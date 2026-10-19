@@ -506,11 +506,24 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def library_sources_sha256(root: Path | None = None) -> str:
+    """Bind the configured source inventory independently of compiled artifact bytes."""
+    import runpy  # Lazy: policy-only offline users need no source inventory.
+    root = ROOT if root is None else root
+    dependencies = runpy.run_path(str(Path(__file__).with_name('lean-deps.py')))
+    digest = hashlib.sha256(b'air2lean-library-sources-v1\0')
+    for path in dependencies['library_sources'](root):
+        digest.update(path.relative_to(root).as_posix().encode() + b'\0')
+        digest.update(file_sha256(path).encode() + b'\0')
+    return digest.hexdigest()
+
+
 def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     """Always ask Lake to validate dependencies; discard unverified/corrupt output."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
     lake_trace = artifact.with_suffix(".trace")
     manifest = root / ".lake/assurance/tool-trace.json"
+    sources = library_sources_sha256(root)
     context = {
         "schema_version": 1,
         "module": "tools.Assurance",
@@ -522,18 +535,21 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
         cached = json.loads(manifest.read_text())
     except (OSError, ValueError):
         cached = {}
-    valid = (isinstance(cached, dict) and all(cached.get(k) == v for k, v in context.items())
+    artifact_valid = (isinstance(cached, dict) and all(k in cached and cached[k] == v for k, v in context.items())
              and artifact.is_file() and lake_trace.is_file()
              and cached.get("olean_sha256") == file_sha256(artifact)
              and cached.get("lake_trace_sha256") == file_sha256(lake_trace))
-    if not valid:
+    valid = artifact_valid and cached.get('library_sources_sha256') == sources
+    if not artifact_valid:
         # Lake must rebuild when output or its independently recorded identity is missing,
         # corrupt, or from a different extractor source, release pin, or configuration.
         artifact.unlink(missing_ok=True)
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
-    trace = {**context, "olean_sha256": file_sha256(artifact),
+    if library_sources_sha256(root) != sources:
+        raise ValueError('project library sources changed during extractor preparation')
+    trace = {**context, "library_sources_sha256": sources, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
     trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]
                                  and cached.get("lake_trace_sha256") == trace["lake_trace_sha256"])
@@ -565,6 +581,8 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = ()) -> dict:
         output = run(["lake", "env", "lean", str(path)])
     finally:
         path.unlink(missing_ok=True)
+    if library_sources_sha256() != tool_trace['library_sources_sha256']:
+        raise ValueError('project library sources changed during extractor extraction')
     lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")

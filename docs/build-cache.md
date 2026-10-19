@@ -88,6 +88,21 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
+Assurance extractor traces include a fresh digest of all configured library `.lean` files,
+including library root files, explicit glob roots and helpers outside theorem dependency
+closures. File paths,
+contents, additions and removals participate; valid file aliases bind their target bytes.
+Directory aliases, missing libraries, unbounded globs and nondefault Lake `srcDir`
+configurations are rejected
+by this source inventory rather than silently binding a decoy tree. The digest is checked
+before and after preparation and extraction, without a persistent metadata-only cache.
+
+A changed source snapshot invalidates trace reuse. It does not by itself delete the compiled
+extractor: Lake still validates its actual dependency/build trace with `--rehash` on every
+preparation and rebuilds when needed. This avoids recompiling the extractor for an unrelated
+proof-source edit. The snapshot is not a proof that compiled modules match those sources or a
+complete witness/import-closure binding; replay and receipt validation remain separate.
+
 Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
 `scripts/build-guard.py`, which admits them within one memory budget for the whole machine
 (`AIR2LEAN_BUILD_MEM_MIB`, default 75% of RAM, in slots of 1 GiB): a workload reserves its

@@ -31,6 +31,7 @@ changed a library module without a rebuild) is never tested silently.
 """
 
 import hashlib
+import itertools
 import json
 import os
 import pathlib
@@ -63,14 +64,48 @@ def imports(path: pathlib.Path) -> set[str]:
     return mods
 
 
-def lib_roots() -> set[str]:
+def lib_roots(root: pathlib.Path | None = None, *, strict_sources: bool = False) -> set[str]:
     """The first components of the package's library modules (`lakefile.toml`: names, roots)."""
-    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+    root = ROOT if root is None else root
+    lake = tomllib.loads((root / "lakefile.toml").read_text(encoding="utf-8"))
+    if strict_sources:
+        for config in [lake, *lake.get('lean_lib', [])]:
+            source_dir = config.get('srcDir', '.')
+            if not isinstance(source_dir, str) or pathlib.Path(source_dir) != pathlib.Path('.'):
+                raise ValueError(f'unsupported Lake srcDir for library source binding: {source_dir!r}')
     roots = set()
     for lib in lake.get("lean_lib", []):
         for r in lib.get("roots", [lib.get("root", lib["name"])]):
             roots.add(r.split(".")[0])
+        if strict_sources:
+            for glob in lib.get('globs', []):
+                top = glob.split('.')[0] if isinstance(glob, str) else ''
+                if not top or top in {'*', '+'}:
+                    raise ValueError(f'unsupported Lake source glob: {glob!r}')
+                roots.add(top)
     return roots
+
+
+def library_sources(root: pathlib.Path | None = None) -> list[pathlib.Path]:
+    """All configured library source files, including roots and unimported helpers."""
+    root = ROOT if root is None else root
+    roots, sources = lib_roots(root, strict_sources=True), set()
+    if not roots:
+        raise ValueError('no configured Lake library sources')
+    for name in roots:
+        if not name or '/' in name or '\\' in name:
+            raise ValueError(f'invalid configured Lake library root: {name!r}')
+        directory, module = root / name, root / (name + '.lean')
+        # rglob skips directory aliases: reject them rather than silently omit source inputs.
+        for path in itertools.chain((directory, module), directory.rglob('*')):
+            if path.is_symlink() and (path.is_dir() or not path.exists()):
+                raise ValueError(f'unsupported library source directory alias or broken link: {path}')
+        candidates = ([str(directory)] if directory.is_dir() else []) + ([str(module)] if module.is_file() else [])
+        files = lean_files(candidates)
+        if not files:
+            raise ValueError(f'Lake library {name} has no Lean sources')
+        sources.update(files)
+    return sorted(sources)
 
 
 def all_targets() -> list[str]:
