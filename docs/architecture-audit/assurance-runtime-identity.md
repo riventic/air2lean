@@ -47,9 +47,10 @@ Freshness carries the root/digest and report verification recomputes the actual 
 bytes, requiring agreement with the extractor binding. Missing old bindings cannot license
 reuse or report admission. There is no new cache, collector or expanded reuse eligibility.
 
-Prepared controls preserve executable/project artifact/report bytes and restore size/mtime
+Offline controls preserve executable/project artifact/report bytes and restore size/mtime
 while mutating installed inputs; other cases remove only a binding or mutate during replay
 and require the previous cache record to remain untouched. Wiring checks connect the existing
-extractor identity to replay/freshness. These new controls have not yet executed. Complete
+extractor identity to replay/freshness. These use synthetic inputs and a shell checker;
+they do not exercise an actual Lean kernel or runtime. Complete
 project/private import closure, source/compiler correspondence, registered witnesses and NN
 qualification remain separate open boundaries. No premise reduction is enabled.
