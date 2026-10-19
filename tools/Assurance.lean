@@ -242,12 +242,23 @@ ordinary-data exemption. In particular, a non-Prop result does not prove a recor
 private def frameworkEvidence (env : Environment) (n : Name) (c : ConstantInfo) : MetaM Json := do
   -- A proof's type is already a proposition. Reducing that proposition could run the program
   -- it mentions; only a definition whose TYPE returns the sort Prop needs the telescope test.
-  let proof ← if c.isTheorem then pure true else isProp c.type
+  if c.type.hasMVar || c.type.hasFVar || c.type.hasLooseBVars then
+    throwError "framework evidence requires a closed kernel signature: {n}"
+  let proof ← if c.isTheorem then pure true else do
+    -- Ask the kernel for the original signature's SORT, without examining a proof value/body.
+    -- Meta's isProp/inferType use default transparency internally; the existing kernel
+    -- APIs handle irreducible sort aliases through forall/let/metadata uniformly.
+    let sort ← match Kernel.check env {} c.type with
+      | .ok sort => pure sort
+      | .error ex => throwError "framework signature check failed for {n}: {ex.toMessageData (← getOptions)}"
+    match Kernel.isDefEq env {} sort (mkSort .zero) with
+    | .ok proof => pure proof
+    | .error ex => throwError "framework signature sort check failed for {n}: {ex.toMessageData (← getOptions)}"
   let (propValued, binders) ←
     if proof then
       pure ((some false : Option Bool), (#[] : Array Json))
     else
-      forallTelescopeReducing c.type (whnfType := true) fun xs result => do
+      withTransparency .all <| forallTelescopeReducing c.type (whnfType := true) fun xs result => do
         let mut binders := #[]
         for x in xs do
           let decl ← x.fvarId!.getDecl

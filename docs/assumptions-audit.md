@@ -242,6 +242,49 @@ unused private definitions and compiler-generated recursors, and records their n
 `selected_declaration_roots`. It uses the same dependency traversal, policy and kernel replay.
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
+
+The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
+for each exact selected root. The CLI report preserves those rows under
+`framework_candidates.declarations`, adding the summaries below. A row identifies the
+original kernel name, user name, module and declaration kind; the original type/body
+constant identities and kernel-expression fingerprint are preserved before reduction.
+`is_proof` distinguishes a proof value using the existing kernel signature checker and
+kernel equality of its inferred sort to `Prop`, with a theorem shortcut. It does not
+inspect a proof body or use normalization of the proposition as a substitute for checking
+its sort. Kernel signature checking can reduce types. A free or
+metavariable signature, or any kernel API error, fails the audit. This performs a signature
+check per non-theorem selected declaration; its cost depends on the selected environment.
+A Prop-valued predicate's `prop_valued` and binder
+evidence come from opening its full type telescope with transparency `.all`, including
+irreducible aliases. Unknown result
+sorts remain `null`. Projection, matcher and auxiliary-recursor flags are provenance, not
+exemptions. Imported dependencies can occur in `nodes` without being selected roots.
+
+`framework_candidates` propagates the framework gate's canonical computation-family
+identities through that same original dependency graph. The opt-in driver first resolves
+every canonical identity in its actual Lean environment; a missing name fails the audit.
+`program_dependencies` is syntactic positive evidence, not recognition of all computation
+types: a written-out `Zig.Mem → Option (Except …)` can have an empty list. **An empty list
+means unknown, never ordinary data.** A Prop-valued definition/opaque/inductive with a
+computation-family witness has verdict `candidate`; every other row has verdict `unknown`.
+Neither verdict approves a framework status or changes policy.
+
+`unresolved_dependency` is a conservative boundary flag: it is true if the declaration's
+original dependency closure (including itself) contains an unresolved constant, an opaque,
+an axiom, an `implemented_by` redirection or an extern entry. Opaques with checked values and
+standard logical axioms still set it, independently of whether policy permits them. The
+replacement implementation is recorded separately, not followed as a kernel dependency.
+A candidate can have this flag; a false flag does not certify a closed type or complete
+execution semantics. This is not a restatement of policy violations.
+
+This evidence is explicitly `scope: selected-modules-only`, `complete: false`, with
+`ordinary_exemption: false` in every row and no ordinary exemptions. It establishes no
+recursive closed-data classification, status approval, legacy-free result, complete module
+enrollment, producer authority or additional source/artifact binding. The existing policy,
+kernel replay, freshness and audit-scope requirements still apply. The default extractor
+omits `selected_declaration_evidence` and `selected_declaration_roots`; the default CLI
+report omits `framework_candidates` and `selected_declaration_roots`.
+
 The extractor always runs `lake --rehash build AssuranceTools` to validate its source,
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
 and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt
