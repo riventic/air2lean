@@ -21,9 +21,13 @@ The row worker reads only the selected part's existing keyed workflow projection
 YAML, and receives declared producer outputs without a source archive or host snapshot mount.
 The immutable image ID, payload provenance and producer references are recorded in local
 receipts. The host exports only the row's own namespace and declared uploads after shutdown,
-using private staging and a separate export budget. Custom tool-volume names receive an
-architecture suffix to keep ARM and x86 caches separate; `build-mode-docker.sh` uses the same
-`-amd64` override suffix. The Rosetta helper remains a no-op on native ARM and macOS.
+using private staging and a separate export budget. Every local-CI row has fresh HOME, tool,
+download and global Zig cache state; the broad tool volume is not mounted. Only existing Lake
+volumes declared by the selected keyed workflow row persist, with their platform/toolchain keys
+and root-then-diff locks. This trades repeated tool preparation for a defined cross-job boundary.
+The architecture-suffixed tool override remains the existing Lake namespace selector;
+`build-mode-docker.sh` retains its separate `-amd64` override suffix. The Rosetta helper remains
+a no-op on native ARM and macOS.
 
 ## The trigger
 

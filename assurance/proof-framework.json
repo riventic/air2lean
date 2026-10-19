@@ -972,35 +972,11 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/GlobalInit.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/LoopTactics.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/strength-log/OutcomeTaxonomy.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsLayout.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsLists.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsPointers.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsSlices.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {

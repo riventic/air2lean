@@ -1,5 +1,4 @@
 import ZigLean.Sep.Full.Strength
-import ZigLean.Sep.Total
 import Proofs.Lists.Linked
 
 /-!
@@ -22,6 +21,9 @@ hand-written heap `create`/`destroy`; their replacements `Lists.Alloc.push_spec`
 `Lists.Alloc.freeAll_spec` are about the open translation (`Proofs/Lists/Open.lean`) for every
 allocator meeting `CAllocSpec`, a different program, so no strength lemma derives one from the
 other (`docs/alloc-spec.md`, §Retired claims, rows `Lists.push_spec` and `Lists.freeAll_spec`).
+
+Each statement is the legacy `TotalTripleIn Mem.FSeqPlain P c Q` (`ZigLean/Sep/Total.lean`) with
+its definition unfolded, word for word, so the log does not use the legacy layer.
 -/
 
 open Zig Zig.Full Zig.Full.FAssn Zig.Assn Lists.Open Lists.Linked
@@ -56,7 +58,9 @@ theorem plist_sizeFree : ∀ (hd : Option Ptr) (xs : List (BitVec 32)),
 
 /-- `Lists.reverse_total` (legacy, over the fields). -/
 example (hd : Option Ptr) (xs : List (BitVec 32)) :
-    TotalTripleIn Mem.FSeqPlain (plist hd xs) (reverse hd) (fun r => plist r xs.reverse) :=
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → plist hd xs hP → m.Seq → m.FSeqPlain →
+      ∃ v m' hQ, (reverse hd).run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
+        m'.heap = hQ ∪ hF ∧ plist v xs.reverse hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on
     (((reverse_total hd xs).pre fun r h => (up_plist hd xs r).mp h).post fun r _ h =>
       (up_plist r xs.reverse _).mpr h)
@@ -64,8 +68,9 @@ example (hd : Option Ptr) (xs : List (BitVec 32)) :
 
 /-- `Lists.sum_total` (legacy, `Proofs/Lists/Bounded.lean`, over the fields). -/
 example (hd : Option Ptr) (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
-    TotalTripleIn Mem.FSeqPlain (plist hd xs) (sum hd)
-      (fun r => ⌜r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⌝ ∗ plist hd xs) :=
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → plist hd xs hP → m.Seq → m.FSeqPlain →
+      ∃ v m' hQ, (sum hd).run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧
+        (⌜v = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⌝ ∗ plist hd xs) hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on
     (((sum_total hd xs htot).pre fun r h => (up_plist hd xs r).mp h).post fun _ r h => by
       obtain ⟨hv, h⟩ := Full.sep_lift.mp h
