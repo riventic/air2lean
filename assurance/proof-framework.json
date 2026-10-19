@@ -976,10 +976,6 @@
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
     {
-      "path": "tests/roadmap/strength-log/LoopTactics.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/strength-log/OutcomeTaxonomy.lean",
       "approved": "coordinator 2026-10-12 (strength-log class)"
     },
