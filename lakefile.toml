@@ -4,6 +4,8 @@ defaultTargets = ["ZigLean", "Air2Lean", "air2lean"]
 
 [[lean_lib]]
 name = "ZigLean"
+globs = ["ZigLean.*"]
+precompileModules = true
 
 [[lean_lib]]
 name = "Air2Lean"
