@@ -532,8 +532,8 @@ code is the **one weakest precondition `Proto.WP`** with an opt-in turn cost. Th
   stop (kernel-checked).
 * **Credits as a resource.** `cr` is any function of the ghost value; a protocol over `FOwned`
   reads it from the thread's part (`credits n`, `Full/Ghost.lean`), which no update mints.
-* **Re-expressed #178 theorems** (next): `Proofs/Threads/Termination` (`disjoint`) and
-  `Proofs/Atomics/Termination` (`publishRead`). They need the thread-total primitive rules
+* **Re-expressed #178 theorems** (next): `Proofs/Threads/Disjoint` (`disjoint`) and
+  `Proofs/Atomics/PtrPublish` (`publishRead`). They need the thread-total primitive rules
   (`FTTotalTriple` of `alloc`/`store`/`load`/`free`, stage S2 of T-ctriple) for `hret`. Bound for
   `disjoint`: `main` starts with 7 credits (5 at its first spawn after reserving 1 for kid 1, …);
   the worst schedule takes 6 turns.

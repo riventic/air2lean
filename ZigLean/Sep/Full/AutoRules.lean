@@ -597,6 +597,15 @@ theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.t
   obtain ⟨v, rfl⟩ := Option.isSome_iff_exists.mp h
   exact (FTotalTriple.ret (Q := fun r => ⟪some v = some r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
 
+/-- Bits that are `valid` as a packed value (`@bitCast` to a packed struct, its `fromInt`): the
+value of those bits (`Packed.ofBits?`). -/
+@[fsym] theorem packedOfBits_step {α : Type} {n : Nat} [Packed α n] {b : BitVec n}
+    (h : Packed.valid (α := α) b = true) :
+    FTotalTriple P (StateT.lift (Packed.ofBits? (α := α) b) : MemM α)
+      (fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) := by
+  rw [Packed.ofBits?_of_valid h]
+  exact (FTotalTriple.ret (Q := fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) _).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+
 /-! Tests of an optional as constructor equations (facts of `if o != null`, `orelse`), so a
 `match o` of the precondition reduces (`destruct`, `substCtor`). -/
 
