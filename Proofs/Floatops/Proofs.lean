@@ -200,10 +200,6 @@ def floatopsTarget : FloatTarget := by
         FloatTarget.aarch64Generic)
       (fun _ _ _ => rfl)
 
-/-- `opN`'s branch for one selector binds the result `X`: generalize it and compute. -/
-local macro "spec_case " f:ident ", " X:term : tactic =>
-  `(tactic| (show _ = $X; unfold $f:ident; generalize $X = x; rcases x with _ | _ | _ <;> rfl))
-
 /-- The compiler-rt helper profile of a translation (`docs/floats.md` §Per-version
 differences): `legacy` is Zig 0.14.1 and 0.15.2, `v016` is Zig 0.16.0. -/
 inductive F128Rt where
@@ -294,15 +290,6 @@ theorem sel_lt {sel : BitVec 8} (h : ¬26 ≤ sel.toNat) :
     ∃ n, n < 26 ∧ sel = BitVec.ofNat 8 n :=
   ⟨sel.toNat, by omega, by simp⟩
 
-/-- The `@mulAdd` selector of `opN` for the translation's target. -/
-local macro "fma_case " f:ident : tactic =>
-  `(tactic| (
-    show _ = floatopsTarget.fmaRt _ _ _
-    cases ht : floatopsTarget
-    · first | exact absurd ht (by decide) | spec_case $f, Zig.Float.fmaRtChk _ _ _
-    · first | exact absurd ht (by decide) | rfl
-    · first | exact absurd ht (by decide) | rfl | spec_case $f, Zig.Float.fmaRtChk _ _ _))
-
 theorem op16_spec (sel : BitVec 8) (a b c : Zig.Float .f16) :
     op16 sel a b c = opSpec floatopsTarget sel a b c := by
   by_cases h : 26 ≤ sel.toNat
@@ -310,15 +297,11 @@ theorem op16_spec (sel : BitVec 8) (a b c : Zig.Float .f16) :
   · obtain ⟨n, hn, rfl⟩ := sel_lt h
     match n, hn with
     | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
-    | 4, _ => fma_case op16
-    | 7, _ => spec_case op16, Zig.Float.remRtChk a b
-    | 8, _ => spec_case op16, Zig.Float.modRtChk a b
-    | 10, _ => spec_case op16, Zig.Float.floorChk a
-    | 11, _ => spec_case op16, Zig.Float.ceilChk a
-    | 12, _ => spec_case op16, Zig.Float.truncChk a
-    | 13, _ => spec_case op16, Zig.Float.roundChk a
-    | 16, _ => spec_case op16, Zig.Float.minChk a b
-    | 17, _ => spec_case op16, Zig.Float.maxChk a b
+    | 4, _ | 7, _ | 8, _ | 10, _ | 11, _ | 12, _ | 13, _ | 16, _ | 17, _ =>
+      simp only [op16, opSpec, floatopsTarget, FloatTarget.fmaRt,
+        BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte,
+        StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, StateT.run_monadLift,
+        monadLift_self, bind_assoc, pure_bind, map_bind, map_pure, bind_pure]
     | n + 26, h => omega
 
 theorem op32_spec (sel : BitVec 8) (a b c : Zig.Float .f32) :
@@ -328,15 +311,11 @@ theorem op32_spec (sel : BitVec 8) (a b c : Zig.Float .f32) :
   · obtain ⟨n, hn, rfl⟩ := sel_lt h
     match n, hn with
     | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
-    | 4, _ => fma_case op32
-    | 7, _ => spec_case op32, Zig.Float.remRtChk a b
-    | 8, _ => spec_case op32, Zig.Float.modRtChk a b
-    | 10, _ => spec_case op32, Zig.Float.floorChk a
-    | 11, _ => spec_case op32, Zig.Float.ceilChk a
-    | 12, _ => spec_case op32, Zig.Float.truncChk a
-    | 13, _ => spec_case op32, Zig.Float.roundChk a
-    | 16, _ => spec_case op32, Zig.Float.minChk a b
-    | 17, _ => spec_case op32, Zig.Float.maxChk a b
+    | 4, _ | 7, _ | 8, _ | 10, _ | 11, _ | 12, _ | 13, _ | 16, _ | 17, _ =>
+      simp only [op32, opSpec, floatopsTarget, FloatTarget.fmaRt,
+        BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte,
+        StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, StateT.run_monadLift,
+        monadLift_self, bind_assoc, pure_bind, map_bind, map_pure, bind_pure]
     | n + 26, h => omega
 
 theorem op64_spec (sel : BitVec 8) (a b c : Zig.Float .f64) :
@@ -346,15 +325,11 @@ theorem op64_spec (sel : BitVec 8) (a b c : Zig.Float .f64) :
   · obtain ⟨n, hn, rfl⟩ := sel_lt h
     match n, hn with
     | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
-    | 4, _ => fma_case op64
-    | 7, _ => spec_case op64, Zig.Float.remRtChk a b
-    | 8, _ => spec_case op64, Zig.Float.modRtChk a b
-    | 10, _ => spec_case op64, Zig.Float.floorChk a
-    | 11, _ => spec_case op64, Zig.Float.ceilChk a
-    | 12, _ => spec_case op64, Zig.Float.truncChk a
-    | 13, _ => spec_case op64, Zig.Float.roundChk a
-    | 16, _ => spec_case op64, Zig.Float.minChk a b
-    | 17, _ => spec_case op64, Zig.Float.maxChk a b
+    | 4, _ | 7, _ | 8, _ | 10, _ | 11, _ | 12, _ | 13, _ | 16, _ | 17, _ =>
+      simp only [op64, opSpec, floatopsTarget, FloatTarget.fmaRt,
+        BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte,
+        StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, StateT.run_monadLift,
+        monadLift_self, bind_assoc, pure_bind, map_bind, map_pure, bind_pure]
     | n + 26, h => omega
 
 /-- x86_64 `f80` (the x87): every selector is `opSpec`. Legacy f80 floor/ceil extend to f128,
@@ -369,9 +344,11 @@ theorem op80_spec (ht : floatopsTarget = .x86_64) (sel : BitVec 8) (a b c : Zig.
     · obtain ⟨n, hn, rfl⟩ := sel_lt h
       match n, hn with
       | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
-      | 4, _ => spec_case op80, Zig.Float.fmaRtChk a b c
-      | 7, _ => spec_case op80, Zig.Float.remRtChk a b
-      | 8, _ => spec_case op80, Zig.Float.modRtChk a b
+      | 4, _ | 7, _ | 8, _ | 13, _ | 16, _ | 17, _ =>
+        simp only [op80, opSpec, FloatTarget.fmaRt,
+          BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte,
+          StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, StateT.run_monadLift,
+          monadLift_self, bind_assoc, pure_bind, map_bind, map_pure, bind_pure]
       | 10, _ =>
         show _ = Zig.Float.floorChk a
         unfold op80
@@ -389,9 +366,6 @@ theorem op80_spec (ht : floatopsTarget = .x86_64) (sel : BitVec 8) (a b c : Zig.
         -- 0.17.0 output keeps a zero-extension pseudo-denormal (`truncRt017Chk`, group I).
         try rw [Zig.Float.truncRt017Chk_eq a ha]
         generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
-      | 13, _ => spec_case op80, Zig.Float.roundChk a
-      | 16, _ => spec_case op80, Zig.Float.minChk a b
-      | 17, _ => spec_case op80, Zig.Float.maxChk a b
       | n + 26, h => omega
 
 /-- The `f80` operands that `op80`'s selector reads on aarch64: every op except the sign-bit ops
@@ -461,20 +435,14 @@ theorem op80_spec_aarch64 (ht : floatopsTarget ≠ .x86_64) (sel : BitVec 8)
     · obtain ⟨n, hn, rfl⟩ := sel_lt h
       match n, hn with
       | 14, _ | 15, _ => rfl
-      | 0, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (pure (Zig.Float.add a b))
-      | 1, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (pure (Zig.Float.sub a b))
-      | 2, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (pure (Zig.Float.mulRt a b))
-      | 3, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (pure (Zig.Float.divXf3 a b))
-      | 4, _ =>
-        spec_case op80, Zig.Float.softF80Chk [a, b, c] (pure (Zig.Float.fmaRtFused a b c))
-      | 5, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (pure (Zig.Float.divTruncXf3 a b))
-      | 6, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (pure (Zig.Float.divFloorXf3 a b))
-      | 7, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (Zig.Float.remRtChk a b)
-      | 8, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (Zig.Float.modRtChk a b)
-      | 9, _ =>
-        first
-        | spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.sqrt a))
-        | spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.sqrtF80ViaF64 a))
+      | 0, _ | 1, _ | 2, _ | 3, _ | 4, _ | 5, _ | 6, _ | 7, _ | 8, _ | 9, _ |
+          13, _ | 16, _ | 17, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ |
+          24, _ | 25, _ =>
+        simp only [op80, opSpec80A64, f80Reads, opSpec, op128Profile, F128Rt.sqrt80,
+          FloatTarget.fmaRt, BitVec.reduceBEq, BitVec.reduceToNat, Nat.reduceLT, Bool.false_eq_true,
+          ↓reduceIte, StateT.run'_eq, StateT.run_bind, StateT.run_pure,
+          StateT.run_lift, StateT.run_monadLift, monadLift_self, bind_assoc, pure_bind,
+          map_bind, map_pure, bind_pure]
       | 10, _ =>
         show _ = Zig.Float.softF80Chk [a] (Zig.Float.floorChk a)
         unfold op80
@@ -493,17 +461,6 @@ theorem op80_spec_aarch64 (ht : floatopsTarget ≠ .x86_64) (sel : BitVec 8)
         try rw [softF80Chk_truncRt017 a]
         generalize Zig.Float.softF80Chk [a] (Zig.Float.truncChk a) = x
         rcases x with _ | _ | _ <;> rfl
-      | 13, _ => spec_case op80, Zig.Float.softF80Chk [a] (Zig.Float.roundChk a)
-      | 16, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (Zig.Float.minChk a b)
-      | 17, _ => spec_case op80, Zig.Float.softF80Chk [a, b] (Zig.Float.maxChk a b)
-      | 18, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .sin a))
-      | 19, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .cos a))
-      | 20, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .tan a))
-      | 21, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .exp a))
-      | 22, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .exp2 a))
-      | 23, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .log a))
-      | 24, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .log2 a))
-      | 25, _ => spec_case op80, Zig.Float.softF80Chk [a] (pure (Zig.Float.libm .log10 a))
       | n + 26, h => omega
 
 /-- `f128`: `/`, `@divTrunc`, `@divFloor` and `@sqrt` (`sel` 3, 5, 6, 9) call another model
@@ -520,15 +477,11 @@ theorem op128_spec (sel : BitVec 8) (hs : sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 
     | 6, _ => exact absurd rfl hs.2.2.1
     | 9, _ => exact absurd rfl hs.2.2.2
     | 0, _ | 1, _ | 2, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
-    | 4, _ => fma_case op128
-    | 7, _ => spec_case op128, Zig.Float.remRtChk a b
-    | 8, _ => spec_case op128, Zig.Float.modRtChk a b
-    | 10, _ => spec_case op128, Zig.Float.floorChk a
-    | 11, _ => spec_case op128, Zig.Float.ceilChk a
-    | 12, _ => spec_case op128, Zig.Float.truncChk a
-    | 13, _ => spec_case op128, Zig.Float.roundChk a
-    | 16, _ => spec_case op128, Zig.Float.minChk a b
-    | 17, _ => spec_case op128, Zig.Float.maxChk a b
+    | 4, _ | 7, _ | 8, _ | 10, _ | 11, _ | 12, _ | 13, _ | 16, _ | 17, _ =>
+      simp only [op128, opSpec, floatopsTarget, FloatTarget.fmaRt,
+        BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte,
+        StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, StateT.run_monadLift,
+        monadLift_self, bind_assoc, pure_bind, map_bind, map_pure, bind_pure]
     | n + 26, h => omega
 
 /-! ### `f128` division and `@sqrt` per Zig version (F05) -/
