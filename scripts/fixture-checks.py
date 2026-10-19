@@ -28,8 +28,11 @@ invocations, a tests/ script called with `--native...` (scripts/target-matrix.py
 are no-ops: they run binaries of the runner's target (scripts/local-ci.sh part PART runs them in
 the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their count.
 
-Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budget/--mem-mib at
-once), in the checkout, after the full build's Lean phases. Every unit runs on every invocation:
+Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS), in the checkout, after the
+full build's Lean phases: the longest first, each admitted while the memory requests of the
+running units fit in the guard's budget (`schedule`; from the last runs' wall times and peaks,
+`hints_path`; --mem-mib for a unit not measured yet).
+Those measurements decide only order and admission. Every unit runs on every invocation:
 no result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19; docs/ci.md#full-build). A key over the files a unit's text names missed every input
 reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
@@ -75,6 +78,11 @@ WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch 
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
+# Scheduling (`schedule`): a request is the largest of a unit's last HINT_RUNS sampled peaks times
+# MEM_MARGIN (sampling every 2 s misses short spikes), at least MEM_FLOOR_MIB; the requests of
+# the running units stay within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the
+# guard enforces on their sum.
+HINT_RUNS, MEM_MARGIN, MEM_FLOOR_MIB, MEM_SHARE = 5, 1.5, 1024, 0.85
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -278,6 +286,50 @@ def _stage(unit, scratch):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
+def hints_path():
+    """The last runs' per-unit measurements, one file per machine (every worktree runs the same
+    units, and a gate's worktree is fresh): $AIR2LEAN_FIXTURE_SCHEDULE, else beside the build
+    lock in ~/.cache/air2lean. It holds no result, so it is not in the artifact cache."""
+    path = os.environ.get('AIR2LEAN_FIXTURE_SCHEDULE')
+    return Path(path) if path else Path.home() / '.cache' / 'air2lean' / 'fixture-checks' / 'schedule.json'
+
+
+def read_hints():
+    try:
+        data = json.loads(hints_path().read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def write_hints(units, stats):
+    """Record each measured unit's wall time and its peaks of the last HINT_RUNS runs."""
+    hints = read_hints()
+    for u, s in zip(units, stats):
+        if s:
+            old = hints.get(u['name'], {})
+            hints[u['name']] = {'elapsed_s': s['elapsed_s'],
+                                'peak_rss_kib': ([s['peak_rss_kib']] + old.get('peak_rss_kib', []))[:HINT_RUNS]}
+    path = hints_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile('w', dir=path.parent, delete=False) as handle:
+        json.dump(hints, handle, indent=1, sort_keys=True)
+    os.replace(handle.name, path)
+
+
+def schedule(units, default_mib):
+    """(start order, memory requests in MiB): the longest units first by their last wall time, an
+    unmeasured one before all; a request is the largest recent peak with a margin (MEM_MARGIN,
+    at least MEM_FLOOR_MIB), `default_mib` for an unmeasured unit. Only order and admission
+    depend on these measurements, never a unit's result."""
+    hints = read_hints()
+    known = [hints.get(u['name']) for u in units]
+    order = sorted(range(len(units)), key=lambda i: -(known[i]['elapsed_s'] if known[i] else float('inf')))
+    requests = [max(MEM_FLOOR_MIB, int(max(h['peak_rss_kib']) / 1024 * MEM_MARGIN)) if h and h['peak_rss_kib']
+                else default_mib for h in known]
+    return order, requests
+
+
 def report(units, statuses, stats, path, top=20):
     """Print the `top` longest units (wall time, peak RSS, time by process kind); write every
     unit's row to PATH (JSON) when given."""
@@ -337,13 +389,19 @@ def main(argv=None):
             for u in units:
                 command, env = stage(u, scratch / names[u['name']])
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
-            workers = par.workers(a.jobs, a.mem_mib, len(jobs))
-            print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
+            order, requests = schedule(units, a.mem_mib)
+            for job, request in zip(jobs, requests):
+                job.mem_mib = request
+            workers, budget = par.workers(a.jobs, None, len(jobs)), int(par.memory_budget_mib() * MEM_SHARE)
+            print('fixture-checks: running %d units, up to %d at once within %d MiB'
+                  % (len(units), workers, budget), flush=True)
             stats, statuses = [], None
             try:
                 with open(os.devnull, 'wb') as null:
-                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
+                                       order=order, mem_budget_mib=budget)
             finally:  # also the finished units of a stopped run (a guard's timeout)
+                write_hints(units, stats)
                 report(units, statuses or [None] * len(units), stats, a.report)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)

@@ -11,6 +11,7 @@ Offline: no toolchain, no Lean.
 import contextlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import sys
@@ -46,7 +47,8 @@ class NoReuse(unittest.TestCase):
                      "error": None, "toolchains": {"patched": [], "stock": []}}
         for patch in (mock.patch.object(fc, "discover", lambda tree: [dict(self.unit)]),
                       mock.patch.object(fc, "resolve", no_toolchain),
-                      mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas)})):
+                      mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas),
+                                                   "AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp / "schedule.json")})):
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -68,6 +70,21 @@ class NoReuse(unittest.TestCase):
         (self.hidden / "input").write_text("ok\n")
         self.assertEqual(self.run_checks()[0], 0)  # and a fixed input passes again
         self.assertEqual(list(self.cas.iterdir()), [])  # no pass is published to the shared store
+
+    def test_the_schedule_orders_and_sizes_but_never_decides(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.assertEqual(self.run_checks()[0], 0)
+        hint = json.loads((self.temp / "schedule.json").read_text())[self.unit["name"]]
+        self.assertEqual(sorted(hint), ["elapsed_s", "peak_rss_kib"])  # measurements, no status
+        (self.hidden / "input").write_text("broken\n")
+        self.assertEqual(self.run_checks()[0], 1)  # a measured unit still runs and fails
+        units = [{"name": n} for n in ("short", "long", "new")]
+        (self.temp / "schedule.json").write_text(json.dumps({
+            "short": {"elapsed_s": 1, "peak_rss_kib": [100 << 10]},
+            "long": {"elapsed_s": 9, "peak_rss_kib": [4000 << 10, 6000 << 10]}}))
+        order, requests = fc.schedule(units, 5000)
+        self.assertEqual([units[i]["name"] for i in order], ["new", "long", "short"])
+        self.assertEqual(requests, [fc.MEM_FLOOR_MIB, int(6000 * fc.MEM_MARGIN), 5000])
 
     def test_there_is_no_selection_by_key(self):
         # `--base REF` chose the units by the key's files; it is rejected, not ignored.
