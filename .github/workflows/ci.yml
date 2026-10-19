@@ -575,13 +575,15 @@ jobs:
         run: python3 tests/roadmap/local-ci/test_cache.py
 
       # docs/ci.md: input keys, the restricted checkout, record lookup, and every
-      # part declared with every step after the reuse decision guarded.
+      # part declared with every step after the reuse decision guarded; the local
+      # fixture checks reuse no result.
       - name: CI result reuse regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python3 tests/roadmap/ci-reuse/test_ci_reuse.py
+          python3 tests/roadmap/fixture-checks/test_fixture_checks.py
           python3 tests/roadmap/ci-cache/test_ci_cache.py
           python3 tests/roadmap/generated/test_generated.py
           python3 scripts/ci-reuse.py check-workflow

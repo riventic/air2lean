@@ -24,7 +24,8 @@
 #     proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
-#     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
+#     the shared cache. Every unit runs on every invocation; no result is reused. --no-fixtures
+#     skips this phase (scripts/worktree-init.sh).
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each phase's time.
 set -euo pipefail
