@@ -39,8 +39,8 @@ for name in FBA.allocSpec Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fall
     FBA.fown_init realloc_eq Client.client_spec; do
   theorems+=(--theorem "AllocFba.$name")
 done
-python3 -B scripts/fixtures.py audit --module AllocFba.Bridge --module AllocFba.Fba \
-  --module AllocFba.Client --module AllocFba.Full --module AllocFba.Wrappers "${theorems[@]}"
+python3 -B scripts/fixtures.py audit AllocFba.Bridge AllocFba.Fba AllocFba.Client AllocFba.Full \
+  AllocFba.Wrappers "${theorems[@]}"
 # `FBA.ledger` is a definition (a `ResetLedger` whose fields are proofs) that no theorem uses, and
 # the claims extractor (tools/Assurance.lean) reports the axioms of theorems only: `#print axioms`
 # over the built modules checks it until the extractor reports named declarations.

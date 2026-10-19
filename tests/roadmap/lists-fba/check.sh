@@ -24,11 +24,6 @@ trap 'rm -rf "$work"' EXIT
 python3 -B scripts/fixtures.py build ListsFba Proofs.Lists.Alloc
 # Axioms from the built environment (only the standard ones), and the claims extractor sees the
 # companions next to the claims and checks their statements.
-modules=()
-for module in Proofs.Lists.Append Proofs.Lists.Alloc ListsFba.Witness ListsFba.NotDead \
-    Interfaces.SentinelSpec ListsFba.Sentinel; do
-  modules+=(--module "$module")
-done
 theorems=()
 for name in ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.Append.append_spec.nonvacuous \
     Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous \
@@ -36,7 +31,8 @@ for name in ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.
     ListsFba.Sentinel.env_runs ListsFba.Sentinel.fba_spec Interfaces.SentinelSpec.make_spec.nonvacuous; do
   theorems+=(--theorem "$name")
 done
-python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}" --output "$work/assurance.json"
+python3 -B scripts/fixtures.py audit Proofs.Lists.Append Proofs.Lists.Alloc ListsFba.Witness \
+  ListsFba.NotDead Interfaces.SentinelSpec ListsFba.Sentinel "${theorems[@]}" --output "$work/assurance.json"
 python3 - "$work/assurance.json" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))

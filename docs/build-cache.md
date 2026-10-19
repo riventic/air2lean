@@ -64,7 +64,7 @@ imports) and the architecture-audit claim fixtures; the other checks still elabo
 | command | what it does |
 | --- | --- |
 | `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
-| `fixtures.py audit --module M... [--theorem NAME]...` | `scripts/assumptions.py --no-build` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no audited declaration depends on `sorry`, and every named theorem exists. |
+| `fixtures.py audit M... [--theorem NAME]...` | `scripts/assumptions.py --no-build` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no audited declaration depends on `sorry`, and every named theorem exists. |
 | `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
@@ -106,10 +106,14 @@ is restored as a hard link in every other worktree with the same inputs, and so 
 mutant copy. Without the variable (CI) the package builds into its own `.lake` like any Lake
 package.
 
-**One mode.** Every elaboration of a converted fixture goes through Lake (proofs, `#guard` files,
-obstructions, counterexamples, mutants), so the precompiled `fsym` engine of step 2
+**One mode.** Every elaboration in a converted fixture's check goes through Lake (proofs,
+`#guard` files, obstructions, counterexamples, mutants), so the precompiled `fsym` engine of step 2
 (`precompileModules`, loaded by Lake for its own builds) applies to all of them at once, and a
-mutant cannot fail on a heartbeat budget that the native proof meets. The remaining `lake env
+mutant cannot fail on a heartbeat budget that the native proof meets. Outside the checks,
+`scripts/theorem_universe.py audit` (CI part `audit`) still compiles the theorem-indexed fixture
+files itself with `lake env lean -o`: it rejects a file whose elaboration printed `declaration
+uses 'sorry'` (a `sorry` in an `example` never reaches the `.olean`), which a Lake-built olean
+does not show. The remaining `lake env
 lean` runs in these checks load oleans and run no tactic: the audit driver of `assumptions.py`
 (`maxHeartbeats 0`), and `alloc-fba`'s `#print axioms` of `FBA.ledger`, a definition whose
 fields are proofs and which no theorem uses: the extractor (`tools/Assurance.lean`) reports the

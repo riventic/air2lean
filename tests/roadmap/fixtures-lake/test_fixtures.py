@@ -24,6 +24,12 @@ fx = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fx)
 
 
+def without_cache():
+    """This environment without the shared artifact cache (the tests' modules stay out of it)."""
+    env = {k: v for k, v in os.environ.items() if k != "AIR2LEAN_CAS_DIR" and not k.startswith("LAKE_")}
+    return mock.patch.dict(os.environ, env, clear=True)
+
+
 class Repo(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-test.")
@@ -33,9 +39,8 @@ class Repo(unittest.TestCase):
         self.write("lakefile.toml", 'name = "air2lean"\n[[lean_lib]]\nname = "Lib"\n')
         self.write("Lib.lean", "def lib : Nat := 1\n")
         self.package = self.repo / "tests/roadmap"
-        env = {k: v for k, v in os.environ.items() if k != "AIR2LEAN_CAS_DIR" and not k.startswith("LAKE_")}
         for patch in (mock.patch.object(fx, "ROOT", self.repo), mock.patch.object(fx, "PACKAGE", self.package),
-                      mock.patch.dict(os.environ, env, clear=True)):
+                      without_cache()):
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -112,8 +117,7 @@ class Audit(unittest.TestCase):
             f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
             '[[lean_lib]]\nname = "AuditControl"\n')
         (workspace / "AuditControl.lean").write_text(text)
-        env = {k: v for k, v in os.environ.items() if k != "AIR2LEAN_CAS_DIR" and not k.startswith("LAKE_")}
-        with mock.patch.dict(os.environ, env, clear=True):
+        with without_cache():
             self.assertEqual(fx.lake(workspace, ["build", "AuditControl"], capture=True).returncode, 0)
         return workspace / ".lake/build/lib/lean"
 

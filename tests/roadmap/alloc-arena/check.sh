@@ -76,12 +76,8 @@ for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
   done
 done
 theorems+=(--theorem AllocArena.ArenaSpec.reset_free_all_frame --theorem AllocArena.ArenaSpec.loop78_ct)
-modules=()
-for module in ArenaObstruction HeaderTagCX HeaderMixCX AllocArena.Core AllocArena.Reset ArenaSpec \
-    ArenaSpecMacos ArenaSpecFixed; do
-  modules+=(--module "$module")
-done
-python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}"
+python3 -B scripts/fixtures.py audit ArenaObstruction HeaderTagCX HeaderMixCX AllocArena.Core \
+  AllocArena.Reset ArenaSpec ArenaSpecMacos ArenaSpecFixed "${theorems[@]}"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then

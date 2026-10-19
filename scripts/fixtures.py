@@ -2,7 +2,7 @@
 """The proof-fixture Lake package (tests/roadmap/lakefile.toml, docs/build-cache.md#proof-fixtures).
 
     python3 -B scripts/fixtures.py build [TARGET...]
-    python3 -B scripts/fixtures.py audit --module MODULE... [--theorem NAME]... [--output FILE]
+    python3 -B scripts/fixtures.py audit MODULE... [--theorem NAME]... [--output FILE]
     python3 -B scripts/fixtures.py mutant NAME --src DIR --fails MODULE [--expect TEXT]...
     python3 -B scripts/fixtures.py files
 
@@ -66,8 +66,8 @@ def lake_modules(package: Path, libs: list[dict]) -> dict[str, list[str]]:
 def check_names(package: Path, root: Path | None = None) -> dict[str, list[str]]:
     """Fail unless every module-name root belongs to one library of `package` and is no root of
     the root package's (`root`, default ROOT) libraries; returns each library's modules."""
-    reserved = {r.split(".")[0] for lib in libraries(root or ROOT)
-                for r in lib.get("roots", [lib.get("root", lib["name"])])}
+    reserved = {"Init", "Std", "Lean", "Lake"} | {r.split(".")[0] for lib in libraries(root or ROOT)
+                                                  for r in lib.get("roots", [lib.get("root", lib["name"])])}
     libs = libraries(package)
     modules = lake_modules(package, libs)
     owner, problems = {}, []
@@ -115,7 +115,8 @@ def files(root: Path | None = None) -> list[str]:
 
 def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Path | None = None) -> int:
     """`lib`: the directory of the built modules (default: the fixture package's)."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    if str(Path(__file__).resolve().parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
     from assumptions import STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
     try:
@@ -137,6 +138,11 @@ def audit(modules: list[str], theorems: list[str], output: Path | None, lib: Pat
             if (report.get("kernel_replay") or {}).get("status") != "pass":
                 problems.append("kernel replay did not pass: "
                                 + json.dumps((report.get("kernel_replay") or {}).get("rejected"))[:2000])
+            # The audited oleans are the built ones: `lake env` puts the root build directory
+            # first on LEAN_PATH, where a stray same-named olean would shadow a fixture module.
+            oleans = {row["module"]: (ROOT / row["olean"]).resolve() for row in report["freshness"]["artifacts"]}
+            problems += [f"{m}: audited {oleans.get(m)}, not the built {lib.resolve() / m.replace('.', '/')}.olean"
+                         for m in modules if oleans.get(m) != lib.resolve() / (m.replace(".", "/") + ".olean")]
             audited = [t for t in report["theorems"] if t["module"] in modules]
             names = {t["name"] for t in audited}
             problems += [f"{t['name']}: axioms {sorted(set(t['axioms']) - STANDARD_AXIOMS)}"
@@ -213,7 +219,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("build")
     p.add_argument("targets", nargs="*")
     p = sub.add_parser("audit")
-    p.add_argument("--module", action="append", required=True)
+    p.add_argument("modules", nargs="+")
     p.add_argument("--theorem", action="append", default=[])
     p.add_argument("--output", type=Path)
     p = sub.add_parser("mutant")
@@ -226,7 +232,7 @@ def main(argv: list[str]) -> int:
     if a.command == "build":
         return build(a.targets)
     if a.command == "audit":
-        return audit(a.module, a.theorem, a.output)
+        return audit(a.modules, a.theorem, a.output)
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
     print("\n".join(files()))

@@ -581,7 +581,8 @@ find their modules built rather than build the same module at once. A converted 
 library again (`fixtures.py build LIB`; Lake's trace makes that a no-op on an unchanged tree,
 seconds), reads the axioms from the built environment (`fixtures.py audit`, which runs
 `assumptions.py` with kernel replay) and builds its mutants with Lake (`fixtures.py mutant`), so
-each of its Lean files is elaborated by Lake only. The checks (`scripts/fixture-checks.sh`, `.py`):
+the check elaborates its Lean files with Lake only (the theorem-universe audit still compiles the
+indexed ones itself, [build-cache.md](build-cache.md#proof-fixtures)). The checks (`scripts/fixture-checks.sh`, `.py`):
 the Lean files that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
 and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
 dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are

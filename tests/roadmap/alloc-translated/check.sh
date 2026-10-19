@@ -57,11 +57,8 @@ for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.con
     PageSpecMacos.free_spec PageSpecMacos.resize_spec PageSpecMacos.remap_spec; do
   theorems+=(--theorem "AllocTranslated.$name")
 done
-modules=()
-for module in PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread ListsPage KernelBytes; do
-  modules+=(--module "$module")
-done
-python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}"
+python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread \
+  ListsPage KernelBytes "${theorems[@]}"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
