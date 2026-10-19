@@ -656,23 +656,11 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "mono_step",
-      "kind": "syntax",
-      "module": "Air2Lean.Sem",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
       "status": "target",
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
-    },
-    {
-      "tactic": "ok_step",
-      "kind": "syntax",
-      "module": "Air2Lean.Sem",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "pure_norm",
