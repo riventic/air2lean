@@ -96,6 +96,22 @@ theorem fallocSpec (c : Ptr) : FAllocSpec FLogic.partial vt c ainv where
     (remap_spec (own := own) c s k n ra φ bs hk hn hfit.1 hs hpos).toPartial
   free s k ra φ bs _ hs hpos := (free_dead_spec (own := own) c s k ra φ bs hs hpos).toPartial
 
+/-! ## Creation from the initialized hint word -/
+
+/-- The context pointer is a visible contract argument. The page allocator has no fresh ghost
+parameter; its state is the global hint word, independently of the context pointer. -/
+def fallocSpec.creationParameters : FAllocCreationParameters := ⟨[0], []⟩
+
+/-- The null hint initialized by the translated program establishes the allocator state, an
+available positive fee and a positive accepted request. `PageLinux.mem0` initializes block 0 to
+this encoded null word. The separate admission obligation must establish this exact input from
+that actual memory; this triple alone makes no program-start admission claim. -/
+theorem fallocSpec.creation (_c : Ptr) :
+    FTotalTriple (aptsE hint (none : Option Ptr)) (pure ())
+      (fun _ => ainv.creationPost) := by
+  fsym [ainv.creationPost_intro Frac.one (by decide)
+    (by refine ⟨(1 : BitVec 64), 0, ?_, ?_, ?_⟩ <;> decide)]
+
 /-! ## O5 regression: alignments above a page -/
 
 /-- `mem0` with one more (dead, empty) block that ends just below the last page under `2 ^ 64`:

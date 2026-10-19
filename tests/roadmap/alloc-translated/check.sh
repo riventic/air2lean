@@ -68,6 +68,7 @@ import PageThread
 #print axioms AllocTranslated.PageThread.fthread_remap
 #print axioms AllocTranslated.PageThread.cAllocSpec
 #print axioms AllocTranslated.PageAlloc.fallocSpec
+#print axioms AllocTranslated.PageAlloc.fallocSpec.creation
 #print axioms AllocTranslated.PageAlloc.alloc_run
 #print axioms AllocTranslated.PageSpec.free_spec
 #print axioms AllocTranslated.PageSpec.resize_spec
