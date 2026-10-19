@@ -108,7 +108,8 @@ theorem unaligned_wake (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ) (
     P.WP t (Linux.futex_3arg ⟨none, 4097⟩ 0x81 1)
       (fun r G' m' d' => r = negErrno Linux.E.INVAL ∧ G' = G ∧ m' = m ∧ d' = d)
       G m d := by
-  fsym [WP.futex_3arg_of_unaligned (.inr rfl) (a := 4097) rfl (by decide)]
+  fsym [WP.futex_3arg_of_unaligned (p := ⟨none, 4097⟩) (m := m)
+    (.inr rfl) (a := 4097) rfl (by decide)]
 
 /-- The same returned-error branch for WAIT; all depths include zero without a vacuous
 scheduled-success branch, and the complete state stays unchanged. -/
@@ -116,6 +117,7 @@ theorem unaligned_wait (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ) (
     P.WP t (Linux.futex_4arg ⟨none, 4097⟩ 0x80 7 none)
       (fun r G' m' d' => r = negErrno Linux.E.INVAL ∧ G' = G ∧ m' = m ∧ d' = d)
       G m d := by
-  fsym [WP.futex_4arg_of_unaligned (.inr rfl) (a := 4097) rfl (by decide)]
+  fsym [WP.futex_4arg_of_unaligned (p := ⟨none, 4097⟩) (m := m)
+    (.inr rfl) (a := 4097) rfl (by decide)]
 
 end SepAuto.WPOsFutex
