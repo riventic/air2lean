@@ -172,4 +172,113 @@ example (s : Ptr) (b : BlockId) (hb : s.block = some b) (v : Pad) : True := by
       fsym_entail; done
   trivial
 
+/-! ## No failure cached under a limit (`limitedRun`)
+
+A struct nested deeper than the nesting budget of a field's derivation (`encFieldOf?`, 8) gets no
+field; the structs inside it, queried after it in the same run, still get theirs (the failures
+under the limit are not cached). -/
+
+/-- A word, then structs of one struct field each. -/
+structure N0 where
+  w : BitVec 64
+
+instance : Zig.Enc N0 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.w)]
+  decode bs := do pure { w := ← Zig.Enc.decodeAt bs 0 }
+
+structure N1 where
+  x : N0
+
+instance : Zig.Enc N1 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N2 where
+  x : N1
+
+instance : Zig.Enc N2 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N3 where
+  x : N2
+
+instance : Zig.Enc N3 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N4 where
+  x : N3
+
+instance : Zig.Enc N4 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N5 where
+  x : N4
+
+instance : Zig.Enc N5 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N6 where
+  x : N5
+
+instance : Zig.Enc N6 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N7 where
+  x : N6
+
+instance : Zig.Enc N7 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N8 where
+  x : N7
+
+instance : Zig.Enc N8 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+structure N9 where
+  x : N8
+
+instance : Zig.Enc N9 where
+  size := 8
+  align := 8
+  encode v := Zig.Enc.fields 8 [(0, Zig.Enc.encode v.x)]
+  decode bs := do pure { x := ← Zig.Enc.decodeAt bs 0 }
+
+open Lean Meta Zig.Full.Auto in
+/-- **No field failure cached under the nesting budget** (`encFieldOf?`): `N9`'s word is past
+the budget; `N2`'s, queried next in the same run, is found. -/
+example : True := by
+  run_tac withRunCaches do
+    let w := mkApp (mkConst ``BitVec) (mkNatLit 64)
+    if (← encFieldOf? (mkConst ``N9) w 0).isSome then
+      throwError "N9's word within the nesting budget: deepen the chain"
+    if (← encFieldOf? (mkConst ``N2) w 0).isNone then
+      throwError "N2's word: the failure under the nesting budget was cached"
+  trivial
+
 end SepAuto.Structs
