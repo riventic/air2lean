@@ -286,6 +286,9 @@ Deletable after L6: Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation (and Ste
   strength example derives the token from the program-start adequacy (`Full/Init`), and the log
   records the change as "premise → resource".
 - Automation's only importer left is Sep/AllocSpec/Wrappers, so it goes with D-b.
+- `PageObstruction.lean` no longer imports the legacy logic: the heap-only negative theorem is
+  recorded in `docs/alloc-page.md`, while the equal-heap counterexample and allocation outcomes
+  stay kernel-checked in the fixture, alongside its real-run executable guards.
 
 ### L8. Tick-cost model (L, design-blocked). Blocker TICK.
 | file | proves | legacy pieces | eff | class |
