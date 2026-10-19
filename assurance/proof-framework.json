@@ -971,18 +971,6 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "ZigLean/Sep/Full/ThreadFacts.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/ThreadOwned.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/ThreadTls.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "ZigLean/Sep/Loop.lean"
     },
     {

@@ -656,15 +656,17 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    a size): the law `LawfulPacked` (`ZigLean/PackedLayout.lean`) is stated once for every packed
    struct by its layout (`PackedLayout`: fields that tile the backing integer, of lawful types),
    and `fsym` derives a type's instance from its generated `Packed` instance
-   (`lawfulPackedOf?`: a packed struct's fields from its `ofBits`, an exhaustive enum by its tags,
-   a non-exhaustive one by definition; cached per run); the bits' validity holds by definition
+   (`lawfulPackedOf?`: an instance in the context first, so a generic client over
+   `[LawfulPacked T n]` uses its own; else a packed struct's fields from its `ofBits`, an
+   exhaustive enum by its tags, a non-exhaustive one by definition; cached per run); the bits' validity holds by definition
    for a type without an exhaustive enum, else by a hypothesis or the discharger. The other
    direction of the law is a rewrite too: a value with every bit determined is the value of its
    bits (`packedValRoundTrip`: `Packed.ofBits (Packed.toBits v) = v`) and those bits are valid
    (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float field,
    else by a hypothesis or the discharger. The per-type round trips of the
    proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
-   union field gets no law (fail closed). Regression: `tests/roadmap/sep-auto/Packed.lean`;
+   union field or a vector field gets no law (fail closed; ledger #packed-lawful-split). Regression:
+   `tests/roadmap/sep-auto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -691,7 +693,10 @@ region's size, and a failed search through them is exponential: 1.8M heartbeats 
 the offsets' equation when two pointers are compared) searches the case facts within
 `probeCaseBudget` heartbeats of its own and fails past them: a probe may ask what no fact
 decides (two offsets in blocks of unknown addresses), and its failure only withholds a step
-(ledger #probe-case-budget). Obligations (a rule's side goals, `fsym_arith`) are not bounded.
+(ledger #probe-case-budget). The budget (`withBudget`) never exceeds what remains of the
+context's `maxHeartbeats`; wherever in the probe it runs out (in `omega`, or in a step around it
+such as the rewrite of a split term), the probe fails, while the context's own limit still ends
+the run. Obligations (a rule's side goals, `fsym_arith`) are not bounded.
 
 An **implication** (a loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration) is
 proved with its premise as a fact (a premise the facts refute, `some N = none`, closes it); an
@@ -700,7 +705,12 @@ implication among the facts gives its conclusion once its premise normalizes to 
 that is no arithmetic, `x0 = none`; ledger #arith-implications).
 
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
-where its free variables are in scope. The caches belong to one run (theorems are elaborated in
+where its free variables are in scope. **Nothing obtained under a limit is cached as a
+failure** (`limitedRun`): a probe's failure at the heartbeat limit (its budget spent, or
+`maxHeartbeats`), and a derivation's (a field, a layout, a `LawfulEnc` or `LawfulPacked`
+instance) that ran out of its nesting budget somewhere inside, say nothing about the input: an
+obligation without a budget, or a query of a type nested inside one past the budget, retries it.
+The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
 ## Extending it
