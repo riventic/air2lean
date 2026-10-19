@@ -34,6 +34,7 @@ IMPLEMENTATION = "<implementation>"
 TOOLCHAIN_ROOTS = ("Init", "Std", "Lean", "Lake")
 # Module roots of the lakefile.toml targets: their oleans are trace-checked by Lake.
 LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
+COMPILED_SUFFIXES = (".olean", ".olean.private", ".olean.server", ".ir", ".ir.sig")
 REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
                  "modules", "modules_sha256", "reused", "rejected", "status"}
 
@@ -506,17 +507,68 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def input_tree_records(root: Path, binaries: bool = False) -> list[tuple[Path, str, str]]:
+    """Loaded toolchain inputs, including alias identities and target bytes."""
+    paths, links = set(), {}
+
+    def visit(path: Path, ancestors: frozenset):
+        if not binaries and path.name.endswith('.hash') and not path.is_dir():
+            return  # Lake's mutable hash metadata is not loaded by Lean.
+        if path.is_symlink():
+            links[path] = os.readlink(path)
+            if not path.exists():
+                raise ValueError(f"missing compiled input symlink target: {path}")
+        if path.is_dir():
+            resolved = path.resolve()
+            if resolved in ancestors:
+                raise ValueError(f"cyclic compiled input directory: {path}")
+            for child in sorted(path.iterdir()):
+                visit(child, ancestors | {resolved})
+        elif path.is_file() and (binaries or path.suffix in {'.dylib', '.dll'}
+                                or re.search(r'\.so(?:\..+)?$', path.name)
+                                or path.name.endswith(COMPILED_SUFFIXES)):
+            paths.add(path)
+
+    visit(root, frozenset())
+    return [(path, links.get(path, ''), file_sha256(path) if path in paths else '')
+            for path in sorted(paths | links.keys())]
+
+
+def toolchain_runtime_sha256(toolchain: Path) -> str:
+    """Hash executable stubs, shared runtime and installed logical/IR inputs freshly."""
+    overlays = sorted(name for name, value in os.environ.items()
+                      if value and name.startswith(('LD_', 'DYLD_')))
+    if overlays:
+        raise ValueError('toolchain runtime loader overlay: ' + ', '.join(overlays))
+    for name in ('lean', 'leanchecker'):
+        if not (toolchain / 'bin' / name).is_file():
+            raise ValueError(f'missing toolchain executable: {name}')
+    if not (toolchain / 'lib').is_dir():
+        raise ValueError('missing toolchain library directory')
+    digest = hashlib.sha256(b'air2lean-toolchain-runtime-v1\0')
+    records = [*input_tree_records(toolchain / 'bin', True),
+               *input_tree_records(toolchain / 'lib')]
+    for path, link, content in sorted(records):
+        digest.update(path.relative_to(toolchain).as_posix().encode() + b'\0')
+        digest.update(link.encode() + b'\0')
+        if content:
+            digest.update(content.encode() + b'\0')
+    return digest.hexdigest()
+
+
 def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     """Always ask Lake to validate dependencies; discard unverified/corrupt output."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
     lake_trace = artifact.with_suffix(".trace")
     manifest = root / ".lake/assurance/tool-trace.json"
+    toolchain = Path(runner(["lake", "env", "printenv", "LEAN_SYSROOT"]).strip())
     context = {
         "schema_version": 1,
         "module": "tools.Assurance",
         "source_sha256": file_sha256(root / "tools/Assurance.lean"),
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
+        "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
     }
     try:
         cached = json.loads(manifest.read_text())
@@ -533,6 +585,8 @@ def prepare_tool(root: Path = ROOT, runner=run) -> dict:
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools"])
+    if toolchain_runtime_sha256(toolchain) != context['toolchain_runtime_sha256']:
+        raise ValueError('toolchain runtime changed during extractor preparation')
     trace = {**context, "olean_sha256": file_sha256(artifact),
              "lake_trace_sha256": file_sha256(lake_trace)}
     trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]

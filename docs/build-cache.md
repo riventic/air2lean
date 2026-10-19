@@ -88,6 +88,15 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
+The assurance extractor's sidecar (`.lake/assurance/tool-trace.json`) binds the installed
+Lean executables, shared libraries and compiled logical/IR inputs, including alias identities
+and target bytes. A changed runtime invalidates reuse even if executable stubs, file sizes and
+mtimes stay unchanged. Lake still rechecks dependencies on every preparation. Runtime bytes
+are hashed before and after preparation; a change prevents publishing a new sidecar. No
+persistent metadata-only digest cache is used. Loader overlays (`LD_*`, `DYLD_*`) are rejected.
+This sidecar binding concerns extractor preparation; it does not authenticate replay-cache
+import closures or replace the separate proof-receipt checks.
+
 Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
 `scripts/build-guard.py`, which admits them within one memory budget for the whole machine
 (`AIR2LEAN_BUILD_MEM_MIB`, default 75% of RAM, in slots of 1 GiB): a workload reserves its
