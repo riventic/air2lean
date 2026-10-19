@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -447,6 +448,42 @@ class Keys(Repository):
 
 
 class Restricted(Repository):
+    def test_alternate_index_is_refreshed_before_the_read_watch(self):
+        default_index = cr.git_dir(self.root) / 'index'
+        original_index = default_index.read_bytes()
+        alternate_index = self.root.parent / 'alternate index '
+        shutil.copyfile(default_index, alternate_index)
+        with patch.dict(os.environ, {'GIT_INDEX_FILE': str(alternate_index)}):
+            self.restrict()
+            withheld = self.root / 'docs/notes.md'
+            self.assertGreater(alternate_index.stat().st_mtime_ns // 1_000_000_000,
+                               withheld.stat().st_mtime_ns // 1_000_000_000)
+            self.git('status', '--porcelain', '-z', '--untracked-files=all', '--', 'Proofs', 'tests/golden')
+            self.git('update-index', '--force-write-index')
+            subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/normalize-generated.py'), 'proof-status'],
+                           cwd=self.root, check=True, capture_output=True)
+            self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+        self.assertEqual(default_index.read_bytes(), original_index)
+
+    def test_proof_status_does_not_read_withheld_files(self):
+        self.restrict()
+        index = cr.git_dir(self.root) / 'index'
+        withheld = self.root / 'docs/notes.md'
+        self.assertGreater(index.stat().st_mtime_ns // 1_000_000_000,
+                           withheld.stat().st_mtime_ns // 1_000_000_000)
+        self.git('status', '--porcelain', '-z', '--untracked-files=all', '--', 'Proofs', 'tests/golden')
+        self.git('update-index', '--force-write-index')
+        subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/normalize-generated.py'), 'proof-status'],
+                       cwd=self.root, check=True, capture_output=True)
+        self.assertEqual(cr.check_restricted(self.root, as_root=True), [])
+        if os.geteuid() == 0:
+            # The same checker still rejects an actual root read, with no permission or atime reset.
+            withheld.read_bytes()
+            result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/ci-reuse.py'),
+                                     '--root', str(self.root), 'check-restricted'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn('docs/notes.md: withheld file was read', result.stderr)
+
     def test_git_attributes_stay_readable_and_do_not_hide_undeclared_inputs(self):
         attributes = self.add_attributes()
         permissions = {}

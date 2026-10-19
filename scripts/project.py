@@ -1012,6 +1012,11 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                 binding, reason, relation = trivial
             if binding == 'direct' and 'bound' in goal and (problem := claims.check_bound(goal['bound'], found['bound'])):
                 binding, reason = 'bound_mismatch', problem
+            row['theorem_outcome_contract'] = outcomes.theorem_contract(
+                goal['strength'], (goal.get('outcomes') or {}).get('admits'),
+                (claims.statement_of(theorem) or {}).get('outcomes'))
+            if binding == 'direct' and row['theorem_outcome_contract']['status'] == 'rejected':
+                binding, reason = 'outcome_contract_mismatch', row['theorem_outcome_contract']['reason']
             row.update(binding=binding, reason=reason)
             if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
@@ -1045,6 +1050,8 @@ def goal_binding(found, definition, nodes, gen_modules):
         return 'unbound', 'audit lacks the statement structure; regenerate it with the current extractor'
     if found['head_problem']:
         return 'spoofed_head', found['head_problem']
+    if found['binding_problem']:
+        return 'unsupported_runner', found['binding_problem']
     module = nodes.get(definition, {}).get('module')
     if found['binding'] != 'direct' or module not in gen_modules:
         return 'wrapper_or_unrelated', (f'theorem conclusion is about {found["subject"] or "no recognised computation"} '
@@ -1369,6 +1376,10 @@ def coverage_text(result):
         for goal in root['goals']:
             lines.append(f'  goal {goal["theorem"]} [{goal["strength"]}] domain: {goal["domain"]} -> {goal["binding"]}')
             lines.append(f'    outcome contract: {goal["outcome_contract"]["status"]} (admits {", ".join(goal["outcome_contract"]["admits"])})')
+            checked = goal.get('theorem_outcome_contract')
+            if checked:
+                lines.append(f'    theorem outcome contract: {checked["status"]}'
+                             + (f' ({checked["reason"]})' if checked['reason'] else ''))
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])

@@ -1,713 +1,761 @@
 {
- "module": "tests.roadmap.assurance.StatementBinding",
- "theorems": [
-  {
-   "name": "StatementFixture.premise_only",
-   "module": "tests.roadmap.assurance.StatementBinding",
-   "dependencies": [
-    "Eq",
-    "Nat",
-    "True",
-    "instOfNatNat",
-    "trivial",
-    "OfNat.ofNat",
-    "StatementFixture.root"
-   ],
-   "statement_dependencies": [
-    "Eq",
-    "Nat",
-    "True",
-    "instOfNatNat",
-    "OfNat.ofNat",
-    "StatementFixture.root"
-   ],
-   "conclusion_dependencies": [
-    "True"
-   ],
-   "conclusion": {
-    "head": "True"
-   },
-   "statement": {
-    "allocator_creation": [],
-    "args": [],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "x",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [
-       "StatementFixture.root"
+  "module": "tests.roadmap.assurance.StatementBinding",
+  "theorems": [
+    {
+      "name": "StatementFixture.premise_only",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "True",
+        "instOfNatNat",
+        "trivial",
+        "OfNat.ofNat",
+        "StatementFixture.root"
       ],
-      "name": "_h",
-      "prop": true,
-      "uses": [
-       0
-      ]
-     }
-    ],
-    "head": {
-     "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "True"
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "True",
+        "instOfNatNat",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "conclusion_dependencies": [
+        "True"
+      ],
+      "conclusion": {
+        "head": "True"
+      },
+      "statement": {
+        "args": [],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          },
+          {
+            "binder": "default",
+            "defs": [
+              "StatementFixture.root"
+            ],
+            "name": "_h",
+            "prop": true,
+            "uses": [
+              0
+            ]
+          }
+        ],
+        "head": {
+          "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "True"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "conclusion has no supported outcome postcondition",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "absent",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
+          }
+        }
+      }
     },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "absent",
-      "theorem": null
-     },
-     "reachability": {
-      "status": "not_required",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
-   "name": "StatementFixture.root2_comm",
-   "module": "tests.roadmap.assurance.StatementBinding",
-   "dependencies": [
-    "Eq",
-    "Nat",
-    "Nat.add_comm",
-    "StatementFixture.root2"
-   ],
-   "statement_dependencies": [
-    "Eq",
-    "Nat",
-    "StatementFixture.root2"
-   ],
-   "conclusion_dependencies": [
-    "Eq",
-    "Nat",
-    "StatementFixture.root2"
-   ],
-   "conclusion": {
-    "args": [
-     {
-      "head": "StatementFixture.root2"
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement": {
-    "allocator_creation": [],
-    "args": [
-     {
-      "args": [],
-      "atom": {
-       "closed": "Nat"
-      },
-      "extra": [],
-      "fn": "Nat",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       },
-       {
-        "bvar": 1
-       }
+    {
+      "name": "StatementFixture.root2_comm",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "Nat.add_comm",
+        "StatementFixture.root2"
       ],
-      "atom": {
-       "bvars": [
-        0,
-        1
-       ],
-       "open": "StatementFixture.root2"
-      },
-      "extra": [],
-      "fn": "StatementFixture.root2",
-      "fn_module": "tests.roadmap.assurance.StatementBinding",
-      "nat": {
-       "pp": "StatementFixture.root2 x y",
-       "value": null
-      },
-      "params": [
-       "default",
-       "default"
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "StatementFixture.root2"
       ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 1
-       },
-       {
-        "bvar": 0
-       }
+      "conclusion_dependencies": [
+        "Eq",
+        "Nat",
+        "StatementFixture.root2"
       ],
-      "atom": {
-       "bvars": [
-        0,
-        1
-       ],
-       "open": "StatementFixture.root2"
+      "conclusion": {
+        "args": [
+          {
+            "head": "StatementFixture.root2"
+          }
+        ],
+        "head": "Eq"
       },
-      "extra": [],
-      "fn": "StatementFixture.root2",
-      "fn_module": "tests.roadmap.assurance.StatementBinding",
-      "nat": {
-       "pp": "StatementFixture.root2 y x",
-       "value": null
-      },
-      "params": [
-       "default",
-       "default"
-      ],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "x",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "y",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
+      "statement": {
+        "args": [
+          {
+            "args": [],
+            "atom": {
+              "closed": "Nat"
+            },
+            "extra": [],
+            "fn": "Nat",
+            "fn_module": "Init.Prelude",
+            "params": [],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              },
+              {
+                "bvar": 1
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0,
+                1
+              ],
+              "open": "StatementFixture.root2"
+            },
+            "extra": [],
+            "fn": "StatementFixture.root2",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 x y",
+              "value": null
+            },
+            "params": [
+              "default",
+              "default"
+            ],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 1
+              },
+              {
+                "bvar": 0
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0,
+                1
+              ],
+              "open": "StatementFixture.root2"
+            },
+            "extra": [],
+            "fn": "StatementFixture.root2",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 y x",
+              "value": null
+            },
+            "params": [
+              "default",
+              "default"
+            ],
+            "peeled": []
+          }
+        ],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          },
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "y",
+            "prop": false,
+            "uses": []
+          }
+        ],
+        "head": {
+          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
+          }
+        }
+      }
     },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     },
-     "reachability": {
-      "status": "not_required",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
-   "name": "StatementFixture.root2_refl",
-   "module": "tests.roadmap.assurance.StatementBinding",
-   "dependencies": [
-    "Eq",
-    "Nat",
-    "rfl",
-    "StatementFixture.root2"
-   ],
-   "statement_dependencies": [
-    "Eq",
-    "Nat",
-    "StatementFixture.root2"
-   ],
-   "conclusion_dependencies": [
-    "Eq",
-    "Nat",
-    "StatementFixture.root2"
-   ],
-   "conclusion": {
-    "args": [
-     {
-      "head": "StatementFixture.root2"
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement": {
-    "allocator_creation": [],
-    "args": [
-     {
-      "args": [],
-      "atom": {
-       "closed": "Nat"
-      },
-      "extra": [],
-      "fn": "Nat",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       },
-       {
-        "bvar": 1
-       }
+    {
+      "name": "StatementFixture.root2_refl",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "rfl",
+        "StatementFixture.root2"
       ],
-      "atom": {
-       "bvars": [
-        0,
-        1
-       ],
-       "open": "StatementFixture.root2"
-      },
-      "extra": [],
-      "fn": "StatementFixture.root2",
-      "fn_module": "tests.roadmap.assurance.StatementBinding",
-      "nat": {
-       "pp": "StatementFixture.root2 x y",
-       "value": null
-      },
-      "params": [
-       "default",
-       "default"
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "StatementFixture.root2"
       ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       },
-       {
-        "bvar": 1
-       }
+      "conclusion_dependencies": [
+        "Eq",
+        "Nat",
+        "StatementFixture.root2"
       ],
-      "atom": {
-       "bvars": [
-        0,
-        1
-       ],
-       "open": "StatementFixture.root2"
+      "conclusion": {
+        "args": [
+          {
+            "head": "StatementFixture.root2"
+          }
+        ],
+        "head": "Eq"
       },
-      "extra": [],
-      "fn": "StatementFixture.root2",
-      "fn_module": "tests.roadmap.assurance.StatementBinding",
-      "nat": {
-       "pp": "StatementFixture.root2 x y",
-       "value": null
-      },
-      "params": [
-       "default",
-       "default"
-      ],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "x",
-      "prop": false,
-      "uses": []
-     },
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "y",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
+      "statement": {
+        "args": [
+          {
+            "args": [],
+            "atom": {
+              "closed": "Nat"
+            },
+            "extra": [],
+            "fn": "Nat",
+            "fn_module": "Init.Prelude",
+            "params": [],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              },
+              {
+                "bvar": 1
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0,
+                1
+              ],
+              "open": "StatementFixture.root2"
+            },
+            "extra": [],
+            "fn": "StatementFixture.root2",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 x y",
+              "value": null
+            },
+            "params": [
+              "default",
+              "default"
+            ],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              },
+              {
+                "bvar": 1
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0,
+                1
+              ],
+              "open": "StatementFixture.root2"
+            },
+            "extra": [],
+            "fn": "StatementFixture.root2",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root2 x y",
+              "value": null
+            },
+            "params": [
+              "default",
+              "default"
+            ],
+            "peeled": []
+          }
+        ],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          },
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "y",
+            "prop": false,
+            "uses": []
+          }
+        ],
+        "head": {
+          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
+          }
+        }
+      }
     },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     },
-     "reachability": {
-      "status": "not_required",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
-   "name": "StatementFixture.root_spec",
-   "module": "tests.roadmap.assurance.StatementBinding",
-   "dependencies": [
-    "Eq",
-    "Nat",
-    "instAddNat",
-    "instHAdd",
-    "instOfNatNat",
-    "rfl",
-    "HAdd.hAdd",
-    "OfNat.ofNat",
-    "StatementFixture.root"
-   ],
-   "statement_dependencies": [
-    "Eq",
-    "Nat",
-    "instAddNat",
-    "instHAdd",
-    "instOfNatNat",
-    "HAdd.hAdd",
-    "OfNat.ofNat",
-    "StatementFixture.root"
-   ],
-   "conclusion_dependencies": [
-    "Eq",
-    "Nat",
-    "instAddNat",
-    "instHAdd",
-    "instOfNatNat",
-    "HAdd.hAdd",
-    "OfNat.ofNat",
-    "StatementFixture.root"
-   ],
-   "conclusion": {
-    "args": [
-     {
-      "head": "HAdd.hAdd"
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement": {
-    "allocator_creation": [],
-    "args": [
-     {
-      "args": [],
-      "atom": {
-       "closed": "Nat"
-      },
-      "extra": [],
-      "fn": "Nat",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       }
+    {
+      "name": "StatementFixture.root_spec",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "rfl",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root"
       ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "StatementFixture.root"
-      },
-      "extra": [],
-      "fn": "StatementFixture.root",
-      "fn_module": "tests.roadmap.assurance.StatementBinding",
-      "nat": {
-       "pp": "StatementFixture.root x",
-       "value": null
-      },
-      "params": [
-       "default"
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root"
       ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": "instHAdd"
-       },
-       {
-        "bvar": 0
-       },
-       {
-        "closed": "OfNat.ofNat"
-       }
+      "conclusion_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root"
       ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "HAdd.hAdd"
+      "conclusion": {
+        "args": [
+          {
+            "head": "HAdd.hAdd"
+          }
+        ],
+        "head": "Eq"
       },
-      "extra": [],
-      "fn": "HAdd.hAdd",
-      "fn_module": "Init.Prelude",
-      "nat": {
-       "pp": "x + 1",
-       "value": null
-      },
-      "params": [
-       "implicit",
-       "implicit",
-       "implicit",
-       "inst_implicit",
-       "default",
-       "default"
-      ],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "x",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
+      "statement": {
+        "args": [
+          {
+            "args": [],
+            "atom": {
+              "closed": "Nat"
+            },
+            "extra": [],
+            "fn": "Nat",
+            "fn_module": "Init.Prelude",
+            "params": [],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "StatementFixture.root"
+            },
+            "extra": [],
+            "fn": "StatementFixture.root",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.root x",
+              "value": null
+            },
+            "params": [
+              "default"
+            ],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "instHAdd"
+              },
+              {
+                "bvar": 0
+              },
+              {
+                "closed": "OfNat.ofNat"
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "HAdd.hAdd"
+            },
+            "extra": [],
+            "fn": "HAdd.hAdd",
+            "fn_module": "Init.Prelude",
+            "nat": {
+              "pp": "x + 1",
+              "value": null
+            },
+            "params": [
+              "implicit",
+              "implicit",
+              "implicit",
+              "inst_implicit",
+              "default",
+              "default"
+            ],
+            "peeled": []
+          }
+        ],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          }
+        ],
+        "head": {
+          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
+          }
+        }
+      }
     },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     },
-     "reachability": {
-      "status": "not_required",
-      "theorem": null
-     }
-    }
-   }
-  },
-  {
-   "name": "StatementFixture.trivial_spec",
-   "module": "tests.roadmap.assurance.StatementBinding",
-   "dependencies": [
-    "Eq",
-    "Nat",
-    "True",
-    "instOfNatNat",
-    "rfl",
-    "trivial",
-    "OfNat.ofNat",
-    "StatementFixture.root"
-   ],
-   "statement_dependencies": [
-    "True"
-   ],
-   "conclusion_dependencies": [
-    "True"
-   ],
-   "conclusion": {
-    "head": "True"
-   },
-   "statement": {
-    "allocator_creation": [],
-    "args": [],
-    "binders": [],
-    "head": {
-     "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "True"
+    {
+      "name": "StatementFixture.trivial_spec",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "True",
+        "instOfNatNat",
+        "rfl",
+        "trivial",
+        "OfNat.ofNat",
+        "StatementFixture.root"
+      ],
+      "statement_dependencies": [
+        "True"
+      ],
+      "conclusion_dependencies": [
+        "True"
+      ],
+      "conclusion": {
+        "head": "True"
+      },
+      "statement": {
+        "args": [],
+        "binders": [],
+        "head": {
+          "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "True"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "conclusion has no supported outcome postcondition",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
+          }
+        }
+      }
     },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     },
-     "reachability": {
-      "status": "not_required",
-      "theorem": null
-     }
+    {
+      "name": "StatementFixture.wrapper_spec",
+      "module": "tests.roadmap.assurance.StatementBinding",
+      "dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "rfl",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.root",
+        "StatementFixture.wrapper"
+      ],
+      "statement_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.wrapper"
+      ],
+      "conclusion_dependencies": [
+        "Eq",
+        "Nat",
+        "instAddNat",
+        "instHAdd",
+        "instOfNatNat",
+        "HAdd.hAdd",
+        "OfNat.ofNat",
+        "StatementFixture.wrapper"
+      ],
+      "conclusion": {
+        "args": [
+          {
+            "head": "HAdd.hAdd"
+          }
+        ],
+        "head": "Eq"
+      },
+      "statement": {
+        "args": [
+          {
+            "args": [],
+            "atom": {
+              "closed": "Nat"
+            },
+            "extra": [],
+            "fn": "Nat",
+            "fn_module": "Init.Prelude",
+            "params": [],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "bvar": 0
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "StatementFixture.wrapper"
+            },
+            "extra": [],
+            "fn": "StatementFixture.wrapper",
+            "fn_module": "tests.roadmap.assurance.StatementBinding",
+            "nat": {
+              "pp": "StatementFixture.wrapper x",
+              "value": null
+            },
+            "params": [
+              "default"
+            ],
+            "peeled": []
+          },
+          {
+            "args": [
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "Nat"
+              },
+              {
+                "closed": "instHAdd"
+              },
+              {
+                "bvar": 0
+              },
+              {
+                "closed": "OfNat.ofNat"
+              }
+            ],
+            "atom": {
+              "bvars": [
+                0
+              ],
+              "open": "HAdd.hAdd"
+            },
+            "extra": [],
+            "fn": "HAdd.hAdd",
+            "fn_module": "Init.Prelude",
+            "nat": {
+              "pp": "x + 1",
+              "value": null
+            },
+            "params": [
+              "implicit",
+              "implicit",
+              "implicit",
+              "inst_implicit",
+              "default",
+              "default"
+            ],
+            "peeled": []
+          }
+        ],
+        "binders": [
+          {
+            "binder": "default",
+            "defs": [],
+            "name": "x",
+            "prop": false,
+            "uses": []
+          }
+        ],
+        "head": {
+          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "kind": "inductive",
+          "module": "Init.Prelude",
+          "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
+        "witnesses": {
+          "liveness": {
+            "status": "not_required",
+            "theorem": null
+          },
+          "nonvacuity": {
+            "status": "trivial",
+            "theorem": null
+          },
+          "reachability": {
+            "status": "not_required",
+            "theorem": null
+          }
+        }
+      }
     }
-   }
-  },
-  {
-   "name": "StatementFixture.wrapper_spec",
-   "module": "tests.roadmap.assurance.StatementBinding",
-   "dependencies": [
-    "Eq",
-    "Nat",
-    "instAddNat",
-    "instHAdd",
-    "instOfNatNat",
-    "rfl",
-    "HAdd.hAdd",
-    "OfNat.ofNat",
-    "StatementFixture.root",
-    "StatementFixture.wrapper"
-   ],
-   "statement_dependencies": [
-    "Eq",
-    "Nat",
-    "instAddNat",
-    "instHAdd",
-    "instOfNatNat",
-    "HAdd.hAdd",
-    "OfNat.ofNat",
-    "StatementFixture.wrapper"
-   ],
-   "conclusion_dependencies": [
-    "Eq",
-    "Nat",
-    "instAddNat",
-    "instHAdd",
-    "instOfNatNat",
-    "HAdd.hAdd",
-    "OfNat.ofNat",
-    "StatementFixture.wrapper"
-   ],
-   "conclusion": {
-    "args": [
-     {
-      "head": "HAdd.hAdd"
-     }
-    ],
-    "head": "Eq"
-   },
-   "statement": {
-    "allocator_creation": [],
-    "args": [
-     {
-      "args": [],
-      "atom": {
-       "closed": "Nat"
-      },
-      "extra": [],
-      "fn": "Nat",
-      "fn_module": "Init.Prelude",
-      "params": [],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "bvar": 0
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "StatementFixture.wrapper"
-      },
-      "extra": [],
-      "fn": "StatementFixture.wrapper",
-      "fn_module": "tests.roadmap.assurance.StatementBinding",
-      "nat": {
-       "pp": "StatementFixture.wrapper x",
-       "value": null
-      },
-      "params": [
-       "default"
-      ],
-      "peeled": []
-     },
-     {
-      "args": [
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": "Nat"
-       },
-       {
-        "closed": "instHAdd"
-       },
-       {
-        "bvar": 0
-       },
-       {
-        "closed": "OfNat.ofNat"
-       }
-      ],
-      "atom": {
-       "bvars": [
-        0
-       ],
-       "open": "HAdd.hAdd"
-      },
-      "extra": [],
-      "fn": "HAdd.hAdd",
-      "fn_module": "Init.Prelude",
-      "nat": {
-       "pp": "x + 1",
-       "value": null
-      },
-      "params": [
-       "implicit",
-       "implicit",
-       "implicit",
-       "inst_implicit",
-       "default",
-       "default"
-      ],
-      "peeled": []
-     }
-    ],
-    "binders": [
-     {
-      "binder": "default",
-      "defs": [],
-      "name": "x",
-      "prop": false,
-      "uses": []
-     }
-    ],
-    "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
-     "kind": "inductive",
-     "module": "Init.Prelude",
-     "name": "Eq"
-    },
-    "witnesses": {
-     "liveness": {
-      "status": "not_required",
-      "theorem": null
-     },
-     "nonvacuity": {
-      "status": "trivial",
-      "theorem": null
-     },
-     "reachability": {
-      "status": "not_required",
-      "theorem": null
-     }
-    }
-   }
-  }
- ]
+  ]
 }

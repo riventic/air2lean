@@ -10,6 +10,7 @@ import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.Thread
 import ZigLean.Sep.Full.AllocSpec
+import tools.OutcomeContracts
 
 /-!
 Environment-based assurance data extraction. The generated driver imports every selected
@@ -183,46 +184,28 @@ private def atomJson (xs : Array Expr) (e : Expr) : Json :=
     if e.hasFVar then Json.mkObj [("open", head), ("bvars", toJson (bvarUses xs e))]
     else Json.mkObj [("closed", head)]
 
-/-- Wrappers that run a computation: (constant, arity, computation index, extra-argument
-indices). The extra arguments (initial state, environment) belong to the claim's domain. -/
-private def runners : List (Name × Nat × Nat × List Nat) :=
-  [(``StateT.run, 5, 3, [4]), (``StateT.run', 6, 4, [5]), (``ExceptT.run, 4, 3, []),
-   (``OptionT.run, 3, 2, []), (``ReaderT.run, 5, 3, [4]), (``Zig.call, 3, 2, [])]
-
 /-- The leading binder kinds of a constant's type (its own parameters). -/
 private def paramBinders (env : Environment) (n : Name) : Array Json := Id.run do
   let some c := env.checked.get.find? n | return #[]
-  let mut out := #[]
-  let mut t := c.type
-  while true do
-    match t.consumeMData with
-    | .forallE _ _ b bi => out := out.push (binderJson bi); t := b
-    | _ => break
-  return out
+  return (computationParameters c.type).map binderJson
 
 /-- A conclusion argument as a computation: peeled runners, the applied constant, its
 parameter kinds, its arguments and the runners' extra arguments, as atoms; `atom` describes the
 argument itself. -/
-private partial def subjectJson (env : Environment) (xs : Array Expr) (e : Expr) : Json :=
-  (go e.consumeMData #[] #[]).setObjVal! "atom" (atomJson xs e)
-where
-  go (e : Expr) (peeled : Array Json) (extra : Array Json) : Json :=
-    let args := e.getAppArgs
-    let runner : Option (Name × Nat × Nat × List Nat) := match e.getAppFn.consumeMData with
-      | .const n _ => runners.find? fun r => r.1 == n && args.size == r.2.1
-      | _ => none
-    match runner with
-    | some (n, _, program, extras) =>
-      go args[program]!.consumeMData (peeled.push (toJson n.toString))
-        (extras.foldl (fun acc i => acc.push (atomJson xs args[i]!)) extra)
-    | none =>
-      let fn := match e.getAppFn.consumeMData with
+private def subjectJson (env : Environment) (xs : Array Expr) (e : Expr)
+    (checked : Except String ComputationView) : Json := Id.run do
+  let result := match checked with
+    | .error reason => Json.mkObj [("fn", Json.null), ("runner_error", toJson reason)]
+    | .ok view => Id.run do
+      let fn := match view.source.getAppFn.consumeMData with
         | .const n _ => some n
         | _ => none
-      Json.mkObj [("peeled", Json.arr peeled), ("fn", toJson (fn.map Name.toString)),
-        ("fn_module", toJson (fn.map (moduleOf env))),
+      return Json.mkObj [("peeled", toJson (view.peeled.map Name.toString)),
+        ("fn", toJson (fn.map Name.toString)), ("fn_module", toJson (fn.map (moduleOf env))),
         ("params", Json.arr ((fn.map (paramBinders env)).getD #[])),
-        ("args", Json.arr (args.map (atomJson xs))), ("extra", Json.arr extra)]
+        ("args", Json.arr (view.source.getAppArgs.map (atomJson xs))),
+        ("extra", Json.arr (view.extra.map (atomJson xs)))]
+  return result.setObjVal! "atom" (atomJson xs e)
 
 private def hashHex (h : UInt64) : String :=
   let s := String.ofList (Nat.toDigits 16 h.toNat)
@@ -253,6 +236,43 @@ private def fnv1a (s : String) : UInt64 :=
 private def fingerprint (c : ConstantInfo) : String :=
   let text := serialize c.type ++ "|" ++ ((c.value? (allowOpaque := true)).map serialize).getD "-"
   hashHex text.hash ++ hashHex (fnv1a text)
+
+/-- Original kernel facts for the framework ratchet. These are candidate evidence, never an
+ordinary-data exemption. In particular, a non-Prop result does not prove a record harmless. -/
+private def frameworkEvidence (env : Environment) (n : Name) (c : ConstantInfo) : MetaM Json := do
+  -- A proof's type is already a proposition. Reducing that proposition could run the program
+  -- it mentions; only a definition whose TYPE returns the sort Prop needs the telescope test.
+  let proof ← if c.isTheorem then pure true else isProp c.type
+  let (propValued, binders) ←
+    if proof then
+      pure ((some false : Option Bool), (#[] : Array Json))
+    else
+      forallTelescopeReducing c.type (whnfType := true) fun xs result => do
+        let mut binders := #[]
+        for x in xs do
+          let decl ← x.fvarId!.getDecl
+          binders := binders.push <| Json.mkObj [
+            ("binder", binderJson decl.binderInfo),
+            ("type_constants", namesJson (decl.type.getUsedConstants.qsort Name.lt))]
+        let propValued : Option Bool := match result.consumeMData with
+          | .sort .zero => some true
+          | .sort (.succ _) => some false
+          | _ => none
+        return (propValued, binders)
+  let body := c.value? (allowOpaque := true)
+  let valueConstants := (body.map fun e => e.getUsedConstants.qsort Name.lt).getD #[]
+  return Json.mkObj [
+    ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
+    ("user_name", toJson ((privateToUserName? n).getD n).toString),
+    ("kind", toJson (kind c)), ("is_proof", toJson proof), ("prop_valued", toJson propValued),
+    ("binders", Json.arr binders),
+    ("original_type_constants", namesJson (c.type.getUsedConstants.qsort Name.lt)),
+    ("original_body_constants", namesJson valueConstants),
+    ("body_available", toJson body.isSome),
+    ("kernel_fingerprint", toJson (fingerprint c)),
+    ("projection", toJson (env.isProjectionFn n)),
+    ("matcher", toJson (Meta.isMatcherCore env n)),
+    ("auxiliary_recursor", toJson (isAuxRecursor env n || isNoConfusion env n))]
 
 /-- The declaration behind a conclusion head: its module and a fingerprint of its kernel type
 and value, so that a same-named declaration elsewhere is distinguishable. -/
@@ -595,8 +615,12 @@ private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Js
     let body := body.consumeMData
     -- A natural-number argument (a bound of a bounded head) also records its value when it is
     -- closed (`evalNat`) and its printed form, so a manifest can check the bound it states.
-    let args ← body.getAppArgs.mapM fun a => do
-      let j := subjectJson env xs a
+    let computation ← statementComputation body
+    let computationIndex := computationArgument? body
+    let computations ← body.getAppArgs.mapIdxM fun i a =>
+      if computationIndex == some i then pure computation else peelComputation a
+    let args ← (body.getAppArgs.zip computations).mapM fun (a, checked) => do
+      let j := subjectJson env xs a checked
       let isNat ← try pure ((← whnfR (← inferType a)).isConstOf ``Nat) catch _ => pure false
       unless isNat do return j
       let value ← if a.hasFVar || a.hasMVar then pure none else evalNat a
@@ -609,6 +633,7 @@ private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Js
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
       ("allocator_creation", Json.arr allocatorCreation),
+      ("outcomes", ← outcomeJson body (some computation)),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
@@ -691,6 +716,12 @@ elab_rules : command
     let roots := rootSet.toArray.qsort Name.lt
     let declarations := declarations.qsort Name.lt
     let selectedDeclarations := selectedDeclarations.qsort Name.lt
+    let mut framework : Array Json := #[]
+    if seedAll then
+      for n in selectedDeclarations do
+        let some c := env.checked.get.find? n | throwError "selected declaration disappeared: {n}"
+        let evidence ← liftTermElabM <| withoutExporting <| frameworkEvidence env n c
+        framework := framework.push evidence
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
@@ -716,7 +747,8 @@ elab_rules : command
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),
       ("nodes", Json.arr (graph env (if seedAll then selectedDeclarations.toList ++ roots.toList ++ declarations.toList
         else roots.toList ++ declarations.toList)))] ++
-      if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations)] else []
+      if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations),
+        ("selected_declaration_evidence", Json.arr framework)] else []
     liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)
 
 end Air2Lean.Assurance

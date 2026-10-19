@@ -251,9 +251,26 @@ every project goal (`docs/project-workflow.md`) against its root's generated def
 * the conclusion is not about the root: the computation at the head's program position (an
   equation's left side) is not the root definition. A root that appears only in a
   postcondition, a hypothesis or an ignored argument does not bind;
+* a peeled runner has an unknown declared effect or projects source data through unsupported
+  semantics. Binding and outcome extraction share the same checked runner description;
+* an equation's `Pure.pure` right-hand side uses an unsupported or noncanonical operation
+  dictionary. A `pure` spelling alone cannot justify a successful return, even for an implicit goal;
 * a hypothesis mentions a generated definition (any definition of the root's generated module)
   or a claim head, unless that definition is one of the root's declared `assumptions`;
 * the derived domain is scoped and the declared domain does not start with `scoped`.
+
+An explicit `outcomes.admits` is checked against the audited kernel postcondition's constructor
+upper bound, independently of tests. A narrower or unsupported contract rejects the goal;
+a wider contract is reported as `under_claim`. Partial postconditions keep divergence and
+stack overflow unexcluded and cannot establish an explicit complete outcome set. Implicit
+defaults remain labelled `strength_default` and follow the declared strength, including its
+conditional-on-return meaning. See [outcome-taxonomy.md](outcome-taxonomy.md#goal-outcome-contracts).
+
+For MM-run triples, the shared computation view identifies the final-state products introduced
+by the runners. Extraction visits the source return value and reconstructs those products when
+reading the original postcondition. A genuine tuple-valued return stays an ordinary value.
+Concurrent CTriple computations use the declared ConcM family; its scheduler arguments are not
+guessed to be source state layers. Unrecognized function families fail source binding closed.
 
 The domain is derived from the subject: each explicit root argument and initial state is
 reported as the quantified variable it is, or `fixed`. It is `universal` only when every one is
@@ -270,7 +287,8 @@ Every declared strength asserts `no-panic`; `total_correctness` also asserts
 `guaranteed-return`. A goal is rejected when its root's evidence includes a capped search,
 a fuel-bounded no-result run, an unspecified result, an unsupported timer (`unspecified_timer`,
 reason `unsupported timer`), an unsupported outcome, or an observed failure the claim denies.
-Error returns never reject a goal. Evidence can only reject: an incomplete summary exits 2, and
+Error returns preserve absence-of-model-failure claims, but an explicit outcome contract may
+exclude them. Evidence can only reject: an incomplete summary exits 2, and
 clean evidence adds nothing to the type-derived strength. Each summary must be bound to the
 current tree: its `runner_runtime_sources` must equal the fingerprints `scripts/diff-report.py`
 computes now and its `cases_sha256` the case file beside it; stale or unbound evidence exits 2.
