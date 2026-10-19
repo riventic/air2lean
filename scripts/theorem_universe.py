@@ -253,12 +253,15 @@ def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | Non
                   *(a for m in modules for a in ("--module", m))], with_lean_path(lean_path))
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
+    # Two test modules may declare the same name (`main`), or one may declare a name a Lake module
+    # also declares (the claim-head spoofs of tests/roadmap/claims/Fixture.lean): they cannot share
+    # one environment.
+    clash = next((line for line in result.stdout.splitlines() if "environment already contains" in line), None)
     return {"modules": modules, "report": str(output), "status": report.get("status"),
             "exit_code": result.returncode, "theorem_count": report.get("theorem_count", 0),
             "seconds": round(time.monotonic() - started, 1),
             "kernel_replay": (report.get("kernel_replay") or {}).get("status"),
-            # Two test modules may declare the same name (`main`): they cannot share one environment.
-            "collision": "environment already contains" in result.stdout,
+            "collision": clash,
             "violations": [v["name"] + ": " + v["reason"] for v in report.get("violations", [])] or
                           ([report["error"]] if report.get("error") else [])}
 
@@ -394,8 +397,15 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
                                replay_cache, sources)
         runs.append(result)
         if result["collision"] and len(bundle) > 1:
+            # Expected, not a failure: the halves are audited in separate runs.
+            print(f"theorem universe: run {len(runs) - 1} ({len(bundle)} modules) declares a name twice; "
+                  "auditing its halves separately", file=sys.stderr)
             result["status"] = "split"
             pending += [bundle[:len(bundle) // 2], bundle[len(bundle) // 2:]]
+        elif result["collision"]:
+            # Fail closed: a module whose own imports declare one name twice is never audited.
+            errors.append(f"{bundle[0].file}: cannot be audited, its import closure declares a name twice "
+                          f"({result['collision']})")
         elif result["status"] != "pass" or result["exit_code"]:
             errors += result["violations"] or [f"audit {result['report']} exited {result['exit_code']}"]
     if shipped_report is not None:
