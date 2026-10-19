@@ -184,4 +184,88 @@ example (P : FAssn) (a : BitVec 16) (h : a.toNat = 128) : True := by
       fsym
   trivial
 
+/-! Implications (a loop invariant's `⟪s.it = none → x0 = none⟫`, ledger #arith-implications):
+the premise is a fact for the conclusion; an implication among the facts gives its conclusion
+once its premise normalizes to `True`; a fact that is the target closes it without `omega`. -/
+
+/-- A premise that the facts refute. -/
+theorem implies_refuted (p : Ptr) (x : Option Ptr) : some p = none → x = none := by
+  fsym_arith
+
+/-- An implication among the facts whose premise holds. -/
+theorem implies_fact (y : BitVec 64) (h : (none : Option Ptr) = none → y.toNat = 3) :
+    y.toNat < 4 := by
+  fsym_arith
+
+/-- … with a conclusion that is no arithmetic. -/
+theorem implies_fact_target (x : Option Ptr) (h : (none : Option Ptr) = none → x = none) :
+    x = none := by
+  fsym_arith
+
+open Zig.Full Zig.Full.FAssn in
+/-- A postcondition fact that is an implication (a loop invariant's, at the next iteration). -/
+theorem implies_post (P : FAssn) (p : Ptr) (x : Option Ptr) :
+    FTotalTriple P (pure (some p) : MemM (Option Ptr)) (fun r => ⟪r = none → x = none⟫ ⋆ P) := by
+  fsym
+
+/-! ## A probe's budget (`withBudget`, ledger #probe-case-budget)
+
+A probe searches the case facts within a budget of heartbeats of its own. These checks spend the
+budget at once (`IO.addHeartbeats`); a misbehaving engine fails the elaboration. -/
+
+section Budget
+open Lean Meta Zig.Full.Auto
+
+/-- **A budget hit outside `omega`** (the rewrite of a split term, `omegaFactsOn`): the probe
+fails with `none`; the heartbeat exception does not escape to end the run. -/
+def budget_outside_omega : MetaM Unit :=
+  withLocalDeclD `a (mkConst ``Nat) fun a => withLocalDeclD `b (mkConst ``Nat) fun b => do
+  let sub ← mkAppM ``HSub.hSub #[a, b]
+  withLocalDeclD `h (← mkAppM ``LE.le #[sub, mkNatLit 10]) fun h => do
+  let ty ← mkAppM ``LE.le #[sub, mkNatLit 11]
+  let r ← withBudget 1 do
+    IO.addHeartbeats 2000
+    omegaFactsOn #[(h, ← inferType h)] ty
+  if r.isSome then throwError "budget_outside_omega: a proof past the budget"
+
+run_meta budget_outside_omega
+
+/-- **No failure cached past the budget**: a case probe of a split term (`detProbe`) that fails
+because its budget ran out is not recorded; the same probe outside the budget, in the same run,
+is tried and succeeds. -/
+def budget_no_failure_cache : MetaM Unit := do
+  let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
+  fsymRuns.modify (·.insert id (← RunCaches.new))
+  try
+    withOptions (·.set `fsym.run id) <|
+    withLocalDeclD `a (mkConst ``Nat) fun a => withLocalDeclD `b (mkConst ``Nat) fun b => do
+    let prop ← mkAppM ``LE.le #[b, a]
+    withLocalDeclD `h prop fun h => do
+    let key := mkApp2 (mkConst `fsym.det) (← mkAppM ``HSub.hSub #[a, b]) prop
+    let r ← withBudget 1 do
+      IO.addHeartbeats 2000
+      detProbe key #[h] (omegaRaw #[h] prop)
+    if r.isSome then throwError "budget_no_failure_cache: a proof past the budget"
+    if (← detProbe key #[h] (omegaRaw #[h] prop)).isNone then
+      throwError "budget_no_failure_cache: the failure past the budget was cached"
+  finally fsymRuns.modify (·.erase id)
+
+run_meta budget_no_failure_cache
+
+/-- **The context's limit binds a budget**: a budget above what remains of `maxHeartbeats` ends
+at that limit, and its exception is rethrown (the limit ends the run), not a probe's `none`. -/
+def budget_within_limit : MetaM Unit := do
+  let r ← tryCatchRuntimeEx
+    (withTheReader Core.Context (fun c => { c with maxHeartbeats := 5000 }) <| withCurrHeartbeats do
+      some <$> withBudget 10000 do
+        IO.addHeartbeats 100000
+        Core.checkSystem "budget_within_limit"
+        return some ())
+    fun ex => if ex.isMaxHeartbeat then pure none else throw ex
+  if r.isSome then throwError "budget_within_limit: the budget raised the context's limit"
+
+run_meta budget_within_limit
+
+end Budget
+
 end SepAuto.Arith

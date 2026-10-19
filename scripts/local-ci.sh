@@ -71,15 +71,22 @@ if [ "${1:-}" = --inside ]; then
   # Serialize users of the shared Linux caches; never reuse host native artifacts.
   exec 9>/cache/local-ci.lock
   flock -n 9 || { echo 'error: another local CI run owns the caches' >&2; exit 1; }
+  snapshot_sha=$(awk -F= '$1 == "snapshot_sha256" { print $2 }' /snapshot/source-revision)
+  [[ "$snapshot_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'error: invalid snapshot archive digest' >&2; exit 1; }
+  printf '%s  /snapshot/source.tar\n' "$snapshot_sha" | sha256sum -c -
   tar -xf /snapshot/source.tar -C /work
   # Under Rosetta: AIR2LEAN_ROSETTA_LINK_FLAGS for every native build below (docs/rosetta.md).
   source scripts/rosetta.sh
+  export AIR2LEAN_LOCAL_BOOTSTRAP=/snapshot/bootstrap.sh
   if [ "$mode" = targeted ]; then
     git init -q
     git config user.email local-ci@example.invalid
     git config user.name local-ci
     git --literal-pathspecs add -f --pathspec-from-file=/snapshot/files --pathspec-file-nul
     git commit -qm 'Local tracked-source snapshot'
+    # Interpreted jobs retain the snapshot in memory for producer/consumer resets and
+    # seal it there; targeted jobs have only this checkout and can seal it now.
+    python3 -B scripts/local-ci-steps.py --seal-snapshot /snapshot /snapshot/bootstrap.sh
   fi
   export AIR2LEAN_LOCAL_MODE=$mode
   if [ "$mode" = part ] || [ "$mode" = discover ]; then
@@ -188,16 +195,9 @@ mkdir -p "$artifact_parent"
 artifact_parent=$(cd -- "$artifact_parent" && pwd -P)
 artifacts=$(mktemp -d "$artifact_parent/run.XXXXXX")
 printf 'Local CI results: %s\n' "$artifacts" >&2
-# Index paths include staged additions; copy their current working-tree content. Deleted
-# paths are omitted. Never copy untracked files, Git metadata or host build/cache directories.
-git ls-files -z | while IFS= read -r -d '' path; do
-  case "$path" in
-    .git|.git/*|.lake|.lake/*|*/.lake|*/.lake/*|.aws/*|.codex/*|.agents/*|zig-air-*/*|host-zig/*) continue ;;
-  esac
-  [ ! -d "$path" ] || { echo "error: tracked directory/submodule unsupported: $path" >&2; exit 1; }
-  if [ -e "$path" ] || [ -L "$path" ]; then printf '%s\0' "$path"; fi
-done >"$snapshot/files"
-COPYFILE_DISABLE=1 tar -cf "$snapshot/source.tar" --null -T "$snapshot/files"
+# Compare the actual archived bytes/modes with one pinned revision before issuing a stamp.
+# A failed comparison stops here, before any local verification runtime is launched.
+python3 -B scripts/local-ci-steps.py --snapshot-runner "$snapshot" "$artifacts" "$mode" "$version"
 # Preflight's ledger ratchet reads origin/main history. Supply that exact local ref,
 # never the caller's .git or credentials; other jobs cannot access this bundle after sealing.
 if [ "$version" = preflight ]; then
@@ -206,26 +206,15 @@ if [ "$version" = preflight ]; then
   git -C "$snapshot/base.git" bundle create "$snapshot/main.bundle" main
   rm -rf "$snapshot/base.git"
 fi
-# Source binding for scripts/release-record.py: the snapshot is evidence for HEAD only when
-# no tracked file differs from it (untracked files are never copied).
-tracked_clean=no
-[ -n "$(git status --porcelain --untracked-files=no)" ] || tracked_clean=yes
-printf 'revision=%s\ntracked_clean=%s\nmode=%s\nversion=%s\n' \
-  "$(git rev-parse HEAD)" "$tracked_clean" "$mode" "$version" >"$artifacts/source-revision"
-cp "$artifacts/source-revision" "$snapshot/source-revision"
 platform=linux/amd64
 if [ "$mode" = part ] || [ "$mode" = discover ]; then
   # The existing interpreter owns runner selection, including unknown-job diagnostics.
   local_python=${AIR2LEAN_LOCAL_PYTHON:-python3}
-  if ! "$local_python" -c 'import yaml' >/dev/null 2>&1; then
-    local_python="$HOME/.cache/air2lean/local-ci/venv/bin/python3"
-    [ -x "$local_python" ] && "$local_python" -c 'import yaml' >/dev/null 2>&1 || {
-      echo 'error: local workflow selection needs Python 3 with PyYAML (set AIR2LEAN_LOCAL_PYTHON)' >&2
-      exit 1
-    }
-  fi
   # Select and launch from captured sources, never files changed after the snapshot.
   mkdir -p "$artifacts/bootstrap"
+  snapshot_sha=$(awk -F= '$1 == "snapshot_sha256" { print $2 }' "$snapshot/source-revision")
+  [[ "$snapshot_sha" =~ ^[0-9a-f]{64}$ ]] || { echo 'error: invalid snapshot archive digest' >&2; exit 1; }
+  printf '%s  %s\n' "$snapshot_sha" "$snapshot/source.tar" | shasum -a 256 -c -
   COPYFILE_DISABLE=1 tar -xf "$snapshot/source.tar" -C "$artifacts/bootstrap"
   platform=$(cd "$artifacts/bootstrap" && "$local_python" scripts/local-ci-steps.py --placement "$version")
 fi
@@ -238,6 +227,7 @@ if [ "$platform" = host ]; then
   mkdir -p "$host_tools"
   mv "$artifacts/bootstrap" "$artifacts/work"
   export AIR2LEAN_LOCAL_ARTIFACTS=$artifacts AIR2LEAN_LOCAL_SNAPSHOT=$snapshot AIR2LEAN_LOCAL_MODE=$mode
+  export AIR2LEAN_LOCAL_BOOTSTRAP=$snapshot/bootstrap.sh
   export AIR2LEAN_LOCAL_HOST_TOOLS=$host_tools
   cd "$artifacts/work"
   bounded_run "$local_python" scripts/local-ci-steps.py --host "$mode" "$version"
@@ -245,7 +235,9 @@ if [ "$platform" = host ]; then
 fi
 rm -rf "$artifacts/bootstrap"
 # Build with only this Dockerfile as context: no checkout or private files reach the daemon.
-tar -xOf "$snapshot/source.tar" Dockerfile.local-ci >"$snapshot/Dockerfile"
+lake_key=$(<"$snapshot/lake-key")
+diff_key=$(<"$snapshot/diff-key")
+rm "$snapshot/lake-key" "$snapshot/diff-key"
 case "$(docker info --format '{{.Architecture}}')" in
   aarch64|arm64) python_arch=arm64 ;;
   x86_64|amd64) python_arch=amd64 ;;
@@ -260,8 +252,6 @@ image="air2lean-local-ci:ubuntu24-$target_arch-python-$python_arch"
 docker build --platform "$platform" --build-arg "PYTHON_ARCH=$python_arch" \
   -t "$image" - <"$snapshot/Dockerfile"
 rm "$snapshot/Dockerfile"
-lake_key=$(tar -xOf "$snapshot/source.tar" lean-toolchain lake-manifest.json | shasum -a 256 | cut -c1-16)
-diff_key=$(tar -xOf "$snapshot/source.tar" tests/diff/lean-toolchain tests/diff/lake-manifest.json | shasum -a 256 | cut -c1-16)
 if [ "$target_arch" = arm64 ]; then
   tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-arm64-toolchains}
 else
@@ -276,7 +266,7 @@ container=$(docker create --platform "$platform" --memory="${AIR2LEAN_LOCAL_MEMO
   --mount "type=volume,src=$tool_volume,dst=/cache" \
   --mount "type=volume,src=air2lean-linux-$target_arch-$cache_namespace-lake-$lake_key,dst=/work/.lake" \
   --mount "type=volume,src=air2lean-linux-$target_arch-$cache_namespace-diff-$diff_key,dst=/work/tests/diff/.lake" \
-  "$image" bash -c 'tar -xOf /snapshot/source.tar scripts/local-ci.sh > /tmp/local-ci.sh; exec bash /tmp/local-ci.sh --inside "$@"' \
+  "$image" bash -c 'exec bash /snapshot/bootstrap.sh --inside "$@"' \
   local-ci "$mode" "$version" "$examples")
 bounded_run docker start -a "$container"
 # Attached start may report only Docker's status; preserve the actual recipe exit code.

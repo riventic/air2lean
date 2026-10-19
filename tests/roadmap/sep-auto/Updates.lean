@@ -92,4 +92,31 @@ precondition. -/
 theorem entail_def (w : W) : EUpd w.L (apts w.q 0#64 ⋆ apts w.p w.v) := by
   fsym_entail
 
+/-! ## An update's precondition through views (ledger #update-plan-views)
+
+An invariant holds a word as a `wpts` (any tag constraint: the arena's node headers); an atomic op
+leaves an `apts`. The plan of an update's precondition views the state's atom as the one that
+plan did not find (`apts_wpts_view`), as a step's plan does, not as what other plans of the
+return missed. -/
+
+/-- A published word at `p`: with any tag constraint, or 16 bytes of a region (a raw predicate,
+which the planner does not unfold). -/
+def PubW (p : Ptr) : FAssn := fun r =>
+  (FAssn.ex fun v => wpts p v) r ∨ ∃ A S K bs, bs.size = 16 ∧ up (regionIn p A S K 8 bs) r
+
+/-- An update that this state does not meet: 16 bytes at `p`. -/
+theorem pubR_upd (p : Ptr) {A S : Nat} {K : BlockKind} {bs : Array Byte} (h : bs.size = 16) :
+    EUpd (up (regionIn p A S K 8 bs)) (PubW p) :=
+  EUpd.of_imp fun _ hr => .inr ⟨A, S, K, bs, h, hr⟩
+
+theorem pubW_upd (p : Ptr) {v : BitVec 64} : EUpd (wpts p v) (PubW p) :=
+  EUpd.of_imp fun _ hr => .inl ⟨v, hr⟩
+
+/-- The second update names a `wpts`, the state has the `apts`: viewed as it (`closePre`). The
+first one's plan, which views the word as the bytes of a region and fails, leaves the state as it
+was: each update's plan views only what that plan misses. -/
+theorem upd_view (p : Ptr) (x : BitVec 64) :
+    FTotalTriple (apts p x) (pure ()) (fun _ => PubW p) := by
+  fsym [pubR_upd p, pubW_upd p]
+
 end SepAuto.Updates

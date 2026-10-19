@@ -17,6 +17,11 @@ the raw declaration graph and Lean's own transitive axiom inventory remain inspe
 
 open Lean Elab Command Meta
 
+register_option air2lean.assurance.allDeclarations : Bool := {
+  defValue := false
+  descr := "seed the assurance graph with every checked declaration in selected modules"
+}
+
 namespace Air2Lean.Assurance
 
 private def moduleOf (env : Environment) (n : Name) : String :=
@@ -274,17 +279,15 @@ private def witnessJson (env : Environment) (thm : Name) (suffix : Name)
 
 private def statementJson (n : Name) (type : Expr) : MetaM Json := do
   let env ← getEnv
-  let nonvacuity ← Zig.Witness.nonvacuityType type
-  let liveness ← Zig.Witness.livenessType? type
-  let trivial ← Zig.Witness.triviallyInhabited type
+  -- One premise telescope serves every witness statement (`Zig.Witness.statements`): unfolding
+  -- the conclusion head can evaluate a whole computation, which is not repeated per statement.
+  let st ← Zig.Witness.statements type
   let nonvacuityJson :=
-    if trivial then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
-    else witnessJson env n Zig.Witness.nonvacuousSuffix (some nonvacuity)
-  let reachability ← Zig.Witness.reachabilityType? type
-  let reachabilityJson ←
-    if reachability.isSome && (← Zig.Witness.triviallyReachable type) then
-      pure (Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)])
-    else pure (witnessJson env n Zig.Witness.reachableSuffix reachability)
+    if st.trivial then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
+    else witnessJson env n Zig.Witness.nonvacuousSuffix (some st.nonvacuity)
+  let reachabilityJson :=
+    if st.triviallyReachable then Json.mkObj [("status", toJson "trivial"), ("theorem", Json.null)]
+    else witnessJson env n Zig.Witness.reachableSuffix st.reachability
   forallTelescope type fun xs body => do
     let mut binders := #[]
     for i in [:xs.size] do
@@ -310,7 +313,7 @@ private def statementJson (n : Name) (type : Expr) : MetaM Json := do
       ("binders", Json.arr binders), ("head", headIdentity env body),
       ("args", Json.arr args),
       ("witnesses", Json.mkObj [("nonvacuity", nonvacuityJson),
-        ("liveness", witnessJson env n Zig.Witness.livenessSuffix liveness),
+        ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
 
 syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
@@ -323,16 +326,19 @@ elab_rules : command
     -- data is loaded by ordinary (non-`module`) imports, so proof bodies are available.
     let env := (← getEnv).setExporting false
     let selectedSet := Std.HashSet.ofArray selected
-    let (roots, declarations) := env.checked.get.constants.fold
-      (init := ((#[] : Array Name), (#[] : Array Name))) fun (roots, declarations) n c =>
-        if !selectedSet.contains (moduleOf env n) then (roots, declarations) else
+    let seedAll := air2lean.assurance.allDeclarations.get (← getOptions)
+    let (roots, declarations, selectedDeclarations) := env.checked.get.constants.fold
+      (init := ((#[] : Array Name), (#[] : Array Name), (#[] : Array Name)))
+      fun (roots, declarations, selectedDeclarations) n c =>
+        if !selectedSet.contains (moduleOf env n) then (roots, declarations, selectedDeclarations) else
         let roots := if c.isTheorem then roots.push n else roots
         let declarations := if c.isAxiom || (kind c == "opaque") ||
             (Compiler.getImplementedBy? env n).isSome ||
             (getExternAttrData? env n).isSome then declarations.push n else declarations
-        (roots, declarations)
+        (roots, declarations, if seedAll then selectedDeclarations.push n else selectedDeclarations)
     let roots := roots.qsort Name.lt
     let declarations := declarations.qsort Name.lt
+    let selectedDeclarations := selectedDeclarations.qsort Name.lt
     let mut theorems : Array Json := #[]
     for n in roots do
       let axs ← collectAxioms n
@@ -345,10 +351,12 @@ elab_rules : command
         ("name", toJson n.toString), ("module", toJson (moduleOf env n)),
         ("axioms", namesJson axs), ("conclusion", conclusion)] ++ statement ++
         [("statement", shape)]
-    let result := Json.mkObj [
+    let result := Json.mkObj <| [
       ("schema_version", toJson (1 : Nat)), ("modules", toJson selected),
       ("theorems", Json.arr theorems), ("project_declarations", namesJson declarations),
-      ("nodes", Json.arr (graph env (roots.toList ++ declarations.toList)))]
+      ("nodes", Json.arr (graph env (if seedAll then selectedDeclarations.toList
+        else roots.toList ++ declarations.toList)))] ++
+      if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations)] else []
     liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)
 
 end Air2Lean.Assurance

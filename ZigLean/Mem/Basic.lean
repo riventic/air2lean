@@ -602,14 +602,66 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
           blk.kind.mappedLo ≤ p.off.toNat
       then pure (b, blk, p.off.toNat) else throw .illegal
 
+/-- `Mem.access` throws only `.illegal`. -/
+theorem access_cases (m : Mem) (p : Ptr) (n al : Nat) :
+    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
+  unfold Mem.access
+  split
+  · exact .inl rfl
+  · split
+    · exact .inl rfl
+    · split
+      · exact .inr ⟨_, _, _, rfl⟩
+      · exact .inl rfl
+
+/-- An access check always returns a checked location or an error, in every memory. -/
+theorem Mem.access_run_ne_none (m : Mem) (p : Ptr) (n align : Nat) :
+    (m.access p n align).run ≠ none := by
+  rcases access_cases m p n align with h | ⟨b, blk, o, h⟩
+  · rw [h]
+    exact Result.throw_run_ne_none _
+  · rw [h]
+    exact Result.pure_run_ne_none _
+
 /-- `Mem.access` for a write: a write to a `const` global throws `.illegal`. -/
 def Mem.accessW (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block × Nat) := do
   let r ← m.access p n align
   if r.2.1.kind = .constGlobal then throw .illegal else pure r
 
-/-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`). -/
-def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+/-- The write access check also always returns a location or an error. -/
+theorem Mem.accessW_run_ne_none (m : Mem) (p : Ptr) (n align : Nat) :
+    (m.accessW p n align).run ≠ none := by
+  unfold Mem.accessW
+  refine Result.bind_run_ne_none (m.access_run_ne_none p n align) fun r => ?_
+  split
+  · exact Result.throw_run_ne_none _
+  · exact Result.pure_run_ne_none _
+
+private def writeBytesArray (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
+
+/-- `a` with the bytes from offset `o` on replaced by `bs` (`o + bs.size ≤ a.size`).
+The kernel shares the unchanged suffix instead of rebuilding it with `Array.push`.
+`writeBytes_eq` proves equality to the original array-splice equation for every
+input, in bounds or not. Keep the implementation opaque to elaborator unification;
+symbolic proofs use that equation instead of expanding concrete byte lists. -/
+@[irreducible] def writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+  let xs := a.toList
+  (xs.take o ++ bs.toList ++ xs.drop (o + bs.size)).toArray
+
+/-- The original array-splice equation. No bounds assumption is required. -/
+theorem writeBytes_eq (a : Array Byte) (o : Nat) (bs : Array Byte) :
+    writeBytes a o bs = a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size := by
+  apply Array.ext'
+  simp only [writeBytes, List.toList_toArray, Array.toList_append, Array.toList_extract,
+    List.extract, List.drop_zero, Nat.sub_zero, ← Array.length_toList, ← List.length_drop,
+    List.take_length]
+
+/-- The compiler uses native array operations through a checked function equality;
+kernel reduction continues to use the list spine above. -/
+@[csimp] private theorem writeBytes_eq_array : writeBytes = writeBytesArray := by
+  funext a o bs
+  exact writeBytes_eq a o bs
 
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
@@ -650,6 +702,16 @@ def recordAccess (block : BlockId) (off len : Nat) (kind : AccessKind) : MemM Un
     set { m with
       clocks := m.clocks.set! t clock,
       footprint := m.footprint.push { tid := t, clock, block, off, len, kind } }
+
+/-- Recording an access always returns or reports a race, including in malformed memories. -/
+theorem recordAccess_run_ne_none (block : BlockId) (off len : Nat) (kind : AccessKind) :
+    ∀ m, ((recordAccess block off len kind).run m).run ≠ none := by
+  unfold recordAccess
+  refine M.bind_run_ne_none M.get_run_ne_none fun _ => ?_
+  dsimp only
+  split
+  · exact M.throw_run_ne_none _
+  · exact M.set_run_ne_none _
 
 /-- `e` without its accesses to offsets `≥ S` of block `b`: an entry that starts there gets the
 empty clock (it happened before every access, so it races with none and every clock covers it;

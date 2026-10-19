@@ -118,12 +118,9 @@ theorem block_fields {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t :
       (fun _ _ m' _ => m'.current = t) G m n := by
   fsym [FTriple.allocStackDrop]
 
-/-- **The facts of the steps' runs** (`@[fsym_run]`, `wpRunFacts`): what the segment rule does
-not carry, the new block's pointer (`allocStack_runFacts`) and the atomic locations and the futex
-queue that the allocation, a field pointer and the stores keep (`ptrProject_runFacts`,
-`store_runFacts`),
-at the end of the thread's own stack block's stores (a protocol's start needs them at the
-spawn). -/
+/-- **The facts of the steps' runs** (`@[fsym_run]`, `wpRunFacts`): the new block's pointer and
+count, and the protocol fields the allocation, a field pointer and the stores keep. The initial
+fields are arbitrary, so this also covers nonempty queues and groups. -/
 theorem run_facts {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
     (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
     (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : plain (own t)) :
@@ -132,8 +129,51 @@ theorem run_facts {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : Th
         ConcM.liftMem (ptrProject p (·.add 8)) >>= fun q =>
         ConcM.liftMem (store (α := BitVec 32) 4 q 5) >>= fun _ => pure p)
       (fun p _ m' _ => p = ⟨some m.blocks.size, 0⟩ ∧ m'.atomics = m.atomics ∧
-        m'.waiters = m.waiters) G m n := by
+        m'.waiters = m.waiters ∧ m'.current = m.current ∧ m'.threads = m.threads ∧
+        m'.woken = m.woken ∧ m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size ∧
+        m'.blocks.size = m.blocks.size + 1) G m n := by
   fsym [FTriple.allocStackDrop]
+
+/-- Two allocations separated by stores: the next pointer uses the first allocation's count,
+which the stores keep. The field pointers use the owned block's authority, without a separate
+memory-description rule. Only the final allocation consumes the plain mode. -/
+theorem two_blocks {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : plain (own t)) :
+    P.WP t (ConcM.liftMem (allocStack 24 8) >>= fun p =>
+        ConcM.liftMem (store (α := BitVec 64) 8 p 1) >>= fun _ =>
+        ConcM.liftMem (ptrProject p (·.add 16)) >>= fun p16 =>
+        ConcM.liftMem (store (α := BitVec 32) 4 p16 2) >>= fun _ =>
+        ConcM.liftMem (ptrProject p (·.add 20)) >>= fun p20 =>
+        ConcM.liftMem (store (α := BitVec 32) 4 p20 3) >>= fun _ =>
+        ConcM.liftMem (allocStack 16 8) >>= fun q =>
+        ConcM.liftMem (store (α := BitVec 32) 4 q 4) >>= fun _ => pure (p, q))
+      (fun r _ m' _ => r.1 = ⟨some m.blocks.size, 0⟩ ∧
+        r.2 = ⟨some (m.blocks.size + 1), 0⟩ ∧ m'.blocks.size = m.blocks.size + 2 ∧
+        m'.atomics = m.atomics ∧ m'.waiters = m.waiters ∧ m'.current = m.current ∧
+        m'.threads = m.threads ∧ m'.woken = m.woken ∧ m'.groups = m.groups ∧
+        m'.clocks.size = m.clocks.size) G m n := by
+  fsym [FTriple.allocStackDrop 16 8]
+
+/-- A loop body that returns the two pointers it was given. -/
+def pointerBody {Tgt : Type} (p q : Ptr) : CM Tgt Unit (Ptr × Ptr) := pure (p, q)
+
+/-- The loop rule infers its body from the current command. The walk proves the body's step
+from the allocation-count facts and the groups preserved by the initial memory steps. -/
+theorem two_blocks_loop {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : plain (own t)) :
+    P.WP t (ConcM.liftMem (allocStack 24 8) >>= fun p =>
+        ConcM.liftMem (store (α := BitVec 64) 8 p 1) >>= fun _ =>
+        ConcM.liftMem (allocStack 16 8) >>= fun q =>
+        (loop (pointerBody p q) (fun _ => false)).run ())
+      (fun r _ m' _ => r.1 = (⟨some m.blocks.size, 0⟩, ⟨some (m.blocks.size + 1), 0⟩) ∧
+        m'.groups = m.groups) G m n := by
+  fsym [FTriple.allocStackDrop 16 8,
+    WP.loop (P := P) (t := t) (σ := Unit) (ε := Ptr × Ptr) _
+      (fun _ => false) (fun _ _ m' _ => m'.groups = m.groups) (fun _ => 0)
+      (fun r _ m' _ => r.1 = (⟨some m.blocks.size, 0⟩, ⟨some (m.blocks.size + 1), 0⟩) ∧
+        m'.groups = m.groups)]
 
 /-- **A thread's bound by the arithmetic** (`numAliases`): `t < m.threads.size` of a
 `t : ThreadId` (the segment rule's side goal) from a fact about `t + 1`; `omega` reads an order

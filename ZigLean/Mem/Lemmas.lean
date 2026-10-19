@@ -126,18 +126,6 @@ theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o
       · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
         cases h
 
-/-- `Mem.access` throws only `.illegal`. -/
-theorem access_cases (m : Mem) (p : Ptr) (n al : Nat) :
-    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
-  unfold Mem.access
-  split
-  · exact .inl rfl
-  · split
-    · exact .inl rfl
-    · split
-      · exact .inr ⟨_, _, _, rfl⟩
-      · exact .inl rfl
-
 /-- A successful access starts at or above its block's first live offset. -/
 theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
@@ -301,27 +289,27 @@ theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
-  simp [writeBytes]; omega
+  simp [writeBytes_eq]; omega
 
 /-- A read of the written range gives the written bytes. -/
 theorem extract_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).extract o (o + bs.size) = bs := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i _ _
     have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
-    simp [writeBytes, ho]
+    simp [writeBytes_eq, ho]
 
 /-- A read of a range that does not overlap the written one is unchanged. -/
 theorem extract_writeBytes_disjoint (a : Array Byte) (o : Nat) (bs : Array Byte) (o' n : Nat)
     (h : o + bs.size ≤ a.size) (h' : o' + n ≤ a.size) (hd : o + bs.size ≤ o' ∨ o' + n ≤ o) :
     (writeBytes a o bs).extract o' (o' + n) = a.extract o' (o' + n) := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i h1 _
     have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
     simp only [Array.size_extract, writeBytes_size a o bs h] at h1
-    simp only [writeBytes, Array.getElem_extract, Array.getElem_append, Array.size_append,
+    simp only [writeBytes_eq, Array.getElem_extract, Array.getElem_append, Array.size_append,
       Array.size_extract, ho]
     split
     · split

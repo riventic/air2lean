@@ -7,11 +7,13 @@ kernel: it refuses one ELF layout that Zig's linker produces.
 
 `scripts/local-ci.sh part <job/part>` follows the workflow's runner placement. `test/*` and
 Ubuntu support jobs use `linux/amd64`; `aarch64-linux`, `build-modes-aarch64-linux` and
-`bitops-native-arm` use a native `linux/arm64` container; `macos/<zig>` runs on the Apple silicon
-host. The ARM container has ARM Lean, Zig, Python and shell tools and does not install the
+`bitops-native-arm` use a native `linux/arm64` container. `discover macos/<zig>` runs an explicitly
+unrestricted diagnostic on the Apple silicon host; `part macos/<zig>` rejects a restricted
+qualification request because other caller checkout copies remain readable. The ARM container
+has ARM Lean, Zig, Python and shell tools and does not install the
 amd64 image's Python machine-identity hook. No Rosetta or x86 result qualifies an ARM/macOS
-row. The same workflow interpreter and restricted-checkout checks run in each placement
-([local CI](ci.md#restricted-checkout)); the Rosetta helper remains a no-op on native ARM and
+row. The same workflow interpreter serves each placement; restricted local qualification applies
+only to Linux/container parts ([local CI](ci.md#restricted-checkout)). The Rosetta helper remains a no-op on native ARM and
 macOS.
 
 ## The trigger

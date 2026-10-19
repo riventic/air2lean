@@ -1,5 +1,5 @@
 import ZigLean.Conc.LockBase
-import ZigLean.Conc.WeakCasLemmas
+import ZigLean.Conc.Base.WeakCas
 import ZigLean.Sep.Full.Res
 
 /-!
@@ -2435,6 +2435,12 @@ theorem WInv.load_noErr {P : ThreadId → LPh} {m : Mem} {c : Nat} {ord : Atomic
   rw [hl0] at hlt ⊢
   obtain ⟨w, -, hw⟩ := hval _ hlt
   exact ⟨_, Array.getElem?_eq_getElem hc, _, by rw [getElem!_pos l.msgs _ hlt]; exact hw⟩
+
+/-- The same memory, but the OS state (an interrupt's delivery, `Os.takeInterrupt`). -/
+theorem WInv.osState {P : ThreadId → LPh} {m : Mem} (hi : L.WInv P m) (o : OsState) :
+    L.WInv P { m with os := o } :=
+  ⟨hi.csize, hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.wfp,
+    hi.rel, hi.fq, hi.wit, hi.owner⟩
 
 /-- A `cmpxchg` with any expected value does not throw: each option is a message, which holds
 a value. -/

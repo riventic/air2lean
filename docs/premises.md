@@ -115,7 +115,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
 | Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
-| OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSM-02](#osm-02) |
+| OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSL-01](#osl-01) [OSM-02](#osm-02) |
 | Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
 
 ## Target and build profiles
@@ -528,7 +528,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `cmpxchg_weak` may fail on a matching value with a failure-order read and no
   write, repeatedly. Its rules are safety-only; no retry liveness follows.
-- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.WeakCasLemmas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
+- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.Base.WeakCas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
 - Sources: [weak-cas.md](weak-cas.md).
 
 <a id="ord-05"></a>
@@ -1261,7 +1261,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
   `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
   `std.Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from its std code.
-- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWait`,
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
+  rules of the rows in a protocol); tokens `Os.futexWait`,
   `Os.Linux.futex_4arg`, `Os.Darwin.__ulock_wait2`, `Os.Darwin.__ulock_wait`; implies THR-01,
   ORD-01.
 - Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
@@ -1277,9 +1278,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux returns
   the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge.
-- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`; tokens `Os.futexWake`,
+- Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
+  rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
-- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`.
+- Sources: [os-threads.md](os-threads.md#futex), `ZigLean/Os/Futex.lean`,
+  `tests/roadmap/os-threads/Check.lean` (the wake count: `WAKE_ALL` wakes every waiter, the
+  Linux count is at most `2^31 − 1`; audit soundness-2026-10-14 §S5).
 
 <a id="ost-01"></a>
 ### OST-01 — Thread creation (`clone`, `pthread_create`)
@@ -1305,15 +1309,22 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 
 - Kind: trusted.
 - Statement: When a `clone` thread's entry function returns, the kernel's `CHILD_CLEARTID` is
-  one step: a release store of `0` to the `i32` at `ctid`, a wake of every waiter there, and the
-  end of the thread's join obligation. Then the thread ends. Std's translated Linux join gets
-  its edge from that store. macOS `pthread_join(h, null)` waits for the end of `h` and gets the
+  one step: a release store of `0` to the `i32` at `ctid`, a shared-domain wake of at most one
+  waiter on that tid address, and the end of the thread's join obligation. Then the thread
+  ends. Std's translated Linux join gets its edge from that store. macOS
+  `pthread_join(h, null)` waits for the end of `h` and gets the
   edge from it; `pthread_detach` releases the obligation. A join or detach by a thread that does
   not own the handle, of a consumed handle, or a second one, is `.illegal`. A detached Linux
   thread's `freeAndExit` is outside the model.
+- Model gap: the current `Os.Linux.cloneExit` still wakes every waiter at `ctid`, which is more
+  than this premise grants. This is the open finding
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open),
+  and the Task 19 primitive fix closes it.
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
   `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
-- Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`.
+- Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Linux v6.16
+  [`mm_release`](https://github.com/torvalds/linux/blob/038d61fd642278bab63ee8ef722c50d10ab01e8f/kernel/fork.c#L1418-L1428),
+  [maintainer decision](https://github.com/riventic/air2lean/pull/437#issuecomment-6262067015).
 
 <a id="ost-03"></a>
 ### OST-03 — Thread ids, process id and CPU count
@@ -1386,6 +1397,46 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `Os.Linux.tgkill`, `Os.Darwin.pthread_kill`; implies THR-01.
 - Sources: [os-threads.md](os-threads.md#interrupts), `ZigLean/Os/Thread.lean`, Zig 0.16.0
   `lib/std/Io/Threaded.zig` (`signalCanceledSyscall`).
+
+<a id="osl-01"></a>
+### OSL-01 — macOS `os_unfair_lock` primitive contract
+
+- Kind: trusted.
+- Statement: The qualified lock/trylock/unlock entry points operate on four bytes of
+  appropriately aligned live writable storage initialized by `OS_UNFAIR_LOCK_INIT`. During
+  use, the address is stable and process-private, without multiple virtual mappings of the
+  object. These are object requirements, not a ban on observing unrelated memory.
+
+  At most one calling thread owns the lock. Completed lock acquisition, or trylock returning
+  true, acquires ownership with acquire ordering. A false trylock does not acquire ownership.
+  Unlock requires the owner and releases ownership with release ordering. Logical ownership
+  uses the accepted live-actor boundary; this premise supplies no guessed native port encoding
+  and does not repair a missing actor-identity proof by assumption.
+
+  An instance-provided relation connects the four bytes, ownership/contenders and OS state.
+  With no owner or contenders the bytes equal `OS_UNFAIR_LOCK_INIT`, all zero. Otherwise their
+  encoding is opaque; no literal `0`/`1` held value is promised. Correctly synchronized byte
+  observations retain the values permitted by that relation. Ordinary memory/race semantics
+  still apply. The primitive may change its four bytes and associated lock bookkeeping and
+  add the justified acquire/release edges; unrelated memory and OS objects are framed.
+  Resource transfer remains in the existing Full mutex contract.
+
+  Recursive locking, foreign-owner unlock, invalid storage, moving the object and
+  cross-process/multiply-mapped use are outside the contract and must fail closed or have
+  documented conservative stopping behavior. They cannot produce a successful
+  acquisition/unlock. No fairness, FIFO order, termination, time, allocation or stack bound is
+  promised; starvation is permitted. Existing total and witness statements retain their
+  scope or are reported as exact obstructions.
+- Derived from: qualified Darwin `os_unfair_lock_*` entry points and their instance-provided
+  representation relation, pending implementation; implies THR-01, ORD-01. This registration
+  does not attribute the premise to an existing runtime model. The first implementation must
+  list OSL-01 in every dependent claim.
+- Sources: macOS SDK `os/lock.h` (opaque bytes, initialization, owner, address and starvation
+  requirements), pinned libplatform
+  [`src/os/lock.c`](https://github.com/apple-oss-distributions/libplatform/blob/b7ed7cf5cf7dd12b98672435db2225a860f199d8/src/os/lock.c#L646-L736)
+  (acquire/release evidence; its concrete encoding is not promised for every supported OS
+  version), [approved draft](https://github.com/riventic/air2lean/pull/437#issuecomment-6256538127),
+  [maintainer decision](https://github.com/riventic/air2lean/pull/437#issuecomment-6262067015).
 
 <a id="osm-02"></a>
 ### OSM-02 — macOS `malloc`/`free`/`malloc_size`

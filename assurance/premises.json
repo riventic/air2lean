@@ -87,6 +87,7 @@
     "ZigLean.ReprCast": ["SEM-01", "SEM-02"],
     "ZigLean.VecCast": ["SEM-01", "SEM-02"],
     "ZigLean.PackedLemmas": ["SEM-01", "SEM-02"],
+    "ZigLean.PackedLayout": ["SEM-01", "SEM-02"],
     "ZigLean.Lemmas": ["SEM-01"],
     "ZigLean.ResultRun": ["SEM-01"],
     "ZigLean.Range": ["SEM-01"],
@@ -132,7 +133,11 @@
     "ZigLean.Conc.Clock": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Own": ["THR-08", "SEM-02"],
     "ZigLean.Conc.Csl": ["THR-08"],
+    "ZigLean.Conc.Base.Heap": ["THR-08"],
+    "ZigLean.Conc.Base.Lock": ["THR-08"],
     "ZigLean.Conc.LockBase": ["THR-08"],
+    "ZigLean.Conc.Base.Threads": ["THR-08"],
+    "ZigLean.Conc.Base.Tls": ["THR-08"],
     "ZigLean.Conc.Capture": ["THR-01"],
     "ZigLean.Conc.Transfer": ["THR-08"],
     "ZigLean.Mem.Tls": ["THR-01"],
@@ -147,7 +152,7 @@
     "ZigLean.Conc.WeakWord": ["THR-08", "THR-05", "ORD-04"],
     "ZigLean.Conc.AtomicWord": ["ORD-01", "THR-01"],
     "ZigLean.Conc.WeakCas": ["ORD-04"],
-    "ZigLean.Conc.WeakCasLemmas": ["ORD-04"],
+    "ZigLean.Conc.Base.WeakCas": ["ORD-04"],
     "ZigLean.Mem.AtomicPtr": ["ORD-05"],
     "ZigLean.Conc.PtrAtomic": ["ORD-05"],
     "ZigLean.Conc.PtrAtomicLemmas": ["ORD-05", "THR-08"],
@@ -295,7 +300,8 @@
     "ZigLean.Os.Clock": ["OSK-01", "OSK-02"],
     "ZigLean.Os.Malloc": ["OSM-02"],
     "ZigLean.Sep.Full.Malloc": ["OSM-02"],
-    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"]
+    "ZigLean.Conc.OsRules": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OSG-01"],
+    "ZigLean.Sep.Full.OsFutex": ["THR-01", "THR-08", "OSF-01", "OSF-02", "OSG-01"]
   },
   "tactic_modules": {
     "fsym": ["ZigLean.Sep.Full.AutoAll"]
@@ -402,6 +408,7 @@
     "OSY-01": ["THR-01", "THR-07"],
     "OSK-02": ["THR-01"],
     "OSG-01": ["THR-01"],
+    "OSL-01": ["THR-01", "ORD-01"],
     "OSM-02": ["SEM-02", "ALC-02"]
   },
   "memory_model": {
