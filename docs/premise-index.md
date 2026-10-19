@@ -84,6 +84,7 @@ premise was derived. This index covers the committed generated modules.
 | [OSG-01](premises.md#osg-01) | 65 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
 | [OSK-01](premises.md#osk-01) | 35 | Clock reads |
 | [OSK-02](premises.md#osk-02) | 26 | Sleep |
+| [OSL-01](premises.md#osl-01) | 0 | macOS `os_unfair_lock` primitive contract |
 | [OSM-01](premises.md#osm-01) | 1105 | Trusted `posix.mmap`/`munmap`/`mremap` model |
 | [OSM-02](premises.md#osm-02) | 36 | macOS `malloc`/`free`/`malloc_size` |
 | [OST-01](premises.md#ost-01) | 91 | Thread creation (`clone`, `pthread_create`) |
