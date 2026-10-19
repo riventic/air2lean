@@ -286,6 +286,93 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
 - `scripts/release-record.py` accepts `push`, `merge_group`, `workflow_dispatch` and `schedule`
   runs as evidence (each tested its `headSha` itself), never a `pull_request` run.
 
+### Pre-merge gate
+
+`scripts/gate.sh` is the one pre-merge command: a PR runs it locally after `main` is merged in,
+before it is pushed for merging, together with the native and Docker rows the PR touches
+(x86_64-linux under Rosetta, docs/rosetta.md), which run on another host. It replaces the
+sequence of four entry points a PR ran one after another: the full build with the touched
+`check.sh` scripts, `scripts/regen.sh --pr`, `scripts/preflight.sh` and
+`scripts/proof-framework.py --base origin/main`. These stay what the gate composes, and the
+inner loop (build the touched module, run the one check script) uses them directly. The gate runs
+them as units (`scripts/gate.sh --list`):
+
+- `materialize:<group>` and `fetch:...`: the whole-tree generated files, as preflight makes them.
+- `full-build`: `scripts/full-build.sh --no-fixtures`, after the materialization. Lake and
+  `lean-deps.py --elaborate` remember results by input themselves, and a phase with no work
+  waits for no build-guard admission (`lake build --no-build`, `--pending`).
+- `fixtures`: the full build's last phase, `scripts/fixture-checks.sh` (the proof-fixture checks
+  and the Python tests CI runs; `fixture-checks.py` remembers results by its own key).
+  It runs after the regen steps, as the checks did in the sequence the gate replaces: a PR that
+  edits a proof regenerates the theorem inventory before a test reads it.
+- `regen:<step>`: each PR-scoped step of `scripts/regen.py`, which regenerates its committed output
+  when stale and then checks it (`--check`: fails instead). They run one after another in
+  regen.py's order, because a step may rewrite a file that a later one reads.
+- `preflight:<label>`: each `check` line of `scripts/preflight.sh`, parsed from it, so a new check
+  there is a new unit. The exceptions are the checks another unit runs already, identified by
+  their command (each regen step's `check_argv`), the full build, and the materialization.
+  `proof-framework.py` gets `--base`. These write nothing and run in parallel.
+
+**No reuse.** Every unit runs in the checkout, every time: no gate run takes a result from an
+earlier one (maintainer decision on #443, 2026-10-19; see
+[the parked precise input tracking](#parked-precise-input-tracking)). What the composed scripts
+remember themselves is theirs: Lake's builds, `lean-deps.py`'s and `fixture-checks.py`'s keys
+([full build](#full-build)). The checkout must not change during a run: if a file changed that
+no unit wrote, or HEAD moved, the gate fails.
+
+When a regen unit rewrote files, the full build of that pass ran before them, so the gate runs a
+second pass of every unit over the new state, also when a unit failed in the first (it may have
+failed on the state before the rewrite). A second pass that rewrites files again fails: the
+regeneration does not settle.
+
+Exit 0: every unit passed. The files a regen unit rewrote are listed; commit them. `--check`
+regenerates nothing.
+
+Measured on the dev Mac (shared CAS, machine shared with other agents), wall time in seconds.
+Both columns run the same checks: the sequence's full build includes the proof-fixture checks
+since #391.
+
+<!-- gate-measurements -->
+| Run | Before: sequence of scripts | `scripts/gate.sh` |
+| --- | --- | --- |
+| Comment-only change in `Proofs/Lists/Append.lean` (2026-10-18) | 10097 (preflight failed) | not measured without reuse |
+| Every gate unit runs (2026-10-19) | not measured | 1865 without reuse (all 177 fixture units ran: 1746); 2476, 2623 with the parked reuse, nothing hit |
+
+The sequence on the comment-only change took 2617 s for the full build (its fixture phase reran
+70 of 75 units), 142 s for `regen.sh --pr` (it rewrote the theorem inventory), 6822 s for
+`preflight.sh` and 516 s for `proof-framework.py`: the four ran one after another, and
+preflight's own full build reran the fixtures again for the rewritten inventory and failed in
+build-guard after 4466 s. The gate runs each check once, in dependency order and in parallel.
+
+### Parked: precise input tracking
+
+The gate once reused a unit's pass while nothing it observed had changed (traced records, #443).
+It is parked, and its code is removed; the last commit that has it is `0b4a3ef95`
+(`scripts/ci-reuse.py` `trace`, `Outside`, `Records`; `tests/roadmap/ci-reuse/test_traced.py`).
+
+A sound key needs the exact set of files and metadata a unit observes: every read and listing,
+and every probe (`stat`, `[ -e x ]`, `[ -x x ]`, `os.stat(x).st_size`, `[ A -nt B ]`, Lean's
+module lookup), in its tree and outside it. Access times show reads and listings but not probes,
+and the macOS sandbox reports neither allowed metadata reads nor every denial (its reports are
+deduplicated). So the parked key took every name of the tree with its mode and size, which
+reruns every unit after almost any edit, and it still missed the modification times of the
+copied Lake builds: a unit that only compares two of them (`[ A.olean -nt B.olean ]`) was reused
+after a rebuild that changed their order, a false green. Observing every probe needs a user-space
+file-system tracer that serves the unit's tree and logs each lookup, attribute read, read and
+listing: FUSE on Linux, FSKit on macOS.
+
+Measured rerun counts of the parked implementation (177 fixture units, one never recorded; 38
+recorded gate units), against the records of a passed gate:
+
+| Edit | Names, modes, emptiness keyed | Also sizes keyed |
+| --- | --- | --- |
+| Comment in `Proofs/Lists/Append.lean` (with the full build) | 24 of 176 fixture units (gate 1466 s) | 176 of 176, all 38 gate units |
+| Comment in `scripts/register.py` | 95 of 176 (their Python import lookup lists `scripts/`) | 176 of 176, all 38 gate units |
+
+The left column is unsound (a unit that only tests a known path's `st_size` was reused after the
+file grew); the right one is sound for sizes but reruns everything, and neither keys
+modification times.
+
 ### Merge queue flow (not in use)
 
 The queue flow below is kept for when the maintainer turns it back on.
@@ -570,16 +657,30 @@ that imports a fixture's own modules (generated into a check's work directory) i
 that fixture's check. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
-the files that import it run again (about 3.5 min for all 360 on the dev Mac).
+the files that import it run again (about 3.5 min for all 360 on the dev Mac). A Lean phase with
+no work (`lake build --no-build` passes, `lean-deps.py --pending`) runs outside build-guard, so
+an unchanged tree waits for no admission: under load, admission waits of 10-25 min for a no-op
+build were measured (2026-10-15).
 
-A fourth phase runs the **proof-fixture checks** (`scripts/fixture-checks.sh`, `.py`): the Lean files
-that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
-and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
-dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are
-derived from `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh`
-whose directory holds tracked `.lean` files, for every job row its `if:` may run for
-(`ci-reuse.py`'s `may_run`), rendered for that row and run once per distinct rendering, the whole
-`run:` script with its `env:` (prerequisites, sibling gates and mode switches as in CI).
+A fourth phase runs the **proof-fixture checks and Python tests** (`scripts/fixture-checks.sh`,
+`.py`): the Lean files that import a fixture's own generated modules are elaborated only by that
+fixture's `check.sh`, and before this phase only CI ran those (#342 and the strength logs,
+984ab3533 and dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge);
+the offline Python tests of CI's `inputs`, `docs` and `audit` rows ran only in CI too, so main was
+red for two days on `test_taxonomy.py` and `test_universe.py`. The checks are derived from
+`.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh` whose directory
+holds tracked `.lean` files, for every job row its `if:` may run for (`ci-reuse.py`'s `may_run`),
+rendered for that row and run once per distinct rendering, the whole `run:` script with its
+`env:` (prerequisites, sibling gates and mode switches as in CI); and in every other step, each
+command line that runs a tracked `tests/**/*.py` with `python3` or `python3 -m unittest discover
+-s tests/...`, on its own with the step's `env:` (`$PWD` is the workspace, as in CI). A Python
+test that takes an argument from the runner (a `$RUNNER_TEMP` file an earlier step wrote, a
+variable the step computed) or needs a toolchain the layout cannot provide is left out. So is
+every unit after a step of its job that regenerates a heavy generated group for the tree
+(`scripts/generated.py produce`; the provenance tests): CI makes those files for the PR, while
+the gate has main's. `--list` and every run name them with the reason (20 of 122 on 2026-10-16;
+the native differentials, the asm audit over the shipped assurance report, the receipt replay,
+the provenance tests).
 `--list` prints the units, their checks and the toolchains they name. The CI layout comes from
 the shared cache: `github.workspace` is a directory of links to the checkout plus
 `zig-air-VERSION` (`scripts/zig-air.sh`, built on a miss before the guarded run) and `host-zig`
@@ -596,12 +697,15 @@ toolchains' identities (the stock binary's path, size and modification time; a p
 a function of `zig-patch/` and its stock bootstrap) and the content of the
 translator and tooling (`Air2Lean/`, `zig-patch/`, `tools/`, the gate's own scripts, top-level
 files other than `*.md`), of `tests/` outside the fixture directories, of the step's fixture
-directories, of every file or directory a scanned text names by its path and every `scripts/` file
-it names by file name or imports (scanned in turn), and of the library
+directories (of a Python test: its directory, or the one it discovers tests in; scanned like a
+fixture's, also under `tests/`), of every file or directory a scanned text
+names by its path and every `scripts/` file it names by file name or imports (scanned in turn), and of the library
 modules a scanned text names (imports, `lake build` targets), with their imports. A check that
 reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
 not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
-the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged tree, about 1 s.
+the phase took 16 to 22 min on the dev Mac with the 75 proof-fixture units alone (2026-10-15)
+and about 38 min with the Python tests too (177 units, 146 checks; 2026-10-19); an unchanged
+tree, about 1 s.
 `scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units whose key
 covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it

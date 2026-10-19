@@ -681,6 +681,7 @@ def main(argv=None):
     p = sub.add_parser('gc')
     p.add_argument('--max-gib', type=float, help='size cap (default $AIR2LEAN_CAS_MAX_GIB or %d)' % DEFAULT_MAX_GIB)
     p.add_argument('--min-age', type=float, default=3600, help='never evict what was used this many seconds ago')
+    p.add_argument('--if-due', action='store_true', help='with the defaults, at most hourly (as scripts/regen.sh)')
     sub.add_parser('stats')
     a = parser.parse_args(argv)
     try:
@@ -702,6 +703,8 @@ def main(argv=None):
             return native_build(a.zig, strip_dd(a.args))
         elif a.command == 'host-zig':
             print(host_zig(a.version))
+        elif a.command == 'gc' and a.if_due:
+            gc_if_due()
         elif a.command == 'gc':
             cap = int(a.max_gib * (1 << 30)) if a.max_gib is not None else max_bytes_default()
             total, freed = gc(cap, a.min_age)

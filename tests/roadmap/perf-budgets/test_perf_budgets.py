@@ -499,7 +499,8 @@ class Record(unittest.TestCase):
             fake.write_text(FAKE_AIR2LEAN)
             fake.chmod(0o755)
             out = temporary / "measurement.json"
-            with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}), \
+            # As under `build-guard.py --exclusive`, also when this test itself runs under a shared guard.
+            with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1", "AIR2LEAN_GUARD_MODE": "exclusive"}), \
                     contextlib.redirect_stderr(io.StringIO()):
                 code = perf.main(["record", "--out", str(out), "--air2lean", str(fake),
                                   "--lake", "/nonexistent/lake", "--no-build", "--skip-elaborate",

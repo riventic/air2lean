@@ -114,7 +114,9 @@ a miss: Lake rebuilds the module.
 
 ## `scripts/regen.sh`
 
-Run it after every merge of `main`; do not write private regeneration scripts.
+Run it after every merge of `main`; do not write private regeneration scripts. Before a push for
+merging, `scripts/gate.sh` runs its PR-scoped steps with the full build and every preflight check
+([ci.md](ci.md#pre-merge-gate)).
 
     scripts/regen.sh                  # everything; provenance last (commits PR-scoped outputs first)
     scripts/regen.sh --pr             # only PR-scoped files

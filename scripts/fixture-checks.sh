@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The proof-fixture checks CI runs (scripts/fixture-checks.py, docs/ci.md#full-build), under
-# scripts/build-guard.py and through the shared cache; scripts/full-build.sh runs it last.
+# The proof-fixture checks and Python tests CI runs (scripts/fixture-checks.py,
+# docs/ci.md#full-build), under scripts/build-guard.py and through the shared cache;
+# scripts/full-build.sh runs it last.
 #
 #   scripts/fixture-checks.sh [--logs DIR] [--base REF] [--only TEXT]...
 #
@@ -17,7 +18,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --base|--only) args+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
-    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "fixture-checks: unknown argument $1" >&2; exit 2 ;;
   esac
 done
