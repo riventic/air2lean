@@ -164,6 +164,14 @@ theorem known_bytes_existing_exists (p : Ptr) (b : BlockId)
       (FAssn.ex fun A' => up (bytesAt p A S K bs) ⋆ known b A') := by
   fsym_entail
 
+/-- Region planning must determine the requested address before unrelated existing knowledge
+can cover it speculatively. -/
+theorem known_region_existing_exists (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A A₀ S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) :
+    EUpd (up (regionIn p A S K 1 bs) ⋆ known b A₀)
+      (FAssn.ex fun A' => up (regionIn p A' S K 1 bs) ⋆ known b A') := by
+  fsym_entail
+
 /-- No knowledge request retains the exact public store result. -/
 theorem store_no_known_request (p : Ptr) (b : BlockId) (hb : p.block = some b)
     (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
