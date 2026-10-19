@@ -157,8 +157,12 @@ class ClaimsEvidenceTests(unittest.TestCase):
         olean = self.base / 'Fixture.olean'
         olean.write_bytes(b'compiled fixture')
         self.report = self.base / 'assurance.json'
-        self.report.write_text(json.dumps(dict(json.loads(FIXTURE.read_text()), freshness={
+        sysroot = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
+        runtime = assumptions.toolchain_runtime_sha256(sysroot)
+        extractor = {'lean_sysroot': str(sysroot), 'toolchain_runtime_sha256': runtime}
+        self.report.write_text(json.dumps(dict(json.loads(FIXTURE.read_text()), extractor=extractor, freshness={
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+            'lean_sysroot': str(sysroot), 'toolchain_runtime_sha256': runtime,
             'artifacts': [{'module': 'Fixture', 'olean': str(olean), 'olean_sha256': assumptions.file_sha256(olean),
                            'source': None, 'source_sha256': None}]})))
 
