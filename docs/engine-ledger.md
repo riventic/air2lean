@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 127 rows, 47 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 129 rows, 48 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -57,13 +57,14 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
 | [P09-E4](#row-p09-e4) | @[fsym_inv] loop-invariant registry | P09 | - | - |
 | [P09-E5](#row-p09-e5) | @[fsym_upd] ghost-update registry keyed by heads, tried at returns | P09 | - | - |
+| [recursive-group-total](#row-recursive-group-total) | Generic total correctness of a recursive function group | L8b-1 tick coverage (Task 09); P03/stack | - | - |
 | [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | - | - |
-| [T4](#row-t4) | ticks in the CTriple backend (not attempted) | stack-ac lane (codex/stack-ac-ticks) | - | - |
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
 | [stack-wp-cur](#row-stack-wp-cur) | The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS) | stack-region lane (codex/stack-pr5) | - | - |
 | [errok-native](#row-errok-native) | WP walk of raw MemM steps in a partial protocol: the error leaf (Proto.ErrOk) from library *_native facts | S4 (audit soundness-2026-10-14) / critic run 15 | `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean` | when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant. |
+| [premise-runtime-fallback](#row-premise-runtime-fallback) | Conservative runtime-source premise fallback | Task 04 premise attribution / coordinator | `scripts/premises.py`, `tutorials/allocation-failure/README.md`, `tutorials/concurrent-clients/README.md`, `tutorials/cross-target/README.md`, `tutorials/external-contracts/README.md`, `tutorials/first-proof/README.md`, `tutorials/generic-containers/README.md`, `tutorials/memory-safety/README.md`, `tutorials/mutable-arrays/README.md` | Track replacement in https://github.com/riventic/air2lean/pull/418 and its fresh-main precision split. Remove broad runtime-source token attribution and the corresponding conservative tutorial additions only as reviewed family-complete declaration attribution replaces them, with fresh kernel-checked dependency graphs and source fingerprints. Every modeled semantic route needing a removed premise must reach an authenticated carrier; unresolved, new or changed routes retain fallback. A reachable carrier absent from the coarse baseline is a hard error. Regenerate the index through the official pipeline, update the exact tutorial premise lists and run scripts/tutorials.py lint, validate retained-premise and dropped-premise controls, and remove resolved workaround sites. Keep this row open while the broad fallback remains. |
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [word-family-views](#row-word-family-views) | A word's plain rules are reached only under the word's own head | arena-retain (coordinator review of #446) | `ZigLean/Sep/Full/AtomicPlain.lean` | once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
@@ -150,6 +151,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [79](#row-79) | Struct pts to field words entailment | DONE codex/eng-78-79: `StructLayout.split` and `StructLayout.join` (ZigLean/Sep/Full/Struct.lean: a struct's `pts` is its fields' `pts` and its padding's bytes `padBytes`, the join reading the pieces' labels from the memory) for every struct with a layout; `fsym` takes them as views at a stuck step (`viewAtoms`: `splitFor` for a wanted field of a struct atom's block, `joinView?` for a wanted struct whose pieces are in the state). `ListsFba.struct_words` is deleted (its use is `fsym_entail`). Regression: sep-auto Structs. |
 | [T2](#row-t2) | plain atom: tick_plain receipt dropped (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
 | [T3](#row-t3) | credits 1 consumed by tick (bare fsym) | see request text (tick rows, plans/tick-cost.md) |
+| [T4](#row-t4) | ticks in the CTriple backend (not attempted) | The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec, in the plain mode; no backend-specific tick rule was needed (a historical probe against 958596cfc, 2026-10-16, first showed it; sep-auto/check.sh now checks Ticks). The CTriple evidence covers the plain mode only: a metered (credits) tick under CTriple has no control yet. |
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym` |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
@@ -1267,6 +1269,17 @@ Progress: pending maintainer approval
 
 Request: `@[fsym_upd]` ghost-update registry keyed by heads, tried at returns; generalizes caller updates (9f); replaces #64–#67 workarounds with the bump-ledger family
 
+<a id="row-recursive-group-total"></a>
+### #recursive-group-total Generic total correctness of a recursive function group
+
+Status: **open**. Requester: L8b-1 tick coverage (Task 09); P03/stack.
+
+Note: Decision: https://github.com/riventic/air2lean/pull/393#issuecomment-6211327766 . The displayed goal identifies the missing generic entry point. The exploratory input containing per-program inductions elaborated, but that is not generic total-recursion coverage and no bare-fsym failure is claimed. The rejected scaffolding was removed. The separately scheduled feature closes the P03 memory-recursion/stack-budget gap.
+
+Progress: Coordinator confirmed the missing API on 2026-10-16 (PR #393 comment 6211327766) and will schedule it separately. L8b-1 covers straight-line code and loops, not total recursion.
+
+Request: One general library rule per emitted recursive partial_fixpoint group: a contract for each member and a well-founded measure on the arguments. fsym must discharge each recursive call through the callee's contract at a smaller measure, with recursive frames charged to the stack-depth token (#402, STK-01). The same full-state framework must support sequential, thread and protocol clients without a new judgment, tactic, proof template or per-program induction. Exact exploratory goal: for `def recur (n : Nat) : MemM Unit := do Zig.tick; if n == 0 then pure () else recur (n - 1)` with `partial_fixpoint`, prove `FTTotalTriple (R ⋆ plain) (recur n) (fun _ => R ⋆ plain)` from a supplied invariant/contract and argument measure, with fsym walking the body. The existing `FTriple.admissible_fun` supplies partial correctness only; `FTotalTriple.loop_ghost`/`loop_measure` and their thread forms apply to Zig.loop, not recursive call groups. Per-instance `Nat.strongRecOn; rw [recur.eq_def]; fsym [ih]` is explicitly not the required API and is not retained as a workaround.
+
 <a id="row-t1"></a>
 ### #T1 credits n is not split for tick_credit
 
@@ -1297,9 +1310,9 @@ Request: OK: `FTotalTriple (R ⋆ credits 1) tick (fun _ => R)` is a bare fsym (
 <a id="row-t4"></a>
 ### #T4 ticks in the CTriple backend (not attempted)
 
-Status: **open**. Requester: stack-ac lane (codex/stack-ac-ticks).
+Status: **closed**. Requester: stack-ac lane (codex/stack-ac-ticks).
 
-Progress: see request text (tick rows, plans/tick-cost.md)
+Progress: The existing rules walk callMC Zig.tick in sep-auto/Ticks.cbody_spec and its loop in cloop_spec, in the plain mode; no backend-specific tick rule was needed (a historical probe against 958596cfc, 2026-10-16, first showed it; sep-auto/check.sh now checks Ticks). The CTriple evidence covers the plain mode only: a metered (credits) tick under CTriple has no control yet.
 
 Request: not attempted (CTriple backend, phase 2).
 
@@ -1386,6 +1399,21 @@ Request: Since S4 a partial protocol's step may throw only errors at which the n
 Workaround sites: `Proofs/Atomics/Relaxed.lean`, `Proofs/Cancel/Group.lean`, `tests/roadmap/futures/Futures/Proofs.lean`, `tests/roadmap/thread-locals/ThreadLocals/Leak.lean`
 
 Deletion plan: when fsym walks raw liftMem steps of a protocol main and discharges `Proto.ErrOk` from the library `*_native` facts, replace the hand `WP.bind (WP.liftM (ErrOk.of_run rfl …))` chains in the workaround sites with `fsym` and delete the explicit `ErrOk.of_run` arguments; the invariant facts (`flag_single`, `flag_vals`, `status_bytes`) stay as the proofs' invariant.
+
+<a id="row-premise-runtime-fallback"></a>
+### #premise-runtime-fallback Conservative runtime-source premise fallback
+
+Status: **open**. Requester: Task 04 premise attribution / coordinator.
+
+Note: Coordinator decision: https://github.com/riventic/air2lean/pull/418#issuecomment-6214104038. This records an assurance-tooling approximation, not a new proof judgment, tactic or per-client exception.
+
+Progress: PR #419 restores conservative source estimates without premise reductions. Declaration-level precision remains separate from this repair, tracked by draft PR #418 and its future fresh-main precision split.
+
+Request: Please add an engine-ledger row (slug id, e.g. `premise-runtime-fallback`), open, citing the precision PR as the plan, and label the tutorial additions as conservative estimates, as you propose.
+
+Workaround sites: `scripts/premises.py`, `tutorials/allocation-failure/README.md`, `tutorials/concurrent-clients/README.md`, `tutorials/cross-target/README.md`, `tutorials/external-contracts/README.md`, `tutorials/first-proof/README.md`, `tutorials/generic-containers/README.md`, `tutorials/memory-safety/README.md`, `tutorials/mutable-arrays/README.md`
+
+Deletion plan: Track replacement in https://github.com/riventic/air2lean/pull/418 and its fresh-main precision split. Remove broad runtime-source token attribution and the corresponding conservative tutorial additions only as reviewed family-complete declaration attribution replaces them, with fresh kernel-checked dependency graphs and source fingerprints. Every modeled semantic route needing a removed premise must reach an authenticated carrier; unresolved, new or changed routes retain fallback. A reachable carrier absent from the coarse baseline is a hard error. Regenerate the index through the official pipeline, update the exact tutorial premise lists and run scripts/tutorials.py lint, validate retained-premise and dropped-premise controls, and remove resolved workaround sites. Keep this row open while the broad fallback remains.
 
 <a id="row-current-thread-subst"></a>
 ### #current-thread-subst A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch)

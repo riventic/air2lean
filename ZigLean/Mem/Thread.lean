@@ -132,6 +132,16 @@ def retireAt (b : BlockId) (o len : Nat) : MemM Nat := do
                nextMsg := m.nextMsg + 1 }
   pure r.atomics.size
 
+/-- Retiring an atomic location always returns its index or an error, in every memory. -/
+theorem retireAt_run_ne_none (b : BlockId) (o len : Nat) :
+    ∀ m, ((retireAt b o len).run m).run ≠ none := by
+  unfold retireAt
+  refine M.bind_run_ne_none M.get_run_ne_none fun _ => ?_
+  dsimp only
+  split
+  · exact M.throw_run_ne_none _
+  · exact M.bind_run_ne_none (M.set_run_ne_none _) fun _ => M.pure_run_ne_none _
+
 /-- The atomic location at `(b, o)` of `len` bytes: created at the first atomic op, with the
 bytes as its first message; a plain write since the last message (a write event, whatever its
 value) becomes a message. An overlapping location of another offset or size is a mixed-size
@@ -156,6 +166,17 @@ def locIdx (b : BlockId) (o len : Nat) : MemM Nat := do
     set { m with atomics := m.atomics.push { block := b, off := o, len, msgs := #[first] },
                  nextMsg := m.nextMsg + 1 }
     pure m.atomics.size
+
+/-- Finding or creating an atomic location never gives `none`; invalid histories may error. -/
+theorem locIdx_run_ne_none (b : BlockId) (o len : Nat) :
+    ∀ m, ((locIdx b o len).run m).run ≠ none := by
+  unfold locIdx
+  refine M.bind_run_ne_none M.get_run_ne_none fun _ => ?_
+  dsimp only
+  split <;> (
+    split
+    · exact retireAt_run_ne_none _ _ _
+    · exact M.bind_run_ne_none (M.set_run_ne_none _) fun _ => M.pure_run_ne_none _)
 
 /-- The position of message `id` of `l`. -/
 def ALoc.pos (l : ALoc) (id : Nat) : Option Nat := l.msgs.findIdx? (·.id == id)
@@ -226,6 +247,20 @@ def loadPrep (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) (rmw : Bool) 
   let li ← locIdx b o (intSize n)
   pure (li, readOpts (← get) li rmw)
 
+/-- Atomic read preparation returns options or an error for every input and memory. -/
+theorem loadPrep_run_ne_none (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) (rmw : Bool) :
+    ∀ m, ((loadPrep n ord align p rmw).run m).run ≠ none := by
+  unfold loadPrep
+  refine M.bind_run_ne_none M.get_run_ne_none fun m => ?_
+  refine M.bind_run_ne_none ?_ fun r => ?_
+  · split
+    · exact M.lift_run_ne_none (m.accessW_run_ne_none _ _ _)
+    · exact M.lift_run_ne_none (m.access_run_ne_none _ _ _)
+  · obtain ⟨b, _, o⟩ := r
+    refine M.bind_run_ne_none (recordAccess_run_ne_none _ _ _ _) fun _ =>
+      M.bind_run_ne_none (locIdx_run_ne_none _ _ _) fun _ => ?_
+    exact M.bind_run_ne_none M.get_run_ne_none fun _ => M.pure_run_ne_none _
+
 def loadCount (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : Mem → Nat :=
   optCount ((·.2) <$> loadPrep n ord align p false)
 
@@ -239,11 +274,38 @@ def atomicLoadAt {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr)
   if ord.isAcq then acquireClock msg.relClock
   intOfBytes n msg.bytes
 
+/-- An atomic load returns a value or an error, even for an invalid pointer or oracle choice. -/
+theorem atomicLoadAt_run_ne_none {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) :
+    ∀ m, ((atomicLoadAt (n := n) c ord align p).run m).run ≠ none := by
+  unfold atomicLoadAt
+  refine M.bind_run_ne_none (loadPrep_run_ne_none _ _ _ _ _) fun r => ?_
+  obtain ⟨li, opts⟩ := r
+  dsimp only
+  split
+  · refine M.bind_run_ne_none M.get_run_ne_none fun _ =>
+      M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => ?_
+    split
+    · exact M.bind_run_ne_none (M.modify_run_ne_none _) fun _ =>
+        M.lift_run_ne_none (intOfBytes_run_ne_none _ _ _)
+    · exact M.lift_run_ne_none (intOfBytes_run_ne_none _ _ _)
+  · exact M.throw_run_ne_none _
+
 def storePrep (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : MemM (Nat × Array Nat) := do
   let (b, _, o) ← (← get).accessW p (intSize n) align
   recordAccess b o (intSize n) .atomicWrite
   let li ← locIdx b o (intSize n)
   pure (li, writeSlots (← get) li)
+
+/-- Atomic write preparation returns slots or an error for every input and memory. -/
+theorem storePrep_run_ne_none (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) :
+    ∀ m, ((storePrep n ord align p).run m).run ≠ none := by
+  unfold storePrep
+  refine M.bind_run_ne_none M.get_run_ne_none fun m => ?_
+  refine M.bind_run_ne_none (M.lift_run_ne_none (m.accessW_run_ne_none _ _ _)) fun r => ?_
+  obtain ⟨b, _, o⟩ := r
+  refine M.bind_run_ne_none (recordAccess_run_ne_none _ _ _ _) fun _ =>
+    M.bind_run_ne_none (locIdx_run_ne_none _ _ _) fun _ => ?_
+  exact M.bind_run_ne_none M.get_run_ne_none fun _ => M.pure_run_ne_none _
 
 def storeCount (n : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr) : Mem → Nat :=
   optCount ((·.2) <$> storePrep n ord align p)
@@ -261,6 +323,18 @@ def atomicStoreAt {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr
       relClock := (if ord.isRel then cl else #[]), writer := some m.current }
   insertMsg li slot msg
   observe li id
+
+/-- An atomic store returns or errors for every memory, pointer, value and oracle choice. -/
+theorem atomicStoreAt_run_ne_none {n : Nat} (c : Nat) (ord : AtomicOrder) (align : Nat) (p : Ptr)
+    (v : BitVec n) : ∀ m, ((atomicStoreAt c ord align p v).run m).run ≠ none := by
+  unfold atomicStoreAt
+  refine M.bind_run_ne_none (storePrep_run_ne_none _ _ _ _) fun r => ?_
+  obtain ⟨li, slots⟩ := r
+  dsimp only
+  split
+  · exact M.bind_run_ne_none M.get_run_ne_none fun _ =>
+      M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => M.modify_run_ne_none _
+  · exact M.throw_run_ne_none _
 
 /-- `std.builtin.AtomicRmwOp`, restricted to the integer subset (`docs/std-models.md` §Thread
 model: no float or `bool` RMW). -/
