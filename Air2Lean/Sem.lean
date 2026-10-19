@@ -939,8 +939,6 @@ theorem monotone_loopMM {σ ε γ : Type} [PartialOrder γ] (f : γ → Zig.MM �
     (hmono : monotone f) : monotone (fun (x : γ) => Zig.loop (f x) again) := by
   exact Zig.monotone_loopMM f again hmono
 
-set_option diagnostics true in
-set_option trace.Elab.Tactic.monotonicity true in
 /-- A body is monotone in its call oracle: a more defined callee gives a more defined
 caller. -/
 theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (Array Value)) :
@@ -974,16 +972,13 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     assumption
   all_goals first
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
-       trace_state
        simp only at *
        subst_vars
-       trace_state
        simp only [execInst]
-       trace_state
        try simp only [*, ↓reduceIte, Bool.false_eq_true]
-       trace_state
        repeat' (first
-         | (try dsimp only; monotonicity)
+         | assumption
+         | monotonicity
          | (apply_assumption <;> rfl))
        done)
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
@@ -1004,7 +999,8 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
        split <;> first
          | (exfalso; solve_by_elim)
          | (repeat' (first
-             | (try dsimp only; monotonicity)
+             | assumption
+             | monotonicity
              | (apply_assumption <;> rfl)); done))
 
 @[partial_fixpoint_monotone]
