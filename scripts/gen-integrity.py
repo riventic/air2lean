@@ -61,6 +61,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # Host keys of the golden overlays (scripts/check.sh): `uname -s` in lower case, then
 # `<os>-<uname -m>` for a host whose AIR or translation differs from its OS's (aarch64-linux).
 PROFILE_PREFIX = b"-- air2lean-profile: "
+GOLDEN_HOST = re.compile(r"[a-z0-9_]+(?:-[a-z0-9_]+)*")
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -380,7 +381,7 @@ def case_api(family, version, host):
     label = f"{family} {version} {host}"
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version or ""):
         raise ValueError(f"{label}: unsupported version spelling")
-    if not re.fullmatch(r"[a-z0-9_]+(?:-[a-z0-9_]+)*", host or ""):
+    if not GOLDEN_HOST.fullmatch(host or ""):
         raise ValueError(f"{label}: unsupported golden host spelling")
     # Encoding every host byte is injective, including '-' versus '_' and architecture keys.
     host = "H_" + host.encode("ascii").hex()
@@ -526,7 +527,7 @@ def strip_identities(value, root=True):
             if k != "comptime_fn_module" and not (k == "module" and named)}
 
 
-def compose(dirs, destination, version, *, require_profile=False):
+def compose(dirs, destination, version, *, require_profile=False, host=None):
     """Apply golden overlays as scripts/check.sh does: a later directory replaces every file
     whose normalized function name it provides. Profile metadata is dropped (schema 12 is the
     schema-11 payload plus that record) and `zig_version` is the checked version, which check.sh
@@ -551,6 +552,17 @@ def compose(dirs, destination, version, *, require_profile=False):
                             docs[0]["profile"].get("zig_version") != version or
                             any(doc.get("zig_version") != version for doc in docs)):
         raise ValueError("namespaced golden case requires one complete schema-12 profile of its actual Zig version; legacy downgrade refused")
+    if require_profile:
+        if not isinstance(host, str) or not GOLDEN_HOST.fullmatch(host):
+            raise ValueError("namespaced golden case requires its explicit valid golden host identity")
+        profile = generated_helpers()["profile_for_air"](docs[0])
+        arch, target_os, _ = profile["target_triple"].split("-")
+        host_os, _, host_arch = host.partition("-")
+        host_os = {"darwin": "macos"}.get(host_os, host_os)
+        host_arch = {"arm64": "aarch64", "amd64": "x86_64"}.get(host_arch, host_arch)
+        if host_os != target_os.split(".")[0] or (host_arch and host_arch != arch):
+            raise ValueError(f"namespaced golden case {version} {host}: actual profile "
+                             f"{profile['target_triple']} does not match golden host")
     own_os = (last.startswith("air-") and last != "air-linux"
               and set(chosen) == {IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
                                   for p in dirs[-1].glob("*.json")})
@@ -570,8 +582,12 @@ def compose(dirs, destination, version, *, require_profile=False):
 
 
 @functools.cache
+def generated_helpers():
+    return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))
+
+
 def split_generated():
-    return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))["split_generated"]
+    return generated_helpers()["split_generated"]
 
 
 def comparable(data, mode):
@@ -615,7 +631,7 @@ class Translator:
             air.mkdir()
             if case.namespaced or case.mode == "golden":
                 try:
-                    compose(case.dirs, air, case.version, require_profile=case.namespaced)
+                    compose(case.dirs, air, case.version, require_profile=case.namespaced, host=case.host)
                 except ValueError as error:
                     self.done[index] = error
                     raise
