@@ -396,7 +396,7 @@ def reset_checkout(snapshot, source):
     if check_tree.exists() or check_tree.is_symlink():
         remove_entry(check_tree)
     for entry in Path.cwd().iterdir():
-        if entry.name in ('.lake', 'host-zig') or entry.name.startswith('zig-air-'):
+        if entry.name == '.lake':
             continue
         if entry.name == 'tests':
             for child in entry.iterdir():

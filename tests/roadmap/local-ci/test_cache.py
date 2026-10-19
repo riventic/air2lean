@@ -396,6 +396,30 @@ except runner.Cancelled as error:
                 self.assertEqual(facet.read_bytes(),b'incremental build facet')
                 self.assertEqual(sentinel.read_bytes(),b'outside source')
 
+    def test_snapshot_reset_removes_previous_compilers_without_following_symlinks(self):
+        stream=io.BytesIO();content=b'tested source\n'
+        with tarfile.open(fileobj=stream,mode='w') as archive:
+            info=tarfile.TarInfo('README.md');info.size=len(content)
+            archive.addfile(info,io.BytesIO(content))
+        (self.snapshot/'files').write_bytes(b'README.md\0')
+        work=self.root/'work';work.mkdir();os.chdir(work)
+        outside=self.root/'outside';outside.mkdir()
+        sentinel=outside/'removed-from-next-version.zig';sentinel.write_bytes(b'outside compiler')
+        compilers=('host-zig','zig-air-0.14.1','zig-air-0.17.0')
+        for symlink in (False,True):
+            with self.subTest(symlink=symlink):
+                for name in compilers:
+                    target=work/name
+                    if symlink:
+                        target.symlink_to(outside,target_is_directory=True)
+                    else:
+                        target.mkdir();(target/sentinel.name).write_bytes(b'stale compiler file')
+                runner.reset_checkout(self.snapshot,stream.getvalue())
+                for name in compilers:
+                    self.assertFalse(os.path.lexists(work/name))
+                self.assertEqual(sentinel.read_bytes(),b'outside compiler')
+                self.assertEqual((work/'README.md').read_bytes(),content)
+
     def test_release_planner_still_excludes_supplied_test_recipes(self):
         _,excluded=runner.reuse_helpers().RR.local_ci_helpers((ROOT/'scripts/local-ci-steps.py').read_text())
         self.assertTrue({'Unpack the patched zig','Unpack the Lake build','Install the generated files',
