@@ -948,13 +948,12 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
     (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
   case case28 =>
-    intros
+    intro s w x sc more el env ihb ihm
     unfold execSwitch
-    refine monotone_bind (m := SM) (γ := Oracle) _ _ ?_ ?_
-    · exact monotone_const _
-    · refine monotone_of_monotone_apply (γ := Oracle) _ ?_
-      intro b
-      refine monotone_ite _ _ _ ?_ ?_ <;> assumption
+    refine monotone_bind (m := SM) (γ := Oracle) (α := Bool) (β := Exit)
+      (fun _ => liftR (caseHit f env s x sc)) _ (monotone_const _) ?_
+    exact monotone_of_monotone_apply _ fun b =>
+      monotone_ite (b = true) _ _ ihb ihm
   all_goals first
     | (intros; simp only [execBody]; first | exact monotone_const _ | assumption)
     | (intros; simp only [execSwitch]; assumption)
