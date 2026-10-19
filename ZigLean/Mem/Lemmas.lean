@@ -301,27 +301,27 @@ theorem errPayloadPtr_formed {α : Type} [Enc α] {m : Mem} {p : Ptr} {a : Nat}
 
 theorem writeBytes_size (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).size = a.size := by
-  simp [writeBytes]; omega
+  simp [writeBytes_eq]; omega
 
 /-- A read of the written range gives the written bytes. -/
 theorem extract_writeBytes (a : Array Byte) (o : Nat) (bs : Array Byte) (h : o + bs.size ≤ a.size) :
     (writeBytes a o bs).extract o (o + bs.size) = bs := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i _ _
     have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
-    simp [writeBytes, ho]
+    simp [writeBytes_eq, ho]
 
 /-- A read of a range that does not overlap the written one is unchanged. -/
 theorem extract_writeBytes_disjoint (a : Array Byte) (o : Nat) (bs : Array Byte) (o' n : Nat)
     (h : o + bs.size ≤ a.size) (h' : o' + n ≤ a.size) (hd : o + bs.size ≤ o' ∨ o' + n ≤ o) :
     (writeBytes a o bs).extract o' (o' + n) = a.extract o' (o' + n) := by
   apply Array.ext
-  · simp [writeBytes]; omega
+  · simp [writeBytes_eq]; omega
   · intro i h1 _
     have ho : Min.min o a.size = o := Nat.min_eq_left (by omega)
     simp only [Array.size_extract, writeBytes_size a o bs h] at h1
-    simp only [writeBytes, Array.getElem_extract, Array.getElem_append, Array.size_append,
+    simp only [writeBytes_eq, Array.getElem_extract, Array.getElem_append, Array.size_append,
       Array.size_extract, ho]
     split
     · split
@@ -1196,6 +1196,25 @@ instance : LawfulEnc Ptr where
   decode_encode p := by
     have hr : Array.finRange 8 = #[0, 1, 2, 3, 4, 5, 6, 7] := by decide
     simp [Enc.encode, Enc.decode, hr, pure, ExceptT.pure, ExceptT.mk]
+
+/-- A slice: its pointer's and its length's lawful encodings, one after the other (a field of
+generated structs such as `std.heap.FixedBufferAllocator`). -/
+instance : LawfulEnc Slice where
+  size_encode s := by
+    show (Enc.encode s.ptr ++ Enc.encode s.len).size = 16
+    rw [Array.size_append, LawfulEnc.size_encode, LawfulEnc.size_encode]; rfl
+  decode_encode s := by
+    have hp : (Enc.encode s.ptr).size = 8 := LawfulEnc.size_encode _
+    have hl : (Enc.encode s.len).size = 8 := LawfulEnc.size_encode _
+    have e1 : (Enc.encode s.ptr ++ Enc.encode s.len).extract 0 8 = Enc.encode s.ptr := by
+      rw [← hp]; simp
+    have e2 : (Enc.encode s.ptr ++ Enc.encode s.len).extract 8 16 = Enc.encode s.len := by
+      have e0 : (Enc.encode s.ptr).extract 8 16 = #[] := by apply Array.ext <;> simp [hp]
+      rw [Array.extract_append, e0, Array.empty_append, hp, show 16 - 8 = 8 from rfl, ← hl]
+      simp
+    show (do pure ⟨← Enc.decode ((Enc.encode s.ptr ++ Enc.encode s.len).extract 0 8),
+      ← Enc.decode ((Enc.encode s.ptr ++ Enc.encode s.len).extract 8 16)⟩ : Result Slice) = pure s
+    rw [e1, e2, LawfulEnc.decode_encode, LawfulEnc.decode_encode]; rfl
 
 /-! ## Finite error storage -/
 

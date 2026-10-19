@@ -6,7 +6,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 toolchain=$(dirname "$(dirname "$(elan which lean)")")
-export LEAN_PATH="$repo_root/.lake/architecture-audit/claims/lib:$repo_root/.lake/build/lib/lean:$toolchain/lib/lean"
+export LEAN_PATH="$repo_root/tests/roadmap/architecture-audit/claims/.lake/build/lib/lean:$repo_root/.lake/build/lib/lean:$toolchain/lib/lean"
 status=0
 for module in "$@"; do
   if "$toolchain/bin/leanchecker" "$module"; then

@@ -62,7 +62,9 @@ for `std.Thread.spawn` today. `env : Os.Env` is the explicit environment (below)
 Arguments that std never passes (other futex commands or flags, other `clone` flags, other
 clocks, other signals, other `sysctl` names, a non-null `pthread_join` result pointer) are outside
 the model: `.unspecified`. The translator must still check, as for OSM-01, that each call site's
-types match.
+types match (`checkOsCall`). The models are of little-endian targets (the futex compares the word
+as it reads it; a clock writes its `timespec` as plain stores), so `checkOsCall` rejects every OS
+row on a big-endian target (s390x, mips64).
 
 ## Environment
 
@@ -84,6 +86,16 @@ run has one spawn oracle. `Env.Matches env run` states that the run's `Io.Thread
 `Env.Valid` is the premise a theorem states: `cpus ≥ 1`; ids distinct and positive; the
 `awake`/`boot` clocks monotone; values fit a `timespec`. Libc's `malloc` is thread-safe (OSM-02).
 The model's `std.mem.Allocator` thread safety (audit finding #11) is a separate question.
+
+**In generated code.** A model that takes `env` reaches the generated code through the class
+`Os.HasEnv` (one field, `env`). The translator marks the OS rows whose model takes it
+(`OsFn.env`, `Air2Lean/StdModels.lean`: today the `clock_gettime` rows), computes the functions
+that reach one (`envFunctions`, `Air2Lean/Memory.lean`: its callers, their callers and the
+spawners of such a task, up to a fixpoint) and gives each of them, and `dispatch` when one of its
+tasks reaches one, the binder `[Zig.Os.HasEnv]`; a call passes `Zig.Os.HasEnv.env`. A theorem
+about such a definition takes the instance too, so it holds for every environment (and states
+`env.Valid` where it needs it). The other OS rows bound so far (`sched_yield`, `__error`, the
+futex waits) take no environment.
 
 ## Futex
 

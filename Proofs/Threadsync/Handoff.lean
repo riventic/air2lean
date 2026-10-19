@@ -27,6 +27,10 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Handoff Threadsync
 
 namespace Threadsync.HO
 
+-- `main`'s condition and event waits reach the translated `std.time.Timer` (OSK-01): the results
+-- hold for every OS environment.
+variable [Zig.Os.HasEnv]
+
 -- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
 attribute [local irreducible] Proto.WP
 
@@ -67,8 +71,10 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rnil r { ph := .rdy }),
     U_storeHeld (Lo := lo), vOf, Ph.hasV, Ph.hasR]
 
+omit [Zig.Os.HasEnv] in
 theorem discard_eq (x : ConcM Tgt Unit) : discard x = (fun _ => ()) <$> x := rfl
 
+omit [Zig.Os.HasEnv] in
 theorem dispatch_producer (p : Ptr) : dispatch (Tgt.producer p) = (fun _ => ()) <$> producer p := by
   rw [show dispatch (Tgt.producer p) = discard (producer p) from rfl]; exact discard_eq _
 
@@ -121,59 +127,22 @@ theorem loop12_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadI
     U_holdStep (Lo := lo), wp_cwait (Lo := lo) (prodOf := prodOf) threadCond rfl rfl rfl ⟨⟩ hpl,
     handoff.again12]
 
-/-- The `Box` that `main` stores. -/
-def box0 : Box :=
-  { m := mutexOf 0,
-    c := { impl := { state := { raw := 0 }, epoch := { raw := 0 } } }, ready := false,
-    done := { impl := { state := { raw := 0 } } }, v := 0 }
-
 theorem main_spec (σ : Placement) (d : Nat) :
     (proto lo prodOf).WP 0 handoff QM G0 { mem0 σ with current := 0 } d := by
+  have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold handoff
-  have ht0 : ({ mem0 σ with current := 0 } : Mem).threads = #[{ spawner := 0, joined := true }] :=
-    rfl
-  -- the `Box`: block 0, a stack block in the plain mode, which `main` keeps
-  refine WP.bind (WP.liftMem_fownedS (by fsym : FTTriple plain _ _)
-    (FOwned.start0_plain σ) rfl (by rw [ht0]; decide) (by rw [plainOwn_zero]; exact plain_intro)
-    fun s0 m₁ r₁ _ hr₁ ho₁ hq₁ hs₁ => ?_)
-  obtain ⟨rfl, hm₁e⟩ := alloc_ok hr₁
-  obtain ⟨A, b, hq₁⟩ := hq₁
-  obtain ⟨⟨hpb, -, hA4⟩, F₁⟩ := Full.sep_lift.mp hq₁
-  obtain rfl : b = 0 := by cases hpb; rfl
-  rw [show (⟨some ({ mem0 σ with current := 0 } : Mem).blocks.size, 0⟩ : Ptr) = bPtr from rfl]
-    at F₁ ⊢
-  have hc₁ : m₁.current = 0 := hs₁.current
-  have ht₁ : m₁.threads = #[{ spawner := 0, joined := true }] := hs₁.threads.trans ht0
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  -- the `Box`'s store
-  refine WP.bind (WP.callMC_fownedS (FTTriple.storeAt' (p := bPtr) (A := A) (S := 24)
-    (K := .stack) (k := 0) (a := 4) box0 (by decide +kernel) rfl rfl (by decide)
-    (by decide +kernel) (by simp [bPtr]; omega) (by decide)).frame ho₁ hc₁ (by rw [ht₁]; decide)
-    F₁ fun _ m₂ r₂ _ hr₂ ho₂ F₂ hs₂ => ?_)
-  simp only [plainOwn, upd_upd] at ho₂
-  have ht₂ : m₂.threads = #[{ spawner := 0, joined := true }] := hs₂.threads.trans ht₁
-  have hat₂ : m₂.atomics = #[] := by rw [store_atomics hr₂, hm₁e]; rfl
-  have hq₂ : m₂.waiters = #[] := by rw [hs₂.waiters, hs₁.waiters]; rfl
-  obtain ⟨rM, hplM, hi₀⟩ := inv_of_box (Lo := lo) (prodOf := prodOf) ho₂ F₂ (by decide +kernel)
-    (by decide) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
-    (by decide +kernel) (by decide +kernel) (fun h => absurd h (by decide)) hA4 ht₂ hat₂ hq₂
-  -- the spawn
-  refine WP.bind (WP.spawnC fun k _ => ⟨gO rM { ph := .pre }, hi₀, fun G₁ m₈ hg₁ hi₈ =>
-    ⟨gO rnil { ph := .lk }, ⟨rfl, rfl⟩, fun child m₉ hf => ?_⟩⟩)
-  obtain ⟨rfl, hi₉⟩ := inv_spawn hi₈ hg₁ hf
-  -- `lock`, the `ready` loop, `v` (the lock holder's step, `FLock.Fits.wp_hold`: the producer
-  -- stored 7, `vOf_ready`), `unlock`, the event wait, the join of the producer, the free of the
-  -- `Box`
-  fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+  -- the `Box` (block 0, a stack block in the plain mode, which `main` keeps) and its store; the
+  -- protocol's start with `main`'s part `rM` (`inv_of_box`) and the spawn; `lock`, the `ready`
+  -- loop, `v` (the lock holder's step, `FLock.Fits.wp_hold`: the producer stored 7, `vOf_ready`),
+  -- `unlock`, the event wait, the join of the producer, the free of the `Box`
+  fsym [inv_of_box (Lo := lo) (prodOf := prodOf), inv_spawn (Lo := lo) (prodOf := prodOf),
+    WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
     wp_lockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩,
-    WP.loop _ _ (inv12 rM) (fun _ => 0) (post12 rM) (loop12_body rM hplM),
-    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rM r { ph := .run }),
+    WP.loop _ _ (inv12 _) (fun _ => 0) (post12 _) (loop12_body _ _),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := (fun rM r => gH rM r { ph := .run }) _),
     U_holdStep (Lo := lo), vOf_ready,
     wp_unlockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩,
-    wp_ewait (Lo := lo) (prodOf := prodOf) resetEvent rfl ⟨⟩ hplM,
+    wp_ewait (Lo := lo) (prodOf := prodOf) resetEvent rfl ⟨⟩ _,
     wp_join (Lo := lo) (prodOf := prodOf), wp_free (Lo := lo) (prodOf := prodOf),
     joinedAll_of_threads]
 
@@ -194,11 +163,14 @@ theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement
   (proto lo prodOf).run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
+omit [Zig.Os.HasEnv] in
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Condition` handoff returns 7 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`), in the example OS
+environment (`Os.Env.example`; the run reads no clock). -/
 theorem handoff_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) handoff (mem0 σ)) = some 7 :=
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
+      (@handoff ⟨Os.Env.example⟩) (mem0 σ)) = some 7 :=
   ⟨.fresh, by unroll_sched 10⟩
 
 end Threadsync.HO

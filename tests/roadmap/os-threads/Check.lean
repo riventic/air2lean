@@ -143,6 +143,31 @@ def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wake 0x01000001 (some p) 0) hex32 ==
   ["-2", "-4"]
 
+-- The wake count (audit soundness-2026-10-14 §S5). Std's `wake(p, n)` on macOS sets `WAKE_ALL`
+-- for `n > 1`: with three threads asleep, `wake(p, 2)` wakes all three, under every choice of the
+-- oracle (kernel-checked), and `__ulock_wake` returns 0, or a spurious -EINTR with nobody woken.
+-- The hand model's scheduler wake `.wake p 2` wakes two (one stays asleep) under every choice.
+def threeWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, p0)] }
+example : ∀ c < wakeCount p0 none threeWaiters,
+    ((wakeAt c p0 none).run threeWaiters).run.map (·.map fun (n, m) => (n, m.waitersAt p0)) =
+      some (.ok (some 3, [])) := by decide +kernel
+example : ∀ a < 3, ∀ b < 2,
+    ((Thread.futexWake p0 2 [a, b]).run threeWaiters).run.map
+      (·.map fun (_, m) => (m.waitersAt p0).length) = some (.ok 1) := by decide +kernel
+#guard outcomes noKids (do
+    let r ← Darwin.__ulock_wake 0x01000101 (some p0) 0
+    pure (r, ((← lift get).waitersAt p0).length)) (fun (r, k) => s!"{r.toInt} {k}")
+    (m0 := threeWaiters) == ["-4 3", "0 0"]
+#guard outcomes noKids (do
+    ConcM.sync (.wake p0 2)
+    pure ((← lift get).waitersAt p0).length) toString (m0 := threeWaiters) == ["1"]
+-- Linux: `nr_wake` is an `int`, so at most 2^31 − 1 threads wake; a `u32` count above it reads
+-- as negative and wakes one, which is why std clamps with `@min(n, maxInt(i32))` (the library
+-- theorem `Os.Linux.wakeLimit_le` covers every `val`). The hand model's `.wake p 0xffffffff`
+-- wakes up to 2^32 − 1.
+example : Linux.wakeLimit 0x7fffffff = 0x7fffffff ∧ Linux.wakeLimit 0x80000000 = 1 ∧
+    Linux.wakeLimit 0xffffffff = 1 := by decide
+
 -- A waiter woken by a wake goes on. Its return code is 0 (woken) or a spurious -EINTR; the word
 -- was 0 when it started.
 def wakeKid : Tgt → ConcM Tgt Unit := fun _ => do

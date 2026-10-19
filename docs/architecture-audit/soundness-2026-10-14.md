@@ -34,9 +34,9 @@ now lies at the two ends of the pipeline:
 | S1 | SOUNDNESS (claims) | A theorem without a non-vacuity witness is capped at `safety`, and `project.py absence_claims` turns every `safety` goal into `no-panic: proved`. A vacuous theorem therefore proves "no panic" for a root that panics. | `vacuous-safety/probe.py`, `Vacuity.lean` (kernel) |
 | S2 | SOUNDNESS (constructed, `--allocator-model translated`) | A user file `posix.zig` binds the trusted OS primitive `Zig.Os.mmap`, because `posix` is missing from `Identity.stdNamespaces`. This is trust-chain finding 1 again, for a namespace added later. | `translator/posix-spoof` (real export, `#guard`) |
 | S3 | SOUNDNESS (outcomes) | Unchecked illegal behaviour gives a safety-panic constructor (`.panic`, `.overflow`, `.divByZero`), not `.illegal`. The affected ops are `@enumFromInt`, inactive union fields (tagged and bare), plain `+ - *`, `/`, and `@intCast` with safety off, on 0.16 and 0.17. A contract that admits `panic` then admits illegal behaviour that natively returns a value. | `translator/unsafe-panic` (real export, kernel `rfl`, native output) |
-| S3b | SOUNDNESS (outcomes), **open** | The rest of S3 (§S3, status): `@shrExact` with safety off (`shr_exact` and no `shrOverflow` check) gives `.overflow`, a safety panic, not `.illegal`. Sema's check comes *after* the op, so neither the op nor its operands tell the checked from the unchecked form. The model needs the check's presence as an export fact (as `for_len`). | none committed yet; the follow-up PR adds it to `translator/` |
+| S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): an inexact `@shrExact` gave `.overflow`, a safety panic, with and without safety. Without safety it is unchecked IB. With safety, Sema's `shrOverflow` check comes *after* the op, which LLVM emits as `lshr exact`: the check branches on poison, and ReleaseSafe deletes it and returns a value. | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`); native rows in `illegal-behavior/native/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
-| S5 | SOUNDNESS (std wake correspondence), **open**, added 2026-10-16 | The handwritten STD-05 futex path uses unsigned `n.toNat` and `wakePick`'s exact minimum cardinality. Real Linux std saturates at `maxInt(i32)`; real Darwin std requests wake-all for count > 1. | Source-only: three Darwin waiters and `wake(p, 2)`; the translated-wrapper regression is required but not yet implemented or run. |
+| S5 | SOUNDNESS (reported 2026-10-16); model fidelity on analysis | The hand models of std's futex wake (`Thread.Futex.wake`, `Io.futexWake`; STD-05) wake exactly `min n k` of `k` waiters. Natively macOS wakes all of them for `n > 1` (`WAKE_ALL`), and Linux at most `2^31 − 1`. No false native statement was derived from it (§S5). | `futex-wake/WakeCount.lean` (kernel) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
 | F3 | FAIL-OPEN | Witnesses do not link claims to the program. Non-vacuity witnesses pick any `Mem.FSeq` memory, not `mem0`. No shipped `Proofs/` claim uses `FTriple.run_init*`/`FTotalTriple.run_init*`. The `CTriple` claims of `Proofs/Lists` (`Alloc`, `Append`, `Container`) have no witness, apart from two fixtures in `tests/roadmap/lists-fba`. | survey (§F3) |
@@ -46,10 +46,9 @@ now lies at the two ends of the pipeline:
 | H4 | HARDENING | A pure-mode sentinel slice parameter loses its sentinel, so `s[len]` is `.illegal`. Natively it returns the sentinel. This is conservative but undocumented. | sub-audit fixture (not committed) |
 | H5 | DOC/POLICY | `docs/illegal-behavior.md` row 23 is stale: the optional/C-pointer unwraps now give `.illegal`. Several std rows added after af9ddc30 select hand-written models for std functions: `Io.async`, `Io.Future.await`/`cancel`, `Io.checkCancel`, `Thread.detach`, `Io.Group.async`/`groupDeferC`. Under CLAUDE.md ("never hand-write a model of a std module") they need a maintainer decision or a deletion plan. | code-read |
 
-**Answer to the original maintainer question.** Inside the originally kernel-checked part, no
-wrong proof was found. The model changes reviewed in that pass are fail-closed for the logics
-that forbid errors (`FTriple`, `FTotalTriple`, `CTriple`, strict protocols). This conclusion
-does not cover the later source-only S5 finding or its pending translated-path regression.
+**Answer to the maintainer's question.** Inside the kernel-checked part, no wrong proof was found.
+Every model change reviewed here is fail-closed for the logics that forbid errors (`FTriple`,
+`FTotalTriple`, `CTriple`, strict protocols).
 
 The risk sits at two points:
 
@@ -59,9 +58,8 @@ The risk sits at two points:
 * **Identity checks of the translator.** S2 and F1 keep a std or OS model bound to code that is
   not std's.
 
-The original four SOUNDNESS findings have concrete counterexamples. S2 and F1 need deliberately
-crafted input. S1, S3 and S4 apply to ordinary use. The later S5 finding is source-derived;
-its required regression is still pending and is not covered by the existing suite's results.
+All four SOUNDNESS findings have concrete counterexamples. S2 and F1 need deliberately crafted
+input. S1, S3 and S4 apply to ordinary use.
 
 ## 0. Re-run of the trust-chain suite
 
@@ -215,9 +213,30 @@ wildcard throw `.illegal`. Then rewrite the affected rows of illegal-behavior.md
   `WP.liftMem_add`, `intCast_step`, the literal simprocs and the others) are generalized over
   `safe`; no new rule is added. `unsafe-panic` is fixed, and `Fixed.lean` proves `.illegal` for
   every unchecked op of `up.zig`. CI runs `soundness-1014/check.sh --require-fixed unsafe-panic`.
-- **Not covered: S3b (open).** Row 13 (`shr_exact` without safety) still gives `.overflow`:
-  Sema checks it *after* the op, so the op cannot tell the forms apart. That needs the check's
-  presence as an export fact, as `for_len` has. Follow-up after F1.
+- **S3b: fixed.** Row 13 (`@shrExact`) gave `.overflow` for an inexact shift in both forms.
+  - Without safety (`shr_exact` alone) that is unchecked IB.
+  - With safety, Sema checks *after* the op: `shl` of the result by the count, `cmp_eq` with
+    the operand, `cond_br` to `shrOverflow`, in 0.14.1 to 0.17.0. The LLVM backend emits the op
+    as `lshr exact`/`ashr exact`, poison on an inexact shift, so the check branches on poison,
+    and ReleaseSafe deletes it. In stock ReleaseSafe neither form panics on `3 >> 1`; Debug
+    panics. This holds for 0.14.1 to 0.17.0 (the [upstream draft](../upstream/shr-exact-check-poison.md)
+    has the runs and the IR). `illegal-behavior/native/` records the same rows for 0.16.0. So
+    `.overflow` was wrong for the checked form too, and telling the two forms apart would not
+    have fixed it.
+  - `Zig.shrExact` throws `.illegal` on an inexact shift in both forms; the AIR, Canon and
+    Normalize are unchanged. For a build that keeps the check (Debug, a self-hosted backend),
+    this over-approximates its panic.
+  - The other ops (`shr-unsafe/family.zig`, the same builds and versions): every other integer
+    safety check panics natively on a violating input. That covers `@shlExact` (Sema emits
+    `shl_with_overflow`), the count check `shiftRhsTooBig` (it does not read the result),
+    `@divExact`, `@divTrunc`, `@divFloor`, `/`, `@rem` and `@mod` (zero, `minInt / -1`, remainder;
+    each checked before the op), and `+`, `-`, `*` and negation, scalar and vector (overflow
+    intrinsics). It also covers `@intCast`, `@intFromFloat` and `@enumFromInt`. Only
+    `@shrExact`'s check reads a poison-producing op.
+  - Case `translator/shr-unsafe`, a real 0.16.0 export (the 0.17.0 export of `shr.zig` is the
+    same but for its version fields). `ShrUnsafe.lean` (one of the forms is `.overflow`) no
+    longer holds. `Fixed.lean` proves `.illegal` for both forms and the value for an exact
+    shift. CI runs `--require-fixed … shr-unsafe`.
 
 ## S4. Non-strict protocols discharge `.unspecified` (SOUNDNESS, claim reading)
 
@@ -283,54 +302,75 @@ need a proof of absence even in partial correctness, as `FTriple` already requir
 * **The counterexample.** `NonStrict.lean` no longer elaborates: its NaN `@bitCast` throws
   `.unspecified`.
 
-## S5. The handwritten std wake path has different cardinality (SOUNDNESS, open)
+## S5. The hand models' futex wake count is not the native one (SOUNDNESS, reported 2026-10-16)
 
-Added 2026-10-16 from the coordinated
-[source audit](https://github.com/riventic/air2lean/pull/397#issuecomment-6214305346).
-This is a native/model correspondence finding from source inspection, not a new
-kernel-checked counterexample or native run. It does not refute the existing
-single-waiter Event theorem.
+Added after the audit. It was raised in the coordinator/Codex design discussion on PR #397
+(Event's finite wake, 2026-10-16), which asked for it to be confirmed as a model finding in its
+own right. STD-05 step A files it here, with the 3-waiter scenario as the regression that the
+translated wake must pass.
 
-**Location.** The STD-05 `Io.futexWake` row in `Air2Lean/StdModels.lean`
-selects `Emit.threadCall`, then `ZigLean/Conc/Call.lean`'s `futexWakeC` converts
-the `BitVec 32` count by `n.toNat`. The scheduler calls `Thread.futexWake`;
-`wakePick` removes exactly the minimum of that count and the queued population.
-The actual generated Event setter reaches this path (`Proofs/Sync/Gen.lean:686`,
-`Proofs/Threadsync/Gen.lean:938`). Existing Linux `futex_3arg` and Darwin
-`__ulock_wake` semantics are bypassed.
-
-The real wrappers in every pinned release differ. Zig 0.17.0 and 0.16.0 use
-`Io/Threaded.zig`; 0.15.2 and 0.14.1 use `Thread/Futex.zig`. Linux saturates at
-`maxInt(i32)` before its primitive. Darwin requests `WAKE_ALL` when the count
-exceeds one (with interruption retry in the Threaded wrappers). The
+**Scope of evidence.** `WakeCount.lean` checks Lean model calls, not native execution,
+and does not refute the unchanged singleton-waiter Event theorem. The
 [seen-floor audit](seen-floor-frame-obstruction.md#native-wake-correspondence-and-lifecycle-boundary)
-preserves the exact source line ranges and full-file SHA256 pins for all four
-versions, read from release-source CAS roots bound by `zig-patch/versions.toml`.
+retains the four-version source pins and required translated-wrapper regression.
+Same-state and whole-run native correspondence, and a live target-correct waiter
+bound, remain separate obligations; mutable `pid_max` alone does not establish
+that invariant.
 
-**Concrete source scenario.** Three distinct Darwin waiters are queued at `p`;
-the caller executes `wake(p, 2)`. Successful native std requests wake-all and
-removes all three, while the current high-level model removes exactly two.
-This needs no large-thread-capacity assumption. On Linux the unsigned high-level
-count can exceed the wrapper's signed saturation. A state with `INT_MAX + 1`
-queued waiters is an unrestricted-model scenario, not a claimed realizable
-Linux process; a live-native-ID argument must be justified separately.
+**Location.** `Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.0) select
+hand models (STD-05; `Zig.threadFutexWakeC`, `Zig.futexWakeC`, `ZigLean/Conc/Call.lean`). Both
+emit the scheduler's `SyncOp.wake p n`, which wakes exactly `min n k` of the `k` threads queued
+at `p` (`Thread.wakePick`; `Thread.wakePick_length`, `ZigLean/Sep/Full/OsFutex.lean`). Std's code
+calls the OS instead:
 
-**Permanent fix and required regression.** Continue the existing STD-05
-retirement track (`codex/std-retire-futex`, after STD-07 #381): translate the
-real Thread.Futex and Io wrappers and the concrete `Io.Threaded` vtable
-implementation, retaining only the OS primitives as trusted boundaries. Retire
-the corresponding model rows and resolve the generic `stdConflict`, specialized
-`Io`/`Thread` representation and translated-thread-mode barriers. A target clamp
-in the handwritten substitution does not complete that retirement.
+* macOS: `__ulock_wake(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = max_waiters > 1 },
+  ptr, 0)`. With `WAKE_ALL` every waiter wakes (0.15.2 `Thread/Futex.zig:234-242`; 0.16.0
+  `Io/Threaded.zig:1141-1147`; 0.17.0 `1145-1151`).
+* Linux: `futex_3arg(ptr, .{ .cmd = .WAKE, .private = true }, @min(max_waiters, maxInt(i32)))`.
+  The kernel's `nr_wake` is an `int`, so at most `2^31 − 1` threads wake (0.15.2
+  `Thread/Futex.zig:287-290`; 0.16.0 `Io/Threaded.zig:1128-1131`; 0.17.0 `1132-1135`).
 
-The translated path must gain a regression for the three-waiter Darwin
-`wake(p, 2)` scenario: after a successful wake, all three are selected and none
-remains queued at `p`. It must also preserve the actual Linux signed-saturation
-behavior and the all-version/target dispatch. Use the existing audit/fixture
-path when that implementation is ready; no separate registry, auditor or proof
-mechanism is introduced here. This doc update adds no fixture or CI gate and
-makes no checked-regression claim. The finding remains open until the actual
-translated path and its regression pass.
+**Counterexample** (`futex-wake/WakeCount.lean`, kernel):
+
+* `hand_leaves_one`: with three threads asleep at `p`, the hand model's `wake(p, 2)` leaves one
+  asleep, under every choice of the oracle.
+* `native_wakes_all`: the OS model of macOS's call (`__ulock_wake` with `WAKE_ALL`, OSF-02) wakes
+  all three, under every choice.
+* `native_clamp`, `hand_wakes_more`: the Linux kernel wakes at most `2^31 − 1`
+  (`Linux.wakeLimit_le`, every `val`), while the hand model's `wake(p, maxInt(u32))` wakes every
+  one of `2^31` waiters.
+
+The file `#guard`s that a std wake still selects a hand model, so it elaborates while the finding
+is open. `check.sh` prints `S5-futex-wake-count: vulnerable` until then.
+
+**Impact.** The memory after the wake differs from native in both directions. No false native
+statement was derived from it:
+
+* macOS (the model wakes fewer). A native run in which a third thread wakes has a model run with
+  the same outcome. In that run the third thread returns spuriously in place of its sleep: the
+  scheduler's `spuriousWake` option, or the `EINTR` option of the OS wait, which std's wait treats
+  as a return. The scheduler then delays it until after the wake. Std's futex API allows spurious
+  returns, and every std caller checks the word again. The model only has more outcomes, for
+  example the third thread asleep at the end, which is `.deadlock`. A no-deadlock proof then
+  fails; it cannot hold falsely.
+* Linux (the model wakes more). The difference needs more than `2^31 − 1` threads queued at once.
+  Linux's thread ids exclude that natively (`pid_max ≤ 2^22`). The model has no such bound
+  (OST-03 makes ids distinct and positive, not bounded; a live-thread bound is open in the PR #397
+  discussion).
+
+So by the taxonomy above this is a model-fidelity finding, nearer HARDENING than SOUNDNESS. It
+stays recorded as SOUNDNESS because the state divergence is real and kernel-checked, and the
+Linux direction (the model wakes more than native) is the unsound direction in principle. Only
+the native thread bound excludes it, and the model does not state that bound.
+
+**Structural fix.** STD-05 deletes the hand rows and translates std's wake down to the OS rows
+(`futex_3arg`, `__ulock_wake`; OSF-02), whose model has the native count: step D for
+`Thread.Futex` and step E (an open architecture question) for the `Io` futex. Step A, the generic
+rules for those rows, is in `ZigLean/Sep/Full/OsFutex.lean` and the lock, word, event and condition
+rules next to them. Its regressions in `tests/roadmap/os-threads/Check.lean` check that
+`__ulock_wake` with `WAKE_ALL` wakes all three waiters, and the Linux clamp.
+
+**Status: open** (steps D and E).
 
 ## F1. The `std` module is not bound to the reviewed sources (FAIL-OPEN)
 
@@ -354,6 +394,23 @@ case was exported with `--zig-lib-dir`.
 defines a model or a special type, or one digest of `lib/std`. The translator compares it with
 the model's `StdReview` row and rejects a mismatch. If that is not wanted, add a premise
 "unmodified std" with an ID and list it in every claim that uses a std model.
+
+**Status: fixed, in the exporter.**
+- **Why not a profile field.** A new field would change every committed export, so the binding
+  sits where the module identity is made.
+- **Table.** `zig-patch/build.sh` writes the SHA-256 of every file of the verified source tree's
+  `lib/std` as Zig installs it (`*test.zig` blank) into the exporter. After the install it
+  checks the table against the installed `lib/std`.
+- **Exporter.** `identity.zig` `stdReviewed` checks that the std root file is `std.zig` and
+  compares every std file the compilation loaded with that table, once per compiler update. On
+  any difference (an edited `--zig-lib-dir`, `-Mstd=`) it names the module `std@modified` and
+  warns.
+- **Translator.** It rejects every identity of that module (`Identity.modifiedStd`), so no std
+  model, special type or panic handler can bind.
+- **Unchanged exports.** Exports with the unmodified std, or with an identical copy, are byte for
+  byte unchanged. No premise is added: the binding is the exporter's, under TRU-02.
+- **Tests.** `libdir-spoof` was re-exported with the new exporter and is rejected.
+  `tests/roadmap/module-identity/check.sh` case 5 exports live on every version.
 
 ## F2. Allocator contracts have no non-vacuity obligation (FAIL-OPEN)
 
@@ -491,4 +548,5 @@ compilers: `scripts/zig-air.sh 0.16.0` (or `0.17.0`) with
 `libdir-spoof` adds `--zig-lib-dir <copy of lib with allocator-create.patch>`.
 
 The native results come from stock 0.16.0 ReleaseSafe on aarch64-macos: `unsafe-panic/native.zig`
-and `nonstrict-unspecified/nan.zig`.
+and `nonstrict-unspecified/nan.zig`. `shr-unsafe/family.zig` (a manual probe; no check runs it)
+was also run with 0.17.0 there, and with 0.14.1 and 0.15.2 on aarch64-linux-musl.

@@ -346,15 +346,14 @@ def main():
     timer = function("timerRead", [dict(pointer, child=2), integer(64), timer_type, NORETURN], [0], 1, [
         inst(0, "arg", 0, param=0), inst(1, "call", 1, [dict(inst=0)], callee=dict(func="time.Timer.read", noreturn=False)),
         inst(2, "ret", 3, [dict(inst=1)])])
-    # `std.time.Timer` exists (and its model row is reviewed) up to Zig 0.15.2 only.
+    # `std.time.Timer` (Zig 0.14.1, 0.15.2) has no model: it is translated from its std code down
+    # to `clock_gettime` (OSK-01), so a call of it without its AIR fails closed, and the OS row
+    # needs the OS of a profile (the legacy profile names none).
     timer["zig_version"] = "0.15.2"
-    checks += run(binary, [timer])
-    mutate = copy.deepcopy(timer)
-    mutate["types"][2]["name"] = "OtherTimer"
-    checks += run(binary, [mutate], "Timer pointer/u64")
-    mutate = copy.deepcopy(timer)
-    mutate["types"][0]["const"] = True
-    checks += run(binary, [mutate], "Timer pointer/u64")
+    checks += run(binary, [timer], "has no AIR file and no model")
+    clock = copy.deepcopy(timer)
+    clock["body"][1]["callee"]["func"] = "os.linux.clock_gettime"
+    checks += run(binary, [clock], "no OS model for target OS")
     # Successful header type equality must not suppress initializer value comparisons.
     error_a = function("errorA", [dict(k="error_set", errors=["Left", "Right"], abi_size=2, abi_align=2),
         VOID, NORETURN, dict(k="error_union", error=0, payload=1, abi_size=2, abi_align=2)], [], 1,

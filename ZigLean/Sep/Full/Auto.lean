@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.AutoConc
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Parts
+import ZigLean.Sep.Full.Struct
 
 /-!
 # `fsym`: symbolic execution of generated code in the full-state logic
@@ -403,6 +404,10 @@ structure RunCaches where
   /-- Derived fields (`encFieldOf?`) by struct type, field type and offset: `get`, `set` and
   the `EncField` proof (closed terms), or `none`. -/
   fields : IO.Ref (Std.HashMap (Expr × Expr × Nat) (Option (Expr × Expr × Expr)))
+  /-- Derived struct layouts (`structLayoutOf?`) and `LawfulEnc` instances (`lawfulEncOf?`) by
+  type, or `none`. -/
+  layouts : IO.Ref (Std.HashMap Expr (Option (Expr × Array (Nat × Nat × Nat × Option Nat))))
+  lawful : IO.Ref (Std.HashMap Expr (Option Expr))
   /-- The atoms the planner did not find in the state during the current step (its unknowns
   abstracted): what a view of a state atom may provide (`viewStep`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
@@ -433,16 +438,27 @@ structure RunCaches where
   `Shape X m → sum X ≤ 4`): applied to a new hypothesis of a `WP` walk that is their first
   premise, their conclusion a new fact for the arithmetic (`wpForward`). -/
   forward : IO.Ref (Array Expr)
+  /-- The caller's run lemmas (`fsym [l]`, a premise a step's run: a protocol's spawn lemma), as
+  the library's `@[fsym_run]` ones (`wpRunFacts`). -/
+  runFwd : IO.Ref (Array Expr)
+  /-- The caller's lemmas whose conclusion is an `∃` (`fsym [l]`, a protocol's start with the
+  part a thread keeps, `∃ rM, …`): from a new hypothesis that is their first premise, the others
+  side goals of the walk, their conclusion as new hypotheses (`wpForwardEx`). -/
+  forwardEx : IO.Ref (Array Expr)
+  /-- The pairs (lemma, hypothesis) `wpForwardEx` tried. -/
+  fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
+           layouts := ← IO.mkRef {}, lawful := ← IO.mkRef {},
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
-           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[] }
+           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
+           runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {} }
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -931,6 +947,16 @@ def omegaDisch : Simp.Discharge := fun e => do
     return out
   r
 
+/-- `e` with the reducible aliases of `Nat` and `Int` (`ThreadId`) as those types: `omega` reads
+an order or a numeral only at `Nat` or `Int` itself (`t < m.threads.size` of a `t : ThreadId`). -/
+def numAliases (e : Expr) : MetaM Expr :=
+  Meta.transform e (post := fun x => do
+    let .const c _ := x | return .continue
+    if c == ``Nat || c == ``Int then return .continue
+    unless (← getReducibilityStatus c) == .reducible do return .continue
+    let v ← whnfR x
+    return if v.isConstOf ``Nat || v.isConstOf ``Int then .done v else .continue)
+
 /-- The facts of the current context: its hypotheses in normal form, each normalized with the
 facts before it (`none`: a hypothesis normalized to `False`, with its proof). -/
 def normFacts : MetaM (Array Expr × Option Expr) := do
@@ -954,13 +980,15 @@ def normFacts : MetaM (Array Expr × Option Expr) := do
   return (facts, none)
 where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array Expr) (d : LocalDecl) :
     MetaM (Option (Expr × Expr)) := do
-  let ty ← instantiateMVars d.type
+  let ty0 ← instantiateMVars d.type
+  let ty ← numAliases ty0
+  let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
   let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
-  let out ← if r.expr == ty then pure none else
+  let out ← if r.expr == ty0 then pure none else
     match r.proof? with
-    | some pf => pure (some (r.expr, ← mkEqMP pf d.toExpr))
-    | none => pure (some (r.expr, ← mkExpectedTypeHint d.toExpr r.expr))
+    | some pf => pure (some (r.expr, ← mkEqMP pf h))
+    | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
   (← caches).hyp.modify (·.insert d.fvarId out)
   return out
 
@@ -985,7 +1013,7 @@ def arithCore (g : MVarId) (quick := false) : TacticM Bool := g.withContext do
   if ← assumptionR g then return true
   let s ← saveState
   try
-    let tgt0 ← instantiateMVars (← g.getType)
+    let tgt0 ← numAliases (← instantiateMVars (← g.getType))
     let h0 ← IO.getNumHeartbeats
     let (facts, ff) ← normFacts
     trace[fsym.prof] "normFacts {((← IO.getNumHeartbeats) - h0) / 1000}"
@@ -1333,121 +1361,6 @@ def fixByFacts (args : Array Expr) : MetaM Unit := do
       if ← isDefEq ty t then a.mvarId!.assign h; break
       s.restore
 
-/-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
-by synthesis, where it succeeds. -/
-def synthInstArgs (args : Array Expr) : MetaM Unit := do
-  for a in args do
-    if ← a.mvarId!.isAssigned then continue
-    let ty ← instantiateMVars (← inferType a)
-    if (← isClass? ty).isSome then
-      if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
-        discard <| isDefEq a inst
-
-/-- The provider kind of a goal `K … P …`: a constant `K` with a lemma `K.of_within`
-(`AutoRules.lean` §Providers over the whole precondition). -/
-def providerKind? (t : Expr) : MetaM (Option Name) := do
-  let .const k _ := t.getAppFn | return none
-  return if (← getEnv).contains (k ++ `of_within) then some k else none
-
-/-- The position of a provider goal's assertion `P`: its last argument of type `FAssn` (the
-last argument for `AddrOf b A P`, the first for `OwnsPtr P p n`, before the command for
-`ThreadLocal P c`). -/
-def assnIdx (t : Expr) : MetaM Nat := do
-  let args := t.getAppArgs
-  let mut i := args.size
-  while i > 0 do
-    i := i - 1
-    if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
-  return args.size - 1
-
-/-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
-`StateT.lift` of a `Result`): their positions and heads. A provider lemma about another command
-does not apply (`providerLemmas`). -/
-def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
-  let args := t.getAppArgs
-  let mut out := #[]
-  for i in [0:args.size] do
-    unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
-    if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
-  return out
-
-/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
-argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
-assertion is an application; with its `headKey`), and those about the whole precondition (a
-variable). -/
-def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
-    MetaM (Array (Name × Name) × Array Name) := do
-  let mut atomL := #[]
-  let mut wholeL := #[]
-  for n in fsymProviderExt.getState (← getEnv) do
-    let body := (← getConstInfo n).type.getForallBody
-    unless body.isAppOf k do continue
-    let bargs := body.getAppArgs
-    let some a := bargs[ip]? | continue
-    -- a command of another head
-    if cmds.any (fun (i, c) => match (bargs[i]?.map (·.getAppFn) : Option Expr) with
-        | some (Expr.const c' _) => c' != c
-        | _ => false) then continue
-    if a.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey a)
-  return (atomL, wholeL)
-
-/-- The depth of nested provider goals (a provider whose hypotheses are providers). -/
-def providerDepth : Nat := 6
-
-/-- Candidates for a provider goal `t` (a `Within X P`, or a provider kind `K … P`): each assigns
-`t`'s unknowns and returns a proof with the goals it leaves (hypotheses of the lemma used). -/
-def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × List MVarId))) := do
-  let t ← instantiateMVars t
-  if t.isAppOfArity ``Within 2 then
-    return (← withinCands t.appFn!.appArg! t.appArg!).map fun (c : MetaM Expr) => return (← c, [])
-  let some k ← providerKind? t | return #[]
-  let ip ← assnIdx t
-  let targs := t.getAppArgs
-  let P := targs[ip]!
-  let (atomL, wholeL) ← providerLemmas k ip (← cmdHeads t)
-  -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
-  let lemmaGoals (n : Name) (concl : Expr) (atom? : Option Expr := none) :
-      TacticM (Expr × List MVarId) := do
-    let f ← mkConstWithFreshMVarLevels n
-    let (args, _, c) ← forallMetaTelescope (← inferType f)
-    -- an atom lemma's atom first, up to instances: a pattern such as a region of `Enc.encode ?v`
-    -- does not unfold the encoding against other bytes
-    if let some part := atom? then
-      unless ← withReducibleAndInstances (isDefEq c.getAppArgs[ip]! part) do
-        throwError "fsym: {n} does not apply"
-    unless ← isDefEq c concl do throwError "fsym: {n} does not apply"
-    synthInstArgs args
-    let gs ← args.filterM fun a => do
-      if ← a.mvarId!.isAssigned then return false
-      isProp (← inferType a)
-    return (mkAppN f args, gs.toList.map (·.mvarId!))
-  let mut out := #[]
-  for (part, k') in ← withinParts P do
-    for (n, key) in atomL do
-      unless key == .anonymous || key == headKey part do continue
-      out := out.push do
-        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part)) part
-        let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
-        unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
-        return (pf, gs)
-  if depth < providerDepth then
-    for n in wholeL do
-      out := out.push (lemmaGoals n t)
-    -- a command with no locality lemma of its own (a check `if … then pure () else throw …`):
-    -- local if its definition, unfolded once, is (`ThreadLocal.ite`, `pure`, `throw`, …)
-    if k == ``ThreadLocal then
-      let c := targs[ip + 1]!
-      let hd := c.getAppFn.constName?
-      let own ← (wholeL ++ atomL.map (·.1)).anyM fun n => do
-        let body := (← getConstInfo n).type.getForallBody
-        return body.getAppArgs[ip + 1]?.bind (·.getAppFn.constName?) == hd
-      if hd.isSome && !own then
-        if let some c' ← unfold1 c then
-          out := out.push do
-            let g ← mkFreshExprSyntheticOpaqueMVar (mkAppN t.getAppFn (targs.set! (ip + 1) c'))
-            return (← mkExpectedTypeHint g t, [g.mvarId!])
-  return out
-
 /-! ## Fields of typed values (`EncField`)
 
 The field rules (`FTotalTriple.encField_load`/`_store`, `Typed.lean`) take an `EncField T U o get
@@ -1475,7 +1388,11 @@ def natVal? (e : Expr) : MetaM (Option Nat) := do
   if e.hasExprMVar || e.hasFVar then return none
   if let some n ← (evalNat e).run then return some n
   let v ← whnfD e
-  return v.rawNatLit? <|> v.nat?
+  if let some n := v.rawNatLit? <|> v.nat? then return some n
+  -- Closed sizes may use implementations opaque to symbolic unification.
+  withoutModifyingState do
+    let v ← withTransparency .all (whnf v)
+    return v.rawNatLit? <|> v.nat?
 
 /-- The fields of a struct type `T` from its encoding's decoding (`FieldInfo`, in the order of
 the structure's fields), or `none` if the decoding is not one field after the other. -/
@@ -1645,6 +1562,383 @@ def ptrAt (q : Expr) (o : Nat) : MetaM Expr := do
       if 0 ≤ c then return mkApp2 (mkConst ``Zig.Ptr.add) (q'.getArg! 0) (toExpr (c + o))
   return mkApp2 (mkConst ``Zig.Ptr.add) q (toExpr (o : Int))
 
+/-- A struct value's encoding `Enc.fields N [(o, cs), …]`: `N`, the list, and each part's
+offset, bytes and element. -/
+def encParts? (T w : Expr) : MetaM (Option (Nat × Expr × Array (Nat × Expr × Expr))) := do
+  let some inst ← (try some <$> synthInstance (mkApp (mkConst ``Zig.Enc) T) catch _ => pure none)
+    | return none
+  let some e ← unfoldProjInst? (mkApp3 (mkConst ``Zig.Enc.encode) T inst w) | return none
+  let e := e.headBeta.consumeMData
+  unless e.isAppOfArity ``Zig.Enc.fields 2 do return none
+  let some N ← natVal? (e.getArg! 0) | return none
+  let lst := e.getArg! 1
+  let some (_, xs) := lst.listLit? | return none
+  let mut out := #[]
+  for x in xs do
+    unless x.isAppOfArity ``Prod.mk 4 do return none
+    let some o ← natVal? (x.getArg! 2) | return none
+    out := out.push (o, x.getArg! 3, x)
+  return some (N, lst, out)
+
+mutual
+/-- `∀ u : U, (Enc.encode u).size = n`: by `LawfulEnc`, or for a struct from its layout. -/
+partial def encSize? (U : Expr) (fuel : Nat) : MetaM (Option (Nat × Expr)) := do
+  let some n ← natVal? (← mkAppOptM ``Zig.Enc.size #[U, none]) | return none
+  withLocalDeclD `u U fun u => do
+    let ty ← mkEq (← mkAppM ``Array.size #[← mkAppOptM ``Zig.Enc.encode #[U, none, u]]) (mkNatLit n)
+    if (← (try some <$> synthInstance (← mkAppOptM ``LawfulEnc #[U, none])
+        catch _ => pure none)).isSome then
+      let pf ← mkAppOptM ``LawfulEnc.size_encode #[U, none, none, u]
+      return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
+    if fuel == 0 then return none
+    let some (N, lst, parts) ← encParts? U u | return none
+    unless N == n do return none
+    let some (hok, _) ← layoutProof N lst parts (fuel - 1) | return none
+    let pf ← mkAppM ``Zig.Full.fields_size #[hok]
+    unless ← isDefEq (← inferType pf) ty do return none
+    return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
+
+/-- `LayoutOk N (partSizes parts) = true` for the parts of an encoding, with each part's size
+and its proof `cs.size = n`. -/
+partial def layoutProof (N : Nat) (lst : Expr) (parts : Array (Nat × Expr × Expr)) (fuel : Nat) :
+    MetaM (Option (Expr × Array (Nat × Expr))) := do
+  let mut sizes := #[]
+  for (_, cs, _) in parts do
+    unless cs.isAppOfArity ``Zig.Enc.encode 3 do return none
+    let some (n, szf) ← encSize? (cs.getArg! 0) fuel | return none
+    let sz := (mkApp szf (cs.getArg! 2)).headBeta
+    let szT ← mkEq (← mkAppM ``Array.size #[cs]) (mkNatLit n)
+    unless ← isDefEq (← inferType sz) szT do return none
+    sizes := sizes.push (n, ← mkExpectedTypeHint sz szT)
+  let nat := mkConst ``Nat
+  let pairTy := mkApp2 (mkConst ``Prod [0, 0]) nat nat
+  let consF := mkApp (mkConst ``List.cons [0]) pairTy
+  let mut L := mkApp (mkConst ``List.nil [0]) pairTy
+  let mut hmap ← mkEqRefl L
+  for j' in [0:parts.size] do
+    let j := parts.size - 1 - j'
+    let mk := mkApp3 (mkConst ``Prod.mk [0, 0]) nat nat (mkNatLit parts[j]!.1)
+    hmap ← mkCongr (← mkCongrArg consF (← mkCongrArg mk sizes[j]!.2)) hmap
+    L := mkApp2 consF (mkApp mk (mkNatLit sizes[j]!.1)) L
+  let hmapT ← mkEq (← mkAppM ``Zig.Full.partSizes #[lst]) L
+  unless ← isDefEq (← inferType hmap) hmapT do return none
+  let lay := mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N) L
+  unless ← isDefEq lay (mkConst ``Bool.true) do return none
+  let ok ← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) (← mkEq lay (mkConst ``Bool.true))
+  return some (← mkAppM ``Zig.Full.layoutOk_of_eq #[← mkExpectedTypeHint hmap hmapT, ok], sizes)
+end
+
+/-- `(Enc.fields N parts).extract o (o + n) = cs` for the part `j` (offset `o`, bytes `cs` of size
+`n`) of an encoding of fields whose layout is `hok` with the parts' `sizes` (`layoutProof`;
+`fields_extract_sz`). -/
+def partExtract (N : Nat) (parts : Array (Nat × Expr × Expr)) (hok : Expr)
+    (sizes : Array (Nat × Expr)) (j : Nat) : MetaM Expr := do
+  let elemTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat)
+    (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte))
+  let (o, cs, x) := parts[j]!
+  let pre ← mkListLit elemTy (parts[:j].toArray.map (·.2.2)).toList
+  let post ← mkListLit elemTy (parts[j+1:].toArray.map (·.2.2)).toList
+  let whole ← mkAppM ``HAppend.hAppend #[pre, ← mkAppM ``List.cons #[x, post]]
+  let hokT ← mkEq (mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N)
+    (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
+  mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit sizes[j]!.1, cs,
+    pre, post, ← mkExpectedTypeHint hok hokT, sizes[j]!.2]
+
+/-! ## Struct layouts (`StructLayout`, ledger #78, #79)
+
+A struct that decodes its fields one after the other (`structFields?`) has a layout
+(`Struct.lean`): its fields in address order with the padding between them, each field at its
+type's alignment. `structLayoutOf?` builds it and proves its `get` and `of_pieces` with the steps
+of the decoding (`result_bind_eq_pure`, `result_bind_of_pure`), as `encFieldDirect` does.
+`lawfulEncOf?` proves a struct's `LawfulEnc` from its layout (`StructLayout.lawfulEnc`) when its
+encoding writes each field's encoding at the field's offset (`encParts?`, `fields_extract_sz`)
+and each field's type is lawful (an instance, or a struct again). Any other type (a packed
+struct, a union, a storage-wrapped field, a field of size zero) gets none, and the rules that
+need it do not apply. -/
+
+-- the steps name their hypotheses across tactics
+set_option hygiene false in
+/-- The layout of the struct type `T`: the `StructLayout T` term and its pieces in address order
+(offset, size, alignment, and the field's index among `structFields?` for a field, none for a
+gap); cached per run. -/
+def structLayoutOf? (T : Expr) : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
+  let T ← instantiateMVars T
+  if T.hasExprMVar || T.hasFVar then return none
+  if let some r := (← (← caches).layouts.get).get? T then return r
+  let s ← saveState
+  let r ← try go catch ex => do
+    trace[fsym] "layout of {T}: {ex.toMessageData}"; s.restore; pure none
+  (← caches).layouts.modify (·.insert T r)
+  return r
+where go : TacticM (Option (Expr × Array (Nat × Nat × Nat × Option Nat))) := do
+  let some fs ← structFields? T | return none
+  let inst ← synthInstance (mkApp (mkConst ``Zig.Enc) T)
+  let some N ← natVal? (mkApp2 (mkConst ``Zig.Enc.size) T inst) | return none
+  -- the fields in address order, the padding between them
+  let order := (Array.range fs.size).qsort fun i j => fs[i]!.lo < fs[j]!.lo
+  let mut pcs : Array (Nat × Nat × Nat × Option Nat) := #[]
+  let mut cur := 0
+  for j in order do
+    let f := fs[j]!
+    if f.lo < cur || f.hi ≤ f.lo then return none
+    if cur < f.lo then pcs := pcs.push (cur, f.lo - cur, 1, none)
+    let some al ← natVal? (← mkAppOptM ``Zig.Enc.align #[f.ty, none]) | return none
+    pcs := pcs.push (f.lo, f.hi - f.lo, al, some j)
+    cur := f.hi
+  if N < cur then return none
+  if cur < N then pcs := pcs.push (cur, N - cur, 1, none)
+  let nat := mkConst ``Nat
+  let spiece := mkConst ``Zig.Full.SPiece
+  let pieces ← withLocalDeclD `v T fun v => do
+    let xs ← pcs.mapM fun (o, n, al, j?) => do
+      match j? with
+      | some j =>
+        let f := fs[j]!
+        let fi ← synthInstance (mkApp (mkConst ``Zig.Enc) f.ty)
+        return mkApp (mkConst ``Zig.Full.SPiece.field) (mkAppN (mkConst ``Zig.Full.SField.mk)
+          #[f.ty, fi, mkNatLit o, mkNatLit al, ← mkAppM f.proj #[v]])
+      | none => return mkApp2 (mkConst ``Zig.Full.SPiece.gap) (mkNatLit o) (mkNatLit n)
+    mkLambdaFVars #[v] (← mkListLit spiece xs.toList)
+  let triple (a b c : Nat) : MetaM Expr := do
+    mkAppM ``Prod.mk #[mkNatLit a, ← mkAppM ``Prod.mk #[mkNatLit b, mkNatLit c]]
+  let shape ← mkListLit (mkApp2 (mkConst ``Prod [0, 0]) nat (mkApp2 (mkConst ``Prod [0, 0]) nat nat))
+    (← pcs.toList.mapM fun (o, n, al, _) => triple o n al)
+  let mk := mkAppN (mkConst ``Zig.Full.StructLayout.mk) #[T, inst, pieces, shape]
+  let (ms, _, _) ← forallMetaTelescope (← inferType mk)
+  unless ms.size == 4 do return none
+  let (mEq, mTiles, mGet, mOf) := (ms[0]!.mvarId!, ms[1]!.mvarId!, ms[2]!.mvarId!, ms[3]!.mvarId!)
+  -- (the goals with the pieces' function applied)
+  let goal (m : MVarId) : MetaM MVarId := do
+    m.replaceTargetDefEq (← Core.betaReduce (← instantiateMVars (← m.getType)))
+  let id (s : String) : Ident := mkIdent (.mkSimple s)
+  unless ← closeWith (← goal mEq) (← `(tactic| exact fun _ => rfl)) do return none
+  unless ← closeWith (← goal mTiles) (← `(tactic| decide)) do return none
+  -- `get`: the decoding split into its fields, each piece's bytes from the field's
+  let k := fs.size
+  let mut getTacs : Array Syntax := #[← `(tactic| intro $(id "bs") $(id "v") $(id "hs") $(id "hd"))]
+  for p in [0:k] do
+    getTacs := getTacs.push (← `(tactic| obtain ⟨$(id s!"a{p}"), $(id s!"h{p}"), $(id "hd")⟩ :=
+      Zig.result_bind_eq_pure $(id "hd")))
+  getTacs := getTacs.push (← `(tactic| obtain rfl := Zig.Full.Auto.result_pure_inj $(id "hd")))
+  let mut parts : Array Term := #[]
+  for (_, _, _, j?) in pcs do
+    parts := parts.push (← match j? with
+      | some j =>
+        let hi := id s!"h{fs[j]!.pos}"
+        if fs[j]!.full then `(Zig.Full.Auto.decode_extract_full $(id "hs") (by decide) $hi)
+        else `($hi:ident)
+      | none => `(trivial))
+  parts := parts.push (← `(trivial))
+  getTacs := getTacs.push (← if pcs.isEmpty then `(tactic| trivial)
+    else `(tactic| exact ⟨$parts,*⟩))
+  unless ← closeSeq (← goal mGet) getTacs do
+    trace[fsym] "layout of {T}: get not proved"; return none
+  -- `of_pieces`: the struct of the pieces' fields, decoded in the decoding's order
+  let mut ofTacs : Array Syntax := #[← `(tactic| intro $(id "bs") $(id "v") $(id "hs") $(id "hd"))]
+  for i in [0:pcs.size] do
+    ofTacs := ofTacs.push (← `(tactic| obtain ⟨$(id s!"d{i}"), $(id "hd")⟩ := $(id "hd")))
+  for p in [0:k] do
+    let some i := pcs.findIdx? fun (_, _, _, j?) => j?.any (fs[·]!.pos == p) | return none
+    let di := id s!"d{i}"
+    let j := (pcs[i]!.2.2.2).get!
+    ofTacs := ofTacs.push (← if fs[j]!.full then
+        `(tactic| refine Zig.Full.Auto.result_bind_of_pure
+          (Zig.Full.decode_of_extract_all $(id "hs") $di) ?_)
+      else `(tactic| refine Zig.Full.Auto.result_bind_of_pure $di ?_))
+  ofTacs := ofTacs.push (← `(tactic| rfl))
+  unless ← closeSeq (← goal mOf) ofTacs do
+    trace[fsym] "layout of {T}: of_pieces not proved"; return none
+  -- (closed: it is cached for the whole run)
+  let L ← instantiateMVars (mkAppN mk ms)
+  if L.hasExprMVar || L.hasFVar then return none
+  return some (L, pcs)
+
+/-- An instance of `ty = LawfulEnc U inst`: synthesized, or for a struct (`inst` its `Enc`) from
+its layout (`lawfulEncOf?` above); cached per run. -/
+partial def lawfulEncOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
+  let ty ← instantiateMVars ty
+  if let some i ← (try some <$> synthInstance ty catch _ => pure none) then return some i
+  unless ty.isAppOfArity ``LawfulEnc 2 do return none
+  if fuel == 0 || ty.hasExprMVar || ty.hasFVar then return none
+  if let some r := (← (← caches).lawful.get).get? ty then return r
+  let s ← saveState
+  let r ← try go (ty.getArg! 0) catch ex => do
+    trace[fsym] "LawfulEnc of {ty.getArg! 0}: {ex.toMessageData}"; s.restore; pure none
+  (← caches).lawful.modify (·.insert ty r)
+  return r
+where go (U : Expr) : TacticM (Option Expr) := do
+  let some (L, pcs) ← structLayoutOf? U | return none
+  let some fs ← structFields? U | return none
+  let inst ← synthInstance (mkApp (mkConst ``Zig.Enc) U)
+  let encode (v : Expr) := mkApp3 (mkConst ``Zig.Enc.encode) U inst v
+  let size := mkApp2 (mkConst ``Zig.Enc.size) U inst
+  let some (N, szf) ← encSize? U 4 | return none
+  let hsize ← withLocalDeclD `v U fun v => do
+    let ty ← mkEq (← mkAppM ``Array.size #[encode v]) size
+    let pf := (mkApp szf v).headBeta
+    unless ← isDefEq (← inferType pf) ty do throwError "fsym: size"
+    mkLambdaFVars #[v] (← mkExpectedTypeHint pf ty)
+  let spiece := mkConst ``Zig.Full.SPiece
+  let piecesF ← mkAppM ``Zig.Full.StructLayout.pieces #[L]
+  let henc ← withLocalDeclD `v U fun v => do
+    let bs := encode v
+    let some (N', lst, parts) ← encParts? U v | throwError "fsym: not an encoding of fields"
+    unless N' == N do throwError "fsym: size"
+    let some (hok, sizes) ← layoutProof N lst parts 4 | throwError "fsym: no layout"
+    let some (_, xs) := (← reduceProjs (mkApp piecesF v)).listLit? | throwError "fsym: pieces"
+    let xs := xs.toArray
+    let encd (x : Expr) := mkApp2 (mkConst ``Zig.Full.SPiece.Encd) bs x
+    let mut proofs : Array Expr := #[]
+    for i in [0:pcs.size] do
+      let (o, _, _, j?) := pcs[i]!
+      let some j := j? | proofs := proofs.push (← mkExpectedTypeHint (mkConst ``True.intro) (encd xs[i]!)); continue
+      let f := fs[j]!
+      let some k := parts.findIdx? (·.1 == o) | throwError "fsym: no part at {o}"
+      let (_, cs, _) := parts[k]!
+      unless cs.isAppOfArity ``Zig.Enc.encode 3 do throwError "fsym: a part not an encoding"
+      unless ← isDefEq (cs.getArg! 0) f.ty <&&> isDefEq (cs.getArg! 2) (← mkAppM f.proj #[v]) do
+        throwError "fsym: the part at {o} is not the field's"
+      let e ← partExtract N parts hok sizes k
+      let some hl ← lawfulEncOf? (← mkAppOptM ``LawfulEnc #[f.ty, none]) (fuel - 1)
+        | throwError "fsym: {f.ty} not lawful"
+      let pf ← mkAppM ``And.intro #[e, hl]
+      unless ← isDefEq (← inferType pf) (encd xs[i]!) do throwError "fsym: piece {i}"
+      proofs := proofs.push (← mkExpectedTypeHint pf (encd xs[i]!))
+    -- `All (SPiece.Encd bs) xs` from the last piece
+    let P := mkApp (mkConst ``Zig.Full.SPiece.Encd) bs
+    let allT (ys : List Expr) : MetaM Expr := do
+      return mkApp3 (mkConst ``Zig.Full.All) spiece P (← mkListLit spiece ys)
+    let mut acc ← mkExpectedTypeHint (mkConst ``True.intro) (← allT [])
+    for i' in [0:xs.size] do
+      let i := xs.size - 1 - i'
+      let tl := xs.toList.drop (i + 1)
+      acc ← mkExpectedTypeHint (mkApp4 (mkConst ``And.intro) (encd xs[i]!) (← allT tl) proofs[i]! acc)
+        (← allT (xs[i]! :: tl))
+    let ty := mkApp3 (mkConst ``Zig.Full.All) spiece P (mkApp piecesF v)
+    mkLambdaFVars #[v] (← mkExpectedTypeHint acc ty)
+  -- (closed: it is cached for the whole run)
+  let pf ← instantiateMVars (← mkAppM ``Zig.Full.StructLayout.lawfulEnc #[L, hsize, henc])
+  if pf.hasExprMVar || pf.hasFVar then return none
+  unless ← isDefEq (← inferType pf) ty do return none
+  return some pf
+
+/-- The unassigned instance arguments of a lemma (`LawfulEnc U`, a class of propositions too)
+by synthesis, where it succeeds; a struct's `LawfulEnc` from its layout (`lawfulEncOf?`). -/
+def synthInstArgs (args : Array Expr) : TacticM Unit := do
+  for a in args do
+    if ← a.mvarId!.isAssigned then continue
+    let ty ← instantiateMVars (← inferType a)
+    if (← isClass? ty).isSome then
+      if ty.isAppOfArity ``LawfulEnc 2 then
+        if let some inst ← lawfulEncOf? ty then discard <| isDefEq a inst
+      else if let some inst ← (try some <$> synthInstance ty catch _ => pure none) then
+        discard <| isDefEq a inst
+
+/-- The provider kind of a goal `K … P …`: a constant `K` with a lemma `K.of_within`
+(`AutoRules.lean` §Providers over the whole precondition). -/
+def providerKind? (t : Expr) : MetaM (Option Name) := do
+  let .const k _ := t.getAppFn | return none
+  return if (← getEnv).contains (k ++ `of_within) then some k else none
+
+/-- The position of a provider goal's assertion `P`: its last argument of type `FAssn` (the
+last argument for `AddrOf b A P`, the first for `OwnsPtr P p n`, before the command for
+`ThreadLocal P c`). -/
+def assnIdx (t : Expr) : MetaM Nat := do
+  let args := t.getAppArgs
+  let mut i := args.size
+  while i > 0 do
+    i := i - 1
+    if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
+  return args.size - 1
+
+/-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
+`StateT.lift` of a `Result`): their positions and heads. A provider lemma about another command
+does not apply (`providerLemmas`). -/
+def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
+  let args := t.getAppArgs
+  let mut out := #[]
+  for i in [0:args.size] do
+    unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
+    if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
+  return out
+
+/-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
+argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
+assertion is an application; with its `headKey`), and those about the whole precondition (a
+variable). -/
+def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
+    MetaM (Array (Name × Name) × Array Name) := do
+  let mut atomL := #[]
+  let mut wholeL := #[]
+  for n in fsymProviderExt.getState (← getEnv) do
+    let body := (← getConstInfo n).type.getForallBody
+    unless body.isAppOf k do continue
+    let bargs := body.getAppArgs
+    let some a := bargs[ip]? | continue
+    -- a command of another head
+    if cmds.any (fun (i, c) => match (bargs[i]?.map (·.getAppFn) : Option Expr) with
+        | some (Expr.const c' _) => c' != c
+        | _ => false) then continue
+    if a.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey a)
+  return (atomL, wholeL)
+
+/-- The depth of nested provider goals (a provider whose hypotheses are providers). -/
+def providerDepth : Nat := 6
+
+/-- Candidates for a provider goal `t` (a `Within X P`, or a provider kind `K … P`): each assigns
+`t`'s unknowns and returns a proof with the goals it leaves (hypotheses of the lemma used). -/
+def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × List MVarId))) := do
+  let t ← instantiateMVars t
+  if t.isAppOfArity ``Within 2 then
+    return (← withinCands t.appFn!.appArg! t.appArg!).map fun (c : MetaM Expr) => return (← c, [])
+  let some k ← providerKind? t | return #[]
+  let ip ← assnIdx t
+  let targs := t.getAppArgs
+  let P := targs[ip]!
+  let (atomL, wholeL) ← providerLemmas k ip (← cmdHeads t)
+  -- the lemma `n` with its conclusion unified with `concl`, and its hypotheses as goals
+  let lemmaGoals (n : Name) (concl : Expr) (atom? : Option Expr := none) :
+      TacticM (Expr × List MVarId) := do
+    let f ← mkConstWithFreshMVarLevels n
+    let (args, _, c) ← forallMetaTelescope (← inferType f)
+    -- an atom lemma's atom first, up to instances: a pattern such as a region of `Enc.encode ?v`
+    -- does not unfold the encoding against other bytes
+    if let some part := atom? then
+      unless ← withReducibleAndInstances (isDefEq c.getAppArgs[ip]! part) do
+        throwError "fsym: {n} does not apply"
+    unless ← isDefEq c concl do throwError "fsym: {n} does not apply"
+    synthInstArgs args
+    let gs ← args.filterM fun a => do
+      if ← a.mvarId!.isAssigned then return false
+      isProp (← inferType a)
+    return (mkAppN f args, gs.toList.map (·.mvarId!))
+  let mut out := #[]
+  for (part, k') in ← withinParts P do
+    for (n, key) in atomL do
+      unless key == .anonymous || key == headKey part do continue
+      out := out.push do
+        let (h, gs) ← lemmaGoals n (mkAppN t.getAppFn (targs.set! ip part)) part
+        let pf ← mkAppM (k ++ `of_within) #[h, ← k' (← mkAppM ``Within.refl #[part])]
+        unless ← isDefEq t (← inferType pf) do throwError "fsym: provider mismatch"
+        return (pf, gs)
+  if depth < providerDepth then
+    for n in wholeL do
+      out := out.push (lemmaGoals n t)
+    -- a command with no locality lemma of its own (a check `if … then pure () else throw …`):
+    -- local if its definition, unfolded once, is (`ThreadLocal.ite`, `pure`, `throw`, …)
+    if k == ``ThreadLocal then
+      let c := targs[ip + 1]!
+      let hd := c.getAppFn.constName?
+      let own ← (wholeL ++ atomL.map (·.1)).anyM fun n => do
+        let body := (← getConstInfo n).type.getForallBody
+        return body.getAppArgs[ip + 1]?.bind (·.getAppFn.constName?) == hd
+      if hd.isSome && !own then
+        if let some c' ← unfold1 c then
+          out := out.push do
+            let g ← mkFreshExprSyntheticOpaqueMVar (mkAppN t.getAppFn (targs.set! (ip + 1) c'))
+            return (← mkExpectedTypeHint g t, [g.mvarId!])
+  return out
+
 -- `readsStruct`'s steps name their hypotheses across tactics
 set_option hygiene false in
 /-- Solve the side goals of a rule, in order; providers backtrack over their candidates, and the
@@ -1722,7 +2016,8 @@ where
       -- (an instance is synthesized, never searched by the arithmetic solver)
       let ok ← if (← g.withContext (isClass? t)).isSome then
           (do
-            let some i ← g.withContext (observing? (synthInstance t)) | pure false
+            let some i ← g.withContext (if t.isAppOfArity ``LawfulEnc 2 then
+                lawfulEncOf? t else observing? (synthInstance t)) | pure false
             g.assign i; pure true)
         else arith g
       if ok then return ← go' rest
@@ -1858,6 +2153,15 @@ where
       let some [] ← go ([g1, g2, h0, ho].map (·.mvarId!, depth + 1)) | s.restore; continue
       let pf ← mkAppM ``Zig.Full.OwnsPtr.join_at #[← instantiateMVars h0, ← instantiateMVars g1,
         hb, ← instantiateMVars ho, ← instantiateMVars g2]
+      if ← isDefEq t (← inferType pf) then return some pf
+      -- Only the closed size needs full conversion, never the symbolic resource.
+      let n ← instantiateMVars n
+      if n.hasExprMVar || n.hasFVar then s.restore; continue
+      let nLit := mkNatLit N
+      unless ← withTransparency .all (isDefEq n nLit) do s.restore; continue
+      let hn ← mkExpectedTypeHint (← mkEqRefl n) (← mkEq n nLit)
+      let eq ← mkCongrArg (mkApp2 (mkConst ``Zig.Full.OwnsPtr) P q) hn
+      let pf ← mkEqMPR eq pf
       unless ← isDefEq t (← inferType pf) do s.restore; continue
       return some pf
     return none
@@ -4051,10 +4355,140 @@ def atomBlock? (a : Expr) : TacticM (Option Expr) := do
     return (← blockOf x).map (·.1)
   return none
 
+/-- The `pts` of an atom `up (pts q a v)`: `(T, q, a, v)`. -/
+def ptsArgs? (x : Expr) : MetaM (Option (Expr × Expr × Expr × Expr)) := do
+  let x ← instantiateMVars x
+  unless x.isAppOfArity ``Zig.Full.FAssn.up 1 do return none
+  let a := x.appArg!.consumeMData
+  unless a.isAppOfArity ``Zig.pts 5 do return none
+  return some (a.getArg! 0, a.getArg! 2, a.getArg! 3, a.getArg! 4)
+
+/-- The unknown alignment of a `pts` atom of a view (the wanted atom fixed none): its type's
+(`Enc.align`). -/
+def defaultAligns (Y : Expr) : MetaM Unit := do
+  for y in atoms (← instantiateMVars Y) do
+    let some (T, _, al, _) ← ptsArgs? y | continue
+    unless al.isMVar do continue
+    if let some n ← natVal? (← mkAppOptM ``Zig.Enc.align #[T, none]) then
+      discard <| isDefEq al (mkNatLit n)
+
+/-- `X = Y` for a struct's pieces (`piecesF`) and the atoms that a specification writes for them:
+by definition, else with the pieces' pointers added up (`pieceAt_eq`, `Ptr.add_add`). -/
+def piecesEq (X Y : Expr) : TacticM (Option Expr) := do
+  if ← isDefEq X Y then return some (← mkExpectedTypeHint (← mkEqRefl Y) (← mkEq X Y))
+  let e ← mkFreshExprMVar (← mkEq X Y)
+  unless ← closeWith e.mvarId! (← `(tactic| simp only [Zig.Full.piecesF, Zig.Full.SPiece.atom,
+      Zig.Full.SPiece.assn, Zig.Full.pieceAt_eq, Zig.Ptr.add_add, Int.cast_ofNat_Int, Int.reduceAdd,
+      Int.natCast_zero, Zig.Ptr.add_zero])) do return none
+  return some (← instantiateMVars e)
+
+/-- The atom of a struct's piece (`structLayoutOf?`: offset, size, alignment, field) at `q` as a
+specification writes it: the field's `pts` of the value `val j` (field `j` of `fs`), or the gap's
+bytes. -/
+def pieceAtom (q : Expr) (fs : Array FieldInfo) (val : Nat → MetaM Expr) :
+    Nat × Nat × Nat × Option Nat → MetaM Expr
+  | (o, n, al, j?) => do
+    let qo ← ptrAt q o
+    let inner ← match j? with
+      | some j => do mkAppOptM ``Zig.pts #[fs[j]!.ty, none, qo, mkNatLit al, ← val j]
+      | none => mkAppM ``Zig.Full.padBytes #[qo, mkNatLit n]
+    mkAppM ``Zig.Full.FAssn.up #[inner]
+
+/-- `StructLayout.split` (`split`) or `StructLayout.join` for the layout `L`, its update's
+`X` (split) or `Y` (join) unified with `e`, its decided hypothesis (the alignment) proved: the
+proof and its `X` and `Y`. -/
+def layoutUpd (lem : Name) (L : Expr) (split : Bool) (e : Expr) :
+    TacticM (Option (Expr × Expr × Expr)) := do
+  let c ← mkConstWithFreshMVarLevels lem
+  let (args, _, concl) ← forallMetaTelescope (← inferType c)
+  for a in args do
+    if (← whnfR (← inferType a)).isAppOf ``Zig.Full.StructLayout then
+      unless ← isDefEq a L do return none
+  unless ← isDefEq (if split then concl.appFn!.appArg! else concl.appArg!) e do return none
+  let hal := args.back!.mvarId!
+  unless ← closeWith hal (← `(tactic| decide)) do return none
+  let h ← instantiateMVars (mkAppN c args)
+  if h.hasExprMVar then return none
+  let concl ← instantiateMVars concl
+  return some (h, concl.appFn!.appArg!, concl.appArg!)
+
+/-- A struct's atom `x = up (pts p a v)` split into its pieces (`StructLayout.split`, ledger #79):
+`(Y, EUpd x Y)`, `Y` each field's `pts` at its offset and its type's alignment (`a` gives it), each
+gap's bytes (`padBytes`); `none` if the type has no layout (`structLayoutOf?`). -/
+def splitView? (x : Expr) : TacticM (Option (Expr × Expr)) := do
+  let some (T, p, _, v) ← ptsArgs? x | return none
+  let some (L, pcs) ← structLayoutOf? T | return none
+  let some fs ← structFields? T | return none
+  let some (h, _, Y') ← layoutUpd ``Zig.Full.StructLayout.split L true (← instantiateMVars x)
+    | return none
+  let ys ← pcs.mapM fun pc => pieceAtom p fs (fun j => do reduceProjs (← mkAppM fs[j]!.proj #[v])) pc
+  let Y := sepOf ys
+  let some e ← piecesEq Y' Y | do trace[fsym] "split of {T}: pieces {Y'} not {Y}"; return none
+  return some (Y, ← mkAppM ``EUpd.trans #[h, ← mkAppM ``atom_eq #[e]])
+
+/-- A wanted struct atom `w = up (pts q a v)` joined from the state's atoms `ats` of its pieces
+(`StructLayout.join`, ledger #79): the indices of the pieces' atoms, the struct's atom (of the
+fields' values, at `a` or else its type's alignment) and `EUpd (pieces) (struct)`; `none` if
+the type has no layout or a piece is not in the state. -/
+def joinView? (ats : Array Expr) (w : Expr) : TacticM (Option (Array Nat × Expr × Expr)) := do
+  let some (T, q, al, _) ← ptsArgs? w | return none
+  if q.hasExprMVar then return none
+  let some (L, pcs) ← structLayoutOf? T | return none
+  let some fs ← structFields? T | return none
+  let some a ← (do if let some a ← natVal? al then pure (some a) else
+      natVal? (← mkAppOptM ``Zig.Enc.align #[T, none])) | return none
+  -- (the unknowns that a piece's unification assigned are restored if a piece is missing)
+  let s ← saveState
+  let some r ← go T q L pcs fs a | s.restore; return none
+  return some r
+where go (T q L : Expr) (pcs : Array (Nat × Nat × Nat × Option Nat)) (fs : Array FieldInfo)
+    (a : Nat) : TacticM (Option (Array Nat × Expr × Expr)) := do
+  -- each piece's atom in the state, the fields' values from them
+  let mut idx := #[]
+  let mut ys := #[]
+  let mut vals : Array Expr := #[]
+  for f in fs do vals := vals.push (← mkFreshExprMVar f.ty)
+  for pc in pcs do
+    let pat ← pieceAtom q fs (fun j => pure vals[j]!) pc
+    let mut found := none
+    for i in [0:ats.size] do
+      if idx.contains i then continue
+      let s ← saveState
+      if ← unifyAtom pat ats[i]! then found := some i; break
+      s.restore
+    let some i := found | return none
+    idx := idx.push i
+    ys := ys.push ats[i]!
+  let Tw ← whnfR T
+  let .const sn us := Tw.getAppFn | return none
+  let ctor := getStructureCtor (← getEnv) sn
+  let v := mkAppN (mkConst ctor.name us) (Tw.getAppArgs ++ (← vals.mapM instantiateMVars))
+  if v.hasExprMVar then return none
+  let Y ← mkAppM ``Zig.Full.FAssn.up #[← mkAppOptM ``Zig.pts #[T, none, q, mkNatLit a, v]]
+  let some (h, X', _) ← layoutUpd ``Zig.Full.StructLayout.join L false Y | return none
+  let some e ← piecesEq (sepOf ys) X' | do
+    trace[fsym] "join of {T}: pieces {X'} not {sepOf ys}"; return none
+  return some (idx, Y, ← mkAppM ``EUpd.trans #[← mkAppM ``atom_eq #[e], h])
+
+/-- The head of a typed atom `up (pts …)` (`headKey`). -/
+def ptsKey : Name := `lift ++ ``Zig.pts
+
+/-- A struct's atom `x` is split (`splitView?`) for the wanted atom `w` of a value of another type
+(a field's): `x`'s type has a layout. -/
+def splitFor (x w : Expr) : TacticM Bool := do
+  let some (T, _, _, _) ← ptsArgs? x | return false
+  let some (U, _, _, _) ← ptsArgs? w | return false
+  if U.hasExprMVar || (← withNewMCtxDepth (withReducible (isDefEq T U))) then return false
+  return (← structLayoutOf? T).isSome
+
 /-- View the state atoms that provide an atom the planner did not find (`wanted`, from
 `noteWanted`): an atom `x` of the head of a view lemma `EUpd X Y` whose `Y` has an atom of the
 wanted head, in the wanted atom's block; `Y`'s atoms of that head unify with the wanted one where
-they can (a fold's alignment), the lemma's hypotheses are side goals that must all be proved.
+they can (a fold's alignment; else the type's, `defaultAligns`), the lemma's hypotheses are side
+goals that must all be proved. A struct is a view of its fields' atoms and they of it (ledger
+#79): a wanted struct atom is joined from its pieces' atoms (`joinView?`), and a struct atom of
+the wanted atom's block is split into its pieces for a wanted atom of another type
+(`splitFor`).
 `(P', EUpd P P')` for the viewed state `P'`, or `none` if no atom was viewed. For a step's
 precondition (`viewStep`) and an entailment's state (`fsym_entail`: bytes as the region a
 postcondition names, ledger #48). -/
@@ -4070,14 +4504,31 @@ def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option 
     if k == .anonymous || k == `fvar then continue
     -- (an atom of an unknown block names no atoms to view: a one-way view would lose others)
     let some wb ← atomBlock? w | continue
+    -- a wanted struct joined from its pieces' atoms (ledger #79)
+    if k == ptsKey then
+      if let some (idx, Y, h) ← joinView? st.ats w then
+        trace[fsym] "view: join {Y}"
+        st ← st.step idx #[Y] h
+        viewed := viewed.push Y
+        continue
     let mut i := 0
     while i < st.ats.size do
       let x := st.ats[i]!
-      let skip ← if viewed.contains x || headKey x == k then pure true
+      -- (an atom of the wanted head only if it is a struct's, split for a field of it)
+      let split ← if !viewed.contains x && headKey x == k && k == ptsKey then splitFor x w
+        else pure false
+      let skip ← if viewed.contains x || (headKey x == k && !split) then pure true
         else match ← atomBlock? x with
           | some xb => pure !(← withReducible (isDefEq xb wb))
           | none => pure true
       if skip then i := i + 1; continue
+      -- a struct's atom split into its pieces for a wanted field's (ledger #79)
+      if split then
+        if let some (Y, h) ← splitView? x then
+          trace[fsym] "view: split {x}"
+          st ← st.step #[i] #[Y] h
+          viewed := viewed.push Y
+        i := i + 1; continue
       let mut y? : Option (Expr × Expr) := none
       for n in lemmas do
         let s' ← saveState
@@ -4092,6 +4543,7 @@ def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option 
             if headKey y == k then
               let s2 ← saveState
               unless ← isDefEq y w do s2.restore
+          defaultAligns Y
           synthInstArgs args
           let sides ← args.filterM fun a => do
             if ← a.mvarId!.isAssigned then return false
@@ -4232,72 +4684,6 @@ field) is executed piece by piece (`FTotalTriple.storeBytes_parts`): its encodin
 fields (`fields_extract`), each field stored as a typed value by the rules of the part that owns
 it (a field that is a struct again by its own pieces), the padding between them as bytes. -/
 
-/-- A struct value's encoding `Enc.fields N [(o, cs), …]`: `N`, the list, and each part's
-offset, bytes and element. -/
-def encParts? (T w : Expr) : MetaM (Option (Nat × Expr × Array (Nat × Expr × Expr))) := do
-  let some inst ← (try some <$> synthInstance (mkApp (mkConst ``Zig.Enc) T) catch _ => pure none)
-    | return none
-  let some e ← unfoldProjInst? (mkApp3 (mkConst ``Zig.Enc.encode) T inst w) | return none
-  let e := e.headBeta.consumeMData
-  unless e.isAppOfArity ``Zig.Enc.fields 2 do return none
-  let some N ← natVal? (e.getArg! 0) | return none
-  let lst := e.getArg! 1
-  let some (_, xs) := lst.listLit? | return none
-  let mut out := #[]
-  for x in xs do
-    unless x.isAppOfArity ``Prod.mk 4 do return none
-    let some o ← natVal? (x.getArg! 2) | return none
-    out := out.push (o, x.getArg! 3, x)
-  return some (N, lst, out)
-
-mutual
-/-- `∀ u : U, (Enc.encode u).size = n`: by `LawfulEnc`, or for a struct from its layout. -/
-partial def encSize? (U : Expr) (fuel : Nat) : MetaM (Option (Nat × Expr)) := do
-  let some n ← natVal? (← mkAppOptM ``Zig.Enc.size #[U, none]) | return none
-  withLocalDeclD `u U fun u => do
-    let ty ← mkEq (← mkAppM ``Array.size #[← mkAppOptM ``Zig.Enc.encode #[U, none, u]]) (mkNatLit n)
-    if (← (try some <$> synthInstance (← mkAppOptM ``LawfulEnc #[U, none])
-        catch _ => pure none)).isSome then
-      let pf ← mkAppOptM ``LawfulEnc.size_encode #[U, none, none, u]
-      return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
-    if fuel == 0 then return none
-    let some (N, lst, parts) ← encParts? U u | return none
-    unless N == n do return none
-    let some (hok, _) ← layoutProof N lst parts (fuel - 1) | return none
-    let pf ← mkAppM ``Zig.Full.fields_size #[hok]
-    unless ← isDefEq (← inferType pf) ty do return none
-    return some (n, ← mkLambdaFVars #[u] (← mkExpectedTypeHint pf ty))
-
-/-- `LayoutOk N (partSizes parts) = true` for the parts of an encoding, with each part's size
-and its proof `cs.size = n`. -/
-partial def layoutProof (N : Nat) (lst : Expr) (parts : Array (Nat × Expr × Expr)) (fuel : Nat) :
-    MetaM (Option (Expr × Array (Nat × Expr))) := do
-  let mut sizes := #[]
-  for (_, cs, _) in parts do
-    unless cs.isAppOfArity ``Zig.Enc.encode 3 do return none
-    let some (n, szf) ← encSize? (cs.getArg! 0) fuel | return none
-    let sz := (mkApp szf (cs.getArg! 2)).headBeta
-    let szT ← mkEq (← mkAppM ``Array.size #[cs]) (mkNatLit n)
-    unless ← isDefEq (← inferType sz) szT do return none
-    sizes := sizes.push (n, ← mkExpectedTypeHint sz szT)
-  let nat := mkConst ``Nat
-  let pairTy := mkApp2 (mkConst ``Prod [0, 0]) nat nat
-  let consF := mkApp (mkConst ``List.cons [0]) pairTy
-  let mut L := mkApp (mkConst ``List.nil [0]) pairTy
-  let mut hmap ← mkEqRefl L
-  for j' in [0:parts.size] do
-    let j := parts.size - 1 - j'
-    let mk := mkApp3 (mkConst ``Prod.mk [0, 0]) nat nat (mkNatLit parts[j]!.1)
-    hmap ← mkCongr (← mkCongrArg consF (← mkCongrArg mk sizes[j]!.2)) hmap
-    L := mkApp2 consF (mkApp mk (mkNatLit sizes[j]!.1)) L
-  let hmapT ← mkEq (← mkAppM ``Zig.Full.partSizes #[lst]) L
-  unless ← isDefEq (← inferType hmap) hmapT do return none
-  let lay := mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N) L
-  unless ← isDefEq lay (mkConst ``Bool.true) do return none
-  let ok ← mkExpectedTypeHint (← mkEqRefl (mkConst ``Bool.true)) (← mkEq lay (mkConst ``Bool.true))
-  return some (← mkAppM ``Zig.Full.layoutOk_of_eq #[← mkExpectedTypeHint hmap hmapT, ok], sizes)
-end
-
 /-- A rule for the store `x` of a struct whose bytes several parts own, about the whole
 precondition `P`: `FTotalTriple P x (fun _ => P')`, with `P'` what the pieces' rules leave
 (`FTotalTriple.storeBytes_parts`). `none` if the struct's encoding is not cut into its fields or
@@ -4317,8 +4703,6 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
     let hsize ← mkAppM ``Zig.Full.fields_size #[hok]
     let hsizeT ← mkEq (← mkAppM ``Array.size #[bs]) (mkNatLit N)
     unless ← isDefEq (← inferType hsize) hsizeT do return none
-    let elemTy := mkApp2 (mkConst ``Prod [0, 0]) (mkConst ``Nat)
-      (mkApp (mkConst ``Array [0]) (mkConst ``Zig.Byte))
     -- the pieces in address order: the parts (bytes `cs`, value `x`), the padding between them
     let order := (Array.range parts.size).qsort fun i j => parts[i]!.1 < parts[j]!.1
     let mut pieces : Array (Nat × Nat × Expr × Expr × Option Expr) := #[]
@@ -4330,13 +4714,7 @@ partial def storeSplitRule? (P x : Expr) (user : Array Expr) (fuel : Nat) :
       if cur < o then
         let gap ← mkAppM ``Array.extract #[bs, mkNatLit cur, mkNatLit o]
         pieces := pieces.push (cur, o, gap, ← mkEqRefl gap, none)
-      let pre ← mkListLit elemTy (parts[:j].toArray.map (·.2.2)).toList
-      let post ← mkListLit elemTy (parts[j+1:].toArray.map (·.2.2)).toList
-      let whole ← mkAppM ``HAppend.hAppend #[pre, ← mkAppM ``List.cons #[parts[j]!.2.2, post]]
-      let hokT ← mkEq (mkApp2 (mkConst ``Zig.Full.LayoutOk) (mkNatLit N)
-        (← mkAppM ``Zig.Full.partSizes #[whole])) (mkConst ``Bool.true)
-      let e ← mkAppOptM ``Zig.Full.fields_extract_sz #[mkNatLit N, mkNatLit o, mkNatLit n, cs,
-        pre, post, ← mkExpectedTypeHint hok hokT, sizes[j]!.2]
+      let e ← partExtract N parts hok sizes j
       let eT ← mkEq (← mkAppM ``Array.extract #[bs, mkNatLit o, mkNatLit (o + n)]) cs
       unless ← isDefEq (← inferType e) eT do return none
       pieces := pieces.push (o, o + n, cs, ← mkExpectedTypeHint e eT, some (cs.getArg! 2))
@@ -4861,14 +5239,18 @@ partial def walk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel :
     if let some m ← matchMatcherApp? (x.getArg! 3).consumeMData then
       if let some d := m.discrs.find? (·.isFVar) then
         return ← casesWalk g d user extra fuel
-  -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`)
-  if partial?.isNone then
-    let s ← saveState
-    if let some rule ← storeSplitRule? P ((memCmd? x).getD x) user 3 then
-      if let some (k, left) ← tryRule g rule x f then
+  -- a store of a struct whose bytes several parts own: piece by piece (`storeSplitRule?`); with
+  -- all its side goals proved also before a split on another rule's undecided side condition (a
+  -- rule that applies beats a split: a region's store rule applies to a struct with a `LawfulEnc`
+  -- whose extent the facts do not decide, while its fields' parts own the bytes)
+  let s ← saveState
+  if let some rule ← storeSplitRule? P ((memCmd? x).getD x) user 3 then
+    if let some (k, left) ← tryRule g rule x f then
+      if partial?.isNone || left.isEmpty then
         return left ++ (← walk k user extra (fuel - 1))
-    s.restore
-    -- (a refuted rule only for a command that cannot be inlined either)
+  s.restore
+  -- (a refuted rule only for a command that cannot be inlined either)
+  if partial?.isNone then
     if (← unfoldCmd x).isNone then partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
@@ -4972,6 +5354,8 @@ def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
   for n in [``Zig.Conc.upd_self, ``Zig.Conc.upd_ne, ``Zig.Conc.Proto.upd_upd, ``Zig.Conc.upd_snd,
       ``Zig.Conc.upd_snd_apply, ``ex_apply,
       ``Zig.Full.sep_lift, ``Zig.Full.sep_ex,
+      -- the block of a new allocation (`some m.blocks.size = some b` at the start memory)
+      ``Option.some.injEq, ``Array.size_empty,
       -- Boolean tests of generated code as propositions, and the logic left after them
       ``bne_iff_ne, ``beq_iff_eq, ``ne_eq, ``eq_self_iff_true, ``Bool.false_eq_true,
       ``ite_true, ``ite_false, ``and_true, ``true_and, ``and_false, ``false_and, ``or_false,
@@ -4998,12 +5382,16 @@ def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext
   | some pf => wpRewrite g a r.expr pf
 
 /-- The equations of the context that relate a field of a local to another term
-(`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory). -/
+(`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory), and the Boolean
+facts (`(G 1).2.mid = false`: the case of a ghost value's flag). -/
 def fieldEqs : MetaM (Array Expr) := do
   let mut out := #[]
   for d in ← getLCtx do
     if d.isImplementationDetail then continue
-    let some (_, l, _) := (← instantiateMVars d.type).eq? | continue
+    let some (_, l, r) := (← instantiateMVars d.type).eq? | continue
+    if (r.isConstOf ``Bool.true || r.isConstOf ``Bool.false) && !l.hasExprMVar &&
+        !(l.isConstOf ``Bool.true || l.isConstOf ``Bool.false) then
+      out := out.push d.toExpr; continue
     let .const c _ := l.getAppFn | continue
     unless (← getProjectionFnInfo? c).isSome && l.appArg!.isFVar do continue
     out := out.push d.toExpr
@@ -5032,6 +5420,28 @@ def wpAssumption (g : MVarId) : MetaM Bool := g.withContext do
   for d in ds.reverse do
     if ← hypIs ts d then
       g.assign d.toExpr; return true
+  return false
+
+/-- `g` by a hypothesis of the same predicate whose arguments are equal up to unfolding, each
+compared on its own (a ghost value `gOut 0` and its value `(⟨.out, rnil, rnil⟩, .work 0)` that a
+protocol's `init` fixed; an unknown of `g` takes the hypothesis's value); the predicate itself is
+not unfolded. Not for the logic's connectives and comparisons (the arithmetic's). -/
+def wpAssumptionArgs (g : MVarId) : MetaM Bool := g.withContext do
+  let t ← instantiateMVars (← g.getType)
+  let .const c _ := t.getAppFn | return false
+  if [``Eq, ``Ne, ``HEq, ``Iff, ``And, ``Or, ``Not, ``LE.le, ``LT.lt, ``Exists].contains c then
+    return false
+  let args := t.getAppArgs
+  -- (the newest first: an unknown takes the current state's value)
+  for d in (← propHyps).reverse do
+    let ty ← instantiateMVars d.type
+    unless ty.getAppFn.isConstOf c && ty.getAppNumArgs == args.size do continue
+    let s ← saveState
+    if ← (args.zip ty.getAppArgs).allM fun (a, b) =>
+        if a.hasExprMVar then isDefEq a b else withNewMCtxDepth (isDefEq a b) then
+      g.assign (← mkExpectedTypeHint d.toExpr (← instantiateMVars t))
+      return true
+    s.restore
   return false
 
 /-- An automatic argument (`(h : T := by tac)`): its tactic. -/
@@ -5064,15 +5474,21 @@ def assnAt? (t : Expr) : MetaM (Option (Expr × Expr)) := do
 /-- `X r` by a hypothesis `Y r` whose assertion has the atoms of `X`, each once: equal up to
 reducible unfolding, else an atom of the same head with provably equal arguments (`proveEq`: a
 stored value that the facts give, `a + 1` for `BitVec.ofNat 32 (k + 1)`); `Y`'s atoms rewritten
-by those equations, then reordered (`acEq`). -/
+by those equations, then reordered (`acEq`). An atom of `X` with unknowns (a premise of a
+caller's lemma, `bytesAt cPtr ?A S K ?bs` of a protocol's start) takes the first atom of `Y` of
+its head that unifies with it, up to unfolding (`cPtr` and the pointer the walk has); the
+resource may be an unknown too, and `Y`'s atoms are unfolded as `X`'s (`bext` is `bauth … one`). -/
 def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
-  let xs := atoms X
-  -- the equations `b = a` of an atom `b` of `Y` and its atom `a` of `X`; `none` if one is missing
-  let pair (ys : Array Expr) : TacticM (Option (Array (Expr × Expr × Expr))) := do
+  -- the equations `b = a` of an atom `b` of `Y` and its atom `a` of `X`, and the atoms that
+  -- unified (equal by unfolding); `none` if one is missing
+  let pair (xs ys : Array Expr) :
+      TacticM (Option (Array (Expr × Expr × Expr) × Array (Expr × Expr))) := do
     unless ys.size == xs.size do return none
     let mut rest := ys
     let mut eqs := #[]
+    let mut unified := #[]
     for a in xs do
+      let a ← instantiateMVars a
       if let some i ← rest.findIdxM? fun b => return a == b ||
           (← withNewMCtxDepth (withReducibleAndInstances (isDefEq a b))) then
         rest := rest.eraseIdx! i; continue
@@ -5080,18 +5496,30 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
       for i in [0:rest.size] do
         let b := rest[i]!
         unless b.getAppFn == a.getAppFn do continue
-        if let some pf ← proveEq b a then
+        if a.hasExprMVar then
+          let s ← saveState
+          if ← isDefEq a b then
+            unified := unified.push (b, a); rest := rest.eraseIdx! i; found := true; break
+          s.restore
+        else if let some pf ← proveEq b a then
           eqs := eqs.push (b, a, pf); rest := rest.eraseIdx! i; found := true; break
       unless found do return none
-    return some eqs
+    return some (eqs, unified)
   for d in ← getLCtx do
     if d.isImplementationDetail then continue
-    let some (Y, r') ← assnAt? (← instantiateMVars d.type) | continue
-    unless r' == r do continue
+    let some (Y0, r') ← assnAt? (← instantiateMVars d.type) | continue
     let s ← saveState
     try
-      let some eqs ← pair (atoms Y) | throwError "atoms"
-      -- `Y = Y'` with the atoms rewritten, then `Y' = X` by AC
+      unless r' == r || (r.hasExprMVar && (← isDefEq r r')) do throwError "resource"
+      let Y ← if X.hasExprMVar then reduceProjs (← unfoldLeaves Y0) else pure Y0
+      let some (eqs, unified) ← pair (atoms X) (atoms Y) | throwError "atoms"
+      -- the unified atoms of `Y` as `X` has them (the same up to unfolding), then `Y = Y'` with
+      -- the atoms rewritten, then `Y' = X` by AC
+      let X ← instantiateMVars X
+      let mut Y := Y
+      for (b, a) in unified do
+        let a ← instantiateMVars a
+        Y := Y.replace fun y => if y == b then some a else none
       let mut Y' := Y
       let mut e ← mkEqRefl Y
       for (b, a, pf) in eqs do
@@ -5100,7 +5528,7 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
         Y' := (mkApp f a).headBeta
         e ← mkEqTrans e (← mkCongrArg f pf)
       e ← mkEqTrans e (← acEq Y' X)
-      g.assign (← mkEqMP (← mkCongrFun e r) d.toExpr)
+      g.assign (← mkEqMP (← mkCongrFun e r') (← mkExpectedTypeHint d.toExpr (mkApp Y r')))
       return true
     catch _ => s.restore
   return false
@@ -5141,6 +5569,34 @@ def isForwardRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
   unless ← args.anyM (fun a => do isProp (← inferType a)) do return false
   isArithFact (← instantiateMVars concl)
 
+/-- A run lemma (`wpRunFacts`): a premise is a step's run (`hasRun`). -/
+def isRunRule (ty : Expr) : MetaM Bool := withNewMCtxDepth do
+  let (args, _, _) ← forallMetaTelescope ty
+  args.anyM fun a => return hasRun (← instantiateMVars (← inferType a))
+
+/-- The lemma `u` with the hypothesis `h` as its first premise whose type `pick` selects, its
+other premises hypotheses (`wpAssumption`): the proof, if its conclusion is then determined and
+not a hypothesis yet (the state restored otherwise). -/
+def forwardAt? (u : Expr) (h : FVarId) (pick : Expr → MetaM Bool) : MetaM (Option Expr) := do
+  let s ← saveState
+  try
+    let (args, _, _) ← forallMetaTelescope (← inferType u)
+    let some i ← args.findIdxM? fun a => do pick (← instantiateMVars (← inferType a))
+      | throwError "premise"
+    unless ← withReducible (isDefEq (← inferType args[i]!) (← instantiateMVars (← h.getType))) do
+      throwError "premise"
+    args[i]!.mvarId!.assign (mkFVar h)
+    for a in args do
+      if ← a.mvarId!.isAssigned then continue
+      unless ← isProp (← inferType a) do continue
+      unless ← wpAssumption a.mvarId! do throwError "premise"
+    let pf ← instantiateMVars (mkAppN u args)
+    if pf.hasExprMVar then throwError "undetermined"
+    let ty ← instantiateMVars (← inferType pf)
+    if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+    return some pf
+  catch _ => s.restore; return none
+
 /-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
 `h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
 whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
@@ -5153,20 +5609,8 @@ def wpForward (g : MVarId) (h : FVarId) : TacticM (Option MVarId) := do
     -- (`some none`: a fact that closes the goal, `False` after `wpNorm`)
     let g' : Option (Option MVarId) ← g.withContext do
       try
-        let hty ← instantiateMVars (← h.getType)
-        let u ← refreshUser u
-        let (args, _, _) ← forallMetaTelescope (← inferType u)
-        let some i ← args.findIdxM? fun a => do isProp (← inferType a) | throwError "premise"
-        unless ← withReducible (isDefEq (← inferType args[i]!) hty) do throwError "premise"
-        args[i]!.mvarId!.assign (mkFVar h)
-        for a in args do
-          if ← a.mvarId!.isAssigned then continue
-          unless ← isProp (← inferType a) do continue
-          unless ← wpAssumption a.mvarId! do throwError "premise"
-        let pf ← instantiateMVars (mkAppN u args)
-        if pf.hasExprMVar then throwError "undetermined"
-        let ty ← instantiateMVars (← inferType pf)
-        if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+        let some pf ← forwardAt? (← refreshUser u) h isProp | throwError "premise"
+        let ty ← inferType pf
         trace[fsym] "forward: {ty}"
         let (h', g') ← (← g.assert `hf ty pf).intro1P
         -- (normalized as the hypothesis it comes from: `wpNorm`)
@@ -5293,12 +5737,91 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   let some g ← wpForward g h | return []
   return [← destruct g h]
 
+/-- **The facts of a step's run** `h : (x.run m).run = some (.ok (a, m'))` (it stays): each run
+lemma (`@[fsym_run]`, the caller's `fsym [l]`) whose run premise is `h`, whose other premises are
+hypotheses and whose conclusion is then determined and new; the conclusions, as one hypothesis
+(`wpHyp`: normalized and split; an equation of a local substituted, `q = ⟨some m.blocks.size, 0⟩`
+of an allocation, `c = 1` of a spawn). -/
+partial def wpRunFacts (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (List MVarId) :=
+  g.withContext do
+  let lib ← (fsymRunExt.getState (← getEnv)).mapM fun n => (mkConstWithFreshMVarLevels n : MetaM _)
+  let caller ← (← (← caches).runFwd.get).mapM fun u => (refreshUser u : MetaM _)
+  let mut pfs : Array Expr := #[]
+  for u in lib ++ caller do
+    let some pf ← forwardAt? u h (fun t => return hasRun t) | continue
+    let ty ← inferType pf
+    if ← pfs.anyM fun p => return (← inferType p) == ty then continue
+    trace[fsym] "run fact: {ty}"
+    pfs := pfs.push pf
+  let some last := pfs.back? | return [g]
+  let pf ← pfs.pop.foldrM (init := last) fun p acc => mkAppM ``And.intro #[p, acc]
+  let (h', g') ← (← g.assert `hrun (← inferType pf) pf).intro1P
+  wpHyp g' h' extra
+
+/-- **Existential facts forwards** (`forwardEx`), before a stop of the walk: each caller's lemma
+with an `∃` conclusion, on the newest hypothesis that is its first premise (the thread's part at
+the current memory, not a stale one) if it was not tried on it, whose other premises the walk
+proves (side goals, `wpSides`), and whose conclusion is new (a protocol's start
+`∃ rM, rM.Plain ∧ P.inv … m` from the thread's part after its last store): the conclusion as a
+new hypothesis, split (its witness a local that the caller's later terms take,
+`fsym [loop_body _ _]`). `none` if no lemma applies. -/
+partial def wpForwardEx (g : MVarId) (extra : Array Syntax) : TacticM (Option (List MVarId)) :=
+  g.withContext do
+  let c ← caches
+  let lemmas ← c.forwardEx.get
+  if lemmas.isEmpty then return none
+  for h : k in [0:lemmas.size] do
+    let u ← refreshUser lemmas[k]
+    let s ← saveState
+    -- the newest hypothesis that is the first premise
+    let some (d, args, i) ← (do
+        let (args, _, _) ← forallMetaTelescope (← inferType u)
+        let some i ← args.findIdxM? fun a => do isProp (← inferType a) | return none
+        let pty ← inferType args[i]!
+        for d in (← propHyps).reverse do
+          let s' ← saveState
+          if ← withReducible (isDefEq pty (← instantiateMVars d.type)) then
+            return some (d, args, i)
+          s'.restore
+        return none : TacticM _)
+      | s.restore; continue
+    if (← c.fwdTried.get).contains (k, d.fvarId) then s.restore; continue
+    c.fwdTried.modify (·.insert (k, d.fvarId))
+    let h0 ← IO.getNumHeartbeats
+    let pf? ← try
+          args[i]!.mvarId!.assign d.toExpr
+          let prems ← args.filterM fun a => do
+            return !(← a.mvarId!.isAssigned) && (← isProp (← a.mvarId!.getType))
+          -- the assertions at a resource first (they fix the unknowns of the others: the bytes
+          -- the thread owns), each by a hypothesis
+          let mut rest := #[]
+          for p in prems do
+            let p := p.mvarId!
+            if (← assnAt? (← instantiateMVars (← p.getType))).isSome then
+              unless (← wpGoal p #[] extra 400).isEmpty do throwError "assertion"
+            else rest := rest.push p
+          unless (← wpSides rest.toList true (2 * rest.size) #[] extra 400) == some [] do
+            throwError "premises"
+          let pf ← instantiateMVars (mkAppN u args)
+          if pf.hasExprMVar then throwError "undetermined"
+          let ty ← instantiateMVars (← inferType pf)
+          if ← (← getLCtx).anyM fun d => return d.type == ty then throwError "known"
+          pure (some pf)
+        catch _ => pure none
+    trace[fsym.prof] "forward ∃ {pf?.isSome} {((← IO.getNumHeartbeats) - h0) / 1000}"
+    if let some pf := pf? then
+      trace[fsym] "forward ∃: {← inferType pf}"
+      let (hn, g') ← (← g.assert `hfwd (← inferType pf) pf).intro1P
+      return some (← wpHyp g' hn extra)
+    s.restore
+  return none
+
 /-- A new hypothesis of a stop: normalized by the caller's simp terms and the ghost values'
-lemmas (`upd_self`), then split. -/
+lemmas (`upd_self`), then split; a step's run gives its facts (`wpRunFacts`). -/
 partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (List MVarId) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  if hasRun ty then return [g]
+  if hasRun ty then return ← wpRunFacts g h extra
   let some (h, g) ← wpNorm g h extra | return []
   let some g ← wpForward g h | return []
   wpSplit g h (keep := true)
@@ -5343,8 +5866,13 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let b ← mkFreshExprSyntheticOpaqueMVar (t.getArg! 1)
     g.assign (← mkAppM ``And.intro #[a, b])
     let (x, y) := if hasWP (t.getArg! 0) then (b, a) else (a, b)
+    let unknowns := (← instantiateMVars (← x.mvarId!.getType)).hasExprMVar
     let lx ← wpGoal x.mvarId! user extra fuel
-    return lx ++ (← wpGoal y.mvarId! user extra fuel)
+    let ly ← wpGoal y.mvarId! user extra fuel
+    -- (a first part left with unknowns that the second part fixed: again, `L.ph (g' ?r) = .holds`
+    -- before `L.part (g' ?r) = L.part (G t)`)
+    let lx ← if unknowns && !lx.isEmpty then lx.flatMapM (wpGoal · user extra fuel) else pure lx
+    return lx ++ ly
   if t.isConstOf ``True then g.assign (mkConst ``True.intro); return []
   -- a disjunction (a post over branches that end in different states): a side that is proved
   -- whole, else the solver on the disjunction
@@ -5363,8 +5891,15 @@ a user definition unfolded. -/
 partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
     TacticM (List MVarId) := g.withContext do
   if ← wpAssumption g then return []
+  if ← wpAssumptionArgs g then return []
   if ← wpChain g user extra fuel then return []
   let t ← instantiateMVars (← g.getType)
+  -- an equation that fixes an unknown (a ghost value `?g = (…)` of a protocol's `init`)
+  if let some (_, l, r) := t.eq? then
+    if l.isMVar || r.isMVar then
+      let s ← saveState
+      if ← isDefEq l r then g.assign (← mkEqRefl l); return []
+      s.restore
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
   if !t.hasExprMVar then
@@ -5401,6 +5936,11 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     unless ← isLibrary c do
       if let some t' ← unfold1 t then
         return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
+    -- a field of a structure value that no lemma proves (a protocol's `P.init tgt ?g`): its
+    -- value, whose equations fix the unknowns
+    if (← getProjectionFnInfo? c).isSome then
+      let t' ← reduceProjs t
+      if t' != t then return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
   return [g]
 
 /-- An atom by a caller's lemma (`fsym [l]`, `chain`: a protocol's step lemma, `U G rX m → …
@@ -5652,7 +6192,12 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     if !d.hasLooseBVars && !(← isCaseCtorApp d) then
       if let some (xs, g') ← observing? (g.generalize #[{ expr := d, xName? := `o, hName? := `ho }]) then
         return ← casesThen g' (.fvar xs[0]!) (wpWalk · user extra (fuel - 1))
-  -- a command: the caller's rules, then the registered ones
+  -- a stop (not a memory step): first the caller's existential facts that the context gives now
+  -- (a protocol's start, before the spawn)
+  if !x.isAppOf ``ConcM.liftMem then
+    if let some gs ← wpForwardEx g extra then
+      return ← gs.flatMapM (wpWalk · user extra (fuel - 1))
+  -- the caller's rules, then the registered ones
   for r in ← rules user x (wp := true) do
     if let some left ← reportLimit m!"the WP rule {r} on the command{indentExpr x}"
         (wpRule g a r x user extra fuel) then
@@ -5771,6 +6316,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
   let mut extra := #[]
   let mut chain := #[]
   let mut forward := #[]
+  let mut runFwd := #[]
+  let mut forwardEx := #[]
   for a in args do
     -- an update lemma by name keeps its implicit arguments (fresh at each return)
     let c? ← if a.isIdent && ((← getLCtx).findFromUserName? a.getId).isNone then
@@ -5793,9 +6340,13 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     let (_, _, concl) ← forallMetaTelescope ty
     if (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome || (← isUpd e) then
       user := user.push e
+    else if ← isRunRule ty then
+      runFwd := runFwd.push e
     else
       extra := extra.push a
-      if ← isChainConcl concl then chain := chain.push e
+      if (← instantiateMVars concl).consumeMData.isAppOfArity ``Exists 2 then
+        forwardEx := forwardEx.push e
+      else if ← isChainConcl concl then chain := chain.push e
       if ← isForwardRule ty then forward := forward.push e
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← (← getMainGoal).intros
@@ -5824,6 +6375,8 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
     (← caches).userCtx.set userCtx
     (← caches).chain.set chain
     (← caches).forward.set forward
+    (← caches).runFwd.set runFwd
+    (← caches).forwardEx.set forwardEx
     -- the user definitions that the caller's updates produce (`own CI γ e ctx` of `own_empty`)
     for u in user do
       unless ← isUpd u do continue
