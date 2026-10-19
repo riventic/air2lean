@@ -437,6 +437,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     (t := 0) (g := gO rM { ph := .run })
     (by rw [upd1_0]; exact hG0c) rfl
   have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
+    hu.einv.fresh
   have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rnil { ph := .lk }) (by rw [hG1]) rfl
       (fun h => by
         have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h

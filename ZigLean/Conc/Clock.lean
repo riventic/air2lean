@@ -700,6 +700,19 @@ theorem of_eq (ha : m'.atomics = m.atomics) (hs : m'.seen = m.seen) : AMap hF m 
           new := fun j l hl hn => h.new j l (ha ▸ hl) hn, seen := by rw [hs]; exact h.seen,
           own := fun _ _ _ _ _ h => by cases h; simp only [Mem.seenAt, hs] }
 
+/-- Normalize both memories to the explicit actor. The destination's selected thread does
+not occur in the map; the source's selected thread is the actor whose views may change. -/
+theorem withCurrent (h : AMap hF m m' σ) {t : ThreadId} (hc : m.current = t) :
+    AMap hF { m with current := t } { m' with current := t } σ where
+  mono := h.mono
+  kept := h.kept
+  frame := h.frame
+  new := h.new
+  seen := by change m'.seen.filter (·.1 != t) = _; rw [← hc]; exact h.seen
+  own i l j hl hin hij := by
+    change m'.seenAt t j = m.seenAt t i
+    rw [← hc]; exact h.own i l j hl hin hij
+
 theorem trans (h₁ : AMap hF m m' σ) (h₂ : AMap hF m' m'' σ') (hc : m'.current = m.current) :
     AMap hF m m'' fun i => (σ i).bind σ' where
   mono i i' j j' h h' hlt := by

@@ -170,13 +170,11 @@ theorem keep_lockWordStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hs : L.Ste
       · omega
       · omega
 
-/-- **The word's location stays** over a step whose frame `hF` has the word (`FStepIn`): the
-word's location (if any) has the word's bytes (`hok`), so it is in the frame. -/
-theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+/-- The word's location stays under an atomic-location map whose frame has the word's bytes. -/
+theorem loc_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (ha : AMap hF m m' σ)
     (hwF : ∀ l, W.In l → hF l ≠ none) (hok : ∀ i l, W.Loc m i l → l.len = nb) (l : ALoc) :
     (∃ i, W.Loc m' i l) ↔ (∃ i, W.Loc m i l) := by
   have := W.sz_pos
-  obtain ⟨σ, ha⟩ := hs.atomics
   refine (ha.first_iff (p := fun l => l.block == W.b && l.off == W.o)
     (fun l l' hb ho _ => by simp [hb, ho]) (fun i l hfi hl x h1 h2 => ?_)
     (fun l hp hpos => ⟨l.off, Nat.le_refl _, by omega, ?_⟩) l).symm
@@ -188,6 +186,14 @@ theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
     rw [hb]; exact hwF _ ⟨rfl, by omega, by omega⟩
   · simp only [Bool.and_eq_true, beq_iff_eq] at hp
     rw [hp.1, hp.2]; exact hwF _ ⟨rfl, Nat.le_refl _, by omega⟩
+
+/-- **The word's location stays** over a step whose frame `hF` has the word (`FStepIn`): the
+word's location (if any) has the word's bytes (`hok`), so it is in the frame. -/
+theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+    (hwF : ∀ l, W.In l → hF l ≠ none) (hok : ∀ i l, W.Loc m i l → l.len = nb) (l : ALoc) :
+    (∃ i, W.Loc m' i l) ↔ (∃ i, W.Loc m i l) := by
+  obtain ⟨σ, ha⟩ := hs.atomics
+  exact loc_amap ha hwF hok l
 
 /-- **A step of a thread on its own part keeps the word** (`FStepIn`): its frame `hF` has the
 word's bytes, the word's location has them (`hok`), and the word's cells stay up to `Cell.norm`
@@ -656,12 +662,11 @@ theorem frame_has {m : Mem} {hF : Heap}
   · simp only [Bool.and_eq_true, beq_iff_eq] at hp
     rw [hp.1, hp.2]; exact hwF W.o (Nat.le_refl _) (by omega)
 
-/-- **A step of a thread on its own part keeps every thread's floor** at a word whose bytes its
-frame has (`FStepIn`; `hok`: the word's location has the word's size, as under `Word.Ok`). -/
-theorem ownPos_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+/-- Atomic-location transport keeps every thread's floor at a fully framed word, independently
+of changes to queues, the OS state or the selected current thread. -/
+theorem ownPos_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (ha : AMap hF m m' σ)
     (hwF : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) ≠ none)
     (hok : ∀ i l, W.Loc m i l → l.len = nb) (u : ThreadId) : W.ownPos m' u = W.ownPos m u := by
-  obtain ⟨σ, ha⟩ := hs.atomics
   obtain ⟨hin, hcov⟩ := frame_has hwF hok
   cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | some i =>
@@ -675,11 +680,21 @@ theorem ownPos_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
     obtain ⟨i, hi⟩ := (ha.first_iff pred_congr hin hcov l).mpr ⟨j, hl⟩
     exact hn i l hi
 
-theorem Fresh.fstep {m m' : Mem} {hF : Heap} (hf : W.Fresh m) (hs : FStepIn hF m m')
+/-- **A step of a thread on its own part keeps every thread's floor** at a word whose bytes its
+frame has (`FStepIn`; `hok`: the word's location has the word's size, as under `Word.Ok`). -/
+theorem ownPos_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+    (hwF : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) ≠ none)
+    (hok : ∀ i l, W.Loc m i l → l.len = nb) (u : ThreadId) : W.ownPos m' u = W.ownPos m u := by
+  obtain ⟨σ, ha⟩ := hs.atomics
+  exact ownPos_amap ha hwF hok u
+
+/-- Atomic-location transport and a nondecreasing message counter preserve framed freshness. -/
+theorem Fresh.amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (hf : W.Fresh m)
+    (ha : AMap hF m m' σ) (hn : m.nextMsg ≤ m'.nextMsg)
     (hwF : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) ≠ none)
     (hok : ∀ i l, W.Loc m i l → l.len = nb) : W.Fresh m' := by
   intro j l hl k hk
-  obtain ⟨i, hi⟩ := (loc_fstep hs
+  obtain ⟨i, hi⟩ := (loc_amap ha
     (fun ⟨b, x⟩ hx => by
       obtain ⟨hb, h1, h2⟩ := hx
       change b = W.b at hb
@@ -687,9 +702,267 @@ theorem Fresh.fstep {m m' : Mem} {hF : Heap} (hf : W.Fresh m) (hs : FStepIn hF m
       rw [hb]
       exact hwF x h1 h2) hok l).mp ⟨j, hl⟩
   obtain ⟨h1, h2⟩ := hf i l hi k hk
-  exact ⟨Nat.lt_of_lt_of_le h1 hs.nextMsg, h2⟩
+  exact ⟨Nat.lt_of_lt_of_le h1 hn, h2⟩
+
+theorem Fresh.fstep {m m' : Mem} {hF : Heap} (hf : W.Fresh m) (hs : FStepIn hF m m')
+    (hwF : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) ≠ none)
+    (hok : ∀ i l, W.Loc m i l → l.len = nb) : W.Fresh m' := by
+  obtain ⟨σ, ha⟩ := hs.atomics
+  exact hf.amap ha hs.nextMsg hwF hok
 
 /-! ## The ops at the word -/
+
+/-- A floor is a position of a nonempty location, including the default position zero. -/
+theorem ownPos_lt {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l)
+    (h0 : 0 < l.msgs.size) (u : ThreadId) : W.ownPos m u < l.msgs.size := by
+  rw [ownPos_loc hl]
+  cases hs : m.seenAt u i with
+  | none => exact h0
+  | some id =>
+    simp only [Option.bind_some]
+    cases hp : l.pos id with
+    | none => exact h0
+    | some j =>
+      exact ALoc.pos_lt hp
+
+/-- Actual preparation at a valid word either keeps its location or creates its singleton
+history. Its shape and floors do not require fresh ids; freshness, when present, is preserved. -/
+theorem prepare {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+    (hk : k.isAtomic = true)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
+    ∃ l, W.Loc m' li l ∧ l.len = nb ∧ 0 < l.msgs.size ∧ l.Chain ∧ (W.Fresh m → W.Fresh m') ∧
+      (∀ u, W.ownPos m' u = W.ownPos m u) ∧ m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
+  let mr := m.recordAt W.b W.o nb k
+  have hfr (hf : W.Fresh m) : W.Fresh mr := hf.of_eq rfl (Nat.le_refl _)
+  have hpos (u : ThreadId) : W.ownPos mr u = W.ownPos m u := ownPos_of_eq rfl rfl u
+  cases he : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
+  | some i =>
+    have hl := loc_of_find he
+    have hl0 : W.Loc m i (mr.atomics[i]!) := hl
+    obtain ⟨hlen, h0, hc, hlast, _⟩ := hw.loc i _ hl0
+    have hpl : PlainLe mr W.b W.o nb (mr.atomics[i]!).lastClock :=
+      (hw.plain i _ hl0).of_fp fun e he => by
+        simp only [mr, Mem.recordAt, Array.mem_push] at he
+        rcases he with he | rfl
+        · exact .inl he
+        · exact .inr (plainHit_atomic hk)
+    obtain ⟨rfl, rfl⟩ := locIdx_found he hlen hlast hpl h
+    exact ⟨_, hl, hlen, h0, hc, hfr, hpos, Nat.le_refl _, rfl⟩
+  | none =>
+    obtain ⟨rfl, rfl⟩ := locIdx_new he (noOverlap_of_only he hw.only) h
+    let nl := firstLoc mr W.b W.o nb
+    have hnl : W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }
+        mr.atomics.size nl := by
+      refine ⟨?_, by simp⟩
+      show (mr.atomics.push nl).findIdx? _ = _
+      rw [Array.findIdx?_push, he]; simp [nl, firstLoc]
+    have h0 : 0 < nl.msgs.size := by simp [nl, firstLoc]
+    refine ⟨nl, hnl, rfl, h0, ?_, ?_, ?_, Nat.le_succ _, rfl⟩
+    · intro j hj; simp [nl, firstLoc] at hj
+    · intro _ i l hl j hj
+      obtain ⟨rfl, rfl⟩ := loc_unique hl hnl
+      have : j = 0 := by simpa [nl, firstLoc] using hj
+      subst j
+      simp [nl, firstLoc, firstMsg, ALoc.pos]
+    · intro u
+      have hnew := ownPos_lt hnl h0 u
+      have hold : W.ownPos mr u = 0 := ownPos_none (fun i l hl => by rw [hl.1] at he; cases he) u
+      have : W.ownPos { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 } u = 0 := by
+        simpa [nl, firstLoc] using hnew
+      change W.ownPos { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 } u = _
+      exact this.trans (hold.symm.trans (hpos u))
+
+/-- Preparation preserves every floor and freshness without an operation-transport judgment. -/
+theorem prepare_seen {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+    (hf : W.Fresh m) (hk : k.isAtomic = true)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
+    ∃ l, W.Loc m' li l ∧ l.len = nb ∧ 0 < l.msgs.size ∧ l.Chain ∧ W.Fresh m' ∧
+      (∀ u, W.ownPos m' u = W.ownPos m u) ∧ m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
+  obtain ⟨l, hl, hlen, h0, hch, hfr, hpos, hn, hc⟩ := prepare hw hk h
+  exact ⟨l, hl, hlen, h0, hch, hfr hf, hpos, hn, hc⟩
+
+/-- The valid word cannot be contained in a frame disjoint from its bytes. -/
+theorem loc_notIn {m : Mem} {i : Nat} {l : ALoc} {hF : Heap} (hl : W.Loc m i l)
+    (hlen : l.len = nb) (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) :
+    ¬ (m.atomics[i]!).In hF := by
+  rw [(loc_get hl).2.2]
+  intro hin
+  obtain ⟨hb, ho⟩ := loc_at hl
+  have hx := hin W.o (by omega) (by have := W.sz_pos; omega)
+  rw [hb] at hx
+  exact hx (hoff W.o (Nat.le_refl _) (by have := W.sz_pos; omega))
+
+/-- The actual preparation carries the existing atomic-location map. Recording the access
+does not change atomic locations or views, so it composes with the actual `locIdx` map. -/
+theorem prepare_amap {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
+    m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
+  obtain ⟨blk, hb, _, hsz, _⟩ := hw.blk
+  have hs := FStepIn.locIdx (m := m.recordAt W.b W.o nb k) W.sz_pos hoff ⟨blk, hb, hsz⟩ h
+  obtain ⟨σ, ha⟩ := hs.atomics
+  have hr : AMap hF m (m.recordAt W.b W.o nb k) some := AMap.of_eq rfl rfl
+  exact ⟨hs.nextMsg, _, hr.trans ha rfl⟩
+
+/-- A completed load carries the frame's atomic locations and views. This is obtained from
+its actual preparation and read, for every memory order, without an `Op` transport premise. -/
+theorem atomicLoad_amap {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n} {hF : Heap}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
+    m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
+  obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, _, _, _, _, hc₁⟩ := prepare hw rfl hp
+  obtain ⟨a, sn, next, hmem⟩ := locIdx_updates hp
+  have hcs : m₁.current < m₁.clocks.size := by rw [hmem]; simpa [Mem.recordAt] using hc
+  have hs := FStepIn.loadM hcs ord ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff)
+  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
+  obtain ⟨τ, hτ⟩ := hs.atomics
+  exact ⟨Nat.le_trans hn hs.nextMsg, _, hσ.trans hτ hc₁⟩
+
+/-- The recorded access remains at the current clock after actual preparation. -/
+theorem prepare_rec {m m' : Mem} {li : Nat} {k : AccessKind}
+    (hc : m.current < m.clocks.size)
+    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
+    W.Rec m' m'.current ∧ m'.current < m'.clocks.size ∧ m'.blocks = m.blocks := by
+  obtain ⟨a, sn, next, rfl⟩ := locIdx_updates h
+  exact ⟨rec_recordAt rfl hc, by simpa [Mem.recordAt] using hc, rfl⟩
+
+/-- The actual newest-message RMW preserves a disjoint frame's atomic locations and views. -/
+theorem rmwM_amap {m : Mem} {li pos : Nat} {l : ALoc} {hF : Heap}
+    (hl : W.Loc m li l) (hlen : l.len = nb) (hpos : pos + 1 = l.msgs.size)
+    (hc : m.current < m.clocks.size) (hrec : W.Rec m m.current)
+    (hb : ∃ blk, m.blocks[W.b]? = some blk)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (ord : AtomicOrder) (new : BitVec n) :
+    m.nextMsg ≤ (rmwM m li pos ord ((m.atomics[li]!).msgs[pos]!) new).nextMsg ∧
+      ∃ σ, AMap hF m (rmwM m li pos ord ((m.atomics[li]!).msgs[pos]!) new) σ := by
+  obtain ⟨blk, hb⟩ := hb
+  obtain ⟨e, he, heb, heo, hel, hec⟩ := hrec
+  obtain ⟨hlb, hlo⟩ := loc_at hl
+  have hl0 := (loc_get hl).2.2
+  have hs := FStepIn.rmwM (hF := hF) (li := li) (pos := pos) (blk := blk) (e := e)
+    ord ((m.atomics[li]!).msgs[pos]!) new hc
+    (by rw [hl0]; exact hpos) (by rw [hl0, hlb]; exact hb) (loc_notIn hl hlen hoff)
+    he (by rw [hl0, hlb]; exact heb) (by rw [hl0, hlo]; exact heo) hel hec
+    (by rw [hl0, getElem!_pos l.msgs pos (by omega)]; exact Array.getElem_mem _)
+  exact ⟨hs.nextMsg, hs.atomics⟩
+
+/-- Every completed RMW operation uses actual preparation and the actual newest-message write. -/
+theorem atomicRmw_amap {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} {hF : Heap} (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, hb, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, h0, hch, _, _, _, hc₁⟩ := prepare hw rfl hp
+  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
+  have hpos : pos + 1 = l.msgs.size := by
+    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+    rw [(loc_get hl).2.2] at this
+    omega
+  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
+  obtain ⟨hn', τ, hτ⟩ := rmwM_amap hl hlen hpos hcs hrec
+    ⟨_, by rw [hblocks]; exact hb⟩ hoff ord (op.apply signed old v)
+  exact ⟨Nat.le_trans hn hn', _, hσ.trans hτ hc₁⟩
+
+/-- A successful CAS records its write, then performs the actual newest-message RMW. -/
+theorem casRmw_amap {m : Mem} {li c pos : Nat} {l : ALoc} {hF : Heap}
+    {expected new : BitVec n} (hl : W.Loc m li l) (hlen : l.len = nb) (hch : l.Chain)
+    (hr : (casOpts m li expected)[c]? = some pos)
+    (hv : (intOfBytes n ((m.atomics[li]!).msgs[pos]!).bytes).run = some (.ok expected))
+    (hc : m.current < m.clocks.size) (hb : ∃ blk, m.blocks[W.b]? = some blk)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) (ord : AtomicOrder) :
+    m.nextMsg ≤ (rmwM (m.recordAt W.b W.o nb .atomicWrite) li pos ord
+      ((m.atomics[li]!).msgs[pos]!) new).nextMsg ∧
+      ∃ σ, AMap hF m (rmwM (m.recordAt W.b W.o nb .atomicWrite) li pos ord
+        ((m.atomics[li]!).msgs[pos]!) new) σ := by
+  have hpos := cas_chain_pos (by rwa [(loc_get hl).2.2]) hr hv
+  have hj := (casOpts_pos hr).1
+  rw [(loc_get hl).2.2] at hpos hj
+  have hlr : W.Loc (m.recordAt W.b W.o nb .atomicWrite) li l := hl
+  obtain ⟨hn, σ, ha⟩ := rmwM_amap (pos := pos) hlr hlen (by omega)
+    (by simpa [Mem.recordAt] using hc) (rec_recordAt rfl hc) hb hoff ord new
+  have hr : AMap hF m (m.recordAt W.b W.o nb .atomicWrite) some := AMap.of_eq rfl rfl
+  exact ⟨hn, _, hr.trans ha rfl⟩
+
+/-- Both branches of a completed strong CAS carry the actual disjoint-frame map. -/
+theorem cmpxchg_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, hblk, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, hch, _, _, _, hc₁⟩ := prepare hw rfl hp
+  obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
+  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
+  rcases hb with ⟨rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · rw [W.sz_eq]
+    obtain ⟨hn', τ, hτ⟩ := casRmw_amap (new := new) hl hlen hch hr hv hcs
+      ⟨_, by rw [hblocks]; exact hblk⟩ hoff succ
+    exact ⟨Nat.le_trans hn hn', _, hσ.trans hτ hc₁⟩
+  · have hs := FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff)
+    obtain ⟨τ, hτ⟩ := hs.atomics
+    exact ⟨Nat.le_trans hn hs.nextMsg, _, hσ.trans hτ hc₁⟩
+
+/-- Weak CAS carries the same map for success, mismatches and matching-value spurious failures. -/
+theorem cmpxchgWeak_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
+    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, hblk, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, hch, _, _, _, hc₁⟩ := prepare hw rfl hp
+  obtain ⟨_, hcs, hblocks⟩ := prepare_rec hc hp
+  obtain ⟨hn, σ, hσ⟩ := prepare_amap hw hoff hp
+  rcases hb with ⟨rfl, rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
+    rw [W.sz_eq]
+    obtain ⟨hn', τ, hτ⟩ := casRmw_amap (new := new) hl hlen hch hj hv hcs
+      ⟨_, by rw [hblocks]; exact hblk⟩ hoff succ
+    exact ⟨Nat.le_trans hn hn', _, hσ.trans hτ hc₁⟩
+  · have hs := FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!) (loc_notIn hl hlen hoff)
+    obtain ⟨τ, hτ⟩ := hs.atomics
+    exact ⟨Nat.le_trans hn hs.nextMsg, _, hσ.trans hτ hc₁⟩
+
+/-- Normalize a whole family of actual disjoint-frame maps to the explicitly named actor.
+The counter fact follows at the empty frame; no destination `current` fact is needed. -/
+theorem amap_for_actor {m m' : Mem} {t : ThreadId} (hc : m.current = t)
+    (h : ∀ hF, (∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) →
+      m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ) :
+    m.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+      (∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) →
+      ∃ σ, AMap hF { m with current := t } { m' with current := t } σ := by
+  refine ⟨(h (fun _ => none) (fun _ _ _ => rfl)).1, fun hF hoff => ?_⟩
+  obtain ⟨_, σ, ha⟩ := h hF hoff
+  exact ⟨σ, ha.withCurrent hc⟩
+
+/-- The scheduler's futex compare/sleep records an access and changes only its queue or woken
+set. Unlike an atomic-load operation, it does not select an atomic-history message. -/
+theorem futexWait_fields {m m' : Mem} {p : Ptr} {e : BitVec 32} {b : Bool}
+    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+    m'.atomics = m.atomics ∧ m'.seen = m.seen ∧ m'.nextMsg = m.nextMsg := by
+  rcases futexWait_eq h with ⟨_, rfl, rfl⟩ | ⟨_, bid, blk, o, v, _, _, _, hcase⟩
+  · exact ⟨rfl, rfl, rfl⟩
+  rcases hcase with ⟨_, rfl, rfl⟩ | ⟨_, rfl, rfl⟩ <;> exact ⟨rfl, rfl, rfl⟩
 
 /-- The current thread observes message `id` of the word's location. -/
 theorem ownPos_observe {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) (id u : Nat) :
@@ -714,6 +987,71 @@ theorem loadM_seen {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) (hf : W.Fre
     (by unfold loadM; split <;> exact Nat.le_refl _)⟩
   · rw [hobs, ownPos_observe hl, if_pos rfl, getElem!_pos l.msgs j hj, (hf i l hl j hj).2]; rfl
   · rw [hobs, ownPos_observe hl, ite_eq_right hu]
+
+/-- Every admitted read choice, at every atomic order, preserves freshness and advances only
+the reader's floor. An unconstrained `observeM` does not have this property. -/
+theorem loadM_read_seen {m : Mem} {i c j : Nat} {l : ALoc} (hl : W.Loc m i l)
+    (hf : W.Fresh m) (hr : (readOpts m i false)[c]? = some j) (ord : AtomicOrder) :
+    W.Fresh (loadM m i ord (l.msgs[j]!)) ∧
+      ∀ u, W.ownPos m u ≤ W.ownPos (loadM m i ord (l.msgs[j]!)) u := by
+  have hj := readOpts_lt hr
+  rw [(loc_get hl).2.2] at hj
+  obtain ⟨ha, ho, hf'⟩ := loadM_seen hl hf hj ord
+  refine ⟨hf', fun u => ?_⟩
+  by_cases hu : u = m.current
+  · subst u; rw [ha]; exact Nat.le_trans (ownPos_le_floor hl) (floor_le hr)
+  · rw [ho u hu]; exact Nat.le_refl _
+
+/-- The bytes returned by a read belong to the message at its resulting caller-local floor. -/
+theorem loadM_seen_val {m : Mem} {i j : Nat} {l : ALoc} {v : BitVec n}
+    (hl : W.Loc m i l) (hf : W.Fresh m) (hj : j < l.msgs.size)
+    (hv : (intOfBytes n (l.msgs[j]!).bytes).run = some (.ok v)) (ord : AtomicOrder) :
+    j < (W.hist (loadM m i ord (l.msgs[j]!))).size ∧
+      (W.hist (loadM m i ord (l.msgs[j]!)))[j]!.Val v ∧
+      W.ownPos (loadM m i ord (l.msgs[j]!)) m.current = j := by
+  have ha : (loadM m i ord (l.msgs[j]!)).atomics = m.atomics := by
+    unfold loadM; split <;> rfl
+  have hL : W.Loc (loadM m i ord (l.msgs[j]!)) i l := by
+    unfold Loc; rw [ha]; exact hl
+  exact ⟨by rw [hist_size hL]; exact hj, val_of hL hj hv, (loadM_seen hl hf hj ord).1⟩
+
+/-- A completed load at the word satisfies the floor property for its actual selected message. -/
+theorem atomicLoad_seen {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
+    (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicLoadAt_ok h
+  obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, _, hf₁, he, hn, hc⟩ := prepare_seen hw hf rfl hp
+  rw [(loc_get hl).2.2]
+  obtain ⟨hf', hm⟩ := loadM_read_seen hl hf₁ hr ord
+  refine ⟨hf', fun u => by rw [← he u]; exact hm u, ?_, (loadM_current _ _ _ _).trans hc⟩
+  exact Nat.le_trans hn (by unfold loadM; split <;> exact Nat.le_refl _)
+
+/-- The actual selected message of a load is the reader's new floor. The witness uses the
+resulting history, so it composes with any existing rule that preserves that history. -/
+theorem atomicLoad_read_seen {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
+    (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      ∃ j < (W.hist m').size, (W.hist m')[j]!.Val v ∧ W.ownPos m' m.current = j := by
+  obtain ⟨hf', hm, _, _⟩ := atomicLoad_seen hw hf h
+  refine ⟨hf', hm, ?_⟩
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, hv, rfl⟩ := atomicLoadAt_ok h
+  obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, _, hf₁, _, _, hc⟩ := prepare_seen hw hf rfl hp
+  have hj := readOpts_lt hr
+  rw [(loc_get hl).2.2] at hj hv ⊢
+  refine ⟨pos, ?_⟩
+  rw [← hc]
+  exact loadM_seen_val hl hf₁ hj hv ord
 
 /-- A message with a fresh id at the end of the word's location keeps the ids fresh and no floor
 smaller, and it is at the end. -/
@@ -777,6 +1115,14 @@ theorem loc_set {m : Mem} {i : Nat} {l l' : ALoc} (hl : W.Loc m i l) (hb : l'.bl
     exact hfirst.trans hl.1
   · rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [hi]
 
+/-- Inserting immediately after the newest message keeps the word at the same location. -/
+theorem loc_insert_last {m : Mem} {i pos : Nat} {l : ALoc} (hl : W.Loc m i l)
+    (hp : pos + 1 = l.msgs.size) (msg : Msg) :
+    W.Loc (insertM m i (pos + 1) msg) i { l with msgs := l.msgs.push msg } := by
+  unfold Loc
+  rw [insertM_atomics, (loc_get hl).2.2, hp, Conc.Proto.insertIdxIfInBounds_size_self]
+  exact loc_set hl rfl rfl
+
 /-- An RMW of the newest message of the word's location (`rmwM`): the writer's floor is the new
 message, at the end; no other floor gets smaller. -/
 theorem rmwM_seen {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) (hf : W.Fresh m) {pos : Nat}
@@ -812,6 +1158,248 @@ theorem rmwM_seen {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l) (hf : W.Fres
   · rw [ownPos_observe hL, ← hMc, ite_eq_left rfl, hend]; rfl
   · rw [ownPos_observe hL, ite_eq_right (by rw [hMc]; exact hu), ← ownPos_of_eq ha₂ hs₂ u]
     exact hle u
+
+/-- Appending an RMW to the newest message preserves freshness and every thread's floor. -/
+theorem rmwM_latest_seen {m : Mem} {i pos : Nat} {l : ALoc} (hl : W.Loc m i l)
+    (hf : W.Fresh m) (hp : pos + 1 = l.msgs.size) (ord : AtomicOrder) (rd : Msg) (new : BitVec n) :
+    W.Fresh (rmwM m i pos ord rd new) ∧
+      ∀ u, W.ownPos m u ≤ W.ownPos (rmwM m i pos ord rd new) u := by
+  obtain ⟨ha, ho, hf'⟩ := rmwM_seen hl hf hp ord rd new
+  refine ⟨hf', fun u => ?_⟩
+  by_cases hu : u = m.current
+  · subst u; rw [ha]; exact Nat.le_of_lt (ownPos_lt hl (by omega) _)
+  · exact ho u hu
+
+/-- A successful newest-message RMW leaves its caller's floor at the new last write. -/
+theorem rmwM_seen_last {m : Mem} {i pos : Nat} {l : ALoc} (hl : W.Loc m i l)
+    (hf : W.Fresh m) (hp : pos + 1 = l.msgs.size) (ord : AtomicOrder) (rd : Msg) (new : BitVec n) :
+    W.ownPos (rmwM m i pos ord rd new) m.current =
+      (W.hist (rmwM m i pos ord rd new)).size - 1 := by
+  have hs : (W.hist (rmwM m i pos ord rd new)).size = l.msgs.size + 1 := by
+    unfold rmwM
+    split
+    · have hl' : W.Loc (acqM m rd.relClock) i l := hl
+      change (W.hist (insertM (acqM m rd.relClock) i (pos + 1)
+        (rmwMsg (acqM m rd.relClock) ord rd new))).size = l.msgs.size + 1
+      rw [hist_size (loc_insert_last hl' hp _)]; simp
+    · change (W.hist (insertM m i (pos + 1) (rmwMsg m ord rd new))).size = l.msgs.size + 1
+      rw [hist_size (loc_insert_last hl hp _)]; simp
+  rw [hs, Nat.add_sub_cancel]
+  exact (rmwM_seen hl hf hp ord rd new).1
+
+/-- An RMW's actual read choice in a chain selects its newest message. -/
+theorem rmwM_read_seen {m : Mem} {i c pos : Nat} {l : ALoc} (hl : W.Loc m i l)
+    (hf : W.Fresh m) (h0 : 0 < l.msgs.size) (hc : l.Chain)
+    (hr : (readOpts m i true)[c]? = some pos) (ord : AtomicOrder) (new : BitVec n) :
+    W.Fresh (rmwM m i pos ord (l.msgs[pos]!) new) ∧
+      ∀ u, W.ownPos m u ≤ W.ownPos (rmwM m i pos ord (l.msgs[pos]!) new) u := by
+  have hp : pos + 1 = l.msgs.size := by
+    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+    rw [(loc_get hl).2.2] at this
+    omega
+  exact rmwM_latest_seen hl hf hp ord _ new
+
+/-- Every completed RMW operation and signedness uses the same floor/freshness rule. -/
+theorem atomicRmw_seen {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, h0, hchain, hf₁, he, hn, hc⟩ := prepare_seen hw hf rfl hp
+  rw [(loc_get hl).2.2]
+  obtain ⟨hf', hm⟩ := rmwM_read_seen hl hf₁ h0 hchain hr ord (op.apply signed old v)
+  refine ⟨hf', fun u => by rw [← he u]; exact hm u, Nat.le_trans hn ?_, ?_⟩
+  · unfold rmwM
+    split <;> dsimp only [observeM] <;> rw [insertM_nextMsg] <;> exact Nat.le_succ _
+  · unfold rmwM
+    split <;> exact insertM_current.trans hc
+
+/-- Every completed RMW leaves its caller at the new last write, for every operation, order
+and signedness. -/
+theorem atomicRmw_write_seen {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    W.ownPos m' m.current = (W.hist m').size - 1 := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, h0, hchain, hf₁, _, _, hc⟩ := prepare_seen hw hf rfl hp
+  have hp' := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+  rw [(loc_get hl).2.2] at hp' ⊢
+  rw [← hc]
+  exact rmwM_seen_last hl hf₁ (by omega) ord _ _
+
+/-- Success of a CAS uses the newest message of a chain. Recording its write does not change
+the floors or freshness before the RMW. -/
+theorem casRmw_seen {m : Mem} {i c pos : Nat} {l : ALoc} {expected new : BitVec n}
+    (hl : W.Loc m i l) (hf : W.Fresh m) (hc : l.Chain)
+    (hr : (casOpts m i expected)[c]? = some pos)
+    (hv : (intOfBytes n ((m.atomics[i]!).msgs[pos]!).bytes).run = some (.ok expected))
+    (ord : AtomicOrder) :
+    W.Fresh (rmwM (m.recordAt W.b W.o nb .atomicWrite) i pos ord (l.msgs[pos]!) new) ∧
+      ∀ u, W.ownPos m u ≤
+        W.ownPos (rmwM (m.recordAt W.b W.o nb .atomicWrite) i pos ord (l.msgs[pos]!) new) u := by
+  have hp := cas_chain_pos (by rwa [(loc_get hl).2.2]) hr hv
+  have hj := (casOpts_pos hr).1
+  rw [(loc_get hl).2.2] at hp hj
+  have hlr : W.Loc (m.recordAt W.b W.o nb .atomicWrite) i l := hl
+  exact rmwM_latest_seen (pos := pos) hlr (hf.of_eq rfl (Nat.le_refl _)) (by omega) ord _ new
+
+/-- Strong CAS preserves freshness and nondecreasing floors in both its successful RMW and
+its failure-order read branch. -/
+theorem cmpxchg_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, hchain, hf₁, he, hn, hc⟩ := prepare_seen hw hf rfl hp
+  rcases hb with ⟨rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · rw [W.sz_eq, (loc_get hl).2.2]
+    obtain ⟨hf', hm⟩ := casRmw_seen hl hf₁ hchain hr hv succ
+    refine ⟨hf', fun u => by rw [← he u]; exact hm u, Nat.le_trans hn ?_, ?_⟩
+    · unfold rmwM
+      split <;> dsimp only [observeM] <;> rw [insertM_nextMsg] <;> exact Nat.le_succ _
+    · unfold rmwM
+      split <;> exact insertM_current.trans hc
+  · have hread : ∃ j : Nat, (readOpts m₁ li false)[j]? = some pos := by
+      exact Array.mem_iff_getElem?.mp (Array.mem_filter.mp (Array.mem_of_getElem? hr)).1
+    obtain ⟨j, hj⟩ := hread
+    rw [(loc_get hl).2.2]
+    obtain ⟨hf', hm⟩ := loadM_read_seen hl hf₁ hj fail
+    refine ⟨hf', fun u => by rw [← he u]; exact hm u, Nat.le_trans hn ?_, (loadM_current _ _ _ _).trans hc⟩
+    unfold loadM; split <;> exact Nat.le_refl _
+
+/-- A failed strong CAS reads the message at its resulting floor, at its failure order. -/
+theorem cmpxchg_read_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
+      some (.ok (some old, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      ∃ j < (W.hist m').size, (W.hist m')[j]!.Val old ∧ W.ownPos m' m.current = j := by
+  obtain ⟨hf', hm, _, _⟩ := cmpxchg_seen hw hf h
+  refine ⟨hf', hm, ?_⟩
+  obtain ⟨b, blk, o, li, m₁, pos, rd, hacc, _, hp, hr, hv, hb⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, _, hf₁, _, _, hc⟩ := prepare_seen hw hf rfl hp
+  rcases hb with ⟨_, he, _, _⟩ | ⟨_, he, rfl⟩
+  · cases he
+  · cases he
+    have hj := (casOpts_pos hr).1
+    rw [(loc_get hl).2.2] at hj hv ⊢
+    refine ⟨pos, ?_⟩
+    rw [← hc]
+    exact loadM_seen_val hl hf₁ hj hv fail
+
+/-- A successful strong CAS leaves the caller at its new last message. -/
+theorem cmpxchg_write_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
+      some (.ok (none, m'))) :
+    W.ownPos m' m.current = (W.hist m').size - 1 := by
+  obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, hchain, hf₁, _, _, hc⟩ := prepare_seen hw hf rfl hp
+  rcases hb with ⟨rfl, _, _, rfl⟩ | ⟨_, he, _⟩
+  · have hp' := cas_chain_pos (by rwa [(loc_get hl).2.2]) hr hv
+    have hj := (casOpts_pos hr).1
+    rw [(loc_get hl).2.2] at hp' hj
+    have hlr : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
+    rw [W.sz_eq, (loc_get hl).2.2, ← hc]
+    exact rmwM_seen_last hlr (hf₁.of_eq rfl (Nat.le_refl _)) (by omega) succ _ new
+  · cases he
+
+/-- Weak CAS includes every matching-value spurious failure. Each permitted branch uses the
+same preparation, read and RMW facts as strong CAS. -/
+theorem cmpxchgWeak_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, hchain, hf₁, he, hn, hc⟩ := prepare_seen hw hf rfl hp
+  rcases hb with ⟨rfl, rfl, _, _, rfl⟩ | ⟨_, _, rfl⟩
+  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
+    rw [W.sz_eq, (loc_get hl).2.2]
+    obtain ⟨hf', hm⟩ := casRmw_seen hl hf₁ hchain hj hv succ
+    refine ⟨hf', fun u => by rw [← he u]; exact hm u, Nat.le_trans hn ?_, ?_⟩
+    · unfold rmwM
+      split <;> dsimp only [observeM] <;> rw [insertM_nextMsg] <;> exact Nat.le_succ _
+    · unfold rmwM
+      split <;> exact insertM_current.trans hc
+  · obtain ⟨j, hj⟩ := weakCasOpts_read hr
+    rw [(loc_get hl).2.2]
+    obtain ⟨hf', hm⟩ := loadM_read_seen hl hf₁ hj fail
+    refine ⟨hf', fun u => by rw [← he u]; exact hm u, Nat.le_trans hn ?_, (loadM_current _ _ _ _).trans hc⟩
+    unfold loadM; split <;> exact Nat.le_refl _
+
+/-- The same actual-message fact includes matching-value spurious weak-CAS failures. -/
+theorem cmpxchgWeak_read_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
+      some (.ok (some old, m'))) :
+    W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
+      ∃ j < (W.hist m').size, (W.hist m')[j]!.Val old ∧ W.ownPos m' m.current = j := by
+  obtain ⟨hf', hm, _, _⟩ := cmpxchgWeak_seen hw hf h
+  refine ⟨hf', hm, ?_⟩
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, rd, hacc, _, hp, hr, hv, hb⟩ := cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, _, hf₁, _, _, hc⟩ := prepare_seen hw hf rfl hp
+  rcases hb with ⟨_, _, he, _, _⟩ | ⟨_, he, rfl⟩
+  · cases he
+  · cases he
+    obtain ⟨j, hj⟩ := weakCasOpts_read hr
+    have hpos := readOpts_lt hj
+    rw [(loc_get hl).2.2] at hpos hv ⊢
+    refine ⟨pos, ?_⟩
+    rw [← hc]
+    exact loadM_seen_val hl hf₁ hpos hv fail
+
+/-- A successful weak CAS has the same newest-write floor as a successful strong CAS. -/
+theorem cmpxchgWeak_write_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
+      some (.ok (none, m'))) :
+    W.ownPos m' m.current = (W.hist m').size - 1 := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hb⟩ := cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, _, _, hchain, hf₁, _, _, hc⟩ := prepare_seen hw hf rfl hp
+  rcases hb with ⟨rfl, rfl, _, _, rfl⟩ | ⟨_, he, _⟩
+  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
+    have hp' := cas_chain_pos (by rwa [(loc_get hl).2.2]) hj hv
+    have hpos := (casOpts_pos hj).1
+    rw [(loc_get hl).2.2] at hp' hpos
+    have hlr : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
+    rw [W.sz_eq, (loc_get hl).2.2, ← hc]
+    exact rmwM_seen_last hlr (hf₁.of_eq rfl (Nat.le_refl _)) (by omega) succ _ new
+  · cases he
 
 end Word
 end Conc

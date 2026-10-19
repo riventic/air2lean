@@ -268,7 +268,7 @@ The coordinated [source audit](https://github.com/riventic/air2lean/pull/397#iss
 checked every pinned release, with Zig 0.17 first. These findings are source
 analyses, not new native runs or kernel-checked counterexamples.
 The wake mismatch is also recorded as open finding S5 in the
-[2026-10-14 audit record](soundness-2026-10-14.md#s5-the-handwritten-std-wake-path-has-different-cardinality-soundness-open),
+[2026-10-14 audit record](soundness-2026-10-14.md#s5-the-hand-models-futex-wake-count-is-not-the-native-one-soundness-reported-2026-10-16),
 with the required translated-path regression still pending.
 
 | Zig | Source file | Linux wrapper | Darwin wrapper | Full-file SHA256 |

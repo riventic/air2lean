@@ -13,6 +13,11 @@ hands the client the facts of the memory model about the op (`Word.Ok.load`, `Ok
 `Ok.weakCas`, `Ok.futexWait`; `ZigLean/Conc/Word.lean`) and the lock's invariant after the op, whose
 rest has the word's new cells (`FLock.Inv.wordOp`). The client shows its `U` after the op.
 
+The continuations also receive the actual reader's resulting floor (or the new last position
+for a write), conditionally on the invariant's existing `Word.Fresh`. This is information
+derived from the primitive run, not an initial precondition. A read's witness has the returned
+value; it need not be the separate happens-before witness when several writes have equal bytes.
+
 | Rule | Op |
 |---|---|
 | `wp_wordLoad`, `wp_wordLoadAs` | atomic load (bits, or decoded) |
@@ -76,7 +81,14 @@ theorem wp_wordLoad (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val v → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      (W.Fresh m₁ → ∃ i < (W.hist m').size,
+        (W.hist m')[i]!.Val v ∧ W.ownPos m' t = i) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' →
       Q (v, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n := by
@@ -87,7 +99,10 @@ theorem wp_wordLoad (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (hw.load_noErr ht hcs hcr e he).elim) fun v m' hr => ?_
   obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hw.load rfl ht hcs hr
-  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' v j hg₁ rfl hU hY hj hv hfl hacq hh hw' hop
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.atomicLoad_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hr
+  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' v j hg₁ rfl hU hY hj hv hfl hacq hh hw' hop hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩)
+    (fun hf => (Word.atomicLoad_read_seen hw hf hr).2.2)
     (hiL.wordOp hY hw hw' hop hap)⟩
 
 /-- An atomic load at the word with a decode (`atomicLoadAsC`), by thread `t` (`g`). -/
@@ -103,7 +118,14 @@ theorem wp_wordLoadAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.
       (Packed.ofBits? (α := α) b).run = some (.ok r) →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      (W.Fresh m₁ → ∃ i < (W.hist m').size,
+        (W.hist m')[i]!.Val b ∧ W.ownPos m' t = i) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' →
       Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α ord 4 W.ptr : CM Tgt σ α).run s) Q G m n := by
@@ -118,7 +140,10 @@ theorem wp_wordLoadAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.
     exact hdec G₁ rY _ hg₁ rfl hU j hj b hv
   obtain ⟨b, hb, hd⟩ := atomicLoadAs_ok hr
   obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hw.load rfl ht hcs hb
-  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' b r j hg₁ rfl hU hY hd hj hv hfl hacq hh hw' hop
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.atomicLoad_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hb
+  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' b r j hg₁ rfl hU hY hd hj hv hfl hacq hh hw' hop hA (fun hf => let hs := Word.atomicLoad_seen hw hf hb; ⟨hs.1, hs.2.1⟩)
+    (fun hf => (Word.atomicLoad_read_seen hw hf hb).2.2)
     (hiL.wordOp hY hw hw' hop hap)⟩
 
 /-- An RMW of a `u32` at the word (`atomicRmwC`), by thread `t` (`g`): it reads the newest write
@@ -134,7 +159,13 @@ theorem wp_wordRmw (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
         (Word.rmwEnt m' t ord (W.hist m₁)[(W.hist m₁).size - 1]! (op.apply signed old v)) →
       (ord.isAcq = true →
         VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
-      W.Ok m' → W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' → Q (old, s) G₁ m' k)
+      W.Ok m' → W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      (W.Fresh m₁ → W.ownPos m' t = (W.hist m').size - 1) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' → Q (old, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC op signed ord 4 W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n := by
   unfold atomicRmwC
@@ -144,7 +175,10 @@ theorem wp_wordRmw (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
     hP.stopW hW hi₁ (by rw [hg₁]; exact hgone)
   refine WP.callMC (fun e he => (hw.rmw_noErr ht hcs hcr e he).elim) fun old m' hr => ?_
   obtain ⟨hv, hw', hop, hH, hh, hacq⟩ := hw.rmw rfl ht hcs hr
-  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' old hg₁ rfl hU hY hv hH hh hacq hw' hop
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.atomicRmw_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hr
+  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' old hg₁ rfl hU hY hv hH hh hacq hw' hop hA (fun hf => let hs := Word.atomicRmw_seen hw hf hr; ⟨hs.1, hs.2.1⟩)
+    (fun hf => Word.atomicRmw_write_seen hw hf hr)
     (hiL.wordOp hY hw hw' hop hap)⟩
 
 /-- An RMW at the word with a decode (`atomicRmwAsC`), by thread `t` (`g`). -/
@@ -164,7 +198,13 @@ theorem wp_wordRmwAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.I
         (op.apply false old (Packed.toBits v))) →
       (ord.isAcq = true →
         VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
-      W.Ok m' → W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' → Q (r, s) G₁ m' k)
+      W.Ok m' → W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      (W.Fresh m₁ → W.ownPos m' t = (W.hist m').size - 1) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC op ord 4 W.ptr v : CM Tgt σ α).run s) Q G m n := by
   unfold atomicRmwAsC
@@ -178,7 +218,10 @@ theorem wp_wordRmwAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.I
     exact hdec G₁ rY _ hg₁ rfl hU b hv
   obtain ⟨old, hb, hd⟩ := atomicRmwAs_ok hr
   obtain ⟨hv, hw', hop, hH, hh, hacq⟩ := hw.rmw rfl ht hcs hb
-  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' old r hg₁ rfl hU hY hd hv hH hh hacq hw' hop
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.atomicRmw_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hb
+  exact ⟨by rw [hop.threads], h k hk G₁ rY _ m' old r hg₁ rfl hU hY hd hv hH hh hacq hw' hop hA (fun hf => let hs := Word.atomicRmw_seen hw hf hb; ⟨hs.1, hs.2.1⟩)
+    (fun hf => Word.atomicRmw_write_seen hw hf hb)
     (hiL.wordOp hY hw hw' hop hap)⟩
 
 /-- A strong `cmpxchg` at the word with a decode (`cmpxchgAsC`), by thread `t` (`g`): on success
@@ -192,17 +235,25 @@ theorem wp_wordCasAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.I
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
-      W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' →
       ((W.hist m₁)[(W.hist m₁).size - 1]!.Val (Packed.toBits exp) → W.Holds m' (Packed.toBits new) →
         W.hist m' = (W.hist m₁).push
           (Word.rmwEnt m' t succ (W.hist m₁)[(W.hist m₁).size - 1]! (Packed.toBits new)) →
         (succ.isAcq = true →
           VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
+        (W.Fresh m₁ → W.ownPos m' t = (W.hist m').size - 1) →
         Q (none, s) G₁ m' k) ∧
       (∀ j b r, b ≠ Packed.toBits exp → (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k))
+        W.hist m' = W.hist m₁ →
+        (W.Fresh m₁ → ∃ i < (W.hist m').size,
+          (W.hist m')[i]!.Val b ∧ W.ownPos m' t = i) → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
   unfold cmpxchgAsC
@@ -218,14 +269,20 @@ theorem wp_wordCasAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.I
       exact hdec G₁ rY _ hg₁ rfl hU j hj _ hv
   rcases cmpxchgAs_ok hr with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
   · obtain ⟨hw', hop, ⟨-, hv, hH, hh, hacq⟩ | ⟨j, old, he, -⟩⟩ := hw.cas rfl ht hcs ho
-    · exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop
-        (hiL.wordOp hY hw hw' hop hap)).1 hv hH hh hacq⟩
+    · have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+        Word.cmpxchg_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff ho
+      exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop hA (fun hf => let hs := Word.cmpxchg_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+        (hiL.wordOp hY hw hw' hop hap)).1 hv hH hh hacq
+        (fun hf => Word.cmpxchg_write_seen hw hf ho)⟩
     · cases he
   · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hne, hj, hv, hfl, hacq, hh⟩⟩ := hw.cas rfl ht hcs ho
     · cases he
     · cases he
-      exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop
-        (hiL.wordOp hY hw hw' hop hap)).2 j b v hne hd hj hv hfl hacq hh⟩
+      have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+        Word.cmpxchg_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff ho
+      exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop hA (fun hf => let hs := Word.cmpxchg_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+        (hiL.wordOp hY hw hw' hop hap)).2 j b v hne hd hj hv hfl hacq hh
+        (fun hf => (Word.cmpxchg_read_seen hw hf ho).2.2)⟩
 
 /-- A strong `cmpxchg` of a `u32` at the word (`cmpxchgC`), by thread `t` (`g`): on success an
 RMW of the newest write, which holds `exp`; on failure a read of write `j`, whose value is not
@@ -235,17 +292,25 @@ theorem wp_wordCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
-      W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' →
       ((W.hist m₁)[(W.hist m₁).size - 1]!.Val exp → W.Holds m' new →
         W.hist m' = (W.hist m₁).push
           (Word.rmwEnt m' t succ (W.hist m₁)[(W.hist m₁).size - 1]! new) →
         (succ.isAcq = true →
           VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
+        (W.Fresh m₁ → W.ownPos m' t = (W.hist m').size - 1) →
         Q (none, s) G₁ m' k) ∧
       (∀ j b, b ≠ exp → j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some b, s) G₁ m' k))
+        W.hist m' = W.hist m₁ →
+        (W.Fresh m₁ → ∃ i < (W.hist m').size,
+          (W.hist m')[i]!.Val b ∧ W.ownPos m' t = i) → Q (some b, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC (n := 32) succ fail 4 W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   unfold cmpxchgC
@@ -256,11 +321,13 @@ theorem wp_wordCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
   refine WP.callMC (fun e he => (hw.cas_noErr (fail := fail) (new := new) ht hcs hcr e he).elim)
     fun r m' hr => ?_
   obtain ⟨hw', hop, hcase⟩ := hw.cas rfl ht hcs hr
-  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop (hiL.wordOp hY hw hw' hop hap)
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.cmpxchg_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hr
+  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop hA (fun hf => let hs := Word.cmpxchg_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordOp hY hw hw' hop hap)
   refine ⟨by rw [hop.threads], ?_⟩
   rcases hcase with ⟨rfl, hv, hH, hh, hacq⟩ | ⟨j, b, rfl, hne, hj, hv, hfl, hacq, hh⟩
-  · exact hk.1 hv hH hh hacq
-  · exact hk.2 j b hne hj hv hfl hacq hh
+  · exact hk.1 hv hH hh hacq (fun hf => Word.cmpxchg_write_seen hw hf hr)
+  · exact hk.2 j b hne hj hv hfl hacq hh (fun hf => (Word.cmpxchg_read_seen hw hf hr).2.2)
 
 /-- A weak `cmpxchg` of a `u32` at the word (`cmpxchgWeakC`), by thread `t` (`g`): on success an
 RMW of the newest write, which holds `exp`; on failure (spurious ones too) a read of write `j`. -/
@@ -269,17 +336,25 @@ theorem wp_wordWeakCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL 
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
-      W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' →
       ((W.hist m₁)[(W.hist m₁).size - 1]!.Val exp → W.Holds m' new →
         W.hist m' = (W.hist m₁).push
           (Word.rmwEnt m' t succ (W.hist m₁)[(W.hist m₁).size - 1]! new) →
         (succ.isAcq = true →
           VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
+        (W.Fresh m₁ → W.ownPos m' t = (W.hist m').size - 1) →
         Q (none, s) G₁ m' k) ∧
       (∀ j b, j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b →
         Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some b, s) G₁ m' k))
+        W.hist m' = W.hist m₁ →
+        (W.Fresh m₁ → ∃ i < (W.hist m').size,
+          (W.hist m')[i]!.Val b ∧ W.ownPos m' t = i) → Q (some b, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC (n := 32) succ fail 4 W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   unfold cmpxchgWeakC
@@ -290,11 +365,13 @@ theorem wp_wordWeakCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL 
   refine WP.callMC (fun e he => (hw.weakCas_noErr (fail := fail) (new := new) ht hcs hcr e he).elim)
     fun r m' hr => ?_
   obtain ⟨hw', hop, hcase⟩ := hw.weakCas rfl ht hcs hr
-  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop (hiL.wordOp hY hw hw' hop hap)
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.cmpxchgWeak_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hr
+  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordOp hY hw hw' hop hap)
   refine ⟨by rw [hop.threads], ?_⟩
   rcases hcase with ⟨rfl, hv, hH, hh, hacq⟩ | ⟨j, b, rfl, hj, hv, hfl, hacq, hh⟩
-  · exact hk.1 hv hH hh hacq
-  · exact hk.2 j b hj hv hfl hacq hh
+  · exact hk.1 hv hH hh hacq (fun hf => Word.cmpxchgWeak_write_seen hw hf hr)
+  · exact hk.2 j b hj hv hfl hacq hh (fun hf => (Word.cmpxchgWeak_read_seen hw hf hr).2.2)
 
 /-- A weak `cmpxchg` at the word with a decode (`cmpxchgWeakAsC`), by thread `t` (`g`). -/
 theorem wp_wordWeakCasAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW : W.InRest U)
@@ -306,17 +383,25 @@ theorem wp_wordWeakCasAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW :
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
       U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
-      W.Op t m₁ m' → L.Inv G₁ (rsum (W.cellsR m') rY) m' →
+      W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' →
       ((W.hist m₁)[(W.hist m₁).size - 1]!.Val (Packed.toBits exp) → W.Holds m' (Packed.toBits new) →
         W.hist m' = (W.hist m₁).push
           (Word.rmwEnt m' t succ (W.hist m₁)[(W.hist m₁).size - 1]! (Packed.toBits new)) →
         (succ.isAcq = true →
           VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (m'.clocks[t]!) = true) →
+        (W.Fresh m₁ → W.ownPos m' t = (W.hist m').size - 1) →
         Q (none, s) G₁ m' k) ∧
       (∀ j b r, (Packed.ofBits? (α := α) b).run = some (.ok r) →
         j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
         (fail.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
-        W.hist m' = W.hist m₁ → Q (some r, s) G₁ m' k))
+        W.hist m' = W.hist m₁ →
+        (W.Fresh m₁ → ∃ i < (W.hist m').size,
+          (W.hist m')[i]!.Val b ∧ W.ownPos m' t = i) → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakAsC succ fail 4 W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
   unfold cmpxchgWeakAsC
@@ -332,14 +417,20 @@ theorem wp_wordWeakCasAs {α : Type} [Packed α 32] (hP : L.Fits K P U ok) (hW :
       exact hdec G₁ rY _ hg₁ rfl hU j hj _ hv
   rcases cmpxchgWeakAs_ok hr with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
   · obtain ⟨hw', hop, ⟨-, hv, hH, hh, hacq⟩ | ⟨j, old, he, -⟩⟩ := hw.weakCas rfl ht hcs ho
-    · exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop
-        (hiL.wordOp hY hw hw' hop hap)).1 hv hH hh hacq⟩
+    · have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+        Word.cmpxchgWeak_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff ho
+      exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+        (hiL.wordOp hY hw hw' hop hap)).1 hv hH hh hacq
+        (fun hf => Word.cmpxchgWeak_write_seen hw hf ho)⟩
     · cases he
   · obtain ⟨hw', hop, ⟨he, -⟩ | ⟨j, old, he, hj, hv, hfl, hacq, hh⟩⟩ := hw.weakCas rfl ht hcs ho
     · cases he
     · cases he
-      exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop
-        (hiL.wordOp hY hw hw' hop hap)).2 j b v hd hj hv hfl hacq hh⟩
+      have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+        Word.cmpxchgWeak_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff ho
+      exact ⟨by rw [hop.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hop hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+        (hiL.wordOp hY hw hw' hop hap)).2 j b v hd hj hv hfl hacq hh
+        (fun hf => (Word.cmpxchgWeak_read_seen hw hf ho).2.2)⟩
 
 /-- A futex wake at the word (`futexWakeC`), by thread `t` (`g`): the lock's invariant holds with
 the same rest; the client shows its `U` after the wake. -/
@@ -382,10 +473,13 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       (∀ l, W.In l → rY.heap l = none) → W.Op t { m₁ with current := t } M →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+      (∀ l, W.In l → rY.heap l = none) →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Op t { m₁ with current := t } M ∧ W.hist M = W.hist m₁ ∧ W.Ok M ∧
           M.blocks = m₁.blocks)) →
       U (upd G₁ t g) (rsum (W.cellsR m₁) rY) M)
@@ -414,22 +508,24 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
   refine ⟨fun _ => hlive G₁ m₁ hg₁ hi₁, fun hq => ⟨fun _ => hw₀.futexWait_run ht0,
     fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hw₀.futexWait_run ht0), fun b m' hr => ?_⟩⟩
   have hl := hiL.waitOff hph₁ hw hap hX hq hr
+  have hfields := Word.futexWait_fields hr
   rcases hw₀.futexWait rfl ht0 hiL.w.csize hr with
     ⟨-, rfl, rfl⟩ | ⟨-, M, hok₂, hop, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY (.inl rfl)⟩)
+    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hfields (.inl rfl)⟩)
   · simp only [↓reduceIte] at hl ⊢
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
-    exact ⟨(hP.inv _ _).mpr ⟨_, hl, hUs G₁ rY m₁ M hg₁ hU hY hop hh hok₂ hbl hU32⟩,
-      h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs, hUo G₁ rY m₁ _ hg₁ hU hY (.inr (.inl rfl))⟩)⟩
+    exact ⟨(hP.inv _ _).mpr ⟨_, hl, hUs G₁ rY m₁ M hg₁ hU hY hop hfields hh hok₂ hbl hU32⟩,
+      h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs,
+        hUo G₁ rY m₁ _ hg₁ hU hY ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨hc, hl'⟩ := hl
     rw [hback] at hl'
     exact h G₁ _ hc
-      ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY (.inr (.inr ⟨hop, hh, hok₂, hbl⟩))⟩)
+      ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hfields (.inr (.inr ⟨hop, hh, hok₂, hbl⟩))⟩)
 
 /-- **A futex wait at the word** (`futexWaitC`, the bits `e`) by thread `t` out of the lock's
 code (`g`, at `out`): while it waits it is `away` (`L.set g .away rnil`). The client says that
@@ -443,11 +539,15 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → W.Op t { m₁ with current := t } M → W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks →
+      (∀ l, W.In l → rY.heap l = none) → W.Op t { m₁ with current := t } M →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks →
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+      (∀ l, W.In l → rY.heap l = none) →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Op t { m₁ with current := t } M ∧ W.hist M = W.hist m₁ ∧ W.Ok M ∧
           M.blocks = m₁.blocks)) →
       U (upd G₁ t g) (rsum (W.cellsR m₁) rY) M)
@@ -479,15 +579,22 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (hos : ∀ G₁ m₁ o, G₁ t = g → m₁.current = t → P.inv G₁ m₁ → P.inv G₁ { m₁ with os := o })
     (hrd : ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       (∀ l, W.In l → rY.heap l = none) → W.hist m' = W.hist m₁ → W.Ok m' → W.Op t m₁ m' →
+      (m₁.nextMsg ≤ m'.nextMsg ∧ ∀ hF,
+        (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        ∃ σ, AMap hF { m₁ with current := t } { m' with current := t } σ) →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
       L.Inv G₁ (rsum (W.cellsR m') rY) m' → P.inv G₁ m')
     (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → U (upd G₁ t (L.set g .away rnil)) rX m₁)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       (∀ l, W.In l → rY.heap l = none) → W.Op t { m₁ with current := t } M →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+      (∀ l, W.In l → rY.heap l = none) →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Op t { m₁ with current := t } M ∧ W.hist M = W.hist m₁ ∧ W.Ok M ∧
           M.blocks = m₁.blocks)) →
       U (upd G₁ t g) (rsum (W.cellsR m₁) rY) M)
@@ -509,10 +616,12 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
   refine ⟨fun er he => absurd he (hw.load_noErr ht hcs hcr er), fun _ => .inr hcost,
     fun v m₂ hr => ?_⟩
   obtain ⟨-, -, -, -, -, hh, hw', hop⟩ := hw.load rfl ht hcs hr
+  have hA := Word.amap_for_actor (W := W) rfl fun hF hoff =>
+    Word.atomicLoad_amap hw (by change t < m₁.clocks.size; rw [hcs]; exact ht) hoff hr
   have hc₂ : m₂.current = t := hop.current
   have hi₂ : P.inv (upd G₁ t g) m₂ := by
     rw [← hg₁, upd_same]
-    exact hrd G₁ rY _ m₂ hg₁ rfl hU hY hh hw' hop (hiL.wordOp hY hw hw' hop hap)
+    exact hrd G₁ rY _ m₂ hg₁ rfl hU hY hh hw' hop hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordOp hY hw hw' hop hap)
   refine ⟨by rw [hop.threads], fun _ => h k (by omega) _ G₁ m₂ hc₂ (by decide) hi₂,
     fun _ => ⟨h k (by omega) _ G₁ m₂ hc₂ (by decide) hi₂, fun k' hk' => ?_⟩⟩
   -- the sleep: `t` goes away, then the scheduler's wait; at the end an interrupt's delivery

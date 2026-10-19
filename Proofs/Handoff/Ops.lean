@@ -50,7 +50,8 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     hu.ws.keep (hk _ (.inl rfl)), hu.we.keep (hk _ (.inr (.inl rfl))),
     hu.wv.keep (hk _ (.inr (.inr rfl))),
     hu.cinv.stay t hhS hhE apE.ptr_ne (fun _ _ h => h) hclk,
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id, hu.places,
+    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
+      hu.einv.fresh, hu.places,
     fun h => by rw [hhE]; exact hu.ep1 h, by rw [hhE]; exact VClock.le_trans hu.ep0 (hclk 0),
     hu.ent, hu.hold, fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, hu.q, hu.xc⟩
   · rw [hhS]

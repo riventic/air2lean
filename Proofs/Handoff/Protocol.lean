@@ -427,7 +427,8 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
   have hk := fun (W : Word 32 4) => W.keep_same m t m.seen m.nextMsg m.waiters m.woken m.groups
   ⟨hu.shape, hu.io, hu.rest, hu.blk, hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _),
     hu.cinv.stay t rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _),
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id,
+    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id
+      hu.einv.fresh,
     hu.places, hu.ep1, hu.ep0, hu.ent, hu.hold, hu.reg, hu.lvc, hu.fin, hu.q, hu.xc⟩
 
 /-- The rest has the bytes of `io`. -/
@@ -467,6 +468,7 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     {hF : Heap} (hu : U Lo G rX m) (hs : FStepIn hF m m')
     (hio : ∀ x, x < Lo.io → hF (0, x) ≠ none)
     (hwL : ∀ x, (L Lo).o ≤ x → x < (L Lo).o + 4 → hF ((L Lo).b, x) ≠ none)
+    (hwB : ∀ l, Lo.BoxW l → hF l ≠ none)
     (hok : ∀ i l, (L Lo).Loc m i l → l.len = 4) (hrest : Rest Lo rX' m') (hbk : BlkOk Lo m')
     (kS : Lo.WS.KeepK m m') (kE : Lo.WE.KeepK m m') (kV : Lo.WV.KeepK m m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U Lo (upd G t g) rX' m' := by
@@ -488,7 +490,9 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
-      (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h),
+      (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h)
+      (hu.einv.fresh.fstep hs (fun x h1 h2 => hwB _ (Lo.wv_box ⟨rfl, h1, h2⟩))
+        (fun i l hl => (hu.wv.loc i l hl).1)),
     by rw [hX']; exact hu.places, fun h1 => ?_, ?_, fun h0 => ?_, fun h1 => ?_,
     fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, fun w hw => ?_,
     fun u hu' => by rw [hX'] at hu' ⊢; exact hu.xc u hu'⟩
@@ -610,7 +614,9 @@ theorem U_stepIn {G G₀ G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : Thre
     keepK_of hu.rest (fun _ => box_live hu) hs (fun _ _ h => frame_rest h) hW hwo
       (fun l hl => hcs l (hW l hl))
   exact U_frame hu hs (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
-    (fun x h1 h2 => frame_word hi h1 h2) (fun i l hl => (hi.w.loc.ok i l hl).1)
+    (fun x h1 h2 => frame_word hi h1 h2)
+    (fun l hl => frame_rest (rest_box hu.rest (fun _ => box_live hu) hl))
+    (fun i l hl => (hi.w.loc.ok i l hl).1)
     (hu.rest.congr hcs) (blk_of hi' hu.rest) (hk _ (fun _ => Lo.ws_box) hu.ws)
     (hk _ (fun _ => Lo.we_box) hu.we) (hk _ (fun _ => Lo.wv_box) hu.wv) hX hph
 
@@ -653,7 +659,9 @@ theorem U_own {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : 
         (fun _ _ h => frame_rest h) (three_box hW') hwo
         (fun l hl => hcs l (three_box hW' l hl) (hap l hl))
   exact U_frame hu hs (fun x hx => frame_rest (by simpa [FHeap.erase] using rest_io hu.rest hx))
-    (fun x h1 h2 => frame_word hi h1 h2) (fun i l hl => (hi.w.loc.ok i l hl).1) hrest hbk'
+    (fun x h1 h2 => frame_word hi h1 h2)
+    (fun l hl => frame_rest (rest_box hu.rest (fun _ => box_live hu) hl))
+    (fun i l hl => (hi.w.loc.ok i l hl).1) hrest hbk'
     (hkW _ (.inl rfl)) (hkW _ (.inr (.inl rfl))) (hkW _ (.inr (.inr rfl))) hX hph
 
 /-! ## A step of the condition's or the event's code, as the rest sees it -/
@@ -849,6 +857,25 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rcases hW with rfl | rfl
       · exact absurd e ne_VS
       · exact absurd e ne_VE
+  have hVW : ∀ l, Lo.WV.In l → ¬ W.In l := by
+    rcases three_apart hW3 (.inr (.inr rfl)) with heq | hap
+    · rcases hW with rfl | rfl
+      · exact False.elim (ne_VS heq)
+      · exact False.elim (ne_VE heq)
+    · exact hap
+  have hoff : ∀ x, W.o ≤ x → x < W.o + 4 → (Lo.WV.cellsR m).heap.erase (W.b, x) = none := by
+    intro x h1 h2
+    have hn : ¬ Lo.WV.In (W.b, x) := fun hl => hVW _ hl ⟨rfl, h1, h2⟩
+    simp [FHeap.erase, Word.cellsR, cellsAt_none hn]
+  obtain ⟨σ, hA⟩ := hs.atomics (Lo.WV.cellsR m).heap.erase hoff
+  have hFV : Lo.WV.Fresh m' := Word.Fresh.amap
+    (m := { m with current := t }) (m' := { m' with current := t }) hu.einv.fresh hA hs.nextMsg
+    (fun x h1 h2 => by
+      have hcell := cellsAt_some (W := Lo.WV.In) (l := (Lo.WV.b, x)) ⟨rfl, h1, h2⟩
+        (hu.wv.cellIn ⟨rfl, h1, h2⟩) (m := m)
+      intro hnone
+      exact hcell (Option.map_eq_none_iff.mp hnone))
+    (fun i l hl => (hu.wv.loc i l hl).1)
   -- a new waiter in the futex queue is `t` at the epoch, registered
   have hnw : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w = (t, Lo.WE.ptr) ∧ ((G t).2.c).waits = true) :=
     fun w hw => by
@@ -885,7 +912,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2 (fun hne => ?_) hV (fun w hw => ?_)
       hclk (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
-      (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
+      (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h') hFV
     · by_cases hl : (L Lo).ph (upd G t ((L Lo).set ((C Lo).set (G t) p) q h) t) = (L Lo).ph (G t)
       · exact .inl hl
       · obtain ⟨-, hq'⟩ := hlq (Ne.symm hl)
