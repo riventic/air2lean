@@ -19,7 +19,7 @@ part and a frame. Everything in `Mem` outside the live bytes is unconstrained.
 | | what the allocator reads | why no assertion constrains it | evidence |
 |---|---|---|---|
 | O3 | the atomic location of `addr_hint` (`@atomicLoad(.unordered)`, `@cmpxchgStrong`) | atomic locations are `Mem.atomics`, not heap cells; a location of another size at the same bytes made `locIdx` throw `.unspecified`. Resolved in the model: an overlapping location whose accesses all happened before is retired (`retireAt`); only racing mixed sizes are `.unspecified` | `alloc_odd` (regression: no error) |
-| O1 | `@intFromPtr(addr_hint)` after the hinted mapping was unmapped, and the `@ptrFromInt` alignment check of the derived hint | a dead block's address is not in the heap; a memory with the same heap and the block's metadata missing gives `.illegal` (a misaligned block, `.panic`, is not mechanised) | `alloc_no_triple_after_free` |
+| O1 | `@intFromPtr(addr_hint)` after the hinted mapping was unmapped, and the `@ptrFromInt` alignment check of the derived hint | a dead block's address is not in the heap; a memory with the same heap and the block's metadata missing gives `.illegal` (a misaligned block, `.panic`, is not mechanised) | `hinted_heap`, `alloc_hintedLost`, `alloc_hinted` |
 | O2 | the size of the mapping, in `free` (`munmap(ptr[0..alignForward(len)])`) and `resize`/`remap` (tail `munmap`, `mremap` of the whole mapping) | `granted I p k bs = region p (2^k) bs ∗ I.tok p n k` hides the block of the region; when `len` is a page multiple the mapping has no tail for the token to own, so no token pins the mapping's size: with a larger mapping whose extra pages are in the frame, `free` is a legal prefix `munmap` that changes the frame's cells | argument below (not mechanised) |
 
 The theorems are in `tests/roadmap/alloc-translated/PageObstruction.lean` (checked by
@@ -32,10 +32,21 @@ The theorems are in `tests/roadmap/alloc-translated/PageObstruction.lean` (check
   atomic location at `addr_hint`. `alloc(1, align 1)` from it used to throw `.unspecified`
   (`not_allocSpec_at_start`, `alloc_no_triple_at_start`). The mixed-size policy now retires a
   location whose accesses all happened before (`retireAt`, `docs/weak-cas.md`), so it succeeds.
-* `alloc_no_triple_after_free`: `hinted` is the state after `alloc` then `free` (the `#guard`s
+* O1: `hinted` is the state after `alloc` then `free` (the `#guard`s
   check that the real run reaches this shape and that `alloc` succeeds from it); `hintedLost` has
   the same heap and no block 6; `alloc` from it throws `.illegal`. Both have no atomic location,
   so O1 holds independently of O3.
+
+The former `alloc_no_triple_after_free` theorem stated that, for every sound heap-only `Logic L`,
+every context `c`, return address `ra`, precondition `P` and postcondition `Q`, if `hinted.heap`
+splits disjointly as `hP ∪ hF` with `P hP`, then `¬ L.T P (vt.alloc c 1 0 ra) Q`. Its argument was exactly
+the checked counterexample above: `hintedLost` has the same live heap and is sequential, but the
+allocation gives `.illegal`, which a sound triple excludes. The theorem about the legacy
+judgment is retired with that judgment's clients. The memory equality and both allocation
+outcomes remain kernel-checked in `PageObstruction.lean`; the executable guards connecting
+`hinted` to the real translated `alloc`/`free` run are retained. The replacement specification
+is `FAllocSpec`: `PageAlloc.own` keeps
+the missing address as `known`, so the bad memory does not satisfy its precondition.
 
 O2 in detail: let `m` be `mem0` plus an 8 KiB mapping (block 6), the precondition own the first
 4 KiB as `region` with a token on the empty heap, the frame own the second 4 KiB. `free(⟨p, 4096⟩)`

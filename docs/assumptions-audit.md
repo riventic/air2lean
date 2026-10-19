@@ -190,6 +190,12 @@ The report has a versioned schema and contains:
   module inventory, whether the wrapper built it, and the policy/toolchain identity.
 - `extractor`: exact SHA256 hashes of the extractor source, toolchain pin, Lake configuration,
   Lake dependency trace, and imported extractor olean, plus whether validated output was reused.
+- `module_imports`: each actually imported module's direct import names, read from Lean's loaded
+  module data, including imports unused by the declaration graph. A module loaded only for IR has
+  `null` rather than an invented empty import list. An older extractor's absent metadata remains
+  `null` in the policy report. This field is observational: it changes neither policy nor replay
+  admission and does not authenticate resolved artifact paths, compiled/source correspondence,
+  registered-witness completeness or replay-cache freshness by itself.
 - `theorems`: every checked theorem name and defining module, its transitive `axioms`,
   direct `dependencies`, transitive `opaque_dependencies`, logical dependencies carrying
   `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status,
@@ -229,10 +235,22 @@ scope stays `all-shipped-modules` with `modules` the shipped inventory.
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers
 that have independently built current artifacts; its report says `build_checked: false`.
+`--all-declarations` additionally seeds every declaration in the selected modules, including
+unused private definitions and compiler-generated recursors, and records their names in
+`selected_declaration_roots`. It uses the same dependency traversal, policy and kernel replay.
+The default roots remain theorems and project boundary declarations; the flag does not select
+every unused declaration in imported modules or certify that a dependency is legacy-free.
 The extractor always runs `lake --rehash build AssuranceTools` to validate its source,
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
 and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt
 output and changed source or release pin force rebuilding. There is no skip-compile flag.
+These hashes are kept as one record per context (`.lake/assurance/tool-traces/<context
+hash>.json`), so invocations with different contexts do not invalidate each other's records; a
+context without a valid record unlinks the olean and Lake rebuilds it. All invocations in one
+worktree share the olean: an exclusive lock (`.lake/assurance/tool.lock`) is held from
+preparation until the `lake env lean` run that imports the olean ends, so parallel audits never
+remove or rebuild it under each other. Kernel replay runs outside the lock. A lock or IO error
+fails the audit.
 The regression harness reuses a validated extractor while still importing every fixture
 into a separate real Lean driver, in serial order.
 Neither is a substitute for the default complete build-and-audit release gate. The report

@@ -39,6 +39,11 @@ input is a different key, so an entry cannot be stale; it can only be missing.
 | native build | `native/<key>` | `scripts/diff.sh`'s stock-Zig builds (`cas.py native -- ZIG build-exe\|build-lib ARGS`): the compiler binary and its `lib/` (path, size, mtime), the arguments, the target (the host identity without `-target`) and every `.zig`/`.zon` file under each source root's directory. The output (`-femit-bin`), stdout and stderr are stored and replayed. A tree that uses `@embedFile`, `ZIG_LIB_DIR` or no `-femit-bin` runs uncached. |
 | pristine source | `src/zig-<version>-<sha256>` | the `versions.toml` tarball digest (checked before extraction) |
 
+The proof-fixture checks (`scripts/fixture-checks.py`) cache nothing: every unit runs on every
+invocation, and no result is reused across runs until a sound input tracer exists (maintainer
+decision on #443, 2026-10-19; [ci.md](ci.md#full-build)). A `fixture-checks/` directory that an
+earlier version left in the cache (or in `.lake/` without it) is unused and can be deleted.
+
 Lean files outside the root package's libraries that need compiled outputs get a Lake package of
 their own that requires the root package by path, so the same Lake artifact cache covers them:
 `tests/diff` and the architecture-audit claim fixtures (`tests/roadmap/architecture-audit/claims`,
@@ -88,20 +93,40 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
-Assurance extractor traces include a fresh digest of all configured library `.lean` files,
+Assurance extractor traces include fresh input records for all configured library `.lean` files,
 including library root files, explicit glob roots and helpers outside theorem dependency
-closures. File paths,
-contents, additions and removals participate; valid file aliases bind their target bytes.
-Directory aliases, missing libraries, unbounded globs and nondefault Lake `srcDir`
-configurations are rejected
-by this source inventory rather than silently binding a decoy tree. The digest is checked
-before and after preparation and extraction, without a persistent metadata-only cache.
+closures. The existing `input_tree_records` traversal binds file paths, link identities,
+target bytes, additions and removals for both sources and runtime inputs. Directory aliases
+use the same traversal; broken links and cycles fail closed. Missing libraries, unbounded
+globs and nondefault Lake `srcDir` are rejected. Source selection conservatively includes
+each configured glob's entire first module component. Configuration (`lakefile.toml`,
+`lean-toolchain` and `lake-manifest.json`, including its absent state) participates in the
+same records, verified before/after preparation and after extraction on the selected root.
 
 A changed source snapshot invalidates trace reuse. It does not by itself delete the compiled
 extractor: Lake still validates its actual dependency/build trace with `--rehash` on every
 preparation and rebuilds when needed. This avoids recompiling the extractor for an unrelated
-proof-source edit. The snapshot is not a proof that compiled modules match those sources or a
+proof-source edit. Source records stay outside the compiled-artifact context key; the existing
+context hash and per-context records remain the sole cache. The snapshot is not a proof that compiled modules match those sources or a
 complete witness/import-closure binding; replay and receipt validation remain separate.
+
+The assurance extractor's per-context record (`.lake/assurance/tool-traces/<context hash>.json`,
+docs/assumptions-audit.md) binds the installed
+Lean executables, shared libraries and compiled logical/IR inputs, including alias identities
+and target bytes. A changed runtime invalidates reuse even if executable stubs, file sizes and
+mtimes stay unchanged. Lake still rechecks dependencies on every preparation. Runtime bytes
+are hashed before and after preparation and extraction; a change rejects the result. No
+persistent metadata-only digest cache is used. Loader overlays (`LD_*`, `DYLD_*`) are rejected.
+Caller `LEAN_PATH` libraries remain supported for theorem-universe and witness fixtures:
+their ordered roots, top-level directory selection, logical/IR/shared-library bytes and aliases
+join the same fresh binding. Changes, including added or removed companions, fail closed.
+Caller `LEAN_SYSROOT` replacement, empty/nonabsolute Lake sysroots and empty path components
+are rejected. A caller library written during preparation is rejected rather than rebound.
+This sidecar binding concerns extractor inputs; it does not authenticate replay-cache
+import closures or replace the separate proof-receipt checks.
+Headers under `include/lean`, static `.a` archives, `.lean` sources and `.ilean` information
+are outside this runtime digest. Lake still checks the extractor's own dependency/build trace;
+this runtime key does not claim to authenticate every input to native compilation.
 
 Heavy workloads (Lake builds, Lean checks, patched-compiler builds) run under
 `scripts/build-guard.py`, which admits them within one memory budget for the whole machine

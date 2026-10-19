@@ -7,10 +7,14 @@ same size and restored mtime. Main still reports `cache_reused: true`. A configu
 source fingerprint makes that trace stale. This is a cache identity finding, not a kernel
 counterexample; the test uses an injectable stand-in for Lake's dependency validation.
 
-Controls also cover added/removed unimported helpers, source-file alias target changes,
-missing source fingerprints, and mutations during preparation or extraction. The inventory
-includes root `.lean` files and the existing Lake `roots` configuration. Directory aliases
-and nondefault package/library `srcDir` with a decoy old directory are rejected explicitly.
+The original controls covered added/removed helpers, aliases, missing bindings and phase
+mutations. The post-batch-C implementation now feeds configured library inputs to #469's
+existing `input_tree_records`; it removes the duplicate walker and source-hash function.
+The same traversal covers file and directory link identities/target bytes, and rejects broken
+links and cycles. Source selection includes root `.lean` files and overapproximates each glob
+by its first module component. Nondefault package/library `srcDir` rejects even with a decoy
+old source tree. Configuration, optional manifest absence, and the selected root are bound.
+The revised causal controls are prepared but have not yet run on this integrated source.
 
 Source snapshot validity is distinct from compiled-artifact validity: a changed unrelated
 source snapshot refreshes the trace without forcibly deleting the extractor. Lake always

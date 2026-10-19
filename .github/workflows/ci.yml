@@ -575,13 +575,15 @@ jobs:
         run: python3 tests/roadmap/local-ci/test_cache.py
 
       # docs/ci.md: input keys, the restricted checkout, record lookup, and every
-      # part declared with every step after the reuse decision guarded.
+      # part declared with every step after the reuse decision guarded; the local
+      # fixture checks reuse no result.
       - name: CI result reuse regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python3 tests/roadmap/ci-reuse/test_ci_reuse.py
+          python3 tests/roadmap/fixture-checks/test_fixture_checks.py
           python3 tests/roadmap/ci-cache/test_ci_cache.py
           python3 tests/roadmap/generated/test_generated.py
           python3 scripts/ci-reuse.py check-workflow
@@ -962,7 +964,9 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: |
           python3 -B tests/roadmap/gen-integrity/test_gen_integrity.py
+          python3 -I -B tests/roadmap/gen-integrity/test_certification.py
           python3 -B scripts/gen-integrity.py check
+          python3 -I -B scripts/gen-integrity.py certify
 
       # --timing-json observes translator phases only: emitted Lean must stay byte-identical.
       - name: Translator timing flag preservation
@@ -1028,7 +1032,8 @@ jobs:
 
       # V01/V02 (docs/air-semantics.md): the certificate flag leaves Gen.lean byte-identical, every
       # committed Proofs/<Ex>/AirCert.lean is current and kernel-checks, its AIR is the decoded
-      # golden AIR, and a one-operator AIR mutation breaks that function's theorem.
+      # golden AIR, and a one-operator AIR mutation breaks that function's theorem. Debug-ID
+      # canonicalization covers the complete inventory in the once-only gen-integrity step.
       - name: AIR semantics certificates
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |

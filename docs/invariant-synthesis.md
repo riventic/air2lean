@@ -449,6 +449,9 @@ Each stage is a permanent part of the end state, and none adds a shim.
 | S5 | layer 4: hints file format, provenance, offline producers | — |
 | S6 | acceptance measured; P09 complete; P03's "invariants and measures are not inferred" closed | — |
 
+P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
+the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
+
 The arena lane does not rewrite the arena invariant by hand in the meantime (coordinator,
 2026-10-14). Its work after #337, moving the macro steps into general `fsym` rules, is a
 prerequisite of S4, not a parallel invariant.
@@ -459,7 +462,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 
 * **P09-E1** residual-goal attribution: each goal `fsym` leaves names its origin (the
   postcondition conjunct, the side condition of which rule). Stop reasons are returned in
-  machine-readable form by `Auto.run` (extends #14, #15).
+  machine-readable form by `Auto.runReport`, using the shared `Auto.run` entry (extends #14, #15).
 * **P09-E2** strongest-postcondition inference at returns for `FTotalTriple`/`FTriple` and the
   thread backends, as `inferPost` does for `WP` segments.
 * **P09-E3** abduction report: at "no plan for its precondition", return the missing atom with its
@@ -469,7 +472,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 * **P09-E5** `@[fsym_upd]` ghost-update registry, keyed by heads, tried at returns. It generalizes
   the caller updates of 9f.
 
-Existing open rows on the path: #9 (arena macros), #14, #15, #21 (disjunctions in `fsym_arith`:
+Existing open rows on the path: #9 (arena macros), #21 (disjunctions in `fsym_arith`:
 Houdini candidates with case splits), #55 and #60 (cost in large states: generation runs many
 walks over the arena's state), #58, #59, #61 (arena planning), #62 (struct ownership in a thread),
 #64–#67 (the FBA updates' workarounds, which E5 and the bump-ledger family replace).

@@ -66,48 +66,24 @@ class Classify(unittest.TestCase):
         self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
         self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", {}))
 
-    def test_library_inventory_includes_roots_and_unimported_helpers(self):
-        self.write('Lib.lean', 'import Lib.A\n')
-        self.write('Lib/ExtractorOnly.lean', 'def state := 1\n')
-        expected = {self.repo / p for p in ('Lib.lean', 'Lib/A.lean', 'Lib/B.lean', 'Lib/ExtractorOnly.lean')}
-        self.assertEqual(set(ld.library_sources()), expected)
-        self.assertEqual(set(ld.library_sources(self.repo)), expected)
+    def test_source_roots_include_explicit_roots_and_glob_prefixes(self):
+        self.assertEqual(ld.lib_roots(), {'Lib'})
+        self.assertEqual(ld.lib_roots(self.repo, strict_sources=True), {'Lib'})
         self.write('lakefile.toml', '[[lean_lib]]\nname = "OtherTarget"\nroots = ["Lib.B"]\n')
-        self.assertEqual(set(ld.library_sources()), expected)
-        self.write('Other/ExtractorOnly.lean', 'def state := 1\n')
+        self.assertEqual(ld.lib_roots(strict_sources=True), {'Lib'})
         self.write('lakefile.toml', '[[lean_lib]]\nname = "OtherTarget"\nroots = ["Lib.B"]\nglobs = ["Other.+"]\n')
-        self.assertEqual(set(ld.library_sources()), expected | {self.repo / 'Other/ExtractorOnly.lean'})
-        self.write('lakefile.toml', '[[lean_lib]]\nname = "Missing"\n')
-        with self.assertRaisesRegex(ValueError, 'Missing.*no Lean sources'):
-            ld.library_sources()
+        self.assertEqual(ld.lib_roots(strict_sources=True), {'Lib', 'Other'})
 
-    def test_source_inventory_rejects_directory_aliases_and_decoy_srcdir(self):
-        self.write('external/Helper.lean', 'def state := 1\n')
-        alias = self.repo / 'Lib/alias'
-        for target in (self.repo / 'external', self.repo / 'missing', self.repo / 'Lib', alias):
-            alias.symlink_to(target, target_is_directory=True)
-            with self.assertRaisesRegex(ValueError, 'source directory alias or broken link'):
-                ld.library_sources()
-            alias.unlink()
-        (self.repo / 'Lib').rename(self.repo / 'original')
-        (self.repo / 'Lib').symlink_to(self.repo / 'original', target_is_directory=True)
-        with self.assertRaisesRegex(ValueError, 'source directory alias or broken link'):
-            ld.library_sources()
-        (self.repo / 'Lib').unlink()
-        (self.repo / 'original').rename(self.repo / 'Lib')
-        (self.repo / 'Lib/Helper.lean').symlink_to(self.repo / 'external/Helper.lean')
-        self.assertIn(self.repo / 'Lib/Helper.lean', ld.library_sources())
+    def test_source_roots_reject_decoy_srcdir_and_unbounded_globs(self):
+        self.write('external/Lib/A.lean', 'def state := 1\n')
         for config in ('srcDir = "external"\n[[lean_lib]]\nname = "Lib"\n',
                        '[[lean_lib]]\nname = "Lib"\nsrcDir = "external"\n'):
             self.write('lakefile.toml', config)
             with self.assertRaisesRegex(ValueError, 'unsupported Lake srcDir'):
-                ld.library_sources()
-        self.write('lakefile.toml', '[[lean_lib]]\nname = "OtherTarget"\nroots = ["../Outside"]\n')
-        with self.assertRaisesRegex(ValueError, 'invalid configured Lake library root'):
-            ld.library_sources()
+                ld.lib_roots(strict_sources=True)
         self.write('lakefile.toml', '[[lean_lib]]\nname = "Lib"\nglobs = ["*"]\n')
         with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
-            ld.library_sources()
+            ld.lib_roots(strict_sources=True)
 
 
 if __name__ == "__main__":

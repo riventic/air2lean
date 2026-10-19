@@ -9,6 +9,7 @@ Lake or Lean; `scripts/example-selection.sh` is sourced with bash.
 import argparse
 import collections
 import functools
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -18,6 +19,10 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import register as register_data  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location('air2lean_support_target_matrix', ROOT / 'scripts/target-matrix.py')
+TM = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(TM)
 GENERATOR = 'scripts/support-matrix.py'
 # Every committed input; tests copy exactly these into a scratch root.
 SOURCES = [
@@ -131,28 +136,32 @@ def default_selection(root, version, arch='x86_64'):
 
 
 def ci_matrix(root):
-    """The `include` rows of the CI test matrix (a narrow parser: flat scalar keys only)."""
-    text = read(root, '.github/workflows/ci.yml')
-    start = text.find('\n  test:\n')  # the test job's matrix, not an earlier job's
-    m = re.search(r'^ +matrix:\n +include:\n(.*?)^ +steps:', text[max(start, 0):], re.M | re.S)
-    if not m: raise Stale('.github/workflows/ci.yml: matrix include list not found')
-    rows = []
-    for line in m.group(1).splitlines():
-        start = re.match(r'\s*- zig: "([^"]+)"\s*$', line)
-        if start:
-            rows.append({'zig': start.group(1)})
-            continue
-        key = re.match(r'\s+(examples|full|mutate|shard): (.*)$', line)
-        if rows and key:
-            rows[-1][key.group(1)] = key.group(2).strip().strip('"')
+    """The test job's include rows, decoded by the held shared workflow reader."""
+    try:
+        rows = TM.parse_workflow(read(root, '.github/workflows/ci.yml')).get('test', {}).get('matrix')
+    except TM.Unreadable as error:
+        raise Stale(str(error)) from error
+    if rows is None:
+        raise Stale('.github/workflows/ci.yml: test matrix include list not found')
+    for index, row in enumerate(rows):
+        for key in ('zig', 'examples'):
+            if not isinstance(row.get(key, ''), str):
+                raise Stale('.github/workflows/ci.yml: test row %d %s must be a string' % (index, key))
+        if 'zig' not in row:
+            raise Stale('.github/workflows/ci.yml: test row %d needs zig' % index)
     return rows
 
 
 def ci_jobs(root, version):
     rows = [r for r in ci_matrix(root) if r['zig'] == version]
-    full = [r for r in rows if r.get('full') == 'true' and r.get('mutate') != 'true']
-    restricted = [r for r in rows if r.get('full') != 'true' and r.get('mutate') != 'true']
-    shards = [r for r in rows if r.get('mutate') == 'true']
+    full, restricted, shards = [], [], []
+    for index, row in enumerate(rows):
+        try:
+            mutation = TM.truthy(row.get('mutate'))
+            complete = TM.truthy(row.get('full'))
+        except TM.Unknown as error:
+            raise Stale('.github/workflows/ci.yml: test row %d flags: %s' % (index, error)) from error
+        (shards if mutation else full if complete else restricted).append(row)
     return full, restricted, shards
 
 
