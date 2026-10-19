@@ -75,12 +75,17 @@ theorem trans {W : Loc → Prop} {m m₁ m' : Mem} (h₁ : RestStep W m m₁)
     fun l hl => (h₂.heap l hl).trans (h₁.heap l hl), h₂.live, h₁.kn.trans h₂.kn,
     h₁.ext.trans h₂.ext, fun h => h₂.layout (h₁.layout h),
     fun b x hx => (h₂.tag b x hx).trans (h₁.tag b x hx), fun h => h₂.wf (h₁.wf h),
-    fun e he => ?_, ⟨fun c hc => h₂.auth.stack c (h₁.auth.stack c hc),
-      h₂.auth.ticks.trans h₁.auth.ticks, fun h => h₂.auth.noStack (h₁.auth.noStack h), rfl⟩,
+    fun e he => ?_, ?_,
     fun h => h₂.cov (h₁.cov h)⟩
-  rcases h₂.fp e he with he | ⟨hw, hb⟩
-  · exact h₁.fp e he
-  · exact .inr ⟨hw, by rw [h₁.bsize] at hb; exact hb⟩
+  · rcases h₂.fp e he with he | ⟨hw, hb⟩
+    · exact h₁.fp e he
+    · exact .inr ⟨hw, by rw [h₁.bsize] at hb; exact hb⟩
+  · refine ⟨fun c hc => ?_, h₂.auth.ticks.trans h₁.auth.ticks,
+      fun h => h₂.auth.noStack (h₁.auth.noStack h), rfl⟩
+    have hmid : StackAuth m₁ c := (h₁.auth.stack c hc).keep_shape rfl rfl rfl
+      fun _ blk hb => ⟨blk, hb, rfl, rfl, rfl, rfl⟩
+    exact (h₂.auth.stack c hmid).keep_shape rfl rfl rfl
+      fun _ blk hb => ⟨blk, hb, rfl, rfl, rfl, rfl⟩
 
 /-- A native thread step that leaves blocks intact preserves the resource rest when its
 location layout and new accesses are confined to the shared bytes. -/

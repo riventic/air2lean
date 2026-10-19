@@ -526,7 +526,7 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
 resources. The lock's framed location may move to its mapped index. -/
 theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     (hi : L.Inv G (rsum (W.cellsR m) rY) m) (hWY : ∀ l, W.In l → rY.heap l = none)
-    (hw : W.Ok m) (hw' : W.Ok m') (hr : RestStep W.In m m')
+    (hw : W.Ok m) (hr : RestStep W.In m m')
     (hs : ∀ hF, (∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) → FStepIn hF m m')
     (hap : W.ApartL L.toLockWord) : L.Inv G (rsum (W.cellsR m') rY) m' := by
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hr.threads
@@ -546,7 +546,7 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     (hXY.1 l).resolve_right (cellsAt_some hl (hw.cellIn hl))
   have hframe := hs (rsum (L.wordR m) rL).heap.erase (fun x h1 h2 => by
     simp only [FHeap.erase, FHeap.union_apply,
-      cellsAt_none (fun h => hnw (W.b, x) h ⟨rfl, h1, h2⟩), hLW _ ⟨rfl, h1, h2⟩]
+      cellsAt_none (fun h => hnw (W.b, x) h ⟨rfl, h1, h2⟩), hLW (W.b, x) ⟨rfl, h1, h2⟩]
     rfl)
   have hframeL : ∀ x, L.o ≤ x → x < L.o + 4 →
       (rsum (L.wordR m) rL).heap.erase (L.b, x) ≠ none := by
@@ -728,7 +728,7 @@ namespace Zig
 namespace Conc
 namespace Word
 
-open Proto
+open Proto Full
 
 variable {n nb : Nat} {W : Word n nb}
 
@@ -1007,8 +1007,8 @@ theorem Ok.record_native {m : Mem} {t : ThreadId} {k : AccessKind} (hw : W.Ok m)
   have hct : m.current < m.clocks.size := by rw [hcs]; exact ht
   let mr := m.recordAt W.b W.o nb k
   have hs : FStepIn (fun _ => none) m mr := record_fstep hw hct (fun _ _ _ => rfl)
-  have hrt : mr.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
-    simp only [mr, Mem.recordAt]; rw [Proto.getElem!_set!_ite]; simp [hct]
+  have hrt : mr.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current :=
+    recordAt_clock hct
   have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
   refine ⟨⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val,
     fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
@@ -1017,8 +1017,10 @@ theorem Ok.record_native {m : Mem} {t : ThreadId} {k : AccessKind} (hw : W.Ok m)
   · simp only [mr, Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · rcases hw.wfp e he hh with ⟨ha, hle⟩ | hle
-      · exact .inl ⟨ha, LockWord.someLe_mono rfl (fun u _ => hs.clock u) hle⟩
-      · exact .inr (LockWord.allLe_mono rfl (fun u _ => hs.clock u) hle)
+      · exact .inl ⟨ha, LockWord.someLe_mono (m := m) (m' := mr) rfl
+          (fun u _ => hs.clock u) hle⟩
+      · exact .inr (LockWord.allLe_mono (m := m) (m' := mr) rfl
+          (fun u _ => hs.clock u) hle)
     · refine .inl ⟨hk, m.current, ht, ?_⟩
       show VClock.le _ (mr.clocks[m.current]!) = true
       rw [hrt]; exact VClock.le_refl _
@@ -1110,6 +1112,7 @@ theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
       rw [tagOf_append_single]
       have hn : ¬ Covers b x (W.b, W.o, nb) := fun ⟨h1, h2, h3⟩ => hx ⟨h1.symm, h2, h3⟩
       simp [hn]
+      rfl
     · simp only [shapes, Array.toList_push, List.map_append, List.map_cons, List.map_nil,
         firstLoc, ALoc.shape]
       refine ⟨fun s hs => ?_, List.pairwise_append.mpr
@@ -1135,7 +1138,7 @@ the word's fields directly rather than constructing a legacy preservation summar
 theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
     (ht : m'.threads = m.threads)
-    (hcl : ∀ u, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
     W.Ok m' ∧ W.hist m' = W.hist m := by
   have hl : ∀ i l, W.Loc m' i l ↔ W.Loc m i l := by
     intro i l; unfold Loc; rw [ha]
@@ -1169,12 +1172,8 @@ theorem Ok.read_native {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicO
   have hl0 := (loc_get hl).2.2
   have hc₁ : m₁.current = t := hs.current.trans hc
   have hcs₁ : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
-  have hr := FStepIn.loadM (hF := fun _ => none) hcs₁ ord (l.msgs[pos]!) (by
-    intro hin
-    have hlen := (hw₁.loc li l hl).1
-    have hpos := W.sz_pos
-    rw [hl0] at hin
-    exact hin l.off (Nat.le_refl _) (by omega) rfl)
+  have hr := FStepIn.loadM (hF := fun _ => none) hcs₁ ord (l.msgs[pos]!)
+    (loc_notIn hl (hw₁.loc li l hl).1 (fun _ _ _ => rfl))
   have hb : (loadM m₁ li ord (l.msgs[pos]!)).blocks = m₁.blocks := by
     unfold loadM; split <;> rfl
   have ha : (loadM m₁ li ord (l.msgs[pos]!)).atomics = m₁.atomics := by
@@ -1236,11 +1235,8 @@ theorem loadM_rest {m : Mem} {li : Nat} {l : ALoc}
     (hlive : ∀ l, W.In l → m.heap l ≠ none) (hl : W.Loc m li l) (hlen : l.len = nb)
     (hc : m.current < m.clocks.size) (ord : AtomicOrder) (msg : Msg) :
     RestStep W.In m (loadM m li ord msg) := by
-  have hs := FStepIn.loadM (hF := fun _ => none) hc ord msg (by
-    intro hin
-    have hpos := W.sz_pos
-    rw [(loc_get hl).2.2] at hin
-    exact hin l.off (Nat.le_refl _) (by omega) rfl)
+  have hs := FStepIn.loadM (hF := fun _ => none) hc ord msg
+    (loc_notIn hl hlen (fun _ _ _ => rfl))
   refine RestStep.of_blocks hs (by unfold loadM; split <;> rfl)
     (by unfold Mem.Aux loadM acqM observeM; split <;> simp)
     hlive (fun _ _ _ => ?_) (fun h => ?_) (fun _ he => ?_)
@@ -1264,7 +1260,7 @@ theorem write_rest {m m' : Mem} {blk : Block} {bs : Array Byte} {hF : Heap}
   obtain ⟨hkn, hext, hauth⟩ := kmono_write hb hset hn hk ha hs.current
   refine ⟨hs.threads, hs.size, hs.clock, by rw [hset]; simp, fun l hl' => ?_,
     fun l hl' => ?_, hkn, hext,
-    LDMono.set hb id rfl (by simp only; rw [writeBytes_size _ _ _ hn]) hset (Nat.le_refl _),
+    ld_write hb hn hset,
     fun b x _ => by rw [hshape], fun h => by rw [hshape]; exact h,
     fun e he => .inl (hfp ▸ he), ?_, hs.msgCov⟩
   · rw [hheap]
@@ -1506,10 +1502,29 @@ theorem rmwM_rest {m : Mem} {li pos : Nat} {l : ALoc} {blk : Block}
   have hMf : M.footprint = m.footprint := by rw [hMe]; exact hf₂
   have hMx : m.Aux M := by rw [hMe]; exact hx₂.trans ⟨rfl, rfl, rfl⟩
   have hsh : shapes M = shapes m := by
-    rw [← keys_toList, keys_set hl.2 rfl hMa, keys_toList]
+    rw [← keys_toList, keys_set (l' := {l with msgs := l.msgs.push msg}) hl.2 rfl hMa, keys_toList]
   exact write_rest (rmwM_fstep hl hlen hpos hc hrec ⟨blk, hb⟩
     (hF := fun _ => none) (fun _ _ _ => rfl) ord new)
     hb hlive hsize hk hlo (W.enc_size new) hMb hsh hMf hMx
+
+/-- The location `i` with another location of the same place. -/
+theorem loc_set {m : Mem} {i : Nat} {l l' : ALoc} (hl : W.Loc m i l) (hb : l'.block = l.block)
+    (ho : l'.off = l.off) :
+    (m.atomics.set! i l').findIdx? (fun l => l.block == W.b && l.off == W.o) = some i ∧
+      (m.atomics.set! i l')[i]? = some l' := by
+  obtain ⟨hi, -, -⟩ := loc_get hl
+  refine ⟨?_, ?_⟩
+  · have hfirst : (m.atomics.set! i l').findIdx? (fun l => l.block == W.b && l.off == W.o) =
+        m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) :=
+      Conc.findIdx?_congr (by simp) fun j hj hj' => by
+        simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hj']
+        by_cases e : i = j
+        · simp only [e, ↓reduceIte]
+          subst j
+          simp [(Array.getElem?_eq_some_iff.mp hl.2).2, hb, ho]
+        · simp [e]
+    exact hfirst.trans hl.1
+  · rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [hi]
 
 /-- A newest-message RMW preserves validity and appends its actual result entry. The proof
 uses the primitive's updates and native clock transport, without an operation summary. -/
@@ -1570,20 +1585,14 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
     unfold Word.Holds; rw [hcur]; exact W.enc_val new
   let l' : ALoc := { l with msgs := l.msgs.push (rmwMsg m₂ ord rd new) }
   have hl' : W.Loc M li l' := by
-    obtain ⟨hi', _, hj⟩ := Array.findIdx?_eq_some_iff_getElem.mp hl.1
-    have hs : (m₁.atomics.set! li l').size = m₁.atomics.size := by simp
-    refine ⟨Array.findIdx?_eq_some_iff_getElem.mpr ⟨by rw [hMa, hs]; exact hi', ?_,
-      fun j hji => ?_⟩, ?_⟩
-    · simp only [hMa, Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds, ↓reduceIte]
-      simp [l', hlb, hlo]
-    · simp only [hMa, Array.set!_eq_setIfInBounds]
-      rw [Array.getElem_setIfInBounds (by omega), if_neg (Nat.ne_of_gt hji)]
-      exact hj j hji
-    · rw [hMa, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [hli, l']
+    unfold Loc
+    rw [hMa]
+    exact loc_set hl rfl rfl
   have hmr : (rmwMsg m₂ ord rd new).rmwOf = some (l.msgs[l.msgs.size - 1]!).id := rfl
   have hsz' : W.o + nb ≤
       (writeBytes blk.bytes W.o (padTo (intSize n) (intBytes new))).size := by
     rw [writeBytes_size _ _ _ (by omega)]; exact hsz
+  have hMf : M.footprint = m₁.footprint := by rw [hMe]; exact hf₂
   refine ⟨⟨⟨_, hMb, hlv, hsz', ha4, hk⟩,
     fun l₀ hl₀ hb' h1 h2 => ?_, fun i l₀ hl₀ => ?_, fun e he hh => ?_,
     ⟨new, hholds⟩, fun i l₀ hl₀ => ?_⟩, hholds, ?_, fun hq => ?_⟩
@@ -1600,15 +1609,13 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
       split
       · exact hval j (by assumption)
       · exact ⟨new, W.enc_val new⟩
-  · have he' : e ∈ m₁.footprint := by
-      rw [hMe] at he; simpa [observeM, hf₂] using he
+  · have he' : e ∈ m₁.footprint := hMf ▸ he
     rcases hw.wfp e he' hh with ⟨ha', hle⟩ | hle
     · exact .inl ⟨ha', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
     · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
   · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
     intro e he hh
-    have he' : e ∈ m₁.footprint := by
-      rw [hMe] at he; simpa [observeM, hf₂] using he
+    have he' : e ∈ m₁.footprint := hMf ▸ he
     have hlc : l'.lastClock = m₂.clocks[m₁.current]! := by
       simp [l', ALoc.lastClock, rmwMsg, hc₂]
     rw [hlc]
@@ -1892,8 +1899,6 @@ theorem casRmw_rest {m : Mem} {li c pos : Nat} {l : ALoc} {blk : Block}
   have hp := cas_chain_pos (by rwa [(loc_get hl).2.2]) hr hv
   have hj := (casOpts_pos hr).1
   rw [(loc_get hl).2.2] at hp hj
-  have hs : FStepIn (fun _ => none) m (m.recordAt W.b W.o nb .atomicWrite) :=
-    FStepIn.recordAt_of hc (fun _ _ _ => rfl) (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => hnot)
   have hrest := record_rest_of (W := W) hc (Array.getElem?_eq_some_iff.mp hb).1
     (fun _ => hnot) (k := .atomicWrite) (fun ⟨b, x⟩ ⟨heq, h1, h2⟩ => by
       simp only at heq h1 h2; subst b
@@ -1901,7 +1906,7 @@ theorem casRmw_rest {m : Mem} {li c pos : Nat} {l : ALoc} {blk : Block}
       rw [dite_eq_left_of_eq_true (eq_true ⟨hlive, by omega, by omega⟩)]
       simp)
   have hlr : W.Loc (m.recordAt W.b W.o nb .atomicWrite) li l := hl
-  exact hrest.trans (rmwM_rest (pos := pos) hlr hlen (by omega) (hs.cur hc)
+  exact hrest.trans (rmwM_rest (pos := pos) hlr hlen (by omega) (by simpa [Mem.recordAt] using hc)
     (rec_recordAt rfl hc) hb hlive hsize hk hlo ord new)
 
 /-- Both branches of a completed strong CAS are native full-state steps of a disjoint frame. -/
@@ -2167,25 +2172,6 @@ theorem fresh_push {m M : Mem} {i : Nat} {l : ALoc} {x : Msg} (hl : W.Loc m i l)
       cases hp : l.pos id with
       | none => exact Nat.zero_le _
       | some k => rw [hold _ _ hp]; exact Nat.le_refl _
-
-/-- The location `i` with another location of the same place. -/
-theorem loc_set {m : Mem} {i : Nat} {l l' : ALoc} (hl : W.Loc m i l) (hb : l'.block = l.block)
-    (ho : l'.off = l.off) :
-    (m.atomics.set! i l').findIdx? (fun l => l.block == W.b && l.off == W.o) = some i ∧
-      (m.atomics.set! i l')[i]? = some l' := by
-  obtain ⟨hi, -, -⟩ := loc_get hl
-  refine ⟨?_, ?_⟩
-  · have hfirst : (m.atomics.set! i l').findIdx? (fun l => l.block == W.b && l.off == W.o) =
-        m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) :=
-      Conc.findIdx?_congr (by simp) fun j hj hj' => by
-        simp only [Array.set!_eq_setIfInBounds, Array.getElem_setIfInBounds hj']
-        by_cases e : i = j
-        · simp only [e, ↓reduceIte]
-          subst j
-          simp [(Array.getElem?_eq_some_iff.mp hl.2).2, hb, ho]
-        · simp [e]
-    exact hfirst.trans hl.1
-  · rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]; simp [hi]
 
 /-- Inserting immediately after the newest message keeps the word at the same location. -/
 theorem loc_insert_last {m : Mem} {i pos : Nat} {l : ALoc} (hl : W.Loc m i l)
