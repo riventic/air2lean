@@ -51,8 +51,10 @@ semantics and the code share one memory model and their primitive operations (`Z
 concurrent function needs a step relation over ZigLean's scheduler instead (`Zig.ConcM`,
 [§Next fragments](#next-fragments)); it stays outside until then.
 
-Fail closed: an operation, type or shape outside the fragment is `stuck`, never a guess. A
-certificate never holds for a stuck function, because the generated definition is defined.
+Fail closed: an operation, type or shape outside the fragment is `stuck`, never a guess. An
+emission certificate cannot identify that result with a defined generated computation.
+A canonicalization equality alone can hold when both sides are stuck; it does not establish
+native behavior outside the interpreter's fragment.
 
 ### Emission preservation (V02): a certificate per function
 
@@ -226,14 +228,113 @@ ranking are decoding, not rewriting) and `≈` is:
 | Rewrite | Relation | Proof |
 |---|---|---|
 | 0 `versionTags`, 4 `argRanks` | part of `decode` | — |
-| 6 `renumber` | equality | per function: both sides normalize to the same term |
+| 6 `renumber`, live IDs and operands | desired equality | unproved: the same arbitrary oracle can manufacture a caller's register-cell ID; see the [audit regression](../tests/roadmap/air-semantics/RenumberOracle.lean) |
+| final debug-definition IDs within 6 `renumber` | equality, for every oracle, argument list and full memory | one generic kernel theorem plus native per-item binding evidence; live IDs, operands and targets remain unchanged |
 | 3 `dropTrueChecks` | equality | needs the dropped condition's truth (`x ≤ x + y` after a checked add): a lemma per pattern, used by the normalization |
 | 2 `itemReads` | equality | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` (needs pointer arithmetic in the semantics) |
 | 5 `dropDeadAllocPlaceholders` | equality | an `alloc` without uses is a register local ([§Locals](#locals)): no block on either side |
 | 1 `forwardReadOnlyCopies` | memory extension up to placement | the raw function's copy is an extra block. A memory extension is not preserved by later allocations under ZigLean's placement ([§Locals](#locals)); this needs a "for every `σ` there is a `σ'`" statement with a prophecy placement, and stays future work |
 
-The certificate then embeds the decoded **raw** AIR, and the round-trip check compares it with
-`decode` of the golden JSON; `Canon.lean` leaves the trusted base for that function.
+Certifying the remaining rewrites would let a certificate embed the decoded **raw** AIR and
+compare it with `decode` of the golden JSON, removing those rewrites from the trusted base for
+that function. The certificates below cover only the final debug-definition-ID rewrite.
+
+#### Live-ID and memory boundaries
+
+The earlier proposed live-renumbering statement used the same arbitrary oracle:
+
+```text
+execFunc o before args = execFunc o after args
+```
+
+That equality is false in the current interpreter. An unrestricted `Sem.Oracle` can
+return `Sem.Value.cell 11`, naming a caller's register-local slot. A seven-instruction
+caller binds its pointer parameter at 10, allocates slot 11, stores `false` then `true`,
+calls a pointer identity function, and loads and returns through its result. Renumbering
+moves the local to slot 1; the same oracle still returns cell 11. The
+[kernel regression](../tests/roadmap/air-semantics/RenumberOracle.lean) proves non-equality
+for every initial memory, pointer argument and identity-record array. Separate checks
+parse the actual JSON, validate references and both programs with the identity callee,
+and bind the complete normalized functions. This witnesses the per-function arbitrary-oracle
+obstruction; it makes no claim of native Zig or whole-program identity-callee misexecution.
+
+The [approved direction for live IDs](https://github.com/riventic/air2lean/pull/394#issuecomment-6197911477)
+is a general oracle contract: results neither observe nor leak the caller's register-cell
+names, with a once-for-all proof for the program's least-fixpoint oracle and an explicit
+premise ID for external implementations. The corresponding future statement is:
+
+```text
+OracleContract o → execFunc o before args = execFunc o after args
+```
+
+That contract and live-renumbering proof remain future work under TRU-02. The implemented
+debug-definition step retains the stronger equality for every arbitrary same oracle:
+it changes no live register cell, operand or branch target and introduces no oracle premise.
+
+Copy elimination has an independent full-memory boundary. `forwardReadOnlyCopies` can
+delete a copy's allocation, store, pointer bitcasts and loads. Taking its address through
+a const-pointer bitcast creates a real stack block in `Sem`; its allocation history remains
+after the frame is freed. Deleting a load also changes recorded read footprints and clocks.
+The [placement obstruction](#locals) therefore remains even without calls. A future stage
+that forwards values while retaining effects needs general memory and continuation
+substitution lemmas; the current debug-only step avoids changing these effects.
+
+#### Generic debug-definition-ID theorem and native binding
+
+`Raw.renumberTraced` factors the existing numbering pass into its live-ID/operand rewrite
+and a final `Raw.numberDebugDefs` rewrite. The ordinary translator and the certificate path
+use that same pipeline. The final step changes only definition IDs of `.line` and `.dbg`,
+including nested bodies. `dbg_inline_block` becomes an ordinary block and keeps its live ID.
+
+`Air2Lean/CanonSem.lean` proves once that erasing those debug definition IDs preserves
+`Sem.execFunc`, including register-allocation classification and the complete memory result.
+This is a compiler-correctness equality about the existing definitional semantics, not a
+program judgment, client proof walk or second proof framework. It adds no tactic, axiom,
+oracle restriction or per-module semantic rule.
+
+One structural debug-ID map covers arbitrary renaming functions; erasure is its
+constant-zero instance. The general composition theorem proves that mapping debug IDs
+preserves erasure. `DebugIds.execFunc_mapDebugArray` states the complete execution equality
+once for every function and map. Re-proving this theorem for data defined by the same map
+adds no assurance about the actual Raw pipeline, so there are no generated per-case Lean
+modules, proof instances, metadata pools or a second Func printer.
+
+`--canon-certificate` checks the actual normalized snapshots and prints only compact JSON
+native evidence to stdout. `CanonCertificate.checkBindings` applies the debug-ID map with
+the actual `Raw.renumberTraced` offset to each complete before-function and structurally
+compares the result with the actual after-function. Locally scoped derived `BEq` instances
+include every operation and Func field; no lossy `Repr` comparison is used. This per-item
+obligation remains native evidence under TRU-02, not a kernel proof of decoding,
+normalization or the snapshot connection. The emitter/checker is excluded from the
+kernel-checked stage's source components.
+
+`scripts/gen-integrity.py certify` checks every existing translation case, including cases
+that share a generated-module path. It runs ordinary translation with the case's full
+configuration and verifies the generated output, then captures certificate mode with the
+same arguments. Main alone parses and validates the configuration; certificate mode returns
+before any program, template or sidecar write. There is no second output path or Python
+option grammar. Every native result must have the exact evidence schema and is retained
+with its actual case. The existing Assurance checker freshly replays the generic
+`CanonSem` module once, binding its actual artifact and explicit generic theorem roots.
+Native JSON is never an Assurance theorem. No success cache, new audit pipeline or duplicate
+tracked AIR snapshots are introduced; ordinary identity attestation keeps its existing scope.
+
+The official full build runs this phase unconditionally. CI runs it once in the inputs
+row. Causal controls reject a changed live ID, nested body, layout, global initializer,
+function metadata or offset, including one wrong item after valid items. The checked
+cases must exercise a real debug-ID change. No case supplies a hand-written proof or rule.
+Existing historical/handwritten generated-module exceptions retain their explicit status
+in gen-integrity.
+
+The equality can be **vacuous when both executions are stuck**, including operations
+outside Sem's fragment and unresolved references. It proves neither defined execution
+nor that a function is inside the semantic fragment. The historical 2,421-function native
+cohort is not such a coverage count; the narrower emission-certificate fragment is not a
+classifier for all of Sem, and no unsupported count is inferred.
+
+Only this final reified mapping is kernel-checked. Live renumbering, all other
+canonicalization passes, normalization and actual Raw/snapshot binding retain TRU-02;
+the interpreter retains SEM-06 and the existing memory-model premises. V01/V02 remain open.
 
 ### How SEM-06 shrinks
 
