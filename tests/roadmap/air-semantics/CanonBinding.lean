@@ -83,7 +83,9 @@ def main : IO Unit := do
     { after with layouts := after.layouts.modify 0 (fun l => { l with size := some 999999 }) })]
   reject "wrong function metadata" #[(offset, before, { after with targetOs := "wrong" })]
   reject "wrong offset" #[(offset - 1, before, after)]
-  let (offset, before, after) := CanonBinding.snapshot CanonBinding.metadataSamples[0]!
+  let some metadata := CanonBinding.metadataSamples[0]?
+    | throw (IO.userError "missing global metadata control")
+  let (offset, before, after) := CanonBinding.snapshot metadata
   reject "wrong global initializer" #[(offset, before,
     { after with globals := after.globals.modify 0 (fun g => { g with init := some (.int 0 999999) }) })]
   -- A genuine batch must fail if just one item is wrong, even after valid items.
