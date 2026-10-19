@@ -238,6 +238,13 @@ The extractor always runs `lake --rehash build AssuranceTools` to validate its s
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
 and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt
 output and changed source or release pin force rebuilding. There is no skip-compile flag.
+These hashes are kept as one record per context (`.lake/assurance/tool-traces/<context
+hash>.json`), so invocations with different contexts do not invalidate each other's records; a
+context without a valid record unlinks the olean and Lake rebuilds it. All invocations in one
+worktree share the olean: an exclusive lock (`.lake/assurance/tool.lock`) is held from
+preparation until the `lake env lean` run that imports the olean ends, so parallel audits never
+remove or rebuild it under each other. Kernel replay runs outside the lock. A lock or IO error
+fails the audit.
 The regression harness reuses a validated extractor while still importing every fixture
 into a separate real Lean driver, in serial order.
 Neither is a substitute for the default complete build-and-audit release gate. The report
