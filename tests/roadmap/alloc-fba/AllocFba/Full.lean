@@ -789,6 +789,26 @@ theorem fown_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array
         ⟨⟨Nat.zero_le _, by omega, hA, hp0, hal, hc0⟩, hb, hcb⟩), sep_lift.mpr ⟨hc, h⟩⟩)
   exact sep_mono_left (fun _ x => ⟨0, bs, q, b, cb, 0, GMap.empty, fun _ => none, x⟩) H
 
+/-- **The actual allocator returned after initialization.** The generated `allocator` helper
+returns this struct's context and its generated vtable. At that return the initialized words
+and the real buffer start a fresh reset ledger (`fown_init`); the returned allocator and the
+new ledger therefore refer to the same context and buffer, at epoch zero. No independent
+allocator state or program-start admission is assumed. -/
+theorem fallocator_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array Byte}
+    (hs : bs.size = B.cap) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64) (hp0 : 0 ≤ B.ptr.off)
+    (hal : (B.cA + ctx.off.toNat) % 8 = 0) (hc0 : 0 ≤ ctx.off) (hb : B.ptr.block = some b)
+    (hcb : ctx.block = some cb) :
+    FTotalTriple
+      (wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
+        bclaim b B.ptr.off.toNat (bnd B) none)))
+      (heap_FixedBufferAllocator_allocator ctx)
+      (fun a => ⟪a = (⟨ctx, ⟨some 5, 0⟩⟩ : mem_Allocator)⟫ ⋆
+        FAssn.ex fun γ => fown ctx B γ 0 ⋆ epTok γ 0 Frac.one) := by
+  have start := EUpd.trans (fown_init (q := q) hs hA hp0 hal hc0 hb hcb)
+    (EUpd.of_imp fun _ h => sep_lift.mpr
+      ⟨(rfl : (⟨ctx, ⟨some 5, 0⟩⟩ : mem_Allocator) = ⟨ctx, ⟨some 5, 0⟩⟩), h⟩)
+  fsym [start]
+
 end FBA
 
 end AllocFba

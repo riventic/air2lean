@@ -339,6 +339,10 @@ theorem JunkAt.junk {h : Heap} {r : Res} (hj : JunkAt h r) : Junk r := ⟨h, hj�
 
 theorem Junk.junkAt {r : Res} (hj : Junk r) : ∃ h, JunkAt h r := hj
 
+/-- Forget the exact contents of owned junk, retaining ownership of its bytes. -/
+theorem EUpd.junkAt_forget {h : Heap} : EUpd (JunkAt h) Junk :=
+  EUpd.of_imp fun _ hj => JunkAt.junk hj
+
 /-- `h` without the bytes `[lo, hi)` of block `b`. -/
 def _root_.Zig.Heap.cut (b : BlockId) (lo hi : Nat) (h : Heap) : Heap :=
   fun l => if l.1 = b ∧ lo ≤ l.2 ∧ l.2 < hi then none else h l

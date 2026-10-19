@@ -492,6 +492,12 @@ theorem drop {K : FAssn}
 theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P :=
   drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
 
+/-- The same affine ghost disposal with the discarded resource on the left. -/
+theorem dropL {K : FAssn}
+    (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine) :
+    EUpd (K ⋆ P) P :=
+  trans (of_imp fun _ h => sep_comm h) (drop hK)
+
 /-- Updates frame. -/
 theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by
   rintro m _ rF hh ⟨r₁, r₂, hd, rfl, hp, hr⟩ hs
