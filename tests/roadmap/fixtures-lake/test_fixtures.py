@@ -113,12 +113,16 @@ class Audit(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-audit-test.")
         self.addCleanup(tmp.cleanup)
         workspace = Path(tmp.name)
+        # The repository's toolchain: outside the checkout elan would pick its default one, and CI
+        # installs elan with none (`elan-init --default-toolchain none`), so `lake` failed at once.
+        shutil.copy(ROOT / "lean-toolchain", workspace / "lean-toolchain")
         (workspace / "lakefile.toml").write_text(
             f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
             '[[lean_lib]]\nname = "AuditControl"\n')
         (workspace / "AuditControl.lean").write_text(text)
         with without_cache():
-            self.assertEqual(fx.lake(workspace, ["build", "AuditControl"], capture=True).returncode, 0)
+            done = fx.lake(workspace, ["build", "AuditControl"], capture=True)
+        self.assertEqual(done.returncode, 0, done.stdout)  # a setup failure shows Lake's output
         return workspace / ".lake/build/lib/lean"
 
     def test_sorry_is_rejected(self):
