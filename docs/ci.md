@@ -347,8 +347,8 @@ proof-fixture checks since #391.
 | Run | Before: sequence of scripts | `scripts/gate.sh` |
 | --- | --- | --- |
 | No-op rerun (nothing changed) | 195 | 52-128 |
-| Comment-only change in `Proofs/Lists/Append.lean` | 10097 (preflight failed) | 1466 |
-| Cold (no records) | not measured | 5053 |
+| Comment-only change in `Proofs/Lists/Append.lean` | 10097 (preflight failed) | 1466 without sizes in `/names`; with them every unit reruns, as cold |
+| Cold (no records) | not measured | 5053; 2623 (2026-10-19, sizes in `/names`) |
 
 The sequence on the comment-only change took 2617 s for the full build (its fixture phase reran
 70 of 75 units), 142 s for `regen.sh --pr` (it rewrote the theorem inventory), 6822 s for
@@ -365,6 +365,14 @@ follows hit everything but the one never-recorded unit (150 s). An earlier figur
 and "898" was a misread of a 538 s run that had failed before its regen phase. The no-op figure is
 the one fixture unit that is never recorded (it reads outside its tree) plus its wait for
 build-guard admission, which varies with the machine's load.
+
+Those gate figures predate the sizes in `/names` (2026-10-19, the review of #443: a unit that only
+tests a known path's `st_size` was reused after the file grew). Counted with
+`fixture-checks.py --pending` and `gate.sh --list` against the records of a passed gate: a
+comment in `Proofs/Lists/Append.lean` (with the full build) reran 24 of the 176 recorded fixture
+units before and all 176 after, and a comment in `scripts/register.py` 95 before (the units whose
+Python import lookup lists `scripts/`) and all 176 after; all 38 recorded gate units rerun after
+either edit. An edit that keeps every size still reruns only the units that read the file.
 
 ### Traced records
 
