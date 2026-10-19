@@ -437,7 +437,7 @@ class Translator:
     """Fresh translations, each made once per case."""
     def __init__(self, binary, work):
         self.binary, self.work, self.done = binary, Path(work), {}
-        self.inputs, self.arguments = {}, {}
+        self.arguments = {}
 
     def output(self, index, case):
         """The fresh output bytes, or raise ValueError with the translator's message."""
@@ -465,7 +465,7 @@ class Translator:
                 self.done[index] = ValueError(f"AIR does not translate: {message.splitlines()[0][:300]}")
             else:
                 self.done[index] = out.read_bytes()
-                self.inputs[index], self.arguments[index] = air, arguments
+                self.arguments[index] = arguments
         if isinstance(self.done[index], ValueError):
             raise self.done[index]
         return self.done[index]

@@ -38,6 +38,21 @@ def audit(records):
                 theorems=theorems, nodes=nodes)
 
 
+class SourceTests(unittest.TestCase):
+    def test_lean_escapes_preserve_controls_and_literal_backslashes(self):
+        self.assertEqual(cc.lean_string("\b\f\0\x1f"), '"\\u0008\\u000c\\u0000\\u001f"')
+        self.assertEqual(cc.lean_string('\\b\\f"😀\n\r\t'), '"\\\\b\\\\f\\"😀\\n\\r\\t"')
+
+    def test_roundtrip_uses_lean_escaping_for_directory_and_original_arguments(self):
+        directory = '/private/tmp/work\b\f/air0'
+        translator = SimpleNamespace(arguments={0: [directory, "--namespace", "Case"]})
+        namespace, source = cc.roundtrip_source("namespace Case\nend Case\n", translator, 0)
+        quoted = '"/private/tmp/work\\u0008\\u000c/air0"'
+        self.assertEqual(namespace, "Case")
+        self.assertIn(f'Air2Lean.parseArgs [{quoted}, "--namespace", "Case"]', source)
+        self.assertIn(f"checkDirectory {quoted} args.allocatorModel Case.snapshots", source)
+
+
 class ScopeTests(unittest.TestCase):
     def test_missing_second_function_proof_fails(self):
         records = [record(count=2)]
@@ -141,11 +156,13 @@ theorem preserves_0 (call : Sem.Oracle) (args : List Sem.Value) :
         with tempfile.TemporaryDirectory() as directory:
             def reject(path):
                 source = path.read_text()
-                self.assertIn(".modify 0 (fun i => { i with id := i.id + 1000000 })", source)
+                self.assertIn("body.findIdx? (fun i : Inst => match i.op", source)
+                self.assertIn("body.modify index (fun i => { i with id := i.id + 1000000 })", source)
                 self.assertIn("#[{ id := 0, ty := 1, op := Air2Lean.Op.arg 0 }]", source)
                 line = next(i + 1 for i, text in enumerate(source.splitlines())
                             if text.startswith("theorem erased_0"))
-                return SimpleNamespace(returncode=1, stdout=f"{path}:{line}:1: error: false equality", stderr="")
+                return SimpleNamespace(returncode=1, stdout="canon-mutant-live:true\n"
+                                       f"{path}:{line}:1: error: false equality", stderr="")
             with mock.patch.object(cc, "lean", side_effect=reject):
                 self.assertTrue(cc.reject_mutant(self.source, Path(directory)))
             with mock.patch.object(cc, "lean", return_value=SimpleNamespace(
@@ -155,9 +172,31 @@ theorem preserves_0 (call : Sem.Oracle) (args : List Sem.Value) :
 
     def test_debug_only_first_instruction_is_not_a_live_id_control(self):
         source = self.source.replace("Air2Lean.Op.arg 0", "Air2Lean.Op.line 0")
-        with mock.patch.object(cc, "lean") as lean:
-            self.assertFalse(cc.reject_mutant(source, Path("unused")))
-        lean.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(cc, "lean", return_value=
+                SimpleNamespace(returncode=0, stdout="canon-mutant-live:false\n", stderr="")) as lean:
+            self.assertFalse(cc.reject_mutant(source, Path(directory)))
+        lean.assert_called_once()
+
+    def test_live_instruction_after_debug_is_selected_without_an_argument(self):
+        source = self.source.replace("Air2Lean.Op.arg 0",
+                                    "Air2Lean.Op.line 0 }, { id := 1, ty := 1, op := Air2Lean.Op.ret .void")
+        with tempfile.TemporaryDirectory() as directory:
+            def reject(path):
+                mutant = path.read_text()
+                self.assertIn("Air2Lean.Op.line 0 }, { id := 1", mutant)
+                self.assertIn("| .line _ | .dbg .. => false | _ => true", mutant)
+                line = next(i + 1 for i, text in enumerate(mutant.splitlines())
+                            if text.startswith("theorem erased_0"))
+                return SimpleNamespace(returncode=1, stdout="canon-mutant-live:true\n"
+                                       f"{path}:{line}:1: error: false equality", stderr="")
+            with mock.patch.object(cc, "lean", side_effect=reject):
+                self.assertTrue(cc.reject_mutant(source, Path(directory)))
+
+    def test_applicable_mutant_that_still_checks_fails_the_control(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(cc, "lean", return_value=
+                SimpleNamespace(returncode=0, stdout="canon-mutant-live:true\n", stderr="")):
+            with self.assertRaisesRegex(ValueError, "wrong canonicalization still checks"):
+                cc.reject_mutant(self.source, Path(directory))
 
 
 if __name__ == "__main__":

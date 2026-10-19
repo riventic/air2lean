@@ -15,6 +15,7 @@ namespace Air2Lean.CanonCertificate
 deriving instance Repr for Op, SwitchCase, Inst
 deriving instance Repr for Func
 deriving instance BEq for Global
+deriving instance Hashable for Ty, Layout, Val, Global
 
 def printFunc (f : Func) : String := (repr f).pretty 100
 
@@ -48,29 +49,35 @@ private structure SharedPool (α : Type) where
   entries : Std.HashMap String (Array (α × String)) := {}
   definitions : Array String := #[]
 
+private def SharedPool.find? [BEq α] (pool : SharedPool α) (key : String)
+    (value : α) : Option String :=
+  (pool.entries[pool.typeName ++ ":" ++ key]?.getD #[]).findSome? fun (previous, name) =>
+    if previous == value then some name else none
+
 private def SharedPool.intern [BEq α] (pool : SharedPool α) (key : String)
     (value : α) (render : Unit → String) : String × SharedPool α := Id.run do
+  if let some name := pool.find? key value then return (name, pool)
   let key := pool.typeName ++ ":" ++ key
   let candidates := pool.entries[key]?.getD #[]
-  for (previous, name) in candidates do
-    if previous == value then return (name, pool)
   let name := s!"{pool.stem}_{pool.definitions.size}"
   return (name, { pool with
     entries := pool.entries.insert key (candidates.push (value, name))
     definitions := pool.definitions.push s!"def {name} : {pool.typeName} :=\n{render ()}\n" })
 
 /-- The same interner shares elements and arrays without changing table order or indices. -/
-private def internTable [BEq α] [Repr α] (values : Array α)
+private def internTable [BEq α] [Hashable α] [Repr α] (values : Array α)
     (elements : SharedPool α) (arrays : SharedPool (Array α)) :
     String × SharedPool α × SharedPool (Array α) := Id.run do
+  let key := toString (hash values)
+  if let some name := arrays.find? key values then return (name, elements, arrays)
   let mut elements := elements
   let mut names := #[]
   for value in values do
-    let text := (repr value).pretty 100
-    let (name, updated) := elements.intern text value (fun _ => text)
+    let (name, updated) := elements.intern (toString (hash value)) value
+      (fun _ => (repr value).pretty 100)
     elements := updated
     names := names.push name
-  let (name, arrays) := arrays.intern (",".intercalate names.toList) values
+  let (name, arrays) := arrays.intern key values
     (fun _ => (arrayTerm (names.map Std.Format.text)).pretty 100)
   return (name, elements, arrays)
 

@@ -45,11 +45,13 @@ def metadataSamples : Array Func :=
   let types : Array Ty := #[.int false 64, .bool, .int false 64]
   let layouts : Array Layout := #[{ size := some 8, align := some 8 },
     { size := some 1, align := some 1 }, { size := some 8, align := some 8 }]
-  let a : Global := { name := some "shared", ty := 0, isConst := true,
+  let a : Global := {
+    name := some "shared", ty := 0, isConst := true,
     threadlocal := false, isExtern := false, init := some (.int 0 1) }
   let b := { a with init := some (.int 0 2) }
   #[{ f with name := "metadataA", types, layouts, globals := #[a, b, a] },
-    { f with name := "metadataB", types := #[types[1]!, types[0]!, types[0]!],
+    { f with
+      name := "metadataB", types := #[types[1]!, types[0]!, types[0]!],
       layouts := #[layouts[1]!, layouts[0]!, layouts[0]!], globals := #[b, a, a] },
     { f with name := "metadataC", types, layouts, globals := #[a, b, a] }]
 

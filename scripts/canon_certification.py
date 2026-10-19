@@ -15,6 +15,13 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def lean_string(value):
+    """Quote using Lean's escapes, including Unicode escapes for every control character."""
+    escapes = {'"': '\\"', '\\': '\\\\', '\n': '\\n', '\r': '\\r', '\t': '\\t'}
+    return '"' + "".join(escapes.get(char, f"\\u{ord(char):04x}" if ord(char) < 32 else char)
+                         for char in value) + '"'
+
+
 def lean(path, compile_module=False):
     output = [f"--root={path.parent}", "-o", str(path.with_suffix(".olean"))] if compile_module else []
     return subprocess.run(["lake", "env", "lean", *output, str(path)], cwd=ROOT,
@@ -26,8 +33,8 @@ def roundtrip_source(source, translator, index):
     if len(namespaces) != 1:
         raise ValueError("canonicalization certificate must have exactly one namespace")
     namespace, = namespaces
-    arguments = ", ".join(json.dumps(a, ensure_ascii=False) for a in translator.arguments[index])
-    directory = json.dumps(str(translator.inputs[index]), ensure_ascii=False)
+    arguments = ", ".join(lean_string(a) for a in translator.arguments[index])
+    directory = lean_string(translator.arguments[index][0])
     wrapper = ("import Air2Lean.Main\n" + source + "\n#eval do\n"
                f"  let args ← IO.ofExcept (Air2Lean.parseArgs [{arguments}])\n"
                f"  let changed ← Air2Lean.CanonCertificate.checkDirectory {directory} args.allocatorModel "
@@ -68,38 +75,43 @@ def compile_certificate(source, translator, index, case):
 
 
 def reject_mutant(source, work):
-    """The real equality obligation must reject a changed live argument definition ID."""
+    """The real equality obligation must reject a changed live definition ID."""
+    live = "(fun i : Inst => match i.op with | .line _ | .dbg .. => false | _ => true)"
     for target in re.finditer(r"^def before_body_(\d+) : Array Inst :=\n(.*?)\n\ndef after_body_",
                               source, re.M | re.S):
-        binding = re.match(r"\s*#\[\{ id := (\d+),\s*ty := \d+,\s*op := Air2Lean\.Op\.arg\b", target[2])
-        if binding:
-            break
-    else:
-        return False
-    after = re.search(rf"^def after_body_{target[1]} : Array Inst :=\n(.*?)\n\ndef after_",
-                      source, re.M | re.S)
-    if after is None:
-        raise ValueError("missing mapped target body in wrong-canonicalization control")
-    start, end = after.span(1)
-    replacement = f"  ({after[1].strip()}).modify 0 (fun i => {{ i with id := i.id + 1000000 }})"
-    mutant = source[:start] + replacement + source[end:]
-    path = work / "WrongCanonicalization.lean"
-    path.write_text(mutant)
-    result = lean(path)
-    output = result.stdout + result.stderr
-    if result.returncode == 0:
-        raise ValueError("wrong canonicalization still checks")
-    lines = mutant.splitlines()
-    proof = next((i + 1 for i, line in enumerate(lines)
-                  if line.startswith(f"theorem erased_{target[1]} :")), None)
-    next_proof = next((i + 1 for i, line in enumerate(lines)
-                       if line.startswith(f"theorem preserves_{target[1]} ")), None)
-    errors = [int(match[1]) for match in re.finditer(
-        rf"^{re.escape(str(path))}:(\d+):\d+: error:", output, re.M)]
-    if proof is None or next_proof is None or not errors or not proof <= errors[0] < next_proof:
-        raise ValueError("wrong-canonicalization control failed outside its actual equality obligation\n"
-                         + output)
-    return True
+        after = re.search(rf"^def after_body_{target[1]} : Array Inst :=\n(.*?)\n\ndef after_",
+                          source, re.M | re.S)
+        if after is None:
+            raise ValueError("missing mapped target body in wrong-canonicalization control")
+        start, end = after.span(1)
+        replacement = (f"  let body := ({after[1].strip()})\n"
+                       f"  match body.findIdx? {live} with\n"
+                       "  | some index => body.modify index (fun i => { i with id := i.id + 1000000 })\n"
+                       "  | none => body\n\n"
+                       f'#eval IO.println s!"canon-mutant-live:{{before_body_{target[1]}.any {live}}}"')
+        mutant = source[:start] + replacement + source[end:]
+        path = work / "WrongCanonicalization.lean"
+        path.write_text(mutant)
+        result = lean(path)
+        output = result.stdout + result.stderr
+        applicable = re.findall(r"^canon-mutant-live:(true|false)$", output, re.M)
+        if applicable == ["false"] and result.returncode == 0:
+            continue
+        if applicable == ["true"] and result.returncode == 0:
+            raise ValueError("wrong canonicalization still checks")
+        lines = mutant.splitlines()
+        proof = next((i + 1 for i, line in enumerate(lines)
+                      if line.startswith(f"theorem erased_{target[1]} :")), None)
+        next_proof = next((i + 1 for i, line in enumerate(lines)
+                           if line.startswith(f"theorem preserves_{target[1]} ")), None)
+        errors = [int(match[1]) for match in re.finditer(
+            rf"^{re.escape(str(path))}:(\d+):\d+: error:", output, re.M)]
+        if (applicable != ["true"] or proof is None or next_proof is None or not errors
+                or not proof <= errors[0] < next_proof):
+            raise ValueError("wrong-canonicalization control failed outside its actual equality obligation\n"
+                             + output)
+        return True
+    return False
 
 
 def check_audit(report, records):
