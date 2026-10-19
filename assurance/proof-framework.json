@@ -968,10 +968,6 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "tests/roadmap/strength-log/OutcomeTaxonomy.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
