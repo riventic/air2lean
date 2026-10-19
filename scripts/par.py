@@ -49,7 +49,7 @@ MEM_FRACTION = 0.8
 GRACE_SECONDS = 10
 CGROUP = Path('/sys/fs/cgroup')
 SAMPLE_SECONDS = 2.0
-KINDS = ('lean', 'zig', 'air2lean', 'lake', 'python', 'other')  # a sample's interval goes to the first present
+KINDS = ('lean', 'leanchecker', 'zig', 'air2lean', 'lake', 'python', 'other')  # a sample's interval goes to the first present
 
 
 def _read(path: str) -> str | None:
