@@ -5,7 +5,8 @@ import ZigLean.Sep.Full.Auto
 
 A word that atomic ops use is also read and written by plain loads and stores (the arena's list
 heads, a node's packed size word). `fsym` walks them with the word's own rules, and the word keeps
-its atomic tag (`apts`/`aptsE` after the access), so the atomic ops still apply.
+its atomic tag (`apts`/`aptsE` after the access), so the atomic ops still apply; a word with any
+tag constraint (`wpts`/`wptsE`) keeps its constraint.
 -/
 
 namespace SepAuto.AtomicPlain
@@ -51,6 +52,83 @@ theorem packed_load (p : Ptr) (v : BitVec 64) :
 
 theorem packed_store (p : Ptr) (v : BitVec 64) (s : Size) :
     FTotalTriple (apts p v) (store 8 p s) (fun _ => apts p (Packed.toBits s)) := by
+  fsym
+
+/-! The same rules for a word with any tag constraint (`wpts`, `wptsE`: memory an allocator
+handed out as plain bytes, such as the arena's node headers): one family over an explicit
+constraint (`tptsE`), and the word keeps the constraint it has. -/
+
+theorem wpts_word_inc (p : Ptr) (v : BitVec 64) :
+    FTotalTriple (wpts p v) (do let a ← load (BitVec 64) 8 p; store 8 p (a + 1))
+      (fun _ => wpts p (v + 1)) := by
+  fsym
+
+theorem wpts_packed (p : Ptr) (v : BitVec 64) (s : Size) :
+    FTotalTriple (wpts p v) (do let _ ← load Size 8 p; store 8 p s)
+      (fun _ => wpts p (Packed.toBits s)) := by
+  fsym
+
+theorem wptsE_swap (p : Ptr) (x y : Option Ptr) :
+    FTotalTriple (wptsE p x ⋆ aptsE (p.add 8) y)
+      (do let a ← load (Option Ptr) 8 p; store 8 (p.add 8) a; store 8 p (none : Option Ptr))
+      (fun _ => wptsE p (none : Option Ptr) ⋆ aptsE (p.add 8) x) := by
+  fsym
+
+/-! Accesses at an offset next to another word of the block, where a region rule is tried first
+(ledger #word-family-views: the words' own rules, not views of the family's). -/
+
+theorem store_beside_aptsE (p : Ptr) (x y z : Option Ptr) :
+    FTotalTriple (aptsE p x ⋆ aptsE (p.add 8) y) (store 8 (p.add 8) z)
+      (fun _ => aptsE p x ⋆ aptsE (p.add 8) z) := by
+  fsym
+
+theorem store_beside_wpts (p : Ptr) (x y z : BitVec 64) :
+    FTotalTriple (wpts p x ⋆ wpts (p.add 8) y) (store 8 (p.add 8) z)
+      (fun _ => wpts p x ⋆ wpts (p.add 8) z) := by
+  fsym
+
+theorem store_beside_packed (p : Ptr) (x y : BitVec 64) (s : Size) :
+    FTotalTriple (apts p x ⋆ apts (p.add 8) y) (store 8 (p.add 8) s)
+      (fun _ => apts p x ⋆ apts (p.add 8) (Packed.toBits s)) := by
+  fsym
+
+theorem store_beside_bytes (p : Ptr) (x y z : Option Ptr) (cs : Array Byte) (hc : cs.size = 8)
+    (hz : Enc.decode cs = pure z) :
+    FTotalTriple (wptsE p x ⋆ wptsE (p.add 8) y) (storeBytes (p.add 8) 8 cs)
+      (fun _ => wptsE p x ⋆ wptsE (p.add 8) z) := by
+  fsym
+
+theorem load_beside_wptsE (p : Ptr) (x y : Option Ptr) :
+    FTotalTriple (wptsE p x ⋆ wptsE (p.add 8) y) (load (Option Ptr) 8 (p.add 8))
+      (fun r => ⟪r = y⟫ ⋆ wptsE p x ⋆ wptsE (p.add 8) y) := by
+  fsym
+
+theorem load_beside_packed (p : Ptr) (x y : BitVec 64) :
+    FTotalTriple (wpts p x ⋆ wpts (p.add 8) y) (load Size 8 (p.add 8))
+      (fun r => ⟪r = Packed.ofBits y⟫ ⋆ wpts p x ⋆ wpts (p.add 8) y) := by
+  fsym
+
+/-! A packed struct's bits (ledger #packed-bits-steps): its encoding's size is its bits'
+(`reduceEncodeVia`), and a `fromInt` (`Packed.ofBits?` of valid bits) is a step
+(`packedOfBits_step`). -/
+
+/-- The bytes of a symbolic packed value: 8. -/
+theorem packed_encode_size (s : Size) : (Enc.encode s).size = 8 := by
+  fsym_arith
+
+/-- Bits as a packed value. -/
+theorem packed_ofBits (P : FAssn) (b : BitVec 64) :
+    FTotalTriple P (StateT.lift (Packed.ofBits? (α := Size) b) : MemM Size)
+      (fun r => ⟪r = Packed.ofBits b⟫ ⋆ P) := by
+  fsym
+
+set_option maxHeartbeats 250 in
+/-- A pointer load next to a word (ledger #rule-instances-first): the packed load rules
+(`[Packed T 64]`) have no `Packed Ptr 64` and are dropped before their precondition is planned
+through views; planning it first costs past this bound (about 150k heartbeats more per load). -/
+theorem ptr_beside_word (p q : Ptr) (v : BitVec 64) (x : Ptr) :
+    FTotalTriple (wpts q v ⋆ up (pts p 8 x)) (load Ptr 8 p)
+      (fun r => ⟪r = x⟫ ⋆ wpts q v ⋆ up (pts p 8 x)) := by
   fsym
 
 end SepAuto.AtomicPlain

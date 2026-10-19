@@ -21,7 +21,7 @@ pointer `CI.cctx` and vtable `CI.vtp` with entries `CI.fns`; ghost name `γ`, ep
 * the ghost authority `gauthP γ e M CI.tag`: the grant map `M` of epoch `e`, grant id ↦ region
   and lent fraction (`docs/sep-full-state.md` §Ghost state), under the child's tag;
 * the first node of `used_list`, if any (`FirstPart`): its header words (`size` and `end_index`
-  atomic words, `apts`: the thread rules of the atomic ops need them, `Core.Header`; `next`
+  atomic words, `wpts`: the thread rules of the atomic ops take them, `Core.Header`; `next`
   plain), the unused tail of its buffer (from `end_index` on), the child's token
   for the node and the part of the node's extent share that the arena keeps; the other used nodes
   (`rest`, a list of node records `NodeV`) and the free list (`Chain`): headers, tokens and
@@ -324,6 +324,78 @@ theorem deinit_ct (used fl : Option Ptr) :
 
 end Deinit
 
+/-! ## `reset`'s retaining modes: `loop78`
+
+`retain_capacity` and `retain_with_limit` handle each list in turn; `loop78` gives every node of a
+list back to the child but the last one, which the arena keeps (`Last`, `AllocArena/Reset.lean`). -/
+
+section Retain
+
+variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
+  (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind)
+
+/-- `loop78`'s invariant: the head word `p`, and the list from `it`; `it` is empty only if the
+list was. -/
+def Inv78 (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
+  FAssn.ex fun ns : List NodeV => ⟪s.it = none → x0 = none⟫ ⋆
+    (aptsE p x0 ⋆ Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc)
+
+/-- `loop78`'s exits: the list's last node, or an empty list. -/
+def Exit78 (p : Ptr) (x0 : Option Ptr) :
+    heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals → FAssn
+  | (.br77 N, _) => aptsE p x0 ⋆ Last CI N ⋆ Cm CI ctx Ac Sc Kc
+  | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc)
+  | _ => ⟪False⟫
+
+attribute [local fsym_atom] Chain FreeCl in
+include h in
+/-- One run of `loop78`'s body: the list's last node is kept (`br77`); any other node goes back to
+the child (`free` through the vtable; the refund joins the reservoir). The list's cases are split
+before `fsym`: its first node, and the rest as a chain (`fsym_atom`), which the invariant names
+again at the next node (ledger #chain-case-unfold). -/
+theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) :
+    CTriple (Tgt := Tgt) (Inv78 CI ctx Ac Sc Kc p x0 s) ((heap_ArenaAllocator_reset.loop78 ctx).run s)
+      (fun r => if heap_ArenaAllocator_reset.again78 r.1 then Inv78 CI ctx Ac Sc Kc p x0 r.2
+        else Exit78 CI ctx Ac Sc Kc p x0 r) := by
+  have hd := child_decode CI
+  refine CTriple.ex fun ns => ?_
+  rcases s with ⟨ok, l, it⟩
+  unfold heap_ArenaAllocator_reset.loop78
+  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it
+  · simp only [List.map_nil, Chain, FreeCl]
+    fsym
+  · simp only [List.map_nil, Chain]
+    fsym
+  · simp only [List.map_cons, List.map_nil, Chain]
+    fsym
+  · rw [List.map_cons, List.map_nil, chain_one, FreeCl.eq_2, FreeCl.eq_1]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+  · simp only [List.map_cons, Chain]
+    fsym
+  · rw [chain_full_cons2, FreeCl.eq_2]
+    fsym [CAllocSpec.free' h, Child.cown_refund]
+
+include h in
+/-- **`loop78`** gives every node of a list back to the child but the last (`CTriple.loop`,
+`Inv78`), from the list's head word `p` holding `x` and the list of whole nodes from `x`. A rule
+from the loop's start state, where the invariant's implication holds (ledger #59). -/
+theorem loop78_ct (p : Ptr) (x : Option Ptr) (ok : Bool) (l : BitVec 64) :
+    CTriple (Tgt := Tgt) (aptsE p x ⋆ FreeList CI x ⋆ Cm CI ctx Ac Sc Kc)
+      ((Zig.loop (heap_ArenaAllocator_reset.loop78 ctx) heap_ArenaAllocator_reset.again78).run ⟨ok, l, x⟩)
+      (fun r => FAssn.ex fun e => FAssn.ex fun s' => ⟪r = (e, s')⟫ ⋆ Exit78 CI ctx Ac Sc Kc p x (e, s')) := by
+  refine CTriple.pre ((CTriple.loop (Inv78 CI ctx Ac Sc Kc p x) (Exit78 CI ctx Ac Sc Kc p x)
+    (loop78_step CI h ctx Ac Sc Kc p x) ⟨ok, l, x⟩).post fun r r' h =>
+      ⟨r.1, r.2, sep_lift.mpr ⟨rfl, h⟩⟩) fun r hr => ?_
+  obtain ⟨r₁, r₂, hd', he, h1, h2⟩ := hr
+  obtain ⟨ns, h2⟩ := sep_ex.mp h2
+  refine ⟨ns, sep_lift.mpr ⟨id, ?_⟩⟩
+  show (aptsE p x ⋆ Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc) r
+  have h3 : (aptsE p x ⋆ ((Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns) ⋆
+    Cm CI ctx Ac Sc Kc)) r := ⟨r₁, r₂, hd', he, h1, h2⟩
+  exact of_eq (by ac_rfl) h3
+
+end Retain
+
 section Reset
 
 set_option maxHeartbeats 2000000 in
@@ -378,3 +450,4 @@ end AllocArena.ArenaSpec
 #print axioms AllocArena.ArenaSpec.count_spec
 #print axioms AllocArena.Core.granted_in_node
 #print axioms AllocArena.ArenaSpec.reset_free_all_frame
+#print axioms AllocArena.ArenaSpec.loop78_ct
