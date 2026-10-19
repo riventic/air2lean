@@ -310,11 +310,11 @@ def binders(text: str) -> list[tuple[str, str]]:
     return [(name, match.group(2)) for match in BINDER_RE.finditer(text) for name in match.group(1).split()]
 
 
-def type_head(decl: Decl) -> str:
+def type_head(decl: Decl, allow_parameters: bool = False) -> str:
     """The head name of a binder-free constant's declared type, `def S : Sem Ph where` -> `Sem`."""
     text = re.split(r":=|\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
     colon = top_level(text, ":")
-    if colon < 0 or binders(text[:colon]):
+    if colon < 0 or (not allow_parameters and binders(text[:colon])):
         return ""
     match = TOKEN_RE.search(text[colon + 1:])
     return match.group(0) if match else ""
@@ -361,6 +361,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
     scopes: list[list] = []  # [kind, name parts, opens, variable binders, if_decl condition]
     file_opens: list[str] = []
     file_vars: list[tuple[str, str]] = []
+    ambient_vars: list[tuple[int, set[str], set[str]]] = []
     for keyword, number, lines in items:
         body = "\n".join(lines)
         head = lines[0]
@@ -374,9 +375,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             scopes.append([keyword, [], [], [], rest.split()[0]])
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
+            names = {n for n, _ in binders(body)}
+            ambient_vars.append((len(scopes), names, set(TOKEN_RE.findall(body)) - names - {"variable"}))
         elif keyword in {"end", "end_if"}:
             if scopes:
                 scopes.pop()
+                ambient_vars = [v for v in ambient_vars if v[0] <= len(scopes)]
         elif keyword == "open":
             names = []
             for word in rest.replace("(", " ( ").split():
@@ -402,6 +406,14 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
+            # A used section variable carries its whole declared type, including concrete
+            # generated target parameters absent from this theorem's explicit telescope.
+            while ambient_vars:
+                used = {token.split(".", 1)[0] for token in decl.tokens}
+                extra = {t for _, names, types in ambient_vars if names & used for t in types}
+                if extra <= decl.tokens:
+                    break
+                decl.tokens |= extra
             decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
             decl.dot_fields = set(DOT_FIELD_RE.findall(body))
             for name, head in [*file_vars, *(b for s in scopes for b in s[3]), *binders(body)]:
@@ -429,6 +441,16 @@ class Repository:
     ctors: dict[str, list[Decl]] = field(default_factory=dict)  # constructor short name -> inductives
     _visible: dict[str, set[str]] = field(default_factory=dict)
     _instances: list | None = None
+    _runtime_rules: dict[str, tuple] = field(default_factory=dict)
+
+    def runtime_rules(self, lean: LeanFile) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        """Existing closure rules over one parsed runtime module, once per repository."""
+        if lean.rel not in self._runtime_rules:
+            tokens = {t for d in lean.decls for t in d.tokens | {d.name}}
+            via: dict[str, list[str]] = {}
+            apply_rules(self.config, via, tokens, "closure")
+            self._runtime_rules[lean.rel] = tuple((p, tuple(reasons)) for p, reasons in via.items())
+        return self._runtime_rules[lean.rel]
 
     def instances(self) -> list[tuple[Decl, frozenset]]:
         """Every instance with the last name components of its instance type (cached)."""
@@ -561,11 +583,17 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
         local, _, rest = token.partition(".")
         if not rest or local not in decl.binders or depth > 2:
             return []
-        field_name = rest.split(".")[0]
-        hits = []
+        hits, owners = [], []
         for head in decl.binders[local]:
-            for owner in typed(head, depth + 1) or lookup(head):
-                hits += [t for t in repo.table.get(f"{owner.name}.{field_name}", ()) if t.file.rel in visible]
+            owners += typed(head, depth + 1) or lookup(head)
+        parts = rest.split(".")
+        for number, field_name in enumerate(parts):
+            fields = [t for owner in owners for t in repo.table.get(f"{owner.name}.{field_name}", ())
+                      if t.file.rel in visible]
+            hits += fields
+            if number + 1 < len(parts):
+                owners = [owner for target in fields if (head := type_head(target, allow_parameters=True))
+                          for owner in lookup(head, target)]
         return hits
 
     found: dict[int, Decl] = {}
@@ -700,9 +728,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
     seen, pending, tokens = {id(theorem)}, [theorem], set()
     runtime: set[str] = set()
-    unfolded: set[str] = set()
-    runtime_targets: list[Decl] = []
-    proof_names: set[str] = set()  # last name components the proofs of the closure's theorems name
     generated: set[str] = set()
     visible = repo.visible(theorem.file)
     instances = [(d, need) for d, need in repo.instances() if d.file.rel in visible]
@@ -714,10 +739,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         if target.file.runtime:
             runtime.add(target.file.module)
             seen.add(id(target))
-            # A proof that names a runtime definition can unfold it (`simp only [d]`, `unfold d`):
-            # the kernel term then holds the constants of its body, so the closure rules see them.
-            # Decided below, once every proof of the closure is known.
-            runtime_targets.append(target)
             return
         if target.kind == "axiom":
             for premise in config["source_axiom"]:
@@ -732,8 +753,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         while pending:
             current = pending.pop()
             tokens |= current.tokens
-            if current.kind in THEOREM_KINDS:
-                proof_names.update(t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(current.text[len(current.statement):]))
             for target in resolve(repo, current):
                 visit(target)
         # Instance arguments are implicit in source: assume every visible instance whose type
@@ -744,18 +763,30 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             break
         for instance in found:
             visit(instance)
-    # Only a proof unfolds: a statement, or a generated definition that applies a runtime
-    # definition, keeps the constant. A type has no body to unfold.
-    for target in runtime_targets:
-        if target.kind not in {"inductive", "structure", "class"} and target.name.rsplit(".", 1)[-1] in proof_names:
-            unfolded.update(target.tokens)
     # A tactic applies lemmas of runtime modules that the source does not name (`tactic_modules`).
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
+    fallback_via: dict[str, list[str]] = {}
     for module in sorted(runtime):
-        for premise in config["runtime_modules"].get(module, ()):
-            via.setdefault(premise, []).append(f"runtime module {module}")
-    apply_rules(config, via, tokens | unfolded, "closure")
+        lean = repo.files.get(module.replace(".", "/") + ".lean")
+        imported = {repo.files[r].module for r in repo.visible(lean) if repo.files[r].runtime} if lean else {module}
+        for dependency in sorted(imported):
+            source = repo.files.get(dependency.replace(".", "/") + ".lean")
+            if source:
+                # Elaborated recursors, instances and unfolding can name source-invisible
+                # constants. The source fallback conservatively includes the whole module.
+                for premise, reasons in repo.runtime_rules(source):
+                    if premise not in fallback_via:
+                        fallback_via[premise] = [f"{reason} (source runtime fallback {dependency})"
+                                                 for reason in reasons]
+            for premise in config["runtime_modules"].get(dependency, ()):
+                reason = f"runtime module {dependency}"
+                if dependency != module:
+                    reason += f" (source import fallback for {module})"
+                via.setdefault(premise, []).append(reason)
+    apply_rules(config, via, tokens, "closure")
+    for premise, reasons in fallback_via.items():
+        via.setdefault(premise, []).extend(reasons)
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):

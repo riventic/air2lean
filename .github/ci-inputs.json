@@ -8,6 +8,8 @@
       "scripts/rosetta-elf.py",
       "scripts/lean-deps.py",
       "lakefile.toml",
+      ".gitattributes",
+      "**/.gitattributes",
       "**/.gitignore"
     ]
   },
