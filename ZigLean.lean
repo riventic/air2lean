@@ -14,6 +14,7 @@ import ZigLean.PackedLemmas
 import ZigLean.Simp
 import ZigLean.Union
 import ZigLean.PackedRepr
+import ZigLean.PackedLayout
 import ZigLean.Vec
 import ZigLean.External
 import ZigLean.VersionGate
