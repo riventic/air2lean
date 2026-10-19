@@ -699,6 +699,14 @@ def prepare_tool(root: Path, runner) -> dict:
     return trace
 
 
+def framework_runtime_types() -> tuple[str, ...]:
+    """The existing framework gate's canonical computation families, without a second list."""
+    spec = importlib.util.spec_from_file_location("air2lean_proof_framework", ROOT / "scripts/proof-framework.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.PROGRAM_TYPES
+
+
 def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
             all_declarations: bool = False, root: Path | None = None) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
@@ -719,6 +727,9 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     driver += "set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n"
     if all_declarations:
         driver += "set_option air2lean.assurance.allDeclarations true\n"
+        # Resolve every canonical family in the SAME protected driver/environment. A renamed
+        # family must fail, even when no selected declaration happens to reference its old name.
+        driver += "".join(f"#check _root_.{name}\n" for name in framework_runtime_types())
     driver += ("#assurance_audit ["
                + ", ".join(json.dumps(m) for m in audited) + "]\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
@@ -745,7 +756,7 @@ def framework_candidates(raw: dict) -> dict:
     not declaration-name exceptions. A fixed point propagates their occurrence through the
     original kernel dependencies. Absence of a witness NEVER grants an ordinary-data exemption.
     """
-    runtime_types = ("ExceptT", "StateT", "Zig.CoN", "Zig.Conc.Proto", "Zig.ConcM", "Zig.MemM", "Zig.Result")
+    runtime_types = framework_runtime_types()
     roots = raw["selected_declaration_roots"]
     evidence = raw["selected_declaration_evidence"]
     if (not isinstance(roots, list) or not all(isinstance(n, str) for n in roots)
@@ -759,7 +770,8 @@ def framework_candidates(raw: dict) -> dict:
     reverse = {name: [] for name in nodes}
     unknown = 1 << len(runtime_types)
     masks = {name: ((1 << runtime_types.index(name)) if name in runtime_types else 0)
-             | (unknown if node["kind"] in ("unresolved", "opaque") else 0)
+             | (unknown if node["kind"] in ("unresolved", "opaque", "axiom")
+                or node.get("implemented_by") or node.get("extern") else 0)
              for name, node in nodes.items()}
     for name, node in nodes.items():
         for dependency in node["dependencies"]:
@@ -789,7 +801,8 @@ def framework_candidates(raw: dict) -> dict:
         prop = original.get("prop_valued")
         if prop is not None and type(prop) is not bool:
             raise ValueError(f"invalid framework result-sort evidence: {name}")
-        if not re.fullmatch(r"[0-9a-f]{32}", original.get("kernel_fingerprint", "")):
+        fingerprint = original.get("kernel_fingerprint")
+        if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{32}", fingerprint):
             raise ValueError(f"missing framework kernel fingerprint: {name}")
         for field in ("original_type_constants", "original_body_constants"):
             values = original.get(field)
