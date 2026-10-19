@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 128 rows, 47 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 130 rows, 48 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -68,6 +68,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [current-thread-subst](#row-current-thread-subst) | A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch) | STD-05 step A (codex/std-retire-futex-rules, PR #437) | `tests/roadmap/sep-auto/WPOsFutex.lean` | when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again. |
 | [word-family-views](#row-word-family-views) | A word's plain rules are reached only under the word's own head | arena-retain (coordinator review of #446) | `ZigLean/Sep/Full/AtomicPlain.lean` | once `viewAtoms` prefers the views that lose nothing (regression: the offset cases `store_beside_*`/`load_beside_*` of `tests/roadmap/sep-auto/AtomicPlain.lean` pass with only the `tptsE_*` rules registered), register `tptsE_load`, `tptsE_storeBytes`, `tptsE_store`, `tptsE_loadPacked`, `tptsE_storePacked` as `@[fsym]`, add the views word ↔ `tptsE` (`@[fsym_view]`), register `tptsE_view`, a `facts_tptsE` and `OwnsPtr.tptsE` as a provider, and delete the 14 instances and `wptsE_of`. |
 | [fold-recursive-pred](#row-fold-recursive-pred) | Fold a recursive user predicate to match a call rule's precondition instead of unfolding the callee | chore/l4-controls (PR #449, critic 27) | - | - |
+| [region-memset-read](#row-region-memset-read) | Infer a region read after a defined-value memset | Task14 full-state allocator client | - | - |
 
 ## Closed rows
 
@@ -154,6 +155,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [T5](#row-t5) | tick_run kept opaque in fsym_norm | see request text (tick rows, plans/tick-cost.md) |
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym` |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
+| [typed-region-release](#row-typed-region-release) | Release a complete block from typed fields while preserving the native stack refund | Task14 r13 actual compile passes all89 import-dependency jobs and both free_fields/free_fields_stack controls by plain fsym, including exact sp refund. Typed.pts_region_view exposes byte pieces; EUpd.region_extent relates their labels to the held physical authority before native free/free_sp. No new engine mechanism or workaround. |
 
 ## Shared mechanisms
 
@@ -1448,3 +1450,25 @@ Status: **open**. Requester: chore/l4-controls (PR #449, critic 27).
 Progress: open (no workaround: ListsPage's right client is `Lists.Client.buildThenFree [7]`, proved by the library theorem)
 
 Request: A client `match ← push a none 7 with | .error _ => pure () | .ok p => freeAll a (some p)` (from `I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain` back to itself) is not walked by `fsym [push_spec ctx vtp fns I e φ none 7 hfit h, freeAll_spec ctx vtp fns I e φ (h := h)]` (Proofs/Lists/Alloc.lean). After `push`, the state holds the new node `node I φ p 7 none` as its unfolded atoms (`bclaim`, `bshare`, `regionIn`, `I.tok`, `pts p 8 none`, `pts (p.add 8) 4 7`); `freeAll_spec`'s precondition is the recursive list predicate `list I φ (some p) [7]` (`Lists.Linked.list`: `∃ q, ⟪q = none⟫ ⋆ node …` for one item). `fsym` does not fold the atoms into `list I φ (some p) [7]` to apply the call rule; it unfolds `freeAll` and stops at `StateT.run (loop (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5) { p := some p }` (unsolved goal, no loop rule chosen). Wanted: when a call's rule has a precondition that is a user predicate (a recursive `list`/`seg` instance at a concrete list, or any `abbrev`/`def` of atoms), fold the matching state atoms into it (unfold the rule's precondition to atoms for the match, as the planner does for postconditions) and apply the call rule before unfolding the callee. Reproduction: the snippet above as an `example` with `import Proofs.Lists.Alloc` and `unfold pushThenFree; fsym […]` (scratch F1.lean on chore/l4-controls).
+
+<a id="row-typed-region-release"></a>
+### #typed-region-release Release a complete block from typed fields while preserving the native stack refund
+
+Status: **closed**. Requester: Task14 full-state allocator client.
+
+Note: Fresh r13 Structs.olean SHA256324372931410eb127f1147daa51643f69dfc4949a86f29209505557de6ac177f; raw guard report SHA256aa7ea842e2f2d69b040aae2c3373bc1da04e36594c609b58194630b6bef7e9bf. The same serial command failed only its independent memset/read control, not these release controls. Earlier r12 timeouts remain historical. Full client and legacy retirement remain open.
+
+Progress: Task14 r13 actual compile passes all89 import-dependency jobs and both free_fields/free_fields_stack controls by plain fsym, including exact sp refund. Typed.pts_region_view exposes byte pieces; EUpd.region_extent relates their labels to the held physical authority before native free/free_sp. No new engine mechanism or workaround.
+
+Request: Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.
+
+<a id="row-region-memset-read"></a>
+### #region-memset-read Infer a region read after a defined-value memset
+
+Status: **open**. Requester: Task14 full-state allocator client.
+
+Note: Actual r13 residual at load after successful memset: the existing generic region provider asks the simplifier to infer an unknown decoded result from memsetBytes. No Region.olean was produced and the client was not run. Typed-field release controls in the same bounded run pass.
+
+Progress: Native all-type Option memsetRegion and byte normalization compile. The real sep-auto/Region memset_read control applies the memset operation but cannot select a ReadsAt value for the subsequent load; no client acceptance.
+
+Request: Close tests/roadmap/sep-auto/Region.lean memset_read by fsym: for arbitrary p,A,S,K and bs.size=4 and v:BitVec8, FTotalTriple (up(regionIn p A S K 1 bs)) (do memset 1 p 4 (some v); load (BitVec8) 1 (p.add 3)) (fun r => ⟪r=v⟫ ⋆ up(regionIn p A S K 1 (memsetBytes 4 (some v)))). The generic fix must cover every lawful encoding/value/count and aligned in-bounds item offset using the existing ReadsAt.regionIn, Array.extract_flatten_replicate and decode_encode path, including fail-closed empty/zero-size read guards. Do not add a byte/client-specific load rule, new provider kind, Auto edit, premise or manual code walk.

@@ -1358,6 +1358,28 @@
    "request": "A client `match ← push a none 7 with | .error _ => pure () | .ok p => freeAll a (some p)` (from `I.own ⋆ (fees I φ 1 ⋆ vtR vtp fns.toList) ⋆ plain` back to itself) is not walked by `fsym [push_spec ctx vtp fns I e φ none 7 hfit h, freeAll_spec ctx vtp fns I e φ (h := h)]` (Proofs/Lists/Alloc.lean). After `push`, the state holds the new node `node I φ p 7 none` as its unfolded atoms (`bclaim`, `bshare`, `regionIn`, `I.tok`, `pts p 8 none`, `pts (p.add 8) 4 7`); `freeAll_spec`'s precondition is the recursive list predicate `list I φ (some p) [7]` (`Lists.Linked.list`: `∃ q, ⟪q = none⟫ ⋆ node …` for one item). `fsym` does not fold the atoms into `list I φ (some p) [7]` to apply the call rule; it unfolds `freeAll` and stops at `StateT.run (loop (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5) { p := some p }` (unsolved goal, no loop rule chosen). Wanted: when a call's rule has a precondition that is a user predicate (a recursive `list`/`seg` instance at a concrete list, or any `abbrev`/`def` of atoms), fold the matching state atoms into it (unfold the rule's precondition to atoms for the match, as the planner does for postconditions) and apply the call rule before unfolding the callee. Reproduction: the snippet above as an `example` with `import Proofs.Lists.Alloc` and `unfold pushThenFree; fsym […]` (scratch F1.lean on chore/l4-controls).",
    "workaround_sites": [],
    "deletion_plan": ""
+  },
+  {
+   "id": "typed-region-release",
+   "title": "Release a complete block from typed fields while preserving the native stack refund",
+   "status": "closed",
+   "requester": "Task14 full-state allocator client",
+   "progress": "Task14 r13 actual compile passes all89 import-dependency jobs and both free_fields/free_fields_stack controls by plain fsym, including exact sp refund. Typed.pts_region_view exposes byte pieces; EUpd.region_extent relates their labels to the held physical authority before native free/free_sp. No new engine mechanism or workaround.",
+   "request": "Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Fresh r13 Structs.olean SHA256324372931410eb127f1147daa51643f69dfc4949a86f29209505557de6ac177f; raw guard report SHA256aa7ea842e2f2d69b040aae2c3373bc1da04e36594c609b58194630b6bef7e9bf. The same serial command failed only its independent memset/read control, not these release controls. Earlier r12 timeouts remain historical. Full client and legacy retirement remain open."
+  },
+  {
+   "id": "region-memset-read",
+   "title": "Infer a region read after a defined-value memset",
+   "status": "open",
+   "requester": "Task14 full-state allocator client",
+   "progress": "Native all-type Option memsetRegion and byte normalization compile. The real sep-auto/Region memset_read control applies the memset operation but cannot select a ReadsAt value for the subsequent load; no client acceptance.",
+   "request": "Close tests/roadmap/sep-auto/Region.lean memset_read by fsym: for arbitrary p,A,S,K and bs.size=4 and v:BitVec8, FTotalTriple (up(regionIn p A S K 1 bs)) (do memset 1 p 4 (some v); load (BitVec8) 1 (p.add 3)) (fun r => ⟪r=v⟫ ⋆ up(regionIn p A S K 1 (memsetBytes 4 (some v)))). The generic fix must cover every lawful encoding/value/count and aligned in-bounds item offset using the existing ReadsAt.regionIn, Array.extract_flatten_replicate and decode_encode path, including fail-closed empty/zero-size read guards. Do not add a byte/client-specific load rule, new provider kind, Auto edit, premise or manual code walk.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Actual r13 residual at load after successful memset: the existing generic region provider asks the simplifier to infer an unknown decoded result from memsetBytes. No Region.olean was produced and the client was not run. Typed-field release controls in the same bounded run pass."
   }
  ],
  "mechanisms": [

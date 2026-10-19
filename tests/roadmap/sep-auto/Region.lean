@@ -50,6 +50,13 @@ theorem memsetUndef_total (n : BitVec 64) (bs : Array Byte) (h : n.toNat = bs.si
       (fun _ => up (regionIn p A S K 1 (Array.replicate n.toNat .undef))) := by
   fsym
 
+/-- Defined bytes written by memset are readable as their original value. -/
+theorem memset_read (bs : Array Byte) (h : bs.size = 4) (v : BitVec 8) :
+    FTotalTriple (up (regionIn p A S K 1 bs))
+      (do Zig.memset 1 p 4 (some v); Zig.load (BitVec 8) 1 (p.add 3))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (memsetBytes 4 (some v)))) := by
+  fsym
+
 /-- A whole region copied onto a separate one of the same size. -/
 theorem memcpy_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
     (h2 : n.toNat = bs.size) :

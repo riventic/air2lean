@@ -1,4 +1,6 @@
 import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Local
+import ZigLean.Sep.Full.Region
 
 /-!
 # Structs as their fields (`StructLayout`, engine ledger #78, #79)
@@ -110,6 +112,40 @@ theorem fold_split (p : Ptr) (b : BlockId) (hb : p.block = some b) (A : Nat) (v 
     EUpd (up (bytesAt p A 24 .global (Enc.encode v)))
       (up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) := by
   fsym_entail
+
+/-- A real store followed by typed folding and field splitting retains the actual address
+needed by an invariant, even though the typed points themselves hide byte metadata. -/
+theorem store_fields_keep_address (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) :
+    FTotalTriple
+      (up (bytesAt p A 24 .stack (Array.replicate 24 .undef)) ⋆ bext b 24 .stack)
+      (do Zig.store 8 p v; pure ())
+      (fun _ => (up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer) ⋆
+        bext b 24 .stack) ⋆ known b A) := by
+  have hw : (Enc.encode v).size = 24 := by
+    change (Enc.fields 24 [(0, Enc.encode v.end_index), (8, Enc.encode v.buffer)]).size = 24
+    apply fields_size
+    simp only [partSizes, List.map_cons, List.map_nil, LawfulEnc.size_encode]
+    decide
+  fsym
+
+set_option maxHeartbeats 800000 in
+theorem free_fields (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
+    (e : BitVec 64) (sl : Slice) :
+    FTotalTriple
+      ((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack)
+      (Zig.free p) (fun _ => emp) := by
+  set_option trace.fsym true in
+  fsym
+
+set_option maxHeartbeats 800000 in
+theorem free_fields_stack (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
+    (e : BitVec 64) (sl : Slice) (t S D c : Nat) :
+    FTotalTriple
+      (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆
+        (ent t (some b) D c ⋆ sp t S (D + c)))
+      (Zig.free p) (fun _ => sp t S D) := by
+  fsym
 
 /-! ## A struct's `pts` is its fields' and its padding's (ledger #79) -/
 

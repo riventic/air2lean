@@ -623,7 +623,8 @@ held with the block's extent (an escaping local, `Full/Local.lean`). -/
     (hdom : (errTagOf w).all d.names.contains = true) :
     FTotalTriple (up (bytesAt p A S K bs) ⋆ bext b S K)
       (@Zig.store (Except ErrName α) (errorUnionEnc d inferInstance) al p w)
-      (fun _ => up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) := by
+      (fun _ => (up (bytesAt p A S K (writeBytes bs 0 (Enc.encode w))) ⋆ bext b S K) ⋆
+        known b A) := by
   have e : @Zig.store (Except ErrName α) (errorUnionEnc d inferInstance) al p w = Zig.store al p w := by
     unfold Zig.store; rw [errorUnionEnc_encode hdom]
   rw [e]
