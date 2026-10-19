@@ -111,54 +111,16 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
   obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
   obtain ⟨ht, hjt⟩ := hiL.ht hg
-  obtain ⟨r, A, S, K', bs, hr, hsub, hbs, hdec, ha, hK⟩ := hrest G' rX m hU
-  have hpos : 0 < bs.size := by omega
-  -- the block: the rest's bytes are the memory's, at the block's address and kind
-  obtain ⟨blk, hblk, hx⟩ := hiL.restBytes hr hpb hsub hpos
-  obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hr hpb hpos
-  have hm := hiL.restCell (hsub _ _ hfc)
-  rw [Nat.add_zero] at hm
-  obtain ⟨c, e⟩ : ∃ c, m.heap (b, p.off.toNat) = some c := by
-    cases e : m.heap (b, p.off.toNat) with
-    | none => rw [e] at hm; cases hm
-    | some c => exact ⟨c, rfl⟩
-  rw [e] at hm
-  obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo e
-  obtain ⟨blk', hblk', hl, _, hc'⟩ := Mem.heap_some e
-  rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
-  subst hc'
-  have hn' := congrArg Cell.norm (Option.some.inj hm)
-  rw [hcell] at hn'
-  simp only [Cell.norm, Cell.mk.injEq] at hn'
-  obtain ⟨-, hA, -, hk⟩ := hn'
-  have h0 : 0 ≤ p.off := by obtain ⟨b', -, h0, -⟩ := hr.1; exact h0
-  have hsz : p.off.toNat + bs.size ≤ blk.bytes.size := by
-    have := congrArg Array.size hx
-    simp only [Array.size_extract] at this; omega
-  have hacc : m.access p (Enc.size T) a = pure (b, blk, p.off.toNat) :=
-    access_of hpb hblk hl h0 (by omega) (by rw [hA]; exact ha) hlo
-  have hkind : blk.kind ≠ .constGlobal := fun e' => by
-    rw [e'] at hk; cases K' <;> simp_all [BlockKind.norm]
-  have hd : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
-    rw [← hbs, hx]; exact hdec
-  have hrun : (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) :=
-    load_run hacc hd hkind ((hsh G' rX m hU).noRace_read (hc ▸ ht) hcov)
+  obtain ⟨hrun, hiL'⟩ := hiL.loadRest hpb hn (hrest G' rX m hU) hc hg
+    ((hsh G' rX m hU).noRace_read (hc ▸ ht) hcov)
   refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) (fun v' m' hr' => ?_)
     fun hnone => by rw [hrun] at hnone; cases hnone
   rw [hrun] at hr'
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
     Prod.mk.injEq] at hr'
   obtain ⟨rfl, rfl⟩ := hr'
-  refine ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr ⟨rX, ?_, hrec G' rX m hU (hc ▸ ht) (hc ▸ hjt)
+  exact ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr ⟨rX, hiL', hrec G' rX m hU (hc ▸ ht) (hc ▸ hjt)
     hiL.w.csize⟩)⟩
-  refine hiL.recordX (k := .read) (by decide) hc ht (Array.getElem?_eq_some_iff.mp hblk).1 hn
-    fun x h1 h2 => ?_
-  obtain ⟨fc', hfc'⟩ : ∃ fc', r.heap (b, x) = some fc' := by
-    have := (up_bytesAt_some hr hpb (b, x)).mpr ⟨rfl, h1, by omega⟩
-    cases e' : r.heap (b, x) with
-    | none => exact absurd e' this
-    | some fc' => exact ⟨fc', rfl⟩
-  rw [hsub _ _ hfc']; simp
 
 /-- A step that keeps the protocol's rest with the lock's word keeps the rest alone (for a
 protocol's `U` step under `Fits.wp_hold`'s `hU`, which gets the step with the word). -/

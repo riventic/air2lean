@@ -505,14 +505,8 @@ backend):
   keeps the place, a store moves it). The walk applies the holder's step itself (below: rules for
   every step, side goals after a segment, the protocol's lemmas); the protocol supplies its
   lemmas about `U` and its shape, no per-field rule.
-  A native plain-load fact is `FLock.Inv.loadRest` (`Full/LockSteps`): from bytes of
-  invariant rest, decoding/alignment and the actual reader's `NoRace`, it gives the exact
-  load run and preserves the same invariant/rest after recording the read. It needs no
-  `Fits` or program judgment. The reader's race-safety can follow from admission after a
-  writer publication without requiring unrelated live threads to have acquired it; a
-  `ReadShared` region is the all-reader case. This fact alone is not an admitted-reader
-  `fsym` protocol rule: that wrapper still needs the native `Fits.stable`/`LockWord.Step`
-  boundary (ledger #76).
+  `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
+  caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
