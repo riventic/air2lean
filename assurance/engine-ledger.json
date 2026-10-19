@@ -1508,9 +1508,9 @@
    {
     "id": "typed-region-release",
     "title": "Release a complete block from typed fields while preserving the native stack refund",
-    "status": "closed",
+    "status": "open",
     "requester": "Task14 full-state allocator client",
-    "progress": "Implemented by Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region. Reproduce the plain and exact-stack-refund controls with tests/roadmap/sep-auto/check.sh: Structs.free_fields and Structs.free_fields_stack. No new engine mechanism or workaround.",
+    "progress": "The native lemmas Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region are implemented. Generalizing the release rules to arbitrary alignment exposes a greedy first-field region match: Structs.free_fields and Structs.free_fields_stack leave an 8-byte region with a 24-byte size obligation instead of joining the complete region. Reproduce with tests/roadmap/sep-auto/check.sh. The permanent matching boundary is discussed on PR481, comment6278295244; no workaround or weakened statement was added.",
     "request": "Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.",
     "workaround_sites": [],
     "deletion_plan": "",
@@ -1532,7 +1532,7 @@
     "title": "Derive requested block-address knowledge from raw bytes without changing global store results",
     "status": "open",
     "requester": "PR481 coordinator takeover review",
-    "progress": "Source preparation: restore the original storeBlock/storeBlock_finite posts and extend the existing requested-knowledge planner through known_of_bytesAt. Qualification and ordered Auto integration remain pending.",
+    "progress": "The original storeBlock/storeBlock_finite posts are restored and the single requested-knowledge planner now precedes region planning, with raw bytes handled by known_of_bytesAt. The five unchanged Proofs callers pass the full root build. Structs.store_fields_keep_address and store_fields_known_exists still expose a return-view retry losing committed knowledge; known_region_existing_exists exposes premature speculative coverage of an unresolved address. Reproduce with tests/roadmap/sep-auto/check.sh. Same-existing-planner options are recorded on PR481, comment6278295244; final qualification is pending.",
     "request": "Close the generic store_fields_keep_address control in tests/roadmap/sep-auto/Structs.lean by deriving requested known b A from nonempty bytes before typed views hide their metadata. Do not eagerly add known to global store posts: the exact old result shape is required by Proofs/Threadsync/Mutex.lean, Proofs/Sync/Mutex.lean, Proofs/Sync/SnapshotCache.lean, Proofs/Threadsync/Handoff.lean and Proofs/Sync/Handoff.lean. Use only the existing knowledge-planning mechanism and known_of_bytesAt, with exact block/address and positive-byte guards; no per-proof glue or broader leftover-resource framing. Validate the completed global-rule repair with scripts/full-build.sh.",
     "workaround_sites": [],
     "deletion_plan": ""

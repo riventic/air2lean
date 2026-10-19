@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 141 rows, 54 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 141 rows, 55 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -74,6 +74,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [arena-retained-capacity](#row-arena-retained-capacity) | The retaining reset's retained capacity is not stated | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01. |
 | [region-end-opt-in](#row-region-end-opt-in) | The owned-region end bound is a per-file opt-in fact | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost). |
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
+| [typed-region-release](#row-typed-region-release) | Release a complete block from typed fields while preserving the native stack refund | Task14 full-state allocator client | - | - |
 | [known-bytes-on-demand](#row-known-bytes-on-demand) | Derive requested block-address knowledge from raw bytes without changing global store results | PR481 coordinator takeover review | - | - |
 
 ## Closed rows
@@ -165,7 +166,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [pick-bind](#row-pick-bind) | Pick-bind rules: bind rules over pick >>= op >>= g | DONE: PR #352 (merged 2026-10-15) registered `CTriple.weakCasPtr_bind` as `@[fsym]` (AutoConc.lean ~363); `publishWeak_spec` and `publishWeak_frame` are a bare `unfold publishWeak; fsym` |
 | [thread-loop](#row-thread-loop) | Loop rule for a Zig.loop in a thread (FTTriple) | DONE PR #319 (codex/fsym-thread-loop: Full/ThreadLoop) |
 | [thread-store-sized](#row-thread-store-sized) | A store of a packed struct into an owned word in a thread | DONE on codex/arena-reset-retain: provider `ThreadLocal.store_sized` (AutoThread.lean); regression `tests/roadmap/sep-auto/Threads.lean` (`packedWord`, `packedAtomicWord`: both fail without the provider) |
-| [typed-region-release](#row-typed-region-release) | Release a complete block from typed fields while preserving the native stack refund | Implemented by Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region. Reproduce the plain and exact-stack-refund controls with tests/roadmap/sep-auto/check.sh: Structs.free_fields and Structs.free_fields_stack. No new engine mechanism or workaround. |
 | [region-memset-read](#row-region-memset-read) | Infer a region read after a defined-value memset | Implemented by ReadsAt.regionMemset/regionMemset0 through the existing region/extraction/decode lemmas. Reproduce with tests/roadmap/sep-auto/check.sh: Region.memset_read and Region.memset_word_reads cover byte and multibyte initial/interior loads. No new provider kind or engine change. |
 
 ## Shared mechanisms
@@ -1597,11 +1597,11 @@ Deletion plan: Close after native lock primitive producers and Full consumers pr
 <a id="row-typed-region-release"></a>
 ### #typed-region-release Release a complete block from typed fields while preserving the native stack refund
 
-Status: **closed**. Requester: Task14 full-state allocator client.
+Status: **open**. Requester: Task14 full-state allocator client.
 
 Note: The controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Full client and legacy retirement remain open.
 
-Progress: Implemented by Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region. Reproduce the plain and exact-stack-refund controls with tests/roadmap/sep-auto/check.sh: Structs.free_fields and Structs.free_fields_stack. No new engine mechanism or workaround.
+Progress: The native lemmas Typed.pts_region_view, EUpd.region_extent and FTotalTriple.free_region/free_sp_region are implemented. Generalizing the release rules to arbitrary alignment exposes a greedy first-field region match: Structs.free_fields and Structs.free_fields_stack leave an 8-byte region with a 24-byte size obligation instead of joining the complete region. Reproduce with tests/roadmap/sep-auto/check.sh. The permanent matching boundary is discussed on PR481, comment6278295244; no workaround or weakened statement was added.
 
 Request: Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.
 
@@ -1621,6 +1621,6 @@ Request: Close tests/roadmap/sep-auto/Region.lean memset_read by fsym: for arbit
 
 Status: **open**. Requester: PR481 coordinator takeover review.
 
-Progress: Source preparation: restore the original storeBlock/storeBlock_finite posts and extend the existing requested-knowledge planner through known_of_bytesAt. Qualification and ordered Auto integration remain pending.
+Progress: The original storeBlock/storeBlock_finite posts are restored and the single requested-knowledge planner now precedes region planning, with raw bytes handled by known_of_bytesAt. The five unchanged Proofs callers pass the full root build. Structs.store_fields_keep_address and store_fields_known_exists still expose a return-view retry losing committed knowledge; known_region_existing_exists exposes premature speculative coverage of an unresolved address. Reproduce with tests/roadmap/sep-auto/check.sh. Same-existing-planner options are recorded on PR481, comment6278295244; final qualification is pending.
 
 Request: Close the generic store_fields_keep_address control in tests/roadmap/sep-auto/Structs.lean by deriving requested known b A from nonempty bytes before typed views hide their metadata. Do not eagerly add known to global store posts: the exact old result shape is required by Proofs/Threadsync/Mutex.lean, Proofs/Sync/Mutex.lean, Proofs/Sync/SnapshotCache.lean, Proofs/Threadsync/Handoff.lean and Proofs/Sync/Handoff.lean. Use only the existing knowledge-planning mechanism and known_of_bytesAt, with exact block/address and positive-byte guards; no per-proof glue or broader leftover-resource framing. Validate the completed global-rule repair with scripts/full-build.sh.
