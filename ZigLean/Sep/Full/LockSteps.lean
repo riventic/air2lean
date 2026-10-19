@@ -36,6 +36,60 @@ open FAssn Conc Proto
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
+/-- **A plain load from invariant rest by a race-free reader.** The bytes occur once in `rX`;
+the caller's admission need only justify its own `NoRace` fact. In particular, no prior write
+has to precede an unrelated live thread. The exact load run and its read record preserve the
+same full-state lock invariant and resource, without a protocol/implementation contract. -/
+theorem Inv.loadRest {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T}
+    {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
+    (hpb : p.block = some b) (hn : 0 < Enc.size T)
+    (hrest : ∃ r A S K' bs, up (bytesAt p A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧ bs.size = Enc.size T ∧
+      Enc.decode bs = pure v ∧ (A + p.off.toNat) % a = 0 ∧ K' ≠ .constGlobal)
+    (hc : m.current = t) (hg : L.ph (G t) ≠ .gone)
+    (hread : NoRace m b p.off.toNat (Enc.size T) .read) :
+    (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) ∧
+      L.Inv G rX (m.recordAt b p.off.toNat (Enc.size T) .read) := by
+  obtain ⟨ht, _⟩ := hi.ht hg
+  obtain ⟨r, A, S, K', bs, hr, hsub, hbs, hdec, ha, hK⟩ := hrest
+  have hpos : 0 < bs.size := by omega
+  obtain ⟨blk, hblk, hx⟩ := hi.restBytes hr hpb hsub hpos
+  obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hr hpb hpos
+  have hm := hi.restCell (hsub _ _ hfc)
+  rw [Nat.add_zero] at hm
+  obtain ⟨c, e⟩ : ∃ c, m.heap (b, p.off.toNat) = some c := by
+    cases e : m.heap (b, p.off.toNat) with
+    | none => rw [e] at hm; cases hm
+    | some c => exact ⟨c, rfl⟩
+  rw [e] at hm
+  obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo e
+  obtain ⟨blk', hblk', hl, _, hc'⟩ := Mem.heap_some e
+  rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
+  subst hc'
+  have hn' := congrArg Cell.norm (Option.some.inj hm)
+  rw [hcell] at hn'
+  simp only [Cell.norm, Cell.mk.injEq] at hn'
+  obtain ⟨_, hA, _, hk⟩ := hn'
+  have h0 : 0 ≤ p.off := by obtain ⟨_, _, h0, _⟩ := hr.1; exact h0
+  have hsz : p.off.toNat + bs.size ≤ blk.bytes.size := by
+    have := congrArg Array.size hx
+    simp only [Array.size_extract] at this; omega
+  have hacc : m.access p (Enc.size T) a = pure (b, blk, p.off.toNat) :=
+    access_of hpb hblk hl h0 (by omega) (by rw [hA]; exact ha) hlo
+  have hkind : blk.kind ≠ .constGlobal := fun e' => by
+    rw [e'] at hk; cases K' <;> simp_all [BlockKind.norm]
+  have hd : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
+    rw [← hbs, hx]; exact hdec
+  refine ⟨load_run hacc hd hkind hread, ?_⟩
+  refine hi.recordX (k := .read) (by decide) hc ht (Array.getElem?_eq_some_iff.mp hblk).1 hn
+    fun x h1 h2 => ?_
+  obtain ⟨fc', hfc'⟩ : ∃ fc', r.heap (b, x) = some fc' := by
+    have := (up_bytesAt_some hr hpb (b, x)).mpr ⟨rfl, h1, by omega⟩
+    cases e' : r.heap (b, x) with
+    | none => exact absurd e' this
+    | some fc' => exact ⟨fc', rfl⟩
+  rw [hsub _ _ hfc']; simp
+
 /-- **A read of read-shared bytes of the protocol's rest** (module doc) by a live thread `t`:
 `T`'s `Enc.size T` bytes at `p` (block `b`) are bytes `bs` of the rest that decode to `v`, at an
 address aligned for the load; the region `Rg` that covers them is read-shared, and a read's
