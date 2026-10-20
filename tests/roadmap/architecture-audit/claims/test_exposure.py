@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import re
 from pathlib import Path
 import subprocess
@@ -212,10 +213,26 @@ def stale_report_accepted():
         olean = base / 'Stale.olean'
         olean.write_bytes(b'audited bytes')
         digest = hashlib.sha256(olean.read_bytes()).hexdigest()
-        olean.write_bytes(b'bytes compiled after the audit')
         head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+        assumptions = load('assumptions', 'assumptions.py')
+        toolchain = base / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        (toolchain / 'lib/lean').mkdir(parents=True)
+        for name in ('bin/lean', 'bin/leanchecker', 'lib/lean/Init.olean'):
+            (toolchain / name).write_bytes(b'synthetic installed input')
+        runtime = {'lean_sysroot': str(toolchain.resolve()),
+                   'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain)}
+        lake = base / 'stub-bin/lake'
+        lake.parent.mkdir()
+        lake.write_text('#!' + sys.executable + '\nimport os,sys\n'
+                        'assert sys.argv[1:] == ["env", "printenv", "LEAN_SYSROOT"]\n'
+                        'print(os.environ["STUB_LEAN_SYSROOT"])\n')
+        lake.chmod(0o755)
+        environment = dict(os.environ, PATH=str(lake.parent) + os.pathsep + os.environ['PATH'],
+                           STUB_LEAN_SYSROOT=runtime['lean_sysroot'])
         report = {'schema_version': 1, 'status': 'pass', 'theorems': [THEOREMS['AuditClaims.hyp_is_claim']],
-                  'freshness': {'revision': {'head': head, 'tracked_dirty': False},
+                  'extractor': dict(runtime),
+                  'freshness': {**runtime, 'revision': {'head': head, 'tracked_dirty': False},
                                 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
                                 'artifacts': [{'module': 'Stale', 'olean': str(olean), 'olean_sha256': digest,
                                                'source': None, 'source_sha256': None}]}}
@@ -232,9 +249,14 @@ def stale_report_accepted():
                    '--assurance', str(base / 'assurance.json')]
         usage = subprocess.run(command[:4] + ['--help'], capture_output=True, text=True).stdout
         # A dirty checkout must not be the reason for the refusal: the stale olean must be.
-        result = subprocess.run(command + (['--allow-dirty'] if '--allow-dirty' in usage else []),
-                                capture_output=True, text=True)
-    return 'stale' not in result.stderr, f'claims.py check on a stale report exits {result.returncode}: {result.stderr.strip()[-120:]}'
+        command += ['--allow-dirty'] if '--allow-dirty' in usage else []
+        unchanged = subprocess.run(command, capture_output=True, text=True, env=environment)
+        if unchanged.returncode not in (0, 1) or not unchanged.stdout:
+            return True, f'unchanged synthetic report was not accepted by freshness: {unchanged.stderr.strip()[-120:]}'
+        olean.write_bytes(b'bytes compiled after the audit')
+        result = subprocess.run(command, capture_output=True, text=True, env=environment)
+    return result.returncode != 2 or 'Stale olean changed' not in result.stderr, \
+        f'claims.py check on a stale report exits {result.returncode}: {result.stderr.strip()[-120:]}'
 
 
 PY_CASES = {'spoofed-total-head': spoofed_total_head, 'spoofed-registered-head': spoofed_registered_head,
