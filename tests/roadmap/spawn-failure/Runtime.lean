@@ -1,8 +1,9 @@
 import ZigLean
-import ZigLean.Conc.SpawnLemmas
-import ZigLean.Conc.Csl
+import ZigLean.Sep.Full.ThreadSpawn
+import ZigLean.Conc.Base.Lock
+import ZigLean.Sep.Full.AutoWP
 
-open Zig Zig.Conc
+open Zig Zig.Conc Zig.Full
 
 inductive Target where
   | worker
@@ -26,24 +27,28 @@ theorem eagerCallerBody (fallback : ConcM Target Unit) (g : Ptr) (s : Unit) :
       (callC fallback : CM Target Unit Unit).run s := by rfl
 
 -- Arbitrary ownership and cleanup obligations stay with the caller on failure.
-theorem failedSpawnOwnership {own : ThreadId → Heap} {m : Mem} {P : Proto Target Unit}
-    {G : ThreadId → Unit} {t depth : Nat} (ho : Owned own m) :
+theorem failedSpawnOwnership {own : ThreadId → Res} {rO : Res} {m : Mem} {P : Proto Target Unit}
+    {G : ThreadId → Unit} {t depth : Nat} (ho : FOwned own rO m) :
     P.WP t ((spawnOutcomeC 1 Target.worker : CM Target Unit _).run ())
-      (fun result _ m' _ => result = (.error "ThreadQuotaExceeded", ()) ∧ Owned own m') G m depth := by
-  exact Proto.WP.spawnFailureFrame (by decide) ho
-
+      (fun result _ m' _ => result = (.error "ThreadQuotaExceeded", ()) ∧ FOwned own rO m') G m depth := by
+  have herr : spawnErrorAt (1 - 1) = "ThreadQuotaExceeded" := rfl
+  fsym [Proto.WP.spawnFailureFrame (P := P) (G := G) (t := t) (n := depth)
+    (target := Target.worker) (c := 1) (s := ())
+    (frame := fun _ m' => FOwned own rO m') (by decide) ho, herr]
 
 -- The refused second capture stays in the parent's private heap. Joining the
 -- earlier child then merges only that child's disjoint part into the caller.
 -- Both claims hold for arbitrary memory and every failed assignment choice.
-theorem refusedSecondThenJoin {own : ThreadId → Heap} {m m' : Mem} {t first c : ThreadId}
-    {depth : Nat} (hc : c ≠ 0) (ho : Owned own m) (ht : t < m.threads.size)
+theorem refusedSecondThenJoin {own : ThreadId → Res} {rO : Res} {m m' : Mem} {t first c : ThreadId}
+    {depth : Nat} (hc : c ≠ 0) (ho : FOwned own rO m) (ht : t < m.threads.size)
     (hne : first ≠ t)
     (hj : ((Thread.join first).run {m with current := t}).run = some (.ok ((), m'))) :
     (spawnOutcomeC c Target.worker : CM Target Unit _).run () depth {m with current := t} =
       CoN.leaf (some (.ok ((.error (spawnErrorAt (c - 1)), ()), {m with current := t}))) ∧
-    Owned (upd (upd own t (own t ∪ own first)) first Heap.empty) m' := by
-  exact ⟨failedSpawnLeaf c hc () _ depth, Owned.join ho ht hne hj⟩
+    FOwned (upd (upd own t (rsum (own t) (own first))) first rnil) rO m' := by
+  refine ⟨failedSpawnLeaf c hc () _ depth, ?_⟩
+  simpa only [upd_comm own rnil (rsum (own t) (own first)) hne] using
+    FOwned.join ho ht hne hj
 
 -- At an exhausted budget the oracle range holds only the five errors, and no choice
 -- decodes to assignment.
