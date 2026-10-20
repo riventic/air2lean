@@ -429,6 +429,85 @@ class ReplayTests(unittest.TestCase):
             self.assertIn('work=$(mktemp -d', text, script)
 
 
+class LakeExtractionTests(unittest.TestCase):
+    """assumptions.lake_extraction (--extract-in) with a stand-in Lake: the persistent workspace's
+    pin follows the repository's, and the installed runtime is part of the driver's identity."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        self.workspace = self.package / '.lake/extraction'
+        self.built = []
+        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')]
+        # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
+        self.own = str(self.workspace / '.lake/build/lib/lean')
+        self.resolved = [*self.roots, self.own]
+
+        def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                code = 0 if self.resolved is not None else 1
+                return subprocess.CompletedProcess(command, code, os.pathsep.join(self.resolved or []) + '\n', '')
+            module = command[-1]
+            self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
+            path = module.replace('.', '/') + '.lean'
+            return subprocess.CompletedProcess(command, 0, f'info: {path}:9:0: {assumptions.MARKER}{{}}\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def extract(self, runtime='a' * 64, binding=None):
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root, binding)
+
+    def test_a_bound_lookup_path_is_used_only_as_lake_resolves_it(self):
+        binding = {'roots': list(self.roots), 'sha256': 'c' * 64}
+        self.assertEqual(self.extract(binding=binding), ['{}'])
+        self.assertEqual(len(self.built), 1)
+        # A changed bound input (same roots) is another driver: Lake builds another module.
+        self.assertEqual(self.extract(binding=dict(binding, sha256='d' * 64)), ['{}'])
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        # One entry of Lake's resolved path differs from the bound one: nothing is built or reused.
+        self.resolved[1] = self.resolved[1] + '-other'
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.roots[1], self.roots[0], self.own]  # the same roots, another order
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = None  # Lake resolves nothing
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.own, *self.roots, self.own]  # the driver library twice
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [*self.roots, self.own]
+        (self.workspace / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
+        self.assertIsNone(self.extract(binding=binding))
+        self.assertEqual(len(self.built), 2)
+
+    def test_report_line_and_unchanged_driver(self):
+        self.assertEqual(self.extract(), ['{}'])
+        source = next(self.workspace.rglob('M*.lean'))
+        written = source.stat().st_mtime_ns
+        self.assertEqual(self.extract(), ['{}'])  # same inputs: the same driver, not rewritten
+        self.assertEqual((self.built[0], source.stat().st_mtime_ns), (self.built[1], written))
+
+    def test_the_child_pin_follows_the_repository(self):
+        self.extract()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v2\n')  # only the root pin changes
+        self.extract()
+        self.assertEqual([pin for _, pin in self.built], ['leanprover/lean4:v1\n', 'leanprover/lean4:v2\n'])
+        self.assertEqual((self.workspace / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+
+    def test_a_changed_runtime_is_another_driver(self):
+        self.extract('a' * 64)
+        self.extract('b' * 64)  # only the installed runtime changes: Lake must build another module
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        with self.assertRaises(ValueError):
+            self.extract(None)  # no runtime binding: fail closed
+
+
 class FreshnessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -628,8 +707,9 @@ class CompiledUnitTests(unittest.TestCase):
         output.write_bytes(b'compiled: ' + source.read_bytes())
         return subprocess.CompletedProcess(command, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertFalse(build)
+        self.assertIsNone(extract_in)
         self.assertEqual(witnesses, self.expected_witnesses)
         self.assertEqual(lean_path, self.active_context['lean_path'])
         audited = sorted({*modules, *witnesses})
@@ -1139,8 +1219,12 @@ class FixtureCompilationTests(unittest.TestCase):
             self.after_build()
         return subprocess.CompletedProcess(args, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertTrue(all_declarations)
+        # The fixture package may build the driver, still bound to the compiled lookup path
+        # (lake_extraction's resolved-roots controls: LakeExtractionTests).
+        self.assertIn(extract_in and Path(extract_in), (None, Path(self.package)))
+        self.assertIsNotNone(lean_path)
         raw = CompiledUnitTests.extract(self, modules, build, witnesses,
                                         all_declarations=all_declarations, lean_path=lean_path)
         # Helper has no declaration-graph node: only its unused header import reveals it.
