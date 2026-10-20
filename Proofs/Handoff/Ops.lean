@@ -272,7 +272,7 @@ theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh}
     (proto Lo prodOf).WP 1 (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (gO rnil { ph := .st })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun i jr sn e h => hs 0 i jr sn e h⟩)
-    (ci.signal_wp fitsC rfl hp 1 (gO rnil { ph := .sg }) rfl rfl rfl io G m d
+    (ci.signal_wp fitsC rfl hp 1 (gO rnil { ph := .sg }) rfl (.inl rfl) rfl io G m d
       (fun G₁ rX m₁ hg hu u i jr sn e hr => signal_seen G₁ rX m₁ hg hu u i jr sn e hr) hi)
 
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
