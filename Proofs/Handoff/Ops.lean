@@ -268,20 +268,26 @@ theorem wp_cwait (hLc : Lo.c = ci.c) {p q : Ptr} (hp : p = Lo.WS.ptr) (hq : q = 
 
 /-- **The producer's `signal`** at `sg`: a registered `main` is signalled; to the event's `set`. -/
 theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem}
-    {d : Nat} {rp : Res} (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .sg })) m) :
+    {d : Nat} {rp : Res} (hpl : rp.Plain)
+    (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .sg })) m) :
     (proto Lo prodOf).WP 1 (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .st })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun i jr sn e h => hs 0 i jr sn e h⟩)
     (ci.signal_wp fitsC rfl hp 1 (gO rp { ph := .sg }) rfl (.inl rfl) rfl io G m d
-      (fun G₁ rX m₁ hg hu u i jr sn e hr => signal_seen G₁ rX m₁ hg hu u i jr sn e hr) hi)
+      hpl (fun rᵢ _ G₁ rX m₁ hg hu u i jr sn e hr =>
+        signal_seen (rp := rᵢ) G₁ rX m₁
+          (by change G₁ 1 = gO rᵢ { ph := .sg } at hg; exact hg) hu u i jr sn e hr) hi)
 
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
 theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {rp : Res} (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .st })) m) :
+    {rp : Res} (hpl : rp.Plain)
+    (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .st })) m) :
     (proto Lo prodOf).WP 1 (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl rfl (.inl rfl) io G m d hi)
+    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl rfl (.inl rfl) io G m d
+      (ei.set_resources.plain_pre 1 rp hpl)
+      (fun r' hr => ei.set_resources.plain_post 1 rp r' hpl hr) hi)
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
