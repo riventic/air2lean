@@ -47,6 +47,30 @@ theorem hand_wakes_more (l : List ThreadId) (hl : l.length = 2 ^ 31) (cs : List 
     (Thread.wakePick (2 ^ 32 - 1) l cs).length = 2 ^ 31 := by
   rw [Thread.wakePick_length, hl]; decide
 
+/-! Sufficient-count coverage counts queue entries, without assuming distinct IDs.
+These are primitive-semantics controls, not claims that the duplicate-ID state is
+a reachable native queue. -/
+
+/-- An exhausted oracle still covers the last distinct ID after duplicate entries. -/
+theorem full_request_empty_choices : 2 ∈ Thread.wakePick 3 [1, 1, 2] [] :=
+  Thread.mem_wakePick_of_length_le (by decide) (by decide)
+
+/-- Only the three entries at `p0` count toward the sufficient request. -/
+def mixedWaiters : Array (ThreadId × Ptr) :=
+  #[(1, p0), (1, p0), (2, p0), (3, ⟨some 1, 0⟩)]
+
+/-- Coverage holds for every oracle and uses the actual pointer-filtered count. -/
+theorem full_request_filtered (cs : List Nat) :
+    2 ∈ Thread.wakeSet mixedWaiters p0 3 cs :=
+  Thread.mem_wakeSet_of_count (w := (2, p0)) (by decide) (by simp [mixedWaiters]) rfl
+
+/-- Two selected entries can share an ID; the insufficient request need not cover `2`. -/
+theorem short_request_duplicate_ids :
+    2 ∉ Thread.wakeSet mixedWaiters p0 2 [] := by decide +kernel
+
+#print axioms Thread.mem_wakePick_of_length_le
+#print axioms Thread.mem_wakeSet_of_count
+
 -- The binding is still there: a std wake selects the hand model.
 #guard Air2Lean.stdModels.any fun r => r.symbol == "Thread.Futex.wake" || r.symbol == "Io.futexWake"
 

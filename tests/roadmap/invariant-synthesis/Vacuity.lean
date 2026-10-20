@@ -40,13 +40,8 @@ theorem vacuous_spec (L : FLogic) (vt : RawVTable) (ctx : Ptr) : FAllocSpec L vt
 
 /-- **The anchor**: a total triple from an admissible precondition ends in an admissible state. -/
 theorem creation_admits {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
-    (ht : FTotalTriple P c Q) (h : FAdmit P) : ∃ v, FAdmit (Q v) := by
-  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
-  obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
-  have h1 := ht.1 m r rF hh hp hs
-  rw [e] at h1
-  obtain ⟨r', hh', hq, hs'⟩ := h1
-  exact ⟨v, m', r', rF, hh', hq, hs', trivial⟩
+    (ht : FTotalTriple P c Q) (h : FAdmit P) : ∃ v, FAdmit (Q v) :=
+  FAdmit.of_total ht h
 
 /-- No state holds `falseInv.own`. -/
 theorem not_admit_falseInv (R : FAssn) : ¬ FAdmit (falseInv.own ⋆ R) := by

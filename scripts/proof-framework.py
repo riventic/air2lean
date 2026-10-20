@@ -67,7 +67,11 @@ SUFFIXES = ("Triple", "TripleIn", "Returns", "ReturnsUnder", "Within", "Stk", "S
 #             separation-logic assertions (`ResetLedger`: `B : W → FAssn`);
 #  (step)     it is a Prop-valued structure relating two memories (`FStepIn hF m m'`), the step
 #             relation of a program logic.
-PROGRAM_TYPE = re.compile(r"\b(?:Result|MemM|ConcM|CoN|StateT|ExceptT|Proto)\b")
+# The same resolved identities seed the opt-in compiled candidate report. Keep the textual
+# spelling test derived from them; it remains only the existing lexical ratchet.
+PROGRAM_TYPES = ("ExceptT", "StateT", "Zig.CoN", "Zig.Conc.Proto", "Zig.ConcM", "Zig.MemM", "Zig.Result")
+PROGRAM_TYPE = re.compile(r"\b(?:" + "|".join(re.escape(name.rsplit(".", 1)[-1])
+                                            for name in PROGRAM_TYPES) + r")\b")
 ASSERTION_TYPE = re.compile(r"\b(?:F?Assn|Res)\b|→\s*Prop\b")
 SEP_ASSERTION = re.compile(r"\bF?Assn\b")
 MEM_BINDER = re.compile(r"((?:[\w']+\s+)+):\s*Mem\b")

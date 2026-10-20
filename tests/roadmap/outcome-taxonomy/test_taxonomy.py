@@ -5,6 +5,7 @@ Offline: synthetic diff summaries and the checked-in claim fixture report only."
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -156,8 +157,25 @@ class ClaimsEvidenceTests(unittest.TestCase):
         spec.loader.exec_module(assumptions)
         olean = self.base / 'Fixture.olean'
         olean.write_bytes(b'compiled fixture')
+        toolchain = self.base / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        (toolchain / 'lib/lean').mkdir(parents=True)
+        for name in ('bin/lean', 'bin/leanchecker', 'lib/lean/Init.olean'):
+            (toolchain / name).write_bytes(b'synthetic installed input')
+        runtime = {'lean_sysroot': str(toolchain.resolve()),
+                   'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain)}
+        lake = self.base / 'stub-bin/lake'
+        lake.parent.mkdir()
+        lake.write_text('#!' + sys.executable + '\nimport os,sys\n'
+                        'assert sys.argv[1:] == ["env", "printenv", "LEAN_SYSROOT"]\n'
+                        'print(os.environ["STUB_LEAN_SYSROOT"])\n')
+        lake.chmod(0o755)
+        self.env = dict(os.environ, PATH=str(lake.parent) + os.pathsep + os.environ['PATH'],
+                        STUB_LEAN_SYSROOT=runtime['lean_sysroot'])
         self.report = self.base / 'assurance.json'
-        self.report.write_text(json.dumps(dict(json.loads(FIXTURE.read_text()), freshness={
+        fixture = json.loads(FIXTURE.read_text())
+        fixture['extractor'] = dict(fixture.get('extractor', {}), **runtime)
+        self.report.write_text(json.dumps(dict(fixture, freshness={**runtime,
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
             'artifacts': [{'module': 'Fixture', 'olean': str(olean), 'olean_sha256': assumptions.file_sha256(olean),
                            'source': None, 'source_sha256': None}]})))
@@ -182,7 +200,7 @@ class ClaimsEvidenceTests(unittest.TestCase):
         # The checkout under test may have uncommitted changes (the evidence binding is tested here).
         result = subprocess.run([sys.executable, str(CLAIMS), 'check', str(path), '--assurance', str(self.report),
                                  '--allow-dirty', *extra],
-                                capture_output=True, text=True, timeout=30)
+                                capture_output=True, text=True, timeout=30, env=self.env)
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
     def test_clean_and_error_return_evidence_accepted(self):
@@ -191,6 +209,28 @@ class ClaimsEvidenceTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(result['roots'][0]['outcomes'],
                          {'valid': 1, 'nondeterministic_valid': 1, 'error_return': 1})
+
+    def test_missing_or_mismatched_runtime_headers_are_refused(self):
+        original = self.report.read_text()
+        cases = [(section, key) for section in ('extractor', 'freshness')
+                 for key in ('lean_sysroot', 'toolchain_runtime_sha256')]
+        try:
+            for section, key in cases:
+                with self.subTest(section=section, key=key):
+                    report = json.loads(original)
+                    del report[section][key]
+                    self.report.write_text(json.dumps(report))
+                    code, result, err = self.run_check([case('value_match', 'value')])
+                    self.assertEqual((code, result), (2, None))
+                    self.assertIn('runtime binding', err)
+            report = json.loads(original)
+            report['extractor']['toolchain_runtime_sha256'] = '0' * 64
+            self.report.write_text(json.dumps(report))
+            code, result, err = self.run_check([case('value_match', 'value')])
+            self.assertEqual((code, result), (2, None))
+            self.assertIn('runtime binding', err)
+        finally:
+            self.report.write_text(original)
 
     def test_capped_or_timer_evidence_rejects_goal(self):
         for row in (case('search_cap', 'value', search('capped')), case('unspecified_exclusion', 'unspecified'),

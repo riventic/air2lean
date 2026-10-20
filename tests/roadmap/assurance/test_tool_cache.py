@@ -24,7 +24,7 @@ def make_root(directory: str) -> Path:
     (root / "tools").mkdir()
     (root / "tools/Assurance.lean").write_text("import Lean\n")
     (root / "lean-toolchain").write_text("leanprover/lean4:v4.34.0\n")
-    (root / "lakefile.toml").write_text('name = "test"\n')
+    (root / "lakefile.toml").write_text('name = "test"\n[[lean_lib]]\nname = "tools"\n')
     (root / "imported-dependency").write_text("original dependency")
     olean(root).parent.mkdir(parents=True)
     return root
@@ -104,7 +104,7 @@ class ToolCacheTests(unittest.TestCase):
         (root / 'tools').mkdir()
         (root / 'tools/Assurance.lean').write_text('import Lean\n')
         (root / 'lean-toolchain').write_text('pin\n')
-        (root / 'lakefile.toml').write_text('name = "test"\n')
+        (root / 'lakefile.toml').write_text('name = "test"\n[[lean_lib]]\nname = "tools"\n')
         artifact = root / '.lake/build/lib/lean/tools/Assurance.olean'
 
         def build(command):
@@ -181,7 +181,7 @@ class ToolCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = make_root(directory)
             config, lake = root / "lakefile.toml", Lake(root)
-            first, second = config.read_text(), 'name = "other context"\n'
+            first, second = config.read_text(), 'name = "other context"\n[[lean_lib]]\nname = "tools"\n'
 
             def reused(text):
                 config.write_text(text)
@@ -208,7 +208,7 @@ class ToolCacheTests(unittest.TestCase):
             with audit.prepared_tool(root, Lake(root)) as trace:
                 # The body stands for the `lake env lean` run importing the olean. A second
                 # invocation with another context (no record yet) would unlink and rebuild it.
-                (root / "lakefile.toml").write_text('name = "other context"\n')
+                (root / "lakefile.toml").write_text('name = "other context"\n[[lean_lib]]\nname = "tools"\n')
                 child = subprocess.Popen([sys.executable, "-B", __file__, "--contend", str(root)],
                                          stdout=subprocess.PIPE, text=True)
                 try:
@@ -256,7 +256,7 @@ class ToolCacheTests(unittest.TestCase):
             (root / 'tools').mkdir()
             (root / 'tools/Assurance.lean').write_text('import Lean\n')
             (root / 'lean-toolchain').write_text('pin\n')
-            (root / 'lakefile.toml').write_text('name = "test"\n')
+            (root / 'lakefile.toml').write_text('name = "test"\n[[lean_lib]]\nname = "tools"\n')
 
             def changing_builder(command):
                 if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
@@ -291,7 +291,7 @@ class ToolCacheTests(unittest.TestCase):
             private.mkdir()
             with patch.dict(os.environ, {'LEAN_PATH': 'private'}):
                 first = self.prepare(root, build)
-                self.assertEqual(first['caller_lean_path']['roots'], [str(private)])
+                self.assertEqual(first['caller_lean_path']['roots'], [str(private.resolve())])
                 self.assertTrue(self.prepare(root, build)['cache_reused'])
                 # Keep every extractor/trace byte fixed; only a private input changes.
                 for name in ('Witness.olean', 'Witness.olean.private', 'Witness.olean.server',
@@ -342,7 +342,7 @@ class ToolCacheTests(unittest.TestCase):
                 dependency = private / 'Witness.ir.sig'
                 dependency.write_bytes(b'original')
 
-                def runner(command):
+                def runner(command, *, root=root):
                     if command[:3] == ['lake', 'env', 'lean']:
                         if stage == 'extraction':
                             dependency.write_bytes(b'modified')
@@ -352,10 +352,8 @@ class ToolCacheTests(unittest.TestCase):
                         dependency.write_bytes(b'modified')
                     return result
 
-                prepared = audit.prepared_tool
                 with patch.dict(os.environ, {'LEAN_PATH': str(private)}), \
-                        patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner), \
-                        patch.object(audit, 'prepared_tool', side_effect=lambda: prepared(root, runner)):
+                        patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner):
                     if stage == 'unchanged':
                         raw = audit.extract(['Proofs.Fixture'], False)
                         self.assertEqual(raw['modules'], ['Proofs.Fixture'])
@@ -441,6 +439,189 @@ class RuntimeDigestTests(unittest.TestCase):
             (root / 'lib').rmdir()
             with self.assertRaisesRegex(ValueError, 'missing toolchain library directory'):
                 audit.toolchain_runtime_sha256(root)
+
+class SourceInputTests(unittest.TestCase):
+    prepare = staticmethod(ToolCacheTests.prepare)
+
+    def source_project(self, root):
+        make_root(str(root))
+        (root / 'tools/Assurance.lean').write_text('import tools.Helper\n')
+        (root / 'tools/Helper.lean').write_text('def value := 1\n')
+        return Lake(root), olean(root)
+
+    def test_helper_source_change_invalidates_trace_with_fixed_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build, artifact = self.source_project(root)
+            self.prepare(root, build)
+            self.assertTrue(self.prepare(root, build)['cache_reused'])
+            fixed = artifact.read_bytes(), artifact.with_suffix('.trace').read_bytes()
+            helper = root / 'tools/Helper.lean'
+            saved = helper.stat()
+            helper.write_text('def value := 2\n')
+            os.utime(helper, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+            changed = self.prepare(root, build)
+            self.assertFalse(changed['cache_reused'])
+            self.assertEqual(fixed, (artifact.read_bytes(), artifact.with_suffix('.trace').read_bytes()))
+            self.assertEqual(changed['library_source_inputs'], audit.library_source_inputs(root))
+            self.assertTrue(self.prepare(root, build)['cache_reused'])
+            external = root / 'outside-library.lean'
+            external.write_bytes(helper.read_bytes())
+            helper.unlink()
+            helper.symlink_to(external)
+            self.assertFalse(self.prepare(root, build)['cache_reused'])
+            other = root / 'same-bytes.lean'
+            other.write_bytes(external.read_bytes())
+            helper.unlink()
+            helper.symlink_to(other)
+            self.assertFalse(self.prepare(root, build)['cache_reused'])
+            helper.unlink()
+            helper.symlink_to(external)
+            external.write_text('def value := 3\n')
+            self.assertFalse(self.prepare(root, build)['cache_reused'])
+            extra = root / 'tools/Unused.lean'
+            extra.write_text('def unused := 1\n')
+            self.assertFalse(self.prepare(root, build)['cache_reused'])
+            extra.unlink()
+            latest = self.prepare(root, build)
+            self.assertFalse(latest['cache_reused'])
+            manifest = record_of(root, latest)
+            unbound = json.loads(manifest.read_text())
+            del unbound['library_source_inputs']
+            manifest.write_text(json.dumps(unbound))
+            self.assertFalse(self.prepare(root, build)['cache_reused'])
+            self.assertEqual(fixed, (artifact.read_bytes(), artifact.with_suffix('.trace').read_bytes()))
+
+    def test_source_mutation_during_preparation_and_extraction_is_rejected(self):
+        for stage in ('unchanged', 'preparation', 'extraction'):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build, _ = self.source_project(root)
+
+                def run(command, *, root=root):
+                    if command[:3] == ['lake', 'env', 'lean']:
+                        if stage == 'extraction':
+                            (root / 'tools/Helper.lean').write_text('def value := 2\n')
+                        return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+                    result = build(command)
+                    if stage == 'preparation' and command[:3] == ['lake', '--rehash', 'build']:
+                        (root / 'tools/Helper.lean').write_text('def value := 2\n')
+                    return result
+
+                with patch.object(audit, 'ROOT', root), patch.object(audit, 'run', run):
+                    if stage == 'unchanged':
+                        self.assertEqual(audit.extract(['Proofs.Fixture'], False)['modules'], ['Proofs.Fixture'])
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'sources changed during extractor ' + stage):
+                            audit.extract(['Proofs.Fixture'], False)
+                if stage == 'preparation':
+                    self.assertTrue(no_record(root))
+
+
+    def test_manifest_add_change_and_remove_bind_the_current_state(self):
+        for before, after in ((None, '{}'), ('{}', '{"changed":true}'), ('{}', None)):
+            with self.subTest(before=before, after=after), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build, _ = self.source_project(root)
+                manifest = root / 'lake-manifest.json'
+                if before is not None:
+                    manifest.write_text(before)
+                first = self.prepare(root, build)
+                self.assertTrue(self.prepare(root, build)['cache_reused'])
+                if after is None:
+                    manifest.unlink()
+                else:
+                    manifest.write_text(after)
+                changed = self.prepare(root, build)
+                self.assertNotEqual(first['library_source_inputs'], changed['library_source_inputs'])
+                self.assertFalse(changed['cache_reused'])
+                latest = self.prepare(root, build)
+                self.assertTrue(latest['cache_reused'])
+                record = record_of(root, latest)
+                unbound = json.loads(record.read_text())
+                del unbound['lake_manifest_sha256']
+                record.write_text(json.dumps(unbound))
+                self.assertFalse(self.prepare(root, build)['cache_reused'])
+
+    def test_configuration_mutations_are_rejected_in_both_phases(self):
+        for stage in ('preparation', 'extraction'):
+            for name in ('lakefile.toml', 'lean-toolchain', 'lake-manifest.json'):
+                with self.subTest(stage=stage, name=name), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    build, _ = self.source_project(root)
+
+                    def runner(command, *, root=root):
+                        phase = 'extraction' if command[:3] == ['lake', 'env', 'lean'] else 'preparation'
+                        if phase == 'extraction':
+                            result = audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+                        else:
+                            result = build(command)
+                        if phase == stage and command[:3] != ['lake', 'env', 'printenv']:
+                            path = root / name
+                            path.write_text(path.read_text() + '\n# changed\n' if path.exists() else '{}')
+                        return result
+
+                    with patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner):
+                        with self.assertRaisesRegex(ValueError, 'sources changed during extractor ' + stage):
+                            audit.extract(['Proofs.Fixture'], False)
+                    if stage == 'preparation':
+                        self.assertTrue(no_record(root))
+
+    def test_source_selection_uses_the_shared_alias_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.source_project(root)
+            (root / 'tools.lean').write_text('import tools.Helper\n')
+            (root / 'Other').mkdir()
+            (root / 'Other/Unused.lean').write_text('def unused := 1\n')
+            (root / 'lakefile.toml').write_text(
+                '[[lean_lib]]\nname = "Extractor"\nroots = ["tools.Assurance"]\nglobs = ["Other.+"]\n')
+            inputs = audit.library_source_inputs(root)
+            files = {path for path, _, content in inputs if content}
+            self.assertTrue({'tools.lean', 'tools/Helper.lean', 'Other/Unused.lean'} <= files)
+            (root / 'external').mkdir()
+            target = root / 'external/Only.lean'
+            target.write_text('def only := 1\n')
+            alias = root / 'tools/alias'
+            alias.symlink_to(root / 'external', target_is_directory=True)
+            linked = audit.library_source_inputs(root)
+            self.assertNotEqual(inputs, linked)
+            target.write_text('def only := 2\n')
+            self.assertNotEqual(linked, audit.library_source_inputs(root))
+            target.unlink()
+            alias.unlink()
+            alias.symlink_to(root / 'missing', target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'missing compiled input symlink target'):
+                audit.library_source_inputs(root)
+            alias.unlink()
+            alias.symlink_to(root / 'tools', target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'cyclic compiled input directory'):
+                audit.library_source_inputs(root)
+            alias.unlink()
+            (root / 'lakefile.toml').write_text('[[lean_lib]]\nname = "Missing"\n')
+            with self.assertRaisesRegex(ValueError, 'Missing.*no Lean sources'):
+                audit.library_source_inputs(root)
+
+    def test_extract_forwards_the_selected_root_to_every_phase(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build, _ = self.source_project(root)
+            selected = []
+
+            def runner(command, *, root):
+                selected.append(root)
+                if command[:3] == ['lake', 'env', 'lean']:
+                    self.assertEqual(Path(command[-1]).parent, root / '.lake/assurance')
+                    return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+                return build(command)
+
+            with patch.object(audit, 'run', runner):
+                raw = audit.extract(['Proofs.Fixture'], False, root=root)
+                relative = Path(os.path.relpath(root))
+                audit.extract(['Proofs.Fixture'], False, root=relative)
+            self.assertTrue(selected)
+            self.assertEqual(set(selected), {root.resolve()})
+            self.assertEqual(raw['extractor']['library_source_inputs'], audit.library_source_inputs(root))
 
 
 if __name__ == "__main__":

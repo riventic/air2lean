@@ -165,6 +165,26 @@ through `cas.py src`.
 
 ## Concurrency and eviction
 
+Assurance extractor traces include fresh input records for all configured library `.lean` files,
+including library root files, explicit glob roots and helpers outside theorem dependency
+closures. The existing `input_tree_records` traversal binds file paths, link identities,
+target bytes, additions and removals for both sources and runtime inputs. Directory aliases
+use the same traversal; broken links and cycles fail closed. Missing libraries, unbounded
+globs and nondefault Lake `srcDir` are rejected. Source selection conservatively includes
+each configured glob's entire first module component. Configuration (`lakefile.toml`,
+`lean-toolchain` and `lake-manifest.json`, including its absent state) participates in the
+same records, verified before/after preparation and after extraction on the selected root.
+The selected root is resolved before choosing the working directory, lock and driver paths;
+relative caller `LEAN_PATH` entries use that same canonical root. Explicit caller path aliases
+retain their own logical paths and resolved identities in the existing caller binding.
+
+A changed source snapshot invalidates trace reuse. It does not by itself delete the compiled
+extractor: Lake still validates its actual dependency/build trace with `--rehash` on every
+preparation and rebuilds when needed. This avoids recompiling the extractor for an unrelated
+proof-source edit. Source records stay outside the compiled-artifact context key; the existing
+context hash and per-context records remain the sole cache. The snapshot is not a proof that compiled modules match those sources or a
+complete witness/import-closure binding; replay and receipt validation remain separate.
+
 The assurance extractor's per-context record (`.lake/assurance/tool-traces/<context hash>.json`,
 docs/assumptions-audit.md) binds the installed
 Lean executables, shared libraries and compiled logical/IR inputs, including alias identities
