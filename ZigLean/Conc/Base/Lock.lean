@@ -132,6 +132,14 @@ theorem joinedB_fork {m m' : Mem} {t c : ThreadId} {gt : Bool}
   · rename_i h; subst h; simp
   · rfl
 
+/-- A fork or deferred fork keeps the spawning thread current. -/
+theorem fork_current {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    m'.current = t := by
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  exact (congrArg Mem.current hf.2).symm
+
 theorem fork_threads {m m' : Mem} {t c : ThreadId} {gt : Bool}
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false, gated := gt } := by

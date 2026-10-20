@@ -1,12 +1,13 @@
 import Proofs.Threads.Gen
 import ZigLean.Simp
-import ZigLean.Conc.Witness
+import ZigLean.Mem.Witness
 import ZigLean.Conc.Base.Lock
 import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # `disjoint` over all schedules: concurrent separation logic
@@ -49,13 +50,6 @@ abbrev blk (p : Ptr) (A S : Nat) (bs : Array Byte) (b : BlockId) : FAssn :=
 theorem sep_lcomm {P Q R : FAssn} {r : Res} (h : (P ⋆ (Q ⋆ R)) r) : (Q ⋆ (P ⋆ R)) r :=
   sep_assoc (sep_mono_left (fun _ h => sep_comm h) (sep_assoc' h))
 
-theorem sep_ex2_lift {R : FAssn} {φ : Nat → BlockId → Prop} {P : Nat → BlockId → FAssn} {r : Res}
-    (h : (R ⋆ FAssn.ex fun A => FAssn.ex fun b => ⟪φ A b⟫ ⋆ P A b) r) :
-    ∃ A b, φ A b ∧ (R ⋆ P A b) r := by
-  obtain ⟨r₁, r₂, hd, e, hr, A, b, hp⟩ := h
-  obtain ⟨hφ, hp⟩ := sep_lift.mp hp
-  exact ⟨A, b, hφ, r₁, r₂, hd, e, hr, hp⟩
-
 /-! ## `writeFlag` -/
 
 theorem writeFlag_eq (c : Ptr) : writeFlag c = (Zig.load Ptr 8 c >>= fun xp =>
@@ -73,27 +67,14 @@ theorem writeFlag_spec {c x : Ptr} {bc bx : BlockId} {Ac Ax : Nat} {cb xb : Arra
     (hcx : Enc.decode (cb.extract 0 8) = pure x) (hcv : Enc.decode (cb.extract 8 12) = pure v) :
     FTTriple (blk c Ac 16 cb bc ⋆ blk x Ax 4 xb bx) (writeFlag c)
       (fun _ => blk c Ac 16 cb bc ⋆ blk x Ax 4 (Enc.encode v) bx) := by
+  have hwrite : writeBytes xb 0 (Enc.encode v) = Enc.encode v :=
+    writeBytes_all (by rw [hxs, LawfulEnc.size_encode]; rfl)
   rw [writeFlag_eq]
-  have hlx : FTTriple (blk c Ac 16 cb bc) (Zig.load Ptr 8 c)
-      (fun r => ⟪r = x⟫ ⋆ blk c Ac 16 cb bc) := by
-    fsym [FTotalTriple.loadBlock (T := Ptr) (A := Ac) (S := 16) (K := .stack) (al := 8) hcb
-      (by decide) (by rw [hcs]; decide) hcx (by simp [hc0, hAc])]
-  have hlv : FTTriple (blk c Ac 16 cb bc) (Zig.load (BitVec 32) 4 (c.add 8))
-      (fun r => ⟪r = v⟫ ⋆ blk c Ac 16 cb bc) := by
-    fsym [FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (A := Ac) (S := 16) (K := .stack)
-      (bs := cb) (T := BitVec 32) (by decide) (by rw [hcs]; decide) (by simp [hc0]; omega) hcv]
-  refine FTTriple.bind (hlx.frame.post fun _ _ h => sep_assoc h)
-    fun xp => FTTriple.lift fun hxp => ?_
-  subst xp
-  refine FTTriple.bind ((FTTriple.ptrProjectAt (k := 8) hcb (by rw [hcs]; decide)
-    (by rw [hcs]; decide)).frame.post fun _ _ h => sep_assoc h) fun q => FTTriple.lift fun hq => ?_
-  subst q
-  refine FTTriple.bind (hlv.frame.post fun _ _ h => sep_assoc h)
-    fun w => FTTriple.lift fun hw => ?_
-  subst w
-  refine (FTTriple.storeAt (k := 0) (a := 4) v hxb (by simp [Ptr.add]) (by decide)
-    (by rw [hxs]; decide) (by simp [hx0, hAx]) (by decide)).frameL.post fun _ _ h => ?_
-  rwa [writeBytes_all (by rw [hxs, LawfulEnc.size_encode]; rfl)] at h
+  fsym [FTotalTriple.loadBlock (T := Ptr) (A := Ac) (S := 16) (K := .stack) (al := 8) hcb
+      (by decide) (by rw [hcs]; decide) hcx (by simp [hc0, hAc]),
+    FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (A := Ac) (S := 16) (K := .stack)
+      (bs := cb) (T := BitVec 32) (by decide) (by rw [hcs]; decide) (by simp [hc0]; omega) hcv,
+    FTTriple.ptrProjectAt, hwrite]
 
 /-! ## Blocks and resources -/
 
@@ -330,76 +311,87 @@ theorem spawner0 {G : ThreadId → Gh} {m : Mem} (hi : Inv a b G m) :
     · exact hk 1 true r1 _
     · exact hk 2 false r2 _
 
+/-- The worker's postcondition follows from its completed resource and the protocol's
+invariant. The generated worker body is walked independently by `fsym`. -/
+theorem inv_kid_done {G : ThreadId → Gh} {m m' : Mem} {u : ThreadId}
+    {r r' rO : Res} {c x : Ptr} {ac ax : Nat} {v : BitVec 32} {bc bx : BlockId}
+    (hi : Inv a b G m) (hu : 0 < u) (hgu : G u = .kid r c ac x ax v false)
+    (hcb : c.block = some bc) (hxb : x.block = some bx) (hc0 : c.off = 0)
+    (hac : ac % 8 = 0) (hx0 : x.off = 0) (hax : ax % 4 = 0)
+    (ho' : FOwned (upd (ownOf G m) u r') rO m')
+    (hq : (ctxF c bc ac x v ⋆ flagF x bx ax v) r')
+    (hth : m'.threads = m.threads) :
+    Inv a b (upd G u (.kid r' c ac x ax v true)) m' := by
+  obtain ⟨hj, _, _⟩ := kid_live hi hu hgu
+  refine ⟨⟨rO, ?_⟩, fun w r₁ c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
+  · rw [ownOf_upd hth hj]; exact ho'
+  · by_cases hwu : w = u
+    · subst hwu; rw [upd_self] at hw; cases hw
+      exact ⟨bc, bx, sep_lift.mpr ⟨⟨hcb, hxb, hc0, hac, hx0, hax⟩, hq⟩⟩
+    · rw [upd_ne _ _ hwu] at hw; exact hi.kids w _ _ _ _ _ _ _ hw
+  · obtain ⟨ph, hm, B, h0, hB, hma, hsh⟩ := hi.main
+    refine ⟨ph, hm, B, by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact h0, hB, hma, ?_⟩
+    have hkid : ∀ w dn, IsKid a b B G w dn → w ≠ u ∨ dn = none →
+        IsKid a b B (upd G u (.kid r' c ac x ax v true)) w dn := by
+      intro w dn ⟨h', d', hd', hk⟩ hw
+      by_cases hwu : w = u
+      · subst hwu
+        rcases hw with hw | rfl
+        · exact absurd rfl hw
+        · refine ⟨r', true, .inl rfl, ?_⟩
+          rw [upd_self]
+          rw [hgu] at hk
+          by_cases h1 : w = 1
+          · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
+          · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
+      · exact ⟨h', d', hd', by rw [upd_ne _ _ hwu]; exact hk⟩
+    have hnone : ∀ k, (∀ w, k ≤ w → G w = .none) →
+        ∀ w, k ≤ w → upd G u (.kid r' c ac x ax v true) w = .none := by
+      intro k hk w hw
+      by_cases hwu : w = u
+      · subst hwu; have := hk w hw; rw [hgu] at this; cases this
+      · rw [upd_ne _ _ hwu]; exact hk w hw
+    have hrec : ∀ w jn, KidRec m w jn → KidRec m' w jn := by
+      intro w jn hr; unfold KidRec; rw [hth]; exact hr
+    cases ph with
+    | pre => exact ⟨by rw [hth]; exact hsh.1, hnone 1 hsh.2⟩
+    | one =>
+      obtain ⟨hsz, r1, k1, hn⟩ := hsh
+      exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hkid 1 _ k1 (.inr rfl), hnone 2 hn⟩
+    | j1 =>
+      obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
+      exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2, hkid 1 _ k1 (.inr rfl),
+        hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
+    | j2 =>
+      obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
+      have hu1 : u ≠ 1 := by
+        intro h1; subst h1
+        obtain ⟨h', d', hd', hk⟩ := k1
+        rw [hgu] at hk; simp only [↓reduceIte] at hk; cases hk
+        simp at hd'
+      exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2,
+        hkid 1 _ k1 (.inl (Ne.symm hu1)), hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
+  · rw [hth]; exact hi.t0
+
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : Inv a b G m) :
     (proto a b).WP u (dispatch tgt) ((proto a b).QKid u) G { m with current := u } d := by
   cases tgt with
   | writeFlag c =>
     obtain ⟨r, ac, x, ax, v, rfl⟩ := hg
-    obtain ⟨hj, hut, h12⟩ := kid_live hi hu hgu
+    obtain ⟨hj, hut, _⟩ := kid_live hi hu hgu
     obtain ⟨bc, bx, hka⟩ := hi.kids u _ _ _ _ _ _ _ hgu
     obtain ⟨⟨hcb, hxb, hc0, hac, hx0, hax⟩, hcx⟩ := sep_lift.mp hka
     have hown : ownOf G m u = r := by unfold ownOf; rw [hj, hgu]; rfl
     obtain ⟨rO, ho⟩ := hi.own
-    show (proto a b).WP u ((fun _ => ()) <$> ConcM.liftMem (writeFlag c)) _ G _ d
-    refine WP.map (WP.liftMem_fowned (own := ownOf G m)
-      (writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
-        (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)) (ho.current u) rfl hut
-      (by rw [hown]; exact hcx) fun _ m' r' _ ho' hq _ hth => ?_)
-    refine ⟨.kid r' c ac x ax v true, ?_, ⟨_, _, _, _, _, _, rfl⟩, fun _ => ?_⟩
-    · refine ⟨⟨rO, ?_⟩, fun w r₁ c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
-      · rw [ownOf_upd hth hj]; exact ho'
-      · by_cases hwu : w = u
-        · subst hwu; rw [upd_self] at hw; cases hw
-          exact ⟨bc, bx, sep_lift.mpr ⟨⟨hcb, hxb, hc0, hac, hx0, hax⟩, hq⟩⟩
-        · rw [upd_ne _ _ hwu] at hw; exact hi.kids w _ _ _ _ _ _ _ hw
-      · obtain ⟨ph, hm, B, h0, hB, hma, hsh⟩ := hi.main
-        refine ⟨ph, hm, B, by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact h0, hB, hma, ?_⟩
-        have hkid : ∀ w dn, IsKid a b B G w dn → w ≠ u ∨ dn = none →
-            IsKid a b B (upd G u (.kid r' c ac x ax v true)) w dn := by
-          intro w dn ⟨h', d', hd', hk⟩ hw
-          by_cases hwu : w = u
-          · subst hwu
-            rcases hw with hw | rfl
-            · exact absurd rfl hw
-            · refine ⟨r', true, .inl rfl, ?_⟩
-              rw [upd_self]
-              rw [hgu] at hk
-              by_cases h1 : w = 1
-              · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
-              · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
-          · exact ⟨h', d', hd', by rw [upd_ne _ _ hwu]; exact hk⟩
-        have hnone : ∀ k, (∀ w, k ≤ w → G w = .none) →
-            ∀ w, k ≤ w → upd G u (.kid r' c ac x ax v true) w = .none := by
-          intro k hk w hw
-          by_cases hwu : w = u
-          · subst hwu; have := hk w hw; rw [hgu] at this; cases this
-          · rw [upd_ne _ _ hwu]; exact hk w hw
-        have hrec : ∀ w jn, KidRec m w jn → KidRec m' w jn := by
-          intro w jn hr; unfold KidRec; rw [hth]; exact hr
-        cases ph with
-        | pre => exact ⟨by rw [hth]; exact hsh.1, hnone 1 hsh.2⟩
-        | one =>
-          obtain ⟨hsz, r1, k1, hn⟩ := hsh
-          exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hkid 1 _ k1 (.inr rfl), hnone 2 hn⟩
-        | j1 =>
-          obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
-          exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2, hkid 1 _ k1 (.inr rfl),
-            hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
-        | j2 =>
-          obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
-          have hu1 : u ≠ 1 := by
-            intro h1; subst h1
-            obtain ⟨h', d', hd', hk⟩ := k1
-            rw [hgu] at hk; simp only [↓reduceIte] at hk; cases hk
-            simp at hd'
-          exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2,
-            hkid 1 _ k1 (.inl (Ne.symm hu1)), hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
-      · rw [hth]; exact hi.t0
-    · intro r hr hsp
-      rw [hth] at hr
-      rw [spawner0 hi r hr] at hsp
-      unfold ThreadId at *; omega
+    have ho' := ho.current u
+    have hp : (ctxF c bc ac x v ⋆ flagF x bx ax 0) (ownOf G m u) := by
+      rw [hown]; exact hcx
+    have hja := joinedAll_of_main (spawner0 hi) hu
+    fsym [Functor.discard, map_const, Function.comp_apply,
+      writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
+        (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v),
+      inv_kid_done, proto, Proto.QKid, joinedAll_of_threads]
   | _ => exact hg.elim
 
 /-! ## `main` -/
@@ -438,309 +430,261 @@ theorem blk_load {p : Ptr} {A : Nat} {w : BitVec 32} {b : BlockId} (hpb : p.bloc
 
 /-- The start memory holds the parts: `main` holds the plain mode, no thread owns anything else. -/
 theorem start (σ : Placement) :
-    ∃ rO, FOwned plainOwn rO { mem0 σ with current := 0 } := by
-  have hs := Mem.init_fseq σ [] (by decide)
-  exact ⟨_, FOwned.start_plain (m := { mem0 σ with current := 0 }) rfl rfl hs.2.1 hs.2.2
-    (Mem.MsgCov.of_atomics rfl) (by simp [mem0, Mem.ofGlobals])⟩
+    ∃ rO, FOwned plainOwn rO { mem0 σ with current := 0 } :=
+  ⟨rnil, FOwned.start0_plain σ⟩
+
+/-- The protocol starts from the four initialized blocks. The two child parts are witnesses
+of the resource split; the program walk chooses neither a resource nor a ghost value. -/
+theorem inv_start {m : Mem} {r : Res} {x y c1 c2 : Ptr} {kx ky k1 k2 : BlockId}
+    {Ax Ay A1 A2 : Nat}
+    (ho : FOwned (upd (fun _ => rnil) 0 r) rnil m)
+    (hF : ((flagF x kx Ax 0 ⋆ (flagF y ky Ay 0 ⋆
+      (ctxF c1 k1 A1 x a ⋆ ctxF c2 k2 A2 y b))) ⋆ plain) r)
+    (hxb : x.block = some kx) (hyb : y.block = some ky)
+    (h1b : c1.block = some k1) (h2b : c2.block = some k2)
+    (hx0 : x.off = 0) (hy0 : y.off = 0) (h10 : c1.off = 0) (h20 : c2.off = 0)
+    (hAx : Ax % 4 = 0) (hAy : Ay % 4 = 0) (hA1 : A1 % 8 = 0) (hA2 : A2 % 8 = 0)
+    (hth : m.threads = #[{ spawner := 0, joined := true }]) :
+    ∃ B rP rK, FHeap.Disjoint rP.heap rK.heap ∧ MainA a b B .one rP ∧
+      KidA B.c1 B.a1 B.x B.ax a false rK ∧
+      Inv a b (upd (fun _ => .none) 0 (.main .pre (rsum rP rK) B)) m := by
+  let B : Blks := ⟨x, y, c1, c2, kx, ky, k1, k2, Ax, Ay, A1, A2⟩
+  have hB : B.Ok := ⟨hxb, hyb, h1b, h2b, hx0, hy0, h10, h20, hAx, hAy, hA1, hA2⟩
+  obtain ⟨rB, rMode, hdMode, rfl, hBlocks, _⟩ := hF
+  have ho' := ho.give (t := 0) (by rw [hth]; decide) (by rw [upd_self]) hdMode
+  rw [upd_upd] at ho'
+  simp only [rsum, FHeap.union_empty, Know.union_none, Ghost.add_unit] at ho'
+  obtain ⟨rP, rK, hd, rfl, hPa, hKa⟩ := split_pre hBlocks
+  refine ⟨B, rP, rK, hd, hPa,
+    ⟨k1, kx, sep_lift.mpr ⟨⟨h1b, hxb, h10, hA1, hx0, hAx⟩, hKa⟩⟩,
+    ⟨⟨rMode, ?_⟩, ?_, ⟨.pre, _, B, upd_self _ _ _, hB, ?_, ?_⟩, ?_⟩⟩
+  · rw [ownOf_main]; exact ho'
+  · intro u _ _ _ _ _ _ _ hu
+    by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu; cases hu
+  · exact hBlocks
+  · refine ⟨by rw [hth]; rfl, fun u hu => ?_⟩
+    rw [upd_ne _ _ (by unfold ThreadId at *; omega)]
+  · rw [hth]; rfl
+
+/-- The invariant's first transfer: the child receives its context and flag; the parent
+keeps the second pair. This is a fact of a fork's run, not a program proof rule. -/
+theorem inv_spawn_pre {G : ThreadId → Gh} {m m' : Mem} {child : ThreadId}
+    {B : Blks} {rP rK : Res} (hi : Inv a b G m)
+    (hg : G 0 = .main .pre (rsum rP rK) B)
+    (hd : FHeap.Disjoint rP.heap rK.heap) (hPa : MainA a b B .one rP)
+    (hKa : KidA B.c1 B.a1 B.x B.ax a false rK)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (child, m'))) :
+    child = 1 ∧ m'.current = 0 ∧
+      Inv a b (upd (upd G 1 (.kid rK B.c1 B.a1 B.x B.ax a false))
+        0 (.main .one rP B)) m' := by
+  obtain ⟨ph, r, B', h0, hB, _, hsh⟩ := hi.main
+  rw [hg] at h0; cases h0
+  obtain ⟨hsz, hn⟩ := hsh
+  obtain ⟨rfl, hth⟩ := fork_threads hf
+  obtain ⟨rO, ho⟩ := hi.own
+  have hown : ownOf G m 0 = rsum rP rK := by simp [ownOf, joinedB, hg, Gh.res]
+  have ho' := FOwned.fork (ho.current 0) (by rw [hsz]; decide) hown hd hf
+  rw [hsz] at ho' ⊢
+  have hc : m'.current = 0 := fork_current hf
+  refine ⟨rfl, hc, ?_⟩
+  have hjb : joinedB m' = joinedB m := joinedB_fork hf
+  have hjb1 : joinedB m 1 = false := by
+    simp [joinedB, Array.getElem?_eq_none (show m.threads.size ≤ 1 by omega)]
+  refine ⟨⟨rO, ?_⟩, ?_, ⟨.one, rP, B, upd_self _ _ _, hB, hPa, ?_⟩, ?_⟩
+  · have e : ownOf (upd (upd G 1 (.kid rK B.c1 B.a1 B.x B.ax a false))
+          0 (.main .one rP B)) m' = upd (upd (ownOf G m) 0 rP) 1 rK := by
+      funext u
+      unfold ownOf
+      rw [hjb]
+      by_cases h0 : u = 0
+      · subst h0; simp [joinedB, upd, Gh.res]
+      · by_cases h1 : u = 1
+        · subst h1; simp [hjb1, upd, Gh.res]
+        · simp [upd, h0, h1]
+    rw [e]; exact ho'
+  · intro u r c ac x ax v dn hu
+    by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu
+      by_cases h1 : u = 1
+      · subst h1; rw [upd_self] at hu; cases hu; exact hKa
+      · rw [upd_ne _ _ h1, hn u (by unfold ThreadId at *; omega)] at hu; cases hu
+  · refine ⟨by rw [hth]; simp [hsz], ?_, ⟨rK, false, .inl rfl, by simp [upd]⟩,
+      fun u hu => ?_⟩
+    · unfold KidRec; rw [hth, Array.getElem?_push, if_pos hsz.symm]
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega),
+        upd_ne _ _ (by unfold ThreadId at *; omega), hn u (by unfold ThreadId at *; omega)]
+  · rw [hth, Array.getElem?_push, if_neg (by omega)]; exact hi.t0
+
+/-- The invariant's second transfer: the parent gives its remaining pair to child 2. -/
+theorem inv_spawn_one {G : ThreadId → Gh} {m m' : Mem} {child : ThreadId}
+    {B : Blks} {rP : Res} (hi : Inv a b G m) (hg : G 0 = .main .one rP B)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (child, m'))) :
+    child = 2 ∧ m'.current = 0 ∧
+      Inv a b (upd (upd G 2 (.kid rP B.c2 B.a2 B.y B.ay b false))
+        0 (.main .j1 rnil B)) m' := by
+  obtain ⟨ph, r, B', h0, hB, hPa, hsh⟩ := hi.main
+  rw [hg] at h0; cases h0
+  obtain ⟨hsz, r1, k1, hn⟩ := hsh
+  obtain ⟨rfl, hth⟩ := fork_threads hf
+  obtain ⟨rO, ho⟩ := hi.own
+  have hown : ownOf G m 0 = rsum rnil rP := by
+    simp [ownOf, joinedB, hg, Gh.res, rnil_rsum]
+  have ho' := FOwned.fork (ho.current 0) (by rw [hsz]; decide) hown
+    (FHeap.disjoint_empty _).symm hf
+  rw [hsz] at ho' ⊢
+  have hc : m'.current = 0 := fork_current hf
+  refine ⟨rfl, hc, ?_⟩
+  have hjb : joinedB m' = joinedB m := joinedB_fork hf
+  have hjb2 : joinedB m 2 = false := by
+    simp [joinedB, Array.getElem?_eq_none (show m.threads.size ≤ 2 by omega)]
+  refine ⟨⟨rO, ?_⟩, ?_, ⟨.j1, rnil, B, upd_self _ _ _, hB, ⟨rfl, rfl, rfl⟩, ?_⟩, ?_⟩
+  · have e : ownOf (upd (upd G 2 (.kid rP B.c2 B.a2 B.y B.ay b false))
+          0 (.main .j1 rnil B)) m' = upd (upd (ownOf G m) 0 rnil) 2 rP := by
+      funext u
+      unfold ownOf
+      rw [hjb]
+      by_cases h0 : u = 0
+      · subst h0; simp [joinedB, upd, Gh.res]
+      · by_cases h2 : u = 2
+        · subst h2; simp [hjb2, upd, Gh.res]
+        · simp [upd, h0, h2]
+    rw [e]; exact ho'
+  · intro u r c ac x ax v dn hu
+    by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu
+      by_cases h2 : u = 2
+      · subst h2; rw [upd_self] at hu; cases hu
+        obtain ⟨_, hyb, _, h2b, _, hy0, _, h20, _, hAy, _, hA2⟩ := hB
+        exact ⟨B.k2, B.ky,
+          sep_lift.mpr ⟨⟨h2b, hyb, h20, hA2, hy0, hAy⟩, sep_comm hPa⟩⟩
+      · rw [upd_ne _ _ h2] at hu; exact hi.kids u _ _ _ _ _ _ _ hu
+  · refine ⟨by rw [hth]; simp [hsz], ?_, ?_, ?_, ⟨rP, false, .inl rfl, by simp [upd]⟩,
+      fun u hu => ?_⟩
+    · unfold KidRec; rw [hth, Array.getElem?_push, if_neg (by omega)]; exact r1
+    · unfold KidRec; rw [hth, Array.getElem?_push, if_pos hsz.symm]
+    · obtain ⟨r, d, hd, hk⟩ := k1
+      exact ⟨r, d, hd, by rw [upd_ne _ _ (by decide), upd_ne _ _ (by decide)]; exact hk⟩
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega),
+        upd_ne _ _ (by unfold ThreadId at *; omega), hn u (by unfold ThreadId at *; omega)]
+  · rw [hth, Array.getElem?_push, if_neg (by omega)]; exact hi.t0
+
+/-- Joining child 1 restores its completed pair to the parent. -/
+theorem inv_join_j1 {G : ThreadId → Gh} {m m' : Mem} {B : Blks}
+    (hi : Inv a b G m) (hg : G 0 = .main .j1 rnil B)
+    (hfin : (proto a b).fin (G 1))
+    (hj : ((Thread.join 1).run { m with current := 0 }).run = some (.ok ((), m'))) :
+    ∃ r, m'.current = 0 ∧ Inv a b (upd G 0 (.main .j2 r B)) m' := by
+  obtain ⟨ph, r, B', h0, hB, _, hsh⟩ := hi.main
+  rw [hg] at h0; cases h0
+  obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
+  obtain ⟨rk1, c, ac, x, ax, v, hf1⟩ := hfin
+  obtain ⟨_, _, _, hk1⟩ := k1
+  simp only [↓reduceIte] at hk1
+  rw [hf1] at hk1; cases hk1
+  obtain ⟨kc1, kx1, hka⟩ := hi.kids 1 _ _ _ _ _ _ _ hf1
+  obtain ⟨⟨hc1b, hx1b, _⟩, hka⟩ := sep_lift.mp hka
+  rw [hB.2.2.1] at hc1b; cases hc1b
+  rw [hB.1] at hx1b; cases hx1b
+  simp only [↓reduceIte] at hka
+  obtain ⟨hc, hth⟩ := join_threads r1 hj
+  obtain ⟨rO, ho⟩ := hi.own
+  have ho' := FOwned.join (ho.current 0) (by rw [hsz]; decide) (by decide) hj
+  have e0 : ownOf G m 0 = rnil := by simp [ownOf, joinedB, hg, Gh.res]
+  have e1 : ownOf G m 1 = rk1 := by
+    have hr : m.threads[1]? = some { spawner := 0, joined := false } := r1
+    simp [ownOf, joinedB, hr, hf1, Gh.res]
+  rw [e0, e1, rnil_rsum] at ho'
+  have hjb : ∀ u, joinedB m' u = if u = 1 then true else joinedB m u := by
+    intro u
+    unfold joinedB
+    rw [hth]
+    by_cases h1 : u = 1
+    · subst h1
+      rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz]; decide)]; rfl
+    · rw [Array.getElem?_setIfInBounds_ne (Ne.symm h1)]; simp [h1]
+  refine ⟨rk1, hc, ⟨⟨rO, ?_⟩, ?_, ⟨.j2, rk1, B, upd_self _ _ _, hB, hka, ?_⟩, ?_⟩⟩
+  · have e : ownOf (upd G 0 (.main .j2 rk1 B)) m' =
+        upd (upd (ownOf G m) 1 rnil) 0 rk1 := by
+      funext u
+      unfold ownOf
+      rw [hjb]
+      by_cases h0 : u = 0
+      · subst h0; simp [joinedB, upd, Gh.res]
+      · by_cases h1 : u = 1
+        · subst h1; simp [upd]
+        · simp [upd, h0, h1]
+    rw [e]; exact ho'
+  · intro u r c ac x ax v dn hu
+    by_cases h0 : u = 0
+    · subst h0; rw [upd_self] at hu; cases hu
+    · rw [upd_ne _ _ h0] at hu; exact hi.kids u _ _ _ _ _ _ _ hu
+  · refine ⟨by rw [hth, Array.size_setIfInBounds, hsz], ?_, ?_,
+      ⟨rk1, true, .inr rfl, by rw [upd_ne _ _ (by decide)]; exact hf1⟩, ?_, fun u hu => ?_⟩
+    · unfold KidRec; rw [hth, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz]; decide)]
+    · unfold KidRec; rw [hth, Array.getElem?_setIfInBounds_ne (by decide)]; exact r2
+    · obtain ⟨r, d, hd, hk⟩ := k2
+      exact ⟨r, d, hd, by rw [upd_ne _ _ (by decide)]; exact hk⟩
+    · rw [upd_ne _ _ (by unfold ThreadId at *; omega), hn u hu]
+  · rw [hth, Array.getElem?_setIfInBounds_ne (by decide)]; exact hi.t0
+
+/-- Joining child 2 restores all four completed blocks; every handle is now consumed. -/
+theorem inv_join_j2 {G : ThreadId → Gh} {m m' : Mem} {B : Blks} {r1 : Res}
+    (hi : Inv a b G m) (hg : G 0 = .main .j2 r1 B)
+    (hfin : (proto a b).fin (G 2))
+    (hj : ((Thread.join 2).run { m with current := 0 }).run = some (.ok ((), m'))) :
+    ∃ rO r,
+      FOwned (upd (upd (ownOf G m) 2 rnil) 0 r) rO m' ∧
+      ((ctxF B.c1 B.k1 B.a1 B.x a ⋆ flagF B.x B.kx B.ax a) ⋆
+        (ctxF B.c2 B.k2 B.a2 B.y b ⋆ flagF B.y B.ky B.ay b)) r ∧
+      B.Ok ∧ m'.current = 0 ∧ 0 < m'.threads.size ∧ joinedAll 0 m' := by
+  obtain ⟨ph, r, B', h0, hB, hma, hsh⟩ := hi.main
+  rw [hg] at h0; cases h0
+  obtain ⟨hsz, hr1, hr2, _, k2, _⟩ := hsh
+  obtain ⟨rk2, c, ac, x, ax, v, hf2⟩ := hfin
+  obtain ⟨_, _, _, hk2⟩ := k2
+  simp only [show (2 : Nat) ≠ 1 by decide, ↓reduceIte] at hk2
+  rw [hf2] at hk2; cases hk2
+  obtain ⟨kc2, ky2, hka⟩ := hi.kids 2 _ _ _ _ _ _ _ hf2
+  obtain ⟨⟨hc2b, hy2b, _⟩, hka⟩ := sep_lift.mp hka
+  rw [hB.2.2.2.1] at hc2b; cases hc2b
+  rw [hB.2.1] at hy2b; cases hy2b
+  simp only [↓reduceIte] at hka
+  obtain ⟨hc, hth⟩ := join_threads hr2 hj
+  obtain ⟨rO, ho⟩ := hi.own
+  have ho' := FOwned.join (ho.current 0) (by rw [hsz]; decide) (by decide) hj
+  have e0 : ownOf G m 0 = r1 := by simp [ownOf, joinedB, hg, Gh.res]
+  have e2 : ownOf G m 2 = rk2 := by
+    have hr : m.threads[2]? = some { spawner := 0, joined := false } := hr2
+    simp [ownOf, joinedB, hr, hf2, Gh.res]
+  have hd : FHeap.Disjoint r1.heap rk2.heap := by
+    have := ho.disj (u := 0) (v := 2) (by rw [hsz]; decide) (by rw [hsz]; decide) (by decide)
+    rwa [e0, e2] at this
+  rw [e0, e2] at ho'
+  refine ⟨rO, rsum r1 rk2, ho', ⟨r1, rk2, hd, rfl, hma, hka⟩, hB, hc,
+    by rw [hth, Array.size_setIfInBounds, hsz]; decide, ?_⟩
+  intro r hr _
+  rw [hth] at hr
+  obtain ⟨i, hil, he⟩ := Array.mem_iff_getElem.mp hr
+  have hi' : i < 3 := by simpa [hsz] using hil
+  have hget : (m.threads.setIfInBounds 2 { spawner := 0, joined := true })[i]? = some r := by
+    rw [Array.getElem?_eq_getElem hil, he]
+  rcases (by omega : i = 0 ∨ i = 1 ∨ i = 2) with rfl | rfl | rfl
+  · rw [Array.getElem?_setIfInBounds_ne (by decide), hi.t0] at hget; cases hget; rfl
+  · rw [Array.getElem?_setIfInBounds_ne (by decide), hr1] at hget; cases hget; rfl
+  · rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz]; decide)] at hget; cases hget; rfl
 
 set_option maxHeartbeats 1000000 in
 theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (QM a b) (fun _ => .none)
     { mem0 σ with current := 0 } d := by
+  have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold disjoint
-  obtain ⟨rO, ho₀⟩ := start σ
-  -- The four blocks: stack blocks in the plain mode (`main` uses it up with the last one).
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _) ho₀ rfl
-    (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
-    fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
-  obtain ⟨Ax, kx, hA⟩ := hq₁
-  obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _).frameL
-    ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
-    fun s4 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
-  obtain ⟨Ay, ky, ⟨hyb, hy0, hAy⟩, hy⟩ := sep_ex2_lift hq₂
-  refine WP.bind (WP.liftMem_fowned ((by fsym : FTTriple plain _ _).frameL.pre
-    fun _ h => sep_assoc' h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
-    fun s6 m₃ r₃ _ ho₃ hq₃ hc₃ ht₃ => ?_)
-  obtain ⟨A1, k1, ⟨h1b, h10, hA1⟩, hc1⟩ := sep_ex2_lift hq₃
-  refine WP.bind (WP.liftMem_fowned ((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL.pre
-    fun _ h => sep_assoc' h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
-    fun s11 m₄ r₄ _ ho₄ hq₄ hc₄ ht₄ => ?_)
-  obtain ⟨A2, k2, ⟨h2b, h20, hA2⟩, hc2⟩ := sep_ex2_lift hq₄
-  have htt₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by rw [ht₄, ht₃, ht₂, ht₁] <;> rfl
-  have F₄ := sep_assoc (sep_assoc hc2)
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  -- `x = 0`, `y = 0`, `c1 = {&x, a}`, `c2 = {&y, b}`.
-  refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (k := 0) (a := 4) (0 : BitVec 32) hxb
-    (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hx0, hAx]) (by decide)).frame) ho₄ hc₄
-    (by rw [htt₄]; decide) F₄ fun _ m₅ r₅ _ ho₅ F₅ hc₅ ht₅ => ?_)
-  refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (k := 0) (a := 4) (0 : BitVec 32) hyb
-    (by simp [Ptr.add]) (by decide) (by simp; decide) (by simp [hy0, hAy]) (by decide)).frame.frameL)
-    ho₅ hc₅ (by rw [ht₅, htt₄]; decide) F₅ fun _ m₆ r₆ _ ho₆ F₆ hc₆ ht₆ => ?_)
-  refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (k := 0) (a := 8) s2 h1b
-    (by simp) (by decide) (by simp; decide) (by simp [h10, hA1]) (by decide)).frame.frameL.frameL)
-    ho₆ hc₆ (by rw [ht₆, ht₅, htt₄]; decide) F₆ fun _ m₇ r₇ _ ho₇ F₇ hc₇ ht₇ => ?_)
-  refine WP.bind (WP.callMC_fowned ((FTTriple.ptrProjectAt (k := 8) h1b
-    (by rw [ctxBytes_one]; decide) (by rw [ctxBytes_one]; decide)).frame.frameL.frameL.post
-    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm (sep_mono_right
-      (fun _ h => sep_assoc h) h)) h))
-    ho₇ hc₇ (by rw [ht₇, ht₆, ht₅, htt₄]; decide) F₇ fun q₁ m₇' r₇' _ ho₇' L₇ hc₇' ht₇' => ?_)
-  obtain ⟨rfl, F₇'⟩ := sep_lift.mp L₇
-  dsimp only
-  refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (k := 8) (a := 4) (A := A1) (S := 16) (K := .stack)
-    (bs := writeBytes (Array.replicate 16 .undef) 0 (Enc.encode s2)) a h1b rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h10]; omega) (by decide)).frame.frameL.frameL)
-    ho₇' hc₇' (by rw [ht₇', ht₇, ht₆, ht₅, htt₄]; decide) F₇' fun _ m₈ r₈ _ ho₈ F₈ hc₈ ht₈ => ?_)
-  refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (k := 0) (a := 8) s4 h2b
-    (by simp) (by decide) (by simp; decide) (by simp [h20, hA2]) (by decide)).frameL.frameL.frameL)
-    ho₈ hc₈ (by rw [ht₈, ht₇', ht₇, ht₆, ht₅, htt₄]; decide) F₈ fun _ m₉ r₉ _ ho₉ F₉ hc₉ ht₉ => ?_)
-  refine WP.bind (WP.callMC_fowned ((FTTriple.ptrProjectAt (k := 8) h2b
-    (by rw [ctxBytes_one]; decide) (by rw [ctxBytes_one]; decide)).frameL.frameL.frameL.post
-    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm (sep_mono_right
-      (fun _ h => sep_lcomm h) h)) h))
-    ho₉ hc₉ (by rw [ht₉, ht₈, ht₇', ht₇, ht₆, ht₅, htt₄]; decide) F₉
-    fun q₂ m₉' r₉' _ ho₉' L₉ hc₉' ht₉' => ?_)
-  obtain ⟨rfl, F₉'⟩ := sep_lift.mp L₉
-  dsimp only
-  refine WP.bind (WP.liftM_fowned ((FTTriple.storeAt (k := 8) (a := 4) (A := A2) (S := 16) (K := .stack)
-    (bs := writeBytes (Array.replicate 16 .undef) 0 (Enc.encode s4)) b h2b rfl (by decide) (by rw [ctxBytes_one]; decide) (by simp [h20]; omega) (by decide)).frameL.frameL.frameL)
-    ho₉' hc₉' (by rw [ht₉', ht₉, ht₈, ht₇', ht₇, ht₆, ht₅, htt₄]; decide) F₉'
-    fun _ m₁₀ r₁₀ _ ho₁₀ F₁₀ hc₁₀ ht₁₀ => ?_)
-  have htt₁₀ : m₁₀.threads = #[{ spawner := 0, joined := true }] := by
-    rw [ht₁₀, ht₉', ht₉, ht₈, ht₇', ht₇, ht₆, ht₅, htt₄]
-  rw [enc_zero] at F₁₀
-  dsimp only at F₁₀ ⊢
-  -- The first spawn: kid 1 gets `c1` and `x`.
-  let B : Blks := ⟨s2, s4, s6, s11, kx, ky, k1, k2, Ax, Ay, A1, A2⟩
-  have hB : B.Ok := ⟨hxb, hyb, h1b, h2b, hx0, hy0, h10, h20, hAx, hAy, hA1, hA2⟩
-  have hM : MainA a b B .pre r₁₀ := F₁₀
-  obtain ⟨rP, rK1, hdPK, rfl, hPa, hKa⟩ := split_pre hM
-  refine WP.bind (WP.spawnC fun k _ => ⟨.main .pre (rsum rP rK1) B, ?_, fun G₁ m₁₁ hg₁ hi₁₁ =>
-    ⟨.kid rK1 s6 A1 s2 Ax a false, ⟨_, _, _, _, _, rfl⟩, fun child m₁₂ hf => ?_⟩⟩)
-  · refine ⟨⟨rO, by rw [ownOf_main]; simp only [plainOwn, upd_upd] at ho₁₀; exact ho₁₀⟩,
-      fun u _ _ _ _ _ _ _ hu => ?_,
-      ⟨.pre, _, B, upd_self _ _ _, hB, hM, by rw [htt₁₀]; rfl, fun u hu => ?_⟩, by rw [htt₁₀]; rfl⟩
-    · by_cases h0 : u = 0
-      · subst h0; rw [upd_self] at hu; cases hu
-      · rw [upd_ne _ _ h0] at hu; cases hu
-    · rw [upd_ne _ _ (by unfold ThreadId at *; omega)]
-  obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₁₁.main
-  rw [hg₁] at h0; cases h0
-  obtain ⟨hsz₁₁, hn₁₁⟩ := hsh
-  obtain ⟨rfl, hth₁₂⟩ := fork_threads hf
-  obtain ⟨rO₁₁, ho₁₁⟩ := hi₁₁.own
-  have hown₁₁ : ownOf G₁ m₁₁ 0 = ⟨rP.heap ∪ rK1.heap, rP.know.union rK1.know, rP.gh.add rK1.gh⟩ := by
-    simp [ownOf, joinedB, hg₁, Gh.res]
-  have ho₁₂ := FOwned.fork (ho₁₁.current 0) (by rw [hsz₁₁]; decide) hown₁₁ hdPK hf
-  rw [hsz₁₁] at ho₁₂ ⊢
-  dsimp only
-  have hjb₁₂ : joinedB m₁₂ = joinedB m₁₁ := joinedB_fork hf
-  have hjb1 : joinedB m₁₁ 1 = false := by
-    simp [joinedB, Array.getElem?_eq_none (show m₁₁.threads.size ≤ 1 by omega)]
-  have hi₁₂ : Inv a b (upd (upd G₁ 1 (.kid rK1 s6 A1 s2 Ax a false)) 0 (.main .one rP B)) m₁₂ := by
-    refine ⟨⟨rO₁₁, ?_⟩, fun u h c ac x ax v dn hu => ?_, ⟨.one, rP, B, upd_self _ _ _, hB, hPa, ?_⟩, ?_⟩
-    · have e : ownOf (upd (upd G₁ 1 (.kid rK1 s6 A1 s2 Ax a false)) 0 (.main .one rP B)) m₁₂ =
-          upd (upd (ownOf G₁ m₁₁) 0 rP) 1 rK1 := by
-        funext u
-        unfold ownOf
-        rw [hjb₁₂]
-        by_cases h0 : u = 0
-        · subst h0; simp [joinedB, upd, Gh.res]
-        · by_cases h1 : u = 1
-          · subst h1; simp [hjb1, upd, Gh.res]
-          · simp [upd, h0, h1]
-      rw [e]; exact ho₁₂
-    · by_cases h0 : u = 0
-      · subst h0; rw [upd_self] at hu; cases hu
-      · rw [upd_ne _ _ h0] at hu
-        by_cases h1 : u = 1
-        · subst h1; rw [upd_self] at hu; cases hu
-          exact ⟨k1, kx, sep_lift.mpr ⟨⟨h1b, hxb, h10, hA1, hx0, hAx⟩, hKa⟩⟩
-        · rw [upd_ne _ _ h1, hn₁₁ u (by unfold ThreadId at *; omega)] at hu; cases hu
-    · refine ⟨by rw [hth₁₂]; simp [hsz₁₁], ?_, ⟨rK1, false, .inl rfl, by simp [upd, B]⟩,
-        fun u hu => ?_⟩
-      · unfold KidRec; rw [hth₁₂, Array.getElem?_push, if_pos hsz₁₁.symm]
-      · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
-          hn₁₁ u (by unfold ThreadId at *; omega)]
-    · rw [hth₁₂, Array.getElem?_push, if_neg (by omega)]; exact hi₁₁.t0
-  -- The second spawn: kid 2 gets `c2` and `y`; `main` owns nothing.
-  simp only [StateT.run_bind]
-  refine WP.bind (WP.spawnC fun k _ => ⟨Gh.main .one rP B, hi₁₂, fun G₂ m₁₃ hg₂ hi₁₃ =>
-    ⟨Gh.kid rP s11 A2 s4 Ay b false, ⟨_, _, _, _, _, rfl⟩, fun child m₁₄ hf₂ => ?_⟩⟩)
-  obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₁₃.main
-  rw [hg₂] at h0; cases h0
-  obtain ⟨hsz₁₃, r1₁₃, k1₁₃, hn₁₃⟩ := hsh
-  obtain ⟨rfl, hth₁₄⟩ := fork_threads hf₂
-  obtain ⟨rO₁₃, ho₁₃⟩ := hi₁₃.own
-  have hown₁₃ : ownOf G₂ m₁₃ 0 = ⟨rnil.heap ∪ rP.heap, rnil.know.union rP.know, rnil.gh.add rP.gh⟩ := by
-    simp [ownOf, joinedB, hg₂, Gh.res, Know.none_union]
-  have ho₁₄ := FOwned.fork (ho₁₃.current 0) (by rw [hsz₁₃]; decide) hown₁₃
-    (FHeap.disjoint_empty _).symm hf₂
-  rw [hsz₁₃] at ho₁₄ ⊢
-  dsimp only
-  have hjb₁₄ : joinedB m₁₄ = joinedB m₁₃ := joinedB_fork hf₂
-  have hjb2 : joinedB m₁₃ 2 = false := by
-    simp [joinedB, Array.getElem?_eq_none (show m₁₃.threads.size ≤ 2 by omega)]
-  have hi₁₄ : Inv a b (upd (upd G₂ 2 (.kid rP s11 A2 s4 Ay b false)) 0 (.main .j1 rnil B))
-      m₁₄ := by
-    refine ⟨⟨rO₁₃, ?_⟩, fun u h c ac x ax v dn hu => ?_,
-      ⟨.j1, rnil, B, upd_self _ _ _, hB, ⟨rfl, rfl, rfl⟩, ?_⟩, ?_⟩
-    · have e : ownOf (upd (upd G₂ 2 (.kid rP s11 A2 s4 Ay b false)) 0 (.main .j1 rnil B))
-          m₁₄ = upd (upd (ownOf G₂ m₁₃) 0 rnil) 2 rP := by
-        funext u
-        unfold ownOf
-        rw [hjb₁₄]
-        by_cases h0 : u = 0
-        · subst h0; simp [joinedB, upd, Gh.res]
-        · by_cases h2 : u = 2
-          · subst h2; simp [hjb2, upd, Gh.res]
-          · simp [upd, h0, h2]
-      rw [e]; exact ho₁₄
-    · by_cases h0 : u = 0
-      · subst h0; rw [upd_self] at hu; cases hu
-      · rw [upd_ne _ _ h0] at hu
-        by_cases h2 : u = 2
-        · subst h2; rw [upd_self] at hu; cases hu
-          exact ⟨k2, ky, sep_lift.mpr ⟨⟨h2b, hyb, h20, hA2, hy0, hAy⟩, sep_comm hPa⟩⟩
-        · rw [upd_ne _ _ h2] at hu; exact hi₁₃.kids u _ _ _ _ _ _ _ hu
-    · refine ⟨by rw [hth₁₄]; simp [hsz₁₃], ?_, ?_, ?_, ⟨rP, false, .inl rfl, by simp [upd, B]⟩,
-        fun u hu => ?_⟩
-      · unfold KidRec; rw [hth₁₄, Array.getElem?_push, if_neg (by omega)]; exact r1₁₃
-      · unfold KidRec; rw [hth₁₄, Array.getElem?_push, if_pos hsz₁₃.symm]
-      · obtain ⟨h', d', hd', hk⟩ := k1₁₃
-        exact ⟨h', d', hd', by rw [upd_ne _ _ (by decide), upd_ne _ _ (by decide)]; exact hk⟩
-      · rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega),
-          hn₁₃ u (by unfold ThreadId at *; omega)]
-    · rw [hth₁₄, Array.getElem?_push, if_neg (by omega)]; exact hi₁₃.t0
-  -- The join of kid 1: `main` gets `c1` and `x` back, with `x = a`.
-  simp only [StateT.run_bind]
-  refine WP.bind (WP.joinC fun k _ => ⟨Gh.main .j1 rnil B, hi₁₄, fun G₃ m₁₅ hg₃ hi₁₅ => ?_⟩)
-  obtain ⟨ph, hm, B', h0, -, -, hsh⟩ := hi₁₅.main
-  rw [hg₃] at h0; cases h0
-  obtain ⟨hsz₁₅, r1₁₅, r2₁₅, k1₁₅, k2₁₅, hn₁₅⟩ := hsh
-  refine ⟨fun _ => ⟨by show 0 < 1; decide, by rw [hsz₁₅]; decide, ⟨_, B, .inl rfl⟩, by
-    have hr := r1₁₅
-    unfold KidRec at hr
-    simp [Thread.joinValid, Mem.isGated, hr]⟩,
-    fun hfin => ⟨fun _ => join_run r1₁₅ rfl rfl, fun m₁₆ hj => ?_⟩⟩
-  obtain ⟨rk1, c', ac', x', ax', v', hf1⟩ := hfin
-  obtain ⟨h', d', -, hk1'⟩ := k1₁₅
-  simp only [↓reduceIte] at hk1'
-  rw [hf1] at hk1'; cases hk1'
-  obtain ⟨kc1, kx1, hka1⟩ := hi₁₅.kids 1 _ _ _ _ _ _ _ hf1
-  obtain ⟨⟨hc1b, hx1b, -⟩, hka1⟩ := sep_lift.mp hka1
-  rw [hB.2.2.1] at hc1b; cases hc1b
-  rw [hB.1] at hx1b; cases hx1b
-  simp only [↓reduceIte] at hka1
-  obtain ⟨hc₁₆, hth₁₆⟩ := join_threads r1₁₅ hj
-  obtain ⟨rO₁₅, ho₁₅⟩ := hi₁₅.own
-  have ho₁₆ := FOwned.join (ho₁₅.current 0) (by rw [hsz₁₅]; decide) (by decide) hj
-  have e0 : ownOf G₃ m₁₅ 0 = rnil := by simp [ownOf, joinedB, hg₃, Gh.res]
-  have e1 : ownOf G₃ m₁₅ 1 = rk1 := by
-    have r : m₁₅.threads[1]? = some { spawner := 0, joined := false } := r1₁₅
-    simp [ownOf, joinedB, r, hf1, Gh.res]
-  rw [e0, e1, rnil_rsum] at ho₁₆
-  have hjb₁₆ : ∀ u, joinedB m₁₆ u = if u = 1 then true else joinedB m₁₅ u := by
-    intro u
-    unfold joinedB
-    rw [hth₁₆]
-    by_cases h1 : u = 1
-    · subst h1
-      rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₅]; decide)]; rfl
-    · rw [Array.getElem?_setIfInBounds_ne (Ne.symm h1)]; simp [h1]
-  have hi₁₆ : Inv a b (upd G₃ 0 (.main .j2 rk1 B)) m₁₆ := by
-    refine ⟨⟨rO₁₅, ?_⟩, fun u h c ac x ax v dn hu => ?_, ⟨.j2, rk1, B, upd_self _ _ _, hB, hka1, ?_⟩, ?_⟩
-    · have e : ownOf (upd G₃ 0 (.main .j2 rk1 B)) m₁₆ =
-          upd (upd (ownOf G₃ m₁₅) 1 rnil) 0 rk1 := by
-        funext u
-        unfold ownOf
-        rw [hjb₁₆]
-        by_cases h0 : u = 0
-        · subst h0; simp [joinedB, upd, Gh.res]
-        · by_cases h1 : u = 1
-          · subst h1; simp [upd]
-          · simp [upd, h0, h1]
-      rw [e]; exact ho₁₆
-    · by_cases h0 : u = 0
-      · subst h0; rw [upd_self] at hu; cases hu
-      · rw [upd_ne _ _ h0] at hu; exact hi₁₅.kids u _ _ _ _ _ _ _ hu
-    · refine ⟨by rw [hth₁₆, Array.size_setIfInBounds, hsz₁₅], ?_, ?_,
-        ⟨rk1, true, .inr rfl, by rw [upd_ne _ _ (by decide)]; exact hf1⟩, ?_, fun u hu => ?_⟩
-      · unfold KidRec; rw [hth₁₆, Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₅]; decide)]
-      · unfold KidRec; rw [hth₁₆, Array.getElem?_setIfInBounds_ne (by decide)]; exact r2₁₅
-      · obtain ⟨h'', d'', hd'', hk⟩ := k2₁₅
-        exact ⟨h'', d'', hd'', by rw [upd_ne _ _ (by decide)]; exact hk⟩
-      · rw [upd_ne _ _ (by unfold ThreadId at *; omega), hn₁₅ u hu]
-    · rw [hth₁₆, Array.getElem?_setIfInBounds_ne (by decide)]; exact hi₁₅.t0
-  -- The join of kid 2: `main` owns all four blocks, with `x = a` and `y = b`.
-  refine WP.bind (WP.joinC fun k _ => ⟨Gh.main .j2 rk1 B, hi₁₆, fun G₄ m₁₇ hg₄ hi₁₇ => ?_⟩)
-  obtain ⟨ph, hm, B', h0, -, hma₁₇, hsh⟩ := hi₁₇.main
-  rw [hg₄] at h0; cases h0
-  obtain ⟨hsz₁₇, r1₁₇, r2₁₇, k1₁₇, k2₁₇, hn₁₇⟩ := hsh
-  refine ⟨fun _ => ⟨by show 0 < 2; decide, by rw [hsz₁₇]; decide, ⟨_, B, .inr rfl⟩, by
-    have hr := r2₁₇
-    unfold KidRec at hr
-    simp [Thread.joinValid, Mem.isGated, hr]⟩,
-    fun hfin => ⟨fun _ => join_run r2₁₇ rfl rfl, fun m₁₈ hj₂ => ?_⟩⟩
-  obtain ⟨rk2, c'', ac'', x'', ax'', v'', hf2⟩ := hfin
-  obtain ⟨h'', d'', -, hk2'⟩ := k2₁₇
-  simp only [show (2 : Nat) ≠ 1 by decide, ↓reduceIte] at hk2'
-  rw [hf2] at hk2'; cases hk2'
-  obtain ⟨kc2, ky2, hka2⟩ := hi₁₇.kids 2 _ _ _ _ _ _ _ hf2
-  obtain ⟨⟨hc2b, hy2b, -⟩, hka2⟩ := sep_lift.mp hka2
-  rw [hB.2.2.2.1] at hc2b; cases hc2b
-  rw [hB.2.1] at hy2b; cases hy2b
-  simp only [↓reduceIte] at hka2
-  obtain ⟨hc₁₈, hth₁₈⟩ := join_threads r2₁₇ hj₂
-  obtain ⟨rO₁₇, ho₁₇⟩ := hi₁₇.own
-  have ho₁₈ := FOwned.join (ho₁₇.current 0) (by rw [hsz₁₇]; decide) (by decide) hj₂
-  have e0 : ownOf G₄ m₁₇ 0 = rk1 := by simp [ownOf, joinedB, hg₄, Gh.res]
-  have e2 : ownOf G₄ m₁₇ 2 = rk2 := by
-    have r : m₁₇.threads[2]? = some { spawner := 0, joined := false } := r2₁₇
-    simp [ownOf, joinedB, r, hf2, Gh.res]
-  have hd12 : FHeap.Disjoint rk1.heap rk2.heap := by
-    have := ho₁₇.disj (u := 0) (v := 2) (by rw [hsz₁₇]; decide) (by rw [hsz₁₇]; decide) (by decide)
-    rwa [e0, e2] at this
-  rw [e0, e2] at ho₁₈
-  have hA : ((ctxF s6 k1 A1 s2 a ⋆ flagF s2 kx Ax a) ⋆ (ctxF s11 k2 A2 s4 b ⋆ flagF s4 ky Ay b))
-      (rsum rk1 rk2) :=
-    ⟨rk1, rk2, hd12, rfl, hma₁₇, hka2⟩
-  have hja : joinedAll 0 m₁₈ := by
-    intro r hr _
-    rw [hth₁₈] at hr
-    obtain ⟨i, hi, he⟩ := Array.mem_iff_getElem.mp hr
-    have hi' : i < 3 := by simpa [hsz₁₇] using hi
-    have hget : (m₁₇.threads.setIfInBounds 2 { spawner := 0, joined := true })[i]? = some r := by
-      rw [Array.getElem?_eq_getElem hi, he]
-    rcases (by omega : i = 0 ∨ i = 1 ∨ i = 2) with rfl | rfl | rfl
-    · rw [Array.getElem?_setIfInBounds_ne (by decide), hi₁₇.t0] at hget; cases hget; rfl
-    · rw [Array.getElem?_setIfInBounds_ne (by decide), r1₁₇] at hget; cases hget; rfl
-    · rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₇]; decide)] at hget; cases hget; rfl
-  have htl : 0 < m₁₈.threads.size := by rw [hth₁₈, Array.size_setIfInBounds, hsz₁₇]; decide
-  -- `x +% y`.
-  refine WP.bind (WP.liftM_fowned ((blk_load (w := a) hxb hx0 hAx).frameL.frame.post
-    fun _ _ h => sep_assoc (sep_mono_left (fun _ h => sep_lcomm h) h))
-    ho₁₈ hc₁₈ htl hA fun r₁ m₁₉ r₁₉ _ ho₁₉ hq₁₉ hc₁₉ ht₁₉ => ?_)
-  obtain ⟨hr₁, hA₁₉⟩ := sep_lift.mp hq₁₉
-  refine WP.bind (WP.liftM_fowned ((blk_load (w := b) hyb hy0 hAy).frameL.frameL.post
-    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm h) h))
-    ho₁₉ hc₁₉ (by rw [ht₁₉]; exact htl) hA₁₉ fun r₂ m₂₀ r₂₀ _ ho₂₀ hq₂₀ hc₂₀ ht₂₀ => ?_)
-  obtain ⟨hr₂, hA₂₀⟩ := sep_lift.mp hq₂₀
-  refine WP.pure' ?_
-  -- The frees.
-  have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
-  -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₂₂ hc₂₂
-    (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂ fun _ m₂₃ r₂₃ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ ht₂₄ => ?_)
-  refine WP.pure' ⟨by simp [hr₁, hr₂, addWrap], fun r hr hs => hja r ?_ hs⟩
-  rwa [ht₂₄, ht₂₃, ht₂₂, ht₂₁, ht₂₀, ht₁₉] at hr
+  fsym [inv_start, inv_spawn_pre, inv_spawn_one, inv_join_j1, inv_join_j2,
+    blk_load, FTTriple.storeAt, FTTriple.ptrProjectAt, ctxBytes, enc_zero, proto, Shape,
+    KidRec, Thread.joinValid, Mem.isGated, @join_run, joinedAll_of_threads]
 
 /-! ## The results -/
 

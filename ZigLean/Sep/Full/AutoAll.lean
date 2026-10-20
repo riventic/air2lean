@@ -15,6 +15,7 @@ import ZigLean.Sep.Full.Malloc
 import ZigLean.Sep.Full.Mmap
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.ThreadLoop
+import ZigLean.Sep.Full.ThreadTls
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
 import ZigLean.Sep.Full.Tick

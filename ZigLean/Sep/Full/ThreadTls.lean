@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Conc.Base.Tls
 import ZigLean.Sep.Full.AutoThread
+import ZigLean.Sep.Full.Auto
 
 /-!
 # Thread-local storage in the full-state thread logic
@@ -55,6 +56,9 @@ def tlsDying : List BlockId → FAssn
   | [] => emp
   | b :: bids =>
     (FAssn.ex fun A => FAssn.ex fun bs : Array Byte => ⟪0 < bs.size⟫ ⋆ gblk b A bs) ⋆ tlsDying bids
+
+/-- Persistent knowledge of every instance ended by a thread exit. -/
+def tlsDead (bids : List BlockId) : FAssn := bids.foldr (fun b R => dead b ⋆ R) emp
 
 /-- The instances of one `threadlocal` global. -/
 theorem tlsOwn_one {k : BlockId} {bs : Array Byte} {a : Nat} {l : List (BlockId × BlockId)}
@@ -138,6 +142,16 @@ theorem freeBlocks : ∀ (bids : List BlockId) {R : FAssn},
     · obtain ⟨A, h⟩ := sep_ex.mp (sep_assoc h)
       obtain ⟨bs, h⟩ := sep_ex.mp h
       exact ⟨A, bs, sep_assoc h⟩
+
+/-- Ending any list of owned instances retains their deadness as full-state knowledge. -/
+theorem freeBlocks_dead : ∀ (bids : List BlockId) {R : FAssn},
+    FTTriple (tlsDying bids ⋆ R) (Zig.freeBlocks bids) (fun _ => tlsDead bids ⋆ R)
+  | [], R => by
+    simp only [Zig.freeBlocks, tlsDying, tlsDead, List.foldr_nil]
+    fsym
+  | b :: bids, R => by
+    simp only [Zig.freeBlocks, tlsDying, tlsDead, List.foldr_cons]
+    fsym [FTotalTriple.free_dead, freeBlocks_dead bids (R := dead b ⋆ R)]
 
 end FTTriple
 
@@ -293,6 +307,27 @@ theorem WP.liftMem_tlsExit_fowned {R : FAssn} {Q : Unit → (ThreadId → γ) �
   exact WP.liftMem_fowned (FTTriple.freeBlocks _) ho hc htl hp (fun _ m' r' _ ho' hq hc' ht' =>
     h m' r' ho' hq hc' ht') (.inl hpart)
 
+/-- A thread exit consumes its instances and retains knowledge that every instance is dead. -/
+@[fsym] theorem WP.liftMem_tlsExit_dead_fowned {R : FAssn}
+    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : (tlsDying ((m.tlsOf t).toList.map (·.2)) ⋆ R) (own t))
+    (h : ∀ m' r', FOwned (upd own t r') rO m' →
+      (tlsDead ((m.tlsOf t).toList.map (·.2)) ⋆ R) r' → m'.current = t →
+      m'.threads = m.threads → Q () G m' n)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inr (by assumption)) :
+    P.WP t (ConcM.liftMem tlsExit : ConcM Tgt Unit) Q G m n := by
+  refine WP.liftMem_congr (y := Zig.freeBlocks ((m.tlsOf t).toList.map (·.2)))
+    (by simp only [tlsExit, StateT.run_bind, StateT.run_get, pure_bind, hc]) ?_
+  exact WP.liftMem_fowned (FTTriple.freeBlocks_dead _) ho hc htl hp
+    (fun _ m' r' _ ho' hq hc' ht' => h m' r' ho' hq hc' ht') (.inl hpart)
+
 /-! ### Errors of the thread-local steps (audit soundness-2026-10-14 S4)
 
 Thread entry and exit and the instance pointer throw only `.illegal` or `.stackOverflow`, errors
@@ -344,6 +379,20 @@ theorem load_dead_native {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat}
     subst hblk
     rw [hl'] at hl
     cases hl
+
+/-- Reading a block known dead in a thread's part cannot return a value. The protocol must
+permit native stopping errors; a strict safety proof cannot use this rule. -/
+@[fsym] theorem WP.liftMem_load_dead_fowned {T : Type} [Enc T] {p : Ptr} {b a : Nat}
+    {R : FAssn} {Q : T → (ThreadId → γ) → Mem → Nat → Prop}
+    (ho : FOwned own rO m) (htl : t < m.threads.size)
+    (hp : (dead b ⋆ R) (own t))
+    (hpb : p.block = some b := by first | assumption | rfl)
+    (hs : P.strict = false := by first | assumption | rfl) :
+    P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m n := by
+  obtain ⟨_, _, _, hh⟩ := ho.part htl
+  have hd : m.Dead b := hh.dead hp
+  exact WP.liftMem (ErrOk.of_run hs (load_dead_native hd hpb))
+    (fun _ _ hr => (load_dead hd hpb hr).elim) (fun _ => .inl hs)
 
 end Proto
 end Conc

@@ -48,4 +48,21 @@ theorem mem1_noRace (bs : Array Byte) (kind : BlockKind) (b o n : Nat) (k : Acce
     NoRace (mem1 bs kind) b o n k :=
   noRace_of_singleThread (singleThread_empty rfl Nat.zero_lt_one) b o n k
 
+/-- The `u32` of a run of a function `!u32`: a completed run of a concurrent program, for a
+statement about one schedule. -/
+def okVal (r : Result (Except ErrName (BitVec 32) × Mem)) : Option Nat :=
+  match r.run with
+  | some (.ok (.ok v, _)) => some v.toNat
+  | _ => none
+
+/-- The error of a run, if it ends in one: for a statement that a schedule fails. -/
+def errOf {α : Type} (r : Result α) : Option Error :=
+  match r.run with
+  | some (.error e) => some e
+  | _ => none
+
+theorem errOf_eq_some {α : Type} {r : Result α} {e : Error} : errOf r = some e ↔ r.run = some (.error e) := by
+  unfold errOf
+  split <;> simp_all
+
 end Zig.Witness
