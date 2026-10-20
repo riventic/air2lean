@@ -4,6 +4,7 @@
 No Lean, Lake or Zig: Lean and leanchecker are replaced by small scripts. The compiled audit
 itself runs in CI (`theorem_universe.py audit`) and in tests/roadmap/architecture-audit/claims.
 """
+import concurrent.futures
 import importlib.util
 import contextlib
 import io
@@ -308,6 +309,20 @@ class ReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'between extraction and replay'):
             assumptions.kernel_replay({'Lib': 'fixed'}, self.toolchain, '', expected_runtime=expected)
         self.assertEqual(self.checked(), [])
+
+    def test_concurrent_audits_replay_each_module_once(self):
+        # Two audits of one build at once through one cache (a fixture-checks run): each Lake
+        # module is replayed by one of them; a non-Lake module by each; a rejection is not shared.
+        checker = self.toolchain / 'bin/leanchecker'
+        checker.write_text(checker.read_text().replace('#!/bin/sh\n', '#!/bin/sh\nsleep 0.2\n'))
+        cache, lake = self.toolchain / 'cache.json', frozenset({'A', 'B', 'C', 'Bad'})
+        digests = {'A': 'a', 'B': 'b', 'C': 'c', 'Bad': 'x', 'Local': 'l'}
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            records = list(pool.map(lambda _: assumptions.kernel_replay(digests, self.toolchain, '', cache, lake),
+                                    range(2)))
+        self.assertEqual(self.checked(), ['A', 'B', 'Bad', 'Bad', 'C', 'Local', 'Local'])
+        self.assertEqual(sorted(m for r in records for m in r['reused']), ['A', 'B', 'C'])
+        self.assertEqual([r['status'] for r in records], ['fail', 'fail'])
 
     def test_gates_share_one_replay_cache(self):
         # Every gate of a build audits through one cache: only changed artifacts replay again.
