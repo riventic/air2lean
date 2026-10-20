@@ -532,6 +532,15 @@ theorem _root_.Zig.writeBytes_empty {a : Array Byte} {o : Nat} (h : o ≤ a.size
     writeBytes a o #[] = a := by
   simp [writeBytes_eq, Array.extract_append_extract, Nat.max_eq_right h]
 
+/-- A byte value is encoded as that exact defined byte. -/
+theorem _root_.Zig.Enc.encode_byte (v : BitVec 8) : Enc.encode v = #[Byte.int v] := by
+  have hr : Array.range 1 = #[0] := by decide
+  simp [Enc.encode, padTo, intBytes, intSize, intAlign, alignUp, hr]
+  apply BitVec.eq_of_toNat_eq
+  have := v.isLt
+  simp only [BitVec.toNat_ofNat]
+  omega
+
 /-- The bytes `@memset(_, v)` writes for `n` items: `n` copies of `v`'s bytes, or undefined
 bytes. -/
 def _root_.Zig.memsetBytes {α : Type} [Enc α] (n : Nat) (v : Option α) : Array Byte :=
