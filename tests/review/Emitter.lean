@@ -326,7 +326,8 @@ private def checkTickPlacement : IO Unit := do
   for target in Target.qualified do
     for version in target.versions do
       for backend in #["unverified", Target.llvmBackend, "stage2_x86_64"] do
-        let dialect := { base.dialect with version, arch := target.arch, os := target.os,
+        let dialect := { base.dialect with
+          version, arch := target.arch, os := target.os,
           ptrBytes := target.pointerBits / 8, endian := target.endian, backend }
         for (mem, conc, label) in #[(false, false, "pure"), (true, false, "MM"),
             (true, true, "CM")] do
