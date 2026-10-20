@@ -214,7 +214,7 @@ theorem FTotalTriple.tick_part_unmetered (r₀ : Res) (hu : 0 < r₀.gh.ac.frag 
     have hh' : Holds m.ticked r' rF := hh.tick_unmetered hu
     have hsep : ((fun r => r = r₀) ⋆ spent 1) r' :=
       ⟨r₀, ⟨FHeap.empty, Know.none, Ghost.spent1⟩, fun _ => .inr rfl,
-        by simp [r', rsum, FHeap.union_empty, Know.union_none], rfl, rfl, rfl, rfl⟩
+        by simp [r', FHeap.union_empty, Know.union_none], rfl, rfl, rfl, rfl⟩
     obtain ⟨r'', hh'', hr''⟩ := EUpd.spent_drop m.ticked r' rF hh' (sep_comm hsep) hs.ticked
     exact ⟨(), m.ticked, r'', tick_run' m, hh'', hr'', hs.ticked⟩
 
