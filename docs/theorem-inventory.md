@@ -38,21 +38,52 @@ A theorem must hold for the translation of every Zig version its example support
 (`examples/<ex>/zig-versions`, else every version of `compatibility.json`) and every target
 with its own translation. As in `scripts/check.sh`, the translation file is
 `tests/golden/<version>/<ex>/Gen-<os>.lean`, else `tests/golden/<version>/<ex>/Gen.lean`, else
-the committed `Proofs/<Ex>/Gen.lean` (the Linux translation of every other version). Only
-`threadsync` (0.15.2, macOS `DarwinImpl`) has a `darwin` translation of its own.
+the committed `Proofs/<Ex>/Gen.lean`. Each available target-specific golden adds a
+required translation.
 
-A check result is a `lake build` of the module run under `scripts/build-guard.py`. Its run
-records the hash of each translation file and of every `Proofs` source in the build. A
-result is current while those hashes match: an edit to a proof module or a translation makes
-it stale and `check` fails until the build is rerun and recorded. A change in `ZigLean/` does
-not make a result stale; the CI proof build (`lake build Proofs`) covers it.
+A check result is an index of a supported explicit-module build under
+`scripts/build-guard.py`, in the trusted local recorder/runtime context. The recorder
+selects Lake through the pinned `lean-toolchain`, resolves that entry physically, and
+checks its current bytes against the guard's producer capture and pin. A nested
+`swap-build` executes that same binary and requires its explicit `--tool` capture.
+The saved physical path, hash and byte count identify the captured producer; command
+spelling or a basename alone is insufficient. Existing records without that capture
+are stale and need a genuine fresh build, never inferred or relabelled identity.
+
+Offline checking validates historical producer structure and the retained command/pin
+binding without opening another host's old physical path. Renewal reconstructs the
+supported command using this host's selected Lake; it never executes a saved foreign
+producer. A recorded `--no-build` check can be current, but fresh renewal removes
+that rebuild-suppressing flag so changed sources are actually rebuilt. This guard
+index does not replace the existing proof-receipt seal/verify
+path or change its `NOT_ATTESTED` native/source-correspondence boundaries.
+
+Each theorem result checks the `Proofs` dependencies returned by the existing shared
+import-discovery API. Complete header parsing, path enrollment and compiled import
+coverage remain separate obligations. A swap keeps the canonical module identity
+while discovery reads its selected translation, including that translation's imports.
+Body validity belongs to the compiler. The
+exact canonical `Proofs.<Example>.Gen` alone owns a short example key; every deeper
+`*.Gen` or profile-bearing retained translation has its full module key/path/hash.
+The recorded canonical path must agree with the last normalized swap declared by
+the command. Missing, foreign or incomplete evidence is stale. Alias normalization
+preserves supported mixed-case examples and `./` paths; absolute/parent-escape swap
+paths, whitespace/NUL source spellings and malformed example identifiers are refused.
+
+An edit to a dependency or selected translation makes a theorem result stale. An
+unrelated generated module that the theorem does not import does not invalidate that
+theorem, but whole-invocation renewal checks every recorded entry and the complete
+module membership. A change in `ZigLean/` does not make this index current by itself;
+the actual proof/compiler gates remain separate obligations.
 
 To check another translation, build against it and record the run:
 
 ```sh
+lake=$(ELAN_TOOLCHAIN="$(cat lean-toolchain)" elan which lake)
+lake=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$lake")
 python3 scripts/build-guard.py --cwd "$PWD" --report /tmp/r.json --log /tmp/r.log \
-  --timeout 7200 --rss-mib 12000 --lock-wait 21600 --log-bytes 8388608 -- \
-  python3 scripts/theorem-inventory.py swap-build \
+  --timeout 7200 --rss-mib 12000 --lock-wait 21600 --log-bytes 8388608 --tool "$lake" -- \
+  python3 scripts/theorem-inventory.py swap-build --lake "$lake" \
     --swap lists=tests/golden/0.15.2/lists/Gen.lean -- Proofs.Lists.Append
 python3 scripts/theorem-inventory.py record --run 0.15.2-linux-lists --zig 0.15.2 \
   --guard-report /tmp/r.json --guard-log /tmp/r.log
@@ -65,10 +96,10 @@ checkout with each translation in place of `Proofs/<Ex>/Gen.lean`;
 file that `scripts/gen-integrity.py attest` does not find to be a fresh translation of its
 committed AIR (so it needs the built translator), and stores the outcome, revision and hashes. `check` (CI, offline) needs no Lean.
 
-A check result says that Lean's kernel accepts the theorem for that translation file. It is
-not an assumption audit ([assumptions-audit.md](assumptions-audit.md)), a proof receipt
-([proof-receipts.md](proof-receipts.md)) or a fresh Zig export: the translation files are the
-committed goldens.
+The index retains a guarded build outcome and its current dependency identities.
+Compiled/kernel claims use the existing [assumption audit](assumptions-audit.md) and
+[proof receipt](proof-receipts.md) mechanisms at their stated scope. The indexed
+translation files remain committed goldens; this is not a fresh Zig export.
 
 ## Remaining scope
 
