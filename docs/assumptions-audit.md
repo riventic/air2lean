@@ -274,6 +274,31 @@ unused private definitions and compiler-generated recursors, and records their n
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
 
+`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
+Lake instead of elaborating it with `lake env lean`: the driver is a module of a generated
+workspace `PACKAGE/.lake/extraction` that requires the Lake package of the audited modules, so
+the driver's outputs stay off the caller's LEAN_PATH. Lake elaborates it again exactly when its
+trace changes (the driver's text, with the modules, options and family checks; the trace of every
+import, `tools.Assurance` included; the toolchain); an unchanged driver replays the build's
+stored log, and the report is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON`
+message, exactly one). The driver's text names the workspace, so it is never restored from
+another checkout's artifact-cache entry, which keeps no log: a missing report fails the audit.
+A compiler-owned Unit audit uses that driver only while Lake resolves exactly its bound lookup
+path there; otherwise the driver is elaborated afresh on that path.
+
+With `--extract-in PACKAGE` the kernel replay is Lake-built as well: each audited module `M` has
+a receipt module in `PACKAGE/.lake/replay` that imports only `tools.KernelReplay` and runs
+`run_meta Air2Lean.KernelReplay.run `M`. The helper runs the toolchain's `leanchecker` on `M` as
+its own process, under Lake's lookup path, and logs one `AIR2LEAN_KERNEL_REPLAY` line. The receipt
+never imports `M`, because importing would run `M`'s `initialize` code in the receipt's process
+([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Instead, the receipt's
+generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M` again exactly
+when the receipt's trace changes: `M`'s olean, `M`'s dependency trace (everything below it), the
+toolchain, and the receipt's text, which names the checker's and the installed runtime's digests. Otherwise
+Lake replays the stored receipt. A failing check stays a failing receipt. The receipts are used
+only while Lake resolves exactly the audit's lookup path in that workspace; a missing, foreign or
+repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
+
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
 for each exact selected root. The CLI report preserves those rows under
 `framework_candidates.declarations`, adding the summaries below. A row identifies the
