@@ -3977,6 +3977,7 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
   return r
 where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List MVarId) := g.withContext do
   let s ← saveState
+  let restoreArith ← (← caches).saveArith
   try
     let t ← instantiateMVars (← g.getType)
     let P := t.appFn!.appArg!
@@ -4321,6 +4322,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
   catch ex =>
     trace[fsym] "entailment: {ex.toMessageData}"
     s.restore
+    restoreArith
     return [g]
 
 /-! ## Facts of atoms -/
@@ -4499,12 +4501,14 @@ backends); in the concurrent backend it executes a `ConcM.liftMem c` command (ab
 def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId × List MVarId)) :=
   g.withContext do
   let s ← saveState
+  let restoreArith ← (← caches).saveArith
+  let restore : TacticM Unit := do s.restore; restoreArith
   try
     let (_, L, α, P, _, Q) ← view g
     let (args, _, concl) ← forallMetaTelescope (← inferType rule)
     let concl ← whnfR concl
     let some (kind, cmd) := ruleConcl? concl | do
-      trace[fsym] "rule {rule}: not a triple {concl}"; s.restore; return none
+      trace[fsym] "rule {rule}: not a triple {concl}"; restore; return none
     let ca := concl.getAppArgs
     let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
     -- the command the rule is about, and whether the rule applies in this backend: a thread's
@@ -4517,7 +4521,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       else if L.conc then memCmd? x
       else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
-    let some tx := target? | s.restore; return none
+    let some tx := target? | restore; return none
     -- a sequential rule in a thread: its command must be local to the thread that owns the
     -- rule's precondition (`ThreadLocal`, solved last by the locality providers, once `P₀` is
     -- known); a command that no provider is about gets no plan
@@ -4526,7 +4530,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     if let some t := local? then
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
       -- (or its definition, unfolded by the provider search: `providerCands`)
-      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then s.restore; return none
+      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then restore; return none
     let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
@@ -4534,16 +4538,16 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       -- argument unifies as written, not in its unfolded form
       let cmd ← reduceProjs (← unfoldToHead (← instantiateMVars cmd) tx)
       let cmd ← reduceProjs (← expandMapLits cmd)
-      unless headKey cmd == headKey tx do s.restore; return none
+      unless headKey cmd == headKey tx do restore; return none
       unless ← isDefEq cmd tx do
         trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"
-        s.restore; return none
+        restore; return none
     else
-      unless ← unifyKeyed cmd tx do s.restore; return none
+      unless ← unifyKeyed cmd tx do restore; return none
     trace[fsym] "rule {rule}: command unified"
     fixByFacts args
     if ← instArgsMissing args then
-      trace[fsym] "rule {rule}: no instance"; s.restore; return none
+      trace[fsym] "rule {rule}: no instance"; restore; return none
     let P₀i ← normNatLits (← instantiateMVars P₀)
     let sizes ← ruleRegionSizes P₀i args
     let whole := P₀i.isMVar
@@ -4551,7 +4555,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     -- `EUpd P (P₀ ⋆ R)` by the planner, when the rule's precondition is not literally there
     let mut planned : Option Expr := none
     if whole then
-      unless ← isDefEq P₀ P do s.restore; return none
+      unless ← isDefEq P₀ P do restore; return none
     else
       -- frame inference: each atom of the rule's precondition is an atom of `P`
       let ats := atoms P
@@ -4580,7 +4584,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
         let left ← closeEntail hE.mvarId! sizes
         unless left.isEmpty do
           trace[fsym] "rule {rule}: no plan for its precondition"
-          s.restore; return none
+          restore; return none
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
     synthInstArgs args
@@ -4589,14 +4593,14 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
     let some left ← solveSides sides | do
       trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
-      s.restore; return none
+      restore; return none
     -- every argument must be determined (a proof by a provider too)
     for a in args do
       let a ← instantiateMVars a
       if a.hasExprMVar && !(left.any fun m => a == .mvar m) then
         unless (← isProp (← inferType a)) && (a.collectMVars {}).result.all (left.contains ·) do
           trace[fsym] "rule {rule}: undetermined {a}"
-          s.restore; return none
+          restore; return none
     let mut r ← instantiateMVars (mkAppN rule args)
     let Q₀ ← normNatLits (← instantiateMVars Q₀)
     let P₀ ← normNatLits (← instantiateMVars P₀)
@@ -4643,7 +4647,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     return some (k', left)
   catch ex =>
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
-    s.restore; return none
+    restore; return none
 
 /-- Try a **bind rule** (a `CTriple` rule about a command and the rest of the program, such as
 an oracle's pick with its op, `CTriple.weakCasPtr_bind`) on the goal's whole program `c`: its
