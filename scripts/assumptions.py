@@ -512,7 +512,8 @@ def file_sha256(path: Path) -> str:
 
 
 def input_tree_records(root: Path, binaries: bool = False, *,
-                       suffixes: tuple[str, ...] | None = None) -> list[tuple[Path, str, str]]:
+                       suffixes: tuple[str, ...] | None = None,
+                       content_exclusions=()) -> list[tuple[Path, str, str]]:
     """Selected input bytes and alias identities, using one traversal for all input sets."""
     paths, links = set(), {}
 
@@ -538,7 +539,8 @@ def input_tree_records(root: Path, binaries: bool = False, *,
                 paths.add(path)
 
     visit(root, frozenset())
-    return [(path, links.get(path, ''), file_sha256(path) if path in paths else '')
+    return [(path, links.get(path, ''), file_sha256(path)
+             if path in paths and path not in content_exclusions else '')
             for path in sorted(paths | links.keys())]
 
 
@@ -610,12 +612,13 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
     return digest.hexdigest()
 
 
-def lean_path_binding(root: Path, value: str) -> dict:
+def lean_path_binding(root: Path, value: str, *, mutable_outputs=()) -> dict:
     """One ordered-root binding for caller inputs and compiler-owned Unit lookup."""
     entries = value.split(os.pathsep)
     if any(not entry for entry in entries):
         raise ValueError('empty root in caller LEAN_PATH')
     paths = [(root / entry).absolute() for entry in entries]
+    mutable_outputs = {path.absolute() for path in mutable_outputs}
     digest = hashlib.sha256(b'air2lean-caller-lean-path-v1\0')
     for path in paths:
         if path.exists() and not path.is_dir():
@@ -623,9 +626,16 @@ def lean_path_binding(root: Path, value: str) -> dict:
         # An empty top-level directory can select this root ahead of a later library.
         tops = sorted(p.name for p in path.iterdir() if p.is_dir()) if path.is_dir() else []
         identity = {'path': str(path), 'resolved': str(path.resolve()),
-                    'exists': path.exists(), 'top_level': tops}
+                    'exists': path.exists(), 'top_level': tops,
+                    'links': [[str(part), os.readlink(part)] for part in (path, *path.parents)
+                              if part.is_symlink()]}
         digest.update(json.dumps(identity, sort_keys=True).encode() + b'\0')
-        for item, link, content in input_tree_records(path):
+        for item, link, content in input_tree_records(
+                path, **({'content_exclusions': mutable_outputs} if mutable_outputs else {})):
+            if item in mutable_outputs:
+                if link:
+                    raise ValueError(f'compiler-owned canonical output is an alias: {item}')
+                continue  # Exact prederived output slots, never a shared library subtree.
             digest.update(item.relative_to(path).as_posix().encode() + b'\0')
             digest.update(link.encode() + b'\0' + content.encode() + b'\0')
     return {'roots': list(map(str, paths)), 'sha256': digest.hexdigest()}
