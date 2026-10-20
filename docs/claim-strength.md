@@ -129,6 +129,13 @@ and kernel replay, and reports them as `witness_theorems` (scope and `modules` s
 ones). `claims.py` accepts a companion from there; it never classifies a witness theorem as a
 claim. A fixture that does not compile fails the shipped audit (fail closed).
 
+The global-claims induction is shared: `Holds.addGlobalClaims` augments resources in the **same
+memory and frame**, preserving their original assertion. It requires that neither part already
+claims a named block and that those blocks exist; it places no restriction on claims of other
+blocks. `FAdmit.Start.init_claims` uses it at the plain start. `initRes_holds_stack_claims` uses
+it at the actual `withStack` start, and `FTotalTriple.run_init_stack_claims` runs a total client
+with the globals, their claims and the main thread's stack tokens, without a separate seed state.
+
 **No witness, no claim.** A theorem whose non-vacuity witness is not `verified` or `trivial`
 derives no strength (`derived_strength: null`), whatever its head: unsatisfiable premises make
 it prove nothing, so it cannot back `safety` or `no-panic` either (audit
@@ -136,6 +143,79 @@ it prove nothing, so it cannot back `safety` or `no-panic` either (audit
 binds such a goal as `unwitnessed`, never `direct`, so it backs no level and no absence claim.
 A partial claim whose premises are witnessed but which has no liveness witness is reduced to
 `safety`. `caps` lists why.
+
+**Allocator instances need creation evidence.** A concrete `FAllocSpec` or `CAllocSpec` theorem
+`T`, including one used by a client's proof, needs `T.creation`, an existing `FTotalTriple` from
+hand-stated raw resources. Its post must establish the exact invariant family's
+`FAllocInv.creationPost`: state, a positive fee, and an accepted positive `BitVec 64` request.
+`T.creationParameters : FAllocCreationParameters` partitions the contract telescope into visible
+and fresh positions. These roles are hand-stated API/specification boundaries, not inferred proof
+of ghostness. The creation theorem quantifies the visible parameters with matching dependent
+types and keeps them fixed in its post; only fresh parameters are existential. A fresh role
+cannot hide a parameter captured by the vtable, context, logic or request bound. Impossible
+premises remain in the existential target even when otherwise unused. The FBA keeps `ctx` and `B`
+visible and allocates its ghost ledger freshly. Its
+`T.creation.nonvacuous` companion must have exactly the recomputed admissibility statement
+(`FAdmit`). The extractor adds imported companion proofs to the audit; `claims.py` requires all
+of them to pass dependency policy. `statement.allocator_creation` records the contracts and
+both theorem provenances. Missing metadata fails closed. An anonymous inline implementation or
+specialization must first be named and supply the same companions; generic interface rules
+whose invariant is an explicit parameter remain generic. Failure removes every derived strength,
+and `project.py` binds the goal as `unwitnessed` and refuses absence claims (audit F2).
+
+**Applied admission (engine ledger #allocator-creation-admissibility).** An existential
+`FAdmit` companion can choose one visible parameter value: creation from `⟪n = 0⟫` into
+the exact invariant with `own := ⟪n = 0⟫` does not create the member at one. Visible/post matching
+alone is insufficient. The gate therefore fails closed with `unbound_admissibility` when the
+creation precondition depends on a visible parameter. The maintainer chose exact applied
+admission on 2026-10-16 ([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
+the checked client must carry `FAdmit` of that same creation precondition at its actual arguments.
+The extractor retains the complete dependent application context and accepts an original exact
+root hypothesis or a closed checked local proof. Its `applications` records include the closed
+application, admission predicate, evidence and `root_bound`; `admission_binding` distinguishes
+this check from a creation precondition independent of the visible parameters. Serializing a
+context does not bind it to the root: a local proof obtained only under False or hypothetical
+Holds premises remains rejected. Start-dependent local evidence remains unbound until its
+actual initialization relation is verified.
+Actual argument dependencies must also come from the original root or checked lets over it;
+a constant spatial precondition cannot hide a proof argument obtained only under local False.
+
+Application inspection retains actual arguments through checked local aliases, direct structure
+projections and higher-order forwarding. Contract-bearing argument types also select polymorphic
+helpers for expansion; an uninspectable callback carrying a known producer fails closed.
+Fresh parameters also remain unbound: admission of a raw precondition cannot identify which
+existential fresh values the creator produced. Relabelling a visible value as fresh cannot
+authenticate another member; actual created-result binding must supply that relation.
+Checked function-domain aliases are inspected at the actual argument spine, before a later
+dependent domain is visited. Every selected local value's stored type is checked at each use;
+an earlier admitted family member cannot hide an unadmitted member behind a local type alias.
+Projection functions must match their checked projection lambda; all other holder fields remain
+inspected. Primitive recursors retain raw motives, branches, indices and major arguments.
+Unsupported type-valued forwarding, including a generic family in an unselected structure
+parameter, remains rejected. Named implementation bodies are inspected against their exact own
+contract type; their creation proof cannot authenticate a foreign anonymous constructor.
+
+Traversal memoization retains the exact local scope, closed term and pending application or
+projection context. Closing a body can recreate its parent's closed term, so the term alone is
+not a sufficient key. The application fixture checks admitted lets and aliases alongside hidden
+constructors, ignored branch/type indices and mixed admitted/unadmitted family members.
+
+The actual FBA initialization still needs to supply this evidence through the general `fsym`
+rules and start-memory lemmas. Its old manually constructed seed is not completion. Generic
+`FTotalTriple.admit_run` retains the actual initializer result and run equation, using the
+existing `FTriple.holds_of_ok`. Callers supply the native `initRes_holds_*` resources directly;
+there are no per-start wrappers. `FAdmit.At.global_aptsE` selects an encoded writable global
+from the actual supplied memory using the existing initialization and typed-word rules. The
+Page companion applies it to the real null hint in `PageLinux.mem0`, for every placement and
+arbitrary input stream, and supplies both sequential and concurrent creation obligations.
+It constructs no memory seed. Its constant precondition needs no argument-dependent admission.
+
+FBA creation and exact fresh-result binding remain open. Unbound uses remain rejected; F2 is
+not fixed until the real instances and the negative controls pass together. The protocol does
+not add a second hand-stated domain or authenticate an unrestricted family from one existential
+witness. The approved separate `admission-at-state` engine feature will expose exact `FAdmit`
+side goals through the existing state planner/frame rule; it adds no wildcard facts or registry.
+Its struct, fsym part 2 and arena prerequisites are on main; this draft makes no Auto change.
 
 **Entry points start at `mem0`.** A manifest goal is a claim about an entry-point root, so its
 premises must hold where the program starts, not only in some memory (audit F3). `claims.py
@@ -171,9 +251,26 @@ every project goal (`docs/project-workflow.md`) against its root's generated def
 * the conclusion is not about the root: the computation at the head's program position (an
   equation's left side) is not the root definition. A root that appears only in a
   postcondition, a hypothesis or an ignored argument does not bind;
+* a peeled runner has an unknown declared effect or projects source data through unsupported
+  semantics. Binding and outcome extraction share the same checked runner description;
+* an equation's `Pure.pure` right-hand side uses an unsupported or noncanonical operation
+  dictionary. A `pure` spelling alone cannot justify a successful return, even for an implicit goal;
 * a hypothesis mentions a generated definition (any definition of the root's generated module)
   or a claim head, unless that definition is one of the root's declared `assumptions`;
 * the derived domain is scoped and the declared domain does not start with `scoped`.
+
+An explicit `outcomes.admits` is checked against the audited kernel postcondition's constructor
+upper bound, independently of tests. A narrower or unsupported contract rejects the goal;
+a wider contract is reported as `under_claim`. Partial postconditions keep divergence and
+stack overflow unexcluded and cannot establish an explicit complete outcome set. Implicit
+defaults remain labelled `strength_default` and follow the declared strength, including its
+conditional-on-return meaning. See [outcome-taxonomy.md](outcome-taxonomy.md#goal-outcome-contracts).
+
+For MM-run triples, the shared computation view identifies the final-state products introduced
+by the runners. Extraction visits the source return value and reconstructs those products when
+reading the original postcondition. A genuine tuple-valued return stays an ordinary value.
+Concurrent CTriple computations use the declared ConcM family; its scheduler arguments are not
+guessed to be source state layers. Unrecognized function families fail source binding closed.
 
 The domain is derived from the subject: each explicit root argument and initial state is
 reported as the quantified variable it is, or `fixed`. It is `universal` only when every one is
@@ -190,7 +287,8 @@ Every declared strength asserts `no-panic`; `total_correctness` also asserts
 `guaranteed-return`. A goal is rejected when its root's evidence includes a capped search,
 a fuel-bounded no-result run, an unspecified result, an unsupported timer (`unspecified_timer`,
 reason `unsupported timer`), an unsupported outcome, or an observed failure the claim denies.
-Error returns never reject a goal. Evidence can only reject: an incomplete summary exits 2, and
+Error returns preserve absence-of-model-failure claims, but an explicit outcome contract may
+exclude them. Evidence can only reject: an incomplete summary exits 2, and
 clean evidence adds nothing to the type-derived strength. Each summary must be bound to the
 current tree: its `runner_runtime_sources` must equal the fingerprints `scripts/diff-report.py`
 computes now and its `cases_sha256` the case file beside it; stale or unbound evidence exits 2.

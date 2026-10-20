@@ -57,57 +57,131 @@ class Unknown(Exception):
 
 # ---- GitHub Actions expressions (the subset ci.yml uses) --------------------------------------
 
-TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(&&|\|\||==|!=|!|\(|\))|"
-                   r"([A-Za-z_][\w.-]*(?:\(\))?)|(\d+(?:\.\d+)?))")
-FUNCTIONS = {'success()': True, 'always()': True, 'failure()': False, 'cancelled()': False}
+# .NET Char.IsWhiteSpace, shared by numeric conversion and expression token boundaries.
+WHITESPACE = ('\t\n\v\f\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005'
+              '\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000')
+SPACE = '[' + re.escape(WHITESPACE) + ']'
+DECIMAL = r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)'
+TOKEN = re.compile(SPACE + r"*(?:('(?:[^']|'')*')|(&&|\|\||==|!=|!|\(|\)|,)|"
+                   r"([A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)|(" + DECIMAL + r"))")
+FUNCTIONS = {'success': True, 'always': True, 'failure': False, 'cancelled': False}
 
 
 def tokenize(text):
-    tokens, pos, text = [], 0, text.strip()
+    tokens, pos, text = [], 0, text.strip(WHITESPACE)
     while pos < len(text):
         m = TOKEN.match(text, pos)
         if not m or m.end() == pos:
             raise Unknown(f'cannot parse expression {text!r}')
-        string, op, ident, number = m.groups()
+        string, op, ident, numeric = m.groups()
         if string is not None:
             tokens.append(('lit', string[1:-1].replace("''", "'")))
         elif op is not None:
             tokens.append(('op', op))
-        elif number is not None:
-            tokens.append(('lit', float(number)))
+        elif numeric is not None:
+            tokens.append(('lit', number(numeric)))
         else:
             tokens.append(('id', ident))
         pos = m.end()
     return tokens
 
 
+def expression_scalar(value):
+    """Supported scalar kinds, with every numeric value canonicalized to finite binary64."""
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if not isinstance(value, (int, float)):
+        raise Unknown(f'unsupported expression scalar of {type(value).__name__}')
+    try:
+        value = float(value)
+    except OverflowError as error:
+        raise Unknown('number is outside the GitHub expression range') from error
+    if not math.isfinite(value):
+        raise Unknown('unsupported non-finite numeric value')
+    return value
+
+
 def truthy(value):
-    if isinstance(value, float) and math.isnan(value):
-        return False
-    return value not in (None, False, 0, '')
+    return expression_scalar(value) not in (None, False, 0, '')
 
 
 def number(value):
-    if value is None or value == '':
-        return 0.0
-    if isinstance(value, (bool, int, float)):
-        return float(value)
-    try:
-        return float(value)
-    except ValueError:
-        return math.nan
+    """Only finite numeric values and trimmed decimal text; other conversions fail closed."""
+    if isinstance(value, str):
+        value = value.strip(WHITESPACE)
+        if not value:
+            return 0.0
+        if not re.fullmatch(DECIMAL, value):
+            raise Unknown(f'unsupported numeric string {value!r}')
+        value = float(value)
+    elif value is None or isinstance(value, bool):
+        raise Unknown(f'unsupported numeric conversion of {type(value).__name__}')
+    return expression_scalar(value)
 
 
 def equal(left, right):
-    if isinstance(left, str) and isinstance(right, str):
+    left, right = expression_scalar(left), expression_scalar(right)
+    if isinstance(left, float) and isinstance(right, str):
+        right = number(right)
+    elif isinstance(left, str) and isinstance(right, float):
+        left = number(left)
+    if type(left) is not type(right):
+        raise Unknown(f'unsupported mixed-kind comparison of {type(left).__name__} and {type(right).__name__}')
+    if isinstance(left, str):
+        if not left.isascii() or not right.isascii():
+            raise Unknown('unsupported non-ASCII string comparison')
         return left.lower() == right.lower()
-    if left is None or right is None:
-        return left is right
-    return number(left) == number(right)
+    return left == right
+
+
+def context_field(mapping, name):
+    """One ASCII case-insensitive field, with ambiguous or unsupported keys rejected."""
+    fields = {}
+    for key, value in mapping.items():
+        if not isinstance(key, str) or not key.isascii():
+            raise Unknown(f'unsupported non-ASCII or non-string context key while reading {name!r}')
+        folded = key.lower()
+        if folded in fields:
+            raise Unknown(f'ambiguous case variants of context field {key!r}')
+        fields[folded] = value
+    return fields.get(name.lower())
+
+
+def expression_string(value):
+    """GitHub scalar coercion, shared by interpolation and format()."""
+    value = expression_scalar(value)
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, float):
+        # actions/runner EvaluationResult.ConvertToString uses invariant NumberFormat="G15".
+        return format(value, '.15G')
+    raise Unknown(f'unsupported string conversion of {type(value).__name__}')
+
+
+def format_string(template, arguments):
+    """Positional fields and doubled braces; no Python format directives or traversal."""
+    def field(match):
+        token, index = match.group(0), match.group(1)
+        if token in ('{{', '}}'):
+            return token[0]
+        if index is None:
+            raise Unknown('invalid format string')
+        try:
+            index = int(index)
+        except ValueError as error:
+            raise Unknown('invalid format argument index') from error
+        if index >= len(arguments):
+            raise Unknown('missing format argument')
+        return expression_string(arguments[index])
+    return re.sub(r'\{\{|\}\}|\{([0-9]+)\}|[{}]', field, expression_string(template))
 
 
 def evaluate(expression, context):
-    """Value of one expression for a {matrix, runner.os} context (JavaScript-like && / ||)."""
+    """Value for a nested matrix and explicitly provided context keys (&& / || return values)."""
     tokens = tokenize(expression)
     pos = 0
 
@@ -116,6 +190,8 @@ def evaluate(expression, context):
 
     def take():
         nonlocal pos
+        if pos == len(tokens):
+            raise Unknown(f'incomplete expression {expression!r}')
         pos += 1
         return tokens[pos - 1]
 
@@ -129,20 +205,52 @@ def evaluate(expression, context):
                 raise Unknown(f'unbalanced parentheses in {expression!r}')
             return inner
         if kind == 'id':
+            if peek() == ('op', '('):
+                take()
+                arguments = []
+                if peek() != ('op', ')'):
+                    while True:
+                        arguments.append(disjunction())
+                        if peek() != ('op', ','):
+                            break
+                        take()
+                if take() != ('op', ')'):
+                    raise Unknown(f'unbalanced function call in {expression!r}')
+                name = value.lower()
+                if name == 'format' and 1 <= len(arguments) <= 255:
+                    return format_string(arguments[0], arguments[1:])
+                if name in FUNCTIONS and not arguments:
+                    status = context.get(name, FUNCTIONS[name])
+                    if not isinstance(status, bool):
+                        raise Unknown(f'unsupported status context: {name!r}')
+                    return status
+                raise Unknown(f'unsupported function or argument count: {value!r}')
             if value in ('true', 'false'):
                 return value == 'true'
             if value == 'null':
                 return None
-            if value in FUNCTIONS:
-                return FUNCTIONS[value]
-            if value == 'runner.os':
-                return context['runner.os']
             if value == 'env.AIR2LEAN_REUSED':
                 return ''  # a path is backed by a part's executing run, never by a reused one (docs/ci.md)
             if value.startswith('matrix.'):
-                if context['matrix'] is None:
+                if '.' in value[len('matrix.'):]:
+                    raise Unknown(f'unsupported nested matrix reference {value!r} in {expression!r}')
+                matrix = context.get('matrix')
+                if matrix is None:
                     raise Unknown(f'{value} in a job without a matrix')
-                return context['matrix'].get(value[len('matrix.'):])
+                if not isinstance(matrix, dict):
+                    raise Unknown('unsupported matrix context')
+                try:
+                    resolved = context_field(matrix, value[len('matrix.'):])
+                except Unknown as error:
+                    raise Unknown(f'{value}: {error}') from error
+            elif value in context:
+                resolved = context[value]
+            else:
+                raise Unknown(f'unsupported term {value!r} in {expression!r}')
+            try:
+                return expression_scalar(resolved)
+            except Unknown as error:
+                raise Unknown(f'{value}: {error}') from error
         raise Unknown(f'unsupported term {value!r} in {expression!r}')
 
     def unary():
@@ -155,7 +263,10 @@ def evaluate(expression, context):
         left = unary()
         if peek() in (('op', '=='), ('op', '!=')):
             op = take()[1]
-            same = equal(left, unary())
+            try:
+                same = equal(left, unary())
+            except Unknown as error:
+                raise Unknown(f'{expression!r}: {error}') from error
             return same if op == '==' else not same
         return left
 
@@ -184,118 +295,277 @@ def evaluate(expression, context):
 def condition(text, context):
     if text is None:
         return True
-    m = re.fullmatch(r'\s*\$\{\{(.*)\}\}\s*', text, re.S)
+    if isinstance(text, bool):
+        return text
+    if not isinstance(text, str):
+        raise Unknown('unsupported condition type: %s' % type(text).__name__)
+    m = re.fullmatch(SPACE + r'*\$\{\{(.*)\}\}' + SPACE + '*', text, re.S)
     return truthy(evaluate(m.group(1) if m else text, context))
 
 
 def interpolate(text, context):
-    def one(m):
-        value = evaluate(m.group(1), context)
-        if isinstance(value, bool):
-            return 'true' if value else 'false'
-        if isinstance(value, float) and value.is_integer():
-            return str(int(value))
-        return '' if value is None else str(value)
-    return re.sub(r'\$\{\{(.*?)\}\}', one, text)
+    # A closing delimiter inside a quoted expression string is ordinary string data.
+    parts, end = [], 0
+    while True:
+        start = text.find('${{', end)
+        if start < 0:
+            return ''.join(parts) + text[end:]
+        parts.append(text[end:start])
+        position, quoted = start + 3, False
+        while position < len(text):
+            if text[position] == "'":
+                if quoted and text.startswith("''", position):
+                    position += 2
+                    continue
+                quoted = not quoted
+            elif not quoted and text.startswith('}}', position):
+                break
+            position += 1
+        else:
+            raise Unknown('unterminated interpolation')
+        parts.append(expression_string(evaluate(text[start + 3:position], context)))
+        end = position + 2
 
 
-# ---- workflow (a narrow line parser for the layout ci.yml uses) ------------------------------
+# ---- shared workflow DATA subset (moved from release-record.py) -------------------------------
 
-def scalar(text):
-    text = text.strip()
-    if len(text) >= 2 and text[0] == text[-1] and text[0] in '"\'':
-        return text[1:-1]
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
+
+
+def selected_rows(rows, selector):
+    """Match DATA identities; a missing field is distinct from an explicit null."""
+    if not selector:
+        return []
+    if not isinstance(selector, dict):
+        raise Unreadable('%s: matrix selector must be a mapping' % WORKFLOW)
+    try:
+        identity = {key: canonical(value) for key, value in selector.items()}
+        return [row for row in rows if all(key in row and canonical(row[key]) == value
+                                          for key, value in identity.items())]
+    except (TypeError, ValueError) as error:
+        raise Unreadable('%s: unsupported matrix selector DATA: %s' % (WORKFLOW, error)) from error
+
+
+def _scalar(text, where):
+    text = text.strip(' \t')
+    if text[:1] in ('"', "'"):
+        quote, position, content = text[0], 1, []
+        while position < len(text):
+            char = text[position]
+            if char == quote:
+                if quote == "'" and text.startswith("''", position):
+                    content.append("'")
+                    position += 2
+                    continue
+                rest = text[position + 1:]
+                if rest and (rest[0] not in ' \t' or not rest.strip(' \t').startswith('#')):
+                    raise Unreadable('%s: unsupported quoted scalar' % where)
+                return ''.join(content)
+            if quote == '"' and char == '\\':
+                raise Unreadable('%s: unsupported quoted scalar escape' % where)
+            content.append(char)
+            position += 1
+        raise Unreadable('%s: unterminated quoted scalar' % where)
+    text = re.sub(r'(?<=[ \t])#.*$', '', text).rstrip(' \t')
+    if text.startswith('['):
+        # Existing workflows use simple flow lists of names; complex flow syntax is refused.
+        if not re.fullmatch(r'\[[ \t]*(?:[A-Za-z0-9_.-]+(?:[ \t]*,[ \t]*[A-Za-z0-9_.-]+)*)?[ \t]*\]', text):
+            raise Unreadable('%s: unsupported flow sequence' % where)
+        return [_scalar(item, where) for item in text[1:-1].split(',') if item.strip(' \t')]
+    if (text[:1] in ('&', '*', '!', '>', '|', '{', '}', ']', ',', '%', '@', '`')
+            or re.search(r':(?:[ \t]|$)|^[?:-](?:[ \t]|$)', text)):
+        raise Unreadable('%s: unsupported YAML syntax %r' % (where, text))
+    if text in ('', '~', 'null', 'Null', 'NULL'):
+        return None
+    if text in ('true', 'True', 'TRUE', 'false', 'False', 'FALSE'):
+        return text.lower() == 'true'
+    if re.fullmatch(DECIMAL, text):
+        try:
+            # Preserve DATA integer identities; expressions canonicalize them to binary64.
+            value = int(text) if re.fullmatch(r'[+-]?[0-9]+', text) else float(text)
+            expression_scalar(value)
+        except (ValueError, Unknown) as error:
+            raise Unreadable('%s: unsupported non-finite or out-of-range YAML number' % where) from error
+        return value
+    if (re.fullmatch(r'0x[0-9a-fA-F]+|0o[0-7]+', text)
+            or re.fullmatch(DECIMAL + r'[eE][+-]?[0-9]+', text)
+            or text in ('.inf', '.Inf', '.INF', '+.inf', '+.Inf', '+.INF',
+                        '-.inf', '-.Inf', '-.INF', '.nan', '.NaN', '.NAN')):
+        raise Unreadable('%s: unsupported YAML numeric form %r' % (where, text))
     return text
 
 
-def typed(text):
-    text = text.strip()
-    if text in ('true', 'false'):
-        return text == 'true'
-    if re.fullmatch(r'\d+', text):
-        return int(text)
-    return scalar(text)
+def parse_workflow_yaml(text):
+    """Pure, fail-closed reader of the workflow's existing block YAML subset."""
+    lines = text.split('\n')
+    terminal_break = text.endswith('\n')
+    if terminal_break:
+        lines.pop()  # Do not treat the split's EOF sentinel as a physical empty line.
+    pos = 0
+    for line_number, line in enumerate(lines, 1):
+        if '\u2028' in line or '\u2029' in line:
+            raise Unreadable('%s:%d: unsupported raw YAML Unicode line break' % (WORKFLOW, line_number))
+        if '\t' in line:
+            raise Unreadable('%s:%d: unsupported YAML tab' % (WORKFLOW, line_number))
+        if any(ord(char) < 32 and char != '\t' or 127 <= ord(char) <= 159
+               or 0xD800 <= ord(char) <= 0xDFFF or ord(char) in (0xFFFE, 0xFFFF) for char in line):
+            raise Unreadable('%s:%d: unsupported YAML control character' % (WORKFLOW, line_number))
+
+    def indent(line):
+        return len(line) - len(line.lstrip(' '))
+
+    def skip():
+        nonlocal pos
+        while pos < len(lines) and (not lines[pos].strip(' \t') or lines[pos].lstrip(' ').startswith('#')):
+            pos += 1
+
+    def node(level):
+        skip()
+        if pos >= len(lines) or indent(lines[pos]) != level:
+            raise Unreadable('%s:%d: unexpected indentation' % (WORKFLOW, pos + 1))
+        body = lines[pos][level:]
+        return sequence(level) if body == '-' or body.startswith('- ') else mapping(level)
+
+    def sequence(level):
+        nonlocal pos
+        items = []
+        while True:
+            skip()
+            if pos >= len(lines) or indent(lines[pos]) < level:
+                return items
+            body = lines[pos][level:]
+            if indent(lines[pos]) != level or not body.startswith('- '):
+                raise Unreadable('%s:%d: unsupported sequence entry' % (WORKFLOW, pos + 1))
+            lines[pos] = ' ' * (level + 2) + body[2:]
+            items.append(node(level + 2))
+
+    def mapping(level):
+        nonlocal pos
+        result = {}
+        while True:
+            skip()
+            if pos >= len(lines) or indent(lines[pos]) < level:
+                return result
+            where = '%s:%d' % (WORKFLOW, pos + 1)
+            match = re.fullmatch(r'([A-Za-z0-9_.-]+):(?:[ ]+(.*))?', lines[pos][level:])
+            if indent(lines[pos]) != level or not match:
+                raise Unreadable('%s: unsupported mapping entry' % where)
+            key, value = match[1], (match[2] or '').strip(' \t')
+            if not isinstance(_scalar(key, where), str):
+                raise Unreadable('%s: unsupported non-string mapping key %r' % (where, key))
+            if key in result:
+                raise Unreadable('%s: duplicate key %s' % (where, key))
+            pos += 1
+            if value in ('|', '|-', '|+'):
+                result[key] = block(level, value)
+            elif not value or value.startswith('#'):
+                skip()
+                deeper = pos < len(lines) and indent(lines[pos]) > level
+                result[key] = node(indent(lines[pos])) if deeper else None
+            else:
+                result[key] = _scalar(value, where)
+
+    def block(level, header):
+        nonlocal pos
+        start = pos
+        width = None
+        while pos < len(lines) and not lines[pos].strip(' '):
+            pos += 1
+        if pos < len(lines) and indent(lines[pos]) > level:
+            width = indent(lines[pos])
+        if width is None:
+            # All-empty blocks have only chomped trailing lines; keep only real breaks.
+            return ''.join('\n' for index in range(start, pos)
+                           if header == '|+' and (index < len(lines) - 1 or terminal_break))
+        for index in range(start, pos):
+            if len(lines[index]) > width:
+                raise Unreadable('%s:%d: over-indented leading empty block line' % (WORKFLOW, index + 1))
+        pos = start
+        content = []
+        while pos < len(lines):
+            line = lines[pos]
+            if line.strip(' '):
+                if indent(line) <= level:
+                    break
+                if indent(line) < width:
+                    raise Unreadable('%s:%d: under-indented block scalar' % (WORKFLOW, pos + 1))
+            # Spaces beyond content indentation are data, including all-space lines.
+            content.append((line[width:], pos < len(lines) - 1 or terminal_break))
+            pos += 1
+        if header != '|+':
+            while content and content[-1][0] == '':
+                content.pop()
+        return ''.join(value + ('\n' if ended and (index < len(content) - 1 or header != '|-') else '')
+                       for index, (value, ended) in enumerate(content))
+
+    result = node(0)
+    skip()
+    if pos != len(lines):
+        raise Unreadable('%s:%d: trailing content' % (WORKFLOW, pos + 1))
+    if isinstance(result, dict) and isinstance(result.get('jobs'), dict):
+        for name, job in result['jobs'].items():
+            if isinstance(job, dict):
+                matrix_include(job, '%s: job %s' % (WORKFLOW, name))
+    return result
+
+
+def matrix_include(job, where):
+    """The shared include-only matrix boundary; axes/exclusions need explicit support."""
+    if 'strategy' not in job:
+        return None
+    strategy = job['strategy']
+    if not isinstance(strategy, dict):
+        raise Unreadable('%s: strategy must be a mapping' % where)
+    if 'matrix' not in strategy:
+        return None
+    matrix = strategy['matrix']
+    if not isinstance(matrix, dict):
+        raise Unreadable('%s: strategy.matrix must be a mapping' % where)
+    if set(matrix) != {'include'}:
+        raise Unreadable('%s: only strategy.matrix.include is supported' % where)
+    rows = matrix['include']
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise Unreadable('%s: strategy.matrix.include must be a list of mappings' % where)
+    return rows
 
 
 def parse_workflow(text):
-    """{job: {'runs-on', 'if', 'env', 'matrix' (list of rows or None), 'steps'}}."""
-    lines = text.splitlines()
-    try:
-        start = lines.index('jobs:')
-    except ValueError:
+    """Target-checker shape projection; DATA decoding is exclusively parse_workflow_yaml."""
+    workflow = parse_workflow_yaml(text)
+    if not isinstance(workflow, dict) or not isinstance(workflow.get('jobs'), dict):
         raise Unreadable(f'{WORKFLOW}: no top-level jobs')
-    jobs, job, step, section, block = {}, None, None, None, None
-    for line in lines[start + 1:]:
-        if block is not None:
-            if not line.strip() or line.startswith(' ' * block[1]):
-                block[0].append(line[block[1]:])
-                continue
-            block = None
-        if not line.strip() or line.lstrip().startswith('#'):
-            continue
-        indent = len(line) - len(line.lstrip())
-        if indent == 0:
-            break
-        if indent == 2:
-            m = re.fullmatch(r'  ([\w-]+):\s*', line)
-            if not m:
-                raise Unreadable(f'{WORKFLOW}: unexpected job line {line!r}')
-            job = jobs[m.group(1)] = {'runs-on': None, 'if': None, 'env': {}, 'matrix': None,
-                                      'steps': []}
-            step, section = None, None
-            continue
-        if job is None:
-            continue
-        if indent == 4:
-            key, _, value = line.strip().partition(':')
-            section, step = key, None
-            if key in ('runs-on', 'if'):
-                job[key] = value.strip()
-            continue
-        if section == 'env' and indent == 6:
-            key, _, value = line.strip().partition(':')
-            job['env'][key] = scalar(value)
-        elif section == 'strategy':
-            row = re.fullmatch(r'\s*- ([\w-]+): (.*)', line)
-            key = re.fullmatch(r'\s*([\w-]+): (.*)', line)
-            if line.strip() == 'include:':
-                job['matrix'] = []
-            elif row and job['matrix'] is not None:
-                job['matrix'].append({row.group(1): typed(row.group(2))})
-            elif key and job['matrix'] and indent >= 12:
-                job['matrix'][-1][key.group(1)] = typed(key.group(2))
-        elif section == 'steps':
-            m = re.fullmatch(r'      - ([\w-]+):(.*)', line)
-            if m:
-                step = {'env': {}, 'name': None, 'if': None, 'run': ''}
-                job['steps'].append(step)
-                line = '        ' + line[8:]
-                indent = 8
-            if step is None:
-                continue
-            if indent == 8:
-                key, _, value = line.strip().partition(':')
-                step['_key'] = key
-                value = value.strip()
-                if key == 'run' and value in ('|', '>'):
-                    lines_out = []
-                    step['run'] = lines_out
-                    block = (lines_out, 10)
-                elif key in ('name', 'if', 'run'):
-                    step[key] = value if key == 'if' else scalar(value)
-            elif indent == 10 and step.get('_key') == 'env':
-                key, _, value = line.strip().partition(':')
-                step['env'][key] = scalar(value)
-    for job in jobs.values():
-        for step in job['steps']:
-            if isinstance(step['run'], list):
-                step['run'] = '\n'.join(step['run'])
-            step.pop('_key', None)
+    jobs = {}
+    for name, job in workflow['jobs'].items():
+        where = '%s: job %s' % (WORKFLOW, name)
+        if not isinstance(job, dict):
+            raise Unreadable('%s must be a mapping' % where)
+
+        def mapping(value, field):
+            if not isinstance(value, dict):
+                raise Unreadable('%s: %s must be a mapping' % (where, field))
+            return value
+
+        env = mapping(job.get('env', {}), 'env')
+        matrix = matrix_include(job, where)
+        steps = job.get('steps', [])
+        if not isinstance(steps, list):
+            raise Unreadable('%s: steps must be a list of mappings' % where)
+        for index, step in enumerate(steps):
+            if not isinstance(step, dict):
+                raise Unreadable('%s: step %d must be a mapping' % (where, index))
+            mapping(step.get('env', {}), 'step %d env' % index)
+        jobs[name] = {'runs-on': job.get('runs-on'), 'if': job.get('if'),
+                      'env': env, 'matrix': matrix,
+                      'steps': [{'name': None, 'if': None, 'run': '', 'env': {}, **step}
+                                for step in steps]}
     return jobs
 
 
 def runner_host(label):
     """GitHub-hosted runner label -> arch-os host, or None when it is not a fixed host."""
+    if not isinstance(label, str):
+        return None
     m = re.fullmatch(r'ubuntu-[\d.]+(-arm)?', label)
     if m:
         return 'aarch64-linux' if m.group(1) else 'x86_64-linux'
@@ -388,7 +658,7 @@ def check_entry(entry, path, jobs):
     job = jobs.get(entry.get('job'))
     if job is None:
         return [f'{pid}: CI job {entry.get("job")!r} not found in {WORKFLOW}'], []
-    label = scalar(job['runs-on'] or '')
+    label = job['runs-on']
     job_host = runner_host(label)
     if job_host != host:
         errors.append(f'{pid}: job {entry["job"]!r} runs on {label!r} ({job_host}), not {host}; '
@@ -401,7 +671,7 @@ def check_entry(entry, path, jobs):
             return [f'{pid}: job {entry["job"]!r} has no matrix, but the entry selects a row'], []
         row = None
     else:
-        rows = [r for r in job['matrix'] if selector and all(r.get(k) == v for k, v in selector.items())]
+        rows = selected_rows(job['matrix'], selector)
         if len(rows) != 1:
             return [f'{pid}: matrix selector {selector!r} matches {len(rows)} rows of '
                     f'job {entry["job"]!r} (need exactly one)'], []
@@ -455,7 +725,7 @@ def job_context(jobs, job_name, selector, host=None):
     job = jobs.get(job_name)
     if job is None:
         return None, None, [f'CI job {job_name!r} not found in {WORKFLOW}']
-    label = scalar(job['runs-on'] or '')
+    label = job['runs-on']
     job_host = runner_host(label)
     if job_host is None or (host is not None and job_host != host):
         return None, None, [f'job {job_name!r} runs on {label!r} ({job_host}), not {host or "a fixed host"}']
@@ -464,7 +734,7 @@ def job_context(jobs, job_name, selector, host=None):
             return None, None, [f'job {job_name!r} has no matrix, but the entry selects a row']
         row = None
     else:
-        rows = [r for r in job['matrix'] if selector and all(r.get(k) == v for k, v in selector.items())]
+        rows = selected_rows(job['matrix'], selector)
         if len(rows) != 1:
             return None, None, [f'matrix selector {selector!r} matches {len(rows)} rows of job {job_name!r}']
         row = rows[0]
@@ -514,7 +784,7 @@ def check_abi_profiles(root, matrix, jobs):
             step = steps[0]
             try:
                 runs = condition(step['if'], context)
-                bound = interpolate({**job['env'], **step['env']}.get('AIR2LEAN_ZIG_VERSION', ''), context)
+                bound = interpolate(expression_string({**job['env'], **step['env']}.get('AIR2LEAN_ZIG_VERSION', '')), context)
             except Unknown as error:
                 errors.append(f'{pid}: {kind} step: {error}')
                 continue
@@ -543,7 +813,7 @@ def check_step(found, job, context, version, kind, os_name):
         if not condition(step['if'], context):
             return ['its `if` is false for this row']
         merged = {**job['env'], **step['env']}
-        env = {k: interpolate(merged[k], context) for k in BOUND_ENV if k in merged}
+        env = {k: interpolate(expression_string(merged[k]), context) for k in BOUND_ENV if k in merged}
     except Unknown as error:
         return [str(error)]
     errors = []

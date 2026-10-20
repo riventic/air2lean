@@ -78,11 +78,50 @@ invariant is ever reached. `Vacuity.lean` shows this:
 * `no_creation_falseInv`: so a creation triple from an admissible precondition cannot end in
   `falseInv.own`.
 
-So every generated instance must come with (i) the creation triple, from the hand-stated
-precondition to `I.own` (proved by `fsym`), and (ii) an `FAdmit` companion for that precondition.
-The claims tooling already requires such companions (`docs/claim-strength.md`, "Witnesses"), so
-this needs no new mechanism. On main, the FBA has no creation theorem for the full-state invariant
-(`fown_init` exists on the ledger branch), and the arena has none. Both become acceptance items.
+Every instance therefore comes with (i) an ordinary total creation triple from its hand-stated
+raw precondition, proved by `fsym`, and (ii) the existing `FAdmit` companion for that precondition.
+`FAllocInv.creationPost` states the obligation once: an inhabited accepted request domain,
+`I.own` and an available fee `I.fee φ` for some positive fraction `φ`. The fee excludes the audit's second
+counterexample, whose state is `emp` but whose fee never holds; the request excludes `fits := False`.
+This is an assertion over the existing judgment, not a new judgment or proof framework.
+
+The contract theorem `T` names its total companion `T.creation`; `nonvacuity_witness T.creation`
+provides its admissibility theorem. The claims extractor compares the post with the exact
+invariant family of `T`. Plain `T.creationParameters` specification data distinguishes visible
+instance parameters from fresh ghost parameters. Creation quantifies and preserves the visible
+parameters (`ctx` and `B` for the FBA) and existentially binds only the fresh ones (its ledger and
+epoch). The roles are hand-stated specification, not inferred ghostness; parameters captured by
+the executable contract or request bound cannot be hidden as fresh. Unused impossible premises
+cannot be erased. The extractor then audits both companion proofs. Claims fail closed on missing,
+mismatched or unaudited
+companion, including contracts used inside client proofs and anonymous inline instances.
+The FBA starts from its initialized struct words, free buffer and raw claim (`fown_init`);
+the page allocator starts from its null hint word. The arena follow-up is recorded as
+`arena-creation` in the soundness audit.
+
+Visible-parameter matching does not prove that every member's raw precondition is admissible.
+The maintainer chose exact applied-argument admission on 2026-10-16
+([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
+a parameterized client carries `FAdmit` of that same creation precondition, and the audit keeps
+the actual contract application and its complete dependent context. An existing exact admission
+hypothesis from the original theorem or a closed checked local proof supplies the evidence.
+An exact local proof under unbound semantic Holds/False premises is insufficient; its context
+must be bound to the root or actual initialization, not merely serialized. Unbound uses remain
+`unbound_admissibility` (engine ledger #allocator-creation-admissibility). Actual creation
+resources and arguments must follow translated initialization through general `fsym` and
+start-memory rules; the FBA's manually built seed does not complete that obligation. No second
+hand-stated domain is added, and one existential witness never stands for all capacities or
+contexts. F2 remains open pending the real FBA/page proofs and negative controls.
+
+For a parameterized instance, that existential companion alone does not bind admission to every
+visible argument. `tests/roadmap/invariant-synthesis/CreationFamily.lean` proves total creation
+from `⟪n = 0⟫` into the exact state and fee, with an accepted request. Its companion chooses zero;
+the kernel also proves that the member at one cannot be admitted. Moving the condition into a
+proof binder preserves the restriction. Engine ledger #allocator-creation-admissibility tracks
+the chosen exact applied-argument protocol, whose implementation remains open. The mechanism must
+automatically derive admission from translated initialization/program start using the general
+full-state rules. A manually selected seed buffer or per-instance hand proof engine is not
+acceptance, and Task10 has not closed F2 for FBA or page.
 
 `fits` is the other way a contract can go vacuous: `fits := fun _ _ => False` makes `alloc`,
 `resize` and `remap` vacuous, while `free` still has to be proved. That is why `fits` is
@@ -449,6 +488,9 @@ Each stage is a permanent part of the end state, and none adds a shim.
 | S5 | layer 4: hints file format, provenance, offline producers | — |
 | S6 | acceptance measured; P09 complete; P03's "invariants and measures are not inferred" closed | — |
 
+P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
+the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
+
 The arena lane does not rewrite the arena invariant by hand in the meantime (coordinator,
 2026-10-14). Its work after #337, moving the macro steps into general `fsym` rules, is a
 prerequisite of S4, not a parallel invariant.
@@ -459,7 +501,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 
 * **P09-E1** residual-goal attribution: each goal `fsym` leaves names its origin (the
   postcondition conjunct, the side condition of which rule). Stop reasons are returned in
-  machine-readable form by `Auto.run` (extends #14, #15).
+  machine-readable form by `Auto.runReport`, using the shared `Auto.run` entry (extends #14, #15).
 * **P09-E2** strongest-postcondition inference at returns for `FTotalTriple`/`FTriple` and the
   thread backends, as `inferPost` does for `WP` segments.
 * **P09-E3** abduction report: at "no plan for its precondition", return the missing atom with its
@@ -469,7 +511,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 * **P09-E5** `@[fsym_upd]` ghost-update registry, keyed by heads, tried at returns. It generalizes
   the caller updates of 9f.
 
-Existing open rows on the path: #9 (arena macros), #14, #15, #21 (disjunctions in `fsym_arith`:
+Existing open rows on the path: #9 (arena macros), #21 (disjunctions in `fsym_arith`:
 Houdini candidates with case splits), #55 and #60 (cost in large states: generation runs many
 walks over the arena's state), #58, #59, #61 (arena planning), #62 (struct ownership in a thread),
 #64–#67 (the FBA updates' workarounds, which E5 and the bump-ledger family replace).

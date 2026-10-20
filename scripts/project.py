@@ -1012,6 +1012,11 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                 binding, reason, relation = trivial
             if binding == 'direct' and 'bound' in goal and (problem := claims.check_bound(goal['bound'], found['bound'])):
                 binding, reason = 'bound_mismatch', problem
+            row['theorem_outcome_contract'] = outcomes.theorem_contract(
+                goal['strength'], (goal.get('outcomes') or {}).get('admits'),
+                (claims.statement_of(theorem) or {}).get('outcomes'))
+            if binding == 'direct' and row['theorem_outcome_contract']['status'] == 'rejected':
+                binding, reason = 'outcome_contract_mismatch', row['theorem_outcome_contract']['reason']
             row.update(binding=binding, reason=reason)
             if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
@@ -1024,7 +1029,7 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
                            derived_strength=found['strength'], claim_class=found['claim_class'],
                            derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
-                           witnesses=found['witnesses'],
+                           witnesses=found['witnesses'], allocator_creation=found['allocator_creation'],
                            premises=claims.premises_of(theorem, found['claims']))
         goals.append(row)
     return compiled, goals
@@ -1045,6 +1050,8 @@ def goal_binding(found, definition, nodes, gen_modules):
         return 'unbound', 'audit lacks the statement structure; regenerate it with the current extractor'
     if found['head_problem']:
         return 'spoofed_head', found['head_problem']
+    if found['binding_problem']:
+        return 'unsupported_runner', found['binding_problem']
     module = nodes.get(definition, {}).get('module')
     if found['binding'] != 'direct' or module not in gen_modules:
         return 'wrapper_or_unrelated', (f'theorem conclusion is about {found["subject"] or "no recognised computation"} '
@@ -1056,6 +1063,9 @@ def goal_binding(found, definition, nodes, gen_modules):
         # No witness, no claim (audit soundness-2026-10-14 S1): unsatisfiable premises prove nothing.
         return 'unwitnessed', (f'non-vacuity witness {nonvacuity}: the premises may be unsatisfiable, so the theorem '
                                'may prove nothing about the root (nonvacuity_witness, ZigLean/Witness.lean)')
+    creation_problem = claims.uncreated(found)
+    if creation_problem:
+        return 'unwitnessed', creation_problem
     unreached = claims.unreached(found)
     if unreached:
         # A root is an entry point: its premises must hold at program start (audit F3).
@@ -1141,6 +1151,7 @@ def absence_backing(goal, claim):
     return (goal['binding'] == 'direct' and strength_supported(goal)
             and claim in outcomes.STRENGTH_ABSENCE.get(goal['strength'], ())
             and (goal.get('witnesses') or {}).get('nonvacuity') in claims.NONVACUOUS
+            and claims.uncreated(goal) is None
             and (goal.get('scope') == 'universal' or claims.declares_scoped(goal['domain'])))
 
 
@@ -1365,6 +1376,10 @@ def coverage_text(result):
         for goal in root['goals']:
             lines.append(f'  goal {goal["theorem"]} [{goal["strength"]}] domain: {goal["domain"]} -> {goal["binding"]}')
             lines.append(f'    outcome contract: {goal["outcome_contract"]["status"]} (admits {", ".join(goal["outcome_contract"]["admits"])})')
+            checked = goal.get('theorem_outcome_contract')
+            if checked:
+                lines.append(f'    theorem outcome contract: {checked["status"]}'
+                             + (f' ({checked["reason"]})' if checked['reason'] else ''))
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])
@@ -1536,6 +1551,7 @@ def audit_goal(root, goal, theorems, nodes, modules):
     row.update(standard_assumptions=standard, project_assumptions=project, subject=found['subject'],
                claim_binding=found['binding'], derived_strength=found['strength'], derived_domain=found['domain'],
                scope=found['scope'], caps=found['caps'], witnesses=found['witnesses'],
+               allocator_creation=found['allocator_creation'],
                root_definition_module=nodes.get(definition, {}).get('module'))
     if unallowed:
         return dict(row, status='unallowed_assumption', unallowed=unallowed,

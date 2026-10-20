@@ -149,6 +149,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -263,6 +264,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -326,6 +339,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -362,6 +376,15 @@
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -500,6 +523,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -590,6 +614,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "exact constructor",
+     "reason": null,
+     "returns": [],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": [
+      "hardware_trap"
+     ]
     },
     "witnesses": {
      "liveness": {
@@ -692,6 +728,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -763,6 +800,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -871,6 +920,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -971,6 +1021,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -1075,6 +1137,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -1158,6 +1221,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -1323,6 +1398,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1393,6 +1469,18 @@
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -1523,6 +1611,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1575,6 +1664,19 @@
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Triple",
      "name": "Zig.Full.FTriple"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [],
+     "schema_version": 1,
+     "scope": "conditional_on_return",
+     "status": "computed",
+     "unexcluded": [
+      "divergence",
+      "stack_overflow"
+     ]
     },
     "witnesses": {
      "liveness": {
@@ -1637,7 +1739,6 @@
     "ZigLean.Sep.Full.Ops",
     "ZigLean.Sep.Full.Res",
     "ZigLean.Sep.Full.StackDepth",
-    "ZigLean.Sep.Full.Strength",
     "ZigLean.Sep.Full.Triple",
     "ZigLean.Sep.Full.Witness",
     "ZigLean.Sep.Heap"
@@ -1711,6 +1812,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1741,6 +1843,15 @@
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "conclusion has no supported outcome postcondition",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {
@@ -1871,6 +1982,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [],
@@ -1934,6 +2046,18 @@
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": "unsupported or opaque return predicate/type; no precise outcome contract established",
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "unsupported",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -2038,6 +2162,7 @@
    ],
    "allowed": false,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2109,6 +2234,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -2219,6 +2356,7 @@
    ],
    "allowed": false,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2307,6 +2445,18 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
     },
     "witnesses": {
      "liveness": {
@@ -2459,6 +2609,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2560,6 +2711,18 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "concurrent": false,
+     "precision": "constructor upper bound",
+     "reason": null,
+     "returns": [
+      "valid"
+     ],
+     "schema_version": 1,
+     "scope": "all_outcomes",
+     "status": "computed",
+     "unexcluded": []
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2607,6 +2770,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2767,6 +2931,15 @@
      "module": "Init.Prelude",
      "name": "Eq"
     },
+    "outcomes": {
+     "precision": null,
+     "reason": "equation uses an unrecognised function runner",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
+    },
     "witnesses": {
      "liveness": {
       "status": "not_required",
@@ -2814,6 +2987,7 @@
    "violations": [],
    "allowed": true,
    "statement": {
+    "allocator_creation": [],
     "args": [
      {
       "args": [
@@ -2973,6 +3147,15 @@
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
+    },
+    "outcomes": {
+     "precision": null,
+     "reason": "equation uses an unrecognised function runner",
+     "returns": null,
+     "schema_version": 1,
+     "scope": null,
+     "status": "unsupported",
+     "unexcluded": null
     },
     "witnesses": {
      "liveness": {

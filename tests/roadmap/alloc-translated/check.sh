@@ -5,28 +5,21 @@
 # PageSpecMacos.lean), the whole vtable with alloc for every alignment (PageAlloc.lean), the
 # obstructions (PageObstruction.lean), the O5 regressions (PageAlloc.alloc_high, alloc_top, alloc_edge), a
 # mutant (mutant.sh); the four entries as thread triples and CAllocSpec (PageThread.lean); the
-# memory-safety tutorial's refuted clients over the page allocator (ListsPage.lean). Needs a built
-# translator and
-# `lake build ZigLean ZigLean.Sep.AllocSpec ZigLean.Sep.AllocSpec.Ops
-# ZigLean.Sep.AllocSpec.Norm ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.Conc
-# ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Auto
-# ZigLean.Sep.Full.AutoClaims`; runs no compiler. With
+# memory-safety tutorial's refuted clients over the page allocator (ListsPage.lean). Every Lean
+# file is a module of the fixture's library AllocTranslated (tests/roadmap/lakefile.toml), built
+# by Lake with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py). Needs
+# a built translator; runs no compiler. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
 # recorded on x86_64-linux): the output depends on the page size only, not on the OS.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
-python3 -B scripts/lean-deps.py --build tests/roadmap/alloc-translated
 here=tests/roadmap/alloc-translated
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-alloc-translated.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/AllocTranslated"
-export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 python3 - "$here" <<'EOF'
 import hashlib, json, pathlib, sys
 here = pathlib.Path(sys.argv[1])
@@ -42,49 +35,32 @@ for prog in page fba; do
     Prog="$(printf '%s' "${prog:0:1}" | tr '[:lower:]' '[:upper:]')${prog:1}"
     Os="$(printf '%s' "${os:0:1}" | tr '[:lower:]' '[:upper:]')${os:1}"
     module="$Prog$Os"
-    # The retained translation is the fresh one, byte for byte.
-    "$translator" "$here/air/0.16.0/$prog-$os" -o "$work/AllocTranslated/$module.lean" \
+    # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+    "$translator" "$here/air/0.16.0/$prog-$os" -o "$work/$module.lean" \
       --namespace "AllocTranslated.$module" --prefix "$prog." --allocator-model translated
-    cmp "$work/AllocTranslated/$module.lean" "$here/AllocTranslated/$module.lean"
-    "${lean_cmd[@]}" -R "$work" -o "$work/AllocTranslated/$module.olean" "$work/AllocTranslated/$module.lean"
+    cmp "$work/$module.lean" "$here/AllocTranslated/$module.lean"
   done
 done
-"${lean_cmd[@]}" "$here/Eval.lean"
-# P4b: the translated PageAllocator cannot satisfy AllocSpec (docs/alloc-page.md).
-"${lean_cmd[@]}" "$here/PageObstruction.lean"
-# P4b: resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
-# PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), their axioms, and
-# a mutant whose shrink leaks the cut pages (mutant.sh).
-for spec in PageTok PageSpec PageSpecMacos PageAlloc PageThread ListsPage; do
-  "${lean_cmd[@]}" -R "$here" -o "$work/$spec.olean" "$here/$spec.lean"
+# The library: the translations, AllocTranslated/Eval.lean (`#guard`s), P4b's obstruction (the
+# translated PageAllocator cannot satisfy AllocSpec, docs/alloc-page.md: PageObstruction.lean),
+# resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
+# PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), PageAlloc,
+# PageThread, PageCreation, ListsPage and KernelBytes.
+python3 -B scripts/fixtures.py build AllocTranslated
+# Axioms of every theorem of the proof modules, from the built environment: only the standard
+# ones. A mutant whose shrink leaks the cut pages fails PageSpec (mutant.sh).
+theorems=()
+for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.controls \
+    ListsPage.reuse_happens ListsPage.pushThenFree_returns PageThread.fthread_alloc \
+    PageThread.fthread_free PageThread.fthread_resize PageThread.fthread_remap PageThread.cAllocSpec \
+    PageAlloc.fallocSpec PageAlloc.fallocSpec.creation PageAlloc.fallocSpec.creation_input_at \
+    PageAlloc.fallocSpec.creation_admission PageThread.cAllocSpec.creation \
+    PageAlloc.alloc_run PageSpec.free_spec PageSpec.resize_spec PageSpec.remap_spec \
+    PageSpecMacos.free_spec PageSpecMacos.resize_spec PageSpecMacos.remap_spec; do
+  theorems+=(--declaration "AllocTranslated.$name")
 done
-cat > "$work/Axioms.lean" <<'AX'
-import PageSpec
-import PageSpecMacos
-import PageAlloc
-import PageThread
-import ListsPage
-#print axioms AllocTranslated.ListsPage.controls
-#print axioms AllocTranslated.ListsPage.reuse_happens
-#print axioms AllocTranslated.ListsPage.pushThenFree_returns
-#print axioms AllocTranslated.PageThread.fthread_alloc
-#print axioms AllocTranslated.PageThread.fthread_free
-#print axioms AllocTranslated.PageThread.fthread_resize
-#print axioms AllocTranslated.PageThread.fthread_remap
-#print axioms AllocTranslated.PageThread.cAllocSpec
-#print axioms AllocTranslated.PageAlloc.fallocSpec
-#print axioms AllocTranslated.PageAlloc.alloc_run
-#print axioms AllocTranslated.PageSpec.free_spec
-#print axioms AllocTranslated.PageSpec.resize_spec
-#print axioms AllocTranslated.PageSpec.remap_spec
-#print axioms AllocTranslated.PageSpecMacos.free_spec
-#print axioms AllocTranslated.PageSpecMacos.resize_spec
-#print axioms AllocTranslated.PageSpecMacos.remap_spec
-AX
-"${lean_cmd[@]}" "$work/Axioms.lean" > "$work/axioms.txt" || { cat "$work/axioms.txt" >&2; exit 1; }
-if grep -v "\[propext, Classical.choice, Quot.sound\]" "$work/axioms.txt" | grep -q .; then
-  cat "$work/axioms.txt" >&2; echo 'alloc-translated: unexpected axioms' >&2; exit 1
-fi
+python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread PageCreation \
+  ListsPage KernelBytes "${theorems[@]}"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then

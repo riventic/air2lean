@@ -62,10 +62,22 @@ uses no runtime model.
 source: simp sets such as `zig_unfold`, unification and tactic-generated terms, and field
 notation on a value whose type is not written in a binder. The `compiled` mode applies the
 same tables to the kernel dependency graph of `scripts/assumptions.sh`. That is the
-authoritative closure for `Proofs/` and `ZigLean/`. It lists each theorem's `source_gaps`
-(compiled premises absent from the source index) with the reason for each (`gap_via`).
-`--strict` fails on any gap, and CI runs it after the audit, so the committed index is a
-superset of the kernel-derived premises for every audited theorem.
+authoritative closure for `Proofs/` and `ZigLean/`. It derives every selected compiled
+theorem before attempting source comparison, retaining that graph and a failing diagnostic
+when the source index is unavailable. It lists each theorem's `source_gaps` (compiled
+premises absent from its source bound) with the reason for each (`gap_via`).
+An internal theorem without its own indexed row is covered only when an indexed root
+actually reaches it, that root's complete comparison passes, and the helper's complete
+compiled premise set fits that independently derived source bound. Bounds from different
+roots are never unioned to manufacture coverage. Existing equation helpers can instead
+use a conservative source bound from their actual parent node and matching source
+declaration, identified by both module and full declaration name. The starting declaration's
+own runtime, generated, profile and marker facts contribute to that bound. This supplies
+no exact source-origin claim: the helper's complete compiled premise closure must fit,
+including any extra axiom. Missing evidence fails closed.
+`--strict` fails on any gap, and CI runs it after the audit. The assumptions auditor owns
+compiled theorem selection and generated-declaration classification; source bounds retain
+the runtime fallback rules above.
 
 **Reviewed compiled-mode gaps.** The first strict review of the 0.16.0 audit found 441
 theorems with gaps. They were closed by general rules, not per-theorem entries:
@@ -528,7 +540,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `cmpxchg_weak` may fail on a matching value with a failure-order read and no
   write, repeatedly. Its rules are safety-only; no retry liveness follows.
-- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.WeakCasLemmas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
+- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.Base.WeakCas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
 - Sources: [weak-cas.md](weak-cas.md).
 
 <a id="ord-05"></a>

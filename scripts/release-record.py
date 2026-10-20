@@ -24,6 +24,7 @@ recorded baseline hash is the file's content at that revision. No builds or netw
 import argparse
 import ast
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -42,6 +43,12 @@ GATE_STATUSES = ('passed', 'failed', 'by-reference', 'missing', 'unavailable')
 REUSE_SCHEMA = 'air2lean-ci-reuse/2'
 # A gate that seals a proof receipt over uncommitted changes (scripts/proof-receipt.py).
 DIRTY_RECEIPT = re.compile(r'AIR2LEAN_RECEIPT_ALLOW_DIRTY\s*[=:]\s*["\']?1|proof-receipt\.py\b[^\n]*--allow-dirty')
+
+# Expression semantics are current verifier policy, like the workflow parser below. Recorded
+# sources supply only workflow text and literal step metadata; they are never executed.
+_spec = importlib.util.spec_from_file_location('air2lean_target_matrix', Path(__file__).with_name('target-matrix.py'))
+TM = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(TM)
 
 
 class ReleaseError(Exception):
@@ -75,133 +82,34 @@ def clean_head(root):
     return revision
 
 
-# --- Workflow subset parser: block mappings/sequences, plain/quoted scalars, `|` blocks. ---
-
-def _scalar(text, where):
-    text = text.strip()
-    if text[:1] in ('"', "'"):
-        end = text.find(text[0], 1)
-        rest = text[end + 1:].strip() if end > 0 else '?'
-        if end < 0 or (rest and not rest.startswith('#')) or (text[0] == '"' and '\\' in text[1:end]):
-            raise ReleaseError('%s: unsupported quoted scalar' % where)
-        return text[1:end]
-    # `|` here is a block scalar with a comment, indentation or keep indicator: unsupported.
-    if text[:1] in ('&', '*', '!', '>', '|', '{', '%', '@', '`'):
-        raise ReleaseError('%s: unsupported YAML syntax %r' % (where, text))
-    if text.startswith('['):
-        if not text.endswith(']'):
-            raise ReleaseError('%s: unsupported flow sequence' % where)
-        return [_scalar(item, where) for item in text[1:-1].split(',') if item.strip()]
-    text = re.sub(r'\s+#.*$', '', text)
-    if text in ('true', 'false'):
-        return text == 'true'
-    if re.fullmatch(r'-?[0-9]+', text):
-        return int(text)
-    return text
-
-
+# The shared reader is pure over these supplied (possibly recorded Git) bytes.
 def parse_workflow_yaml(text):
-    lines = text.split('\n')
-    pos = 0
-
-    def indent(line):
-        return len(line) - len(line.lstrip(' '))
-
-    def skip():
-        nonlocal pos
-        while pos < len(lines) and (not lines[pos].strip() or lines[pos].lstrip().startswith('#')):
-            pos += 1
-
-    def node(level):
-        skip()
-        if pos >= len(lines) or indent(lines[pos]) != level:
-            raise ReleaseError('%s:%d: unexpected indentation' % (WORKFLOW, pos + 1))
-        if '\t' in lines[pos][:level + 1]:
-            raise ReleaseError('%s:%d: tab indentation' % (WORKFLOW, pos + 1))
-        body = lines[pos][level:]
-        return sequence(level) if body == '-' or body.startswith('- ') else mapping(level)
-
-    def sequence(level):
-        nonlocal pos
-        items = []
-        while True:
-            skip()
-            if pos >= len(lines) or indent(lines[pos]) < level:
-                return items
-            body = lines[pos][level:]
-            if indent(lines[pos]) != level or not body.startswith('- '):
-                raise ReleaseError('%s:%d: unsupported sequence entry' % (WORKFLOW, pos + 1))
-            lines[pos] = ' ' * (level + 2) + body[2:]
-            items.append(node(level + 2))
-
-    def mapping(level):
-        nonlocal pos
-        result = {}
-        while True:
-            skip()
-            if pos >= len(lines) or indent(lines[pos]) < level:
-                return result
-            where = '%s:%d' % (WORKFLOW, pos + 1)
-            match = re.fullmatch(r'([A-Za-z0-9_.-]+):(?:[ ]+(.*))?', lines[pos][level:])
-            if indent(lines[pos]) != level or not match:
-                raise ReleaseError('%s: unsupported mapping entry' % where)
-            key, value = match[1], (match[2] or '').strip()
-            if key in result:
-                raise ReleaseError('%s: duplicate key %s' % (where, key))
-            pos += 1
-            if value in ('|', '|-'):
-                result[key] = block(level, value == '|-')
-            elif not value or value.startswith('#'):
-                skip()
-                deeper = pos < len(lines) and indent(lines[pos]) > level
-                result[key] = node(indent(lines[pos])) if deeper else None
-            else:
-                result[key] = _scalar(value, where)
-
-    def block(level, strip):
-        nonlocal pos
-        content = []
-        width = None
-        while pos < len(lines):
-            line = lines[pos]
-            if line.strip():
-                if indent(line) <= level:
-                    break
-                width = indent(line) if width is None else width
-                if indent(line) < width:
-                    raise ReleaseError('%s:%d: under-indented block scalar' % (WORKFLOW, pos + 1))
-                content.append(line[width:])
-            else:
-                content.append('')
-            pos += 1
-        text = '\n'.join(content).rstrip('\n')
-        return text if strip or not text else text + '\n'
-
-    result = node(0)
-    skip()
-    if pos != len(lines):
-        raise ReleaseError('%s:%d: trailing content' % (WORKFLOW, pos + 1))
-    return result
+    try:
+        return TM.parse_workflow_yaml(text)
+    except TM.Unreadable as error:
+        raise ReleaseError(str(error)) from error
 
 
 # --- Profile and gate plan, all read from Git objects at one revision. ---
 
 def local_ci_helpers(source):
-    """The local runner's condition evaluator and the step names that are not gates: the
-    substituted setup recipes and the CI-only reuse machinery (`ci_only`, docs/ci.md)."""
-    tree = ast.parse(source)
-    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'expression']
-    setups = [n.value for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Dict)
-              and [getattr(t, 'id', None) for t in n.targets] == ['setup']]
-    ci_only = [n.value for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.value, ast.Set)
-               and [getattr(t, 'id', None) for t in n.targets] == ['ci_only']]
-    if len(functions) != 1 or len(setups) != 1 or len(ci_only) > 1:
-        raise ReleaseError('%s: expression() or the setup recipe table changed' % STEPS_SCRIPT)
-    namespace = {'re': re}
-    exec(compile(ast.Module(body=functions, type_ignores=[]), STEPS_SCRIPT, 'exec'), namespace)
-    names = {ast.literal_eval(key) for key in setups[0].keys}
-    names |= ast.literal_eval(ci_only[0]) if ci_only else set()
-    return namespace['expression'], names
+    """Literal names of substituted setup recipes and optional CI-only reuse machinery."""
+    try:
+        tree = ast.parse(source)
+        setups = [n.value for n in tree.body if isinstance(n, ast.Assign)
+                  and [getattr(t, 'id', None) for t in n.targets] == ['setup']]
+        ci_only = [n.value for n in tree.body if isinstance(n, ast.Assign)
+                   and [getattr(t, 'id', None) for t in n.targets] == ['ci_only']]
+        if (len(setups) != 1 or not isinstance(setups[0], ast.Dict) or len(ci_only) > 1
+                or ci_only and not isinstance(ci_only[0], ast.Set)):
+            raise ValueError('expected one setup dictionary and at most one ci_only set')
+        names = {ast.literal_eval(key) for key in setups[0].keys}
+        names |= ast.literal_eval(ci_only[0]) if ci_only else set()
+        if any(not isinstance(name, str) for name in names):
+            raise ValueError('step names must be strings')
+    except (SyntaxError, TypeError, ValueError) as error:
+        raise ReleaseError('%s: unsupported setup/ci_only metadata: %s' % (STEPS_SCRIPT, error)) from error
+    return names
 
 
 def job_name(job_id, row):
@@ -216,10 +124,17 @@ def reproduce(row):
     return 'scripts/local-ci.sh full %s' % row['zig']
 
 
-MACOS_REPRODUCE = 'GitHub Actions macos-14 runner only; scripts/local-ci.sh runs the Linux test job'
-# Matrix-free jobs on native runners that scripts/local-ci.sh cannot reproduce: Q05 `macos` and
-# T04 `aarch64-linux`, L02 `bitops-native-arm` and T06 `build-modes-aarch64-linux` (ubuntu-24.04-arm).
-ARM_REPRODUCE = 'GitHub Actions ubuntu-24.04-arm runner only; scripts/local-ci.sh runs the x86_64 test job'
+MACOS_REPRODUCE = (
+    'Apple silicon macOS: scripts/local-ci.sh discover macos/<version> is an unrestricted diagnostic; '
+    'restricted scripts/local-ci.sh part macos/<version> is rejected. Run the workflow native check '
+    'scripts directly (for example scripts/check.sh); release records still require GitHub evidence.'
+)
+# Native workflow jobs remain GitHub evidence gates; local commands aid reproduction.
+ARM_REPRODUCE = (
+    'Native linux/arm64 Docker engine: scripts/local-ci.sh part <job/part> runs the aarch64-linux, '
+    'bitops-native-arm and build-modes-aarch64-linux workflow jobs locally; '
+    'release records still require GitHub evidence.'
+)
 NATIVE_JOBS = {
     # The whole-tree generated files (docs/ci.md#whole-tree-generated-files): their determinism
     # and strict checks are gates of the run that produced them.
@@ -242,9 +157,9 @@ REUSE_CONTEXT = {'env.AIR2LEAN_REUSED': ''}
 REUSE_STEP = 'Reuse a recorded result'
 
 
-def row_gates(job, row, wanted, expression, where):
+def row_gates(job, row, wanted, where):
     """(gates, not applicable) among the `wanted` step names of one matrix row (or `{}`)."""
-    context = {'matrix.%s' % key: value for key, value in row.items()}
+    context = {'matrix': row}
     context.update(REUSE_CONTEXT)
     runner = str(job.get('runs-on', ''))
     context.update({'runner.os': 'macOS' if runner.startswith('macos') else 'Linux', 'github.workspace': '/work'})
@@ -252,16 +167,15 @@ def row_gates(job, row, wanted, expression, where):
     for step in job.get('steps') or []:
         if step['name'] not in wanted:
             continue
-        condition = step.get('if', True)
         try:
-            applies = condition if isinstance(condition, bool) else bool(expression(str(condition), context))
-        except (ValueError, IndexError, KeyError) as error:
+            applies = TM.condition(step.get('if'), context)
+        except TM.Unknown as error:
             raise ReleaseError('%s: %sstep %r: unsupported condition: %s' % (WORKFLOW, where, step['name'], error))
         (gates if applies else skipped).append(step['name'])
     return gates, skipped
 
 
-def native_plan(name, job, commands, expression, setup):
+def native_plan(name, job, commands, setup):
     """A native job (`NATIVE_JOBS`) per matrix row (GitHub's row name), or once without a matrix.
 
     Only GitHub evidence covers it. Its commands are keyed `<name>::<step>` (step names may repeat
@@ -284,7 +198,7 @@ def native_plan(name, job, commands, expression, setup):
             commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
     plans = []
     for row in rows:
-        gates, skipped = row_gates(job, row, wanted, expression, name + ' ')
+        gates, skipped = row_gates(job, row, wanted, name + ' ')
         plans.append({'name': job_name(name, row) if row else name, 'matrix': None,
                       'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': skipped})
     return plans
@@ -297,7 +211,7 @@ def build_plan(root, revision):
         raise ReleaseError('%s: a gate lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
                            'a release binds only clean-tree receipts' % WORKFLOW)
     workflow = parse_workflow_yaml(text)
-    expression, setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
+    setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
     jobs = workflow.get('jobs') or {}
     if set(jobs) - set(NATIVE_JOBS) - SUPPORT_JOBS != {'test'}:
         raise ReleaseError('%s: only the test, %s jobs are qualified for release records'
@@ -314,14 +228,14 @@ def build_plan(root, revision):
                 for step in steps if 'run' in step and step['name'] not in setup}
     plan_jobs = []
     for row in rows:
-        gates, skipped = row_gates(job, row, commands, expression, '')
+        gates, skipped = row_gates(job, row, commands, '')
         plan_jobs.append({'name': job_name('test', row), 'matrix': row, 'reproduce': reproduce(row),
                           'gates': gates, 'not_applicable': skipped})
     if len({j['name'] for j in plan_jobs}) != len(plan_jobs):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     for name in NATIVE_JOBS:
         if name in jobs:
-            plan_jobs.extend(native_plan(name, jobs[name], commands, expression, setup))
+            plan_jobs.extend(native_plan(name, jobs[name], commands, setup))
     for name in sorted(SUPPORT_JOBS & set(jobs)):
         support_rows = (((jobs[name].get('strategy') or {}).get('matrix') or {}).get('include')) or [{}]
         for row in support_rows:
@@ -697,10 +611,30 @@ def verify_record(root, record):
             problems.append('evidence %d is not %s evidence for %s' % (index, source.get('kind'), revision))
     expected = [(job['name'], step) for job in plan['jobs'] for step in job['gates']]
     gates = record.get('gates') or []
-    if [(g.get('job'), g.get('step')) for g in gates] != expected:
-        problems.append('gate list differs from the workflow at %s' % revision)
+    recorded = [(g.get('job'), g.get('step')) for g in gates]
+    if recorded != expected:
+        # Only genuine string names are indexed. Malformed names are never coerced to a
+        # possibly matching string, and unhashable JSON values still get named diagnostics.
+        expected_keys = [pair if all(isinstance(name, str) for name in pair) else None for pair in expected]
+        recorded_keys = [pair if all(isinstance(name, str) for name in pair) else None for pair in recorded]
+        expected_names = set(expected_keys) - {None}
+        recorded_names = set(recorded_keys) - {None}
+        changes = ['now required: %r / %r' % pair for pair, key in zip(expected, expected_keys)
+                   if key not in recorded_names]
+        changes += ['no longer required: %r / %r' % pair for pair, key in zip(recorded, recorded_keys)
+                    if key not in expected_names]
+        old_common = [pair for pair, key in zip(recorded, recorded_keys) if key in expected_names]
+        new_common = [pair for pair, key in zip(expected, expected_keys) if key in recorded_names]
+        if old_common != new_common:
+            changes += ['changed order or duplicate: %r / %r' % pair for index, pair in enumerate(old_common)
+                        if index >= len(new_common) or pair != new_common[index]]
+        problems.append('gate list differs from the workflow at %s: %s; re-qualification required; '
+                        'the recorded plan is not upgraded' % (revision, '; '.join(changes)))
     for gate in gates:
         label = '%s / %s' % (gate.get('job'), gate.get('step'))
+        if not isinstance(gate.get('job'), str) or not isinstance(gate.get('step'), str):
+            problems.append('%s: job and step names must be strings' % label)
+            continue
         refs = gate.get('evidence')
         status = gate.get('status')
         if status not in GATE_STATUSES or not isinstance(refs, list):

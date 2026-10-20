@@ -115,6 +115,60 @@ declares no inputs.
 
 ### Restricted checkout
 
+Restricted checkouts withhold undeclared file contents and remove the original snapshot's Git
+objects. In local Linux execution, the stopped container's initial checkout and the separate
+initializer/restriction processes may transiently handle full source. Before verification steps
+can execute, unkeyed withheld content must be absent from the worker's objects, readable files,
+open file descriptors and Git objects. The host retains the source archive and full workflow;
+the worker receives only the workflow projection already covered by the selected part's key.
+The mechanisms below address the known archive, capture-attribution, Git-object and retained
+workflow/process-memory routes.
+Local restricted qualification applies only to Linux/container parts. The macOS host route
+has no filesystem boundary against other checkout copies: from its default private work path,
+`git -C ../../../.. show HEAD:README.md` can read the caller's original Git objects. Host
+discovery and direct native scripts therefore run **unrestricted**, withhold no files and
+record this gap in local row receipts. A host `part` request for restricted qualification is
+rejected before verification; it is never silently downgraded. The nightly unrestricted run
+and hosted CI's existing restriction and GitHub-evidence rules are unchanged.
+Recorded release revisions freeze workflow data, setup/exclusion tables and profile identities;
+the current shared expression evaluator defines their semantics. If its step plan differs from
+the recorded plan in either direction, `release-record` rejects the record, names the differing
+steps and requires requalification. It never upgrades a historical record to the new plan.
+
+The workflow DATA reader is shared by target checking, release planning, reuse and local CI;
+it consumes the supplied workflow text, including recorded Git blobs. Its supported subset
+keeps plain YAML core booleans/nulls and finite ASCII decimal numbers as their scalar kinds,
+preserves integer DATA identities (including shard IDs), and keeps quoted scalars as strings.
+It refuses unsupported YAML structure and numeric forms with a workflow/line diagnostic.
+Expression conversion happens after decoding and keeps the independently defined subset below.
+Fixture and support-matrix semantic consumers use that same reader; raw-source audits and
+generated-region rewriters retain their declared text contracts.
+Literal blocks retain content spaces and physical terminal line breaks under their supported
+clip/strip/keep headers (`|`, `|-`, `|+`). Tabs and other headers refuse with a line diagnostic.
+Repeated part IDs are refused before selection; a reuse decision
+must match the entire supplied job/row DATA to its unique workflow row, preserving scalar kinds
+and missing/null fields. Selection, manifest construction and normal restriction use the
+workflow and declarations from the same captured tested commit. The explicit live-DATA parser
+helpers and unrestricted discovery diagnostic retain their worktree inputs.
+Reuse also qualifies the runner wire form: every source numeric value must round-trip through
+binary64 and the shared G15 formatter, and complete wire rows must be unique within each job.
+The request must match that qualified wire form; the selected source row supplies the unchanged
+part ID. Incoming DATA is not normalized to force a match. Raw Unicode line separators refuse
+with a source-line diagnostic; ordinary and already-decoded Unicode strings stay unchanged.
+
+The shared evaluator has an explicit scalar subset. Finite numbers are canonicalized to
+binary64 for comparison and use G15 formatting. Number/string comparisons convert only
+decimal integer or decimal text after .NET whitespace trimming; empty or whitespace-only
+text converts to zero. Boolean and null comparisons require the same kind. Other mixed
+comparisons, non-finite numeric values, and unsupported numeric text (including hex, octal,
+separators, exponents, Infinity, NaN and ordinary non-numeric text) raise contextual `Unknown`.
+Exponent and base-prefixed numeric literals are also unsupported. String/string comparisons
+stay string comparisons, use ASCII case-insensitive equality, and reject non-ASCII operands;
+Unicode text otherwise passes through transport, interpolation and truthiness unchanged.
+Identifiers are validated per segment. A single `matrix` property uses ASCII case-insensitive
+lookup, rejects duplicate-case or unsupported keys, and returns null only for a genuinely
+missing field. Nested matrix references and aggregate expression values are refused.
+
 An executing part never sees more than its key. After the reuse decision it runs in a
 *restricted checkout* (`ci-reuse.py restrict`, called by the decision step):
 
@@ -139,11 +193,150 @@ An executing part never sees more than its key. After the reuse decision it runs
 - The whole-tree generated files (`generated` job) are installed before the restriction and stay
   (they are untracked); the key contains their digests.
 
-`scripts/local-ci.sh part test/<zig>/<part>` runs one Linux test row the same way in the local
-container (as root: the access-time check is what fails it there). `scripts/local-ci.sh discover
-test/<zig>/<part>` is the diagnostic for writing a declaration: the checkout stays whole, every
-step runs even after a failure, and the run ends with the list of undeclared files it read
-(never an input of a key or a record).
+Git's index writer can hash racily clean entries even outside a status pathspec:
+[the write loop](https://github.com/git/git/blob/v2.43.0/read-cache.c#L2735) calls
+[the content comparison](https://github.com/git/git/blob/v2.43.0/read-cache.c#L2435), while
+[scoped refresh](https://github.com/git/git/blob/v2.43.0/read-cache.c#L1486) leaves those entries
+unrefreshed. A fresh checkout and its index can share a timestamp second, so the original scoped
+`normalize-generated.py proof-status` command read every withheld file in root Docker. Before
+removing permissions or starting the access-time watch, restriction waits past the actual index
+and withheld-file mtimes' second, then refreshes and writes the index once. It checks that the
+index advanced into a later second; no fixed sleep or Git stat-check configuration is used.
+The final restricted-file check continues to reject an actual read of any withheld file.
+
+`scripts/local-ci.sh part <job/part>` selects the workflow's exact job row: for example,
+`test/0.16.0/inputs`, `macos/0.17.0`, `aarch64-linux`, `build-modes-aarch64-linux`,
+`bitops-native-arm`, `lake`, `zig-air/0.17.0`, `generated`, `provenance` or `preflight`.
+Ubuntu x86 rows run in the Rosetta `linux/amd64` container, ARM rows in a native `linux/arm64`
+container, and macOS rows on the Apple silicon host. An ARM row refuses an x86 Docker engine.
+Use `discover macos/<version>` for the explicitly unrestricted host diagnostic; a restricted
+`part macos/<version>` request is rejected because the original caller checkout remains readable.
+All placements use `scripts/local-ci-steps.py`, the workflow's shell commands and toolchain
+installers. Run heavy invocations through `scripts/build-guard.py`, with the normal shared
+admission policy. The interpreter requires Python 3.12 or newer. Host selection uses
+`AIR2LEAN_LOCAL_PYTHON` (or `python3`) and the same canonical workflow reader as the other
+semantic consumers.
+
+The host captures and validates tracked working-tree content. For each Linux job it creates a
+fresh, stopped container and uses Docker's host/daemon transport to extract the archive into
+that container's checkout. The archive and original host snapshot directory are not copied or
+mounted into the container.
+A separate initializer commits the copied files and removes temporary inventory/bootstrap
+paths, then exits. Canonical restriction/sealing runs in a separate process that also exits
+before verification; `lake` and `zig-air` execute their workflow's restricted support setup.
+Whole-checkout jobs retain their declared `reuse: false` behavior.
+
+Only the host dispatcher parses the full captured workflow for scheduling. The long-lived row
+worker reads a host-derived JSON projection of the existing `ci-reuse._manifest`: the selected
+job's `job_definition` (its own row and steps that may run), full definitions of its direct
+`needs`, and keyed workflow-level metadata. It never parses the full `ci.yml`, including for its
+receipt. Required runtime fields absent from that projection fail closed. Source identity,
+part/job/normalized-row identity, the full-workflow digest and the transport-payload digest bind
+the capture and transfer. Those digests supply provenance, not authority for extra plaintext or
+a new reuse key. Host scheduling retains the full dependency graph; the worker is not given
+unkeyed transitive job definitions to run a second dependency walk.
+
+The host schedules support dependencies first and transports actual upload/download artifact
+outputs only from successful producers named in the consumer's declared dependencies. Cache
+actions report a miss while retaining incremental Lake outputs. The existing verified Linux
+`test` tool setup remains a qualified recipe substitution; native and support installers execute
+from the workflow itself. Each container has a fresh HOME, download/tool directory and Zig global
+cache. The broad tool volume is not mounted into local-CI verification rows: a directory left by
+an unrestricted row must not become an undeclared input of a later restricted row. This costs
+repeated tool downloads and compiler preparation. Selectively persisting tool installations would
+need a separate audited persistence contract; a directory name alone is not that contract.
+Every substituted Linux setup step is checked against its complete qualified workflow dictionary
+before conditions or preparation; a changed body, guard, environment or action option fails until
+requalified. Previous marked source copies are removed from both Lake caches, matching CI's cache
+exclusion. Compiler installations are reset between jobs before their pinned installers run.
+Containers run by the immutable image ID returned by the captured Dockerfile build. Only the
+existing root/diff Lake volumes may persist, and only when the selected keyed job's cache actions
+declare their whole cache paths. Dynamic, narrower or unrecognized cache paths remain misses;
+they do not authorize a broader mount. Existing toolchain/manifest/platform namespace bindings
+and marked-source-copy pruning remain in force. A custom `AIR2LEAN_LOCAL_TOOL_VOLUME` retains
+its architecture suffix as the existing Lake namespace selector; the broad tool volume itself
+is not exposed. The separate build-mode Docker wrapper still uses its `-amd64` override suffix.
+It bootstraps its own stock Zig and elan through the same pinned Linux installer, rather than
+requiring a previous local-CI run to populate that volume. Its existing tool-volume lock precedes
+the root/diff Lake locks, so the two wrappers agree on ownership of their shared Lake outputs.
+Each mounted Lake cache is locked without waiting, root then diff, with inherited lock ownership;
+an already owned cache fails with a named reason. A macOS row also gets a fresh HOME and global
+Zig cache, keeps permitted cache/admission settings, and excludes caller verification
+overrides and inherited Zig/Lean tools. Both routes use the configured local timeout when GNU
+`timeout` or `gtimeout` is installed; otherwise they print a warning and run without that bound.
+Cancellation drains the command's owned process group before releasing its cache lock.
+The host supplies a private `--cidfile` before container creation, so container ownership does
+not depend on the row's output. Metadata transfer directories are private snapshot children under
+the exit trap, including when copy-in fails; all Docker copy-ins use the existing bounded call.
+Container absence is confirmed by a successful exact-ID listing, never Docker's diagnostic text.
+After the row worker stops, host export has its own budget
+outside the worker's cancellation grace. A failed export retains the owned container and
+snapshot for recovery.
+
+Results remain under `.lake/local-ci-results/run.*` (or `AIR2LEAN_LOCAL_RESULTS`):
+`source-revision` binds the original HEAD and tracked cleanliness; each row's `row.json` binds
+the snapshot, workflow and exact step recipes, statuses and timings. Container receipts also bind
+the immutable image ID and each imported artifact's producer part, source/workflow digests and
+row-receipt digest. Host export copies only that row's own namespace and declared uploads into
+private staging, then validates them before publication. The container's `/artifacts` directory
+cannot authorize another row's paths or overwrite an accepted producer receipt or upload.
+Targeted runs retain their fixed diagnostic export namespace. Receipts also state whether
+restriction was requested, files were withheld and restricted qualification was obtained. Host
+receipts explicitly record unrestricted execution and the caller-Git-object gap. These local
+receipts do not replace GitHub evidence in `scripts/release-record.py`. Unsupported runners,
+expressions, actions, artifact syntax or missing producer outputs fail closed with their exact
+reason.
+`all-checks` fails explicitly because GitHub's `needs.*.result` evidence is unavailable locally.
+A failed `continue-on-error` build also fails the local qualification.
+Known fail-closed limitation ([#442 takeover](https://github.com/riventic/air2lean/pull/442#issuecomment-6277407468)):
+host validation re-renders upload names without runtime `GITHUB_ENV` updates, so a legitimate
+dynamic upload name can be refused. Supporting that form remains follow-up work; it cannot
+produce a false green and this repair does not introduce a second artifact mechanism.
+
+Retained `run.*/bootstrap` and host `run.*/work` directories are unrestricted diagnostic copies
+of the captured source. They remain on the host and are not mounted into Linux rows; remove your
+own finished run directory when its diagnostic artifacts are no longer needed.
+
+`scripts/local-ci.sh discover <job/part>` is the diagnostic for writing a declaration: the
+checkout stays whole and steps continue after a command failure (never an input of a key or a
+record). Linux diagnostics watch undeclared files with the access-time check, and detected reads
+fail the run. Host macOS diagnostics withhold no files, perform no undeclared-read qualification
+and record the caller-checkout gap described above.
+Support jobs (`lake`, `zig-air`) enforce restriction inside their workflow commands, so their
+discovery request is rejected with that reason; `part` executes their restricted workflow.
+
+Before launching local verification, the existing interpreter captures indexed working-tree
+files and pins one commit. It compares the completed archive's names, Git modes and raw blob
+identities with that commit under the existing private/cache exclusions. `source-revision`
+records that pinned revision and the archive's SHA-256; `tracked_clean=yes` also requires clean
+tracked status and an unchanged HEAD. Restoring an edit after it entered the archive cannot
+certify those bytes as HEAD. Dirty/staged snapshots can run with `tracked_clean=no`; an
+unavailable or unsupported comparison stops the wrapper before verification or a source stamp.
+This archive identity check leaves the native gates' GitHub-evidence requirement unchanged.
+The image recipe and Lean cache-key inputs also come from that archive. Cache keys retain the
+old concatenation order (toolchain, then manifest), so unchanged inputs keep their existing keys.
+Configuration reads share the archive's regular-data resolver, including hardlinks; missing,
+symlink or other unsupported configuration members fail before image/container creation.
+Capture and configuration run in the same initially loaded helper process, so a later source
+edit cannot replace the configuration helper. The initial host launcher and tool invocation
+remain trusted.
+The host verifies the archive against its stamped SHA-256 before transport. Docker extracts the
+stream into the stopped container's root filesystem; neither the initializer nor the later row
+interpreter reads or retains the archive bytes. Snapshot metadata, the temporary inventory and
+bootstrap, the keyed workflow projection, and declared producer outputs are copied in
+separately. The captured main-history bundle is supplied only to `preflight`. There is no host
+snapshot bind mount. The initializer also removes every directory with the existing
+`.air2lean-check-tree.json` marker below both persistent Lake caches, regardless of its name,
+while preserving compiled Lake facets. Unreadable traversal and unsafe marker types fail
+closed. The stopped root filesystem may initially contain full `ci.yml`; the separate canonical
+restriction/sealing process removes its unkeyed contents before verification. The row worker
+retains neither that YAML nor its parsed full-workflow object. Archive-memory evidence covers
+the archive boundary only; it does not establish this separate workflow-payload boundary.
+These mechanisms address the identified plaintext and process-memory copies, without claiming
+a filesystem boundary for the unrestricted macOS host route.
+Single-part runs use the existing `ci-reuse.py --seal` history removal too, so original blobs
+cannot be read with `git show`. Discovery remains an unrestricted diagnostic; full/matrix runs
+keep their existing unrestricted recipe behavior.
 
 ### The key
 
@@ -351,7 +544,7 @@ required translation, timing fields dropped).
 **Not committed.** The files are in `.gitignore`. No PR adds or changes one, and agents never
 regenerate them for a PR.
 
-**Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`) has
+**Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`, `schedule`) has
 two jobs that regenerate them on exactly the checked-out tree:
 
 - `generated` (no build; about a minute): `scripts/generated.py produce --group coverage --group
@@ -376,13 +569,43 @@ cleanly is red, and the merge rule (green locally, which includes `scripts/regen
 preflight) keeps one off `main`; on `main` such a commit gets no entry (below).
 
 **Published per main commit on the `generated` branch.** Every push to `main` runs `ci.yml` on
-the commit M that `main` now is, so that `push` run's artifacts are M's files (a `merge_group`
-run of M, or a `workflow_dispatch` run on `main` while M is its head, counts the same).
-`.github/workflows/generated.yml` runs when a CI run on `main` completes and every 30 minutes:
+the commit M that `main` now is, so that `push` run's artifacts are M's files. Only a completed
+same-repository CI push to `main` whose `generated` and `provenance` producer jobs passed can
+supply a new published entry. The whole run may fail because an unrelated test job failed;
+that does not invalidate these two producers' artifacts or starve publication. PR and merge-group
+runs still produce and check outputs but cannot supply publication; manual dispatch and scheduled
+runs also produce and run all their normal checks, including the unrestricted nightly rows,
+but never publish the `generated` branch.
+
+The case-family enrollment ratchet (ledger #case-family-enrollment) runs before restriction on
+transition events: `push` uses `before`, `pull_request` uses `pull_request.base.sha`, and
+`merge_group` uses `merge_group.base_sha`. A PR synchronize event's `before` is its previous
+head, which may already have withdrawn a case or be unreachable after a force-push; it is never
+the PR baseline. Empty/zero, unavailable or mismatched bases fail closed; required history is fetched.
+Locally, preflight defaults to fetched `origin/main`; `AIR2LEAN_CASE_BASE` can pin another
+comparison commit. Equal HEAD is a no-transition comparison, not an error. The ratchet retains
+both whole families and each family's actual version/host identities, so deleting a golden
+overlay, its module and aggregate import together cannot erase the expected case.
+The two-commit withdrawal control compares the actual push baseline, never an assumed first
+parent. Schedule and dispatch are not transitions: main already arrived through a ratcheted
+push, so they skip this history comparison while keeping all producer and check steps.
+
+`.github/workflows/generated.yml` structurally wakes its publication step only after an
+original CI `push` to `main` completes in this repository. The wakeup can be unsuccessful:
+if older push A was running when newer B with passing producers tried to publish, B waited for A;
+A's completion must wake catch-up so the publisher can publish A if its producers passed, or
+skip A otherwise, then publish B's producer evidence.
+A success-only wakeup would strand B. Scheduled/manual invocations still check freshness.
+Publishing and freshness-only invocations use separate concurrency groups: GitHub replaces
+the pending run of a group even with `cancel-in-progress: false`, so a cron/manual invocation
+must not replace the only pending publisher. Publishing completions still serialize together.
+The publisher independently refuses non-push, non-main, incomplete or wrong-source evidence,
+and evidence missing either successful producer. Dispatch-time publication would need an explicit
+authenticated base contract; it is not provided here.
+
 `scripts/generated.py publish` walks main's first-parent history back to the newest commit that
-has an entry and, for each newer commit M (oldest first), takes M's newest such run whose
-producing jobs `generated` and `provenance` passed (the rest of the run may be red: the files
-are those two jobs' output, checked by them on M, and `main` is fixed forward), downloads its
+has an entry and, for each newer commit M (oldest first), takes M's newest completed push run
+whose producing jobs `generated` and `provenance` passed, downloads its
 two artifacts, checks that both manifests name M and `M^{tree}`, that every digest matches and
 that together they hold exactly the registry's files, and appends one commit to `generated`.
 Nothing is regenerated there. Layout: each `generated` commit's tree is exactly
@@ -406,8 +629,21 @@ main's order: publishing waits at the first commit whose run is still queued or 
 commit whose runs have all completed without both producing jobs passing (or that has no run:
 the commits of one multi-commit push other than its head, the commits from before the `push`
 trigger) gets no entry and is skipped; `fetch` takes the newest published ancestor. When the
-newest commit is such a one, the freshness check reports it: fix forward, rerun the failed jobs
-(`gh run rerun <id> --failed`), or run `gh workflow run ci.yml --ref main`.
+newest commit is such a one, the freshness check reports it: fix forward or rerun that push
+run in full (`gh run rerun <id>`). The existing publisher requires both producer jobs to be
+visible and successful in its `filter=latest` jobs view; if a partial rerun leaves either
+absent, a full push-run rerun is required. No prior-attempt evidence fallback is used.
+A manual dispatch rechecks main but cannot
+supply publication; a commit with no push run needs a new push to main.
+
+A push-triggered publisher retries the same `publish` operation up to three times, with ten
+seconds between failures. Each attempt reselects and verifies the existing push evidence;
+no scheduled/manual artifact becomes eligible. This handles brief API/download/push failures
+without a new publication authority. After all three attempts fail, the next eligible push
+completion retries catch-up, or rerun that failed push-triggered **Generated files** workflow
+(`gh run rerun <publisher-run-id>`). The 30-minute scheduled run still reports freshness but
+cannot retry publication. A prolonged failure therefore requires this explicit recovery; the
+old automatic 30-minute publication retry is not claimed.
 
 Earlier design, retired 2026-10-15: entries came only from `merge_group` or `workflow_dispatch`
 runs, and `publish --dispatch` created a branch `ci-evidence/<M>` for each admin-merged commit
@@ -567,13 +803,23 @@ that has no file fails for every Lean file, standalone or not; and the files und
 `assurance/lean-files.json` (negative controls, one stale historical module, each with its reason)
 must be rejected, so a listed file that starts to check, or that is renamed, fails too. A file
 that imports a fixture's own modules (generated into a check's work directory) is elaborated by
-that fixture's check. A pass is remembered under a hash of the file, its transitive package
+that fixture's check, and a module of the proof-fixture package (`scripts/fixtures.py files`) by
+Lake. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
 the files that import it run again (about 3.5 min for all 360 on the dev Mac).
 
-A fourth phase runs the **proof-fixture checks** (`scripts/fixture-checks.sh`, `.py`): the Lean files
-that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
+A fourth phase builds the **proof-fixture package** and runs the **proof-fixture checks**. The
+package (`tests/roadmap/lakefile.toml`, one library per converted fixture directory,
+[build-cache.md](build-cache.md#proof-fixtures)) is built first, every library in one guarded
+`scripts/fixtures.py build`: the checks run in parallel, and Lake has no build lock, so they must
+find their modules built rather than build the same module at once. A converted check builds its
+library again (`fixtures.py build LIB`; Lake's trace makes that a no-op on an unchanged tree,
+seconds), reads the axioms from the built environment (`fixtures.py audit`, which runs
+`assumptions.py` with kernel replay) and builds its mutants with Lake (`fixtures.py mutant`), so
+the check elaborates its Lean files with Lake only (the theorem-universe audit still compiles the
+indexed ones itself, [build-cache.md](build-cache.md#proof-fixtures)). The checks (`scripts/fixture-checks.sh`, `.py`):
+the Lean files that import a fixture's own generated modules are elaborated only by that fixture's `check.sh`,
 and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
 dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are
 derived from `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh`
@@ -590,20 +836,16 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to two at once inside their own guard (11000 MiB). A pass is remembered (`$AIR2LEAN_CAS_DIR/fixture-checks/`, else
-`.lake/fixture-checks/`) under a key of the rendered step and environment, the host, the
-toolchains' identities (the stock binary's path, size and modification time; a patched compiler is
-a function of `zig-patch/` and its stock bootstrap) and the content of the
-translator and tooling (`Air2Lean/`, `zig-patch/`, `tools/`, the gate's own scripts, top-level
-files other than `*.md`), of `tests/` outside the fixture directories, of the step's fixture
-directories, of every file or directory a scanned text names by its path and every `scripts/` file
-it names by file name or imports (scanned in turn), and of the library
-modules a scanned text names (imports, `lake build` targets), with their imports. A check that
-reaches a file by a path no scanned text spells out (a glob over another fixture's directory) is
-not keyed by it; the nightly CI run executes every check. A failed unit is not remembered. Cold,
-the phase takes 16 to 22 min on the dev Mac (75 units, 59 checks); an unchanged tree, about 1 s.
-`scripts/fixture-checks.sh` runs the phase on its own (`--base REF`: only the units whose key
-covers a file changed since REF, all of them when the workflow changed; `--only TEXT`).
+to two at once inside their own guard (11000 MiB). **Every unit runs on every invocation**: no
+result is reused across runs until a sound input tracer exists (maintainer decision on #443,
+2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
+by path, and of the stock compiler's path, size and modification time. That key missed every input
+reached by a path built in code, a false green: `tests/roadmap/callbacks/mutants.py` reaches
+`ROADMAP / "asm-effects"`, so after `theorem elapsed_counter` in
+`tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the unit "test: Callback
+contracts" kept its key and its stale pass while `callbacks/check.sh` failed. The phase takes 16
+to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
+own (`--only TEXT`: the units whose name or checks contain TEXT).
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 

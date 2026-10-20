@@ -1,5 +1,71 @@
 # Std functions: translated or modelled
 
+## Side-by-side golden cases
+
+An `examples/<family>/all-cases` marker enrolls the whole supported golden stream,
+including older versions, rather than selecting individual version/host cases.
+`gen-integrity.py` derives one additional exact retranslation rule per golden case.
+The existing AIR overlay composer and translator emit each case with a distinct
+`--namespace`, unchanged source prefix and its own full profile, ABI types, encoder
+and constants. No source wrapper or proof import is inserted into a Gen module.
+The current public module and declarations remain unchanged.
+Namespaced cases require a complete, consistent schema-12 profile of the actual
+Zig version; a mixed-profile input fails instead of being downgraded to legacy AIR.
+
+Case outputs are `Proofs/<Family>/Gen/V<version>/H_<host-UTF8-hex>/Gen.lean`;
+the host encoding is injective. The generated `Proofs/<Family>/Cases.lean` imports
+every expected case unconditionally. The full build and `check.sh` check all enrolled
+cases and build their modules even when the native example/version/host selection
+is different. Existing `check`, `write`, `attest` and `certify` use the same Case
+rules; the ordinary regeneration `gen` step creates the files and import aggregate.
+
+Coverage is golden-derived. Missing, extra, changed or profile-mismatched modules
+and missing aggregate imports fail. Restricted checks use current output/enrollment
+coverage without Git history. The unrestricted generated producer checks the
+event-authenticated push `before`, PR base or merge-group base before restriction
+on those transition events;
+local preflight defaults to fetched `origin/main`, with `AIR2LEAN_CASE_BASE` available
+for another explicit comparison pin. An equal HEAD has no transition. Missing/zero
+or unavailable comparison history fails closed. The ratchet retains the actual
+version/host identity set as well as markers: deleting golden inputs, case outputs
+and aggregate imports together cannot erase a supported case. A marker plus all
+outputs cannot be withdrawn in the first of two pushed commits. PR synchronize
+uses the target base, never its previous (possibly withdrawn or force-pushed) head.
+Scheduled and manual workflows still produce and check their outputs, including
+the unrestricted nightly rows. They are not transitions and do not run this ratchet;
+their outputs cannot be published. Only CI pushes to main supply publication, enforced
+by the publication workflow and reader. No guessed parent or empty baseline is used.
+
+Enrollment markers are transitional (engine-ledger #case-family-enrollment): remove
+them when the last golden family is enrolled, together with when_defined/if_decl.
+The first family is exactly Threadsync's real 0.15.2 Linux, Darwin and Linux-aarch64
+goldens; no 0.16/0.17 Threadsync case is invented. This generation coverage does not
+claim case contract instances, native/receipt binding, a wrong-version receipt
+negative control, or retirement of the remaining version-gated proofs. Those remain
+later Task23 obligations in the sole full-state/fsym framework.
+
+Basic's four existing Linux cases are 0.17.0, 0.16.0, 0.15.2 and 0.14.1. Each
+version-local AIR directory retains a complete actual export with its own full
+Linux profile; the shared historical AIR and public `Basic` module are unchanged.
+The same Case pipeline generates all four disjoint modules and their unconditional
+`Proofs.Basic.Cases` import aggregate. This generation coverage does not establish
+Basic's functional Full contracts, profile-plus-Gen contract receipts or their
+wrong-version negative control; those obligations and version-gate retirement
+remain open.
+
+`Proofs/Sync/MutexCases.lean` supplies mutex instances for the three enrolled Sync
+profiles: 0.17.0 Linux, then 0.16.0 Linux and Darwin. Each profile's generated
+state type, encoder, locals, exits and functions supply code correspondence to the
+existing `IoMutexCode` interface. Its general proof establishes `MutexImpl` once;
+clients use that contract's rules through `fsym`, as in `Proofs/Sync/Mutex.lean`.
+The three instances have disjoint `Sync.CaseContracts` namespaces, import every
+case unconditionally and retain their own ABI facts. No generated body or public
+`Sync.ioMutex` symbol changes. This is only the mutex facet: the remaining Sync
+contracts, other families, full-profile plus Gen receipt matching, the wrong-version
+receipt control, contract coverage and version-gate retirement remain open. The
+generation/debug-ID evidence does not establish those later obligations or native
+behavior, and a report/profile hash does not authenticate a producer invocation.
+
 A std function that an example calls is one of these:
 
 | Kind | How | Where |

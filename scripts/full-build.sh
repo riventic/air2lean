@@ -19,10 +19,16 @@
 #     libraries that imports only Lean and this package (strength logs, proof-client fixtures,
 #     tutorials) is elaborated with `lake env lean`; the negative controls in
 #     assurance/lean-files.json must be rejected. Cached per input.
-#   - the proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
+#   - the proof-fixture package (tests/roadmap/lakefile.toml, `scripts/fixtures.py build`): every
+#     fixture library, so the parallel checks below find their modules built; then the
+#     proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
-#     the shared cache. Cached per input. --no-fixtures skips this phase (scripts/worktree-init.sh).
+#     the shared cache. Every unit runs on every invocation; no result is reused. --no-fixtures
+#     skips this phase (scripts/worktree-init.sh).
+#   - debug-ID canonicalization: complete native Func binding for every gen-integrity case,
+#     plus one fresh independent Assurance replay of the generic CanonSem theorem module.
+#     This phase always checks; it has no cached-success marker.
 # Defaults: --lean-threads 2, --rss-mib 11000 (one job, under the 12 GB cap); the guard waits up to
 # AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each phase's time.
 set -euo pipefail
@@ -40,7 +46,7 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -61,6 +67,7 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
 }
 
 root=()
+# The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
 guarded root "$PWD" lake build "${root[@]}"
 guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
@@ -68,7 +75,13 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 # libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
 # remembered per input (lean-deps.py), so an unchanged file costs nothing.
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
-# The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh).
+# Retain per-case native binding evidence and the one generic kernel audit beside the logs.
+canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
+guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
+# The proof-fixture package (tests/roadmap/lakefile.toml), every library, then the proof-fixture
+# checks CI runs, in their own guard (scripts/fixture-checks.sh). Built first, once: the checks run
+# in parallel, and two Lake builds of one workspace must not build the same module at once.
 if [ "$fixtures" = 1 ]; then
+  guarded fixtures-lean "$PWD" python3 -B scripts/fixtures.py build
   scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi

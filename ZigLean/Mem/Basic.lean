@@ -602,10 +602,40 @@ def Mem.access (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block ×
           blk.kind.mappedLo ≤ p.off.toNat
       then pure (b, blk, p.off.toNat) else throw .illegal
 
+/-- `Mem.access` throws only `.illegal`. -/
+theorem access_cases (m : Mem) (p : Ptr) (n al : Nat) :
+    m.access p n al = throw .illegal ∨ ∃ b blk o, m.access p n al = pure (b, blk, o) := by
+  unfold Mem.access
+  split
+  · exact .inl rfl
+  · split
+    · exact .inl rfl
+    · split
+      · exact .inr ⟨_, _, _, rfl⟩
+      · exact .inl rfl
+
+/-- An access check always returns a checked location or an error, in every memory. -/
+theorem Mem.access_run_ne_none (m : Mem) (p : Ptr) (n align : Nat) :
+    (m.access p n align).run ≠ none := by
+  rcases access_cases m p n align with h | ⟨b, blk, o, h⟩
+  · rw [h]
+    exact Result.throw_run_ne_none _
+  · rw [h]
+    exact Result.pure_run_ne_none _
+
 /-- `Mem.access` for a write: a write to a `const` global throws `.illegal`. -/
 def Mem.accessW (m : Mem) (p : Ptr) (n align : Nat) : Result (BlockId × Block × Nat) := do
   let r ← m.access p n align
   if r.2.1.kind = .constGlobal then throw .illegal else pure r
+
+/-- The write access check also always returns a location or an error. -/
+theorem Mem.accessW_run_ne_none (m : Mem) (p : Ptr) (n align : Nat) :
+    (m.accessW p n align).run ≠ none := by
+  unfold Mem.accessW
+  refine Result.bind_run_ne_none (m.access_run_ne_none p n align) fun r => ?_
+  split
+  · exact Result.throw_run_ne_none _
+  · exact Result.pure_run_ne_none _
 
 private def writeBytesArray (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
   a.extract 0 o ++ bs ++ a.extract (o + bs.size) a.size
@@ -672,6 +702,18 @@ def recordAccess (block : BlockId) (off len : Nat) (kind : AccessKind) : MemM Un
     set { m with
       clocks := m.clocks.set! t clock,
       footprint := m.footprint.push { tid := t, clock, block, off, len, kind } }
+
+/-- Recording an access always returns or reports a race, including in malformed memories. -/
+theorem recordAccess_run_ne_none (block : BlockId) (off len : Nat) (kind : AccessKind) :
+    ∀ m, ((recordAccess block off len kind).run m).run ≠ none := by
+  unfold recordAccess
+  refine M.bind_run_ne_none M.get_run_ne_none fun _ => ?_
+  -- Without match reduction, so `split` cases on the race check's result even when it is a
+  -- constant: the proof does not depend on what the check computes.
+  dsimp -iota only
+  split
+  · exact M.throw_run_ne_none _
+  · exact M.set_run_ne_none _
 
 /-- `e` without its accesses to offsets `≥ S` of block `b`: an entry that starts there gets the
 empty clock (it happened before every access, so it races with none and every clock covers it;

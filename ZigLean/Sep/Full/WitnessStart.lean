@@ -23,6 +23,9 @@ admissibility predicates inherit it:
   on every global's bytes** (`gclaims`). Claims are created with their block
   (`FTriple.mintClaim`); no one holds a claim at program start, so the start resource can hold
   all of them (`Holds.addClaim`).
+* `Holds.addGlobalClaims`: that induction over any unchanged memory and frame, preserving the
+  original assertion; `initRes_holds_stack_claims` instantiates it at the actual stack-budget
+  start, and `FTotalTriple.run_init_stack_claims` gives total adequacy there.
 * `FAdmit.At.aptsE` makes a word's plain bytes its atomic points-to before the first atomic op
   (`Holds.retag`: no atomic location constrains a tag); a counterexample that the kernel runs
   from a given memory states its input with `FAdmit.At`.
@@ -202,6 +205,32 @@ theorem FAdmit.At.aptsE {α : Type} [Enc α] {m : Mem} {R : FAssn} {p : Ptr} {A 
       | none => rfl
       | some fc => rw [e] at this; cases this
 
+/-- Select an encoded word at any global index in the actual initial memory. Other globals and
+the selected block's knowledge and extent join the frame. The target memory may change fields
+irrelevant to these resources, such as its arbitrary input stream, with `MemAuth.Keep` retaining
+counter authorization. The width and alignment are those of the existing `aptsE` rule. -/
+theorem FAdmit.At.global_aptsE {α : Type} [Enc α] {m : Mem}
+    (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (hb : m.blocks = (Mem.ofGlobals σ gs).blocks)
+    (ha : m.atomics = (Mem.ofGlobals σ gs).atomics)
+    (hk : MemAuth.Keep (Mem.ofGlobals σ gs) m)
+    (hlo : ∀ g ∈ gs, g.2.2.mappedLo = 0)
+    (j : Nat) (bs : Array Byte) (a : Nat) (K : BlockKind) (v : α)
+    (hg : gs[j]? = some (bs, a, K)) (hapos : 0 < a) (halign : 8 ∣ a)
+    (hK : K ≠ .constGlobal) (hsz : bs.size = 8) (hv : Enc.decode bs = pure v) :
+    FAdmit.At m (Full.aptsE ⟨some j, 0⟩ v) := by
+  obtain ⟨hh, hp⟩ := initRes_holds σ gs hlo
+  have h : FAdmit.At m (globals gs) :=
+    ⟨_, _, Holds.congrMem hb ha hh hk, hp⟩
+  rw [globals_pick hg] at h
+  have h := h.frame
+  unfold gblock at h
+  obtain ⟨A, h⟩ := h.ex
+  obtain ⟨hA, h⟩ := h.lift
+  have h8 : A % 8 = 0 :=
+    Nat.mod_eq_zero_of_dvd (Nat.dvd_trans halign (Nat.dvd_of_mod_eq_zero (hA hapos)))
+  exact (h.aptsE (v := v) (by simp [shapes, ha]) (by simpa using h8) hK hsz hv).frame
+
 /-! ## Claims at program start -/
 
 /-- **A claim on a block that no one claims can be added** (`GOk.addCl`, the step of
@@ -221,6 +250,42 @@ def gclaims (gs : List (Array Byte × Nat × BlockKind)) : FAssn :=
   sepN gs.length fun j => match gs[j]? with
     | some (bs, _, _) => bclaim j 0 bs.size
     | none => emp
+
+/-- **Add the claims of existing blocks to the same memory and frame.** Neither the owned part
+nor its frame may already claim one of the named blocks. The original assertion stays beside
+the new claims; claims on other blocks are unrestricted. -/
+theorem _root_.Zig.Full.Holds.addGlobalClaims {m : Mem} {r rF : Res} {P : FAssn}
+    (hh : Holds m r rF) (gs : List (Array Byte × Nat × BlockKind)) (hp : P r)
+    (hr : ∀ b x, b < gs.length → r.gh.cl b x = ECell.unit)
+    (hF : ∀ b x, b < gs.length → rF.gh.cl b x = ECell.unit)
+    (hb : gs.length ≤ m.blocks.size) :
+    ∃ r', Holds m r' rF ∧ (P ⋆ gclaims gs) r' := by
+  let f : Nat → FAssn := fun j => match gs[j]? with
+    | some (bs, _, _) => bclaim j 0 bs.size
+    | none => emp
+  have key : ∀ n, n ≤ gs.length → ∃ r', Holds m r' rF ∧
+      (P ⋆ sepN n f) r' ∧ ∀ b x, n ≤ b → b < gs.length → r'.gh.cl b x = ECell.unit := by
+    intro n hn
+    induction n with
+    | zero => exact ⟨r, hh, Full.sep_emp.mpr hp, fun b x _ hbg => hr b x hbg⟩
+    | succ n ih =>
+      obtain ⟨r', hh', hp', hz⟩ := ih (by omega)
+      have hgn : gs[n]? = some gs[n] := List.getElem?_eq_getElem (by omega)
+      have hnb : n < m.blocks.size := Nat.lt_of_lt_of_le (by omega) hb
+      refine ⟨_, hh'.addClaim (b := n) (lo := 0) (hi := (gs[n]'(by omega)).1.size)
+        (fun x => hz n x (Nat.le_refl n) (by omega)) (fun x => hF n x (by omega)) hnb,
+        ?_, fun b x hbn hbg => ?_⟩
+      · have hc : f n ⟨FHeap.empty, Know.none,
+            Ghost.atCl n (ECell.onRange 0 (gs[n]'(by omega)).1.size (ECell.shareT none Frac.one 0))⟩ := by
+          simp only [f, hgn]; exact ⟨rfl, rfl, rfl⟩
+        have hj : ((P ⋆ sepN n f) ⋆ f n) _ :=
+          ⟨r', _, FHeap.disjoint_empty _, rfl, hp', hc⟩
+        show (P ⋆ (f n ⋆ sepN n f)) _
+        exact ac_cast hj (by ac_rfl)
+      · simp only [Ghost.add_cl, hz b x (by omega) hbg, Ghost.atCl,
+          show b ≠ n by omega, ↓reduceIte, ECell.add_unit]
+  obtain ⟨r', hh', hp', -⟩ := key gs.length (Nat.le_refl _)
+  exact ⟨r', hh', hp'⟩
 
 theorem noCl_known (b : BlockId) (A : Nat) : NoCl (known b A) := by
   rintro _ ⟨-, -, hg⟩ b' x; rw [hg]; rfl
@@ -247,38 +312,37 @@ stack yet). -/
 theorem FAdmit.Start.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
     (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) :
     FAdmit.Start ((globals gs ⋆ plain) ⋆ gclaims gs) := by
-  let f : Nat → FAssn := fun j => match gs[j]? with
-    | some (bs, _, _) => bclaim j 0 bs.size
-    | none => emp
-  -- the claims of the globals below `n`, none above
-  have key : ∀ n, n ≤ gs.length → ∃ r, Holds (Mem.ofGlobals σ gs) r ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
-      ((globals gs ⋆ plain) ⋆ sepN n f) r ∧ ∀ b x, n ≤ b → r.gh.cl b x = ECell.unit := by
-    intro n hn
-    induction n with
-    | zero =>
-      obtain ⟨hh, hg⟩ := initRes_holds_plain σ gs hK
-      refine ⟨_, ?_, ⟨_, ⟨FHeap.empty, Know.none, Ghost.unit⟩, FHeap.disjoint_empty _, rfl, hg,
-        rfl, rfl, rfl⟩, fun b x _ => ?_⟩
-      · simpa [FHeap.union_empty, Know.union_none, Ghost.add_unit] using hh
-      · simp only [Ghost.add_cl, noCl_globals gs _ (initRes_holds σ gs hK).2 b x]
-        simp [Ghost.plain, Ghost.ofAC, Ghost.unit, ECell.unit_add]
-    | succ n ih =>
-      obtain ⟨r, hh, hp, hz⟩ := ih (by omega)
-      have hb : n < (Mem.ofGlobals σ gs).blocks.size := by rw [Mem.ofGlobals_size]; omega
-      have hgn : gs[n]? = some gs[n] := List.getElem?_eq_getElem (by omega)
-      refine ⟨_, Holds.addClaim (lo := 0) (hi := (gs[n]'(by omega)).1.size) hh (hz n · (Nat.le_refl n))
-        (fun _ => rfl) hb, ?_, fun b x hbn => ?_⟩
-      · have hc : f n ⟨FHeap.empty, Know.none,
-            Ghost.atCl n (ECell.onRange 0 (gs[n]'(by omega)).1.size (ECell.shareT none Frac.one 0))⟩ := by
-          simp only [f, hgn]; exact ⟨rfl, rfl, rfl⟩
-        have hj : (((globals gs ⋆ plain) ⋆ sepN n f) ⋆ f n) _ :=
-          ⟨r, _, FHeap.disjoint_empty _, rfl, hp, hc⟩
-        show ((globals gs ⋆ plain) ⋆ (f n ⋆ sepN n f)) _
-        exact ac_cast hj (by ac_rfl)
-      · simp only [Ghost.add_cl, hz b x (by omega), Ghost.atCl, show b ≠ n by omega, ↓reduceIte,
-          ECell.add_unit]
-  obtain ⟨r, hh, hp, -⟩ := key gs.length (Nat.le_refl _)
-  exact ⟨_, ⟨Mem.init_fseq σ gs h, Mem.ofGlobals_footprint σ gs⟩, r, _, hh, hp⟩
+  obtain ⟨hh, hp⟩ := initRes_holds_plain σ gs hK
+  obtain ⟨r, hh', hp'⟩ := hh.addGlobalClaims gs hp
+    (fun b x _ => noCl_sep (noCl_globals gs) noCl_plain _ hp b x) (fun _ _ _ => rfl)
+    (by simp [Mem.ofGlobals_size])
+  exact ⟨_, ⟨Mem.init_fseq σ gs h, Mem.ofGlobals_footprint σ gs⟩, r, _, hh', hp'⟩
+
+/-- **The real stack-budget start holds the globals and their claims.** The claims augment the
+resources from `initRes_holds_stack`; the memory, budget and empty frame are unchanged. -/
+theorem _root_.Zig.Full.initRes_holds_stack_claims (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0)
+    (S : Nat) (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome) :
+    ∃ r, Holds ((Mem.ofGlobals σ gs).withStack S) r ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
+      ((globals gs ⋆ stackStart S) ⋆ gclaims gs) r := by
+  obtain ⟨hh, hp⟩ := initRes_holds_stack σ gs hK S hr
+  refine hh.addGlobalClaims gs hp (fun b x _ => ?_) (fun _ _ _ => rfl) ?_
+  · simp only [Ghost.add_cl, noCl_globals gs _ (initRes_holds σ gs hK).2 b x]
+    simp [Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]
+  · unfold Mem.withStack
+    split <;> simp [Mem.ofGlobals_size]
+
+/-- **Total adequacy from the actual stack-budget start, with global claims.** The same-memory
+augmentation above supplies the claims beside the stack-start resources. -/
+theorem _root_.Zig.Full.FTotalTriple.run_init_stack_claims {α : Type} {c : MemM α}
+    {Q : α → FAssn} (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (h : Mem.GlobalsFit gs) (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (S : Nat)
+    (hr : ((Mem.ofGlobals σ gs).reserveAt? 0 S).isSome)
+    (ht : FTotalTriple ((globals gs ⋆ stackStart S) ⋆ gclaims gs) c Q) :
+    ∃ v m' r', c.run ((Mem.ofGlobals σ gs).withStack S) = pure (v, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq := by
+  obtain ⟨r, hh, hp⟩ := initRes_holds_stack_claims σ gs hK S hr
+  exact ht.runs hh hp ((Mem.init_fseq σ gs h).withStack S)
 
 /-- **The globals at program start, with their claims, are admissible** (`FAdmit.Start.init_claims`). -/
 theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))

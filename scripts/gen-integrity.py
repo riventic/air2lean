@@ -34,9 +34,16 @@ other ones than the translation is replaced by the fresh one). A module whose ca
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
+       gen-integrity.py certify [--translator PATH] [--only SUBSTRING] [--work-dir PATH]
        gen-integrity.py list   (each case and its inputs; no translation)
+
+`certify` checks every case's private debug-ID certificate, binds both complete actual
+normalized functions and every per-function proof root, and freshly replays the batch
+with Assurance. The official full build runs it under its existing build guard. Ordinary
+check/write/attest verify generated-code identity; they do not claim semantic certification.
 """
 import argparse
+import contextlib
 import dataclasses
 import functools
 import hashlib
@@ -53,12 +60,13 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 # Host keys of the golden overlays (scripts/check.sh): `uname -s` in lower case, then
 # `<os>-<uname -m>` for a host whose AIR or translation differs from its OS's (aarch64-linux).
-OSES = ("linux", "darwin", "linux-aarch64")
 PROFILE_PREFIX = b"-- air2lean-profile: "
+GOLDEN_HOST = re.compile(r"[a-z0-9_]+(?:-[a-z0-9_]+)*")
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import premise_markers  # noqa: E402
+import canon_certification  # noqa: E402
 
 # Direct fixtures: (generated file, committed AIR dir, translator arguments, comparison), with
 # the arguments of the fixture's own check script.
@@ -277,6 +285,9 @@ class Case:
     mode: str
     label: str
     version: str | None = None
+    family: str | None = None
+    host: str | None = None
+    namespaced: bool = False
 
 
 def git_files(*patterns):
@@ -291,6 +302,8 @@ def tracked_generated():
     by design and excluded from the premise index and from this gate alike)."""
     found = set()
     for path in git_files("*.lean"):
+        if not (ROOT / path).is_file():
+            continue  # A tracked file removed from the working tree has no declarations.
         with open(ROOT / path, "rb") as stream:
             first = stream.read(len(PROFILE_PREFIX)).decode(errors="replace")
         if premise_markers.is_generated(path, first):
@@ -298,45 +311,208 @@ def tracked_generated():
     return sorted(found)
 
 
-def example_versions(ex):
-    listed = ROOT / "examples" / ex / "zig-versions"
-    if listed.is_file():
-        return listed.read_text().split()
-    data = json.loads((ROOT / "compatibility.json").read_text())
-    return [v["version"] for v in data["zig"]["versions"]]
+def golden_profiles(files=None, read_text=None, families=None):
+    """Golden identities from source metadata, shared by the current tree and verified base.
+
+    This enumeration is independent of generated case modules. The transitional history
+    comparison prevents deletion of its golden inputs erasing a case (ledger #case-family-enrollment).
+    """
+    if files is None:
+        files = {p.relative_to(ROOT).as_posix() for directory in ("examples", "tests/golden")
+                 for p in (ROOT / directory).rglob("*") if p.is_file()}
+    if read_text is None:
+        read_text = lambda path: (ROOT / path).read_text()
+    examples, recorded = set(), {}
+    for path in files:
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == "examples" and parts[2] == parts[1] + ".zig":
+            examples.add(parts[1])
+        elif len(parts) >= 5 and parts[:2] == ["tests", "golden"]:
+            hosts = recorded.setdefault(parts[3], {}).setdefault(parts[2], {"linux"})
+            if len(parts) > 5 and parts[4].startswith("air-"):
+                hosts.add(parts[4][4:])
+            elif len(parts) == 5 and parts[4].startswith("Gen-") and parts[4].endswith(".lean"):
+                hosts.add(parts[4][4:-5])
+    for ex in sorted(examples if families is None else examples & families):
+        args = ["--namespace", ex[0].upper() + ex[1:], "--prefix", ex + "."]
+        if f"examples/{ex}/translate.args" in files:
+            args += read_text(f"examples/{ex}/translate.args").split()
+        versions_path = f"examples/{ex}/zig-versions"
+        listed = (read_text(versions_path).split() if versions_path in files else
+                  [v["version"] for v in json.loads(read_text("compatibility.json"))["zig"]["versions"]])
+        versions = recorded.get(ex, {})
+        for version in listed + sorted(versions.keys() - set(listed)):
+            for os_name in sorted(versions.get(version, {"linux"})):
+                yield ex, version, os_name, args
 
 
 def golden_cases():
     """Each (version, OS) translation that scripts/check.sh compares, with its expected file."""
-    for ex_dir in sorted((ROOT / "examples").iterdir()):
-        ex = ex_dir.name
-        if not (ex_dir / f"{ex}.zig").is_file():
-            continue
+    for ex, version, os_name, args in golden_profiles():
         Ex = ex[0].upper() + ex[1:]
-        args = ["--namespace", Ex, "--prefix", ex + "."]
-        if (ex_dir / "translate.args").is_file():
-            args += (ex_dir / "translate.args").read_text().split()
-        for version in example_versions(ex):
-            golden = ROOT / "tests/golden" / version / ex
-            for os_name in OSES:
-                os_dir, os_gen = golden / f"air-{os_name}", golden / f"Gen-{os_name}.lean"
-                # Linux is the reference host; another OS has a case when it has its own files.
-                if os_name != "linux" and not os_dir.is_dir() and not os_gen.is_file():
-                    continue
-                # An <os>-<arch> host also takes its OS's overlay (check.sh's order).
-                base_os = os_name.split("-")[0]
-                base_dir, base_gen = golden / f"air-{base_os}", golden / f"Gen-{base_os}.lean"
-                expected = next(g for g in (os_gen, base_gen, golden / "Gen.lean", ROOT / "Proofs" / Ex / "Gen.lean")
-                                if g.is_file())
-                overlays = (base_dir, os_dir) if base_os != os_name else (os_dir,)
-                dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", *overlays) if d.is_dir()]
-                yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
-                           f"{ex} {version} {os_name}", version)
+        golden = ROOT / "tests/golden" / version / ex
+        os_dir, os_gen = golden / f"air-{os_name}", golden / f"Gen-{os_name}.lean"
+        # An <os>-<arch> host also takes its OS's overlay (check.sh's order).
+        base_os = os_name.split("-")[0]
+        base_dir, base_gen = golden / f"air-{base_os}", golden / f"Gen-{base_os}.lean"
+        expected = next(g for g in (os_gen, base_gen, golden / "Gen.lean", ROOT / "Proofs" / Ex / "Gen.lean")
+                        if g.is_file())
+        overlays = (base_dir, os_dir) if base_os != os_name else (os_dir,)
+        dirs = [d for d in (ROOT / "tests/golden" / ex / "air", golden / "air", *overlays) if d.is_dir()]
+        yield Case(str(expected.relative_to(ROOT)), dirs, args, "golden",
+                   f"{ex} {version} {os_name}", version, ex, os_name)
+
+
+def enrolled_families():
+    families = {p.parent.name for p in (ROOT / "examples").glob("*/all-cases") if p.is_file()}
+    namespaces = {}
+    for family in sorted(families):
+        if (not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", family) or
+                not (ROOT / "examples" / family / (family + ".zig")).is_file()):
+            raise ValueError(f"{family}: orphan or invalid all-cases family marker")
+        namespace = family[0].upper() + family[1:]
+        if namespace in namespaces:
+            raise ValueError(f"case families {namespaces[namespace]} and {family} share namespace {namespace}")
+        namespaces[namespace] = family
+    return families
+
+
+def case_api(family, version, host):
+    label = f"{family} {version} {host}"
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version or ""):
+        raise ValueError(f"{label}: unsupported version spelling")
+    if not GOLDEN_HOST.fullmatch(host or ""):
+        raise ValueError(f"{label}: unsupported golden host spelling")
+    # Encoding every host byte is injective, including '-' versus '_' and architecture keys.
+    host = "H_" + host.encode("ascii").hex()
+    version = "V" + version.replace(".", "_")
+    family = family[0].upper() + family[1:]
+    return f"Proofs/{family}/Gen/{version}/{host}/Gen.lean", f"{family}.Gen.{version}.{host}"
+
+
+def namespaced_cases(goldens):
+    """Every golden case of each enrolled whole family, through the original translator rule."""
+    outputs, enrolled = set(), enrolled_families()
+    for case in goldens:
+        if case.family not in enrolled:
+            continue
+        path, namespace = case_api(case.family, case.version, case.host)
+        if path in outputs:
+            raise ValueError(f"{case.label}: duplicate namespaced case output {path}")
+        outputs.add(path)
+        if case.args.count("--namespace") != 1:
+            raise ValueError(f"{case.label}: case arguments must have one namespace")
+        args = list(case.args)
+        args[args.index("--namespace") + 1] = namespace
+        yield dataclasses.replace(case, path=path, args=args, mode="exact", namespaced=True,
+                                  label=case.label + " namespaced")
+
+
+def case_aggregates(paths):
+    imports = {}
+    for path in paths:
+        aggregate = "Proofs/" + Path(path).parts[1] + "/Cases.lean"
+        imports.setdefault(aggregate, []).append(path[:-5].replace("/", "."))
+    return {path: ("-- Generated by scripts/gen-integrity.py; do not edit.\n" +
+                   "".join(f"import {module}\n" for module in sorted(modules))).encode()
+            for path, modules in imports.items()}
+
+
+def case_coverage_errors(cases):
+    """History-free M/O and golden output/import coverage (ledger #case-family-enrollment)."""
+    errors, enrolled = [], enrolled_families()
+    expected = {}
+    for family, version, host, _ in golden_profiles():
+        if family in enrolled:
+            path, _ = case_api(family, version, host)
+            if path in expected:
+                raise ValueError(f"{family} {version} {host}: duplicate namespaced case output {path}")
+            expected[path] = (family, version, host)
+    mapped = {}
+    for case in cases:
+        if case.namespaced:
+            if case.path in mapped:
+                errors.append(f"{case.path}: duplicate namespaced retranslation rule")
+            mapped[case.path] = case
+    for path in sorted(mapped.keys() - expected.keys()):
+        errors.append(f"{path}: namespaced retranslation rule has no supported golden case")
+    aggregates = case_aggregates(expected)
+    present = {p.relative_to(ROOT).as_posix()
+               for p in (ROOT / "Proofs").glob("*/Gen/**/*.lean") if p.is_file()}
+    present.update(p.relative_to(ROOT).as_posix()
+                   for p in (ROOT / "Proofs").glob("*/Cases.lean") if p.is_file())
+    for path in sorted(present - expected.keys() - aggregates.keys()):
+        errors.append(f"{path}: orphan or extra case-family output (O must be contained in M)")
+    represented = {identity[0] for identity in expected.values()}
+    for family in sorted(enrolled - represented):
+        errors.append(f"{family}: enrolled family has no supported golden cases")
+    for path, identity in expected.items():
+        label = " ".join(identity) + " namespaced"
+        case = mapped.get(path)
+        if case is None:
+            errors.append(f"{path} [{label}]: supported golden case has no namespaced retranslation rule")
+        elif (case.family, case.version, case.host) != identity:
+            errors.append(f"{path} [{label}]: retranslation rule has a different golden identity")
+        if not (ROOT / path).is_file() or (case is not None and
+                (not case.dirs or any(not d.is_dir() for d in case.dirs))):
+            errors.append(f"{path} [{label}]: namespaced case or AIR input missing")
+    for path, data in aggregates.items():
+        actual = (ROOT / path).read_bytes() if (ROOT / path).is_file() else b""
+        if actual != data:
+            lines = set(actual.splitlines())
+            missing = [" ".join(identity) + " namespaced" for case_path, identity in expected.items()
+                       if Path(case_path).parts[1] == Path(path).parts[1] and
+                       ("import " + case_path[:-5].replace("/", ".")).encode() not in lines]
+            detail = ", ".join(missing) if missing else "aggregate differs from its canonical imports"
+            errors.append(f"{path}: missing or changed complete case imports: {detail}")
+    return errors
+
+
+def enrollment_errors(base):
+    """Retain enrolled families AND their golden identities (ledger #case-family-enrollment).
+
+    CI supplies the authenticated event base. Local preflight defaults to origin/main, like
+    proof-framework.py; an equal commit has no transition to compare. Never infer HEAD's parent.
+    """
+    command = ["git", "--no-replace-objects", "-C", str(ROOT)]
+    if base is None and os.environ.get("GITHUB_ACTIONS") != "true":
+        try:
+            base = subprocess.check_output([*command, "rev-parse", "--verify", "origin/main^{commit}"],
+                                           text=True, stderr=subprocess.PIPE).strip()
+        except subprocess.CalledProcessError as error:
+            raise ValueError("local case enrollment baseline origin/main is unavailable; fetch origin/main") from error
+    if not re.fullmatch(r"[0-9a-f]{40}", base or "") or base == "0" * 40:
+        raise ValueError("case enrollment requires a nonzero authenticated pre-update --base commit")
+    try:
+        actual = subprocess.check_output([*command, "rev-parse", "--verify", base + "^{commit}"],
+                                         text=True, stderr=subprocess.PIPE).strip()
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"case enrollment baseline {base} is unavailable; fetch and verify the event history") from error
+    if actual != base:
+        raise ValueError("case enrollment baseline must be the verified comparison commit")
+    paths = set(filter(None, subprocess.check_output([*command, "ls-tree", "-r", "-z", "--name-only", base, "--",
+                                                     "examples", "tests/golden", "compatibility.json"],
+                                                    text=True).split("\0")))
+    before = {Path(p).parts[1] for p in paths
+              if len(Path(p).parts) == 3 and Path(p).name == "all-cases"}
+    current = enrolled_families()
+    errors = [f"{family}: supported case family withdrawn since {base} (B must be contained in M)"
+              for family in sorted(before - current)]
+    def read_base(path):
+        return subprocess.check_output([*command, "show", f"{base}:{path}"], text=True)
+    previous_cases = {(family, version, host) for family, version, host, _ in golden_profiles(paths, read_base, before)}
+    if before - {family for family, _, _ in previous_cases}:
+        raise ValueError(f"case enrollment baseline {base} has an enrolled family without golden identities")
+    current_cases = {(family, version, host) for family, version, host, _ in golden_profiles(families=current)}
+    errors += [f"{' '.join(identity)}: supported golden case withdrawn since {base}"
+               for identity in sorted(previous_cases - current_cases) if identity[0] in current]
+    return errors
 
 
 def all_cases():
     cases = [Case(path, [ROOT / air], args, mode, path) for path, air, args, mode in FIXTURES]
-    return cases + list(golden_cases())
+    goldens = list(golden_cases())
+    return cases + goldens + list(namespaced_cases(goldens))
 
 
 def strip_identities(value, root=True):
@@ -351,7 +527,7 @@ def strip_identities(value, root=True):
             if k != "comptime_fn_module" and not (k == "module" and named)}
 
 
-def compose(dirs, destination, version):
+def compose(dirs, destination, version, *, require_profile=False, host=None):
     """Apply golden overlays as scripts/check.sh does: a later directory replaces every file
     whose normalized function name it provides. Profile metadata is dropped (schema 12 is the
     schema-11 payload plus that record) and `zig_version` is the checked version, which check.sh
@@ -372,6 +548,21 @@ def compose(dirs, destination, version):
     last = dirs[-1].name if dirs else ""
     uniform = (docs and all(doc.get("schema") == 12 for doc in docs)
                and len({json.dumps(doc.get("profile"), sort_keys=True) for doc in docs}) == 1)
+    if require_profile and (not uniform or not isinstance(docs[0].get("profile"), dict) or
+                            docs[0]["profile"].get("zig_version") != version or
+                            any(doc.get("zig_version") != version for doc in docs)):
+        raise ValueError("namespaced golden case requires one complete schema-12 profile of its actual Zig version; legacy downgrade refused")
+    if require_profile:
+        if not isinstance(host, str) or not GOLDEN_HOST.fullmatch(host):
+            raise ValueError("namespaced golden case requires its explicit valid golden host identity")
+        profile = generated_helpers()["profile_for_air"](docs[0])
+        arch, target_os, _ = profile["target_triple"].split("-")
+        host_os, _, host_arch = host.partition("-")
+        host_os = {"darwin": "macos"}.get(host_os, host_os)
+        host_arch = {"arm64": "aarch64", "amd64": "x86_64"}.get(host_arch, host_arch)
+        if host_os != target_os.split(".")[0] or (host_arch and host_arch != arch):
+            raise ValueError(f"namespaced golden case {version} {host}: actual profile "
+                             f"{profile['target_triple']} does not match golden host")
     own_os = (last.startswith("air-") and last != "air-linux"
               and set(chosen) == {IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
                                   for p in dirs[-1].glob("*.json")})
@@ -391,8 +582,12 @@ def compose(dirs, destination, version):
 
 
 @functools.cache
+def generated_helpers():
+    return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))
+
+
 def split_generated():
-    return runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))["split_generated"]
+    return generated_helpers()["split_generated"]
 
 
 def comparable(data, mode):
@@ -427,14 +622,19 @@ class Translator:
     """Fresh translations, each made once per case."""
     def __init__(self, binary, work):
         self.binary, self.work, self.done = binary, Path(work), {}
+        self.arguments = {}
 
     def output(self, index, case):
         """The fresh output bytes, or raise ValueError with the translator's message."""
         if index not in self.done:
             air = self.work / f"air{index}"
             air.mkdir()
-            if case.mode == "golden":
-                compose(case.dirs, air, case.version)
+            if case.namespaced or case.mode == "golden":
+                try:
+                    compose(case.dirs, air, case.version, require_profile=case.namespaced, host=case.host)
+                except ValueError as error:
+                    self.done[index] = error
+                    raise
             else:
                 # A fixture's AIR is a directory, or the one file its check translates.
                 source = case.dirs[0]
@@ -447,16 +647,30 @@ class Translator:
             # (docs/profiles.md), as each fixture's own check passes it.
             legacy = ["--profile", "legacy-abi64-le"] if "--profile" not in case.args and all(
                 json.loads(f.read_bytes()).get("schema", 0) < 12 for f in air.glob("*.json")) else []
-            result = subprocess.run([self.binary, str(air), "-o", str(out), *legacy, *case.args],
-                                    capture_output=True, text=True)
+            arguments = [str(air), "-o", str(out), *legacy, *case.args]
+            result = subprocess.run([self.binary, *arguments], capture_output=True, text=True)
             if result.returncode != 0 or not out.is_file():
-                message = (result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}")
+                message = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
                 self.done[index] = ValueError(f"AIR does not translate: {message.splitlines()[0][:300]}")
             else:
                 self.done[index] = out.read_bytes()
+                self.arguments[index] = arguments
         if isinstance(self.done[index], ValueError):
             raise self.done[index]
         return self.done[index]
+
+    def certificate(self, index, case):
+        self.output(index, case)
+        # Main alone parses the exact original configuration. Native binding mode writes
+        # only stdout, so output paths and aliases cannot overwrite another result.
+        result = subprocess.run([self.binary, *self.arguments[index], "--canon-certificate"],
+                                capture_output=True)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout).decode(errors="replace").strip()
+            raise ValueError(f"AIR native binding does not translate: {message[:300]}")
+        if not result.stdout:
+            raise ValueError("translator did not emit native canonicalization binding evidence")
+        return result.stdout
 
     def matches(self, index, case, path):
         """None if `path` equals the fresh output of `case`, else the difference."""
@@ -467,9 +681,8 @@ class Translator:
         mine, theirs = comparable(committed, case.mode), comparable(fresh, case.mode)
         return None if mine == theirs else first_difference(mine, theirs)
 
-
 def coverage_errors(cases):
-    errors = []
+    errors = case_coverage_errors(cases)
     covered = {case.path for case in cases}
     for path in tracked_generated():
         if path not in covered and path not in EXCEPTIONS:
@@ -496,9 +709,11 @@ def coverage_errors(cases):
     return errors
 
 
-def run_check(translator, cases, only):
-    errors = coverage_errors(cases)
+def run_check(translator, cases, only, case_only=False):
+    errors = case_coverage_errors(cases) if case_only else coverage_errors(cases)
     for index, case in enumerate(cases):
+        if case_only and not case.namespaced:
+            continue
         if only and only not in case.path and only not in case.label:
             continue
         if not (ROOT / case.path).is_file() or any(not d.exists() for d in case.dirs):
@@ -519,14 +734,14 @@ def run_write(translator, cases, only):
     errors = []
     by_path = {}
     for index, case in enumerate(cases):
-        if (not only or only in case.path or only in case.label) and (ROOT / case.path).is_file() \
+        if (not only or only in case.path or only in case.label) and ((ROOT / case.path).is_file() or case.namespaced) \
                 and all(d.exists() for d in case.dirs):
             by_path.setdefault(case.path, []).append((index, case))
     for path, members in sorted(by_path.items()):
         try:
-            if all(translator.matches(index, case, path) is None for index, case in members):
+            if (ROOT / path).is_file() and all(translator.matches(index, case, path) is None for index, case in members):
                 continue
-            committed = (ROOT / path).read_bytes()
+            committed = (ROOT / path).read_bytes() if (ROOT / path).is_file() else b""
             fresh = {}
             for index, case in members:
                 out = translator.output(index, case)
@@ -546,9 +761,18 @@ def run_write(translator, cases, only):
             errors.append(f"{path}: its cases translate differently ({', '.join(sorted(fresh))}); not written")
             continue
         staged = ROOT / (path + ".partial")
+        staged.parent.mkdir(parents=True, exist_ok=True)
         staged.write_bytes(next(iter(fresh.values())))
         os.replace(staged, ROOT / path)
         print(f"wrote {path}", file=sys.stderr)
+    families = {case.family for case in cases if case.namespaced and
+                (not only or only in case.path or only in case.label)}
+    for path, data in case_aggregates(c.path for c in cases if c.namespaced and c.family in families).items():
+        if not (ROOT / path).is_file() or (ROOT / path).read_bytes() != data:
+            staged = ROOT / (path + ".partial")
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            staged.write_bytes(data)
+            os.replace(staged, ROOT / path)
     return errors + run_check(translator, cases, only)
 
 
@@ -578,29 +802,50 @@ def run_attest(translator, cases, paths):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "write", "attest", "list"))
+    parser.add_argument("command", choices=("check", "write", "attest", "certify", "list",
+                                            "case-coverage", "case-check", "case-targets", "enrollment"))
     parser.add_argument("paths", nargs="*", help="attest: generated files (default: every tracked one)")
     parser.add_argument("--translator", default=os.environ.get("AIR2LEAN_TRANSLATOR",
                                                              str(ROOT / ".lake/build/bin/air2lean")))
     parser.add_argument("--only", default="", help="check: only cases whose file or label contains this")
+    parser.add_argument("--work-dir", type=Path, help="certify: retain artifacts in a new private directory")
+    parser.add_argument("--base", help="enrollment: authenticated event commit; locally defaults to origin/main "
+                        "(ledger #case-family-enrollment)")
     args = parser.parse_args(argv)
     if args.paths and args.command != "attest":
         parser.error("paths are only accepted by attest")
-    cases = all_cases()
+    if args.work_dir is not None and args.command != "certify":
+        parser.error("--work-dir is only accepted by certify")
+    if args.base is not None and args.command != "enrollment":
+        parser.error("--base is only accepted by enrollment")
+    if args.only and (args.command.startswith("case-") or args.command == "enrollment"):
+        parser.error("case-family coverage cannot select individual cases")
     try:
-        errors = run(args, cases)
-    except (ValueError, OSError) as error:
+        errors = enrollment_errors(args.base if args.base is not None else os.environ.get("AIR2LEAN_CASE_BASE")) \
+            if args.command == "enrollment" else run(args, all_cases())
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
         errors = [str(error)]
     for error in errors:
         print(f"error: {error}", file=sys.stderr)
     if errors:
-        print("hint: never edit a generated module by hand: regenerate it from committed AIR "
-              "(scripts/check.sh) and put hand-written definitions in a separate module", file=sys.stderr)
+        if args.command == "enrollment":
+            print("hint: restore withdrawn families/cases and verify the fetched comparison history "
+                  "(ledger #case-family-enrollment)", file=sys.stderr)
+        else:
+            print("hint: never edit a generated module by hand: regenerate it from committed AIR "
+                  "(scripts/check.sh) and put hand-written definitions in a separate module", file=sys.stderr)
         return 1
     return 0
 
 
 def run(args, cases):
+    # Transitional case commands: ledger #case-family-enrollment.
+    if args.command in {"case-coverage", "case-targets"}:
+        errors = case_coverage_errors(cases)
+        if args.command == "case-targets" and not errors:
+            for path in sorted(case_aggregates(c.path for c in cases if c.namespaced)):
+                print(path[:-5].replace("/", "."))
+        return errors
     if args.command == "list":
         for case in cases:
             dirs = ",".join(str(d.relative_to(ROOT)) for d in case.dirs)
@@ -610,10 +855,28 @@ def run(args, cases):
         return coverage_errors(cases)
     if not os.access(args.translator, os.X_OK):
         return [f"translator not found: {args.translator} (lake build air2lean)"]
-    with tempfile.TemporaryDirectory(prefix="air2lean-gen-integrity.") as work:
+    if args.work_dir is not None:
+        args.work_dir.mkdir(parents=True, exist_ok=False)
+    workspace = (contextlib.nullcontext(args.work_dir.resolve()) if args.work_dir is not None else
+                 tempfile.TemporaryDirectory(prefix="air2lean-gen-integrity."))
+    with workspace as work:
         translator = Translator(args.translator, work)
+        if args.command == "certify":
+            errors = coverage_errors(cases)
+            if errors:
+                return errors
+            selected = [(index, case) for index, case in enumerate(cases)
+                        if not args.only or args.only in case.path or args.only in case.label]
+            canon_certification.certify(translator, selected)
+            return []
         if args.command == "check":
             return run_check(translator, cases, args.only)
+        if args.command == "case-check":
+            errors = run_check(translator, cases, "", case_only=True)
+            if not errors:
+                for path in sorted(case_aggregates(c.path for c in cases if c.namespaced)):
+                    print(path[:-5].replace("/", "."))
+            return errors
         if args.command == "write":
             return run_write(translator, cases, args.only)
         return run_attest(translator, cases, [str(Path(p)) for p in args.paths])

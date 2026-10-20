@@ -44,9 +44,6 @@ namespace Full
 
 open FAssn Conc Proto
 
-theorem rsum_rnil (r : Res) : rsum r rnil = r := by
-  simp [rsum, Know.union_none]
-
 namespace LockWord
 
 variable {L : LockWord}
@@ -672,11 +669,16 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
       have := (hholds u).mp hu; rw [e] at this; exact hnh this
     rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
 
-/-- A change of thread `t`'s ghost value that keeps its place, its part and its resource in the
-lock (a step of `t` in another sync object's code, also while it holds the lock). -/
-theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
-    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t)) (hpart : L.part g = L.part (G t))
-    (hheld : L.held g = L.held (G t)) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+/-- A new split of a thread's complete resource at the same lock phase. Equality of `Res`
+preserves bytes, knowledge and ghost state together. A holder re-establishes the protected
+assertion on its new held part; otherwise every protected assertion is preserved. -/
+theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t))
+    (hsum : rsum (L.part g) (L.held g) = rsum (L.part (G t)) (L.held (G t)))
+    (hdisj : FHeap.Disjoint (L.part g).heap (L.held g).heap)
+    (hidle : L.ph g ≠ .holds → L.held g = rnil)
+    (hRk : L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r)
+    (hres : L.ph g = .holds → L.R (upd G t g) (L.held g)) :
     L.Inv (upd G t g) rX m := by
   have hphu : ∀ u, L.ph (upd G t g u) = L.ph (G u) := fun u => by
     by_cases e : u = t
@@ -686,25 +688,37 @@ theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g
   have hown : L.own (upd G t g) m = L.own G m := by
     funext u; unfold FLock.own
     by_cases e : u = t
-    · subst e; rw [upd_self, hpart, hheld]
+    · subst e; rw [upd_self, hsum]
     · rw [upd_ne _ _ e]
   have hfree : L.Free (upd G t g) ↔ L.Free G := by unfold FLock.Free; rw [hpl]
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   refine ⟨by rw [hpl]; exact hi.w, ⟨rL, by rw [hown]; exact ho, hLoff, hLX, fun hF' => ?_,
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
     fun u hu => ?_⟩
-  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF'); exact ⟨hRk rL h1, by rw [hpl]; exact h2⟩
+  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
+    exact ⟨hRk (hfree.mp hF' t) rL h1, by rw [hpl]; exact h2⟩
   · by_cases e : u = t
-    · subst e; rw [upd_self, hpart, hheld]; exact hi.pdisj _
+    · subst e; rw [upd_self]; exact hdisj
     · rw [upd_ne _ _ e]; exact hi.pdisj u
   · rw [hphu] at hu
     by_cases e : u = t
-    · subst e; rw [upd_self, hheld]; exact hi.idle _ hu
+    · subst e; rw [upd_self]; exact hidle (by rw [hph]; exact hu)
     · rw [upd_ne _ _ e]; exact hi.idle u hu
   · rw [hphu] at hu
     by_cases e : u = t
-    · subst e; rw [upd_self, hheld]; exact hRk _ (hi.res _ hu)
-    · rw [upd_ne _ _ e]; exact hRk _ (hi.res u hu)
+    · subst e; rw [upd_self]; exact hres (by rw [hph]; exact hu)
+    · rw [upd_ne _ _ e]
+      exact hRk (fun ht => e (hi.w.one u t hu ht)) _ (hi.res u hu)
+
+/-- A change of thread `t`'s ghost value that keeps its place, its part and its resource in the
+lock (a step of `t` in another sync object's code, also while it holds the lock). -/
+theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t)) (hpart : L.part g = L.part (G t))
+    (hheld : L.held g = L.held (G t)) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+    L.Inv (upd G t g) rX m := by
+  exact hi.repartition hph (by rw [hpart, hheld]) (by rw [hpart, hheld]; exact hi.pdisj t)
+    (fun hn => hheld.trans (hi.idle t (hph ▸ hn))) (fun _ => hRk)
+    (fun hh => by rw [hheld]; exact hRk _ (hi.res t (hph ▸ hh)))
 
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives

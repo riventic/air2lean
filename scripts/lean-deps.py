@@ -31,6 +31,7 @@ changed a library module without a rebuild) is never tested silently.
 """
 
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -63,13 +64,26 @@ def imports(path: pathlib.Path) -> set[str]:
     return mods
 
 
-def lib_roots() -> set[str]:
-    """The first components of the package's library modules (`lakefile.toml`: names, roots)."""
-    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+def lib_roots(root: pathlib.Path | None = None, *, strict_sources: bool = False) -> set[str]:
+    """Library module roots; strict source selection also overapproximates each glob by its
+    first component and rejects unsupported nondefault source directories."""
+    root = ROOT if root is None else root
+    lake = tomllib.loads((root / "lakefile.toml").read_text(encoding="utf-8"))
+    if strict_sources:
+        for config in [lake, *lake.get('lean_lib', [])]:
+            source_dir = config.get('srcDir', '.')
+            if not isinstance(source_dir, str) or pathlib.Path(source_dir) != pathlib.Path('.'):
+                raise ValueError(f'unsupported Lake srcDir for library source binding: {source_dir!r}')
     roots = set()
     for lib in lake.get("lean_lib", []):
         for r in lib.get("roots", [lib.get("root", lib["name"])]):
             roots.add(r.split(".")[0])
+        if strict_sources:
+            for glob in lib.get('globs', []):
+                top = glob.split('.')[0] if isinstance(glob, str) else ''
+                if not top or top in {'*', '+'}:
+                    raise ValueError(f'unsupported Lake source glob: {glob!r}')
+                roots.add(top)
     return roots
 
 
@@ -103,12 +117,21 @@ def library_files() -> list[str]:
     return [t.replace(".", "/") + ".lean" for t in all_targets() if "." in t]
 
 
+def fixture_files() -> list[str]:
+    """The modules of the proof-fixture package (tests/roadmap/lakefile.toml): their checks build
+    them with Lake (scripts/fixtures.py), so they are not standalone files."""
+    spec = importlib.util.spec_from_file_location("air2lean_fixtures", pathlib.Path(__file__).with_name("fixtures.py"))
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+    return fixtures.files(ROOT)
+
+
 def classify() -> tuple[list[str], list[str]]:
     """(standalone files, errors): the tracked `.lean` files outside the libraries, split by their
     imports (see the module docstring). An import of a library root that names no file is an error
     for every file, standalone or not."""
     roots = lib_roots()
-    owned = set(library_files())
+    owned = set(library_files()) | set(fixture_files())
     tracked = subprocess.run(["git", "ls-files", "-z", "--", "*.lean"], cwd=ROOT, check=True,
                              capture_output=True, text=True).stdout.split("\0")
     files, errors = [], []

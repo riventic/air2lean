@@ -28,6 +28,7 @@
         "head": "True"
       },
       "statement": {
+        "allocator_creation": [],
         "args": [],
         "binders": [
           {
@@ -54,6 +55,15 @@
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "True"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "conclusion has no supported outcome postcondition",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
         },
         "witnesses": {
           "liveness": {
@@ -99,6 +109,7 @@
         "head": "Eq"
       },
       "statement": {
+        "allocator_creation": [],
         "args": [
           {
             "args": [],
@@ -192,6 +203,15 @@
           "module": "Init.Prelude",
           "name": "Eq"
         },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
         "witnesses": {
           "liveness": {
             "status": "not_required",
@@ -236,6 +256,7 @@
         "head": "Eq"
       },
       "statement": {
+        "allocator_creation": [],
         "args": [
           {
             "args": [],
@@ -329,6 +350,15 @@
           "module": "Init.Prelude",
           "name": "Eq"
         },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
         "witnesses": {
           "liveness": {
             "status": "not_required",
@@ -388,6 +418,7 @@
         "head": "Eq"
       },
       "statement": {
+        "allocator_creation": [],
         "args": [
           {
             "args": [],
@@ -484,6 +515,15 @@
           "module": "Init.Prelude",
           "name": "Eq"
         },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
+        },
         "witnesses": {
           "liveness": {
             "status": "not_required",
@@ -523,6 +563,7 @@
         "head": "True"
       },
       "statement": {
+        "allocator_creation": [],
         "args": [],
         "binders": [],
         "head": {
@@ -530,6 +571,15 @@
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "True"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "conclusion has no supported outcome postcondition",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
         },
         "witnesses": {
           "liveness": {
@@ -591,6 +641,7 @@
         "head": "Eq"
       },
       "statement": {
+        "allocator_creation": [],
         "args": [
           {
             "args": [],
@@ -686,6 +737,15 @@
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
+        },
+        "outcomes": {
+          "precision": null,
+          "reason": "equation uses an unrecognised function runner",
+          "returns": null,
+          "schema_version": 1,
+          "scope": null,
+          "status": "unsupported",
+          "unexcluded": null
         },
         "witnesses": {
           "liveness": {

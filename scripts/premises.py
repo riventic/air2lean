@@ -310,11 +310,11 @@ def binders(text: str) -> list[tuple[str, str]]:
     return [(name, match.group(2)) for match in BINDER_RE.finditer(text) for name in match.group(1).split()]
 
 
-def type_head(decl: Decl) -> str:
+def type_head(decl: Decl, allow_parameters: bool = False) -> str:
     """The head name of a binder-free constant's declared type, `def S : Sem Ph where` -> `Sem`."""
     text = re.split(r":=|\bwhere\b", statement_of(decl.text), maxsplit=1)[0]
     colon = top_level(text, ":")
-    if colon < 0 or binders(text[:colon]):
+    if colon < 0 or (not allow_parameters and binders(text[:colon])):
         return ""
     match = TOKEN_RE.search(text[colon + 1:])
     return match.group(0) if match else ""
@@ -361,6 +361,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
     scopes: list[list] = []  # [kind, name parts, opens, variable binders, if_decl condition]
     file_opens: list[str] = []
     file_vars: list[tuple[str, str]] = []
+    ambient_vars: list[tuple[int, set[str], set[str]]] = []
     for keyword, number, lines in items:
         body = "\n".join(lines)
         head = lines[0]
@@ -374,9 +375,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             scopes.append([keyword, [], [], [], rest.split()[0]])
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
+            names = {n for n, _ in binders(body)}
+            ambient_vars.append((len(scopes), names, set(TOKEN_RE.findall(body)) - names - {"variable"}))
         elif keyword in {"end", "end_if"}:
             if scopes:
                 scopes.pop()
+                ambient_vars = [v for v in ambient_vars if v[0] <= len(scopes)]
         elif keyword == "open":
             names = []
             for word in rest.replace("(", " ( ").split():
@@ -402,6 +406,14 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = set(TOKEN_RE.findall(body))
+            # A used section variable carries its whole declared type, including concrete
+            # generated target parameters absent from this theorem's explicit telescope.
+            while ambient_vars:
+                used = {token.split(".", 1)[0] for token in decl.tokens}
+                extra = {t for _, names, types in ambient_vars if names & used for t in types}
+                if extra <= decl.tokens:
+                    break
+                decl.tokens |= extra
             decl.dot_ctors = set(DOT_CTOR_RE.findall(body))
             decl.dot_fields = set(DOT_FIELD_RE.findall(body))
             for name, head in [*file_vars, *(b for s in scopes for b in s[3]), *binders(body)]:
@@ -429,6 +441,16 @@ class Repository:
     ctors: dict[str, list[Decl]] = field(default_factory=dict)  # constructor short name -> inductives
     _visible: dict[str, set[str]] = field(default_factory=dict)
     _instances: list | None = None
+    _runtime_rules: dict[str, tuple] = field(default_factory=dict)
+
+    def runtime_rules(self, lean: LeanFile) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        """Existing closure rules over one parsed runtime module, once per repository."""
+        if lean.rel not in self._runtime_rules:
+            tokens = {t for d in lean.decls for t in d.tokens | {d.name}}
+            via: dict[str, list[str]] = {}
+            apply_rules(self.config, via, tokens, "closure")
+            self._runtime_rules[lean.rel] = tuple((p, tuple(reasons)) for p, reasons in via.items())
+        return self._runtime_rules[lean.rel]
 
     def instances(self) -> list[tuple[Decl, frozenset]]:
         """Every instance with the last name components of its instance type (cached)."""
@@ -561,11 +583,17 @@ def resolve(repo: Repository, decl: Decl) -> list[Decl]:
         local, _, rest = token.partition(".")
         if not rest or local not in decl.binders or depth > 2:
             return []
-        field_name = rest.split(".")[0]
-        hits = []
+        hits, owners = [], []
         for head in decl.binders[local]:
-            for owner in typed(head, depth + 1) or lookup(head):
-                hits += [t for t in repo.table.get(f"{owner.name}.{field_name}", ()) if t.file.rel in visible]
+            owners += typed(head, depth + 1) or lookup(head)
+        parts = rest.split(".")
+        for number, field_name in enumerate(parts):
+            fields = [t for owner in owners for t in repo.table.get(f"{owner.name}.{field_name}", ())
+                      if t.file.rel in visible]
+            hits += fields
+            if number + 1 < len(parts):
+                owners = [owner for target in fields if (head := type_head(target, allow_parameters=True))
+                          for owner in lookup(head, target)]
         return hits
 
     found: dict[int, Decl] = {}
@@ -698,11 +726,8 @@ def binding_premises(repo: Repository, rel: str, tokens) -> list[tuple[str, str]
 def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     config = repo.config
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
-    seen, pending, tokens = {id(theorem)}, [theorem], set()
+    seen, pending, tokens = set(), [], set()
     runtime: set[str] = set()
-    unfolded: set[str] = set()
-    runtime_targets: list[Decl] = []
-    proof_names: set[str] = set()  # last name components the proofs of the closure's theorems name
     generated: set[str] = set()
     visible = repo.visible(theorem.file)
     instances = [(d, need) for d, need in repo.instances() if d.file.rel in visible]
@@ -714,10 +739,6 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
         if target.file.runtime:
             runtime.add(target.file.module)
             seen.add(id(target))
-            # A proof that names a runtime definition can unfold it (`simp only [d]`, `unfold d`):
-            # the kernel term then holds the constants of its body, so the closure rules see them.
-            # Decided below, once every proof of the closure is known.
-            runtime_targets.append(target)
             return
         if target.kind == "axiom":
             for premise in config["source_axiom"]:
@@ -728,12 +749,12 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             seen.add(id(target))
             pending.append(target)
 
+    # The starting declaration has runtime/generated/profile/marker facts of its own too.
+    visit(theorem)
     while True:
         while pending:
             current = pending.pop()
             tokens |= current.tokens
-            if current.kind in THEOREM_KINDS:
-                proof_names.update(t.rsplit(".", 1)[-1] for t in TOKEN_RE.findall(current.text[len(current.statement):]))
             for target in resolve(repo, current):
                 visit(target)
         # Instance arguments are implicit in source: assume every visible instance whose type
@@ -744,18 +765,30 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             break
         for instance in found:
             visit(instance)
-    # Only a proof unfolds: a statement, or a generated definition that applies a runtime
-    # definition, keeps the constant. A type has no body to unfold.
-    for target in runtime_targets:
-        if target.kind not in {"inductive", "structure", "class"} and target.name.rsplit(".", 1)[-1] in proof_names:
-            unfolded.update(target.tokens)
     # A tactic applies lemmas of runtime modules that the source does not name (`tactic_modules`).
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
+    fallback_via: dict[str, list[str]] = {}
     for module in sorted(runtime):
-        for premise in config["runtime_modules"].get(module, ()):
-            via.setdefault(premise, []).append(f"runtime module {module}")
-    apply_rules(config, via, tokens | unfolded, "closure")
+        lean = repo.files.get(module.replace(".", "/") + ".lean")
+        imported = {repo.files[r].module for r in repo.visible(lean) if repo.files[r].runtime} if lean else {module}
+        for dependency in sorted(imported):
+            source = repo.files.get(dependency.replace(".", "/") + ".lean")
+            if source:
+                # Elaborated recursors, instances and unfolding can name source-invisible
+                # constants. The source fallback conservatively includes the whole module.
+                for premise, reasons in repo.runtime_rules(source):
+                    if premise not in fallback_via:
+                        fallback_via[premise] = [f"{reason} (source runtime fallback {dependency})"
+                                                 for reason in reasons]
+            for premise in config["runtime_modules"].get(dependency, ()):
+                reason = f"runtime module {dependency}"
+                if dependency != module:
+                    reason += f" (source import fallback for {module})"
+                via.setdefault(premise, []).append(reason)
+    apply_rules(config, via, tokens, "closure")
+    for premise, reasons in fallback_via.items():
+        via.setdefault(premise, []).extend(reasons)
     apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):
@@ -857,7 +890,7 @@ def runtime_errors(repo: Repository) -> list[str]:
     return errors
 
 
-def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]]:
+def check(root: Path = ROOT, write: bool = False, *, repo: Repository | None = None) -> tuple[list[str], list[dict]]:
     config = load_config(root / CONFIG)
     premises, reports, errors = load_catalog(root / config["catalog"])
     referenced = set()
@@ -873,7 +906,7 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
     if set(config["profiles"]) - {"abi64-be-v1"} != {"absent", "legacy-abi64-le", "abi64-le-v1", "gate-time"}:
         errors.append(f"{CONFIG}: profiles must map absent, legacy-abi64-le, abi64-le-v1 and gate-time "
                       "(and optionally abi64-be-v1)")
-    repo = load_repository(root, config)
+    repo = repo if repo is not None else load_repository(root, config)
     errors += repo.errors + runtime_errors(repo)
     entries, index_errors = build_index(repo)
     errors += index_errors
@@ -899,32 +932,69 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
 EQUATION_RE = re.compile(r"\.(?:eq_\d+|eq_def|eq_unfold)$")
 
 
+def equation_parent(node: dict, nodes: dict) -> dict | None:
+    name = node["name"]
+    return nodes.get(EQUATION_RE.sub("", name)) if EQUATION_RE.search(name) else None
+
+
 def defining_module(node: dict, nodes: dict) -> str:
     """The module a declaration belongs to for premises. Lean realizes the equation lemmas of a
     definition (`d.eq_1`, `d.eq_def`) in the module whose proof first unfolds it, which can be
     another one than the definition's; they belong to the definition."""
-    name = node["name"]
-    parent = nodes.get(EQUATION_RE.sub("", name)) if EQUATION_RE.search(name) else None
-    return (parent or node)["module"]
+    return (equation_parent(node, nodes) or node)["module"]
 
 
-def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
-    """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
+def compiled_source_files(report: dict, root: Path) -> dict[str, str]:
+    """Join only owner-validated compiled modules to their indexed source identities."""
+    freshness = report.get('freshness')
+    context = freshness.get('compiled_units') if isinstance(freshness, dict) else None
+    if context is None:
+        return {}
+    from theorem_universe import ROOT as owner_root, compilation_plan, verify_compiled_report
+    if root.resolve() != owner_root.resolve():
+        raise ValueError('source comparison root differs from compiler owner root')
+    verify_compiled_report(report)
+    return {unit.module: unit.file for unit in compilation_plan(context)}
+
+
+def equation_source_bounds(repo: Repository, nodes: dict, roots: list[dict], *,
+                           source_files: dict[str, str] | None = None) -> dict[tuple[str, str], set[str]]:
+    """Conservative source bounds for existing equation parents, not exact origin evidence."""
+    bounds = {}
+    for theorem in roots:
+        if is_runtime(theorem['module']):
+            continue
+        parent = equation_parent(nodes[theorem['name']], nodes)
+        if parent is None:
+            continue
+        key = (parent["module"], parent.get("user_name", parent["name"]))
+        if key not in bounds:
+            source_file = (source_files or {}).get(key[0])
+            candidates = [decl for decl in repo.table.get(key[1], ())
+                          if decl.name == key[1] and (decl.file.rel == source_file if source_file is not None
+                                                    else decl.file.module == key[0])]
+            if candidates:
+                bound = {p for decl in candidates for p in derive(repo, decl)}
+                if bound:
+                    bounds[key] = bound
+    return bounds
+
+
+def compiled_graph(report: dict, root: Path, config: dict, *,
+                   source_files: dict[str, str] | None = None) -> tuple[dict, dict, dict]:
+    """Derive every selected compiled root independently of the limited source index."""
     if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
         raise ValueError("assumption report is not a completed schema-1 audit")
     nodes = {n["name"]: n for n in report["nodes"]}
     errors, theorems, skipped = [], [], 0
     profiles: dict[str, tuple[list[str], str]] = {}
-    markers = GeneratedMarkers(root)
-    # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
-    # source comparison use the user-facing name so module paths cannot trigger token rules.
+    markers = GeneratedMarkers(root, source_files=source_files)
+    # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules use the
+    # user-facing name so module paths cannot trigger token rules.
     def user(name: str) -> str:
         return nodes[name].get("user_name", name) if name in nodes else name
 
-    by_name: dict[tuple[str, str], set] = {}
-    for entry in source or ():
-        key = (module_name(Path(entry["file"])), entry["theorem"])
-        by_name.setdefault(key, set()).update(entry["premises"])
+    reasons, edges = {}, {}
 
     def external(module: str) -> bool:
         return module.split(".")[0] in EXTERNAL_IMPORTS
@@ -952,6 +1022,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                 continue
             if external(module):
                 continue
+            edges[name] = node["dependencies"]
             names.add(user(name))
             if node["kind"] == "axiom" and name not in STANDARD_AXIOMS:
                 for premise in config["source_axiom"]:
@@ -981,10 +1052,11 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         apply_rules(config, via, {user(n) for n in statement}, "statement")
         for module in sorted(generated):
             if module not in profiles:
-                path = generated_path(root, module)
+                path = generated_path(root, module, source_files=source_files)
                 if path.is_file():
                     header = profile_header(path.read_text())
-                    profiles[module] = profile_premises(config, LeanFile(path, module, module, [], header))
+                    profiles[module] = profile_premises(
+                        config, LeanFile(path, path.relative_to(root).as_posix(), module, [], header))
                 else:
                     profiles[module] = ([config["profiles"]["gate-time"]], "generated module not in repository")
             profile, reason = profiles[module]
@@ -993,19 +1065,92 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         via = close(config, via)
         entry = {"name": theorem["name"], "module": theorem["module"],
                  "premises": sorted(via, key=premise_key)}
-        if source is not None:
-            known = by_name.get((theorem["module"], user(theorem["name"])))
-            if known is not None:
-                entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)
-                if entry["source_gaps"]:
-                    entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
+        reasons[theorem["name"]] = via
         theorems.append(entry)
     errors += markers.errors
     errors += memory_model_errors(config, theorems, lambda t: t["name"])
-    gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,
-            "source_gap_count": len(gaps), "errors": errors, "theorems": theorems}
+            "source_gap_count": 0, "errors": errors, "theorems": theorems}, reasons, edges
+
+
+def compare_compiled_source(result: dict, nodes: dict, reasons: dict, edges: dict,
+                            source: list[dict], origins: dict | None = None, *,
+                            source_files: dict[str, str] | None = None) -> None:
+    """Compare complete compiled closures; missing source evidence is never an empty success."""
+    by_name: dict[tuple[str, str], set] = {}
+    by_file: dict[tuple[str, str], set] = {}
+    for entry in source:
+        key = (module_name(Path(entry["file"])), entry["theorem"])
+        by_name.setdefault(key, set()).update(entry["premises"])
+        if source_files:
+            by_file.setdefault((entry["file"], entry["theorem"]), set()).update(entry["premises"])
+
+    def compare(theorem: dict, known: set) -> bool:
+        gaps = theorem["source_gaps"] = sorted(set(theorem["premises"]) - known, key=premise_key)
+        if gaps:
+            theorem["gap_via"] = {p: sorted(set(reasons[theorem["name"]][p])) for p in gaps}
+        return not gaps
+
+    passed, missing = [], []
+    for theorem in result["theorems"]:
+        node = nodes[theorem["name"]]
+        name = node.get("user_name", node["name"])
+        source_file = (source_files or {}).get(theorem["module"])
+        known = by_file.get((source_file, name)) if source_file is not None else \
+            by_name.get((theorem["module"], name))
+        if known is None:
+            missing.append(theorem)
+        elif compare(theorem, known):
+            passed.append((theorem["name"], frozenset(known)))
+    if missing:
+        # Retain each independent passing source bound along actual root-to-helper edges.
+        # A helper's own statement rules can add facts absent from its caller's premise set.
+        covered, pending = {}, passed
+        while pending:
+            name, bound = pending.pop()
+            bounds = covered.setdefault(name, set())
+            if bound not in bounds:
+                bounds.add(bound)
+                pending.extend((dependency, bound) for dependency in edges.get(name, ()))
+        for theorem in missing:
+            candidates = list(covered.get(theorem["name"], ()))
+            parent = equation_parent(nodes[theorem["name"]], nodes)
+            key = (parent["module"], parent.get("user_name", parent["name"])) if parent else None
+            bound = (origins or {}).get(key)
+            if bound is not None:
+                candidates.append(bound)
+            if candidates:
+                # Never union unrelated source bounds to manufacture complete coverage.
+                if len(candidates) == 1:
+                    best = candidates[0]
+                else:
+                    complete = set(theorem["premises"])
+                    best = min(candidates, key=lambda known: (len(complete - known), tuple(sorted(known))))
+                compare(theorem, best)
+            else:
+                result["errors"].append(f'{theorem["name"]}: source comparison unavailable: no indexed '
+                                        'theorem row, passing indexed root covering it, or equation-parent source bound')
+    result["source_gap_count"] = sum(bool(t.get("source_gaps")) for t in result["theorems"])
+    if result["errors"]:
+        result["status"] = "fail"
+
+
+def compiled(report: dict, root: Path, config: dict, source: list[dict] | None,
+             source_origins: dict | None = None) -> dict:
+    """Derive compiled premises, optionally requiring the separate source comparison."""
+    source_files, errors = {}, []
+    if source is not None:
+        try:
+            source_files = compiled_source_files(report, root)
+        except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
+            errors.append(f'source comparison unavailable: {error}')
+    result, reasons, edges = compiled_graph(report, root, config, source_files=source_files)
+    result["errors"] += errors
+    if source is not None:
+        compare_compiled_source(result, {n["name"]: n for n in report["nodes"]}, reasons, edges,
+                                source, source_origins, source_files=source_files)
+    return result
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -1030,8 +1175,26 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if command == "compiled":
             config = load_config(root / CONFIG)
-            _, entries = check(root)
-            report = compiled(json.loads(args.assurance.read_text()), root, config, entries)
+            audit = json.loads(args.assurance.read_text())
+            source_files, source_errors = {}, []
+            try:
+                source_files = compiled_source_files(audit, root)
+            except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
+                source_errors.append(f'source comparison unavailable: {error}')
+            report, reasons, edges = compiled_graph(audit, root, config, source_files=source_files)
+            nodes = {n["name"]: n for n in audit["nodes"]}
+            entries, origins = [], {}
+            try:
+                repo = load_repository(root, config)
+                index_errors, entries = check(root, repo=repo)
+                source_errors += index_errors
+                origins = equation_source_bounds(repo, nodes, audit['theorems'],
+                                                source_files=source_files)
+            except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
+                source_errors.append(f'source comparison unavailable: {error}')
+            report["errors"] += source_errors
+            compare_compiled_source(report, nodes, reasons, edges, entries, origins,
+                                    source_files=source_files)
             write_report(args.output, report)
             for error in report["errors"]:
                 print(f"  {error}", file=sys.stderr)

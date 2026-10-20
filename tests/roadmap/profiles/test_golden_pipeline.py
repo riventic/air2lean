@@ -317,6 +317,7 @@ class FakePipelineTests(unittest.TestCase):
 import os
 from pathlib import Path
 import shutil
+with Path("calls.log").open("a") as log: log.write("export\\n")
 shutil.copyfile("fixture.json", Path(os.environ["ZIG_AIR_JSON_DIR"]) / "basic.fixture.json")
 ''')
         (self.repo / "bin/lake").write_text('''#!/usr/bin/env python3
@@ -334,6 +335,15 @@ if args[0] == "exe":
 elif os.environ.get("FAKE_PROOF_FAIL"):
     print("proof gate rejected generated source", file=sys.stderr)
     sys.exit(1)
+''')
+        # This harness stubs generation/compilation; the real Case rules have separate synthetic
+        # coverage tests. Retain a target so check.sh must forward the checked target stream.
+        (self.repo / "scripts/gen-integrity.py").write_text('''import os, sys
+from pathlib import Path
+assert sys.argv[1:] == ["case-check"]
+with Path("calls.log").open("a") as log: log.write("case-check\\n")
+if os.environ.get("FAKE_CASE_FAIL"): sys.exit("case coverage rejected")
+print("Proofs.Basic.Cases")
 ''')
         for tool in ("zig", "lake"):
             (self.repo / "bin" / tool).chmod(0o755)
@@ -368,6 +378,7 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
                               text=True, capture_output=True, check=False)
 
     def test_same_body_builds_the_checkout_and_writes_nothing_tracked(self):
+        self.assertFalse((self.repo / ".lake/check-reports/0.16.0").exists())
         for _ in range(2):
             result = self.pipeline()
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -379,6 +390,19 @@ elif os.environ.get("FAKE_PROOF_FAIL"):
         report = json.loads((self.repo / ".lake/check-reports/0.16.0/basic.json").read_text())
         self.assertEqual(report["generated_sha256"], hashlib.sha256(actual.read_bytes()).hexdigest())
         self.assertIn("build Proofs.Basic.Gen", (self.repo / "calls.log").read_text())
+        self.assertIn("build Proofs.Basic.Gen Proofs.Basic.Cases", (self.repo / "calls.log").read_text())
+        self.assertEqual((self.repo / "calls.log").read_text().splitlines().count("case-check"), 2)
+
+    def test_case_failure_stops_before_export_or_proof_build_on_a_fresh_report_path(self):
+        self.assertFalse((self.repo / ".lake/check-reports/0.16.0").exists())
+        result = self.pipeline(FAKE_CASE_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("case coverage rejected", result.stderr)
+        calls = (self.repo / "calls.log").read_text().splitlines()
+        self.assertEqual(calls.count("case-check"), 1)
+        self.assertNotIn("export", calls)
+        self.assertFalse(any(line.startswith("exe ") or "Proofs.Basic" in line for line in calls), calls)
+        self.assert_checkout_unchanged()
 
     def test_version_golden_is_built_in_a_check_tree(self):
         os_name = subprocess.run(["uname", "-s"], check=True, capture_output=True, text=True).stdout.strip().lower()

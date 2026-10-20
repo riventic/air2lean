@@ -361,6 +361,16 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   is carved to the size of the state's atom of that head; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
+
+  Return planning may forget affine ghost resources when the postcondition does not request
+  them: epoch tokens, grant-map authority/fragments, extent shares/claim receipts and ledger
+  receipts, as well as persistent constant/address knowledge and pure facts. The registered
+  `fsym_drop` laws use `EUpd.drop`: forgetting a ghost token does not release physical bytes,
+  reclaim an outstanding grant, or supply a replacement token. A proof that must retain the
+  ability to reset an allocator or form a pointer through an extent share must require those
+  resources in its postcondition. Their intentional omission no longer makes an otherwise
+  valid return fail. Exclusive stack resources (`sp`, `ent`, `cur`) are not affine and are never
+  disposed of by these laws; a stack block must still be released with its exact refund.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
   invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
@@ -433,9 +443,10 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `hl : ThreadLocal P₀ c` proved last by the providers. So each sequential rule is a thread rule;
   nothing is copied by hand.
 * **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`, each with
-  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `loadBytes`,
-  `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
-  (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
+  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `store_sized`,
+  `loadBytes`, `storeBytes`, `memset_of`, `memmove`, `memcpy`; a store of an encoding without
+  `LawfulEnc`, a packed struct's through its bits, by the size the arithmetic solver reads,
+  `store_sized`) is local when `P₀` owns its bytes (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
   `errPayload`; a field pointer `ptrProject` of a block whose extent `P₀` holds: `Reaches.bauth`);
   `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
@@ -474,8 +485,8 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
 
 Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
-thread logics; `const` reads; the rejected store to unowned bytes; §Bridges: one step's post, a
-`free` among two blocks of one size).
+thread logics; `const` reads; the rejected store to unowned bytes; a packed struct stored into
+an owned word, `packedWord`; §Bridges: one step's post, a `free` among two blocks of one size).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
@@ -505,6 +516,8 @@ backend):
   keeps the place, a store moves it). The walk applies the holder's step itself (below: rules for
   every step, side goals after a segment, the protocol's lemmas); the protocol supplies its
   lemmas about `U` and its shape, no per-field rule.
+  `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
+  caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
@@ -656,15 +669,17 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    a size): the law `LawfulPacked` (`ZigLean/PackedLayout.lean`) is stated once for every packed
    struct by its layout (`PackedLayout`: fields that tile the backing integer, of lawful types),
    and `fsym` derives a type's instance from its generated `Packed` instance
-   (`lawfulPackedOf?`: a packed struct's fields from its `ofBits`, an exhaustive enum by its tags,
-   a non-exhaustive one by definition; cached per run); the bits' validity holds by definition
+   (`lawfulPackedOf?`: an instance in the context first, so a generic client over
+   `[LawfulPacked T n]` uses its own; else a packed struct's fields from its `ofBits`, an
+   exhaustive enum by its tags, a non-exhaustive one by definition; cached per run); the bits' validity holds by definition
    for a type without an exhaustive enum, else by a hypothesis or the discharger. The other
    direction of the law is a rewrite too: a value with every bit determined is the value of its
    bits (`packedValRoundTrip`: `Packed.ofBits (Packed.toBits v) = v`) and those bits are valid
    (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float field,
    else by a hypothesis or the discharger. The per-type round trips of the
    proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
-   union field gets no law (fail closed). Regression: `tests/roadmap/sep-auto/Packed.lean`;
+   union field or a vector field gets no law (fail closed; ledger #packed-lawful-split). Regression:
+   `tests/roadmap/sep-auto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -691,7 +706,10 @@ region's size, and a failed search through them is exponential: 1.8M heartbeats 
 the offsets' equation when two pointers are compared) searches the case facts within
 `probeCaseBudget` heartbeats of its own and fails past them: a probe may ask what no fact
 decides (two offsets in blocks of unknown addresses), and its failure only withholds a step
-(ledger #probe-case-budget). Obligations (a rule's side goals, `fsym_arith`) are not bounded.
+(ledger #probe-case-budget). The budget (`withBudget`) never exceeds what remains of the
+context's `maxHeartbeats`; wherever in the probe it runs out (in `omega`, or in a step around it
+such as the rewrite of a split term), the probe fails, while the context's own limit still ends
+the run. Obligations (a rule's side goals, `fsym_arith`) are not bounded.
 
 An **implication** (a loop invariant's `⟪s.it = none → x0 = none⟫` at the next iteration) is
 proved with its premise as a fact (a premise the facts refute, `some N = none`, closes it); an
@@ -700,8 +718,35 @@ implication among the facts gives its conclusion once its premise normalizes to 
 that is no arithmetic, `x0 = none`; ledger #arith-implications).
 
 Results of the discharger and of the probes are cached per run; a cached proof is reused only
-where its free variables are in scope. The caches belong to one run (theorems are elaborated in
+where its free variables are in scope. **Nothing obtained under a limit is cached as a
+failure** (`limitedRun`): a probe's failure at the heartbeat limit (its budget spent, or
+`maxHeartbeats`), and a derivation's (a field, a layout, a `LawfulEnc` or `LawfulPacked`
+instance) that ran out of its nesting budget somewhere inside, say nothing about the input: an
+obligation without a budget, or a query of a type nested inside one past the budget, retries it.
+The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
+
+## Recursive groups
+
+`FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
+The supplied invocation type is a tagged union of the members' arguments and their logical
+contract parameters; each invocation has its own precondition, postcondition and result type.
+The measure maps invocations into any well-founded order. Its natural-number specialization,
+`FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
+the latter is itself an instance of this rule.
+
+The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
+unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
+smaller measures. The induction is in the library once for the whole group. Logical parameters
+may change at a recursive call without changing the program arguments: a memory-backed
+contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
+depth after `enterFrame`.
+
+The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
+consume and restore the stack-depth token `sp t S D`, with the room requirement proved from
+the caller's precondition. A decreasing argument does not establish stack room. Pure
+`Result` recursion has no modeled frame operations; its native interpretation retains premise
+STK-01 even when its lifted program has a total triple.
 
 ## Extending it
 
@@ -730,6 +775,66 @@ parallel; a run is identified by the option `fsym.run`).
   arithmetic solver reads literal high masks (`2 ^ w - 2 ^ j`) directly.
 
 ## Debugging and budget
+
+### Machine-readable residual reports (P09-E1)
+
+`set_option fsym.report true in fsym` emits one info message beginning with `fsym-report `,
+followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
+fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
+A reporting call suppresses the ordinary
+human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
+enabling a report.
+
+Reporting currently formats origins during the walk. That work consumes heartbeats, including
+inside speculative rule probes, so enabling it can change where a finite-budget probe stops.
+There is no guarantee of identical outcomes under a finite resource limit. Moving rendering to
+the final report is a follow-up. Two other opt-in attribution limits remain: a split that derives
+a descendant of a temporary goal label can lose its origin, and an untagged fallback residual is
+labelled `postcondition_not_proved` even when its precise cause is unknown. These diagnostic
+follow-ups are recorded in [PR #416's takeover review](https://github.com/riventic/air2lean/pull/416#issuecomment-6270717508);
+none supplies a proof or closes an obligation.
+
+The schema is versioned by `schemaVersion` (currently `1`):
+
+* `status`: `complete` when no goals remain, otherwise `stopped`.
+* `residuals`: one entry per returned goal, in the same order. Each entry has a zero-based
+  `index`, the `goal` (`head`, a fully qualified constant name or null, and `text`, Lean's
+  pretty-printed target), and an `origin`.
+* `origin.judgment`: the judgment at the program point, as a fully qualified constant name.
+  `origin.source` is that point's target before the residual was generated, including its
+  precondition, postcondition and logic arguments. `origin.program` and `origin.rule` use the
+  same `{head, text}` form. `program` is null when fuel ran out before command inspection;
+  `rule` is null when the stop has no selected rule (including a no-rule, panic or fuel stop).
+* `origin.condition`: `program`, `reachability`, `postcondition`, `rule_premise`,
+  `update_premise`, or `rule_continuation`. For a postcondition, the goal is its unproved
+  conjunct or the remaining `EUpd`; for a rule premise, `goal.head` identifies its family
+  (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
+* `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
+  `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
+  or `match_without_discriminant`.
+
+The JSON structure and discriminator strings are the API. The expression text follows Lean's
+pretty printer and its local names; it is display text, not an expression serialization. The
+index identifies a residual within one report, not across proof runs. Reports describe the
+residuals of a normally returning walk; an elaboration error or a heartbeat/recursion limit
+still raises the existing diagnostic.
+
+Meta-level clients use `Zig.Full.Auto.run g user extra` for the ordinary entry, including its
+introductions, context preparation and per-run caches. `Zig.Full.Auto.runReport g user extra`
+uses that entry and returns `(goals, report)` without logging the report. The goals retain their
+original labels and contexts. Both entries also accept the original `userCtx` and the classified
+`chain`, `forward`, `runFwd` and `forwardEx` caller facts that `fsym [...]` supplies to its
+per-run caches. Run-fact and existential-forward arguments retain the same classification
+with reporting enabled.
+Provenance tags participate in Lean's saved metavariable state,
+so backtracking discards an abandoned candidate's attribution. `AutoReport.lean` owns the data,
+collection and JSON rendering; it does no proof search.
+
+Regression: `tests/roadmap/sep-auto/Report.lean` compares ordinary and reporting runs on
+deliberately incomplete proofs (including their proof terms), checks the sequential and thread
+logics and internal protocol-backend residuals (including post-dependent rule premises), and
+checks rollback of speculative attribution. These incomplete backend exercises do not declare
+program correctness theorems.
 
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;

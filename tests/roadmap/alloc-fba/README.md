@@ -14,14 +14,18 @@ is modelled by hand.
 | `AllocFba/Fba.lean` | `FBA.allocSpec : AllocSpec Logic.total impl ctx (FBA.inv ctx B)` for every struct and buffer; `grantSep`; `own_init`, `own_state`, `reset_spec` |
 | `AllocFba/Full.lean` | `FBA.fallocSpec : FAllocSpec FLogic.total impl ctx (FBA.finv ctx B γ e)` for every struct, buffer and epoch `e` of a reset ledger `γ` (`fsym` with the updates of the returns); `FBA.ledger` (the second `ResetLedger` instance), `FBA.freset_spec` (the whole epoch token for the next one), `FBA.fown_init` (a new ledger) |
 | `AllocFba/Client.lean` | `Client.client_spec`: `fba_client v` returns, without an error, `1`–`4` (out of memory) or `v + v + (v +% 1)`, proved from the contracts only |
-| `Eval.lean` | `#guard`s: the translated functions evaluate to `expected.txt` from `mem0` |
+| `AllocFba/Eval.lean` | `#guard`s: the translated functions evaluate to `expected.txt` from `mem0` |
 | `AllocFba/Wrappers.lean` | the generated `std.mem.Allocator` wrappers over `FAllocSpec`, for every allocator invariant (`fsym` walks their code; no `Wrap.*`) |
 | `mutant.sh` | an `alloc` that does not advance `end_index` fails the `FBA.allocSpec` and `FBA.fallocSpec` proofs |
 | `native.zig`, `expected.txt` | the native run with a stock Zig 0.16.0 |
 | `provenance.json`, `provenance.py` | source, compiler and AIR hashes |
 
+The Lean files are the library `AllocFba` of the proof-fixture package
+(`tests/roadmap/lakefile.toml`); `check.sh` builds it, and the modules it imports, with Lake
+([build-cache.md](../../../docs/build-cache.md#proof-fixtures)).
+
 ```sh
-lake build air2lean ZigLean ZigLean.Sep.AllocSpec.Dispatch
+lake build air2lean
 bash tests/roadmap/alloc-fba/check.sh
 AIR2LEAN_NATIVE_ZIG=/path/to/zig-0.16.0/zig bash tests/roadmap/alloc-fba/check.sh   # also native
 ```
@@ -37,4 +41,4 @@ address `A₀` with `A₀ + 16 ≤ 2^64`) and the vtable constant, and the addre
 the client's 24-byte stack block (`Mem.allocOk .stack 24 8`: room in the address space, SEM-07,
 and in the thread's stack budget if it has one, MM-18; an allocation without room has no
 outcome, so a total statement needs it; `TotalTripleIn`); the `mem0` run is checked by
-`Eval.lean`.
+`AllocFba/Eval.lean`.
