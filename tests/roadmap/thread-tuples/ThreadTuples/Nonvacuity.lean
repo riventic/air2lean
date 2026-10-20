@@ -1,6 +1,7 @@
 import ThreadTuples.Proofs
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Init
+import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.ThreadRest
 import ZigLean.Sep.Full.Witness
@@ -32,13 +33,13 @@ def makeZeroPair : MemM (Ptr × Ptr) := do
   store (α := BitVec 32) 4 other 0
   pure (out, other)
 
-/-- All allocation metadata and the plain mode remain next to the output cells. -/
-def pairKeep : FAssn :=
-  (FAssn.ex fun b : BlockId => bext b 4 .stack) ⋆
-    ((FAssn.ex fun b : BlockId => bext b 4 .stack) ⋆ plain)
+/-- Each output keeps its own full allocation extent, together with the plain mode. -/
+def pairKeep (ps : Ptr × Ptr) : FAssn :=
+  (FAssn.ex fun b : BlockId => ⟪ps.1.block = some b⟫ ⋆ bext b 4 .stack) ⋆
+    ((FAssn.ex fun b : BlockId => ⟪ps.2.block = some b⟫ ⋆ bext b 4 .stack) ⋆ plain)
 
 def pairPost (ps : Ptr × Ptr) : FAssn :=
-  (up (pts ps.1 4 (0#32)) ⋆ up (pts ps.2 4 (0#32))) ⋆ pairKeep
+  (up (pts ps.1 4 (0#32)) ⋆ up (pts ps.2 4 (0#32))) ⋆ pairKeep ps
 
 /-- A genuine full-state statement, proved by one generic walk. It is partial
 because the address space may be full. The admission below proves an actual
@@ -50,7 +51,7 @@ theorem makeZeroPair_spec :
 /-- Real initial ownership, with its complete plain-mode resource. -/
 theorem start_owned :
     FOwned plainOwn rnil (ThreadTuples.mem0 Placement.fresh) := by
-  simpa only [ThreadTuples.mem0, Mem.ofGlobals] using
+  simpa only [ThreadTuples.mem0, Mem.ofGlobals, List.foldl_nil] using
     FOwned.start0_plain Placement.fresh
 
 /-- The output pointer identities are returned by the actual construction, not
@@ -58,7 +59,16 @@ chosen independently of its run. The final memory is inferred from that run. -/
 theorem makeZeroPair_returns :
     ∃ m', (makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run =
       some (.ok (((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr)), m')) := by
-  exact ⟨_, rfl⟩
+  have hr : ((makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run).map
+      (fun result => result.map Prod.fst) =
+      some (.ok ((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr))) := by decide +kernel
+  obtain ⟨result, hrun, hresult⟩ := Option.map_eq_some_iff.mp hr
+  cases result with
+  | error e => cases hresult
+  | ok result =>
+      obtain ⟨ps, m'⟩ := result
+      cases hresult
+      exact ⟨m', hrun⟩
 
 /- The statement of this companion is computed from `makeZeroPair_spec`'s actual
 type by the existing command. Its full framed precondition is the real start. -/
@@ -118,15 +128,11 @@ theorem zero_pair_resources :
       up (pts ⟨some 1, 0⟩ 4 (0#32)) otherCell ∧
       FHeap.Disjoint outCell.heap otherCell.heap ∧
       FHeap.Disjoint (rsum outCell otherCell).heap keep.heap ∧
-      pairKeep keep ∧ m'.FSeq := by
+      pairKeep ((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr)) keep ∧ m'.FSeq := by
   obtain ⟨m', hr⟩ := makeZeroPair_returns
   have hp := FTriple.run_init_plain Placement.fresh []
     (by simp [Mem.GlobalsFit]) (by simp) makeZeroPair_spec.toFTriple
-  change match (makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run with
-    | none => True
-    | some (.error e) => e = .stackOverflow
-    | some (.ok (ps, m')) =>
-        ∃ r', Holds m' r' rnil ∧ pairPost ps r' ∧ m'.FSeq at hp
+  simp only [ThreadTuples.mem0] at hr
   rw [hr] at hp
   obtain ⟨r, hh, hpost, hs⟩ := hp
   obtain ⟨child, keep, hd, rfl, hchild, hkeep⟩ := hpost
@@ -164,7 +170,7 @@ theorem atomic_grant_at_source (first second : BitVec 32) :
 spawn, and also the ownership and run premises needed by `worker_join`. The raw
 fork/join are bookkeeping steps; this is not a scheduler or worker execution proof. -/
 theorem mixed_capture_fork_join_source (first second : BitVec 32) :
-    ∃ m mfork mjoin (own : ThreadId → Res) (keep outCell otherCell : Res),
+    ∃ (m mfork mjoin : Mem) (own : ThreadId → Res) (keep outCell otherCell : Res),
       (makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run =
         some (.ok (((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr)), m)) ∧
       FOwned own rnil m ∧ 0 < m.threads.size ∧
@@ -212,7 +218,7 @@ theorem mixed_capture_fork_join_source (first second : BitVec 32) :
 The native atomic-capture theorem then receives its original owned/shared mode
 premises and a real fork. This does not prove the atomic worker's accesses. -/
 theorem atomic_capture_fork_source (first second : BitVec 32) :
-    ∃ m mfork (own : ThreadId → Res) (rO keep child shared : Res) (mode : Ptr → FTransfer),
+    ∃ (m mfork : Mem) (own : ThreadId → Res) (rO keep child shared : Res) (mode : Ptr → FTransfer),
       (makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run =
         some (.ok (((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr)), m)) ∧
       FOwned own rO m ∧ rO = rsum shared rnil ∧ 0 < m.threads.size ∧
@@ -247,7 +253,7 @@ theorem atomic_capture_fork_source (first second : BitVec 32) :
     else .owned (up (pts p 4 (0#32)))
   have hmodeOut : mode ⟨some 0, 0⟩ = .owned (up (pts ⟨some 0, 0⟩ 4 (0#32))) := rfl
   have hmodeShared : mode ⟨some 1, 0⟩ = .shared otherCell.heap := rfl
-  have hsplit : own 0 = rsum keep outCell := by rw [upd_self]
+  have hsplit : own 0 = rsum keep outCell := by simp only [own, upd_self]
   obtain ⟨mfork, hf⟩ : ∃ mfork,
       (Thread.fork.run {m with current := 0}).run = some (.ok (m.threads.size, mfork)) :=
     ⟨_, Proto.forkWith_run false _⟩

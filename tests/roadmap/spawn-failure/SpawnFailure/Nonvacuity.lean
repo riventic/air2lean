@@ -18,7 +18,7 @@ namespace SpawnFailure.RuntimeNonvacuity
 private theorem start_owned (σ : Placement) :
     ∃ rO, FOwned plainOwn rO (SpawnFailure.mem0 σ) := by
   refine ⟨rnil, ?_⟩
-  simpa only [SpawnFailure.mem0, Mem.ofGlobals] using FOwned.start0_plain σ
+  simpa only [SpawnFailure.mem0, Mem.ofGlobals, List.foldl_nil] using FOwned.start0_plain σ
 
 /-- Native fork and join endpoints that inhabit the refusal contract's premises.
 The fork hands the complete plain resource to its child, leaving the parent rnil. -/
