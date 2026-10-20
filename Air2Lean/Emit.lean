@@ -832,7 +832,7 @@ structure FCtx where
   sentinelChecked : Array InstId := #[]
   /-- This function is in a recursive call group (`callGroups`): its call depth is not bounded
   by the call graph, so a function that uses memory charges its frame to the stack budget
-  (`Zig.enterFrame`, MM-5). -/
+  (`Zig.enterFrame`, MM-5). Every MM/CM member also ticks once at its function entry. -/
   recursive : Bool := false
   /-- `some`: the function has `noalias` parameters, or one that has them may call it; the roots
   of the reads and writes of each instruction that can touch memory (`Air2Lean/Noalias.lean`),
@@ -3588,20 +3588,23 @@ def FCtx.loopParams (fc : FCtx) (loopInst : Inst) : Array (InstId × String × S
 /-- The text after `:= ` of a loop's extracted body def, starting with `do`. -/
 def emitLoopBody (fc : FCtx) (loopInst : Inst) : String :=
   let initEnv := (fc.loopParams loopInst).map fun (id, name, _) => (id, name)
+  -- One tick per body run, including its final exit. Both ordinary and dispatch loops use
+  -- this same prefix; pure M bodies have no memory counter (D5).
+  let step := if fc.mem || fc.conc then [s!"  {fc.callMName} Zig.tick"] else []
   match loopInst.op with
   | .loop body =>
-    "do\n" ++ indent 2 (emitStmts fc initEnv body.toList)
+    String.intercalate "\n" (["do"] ++ step ++ [indent 2 (emitStmts fc initEnv body.toList)])
   | .loopSwitchBr initial cases elseBody =>
     let branch := fc.ascribedDo (emitSwitch fc initEnv initial "dispatchValue" cases elseBody)
     String.intercalate "\n"
-      ["do",
+      (["do"] ++ step ++ [
        s!"  let dispatchValue := (← get).{dispatchFieldName loopInst.id}",
        s!"  let dispatchExit ← {indentTail 2 branch}",
        "  match dispatchExit with",
        s!"  | .dispatch{loopInst.id} dispatchValue => do",
        s!"    modify fun s => \{ s with {dispatchFieldName loopInst.id} := dispatchValue }",
        "    pure dispatchExit",
-       "  | _ => pure dispatchExit"]
+       "  | _ => pure dispatchExit"])
   | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
 
 /-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
@@ -3671,6 +3674,12 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let (enterLines, leaveLines) := if fc.recursive && fc.mem && !fc.conc then
       (["  Zig.enterFrame"], ["  Zig.leaveFrame"])
     else ([], [])
+  -- Original call-group members pay once per entry, independently of their extracted loop
+  -- definitions (which already pay per body run). A lifted CM tick is not a scheduler stop.
+  let tickLines := if !fc.recursive then []
+    else if fc.conc then ["  Zig.ConcM.liftMem Zig.tick"]
+    else if fc.mem then ["  Zig.tick"]
+    else []
   -- A function with `noalias` parameters checks the accesses of each call in a scope
   -- (`ZigLean/Mem/Noalias.lean`).
   let (enterLines, leaveLines) := if fc.naScope then
@@ -3687,7 +3696,7 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   -- The owner check of a mutex unlock (`ownerCheckedUnlocks`): before any other step.
   let checkLines := if ownerCheck then ["  Zig.mutexOwnerCheck p0"] else []
   String.intercalate "\n"
-    (["do"] ++ checkLines ++ enterLines ++ allocLines ++
+    (["do"] ++ checkLines ++ tickLines ++ enterLines ++ allocLines ++
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++ leaveLines ++
      ["  match e with"] ++ matchLines)
 

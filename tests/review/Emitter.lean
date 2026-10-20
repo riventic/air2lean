@@ -313,10 +313,50 @@ private def keywordField (keyword : String) : Json :=
       inst 1 "struct_field_val" 0 #[ref 0] [("index", num 0)],
       inst 2 "call" 0 #[ref 1] [("callee", obj [("func", .str keyword)])], inst 3 "ret" 2 #[ref 2]]
 
+/-- Step-count placement is shared by versions and profiles. Check both loop forms and the
+original function entry independently; extracted recursive-group loop defs must not pay twice. -/
+private def checkTickPlacement : IO Unit := do
+  let f ← accept blockLoopValue
+  let some loop := f.allInsts.find? (fun i => match i.op with | .loop _ => true | _ => false)
+    | throw (IO.userError "tick placement fixture has no loop")
+  let body := match loop.op with | .loop body => body | _ => #[]
+  let dispatch := { loop with op := .loopSwitchBr (.int 0 0) #[] body }
+  let base := mkFCtx f #[] #[] .ieee #[] #[]
+  let count (text token : String) := (text.splitOn token).length - 1
+  for target in Target.qualified do
+    for version in target.versions do
+      for backend in #["unverified", Target.llvmBackend, "stage2_x86_64"] do
+        let dialect := { base.dialect with version, arch := target.arch, os := target.os,
+          ptrBytes := target.pointerBits / 8, endian := target.endian, backend }
+        for (mem, conc, label) in #[(false, false, "pure"), (true, false, "MM"),
+            (true, true, "CM")] do
+          let fc := { base with mem, conc, dialect }
+          let scope := s!"{version}/{target.arch}-{target.os}/{backend}/{label}"
+          for recursive in #[false, true] do
+            let fc := { fc with recursive }
+            for (inst, shape) in #[(loop, "loop"), (dispatch, "dispatch")] do
+              let text := emitLoopBody fc inst
+              require (count text "Zig.tick" == if mem then 1 else 0)
+                s!"{scope}/{shape}: missing, duplicate or pure loop tick"
+              if mem then
+                let call := if conc then "Zig.callMC" else "Zig.callM"
+                require (text.startsWith s!"do\n  {call} Zig.tick\n")
+                  s!"{scope}/{shape}: the loop tick is not before its first body step"
+            let text := emitFunctionBody fc fc.localsName fc.exitName f.ret f.body true
+            require (count text "Zig.tick" == if recursive && mem then 1 else 0)
+              s!"{scope}: recursive entry has the wrong tick count"
+            require (count text "Zig.enterFrame" == if recursive && mem && !conc then 1 else 0)
+              s!"{scope}: tick instrumentation changed the existing stack charge"
+            if recursive && mem then
+              let entry := if conc then "Zig.ConcM.liftMem Zig.tick" else "Zig.tick"
+              require (text.startsWith s!"do\n  {entry}\n")
+                s!"{scope}: recursive tick is not at the function entry"
+
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Emitter.lean OUTPUT_DIR")
   let directory : System.FilePath := output
   IO.FS.createDirAll directory
+  checkTickPlacement
   let constRead ← accept (pointerRead "pointerConst" false)
   let varRead ← accept (pointerRead "pointerVar" true)
   require (!(escapingAllocs constRead).isEmpty && !(escapingAllocs varRead).isEmpty)
