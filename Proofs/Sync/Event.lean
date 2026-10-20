@@ -35,14 +35,17 @@ attribute [local fsym_arith] ioEvent_decode0 ioEvent_decode1 ioEvent_decode2
 
 theorem ioEvent_of0 {r : Io_Event} (h : (Packed.ofBits? (α := Io_Event) 0).run = some (.ok r)) :
     r = .unset := by
+  simp only [BitVec.ofNat_eq_ofNat] at h
   rw [ioEvent_decode0] at h; cases h; rfl
 
 theorem ioEvent_of1 {r : Io_Event} (h : (Packed.ofBits? (α := Io_Event) 1).run = some (.ok r)) :
     r = .waiting := by
+  simp only [BitVec.ofNat_eq_ofNat] at h
   rw [ioEvent_decode1] at h; cases h; rfl
 
 theorem ioEvent_of2 {r : Io_Event} (h : (Packed.ofBits? (α := Io_Event) 2).run = some (.ok r)) :
     r = .is_set := by
+  simp only [BitVec.ofNat_eq_ofNat] at h
   rw [ioEvent_decode2] at h; cases h; rfl
 
 section

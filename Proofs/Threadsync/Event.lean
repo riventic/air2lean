@@ -136,8 +136,10 @@ theorem dwait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
     P.WP t (Thread_Futex_Deadline_wait q E.W.ptr 1) (fun x G' m' d' => x = .ok () ∧ d' < d ∧
       m'.current = t ∧ ∃ r', DPart DR q bsD r' ∧
         P.inv (upd G' t (gD L E g .w1 r')) m') G m d := by
-  fsym [FEvent.wp_liftPart hE, dload, FEvent.wp_wait hE (ε := BitVec 32) (w := 32),
-    gD_ph, gD_lph, gD_part, gD_setPart, threadFutexWaitC_eq]
+  fsym [FEvent.wp_liftPart hE (g := gD L E g .w1 r) (t := t)
+      (htt := dload (P := DR) (q := q)),
+    FEvent.wp_wait hE (g := gD L E g .w1 _) (ε := BitVec 32) (w := 32),
+    gD_ph hE, gD_lph hE, gD_part, gD_setPart, threadFutexWaitC_eq]
 
 /-- `waitUntilSet`'s loop invariant: `t` is a waiter at `w1` with its deadline block `q`. -/
 def wusInv (DR : BlockId → FAssn) (P : Proto Tgt γ) (L : FLock γ) (E : FEvent γ)
@@ -168,8 +170,10 @@ theorem wus_body [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
         (d' < d ∨ d' = d ∧ (fun _ => 0) x.2 <
           (fun (_ : Thread_ResetEvent_FutexImpl_waitUntilSetLocals) => 0) s)
       else wusPost DR P L E t g q D x G' m' d') G m d := by
-  fsym [hE.wp_tick_unmetered, DPart.unmetered hu, dwait_wp hE hcost hgo hlive,
-    FEvent.wp_load hE, gD_ph, gD_lph, gD_set, gD_part, gD_setPart, wusInv, wusPost,
+  fsym [hE.wp_tick_unmetered (g := gD L E g .w1 _) (t := t),
+    DPart.unmetered hu, dwait_wp hE hcost hgo hlive,
+    FEvent.wp_load hE (g := gD L E g .w1 _),
+    gD_ph hE, gD_lph hE, gD_set hE, gD_part, gD_setPart, wusInv, wusPost,
     Thread_ResetEvent_FutexImpl_waitUntilSet.again37]
 
 
@@ -191,12 +195,17 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
   fsym [FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t) (htt := halloc),
     FEvent.wp_liftPartCur hE, halloc, hfree, FEvent.wp_liftPart hE, dstore,
-    FEvent.wp_load hE, FEvent.wp_cas hE,
+    FEvent.wp_liftPart hE (g := gD L E g .w1 _) (t := t)
+      (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp)),
+    FEvent.wp_load hE (g := gD L E g p₀ _),
+    FEvent.wp_cas hE (g := gD L E g .w0 _),
+    (WP.liftMem_liftR (P := P) (t := t)
+      (hnone := fun _ => (show P.Partial from Or.inr hcost))),
     (fun (q : Ptr) =>
       WP.loop _ _ (wusInv DR P L E t g q d) (fun _ => 0) (wusPost DR P L E t g q d)
         (wus_body hE hcost DR hu hgo hlive q d)),
-    dinit_eq, debugAssert_true, bsD_size, gD_ph, gD_lph, gD_set, gD_part, gD_setPart,
-    gD_self, FEvent.set_of, wusInv, wusPost]
+    dinit_eq, debugAssert_true, bsD_size, gD_ph hE, gD_lph hE, gD_set hE, gD_part, gD_setPart,
+    gD_self hE, FEvent.set_of, wusInv, wusPost]
 
 /-- **`ResetEvent.wait`** by a thread out of the event's and the lock's code, as the only waiter
 (`hone`, `hhb`): it returns when the event is set. -/

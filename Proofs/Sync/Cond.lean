@@ -323,7 +323,7 @@ theorem loop56_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
           simp only [StateT.run_lift, hs, pure_bind]) rfl),
     FCond.wp_consumeAs (α := Io_Condition_State) hC condS_dec
       (t := t) (i := i) (jr := jr) (e := e)
-      (g := gR L C g i jr _ e) (exp := s.prev_state)
+      (g := gR L C g i jr _ e) (hg := gR_ph) (hgo := gR_lph hC) (exp := s.prev_state)
       (new := { waiters := s.prev_state.waiters - 1, signals := s.prev_state.signals - 1 }),
     condS_eq, condS_bits, condS_take,
     condS_subW, condS_subS, condS_gtS, gR_ph, gR_lph hC, gR_set, gR_out hC hgx,
@@ -366,7 +366,8 @@ theorem loop23_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     FCond.wp_loadEp hC (t := t) (i := i) (jr := jr) (e := e)
       (g := gR L C g i jr false e),
     FCond.wp_loadSAs (α := Io_Condition_State) hC condS_dec
-      (t := t) (i := i) (jr := jr) (e := e) (g := gR L C g i jr _ e),
+      (t := t) (i := i) (jr := jr) (e := e) (g := gR L C g i jr _ e)
+      (hg := gR_ph) (hgo := gR_lph hC),
     WP.loop _ _ (inv56 P L C t g i jr e d) (fun _ => 0) (post56 P L C t g i jr e d)
       (loop56_body hC hcost hLc t g hgx hok hu i jr e d io),
     condS_eq, gR_ph, gR_lph hC, gR_set, gR, hC.lpart, hC.lph, L.part_set, L.ph_set,
@@ -391,6 +392,7 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
   fsym [FCond.wp_ldEp hC (t := t) (g := C.set g .en),
     FCond.wp_regAs (α := Io_Condition_State) hC (t := t)
       (v := Packed.ofBits (1 : BitVec 32)) (g := C.set g (.ld _ _))
+      (hg := C.ph_set g _) (hgh := by rw [hC.lph]; exact hgh)
       condS_bits1 ⟨_, condS_of 0⟩,
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)), ioMutex.unlock_wp hC hcost,
     WP.loop _ _ (inv23 P L C t g _ _ _ d) (fun _ => 0) (post23 P L g t d)
@@ -478,7 +480,7 @@ theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
           simp only [StateT.run_lift, hs, pure_bind]) rfl),
     FCond.wp_consumeAs (α := Io_Condition_State) hC condS_dec
       (t := t) (i := i) (jr := jr) (e := e)
-      (g := gR L C g i jr _ e) (exp := s.prev_state)
+      (g := gR L C g i jr _ e) (hg := gR_ph) (hgo := gR_lph hC) (exp := s.prev_state)
       (new := { waiters := s.prev_state.waiters - 1, signals := s.prev_state.signals - 1 }),
     condS_eq, condS_bits, condS_take,
     condS_subW, condS_subS, condS_gtS, gR_ph, gR_lph hC, gR_set, gR_out hC hgx,
@@ -522,7 +524,8 @@ theorem loop22_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     FCond.wp_loadEp hC (t := t) (i := i) (jr := jr) (e := e)
       (g := gR L C g i jr false e),
     FCond.wp_loadSAs (α := Io_Condition_State) hC condS_dec
-      (t := t) (i := i) (jr := jr) (e := e) (g := gR L C g i jr _ e),
+      (t := t) (i := i) (jr := jr) (e := e) (g := gR L C g i jr _ e)
+      (hg := gR_ph) (hgo := gR_lph hC),
     WP.loop _ _ (inv45 P L C t g i jr e d) (fun _ => 0) (post45 P L C t g i jr e d)
       (loop45_body hC hcost hLc t g hgx hok hu i jr e d io),
     condS_eq, gR_ph, gR_lph hC, gR_set, gR, hC.lpart, hC.lph, L.part_set, L.ph_set,
@@ -547,6 +550,7 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
   fsym [FCond.wp_ldEp hC (t := t) (g := C.set g .en),
     FCond.wp_regAs (α := Io_Condition_State) hC (t := t)
       (v := Packed.ofBits (1 : BitVec 32)) (g := C.set g (.ld _ _))
+      (hg := C.ph_set g _) (hgh := by rw [hC.lph]; exact hgh)
       condS_bits1 ⟨_, condS_of 0⟩,
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)), ioMutex.unlock_wp hC hcost,
     WP.loop _ _ (inv22 P L C t g _ _ _ d) (fun _ => 0) (post22 P L g t d)
