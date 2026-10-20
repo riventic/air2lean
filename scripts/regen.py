@@ -397,6 +397,9 @@ def step_provenance(check, allow_commit, written):
 # name, scope, outputs, function; in dependency order (provenance is handled last, separately).
 STEPS = [
     ('translator', 'pr', [], step_translator),
+    ('precompiled', 'pr', ['lakefile.toml (the globs of FsymDeps)'],
+     simple([PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'check'],
+            [PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'write'])),
     ('gen', 'pr', ['Gen.lean modules (scripts/gen-integrity.py list)'], step_gen),
     ('ci-matrix', 'pr', ['.github/workflows/ci.yml (generated matrix regions)'],
      simple([PY, 'scripts/ci-matrix.py', 'check'], [PY, 'scripts/ci-matrix.py', 'write'])),

@@ -301,7 +301,7 @@ successful run for every admissible input. `tests/roadmap/claims/Fixture.lean` p
 postcondition; without a liveness witness that triple derives only `safety`. `ffalse_total`
 holds for the diverging program under an unsatisfiable precondition and, without a non-vacuity
 witness, supports no claim.
-`tests/roadmap/sep-auto/Total.lean` also rejects panics (`panic_not_partial`). An unsatisfiable precondition or
+`tests/roadmap/sep-auto/SepAuto/Total.lean` also rejects panics (`panic_not_partial`). An unsatisfiable precondition or
 hypothesis has no non-vacuity witness, so the theorem supports no claim.
 
 ## Scope
