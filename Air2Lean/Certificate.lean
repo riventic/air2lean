@@ -1329,6 +1329,7 @@ def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas :
   let items := " ".intercalate (views.toList.map fun v => s!"a{v.idx}")
   let viewTerm := s!"(view_{d} {items})"
   let enc (v : ViewParam) := s!"(fun x => {v.sc.enc "x"})"
+  let sourceSet := ", ".intercalate ([air, "air_sem"] ++ calleeLemmas)
   let mut out : Array String := #[
     s!"/-- The items of `{f.name}`'s slice parameters, by their `arg` instruction. -/",
     s!"def view_{d} {" ".intercalate (views.toList.map fun v => s!"(a{v.idx} : Array ({v.sc.lean}))")} : InstId → Option (Array Value) :=",
@@ -1379,15 +1380,15 @@ def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas :
   for v in views do
     out := out ++ #[
       s!"  obtain ⟨v{v.idx}, hs{v.idx}, -⟩ := holds_of_readSlice (f := {air}) (t := {v.item}) (a := {v.ptrAlign})",
-      s!"    {enc v} r{v.idx} hwf (fun q al => by simp only [{air}, air_sem])",
+      s!"    {enc v} r{v.idx} hwf (fun q al => by simp only [{sourceSet}])",
       s!"    (fun size al h => by",
-      s!"      simp only [{air}, air_sem, Option.some.injEq, Prod.mk.injEq] at h",
+      s!"      simp only [{sourceSet}, Option.some.injEq, Prod.mk.injEq] at h",
       "      obtain ⟨rfl, rfl⟩ := h",
       "      decide)"]
   out := out ++ #[
     s!"  rw [← {d}_view call {viewArgs} m]",
     s!"  refine execFunc_view program m {air} _ call {viewTerm} viewTy_{d}",
-    s!"    (by simp only [roBody, roNested, roCases, roInst, argAt, {air}, air_sem, view_{d}, viewTy_{d},",
+    s!"    (by simp only [roBody, roNested, roCases, roInst, argAt, {sourceSet}, view_{d}, viewTy_{d},",
     "      List.find?_cons, List.find?_nil, cond_true, cond_false, Option.isSome_some])",
     s!"    ⟨by simp [Value.noPtr], ?_⟩ policy_{d}",
     "  intro k items idx t hk ha",
@@ -1460,9 +1461,11 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
   let models ← Reify.models program.models
   let sources := (Array.range funcs.size).map fun index => s!"source_{index}"
   lines := lines.push s!"/-- The complete original translation input, before certificate selection. -/\ndef program : _root_.Air2Lean.Program := ⟨{arr id sources}, {models}⟩\n"
+  let mut sourceLemmas : Array (String × String) := #[]
   for f in frag do
     let some index := funcs.findIdx? (·.name == f.name)
       | throw s!"certificate function {f.name} is absent from its original program"
+    sourceLemmas := sourceLemmas.push (f.name, s!"source_{index}")
     lines := lines.push s!"/-- The decoded canonical AIR of `{f.name}` in the original program. -/"
     lines := lines.push s!"def {airName f} : _root_.Air2Lean.Func := source_{index}\n"
     lines := lines.push s!"theorem lookup_{declOf f.name} : program.lookup {str f.name} = some {airName f} := rfl"
@@ -1478,10 +1481,12 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
     lines := lines.push s!"theorem callee_{k} : panicOf? {str n} = {rhs} := rfl"
     panicLemmas := panicLemmas.push (n, s!"callee_{k}")
   lines := lines.push ""
-  let calleeLemmasOf (f : Func) := (panicLemmas.filter fun (n, _) => (callsIn f).contains n).toList.map (·.2)
+  let reductionLemmasOf (f : Func) :=
+    (sourceLemmas.filter fun (n, _) => n == f.name).toList.map (·.2) ++
+      (panicLemmas.filter fun (n, _) => (callsIn f).contains n).toList.map (·.2)
   for f in views do
     lines := lines ++ viewCert f ((shapes.find? (·.1 == f.name)).map (·.2) |>.getD default) ns (genName f)
-      (airName f) (declOf f.name) (calleeLemmasOf f)
+      (airName f) (declOf f.name) (reductionLemmasOf f)
   unless views.isEmpty do
     lines := lines.push "/-- The functions certified through a view of their slices, by fully qualified name. -/"
     lines := lines.push ("def views : Table := [\n" ++
@@ -1507,7 +1512,7 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
     let calls := calling f
     let oracle := if calls then "gen" else "call"
     let callBinder := if calls then "" else "(call : Oracle) "
-    let calleeLemmas := calleeLemmasOf f
+    let calleeLemmas := reductionLemmasOf f
     let simpSet := ", ".intercalate
       ([airName f, "air_sem", s!"policy_{d}", s!"entry_{d}"] ++
         calleeLemmas ++ (if calls then ["gen"] else []))
@@ -1655,14 +1660,17 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
             out := out ++ (← member.boundAdapter fixed head ih ns (airName member.source) (declOf member.source.name))
             available := available.push (member, s!"b_{member.stem}", s!"hb_{member.stem}")
         out := out ++ (← decl.fixedIntro)
-        unless role?.isSome do out := out.push s!"    conv => lhs; rw [{ns}.{decl.emitted.name}]"
+        -- The ordinary declaration can still sit beneath `partialTerm`'s eta-expanded
+        -- application. Delta expansion opens that exact nonrecursive body without asking
+        -- equation rewriting to match through the approximation's lambda.
+        unless role?.isSome do out := out.push s!"    conv => lhs; delta {ns}.{decl.emitted.name}"
         if decl.loop.isNone then
           out := out.push s!"    rw [runOn_of_lookup (by decide) lookup_{sd}]"
         for (helper, head, hyp) in available do
           if helper.loop.isSome then
             out := out ++ (← helper.loopClosure head hyp ns (genName helper.source) (airName helper.source) (declOf helper.source.name))
         let definitions := ["air_sem", "-map_bind", airName decl.source, s!"policy_{sd}", s!"entry_{sd}"] ++
-          calleeLemmasOf decl.source ++
+          reductionLemmasOf decl.source ++
           (if decl.loop.isSome || !decl.shape.loops.isEmpty then [s!"enc_{sd}"] else []) ++
           (available.toList.filterMap fun (member, head, _) => if head == s!"b_{member.stem}" then some head else none) ++
           ["Env.val", "Frame.cell"]
