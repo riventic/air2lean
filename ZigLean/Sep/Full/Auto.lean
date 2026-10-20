@@ -2706,6 +2706,16 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
       if let some (fs, g') ← observing? (substEq g h) then
+        let fs ← g'.withContext do
+          let lhs := fs.apply l
+          let rhs := fs.apply r
+          let lctx ← getLCtx
+          if lhs.hasAnyFVar (fun f => !lctx.contains f) ||
+              rhs.hasAnyFVar (fun f => !lctx.contains f) then return fs
+          let checkedRefl ← mkEqRefl lhs
+          unless ← isDefEq (← inferType checkedRefl) (← mkEq lhs rhs) do
+            throwError "fsym: substituted equality is not reflexive"
+          pure { fs with map := fs.map.insert h checkedRefl }
         -- (recorded: a caller's term that names an eliminated local takes its value)
         (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
         return g'
@@ -2924,6 +2934,101 @@ where
   mkConstFun (p x : Expr) : MetaM Expr := do
     withLocalDeclD `h p fun h => do mkLambdaFVars #[h] (← mkEqRefl x)
 
+/-- Apply the recorded substitutions to an expression, with the same bound used for caller
+terms. Matching data uses only this refresh, never caller-term binder abstraction. -/
+def refreshSubsts (e : Expr) : MetaM Expr := do
+  unless e.hasFVar do return e
+  let lctx ← getLCtx
+  let substs ← (← caches).substs.get
+  let mut e := e
+  for _ in [0:16] do
+    let e' := e.replace fun x => match x with
+      | .fvar f => if lctx.contains f then none else substs.get? f
+      | _ => none
+    if e' == e then break
+    e := e'
+  return e
+
+/-- A caller's term (`fsym [t]`) in the current step's context. A local of the context it was
+elaborated in that the walk replaced (a substitution reintroduces the hypotheses after the
+variable it eliminates, with new locals) is the current local of the same name and type, else a
+binder of the term: an argument that unification or a side goal supplies, as for an implicit
+argument. -/
+def refreshUser (e : Expr) : MetaM Expr := do
+  unless e.hasFVar do return e
+  let lctx ← getLCtx
+  let orig ← (← caches).userCtx.get
+  let e ← refreshSubsts e
+  -- the replaced locals of the term and of their types, in their original order
+  let mut stale : Array FVarId := #[]
+  let mut todo := (collectFVars {} e).fvarIds.toList
+  while !todo.isEmpty do
+    let fv := todo.head!
+    todo := todo.tail!
+    if lctx.contains fv || stale.contains fv then continue
+    let some d := orig.find? fv | return e
+    stale := stale.push fv
+    todo := todo ++ (collectFVars {} (← refreshSubsts d.type)).fvarIds.toList
+  if stale.isEmpty then return e
+  let decls := (stale.filterMap orig.find?).qsort (·.index < ·.index)
+  let mut src : Array Expr := #[]
+  let mut tgt : Array Expr := #[]
+  let mut binders : Array (Name × Expr × Expr) := #[]
+  for d in decls do
+    let ty := (← refreshSubsts d.type).replaceFVars src tgt
+    let same? ← if ty.hasAnyFVar (fun fv => !lctx.contains fv) then pure none else
+      lctx.findDeclRevM? fun d' => do
+        if d'.isImplementationDetail || d'.userName != d.userName then return none
+        let ok ← try withNewMCtxDepth (isDefEq d'.type ty) catch _ => pure false
+        return if ok then some d'.toExpr else none
+    match same? with
+    | some x => src := src.push d.toExpr; tgt := tgt.push x
+    | none => binders := binders.push (d.userName, ty, d.toExpr)
+  let xs := binders.map (·.2.2)
+  let mut body := (e.replaceFVars src tgt).abstract xs
+  for i' in [0:binders.size] do
+    let i := binders.size - 1 - i'
+    let (n, ty, _) := binders[i]!
+    body := .lam n (ty.abstract (xs.extract 0 i)) body .default
+  return body
+
+/-- A current-context view of prepared caller simp proofs. The stored context stays in its
+original scope, so a restored or sibling branch never inherits another branch's locals. -/
+private def refreshExtraCtx (ctx : Simp.Context) : MetaM Simp.Context := do
+  let lctx ← getLCtx
+  let stale (thms : SimpTheorems) (thm : SimpTheorem) : Bool :=
+    match thm.origin with
+    | .stx .. => !thms.erased.contains thm.origin && thm.proof.hasFVar &&
+        thm.proof.hasAnyFVar (fun f => !lctx.contains f)
+    | _ => false
+  unless ctx.simpTheorems.any (fun thms =>
+      thms.pre.containsValueP (stale thms) || thms.post.containsValueP (stale thms)) do
+    return ctx
+  let refresh (thms : SimpTheorems) : MetaM SimpTheorems := do
+    let collect (changed : Array (SimpTheorem × Expr)) (thm : SimpTheorem) := do
+      unless stale thms thm do return changed
+      let proof ← refreshUser thm.proof
+      return if proof == thm.proof then changed else changed.push (thm, proof)
+    let changed ← thms.pre.foldValuesM collect #[]
+    let changed ← thms.post.foldValuesM collect changed
+    if changed.isEmpty then return thms
+    -- Erasure applies to an entire origin, which can own several independent entries.
+    -- Remove just the changed proofs physically, preserving every sibling and erased origin.
+    let keep (ts : Array SimpTheorem) := ts.filter fun thm =>
+      match thm.origin with
+      | .stx .. => !changed.any fun (old, _) =>
+          thm.origin == old.origin && thm.post == old.post && thm.proof == old.proof
+      | _ => true
+    let mut thms := { thms with pre := thms.pre.mapArrays keep, post := thms.post.mapArrays keep }
+    for (old, proof) in changed do
+      let fresh ← mkSimpTheoremFromExpr old.origin old.levelParams proof
+        (post := old.post) (prio := old.priority)
+      for thm in fresh do
+        thms := thms.addSimpTheorem { thm with origin := old.origin,
+          rfl := thm.rfl && old.rfl, backwardRfl := thm.backwardRfl && old.backwardRfl }
+    return thms
+  return ctx.setSimpTheorems (← ctx.simpTheorems.mapM refresh)
+
 /-- The caller's simp terms (`fsym [t]` that are not rules) added to `thms`. -/
 def addExtra (thms : SimpTheorems) (extra : Array Syntax) : TacticM SimpTheorems := do
   let mut thms := thms
@@ -2955,7 +3060,7 @@ def noRflThms (thms : SimpTheorems) : SimpTheorems :=
   { thms with pre := thms.pre.mapArrays noRfl, post := thms.post.mapArrays noRfl }
 
 /-- The program normal form: `fsym_norm` and the caller's simp terms, with Lean's simprocs. -/
-def progCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
+private def progCtxBase (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
   if let some cp ← (← caches).prog.get then return cp
   let some ext ← getSimpExtension? `fsym_norm | throwError "fsym: no fsym_norm"
   let thms := noRflThms (← addExtra (← ext.getTheorems) extra)
@@ -2966,6 +3071,11 @@ def progCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray
   if let some pe ← Simp.getSimprocExtension? `fsym_norm then procs := procs.push (← pe.getSimprocs)
   (← caches).prog.set (some (ctx, procs))
   return (ctx, procs)
+
+/-- The prepared program context with caller proofs transported to the current step. -/
+def progCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
+  let (ctx, procs) ← progCtxBase extra
+  return (← refreshExtraCtx ctx, procs)
 
 /-- Simplify the head of the program (`lazyMethods`) with `fsym_norm` and the caller's lemmas. -/
 def simpProg (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext do
@@ -3766,21 +3876,6 @@ partial def conjuncts (φ : Expr) (fuel : Nat := 16) : MetaM (Array Expr) := do
     unless ← isLibrary c do
       if let some u ← unfold1 φ then return ← conjuncts u (fuel - 1)
   return #[φ]
-
-/-- Apply the recorded substitutions to an expression, with the same bound used for caller
-terms. Matching data uses only this refresh, never caller-term binder abstraction. -/
-def refreshSubsts (e : Expr) : MetaM Expr := do
-  unless e.hasFVar do return e
-  let lctx ← getLCtx
-  let substs ← (← caches).substs.get
-  let mut e := e
-  for _ in [0:16] do
-    let e' := e.replace fun x => match x with
-      | .fvar f => if lctx.contains f then none else substs.get? f
-      | _ => none
-    if e' == e then break
-    e := e'
-  return e
 
 /-- The size of `bs` from a postcondition fact, or the required size supplied as matching data
 by a rule. Required sizes never enter the arithmetic context as facts. -/
@@ -5118,49 +5213,6 @@ def tryUpd (g : MVarId) (c u P Qv : Expr) : TacticM (Option (Expr × List MVarId
     trace[fsym] "update {u} failed: {ex.toMessageData}"
     s.restore; return none
 
-/-- A caller's term (`fsym [t]`) in the current step's context. A local of the context it was
-elaborated in that the walk replaced (a substitution reintroduces the hypotheses after the
-variable it eliminates, with new locals) is the current local of the same name and type, else a
-binder of the term: an argument that unification or a side goal supplies, as for an implicit
-argument. -/
-def refreshUser (e : Expr) : MetaM Expr := do
-  unless e.hasFVar do return e
-  let lctx ← getLCtx
-  let orig ← (← caches).userCtx.get
-  let e ← refreshSubsts e
-  -- the replaced locals of the term and of their types, in their original order
-  let mut stale : Array FVarId := #[]
-  let mut todo := (collectFVars {} e).fvarIds.toList
-  while !todo.isEmpty do
-    let fv := todo.head!
-    todo := todo.tail!
-    if lctx.contains fv || stale.contains fv then continue
-    let some d := orig.find? fv | return e
-    stale := stale.push fv
-    todo := todo ++ (collectFVars {} d.type).fvarIds.toList
-  if stale.isEmpty then return e
-  let decls := (stale.filterMap orig.find?).qsort (·.index < ·.index)
-  let mut src : Array Expr := #[]
-  let mut tgt : Array Expr := #[]
-  let mut binders : Array (Name × Expr × Expr) := #[]
-  for d in decls do
-    let ty := d.type.replaceFVars src tgt
-    let same? ← if ty.hasAnyFVar (fun fv => !lctx.contains fv) then pure none else
-      lctx.findDeclRevM? fun d' => do
-        if d'.isImplementationDetail || d'.userName != d.userName then return none
-        let ok ← try withNewMCtxDepth (isDefEq d'.type ty) catch _ => pure false
-        return if ok then some d'.toExpr else none
-    match same? with
-    | some x => src := src.push d.toExpr; tgt := tgt.push x
-    | none => binders := binders.push (d.userName, ty, d.toExpr)
-  let xs := binders.map (·.2.2)
-  let mut body := (e.replaceFVars src tgt).abstract xs
-  for i' in [0:binders.size] do
-    let i := binders.size - 1 - i'
-    let (n, ty, _) := binders[i]!
-    body := .lam n (ty.abstract (xs.extract 0 i)) body .default
-  return body
-
 /-- Is `r` a `WP` rule for any memory step, or any lifted result step? Such wildcard rules
 are tried after specific commands and apply only completely (`wpRule`). -/
 def wpGenericRule (r : Expr) : MetaM Bool := withNewMCtxDepth do
@@ -5915,9 +5967,9 @@ completely. -/
 concurrent commands (`atomicRmwAsC` as an oracle pick and a `MemM` op is the solo reading of
 the `CTriple` backend; in a `WP` walk such a command is a stop that a rule of the protocol
 takes), and with the steps of `CM` (`CNorm`). -/
-def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
+private def wpCtxBase (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
   if let some cp ← (← caches).wpProg.get then return cp
-  let (ctx, procs) ← progCtx extra
+  let (ctx, procs) ← progCtxBase extra
   let isConc (n : Name) : MetaM Bool := do
     let some ci := (← getEnv).find? n | return false
     forallTelescope ci.type fun _ r => return r.isAppOf ``Zig.CM || r.isAppOf ``Zig.ConcM
@@ -5937,10 +5989,15 @@ def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) 
   (← caches).wpProg.set (some (ctx', procs))
   return (ctx', procs)
 
+/-- The prepared concurrent context with caller proofs transported to the current step. -/
+def wpCtx (extra : Array Syntax) : TacticM (Simp.Context × Simp.SimprocsArray) := do
+  let (ctx, procs) ← wpCtxBase extra
+  return (← refreshExtraCtx ctx, procs)
+
 /-- The simp context of a stop's hypotheses and side goals: the caller's simp terms, the ghost
 values of a thread (`upd_self`, `upd_upd`), the facts and witnesses of an assertion that holds
 of a resource (a segment's post: `ex_apply`, `sep_lift`). -/
-def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
+private def wpHypCtxBase (extra : Array Syntax) : TacticM Simp.Context := do
   if let some c ← (← caches).wpHyp.get then return c
   let mut thms ← addExtra {} extra
   for n in [``Zig.Conc.upd_self, ``Zig.Conc.upd_ne, ``Zig.Conc.Proto.upd_upd, ``Zig.Conc.upd_snd,
@@ -5956,6 +6013,10 @@ def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   (← caches).wpHyp.set (some ctx)
   return ctx
+
+/-- The prepared hypothesis context with caller proofs transported to the current step. -/
+def wpHypCtx (extra : Array Syntax) : TacticM Simp.Context := do
+  refreshExtraCtx (← wpHypCtxBase extra)
 
 /-- The goal `P.WP t x' Q G m n` from the arguments `a` of `P.WP t x Q G m n` and `x = x'`. -/
 def wpRewrite (g : MVarId) (a : Array Expr) (x' eq : Expr) : MetaM MVarId := do

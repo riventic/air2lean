@@ -779,4 +779,11 @@ theorem applied_conditional_missing {Tgt γ : Type} (P : Proto Tgt γ) (t : Thre
       fsym [applied_conditional hP]
   trivial
 
+/-- Prepared applied proofs follow a substitution even when their data type names its witness. -/
+theorem applied_simp_after_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n k : Nat) (heq : k = m.current)
+    (A : (j : Nat) → j = m.current → Type) (xs : List (A k heq)) :
+    P.WP t (pure xs) (fun v _ _ _ => v.reverse.reverse = xs) G m n := by
+  fsym [applied_reverse_twice (xs := xs) ()]
+
 end SepAuto.WP
