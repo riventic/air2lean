@@ -141,14 +141,12 @@ def collectUses (env : Environment) (root : Name) (contracts relevant : NameSet)
       let expr := expr.consumeMData
       -- The same term under a stronger local premise is a different use. In particular, an
       -- earlier use under False must not hide an unrestricted use of the same closed contract.
-      let closedExpr ← close scope expr
-      -- Closing an unvisited body can recreate its parent's closed expression. The actual
-      -- scope also distinguishes recreated local lets whose selected-use marks have new IDs.
-      let closedContext : Inspection := {
-        arguments := ← ctx.arguments.mapM (close scope)
-        projections := ← ctx.projections.mapM fun (name, index, args) => do
-          pure (name, index, ← args.mapM (close scope)) }
-      let scopedExpr := (scope, closedExpr, closedContext)
+      -- The key is the open term with its actual scope. Every walked term is free of loose
+      -- bound variables, so for a fixed scope it determines its closure over that scope and
+      -- conversely: this is the same identity as the closed term, without building one. A
+      -- closure copies the scope's let values (the proof's whole prefix) and was built for
+      -- every visited term (AllocFba's audit: above 11 GB).
+      let scopedExpr := (scope, expr, ctx)
       if (← seen.get).contains scopedExpr then return
       let budget ← remaining.get
       if budget == 0 then throwError "allocator admission application expansion budget exhausted"
