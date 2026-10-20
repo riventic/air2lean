@@ -676,12 +676,36 @@ private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Js
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
 
+/-- The current imports and `modules`, imported the way `leanchecker` loads them: no newly
+imported module's initializer runs (docs/architecture-audit/soundness-2026-10-20.md E1). Importing
+an audited module through the driver's header would run its `initialize` code in this process,
+which writes the report. The closure is read first without loading extensions; each of its
+modules is then marked as already initialized, so the extension-loading import runs no `[init]`
+of it. Only the extractor's own imports, initialized when this file was elaborated, keep theirs. -/
+private unsafe def importWithoutInitializersImpl (env : Environment) (modules : Array Name)
+    (opts : Options) : IO Environment := do
+  let imports := env.header.imports ++ modules.map ({ module := · })
+  -- Not `withImportModules`: freeing that environment's regions would also free module data the
+  -- second import below and this process's own environment can share.
+  let closure := (← importModules imports opts (loadExts := false) (leakEnv := true)).header.moduleNames
+  let initialized ← interpretedModInits.get
+  interpretedModInits.set (closure.foldl (init := initialized) (·.insert ·))
+  enableInitializersExecution
+  importModules imports opts (loadExts := true) (leakEnv := true)
+
+@[implemented_by importWithoutInitializersImpl]
+private opaque importWithoutInitializers (env : Environment) (modules : Array Name) (opts : Options) :
+  IO Environment
+
 syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
 
 elab_rules : command
   | `(#assurance_audit [$modules:str,*]) => do
     let selected := modules.getElems.map (·.getString)
     if selected.isEmpty then throwError "assurance audit requires modules"
+    -- The driver imports only this file; the audited modules are imported here, running none
+    -- of their initializers (`importWithoutInitializers`).
+    setEnv (← importWithoutInitializers (← getEnv) (selected.map String.toName) (← getOptions))
     -- The checked environment excludes erroneous elaborator placeholders. Private olean
     -- data is loaded by ordinary (non-`module`) imports, so proof bodies are available.
     let env := (← getEnv).setExporting false
