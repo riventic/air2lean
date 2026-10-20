@@ -169,8 +169,9 @@ def check_clique_order(binary, tmp):
     group = groups[0]
     actual = [member['name'] for member in group['members']]
     assert len(rendered) == len(actual) == len(names) and set(actual) == set(rendered), (rendered, actual)
-    # B's immediate branch drops its dead call to C from the emitted body. The original
-    # Program retains that source edge, so the two existing graph passes expose this mismatch.
+    # B's first branch calls present panic handler H, whose original body calls C. The
+    # complete Program follows B→H→C→A; panic lowering removes B→H, leaving the actual
+    # three-member executable clique. The two existing graph passes expose this mismatch.
     assert rendered != actual, (rendered, actual)
     lines, changed = source.splitlines(keepends=True), []
     for induction in group['inductions']:
