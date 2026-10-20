@@ -21,7 +21,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
-| [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
+| [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
@@ -194,11 +194,11 @@ Planning units of the engine lane (one PR each, regressions from every requester
 
 Status: **open**. Requester: Task23; coordinator decision 6258258831.
 
-Progress: Enroll the first complete golden family through existing retranslation cases; no per-case selector.
+Progress: Enroll complete golden families through existing retranslation cases; Threadsync and Sync use no per-case selector.
 
 Request: Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.
 
-Workaround sites: `examples/threadsync/all-cases`
+Workaround sites: `examples/threadsync/all-cases`, `examples/sync/all-cases`
 
 Deletion plan: When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks.
 
