@@ -1716,7 +1716,7 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
         out := out ++ #[
           "      | (refine map_bind_le_ok _ _ Lean.Order.PartialOrder.rel_refl (fun _ => True) (fun _ _ => True.intro) ?_",
           s!"         intro r _; {simplify})",
-          s!"      | (split <;> simp_all (config := \{ failIfUnchanged := false }) only [{simpSet}])",
+          s!"      | (split <;> simp (config := \{ failIfUnchanged := false }) only [{simpSet}, *])",
           "      | (simp only [map_bind]; apply Lean.Order.MonoBind.bind_mono_right; intro)",
           "      | (apply Lean.Order.MonoBind.bind_mono_right; intro))"]
         pure out
