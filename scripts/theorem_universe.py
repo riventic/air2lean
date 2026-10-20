@@ -411,8 +411,11 @@ def prepare_fixture_compilation(modules: list[str]) -> dict | None:
 
 
 def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: Path, *,
-                        fixture_modules: list[str] | None = None) -> dict:
+                        fixture_modules: list[str] | None = None,
+                        witness_registry: dict | None = None) -> dict:
     """Snapshot actual inputs BEFORE the existing compiler writes any Unit output."""
+    if fixture_modules is not None and witness_registry is not None:
+        raise ValueError('registered witness compilation cannot select a fixture package')
     output = output.absolute()
     local = closure(selected, by_file)
     # Prepare the SAME extractor first: its build cannot legitimately change a later frozen
@@ -476,6 +479,8 @@ def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: 
                'lean_sysroot': str(toolchain),
                'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain),
                'library_sources_sha256': input_digest(assumptions.library_source_inputs(ROOT))}
+    if witness_registry is not None:
+        context['witness_registry'] = witness_registry
     if fixture_modules is not None:
         context.update(fixture_package=fixtures.PACKAGE.relative_to(ROOT).as_posix(),
                        fixture_configuration=fixture_configuration())
@@ -488,14 +493,17 @@ def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: 
 def compilation_plan(context: dict) -> list[Unit]:
     """Re-derive the source plan; a saved context cannot choose different source paths."""
     if (not isinstance(context, dict) or not isinstance(context.get('units'), dict)
-            or not context['units'] or not isinstance(context.get('selected_files'), list)
-            or not context['selected_files'] or not isinstance(context.get('selected_modules'), list)
+            or not isinstance(context.get('selected_files'), list)
+            or not isinstance(context.get('selected_modules'), list)
             or not isinstance(context.get('output_dir'), str)
             or not Path(context['output_dir']).is_absolute()):
         raise ValueError('missing compiler-owned Unit run binding')
+    if 'witness_registry' not in context and (not context['units'] or not context['selected_files']):
+        raise ValueError('missing compiler-owned Unit run binding')
     if 'fixture_package' in context:
         import fixtures
-        if (context['fixture_package'] != fixtures.PACKAGE.relative_to(ROOT).as_posix()
+        if ('witness_registry' in context
+                or context['fixture_package'] != fixtures.PACKAGE.relative_to(ROOT).as_posix()
                 or context['output_dir'] != str((fixtures.PACKAGE / '.lake/build/lib/lean').absolute())
                 or sorted(set(context['selected_modules'])) != context['selected_modules']):
             raise ValueError('compiler-owned fixture package/output selection changed')
@@ -503,6 +511,17 @@ def compilation_plan(context: dict) -> list[Unit]:
     else:
         _, units = universe()
         by_file = {unit.file: unit for unit in units}
+        if 'witness_registry' in context:
+            if input_identity(ROOT / assumptions.WITNESS_FIXTURES) != context['witness_registry']:
+                raise ValueError('assurance report is stale: witness registry changed')
+            registered = assumptions.witness_fixtures()
+            if any(file not in by_file or by_file[file].gate is not None for file in registered):
+                raise ValueError('registered witness selection changed or needs a gate')
+            expected = sorted(unit.file for unit in closure([by_file[file] for file in registered], by_file))
+            if context['selected_files'] != expected:
+                raise ValueError('compiled witness closure differs from the registry')
+            if context['output_dir'] != str((ROOT / '.lake/assurance/witness-fixtures').absolute()):
+                raise ValueError('compiled witness output differs from its registered producer')
         if any(file not in by_file or by_file[file].gate is not None for file in context['selected_files']):
             raise ValueError('compiler-owned Unit source selection changed or needs a gate')
         selected = [by_file[file] for file in context['selected_files']]
@@ -597,6 +616,8 @@ def verify_compiled_report(report: dict) -> None:
     for row in report['freshness']['artifacts']:
         artifacts.setdefault(row['module'], []).append(row)
     if context is None:
+        if report.get('scope') == 'all-shipped-modules' or report.get('witness_modules'):
+            raise ValueError('shipped witness audit carries no compiler-owned run binding')
         _, units = universe()
         known = {unit.module for unit in units if unit.gate is None}
         headers = report.get('module_imports') or {}
@@ -606,27 +627,16 @@ def verify_compiled_report(report: dict) -> None:
         for key in ('nodes', 'theorems', 'witness_theorems'):
             represented.update(row.get('module') for row in report.get(key, []))
         required = known.intersection(represented)
-        if not required:
-            return
-        if known.intersection(selected):
+        if required:
             raise ValueError('known non-gated Unit audit carries no compiler-owned run binding')
-        # Preserve the existing registered-witness producer's canonical source/output binding.
-        # A removable scope/witness label is not an exemption and grants no Unit authority.
-        by_file = {unit.file: unit for unit in units}
-        registered = [by_file[file] for file in assumptions.witness_fixtures()]
-        witnesses = unit_plan(closure(registered, by_file))
-        witness_output = ROOT / '.lake/assurance/witness-fixtures'
-        for module in required:
-            unit, rows = witnesses.get(module), artifacts.get(module, [])
-            if unit is None or len(rows) != 1:
-                raise ValueError('known non-gated Unit audit carries no compiler-owned run binding')
-            expected = lib_of(witness_output, unit['root']) / (module.replace('.', '/') + '.olean')
-            if (rows[0]['source'] != unit['file'] or rows[0]['olean'] != assumptions.display(expected)
-                    or rows[0]['source_sha256'] != assumptions.file_sha256(ROOT / unit['file'])):
-                raise ValueError('known non-gated Unit audit carries no matching compiler-owned run binding')
         return
     verify_compilation(context)
-    if selected != context['selected_modules'] or report.get('witness_modules'):
+    if 'witness_registry' in context:
+        if (report.get('scope') != 'all-shipped-modules' or selected != shipped_modules()
+                or report.get('witness_modules') != context['selected_modules']):
+            raise ValueError('compiled witness context differs from the shipped report selection')
+    elif (selected != context['selected_modules'] or report.get('witness_modules')
+          or report.get('scope') == 'all-shipped-modules'):
         raise ValueError('compiled Unit context differs from the report selection')
     for module, unit in context['units'].items():
         rows = artifacts.get(module, [])
@@ -644,7 +654,7 @@ def compiled_imports(raw: dict, context: dict, paths: list[Path], toolchain: Pat
     headers = raw.get('module_imports')
     if not isinstance(headers, dict):
         raise ValueError('compiler-owned Unit audit has no actual import headers')
-    seen, pending = set(), list(context['selected_modules'])
+    seen, pending = set(), list({*raw.get('modules', []), *context['selected_modules']})
     built, standard = ROOT / '.lake/build/lib/lean', toolchain / 'lib/lean'
     while pending:
         module = pending.pop()
@@ -742,10 +752,14 @@ def compile_all(local: list[Unit], by_file, output: Path, *, compiled_units: dic
     return errors
 
 
-def compile_witness_fixtures(files: list[str], output: Path, build: bool) -> tuple[dict, list[Path]]:
+def compile_witness_fixtures(files: list[str], output: Path, build: bool) -> tuple[dict, dict]:
     """Compile the registered witness-fixture files (assurance/witness-fixtures.json) and the
     local modules they import into `output`, for the shipped audit (scripts/assumptions.py).
-    Returns module -> source of the compiled closure and the library directories to load."""
+    Returns the classification source map and the SAME compiler-owned run context. The
+    registry and actual inputs precede compilation, including an empty registered closure."""
+    registry = input_identity(ROOT / assumptions.WITNESS_FIXTURES)
+    if files != assumptions.witness_fixtures():
+        raise ValueError('registered witness selection changed before compilation')
     _, units = universe()
     by_file = {u.file: u for u in units}
     missing = [f for f in files if f not in by_file]
@@ -755,15 +769,17 @@ def compile_witness_fixtures(files: list[str], output: Path, build: bool) -> tup
     if gated:
         raise ValueError(f"witness fixtures that need a gate-time generated module: {gated}")
     local = closure([by_file[f] for f in files], by_file)
-    if build:
-        result = run(["lake", "build", *sorted({m for u in local for m in u.lake})])
+    imports = sorted({m for u in local for m in u.lake})
+    if build and imports:
+        result = run(["lake", "build", *imports])
         if result.returncode:
             raise RuntimeError(f"lake build failed:\n{result.stdout[-4000:]}")
-    errors = compile_all(local, by_file, output)
+    context = prepare_compilation(local, by_file, output, witness_registry=registry)
+    errors = compile_all(local, by_file, output, compiled_units=context)
     if errors:
         raise RuntimeError("; ".join(errors))
-    return ({u.module: u.file for u in local},
-            sorted({lib_of(output, u.root) for u in local}))
+    seal_compilation(context)
+    return {u.module: u.file for u in local}, context
 
 
 def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: Path | None) -> dict:
