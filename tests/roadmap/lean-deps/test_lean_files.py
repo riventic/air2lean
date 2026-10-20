@@ -115,7 +115,7 @@ class Classify(unittest.TestCase):
         self.write("lakefile.toml", '[[lean_lib]]\nname = "Lib"\n\n[[lean_lib]]\nname = "P"\n'
                    'roots = ["Lib.C"]\nglobs = ["Lib.C"]\nprecompileModules = true\n\n'
                    '[[lean_lib]]\nname = "PDeps"\nroots = ["Lib.C"]\nglobs = []\n')
-        self.assertEqual(ld.precompiled_deps(), {"PDeps": ["Lib.A", "Lib.B"]})
+        self.assertEqual(ld.precompiled_deps(ld.precompiled_libs()), {"PDeps": ["Lib.A", "Lib.B"]})
         self.assertEqual(ld.precompiled(write=False), 1)
         self.assertEqual(ld.precompiled(write=True), 0)
         self.assertEqual(ld.precompiled(write=False), 0)
@@ -133,7 +133,7 @@ class Classify(unittest.TestCase):
         self.write("Lib/C.lean", "import Lib.Gone\n")
         self.write("lakefile.toml", '[[lean_lib]]\nname = "P"\nglobs = ["Lib.Gone"]\nprecompileModules = true\n')
         with self.assertRaisesRegex(SystemExit, "must name existing modules"):
-            ld.precompiled_deps()
+            ld.precompiled_libs()
 
 
 if __name__ == "__main__":

@@ -188,12 +188,12 @@ def precompiled_libs() -> dict[str, list[str]]:
     return out
 
 
-def precompiled_deps() -> dict[str, list[str]]:
-    """{`<P>Deps`: its globs} for every precompiled library P: the modules P's modules import,
-    transitively (Lake's `transImports`). Lake links P's shared library against `<P>Deps`'s, so
-    that one must hold the native code of all of them."""
+def precompiled_deps(libs: dict[str, list[str]]) -> dict[str, list[str]]:
+    """{`<P>Deps`: its globs} for every precompiled library P of `libs` (`precompiled_libs`): the
+    modules P's modules import, transitively (Lake's `transImports`). Lake links P's shared
+    library against `<P>Deps`'s, so that one must hold the native code of all of them."""
     out = {}
-    for name, mods in precompiled_libs().items():
+    for name, mods in libs.items():
         below = set().union(*(set(v) for v in lake_query([f"{m}:transImports" for m in mods])))
         out[name + "Deps"] = sorted(below - set(mods))
     return out
@@ -203,7 +203,8 @@ def precompiled(write: bool) -> int:
     path = ROOT / "lakefile.toml"
     text = path.read_text(encoding="utf-8")
     current = {lib["name"]: lib.get("globs") for lib in tomllib.loads(text).get("lean_lib", [])}
-    expected = precompiled_deps()
+    precompiled_mods = precompiled_libs()
+    expected = precompiled_deps(precompiled_mods)
     stale = [deps for deps, globs in expected.items() if current.get(deps) != globs]
     if write and stale:
         for deps in stale:
@@ -224,9 +225,9 @@ def precompiled(write: bool) -> int:
         return 1
     # What Lake builds: each library's modules (a library listed before ZigLean, or an overlapping
     # glob of a later library, would hand the modules to another library).
-    libs = [n for p in precompiled_libs() for n in (p, p + "Deps")]
+    want = {**precompiled_mods, **expected}
+    libs = list(want)
     owned = dict(zip(libs, lake_query([f"{n}:modules" for n in libs])))
-    want = {**precompiled_libs(), **expected}
     wrong = [n for n in libs if sorted(owned[n]) != want[n]]
     for n in wrong:
         print(f"lean-deps: Lake builds {sorted(owned[n])} as library {n}, not its globs {want[n]}; "
