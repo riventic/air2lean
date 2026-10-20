@@ -1090,6 +1090,11 @@ private def CompleteDecl.formalValue (decl : CompleteDecl) (index : Nat) : Excep
   if decl.statePosition == some index then return "s"
   throw s!"unmapped original compiler formal in {decl.compiler.name}"
 
+private def CompleteDecl.formalType (decl : CompleteDecl) (ns : String) (index : Nat) : Except String String := do
+  if let some i := decl.positions.idxOf? index then return decl.emitted.params[i]!.2
+  if decl.statePosition == some index then return s!"{ns}.{decl.shape.localsName}"
+  throw "unknown varying compiler formal"
+
 private def CompleteDecl.guard (decl : CompleteDecl) (fixed : Array String) : Except String String := do
   let mut tests := #[]
   for index in [:decl.compiler.fixed.size] do
@@ -1191,9 +1196,7 @@ private def CompleteDecl.partialTerm (decl : CompleteDecl) (fixed : Array String
       let some value := fixed[k]? | throw "missing partial declaration fixed parameter"
       values := values.push value
     else
-      let type ← if let some i := decl.positions.idxOf? index then pure decl.emitted.params[i]!.2
-        else if decl.statePosition == some index then pure s!"{ns}.{decl.shape.localsName}"
-        else throw "unknown varying compiler formal"
+      let type ← decl.formalType ns index
       binders := binders.push s!"(v{index} : {type})"
       values := values.push s!"v{index}"
   let runtime := decl.positions.map (fun i => values[i]!)
@@ -1203,16 +1206,29 @@ private def CompleteDecl.partialTerm (decl : CompleteDecl) (fixed : Array String
     | none => app
   pure (if binders.isEmpty then app else s!"(fun {" ".intercalate binders.toList} => {app})")
 
-private def CompleteDecl.admissibility (decl : CompleteDecl) : Except String (Array String) := do
+private def CompleteDecl.admissibility (decl : CompleteDecl) (ns air d : String) : Except String (Array String) := do
   let names := decl.values ++ decl.extraNameArray ++ #["hfixed"]
   let mut lines := names.map fun name => s!"    apply Lean.Order.admissible_pi; intro {name}"
-  -- Applying a known original formal is an existing generic continuous projection. It works
-  -- for every helper capture count; the source-function arity gate is unchanged.
+  let mut arguments := #[]
   for index in [:decl.compiler.params.size] do
     if decl.compiler.fixed[index]!.isNone then
-      lines := lines.push s!"    apply Lean.Order.admissible_apply (x := {← decl.formalValue index})"
+      arguments := arguments.push (← decl.formalValue index, ← decl.formalType ns index)
   if decl.loop.isSome && decl.statePosition.isNone then
-    lines := lines.push "    apply Lean.Order.admissible_apply (x := s)"
+    arguments := arguments.push ("s", s!"{ns}.{decl.shape.localsName}")
+  let resultType := if decl.loop.isSome then
+      s!"Zig.Result ({ns}.{decl.shape.exitName} × {ns}.{decl.shape.localsName})"
+    else s!"Zig.Result ({(sig decl.source).ret.lean})"
+  let right := decl.right air
+  -- Supply the existing projection rule's dependent codomain and residual predicate
+  -- explicitly, rather than asking unification to infer them from an applied function.
+  for index in [:arguments.size] do
+    let rest := arguments.extract (index + 1) arguments.size
+    let type := " → ".intercalate (rest.toList.map (fun (_, type) => s!"({type})") ++ [resultType])
+    let app := "r" ++ String.join (rest.toList.map (fun (name, _) => " " ++ name))
+    let (value, _) := arguments[index]!
+    lines := lines.push <| "    apply Lean.Order.admissible_apply " ++
+      s!"(fun _ (r : {type}) => Lean.Order.PartialOrder.rel ({decl.encodeResult app d}) {right}) " ++
+      s!"(x := {value})"
   pure (lines.push "    exact adm_app0 _ _")
 
 private def CompleteDecl.fixedIntro (decl : CompleteDecl) : Except String (Array String) := do
@@ -1719,9 +1735,9 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
         for (_, memberName, isStep) in goals do
           let some member := members.find? (·.compiler.name == memberName) | throw "unknown actual induction goal"
           let some role := induction.members.find? (·.member == memberName) | throw "missing actual induction role"
-          let body ← if isStep then step member (some role.step) else member.admissibility
+          let body ← if isStep then step member (some role.step) else member.admissibility ns (airName member.source) (declOf member.source.name)
           lines := lines.push "    ·"
-          lines := lines ++ body.map ("  " ++ ·)
+          lines := lines ++ body.map (indent 2)
       lines := lines ++ #[s!"  exact h_complete {" ".intercalate targetArgs.toList} {targetExtra} (by simp)", ""]
     for member in members do
       complete := complete.push (member, s!"{ns}.{member.emitted.name}", completion member)
