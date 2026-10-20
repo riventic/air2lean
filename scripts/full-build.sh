@@ -110,7 +110,9 @@ guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
 jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
 # Retain per-case native binding evidence and the one generic kernel audit beside the logs.
 canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
-guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
+# Its per-case bindings run on AIR2LEAN_JOBS threads (scripts/canon_certification.py), light on
+# memory: one per Lean process of the budget.
+jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
 # The proof-fixture package (tests/roadmap/lakefile.toml), every library, then the proof-fixture
 # checks CI runs, in their own guard (scripts/fixture-checks.sh). Built first, once: the checks run
 # in parallel, and two Lake builds of one workspace must not build the same module at once.
