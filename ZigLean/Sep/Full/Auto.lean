@@ -6130,16 +6130,26 @@ def etaAll (e : Expr) : MetaM Expr :=
 
 /-- A hypothesis `h` of a stop normalized: caller simp terms and ghost values' lemmas, then
 data components (`(gH x r).2` after `upd_snd`). Context equations are used after forwarding
-the original fact, so a caller's lemma can still infer its arguments from that fact. -/
-def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) (fields := false) :
+the original fact. `keepOriginal` also keeps its compound's original leaf evidence. -/
+def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) (fields := false)
+    (keepOriginal := false) :
     TacticM (Option (FVarId × MVarId)) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
   let ctx ← if fields then wpFactCtx extra (some h) else wpHypCtx extra
   let (r, _) ← simp ty ctx (simprocs := #[← Simp.getSimprocs])
   let (g, h) ← if r.expr == ty && !r.expr.isFalse then pure (g, h) else
-    let some (h', g') ← applySimpResultToLocalDecl g h r true | return none
-    pure (g', h')
+    if keepOriginal && !r.expr.isFalse then
+      let known := (← getLCtx).foldl (init := none) fun acc d =>
+        if !d.isImplementationDetail && d.type == r.expr then some d.fvarId else acc
+      if let some h' := known then pure (g, h') else
+        -- Normalize before adding a copy: its own equation stays excluded from the context.
+        let some (pf, ty') ← Lean.Meta.applySimpResult g (mkFVar h) ty r true | return none
+        let (h', g') ← (← g.assert (← h.getUserName) ty' pf).intro1P
+        pure (g', h')
+    else
+      let some (h', g') ← applySimpResultToLocalDecl g h r true | return none
+      pure (g', h')
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
   let ty' ← etaAll (← reduceProjs ty (data := true))
@@ -6452,7 +6462,10 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let some (h, g) ← wpNorm g h extra | return []
   let some g ← wpForward g h | return []
   let some h ← g.withContext (wpCurrentHyp? h) | return [g]
-  let some (h, g) ← wpNorm g h extra (fields := true) | return []
+  let original := h
+  let some (h, g) ← wpNorm g h extra (fields := true) (keepOriginal := true) | return []
+  let some g ← if h == original then pure (some g) else wpForward g h | return []
+  let some h ← g.withContext (wpCurrentHyp? original) | return [g]
   wpSplit g h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an

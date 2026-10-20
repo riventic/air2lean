@@ -434,6 +434,43 @@ theorem incoming_forward_compatibility {Tgt γ : Type} (P : Proto Tgt γ) (t : T
       (fun _ _ _ _ => (flag k = true ∨ Nonempty (Fin (1 - j))) → j - 1 = 0) G m n := by
   fsym [incoming_raw_or_bound flag k]
 
+/-- A nested leaf still supplies the data argument of its original forward premise. -/
+theorem incoming_nested_bound (flag : Nat → Bool) (k j : Nat)
+    (h : Nonempty (Fin (if flag k then 0 else 1 - j))) : j - 1 = 0 := by
+  rcases h with ⟨i⟩
+  have hi := i.isLt
+  split at hi <;> omega
+
+theorem incoming_nested_sanity (R : Prop) (flag : Nat → Bool) (k j : Nat)
+    (h : R ∧ Nonempty (Fin (if flag k then 0 else 1 - j))) : j - 1 = 0 :=
+  incoming_nested_bound flag k j h.2
+
+theorem incoming_nested_forward {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (R : Prop) (flag : Nat → Bool) (k j : Nat)
+    (hf : flag k = false) :
+    P.WP t (pure ())
+      (fun _ _ _ _ => (R ∧ Nonempty (Fin (if flag k then 0 else 1 - j))) → j - 1 = 0)
+      G m n := by
+  fsym [incoming_nested_bound flag k]
+
+/-- The normalized whole conditional remains available while its original fact is split. -/
+theorem incoming_conditional_whole {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (A B : Prop) (flag : Nat → Bool) (k : Nat)
+    (hf : flag k = false) :
+    P.WP t (pure ()) (fun _ _ _ _ => (if flag k then A else B) → B) G m n := by
+  fsym
+
+structure IncomingTagged (b : Bool) (R : Prop) : Prop where
+  holds : R
+
+/-- Normalization retains the whole indexed structure, in addition to its projected fields. -/
+theorem incoming_tagged_whole {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (R : Prop) (flag : Nat → Bool) (k : Nat)
+    (hf : flag k = false) :
+    P.WP t (pure ()) (fun _ _ _ _ => IncomingTagged (flag k) R → IncomingTagged false R)
+      G m n := by
+  fsym
+
 /-- Inspect the simplifier result and require that the existing normalization API closes
 the goal when a closed bit-vector comparison makes an incoming fact impossible. -/
 theorem incoming_false_result (R : Prop) (flag : Bool)
