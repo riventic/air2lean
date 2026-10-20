@@ -3487,24 +3487,12 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
           if qbs.hasExprMVar then pure none else pure (some (← mkAppM ``Array.size #[qbs]))
       if let some n := n? then
         let sz ← mkAppM ``Array.size #[cur[5]!]
-        -- An exact whole candidate gets the ordinary size side-proof attempt, in the actual
-        -- context. The demand is a goal, never an assumed fact. A rejected candidate leaves
-        -- no byte-witness assignment behind; the protected carving probes below stay unchanged.
-        let sExact ← saveState
-        let exact ← if zero.isSome && !n.hasExprMVar && !sz.hasExprMVar then do
-            if (← proveArith (mkNot (← mkEq n sz)) (quick := true) (cases := false)).isSome then
-              pure false
-            else if ← isDefEq qbs cur[5]! then
-              pure (← proveArith (← mkEq n sz)).isSome
-            else pure false
-          else pure false
-        unless exact do sExact.restore
         -- the bytes past `n` split off, unless they are none (`n = sz` by the quick solver, else
         -- `sz ≤ n` by the full one: no empty rest). (Sizes, without the case facts: the
         -- disjointness of other regions does not bound them, and a failed search through those
         -- facts is exponential: a node of `n` bytes against its 24 header bytes in a state of
         -- three blocks, ledger #carve-size-probes.)
-        let hk? ← if exact || (← proveArith (← mkEq n sz) (quick := true) (cases := false)).isSome then
+        let hk? ← if (← proveArith (← mkEq n sz) (quick := true) (cases := false)).isSome then
             pure none else do
           let some hk ← proveArith (← mkAppM ``LE.le #[n, sz]) (cases := false) | throwError "n"
           pure (if (← proveArith (← mkAppM ``LE.le #[sz, n]) (cases := false)).isSome then none
