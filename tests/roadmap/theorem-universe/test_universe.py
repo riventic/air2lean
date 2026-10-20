@@ -951,8 +951,10 @@ class FixtureCompilationTests(unittest.TestCase):
             self.after_build()
         return subprocess.CompletedProcess(args, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertTrue(all_declarations)
+        # A compiled Unit audit is bound to its lookup path: Lake never chooses its imports.
+        self.assertIsNone(extract_in)
         raw = CompiledUnitTests.extract(self, modules, build, witnesses,
                                         all_declarations=all_declarations, lean_path=lean_path)
         # Helper has no declaration-graph node: only its unused header import reveals it.

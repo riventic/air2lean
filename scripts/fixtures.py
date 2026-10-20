@@ -153,7 +153,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
         report_path = output or work / "assurance.json"
         report_path.unlink(missing_ok=True)
         context = None
-        if lib is None:
+        if lib is None and package is None:
             # This producer owns the canonical Lake outputs. Snapshot before the ordinary
             # cached build, rather than attaching source names to a pre-existing artifact.
             context = theorem_universe.prepare_fixture_compilation(modules)
