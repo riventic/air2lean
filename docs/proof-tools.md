@@ -117,7 +117,7 @@ Reports classify theorems over these interfaces by their kernel types, not by la
 The scenarios of the retired `Normalize`, `Clients` and `Total` regressions (AC normalization,
 unit/duplicate handling, rejected framing, total bind, rejection of divergence/panics, partial
 and total correctness) are `fsym` regressions in the full-state logic:
-`tests/roadmap/sep-auto/Frame.lean` and `tests/roadmap/sep-auto/Total.lean`
+`tests/roadmap/sep-auto/SepAuto/Frame.lean` and `tests/roadmap/sep-auto/SepAuto/Total.lean`
 ([proof-automation.md](proof-automation.md)). The array regressions in
 `tests/roadmap/proof-tools/` use `Full/Arr` and `fsym`: `Array.lean` checks
 prefix/element/suffix ownership, endpoint and singleton boundaries, a store preserving
@@ -158,7 +158,7 @@ generated array clients of the former `StepClients.lean` are `fsym` proofs in
 alone proves `bump_spec` and the body of the `reverse` loop.)
 
 The scenarios of the retired `Steps.lean` regressions are `fsym` regressions in the
-full-state logic, `tests/roadmap/sep-auto/Steps.lean`: framed `pts` steps in partial and total
+full-state logic, `tests/roadmap/sep-auto/SepAuto/Steps.lean`: framed `pts` steps in partial and total
 form, an item store through `p.elem` with its neighbours framed, a side condition left visible
 as a goal, caller rules with existential/pure postconditions, existentials and facts of the
 precondition, and a generated-style `MM` body. It also rejects a missing points-to, a dropped

@@ -642,6 +642,16 @@ namespace ResetLedger
 
 variable {I : FAllocInv} {γ e : Nat}
 
+/-- The whole epoch token supplies a positive available fee for creation. The accepted request
+is still an obligation of the concrete invariant; no capacity or success guarantee is added. -/
+theorem creationPost (L : ResetLedger I γ e)
+    (hf : ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k) :
+    EUpd (I.own ⋆ epTok γ e Frac.one) I.creationPost := by
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_mono_right (fun _ ht => ?_) h)
+    (I.creationPost_intro Frac.one (by decide) hf)
+  rw [L.fee_eq]
+  exact sep_comm (sep_lift.mpr ⟨by decide, ht⟩)
+
 /-- **The state next to the whole epoch token has no grant.** -/
 theorem own_epTok_empty (L : ResetLedger I γ e) :
     EUpd (I.own ⋆ epTok γ e Frac.one)

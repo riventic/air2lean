@@ -104,6 +104,26 @@ theorem of_blocks {W : Loc → Prop} {m m' : Mem} {hF : Heap} (hs : FStepIn hF m
 
 end RestStep
 
+/-- A rest-only step that acquires the publication clock owns the drained region when
+each old access was covered by that publication or by this caller's own clock.
+The future-block disjunct is retained exactly as in `Mem.OwnsC`. -/
+theorem RestStep.owns_of_acquire {A : Loc → Prop} {m m' : Mem} {t : ThreadId}
+    {h : Heap} {c : VClock} (hs : RestStep A m m')
+    (hoff : ∀ l, A l → h l = none)
+    (hacq : VClock.le c (m'.clocks[t]!) = true)
+    (hbefore : ∀ e ∈ m.footprint, (e.Touches h ∨ m.blocks.size ≤ e.block) →
+      VClock.le e.clock c = true ∨ VClock.le e.clock (m.clocks[t]!) = true) :
+    m'.Owns t h := by
+  intro e he htouch
+  rcases hs.fp e he with he | ⟨hA, hb⟩
+  · rcases hbefore e he (htouch.imp id (fun h => by rw [← hs.bsize]; exact h)) with hp | ht
+    · exact VClock.le_trans hp hacq
+    · exact VClock.le_trans ht (hs.clocks t)
+  · rcases htouch with ⟨x, h1, h2, h3⟩ | hf
+    · exact (h3 (hoff (e.block, x) (hA x h1 h2))).elim
+    · rw [hs.bsize] at hf
+      exact (Nat.not_lt_of_ge hf hb).elim
+
 namespace FOwned
 
 variable {own : ThreadId → Res} {rO Y : Res} {m m' : Mem} {t : ThreadId}

@@ -138,6 +138,16 @@ theorem MemFacts.regionIn_bound (hpos : 0 < bs.size) :
 
 end Apart
 
+/-- An untagged extent share reaches a live block inside the address space, including when
+the requested bound is zero. Unlike a fact obtained from owned bytes, this needs no nonempty
+region. Kept opt-in, like `MemFacts.regionIn_bound`. -/
+theorem MemFacts.bshare_bound {b : BlockId} {q : Frac} {k : Nat} :
+    MemFacts (bshare b q k) (k ≤ 2 ^ 63) := by
+  intro m r rF hh hp hs
+  obtain ⟨blk, hb, hlive, hk, -⟩ := hh.bshare (sep_emp.mpr hp)
+  have := hs.2.2.2 b blk hb hlive
+  omega
+
 /-! ## Pointer order -/
 
 /- The thread rules are the proofs (they read no byte); the sequential rules are read from them

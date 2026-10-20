@@ -85,6 +85,56 @@ class Classify(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
             ld.lib_roots(strict_sources=True)
 
+    def fake_lake_query(self, targets):
+        # Lake's answers in the tiny repo: transitive imports by the file headers, a library's
+        # modules by its globs (as Lake assigns them when the lakefile is well-formed).
+        libs = {lib["name"]: lib.get("globs", []) for lib in
+                ld.tomllib.loads((self.repo / "lakefile.toml").read_text())["lean_lib"]}
+        out = []
+        for t in targets:
+            name, facet = t.rsplit(":", 1)
+            if facet == "modules":
+                out.append(self.owned.get(name, libs[name]))
+                continue
+            seen, todo = set(), sorted(ld.imports(ld.module_file(name)))
+            while todo:
+                m = todo.pop()
+                if m not in seen and ld.module_file(m).is_file():
+                    seen.add(m)
+                    todo += sorted(ld.imports(ld.module_file(m)))
+            out.append(sorted(seen))
+        return out
+
+    def test_precompiled_deps_are_the_import_closure(self):
+        # docs/build-cache.md#precompiled-fsym: `<P>Deps` holds what P's modules import.
+        self.owned = {}
+        saved = ld.lake_query
+        ld.lake_query = self.fake_lake_query
+        self.addCleanup(setattr, ld, "lake_query", saved)
+        self.write("Lib/C.lean", "import Lib.B\ndef c := b\n")
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "Lib"\n\n[[lean_lib]]\nname = "P"\n'
+                   'roots = ["Lib.C"]\nglobs = ["Lib.C"]\nprecompileModules = true\n\n'
+                   '[[lean_lib]]\nname = "PDeps"\nroots = ["Lib.C"]\nglobs = []\n')
+        self.assertEqual(ld.precompiled_deps(ld.precompiled_libs()), {"PDeps": ["Lib.A", "Lib.B"]})
+        self.assertEqual(ld.precompiled(write=False), 1)
+        self.assertEqual(ld.precompiled(write=True), 0)
+        self.assertEqual(ld.precompiled(write=False), 0)
+        self.assertIn('name = "PDeps"\nroots = ["Lib.C"]\nglobs = [\n  "Lib.A",\n  "Lib.B",\n]',
+                      (self.repo / "lakefile.toml").read_text())
+        self.owned = {"PDeps": ["Lib.A"]}  # Lake hands Lib.B to another library (order, overlap)
+        self.assertEqual(ld.precompiled(write=False), 1)
+        self.owned = {}
+        self.write("Lib/B.lean", "def b := 1\n")  # no longer imports Lib.A: the list is stale
+        self.assertEqual(ld.precompiled(write=False), 1)
+        text = (self.repo / "lakefile.toml").read_text()
+        self.write("lakefile.toml", text.replace('[[lean_lib]]\nname = "PDeps"', '[[lean_lib]]\n# x\nname = "PDeps"'))
+        with self.assertRaisesRegex(SystemExit, "needs a library PDeps"):
+            ld.precompiled(write=True)  # a layout write cannot edit fails, not loops
+        self.write("Lib/C.lean", "import Lib.Gone\n")
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "P"\nglobs = ["Lib.Gone"]\nprecompileModules = true\n')
+        with self.assertRaisesRegex(SystemExit, "must name existing modules"):
+            ld.precompiled_libs()
+
 
 if __name__ == "__main__":
     unittest.main()

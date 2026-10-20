@@ -29,7 +29,8 @@
 #   coverage inventories                  coverage.py l14 over the regenerated inventories
 #   C front-end record                    tests/roadmap/c-frontend/check.sh --light
 #   generated modules                     gen-integrity.py check, after the full build
-#                                         (scripts/full-build.sh; skipped by --no-translator)
+#                                         (scripts/full-build.sh, which first checks the
+#                                         precompiled fsym libraries; skipped by --no-translator)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail

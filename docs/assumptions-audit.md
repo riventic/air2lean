@@ -253,11 +253,51 @@ scope stays `all-shipped-modules` with `modules` the shipped inventory.
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers
 that have independently built current artifacts; its report says `build_checked: false`.
+Module arguments, receipt module paths, numerical registry module keys and project contract
+paths share `lean-deps.py`'s bounded ASCII module spelling, including `'`, `!` and `?`.
+Quoted or escaped spellings are refused. Project paths must end in `.lean`, with one literal
+module component per directory or filename: `A.B.lean` cannot stand for `A/B.lean`.
+This does not change declaration-name or Zig-namespace validation, module enrollment, policy
+or the compiler-owned source/output checks.
+
+Project check records hash the actual project validator and the selected auditor's physical
+adjacent `lean-deps.py`, in addition to their declared scripts. A custom auditor stub without
+that helper remains supported; no repository helper is substituted. An existing malformed
+helper fails, and changes in known-script bytes, presence or physical identity fail the existing
+input-stability stage. Each check reloads its project validator before validation. These are
+known input checks within the trusted Python runtime, not arbitrary import discovery,
+immutable execution, writer authentication or additional receipt qualification.
+
 `--all-declarations` additionally seeds every declaration in the selected modules, including
 unused private definitions and compiler-generated recursors, and records their names in
 `selected_declaration_roots`. It uses the same dependency traversal, policy and kernel replay.
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
+
+`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
+Lake instead of elaborating it with `lake env lean`: the driver is a module of a generated
+workspace `PACKAGE/.lake/extraction` that requires the Lake package of the audited modules, so
+the driver's outputs stay off the caller's LEAN_PATH. Lake elaborates it again exactly when its
+trace changes (the driver's text, with the modules, options and family checks; the trace of every
+import, `tools.Assurance` included; the toolchain); an unchanged driver replays the build's
+stored log, and the report is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON`
+message, exactly one). The driver's text names the workspace, so it is never restored from
+another checkout's artifact-cache entry, which keeps no log: a missing report fails the audit.
+A compiler-owned Unit audit uses that driver only while Lake resolves exactly its bound lookup
+path there; otherwise the driver is elaborated afresh on that path.
+
+With `--extract-in PACKAGE` the kernel replay is Lake-built as well: each audited module `M` has
+a receipt module in `PACKAGE/.lake/replay` that imports only `tools.KernelReplay` and runs
+`run_meta Air2Lean.KernelReplay.run `M`. The helper runs the toolchain's `leanchecker` on `M` as
+its own process, under Lake's lookup path, and logs one `AIR2LEAN_KERNEL_REPLAY` line. The receipt
+never imports `M`, because importing would run `M`'s `initialize` code in the receipt's process
+([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Instead, the receipt's
+generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M` again exactly
+when the receipt's trace changes: `M`'s olean, `M`'s dependency trace (everything below it), the
+toolchain, and the receipt's text, which names the checker's and the installed runtime's digests. Otherwise
+Lake replays the stored receipt. A failing check stays a failing receipt. The receipts are used
+only while Lake resolves exactly the audit's lookup path in that workspace; a missing, foreign or
+repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
 
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
 for each exact selected root. The CLI report preserves those rows under

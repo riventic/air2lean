@@ -85,7 +85,7 @@ class ReceiptTests(unittest.TestCase):
                      'tools/Assurance.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain',
                      'zig-patch/versions.toml', 'assurance/float-semantics.json', 'scripts/float-semantics.py',
                      'scripts/gen-integrity.py', 'scripts/premise_markers.py', 'assurance/witness-fixtures.json',
-                     'scripts/theorem_universe.py', 'scripts/premises.py'):
+                     'scripts/theorem_universe.py', 'scripts/premises.py', 'scripts/lean-deps.py'):
             self.source(name, (ROOT / name).read_bytes())
         self.source('ZigLean.lean', b'import ZigLean.Basic\n')
         self.source('ZigLean/Basic.lean', b'def trivial := 0\n')
@@ -233,6 +233,40 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual((self.attempt / 'receipt.json').read_bytes(), original)
         self.assertEqual(r.verify(self.attempt)['checking'], 'not_rerun')
 
+    def test_module_spelling_and_imported_punctuation_artifact(self):
+        for module in ("Proofs.Dep'", 'Proofs.Check!', 'Fixture.Witness?'):
+            self.assertEqual(r.module_file(module), module.replace('.', '/') + '.lean')
+        for module in ('A..B', 'A/B', '../A', 'A B', '«A»', '', None):
+            with self.subTest(module=module), self.assertRaisesRegex(ValueError, 'invalid module name'):
+                r.module_file(module)
+        module = "Proofs.Dep'"
+        self.put(self.root / '.lake/build/lib/lean' / (module.replace('.', '/') + '.olean'), b'fixture artifact')
+        audit = r.load(self.attempt / 'audit.json')
+        audit['nodes'].append(dict(audit['nodes'][0], name='Imported.value', kind='definition', module=module))
+        audit['kernel_replay'] = self.replay([module, 'Proofs.One'])
+        auditor = r.helper('assumptions')
+        audit.update(auditor.apply_policy(audit, auditor.load_policy(self.root / 'assurance/policy.json')))
+        r.audit_ok(self.plan, audit)
+
+    def test_module_helper_uses_one_physical_sibling_load(self):
+        alias = self.base / 'aliases/receipt.py'
+        alias.parent.mkdir()
+        alias.symlink_to(ROOT / 'scripts/proof-receipt.py')
+        (alias.parent / 'lean-deps.py').write_text('raise RuntimeError("wrong sibling")\n')
+        actual, calls = r.importlib.util.spec_from_file_location, []
+        def load(name, path):
+            calls.append((name, path))
+            return actual(name, path)
+        r.lean_deps.cache_clear()
+        try:
+            with mock.patch.object(r, '__file__', str(alias)), \
+                 mock.patch.object(r.importlib.util, 'spec_from_file_location', load):
+                self.assertEqual(r.module_file("Proofs.Dep'"), "Proofs/Dep'.lean")
+                self.assertEqual(r.module_file('Proofs.Other!'), 'Proofs/Other!.lean')
+            self.assertEqual(calls, [('receipt_lean_deps', ROOT / 'scripts/lean-deps.py')])
+        finally:
+            r.lean_deps.cache_clear()
+
     def test_guard_failure_and_cleanup_classes(self):
         for outcome in ('child_failed', 'timeout', 'cancelled', 'cleanup_failed', 'lock_busy', 'rss_limit'):
             with self.subTest(outcome=outcome):
@@ -306,7 +340,7 @@ class ReceiptTests(unittest.TestCase):
 
     def test_mutable_source_runtime_policy_and_tool_context(self):
         paths = ['Proofs/One.lean', 'Proofs/One/Gen.lean', 'ZigLean/Basic.lean',
-                 'assurance/policy.json', 'lean-toolchain', 'lakefile.toml']
+                 'assurance/policy.json', 'lean-toolchain', 'lakefile.toml', 'scripts/lean-deps.py']
         for name in paths:
             with self.subTest(name=name):
                 path = self.root / name

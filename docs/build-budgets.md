@@ -29,8 +29,13 @@ The machine's guarded workloads share one memory budget, `--mem-budget-mib` (def
 `AIR2LEAN_BUILD_MEM_MIB`, else 75% of physical memory), cut into slots of 1 GiB
 (`<lock>.d/slot-NNN`). A workload holds ceil(`--rss-mib` / 1 GiB) slots, at most all of them,
 and the guard stops it above `--rss-mib`, so the admitted workloads stay within the budget
-(up to the sampling limits below). On the 64 GB development Mac that is 48 slots: four full
-builds (`--rss-mib 11000`) run at once instead of one.
+(up to the sampling limits below). On the 64 GB development Mac that is 48 slots: four
+single-process builds (`--rss-mib 11000`) run at once instead of one. `scripts/full-build.sh`
+sizes itself from the slots free when it starts (`free_mib`): max(1, min(cores, budget / 2 /
+11000, free / 11000)) Lean processes (Lake's LEAN_NUM_THREADS), with `--rss-mib` 11000 per
+process, in one admission for all its phases. That is at most 2 processes and 22 slots on that
+Mac. It never asks for more than half the machine, and it asks for at most what was free, so it
+does not hold the admission queue for slots that other running builds hold.
 
 - One build per Lake workspace: Lake has no build lock, so a workload holds
   `<lock>.d/ws-<digest>` of the git top level of `--cwd` (else `--cwd`) exclusively. Check trees

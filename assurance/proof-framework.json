@@ -115,7 +115,7 @@
     },
     {
       "name": "FI",
-      "module": "tests.roadmap.sep-auto.Views",
+      "module": "tests.roadmap.sep-auto.SepAuto.Views",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate, engine)"
     },

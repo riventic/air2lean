@@ -1,3 +1,4 @@
+import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.Logic
 import ZigLean.Sep.Full.Extent
 import ZigLean.Sep.Full.Claims
@@ -193,7 +194,7 @@ is an ordinary `FTotalTriple P c (fun _ => … creationPost …)` with the exist
 companion; this assertion introduces no program judgment. The post may existentially bind the
 instance's fresh ghost parameters, including a ledger allocated by creation; visible program
 parameters remain fixed at the actual application. -/
-def FAllocInv.creationPost (I : FAllocInv) : FAssn :=
+@[fsym_atom] def FAllocInv.creationPost (I : FAllocInv) : FAssn :=
   FAssn.ex fun φ : Frac =>
     ⟪0 < φ.val ∧ ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k⟫ ⋆
       (I.own ⋆ I.fee φ)

@@ -43,6 +43,18 @@ name = "Interfaces"
 srcDir = "interfaces"
 globs = ["Interfaces.Sentinel", "Interfaces.SentinelSpec"]
 
+# The general symbolic executor `fsym` on library-only examples (tests/roadmap/sep-auto/check.sh).
+[[lean_lib]]
+name = "SepAuto"
+srcDir = "sep-auto"
+globs = ["SepAuto.+"]
+
+# The one-logic scenarios over the full-state logic (tests/roadmap/one-logic/check.sh).
+[[lean_lib]]
+name = "OneLogic"
+srcDir = "one-logic"
+globs = ["OneLogic.+"]
+
 # The architecture-audit claim fixtures (docs/architecture-audit/claims.md). No module imports two
 # of them: Shadow and ShadowWithin redefine claim heads on purpose and clash only in the audit
 # environment.

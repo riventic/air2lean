@@ -64,7 +64,7 @@ imports) and the architecture-audit claim fixtures; the other checks still elabo
 | command | what it does |
 | --- | --- |
 | `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
-| `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration of the modules depends on `sorry`, every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. |
+| `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration of the modules depends on `sorry`, every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. The extractor's driver (the `#assurance_audit` file) is built by Lake (`assumptions.py --extract-in`, in the generated workspace `tests/roadmap/.lake/extraction`, which requires the package): its trace (the driver's text, every import's trace, `tools.Assurance` included, the toolchain) decides when the extraction runs again, and an unchanged one replays the build's stored log, which carries the report. The policy, the kernel replay and the freshness checks run on every audit. |
 | `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
@@ -107,8 +107,8 @@ mutant copy. Without the variable (CI) the package builds into its own `.lake` l
 package.
 
 **One mode.** Every elaboration in a converted fixture's check goes through Lake (proofs,
-`#guard` files, obstructions, counterexamples, mutants), so the precompiled `fsym` engine of step 2
-(`precompileModules`, loaded by Lake for its own builds) applies to all of them at once, and a
+`#guard` files, obstructions, counterexamples, mutants), so the precompiled `fsym` engine
+([below](#precompiled-fsym), loaded by Lake for its own builds) applies to all of them at once, and a
 mutant cannot fail on a heartbeat budget that the native proof meets. Outside the checks,
 `scripts/theorem_universe.py audit` (CI part `audit`) still compiles the theorem-indexed fixture
 files itself with `lake env lean -o`: it rejects a file whose elaboration printed `declaration
@@ -130,6 +130,55 @@ every `.olean`, `.ilean`, `.c` and the executable).
 Proof receipts (`scripts/proof-receipt.py`) refuse any `LAKE_*` environment overlay, so a
 receipt never runs with the cache variables; `scripts/regen.sh` removes them for the provenance
 step. The hard-linked outputs it finds in `.lake/build` are ordinary up-to-date Lake outputs.
+
+## Precompiled fsym
+
+`fsym` (`ZigLean/Sep/Full/Auto.lean`, with the attribute handlers, arithmetic solver and rule
+tables of the modules below it) runs as native code in every Lake build of a module that imports
+`ZigLean.Sep.Full.Auto`, directly or through `AutoAll`, in the root package, the proof-fixture
+package and `tests/diff`. Lean's interpreter runs the same code otherwise. This is a build mode,
+not a proof rule: the elaborator produces the same terms and the kernel checks them as before
+(the `.olean` of every measured module is byte-identical in both modes, on aarch64-macos and
+x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`, `unroll_solo` in
+`Unroll`) stays interpreted. Native code does change one thing: `native_decide` and
+`Lean.ofReduceBool` would evaluate a closure function with compiled code. Both are already
+rejected (`scripts/no-sorry.sh`, the claim policy).
+
+Two libraries of `lakefile.toml` do it:
+
+- `Fsym` (`precompileModules = true`) holds `ZigLean.Sep.Full.Auto` alone. Lake compiles it to
+  C, an object file and the shared library `libair2lean_Fsym`. It passes that library, and the
+  `FsymDeps` library it depends on, to every importer as `--load-dynlib`.
+- `FsymDeps` holds the import closure of `Auto`. It is not precompiled: Lake builds its shared
+  library `libair2lean_FsymDeps` only because `Fsym`'s library links against it. Its list of
+  modules is generated (`python3 -B scripts/lean-deps.py --precompiled write`, regen step
+  `precompiled`; preflight checks it). The generator takes the closure from Lake
+  (`Auto:transImports`) and checks with `lake query Fsym:modules FsymDeps:modules` that Lake
+  builds exactly those modules in those libraries. Lake assigns a module to the last library
+  whose `globs` match it, so only an explicit list keeps those modules out of `ZigLean`, whose
+  shared library does not hold them. With a stale list, an importer of `Auto` stops with
+  `error loading library, dlopen(...libair2lean_Fsym...): symbol not found`, or Lake compiles
+  `ZigLean`'s root closure to C as well. The preflight check is the gate.
+
+Lake loads a precompiled import as its whole library and records that library in the importer's
+trace. The split keeps that to the importers of `Auto`: a module that imports only modules below it
+(`ZigLean.Basic`, the translator's `Air2Lean` modules) loads no native code, does not wait for the
+C compile, and is not rebuilt when only `Auto` changes. Importers of `Auto` already depend on every
+module of the closure, so the shared libraries add no rebuild they did not have.
+
+The shared cache needs nothing extra: Lake stores `.c.o.export`, both shared libraries and the
+importers' outputs in its artifact cache under traces that include the toolchain, the platform
+and the compiler arguments, and restores the shared libraries under their names
+(`buildLeanSharedLib`, `restore := true`).
+
+`lake env lean FILE` loads no native code; the checks that still elaborate with it (the ones not
+yet converted to the proof-fixture package, `perf-budgets.py heartbeats`,
+`theorem_universe.py audit`, `lean-deps.py --elaborate`) run `fsym` interpreted. Results agree,
+but a heartbeat count does not. The native engine spends no more heartbeats than the interpreter
+in every declaration measured (2026-10-20: `ArenaSpec.resize_ct` 3 383 680 thousand interpreted,
+1 913 890 thousand native; `Proofs/Lists` up to 23 % fewer), so a budget measured interpreted
+(`perf-budgets.py heartbeats`) is an upper bound for the native build. `lake lean FILE`
+elaborates a file with Lake's setup, dynlibs included.
 
 ## Use
 

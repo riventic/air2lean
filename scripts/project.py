@@ -42,6 +42,15 @@ outcomes = _sibling('outcomes')
 def _export_module():
     return _sibling('project-export')
 
+
+@functools.cache
+def _lean_deps():
+    path = Path(__file__).resolve().with_name('lean-deps.py')
+    spec = importlib.util.spec_from_file_location('project_lean_deps', path)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
 claims = _sibling('claims')
 ARTIFACT_MANIFEST = Path(__file__).resolve().with_name('artifact-manifest.py')
 CLAIM_HEADS = claims.load_heads()
@@ -865,8 +874,12 @@ def load_receipt(attempt, verifier, limits):
 
 
 def module_of(relative):
-    parts = Path(relative).with_suffix('').parts
-    return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
+    path = Path(relative)
+    if path.is_absolute() or path.suffix != '.lean':
+        return None
+    parts = path.with_suffix('').parts
+    module_name = _lean_deps().MODULE_NAME
+    return '.'.join(parts) if all('.' not in p and module_name.fullmatch(p) for p in parts) else None
 
 
 def self_relation(theorem, definition):
@@ -1422,6 +1435,32 @@ CHECK_TOOLS.update({key: CHECK_TOOLS['project'].with_name(name) for key, name in
                      ('normalize', 'normalize-generated.py'))})
 
 
+def script_inputs(tools):
+    """Snapshot declared tools and their two known physical module-validator helpers.
+
+    A custom auditor may omit its adjacent helper. An existing malformed helper fails;
+    these known inputs do not resolve arbitrary Python imports or make execution immutable.
+    """
+    paths = dict(tools, lean_deps=Path(__file__).resolve().with_name('lean-deps.py'),
+                 assumptions_lean_deps=tools['assumptions'].with_name('lean-deps.py'))
+    hashes, identities, errors, read = {}, {}, {}, {}
+    for role, path in sorted(paths.items()):
+        try:
+            path = Path(path)
+            if role == 'assumptions_lean_deps':
+                try:
+                    path.lstat()
+                except FileNotFoundError:
+                    continue
+            physical = path.resolve(strict=True)
+            if physical not in read:
+                read[physical] = hash_bounded(physical, 64 * 1024 * 1024)[0]
+            hashes[role], identities[role] = read[physical], physical
+        except (OSError, ValueError, RuntimeError) as error:
+            errors[role] = str(error)
+    return hashes, identities, errors
+
+
 def check_budget(manifest):
     """Optional proof-checking budget: Lake build and audit timeouts, sampled RSS ceiling."""
     supplied = manifest.get('check', {})
@@ -1592,18 +1631,30 @@ def run_claims(tools, manifest_path, audit_path, staging):
 
 def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0):
     """Run the whole check into `staging`; stage failures are recorded, not raised."""
+    # A new check must validate with the helper whose current bytes it records.
+    _lean_deps.cache_clear()
+    overrides = set(tools or {}) & {'lean_deps', 'assumptions_lean_deps'}
+    if overrides:
+        raise Invalid(f'helper script roles are derived, not configurable: {sorted(overrides)}')
     tools = dict(CHECK_TOOLS, **(tools or {}))
     started = time.monotonic()
+    base = path.parent
+    try:
+        tools['assumptions'] = (base / tools['assumptions']).resolve(strict=True)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise Invalid(f'assumptions script unavailable: {error}') from error
+    scripts, script_identities, script_errors = script_inputs(tools)
+    if script_errors:
+        raise Invalid(f'script inputs unavailable: {script_errors}')
     manifest, limits, data, report = collect(path)
     budget = check_budget(manifest)
     modules = check_modules(manifest)
-    base = path.parent
     failures = []
     inputs = dict(report['files'])
     toolchain = base / 'lean-toolchain'
     reproducible = {'manifest_sha256': report['manifest_sha256'], 'inputs': inputs, 'check_budget': budget,
                     'modules': modules,
-                    'scripts': {key: hash_bounded(tool, 64 * 1024 * 1024)[0] for key, tool in sorted(tools.items())},
+                    'scripts': scripts,
                     'lean_toolchain': toolchain.read_text().strip() if toolchain.is_file() else None,
                     'float_semantics': manifest['float_semantics'], 'spawn_policy': spawn_policy(manifest),
                     'stages': {name: {'status': 'not_run'} for name in CHECK_STAGES}, 'roots': []}
@@ -1614,7 +1665,9 @@ def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0)
     record = {'schema': SCHEMA, 'kind': RECORD_KIND, 'status': 'failed', 'failures': failures,
               'reproducible': reproducible, 'host': host,
               'note': 'compare-records compares only `reproducible`; `host` holds machine-specific '
-                      'evidence (translator and Lake binaries, paths, timing, Git state).'}
+                      'evidence (translator and Lake binaries, paths, timing, Git state). '
+                      'Script hashes cover declared tools and two known helper roles; Python execution '
+                      'and other imports remain within the trusted runtime.'}
 
     def finish():
         host['elapsed_seconds'] = round(time.monotonic() - started, 3)
@@ -1707,6 +1760,10 @@ def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0)
     # 6. Inputs (manifest, sources, contracts, committed generated modules) unchanged throughout.
     after = collect(path)[3]['files']
     changed = sorted(name for name in set(inputs) | set(after) if inputs.get(name) != after.get(name))
+    after_scripts, after_identities, errors = script_inputs(tools)
+    changed += ['script/' + role for role in sorted(set(scripts) | set(after_scripts) | set(errors))
+                if (scripts.get(role) != after_scripts.get(role)
+                    or script_identities.get(role) != after_identities.get(role) or role in errors)]
     stages['inputs_stable'] = {'status': 'failed' if changed else 'passed', 'changed': changed}
     if changed:
         failures.append(f'inputs changed during check: {changed}')

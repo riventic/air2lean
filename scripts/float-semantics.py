@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import functools
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -41,7 +43,6 @@ FLOAT_MODULE = 'ZigLean.Float'
 OPS_MODULE = 'ZigLean.Float.Ops'
 RT_MODULE = 'ZigLean.Float.CompilerRt'
 FLOAT, OPS, RT = 1, 2, 4
-MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9!?']*(\.[A-Za-z_][A-Za-z_0-9!?']*)*")
 # Lean-generated companions of a declaration: equation, injectivity, sizeOf, sparse-case
 # and abstracted proof lemmas. They are reported, but their parent states the claim.
@@ -87,10 +88,21 @@ def label_text(entry):
     return entry['semantics']
 
 
+@functools.cache
+def lean_deps():
+    path = Path(__file__).resolve().with_name('lean-deps.py')
+    spec = importlib.util.spec_from_file_location(
+        'float_lean_deps', path)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
+
 def split_key(key):
     demand(isinstance(key, str) and key.count('::') == 1, 'invalid registry key: ' + repr(key))
     module, name = key.split('::')
-    demand(bool(MODULE.fullmatch(module)) and bool(NAME.fullmatch(name)), 'invalid registry key: ' + key)
+    demand(bool(lean_deps().MODULE_NAME.fullmatch(module)) and bool(NAME.fullmatch(name)),
+           'invalid registry key: ' + key)
     return module, name
 
 
