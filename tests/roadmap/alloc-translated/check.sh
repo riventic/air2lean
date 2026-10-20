@@ -45,7 +45,7 @@ done
 # translated PageAllocator cannot satisfy AllocSpec, docs/alloc-page.md: PageObstruction.lean),
 # resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
 # PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), PageAlloc,
-# PageThread, ListsPage and KernelBytes.
+# PageThread, PageCreation, ListsPage and KernelBytes.
 python3 -B scripts/fixtures.py build AllocTranslated
 # Axioms of every theorem of the proof modules, from the built environment: only the standard
 # ones. A mutant whose shrink leaks the cut pages fails PageSpec (mutant.sh).
@@ -53,11 +53,13 @@ theorems=()
 for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.controls \
     ListsPage.reuse_happens ListsPage.pushThenFree_returns PageThread.fthread_alloc \
     PageThread.fthread_free PageThread.fthread_resize PageThread.fthread_remap PageThread.cAllocSpec \
-    PageAlloc.fallocSpec PageAlloc.alloc_run PageSpec.free_spec PageSpec.resize_spec PageSpec.remap_spec \
+    PageAlloc.fallocSpec PageAlloc.fallocSpec.creation PageAlloc.fallocSpec.creation_input_at \
+    PageAlloc.fallocSpec.creation_admission PageThread.cAllocSpec.creation \
+    PageAlloc.alloc_run PageSpec.free_spec PageSpec.resize_spec PageSpec.remap_spec \
     PageSpecMacos.free_spec PageSpecMacos.resize_spec PageSpecMacos.remap_spec; do
   theorems+=(--declaration "AllocTranslated.$name")
 done
-python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread \
+python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread PageCreation \
   ListsPage KernelBytes "${theorems[@]}"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
