@@ -338,9 +338,10 @@ private def tickLoop (name reader : String) (dispatch : Bool) : Json :=
   let body := if dispatch then
       inst 40 "loop_switch_br" 4 #[ref 20]
         [("cases", .arr #[
-          obj [("items", .arr #[lit 0 "0"]), ("body", .arr #[
+          obj [("items", .arr #[lit 0 "0"]), ("ranges", .arr #[]), ("body", .arr #[
             inst 50 "switch_dispatch" 4 #[lit 0 "1"] [("target", num 40)]])],
-          obj [("items", .arr #[lit 0 "1"]), ("body", .arr #[inst 60 "ret" 4 #[lit 0 "17"]])]]),
+          obj [("items", .arr #[lit 0 "1"]), ("ranges", .arr #[]),
+            ("body", .arr #[inst 60 "ret" 4 #[lit 0 "17"]])]]),
          ("else", .arr #[inst 70 "ret" 4 #[lit 0 "99"]])]
     else inst 40 "loop" 4 #[] [("body", .arr #[inst 50 "ret" 4 #[lit 0 "17"]])]
   tickReadBranch name reader #[body]
