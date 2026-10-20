@@ -78,7 +78,7 @@ private def term (e : Expr) (inApp : Bool := false) : Except String String :=
   | .app f a => do
     let application := (← term f true) ++ " " ++ (← term a)
     pure (if inApp then application else "(" ++ application ++ ")")
-  | .lit (.natVal n) => pure (toString n)
+  | .lit (.natVal n) => pure s!"(nat_lit {n})"
   | .lit (.strVal s) => pure s.quote
   | .mdata _ e => term e inApp
   | _ => throw "source-program quotation produced a non-constructor expression"

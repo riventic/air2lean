@@ -1469,8 +1469,8 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
     lines := lines.push s!"/-- The decoded canonical AIR of `{f.name}` in the original program. -/"
     lines := lines.push s!"def {airName f} : _root_.Air2Lean.Func := source_{index}\n"
     lines := lines.push s!"theorem lookup_{declOf f.name} : program.lookup {str f.name} = some {airName f} := rfl"
-    lines := lines.push s!"theorem policy_{declOf f.name} : program.ticked {airName f}.name = {bool (program.ticked f.name)} := by decide +kernel"
-    lines := lines.push s!"theorem entry_{declOf f.name} : program.entryTicked {airName f}.name = {bool (program.entryTicked f.name)} := by decide +kernel\n"
+    lines := lines.push s!"theorem policy_{declOf f.name} : program.ticked {str f.name} = {bool (program.ticked f.name)} := by decide +kernel"
+    lines := lines.push s!"theorem entry_{declOf f.name} : program.entryTicked {str f.name} = {bool (program.entryTicked f.name)} := by decide +kernel\n"
   -- Functions with a viewed slice parameter, and the program of the others.
   let views := frag.filter (isView · memFuncs)
   let frag := frag.filter (!isView · memFuncs)
