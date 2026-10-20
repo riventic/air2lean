@@ -94,6 +94,52 @@ theorem Inv.loadRest {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T
     | some fc' => exact ⟨fc', rfl⟩
   rw [hsub _ _ hfc']; simp
 
+/-- Reads by other admitted readers need no clock ordering. Every conflicting write
+must precede this reader through the publication clock or through AllLe. -/
+theorem _root_.Zig.Full.noRace_read_of_publication {m : Mem} {b o n : Nat}
+    {Rg : FootprintEntry → Prop} {c : VClock} (ht : m.current < m.threads.size)
+    (hcov : Conc.Covers Rg b o n)
+    (hpub : ∀ e ∈ m.footprint, Rg e → e.kind = .read ∨
+      VClock.le e.clock c = true ∨ AllLe m e.clock)
+    (ha : VClock.le c (m.clocks[m.current]!) = true) : NoRace m b o n .read := by
+  refine noRace_of_pos fun e he hb hn h1 h2 => ?_
+  rcases hpub e he (hcov e hb hn h1 h2) with hr | hp | hall
+  · exact .inr (by rw [hr]; rfl)
+  · exact .inl (VClock.le_trans hp ha)
+  · exact .inl (hall _ ht)
+
+/-- The reader's admission justifies its projection, actual NoRace and preservation
+of U by this read record. It does not require an unrelated live reader's clock. -/
+theorem Fits.wp_readRestOf (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b : BlockId}
+    {a : Nat} {v : T} {A : ThreadId → γ → Prop} (hpb : p.block = some b)
+    (hn : 0 < Enc.size T)
+    (hrest : ∀ G rX m u, U G rX m → A u (G u) → ∃ r B S K' bs, up (bytesAt p B S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧ bs.size = Enc.size T ∧
+      Enc.decode bs = pure v ∧ (B + p.off.toNat) % a = 0 ∧ K' ≠ .constGlobal)
+    (hread : ∀ G rX m u, U G rX m → A u (G u) → m.current = u →
+      u < m.threads.size → NoRace m b p.off.toNat (Enc.size T) .read)
+    (hrec : ∀ G rX m u, U G rX m → A u (G u) → m.current = u →
+      u < m.threads.size → joinedB m u = false → m.clocks.size = m.threads.size →
+      U G rX (m.recordAt b p.off.toNat (Enc.size T) .read))
+    {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
+    {Q : T → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv G' m) (hc : m.current = t) (hg : L.ph (G' t) ≠ .gone)
+    (ha : A t (G' t))
+    (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
+    P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
+  obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
+  obtain ⟨ht, hjt⟩ := hiL.ht hg
+  obtain ⟨hrun, hiL'⟩ := hiL.loadRest hpb hn (hrest G' rX m t hU ha) hc hg
+    (hread G' rX m t hU ha hc ht)
+  refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) (fun v' m' hr' => ?_)
+    fun hnone => by rw [hrun] at hnone; cases hnone
+  rw [hrun] at hr'
+  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
+    Prod.mk.injEq] at hr'
+  obtain ⟨rfl, rfl⟩ := hr'
+  exact ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr
+    ⟨rX, hiL', hrec G' rX m t hU ha hc ht hjt hiL.w.csize⟩)⟩
+
 /-- **A read of read-shared bytes of the protocol's rest** (module doc) by a live thread `t`:
 `T`'s `Enc.size T` bytes at `p` (block `b`) are bytes `bs` of the rest that decode to `v`, at an
 address aligned for the load; the region `Rg` that covers them is read-shared, and a read's
@@ -113,18 +159,11 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
     (hi : P.inv G' m) (hc : m.current = t) (hg : L.ph (G' t) ≠ .gone)
     (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
-  obtain ⟨ht, hjt⟩ := hiL.ht hg
-  obtain ⟨hrun, hiL'⟩ := hiL.loadRest hpb hn (hrest G' rX m hU) hc hg
-    ((hsh G' rX m hU).noRace_read (hc ▸ ht) hcov)
-  refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) (fun v' m' hr' => ?_)
-    fun hnone => by rw [hrun] at hnone; cases hnone
-  rw [hrun] at hr'
-  simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
-    Prod.mk.injEq] at hr'
-  obtain ⟨rfl, rfl⟩ := hr'
-  exact ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr ⟨rX, hiL', hrec G' rX m hU (hc ▸ ht) (hc ▸ hjt)
-    hiL.w.csize⟩)⟩
+  exact hF.wp_readRestOf (A := fun _ _ => True) hpb hn
+    (fun G rX m _ hU _ => hrest G rX m hU)
+    (fun G rX m u hU _ hc ht => (hsh G rX m hU).noRace_read (hc ▸ ht) hcov)
+    (fun G rX m u hU _ hc ht hj hcs => hrec G rX m hU (hc ▸ ht) (hc ▸ hj) hcs)
+    hi hc hg trivial h
 
 /-- A step that keeps the protocol's rest with the lock's word keeps the rest alone (for a
 protocol's `U` step under `Fits.wp_hold`'s `hU`, which gets the step with the word). -/

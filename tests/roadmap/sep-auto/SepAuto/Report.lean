@@ -505,7 +505,8 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
   trivial
 
 /-- A caller's fact about a memory step's actual run follows the same path with reporting
-enabled. The unknown result fact is not supplied by the generic store rule. -/
+enabled, explicitly or from the local context. Without that fact, the generic store rule
+cannot supply the unknown result proposition. -/
 example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : ThreadId)
     (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
     (v w : BitVec 32) (_ho : FOwned own rO m) (_hc : m.current = t)
@@ -524,11 +525,16 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
     let (gs, report) ← compareRuns ty (evalTacticAt tac) (reportedTactic tac)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
       throwError "caller run facts were dropped by a shared entry: {line report}"
+    let localTac ← `(tactic| fsym)
+    let (gs, report) ← compareRuns ty (evalTacticAt localTac) (reportedTactic localTac)
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "local run facts were dropped by a shared entry: {line report}"
     let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let missingFact ← g.mvarId!.clear (← getLocalDeclFromUserName `fact).fvarId
     let stopped ← withOptions (·.setBool `fsym.quiet true) do
-      evalTacticAt (← `(tactic| fsym)) g.mvarId!
+      evalTacticAt localTac missingFact
     unless !stopped.isEmpty do
-      throwError "run-fact control did not require its caller argument"
+      throwError "run-fact control did not require its caller fact"
   trivial
 
 end SepAuto.Report
