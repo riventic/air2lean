@@ -6,6 +6,7 @@ itself runs in CI (`theorem_universe.py audit`) and in tests/roadmap/architectur
 """
 import importlib.util
 import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -803,6 +804,241 @@ class CompiledUnitTests(unittest.TestCase):
         (second / 'Foo/Child.olean').write_bytes(b'later child')
         with self.assertRaisesRegex(ValueError, 'Foo.Child'):
             assumptions.locate('Foo.Child', [first, second])
+
+
+class FixtureCompilationTests(unittest.TestCase):
+    """Canonical fixture producer; synthetic files, mocked Lake/compiler/extractor only.
+
+    This class never runs the real fixture/Lake test classes. The only executable is the
+    existing tiny synthetic leanchecker from CompiledUnitTests, not an installed toolchain.
+    """
+
+    patch = CompiledUnitTests.patch
+    compiler = CompiledUnitTests.compiler
+
+    def setUp(self):
+        prepare = universe.prepare_compilation
+        CompiledUnitTests.setUp(self)
+        self.fx = load('fixtures', 'fixtures.py')
+        self.package = self.root / 'tests/roadmap'
+        self.fixture_lib = self.package / '.lake/build/lib/lean'
+        self.fixture_lib.mkdir(parents=True)
+        self.patch(self.fx, 'ROOT', self.root)
+        self.patch(self.fx, 'PACKAGE', self.package)
+        for relative, text in {
+                'lakefile.toml': 'name = "fixtures"\n[[lean_lib]]\nname = "Fx"\nsrcDir = "src"\n',
+                'src/Fx/Main.lean': 'import Fx.Helper\nimport ZigLean.Basic\ntheorem fix_p : True := trivial\n',
+                'src/Fx/Helper.lean': 'import ZigLean.Basic\n',
+                'src/Fx/Unused.lean': 'def unused := 1\n',
+                '.lake/build/lib/lean/Fx/Unused.olean': 'unowned fixed input'}.items():
+            path = self.package / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        self.patch(self.fx, 'lake_modules', lambda package, libs: {'Fx': ['Fx.Main', 'Fx.Helper', 'Fx.Unused']})
+        self.patch(self.fx, 'lake', self.lake)
+        self.paths = [self.built, self.fixture_lib, self.toolchain / 'lib/lean']
+        self.headers = {'Fx.Main': ['Fx.Helper', 'ZigLean.Basic'], 'Fx.Helper': ['ZigLean.Basic'],
+                        'ZigLean.Basic': ['Init'], 'Init': []}
+        self.units = [universe.Unit('tests/roadmap/src/Fx/Main.lean', 'tests/roadmap/src',
+                                    'Fx.Main', ('tests/roadmap/src/Fx/Helper.lean',),
+                                    ('ZigLean.Basic',), None, ('fix_p',)),
+                      universe.Unit('tests/roadmap/src/Fx/Helper.lean', 'tests/roadmap/src',
+                                    'Fx.Helper', (), ('ZigLean.Basic',), None, ())]
+        self.patch(universe, 'premises_module', lambda: premises)
+        self.patch(assumptions, 'framework_candidates', lambda raw: {})
+        self.patch(assumptions, 'apply_policy', lambda raw, *a: {
+            'status': 'pass', 'theorem_count': len(raw['theorems']), 'theorems': raw['theorems'],
+            'violations': [], 'nodes': raw['nodes'], 'modules': raw['modules'],
+            'module_imports': raw['module_imports'], 'kernel_replay': raw['kernel_replay']})
+
+        def preparing(*args, **kwargs):
+            self.active_context = prepare(*args, **kwargs)
+            return self.active_context
+
+        self.patch(universe, 'prepare_compilation', preparing)
+        self.commands = []
+        self.after_build = lambda: None
+        self.effective_paths = list(map(str, self.paths))
+
+    def lake(self, package, args, capture=False):
+        self.assertEqual(package, self.package)
+        self.commands.append(args)
+        if args == ['env', 'printenv', 'LEAN_PATH']:
+            return subprocess.CompletedProcess(args, 0, os.pathsep.join(self.effective_paths) + '\n')
+        self.assertEqual(args[:2], ['--rehash', 'build'])
+        if '--no-build' not in args and any(module.startswith('Fx.') for module in args[2:]):
+            for unit in self.active_context['units'].values():
+                output = Path(unit['output_path'])
+                output.write_bytes(b'compiled: ' + (self.root / unit['compiler_source']['path']).read_bytes())
+            self.after_build()
+        return subprocess.CompletedProcess(args, 0, '')
+
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+        self.assertTrue(all_declarations)
+        raw = CompiledUnitTests.extract(self, modules, build, witnesses,
+                                        all_declarations=all_declarations, lean_path=lean_path)
+        # Helper has no declaration-graph node: only its unused header import reveals it.
+        nodes = [{'name': 'fix_p' if module == 'Fx.Main' else 'root_p', 'module': module,
+                  'kind': 'theorem', 'dependencies': [], 'axioms': []} for module in modules]
+        raw.update(nodes=nodes, theorems=nodes,
+                   selected_declaration_roots=[row['name'] for row in nodes])
+        return raw
+
+    def audited(self, modules=None):
+        modules = modules or ['Fx.Main']
+        output = self.root / 'fixture-report.json'
+        self.assertEqual(self.fx.audit(modules, ['fix_p'], output), 0)
+        report = json.loads(output.read_text())
+        assumptions.verify_fresh(report, allow_dirty=True)
+        return report
+
+    def test_default_producer_preserves_canonical_identity_scope_headers_and_cache(self):
+        report = self.audited(['Fx.Main', 'ZigLean.Basic'])
+        context = report['freshness']['compiled_units']
+        self.assertEqual(report['modules'], ['Fx.Main', 'ZigLean.Basic'])
+        self.assertEqual(context['selected_modules'], report['modules'])
+        self.assertEqual(set(context['units']), {'Fx.Main', 'Fx.Helper'})
+        self.assertEqual(report['selected_declaration_roots'], ['fix_p', 'root_p'])
+        rows = {row['module']: row for row in report['freshness']['artifacts']}
+        self.assertEqual(rows['Fx.Helper']['source'], 'tests/roadmap/src/Fx/Helper.lean')
+        self.assertEqual((self.root / rows['Fx.Main']['olean']).resolve(), self.fixture_lib / 'Fx/Main.olean')
+        self.assertIn(['--rehash', 'build', '--no-build', 'Fx.Main', 'ZigLean.Basic'], self.commands)
+        for index in range(2):
+            output = self.root / f'repeated-{index}.json'
+            result = universe.audit_modules(report['modules'], [], output, self.cache,
+                                            all_declarations=True, compiled_units=context)
+            self.assertEqual((result['status'], result['exit_code']), ('pass', 0), result)
+        repeated = json.loads(output.read_text())
+        self.assertEqual(repeated['kernel_replay']['reused'], ['ZigLean.Basic'])
+
+    def test_relative_lookup_entries_use_the_actual_fixture_compiler_cwd(self):
+        self.effective_paths = [os.path.relpath(path, self.package) for path in self.paths]
+        report = self.audited()
+        context = report['freshness']['compiled_units']
+        self.assertEqual([Path(path).resolve() for path in context['lean_path'].split(os.pathsep)], self.paths)
+
+    def test_failed_producer_clears_previous_success_before_build(self):
+        self.audited()
+        output = self.root / 'fixture-report.json'
+        with mock.patch.object(universe, 'prepare_fixture_compilation',
+                               side_effect=ValueError('source plan failed')):
+            self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], output), 1)
+        self.assertFalse(output.exists())
+
+    def test_source_comment_change_rejects_fixed_report_and_outputs_then_restores(self):
+        report = self.audited()
+        fixed = json.dumps(report)
+        outputs = {path: path.read_bytes() for path in self.fixture_lib.rglob('*.olean')}
+        source = self.package / 'src/Fx/Main.lean'
+        before = source.read_bytes()
+        source.write_bytes(before + b'\n-- source-only change\n')
+        with self.assertRaisesRegex(ValueError, 'Fx.Main source changed'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+        self.assertEqual(json.dumps(report), fixed)
+        self.assertEqual({path: path.read_bytes() for path in outputs}, outputs)
+        source.write_bytes(before)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_postcompile_source_change_refuses_before_extraction_with_fixed_outputs(self):
+        report = self.audited()
+        report_file = self.root / 'fixture-report.json'
+        fixed_report = report_file.read_bytes()
+        outputs = {path: path.read_bytes() for path in self.fixture_lib.rglob('*.olean')}
+        source = self.package / 'src/Fx/Main.lean'
+        original = source.read_bytes()
+        self.after_build = lambda: source.write_bytes(original + b'\n-- changed after compilation\n')
+        diagnostic = io.StringIO()
+        try:
+            with mock.patch.object(universe, 'audit_modules') as audit, contextlib.redirect_stderr(diagnostic):
+                self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], self.root / 'rejected.json'), 1)
+            audit.assert_not_called()
+            self.assertIn('Fx.Main source changed', diagnostic.getvalue())
+            self.assertEqual(report_file.read_bytes(), fixed_report)
+            self.assertEqual({path: path.read_bytes() for path in outputs}, outputs)
+        finally:
+            source.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_shared_library_remainder_is_not_a_mutable_subtree(self):
+        self.audited()
+        unowned = self.fixture_lib / 'Fx/Unused.olean'
+        original = unowned.read_bytes()
+        added = self.fixture_lib / 'Fx/Unplanned.olean'
+        for action in ('change', 'add', 'remove'):
+            with self.subTest(action=action):
+                def mutate():
+                    if action == 'add':
+                        added.write_bytes(b'new unowned artifact')
+                    elif action == 'remove':
+                        unowned.unlink()
+                    else:
+                        unowned.write_bytes(b'changed unowned artifact')
+                self.after_build = mutate
+                diagnostic = io.StringIO()
+                with mock.patch.object(universe, 'audit_modules') as audit, \
+                        contextlib.redirect_stderr(diagnostic):
+                    self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], None), 1)
+                audit.assert_not_called()
+                self.assertIn('compiler-owned Unit imported inputs changed', diagnostic.getvalue())
+                added.unlink(missing_ok=True)
+                unowned.write_bytes(original)
+
+    def test_changed_configuration_or_context_cannot_rebind_saved_outputs(self):
+        report = self.audited()
+        config = self.package / 'lakefile.toml'
+        original = config.read_bytes()
+        config.write_bytes(original + b'\n# configuration changed\n')
+        with self.assertRaisesRegex(ValueError, 'fixture configuration changed'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+        config.write_bytes(original)
+        for mutation, diagnostic in (
+                ('strip', 'no compiler-owned run binding'),
+                ('private-output', 'fixture package/output selection changed'),
+                ('scope', 'differs from the report selection'),
+                ('source', 'import/source resolution changed')):
+            with self.subTest(mutation=mutation):
+                broken = json.loads(json.dumps(report))
+                context = broken['freshness']['compiled_units']
+                if mutation == 'strip':
+                    del broken['freshness']['compiled_units']
+                elif mutation == 'private-output':
+                    context['output_dir'] = str(self.root / 'private-lib')
+                elif mutation == 'scope':
+                    broken['modules'] = sorted([*broken['modules'], 'Fx.Helper'])
+                else:
+                    context['units']['Fx.Main']['file'] = 'tests/roadmap/src/Fx/Helper.lean'
+                with self.assertRaisesRegex(ValueError, diagnostic):
+                    assumptions.verify_fresh(broken, allow_dirty=True)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_missing_shadowed_and_unowned_header_outputs_refuse(self):
+        report = self.audited()
+        context = report['freshness']['compiled_units']
+        owned = self.fixture_lib / 'Fx/Main.olean'
+        original = owned.read_bytes()
+        owned.unlink()
+        with self.assertRaisesRegex(ValueError, 'Fx.Main|missing compiler-owned'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+        owned.write_bytes(original)
+        shadow = self.built / 'Fx'
+        shadow.mkdir()
+        with self.assertRaisesRegex(ValueError, 'compiler-owned Unit imported inputs changed'):
+            universe.verify_compilation(context)
+        shadow.rmdir()
+        shadow.mkdir()  # A namespace already present before the next producer snapshot.
+        diagnostic = io.StringIO()
+        try:
+            with mock.patch.object(universe, 'audit_modules') as audit, contextlib.redirect_stderr(diagnostic):
+                self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], None), 1)
+            audit.assert_not_called()
+            self.assertIn('no compiled module for Fx.', diagnostic.getvalue())
+        finally:
+            shadow.rmdir()
+        broken = json.loads(json.dumps(report))
+        broken['module_imports']['Fx.Helper'].append('Fx.Unused')
+        with self.assertRaisesRegex(ValueError, 'unowned private import: Fx.Unused'):
+            assumptions.verify_fresh(broken, allow_dirty=True)
+        assumptions.verify_fresh(report, allow_dirty=True)
 
 
 if __name__ == '__main__':

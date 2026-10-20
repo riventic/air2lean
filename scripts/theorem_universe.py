@@ -348,7 +348,75 @@ def unit_plan(units: list[Unit]) -> dict:
     return records
 
 
-def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: Path) -> dict:
+def fixture_plan(modules: list[str]) -> tuple[list[Unit], dict[str, Unit]]:
+    """The existing fixture package's compiler plan, not a caller-provided source layout."""
+    import fixtures
+    sources = fixtures.source_modules(ROOT)
+    pending, planned = list(modules), {}
+    while pending:
+        module = pending.pop()
+        if not isinstance(module, str) or MODULE.fullmatch(module) is None:
+            raise ValueError(f'fixture compiler has an invalid module name: {module!r}')
+        if module in planned or module.split('.')[0] in TOOLCHAIN_ROOTS:
+            continue
+        if module.split('.')[0] in LAKE_ROOTS:
+            if not (ROOT / (module.replace('.', '/') + '.lean')).is_file():
+                raise ValueError(f'fixture compiler has no canonical root source: {module}')
+            continue
+        if module not in sources:
+            raise ValueError(f'fixture compiler has no configured source owner: {module}')
+        file, root = sources[module]
+        lean = premises_module().parse_file(ROOT / file, ROOT)
+        local = [dep for dep in lean.imports if dep in sources]
+        lake = [dep for dep in lean.imports if dep.split('.')[0] in LAKE_ROOTS]
+        planned[module] = Unit(file, root, module, tuple(sources[dep][0] for dep in local),
+                               tuple(lake), None, ())
+        pending.extend(lean.imports)
+    selected = [planned[module] for module in sorted(set(modules)) if module in planned]
+    return selected, {unit.file: unit for unit in planned.values()}
+
+
+def fixture_configuration() -> list:
+    import fixtures
+    return [[name, input_identity(path) if path.exists() or path.is_symlink() else None]
+            for name in ('lakefile.toml', 'lake-manifest.json', 'lean-toolchain')
+            for path in [fixtures.PACKAGE / name]]
+
+
+def compiler_output(context: dict, unit: Unit) -> Path:
+    output = Path(context['output_dir'])
+    library = output if 'fixture_package' in context else lib_of(output, unit.root)
+    return library / (unit.module.replace('.', '/') + '.olean')
+
+
+def mutable_outputs(context: dict, local: list[Unit]) -> set[Path]:
+    """Only canonical compiler-owned file slots can change inside a shared input library."""
+    if 'fixture_package' not in context:
+        return set()
+    return {compiler_output(context, unit).with_suffix(suffix)
+            for unit in local for suffix in assumptions.COMPILED_SUFFIXES}
+
+
+def prepare_fixture_compilation(modules: list[str]) -> dict | None:
+    """Prepare the SAME Unit context before the normal canonical fixture Lake build."""
+    import fixtures
+    selected, by_file = fixture_plan(modules)
+    if not selected:
+        return None  # Root-only selection retains its existing Lake producer and trace checks.
+    # A root dependency rebuild must precede freezing the shared-library immutable remainder.
+    targets = sorted({m for unit in by_file.values() for m in unit.lake}
+                     | {m for m in modules if m.split('.')[0] in LAKE_ROOTS})
+    if targets:
+        done = fixtures.lake(fixtures.PACKAGE, ['--rehash', 'build', *targets], capture=True)
+        if done.returncode:
+            raise RuntimeError(f'fixture root prerequisites failed:\n{done.stdout[-4000:]}')
+    selected, by_file = fixture_plan(modules)
+    return prepare_compilation(selected, by_file, fixtures.PACKAGE / '.lake/build/lib/lean',
+                               fixture_modules=sorted(set(modules)))
+
+
+def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: Path, *,
+                        fixture_modules: list[str] | None = None) -> dict:
     """Snapshot actual inputs BEFORE the existing compiler writes any Unit output."""
     output = output.absolute()
     local = closure(selected, by_file)
@@ -356,20 +424,26 @@ def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: 
     # compiler/auditor input. extract() still validates it under its ordinary lock.
     with assumptions.prepared_tool():
         pass
-    libraries = sorted({lib_of(output, unit.root) for unit in local})
-    resolved = run(['lake', 'env', 'printenv', 'LEAN_PATH'], with_lean_path(libraries))
+    if fixture_modules is None:
+        libraries = sorted({lib_of(output, unit.root) for unit in local})
+        resolved = run(['lake', 'env', 'printenv', 'LEAN_PATH'], with_lean_path(libraries))
+    else:
+        import fixtures
+        libraries = [output]
+        resolved = fixtures.lake(fixtures.PACKAGE, ['env', 'printenv', 'LEAN_PATH'], capture=True)
     if resolved.returncode or not resolved.stdout.strip() or len(resolved.stdout.strip().splitlines()) != 1:
         raise ValueError('cannot resolve the compiler-owned Unit lookup path: ' + resolved.stdout)
     entries = resolved.stdout.strip().split(os.pathsep)
     if any(not path for path in entries):
         raise ValueError('compiler-owned Unit lookup roots must be nonempty')
-    paths = [(ROOT / path).absolute() for path in entries]
+    lookup_root = ROOT if fixture_modules is None else fixtures.PACKAGE
+    paths = [(lookup_root / path).absolute() for path in entries]
     lean_path = os.pathsep.join(map(str, paths))
     # Lean chooses the first library holding a TOP-LEVEL name, not the first matching file.
     # Refuse ambiguous private roots instead of compiling one artifact and auditing another.
     tops = {}
     for unit in local:
-        library = lib_of(output, unit.root)
+        library = output if fixture_modules is not None else lib_of(output, unit.root)
         top = unit.module.split('.')[0]
         if tops.setdefault(top, library) != library:
             raise ValueError(f'ambiguous private lookup roots for {top}')
@@ -380,26 +454,38 @@ def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: 
         compiler_source = input_identity(ROOT / source)
         if original['sha256'] != compiler_source['sha256']:
             raise ValueError(f'compiler-owned Unit staged source differs: {unit.module}')
-        olean = lib_of(output, unit.root) / (unit.module.replace('.', '/') + '.olean')
+        library = output if fixture_modules is not None else lib_of(output, unit.root)
+        olean = library / (unit.module.replace('.', '/') + '.olean')
         # These are this run's expected private outputs only. Never fall back to an old copy
         # or a leftover loaded companion after a compiler failure.
-        for suffix in assumptions.COMPILED_SUFFIXES:
-            olean.with_name(olean.name[:-len('.olean')] + suffix).unlink(missing_ok=True)
+        if fixture_modules is None:
+            for suffix in assumptions.COMPILED_SUFFIXES:
+                olean.with_name(olean.name[:-len('.olean')] + suffix).unlink(missing_ok=True)
+        else:
+            # Freeze lookup namespaces before building, without deleting/replacing any
+            # Lake-owned artifact, trace or companion. Only exact output files may change.
+            olean.parent.mkdir(parents=True, exist_ok=True)
         records[unit.module].update(source=original, compiler_source=compiler_source,
                                     compiler_root=source_root, output_path=str(olean.absolute()))
     private_roots = {path.resolve() for path in libraries}
-    base = [path for path in paths if path.resolve() not in private_roots]
+    base = (paths if fixture_modules is not None else
+            [path for path in paths if path.resolve() not in private_roots])
     if not base:
         raise ValueError('compiler-owned Unit path has no existing Lake/toolchain inputs')
     toolchain = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
     context = {'selected_files': sorted(unit.file for unit in selected),
-               'selected_modules': sorted(unit.module for unit in selected),
+               'selected_modules': (fixture_modules if fixture_modules is not None else
+                                    sorted(unit.module for unit in selected)),
                'units': records, 'output_dir': str(output), 'lean_path': lean_path,
                'base_path': os.pathsep.join(map(str, base)),
-               'base_inputs': assumptions.lean_path_binding(ROOT, os.pathsep.join(map(str, base))),
                'lean_sysroot': str(toolchain),
                'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain),
                'library_sources_sha256': input_digest(assumptions.library_source_inputs(ROOT))}
+    if fixture_modules is not None:
+        context.update(fixture_package=fixtures.PACKAGE.relative_to(ROOT).as_posix(),
+                       fixture_configuration=fixture_configuration())
+    context['base_inputs'] = assumptions.lean_path_binding(
+        ROOT, context['base_path'], mutable_outputs=mutable_outputs(context, local))
     verify_compiler_inputs(context)
     return context
 
@@ -412,16 +498,27 @@ def compilation_plan(context: dict) -> list[Unit]:
             or not isinstance(context.get('output_dir'), str)
             or not Path(context['output_dir']).is_absolute()):
         raise ValueError('missing compiler-owned Unit run binding')
-    _, units = universe()
-    by_file = {unit.file: unit for unit in units}
-    if any(file not in by_file or by_file[file].gate is not None for file in context['selected_files']):
-        raise ValueError('compiler-owned Unit source selection changed or needs a gate')
-    selected = [by_file[file] for file in context['selected_files']]
+    if 'fixture_package' in context:
+        import fixtures
+        if (context['fixture_package'] != fixtures.PACKAGE.relative_to(ROOT).as_posix()
+                or context['output_dir'] != str((fixtures.PACKAGE / '.lake/build/lib/lean').absolute())
+                or sorted(set(context['selected_modules'])) != context['selected_modules']):
+            raise ValueError('compiler-owned fixture package/output selection changed')
+        selected, by_file = fixture_plan(context['selected_modules'])
+    else:
+        _, units = universe()
+        by_file = {unit.file: unit for unit in units}
+        if any(file not in by_file or by_file[file].gate is not None for file in context['selected_files']):
+            raise ValueError('compiler-owned Unit source selection changed or needs a gate')
+        selected = [by_file[file] for file in context['selected_files']]
     local = closure(selected, by_file)
     planned = unit_plan(local)
     recorded = {module: {key: unit[key] for key in ('file', 'root', 'deps', 'lake')}
                 for module, unit in context['units'].items()}
-    if (planned != recorded or sorted(unit.module for unit in selected) != context['selected_modules']
+    if (planned != recorded
+            or ('fixture_package' not in context and
+                sorted(unit.module for unit in selected) != context['selected_modules'])
+            or sorted(unit.file for unit in selected) != context['selected_files']
             or sorted(set(context['selected_files'])) != context['selected_files']):
         raise ValueError('compiler-owned Unit import/source resolution changed')
     return local
@@ -433,7 +530,7 @@ def verify_compiler_inputs(context: dict) -> None:
     for planned in local:
         module, unit = planned.module, context['units'][planned.module]
         source, root = compiler_paths(output, planned)
-        expected_output = str((lib_of(output, planned.root) / (module.replace('.', '/') + '.olean')).absolute())
+        expected_output = str(compiler_output(context, planned).absolute())
         if unit['compiler_root'] != root or unit['output_path'] != expected_output:
             raise ValueError(f'compiler-owned Unit compiler/output path differs from its source plan: {module}')
         for kind, path in (('source', ROOT / planned.file), ('compiler_source', ROOT / source)):
@@ -447,7 +544,10 @@ def verify_compiler_inputs(context: dict) -> None:
         raise ValueError('compiler-owned Unit runtime changed')
     if input_digest(assumptions.library_source_inputs(ROOT)) != context['library_sources_sha256']:
         raise ValueError('compiler-owned Unit library sources changed')
-    if assumptions.lean_path_binding(ROOT, context['base_path']) != context['base_inputs']:
+    if 'fixture_package' in context and fixture_configuration() != context['fixture_configuration']:
+        raise ValueError('compiler-owned fixture configuration changed')
+    if assumptions.lean_path_binding(ROOT, context['base_path'],
+                                     mutable_outputs=mutable_outputs(context, local)) != context['base_inputs']:
         raise ValueError('compiler-owned Unit imported inputs changed')
 
 
@@ -467,6 +567,12 @@ def compiled_output(path: Path) -> list:
 def verify_compilation(context: dict) -> None:
     """Validate the SAME compiler-owned correspondence at audit and report admission."""
     verify_compiler_inputs(context)
+    if 'fixture_package' in context:
+        import fixtures
+        done = fixtures.lake(fixtures.PACKAGE,
+                             ['--rehash', 'build', '--no-build', *context['selected_modules']], capture=True)
+        if done.returncode:
+            raise ValueError(f'compiler-owned fixture Lake trace check failed:\n{done.stdout[-4000:]}')
     paths = [Path(path) for path in context['lean_path'].split(os.pathsep)]
     for module, unit in context['units'].items():
         path = Path(unit['output_path'])
