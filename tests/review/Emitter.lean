@@ -313,6 +313,63 @@ private def keywordField (keyword : String) : Json :=
       inst 1 "struct_field_val" 0 #[ref 0] [("index", num 0)],
       inst 2 "call" 0 #[ref 1] [("callee", obj [("func", .str keyword)])], inst 3 "ret" 2 #[ref 2]]
 
+/-- Real pointer/atomic reads establish MM/CM through the complete checked program. The
+controls may return without taking their read branch; classification remains static. -/
+private def tickTypes : Array Json :=
+  #[intTy 8, ptrTy 0, obj [("k", .str "bool")], voidTy, nrTy]
+
+private def tickRead (name : String) (atomic : Bool) : Json :=
+  file name tickTypes #[1] 0
+    #[inst 10 "arg" 1 #[] [("param", num 0)],
+      inst 20 (if atomic then "atomic_load" else "load") 0 #[ref 10]
+        (if atomic then [("order", .str "acquire")] else []),
+      inst 30 "ret" 4 #[ref 20]]
+
+private def tickReadBranch (name reader : String) (body : Array Json) : Json :=
+  file name tickTypes #[1, 0, 2] 0
+    #[inst 10 "arg" 1 #[] [("param", num 0)], inst 20 "arg" 0 #[] [("param", num 1)],
+      inst 30 "arg" 2 #[] [("param", num 2)], inst 35 "cond_br" 4 #[ref 30]
+        [("then", .arr #[inst 36 "call" 0 #[ref 10] [("callee", obj [("func", .str reader)])],
+          inst 37 "ret" 4 #[ref 36]]), ("else", .arr body)]]
+
+/-- `read` can return before the loop. Otherwise an ordinary loop exits at its first body
+run, or a dispatch loop changes selector 0 to 1 and exits on its second body run. -/
+private def tickLoop (name reader : String) (dispatch : Bool) : Json :=
+  let body := if dispatch then
+      inst 40 "loop_switch_br" 4 #[ref 20]
+        [("cases", .arr #[
+          obj [("items", .arr #[lit 0 "0"]), ("body", .arr #[
+            inst 50 "switch_dispatch" 4 #[lit 0 "1"] [("target", num 40)]])],
+          obj [("items", .arr #[lit 0 "1"]), ("body", .arr #[inst 60 "ret" 4 #[lit 0 "17"]])]]),
+         ("else", .arr #[inst 70 "ret" 4 #[lit 0 "99"]])]
+    else inst 40 "loop" 4 #[] [("body", .arr #[inst 50 "ret" 4 #[lit 0 "17"]])]
+  tickReadBranch name reader #[body]
+
+/-- The original function is recursive even on a base return. Its optional extracted loop
+helper belongs to the emitted fixpoint group, but must not gain another function-entry tick. -/
+private def tickRecursive (name reader : String) (loop : Bool) : Json :=
+  let body := #[inst 50 "cmp_eq" 2 #[ref 20, lit 0 "0"], inst 60 "cond_br" 4 #[ref 50]
+    [("then", .arr #[inst 70 "ret" 4 #[lit 0 "17"]]),
+     ("else", .arr #[inst 80 "sub_wrap" 0 #[ref 20, lit 0 "1"],
+       inst 90 "call" 0 #[ref 10, ref 80, ref 30] [("callee", obj [("func", .str name)])],
+       inst 100 "ret" 4 #[ref 90]])]]
+  tickReadBranch name reader
+    (if loop then #[inst 40 "loop" 4 #[] [("body", .arr body)]] else body)
+
+private def tickPureRecursive : Json :=
+  file "tickPureRecursive" tickTypes #[0] 0
+    #[inst 10 "arg" 0 #[] [("param", num 0)], inst 20 "cmp_eq" 2 #[ref 10, lit 0 "0"],
+      inst 30 "cond_br" 4 #[ref 20]
+        [("then", .arr #[inst 40 "ret" 4 #[lit 0 "17"]]),
+         ("else", .arr #[inst 50 "sub_wrap" 0 #[ref 10, lit 0 "1"],
+           inst 60 "call" 0 #[ref 50] [("callee", obj [("func", .str "tickPureRecursive")])],
+           inst 70 "ret" 4 #[ref 60]])]]
+
+private def tickViewLoop : Json :=
+  file "tickViewLoop" #[intTy 8, ptrTy 0 true "slice", intTy 64, nrTy] #[1] 0
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 10 "loop" 3 #[]
+      [("body", .arr #[inst 20 "slice_elem_val" 0 #[ref 0, lit 2 "0"], inst 30 "ret" 3 #[ref 20]])]]
+
 /-- Step-count placement is shared by versions and profiles. Check both loop forms and the
 original function entry independently; extracted recursive-group loop defs must not pay twice. -/
 private def checkTickPlacement : IO Unit := do
@@ -386,6 +443,37 @@ def main (args : List String) : IO Unit := do
     "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .b n => n.toNat | _ => 0) = some 17 := by native_decide"
   writeCase directory "spawnedSlice" #[spawnSlice, sliceWorker]
     "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) (Review.mem0 .fresh)).map fun (v, _) => v) = some () := by native_decide"
+  writeCase directory "tickControls"
+    #[tickRead "tickReadMM" false, tickRead "tickReadCM" true,
+      tickLoop "tickLoopMM" "tickReadMM" false, tickLoop "tickLoopCM" "tickReadCM" false,
+      tickLoop "tickDispatchMM" "tickReadMM" true, tickLoop "tickDispatchCM" "tickReadCM" true,
+      tickRecursive "tickRecursiveMM" "tickReadMM" false,
+      tickRecursive "tickRecursiveCM" "tickReadCM" false,
+      tickRecursive "tickRecursiveLoopMM" "tickReadMM" true,
+      tickRecursive "tickRecursiveLoopCM" "tickReadCM" true, tickPureRecursive, tickViewLoop]
+    (String.intercalate "\n" [
+      "example : successful (((Review.tickLoopMM ⟨none, 0⟩ 0 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful (((Review.tickDispatchMM ⟨none, 0⟩ 0 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 2) := by native_decide",
+      "example : successful (((Review.tickDispatchMM ⟨none, 0⟩ 1 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful (((Review.tickDispatchMM ⟨none, 0⟩ 2 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (99, 1) := by native_decide",
+      "example : successful ((((do let p ← Zig.allocStack 1 1; Zig.store 1 p (23 : BitVec 8); Review.tickLoopMM p 0 true) : Zig.MemM (BitVec 8)).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (23, 0) := by native_decide",
+      "example : successful (((Review.tickRecursiveMM ⟨none, 0⟩ 0 false).run (({} : Zig.Mem).withStack Zig.frameBase)).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 1, 0) := by native_decide",
+      "example : successful (((Review.tickRecursiveMM ⟨none, 0⟩ 2 false).run (({} : Zig.Mem).withStack (3 * Zig.frameBase))).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 3, 0) := by native_decide",
+      "example : failedWith ((Review.tickRecursiveMM ⟨none, 0⟩ 0 false).run (({} : Zig.Mem).withStack 0)) Zig.Error.stackOverflow = true := by native_decide",
+      "example : failedWith ((Review.tickRecursiveMM ⟨none, 0⟩ 2 false).run (({} : Zig.Mem).withStack (2 * Zig.frameBase))) Zig.Error.stackOverflow = true := by native_decide",
+      "example : successful (((Review.tickRecursiveLoopMM ⟨none, 0⟩ 0 false).run (({} : Zig.Mem).withStack Zig.frameBase)).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 2, 0) := by native_decide",
+      "example : successful (((Review.tickRecursiveLoopMM ⟨none, 0⟩ 2 false).run (({} : Zig.Mem).withStack (3 * Zig.frameBase))).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 6, 0) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickLoopCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickDispatchCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 2) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickDispatchCM ⟨none, 0⟩ 1 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickDispatchCM ⟨none, 0⟩ 2 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (99, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (do let p ← Zig.ConcM.liftMem (Zig.allocStack 1 1); Zig.ConcM.liftMem (Zig.store 1 p (23 : BitVec 8)); Review.tickLoopCM p 0 true) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (23, 0) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveCM ⟨none, 0⟩ 2 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 3) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveLoopCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 2) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveLoopCM ⟨none, 0⟩ 2 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 6) := by native_decide",
+      "example : successful ((Review.tickPureRecursive 2 : Zig.Result (BitVec 8)).map BitVec.toNat) = some 17 := by native_decide",
+      "example : successful ((Review.tickViewLoop #[23] : Zig.Result (BitVec 8)).map BitVec.toNat) = some 23 := by native_decide"])
   for (mode, name) in #[(FloatSemantics.ieee, "floatIeee"), (.compilerRt, "floatCompilerRt")] do
     let expected : Nat := match mode with | .ieee => 512 | .compilerRt => 0
     writeCase directory name #[floatConversion]
