@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import functools
 import hashlib
 import importlib.util
 import json
@@ -39,6 +40,17 @@ LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
 COMPILED_SUFFIXES = (".olean", ".olean.private", ".olean.server", ".ir", ".ir.sig")
 REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
                  "modules", "modules_sha256", "reused", "rejected", "status"}
+
+
+@functools.cache
+def lean_deps():
+    path = Path(__file__).resolve().with_name("lean-deps.py")
+    spec = importlib.util.spec_from_file_location(
+        "assumptions_lean_deps", path)
+    module = importlib.util.module_from_spec(spec)
+    # Validate with source bytes, not a timestamp-valid cache of older helper code.
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
 
 
 def is_compiler_axiom(name: str) -> bool:
@@ -750,7 +762,8 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
     root = (ROOT if root is None else root).resolve()
     runner = lambda command: run(command, root=root)
-    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
+    module_name = lean_deps().MODULE_NAME
+    if not all(isinstance(m, str) and module_name.fullmatch(m) for m in [*modules, *witnesses]):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
