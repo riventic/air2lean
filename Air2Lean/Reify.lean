@@ -70,13 +70,17 @@ deriving instance ToExpr for ModelBinding
 /-- Render constructor quotations with all term arguments explicit. The quotation API
 supplies constructors, applications and literals; any unexpected expression is rejected,
 not replaced by an inhabited value. Universe arguments are inferred from the explicit
-types and values supplied by `ToExpr`. -/
-private def term : Expr → Except String String
+types and values supplied by `ToExpr`. An application spine stays in one parenthesized
+term so elaboration does not insert implicit arguments at an intermediate boundary. -/
+private def term (e : Expr) (inApp : Bool := false) : Except String String :=
+  match e with
   | .const n _ => pure ("@_root_." ++ n.toString)
-  | .app f a => return "(" ++ (← term f) ++ " " ++ (← term a) ++ ")"
+  | .app f a => do
+    let application := (← term f true) ++ " " ++ (← term a)
+    pure (if inApp then application else "(" ++ application ++ ")")
   | .lit (.natVal n) => pure (toString n)
   | .lit (.strVal s) => pure s.quote
-  | .mdata _ e => term e
+  | .mdata _ e => term e inApp
   | _ => throw "source-program quotation produced a non-constructor expression"
 
 /-- Every field and instruction of an original function, including outside the semantic
