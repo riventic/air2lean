@@ -2,6 +2,7 @@
 """V06 outcome-taxonomy regressions: shared taxonomy, absence refusal in claims and coverage.
 
 Offline: synthetic diff summaries and the checked-in claim fixture report only."""
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -30,6 +32,10 @@ report = load('diff_report', ROOT / 'scripts' / 'diff-report.py')
 CLAIMS = ROOT / 'scripts' / 'claims.py'
 FIXTURE = ROOT / 'tests' / 'roadmap' / 'claims' / 'fixture-report.json'
 O = outcomes.Outcome
+sys.path.insert(0, str(ROOT / 'scripts'))
+import theorem_universe as universe
+
+assumptions = universe.assumptions
 
 
 def case(status, kind=None, schedule=None, function='ret'):
@@ -145,40 +151,73 @@ class TaxonomyTests(unittest.TestCase):
 
 
 class ClaimsEvidenceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.compilation = tempfile.TemporaryDirectory(prefix='taxonomy-synthetic-compiler-')
+        cls.addClassCleanup(cls.compilation.cleanup)
+        base = Path(cls.compilation.name)
+        toolchain = base / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        (toolchain / 'lib/lean').mkdir(parents=True)
+        for name in ('bin/lean', 'bin/leanchecker', 'lib/lean/Init.olean'):
+            (toolchain / name).write_bytes(b'synthetic installed input')
+        cls.runtime = {'lean_sysroot': str(toolchain.resolve()),
+                       'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain)}
+        lake = base / 'stub-bin/lake'
+        lake.parent.mkdir()
+        lake.write_text('#!' + sys.executable + '\nimport os,pathlib,sys\n'
+                        'if sys.argv[1:] == ["env", "printenv", "LEAN_SYSROOT"]:\n'
+                        '    print(os.environ["STUB_LEAN_SYSROOT"])\n'
+                        'elif sys.argv[1:] == ["env", "printenv", "LEAN_PATH"]:\n'
+                        '    standard = pathlib.Path(os.environ["STUB_LEAN_SYSROOT"]) / "lib/lean"\n'
+                        '    print(os.environ["LEAN_PATH"] + os.pathsep + str(standard))\n'
+                        'else:\n'
+                        '    raise AssertionError(sys.argv[1:])\n')
+        lake.chmod(0o755)
+        cls.env = dict(os.environ, PATH=str(lake.parent) + os.pathsep + os.environ['PATH'],
+                       STUB_LEAN_SYSROOT=cls.runtime['lean_sysroot'])
+        _, units = universe.universe()
+        by_file = {unit.file: unit for unit in units}
+        selected = [by_file['tests/roadmap/claims/Fixture.lean']]
+
+        def compile_fixture(source, root, olean, lean_path, log, **kwargs):
+            olean.parent.mkdir(parents=True, exist_ok=True)
+            olean.write_bytes(b'compiled fixture')
+            return None
+
+        # The statements are synthetic test input, not a kernel replay. Keep the real
+        # compiler-owned Unit/source plan and prepare it BEFORE the fake compiler runs.
+        with mock.patch.dict(os.environ, cls.env):
+            with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext):
+                context = universe.prepare_compilation(selected, by_file, base / 'producer')
+            with mock.patch.object(universe, 'compile_unit', side_effect=compile_fixture):
+                errors = universe.compile_all(universe.closure(selected, by_file), by_file,
+                                              base / 'producer', compiled_units=context)
+            if errors:
+                raise AssertionError(errors)
+            universe.seal_compilation(context)
+        cls.compiler_context = context
+        cls.module = selected[0].module
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.base = Path(temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.diff = self.base / 'diff.json'
-        # A claims report must be bound to this checkout (H1): revision and one artifact digest.
-        spec = importlib.util.spec_from_file_location('assumptions', ROOT / 'scripts' / 'assumptions.py')
-        assumptions = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(assumptions)
-        olean = self.base / 'Fixture.olean'
-        olean.write_bytes(b'compiled fixture')
-        toolchain = self.base / 'toolchain'
-        (toolchain / 'bin').mkdir(parents=True)
-        (toolchain / 'lib/lean').mkdir(parents=True)
-        for name in ('bin/lean', 'bin/leanchecker', 'lib/lean/Init.olean'):
-            (toolchain / name).write_bytes(b'synthetic installed input')
-        runtime = {'lean_sysroot': str(toolchain.resolve()),
-                   'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain)}
-        lake = self.base / 'stub-bin/lake'
-        lake.parent.mkdir()
-        lake.write_text('#!' + sys.executable + '\nimport os,sys\n'
-                        'assert sys.argv[1:] == ["env", "printenv", "LEAN_SYSROOT"]\n'
-                        'print(os.environ["STUB_LEAN_SYSROOT"])\n')
-        lake.chmod(0o755)
-        self.env = dict(os.environ, PATH=str(lake.parent) + os.pathsep + os.environ['PATH'],
-                        STUB_LEAN_SYSROOT=runtime['lean_sysroot'])
         self.report = self.base / 'assurance.json'
+        unit = self.compiler_context['units'][self.module]
+        self.olean = Path(unit['output_path'])
+        self.olean.write_bytes(b'compiled fixture')
         fixture = json.loads(FIXTURE.read_text())
-        fixture['extractor'] = dict(fixture.get('extractor', {}), **runtime)
-        self.report.write_text(json.dumps(dict(fixture, freshness={**runtime,
+        fixture.update(modules=[self.module], module_imports={self.module: []})
+        fixture['extractor'] = dict(fixture.get('extractor', {}), **self.runtime)
+        self.report.write_text(json.dumps(dict(fixture, freshness={**self.runtime,
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
-            'artifacts': [{'module': 'Fixture', 'olean': str(olean), 'olean_sha256': assumptions.file_sha256(olean),
-                           'source': None, 'source_sha256': None}]})))
+            'compiled_units': self.compiler_context,
+            'artifacts': [{'module': self.module, 'olean': assumptions.display(self.olean),
+                           'olean_sha256': unit['outputs'][0][1]['sha256'],
+                           'source': unit['source']['path'], 'source_sha256': unit['source']['sha256']}]})))
 
     def run_check(self, rows, strength='total_correctness', function='example.ret', complete=True, diff=True,
                   tamper=None):
@@ -231,6 +270,32 @@ class ClaimsEvidenceTests(unittest.TestCase):
             self.assertIn('runtime binding', err)
         finally:
             self.report.write_text(original)
+
+    def test_missing_or_mismatched_compiler_binding_is_refused(self):
+        original = self.report.read_text()
+        try:
+            missing = json.loads(original)
+            del missing['freshness']['compiled_units']
+            mismatched = json.loads(original)
+            mismatched['freshness']['artifacts'][0].update(source=None, source_sha256=None)
+            for report, message in ((missing, 'no compiler-owned run binding'),
+                                    (mismatched, 'source/output differs from its run binding')):
+                with self.subTest(message=message):
+                    self.report.write_text(json.dumps(report))
+                    code, result, err = self.run_check([case('value_match', 'value')])
+                    self.assertEqual((code, result), (2, None))
+                    self.assertIn(message, err)
+        finally:
+            self.report.write_text(original)
+
+    def test_changed_compiler_output_is_refused(self):
+        try:
+            self.olean.write_bytes(b'changed after the compiler run')
+            code, result, err = self.run_check([case('value_match', 'value')])
+            self.assertEqual((code, result), (2, None))
+            self.assertIn('Fixture olean changed', err)
+        finally:
+            self.olean.write_bytes(b'compiled fixture')
 
     def test_capped_or_timer_evidence_rejects_goal(self):
         for row in (case('search_cap', 'value', search('capped')), case('unspecified_exclusion', 'unspecified'),
