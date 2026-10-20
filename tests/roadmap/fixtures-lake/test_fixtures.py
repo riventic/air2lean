@@ -11,6 +11,7 @@ modules (seconds), without the shared artifact cache.
   that still builds or a missing expected message is no kill.
 """
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -248,6 +249,14 @@ class LakeKernelReplay(unittest.TestCase):
         rejected = built()
         self.assertEqual(audit(unchecked), 1)
         self.assertEqual(built(), rejected)  # the failing receipt is replayed and still fails
+        # An `initialize` that forges a passing receipt line (and marks that it ran) next to the
+        # kernel-unchecked theorem: no receipt process runs it, and the verdict stays a rejection.
+        marker = package / "initialize-ran"
+        fake = json.dumps({"module": "AuditControl", "status": "pass", "exit_code": 0, "output": ""})
+        forged = (f"initialize do\n  IO.FS.writeFile {json.dumps(str(marker))} \"ran\"\n"
+                  f"  IO.println {json.dumps('info: KernelReplay/R0.lean:3:0: AIR2LEAN_KERNEL_REPLAY:' + fake)}\n")
+        self.assertEqual(audit(unchecked + forged), 1)
+        self.assertFalse(marker.exists())
 
 
 if __name__ == "__main__":

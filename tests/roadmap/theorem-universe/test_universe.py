@@ -15,6 +15,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest import mock
 
@@ -522,6 +523,10 @@ class LakeKernelReplayTests(unittest.TestCase):
         self.package.mkdir()
         (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
         (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        (self.root / 'lakefile.toml').write_text('name = "air2lean"\n')
+        for owner, module in ((self.root, 'A'), (self.package, 'B')):  # A in the root package, B in the fixtures'
+            (owner / '.lake/build/lib/lean').mkdir(parents=True, exist_ok=True)
+            (owner / '.lake/build/lib/lean' / (module + '.olean')).write_bytes(b'olean')
         self.workspace = self.package / '.lake/replay'
         self.lean_path = os.pathsep.join([str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')])
         self.resolved = [*self.lean_path.split(os.pathsep), str(self.workspace / '.lake/build/lib/lean')]
@@ -555,6 +560,14 @@ class LakeKernelReplayTests(unittest.TestCase):
         receipts = self.replay()
         self.assertEqual({m: r['status'] for m, r in receipts.items()}, {'A': 'pass', 'B': 'fail'})
         first = self.builds[-1]
+        # No receipt imports its module (its `initialize` would run there); each receipt's library
+        # needs the module's olean and dependency trace in the package that builds it.
+        texts = [p.read_text() for p in (self.workspace / 'KernelReplay').glob('*.lean')]
+        self.assertTrue(texts and all('import A' not in t and 'import B' not in t for t in texts))
+        manifest = tomllib.loads((self.workspace / 'lakefile.toml').read_text())
+        self.assertEqual(sorted(lib['needs'] for lib in manifest['lean_lib']),
+                         [['@air2lean/+A:olean', '@air2lean/+A:depTrace'],
+                          ['@fixtures/+B:olean', '@fixtures/+B:depTrace']])
         self.replay()
         self.assertEqual(self.builds[-1], first)  # same inputs: the same receipt modules
         self.replay(checker='d' * 64)
