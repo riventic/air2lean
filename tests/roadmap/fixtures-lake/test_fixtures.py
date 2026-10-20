@@ -188,5 +188,67 @@ class LakeExtraction(unittest.TestCase):
         self.assertEqual(drivers(), first)
 
 
+class LakeKernelReplay(unittest.TestCase):
+    """A module's kernel check as a Lake-built receipt (tools/KernelReplay.lean,
+    scripts/assumptions.py lake_kernel_replay) on the package's own lookup path, as a fixture
+    Unit audit uses it: an unchanged module's receipt is replayed, a changed module is checked
+    again, and a module the kernel rejects keeps a failing receipt, built and replayed alike."""
+
+    def test_receipts_are_lakes_trace(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-replay-test.")
+        self.addCleanup(tmp.cleanup)
+        package = Path(tmp.name)
+        shutil.copy(ROOT / "lean-toolchain", package / "lean-toolchain")
+        (package / "lakefile.toml").write_text(
+            f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
+            '[[lean_lib]]\nname = "AuditControl"\n')
+        source = package / "AuditControl.lean"
+        workspace = package / ".lake/replay"
+        receipts = workspace / ".lake/build/lib/lean/KernelReplay"
+
+        spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
+        assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(assumptions)
+        sysroot = Path(assumptions.lake_env("LEAN_SYSROOT")).resolve()
+        checker = assumptions.file_sha256(sysroot / "bin/leanchecker")
+        runtime = assumptions.toolchain_runtime_sha256(sysroot)
+
+        def audit(text):
+            """0 when the receipt passes, 1 when it records a rejection."""
+            source.write_text(text)
+            with without_cache():
+                done = fx.lake(package, ["build", "AuditControl"], capture=True)
+                self.assertEqual(done.returncode, 0, done.stdout)
+                lean_path = fx.lake(package, ["env", "printenv", "LEAN_PATH"], capture=True).stdout.strip()
+                found = assumptions.lake_kernel_replay(["AuditControl"], package, checker, runtime, lean_path)
+            self.assertIsNotNone(found)  # the package's own lookup path: receipts are used
+            return 0 if found["AuditControl"]["status"] == "pass" else 1
+
+        def built():
+            # The receipt of AuditControl: the one whose source names it.
+            sources = [p for p in workspace.glob("KernelReplay/*.lean")
+                       if "run `AuditControl\n" in p.read_text()]
+            self.assertEqual(len(sources), 1, sources)
+            return sources[0].name, (receipts / (sources[0].stem + ".olean")).stat().st_mtime_ns
+
+        honest = "theorem honest : 1 + 1 = 2 := rfl\n"
+        self.assertEqual(audit(honest), 0)
+        first = built()
+        self.assertEqual(audit(honest), 0)
+        self.assertEqual(built(), first)  # unchanged: the receipt is replayed, not rechecked
+        self.assertEqual(audit(honest + "theorem other : 2 + 2 = 4 := rfl\n"), 0)
+        self.assertNotEqual(built()[1], first[1])  # the module changed: checked again
+        # Kernel-unchecked (debug.skipKernelTC): leanchecker rejects it, built and replayed alike.
+        unchecked = ("import Lean\nopen Lean Elab Command Term\nelab \"#unchecked\" : command => liftTermElabM do\n"
+                     "  let type ← elabType (← `((1 : Nat) = 2))\n"
+                     "  withOptions (fun o => o.setBool `debug.skipKernelTC true) do\n"
+                     "    addDecl (.thmDecl { name := `bad, levelParams := [], type, value := mkConst ``True.intro })\n"
+                     "#unchecked\n" + honest)
+        self.assertEqual(audit(unchecked), 1)
+        rejected = built()
+        self.assertEqual(audit(unchecked), 1)
+        self.assertEqual(built(), rejected)  # the failing receipt is replayed and still fails
+
+
 if __name__ == "__main__":
     unittest.main()
