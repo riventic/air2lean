@@ -40,15 +40,19 @@ open FAssn Conc Proto
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-/-- An instrumentation tick paid by the caller's own part. The existing total thread rule
+/-- An instrumentation tick with its EXACT computed memory post, paid by the caller's part.
+The continuation retains all unchanged memory observations through `m.ticked` rather than
+receiving an abstract post memory that hides the tick's already-proved run equality.
+The existing total thread rule
 fixes the actual resource post, while `Inv.wp_liftPartLive` frames the entire held resource.
 The composite protocol's existing `kstep` obligation re-establishes arbitrary `U` at the exact
 ticked memory. Internal busy phases need no lock-code `ok` admission. -/
-theorem Fits.wp_tick (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} {r : Res}
+theorem Fits.wp_tick_exact (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} {r : Res}
     {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
     (htt : FTTotalTriple (fun rp => rp = L.part g) Zig.tick (fun _ rp => rp = r))
-    (h : ∀ m', m'.current = t → P.inv (upd G t (L.setPart g r)) m' → Q () G₀ m' d) :
+    (h : m.ticked.current = t → P.inv (upd G t (L.setPart g r)) m.ticked →
+      Q () G₀ m.ticked d) :
     P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
   obtain ⟨rX, hL, hU⟩ := (hF.inv _ _).mp hi
   refine hL.wp_liftPartLive hc hg htt.1 rfl (fun a m' r' hr hq _ hc' hL' => ?_) (.inr htt.2)
@@ -61,7 +65,18 @@ theorem Fits.wp_tick (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} 
     (.inr ⟨hc, by rw [upd_self]; exact hg, hL, r,
       by simpa only [upd_self] using htt,
       by rw [upd_self, upd_upd], rfl, hm, hL'⟩) hU
-  exact h m' hc' ((hF.inv _ _).mpr ⟨rX, hL', hU'⟩)
+  subst m'
+  exact h hc' ((hF.inv _ _).mpr ⟨rX, hL', hU'⟩)
+
+/-- The existing caller-part tick API, derived from the exact-memory rule. Its callback
+header stays unchanged; callers needing unchanged memory observations use `wp_tick_exact`. -/
+theorem Fits.wp_tick (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} {r : Res}
+    {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (htt : FTTotalTriple (fun rp => rp = L.part g) Zig.tick (fun _ rp => rp = r))
+    (h : ∀ m', m'.current = t → P.inv (upd G t (L.setPart g r)) m' → Q () G₀ m' d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d :=
+  hF.wp_tick_exact hi hc hg htt (h m.ticked)
 
 /-- One actual tick edge between caller-resource assertions. Payment is required only for
 this edge; the continuation receives its actual part. A retry needs a new proof at its own
@@ -79,18 +94,27 @@ theorem Fits.wp_tick_assert (hF : L.Fits K P U ok) {A B : FAssn}
   obtain ⟨r', ht, hb⟩ := pay (L.part g) ha
   exact hF.wp_tick hi hc hg ht (h r' hb)
 
-/-- An unmetered caller keeps its exact part. Stack budgets and tokens may be present;
-no noStack fragment or `P.cost = none` inference is used. -/
+/-- An unmetered tick exposes the exact memory and exact caller part. All actual stack
+resources remain framed; no noStack fragment or `P.cost = none` inference is used. -/
+theorem Fits.wp_tick_unmetered_exact (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}
+    {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : m.ticked.current = t → P.inv (upd G t g) m.ticked → Q () G₀ m.ticked d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  refine hF.wp_tick_exact hi hc hg (FTTotalTriple.tick_part_unmetered (L.part g) hu) ?_
+  intro hc' hi'
+  rw [L.setPart_self] at hi'
+  exact h hc' hi'
+
+/-- The existing unmetered API, derived without changing its callback or admission. -/
 theorem Fits.wp_tick_unmetered (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}
     {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (h : ∀ m', m'.current = t → P.inv (upd G t g) m' → Q () G₀ m' d) :
-    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
-  refine hF.wp_tick hi hc hg (FTTotalTriple.tick_part_unmetered (L.part g) hu) ?_
-  intro m' hc' hi'
-  rw [L.setPart_self] at hi'
-  exact h m' hc' hi'
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d :=
+  hF.wp_tick_unmetered_exact hi hc hg hu (h m.ticked)
 
 /-- Plain is a concrete specialization of the unmetered rule. -/
 theorem Fits.wp_tick_plain (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}

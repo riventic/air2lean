@@ -21,20 +21,29 @@ theorem ioEvent_dec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 2) →
     ∃ r, (Packed.ofBits? (α := Io_Event) b).run = some (.ok r) := by
   rintro b (rfl | rfl | rfl) <;> exact ⟨_, rfl⟩
 
+/-- Closed decoder equations remain available after the walk splits a returned enum value. -/
+theorem ioEvent_decode0 :
+    (Packed.ofBits? (α := Io_Event) 0).run = some (.ok .unset) := rfl
+
+theorem ioEvent_decode1 :
+    (Packed.ofBits? (α := Io_Event) 1).run = some (.ok .waiting) := rfl
+
+theorem ioEvent_decode2 :
+    (Packed.ofBits? (α := Io_Event) 2).run = some (.ok .is_set) := rfl
+
+attribute [local fsym_arith] ioEvent_decode0 ioEvent_decode1 ioEvent_decode2
+
 theorem ioEvent_of0 {r : Io_Event} (h : (Packed.ofBits? (α := Io_Event) 0).run = some (.ok r)) :
     r = .unset := by
-  have : (Packed.ofBits? (α := Io_Event) 0).run = some (.ok .unset) := rfl
-  rw [this] at h; cases h; rfl
+  rw [ioEvent_decode0] at h; cases h; rfl
 
 theorem ioEvent_of1 {r : Io_Event} (h : (Packed.ofBits? (α := Io_Event) 1).run = some (.ok r)) :
     r = .waiting := by
-  have : (Packed.ofBits? (α := Io_Event) 1).run = some (.ok .waiting) := rfl
-  rw [this] at h; cases h; rfl
+  rw [ioEvent_decode1] at h; cases h; rfl
 
 theorem ioEvent_of2 {r : Io_Event} (h : (Packed.ofBits? (α := Io_Event) 2).run = some (.ok r)) :
     r = .is_set := by
-  have : (Packed.ofBits? (α := Io_Event) 2).run = some (.ok .is_set) := rfl
-  rw [this] at h; cases h; rfl
+  rw [ioEvent_decode2] at h; cases h; rfl
 
 section
 variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
@@ -50,7 +59,8 @@ theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d := by
   subst hp
-  fsym [FEvent.wp_xchgAs hE (v := Io_Event.is_set) rfl ioEvent_dec, FEvent.wp_wake hE,
+  fsym [FEvent.wp_xchgAs (g := g) hE (v := Io_Event.is_set) rfl ioEvent_dec,
+    FEvent.wp_wake (g := E.set g .sw) hE,
     hE.lph, E.ph_set, E.set_set, FEvent.set_of hgx, ioEvent_of0, ioEvent_of1, ioEvent_of2]
 
 /-- `waitUncancelable`'s loop invariant: `t` is a waiter at `w1`. -/
@@ -76,9 +86,9 @@ theorem wait_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
       if Io_Event_waitUncancelable.again17 r.1 then waitInv P E t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Event_waitUncancelableLocals) => 0) s)
       else waitPost P E t g D r G' m' d') G m d := by
-  fsym [hE.wp_tick_unmetered,
-    FEvent.wp_wait hE (ε := Io_Event) (e := .waiting) (by decide),
-    FEvent.wp_loadAs hE ioEvent_dec, hE.lpart, hE.lph, E.ph_set, E.set_set,
+  fsym [hE.wp_tick_unmetered (g := E.set g .w1),
+    FEvent.wp_wait (g := E.set g .w1) hE (ε := Io_Event) (e := .waiting) (by decide),
+    FEvent.wp_loadAs (g := E.set g .w1) hE ioEvent_dec, hE.lpart, hE.lph, E.ph_set, E.set_set,
     FEvent.set_of hgx, ioEvent_of0, ioEvent_of1, ioEvent_of2,
     waitInv, waitPost, Io_Event_waitUncancelable.again17]
 
@@ -97,7 +107,8 @@ theorem ioEvent_wait_wp_unmetered (hE : L.Fits (E.prim L) P U ok) (hcost : P.cos
       E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
-  fsym [FEvent.wp_casAs hE (exp := Io_Event.unset) (new := .waiting) rfl rfl ioEvent_dec,
+  fsym [FEvent.wp_casAs (g := E.set g .w0) hE
+      (exp := Io_Event.unset) (new := .waiting) rfl rfl ioEvent_dec,
     WP.loop _ _ (waitInv P E t g d) (fun _ => 0) (waitPost P E t g d)
       (wait_body hE hcost t g hgx hgo hu d io hlive),
     hE.lph, E.ph_set, E.set_set, FEvent.set_of hgx, ioEvent_of0, ioEvent_of1, ioEvent_of2,

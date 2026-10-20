@@ -67,7 +67,8 @@ theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
           wakeInv P C t g D r.2 G' m' d' ∧ (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
             (fun (_ : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) => 0) s)
         else wakePost P C t g D r G' m' d') G m d := by
-  fsym [hC.wp_tick_unmetered, FCond.wp_signal hC, FCond.wp_bump hC, FCond.wp_wakeEp hC,
+  fsym [hC.wp_tick_unmetered_exact (g := g) (t := t),
+    FCond.wp_signal hC, FCond.wp_bump hC, FCond.wp_wakeEp hC,
     hC.wp_projE (t := t),
     (WP.liftMem_liftR (P := P) (t := t)
       (hnone := fun _ => (show P.Partial from Or.inr hcost))),

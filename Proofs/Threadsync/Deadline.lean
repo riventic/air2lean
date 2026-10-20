@@ -277,18 +277,22 @@ theorem dfree_sp {t S D : Nat} (R : FAssn) {q : Ptr} {bs : Array Byte} (hbs : bs
 /-- The actual deadline-bearing wait family: concrete Plain parts, or an owned stack token
 with room for this block and a real unmetered residual. No other part supplies stack room. -/
 def deadlineResources : CallerResources where
-  pre t r := r.Plain ∨ ∃ S D rRest, D + 56 ≤ S ∧
+  pre t r := r.Plain ∨ ∃ (S D : Nat) (rRest : Res), D + 56 ≤ S ∧
     0 < rRest.gh.ac.frag .unmetered ∧ (sp t S D ⋆ (· = rRest)) r
-  during _ r₀ r := r = r₀ ∨ ∃ (DR : BlockId → FAssn) q bs, DPart DR q bs r
+  during _ r₀ r := r = r₀ ∨
+    ∃ (DR : BlockId → FAssn) (q : Ptr) (bs : Array Byte), DPart DR q bs r
   post _ r₀ r := r = r₀
   plain_pre _ _ hp := .inl hp
   plain_post _ _ _ _ hr := hr
 
 theorem deadlineResources.unmetered {t : ThreadId} {r : Res}
     (h : deadlineResources.pre t r) : 0 < r.gh.ac.frag .unmetered := by
-  rcases h with hp | ⟨S, D, rRest, _, hu, rs, _, _, rfl, _, rfl⟩
+  rcases h with hp | ⟨S, D, rRest, _, hu, hpart⟩
   · exact hp.2
-  · change 0 < rs.gh.ac.frag .unmetered + rRest.gh.ac.frag .unmetered
+  · obtain ⟨rs, rr, _, he, _, hr⟩ := hpart
+    subst rr
+    rw [he]
+    change 0 < rs.gh.ac.frag .unmetered + rRest.gh.ac.frag .unmetered
     omega
 
 /-- The deadline's bytes and extent add no obligation to the residual's real tick resource. -/
@@ -318,14 +322,20 @@ theorem deadlineResources.elim {t : ThreadId} {r₀ : Res}
       exact hp.2
     · intro q bs hbs
       exact (dfree hbs).frame
-  · obtain ⟨rs, _, hd, rfl, hs, rfl⟩ := hpart
+  · obtain ⟨rs, rr, hd, he, hs, hr⟩ := hpart
+    subst rr
+    subst r₀
     have hrestore : ∀ r, (sp t S D ⋆ (· = rRest)) r → r = rsum rs rRest := by
       intro r hr
-      obtain ⟨rs', _, _, rfl, hs', rfl⟩ := hr
-      rw [sp_gres hs', sp_gres hs]
+      obtain ⟨rs', rr', _, he', hs', hr'⟩ := hr
+      subst rr'
+      rw [he', sp_gres hs', sp_gres hs]
     refine ⟨fun b => sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ (· = rRest)), ?_, ?_, ?_⟩
     · intro b r hr
-      obtain ⟨rsp, _, _, rfl, _, re, _, _, rfl, _, rfl⟩ := hr
+      obtain ⟨rsp, rt, _, hsum, _, htail⟩ := hr
+      obtain ⟨re, rr, _, htailEq, _, hr⟩ := htail
+      subst rr
+      rw [hsum, htailEq]
       change 0 < rsp.gh.ac.frag .unmetered +
         (re.gh.ac.frag .unmetered + rRest.gh.ac.frag .unmetered)
       omega

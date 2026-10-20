@@ -100,7 +100,9 @@ theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
       m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp
   have hS : threadMutexW.c = L.c := hc3.symm
-  fsym [wp_loadLock hP, wp_waitOn hP threadMutexW hS, hP.toWait,
+  fsym [wp_loadLock hP (g := L.set g .spin rnil),
+    wp_waitOn hP threadMutexW hS (g := L.set g .wait rnil),
+    hP.toWait (g := L.set g .spin rnil),
     WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
       (loop16_body hP hcost hc3 t g hok hu d),
     threadFutexWaitC_eq, L.ph_set, L.set_set, hP.ok_set,
@@ -113,8 +115,9 @@ theorem futexLock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c =
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_FutexImpl_lock p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
-  fsym [tryLock_wp hP hcost hc3 hp t g hg hok,
-    lockSlow_wp hP hcost hc3 hp t g hok hu]
+  subst hp
+  fsym [tryLock_wp hP hcost hc3 rfl t g hg hok,
+    lockSlow_wp hP hcost hc3 rfl t g hok hu]
 
 /-- `Thread.Mutex.lock` is `FutexImpl.lock` (Linux). -/
 theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
@@ -130,7 +133,8 @@ theorem lock_wp_unmetered (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Pt
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
-  fsym [futexLock_wp hP hcost hc hp t g hg hok hu]
+  subst hp
+  fsym [futexLock_wp hP hcost hc rfl t g hg hok hu]
 
 /-- The actual Linux emitted loop pays each reachable tick from an unmetered caller part;
 all remaining caller fragments, including stack resources, keep their exact values. -/
@@ -182,6 +186,7 @@ theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp :
     (by show L.ph (upd G t g t) = _; rw [upd_self]; exact hg) hcur
   unfold Thread_Mutex_unlock Thread_Mutex_FutexImpl_unlock mutexOwnerCheck
   fsym [WP.liftMem_pure (x := Thread.mutexOwnerCheck L.ptr) hrun rfl,
+    WP.liftMem_pure (x := StateT.lift (debug_assert true)) (by rfl) rfl,
     wp_xchgUnlockOn hP threadMutexW hS, wp_wakeOn hP,
     atomicRmwC_eq, threadFutexWakeC_eq, L.ph_set, L.set_set, hP.ok_set, threadMutexW]
 
