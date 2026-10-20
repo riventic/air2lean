@@ -14,7 +14,8 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   Lake builds only one of two modules with the same name, silently (both libraries "pass"), so
   the build first checks that every module-name root (the first component, and each library's
   `roots`) belongs to one library and is no root of the root package's libraries.
-- `audit`: the axioms of the built modules, read from the compiled environment by
+- `audit`: the normal canonical Lake producer snapshots sources before its cached build, then
+  audits those exact built outputs; an explicit custom `lib` stays graph-only. Axioms are read by
   `scripts/assumptions.py --all-declarations` (kernel replay included), not from a message log.
   Fails unless every theorem of the modules depends on the standard axioms only (propext,
   Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
@@ -100,19 +101,24 @@ def build(targets: list[str]) -> int:
     return lake(PACKAGE, ["build", *(targets or [lib["name"] for lib in libraries(PACKAGE)])]).returncode
 
 
-def files(root: Path | None = None) -> list[str]:
-    """The `root`-relative (default ROOT) paths of the fixture package's modules (none without
-    the package)."""
+def source_modules(root: Path | None = None) -> dict[str, tuple[str, str]]:
+    """Lake's configured module -> (repository source, source root), with collision checks."""
     root = root or ROOT
     package = root / PACKAGE.relative_to(ROOT)
     if not (package / "lakefile.toml").is_file():
-        return []
-    out, modules = [], check_names(package, root)
+        return {}
+    out, modules = {}, check_names(package, root)
     for lib in libraries(package):
         src = package / lib.get("srcDir", ".")
         for module in modules[lib["name"]]:
-            out.append((src / (module.replace(".", "/") + ".lean")).relative_to(root).as_posix())
-    return sorted(out)
+            out[module] = ((src / (module.replace(".", "/") + ".lean")).relative_to(root).as_posix(),
+                           src.relative_to(root).as_posix())
+    return out
+
+
+def files(root: Path | None = None) -> list[str]:
+    """The repository-relative source paths of the configured fixture modules."""
+    return sorted(file for file, _ in source_modules(root).values())
 
 
 def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
@@ -137,25 +143,45 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
+    import theorem_universe
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
     try:
         report_path = output or work / "assurance.json"
+        report_path.unlink(missing_ok=True)
+        context = None
+        if lib is None:
+            # This producer owns the canonical Lake outputs. Snapshot before the ordinary
+            # cached build, rather than attaching source names to a pre-existing artifact.
+            context = theorem_universe.prepare_fixture_compilation(modules)
+            if context is not None:
+                done = lake(PACKAGE, ["--rehash", "build", *modules], capture=True)
+                if done.returncode:
+                    raise RuntimeError(f"fixture build failed:\n{done.stdout[-4000:]}")
+                for unit in context['units'].values():
+                    unit['outputs'] = theorem_universe.compiled_output(Path(unit['output_path']))
+                theorem_universe.seal_compilation(context)
         lib = lib or PACKAGE / ".lake" / "build" / "lib" / "lean"
-        env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
         # --all-declarations: every declaration of the modules is a graph root, so a definition
         # whose value carries proofs (a `ResetLedger` instance) is audited like a theorem.
-        command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
-                   "--all-declarations", "--replay-cache", str(work / "replay-cache.json"),
-                   "--output", str(report_path)]
-        for module in modules:
-            command += ["--module", module]
-        report_path.unlink(missing_ok=True)
-        done = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT)
+        if context is None:
+            env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
+            command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
+                       "--all-declarations", "--replay-cache", str(work / "replay-cache.json"),
+                       "--output", str(report_path)]
+            for module in modules:
+                command += ["--module", module]
+            done = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT)
+            audit_code, audit_output = done.returncode, done.stdout
+        else:
+            result = theorem_universe.audit_modules(sorted(set(modules)), [], report_path,
+                                                   work / 'replay-cache.json', all_declarations=True,
+                                                   compiled_units=context)
+            audit_code, audit_output = result['exit_code'], ''
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"status": "error"}
         problems = []
         if report.get("status") == "error":
-            problems.append(f"assumptions.py exited {done.returncode}: {report.get('error')}")
+            problems.append(f"assumptions.py exited {audit_code}: {report.get('error')}")
         else:
             if (report.get("kernel_replay") or {}).get("status") != "pass":
                 problems.append("kernel replay did not pass: "
@@ -183,13 +209,16 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
                 elif not (axioms := reached_axioms(name, nodes)) <= STANDARD_AXIOMS:
                     problems.append(f"{name}: axioms {sorted(axioms - STANDARD_AXIOMS)}")
         if problems:
-            sys.stdout.write(done.stdout[-4000:])
+            sys.stdout.write(audit_output[-4000:])
             print("fixtures audit: FAILED\n  " + "\n  ".join(problems), file=sys.stderr)
             return 1
         print(f"fixtures audit: {len(audited)} theorems and {len(declarations)} named declarations of "
               f"{', '.join(modules)}: standard axioms only "
               f"(kernel replay of {len(report['kernel_replay']['modules'])} modules passed)")
         return 0
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        print(f"fixtures audit: FAILED\n  {error}", file=sys.stderr)
+        return 1
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
