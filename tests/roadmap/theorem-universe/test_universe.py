@@ -429,8 +429,15 @@ class LakeExtractionTests(unittest.TestCase):
         (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
         self.workspace = self.package / '.lake/extraction'
         self.built = []
+        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')]
+        # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
+        self.own = str(self.workspace / '.lake/build/lib/lean')
+        self.resolved = [*self.roots, self.own]
 
         def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                code = 0 if self.resolved is not None else 1
+                return subprocess.CompletedProcess(command, code, os.pathsep.join(self.resolved or []) + '\n', '')
             module = command[-1]
             self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
             path = module.replace('.', '/') + '.lean'
@@ -440,8 +447,29 @@ class LakeExtractionTests(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
-    def extract(self, runtime='a' * 64):
-        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root)
+    def extract(self, runtime='a' * 64, binding=None):
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root, binding)
+
+    def test_a_bound_lookup_path_is_used_only_as_lake_resolves_it(self):
+        binding = {'roots': list(self.roots), 'sha256': 'c' * 64}
+        self.assertEqual(self.extract(binding=binding), ['{}'])
+        self.assertEqual(len(self.built), 1)
+        # A changed bound input (same roots) is another driver: Lake builds another module.
+        self.assertEqual(self.extract(binding=dict(binding, sha256='d' * 64)), ['{}'])
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        # One entry of Lake's resolved path differs from the bound one: nothing is built or reused.
+        self.resolved[1] = self.resolved[1] + '-other'
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.roots[1], self.roots[0], self.own]  # the same roots, another order
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = None  # Lake resolves nothing
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.own, *self.roots, self.own]  # the driver library twice
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [*self.roots, self.own]
+        (self.workspace / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
+        self.assertIsNone(self.extract(binding=binding))
+        self.assertEqual(len(self.built), 2)
 
     def test_report_line_and_unchanged_driver(self):
         self.assertEqual(self.extract(), ['{}'])
@@ -953,8 +981,10 @@ class FixtureCompilationTests(unittest.TestCase):
 
     def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertTrue(all_declarations)
-        # A compiled Unit audit is bound to its lookup path: Lake never chooses its imports.
-        self.assertIsNone(extract_in)
+        # The fixture package may build the driver, still bound to the compiled lookup path
+        # (lake_extraction's resolved-roots controls: LakeExtractionTests).
+        self.assertIn(extract_in and Path(extract_in), (None, Path(self.package)))
+        self.assertIsNotNone(lean_path)
         raw = CompiledUnitTests.extract(self, modules, build, witnesses,
                                         all_declarations=all_declarations, lean_path=lean_path)
         # Helper has no declaration-graph node: only its unused header import reveals it.

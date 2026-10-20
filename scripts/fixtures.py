@@ -140,10 +140,10 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
 def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
           package: Path | None = None) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
-    `lib`: the directory of the built modules (default: the fixture package's). A fixture Unit
-    audit is bound to its compiler-owned lookup path, so its driver is elaborated afresh. Any
-    other audit with a Lake package (`package`, else the fixture package when `lib` is not given)
-    has Lake build the driver on that package (scripts/assumptions.py --extract-in)."""
+    `lib`: the directory of the built modules (default: the fixture package's). An audit with a
+    Lake package (`package`, else the fixture package when `lib` is not given) has Lake build the
+    extractor's driver on that package (scripts/assumptions.py --extract-in); a fixture Unit
+    audit only while Lake resolves exactly its compiler-owned lookup path."""
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
@@ -182,7 +182,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
         else:
             result = theorem_universe.audit_modules(sorted(set(modules)), [], report_path,
                                                    work / 'replay-cache.json', all_declarations=True,
-                                                   compiled_units=context)
+                                                   compiled_units=context, extract_in=extract_in)
             audit_code, audit_output = result['exit_code'], ''
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"status": "error"}
         problems = []

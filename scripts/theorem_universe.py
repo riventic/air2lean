@@ -254,11 +254,14 @@ def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path, *,
 
 def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None,
                   sources: Path | None = None, *, all_declarations: bool = False,
-                  compiled_units: dict | None = None) -> dict:
-    """Audit this exact module set; optional declaration evidence stays in the same full report."""
+                  compiled_units: dict | None = None, extract_in: Path | None = None) -> dict:
+    """Audit this exact module set; optional declaration evidence stays in the same full report.
+    `extract_in`: the Lake package whose Lake may build the extractor's driver
+    (assumptions.py --extract-in)."""
     started = time.monotonic()
     arguments = ["--no-build", "--allow-no-theorems", "--output", str(output),
                  *(["--replay-cache", str(cache)] if cache else []),
+                 *(["--extract-in", str(extract_in)] if extract_in else []),
                  *(["--sources", str(sources)] if sources else []),
                  *(["--all-declarations"] if all_declarations else []),
                  *(a for m in modules for a in ("--module", m))]

@@ -754,7 +754,27 @@ globs = ["{library}.+"]
 """
 
 
-def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = ROOT) -> list[str]:
+def resolved_roots(lake: list[str], workspace: Path, env: dict) -> list[str] | None:
+    """The lookup roots Lake gives the extraction workspace's modules besides its own driver
+    library, in order, when that library is there once and holds only drivers (no top-level name
+    of an audited module); None when Lake resolves nothing usable."""
+    done = subprocess.run([*lake, "env", "printenv", "LEAN_PATH"], cwd=workspace, text=True,
+                          capture_output=True, env=env)
+    lines = done.stdout.strip().splitlines()
+    if done.returncode or len(lines) != 1 or not all(lines[0].split(os.pathsep)):
+        return None
+    entries = [(workspace / entry).absolute() for entry in lines[0].split(os.pathsep)]
+    own = (workspace / ".lake/build/lib/lean").absolute()
+    if entries.count(own) != 1:
+        return None
+    if own.is_dir() and any(p.name != EXTRACTION_LIBRARY for p in own.iterdir()
+                            if p.is_dir() or p.suffix == ".olean"):
+        return None  # a top-level name of its own could shadow an audited module
+    return [str(entry) for entry in entries if entry != own]
+
+
+def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = ROOT,
+                    binding: dict | None = None) -> list[str] | None:
     """The extractor's report lines from `driver` built by Lake as a module of a generated
     workspace (`package/.lake/extraction`) that requires the Lake package `package` of the
     audited modules. Lake elaborates the driver again exactly when its trace changes (the
@@ -768,13 +788,23 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
     the shared artifact cache keeps no log, and a driver restored from another checkout's build
     would replay none (no report: this fails rather than trusting anything). A driver builds
     under its own lock; its outputs stay out of `package`'s build directory, which the caller's
-    LEAN_PATH binding covers."""
+    LEAN_PATH binding covers.
+
+    `binding`: the `lean_path_binding` of a compiler-owned Unit lookup path (#511) the audit is
+    bound to. Lake chooses the driver's imports itself, so the driver is built only when Lake
+    resolves exactly those roots in the workspace, after the workspace's own driver library
+    (which holds nothing else). The driver's text names the roots and the binding's digest, so a
+    changed root or bound input is another driver, elaborated again. A path Lake resolves
+    otherwise, or cannot resolve, returns None before anything is built: the caller elaborates
+    the driver afresh on its lookup path, and nothing is reused."""
     if not re.fullmatch(r"[0-9a-f]{64}", runtime_sha or ""):
         raise ValueError("extraction requires the prepared tool's toolchain runtime binding")
     name = tomllib.loads((package / "lakefile.toml").read_text(encoding="utf-8"))["name"]
     workspace = package / ".lake/extraction"
+    bound = "" if binding is None else (f"-- lookup roots {json.dumps(binding['roots'])}\n"
+                                        f"-- lookup binding {binding['sha256']}\n")
     text = (f"-- The assurance extractor's driver in {workspace} (scripts/assumptions.py).\n"
-            f"-- toolchain runtime {runtime_sha}\n" + driver)
+            f"-- toolchain runtime {runtime_sha}\n" + bound + driver)
     module = f"{EXTRACTION_LIBRARY}.M{hashlib.sha256(text.encode()).hexdigest()[:32]}"
     source = workspace / (module.replace(".", "/") + ".lean")
     source.parent.mkdir(parents=True, exist_ok=True)
@@ -788,9 +818,12 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
             if not path.is_file() or path.read_text() != content:
                 path.write_text(content)
         # Lake chooses the import paths itself: a caller's LEAN_PATH (the replay's) stays out.
-        result = subprocess.run([sys.executable, "-B", str(root / "scripts/cas.py"), "run", "--",
-                                 "lake", "build", module], cwd=workspace, text=True, capture_output=True,
-                                env={k: v for k, v in os.environ.items() if k != "LEAN_PATH"})
+        lake = [sys.executable, "-B", str(root / "scripts/cas.py"), "run", "--", "lake"]
+        env = {k: v for k, v in os.environ.items() if k != "LEAN_PATH"}
+        if binding is not None and resolved_roots(lake, workspace, env) != binding['roots']:
+            return None
+        result = subprocess.run([*lake, "build", module], cwd=workspace, text=True, capture_output=True,
+                                env=env)
     finally:
         os.close(descriptor)
     if result.returncode:
@@ -816,9 +849,9 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion. `extract_in`: a
     Lake package that builds the extractor's driver (`lake_extraction`) instead of `lake env
-    lean` elaborating it afresh; Lake then chooses the import paths, so it excludes `lean_path`."""
-    if lean_path is not None and extract_in is not None:
-        raise ValueError("--extract-in and an explicit lookup path exclude each other")
+    lean` elaborating it afresh. Lake then chooses the import paths: with a compiler-owned
+    `lean_path` the Lake-built driver is used only when Lake resolves exactly that path
+    (`lake_extraction`), else the driver is elaborated afresh on `lean_path`."""
     root = (ROOT if root is None else root).resolve()
     runner = lambda command: run(command, root=root)
     if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
@@ -840,10 +873,15 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
         driver += "".join(f"#check _root_.{name}\n" for name in framework_runtime_types())
     driver += ("#assurance_audit ["
                + ", ".join(json.dumps(m) for m in audited) + "]\n")
+    lines = None
     if extract_in is not None:
         with prepared_tool(root, runner) as tool_trace:  # The build imports the olean the trace records.
-            lines = lake_extraction(driver, extract_in.resolve(), tool_trace.get("toolchain_runtime_sha256"), root)
-    else:
+            binding = lean_path_binding(root, lean_path) if lean_path is not None else None
+            lines = lake_extraction(driver, extract_in.resolve(), tool_trace.get("toolchain_runtime_sha256"),
+                                    root, binding)
+            if lines is not None and binding is not None and lean_path_binding(root, lean_path) != binding:
+                raise ValueError('compiled Unit lookup inputs changed during extraction')
+    if lines is None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
             handle.write(driver)
             path = Path(handle.name)
