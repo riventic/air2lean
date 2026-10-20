@@ -1172,7 +1172,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         cases hc : ((G t).2.c).crit
         · rw [show (C Lo).ph (G t) = (G t).2.c from rfl, hc, Bool.false_or] at hb; exact hb
         · have := hu.cinv.crit t hc; exact absurd this hnh
-      have hlp : (G t).1.ph = .out := hu.cinv.lp t hsig
+      have hlp : (G t).1.ph = .out := (hu.cinv.lp t hsig).resolve_right hnh
       have hsg : (G t).2.ph = .sg := hu.cinv.sx t hsig
       rcases hq with rfl | ⟨rfl, rfl⟩
       · rw [upd_self]; show LPh.out = (G t).1.ph; rw [hlp]

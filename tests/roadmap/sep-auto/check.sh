@@ -18,7 +18,8 @@
 # spawn from the start facts and the facts of the steps' runs; WPMutex: the generated
 # `Io.Mutex` lock, unlock and lock loop against the lock rules, for every protocol with the
 # lock; WPHold: the lock holder's steps by `FLock.Fits.wp_hold` with the holder's next place, the
-# protocol's lemmas backwards and forwards; ReadRest: a reader's rest-read race premise can
+# protocol's lemmas backwards and forwards; WPCond: the same condition signal contract outside
+# or holding the mutex, preserving both complete resource components; ReadRest: a reader's rest-read race premise can
 # hold while an unrelated live thread has not acquired the publication; WPOsFutex: the OS futex
 # rows of std's Thread.Futex at a lock's word, by the rows' rules and the lock's OS wait and wake
 # rules) and total stack pushes

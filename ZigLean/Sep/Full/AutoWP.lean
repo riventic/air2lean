@@ -111,7 +111,37 @@ theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {safe : Bool}
 A segment's rule gives the continuation the step's run (`(x.run m).run = some (.ok (a, m'))`);
 the walk adds its lightweight field facts (`wpRunFacts`): the protocol fields the step keeps,
 and an allocation's pointer and block-count growth. These facts do not expose the whole memory
-after an allocation or store. -/
+after an allocation or store. A pure Result step similarly exposes its actual value or error. -/
+
+/-- The actual outcome of integer division, for every width and signedness. Zero-width words
+retain the zero-divisor error, and signed overflow uses the runtime's existing predicate. -/
+@[fsym_run] theorem divTrunc_runFacts {w : Nat} {s : Bool} {a b : BitVec w}
+    {r : Except Error (BitVec w)} (h : (Zig.divTrunc s a b).run = some r) :
+    match (generalizing := false) r with
+    | .error e => e = .illegal ∧ (b = 0 ∨ s = true ∧ a.sdivOverflow b = true)
+    | .ok v => b ≠ 0 ∧ (s = true → a.sdivOverflow b = false) ∧
+        v = (if s then a.sdiv b else a.udiv b) := by
+  by_cases hb : b = 0
+  · rw [Zig.divTrunc, if_pos hb] at h
+    simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
+    cases h
+    exact ⟨rfl, .inl hb⟩
+  · rw [Zig.divTrunc, if_neg hb] at h
+    cases s with
+    | false =>
+      simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+      cases h
+      exact ⟨hb, by simp, rfl⟩
+    | true =>
+      by_cases ho : a.sdivOverflow b = true
+      · simp [ho, throw, throwThe, MonadExceptOf.throw, ExceptT.mk,
+          ExceptT.run] at h
+        cases h
+        exact ⟨rfl, .inr ⟨rfl, ho⟩⟩
+      · have ho' : a.sdivOverflow b = false := Bool.eq_false_iff.mpr ho
+        simp [ho', pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+        cases h
+        exact ⟨hb, fun _ => ho', rfl⟩
 
 /-- A store keeps the block count and protocol fields, including the number of thread clocks. -/
 @[fsym_run] theorem store_runFacts {T : Type} [Enc T] {m m' : Mem} {p : Ptr} {a : Nat} {v : T} {x : Unit}
