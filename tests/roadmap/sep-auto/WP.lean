@@ -346,6 +346,34 @@ def wrapper_keys : MetaM Unit := do
 
 run_meta wrapper_keys
 
+/-- Generic memory/result rules remain behind specific caller and registered commands. -/
+theorem generic_rule_priority : True := by
+  run_tac withRunCaches do
+    let memory ← mkConstWithFreshMVarLevels ``WP.liftMem_fownedT
+    let result ← mkConstWithFreshMVarLevels ``WP.liftMem_liftR
+    let add ← mkConstWithFreshMVarLevels ``WP.liftMem_add
+    let sub ← mkConstWithFreshMVarLevels ``WP.liftMem_sub
+    unless (← wpGenericRule memory) && (← wpGenericRule result) do
+      throwError "generic_rule_priority: a wildcard rule was classified as concrete"
+    if (← wpGenericRule add) || (← wpGenericRule sub) then
+      throwError "generic_rule_priority: a concrete rule was classified as generic"
+    let (_, _, concl) ← forallMetaTelescope (← inferType add)
+    let some args := wpArgs? concl | throwError "generic_rule_priority: not a WP rule"
+    let ordered ← rules #[result, add] args[5]! (wp := true)
+    unless ordered[0]? == some add && ordered.back? == some result do
+      throwError "generic_rule_priority: a supplied wildcard preceded a concrete rule"
+  trivial
+
+/-- A pure forward fact can substitute its result, renaming the dependent premise. -/
+theorem forward_to_one {r : BitVec 32} (hr : r.toNat = 1) : r = 1 :=
+  BitVec.eq_of_toNat_eq hr
+
+/-- Re-read the current premise after forwarding; its old free variable was replaced. -/
+theorem forward_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) :
+    P.WP t (pure ()) (fun _ _ _ _ => ∀ r : BitVec 32, r.toNat = 1 → r = 1) G m n := by
+  fsym [forward_to_one]
+
 end SepAuto.WP
 
 namespace SepAuto.WP

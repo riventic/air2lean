@@ -5150,14 +5150,16 @@ def refreshUser (e : Expr) : MetaM Expr := do
     body := .lam n (ty.abstract (xs.extract 0 i)) body .default
   return body
 
-/-- Is `r` a `WP` rule whose command is any `MemM` step (`ConcM.liftMem x`, `x` unknown: a
-segment that the thread backend walks, as `FLock.Fits.wp_hold`)? Such a rule is tried after the
-others and applies only completely (`wpRule`). -/
+/-- Is `r` a `WP` rule for any memory step, or any lifted result step? Such wildcard rules
+are tried after specific commands and apply only completely (`wpRule`). -/
 def wpGenericRule (r : Expr) : MetaM Bool := withNewMCtxDepth do
   let (_, _, concl) ← forallMetaTelescope (← inferType r)
   let some a := wpArgs? (← instantiateMVars concl) | return false
   let x := (← instantiateMVars a[5]!).consumeMData
-  return x.isAppOf ``Zig.ConcM.liftMem && x.appArg!.getAppFn.isMVar
+  unless x.isAppOf ``Zig.ConcM.liftMem do return false
+  let c := x.appArg!.consumeMData
+  return c.getAppFn.isMVar ||
+    (c.isAppOfArity ``StateT.lift 5 && c.appArg!.consumeMData.getAppFn.isMVar)
 
 /-- The registered rules and the caller's. -/
 def rules (user : Array Expr) (x : Expr) (wp := false) : MetaM (Array Expr) := do
@@ -6176,6 +6178,19 @@ def forwardAt? (u : Expr) (h : FVarId) (pick : Expr → MetaM Bool) : MetaM (Opt
     return some pf
   catch _ => s.restore; return none
 
+/-- A forwarded equality may replace the hypothesis it came from. Follow the existing
+substitution map before reading that local again. A recorded non-local proof was consumed by
+substitution; an unexplained missing local remains an error. -/
+def wpCurrentHyp? (h : FVarId) : MetaM (Option FVarId) := do
+  let lctx ← getLCtx
+  if lctx.contains h then return some h
+  let e := (← refreshSubsts (mkFVar h)).consumeMData
+  if e.hasAnyFVar (fun f => !lctx.contains f) then
+    throwError "unresolved WP hypothesis after substitution"
+  if let .fvar f := e then return some f
+  unless ← isProof e do throwError "substituted WP hypothesis is not a proof"
+  return none
+
 /-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
 `h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
 whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
@@ -6184,6 +6199,7 @@ def wpForward (g : MVarId) (h : FVarId) : TacticM (Option MVarId) := do
   if lemmas.isEmpty then return some g
   let mut g := g
   for u in lemmas do
+    let some h ← g.withContext (wpCurrentHyp? h) | return some g
     let s ← saveState
     -- (`some none`: a fact that closes the goal, `False` after `wpNorm`)
     let g' : Option (Option MVarId) ← g.withContext do
@@ -6232,6 +6248,7 @@ the rest by `destruct` (equations substituted, user definitions unfolded). The e
 step's run (`(x.run m).run = …`) stays. -/
 partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MVarId) :=
   g.withContext do
+  let some h ← wpCurrentHyp? h | return [g]
   let ty0 ← instantiateMVars (← h.getType)
   let ty ← whnfR ty0
   if hasRun ty then return [g]
@@ -6323,12 +6340,16 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         unless (← g.withContext f.findDecl?).isSome do continue
         let some (fn, g') ← wpNorm g f #[] | return []
         let some g' ← wpForward g' fn | return []
-        -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
-        let (f', g'') ← g'.withContext do
-          (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
-        g ← destruct g'' f'
+        match ← g'.withContext (wpCurrentHyp? fn) with
+        | none => g := g'
+        | some fn =>
+          -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
+          let (f', g'') ← g'.withContext do
+            (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
+          g ← destruct g'' f'
       return [g]
   let some g ← wpForward g h | return []
+  let some h ← g.withContext (wpCurrentHyp? h) | return [g]
   return [← destruct g h]
 
 /-- **The facts of a step's run** `h : (x.run m).run = some (.ok (a, m'))` (it stays): each run
