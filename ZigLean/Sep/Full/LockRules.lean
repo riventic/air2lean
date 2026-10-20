@@ -143,7 +143,7 @@ theorem Fits.wp_preservePart (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p :
     P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ rH,
       P.inv (upd G' t (L.set g p rH)) m' ∧
       (A ⋆ fun r => r = rH) (L.own (upd G' t (L.set g p rH)) m' t)) G m d := by
-  refine WP.mono ?_ (hP.wp_preservePartPost (g := g) (p := p)
+  refine WP.mono ?_ (hP.wp_preservePartPost (g := g) (p := p) (B := B)
     (A := fun r => r = L.part g ∧ A r) hp (WP.mono ?_ hbody))
   · rintro a G' m' d' ⟨hB, r, rH, ⟨rfl, _⟩, hi, hs⟩
     have hs' : (A ⋆ fun r => r = rH)
