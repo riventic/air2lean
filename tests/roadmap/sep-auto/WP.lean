@@ -301,3 +301,108 @@ theorem main_start_ex (σ : Placement) (n : Nat) :
   fsym [FTriple.allocStackDrop, start_ex, spawn_threads]
 
 end SepAuto.WP
+
+namespace SepAuto.WP
+
+attribute [local irreducible] Proto.WP
+
+variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId}
+  {G : ThreadId → γ} {m : Mem} {n : Nat}
+
+/-- A current local function supplies a quantified post, after its opaque antecedent. -/
+theorem local_pi_imp (R B C : Prop) (A : α → Prop)
+    (_wrongHead : ∀ u, A u → C) (h : R → ∀ u, A u → B) (hr : R) :
+    P.WP t (pure ()) (fun _ _ _ _ => ∀ u, A u → B) G m n := by
+  fsym
+
+theorem local_pi_true (B : Prop) (A : α → Prop) (h : True → ∀ u, A u → B) :
+    P.WP t (pure ()) (fun _ _ _ _ => ∀ u, A u → B) G m n := by
+  fsym
+
+theorem local_pi (B : Prop) (A : α → Prop) (h : ∀ u, A u → B) :
+    P.WP t (pure ()) (fun _ _ _ _ => ∀ u, A u → B) G m n := by
+  fsym
+
+-- The direct post must not introduce the missing opaque argument itself.
+include P t G m n in
+theorem local_pi_missing_arg (R B : Prop) (A : α → Prop) (u : α)
+    (h : R → ∀ u, A u → B) (hr : R) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by fsym
+  trivial
+
+include P t G m n in
+theorem local_pi_missing_antecedent (R B : Prop) (A : α → Prop) (u : α)
+    (h : R → ∀ u, A u → B) (ha : A u) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by fsym
+  trivial
+
+include P t G m n in
+theorem local_self_cycle (B : Prop) (self : B → B) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by fsym
+  trivial
+
+include P t G m n in
+theorem local_mutual_cycle (A B : Prop) (ab : A → B) (ba : B → A) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by fsym
+  trivial
+
+/-- Failed cyclic candidates leave a later usable function available. -/
+theorem local_cycle_then_function (A R B : Prop) (self : B → B)
+    (ab : A → B) (ba : B → A) (later : R → B) (hr : R) :
+    P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by
+  fsym
+
+/-- Equal predicate heads do not authorize unequal conclusion arguments. -/
+theorem local_indexed_args (R : Prop) (D : Nat → Prop) (i j : Nat) (hne : i ≠ j)
+    (wrong : R → D j) (right : R → D i) (hr : R) :
+    P.WP t (pure ()) (fun _ _ _ _ => D i) G m n := by
+  fsym
+
+/-- This is logically provable, independently of the deliberately bounded search below. -/
+theorem no_cases_kernel (A C R B : Prop) (h : ((A ∨ C) → R) → B)
+    (ha : A → R) (hc : C → R) : B :=
+  h (fun ac => ac.elim ha hc)
+
+-- Do not supply no_cases_kernel to fsym: a local attempt may not split its new premise.
+include P t G m n in
+theorem local_no_cases (A C R B : Prop) (h : ((A ∨ C) → R) → B)
+    (ha : A → R) (hc : C → R) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by fsym
+  trivial
+
+/-- The arithmetic version is also provable, but needs the newly introduced case fact. -/
+theorem no_arithmetic_cases_kernel (B : Prop) (x y z M c : Nat)
+    (h : ((x = y ∨ x = z) → x % M = c) → B) (hzy : z = y) (hmod : y % M = c) : B :=
+  h (fun hx => (congrArg (fun v => v % M) (hx.elim id (fun hxz => hxz.trans hzy))).trans hmod)
+
+-- Keep the disjunction inside the attempted function premise, outside the ordinary splitter.
+include P t G m n in
+theorem local_no_arithmetic_cases (B : Prop) (x y z M c : Nat)
+    (h : ((x = y ∨ x = z) → x % M = c) → B) (hzy : z = y) (hmod : y % M = c) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by fsym
+  trivial
+
+/-- A failed witness choice must not retain normalization of a hypothesis at that choice. -/
+theorem local_witness_retry (B Missing : Prop) (D : Nat → Prop) (x : Nat)
+    (outer : (∃ i : Nat, (if i = 0 then x = 0 else x = 1) → D i) → B)
+    (bad : x + 1 = 1 → Missing → D 0) (good : x + 1 = 2 → D 1) :
+    P.WP t (pure ()) (fun _ _ _ _ => B) G m n := by
+  fsym
+
+/-- The usable second witness in the rollback control has a direct kernel derivation. -/
+theorem witness_retry_kernel (B Missing : Prop) (D : Nat → Prop) (x : Nat)
+    (outer : (∃ i : Nat, (if i = 0 then x = 0 else x = 1) → D i) → B)
+    (_bad : x + 1 = 1 → Missing → D 0) (good : x + 1 = 2 → D 1) : B := by
+  apply outer
+  refine ⟨1, ?_⟩
+  intro hx
+  have hx : x = 1 := by simpa using hx
+  exact good (by omega)
+
+end SepAuto.WP
