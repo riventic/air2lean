@@ -492,6 +492,12 @@ theorem drop {K : FAssn}
 theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P :=
   drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
 
+/-- The same affine ghost disposal with the discarded resource on the left. -/
+theorem dropL {K : FAssn}
+    (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine) :
+    EUpd (K ⋆ P) P :=
+  trans (of_imp fun _ h => sep_comm h) (drop hK)
+
 /-- Updates frame. -/
 theorem frame (h : EUpd P P') : EUpd (P ⋆ R) (P' ⋆ R) := by
   rintro m _ rF hh ⟨r₁, r₂, hd, rfl, hp, hr⟩ hs
@@ -552,6 +558,27 @@ theorem ext1 {b : BlockId} {c c' : ECell}
     exact ⟨e, hp', hst.toT⟩
 
 end EUpd
+
+/-- Owning a nonempty byte range records its actual block address. This knowledge can be
+retained when a later typed view hides the bytes' metadata. -/
+theorem known_of_bytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {b : BlockId} (hpb : p.block = some b) (hpos : 0 < bs.size) :
+    EUpd (up (bytesAt p A S K bs)) (up (bytesAt p A S K bs) ⋆ known b A) := by
+  intro m r rF hh hp _
+  obtain ⟨hr, hk, hg⟩ := id hp
+  obtain ⟨b', hb', -, hl⟩ := id hr
+  rw [hpb] at hb'; cases hb'
+  have e := hl (b, p.off.toNat)
+  rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at e
+  simp only [FHeap.erase, Option.map_eq_some_iff] at e
+  obtain ⟨fc, hfc, hfe⟩ := e
+  have hkn : m.kn (.addr b A) := by
+    obtain ⟨blk, hblk, -, -, -, ha, -⟩ := hh.block hfc
+    exact ⟨blk, hblk, by rw [← ha, hfe]⟩
+  exact ⟨⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩,
+    Holds.addKnow (Know.sub_single hkn) hh,
+    ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
+      by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩⟩
 
 section Rules
 

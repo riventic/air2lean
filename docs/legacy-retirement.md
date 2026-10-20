@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-10-19, after batch #478): 55 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+**Status (2026-10-19, after #397): 54 `legacy_users` left.** The sections below are the 2026-10-14 plan;
 their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
 
 | lane | state | PRs |
@@ -363,7 +363,7 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 | ZigLean/Sep/Loop.lean (127), Block.lean (239) | loop rules / `SameThreads` (Total imports Loop) |
 | ZigLean/Sep/Step.lean (541), Automation.lean (113) | `sep_*` tactics (delete in Group 3 once L4 and L6 are in; they have no strength dependency) |
 | ZigLean/Sep.lean (12) | umbrella: shrink with every deleted module, delete last |
-| tests/roadmap/strength-log/{GlobalInit,GlobalPayloadPointers,OutcomeTaxonomy,ProofsLayout,ProofsLists,ProofsPointers,ProofsSlices,TryPointers}.lean | STAY (class pre-approved) |
+| tests/roadmap/strength-log/*.lean | off `legacy_users` (#497 and part 2): each legacy statement is written out as the body of the legacy definition (`TotalTripleIn Mem.FSeqPlain P c Q`, `Triple P c Q`) and proved by `Full/Strength` as before, so no file imports `Sep/{Triple,Total}`; the files stay until the final PR |
 
 ## 4. Final deletion PR (stages)
 
@@ -372,7 +372,7 @@ Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
 Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Detach,Transfer,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc.
 Stage D-e = the **final PR** (needs the strength log):
-1. Run every `tests/roadmap/strength-log/*.lean` and `Full/Strength.lean` against the legacy defs; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
+1. Run every `tests/roadmap/strength-log/*.lean` (the legacy statements, written out) and `Full/Strength.lean`; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
 2. Delete `tests/roadmap/strength-log/`, `Full/Strength.lean` (`toTriple_on`, `toTotal_on`), `Sep/{Triple,Total,Loop,Block}.lean`, `Sep.lean`; check `Full/Init` lost its dependency on `Sep.Total`.
 3. `assurance/proof-framework.json`: `legacy_users: []`, no `legacy-to-retire` judgment or tactic entries; `scripts/proof-framework.py` regexes and `test_proof_framework.py` reduced to the target set; `claim-heads.json` legacy heads become reserved names.
 4. Acceptance (Plan A): (a) ratchet list empty and the extended regex finds nothing; (b) `git grep -wE "Triple|TotalTriple|TotalTripleIn|TTriple|TTripleIn|TotalTripleWithin|Returns"` outside `ZigLean/Sep/Base` (and docs) is empty; (c) full build of default targets + `Proofs` + `AssuranceTools`, no raised `maxHeartbeats` (`git grep maxHeartbeats` unchanged vs main); (d) `scripts/claims.py` shows no strength loss against the recorded inventory (re-record `docs/theorem-inventory.md`, `assurance/claim-heads.json`); (e) strength log attached; (f) `assurance/premises.json`, `docs/premises.md`, `assurance/register/{L04,M05,P01,P06,M01,M04}.md` updated, `scripts/register.py generate`; (g) ci.yml `lake build` lines and the `check.sh`/`mutant.sh` files of section 1 point at surviving modules; (h) docs mention no deleted module (`docs/sep-full-state.md`, `alloc-spec.md`, `proof-framework.md` migration table becomes history); (i) `scripts/regen.sh --pr`, `preflight.sh`, native Docker rows (x86_64 Rosetta, aarch64) of the parts touched (alloc-arena, alloc-fba, sync fixtures, thread-locals).

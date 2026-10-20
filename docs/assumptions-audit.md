@@ -42,6 +42,13 @@ so do the `theorem_universe.py gate --replay-cache` calls of a gate script (a fr
 temporary directory; no gate caches by default).
 Receipts reject reused replays.
 
+Existing replay-cache hits also require the current installed runtime/logical/IR input digest
+from `toolchain_runtime_sha256`, the same byte traversal the extractor uses. Missing or changed
+cache bindings trigger fresh replay. The digest is recomputed after the replay batch, before a
+cache record or successful result is published. Extraction's recorded runtime must match at
+replay entry. This tightens existing admission; it does not expand the cacheable module set or
+authenticate complete project/private import closures.
+
 `no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
 `set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
 `extern` and `implemented_by` outside the reviewed counts in `assurance/kernel-escapes.json`.
@@ -71,6 +78,15 @@ from another revision, a changed artifact, or a dirty report or tree unless `--a
 given (recorded in its output). `proof-receipt.py prepare` refuses a dirty tree unless
 `--allow-dirty` (`AIR2LEAN_RECEIPT_ALLOW_DIRTY=1` for `tests/roadmap/proof-receipts/check.sh`);
 the receipt records `tree.dirty_allowed`.
+
+Freshness also records the canonical `lean_sysroot` and `toolchain_runtime_sha256` connected to
+the extractor's existing runtime identity. Verification requires matching extractor/freshness
+bindings, resolves the current sysroot through the existing `lake env printenv` path and
+freshly hashes its installed inputs. A different selected root is rejected even while the old
+bound installation still exists. Sysroot resolution does not request a build.
+Missing bindings require a new audit; changing only an installed standard module, IR/signature
+or shared library makes a report stale even if every recorded project artifact stays fixed.
+This does not establish external source/compiler correspondence or registered-witness closure.
 
 The regression command compiles intentionally untrusted fixtures outside the shipped
 source scope. It checks that a clean wrapper importing a hidden `sorry` fails, a new

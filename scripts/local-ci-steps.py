@@ -417,7 +417,7 @@ def stop_group(child, signum):
 def call(command, *, timeout=None, **kwargs):
     global CANCELLING, LAUNCHING, PENDING_SIGNAL
     inherited = []
-    for descriptor in {9, CACHE_LOCK_FD} - {None}:
+    for descriptor in {8, 9, CACHE_LOCK_FD} - {None}:
         try:
             os.fstat(descriptor)
             inherited.append(descriptor)
@@ -556,6 +556,25 @@ def validate_job(job, optimized):
         if optimized and step.get('uses', '').split('@')[0] == 'actions/download-artifact':
             if step['name'] not in QUALIFIED_TEST_SUBSTITUTIONS:
                 raise ValueError(f'unsupported optimized artifact download: {step["name"]}')
+
+
+def declared_lake_caches(job):
+    """Persist only complete Lake trees named by this projected job's cache actions."""
+    root, diff = False, False
+    for step in job['steps']:
+        if step.get('uses', '').split('@')[0] not in ('actions/cache', 'actions/cache/restore'):
+            continue
+        path = step.get('with', {}).get('path')
+        if not isinstance(path, str):
+            continue
+        paths = {line.strip() for line in path.splitlines() if line.strip()}
+        root_paths = paths - {'tests/diff/.lake'}
+        if root_paths not in (set(), {'.lake'}, {'.lake', '!.lake/check-tree'},
+                              {'.lake/*', '!.lake/check-tree'}):
+            continue
+        root |= bool(root_paths)
+        diff |= 'tests/diff/.lake' in paths
+    return root, diff
 
 
 def read_updates(path):
@@ -842,10 +861,13 @@ class WorkflowRun:
                 refs[artifact] = producer
         manifest = self.artifacts / (safe + '.imports.json')
         manifest.write_text(json.dumps(imports, sort_keys=True) + '\n')
+        root_cache, diff_cache = declared_lake_caches(payload['definitions']['job'])
         env = dict(os.environ, AIR2LEAN_LOCAL_IMPORTS=str(manifest.absolute()),
                    AIR2LEAN_LOCAL_PRODUCERS=json.dumps(refs, sort_keys=True),
                    AIR2LEAN_LOCAL_JOB_PAYLOAD=str(payload_path.absolute()),
-                   AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=payload_sha)
+                   AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=payload_sha,
+                   AIR2LEAN_LOCAL_ROOT_CACHE='1' if root_cache else '0',
+                   AIR2LEAN_LOCAL_DIFF_CACHE='1' if diff_cache else '0')
         bootstrap = os.environ['AIR2LEAN_LOCAL_BOOTSTRAP']
         try:
             call(['bash', bootstrap, '--container-row', part], env=env)
@@ -1198,8 +1220,8 @@ def run_host(workflow, mode, selected):
         except BlockingIOError:
             raise ValueError('another local CI host run owns the caches')
         CACHE_LOCK_FD = lock.fileno()
-        # Keep the pinned workflow-installed elan in the standard host cache. The user's own
-        # Lean/Zig executables never enter PATH; keep other tools from those directories.
+        # The user's own Lean/Zig executables never enter PATH; keep other tools
+        # from those directories and install workflow tools under this run's fresh HOME.
         artifacts = Path(os.environ['AIR2LEAN_LOCAL_ARTIFACTS'])
         filtered = artifacts / 'path'
         filtered.mkdir()
@@ -1212,8 +1234,8 @@ def run_host(workflow, mode, selected):
                 if entry.name not in banned and entry.name not in seen and os.access(entry, os.X_OK) and not entry.is_dir():
                     (filtered / entry.name).symlink_to(entry.absolute())
                     seen.add(entry.name)
-        home = tools / 'home'
-        home.mkdir(exist_ok=True)
+        home = artifacts / 'home'
+        home.mkdir()
         # Keep only machine/cache/admission settings. Caller corpus/compiler/verification
         # switches must not change a workflow recipe or silently reduce its coverage.
         permitted = {'AIR2LEAN_CAS_DIR', 'AIR2LEAN_BUILD_LOCK', 'AIR2LEAN_BUILD_MEM_MIB',
@@ -1225,7 +1247,7 @@ def run_host(workflow, mode, selected):
         os.environ.clear()
         os.environ.update(kept)
         os.environ.update(HOME=str(home), ELAN_HOME=str(home / '.elan'),
-                          AIR2LEAN_CACHE=str(tools / 'downloads'), ZIG_GLOBAL_CACHE_DIR=str(tools / 'zig-global'),
+                          AIR2LEAN_CACHE=str(tools / 'downloads'), ZIG_GLOBAL_CACHE_DIR=str(home / '.cache' / 'zig'),
                           LEAN_NUM_THREADS='1', PATH=str(filtered))
         os.chdir(artifacts / 'work')
         run = WorkflowRun(workflow, artifacts, os.environ['AIR2LEAN_LOCAL_SNAPSHOT'], mode == 'discover',

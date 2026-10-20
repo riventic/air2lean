@@ -78,11 +78,50 @@ invariant is ever reached. `Vacuity.lean` shows this:
 * `no_creation_falseInv`: so a creation triple from an admissible precondition cannot end in
   `falseInv.own`.
 
-So every generated instance must come with (i) the creation triple, from the hand-stated
-precondition to `I.own` (proved by `fsym`), and (ii) an `FAdmit` companion for that precondition.
-The claims tooling already requires such companions (`docs/claim-strength.md`, "Witnesses"), so
-this needs no new mechanism. On main, the FBA has no creation theorem for the full-state invariant
-(`fown_init` exists on the ledger branch), and the arena has none. Both become acceptance items.
+Every instance therefore comes with (i) an ordinary total creation triple from its hand-stated
+raw precondition, proved by `fsym`, and (ii) the existing `FAdmit` companion for that precondition.
+`FAllocInv.creationPost` states the obligation once: an inhabited accepted request domain,
+`I.own` and an available fee `I.fee φ` for some positive fraction `φ`. The fee excludes the audit's second
+counterexample, whose state is `emp` but whose fee never holds; the request excludes `fits := False`.
+This is an assertion over the existing judgment, not a new judgment or proof framework.
+
+The contract theorem `T` names its total companion `T.creation`; `nonvacuity_witness T.creation`
+provides its admissibility theorem. The claims extractor compares the post with the exact
+invariant family of `T`. Plain `T.creationParameters` specification data distinguishes visible
+instance parameters from fresh ghost parameters. Creation quantifies and preserves the visible
+parameters (`ctx` and `B` for the FBA) and existentially binds only the fresh ones (its ledger and
+epoch). The roles are hand-stated specification, not inferred ghostness; parameters captured by
+the executable contract or request bound cannot be hidden as fresh. Unused impossible premises
+cannot be erased. The extractor then audits both companion proofs. Claims fail closed on missing,
+mismatched or unaudited
+companion, including contracts used inside client proofs and anonymous inline instances.
+The FBA starts from its initialized struct words, free buffer and raw claim (`fown_init`);
+the page allocator starts from its null hint word. The arena follow-up is recorded as
+`arena-creation` in the soundness audit.
+
+Visible-parameter matching does not prove that every member's raw precondition is admissible.
+The maintainer chose exact applied-argument admission on 2026-10-16
+([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)):
+a parameterized client carries `FAdmit` of that same creation precondition, and the audit keeps
+the actual contract application and its complete dependent context. An existing exact admission
+hypothesis from the original theorem or a closed checked local proof supplies the evidence.
+An exact local proof under unbound semantic Holds/False premises is insufficient; its context
+must be bound to the root or actual initialization, not merely serialized. Unbound uses remain
+`unbound_admissibility` (engine ledger #allocator-creation-admissibility). Actual creation
+resources and arguments must follow translated initialization through general `fsym` and
+start-memory rules; the FBA's manually built seed does not complete that obligation. No second
+hand-stated domain is added, and one existential witness never stands for all capacities or
+contexts. F2 remains open pending the real FBA/page proofs and negative controls.
+
+For a parameterized instance, that existential companion alone does not bind admission to every
+visible argument. `tests/roadmap/invariant-synthesis/CreationFamily.lean` proves total creation
+from `⟪n = 0⟫` into the exact state and fee, with an accepted request. Its companion chooses zero;
+the kernel also proves that the member at one cannot be admitted. Moving the condition into a
+proof binder preserves the restriction. Engine ledger #allocator-creation-admissibility tracks
+the chosen exact applied-argument protocol, whose implementation remains open. The mechanism must
+automatically derive admission from translated initialization/program start using the general
+full-state rules. A manually selected seed buffer or per-instance hand proof engine is not
+acceptance, and Task10 has not closed F2 for FBA or page.
 
 `fits` is the other way a contract can go vacuous: `fits := fun _ _ => False` makes `alloc`,
 `resize` and `remap` vacuous, while `free` still has to be proved. That is why `fits` is

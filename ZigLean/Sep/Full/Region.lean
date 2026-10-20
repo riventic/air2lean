@@ -3,6 +3,7 @@ import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AutoRules
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Strength
+import ZigLean.Sep.Full.Stack
 import ZigLean.Sep.AllocSpec.Ops
 
 /-!
@@ -222,6 +223,21 @@ end FTotalTriple
 The native rules of owned bytes (`Ops.lean`: `load_bytesAt`, `store_bytesAt`, `memset_bytesAt`,
 `memmove_bytesAt`) with the region's alignment and kind. -/
 
+/-- Owned bytes may carry stale size labels and a kind with the same normal form. An
+authority for their block supplies its physical metadata; relabelling preserves the bytes,
+the authority and every frame. -/
+theorem EUpd.region_extent {p : Ptr} {A S Sz a : Nat} {K Kactual : BlockKind}
+    {bs : Array Byte} {b : BlockId} {q : Frac} (hpb : p.block = some b) (hpos : 0 < bs.size) :
+    EUpd (up (regionIn p A S K a bs) ⋆ bauth b Sz Kactual q)
+      (up (regionIn p A Sz Kactual a bs) ⋆ bauth b Sz Kactual q) := by
+  intro m r rF hh hp hs
+  obtain ⟨blk, hb, -, -, -, -, hkind⟩ :=
+    (Owns.within (Owns.region (a := a) (S := S) hpb hpos)
+      (Within.sepL (Within.refl _))).block hh hp
+  obtain ⟨blk', hb', -, -, hactual, -⟩ := hh.bauth (sep_comm hp)
+  rw [hb] at hb'; cases hb'
+  exact EUpd.frame (EUpd.relabel (by rw [← hactual]; exact hkind)) m r rF hh hp hs
+
 namespace FTotalTriple
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
@@ -241,6 +257,47 @@ theorem region_of' {α : Type} {c : MemM α} {Q : α → Array Byte}
     FTotalTriple (up (regionIn p A S K a bs)) c (fun v => up (regionIn p A S K a (Q v))) :=
   up_view' fun _ ⟨hA, hK, hb⟩ => ⟨_, _, ht hA hK, hb, fun _ _ hb' => ⟨hA, hK, hb'⟩⟩
 
+/-- A whole byte region and its complete extent can be released. Typed pieces can expose
+their regions and join before this rule; no struct type or module-specific rule is needed. -/
+@[fsym] theorem free_region {b : BlockId} {Sz : Nat} {Kactual : BlockKind}
+    (hpb : p.block = some b) (hS : bs.size = Sz) (h0 : p.off = 0) (hpos : 0 < Sz)
+    (hK : Kactual ≠ .constGlobal) :
+    FTotalTriple (up (regionIn p A S K a bs) ⋆ bext b Sz Kactual) (Zig.free p) (fun _ => emp) :=
+  FTotalTriple.eupd (EUpd.region_extent hpb (by omega))
+    ((FTotalTriple.free hpb hS h0 hpos hK).pre fun _ h =>
+      sep_mono_left (fun _ hr => ⟨hr.1.2.2, hr.2⟩) h)
+
+/-- The same region view of the native top-of-stack release, retaining its exact stack refund. -/
+@[fsym] theorem free_sp_region {b : BlockId} {Sz t Stack D ℓ c : Nat} {Kactual : BlockKind}
+    (hpb : p.block = some b) (hS : bs.size = Sz) (h0 : p.off = 0) (hpos : 0 < Sz)
+    (hK : Kactual ≠ .constGlobal) (hD : D = ℓ + c) :
+    FTotalTriple ((up (regionIn p A S K a bs) ⋆ bext b Sz Kactual) ⋆
+      (ent t (some b) ℓ c ⋆ sp t Stack D)) (Zig.free p) (fun _ => sp t Stack ℓ) :=
+  FTotalTriple.eupd (EUpd.frame (EUpd.region_extent hpb (by omega)))
+    ((FTotalTriple.free_sp hpb hS h0 hpos hK hD).pre fun _ h =>
+      sep_mono_left (fun _ hr => sep_mono_left (fun _ hb => ⟨hb.1.2.2, hb.2⟩) hr) h)
+
+/-- The bytes of a defined-byte memset are a plain replicated byte array, for every count
+and byte value. Read providers can use their ordinary array facts after this normalization. -/
+@[fsym_arith] theorem _root_.Zig.memsetBytes_byte (n : Nat) (v : BitVec 8) :
+    memsetBytes n (some v) = Array.replicate n (Byte.int v) := by
+  simp only [memsetBytes, Enc.encode_byte]
+  exact Region.flatten_replicate_single _ _
+
+/-- Set a whole region to `n` copies of a lawful encoded value, or to undefined bytes. The
+native byte rule handles zero-sized encodings and empty ranges as well. -/
+@[fsym] theorem memsetRegion {T : Type} [Enc T] [LawfulEnc T] {n : BitVec 64}
+    {v : Option T} {al : Nat} (hn : n.toNat * Enc.size T = bs.size) (hal : al ∣ a) :
+    FTotalTriple (up (regionIn p A S K a bs)) (Zig.memset al p n v)
+      (fun _ => up (regionIn p A S K a (memsetBytes n.toNat v))) := by
+  have hsz : (memsetBytes n.toNat v).size = n.toNat * Enc.size T := by
+    cases v <;> simp [memsetBytes, LawfulEnc.size_encode]
+  refine region_of' fun ha hK => ?_
+  have t := memset_bytesAt (q := p) (k := 0) (A := A) (S := S) (bs := bs)
+    (n := n) (v := v) hsz (by omega)
+    (by simpa using Nat.mod_eq_zero_of_dvd (Nat.dvd_trans hal (Nat.dvd_of_mod_eq_zero ha))) hK
+  simpa only [Int.natCast_zero, Ptr.add_zero, writeBytes_all (hsz.trans hn)] using t
+
 /-- **`@memset(region, undefined)`** of all `n` bytes of a region: the region's bytes become
 undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
 @[fsym] theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
@@ -248,12 +305,9 @@ undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
       (fun _ => up (regionIn p A S K a (Array.replicate n.toNat .undef))) := by
   have e : memsetBytes n.toNat (none : Option (BitVec 8)) = Array.replicate n.toNat .undef :=
     Region.flatten_replicate_single _ _
-  have hs : (Array.replicate n.toNat Byte.undef).size = bs.size := by simp [hn]
-  refine region_of' fun _ hK => ?_
-  have t := memset_bytesAt (q := p) (k := 0) (al := 1) (A := A) (S := S) (bs := bs)
-    (n := n) (v := (none : Option (BitVec 8))) (by rw [e]; simp [Region.enc_size_byte])
-    (by rw [Region.enc_size_byte]; omega) (Nat.mod_one _) hK
-  simpa only [Int.natCast_zero, Ptr.add_zero, e, writeBytes_all hs] using t
+  have t := memsetRegion (p := p) (A := A) (S := S) (K := K) (T := BitVec 8) (n := n) (v := none)
+    (by simpa only [Region.enc_size_byte, Nat.mul_one] using hn) (Nat.one_dvd a)
+  simpa only [e] using t
 
 /-- **Store of an item** `v` at item `i` of a region (aligned to `al`): its bytes are `v`'s. -/
 @[fsym] theorem regionStore {T : Type} [Enc T] [LawfulEnc T] {i : BitVec 64} {al : Nat} (v : T)

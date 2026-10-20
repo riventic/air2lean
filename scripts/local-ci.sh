@@ -1,30 +1,21 @@
 #!/usr/bin/env bash
 # Run the checkout's CI recipes on their intended local platforms.
 set -euo pipefail
+row_transfer=
 
 prepare() {
-  local version=$1 url sha host stage key compiler
-  url=$(zig-patch/toml-get.sh "[ci.host-zig.\"$version\"]" url)
-  sha=$(zig-patch/toml-get.sh "[ci.host-zig.\"$version\"]" sha256)
-  host=/cache/host-zig-$sha
-  if [ ! -f "$host/.local-ci-verified" ]; then
-    curl -fL --output /tmp/host-zig.tar.xz "$url"
-    echo "$sha  /tmp/host-zig.tar.xz" | sha256sum -c -
-    stage=$(mktemp -d /cache/.host-zig.XXXXXX)
-    tar -xJf /tmp/host-zig.tar.xz -C "$stage" --strip-components=1
-    [ -x "$stage/zig" ]
-    touch "$stage/.local-ci-verified"
-    [ ! -e "$host" ] || mv "$host" "$host.incomplete.$$"
-    mv "$stage" "$host"
-  fi
+  local version=$1 sha host key compiler
+  source scripts/linux-ci-tools.sh
+  host=$(air2lean_linux_ci_host_zig "$version")
+  sha=${host##*/host-zig-}
   export PATH="$host:$ELAN_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   key=$(cat zig-patch/versions.toml zig-patch/toml-get.sh zig-patch/build.sh zig-patch/lock.sh \
     zig-patch/air-json/json.zig zig-patch/air-json/pointer-offset.zig zig-patch/air-json/identity.zig \
     "zig-patch/$version/hook.patch" | sha256sum | cut -d' ' -f1)
   compiler=/cache/zig-air-$version-$key
   if [ ! -x "$compiler/bin/zig" ]; then
-    # FD 9's exclusive flock is inherited by every child, so only an exited
-    # previous container can have left this exact prefix's empty mkdir lock.
+    # /cache belongs only to this container; an empty mkdir lock can be left by
+    # this row's interrupted first build before the existing retry.
     rmdir "/cache/.zig-air-$version-$key.air2lean-build.lock" 2>/dev/null || true
     zig-patch/build.sh "$version" "$compiler" || zig-patch/build.sh "$version" "$compiler"
   fi
@@ -58,26 +49,33 @@ bounded_run() {
 }
 
 drain_owned_container() {
-  local identifier=$1 grace=$2 state
+  local identifier=$1 grace=$2 state listed
   owned_container_present=0
-  if state=$(docker inspect --format '{{.State.Running}}' "$identifier" 2>&1); then
-    owned_container_present=1
-    if [ "$state" = true ]; then
-      if ! docker stop --time "$grace" "$identifier" >/dev/null; then
-        echo "error: cannot stop owned container $identifier" >&2
-        return 1
-      fi
-      if ! state=$(docker inspect --format '{{.State.Running}}' "$identifier") || [ "$state" != false ]; then
-        echo "error: cannot confirm owned container stopped: $identifier" >&2
-        return 1
-      fi
-    elif [ "$state" != false ]; then
-      echo "error: invalid owned container state: $identifier: $state" >&2
+  if ! listed=$(bounded_run docker ps -aq --no-trunc --filter "id=$identifier"); then
+    echo "error: cannot list owned container $identifier" >&2
+    return 1
+  fi
+  [ -n "$listed" ] || return 0
+  if [ "$listed" != "$identifier" ]; then
+    echo "error: unexpected owned container identity: $listed" >&2
+    return 1
+  fi
+  owned_container_present=1
+  if ! state=$(bounded_run docker inspect --format '{{.State.Running}}' "$identifier"); then
+    echo "error: cannot inspect owned container $identifier" >&2
+    return 1
+  fi
+  if [ "$state" = true ]; then
+    if ! bounded_run docker stop --time "$grace" "$identifier" >/dev/null; then
+      echo "error: cannot stop owned container $identifier" >&2
       return 1
     fi
-  elif [[ "$state" != *"No such object: $identifier" && "$state" != *"No such container: $identifier" &&
-          "$state" != *"no such object: $identifier" && "$state" != *"no such container: $identifier" ]]; then
-    echo "error: cannot inspect owned container $identifier: $state" >&2
+    if ! state=$(bounded_run docker inspect --format '{{.State.Running}}' "$identifier") || [ "$state" != false ]; then
+      echo "error: cannot confirm owned container stopped: $identifier" >&2
+      return 1
+    fi
+  elif [ "$state" != false ]; then
+    echo "error: invalid owned container state: $identifier: $state" >&2
     return 1
   fi
 }
@@ -103,6 +101,13 @@ export_targeted_container() {
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
+  if [ -n "$row_transfer" ]; then
+    if ! rm -rf "$row_transfer"; then
+      echo "error: cannot remove local CI row metadata: $row_transfer" >&2
+      status=1
+    fi
+    row_transfer=
+  fi
   # Docker writes the private registry itself, including when create succeeds but
   # cancellation prevents the shell from reading its result.
   if [ -z "$container" ] && [ -n "${cid_file:-}" ] && [ -f "$cid_file" ]; then
@@ -185,15 +190,33 @@ if [ "${1:-}" = --container-row ]; then
       exit 1
     fi
   fi
+  root_cache=0 diff_cache=0
+  if [ "$AIR2LEAN_LOCAL_MODE" != targeted ]; then
+    root_cache=${AIR2LEAN_LOCAL_ROOT_CACHE:-0}
+    diff_cache=${AIR2LEAN_LOCAL_DIFF_CACHE:-0}
+  fi
+  case "$root_cache:$diff_cache" in
+    0:0|0:1|1:0|1:1) ;;
+    *) echo 'error: invalid declared local CI cache flags' >&2; exit 1 ;;
+  esac
+  cache_args=(--env "AIR2LEAN_LOCAL_ROOT_CACHE=$root_cache" --env "AIR2LEAN_LOCAL_DIFF_CACHE=$diff_cache")
+  # Persist only Lake paths declared by the captured job's cache actions. Their
+  # existing toolchain/manifest keys and Lake traces bind incremental facets to
+  # inputs; initialization removes cached source copies before restriction.
+  if [ "$root_cache" = 1 ]; then
+    cache_args+=(--mount "type=volume,src=air2lean-linux-$AIR2LEAN_LOCAL_TARGET_ARCH-$AIR2LEAN_LOCAL_CACHE_NAMESPACE-lake-$AIR2LEAN_LOCAL_LAKE_KEY,dst=/work/.lake")
+  fi
+  if [ "$diff_cache" = 1 ]; then
+    cache_args+=(--mount "type=volume,src=air2lean-linux-$AIR2LEAN_LOCAL_TARGET_ARCH-$AIR2LEAN_LOCAL_CACHE_NAMESPACE-diff-$AIR2LEAN_LOCAL_DIFF_KEY,dst=/work/tests/diff/.lake")
+  fi
+  # HOME, Zig's global cache, compilers and downloads stay in this fresh rootfs.
   docker create --cidfile "$cid_file" --platform "$AIR2LEAN_LOCAL_PLATFORM" \
     --memory="${AIR2LEAN_LOCAL_MEMORY:-8g}" --memory-swap="${AIR2LEAN_LOCAL_MEMORY:-8g}" \
     --cpus="${AIR2LEAN_LOCAL_CPUS:-2}" --pids-limit=512 --init \
     --env "AIR2LEAN_LOCAL_IMAGE_ID=$AIR2LEAN_LOCAL_IMAGE_ID" \
     --env "AIR2LEAN_LOCAL_PRODUCERS=$producer_refs" \
     --env "AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=$job_payload_sha" \
-    --mount "type=volume,src=$AIR2LEAN_LOCAL_EFFECTIVE_TOOL_VOLUME,dst=/cache" \
-    --mount "type=volume,src=air2lean-linux-$AIR2LEAN_LOCAL_TARGET_ARCH-$AIR2LEAN_LOCAL_CACHE_NAMESPACE-lake-$AIR2LEAN_LOCAL_LAKE_KEY,dst=/work/.lake" \
-    --mount "type=volume,src=air2lean-linux-$AIR2LEAN_LOCAL_TARGET_ARCH-$AIR2LEAN_LOCAL_CACHE_NAMESPACE-diff-$AIR2LEAN_LOCAL_DIFF_KEY,dst=/work/tests/diff/.lake" \
+    "${cache_args[@]}" \
     "$AIR2LEAN_LOCAL_IMAGE_ID" bash -c 'exec bash /snapshot/bootstrap.sh --inside "$@"' \
     local-ci "$AIR2LEAN_LOCAL_MODE" "$part" "${AIR2LEAN_LOCAL_EXAMPLES:-}" >/dev/null
   container=$(<"$cid_file")
@@ -204,25 +227,26 @@ if [ "${1:-}" = --container-row ]; then
   fi
   # Docker's host/daemon transport extracts this stream into the stopped rootfs.
   # Neither PID 1 nor the later row interpreter ever sees the archive bytes.
-  docker cp - "$container:/work" <"$AIR2LEAN_LOCAL_SNAPSHOT/source.tar"
-  transfer=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-row-metadata.XXXXXX")
-  mkdir -p "$transfer/snapshot" "$transfer/imports"
-  cp "$AIR2LEAN_LOCAL_SNAPSHOT/source-revision" "$transfer/snapshot/source-revision"
-  cp "$AIR2LEAN_LOCAL_SNAPSHOT/files" "$transfer/snapshot/files"
-  cp "$AIR2LEAN_LOCAL_BOOTSTRAP" "$transfer/snapshot/bootstrap.sh"
+  bounded_run docker cp - "$container:/work" <"$AIR2LEAN_LOCAL_SNAPSHOT/source.tar"
+  row_transfer=$(mktemp -d "$AIR2LEAN_LOCAL_SNAPSHOT/row-metadata.XXXXXX")
+  mkdir -p "$row_transfer/snapshot" "$row_transfer/imports"
+  cp "$AIR2LEAN_LOCAL_SNAPSHOT/source-revision" "$row_transfer/snapshot/source-revision"
+  cp "$AIR2LEAN_LOCAL_SNAPSHOT/files" "$row_transfer/snapshot/files"
+  cp "$AIR2LEAN_LOCAL_BOOTSTRAP" "$row_transfer/snapshot/bootstrap.sh"
   if [ "$AIR2LEAN_LOCAL_MODE" != targeted ]; then
-    cp "$job_payload" "$transfer/snapshot/job.json"
+    cp "$job_payload" "$row_transfer/snapshot/job.json"
   fi
   if [ "$part" = preflight ]; then
-    cp "$AIR2LEAN_LOCAL_SNAPSHOT/main.bundle" "$transfer/snapshot/main.bundle"
+    cp "$AIR2LEAN_LOCAL_SNAPSHOT/main.bundle" "$row_transfer/snapshot/main.bundle"
   fi
   python3 -B -c 'import json,sys; from pathlib import Path; d=json.loads(Path(sys.argv[1]).read_text()); print(json.dumps({name:"/imports/"+name for name in d}))' \
-    "$AIR2LEAN_LOCAL_IMPORTS" >"$transfer/imports/manifest.json"
-  docker cp "$transfer/snapshot" "$container:/snapshot"
-  docker cp "$transfer/imports" "$container:/imports"
-  rm -rf "$transfer"
+    "$AIR2LEAN_LOCAL_IMPORTS" >"$row_transfer/imports/manifest.json"
+  bounded_run docker cp "$row_transfer/snapshot" "$container:/snapshot"
+  bounded_run docker cp "$row_transfer/imports" "$container:/imports"
+  rm -rf "$row_transfer"
+  row_transfer=
   while IFS=$'\t' read -r name path; do
-    docker cp "$path/." "$container:/imports/$name"
+    bounded_run docker cp "$path/." "$container:/imports/$name"
   done < <(python3 -B -c 'import json,sys; from pathlib import Path; d=json.loads(Path(sys.argv[1]).read_text()); [print(name+"\t"+path) for name,path in d.items()]' "$AIR2LEAN_LOCAL_IMPORTS")
   bounded_run docker start -a "$container"
   exit "$(docker inspect --format '{{.State.ExitCode}}' "$container")"
@@ -239,9 +263,21 @@ if [ "${1:-}" = --inside ]; then
   mode=$1 version=$2 examples=$3
   mkdir -p /artifacts
   cp /snapshot/source-revision /artifacts/source-revision
-  # Serialize users of the shared Linux caches; never reuse host native artifacts.
-  exec 9>/cache/local-ci.lock
-  flock -n 9 || { echo 'error: another local CI run owns the caches' >&2; exit 1; }
+  # Lock each declared shared cache in root-then-diff order. FD 9 also anchors
+  # --prepare when both caches are private; children inherit both owned locks.
+  if [ "${AIR2LEAN_LOCAL_ROOT_CACHE:-0}" = 1 ]; then
+    exec 9>/work/.lake/local-ci.lock
+  else
+    exec 9>/cache/local-ci.lock
+  fi
+  flock -n 9 || { echo 'error: another local CI run owns the root cache' >&2; exit 1; }
+  if [ "${AIR2LEAN_LOCAL_DIFF_CACHE:-0}" = 1 ]; then
+    exec 8>/work/tests/diff/.lake/local-ci.lock
+    flock -n 8 || { echo 'error: another local CI run owns the diff cache' >&2; exit 1; }
+  fi
+  export HOME=/tmp/air2lean-home
+  export ZIG_GLOBAL_CACHE_DIR=$HOME/.cache/zig
+  mkdir -p "$HOME"
   [ ! -e /snapshot/source.tar ] || { echo 'error: source archive must stay outside the container' >&2; exit 1; }
   python3 -B scripts/local-ci-steps.py --initialize /snapshot/files
   # Under Rosetta: AIR2LEAN_ROSETTA_LINK_FLAGS for every native build below (docs/rosetta.md).
@@ -253,26 +289,16 @@ if [ "${1:-}" = --inside ]; then
       test/*) ;;
       *)
         # Native/support installers run from the workflow, not the Linux test setup.
-        export HOME=/cache/home ELAN_HOME=/cache/home/.elan
-        export AIR2LEAN_CACHE=/cache/downloads ZIG_GLOBAL_CACHE_DIR=/cache/zig-global LEAN_NUM_THREADS=1
-        mkdir -p "$HOME"
+        export ELAN_HOME=$HOME/.elan
+        export AIR2LEAN_CACHE=/cache/downloads LEAN_NUM_THREADS=1
         exec python3 -B scripts/local-ci-steps.py --row "$mode" "$version"
         ;;
     esac
   fi
-  sha=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
-  export ELAN_HOME=/cache/elan-$sha AIR2LEAN_CACHE=/cache/downloads
-  export ZIG_GLOBAL_CACHE_DIR=/cache/zig-global LEAN_NUM_THREADS=1
-  export PATH="$ELAN_HOME/bin:$PATH"
-  if [ ! -x "$ELAN_HOME/bin/elan" ]; then
-    url=$(zig-patch/toml-get.sh '[ci.elan]' url)
-    sha=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
-    curl -fL --output /tmp/elan.tar.gz "$url"
-    echo "$sha  /tmp/elan.tar.gz" | sha256sum -c -
-    tar -xzf /tmp/elan.tar.gz -C /tmp
-    chmod +x /tmp/elan-init
-    /tmp/elan-init --default-toolchain none -y
-  fi
+  source scripts/linux-ci-tools.sh
+  air2lean_linux_ci_elan
+  export AIR2LEAN_CACHE=/cache/downloads
+  export LEAN_NUM_THREADS=1
   if [ "$mode" != targeted ]; then
     exec python3 -B scripts/local-ci-steps.py --row "$mode" "$version"
   fi
@@ -397,6 +423,8 @@ elif [ "$target_arch" = arm64 ]; then
 else
   tool_volume=air2lean-local-linux-toolchains
 fi
+# Keep the established override-derived namespace for declared Lake volumes;
+# the former broad tool volume itself is never mounted into a verification row.
 cache_namespace=$(printf '%s' "$tool_volume" | shasum -a 256 | cut -c1-16)
 # AIR2LEAN_LOCAL_CPUS (default 2) and AIR2LEAN_LOCAL_MEMORY (default 8g) size the container; a
 # GitHub runner has 4 CPUs and 16 GB. scripts/par.py takes its worker count from the CPU quota.

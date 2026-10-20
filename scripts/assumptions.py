@@ -855,24 +855,29 @@ def stage_jobs(stage_variable: str) -> int:
 
 
 def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
-                  cacheable: frozenset = frozenset()) -> dict:
+                  cacheable: frozenset = frozenset(), *, expected_runtime: str | None = None) -> dict:
     """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
 
     Imports are loaded from oleans, so the caller passes every non-toolchain module of the
     dependency graph: together they replay the complete closure above the toolchain. `cache`
     (one build only; receipts never use it) holds `cacheable` (Lake-built) modules that already
-    passed with the same checker and identical olean bytes. Their imports are Lake-built too, so
-    any differing digest among them drops the whole cache."""
+    passed with the same checker, installed runtime inputs and identical olean bytes. Any
+    differing cacheable-module digest drops the whole cache. The caller still selects cacheable
+    modules; this runtime binding does not authenticate project/private import closures."""
     from concurrent.futures import ThreadPoolExecutor  # Lazy: the offline receipt suite has a 32 MiB budget.
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
+    runtime_sha = toolchain_runtime_sha256(toolchain)
+    if expected_runtime is not None and runtime_sha != expected_runtime:
+        raise ValueError('toolchain runtime changed between extraction and replay')
     environment = {**os.environ, "LEAN_PATH": lean_path}
     jobs = stage_jobs("AIR2LEAN_REPLAY_JOBS")
     try:
         cached = json.loads(cache.read_text()) if cache else {}
     except FileNotFoundError:
         cached = {}
-    passed = cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha else {}
+    passed = (cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha
+              and cached.get("toolchain_runtime_sha256") == runtime_sha else {})
     if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
         passed = {}  # Another build: a reused module could depend on a changed one.
     modules = sorted(digests)
@@ -886,10 +891,13 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
 
     with ThreadPoolExecutor(jobs) as pool:
         rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
+    if toolchain_runtime_sha256(toolchain) != runtime_sha:
+        raise ValueError('toolchain runtime changed during kernel replay')
     if cache:
         failed = {r["module"] for r in rejected}
         passed.update({m: d for m, d in digests.items() if m in cacheable and m not in failed})
-        write_report(cache, {"tool_sha256": checker_sha, "passed": passed})
+        write_report(cache, {"tool_sha256": checker_sha, "toolchain_runtime_sha256": runtime_sha,
+                             "passed": passed})
     return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
             "lean_sha256": file_sha256(toolchain / "bin/lean"),
             "toolchain": (ROOT / "lean-toolchain").read_text().strip(),
@@ -900,6 +908,15 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
 def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, str] | None = None) -> dict:
     """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
     toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
+    extractor = raw.get('extractor')
+    if not isinstance(extractor, dict):
+        raise ValueError('assurance extraction carries no toolchain runtime binding')
+    runtime_sha = extractor.get('toolchain_runtime_sha256')
+    if (not isinstance(runtime_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', runtime_sha)
+            or not isinstance(extractor.get('lean_sysroot'), str)
+            or not Path(extractor['lean_sysroot']).is_absolute()
+            or Path(extractor['lean_sysroot']).resolve() != toolchain):
+        raise ValueError('assurance extraction carries no matching toolchain runtime binding')
     lean_path_text = lake_env("LEAN_PATH")
     lean_path = [Path(p).resolve() for p in lean_path_text.split(os.pathsep) if p]
     standard = toolchain / "lib/lean"
@@ -924,8 +941,10 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
         run(["lake", "--rehash", "build", "--no-build", *lake_modules])
     raw["kernel_replay"] = kernel_replay({r["module"]: r["olean_sha256"] for r in artifacts},
-                                         toolchain, lean_path_text, cache, frozenset(lake_modules))
+                                         toolchain, lean_path_text, cache, frozenset(lake_modules),
+                                         expected_runtime=runtime_sha)
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
+            "lean_sysroot": str(toolchain), "toolchain_runtime_sha256": runtime_sha,
             "artifacts": artifacts}
 
 
@@ -942,11 +961,26 @@ def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
         raise ValueError("assurance report or tree has uncommitted tracked changes (pass --allow-dirty to record them)")
     if (freshness.get("lake_trace_check") or {}).get("status") != "up-to-date":
         raise ValueError("assurance report has no passing Lake trace check")
+    runtime_sha, sysroot = freshness.get('toolchain_runtime_sha256'), freshness.get('lean_sysroot')
+    extractor = report.get('extractor')
+    if (not isinstance(runtime_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', runtime_sha)
+            or not isinstance(sysroot, str) or not Path(sysroot).is_absolute()
+            or not isinstance(extractor, dict)
+            or not isinstance(extractor.get('lean_sysroot'), str)
+            or not Path(extractor['lean_sysroot']).is_absolute()
+            or Path(extractor['lean_sysroot']).resolve() != Path(sysroot).resolve()
+            or extractor.get('toolchain_runtime_sha256') != runtime_sha):
+        raise ValueError('assurance report carries no matching toolchain runtime binding; re-run scripts/assumptions.py')
     for row in freshness["artifacts"]:
         for kind in ("olean", "source"):
             path = row[kind] and (ROOT / row[kind] if not Path(row[kind]).is_absolute() else Path(row[kind]))
             if path and (not path.is_file() or file_sha256(path) != row[kind + "_sha256"]):
                 raise ValueError(f"assurance report is stale: {row['module']} {kind} changed")
+    toolchain = Path(lake_env('LEAN_SYSROOT')).resolve()
+    if Path(sysroot).resolve() != toolchain:
+        raise ValueError('assurance report is stale: toolchain runtime root changed')
+    if toolchain_runtime_sha256(toolchain) != runtime_sha:
+        raise ValueError('assurance report is stale: toolchain runtime changed')
     return {"head": current["head"], "tracked_dirty": dirty, "dirty_allowed": bool(dirty and allow_dirty),
             "artifacts": len(freshness["artifacts"])}
 

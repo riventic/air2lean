@@ -499,6 +499,64 @@ and an `FAdmit` companion for that precondition ([invariant-synthesis.md](../inv
 decision 2). That is P09's acceptance; until it lands the FBA, page allocator and arena are still
 open, and `contract-vacuity/FeeFalse.lean` still type-checks.
 
+**Task10 audit follow-up: visible-family admission is unresolved.** The full-state kernel control
+[`CreationFamily.lean`](../../tests/roadmap/invariant-synthesis/CreationFamily.lean) proves a
+contract and total creation triple for every `n`, with `own := ⟪n = 0⟫` and the native context
+capturing `n`. Its post includes state, an available positive fee and an accepted positive
+`BitVec 64` request. The existing `nonvacuity_witness creation` is valid by choosing zero, but
+`not_admit_pre_one` and `not_admit_post_one` rule out the member at one. The guarded variant moves
+the same restriction into a proof binder. Exact visible-parameter/post matching and a single
+existential `FAdmit` companion therefore do not establish admission for every instance.
+
+The maintainer chose exact applied-instance admission on 2026-10-16
+([PR400](https://github.com/riventic/air2lean/pull/400#issuecomment-6209913710)). A checked client
+must carry `FAdmit` of that same creation precondition at its actual arguments; its complete
+dependent context remains in the audit. Hand-stated parameter roles remain specification, not
+proof that those arguments are fresh ghosts. An existential fresh post also cannot authenticate
+arbitrary applied fresh values. Requiring admission for every arbitrary raw pointer/buffer is
+false; accepting one convenient capacity for an entire family is insufficient.
+
+The permanent mechanism must extract the resources and arguments of translated initialization
+or program start and discharge admission through general `fsym` rules and start-memory lemmas.
+The old experiment on `codex/cx-allocator-creation-wip` (commit
+`54a6228c40d8c0ace742e03087e41531b26e8263`) is preserved. Its roughly 90 lines of manually
+selected FBA seed storage and resource rearrangement were removed from active implementation;
+they do not provide general automatic admission. The resumed generic transport/claim-checking
+work remains WIP. The native Page creation and admission companions now derive the real null
+hint from `PageLinux.mem0` for every placement and arbitrary input stream, using the generic
+`FAdmit.At.global_aptsE` rule. Both sequential and concurrent companions have passed kernel
+extraction and complete proof-and-type closure checks without legacy judgments or Strength;
+the actual missing-companion environment rejects both contracts. The superseded unused
+per-start wrappers were removed after the shared start-claims library reached main.
+
+The draft application gate itself had a reproducible traversal defect: closing a let or lambda
+body could recreate its parent's memo key, so the body was skipped. The original 187-theorem
+kernel audit passed while `named_hidden` incorrectly verified and the invariant/let aliases
+incorrectly reported no creation obligation. This was a metadata-gate defect, not a kernel
+soundness finding. The collector now keys the exact scope and pending context as well as the
+closed expression. It inspects local declared types at every actual use and follows checked
+projection heads without rescanning a selected family at invented arguments.
+
+The fresh 225-theorem application audit passes kernel replay and the complete causal assertions:
+checked and nested lets and direct/let/projection aliases admit the exact member; mixed zero/one
+calls retain both applications and reject the unadmitted member. Hidden named constructors,
+invariant aliases, ignored type indices and a producer in an unselected recursor branch reject.
+Conservative unsupported alias cases remain rejected. These controls do not complete actual
+allocator acceptance.
+
+Actual FBA creation, exact fresh initializer-result binding and the paired real producer/checker
+regression remain open. The separate
+approved `admission-at-state` engine feature is still pending; its struct, fsym part 2 and arena
+prerequisites are on main. Negative vacuity rejection alone is insufficient to close F2, so
+`soundness-1014 --require-fixed F2-contract-fee-false` remains nonzero until source-bound positive
+FBA and Page acceptance are both wired. F2 remains open (engine ledger
+#allocator-creation-admissibility). The small logical impossibility proofs are audit evidence;
+the control's program proofs use `fsym` throughout.
+
+| Creation follow-up | Scope | Acceptance |
+| --- | --- | --- |
+| arena-creation | Open, arena lane after its current rewrite | Derive creation and admission from actual raw initialization through the same generic full-state mechanism, including the positive fee/request and exact visible-argument domain. Reject missing or unbound evidence; no arena-specific proof engine. |
+
 ## F3. Witnesses are not tied to the program's start (FAIL-OPEN)
 
 The full-state witnesses (`ZigLean/Sep/Full/Witness.lean`: `FAdmit`, `FLive`, `CAdmit`, `CLive`)
