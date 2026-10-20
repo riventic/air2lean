@@ -541,13 +541,18 @@ def input_tree_records(root: Path, binaries: bool = False, *,
             for path in sorted(paths | links.keys())]
 
 
-def library_source_inputs(root: Path) -> list[list[str]]:
-    """Configured source selection; all content/link records use input_tree_records."""
+def library_roots(root: Path) -> set[str]:
     import runpy  # Lazy: policy-only users need no source inventory.
     dependencies = runpy.run_path(str(Path(__file__).with_name('lean-deps.py')))
     roots = dependencies['lib_roots'](root, strict_sources=True)
     if not roots:
         raise ValueError('no configured Lake library sources')
+    return roots
+
+
+def library_source_inputs(root: Path) -> list[list[str]]:
+    """Configured source selection; all content/link records use input_tree_records."""
+    roots = library_roots(root)
     records = []
     for name in sorted(roots):
         if not name or '/' in name or '\\' in name:
@@ -567,6 +572,19 @@ def library_source_inputs(root: Path) -> list[list[str]]:
             records.extend(input_tree_records(path, binaries=True))
     return [[path.relative_to(root).as_posix(), link, content]
             for path, link, content in sorted(records)]
+
+
+def library_compiled_inputs(root: Path) -> list:
+    """The existing cache's canonical Lake inputs, including loaded companions and absence."""
+    built = root / '.lake/build/lib/lean'
+    records = []
+    for name in sorted(library_roots(root)):
+        for suffix in ('', *COMPILED_SUFFIXES):
+            selected = built / (name + suffix)
+            records.append([str(selected), str(selected.resolve()), selected.exists(),
+                            [[str(path), link, content]
+                             for path, link, content in input_tree_records(selected)]])
+    return records
 
 
 def toolchain_runtime_sha256(toolchain: Path) -> str:
@@ -591,13 +609,8 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
     return digest.hexdigest()
 
 
-def caller_lean_path_binding(root: Path) -> dict | None:
-    """Bind supported private-library inputs without permitting a sysroot replacement."""
-    if os.environ.get('LEAN_SYSROOT'):
-        raise ValueError('unsupported caller LEAN_SYSROOT overlay')
-    value = os.environ.get('LEAN_PATH')
-    if not value:
-        return None
+def lean_path_binding(root: Path, value: str) -> dict:
+    """One ordered-root binding for caller inputs and compiler-owned Unit lookup."""
     entries = value.split(os.pathsep)
     if any(not entry for entry in entries):
         raise ValueError('empty root in caller LEAN_PATH')
@@ -615,6 +628,14 @@ def caller_lean_path_binding(root: Path) -> dict | None:
             digest.update(item.relative_to(path).as_posix().encode() + b'\0')
             digest.update(link.encode() + b'\0' + content.encode() + b'\0')
     return {'roots': list(map(str, paths)), 'sha256': digest.hexdigest()}
+
+
+def caller_lean_path_binding(root: Path) -> dict | None:
+    """Bind supported private-library inputs without permitting a sysroot replacement."""
+    if os.environ.get('LEAN_SYSROOT'):
+        raise ValueError('unsupported caller LEAN_SYSROOT overlay')
+    value = os.environ.get('LEAN_PATH')
+    return lean_path_binding(root, value) if value else None
 
 
 def verify_extractor_inputs(trace: dict, root: Path, stage: str) -> None:
@@ -707,8 +728,14 @@ def framework_runtime_types() -> tuple[str, ...]:
     return module.PROGRAM_TYPES
 
 
+def lean_command(arguments: list[str], lean_path: str) -> list[str]:
+    """Apply an already resolved lookup path AFTER Lake installs its environment."""
+    return ['lake', 'env', 'env', 'LEAN_PATH=' + lean_path, 'lean', *arguments]
+
+
 def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
-            all_declarations: bool = False, root: Path | None = None) -> dict:
+            all_declarations: bool = False, root: Path | None = None,
+            lean_path: str | None = None) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
     root = (ROOT if root is None else root).resolve()
@@ -737,7 +764,11 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
         path = Path(handle.name)
     try:
         with prepared_tool(root, runner) as tool_trace:  # The run imports the olean the trace records.
-            output = runner(["lake", "env", "lean", str(path)])
+            binding = lean_path_binding(root, lean_path) if lean_path is not None else None
+            output = runner(lean_command([str(path)], lean_path) if lean_path is not None else
+                            ["lake", "env", "lean", str(path)])
+            if binding is not None and lean_path_binding(root, lean_path) != binding:
+                raise ValueError('compiled Unit lookup inputs changed during extraction')
     finally:
         path.unlink(missing_ok=True)
     verify_extractor_inputs(tool_trace, root, 'extraction')
@@ -837,9 +868,12 @@ def git_revision(root: Path = ROOT) -> dict:
 
 def locate(module: str, lean_path: list[Path]) -> Path:
     relative = module.replace(".", "/") + ".olean"
+    top = module.split('.')[0]
     for directory in lean_path:
-        if (directory / relative).is_file():
-            return directory / relative
+        if (directory / top).is_dir() or (directory / (top + '.olean')).exists():
+            if (directory / relative).is_file():
+                return directory / relative
+            raise ValueError(f"no compiled module for {module} in selected library {directory}")
     raise ValueError(f"no compiled module for {module}")
 
 
@@ -855,7 +889,8 @@ def stage_jobs(stage_variable: str) -> int:
 
 
 def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
-                  cacheable: frozenset = frozenset(), *, expected_runtime: str | None = None) -> dict:
+                  cacheable: frozenset = frozenset(), *, expected_runtime: str | None = None,
+                  compiled_inputs_sha256: str | None = None, validate_inputs=None) -> dict:
     """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
 
     Imports are loaded from oleans, so the caller passes every non-toolchain module of the
@@ -867,8 +902,9 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     Several audits of one build may share `cache` at once (scripts/fixture-checks.py's run): each
     cacheable module is checked under a claim (`<cache>.d/<module>.lock`), the cache is read
     again under it and a pass is merged in at once, so concurrent audits replay each module once
-    between them. A replay that merged passes in and then finds the runtime changed removes the
-    cache (those passes may come from either runtime)."""
+    between them. A pass is merged in only while the compiled inputs are unchanged, and a replay
+    that merged passes in and then fails (a changed runtime or input) removes the cache (those
+    passes may come from either side of the change)."""
     from concurrent.futures import ThreadPoolExecutor  # Lazy: the offline receipt suite has a 32 MiB budget.
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
@@ -887,7 +923,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
         except FileNotFoundError:
             return {}
         passed = (cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha
-                  and cached.get("toolchain_runtime_sha256") == runtime_sha else {})
+                  and cached.get("toolchain_runtime_sha256") == runtime_sha
+                  and cached.get("compiled_inputs_sha256") == compiled_inputs_sha256 else {})
         if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
             passed = {}  # Another build: a reused module could depend on a changed one.
         return passed
@@ -919,20 +956,28 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
             rejection = run_checker(module)
             if rejection is None:
                 with locked(claims / "cache.lock"):
+                    if validate_inputs is not None:
+                        validate_inputs()  # No cache publication from a changed input batch.
                     passed = load()
                     passed[module] = digests[module]
                     write_report(cache, {"tool_sha256": checker_sha, "toolchain_runtime_sha256": runtime_sha,
+                                         "compiled_inputs_sha256": compiled_inputs_sha256,
                                          "passed": passed})
                     published.append(module)
             return False, rejection
 
     modules, published = sorted(digests), []
-    with ThreadPoolExecutor(jobs) as pool:
-        results = dict(zip(modules, pool.map(check, modules)))
-    if toolchain_runtime_sha256(toolchain) != runtime_sha:
-        if published:  # passes this replay merged in may come from the changed runtime
+    try:
+        with ThreadPoolExecutor(jobs) as pool:
+            results = dict(zip(modules, pool.map(check, modules)))
+        if toolchain_runtime_sha256(toolchain) != runtime_sha:
+            raise ValueError('toolchain runtime changed during kernel replay')
+        if validate_inputs is not None:
+            validate_inputs()  # No passing result from a changed input batch.
+    except BaseException:
+        if published:  # passes this replay merged in may come from the changed runtime or inputs
             cache.unlink(missing_ok=True)
-        raise ValueError('toolchain runtime changed during kernel replay')
+        raise
     reused = [m for m in modules if results[m][0]]
     rejected = [r for _, r in results.values() if r is not None]
     return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
@@ -942,7 +987,52 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
             "rejected": rejected, "status": "fail" if rejected else "pass"}
 
 
-def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, str] | None = None) -> dict:
+def cacheable_modules(imports: dict, candidates: list[str], paths: list[Path], toolchain: Path) -> frozenset:
+    """Authenticate the existing cache's complete canonical Lake/stdlib import closure.
+
+    Missing, IR-only, cyclic, shadowed or private/external inputs take fresh replay.
+    Recovered from the preserved Task04 eligibility rule; no second cache is introduced.
+    """
+    if not candidates or not isinstance(imports, dict):
+        return frozenset()
+    standard, built = (toolchain / 'lib/lean').resolve(), (ROOT / '.lake/build/lib/lean').resolve()
+    pending, seen, required = {}, set(), list(candidates)
+    while required:
+        module = required.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        dependencies = imports.get(module)
+        if (not isinstance(module, str) or not isinstance(dependencies, list)
+                or not all(isinstance(dep, str) for dep in dependencies)):
+            continue
+        required.extend(dependencies)
+        relative = module.replace('.', '/') + '.olean'
+        try:
+            actual = locate(module, paths).resolve(strict=True)
+            if module.split('.')[0] in TOOLCHAIN_ROOTS:
+                owned = actual.is_relative_to(standard) and actual == (standard / relative).resolve(strict=True)
+            else:
+                owned = (module.split('.')[0] in LAKE_ROOTS and actual.is_relative_to(built)
+                         and actual == (built / relative).resolve(strict=True)
+                         and (ROOT / (module.replace('.', '/') + '.lean')).is_file())
+            if owned:
+                pending[module] = set(dependencies)
+        except (OSError, ValueError):
+            continue
+    approved = set()
+    while pending:
+        ready = {module for module, dependencies in pending.items() if dependencies <= approved}
+        if not ready:
+            break
+        approved |= ready
+        for module in ready:
+            del pending[module]
+    return frozenset(approved.intersection(candidates))
+
+
+def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, str] | None = None,
+                         *, compiled_units: dict | None = None) -> dict:
     """Kernel-replay the audited closure (S1) and bind it to artifact digests and the tree (H1)."""
     toolchain = Path(lake_env("LEAN_SYSROOT")).resolve()
     extractor = raw.get('extractor')
@@ -954,10 +1044,15 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
             or not Path(extractor['lean_sysroot']).is_absolute()
             or Path(extractor['lean_sysroot']).resolve() != toolchain):
         raise ValueError('assurance extraction carries no matching toolchain runtime binding')
-    lean_path_text = lake_env("LEAN_PATH")
+    if compiled_units is not None:
+        import theorem_universe
+        theorem_universe.verify_compilation(compiled_units)
+    lean_path_text = lake_env("LEAN_PATH") if compiled_units is None else compiled_units['lean_path']
     lean_path = [Path(p).resolve() for p in lean_path_text.split(os.pathsep) if p]
     standard = toolchain / "lib/lean"
     graph_modules = {n["module"] for n in raw["nodes"]}
+    if compiled_units is not None:
+        graph_modules |= theorem_universe.compiled_imports(raw, compiled_units, lean_path, toolchain)
     for module in sorted(m for m in graph_modules if m and not needs_replay(m)):
         if not locate(module, lean_path).is_relative_to(standard):
             raise ValueError(f"toolchain module {module} is shadowed by a project olean")
@@ -973,16 +1068,32 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
             lake_modules.append(module)
         elif module in (bound or {}):  # a witness fixture: bound to its source too
             row.update(source=bound[module], source_sha256=file_sha256(ROOT / bound[module]))
+        elif compiled_units is not None and module in compiled_units['units']:
+            source_record = compiled_units['units'][module]['source']
+            row.update(source=source_record['path'], source_sha256=source_record['sha256'])
         artifacts.append(row)
     if lake_modules:
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
         run(["lake", "--rehash", "build", "--no-build", *lake_modules])
+    lake_inputs = library_compiled_inputs(ROOT)
+    cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)
+
+    def validate_inputs():
+        if library_compiled_inputs(ROOT) != lake_inputs:
+            raise ValueError('canonical Lake compiled inputs changed during kernel replay')
+        if compiled_units is not None:
+            theorem_universe.verify_compilation(compiled_units)
+
     raw["kernel_replay"] = kernel_replay({r["module"]: r["olean_sha256"] for r in artifacts},
-                                         toolchain, lean_path_text, cache, frozenset(lake_modules),
-                                         expected_runtime=runtime_sha)
+                                         toolchain, lean_path_text, cache, cacheable,
+                                         expected_runtime=runtime_sha,
+                                         compiled_inputs_sha256=hashlib.sha256(
+                                              json.dumps(lake_inputs, sort_keys=True).encode()).hexdigest(),
+                                          validate_inputs=validate_inputs)
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
             "lean_sysroot": str(toolchain), "toolchain_runtime_sha256": runtime_sha,
-            "artifacts": artifacts}
+            "artifacts": artifacts,
+            **({'compiled_units': compiled_units} if compiled_units is not None else {})}
 
 
 def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
@@ -1018,6 +1129,8 @@ def verify_fresh(report: dict, allow_dirty: bool = False) -> dict:
         raise ValueError('assurance report is stale: toolchain runtime root changed')
     if toolchain_runtime_sha256(toolchain) != runtime_sha:
         raise ValueError('assurance report is stale: toolchain runtime changed')
+    import theorem_universe
+    theorem_universe.verify_compiled_report(report)
     return {"head": current["head"], "tracked_dirty": dirty, "dirty_allowed": bool(dirty and allow_dirty),
             "artifacts": len(freshness["artifacts"])}
 
@@ -1062,7 +1175,7 @@ def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> N
     report["theorem_count"] = len(report["theorems"])
 
 
-def main() -> int:
+def main(argv=None, *, compiled_units: dict | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".lake/assurance/assumptions.json")
     parser.add_argument("--policy", type=Path, default=ROOT / "assurance/policy.json")
@@ -1081,7 +1194,7 @@ def main() -> int:
     parser.add_argument("--sources", type=Path,
                         help="JSON object: module -> repository-relative source of each non-Lake module "
                              "(scripts/theorem_universe.py), for the generated-declaration classification")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         policy = load_policy(args.policy)
         sources = json.loads(args.sources.read_text()) if args.sources else {}
@@ -1092,11 +1205,19 @@ def main() -> int:
         modules = sorted(set(args.module)) if args.module else shipped_modules()
         fixtures = {} if args.module else compile_witness_fixtures(not args.no_build)
         witnesses = sorted(m for m in fixtures if m not in modules)
+        if compiled_units is not None:
+            import theorem_universe
+            theorem_universe.verify_compilation(compiled_units)
+            if modules != compiled_units['selected_modules'] or witnesses:
+                raise ValueError('compiled Unit context differs from the requested audit scope')
         raw = extract(modules, not args.no_build, witnesses,
-                      all_declarations=args.all_declarations)
+                      all_declarations=args.all_declarations,
+                      **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
         if raw["modules"] != sorted({*modules, *witnesses}):
             raise ValueError("extractor scope differs from requested module inventory")
-        freshness = replay_and_freshness(raw, args.replay_cache, fixtures)
+        freshness = replay_and_freshness(raw, args.replay_cache, fixtures,
+                                        **({'compiled_units': compiled_units}
+                                           if compiled_units is not None else {}))
         report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
         split_witnesses(report, modules, witnesses)
         report["freshness"] = freshness
