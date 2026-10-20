@@ -70,6 +70,10 @@ The register below counts <!-- register:counts -->**90 requirements: 45 complete
 | [#495](https://github.com/riventic/air2lean/pull/495), [#504](https://github.com/riventic/air2lean/pull/504), [#508](https://github.com/riventic/air2lean/pull/508), [#528](https://github.com/riventic/air2lean/pull/528) | Build speed: per-unit fixture statistics (#495); one kernel-replay cache per run (#504); sep-auto and one-logic as Lake modules (#508); parallel canonicalization certification (#528). |
 | [#525](https://github.com/riventic/air2lean/pull/525), [#530](https://github.com/riventic/air2lean/pull/530) | Assurance extractor: sharing-aware fingerprints and caught runtime limits (#525); a 32 MiB RSS growth budget for proof receipts (#530). |
 | [#532](https://github.com/riventic/air2lean/pull/532), [#533](https://github.com/riventic/air2lean/pull/533) | Fix-forwards of main's alloc-fba fixture red: one Lake cache mode per workload (#532); a fixture unit that rebuilds root modules fails (#533). |
+| [#523](https://github.com/riventic/air2lean/pull/523), [#536](https://github.com/riventic/air2lean/pull/536) | Assurance binding: registered witnesses are bound to their precompile context (#523); module spelling and the physical validator inputs share one identity (#536). |
+| [#537](https://github.com/riventic/air2lean/pull/537) | Docs: this table lists #525-#535; the "One proof logic" row's legacy count is 41. |
+| [#538](https://github.com/riventic/air2lean/pull/538), [#505](https://github.com/riventic/air2lean/pull/505) | Build speed: `full-build` takes one admission for all phases (#538); `fixtures.py audit` builds the extractor's driver with Lake (`assumptions.py --extract-in`, #505). |
+| [#539](https://github.com/riventic/air2lean/pull/539) | Architecture audit E1 (open, FAIL-OPEN): the assurance extractor imports audited modules, so their `initialize` code runs in the process that writes the report ([soundness-2026-10-20](docs/architecture-audit/soundness-2026-10-20.md)). |
 
 ### Merged to main on 2026-10-19
 
