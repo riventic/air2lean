@@ -964,15 +964,7 @@
       "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
     },
     {
-      "path": "tests/roadmap/spawn-failure/Runtime.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     }
   ]
