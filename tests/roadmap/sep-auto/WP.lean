@@ -310,7 +310,7 @@ open Lean Meta Zig.Full.Auto
 before unfolding, including when the inner commands or assertions contain metavariables. -/
 def wrapper_keys : MetaM Unit := do
   let a ← mkFreshExprMVar (mkApp (mkConst ``BitVec) (mkNatLit 32))
-  let add ← mkAppM ``Zig.add #[mkConst ``Bool.false, a, a]
+  let add ← mkAppM ``Zig.add #[mkConst ``Bool.false, a, a, mkConst ``Bool.true]
   let actual ← mkAppM ``StateT.lift #[add]
   let x ← mkFreshExprMVar (← inferType add)
   let pattern ← mkAppM ``StateT.lift #[x]
@@ -322,7 +322,7 @@ def wrapper_keys : MetaM Unit := do
     throwError "wrapper_keys: StateT.lift left its inner command unassigned"
   unless ← isDefEq x add do
     throwError "wrapper_keys: StateT.lift did not determine the inner command"
-  let sub ← mkAppM ``Zig.sub #[mkConst ``Bool.false, a, a]
+  let sub ← mkAppM ``Zig.sub #[mkConst ``Bool.false, a, a, mkConst ``Bool.true]
   let other ← mkAppM ``StateT.lift #[sub]
   if ← unifyKeyed actual other then
     throwError "wrapper_keys: StateT.lift unfolded different concrete heads"
