@@ -99,7 +99,9 @@ mkdir -p "$check/scripts" "$check/examples/basic" "$check/tests/golden/basic/air
   "$check/Proofs/Basic" "$check/bin"
 cp "$repo_root/scripts/check.sh" "$repo_root/scripts/normalize-air.py"   "$repo_root/scripts/normalize-generated.py" \
   "$repo_root/scripts/workflow-common.sh" "$repo_root/scripts/safe-output.py" "$repo_root/scripts/par.py" \
-  "$repo_root/scripts/zig-default.sh" "$repo_root/scripts/compat.py" "$check/scripts/"
+  "$repo_root/scripts/zig-default.sh" "$repo_root/scripts/compat.py" \
+  "$repo_root/scripts/gen-integrity.py" "$repo_root/scripts/premise_markers.py" \
+  "$repo_root/scripts/canon_certification.py" "$check/scripts/"
 cp "$repo_root/compatibility.json" "$check/"
 cat >"$check/tests/golden/basic/air/basic.foo.json" <<'EOF'
 {
@@ -183,6 +185,11 @@ printf 'def valid := 1\n' >"$check/Proofs/Basic/Gen.lean"
 git -C "$check" init -q
 git -C "$check" add -A
 git -C "$check" -c user.name=review -c user.email=review@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -qm fixture
+# check.sh's case pass (gen-integrity.py case-check) needs an executable translator; the fixture
+# has no namespaced cases, so it is never run, and it fails if it ever is.
+mkdir -p "$check/.lake/build/bin"
+printf '#!/usr/bin/env bash\necho "unexpected translator call" >&2; exit 1\n' >"$check/.lake/build/bin/air2lean"
+chmod +x "$check/.lake/build/bin/air2lean"
 expect_failure "generated Lean checked with diff disabled" "invalid generated Lean rejected" \
   env PATH="$check/bin:$PATH" AIR2LEAN_ZIG_AIR="$check/bin/zig" AIR2LEAN_EXAMPLES=basic \
   AIR2LEAN_CI=0 AIR2LEAN_DIFF=0 AIR2LEAN_OUT_DIR= GENERATED_SOURCE=invalid bash "$check/scripts/check.sh"
