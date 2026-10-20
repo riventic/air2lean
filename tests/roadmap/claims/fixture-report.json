@@ -46,7 +46,7 @@
      }
     ],
     "head": {
-     "fingerprint": "1683c31a838e98bfa7b669456cadff84",
+     "fingerprint": "6bf7ba0f5cbb9a152cbf90e656ae2ffd",
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "ClaimAllocator.ContractAlias"
@@ -188,7 +188,7 @@
      }
     ],
     "head": {
-     "fingerprint": "f22fde16f319194bd61d68997f10b267",
+     "fingerprint": "5807c37872503964ba79b606f6c10df3",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.Res",
      "name": "Zig.Full.Act"
@@ -331,7 +331,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -470,7 +470,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -650,7 +650,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -829,7 +829,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -982,7 +982,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -1120,7 +1120,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -1300,7 +1300,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -1479,7 +1479,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -1559,7 +1559,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -1650,7 +1650,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "1d9820f975500d1f9e6b550c0f4a3425",
+     "fingerprint": "20678466416ca4bd5ce4847293a65de5",
      "kind": "definition",
      "module": "Init.Prelude",
      "name": "Not"
@@ -1823,7 +1823,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -1965,7 +1965,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2145,7 +2145,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2324,7 +2324,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2423,7 +2423,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -2592,7 +2592,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -2734,7 +2734,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2914,7 +2914,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -3093,7 +3093,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -3185,7 +3185,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -3335,7 +3335,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -3473,7 +3473,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -3653,7 +3653,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -3832,7 +3832,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -3969,7 +3969,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -4106,7 +4106,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -4286,7 +4286,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -4465,7 +4465,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -4542,7 +4542,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -4708,7 +4708,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -4809,7 +4809,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -4941,7 +4941,7 @@
      }
     ],
     "head": {
-     "fingerprint": "f22fde16f319194bd61d68997f10b267",
+     "fingerprint": "5807c37872503964ba79b606f6c10df3",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.Res",
      "name": "Zig.Full.Act"
@@ -5061,7 +5061,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -5199,7 +5199,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -5379,7 +5379,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -5558,7 +5558,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -5690,7 +5690,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -5791,7 +5791,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -5954,7 +5954,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -6112,7 +6112,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -6269,7 +6269,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -6369,7 +6369,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -6519,7 +6519,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -6667,7 +6667,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -6766,7 +6766,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -6898,7 +6898,7 @@
      }
     ],
     "head": {
-     "fingerprint": "f22fde16f319194bd61d68997f10b267",
+     "fingerprint": "5807c37872503964ba79b606f6c10df3",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.Res",
      "name": "Zig.Full.Act"
@@ -7035,7 +7035,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -7188,7 +7188,7 @@
      }
     ],
     "head": {
-     "fingerprint": "cb55f574a51c159595e1137d32f46d38",
+     "fingerprint": "7b41595f631091b69b5debd95973eb1b",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "And"
@@ -7321,7 +7321,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -7459,7 +7459,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -7639,7 +7639,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -7818,7 +7818,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -7952,7 +7952,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -8090,7 +8090,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -8270,7 +8270,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -8449,7 +8449,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -8526,7 +8526,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -8692,7 +8692,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -8793,7 +8793,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -8946,7 +8946,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -9093,7 +9093,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -9192,7 +9192,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -9344,7 +9344,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -9485,7 +9485,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -9665,7 +9665,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -9844,7 +9844,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -9920,7 +9920,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -10007,7 +10007,7 @@
      }
     ],
     "head": {
-     "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+     "fingerprint": "5b12ecbac9bdb84d7bdbd59961f1040e",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "False"
@@ -10102,7 +10102,7 @@
      }
     ],
     "head": {
-     "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+     "fingerprint": "5b12ecbac9bdb84d7bdbd59961f1040e",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "False"
@@ -10244,7 +10244,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -10413,7 +10413,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -10551,7 +10551,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -10731,7 +10731,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -10910,7 +10910,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -10990,7 +10990,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -11155,7 +11155,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -11296,7 +11296,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -11476,7 +11476,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -11655,7 +11655,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -11799,7 +11799,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -11955,7 +11955,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -12024,7 +12024,7 @@
     "args": [],
     "binders": [],
     "head": {
-     "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+     "fingerprint": "5b12ecbac9bdb84d7bdbd59961f1040e",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "True"
@@ -12148,7 +12148,7 @@
      }
     ],
     "head": {
-     "fingerprint": "73ca5769d47b8cedabfeea0c87300ee8",
+     "fingerprint": "a15b7a5b4b6e8be77d5b2d53bb0fb661",
      "kind": "inductive",
      "module": "ZigLean.Sep.Full.AllocSpec",
      "name": "Zig.Full.FAllocSpec"
@@ -12304,7 +12304,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -12403,7 +12403,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -12575,7 +12575,7 @@
      }
     ],
     "head": {
-     "fingerprint": "9a4014e348add433b206b6d12bbdb7df",
+     "fingerprint": "52337a8c84e7af03ef11c8ab60144e83",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Conc",
      "name": "Zig.Full.CTriple"
@@ -12683,7 +12683,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -12797,7 +12797,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -12936,7 +12936,7 @@
      }
     ],
     "head": {
-     "fingerprint": "1d9820f975500d1f9e6b550c0f4a3425",
+     "fingerprint": "20678466416ca4bd5ce4847293a65de5",
      "kind": "definition",
      "module": "Init.Prelude",
      "name": "Not"
@@ -13059,7 +13059,7 @@
      }
     ],
     "head": {
-     "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+     "fingerprint": "b1969771d43534e1306ab679b18b6482",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Triple",
      "name": "Zig.Full.FTriple"
@@ -13154,7 +13154,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -13279,7 +13279,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -13438,7 +13438,7 @@
      }
     ],
     "head": {
-     "fingerprint": "cb55f574a51c159595e1137d32f46d38",
+     "fingerprint": "7b41595f631091b69b5debd95973eb1b",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "And"
@@ -13586,7 +13586,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -13686,7 +13686,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -13827,7 +13827,7 @@
      }
     ],
     "head": {
-     "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+     "fingerprint": "b1969771d43534e1306ab679b18b6482",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Triple",
      "name": "Zig.Full.FTriple"
@@ -13926,7 +13926,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -14031,7 +14031,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -14172,7 +14172,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -14268,7 +14268,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -14383,7 +14383,7 @@
      }
     ],
     "head": {
-     "fingerprint": "4ec2e06293f3a412bc7ef0288b029cfc",
+     "fingerprint": "b6c1e960f844cf2ac0fbedd8bc0c7cd8",
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "ClaimFixture.FWrapped"
@@ -14551,7 +14551,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -14702,7 +14702,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -14847,7 +14847,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -15028,7 +15028,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -15206,7 +15206,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -15376,7 +15376,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -15543,7 +15543,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -15794,7 +15794,7 @@
      }
     ],
     "head": {
-     "fingerprint": "ad72d795ad6c3a7e54882c2714b7fc13",
+     "fingerprint": "b56293117a5895d9d720b39f409e6ceb",
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.EventuallyReturns"
@@ -15899,7 +15899,7 @@
      }
     ],
     "head": {
-     "fingerprint": "58123b2004b943094f8a9a94b7bbd65d",
+     "fingerprint": "4a724eedc76405de634d9e84ce781e69",
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"
@@ -16023,7 +16023,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d4d31ff3e67a693846b92001818ddb7d",
+     "fingerprint": "17236c73bd43a2b02f8e368ed05fa5ec",
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.ReturnsWithin"
@@ -16172,7 +16172,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d4d31ff3e67a693846b92001818ddb7d",
+     "fingerprint": "17236c73bd43a2b02f8e368ed05fa5ec",
      "kind": "definition",
      "module": "tests.roadmap.claims.Fixture",
      "name": "Zig.Conc.Total.ReturnsWithin"
@@ -16299,7 +16299,7 @@
      }
     ],
     "head": {
-     "fingerprint": "267b6a68edbb353b46a816a3814cfaa3",
+     "fingerprint": "6925f4258e0f3781a89d7bb0a13efac3",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
@@ -16404,7 +16404,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -16515,7 +16515,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -16658,7 +16658,7 @@
      }
     ],
     "head": {
-     "fingerprint": "a160fcc9319842db3ea3d21cc9682f5e",
+     "fingerprint": "81f6b87d11eb5d3b1a01d83304614095",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTotalTriple"
@@ -16760,7 +16760,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -16903,7 +16903,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -17007,7 +17007,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -17110,7 +17110,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -17252,7 +17252,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -17356,7 +17356,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
