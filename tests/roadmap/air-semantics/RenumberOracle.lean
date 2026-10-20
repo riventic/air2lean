@@ -45,15 +45,17 @@ def program (records : Array Identity.Record) : Program :=
 private theorem caller_allInsts (base : Nat) (records : Array Identity.Record) :
     (caller base records).allInsts = (caller base records).body := by
   rw [Func.allInsts, ← Array.foldl_toList]
-  simp (discharger := simp only [Op.call_control_bodies, Op.effects, Op.effectsIn,
-      Effects.pure, Effects.placeAccess, Effects.flow, Control.bodies]) only
-    [caller, List.foldl_cons, List.foldl_nil, flattenInst_without_children]
+  simp only [caller, List.foldl_cons, List.foldl_nil, flattenInst]
+  simp only [flattenOp, Op.call_control_bodies, Op.effects, Op.effectsIn,
+    Effects.pure, Effects.placeAccess, Effects.flow, Control.bodies,
+    Array.attach_empty, Array.foldl_empty] <;> rfl
 
 private theorem identity_allInsts : identity.allInsts = identity.body := by
   rw [Func.allInsts, ← Array.foldl_toList]
-  simp (discharger := simp only [Op.call_control_bodies, Op.effects, Op.effectsIn,
-      Effects.pure, Effects.placeAccess, Effects.flow, Control.bodies]) only
-    [identity, List.foldl_cons, List.foldl_nil, flattenInst_without_children]
+  simp only [identity, List.foldl_cons, List.foldl_nil, flattenInst]
+  simp only [flattenOp, Op.call_control_bodies, Op.effects, Op.effectsIn,
+    Effects.pure, Effects.placeAccess, Effects.flow, Control.bodies,
+    Array.attach_empty, Array.foldl_empty] <;> rfl
 
 private theorem caller_edges (base : Nat) (records : Array Identity.Record) :
     calleesOf #["canon.caller", "canon.identity"] #[] (caller base records) =
@@ -65,7 +67,11 @@ private theorem caller_edges (base : Nat) (records : Array Identity.Record) :
     caller, Func.calleeValFnTy?, Array.toList_push, Array.toList_empty,
     List.append_nil, List.nil_append, List.filterMap_cons, List.filterMap_nil,
     List.flatMap_cons, List.flatMap_nil, List.filter_cons, List.filter_nil,
-    List.foldl_cons, List.foldl_nil] <;> rfl
+    List.foldl_cons, List.foldl_nil]
+  simp only [← Array.contains_toList, List.contains_cons, List.contains_nil,
+    beq_self_eq_true, Bool.or_true, Bool.or_false, List.foldl_cons, List.foldl_nil,
+    Array.toList_push, Array.toList_empty, List.nil_append,
+    Bool.false_eq_true, ite_false, ite_true] <;> rfl
 
 private theorem identity_edges :
     calleesOf #["canon.caller", "canon.identity"] #[] identity = #[] := by
@@ -79,10 +85,13 @@ private theorem program_rows (records : Array Identity.Record) :
       #[("canon.caller", #["canon.identity"]), ("canon.identity", #[])] := by
   have hnames : (program records).funcs.map (·.name) =
       #["canon.caller", "canon.identity"] := by
-    simp only [program, Array.map_push, Array.map_empty, caller, identity]
+    apply Array.ext'
+    simp only [Array.toList_map, program, caller, identity, List.map_cons, List.map_nil]
   have hrefs : fnRefs (program records).funcs = #[] := by rfl
   rw [hnames, hrefs]
-  simpa only [program, Array.map_push, Array.map_empty, caller_edges, identity_edges]
+  apply Array.ext'
+  simp only [Array.toList_map, program, List.map_cons, List.map_nil,
+    caller_edges, identity_edges]
 
 private theorem recursive_false_of_rows (records : Array Identity.Record)
     (hrows : (program records).funcs.map (fun f =>
