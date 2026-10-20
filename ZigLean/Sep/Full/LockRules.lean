@@ -34,6 +34,16 @@ namespace Full
 
 open FAssn Conc Proto LockWord
 
+/-- Caller-resource assertions of a composite operation, with verified compatibility for
+concrete Plain clients. The implementation's existing WP theorem proves these assertions
+for its actual code. This data asserts no tick count or repeated-payment obligation. -/
+structure CallerResources where
+  pre : ThreadId → FAssn
+  during : ThreadId → Res → FAssn
+  post : ThreadId → Res → FAssn
+  plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → pre t r
+  plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → post t r r' → r' = r
+
 namespace FLock
 
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt γ}
@@ -98,6 +108,29 @@ theorem Fits.curU (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : M
 
 /-! ## The ops in generated code (`WP`) -/
 
+/-- A composite operation's actual caller-resource post is a spatial frame beside its
+complete held resource. The actual post invariant supplies ownership and disjointness. -/
+theorem Fits.wp_preservePartPost (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p : LPh}
+    {g : γ} {t : ThreadId} {c : ConcM Tgt α} {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {B : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hp : p ≠ .gone)
+    (hbody : P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ r rH,
+      A r ∧ P.inv (upd G' t (L.set (L.setPart g r) p rH)) m') G m d) :
+    P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ r rH, A r ∧
+      P.inv (upd G' t (L.set (L.setPart g r) p rH)) m' ∧
+      (A ⋆ fun r => r = rH)
+        (L.own (upd G' t (L.set (L.setPart g r) p rH)) m' t)) G m d := by
+  refine WP.mono ?_ hbody
+  rintro a G' m' d' ⟨hB, r, rH, hA, hi⟩
+  obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi
+  have hlive : L.ph (upd G' t (L.set (L.setPart g r) p rH) t) ≠ .gone := by
+    rw [upd_self, L.ph_set]; exact hp
+  refine ⟨hB, r, rH, hA, hi, ?_⟩
+  rw [own_live (L := L) (hiL.ht hlive).2]
+  refine ⟨r, rH, ?_, ?_, hA, rfl⟩
+  · simpa only [upd_self, L.part_set, L.part_setPart, L.held_set] using hiL.pdisj t
+  · rw [upd_self, L.part_set, L.part_setPart, L.held_set]
+
 /-- An operation whose post keeps the caller part through `set` preserves every assertion on
 that complete part as a spatial frame beside its held resource. The post invariant supplies
 actual ownership, liveness and disjointness; no tick or mode assumption is introduced. -/
@@ -110,16 +143,17 @@ theorem Fits.wp_preservePart (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p :
     P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ rH,
       P.inv (upd G' t (L.set g p rH)) m' ∧
       (A ⋆ fun r => r = rH) (L.own (upd G' t (L.set g p rH)) m' t)) G m d := by
-  refine WP.mono ?_ hbody
-  rintro a G' m' d' ⟨hB, rH, hi⟩
-  obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi
-  have hlive : L.ph (upd G' t (L.set g p rH) t) ≠ .gone := by
-    rw [upd_self, L.ph_set]; exact hp
-  refine ⟨hB, rH, hi, ?_⟩
-  rw [own_live (L := L) (hiL.ht hlive).2]
-  refine ⟨L.part g, rH, ?_, ?_, hA, rfl⟩
-  · simpa only [upd_self, L.part_set, L.held_set] using hiL.pdisj t
-  · rw [upd_self, L.part_set, L.held_set]
+  refine WP.mono ?_ (hP.wp_preservePartPost (g := g) (p := p)
+    (A := fun r => r = L.part g ∧ A r) hp (WP.mono ?_ hbody))
+  · rintro a G' m' d' ⟨hB, r, rH, ⟨rfl, _⟩, hi, hs⟩
+    have hs' : (A ⋆ fun r => r = rH)
+        (L.own (upd G' t (L.set (L.setPart g (L.part g)) p rH)) m' t) :=
+      sep_mono_left (fun _ h => h.2) hs
+    refine ⟨hB, rH, ?_, ?_⟩
+    · simpa only [L.setPart_self] using hi
+    · simpa only [L.setPart_self] using hs'
+  · rintro a G' m' d' ⟨hB, rH, hi⟩
+    exact ⟨hB, L.part g, rH, ⟨rfl, hA⟩, by rwa [L.setPart_self]⟩
 
 variable {σ α : Type} [Packed α 32]
 

@@ -63,18 +63,43 @@ theorem Fits.wp_tick (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} 
       by rw [upd_self, upd_upd], rfl, hm, hL'⟩) hU
   exact h m' hc' ((hF.inv _ _).mpr ⟨rX, hL', hU'⟩)
 
-/-- Plain sync clients retain their exact caller part. The explicit plain admission supplies
-the unmetered fragment; `P.cost = none` alone does not. -/
+/-- One actual tick edge between caller-resource assertions. Payment is required only for
+this edge; the continuation receives its actual part. A retry needs a new proof at its own
+reachable loop entry, not a universal payment assumption on every implementation. -/
+theorem Fits.wp_tick_assert (hF : L.Fits K P U ok) {A B : FAssn}
+    {G G₀ : ThreadId → γ} {g : γ} {t : ThreadId} {m : Mem} {d : Nat}
+    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (ha : A (L.part g))
+    (pay : ∀ r, A r → ∃ r',
+      FTTotalTriple (fun rp => rp = r) Zig.tick (fun _ rp => rp = r') ∧ B r')
+    (h : ∀ r', B r' → ∀ m', m'.current = t →
+      P.inv (upd G t (L.setPart g r')) m' → Q () G₀ m' d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  obtain ⟨r', ht, hb⟩ := pay (L.part g) ha
+  exact hF.wp_tick hi hc hg ht (h r' hb)
+
+/-- An unmetered caller keeps its exact part. Stack budgets and tokens may be present;
+no noStack fragment or `P.cost = none` inference is used. -/
+theorem Fits.wp_tick_unmetered (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}
+    {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : ∀ m', m'.current = t → P.inv (upd G t g) m' → Q () G₀ m' d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  refine hF.wp_tick hi hc hg (FTTotalTriple.tick_part_unmetered (L.part g) hu) ?_
+  intro m' hc' hi'
+  rw [L.setPart_self] at hi'
+  exact h m' hc' hi'
+
+/-- Plain is a concrete specialization of the unmetered rule. -/
 theorem Fits.wp_tick_plain (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}
     {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
     (hp : (L.part g).Plain)
     (h : ∀ m', m'.current = t → P.inv (upd G t g) m' → Q () G₀ m' d) :
-    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
-  refine hF.wp_tick hi hc hg (FTTotalTriple.tick_part_unmetered (L.part g) hp.2) ?_
-  intro m' hc' hi'
-  rw [L.setPart_self] at hi'
-  exact h m' hc' hi'
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d :=
+  hF.wp_tick_unmetered hi hc hg hp.2 h
 
 /-- **A plain load from invariant rest by a race-free reader.** The bytes occur once in `rX`;
 the caller's admission need only justify its own `NoRace` fact. In particular, no prior write

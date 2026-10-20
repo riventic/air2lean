@@ -130,7 +130,8 @@ def lockPost (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex (a stop, so the depth gets smaller). -/
 theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.c)
-    (t : ThreadId) (g : γ) (hok : ok g) (hp : (L.part g).Plain)
+    (t : ThreadId) (g : γ) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (D : Nat) (io : Io) (s : C.σ) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (h : C.lockInv P L t g D s G m d) :
     P.WP t ((C.body L.ptr io).run s) (fun r G' m' d' =>
@@ -141,8 +142,8 @@ theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.
   rw [C.body_eq, bodyOf, StateT.run_bind]
   refine WP.bind ?_
   show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
-  refine WP.bind (hP.wp_tick_plain hi hc (by rw [L.ph_set]; decide)
-    (by simpa only [L.part_set] using hp) fun m₀ hc₀ hi₀ => WP.pure' ?_)
+  refine WP.bind (hP.wp_tick_unmetered hi hc (by rw [L.ph_set]; decide)
+    (by simpa only [L.part_set] using hu) fun m₀ hc₀ hi₀ => WP.pure' ?_)
   rw [StateT.run_bind]
   refine WP.bind (wp_xchgLockOn hP C.st hS (g := L.set g .spin rnil) (L.ph_set _ _ _)
     ((hP.ok_set _ _ _).mpr hok) hi₀ fun k hk G₁ m₁ r hc₁ hcase => ?_)
@@ -163,9 +164,9 @@ theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
-theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp_unmetered (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hplain : (L.part g).Plain) (io : Io)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
@@ -186,7 +187,7 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     intro G₃ m₃ d₃ h₃
     rw [StateT.run_bind]
     refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lockInv P L t g d) (fun _ => 0)
-      (C.lockPost P L t g d) (C.body_wp hP hcost hS t g hok hplain d io) default G₃ m₃ d₃ h₃))
+      (C.lockPost P L t g d) (C.body_wp hP hcost hS t g hok hu d io) default G₃ m₃ d₃ h₃))
     rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', rL, hi'⟩
     rw [hkL, StateT.run_pure]
     exact WP.pure' (by rw [hfin]; exact WP.pure' ⟨hd', hc', rL, hi'⟩)
@@ -207,6 +208,37 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
       ((hP.ok_set _ _ _).mpr hok) hi₁ fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
     rw [L.set_set] at hi₂
     exact hloop G₂ m₂ k₂ ⟨by omega, hc₂, hi₂⟩
+
+/-- The existing exact-part Plain rule, derived from the real unmetered resource proof. -/
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hplain : (L.part g).Plain) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d :=
+  C.lock_wp_unmetered hP hcost hp hS t g hg hok hplain.2 io G m d hi
+
+/-- The emitted unbounded Io.Mutex retry loop uses unmetered caller resources. Its
+singleton intermediate/post assertions preserve all other caller fragments, including
+stack budgets. This is this code family's proved profile, not a generic default. -/
+def lockResources : CallerResources where
+  pre _ r := 0 < r.gh.ac.frag .unmetered
+  during _ r r' := r' = r
+  post _ r r' := r' = r
+  plain_pre _ _ hp := hp.2
+  plain_post _ _ _ _ hr := hr
+
+/-- The resource-polymorphic lock contract for the actual emitted Io.Mutex code. -/
+theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hu : lockResources.pre t (L.part g)) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r rL, lockResources.post t (L.part g) r ∧
+        P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
+  refine WP.mono ?_ (C.lock_wp_unmetered hP hcost hp hS t g hg hok hu io G m d hi)
+  rintro _ G' m' d' ⟨hd, hc, rL, hi'⟩
+  exact ⟨hd, hc, L.part g, rL, rfl, by simpa only [L.setPart_self] using hi'⟩
 
 /-- `unlock` by the holder `t` (`g`): it goes to `out`. -/
 theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
@@ -238,7 +270,8 @@ def impl : MutexImpl Tgt where
   lock := C.lock
   unlock := C.unlock
   c := C.st.c
-  lock_wp := C.lock_wp
+  lock_resources := lockResources
+  lock_wp_resource := C.lock_wp_resource
   unlock_wp := C.unlock_wp
 
 end IoMutexCode

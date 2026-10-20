@@ -28,9 +28,11 @@ of its program (`Io.Mutex` of 0.16.0: `IoMutexCode.impl`, `ZigLean/Sep/Full/IoMu
 every program, instantiated by `Proofs/Iogroup/Lock.lean` and `Proofs/Sync/IoMutex.lean`;
 `Thread.Mutex` of 0.15.2: `Proofs/Threadsync/ThreadMutex.lean`) and uses only these two rules.
 
-The unbounded lock loop additionally requires the caller's explicit plain resource. Counting no
-turns does not provide tick credits or unmetered mode. Metered tick segments use the existing
-caller-part rule with their actual `setPart` post; this interface claims no cost bound.
+The primary resource contract exposes the actual caller-resource pre/post assertions. Each
+implementation proves payment only at its actual tick sites: an unticked native operation
+needs none, while an unbounded emitted retry needs a real invariant that supplies each tick.
+`lock_wp` is the exact-part specialization for concrete Plain clients. Counting no turns
+provides no resource mode, and this interface claims no numerical tick or retry bound.
 -/
 
 namespace Zig
@@ -46,19 +48,43 @@ structure MutexImpl (Tgt : Type) where
   unlock : Ptr → Io → ConcM Tgt Unit
   /-- The word's value while a thread can wait (`LockWord.c`). -/
   c : Nat
-  lock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
+  /-- Actual caller-resource assertions for this implementation's lock. -/
+  lock_resources : CallerResources
+  lock_wp_resource : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
-    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → (L.part g).Plain →
+    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → lock_resources.pre t (L.part g) →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m →
     P.WP t (lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d
+      ∃ r rL, lock_resources.post t (L.part g) r ∧
+        P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d
   unlock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
     ∀ (t : ThreadId) (g : γ), L.ph g = .holds → ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m → m.current = t →
     P.WP t (unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
       P.inv (upd G' t (L.set g .out rnil)) m') G m d
+
+namespace MutexImpl
+
+/-- The exact-part rule for a concrete Plain caller, derived from the implementation's
+actual resource contract and its verified compatibility entailments. -/
+theorem lock_wp (C : MutexImpl Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop} {K : FPrim γ}
+    (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hS : L.c = C.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hplain : (L.part g).Plain) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t g) m) :
+    P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
+  refine WP.mono ?_ (C.lock_wp_resource hP hcost hp hS t g hg hok
+    (C.lock_resources.plain_pre t (L.part g) hplain) io G m d hi)
+  rintro _ G' m' d' ⟨hd, hc, r, rL, hr, hi'⟩
+  have he := C.lock_resources.plain_post t (L.part g) r hplain hr
+  subst r
+  exact ⟨hd, hc, rL, by simpa only [L.setPart_self] using hi'⟩
+
+end MutexImpl
 
 end Full
 end Zig

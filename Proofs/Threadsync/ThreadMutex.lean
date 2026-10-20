@@ -93,7 +93,8 @@ def lockPost (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
 /-- One repeat of `lockSlow`'s loop: `xchg(3)`; the thread holds the mutex, or it waits at the
 futex (a stop, so the depth gets smaller). -/
 theorem loop16_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3)
-    (t : ThreadId) (g : γ) (hok : ok g) (hplain : (L.part g).Plain)
+    (t : ThreadId) (g : γ) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (D : Nat) (s : Thread_Mutex_FutexImpl_lockSlowLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : lockInv P L t g D s G m d) :
     P.WP t ((Thread_Mutex_FutexImpl_lockSlow.loop16 L.ptr).run s) (fun r G' m' d' =>
@@ -108,8 +109,8 @@ theorem loop16_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   refine WP.bind ?_
   show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
-  refine WP.bind (hP.wp_tick_plain hi hcur (by rw [L.ph_set]; decide)
-    (by simpa only [L.part_set] using hplain) fun m₀ hc₀ hi₀ => WP.pure' ?_)
+  refine WP.bind (hP.wp_tick_unmetered hi hcur (by rw [L.ph_set]; decide)
+    (by simpa only [L.part_set] using hu) fun m₀ hc₀ hi₀ => WP.pure' ?_)
   rw [atomicRmwC_eq]
   refine WP.bind (wp_xchgLockOn hP threadMutexW hS (g := L.set g .spin rnil) (L.ph_set _ _ _)
     (hok' _ _) hi₀ fun k hk G₁ m₁ r hc₁ hcase => ?_)
@@ -132,7 +133,8 @@ theorem loop16_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
 
 /-- `lockSlow` by thread `t` at `spin`: it holds the mutex. -/
 theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
-    (hp : p = L.ptr) (t : ThreadId) (g : γ) (hok : ok g) (hplain : (L.part g).Plain)
+    (hp : p = L.ptr) (t : ThreadId) (g : γ) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t (L.set g .spin rnil)) m) :
     P.WP t (Thread_Mutex_FutexImpl_lockSlow p) (fun _ G' m' d' => d' < d ∧
@@ -163,7 +165,7 @@ theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
     intro G₃ m₃ d₃ h₃
     simp only [StateT.run_bind]
     refine WP.bind (WP.mono ?_ (WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
-      (loop16_body hP hcost hc3 t g hok hplain d) default G₃ m₃ d₃ h₃))
+      (loop16_body hP hcost hc3 t g hok hu d) default G₃ m₃ d₃ h₃))
     rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', rL, hi'⟩
     simp only [StateT.run_pure]
     exact WP.pure' (WP.pure' ⟨hd', hc', rL, hi'⟩)
@@ -187,7 +189,7 @@ theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
 /-- `FutexImpl.lock` by thread `t` at `out` (`g`): it holds the mutex. -/
 theorem futexLock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 3) {p : Ptr}
     (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hplain : (L.part g).Plain) (G : ThreadId → γ)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_FutexImpl_lock p) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
@@ -201,7 +203,7 @@ theorem futexLock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c =
   · simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
     exact WP.pure' (WP.pure' ⟨hd₁, hc₁, rL, hi₁⟩)
   · simp only [Bool.not_false, ↓reduceIte, StateT.run_bind, bind_assoc]
-    refine WP.bind (WP.callC (WP.mono ?_ (lockSlow_wp hP hcost hc3 hp t g hok hplain G₁ m₁ d₁ hi₁)))
+    refine WP.bind (WP.callC (WP.mono ?_ (lockSlow_wp hP hcost hc3 hp t g hok hu G₁ m₁ d₁ hi₁)))
     rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
     simp only [StateT.run_pure, pure_bind]
     exact WP.pure' (WP.pure' ⟨by omega, hc₂, rL, hi₂⟩)
@@ -214,15 +216,44 @@ theorem lock_eq (p : Ptr) : Thread_Mutex_lock p =
     bind_assoc, map_bind, map_pure]
 
 /-- `lock` (Linux) by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
-theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+theorem lock_wp_unmetered (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hplain : (L.part g).Plain) (_ : Io)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   rw [lock_eq]
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
-    (futexLock_wp hP hcost hc hp t g hg hok hplain G m d hi))
+    (futexLock_wp hP hcost hc hp t g hg hok hu G m d hi))
+
+/-- The actual Linux emitted loop pays each reachable tick from an unmetered caller part;
+all remaining caller fragments, including stack resources, keep their exact values. -/
+def lockResources : CallerResources where
+  pre _ r := 0 < r.gh.ac.frag .unmetered
+  during _ r r' := r' = r
+  post _ r r' := r' = r
+  plain_pre _ _ hp := hp.2
+  plain_post _ _ _ _ hr := hr
+
+theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hu : lockResources.pre t (L.part g)) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r rL, lockResources.post t (L.part g) r ∧
+        P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
+  refine WP.mono ?_ (lock_wp_unmetered hP hcost hp hc t g hg hok hu io G m d hi)
+  rintro _ G' m' d' ⟨hd, hcur, rL, hi'⟩
+  exact ⟨hd, hcur, L.part g, rL, rfl, by simpa only [L.setPart_self] using hi'⟩
+
+/-- The existing Linux Plain rule is the exact-part unmetered specialization. -/
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hplain : (L.part g).Plain) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d :=
+  lock_wp_unmetered hP hcost hp hc t g hg hok hplain.2 io G m d hi
 
 /-- `Thread.Mutex.unlock` is `FutexImpl.unlock` (Linux). -/
 theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
@@ -328,18 +359,19 @@ theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
     rw [L.set_set] at hi₂
     exact ⟨⟨by omega, _, .inr rfl, hi₂⟩, .inl (by omega)⟩
 
-/-- `lock` (macOS) by thread `t` at `out` (`g`): it holds the mutex. -/
-theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+/-- The unticked native macOS lock preserves every actual caller-part assertion as a
+spatial frame beside its returned protected resource. No mode/payment admission is needed. -/
+theorem lock_wp_part (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hplain : (L.part g).Plain) (_ : Io)
+    (A : FAssn) (hA : A (L.part g)) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
-    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => (d' < d ∧ m'.current = t) ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m' ∧
+        (A ⋆ fun r => r = rL) (L.own (upd G' t (L.set g .holds rL)) m' t)) G m d := by
   subst hp
   have hc1 : L.c = 1 := hc
-  refine WP.mono (fun _ _ _ _ ⟨⟨hd, hcur⟩, rL, hi', _⟩ => ⟨hd, hcur, rL, hi'⟩)
-    (hP.wp_preservePart (p := .holds) (A := fun r => r = L.part g ∧ r.Plain)
-      (B := fun _ _ m' d' => d' < d ∧ m'.current = t) (by decide) ⟨rfl, hplain⟩ ?_)
+  refine hP.wp_preservePart (p := .holds) (A := A)
+    (B := fun _ _ m' d' => d' < d ∧ m'.current = t) (by decide) hA ?_
   unfold Thread_Mutex_lock
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -352,6 +384,38 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
   rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', rL, hi'⟩
   simp only [StateT.run_pure, pure_bind]
   exact WP.pure' (WP.pure' ⟨⟨hd', hc'⟩, rL, hi'⟩)
+
+/-- This native wrapper performs no emitted tick and preserves the exact arbitrary caller
+part. Its profile imposes no payment closure or unmetered guard. -/
+def lockResources : CallerResources where
+  pre _ _ := True
+  during _ r r' := r' = r
+  post _ r r' := r' = r
+  plain_pre _ _ _ := True.intro
+  plain_post _ _ _ _ hr := hr
+
+theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (_hpre : lockResources.pre t (L.part g)) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r rL, lockResources.post t (L.part g) r ∧
+        P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
+  refine WP.mono ?_ (lock_wp_part hP hcost hp hc t g hg hok (fun r => r = L.part g)
+    rfl io G m d hi)
+  rintro _ G' m' d' ⟨⟨hd, hcur⟩, rL, hi', _⟩
+  exact ⟨hd, hcur, L.part g, rL, rfl, by simpa only [L.setPart_self] using hi'⟩
+
+/-- The existing Plain macOS rule retains its real spatial caller-resource proof. -/
+theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
+    (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hplain : (L.part g).Plain) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d :=
+  WP.mono (fun _ _ _ _ ⟨⟨hd, hcur⟩, rL, hi', _⟩ => ⟨hd, hcur, rL, hi'⟩)
+    (lock_wp_part hP hcost hp hc t g hg hok (fun r => r = L.part g ∧ r.Plain)
+      ⟨rfl, hplain⟩ io G m d hi)
 
 /-- `unlock` (macOS) by the holder `t` (`g`), the current thread: it goes to `out`. -/
 theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
@@ -395,7 +459,8 @@ def threadMutex : MutexImpl Tgt where
   lock p _ := Thread_Mutex_lock p
   unlock p _ := Thread_Mutex_unlock p
   c := mutexC
-  lock_wp hP hcost := ThreadMutex.lock_wp hP hcost
+  lock_resources := ThreadMutex.lockResources
+  lock_wp_resource hP hcost := ThreadMutex.lock_wp_resource hP hcost
   unlock_wp hP hcost := ThreadMutex.unlock_wp hP hcost
 
 end Threadsync

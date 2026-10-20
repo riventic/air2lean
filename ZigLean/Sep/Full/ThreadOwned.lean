@@ -617,14 +617,14 @@ theorem _root_.Zig.Full.sep_cur_intro {R : FAssn} {r : Res} {t : ThreadId} (h : 
   ⟨r, ⟨FHeap.empty, Know.none, Ghost.cur t⟩, fun _ => .inr rfl,
     by simp [FHeap.union_empty, Know.union_none], h, rfl, rfl, rfl⟩
 
-/-- **A `MemM` step of thread `t` that runs as `t`** (`cur t`: the stack rules, `Full/Stack`): the
-thread rule hands the running thread's token to the step, next to its part, and takes it back
-(the parts hold none, `FOwned.noCur`). Otherwise as `WP.liftMem_fownedS`. -/
-theorem WP.liftMem_fownedCurS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+/-- A cur-aware local step with the ACTUAL protocol rest as its protected footprint.
+The running token exists only inside this step; other parts and the complete rest stay
+framed, including their stack resources. -/
+theorem WP.liftMem_fownedCurR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t))
     (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
-    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → FStepIn hF m m' → Q a G m' n)
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
+      Qa a r' → FStepIn rO.heap.erase m m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
       first
         | exact .inl (.inl rfl)
@@ -656,9 +656,32 @@ theorem WP.liftMem_fownedCurS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     have ho₂ : m'.Owns m'.current r₁.heap.erase := ho'.sub fun l hl => by
       simp only [FHeap.erase_union, Heap.union_apply]
       cases e : r₁.heap.erase l <;> simp_all
-    exact ⟨by rw [hs.threads], h a m' r₁ _ hr (ho.step hc htl hR hRO hh₂ hc' ho₂ hs hnc) hq₁ hs⟩
+    refine ⟨by rw [hs.threads],
+      h a m' r₁ hr (ho.step hc htl hR hRO hh₂ hc' ho₂ hs hnc) hq₁
+        (hs.weaken fun l hl => ?_)⟩
+    simp only [FHeap.erase, FHeap.erase_union, Heap.union_apply, Option.map_eq_none_iff] at hl ⊢
+    cases e : rR.heap l <;> simp_all
   · obtain ⟨v, m', e⟩ := hr m _ _ hh₁ hp₁ hcs (hc ▸ ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
+
+/-- A local step that temporarily receives `cur t`, with an abstract protected footprint.
+The exact-rest form is `WP.liftMem_fownedCurR`; this interface needs only some footprint. -/
+theorem WP.liftMem_fownedCurS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t))
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
+    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
+      Qa a r' → FStepIn hF m m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  WP.liftMem_fownedCurR ht ho hc htl hp
+    (fun a m' r' hr ho' hq hs => h a m' r' rO.heap.erase hr ho' hq hs) hret
 
 /-- `WP.liftMem_fownedS` with the current thread and the threads of the step. -/
 theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
