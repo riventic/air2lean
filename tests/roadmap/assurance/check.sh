@@ -390,3 +390,52 @@ print('assurance environment regressions passed')
 PY
 
 bash tests/roadmap/assurance/import-metadata.sh "$out/import-metadata.json"
+
+# The same universe adapter retains all declarations in three canonical Lake contexts.
+# These are bounded candidate controls, not a full census or the external NN Unit binding.
+python3 - "$out" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+sys.path.insert(0, str(Path('scripts').resolve()))
+import assumptions
+import theorem_universe
+
+out = Path(sys.argv[1])
+contexts = [
+    ('full-triple', ['ZigLean.Mem.Basic', 'ZigLean.Sep.Full.Triple'],
+     [('Zig.Full.Tame', 'ZigLean.Sep.Full.Triple', 'Zig.MemM')]),
+    ('full-thread-step', ['ZigLean.Sep.Full.ThreadStep'],
+     [('Zig.Full.RunFp', 'ZigLean.Sep.Full.ThreadStep', 'Zig.MemM')]),
+    ('lists-client', ['Proofs.Lists.Client'],
+     [('Lists.Client.NoIllegal', 'Proofs.Lists.Client', 'Zig.ConcM'),
+      ('Lists.Client.NoLeak', 'Proofs.Lists.Client', 'Zig.ConcM')]),
+]
+subprocess.run(['lake', 'build', *sorted({m for _, modules, _ in contexts for m in modules})], check=True)
+for label, modules, seeds in contexts:
+    path = out / (label + '-all-declarations.json')
+    result = theorem_universe.audit_modules(modules, [], path, all_declarations=True)
+    assert result['status'] == 'pass' and result['exit_code'] == 0, result
+    report = json.loads(path.read_text())
+    assert report['modules'] == modules and report['scope'] == 'explicit-modules', path
+    assert 'framework_candidates' in report and 'selected_declaration_roots' in report, path
+    roots, summary = report['selected_declaration_roots'], report['framework_candidates']
+    assert summary['scope'] == 'selected-modules-only' and summary['complete'] is False
+    assert summary['ordinary_exemptions'] == []
+    assert [row['name'] for row in summary['declarations']] == roots
+    nodes = {row['name']: row for row in report['nodes']}
+    assert set(roots) == {name for name, row in nodes.items() if row['module'] in modules}
+    assert all(row['ordinary_exemption'] is False for row in summary['declarations'])
+    assert all(row.get('framework_status') is None and row.get('classification_approval') is None
+               for row in summary['declarations'])
+    by_name = {row['name']: row for row in summary['declarations']}
+    for name, module, program in seeds:
+        row = by_name[name]
+        assert row['module'] == module and row['is_proof'] is False, row
+        assert row['prop_valued'] is True and row['verdict'] == 'candidate', row
+        assert program in row['original_type_constants'] and program in row['program_dependencies'], row
+    assert set(name for name, _, _ in seeds) < set(roots), path
+    assert any(row['verdict'] == 'unknown' for row in summary['declarations']), path
+    assert report['kernel_replay']['status'] == 'pass' and report['kernel_replay']['reused'] == []
+    assumptions.verify_fresh(report, allow_dirty=True)
+    print(label, 'all selected declarations retained; complete=false; zero exemptions; approvals unset')
+PY
