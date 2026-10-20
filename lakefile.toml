@@ -120,7 +120,7 @@ globs = ["Proofs.+"]
 
 [[lean_lib]]
 name = "AssuranceTools"
-roots = ["tools.Assurance", "tools.AllocatorAdmission", "tools.OutcomeContracts"]
+roots = ["tools.Assurance", "tools.AllocatorAdmission", "tools.OutcomeContracts", "tools.KernelReplay"]
 
 [[lean_exe]]
 name = "air2lean"
