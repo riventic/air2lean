@@ -245,11 +245,13 @@ def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str
 
 
 def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None,
-                  sources: Path | None = None) -> dict:
+                  sources: Path | None = None, *, all_declarations: bool = False) -> dict:
+    """Audit this exact module set; optional declaration evidence stays in the same full report."""
     started = time.monotonic()
     result = run([sys.executable, "-B", str(ROOT / "scripts/assumptions.py"), "--no-build", "--allow-no-theorems",
                   "--output", str(output), *(["--replay-cache", str(cache)] if cache else []),
                   *(["--sources", str(sources)] if sources else []),
+                  *(["--all-declarations"] if all_declarations else []),
                   *(a for m in modules for a in ("--module", m))], with_lean_path(lean_path))
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
