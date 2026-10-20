@@ -104,6 +104,11 @@ theorem Persistent.cbytesAt {p : Ptr} {A : Nat} {bs : Array Byte} :
 theorem Persistent.cpts {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} :
     Persistent (Zig.Full.cpts p a v) := fun _ ⟨_, _, _, _, _, h⟩ => ⟨h.1, h.2.1⟩
 
+/-- Read-only typed knowledge may be forgotten at a return. -/
+@[fsym_drop] theorem EUpd.cpts_drop {T : Type} [Enc T] {p : Ptr} {a : Nat} {v : T} {R : FAssn} :
+    EUpd (cpts p a v ⋆ R) R :=
+  Persistent.cpts.drop
+
 /-- A memory's facts about a live `const` global block: its address and each of its bytes. -/
 theorem Mem.kn_const {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
     (hk : blk.kind = .constGlobal) (hl : blk.live = true) {o : Nat} {bs : Array Byte}
