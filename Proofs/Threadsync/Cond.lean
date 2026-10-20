@@ -1,6 +1,7 @@
 import Proofs.Threadsync.Deadline
 import Proofs.Threadsync.ThreadMutex
 import ZigLean.Sep.Full.Cond
+import ZigLean.Sep.Full.AutoWP
 
 /-!
 # `Thread.Condition` of `examples/threadsync` as a condition (`CondImpl`, 0.15.2)
@@ -45,7 +46,8 @@ def wakePost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
     ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m
 
 theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
-    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgo : L.ph g = .out) (hsx : C.sx g) (D : Nat)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g) (D : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → γ) (m : Mem)
@@ -56,102 +58,29 @@ theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
           wakeInv P C t g D r.2 G' m' d' ∧ (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
             (fun (_ : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) => 0) s)
         else wakePost P C t g D r G' m' d') G m d := by
-  obtain ⟨st⟩ := s
-  obtain ⟨hD, hc, hi, hb, hsg⟩ := h
-  simp only at hb hsg
-  unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
-  rcases hb with rfl | rfl | rfl
-  · -- `(0, 0)`: no waiter
-    refine WP.bind (WP.callRC_ok (v := 0) (by rfl) ?_)
-    refine WP.bind (WP.callRC_ok (v := 0) (by rfl) ?_)
-    refine WP.bind (WP.callRC_ok (v := 0) (by rfl) ?_)
-    repeat (first
-      | exact ⟨rfl, hD, hc, hi, hsg (by decide)⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, StateT.run_bind,
-          Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true,
-          ↓reduceIte, show ((0 : BitVec 32) == 0) = true from rfl])
-    done
-  · -- `(1, 0)`: signal the waiter
-    refine WP.bind (WP.callRC_ok (v := 1) (by rfl) ?_)
-    refine WP.bind (WP.callRC_ok (v := 0) (by rfl) ?_)
-    refine WP.bind (WP.callRC_ok (v := 1) (by rfl) ?_)
-    simp only [StateT.run_pure, pure_bind, StateT.run_bind, StateT.run_get,
-      show ((1 : BitVec 32) == 0) = false from rfl, Bool.false_eq_true, ↓reduceIte]
-    refine WP.bind (WP.bind (WP.callRC_ok (v := 0x10001) (by rfl) ?_))
-    refine WP.bind (FCond.wp_signal hC rfl rfl hgx hgo hsx hseen hi
-      fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' hb' hs' hi₁ => ?_⟩)
-    · -- success: `epoch += 1`, the wake
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_))
-      dsimp only
-      rw [FCond.ptr_ep]
-      refine WP.bind (FCond.wp_bump hC (C.ph_set _ _) (by rw [hC.lph]; exact hgo) hi₁
-        fun k₂ hk₂ G₂ m₂ o hc₂ hi₂ => ?_)
-      refine WP.bind (WP.callMC_ptrProject (hC.projE hi₂) ?_)
-      dsimp only
-      rw [FCond.ptr_ep, threadFutexWakeC_eq]
-      refine WP.bind (FCond.wp_wakeEp hC (by decide) (C.ph_set _ _) hi₂
-        fun k₃ hk₃ G₃ m₃ hc₃ hsg₃ hi₃ => ?_)
-      rw [C.set_set, C.set_set, FCond.set_of hgx] at hi₃
-      repeat (first
-        | exact ⟨rfl, by omega, hc₃, hi₃, hsg₃⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, pure_bind,
-            Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true,
-            ↓reduceIte])
-      done
-    · -- failure: the read value
-      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callRC_ok (x := optPayload (some b')) rfl ?_))
-      repeat (first
-        | exact ⟨⟨by omega, hc₁, hi₁, hb', hs'⟩, .inl (by omega)⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
-            Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, ↓reduceIte])
-      done
-  · -- `(1, 1)`: signalled
-    refine WP.bind (WP.callRC_ok (v := 1) (by rfl) ?_)
-    refine WP.bind (WP.callRC_ok (v := 1) (by rfl) ?_)
-    refine WP.bind (WP.callRC_ok (v := 0) (by rfl) ?_)
-    repeat (first
-      | exact ⟨rfl, hD, hc, hi, hsg (by decide)⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, StateT.run_bind,
-          Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9, Bool.false_eq_true,
-          ↓reduceIte, show ((0 : BitVec 32) == 0) = true from rfl])
-    done
+  fsym [FCond.wp_signal hC, FCond.wp_bump hC, FCond.wp_wakeEp hC,
+    (fun {G₀ : ThreadId → γ} {m₀ : Mem} (hi₀ : P.inv G₀ m₀) =>
+      WP.liftMem_pure (P := P) (t := t) (hC.projE hi₀) rfl),
+    C.ph_set, hC.lph, C.set_set, FCond.set_of, FCond.ptr_ep,
+    threadFutexWakeC_eq, wakeInv, wakePost,
+    Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9]
 
-/-- **`Condition.signal`** (`wake(1)`) by a thread out of the condition's and the lock's code
-that may signal, after every registration (`hseen`). -/
+/-- **`Condition.signal`** (`wake(1)`) outside or holding the mutex, preserving its complete
+resource, after every registration (`hseen`). -/
 theorem cond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : C.sx g) (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Condition_signal p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       P.inv (upd G' t g) m' ∧ ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m')
       G m d := by
-  subst hp
-  unfold Thread_Condition_signal
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ d₂ h => WP.pure' (WP.pure' h)) ?_))
-  unfold Thread_Condition_FutexImpl_wake__anon_b3c587c57789
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (FCond.wp_sload hC hgo hseen hi fun k hk G₁ m₁ b hc₁ hb hsg hi₁ => ?_)
-  simp only [StateT.run_modify, pure_bind]
-  refine WP.mono ?_ (WP.loop _ _ (wakeInv P C t g d) (fun _ => 0) (wakePost P C t g d)
-    (wake_body hC hcost t g hgx hgo hsx d hseen) _ G₁ m₁ k ⟨by omega, hc₁, hi₁, hb, hsg⟩)
-  rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨rfl, hd₂, hc₂, hi₂, hsg₂⟩
-  exact WP.pure' ⟨hd₂, hc₂, hi₂, hsg₂⟩
+  fsym [FCond.wp_sload hC,
+    WP.loop _ _ (wakeInv P C t g d) (fun _ => 0) (wakePost P C t g d)
+      (wake_body hC hcost t g hgx hgo hsx d hseen),
+    wakeInv, wakePost]
 
 /-! ## `wait`
 

@@ -1,5 +1,6 @@
 import Proofs.Sync.IoMutex
 import ZigLean.Sep.Full.Cond
+import ZigLean.Sep.Full.AutoWP
 import ZigLean.VersionGate
 
 /-!
@@ -119,7 +120,8 @@ def sigPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
     ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m
 
 theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
-    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgo : L.ph g = .out) (hsx : C.sx g) (D : Nat)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g) (D : Nat)
     (io : Io)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
@@ -129,88 +131,29 @@ theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       if Io_Condition_signal.again11 r.1 then sigInv P C t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
       else sigPost P C t g D r G' m' d') G m d := by
-  obtain ⟨ps⟩ := s
-  obtain ⟨hD, hc, hi, b, hps, hb, hsg⟩ := h
-  simp only at hps
-  unfold Io_Condition_signal.loop11
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
-  refine WP.bind ?_
-  by_cases hb1 : b = 1
-  · have hg : gt false ps.waiters ps.signals = true := by rw [hps, condS_gtWS hb]; simp [hb1]
-    simp only [hg, ↓reduceIte]
-    simp only [StateT.run_bind, StateT.run_get]
-    simp only [pure_bind]
-    refine WP.bind (WP.callRC_ok (by rw [hps]; exact condS_add1 hb1) ?_)
-    refine WP.bind (FCond.wp_signalAs hC condS_dec (by rw [hps, condS_bits hb, hb1])
-      (by rw [hps]; exact condS_sig hb1) hgx hgo hsx hseen hi
-      fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' r hd hb' hs' hi₁ => ?_⟩)
-    · -- success: `epoch += 1`, the wake
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_))
-      dsimp only
-      rw [FCond.ptr_ep]
-      refine WP.bind (FCond.wp_bump hC (C.ph_set _ _) (by rw [hC.lph]; exact hgo) hi₁
-        fun k₂ hk₂ G₂ m₂ o hc₂ hi₂ => ?_)
-      refine WP.bind (WP.callMC_ptrProject (hC.projE hi₂) ?_)
-      dsimp only
-      rw [FCond.ptr_ep]
-      refine WP.bind (FCond.wp_wakeEp hC (by decide) (C.ph_set _ _) hi₂
-        fun k₃ hk₃ G₃ m₃ hc₃ hsg₃ hi₃ => ?_)
-      rw [C.set_set, C.set_set, FCond.set_of hgx] at hi₃
-      repeat (first
-        | exact ⟨.inl rfl, by omega, hc₃, hi₃, hsg₃⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, pure_bind, Io_Condition_signal.again11, Bool.false_eq_true,
-            ↓reduceIte])
-      done
-    · -- failure: the read value
-      obtain rfl := condS_eq hd
-      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callRC_ok (x := optPayload (some (Packed.ofBits b'))) rfl ?_))
-      repeat (first
-        | exact ⟨⟨by omega, hc₁, hi₁, b', rfl, hb', hs'⟩, .inl (by omega)⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
-            Io_Condition_signal.again11, ↓reduceIte])
-      done
-  · have hg : gt false ps.waiters ps.signals = false := by
-      rw [hps, condS_gtWS hb]; simpa using hb1
-    simp only [hg, Bool.false_eq_true, ↓reduceIte]
-    repeat (first
-      | exact ⟨.inr rfl, hD, hc, hi, hsg hb1⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, Io_Condition_signal.again11, Bool.false_eq_true,
-          ↓reduceIte])
-    done
+  fsym [FCond.wp_signalAs hC condS_dec, FCond.wp_bump hC, FCond.wp_wakeEp hC,
+    (fun {G₀ : ThreadId → γ} {m₀ : Mem} (hi₀ : P.inv G₀ m₀) =>
+      WP.liftMem_pure (P := P) (t := t) (hC.projE hi₀) rfl),
+    condS_eq, condS_bits, condS_sig, condS_add1, condS_gtWS,
+    C.ph_set, hC.lph, C.set_set, FCond.set_of, FCond.ptr_ep,
+    sigInv, sigPost, Io_Condition_signal.again11]
 
-/-- **`Io.Condition.signal`** by a thread out of the condition's and the lock's code that may
-signal, after every registration (`hseen`). -/
+/-- **`Io.Condition.signal`** outside or holding the mutex, preserving its complete resource,
+after every registration (`hseen`). -/
 theorem ioCond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Condition_signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       P.inv (upd G' t g) m' ∧ ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m')
       G m d := by
-  subst hp
-  unfold Io_Condition_signal
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (FCond.wp_sloadAs hC condS_dec hgo hseen hi
-    fun k hk G₁ m₁ b r hc₁ hd hb hsg hi₁ => ?_)
-  obtain rfl := condS_eq hd
-  simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (sigInv P C t g d) (fun _ => 0) (sigPost P C t g d)
-    (sig_body hC hcost t g hgx hgo hsx d io hseen) _ G₁ m₁ k
-    ⟨by omega, hc₁, hi₁, b, rfl, hb, hsg⟩))
-  rintro ⟨e, s'⟩ G₂ m₂ d₂ ⟨he, hd₂, hc₂, hi₂, hsg₂⟩
-  rcases he with rfl | rfl <;>
-  · simp only [StateT.run_pure]
-    exact WP.pure' (WP.pure' ⟨hd₂, hc₂, hi₂, hsg₂⟩)
+  fsym [FCond.wp_sloadAs hC condS_dec, condS_eq,
+    WP.loop _ _ (sigInv P C t g d) (fun _ => 0) (sigPost P C t g d)
+      (sig_body hC hcost t g hgx hgo hsx d io hseen),
+    sigInv, sigPost]
 
 /-! ## `wait`
 

@@ -18,7 +18,8 @@
 # spawn from the start facts and the facts of the steps' runs; WPMutex: the generated
 # `Io.Mutex` lock, unlock and lock loop against the lock rules, for every protocol with the
 # lock; WPHold: the lock holder's steps by `FLock.Fits.wp_hold` with the holder's next place, the
-# protocol's lemmas backwards and forwards; ReadRest: a reader's rest-read race premise can
+# protocol's lemmas backwards and forwards; WPCond: the same condition signal contract outside
+# or holding the mutex, preserving both complete resource components; ReadRest: a reader's rest-read race premise can
 # hold while an unrelated live thread has not acquired the publication; WPOsFutex: the OS futex
 # rows of std's Thread.Futex at a lock's word, by the rows' rules and the lock's OS wait and wake
 # rules) and total stack pushes
@@ -38,7 +39,7 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-sep-auto.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views Structs Packed WP WPMutex WPHold ReadRest WPOsFutex Stack Ticks KernelBytes Report; do
+for m in Arith Walk Conc Facts Large Steps Frame Total Plan Region Providers Unify Updates Fields AtomicPlain Parts Threads Views Structs Packed WP WPMutex WPHold WPCond ReadRest WPOsFutex Stack Ticks KernelBytes Report; do
   { cat "$here/$m.lean"; echo; grep -o '^theorem [^ :({\[]*' "$here/$m.lean" | while read -r _ t; do
       echo "#print axioms SepAuto.$m.$t"; done; } > "$work/$m.lean"
   "${lean_cmd[@]}" "$work/$m.lean" > "$work/$m.txt" 2>&1 || { cat "$work/$m.txt" >&2; exit 1; }

@@ -31,13 +31,13 @@ and the epoch is still write `i` or a signaller will wake it (no lost wakeup).
 the condition's code (`hone`: no other waiter, no signaller between its `signals += 1` and its
 wake) and after every epoch write (`hhb`), so that its acquire load reads the newest epoch write
 and the futex value cannot be an older write's (ABA). A signaller's stops come after the
-registration of a waiter (`hseen`). Reason: as for the event (`ZigLean/Sep/Full/Event.lean`),
-the memory model's facts of a read give its happens-before floor, not the read-read coherence of
-`Mem.seen`, and a full-state frame does not keep `Mem.seen`. Several waiters are a follow-up.
+registration of a waiter (`hseen`). These remain the existing singleton contract's admissions.
+Native caller-local floors and framed-view preservation do not by themselves establish general
+admission/accounting or a bounded-epoch proof. Several waiters remain a follow-up.
 
 **The client's part.** Roles: `FCond.sx` are the ghost values that may signal (`Inv.sx`). A
 thread in the condition's critical code (`en`, `ld`) holds the mutex (`Inv.crit`); one between
-its signal and its wake (`inc`, `wk`) is out of the lock's code (`Inv.lp`); both run no lock
+its signal and its wake (`inc`, `wk`) is outside or holding the mutex (`Inv.lp`); both run no lock
 code, so a client's `Fits` `ok` excludes them (`CPh.busy`, `Fits.ok_calm`) and a lock step keeps
 the invariant (`Inv.lstep`). A step of the condition's code keeps the client's rest `U` given
 the code's transition (`CPh.Next`; the entry `out → en` is the client's `hent` of
@@ -179,7 +179,7 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- A waiter in the futex queue is at the epoch or at the mutex. -/
   qw : ∀ w ∈ m.waiters, (C.ph (G w.1)).waits → w.2 = C.Ep.ptr ∨ w.2 = L.ptr
   crit : ∀ u, (C.ph (G u)).crit → L.ph (G u) = .holds
-  lp : ∀ u, (C.ph (G u)).sig → L.ph (G u) = .out
+  lp : ∀ u, (C.ph (G u)).sig → L.ph (G u) = .out ∨ L.ph (G u) = .holds
   sx : ∀ u, (C.ph (G u)).sig → C.sx (G u)
 
 /-- **The condition at its start**: every thread out of its code, no thread in the futex queue,
@@ -811,7 +811,8 @@ theorem Inv.reg_of {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m)
 /-- A signaller's `signals += 1` (`out` → `inc`): its `cmpxchg((1, 0) → (1, 1))` succeeded. -/
 theorem Inv.signal {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : AtomicOrder}
     (hI : C.Inv L G m) (hG : ∀ u, u ≠ t → G' u = G u)
-    (ht0 : C.ph (G t) = .out) (ht1 : C.ph (G' t) = .inc) (hlpt : L.ph (G' t) = .out)
+    (ht0 : C.ph (G t) = .out) (ht1 : C.ph (G' t) = .inc)
+    (hlpt : L.ph (G' t) = .out ∨ L.ph (G' t) = .holds)
     (hsxt : C.sx (G' t)) (hold1 : (C.lastS m).Val (1 : BitVec 32))
     (hS : C.S.hist m' = (C.S.hist m).push (Word.rmwEnt m' t ord (C.lastS m) (0x10001 : BitVec 32)))
     (hE : C.Ep.hist m' = C.Ep.hist m) (hwt : m'.waiters = m.waiters)
@@ -1358,12 +1359,14 @@ theorem _root_.Zig.Full.FLock.Fits.liveSig (hC : L.Fits (C.prim L) P U ok) {G : 
     rcases h2 with h2 | ⟨v, hv⟩
     · obtain ⟨v, hv⟩ := h.pend hs2 h2; exact ⟨v, by rw [hv]; rfl⟩
     · exact ⟨v, by rw [hv]; rfl⟩
-  have hlo := hI.lp v hv
-  have hvt := (hL.ht (t := v) (by rw [hlo]; decide)).1
+  have hvph : L.ph (G v) ≠ .gone ∧ L.ph (G v) ≠ .wait ∧ L.ph (G v) ≠ .away := by
+    rcases hI.lp v hv with ho | hh
+    · rw [ho]; decide
+    · rw [hh]; decide
+  have hvt := (hL.ht (t := v) hvph.1).1
   rcases hall v hvt with h' | h' | h'
   · rw [hC.kfin _ h'] at hv; cases hv
-  · have := hL.w.notQ (t := v) (show L.ph (G v) ≠ .wait by rw [hlo]; decide)
-      (show L.ph (G v) ≠ .away by rw [hlo]; decide)
+  · have := hL.w.notQ (t := v) hvph.2.1 hvph.2.2
     rw [this] at h'; cases h'
   · rw [hC.kjoins _ h'] at hv; cases hv
 
@@ -1850,7 +1853,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSig (hC : L.Fits (C.prim L) P U ok)
   unfold FCond.Signalled FCond.lastS; rw [hh]; exact h2 hb u i jr sn e hu
 
 /-- A signaller's relaxed load of the state at `out`, on bits (`Thread.Condition`). -/
-theorem wp_sload (hC : L.Fits (C.prim L) P U ok) (hgo : L.ph g = .out)
+theorem wp_sload (hC : L.Fits (C.prim L) P U ok)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -1859,7 +1863,8 @@ theorem wp_sload (hC : L.Fits (C.prim L) P U ok) (hgo : L.ph g = .out)
       P.inv (upd G₁ t g) m' → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .relaxed 4 C.S.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
+    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
 
@@ -1870,7 +1875,7 @@ theorem wp_sload (hC : L.Fits (C.prim L) P U ok) (hgo : L.ph g = .out)
 theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 0x10001) →
       ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
-    (hgo : L.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -1880,7 +1885,8 @@ theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
       P.inv (upd G₁ t g) m' → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α .relaxed 4 C.S.ptr : CM Tgt σ α).run s) Q G m n :=
-  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
+    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1892,7 +1898,7 @@ theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
 theorem _root_.Zig.Full.FLock.Fits.afterSignal (hC : L.Fits (C.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {ord : AtomicOrder} (hg₁ : G₁ t = g) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : C.sx g)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
     (hms : C.MStep C.S t m₁ m')
     (hA : ∀ hF, (∀ x, C.S.o ≤ x → x < C.S.o + 4 → hF (C.S.b, x) = none) →
@@ -1915,7 +1921,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterSignal (hC : L.Fits (C.prim L) P U ok)
 `wp_sload`. -/
 theorem wp_signal (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     {exp new : BitVec 32} (hexp : exp = 1) (hnew : new = 0x10001) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : C.sx g)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -1927,7 +1933,8 @@ theorem wp_signal (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC (n := 32) succ fail 4 C.S.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst hexp hnew
-  exact FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  exact FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
+    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA _hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
@@ -1944,7 +1951,7 @@ theorem wp_signalAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
       ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {succ fail : AtomicOrder} {exp new : α} (hexp : Packed.toBits exp = (1 : BitVec 32))
     (hnew : Packed.toBits new = (0x10001 : BitVec 32)) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : C.sx g)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -1955,7 +1962,8 @@ theorem wp_signalAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
         P.inv (upd G₁ t g) m' → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakAsC succ fail 4 C.S.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n :=
-  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
+    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA _hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1970,14 +1978,15 @@ theorem wp_signalAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
 
 /-- The signaller's `epoch += 1` (release) at `inc`: it is at `wk`. -/
 theorem wp_bump (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .inc)
-    (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o, m'.current = t → P.inv (upd G₁ t (C.set g .wk)) m' →
       Q (o, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .add false .release 4 C.Ep.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n :=
-  FLock.wp_wordRmw hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordRmw hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl))
+    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hY hv _ hh _ hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩)) hw' (.inr ⟨_, _, hh⟩)
@@ -2170,9 +2179,10 @@ turns.
   waiter's part holds the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): a stack
   block needs it (`FTriple.allocStackDrop`), and an implementation may keep its state on the
   waiter's stack.
-- `signal_wp`: a thread out of the condition's and the lock's code that may signal, whose stops
-  come after every registration (`hseen`), returns out of the condition's code; a registered
-  waiter is then signalled. -/
+- `signal_wp`: a thread out of the condition's code, outside or holding the mutex, that may
+  signal, whose stops come after every registration (`hseen`), returns with its exact initial
+  ghost value, including the complete caller part and held resource; a registered waiter is
+  then signalled. -/
 structure CondImpl (Tgt : Type) where
   wait : Ptr → Io → Ptr → ConcM Tgt Unit
   signal : Ptr → Io → ConcM Tgt Unit
@@ -2195,7 +2205,8 @@ structure CondImpl (Tgt : Type) where
   signal_wp : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (C.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = C.S.ptr → ∀ (t : ThreadId) (g : γ), C.ph g = .out →
-    L.ph g = .out → C.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
+    (L.ph g = .out ∨ L.ph g = .holds) → C.sx g →
+    ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
     (∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true) →
     P.inv (upd G t g) m →
