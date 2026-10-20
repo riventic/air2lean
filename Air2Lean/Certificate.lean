@@ -1695,10 +1695,10 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
               | some (.optional _) | some (.errorUnion ..) => s!"cases r <;> {simplify}"
               | _ => simplify
             out := out.push <|
-              s!"      | (refine map_bind_le_ok _ _ ({hyp} {args} _) (fun _ => True) (by intro; trivial) ?_\n" ++
+              s!"      | (refine map_bind_le_ok _ _ ({hyp} {args} _) (fun _ => True) (fun _ _ => True.intro) ?_\n" ++
               s!"         intro r _\n         {split})"
         out := out ++ #[
-          "      | (refine map_bind_le_ok _ _ Lean.Order.PartialOrder.rel_refl (fun _ => True) (by intro; trivial) ?_",
+          "      | (refine map_bind_le_ok _ _ Lean.Order.PartialOrder.rel_refl (fun _ => True) (fun _ _ => True.intro) ?_",
           s!"         intro r _; {simplify})",
           s!"      | (split <;> simp_all (config := \{ failIfUnchanged := false }) only [{simpSet}])",
           "      | (simp only [map_bind]; apply Lean.Order.MonoBind.bind_mono_right; intro)",
