@@ -1,14 +1,54 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "basic.weightedTardiness",
+ "module": "root",
+ "src": {
+  "file": "basic.zig",
+  "module": "basic",
+  "decl_line": 24
+ },
  "params": [
   0,
   1
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -55,7 +95,8 @@
    "id": 5,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 28
   },
   {
    "id": 6,
@@ -81,7 +122,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 23
   },
   {
    "id": 9,
@@ -111,7 +153,8 @@
    "id": 11,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 30
   },
   {
    "id": 12,
@@ -137,7 +180,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 21
   },
   {
    "id": 15,
@@ -146,6 +190,7 @@
    "callee": {
     "ty": 6,
     "func": "basic.tardiness",
+    "module": "root",
     "noreturn": false
    },
    "args": [
@@ -161,7 +206,8 @@
    "id": 16,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 41
   },
   {
    "id": 17,
@@ -187,7 +233,8 @@
    "id": 19,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 36
   },
   {
    "id": 20,
@@ -216,7 +263,8 @@
    "id": 22,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 23,
@@ -233,6 +281,7 @@
   {
    "k": "struct",
    "name": "basic.Job",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -269,6 +318,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -287,6 +337,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -300,6 +351,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -317,6 +369,7 @@
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
