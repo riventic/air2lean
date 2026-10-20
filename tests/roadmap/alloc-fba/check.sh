@@ -30,18 +30,19 @@ EOF
 "$translator" "$here/air/0.16.0/client-linux" -o "$work/Gen.lean" \
   --namespace AllocFba.Gen --prefix client. --allocator-model translated
 cmp "$work/Gen.lean" "$here/AllocFba/Gen.lean"
-# The library: Gen, Impl, Bridge, Fba, Client, Full, Wrappers and AllocFba/Eval.lean (`#guard`s).
+# The library, including creation/domain controls and AllocFba/Eval.lean (`#guard`s).
 python3 -B scripts/fixtures.py build AllocFba
 # Axioms of every theorem of the proof modules, from the built environment: only the standard ones.
 # Named: the theorems, and `FBA.ledger`, a definition (a `ResetLedger` whose fields are proofs).
 named=()
 for name in FBA.allocSpec Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fallocSpec \
     FBA.fthread_alloc FBA.fthread_resize FBA.fthread_remap FBA.fthread_free FBA.freset_spec \
-    FBA.fown_init FBA.fallocator_init FBA.ledger realloc_eq Client.client_spec; do
+    FBA.fown_init FBA.fallocator_init FBA.fallocator_creation FBA.fallocSpec.creation \
+    FBA.ledger realloc_eq Client.client_spec; do
   named+=(--declaration "AllocFba.$name")
 done
 python3 -B scripts/fixtures.py audit AllocFba.Bridge AllocFba.Fba AllocFba.Client AllocFba.Full \
-  AllocFba.Wrappers "${named[@]}"
+  AllocFba.Wrappers AllocFba.Creation AllocFba.CreationDomain "${named[@]}"
 bash "$here/mutant.sh"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   "$AIR2LEAN_NATIVE_ZIG" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \

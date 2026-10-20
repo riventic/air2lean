@@ -253,11 +253,38 @@ scope stays `all-shipped-modules` with `modules` the shipped inventory.
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers
 that have independently built current artifacts; its report says `build_checked: false`.
+Module arguments, receipt module paths, numerical registry module keys and project contract
+paths share `lean-deps.py`'s bounded ASCII module spelling, including `'`, `!` and `?`.
+Quoted or escaped spellings are refused. Project paths must end in `.lean`, with one literal
+module component per directory or filename: `A.B.lean` cannot stand for `A/B.lean`.
+This does not change declaration-name or Zig-namespace validation, module enrollment, policy
+or the compiler-owned source/output checks.
+
+Project check records hash the actual project validator and the selected auditor's physical
+adjacent `lean-deps.py`, in addition to their declared scripts. A custom auditor stub without
+that helper remains supported; no repository helper is substituted. An existing malformed
+helper fails, and changes in known-script bytes, presence or physical identity fail the existing
+input-stability stage. Each check reloads its project validator before validation. These are
+known input checks within the trusted Python runtime, not arbitrary import discovery,
+immutable execution, writer authentication or additional receipt qualification.
+
 `--all-declarations` additionally seeds every declaration in the selected modules, including
 unused private definitions and compiler-generated recursors, and records their names in
 `selected_declaration_roots`. It uses the same dependency traversal, policy and kernel replay.
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
+
+`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
+Lake instead of elaborating it with `lake env lean`: the driver is a module of a generated
+workspace `PACKAGE/.lake/extraction` that requires the Lake package of the audited modules, so
+the driver's outputs stay off the caller's LEAN_PATH. Lake elaborates it again exactly when its
+trace changes (the driver's text, with the modules, options and family checks; the trace of every
+import, `tools.Assurance` included; the toolchain); an unchanged driver replays the build's
+stored log, and the report is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON`
+message, exactly one). The driver's text names the workspace, so it is never restored from
+another checkout's artifact-cache entry, which keeps no log: a missing report fails the audit.
+Everything after the extraction (tool binding, policy, kernel replay, freshness) runs on every
+audit.
 
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
 for each exact selected root. The CLI report preserves those rows under

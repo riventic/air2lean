@@ -4,6 +4,7 @@
 No Lean, Lake or Zig: Lean and leanchecker are replaced by small scripts. The compiled audit
 itself runs in CI (`theorem_universe.py audit`) and in tests/roadmap/architecture-audit/claims.
 """
+import concurrent.futures
 import importlib.util
 import contextlib
 import io
@@ -309,6 +310,20 @@ class ReplayTests(unittest.TestCase):
             assumptions.kernel_replay({'Lib': 'fixed'}, self.toolchain, '', expected_runtime=expected)
         self.assertEqual(self.checked(), [])
 
+    def test_concurrent_audits_replay_each_module_once(self):
+        # Two audits of one build at once through one cache (a fixture-checks run): each Lake
+        # module is replayed by one of them; a non-Lake module by each; a rejection is not shared.
+        checker = self.toolchain / 'bin/leanchecker'
+        checker.write_text(checker.read_text().replace('#!/bin/sh\n', '#!/bin/sh\nsleep 0.2\n'))
+        cache, lake = self.toolchain / 'cache.json', frozenset({'A', 'B', 'C', 'Bad'})
+        digests = {'A': 'a', 'B': 'b', 'C': 'c', 'Bad': 'x', 'Local': 'l'}
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            records = list(pool.map(lambda _: assumptions.kernel_replay(digests, self.toolchain, '', cache, lake),
+                                    range(2)))
+        self.assertEqual(self.checked(), ['A', 'B', 'Bad', 'Bad', 'C', 'Local', 'Local'])
+        self.assertEqual(sorted(m for r in records for m in r['reused']), ['A', 'B', 'C'])
+        self.assertEqual([r['status'] for r in records], ['fail', 'fail'])
+
     def test_gates_share_one_replay_cache(self):
         # Every gate of a build audits through one cache: only changed artifacts replay again.
         cache = self.toolchain / 'gate-cache.json'
@@ -412,6 +427,85 @@ class ReplayTests(unittest.TestCase):
             text = (ROOT / 'tests/roadmap' / script / 'check.sh').read_text()
             self.assertIn('--replay-cache "$work/replay-cache.json"', text, script)
             self.assertIn('work=$(mktemp -d', text, script)
+
+
+class LakeExtractionTests(unittest.TestCase):
+    """assumptions.lake_extraction (--extract-in) with a stand-in Lake: the persistent workspace's
+    pin follows the repository's, and the installed runtime is part of the driver's identity."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        self.workspace = self.package / '.lake/extraction'
+        self.built = []
+        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')]
+        # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
+        self.own = str(self.workspace / '.lake/build/lib/lean')
+        self.resolved = [*self.roots, self.own]
+
+        def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                code = 0 if self.resolved is not None else 1
+                return subprocess.CompletedProcess(command, code, os.pathsep.join(self.resolved or []) + '\n', '')
+            module = command[-1]
+            self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
+            path = module.replace('.', '/') + '.lean'
+            return subprocess.CompletedProcess(command, 0, f'info: {path}:9:0: {assumptions.MARKER}{{}}\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def extract(self, runtime='a' * 64, binding=None):
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root, binding)
+
+    def test_a_bound_lookup_path_is_used_only_as_lake_resolves_it(self):
+        binding = {'roots': list(self.roots), 'sha256': 'c' * 64}
+        self.assertEqual(self.extract(binding=binding), ['{}'])
+        self.assertEqual(len(self.built), 1)
+        # A changed bound input (same roots) is another driver: Lake builds another module.
+        self.assertEqual(self.extract(binding=dict(binding, sha256='d' * 64)), ['{}'])
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        # One entry of Lake's resolved path differs from the bound one: nothing is built or reused.
+        self.resolved[1] = self.resolved[1] + '-other'
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.roots[1], self.roots[0], self.own]  # the same roots, another order
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = None  # Lake resolves nothing
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.own, *self.roots, self.own]  # the driver library twice
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [*self.roots, self.own]
+        (self.workspace / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
+        self.assertIsNone(self.extract(binding=binding))
+        self.assertEqual(len(self.built), 2)
+
+    def test_report_line_and_unchanged_driver(self):
+        self.assertEqual(self.extract(), ['{}'])
+        source = next(self.workspace.rglob('M*.lean'))
+        written = source.stat().st_mtime_ns
+        self.assertEqual(self.extract(), ['{}'])  # same inputs: the same driver, not rewritten
+        self.assertEqual((self.built[0], source.stat().st_mtime_ns), (self.built[1], written))
+
+    def test_the_child_pin_follows_the_repository(self):
+        self.extract()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v2\n')  # only the root pin changes
+        self.extract()
+        self.assertEqual([pin for _, pin in self.built], ['leanprover/lean4:v1\n', 'leanprover/lean4:v2\n'])
+        self.assertEqual((self.workspace / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+
+    def test_a_changed_runtime_is_another_driver(self):
+        self.extract('a' * 64)
+        self.extract('b' * 64)  # only the installed runtime changes: Lake must build another module
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        with self.assertRaises(ValueError):
+            self.extract(None)  # no runtime binding: fail closed
 
 
 class FreshnessTests(unittest.TestCase):
@@ -559,14 +653,15 @@ class CompiledUnitTests(unittest.TestCase):
                         'Universe.Staged': ['Init'], 'ZigLean.Basic': ['Init'], 'Init': []}
         self.cache = self.root / 'replay-cache.json'
         self.paths = [self.built, self.toolchain / 'lib/lean']
+        self.expected_witnesses = []
         self.patch(universe, 'ROOT', self.root)
         self.patch(assumptions, 'ROOT', self.root)
         self.patch(universe, 'assumptions', assumptions)
         self.patch(universe, 'universe', lambda: ([], self.units))
         prepare = universe.prepare_compilation
 
-        def preparing(*args):
-            self.active_context = prepare(*args)
+        def preparing(*args, **kwargs):
+            self.active_context = prepare(*args, **kwargs)
             return self.active_context
 
         self.patch(universe, 'prepare_compilation', preparing)
@@ -578,6 +673,7 @@ class CompiledUnitTests(unittest.TestCase):
         self.patch(assumptions, 'prepared_tool', contextlib.nullcontext)
         self.patch(assumptions, 'git_revision', lambda: {'head': '1' * 40, 'tracked_dirty': False})
         self.patch(assumptions, 'load_policy', lambda path: {})
+        self.registry_files = assumptions.witness_fixtures
         self.patch(assumptions, 'witness_fixtures', lambda: [])
         self.patch(assumptions, 'float_semantics', lambda: mock.Mock(load_registry=lambda *a, **k: {}))
         self.patch(assumptions, 'extract', self.extract)
@@ -597,7 +693,8 @@ class CompiledUnitTests(unittest.TestCase):
     def compiler(self, command, env=None):
         if command == ['lake', 'env', 'printenv', 'LEAN_PATH']:
             return subprocess.CompletedProcess(command, 0,
-                                               os.pathsep.join([*map(str, self.paths), env['LEAN_PATH']]) + '\n')
+                                               os.pathsep.join([*map(str, self.paths),
+                                                                *filter(None, [env['LEAN_PATH']])]) + '\n')
         # This is the existing explicit-path Lean invocation, not an executable compiler.
         self.assertEqual(command[:3], ['lake', 'env', 'env'])
         self.assertEqual(command[3], 'LEAN_PATH=' + self.active_context['lean_path'])
@@ -610,18 +707,20 @@ class CompiledUnitTests(unittest.TestCase):
         output.write_bytes(b'compiled: ' + source.read_bytes())
         return subprocess.CompletedProcess(command, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertFalse(build)
-        self.assertEqual(witnesses, [])
+        self.assertIsNone(extract_in)
+        self.assertEqual(witnesses, self.expected_witnesses)
         self.assertEqual(lean_path, self.active_context['lean_path'])
-        headers, pending = {}, list(modules)
+        audited = sorted({*modules, *witnesses})
+        headers, pending = {}, list(audited)
         while pending:
             module = pending.pop()
             if module in headers or module not in self.headers:
                 continue
             headers[module] = list(self.headers[module])
             pending.extend(headers[module])
-        return {'modules': modules, 'nodes': [{'module': module} for module in modules],
+        return {'modules': audited, 'nodes': [{'module': module} for module in modules],
                 'module_imports': headers,
                 'extractor': {'lean_sysroot': str(self.toolchain),
                               'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(self.toolchain)}}
@@ -794,16 +893,237 @@ class CompiledUnitTests(unittest.TestCase):
                 self.assertFalse(json.loads(output.read_text()).get('freshness'))
                 self.assertIn(diagnostic, result['violations'][0])
 
-    def test_existing_registered_witness_binding_is_preserved_without_unit_qualification(self):
-        context = self.compiled(output=self.root / '.lake/assurance/witness-fixtures')
-        report = self.audited(context)
-        del report['freshness']['compiled_units']
-        report.update(modules=['ZigLean.Basic'], witness_modules=['Owned.Main'], scope='all-shipped-modules')
-        with mock.patch.object(assumptions, 'witness_fixtures', return_value=[self.main.file]):
+    def registered(self, files=None):
+        """The real registry reader and the same producer; only compiler/installation are fake."""
+        files = [self.main.file] if files is None else files
+        registry = self.root / assumptions.WITNESS_FIXTURES
+        # Use valid test-source locations under the real registry's existing validation rule.
+        for unit in self.units:
+            source = self.root / unit.file
+            target = self.root / 'tests' / unit.file
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        self.units = [universe.Unit('tests/' + unit.file, 'tests/' + unit.root if unit.root else None,
+                                    unit.module, tuple('tests/' + dep for dep in unit.deps),
+                                    unit.lake, unit.gate, unit.names) for unit in self.units]
+        self.main, self.basic = (next(unit for unit in self.units if unit.file == 'tests/' + original.file)
+                                 for original in (self.main, self.basic))
+        registry.write_text(json.dumps({'description': 'Synthetic registered witnesses',
+                                        'fixtures': [{'file': 'tests/' + file, 'reason': 'test'} for file in files]}))
+        self.patch(assumptions, 'witness_fixtures', lambda: self.registry_files(self.root))
+        self.patch(assumptions, 'shipped_modules', lambda: ['ZigLean.Basic'])
+        self.patch(universe, 'shipped_modules', lambda: ['ZigLean.Basic'])
+        by_file = {unit.file: unit for unit in self.units}
+        self.expected_witnesses = sorted(unit.module for unit in universe.closure(
+            [by_file[file] for file in assumptions.witness_fixtures()], by_file))
+        self.patch(assumptions, 'apply_policy', lambda raw, *args: {
+            'status': 'pass', 'theorem_count': len(raw['modules']), 'violations': [],
+            'theorems': [{'name': module + '.proof', 'module': module} for module in raw['modules']],
+            'modules': raw['modules'], 'module_imports': raw['module_imports'],
+            'kernel_replay': raw['kernel_replay']})
+        return registry
+
+    def shipped(self):
+        output = self.root / 'shipped.json'
+        code = assumptions.main(['--no-build', '--replay-cache', str(self.cache), '--output', str(output)])
+        report = json.loads(output.read_text())
+        self.assertEqual(code, 0, report)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        return report
+
+    def test_registered_witness_default_flow_binds_unused_imports_and_splits_companions(self):
+        self.registered()
+        report = self.shipped()
+        self.assertEqual(report['modules'], ['ZigLean.Basic'])
+        self.assertEqual(report['witness_modules'], ['Owned.Basic', 'Owned.Main'])
+        self.assertEqual([row['module'] for row in report['theorems']], ['ZigLean.Basic'])
+        self.assertEqual([row['module'] for row in report['witness_theorems']], self.expected_witnesses)
+        # Neither private module is in the fake declaration graph. Both actual headers own rows.
+        rows = {row['module']: row for row in report['freshness']['artifacts']}
+        self.assertEqual(rows['Owned.Basic']['source'], self.basic.file)
+        self.assertEqual(rows['Owned.Main']['source'], self.main.file)
+        self.assertEqual(self.shipped()['kernel_replay']['reused'], ['ZigLean.Basic'])
+
+    def test_registered_witness_postcompile_source_change_cannot_be_stamped_as_current(self):
+        self.registered()
+        report = self.shipped()
+        fixed = json.dumps(report)
+        compiler = assumptions.compile_witness_fixtures
+        for unit in (self.main, self.basic):
+            source, original = self.root / unit.file, (self.root / unit.file).read_bytes()
+            outputs = {}
+
+            def changed(build):
+                sources, context = compiler(build)
+                outputs.update({record['output_path']: Path(record['output_path']).read_bytes()
+                                for record in context['units'].values()})
+                source.write_bytes(original + b'-- source-only change after compiler completion\n')
+                return sources, context
+
+            try:
+                with self.subTest(module=unit.module), \
+                        mock.patch.object(assumptions, 'compile_witness_fixtures', side_effect=changed):
+                    output = self.root / 'changed.json'
+                    self.assertEqual(assumptions.main(['--no-build', '--output', str(output)]), 2)
+                    self.assertIn(f'{unit.module} source changed', json.loads(output.read_text())['error'])
+                    self.assertEqual(outputs, {path: Path(path).read_bytes() for path in outputs})
+                    self.assertEqual(json.dumps(report), fixed)
+            finally:
+                source.write_bytes(original)
             assumptions.verify_fresh(report, allow_dirty=True)
-            report['freshness']['artifacts'][0].update(source=None, source_sha256=None)
-            with self.assertRaisesRegex(ValueError, 'no matching compiler-owned run binding'):
+
+    def test_witness_registry_changes_and_missing_or_transplanted_context_are_refused(self):
+        registry = self.registered()
+        report = self.shipped()
+        original = registry.read_bytes()
+        try:
+            registry.write_bytes(original + b'\n')
+            with self.assertRaisesRegex(ValueError, 'witness registry changed'):
                 assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            registry.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        missing = json.loads(json.dumps(report))
+        del missing['freshness']['compiled_units']
+        with self.assertRaisesRegex(ValueError, 'no compiler-owned run binding'):
+            assumptions.verify_fresh(missing, allow_dirty=True)
+        for field in ('witness_registry', 'selected_files'):
+            changed = json.loads(json.dumps(report))
+            del changed['freshness']['compiled_units'][field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'run binding|report selection'):
+                assumptions.verify_fresh(changed, allow_dirty=True)
+        replaced = json.loads(json.dumps(report))
+        replaced['freshness']['compiled_units']['witness_registry']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'witness registry changed'):
+            assumptions.verify_fresh(replaced, allow_dirty=True)
+        hybrid = json.loads(json.dumps(report))
+        hybrid['freshness']['compiled_units']['fixture_package'] = 'tests/roadmap'
+        with self.assertRaisesRegex(ValueError, 'fixture package/output selection changed'):
+            assumptions.verify_fresh(hybrid, allow_dirty=True)
+        other = self.compiled()
+        transplanted = json.loads(json.dumps(report))
+        transplanted['freshness']['compiled_units'] = other
+        with self.assertRaisesRegex(ValueError, 'report selection'):
+            assumptions.verify_fresh(transplanted, allow_dirty=True)
+        source = next(row for row in missing['freshness']['artifacts'] if row['module'] == 'Owned.Basic')
+        source.update(source=None, source_sha256=None)
+        missing.pop('scope')
+        missing.pop('witness_modules')
+        with self.assertRaisesRegex(ValueError, 'no compiler-owned run binding'):
+            assumptions.verify_fresh(missing, allow_dirty=True)
+
+    def test_registered_witness_headers_outputs_and_resolved_source_plan_are_required(self):
+        self.registered()
+        report = self.shipped()
+        missing_header = json.loads(json.dumps(report))
+        del missing_header['module_imports']['Owned.Basic']
+        with self.assertRaisesRegex(ValueError, 'incomplete import headers: Owned.Basic'):
+            assumptions.verify_fresh(missing_header, allow_dirty=True)
+        context = report['freshness']['compiled_units']
+        output = Path(context['units']['Owned.Basic']['output_path'])
+        original = output.read_bytes()
+        # An older alternative is present, but this producer's exact expected output is required.
+        alternative = self.root / 'old/Owned/Basic.olean'
+        alternative.parent.mkdir(parents=True)
+        alternative.write_bytes(original)
+        try:
+            output.unlink()
+            with self.assertRaisesRegex(ValueError, 'Owned.Basic|compiler-owned Unit input/output'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            output.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        # The existing resolver now returns a nearer source with identical bytes. Context cannot
+        # retain the old source/output pairing merely because registry/helper/report bytes match.
+        lean = premises.parse_file(self.root / self.main.file, self.root)
+        self.assertEqual(premises.resolve_import('Owned.Basic', lean, self.root), self.root / self.basic.file)
+        nearer = self.root / 'tests/local/Owned/Owned/Basic.lean'
+        nearer.parent.mkdir(parents=True)
+        nearer.write_bytes((self.root / self.basic.file).read_bytes())
+        self.assertEqual(premises.resolve_import('Owned.Basic', lean, self.root), nearer)
+        changed_basic = universe.Unit(nearer.relative_to(self.root).as_posix(), 'tests/local/Owned', 'Owned.Basic',
+                                       (), self.basic.lake, None, ())
+        changed_main = universe.Unit(self.main.file, self.main.root, self.main.module,
+                                      (changed_basic.file,), self.main.lake, None, self.main.names)
+        with mock.patch.object(self, 'units', [changed_basic, changed_main]):
+            with self.assertRaisesRegex(ValueError, 'compiled witness closure differs from the registry'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_shipped_build_precedes_witness_input_snapshot_and_extraction(self):
+        self.registered()
+        events = []
+        prepare, compiler, extract = universe.prepare_compilation, universe.run, self.extract
+
+        def preparing(*args, **kwargs):
+            events.append('snapshot')
+            return prepare(*args, **kwargs)
+
+        def building(command, env=None):
+            if command[:2] == ['lake', 'build']:
+                self.assertEqual(command[2:], ['ZigLean.Basic'])
+                events.append('import build')
+                return subprocess.CompletedProcess(command, 0, '')
+            return compiler(command, env)
+
+        def extracting(*args, **kwargs):
+            events.append('extract')
+            return extract(*args, **kwargs)
+
+        def lake(command):
+            if command == ['lake', 'build', 'ZigLean.Basic']:
+                events.append('shipped build')
+            else:
+                self.assertEqual(command, ['lake', '--rehash', 'build', '--no-build', 'ZigLean.Basic'])
+                events.append('trace check')
+            return ''
+
+        with mock.patch.object(assumptions, 'run', side_effect=lake), \
+                mock.patch.object(universe, 'run', side_effect=building), \
+                mock.patch.object(universe, 'prepare_compilation', side_effect=preparing), \
+                mock.patch.object(assumptions, 'extract', side_effect=extracting):
+            output = self.root / 'built-shipped.json'
+            self.assertEqual(assumptions.main(['--output', str(output)]), 0)
+        self.assertEqual(events, ['shipped build', 'import build', 'snapshot', 'extract', 'trace check'])
+        self.assertTrue(json.loads(output.read_text())['build_checked'])
+
+    def test_registered_witness_cannot_compile_through_a_shadowing_library(self):
+        self.registered()
+        self.shipped()
+        stray = self.built / 'Owned/Main.olean'
+        stray.parent.mkdir(parents=True)
+        stray.write_bytes(b'older shadowing artifact')
+        output = self.root / 'shadowed.json'
+        self.assertEqual(assumptions.main(['--no-build', '--output', str(output)]), 2)
+        report = json.loads(output.read_text())
+        self.assertIn('would shadow theorem-universe modules', report['error'])
+        self.assertFalse(report.get('freshness'))
+        self.assertEqual(stray.read_bytes(), b'older shadowing artifact')
+
+    def test_empty_registry_still_binds_default_shipped_audit_without_changing_explicit_scope(self):
+        registry = self.registered([])
+        report = self.shipped()
+        self.assertEqual(report['witness_modules'], [])
+        self.assertEqual(report['freshness']['compiled_units']['units'], {})
+        for removed in ('compiled_units', 'witness_registry'):
+            changed = json.loads(json.dumps(report))
+            if removed == 'compiled_units':
+                del changed['freshness'][removed]
+            else:
+                del changed['freshness']['compiled_units'][removed]
+            with self.subTest(removed=removed), self.assertRaisesRegex(ValueError, 'run binding'):
+                assumptions.verify_fresh(changed, allow_dirty=True)
+        original = registry.read_bytes()
+        try:
+            registry.write_bytes(original + b'\n')
+            with self.assertRaisesRegex(ValueError, 'witness registry changed'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            registry.write_bytes(original)
+        explicit = json.loads(json.dumps(report))
+        del explicit['freshness']['compiled_units']
+        explicit['scope'] = 'explicit-modules'
+        assumptions.verify_fresh(explicit, allow_dirty=True)
 
     def test_changed_compiled_input_does_not_publish_a_replay_cache_entry(self):
         report = self.audited()
@@ -899,8 +1219,12 @@ class FixtureCompilationTests(unittest.TestCase):
             self.after_build()
         return subprocess.CompletedProcess(args, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertTrue(all_declarations)
+        # The fixture package may build the driver, still bound to the compiled lookup path
+        # (lake_extraction's resolved-roots controls: LakeExtractionTests).
+        self.assertIn(extract_in and Path(extract_in), (None, Path(self.package)))
+        self.assertIsNotNone(lean_path)
         raw = CompiledUnitTests.extract(self, modules, build, witnesses,
                                         all_declarations=all_declarations, lean_path=lean_path)
         # Helper has no declaration-graph node: only its unused header import reveals it.
