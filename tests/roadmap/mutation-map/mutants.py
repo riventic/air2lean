@@ -175,8 +175,8 @@ MUTANTS = {
     # (`premises.py compiled --strict` fails on it).
     'premises-compiled-source-gap-hidden': (
         'scripts/premises.py',
-        '                entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)\n',
-        '                entry["source_gaps"] = []\n', PREMISES, 'premises',
+        '        gaps = theorem["source_gaps"] = sorted(set(theorem["premises"]) - known, key=premise_key)\n',
+        '        gaps = theorem["source_gaps"] = []\n', PREMISES, 'premises',
         ('CompiledTests.test_compiled_source_gaps',)),
     # D03: a runtime module reached by a theorem must map to premises.
     'premises-compiled-runtime-module-unmapped': (
