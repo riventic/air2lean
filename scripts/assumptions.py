@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import functools
 import hashlib
 import importlib.util
 import json
@@ -39,6 +40,17 @@ LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
 COMPILED_SUFFIXES = (".olean", ".olean.private", ".olean.server", ".ir", ".ir.sig")
 REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
                  "modules", "modules_sha256", "reused", "rejected", "status"}
+
+
+@functools.cache
+def lean_deps():
+    path = Path(__file__).resolve().with_name("lean-deps.py")
+    spec = importlib.util.spec_from_file_location(
+        "assumptions_lean_deps", path)
+    module = importlib.util.module_from_spec(spec)
+    # Validate with source bytes, not a timestamp-valid cache of older helper code.
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
 
 
 def is_compiler_axiom(name: str) -> bool:
@@ -750,7 +762,8 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
     root = (ROOT if root is None else root).resolve()
     runner = lambda command: run(command, root=root)
-    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
+    module_name = lean_deps().MODULE_NAME
+    if not all(isinstance(m, str) and module_name.fullmatch(m) for m in [*modules, *witnesses]):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
@@ -1076,11 +1089,11 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
         if olean.is_relative_to(built) and module.split(".")[0] in LAKE_ROOTS and source.is_file():
             row.update(source=display(source), source_sha256=file_sha256(source))
             lake_modules.append(module)
-        elif module in (bound or {}):  # a witness fixture: bound to its source too
-            row.update(source=bound[module], source_sha256=file_sha256(ROOT / bound[module]))
         elif compiled_units is not None and module in compiled_units['units']:
             source_record = compiled_units['units'][module]['source']
             row.update(source=source_record['path'], source_sha256=source_record['sha256'])
+        elif module in (bound or {}):
+            raise ValueError(f'witness source has no compiler-owned run binding: {module}')
         artifacts.append(row)
     if lake_modules:
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
@@ -1163,16 +1176,11 @@ def write_report(path: Path, report: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def compile_witness_fixtures(build: bool) -> dict[str, str]:
-    """Compile the registered witness fixtures and put them on LEAN_PATH (`lake env` keeps a
-    caller's LEAN_PATH after its own). Returns module -> source of every compiled module."""
+def compile_witness_fixtures(build: bool) -> tuple[dict[str, str], dict]:
+    """Compile registered witnesses with the same precompile input/output binding as Units."""
     files = witness_fixtures()
-    if not files:
-        return {}
     import theorem_universe  # Lazy: theorem_universe imports this module.
-    sources, libs = theorem_universe.compile_witness_fixtures(files, ROOT / ".lake/assurance/witness-fixtures", build)
-    os.environ["LEAN_PATH"] = os.pathsep.join([*map(str, libs), *filter(None, [os.environ.get("LEAN_PATH")])])
-    return sources
+    return theorem_universe.compile_witness_fixtures(files, ROOT / ".lake/assurance/witness-fixtures", build)
 
 
 def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> None:
@@ -1213,14 +1221,27 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
             raise ValueError("--sources must map module names to source paths")
         labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
-        fixtures = {} if args.module else compile_witness_fixtures(not args.no_build)
+        fixtures = {}
+        if not args.module:
+            if compiled_units is not None:
+                raise ValueError('default shipped audit requires its own registered witness compilation')
+            if not args.no_build:
+                # Complete the SAME selected-module prerequisite before freezing witness inputs.
+                # extract() must not change those Lake artifacts after the compiler snapshot.
+                run(['lake', 'build', *modules])
+            fixtures, compiled_units = compile_witness_fixtures(not args.no_build)
         witnesses = sorted(m for m in fixtures if m not in modules)
         if compiled_units is not None:
             import theorem_universe
             theorem_universe.verify_compilation(compiled_units)
-            if modules != compiled_units['selected_modules'] or witnesses:
-                raise ValueError('compiled Unit context differs from the requested audit scope')
-        raw = extract(modules, not args.no_build, witnesses,
+            if args.module:
+                if (modules != compiled_units['selected_modules'] or witnesses
+                        or 'witness_registry' in compiled_units):
+                    raise ValueError('compiled Unit context differs from the requested audit scope')
+            elif ('witness_registry' not in compiled_units
+                  or witnesses != compiled_units['selected_modules']):
+                raise ValueError('compiled witness context differs from the requested audit scope')
+        raw = extract(modules, bool(args.module) and not args.no_build, witnesses,
                       all_declarations=args.all_declarations,
                       **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
         if raw["modules"] != sorted({*modules, *witnesses}):
