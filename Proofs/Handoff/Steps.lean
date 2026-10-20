@@ -402,22 +402,27 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   · exfalso; apply h0; show (G 0).2.ph = _; rw [hg]; rfl
   have hcs : m.clocks.size = m.threads.size := hL.w.csize
   have hG1 : (G 1).2 = {} := hnone 1 (Nat.le_refl _)
-  have hk : ∀ W : Word 32 4, W.Keep m m' := fun W =>
-    Word.keep_fork (by rw [hs1]; decide) hcs hf
-  have hhS := Word.hist_keep hu.ws (hk _)
-  have hhE := Word.hist_keep hu.we (hk _)
-  have hhV := Word.hist_keep hu.wv (hk _)
+  obtain ⟨hwS, hhS⟩ := hu.ws.fork_native (t := 0) (gt := false)
+    (by rw [hs1]; decide) hcs hf
+  obtain ⟨hwE, hhE⟩ := hu.we.fork_native (t := 0) (gt := false)
+    (by rw [hs1]; decide) hcs hf
+  obtain ⟨hwV, hhV⟩ := hu.wv.fork_native (t := 0) (gt := false)
+    (by rw [hs1]; decide) hcs hf
+  have hfork := hf
+  change ((Thread.forkWith false).run { m with current := 0 }).run = some (.ok (c, m')) at hfork
+  rw [Proto.forkWith_run] at hfork
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfork
   have hL' := hL.fork (t := 0) (g₁ := gO rM { ph := .run }) (g₀ := gO rnil { ph := .lk })
     (by rw [hg]; rfl) hf (by rw [hg]; exact (rsum_rnil rM).symm) (FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
-      obtain ⟨rfl, -⟩ := Conc.Lock.fork_eq hf
+      rw [← hfork.1]
       have hR' : R Lo (fun u => (G u).2) r := hR
       show R Lo (fun u => (upd (upd G m.threads.size (gO rnil { ph := .lk })) 0
         (gO rM { ph := .run }) u).2) r
       rw [R_eq (Y := fun u => (G u).2) (by rw [hs1, upd0_1, upd_self, hG1]; rfl)
         (by rw [hs1, upd0_1, upd_self, hG1]; rfl)]
       exact hR'
-  obtain ⟨rfl, rfl⟩ := Conc.Lock.fork_eq hf
+  obtain ⟨rfl, rfl⟩ := hfork
   rw [hs1] at hL' ⊢
   have hclk := clk_fork (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
   -- the new ghost values
@@ -437,6 +442,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     (t := 0) (g := gO rM { ph := .run })
     (by rw [upd1_0]; exact hG0c) rfl
   have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
+    hu.einv.fresh
   have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rnil { ph := .lk }) (by rw [hG1]) rfl
       (fun h => by
         have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h
@@ -450,7 +456,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   refine ⟨rfl, rX, hL', ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by dsimp only; rw [hX0]; rfl,
       by dsimp only; rw [hX0]; decide, by dsimp only; rw [hX1]; rfl, hXu⟩⟩, ?_,
       hu.rest.congr fun _ _ => rfl, hu.blk,
-    hu.ws.keep (hk _), hu.we.keep (hk _), hu.wv.keep (hk _), hI', hJ', by rw [hX1]; rfl,
+    hwS, hwE, hwV, hI', hJ', by rw [hX1]; rfl,
     fun _ => by rw [hhE]; exact hu.ep1 (by rw [hG1]; rfl),
     by rw [hhE]; exact VClock.le_trans hu.ep0 (hclk 0),
     ?_, ?_, ?_, ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩

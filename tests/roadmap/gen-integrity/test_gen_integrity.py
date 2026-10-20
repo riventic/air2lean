@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,10 @@ docs = [json.loads(p.read_text()) for p in sorted(air.glob('*.json'))]
 if len({d['zig_version'] for d in docs}) > 1:
     sys.exit("mixed AIR profiles: field 'zig_version' differs")
 header = '-- air2lean-profile: {}\\n'.format(json.dumps(dict(stub=docs[0]['zig_version']))) if docs else ''
-output = header + 'import ZigLean\\n' + ''.join(f"def {d['name'].replace('.', '_')} := 0\\n" for d in sorted(docs, key=lambda d: d['name']))
+namespace = sys.argv[sys.argv.index('--namespace') + 1] if '--namespace' in sys.argv else ''
+output = header + 'import ZigLean\\n' + (f'namespace {namespace}\\n' if namespace else '')
+output += ''.join(f"def {d['name'].replace('.', '_')} := 0\\n" for d in sorted(docs, key=lambda d: d['name']))
+output += f'end {namespace}\\n' if namespace else ''
 if '--canon-certificate' in sys.argv:
     print(json.dumps(dict(kind='canon-debug-native-binding', version=1, functions=len(docs), changed=True)))
 else:
@@ -40,6 +44,14 @@ else:
 
 def air(name, version="0.16.0", schema=11):
     return json.dumps(dict(schema=schema, zig_version=version, name=name, body=[]))
+
+
+def profile(version, target="x86_64-linux-gnu"):
+    return dict(name="abi64-le-v1", zig_version=version, target_triple=target,
+                pointer_bits=64, endian="little", abi=target.rsplit("-", 1)[1],
+                backend="stage2_llvm", cpu=target.split("-", 1)[0], features=[],
+                build_mode="ReleaseSafe", float_mode="per-instruction", error_set_bits=16,
+                error_layout="type-table", error_tracing=False, export_stage="analyzed-air")
 
 
 class Fixture:
@@ -105,6 +117,306 @@ class SyntheticTests(unittest.TestCase):
         self.assertIn("ok demo 0.16.0 linux: Proofs/Demo/Gen.lean", err)
         self.assertIn("ok demo 0.15.2 linux: tests/golden/0.15.2/demo/Gen.lean", err)
 
+    def enroll(self):
+        self.fx.write("examples/demo/zig-versions", "0.15.2\n")
+        shutil.rmtree(self.fx.root / "tests/golden/0.16.0/demo")
+        (self.fx.root / "tests/golden/0.15.2/demo/Gen.lean").unlink()
+        # A complete toy export for each host, rather than a legacy mixed-profile overlay.
+        for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+            doc = json.loads(path.read_text())
+            doc.update(schema=12, zig_version="0.15.2", profile=profile("0.15.2"))
+            path.write_text(json.dumps(doc))
+            for host, target in (("darwin", "aarch64-macos-none"), ("linux-aarch64", "aarch64-linux-gnu")):
+                other = dict(doc, profile=profile("0.15.2", target))
+                self.fx.write(f"tests/golden/0.15.2/demo/air-{host}/{path.name}", json.dumps(other))
+        self.assertEqual(self.fx.run("write")[0], 0)
+        public = (self.fx.root / "Proofs/Demo/Gen.lean").read_bytes()
+        self.fx.write("examples/demo/all-cases", "complete golden family\n")
+        status, _, err = self.fx.run("write")
+        self.assertEqual(status, 0, err)
+        self.assertEqual((self.fx.root / "Proofs/Demo/Gen.lean").read_bytes(), public)
+        self.fx.git("add", "-A")
+        return [case for case in gi.all_cases() if case.namespaced]
+
+    def test_complete_family_outputs_have_disjoint_namespaces_and_duplicate_short_names(self):
+        cases = self.enroll()
+        self.assertEqual({(c.version, c.host) for c in cases}, {
+            ("0.15.2", "linux"), ("0.15.2", "darwin"), ("0.15.2", "linux-aarch64")})
+        namespaces = {c.args[c.args.index("--namespace") + 1] for c in cases}
+        self.assertEqual(len(namespaces), 3)
+        for case in cases:
+            text = (self.fx.root / case.path).read_text()
+            namespace = case.args[case.args.index("--namespace") + 1]
+            self.assertIn(f"namespace {namespace}\n", text)
+            self.assertIn("def demo_f := 0\n", text)  # the same short name in every separate API
+            self.assertEqual(case.args[case.args.index("--prefix") + 1], "demo.")
+        aggregate = (self.fx.root / "Proofs/Demo/Cases.lean").read_text()
+        self.assertEqual(sum(line.startswith("import ") for line in aggregate.splitlines()), 3)
+        status, out, err = self.fx.run("case-check")
+        self.assertEqual(status, 0, err)
+        self.assertEqual(out, "Proofs.Demo.Cases\n")
+
+    def test_missing_case_and_aggregate_import_fail_with_case_identity(self):
+        case = self.enroll()[0]
+        (self.fx.root / case.path).unlink()
+        self.assertFails(case.path, "case-coverage")
+        self.assertEqual(self.fx.run("write")[0], 0)
+        path = self.fx.root / "Proofs/Demo/Cases.lean"
+        path.write_text(path.read_text().splitlines()[0] + "\n")
+        status, _, err = self.fx.run("case-targets")
+        self.assertEqual(status, 1, err)
+        self.assertIn("missing or changed complete case imports", err)
+        self.assertIn(case.label, err)
+
+    def test_inactive_case_body_and_profile_are_checked_without_a_selector(self):
+        case = next(c for c in self.enroll() if c.host == "darwin")
+        path = self.fx.root / case.path
+        original = path.read_bytes()
+        path.write_bytes(original + b"def extra := 1\n")
+        self.assertFails(case.label, "case-check")
+        path.write_bytes(original.replace(b'"0.15.2"', b'"0.17.0"', 1))
+        self.assertFails(case.label, "case-check")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            gi.main(["case-check", "--only", "linux"])
+        self.assertEqual(error.exception.code, 2)
+
+    def test_deleting_generation_entry_and_its_output_cannot_delete_golden_expectation(self):
+        cases = self.enroll()
+        omitted = next(case for case in cases if case.host == "darwin")
+        remaining = [case for case in cases if case != omitted]
+        (self.fx.root / omitted.path).unlink()
+        aggregate = self.fx.root / "Proofs/Demo/Cases.lean"
+        omitted_import = "import " + omitted.path[:-5].replace("/", ".")
+        aggregate.write_text("\n".join(line for line in aggregate.read_text().splitlines()
+                                       if line != omitted_import) + "\n")
+        # Simulate removal from the producer mapping, without changing the golden universe.
+        with mock.patch.object(gi, "namespaced_cases", return_value=remaining):
+            status, _, err = self.fx.run("case-coverage")
+        self.assertEqual(status, 1, err)
+        self.assertIn(omitted.label, err)
+        self.assertIn("supported golden case has no namespaced retranslation rule", err)
+        self.assertIn("missing or changed complete case imports", err)
+
+    def test_changed_inactive_air_and_new_older_version_cannot_disappear(self):
+        self.enroll()
+        self.fx.write("tests/golden/0.15.2/demo/air-darwin/demo.new.json", air("demo.new", "0.15.2"))
+        self.assertFails("demo 0.15.2 darwin namespaced", "case-check")
+        self.fx.write("examples/demo/zig-versions", "0.15.2\n0.14.1\n")
+        self.assertFails("demo 0.14.1 linux namespaced", "case-coverage")
+
+    def test_recorded_older_golden_survives_deleted_version_selection(self):
+        self.enroll()
+        self.fx.write("tests/golden/0.14.1/demo/air-linux/demo.f.json", air("demo.f", "0.14.1"))
+        self.assertFails("demo 0.14.1 linux namespaced", "case-coverage")
+
+    def test_inconsistent_case_profile_cannot_downgrade_to_legacy_during_write(self):
+        case = next(c for c in self.enroll() if c.host == "darwin")
+        path = self.fx.root / case.path
+        before = path.read_bytes()
+        air_path = self.fx.root / "tests/golden/0.15.2/demo/air-darwin/demo.f.json"
+        doc = json.loads(air_path.read_text())
+        doc["profile"]["target_triple"] = "x86_64-linux"
+        air_path.write_text(json.dumps(doc))
+        self.assertFails("legacy downgrade refused", "write")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_uniform_wrong_host_refuses_translation_and_preserves_case(self):
+        case = next(c for c in self.enroll() if c.host == "darwin")
+        path = self.fx.root / case.path
+        before = path.read_bytes()
+        for air_path in (self.fx.root / "tests/golden/0.15.2/demo/air-darwin").glob("*.json"):
+            doc = json.loads(air_path.read_text())
+            doc["profile"] = profile("0.15.2")
+            air_path.write_text(json.dumps(doc))
+        with tempfile.TemporaryDirectory() as work:
+            translator = gi.Translator(str(self.fx.translator), work)
+            with mock.patch.object(gi.subprocess, "run") as run:
+                with self.assertRaisesRegex(ValueError, "0.15.2 darwin.*does not match golden host"):
+                    translator.output(0, case)
+                run.assert_not_called()
+        self.assertFails("0.15.2 darwin", "write", "--only", case.label)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_uniform_wrong_arch_refuses_namespaced_write(self):
+        case = next(c for c in self.enroll() if c.host == "linux-aarch64")
+        path = self.fx.root / case.path
+        before = path.read_bytes()
+        for air_path in (self.fx.root / "tests/golden/0.15.2/demo/air-linux-aarch64").glob("*.json"):
+            doc = json.loads(air_path.read_text())
+            doc["profile"] = profile("0.15.2")
+            air_path.write_text(json.dumps(doc))
+        self.assertFails("linux-aarch64: actual profile x86_64-linux-gnu", "write", "--only", case.label)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_namespaced_profile_uses_existing_full_profile_validation(self):
+        self.enroll()
+        for field, value, error in (("backend", None, "exactly the supported profile fields"),
+                                    ("pointer_bits", 32, "incompatible target profile"),
+                                    ("abi", "none", "outside the supported model ABI scope")):
+            with self.subTest(field=field):
+                for air_path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+                    doc = json.loads(air_path.read_text())
+                    doc["profile"] = profile("0.15.2")
+                    if value is None:
+                        del doc["profile"][field]
+                    else:
+                        doc["profile"][field] = value
+                    air_path.write_text(json.dumps(doc))
+                self.assertFails(error, "case-check")
+
+    def test_namespaced_composition_preserves_actual_profile_for_host_spellings(self):
+        for host, target in (("linux", "x86_64-linux-gnu"),
+                             ("linux-aarch64", "aarch64-linux-gnu"),
+                             ("linux-amd64", "x86_64-linux-gnu"),
+                             ("darwin", "aarch64-macos-none"),
+                             ("darwin-arm64", "aarch64-macos-none")):
+            with self.subTest(host=host), tempfile.TemporaryDirectory() as work:
+                source, output = Path(work) / "air", Path(work) / "output"
+                source.mkdir()
+                output.mkdir()
+                doc = json.loads(air("demo.f", "0.17.0", 12))
+                doc["profile"] = profile("0.17.0", target)
+                (source / "demo.f.json").write_text(json.dumps(doc))
+                gi.compose([source], output, "0.17.0", require_profile=True, host=host)
+                self.assertEqual(json.loads((output / "demo.f.json").read_text()), doc)
+
+    def test_namespaced_composition_requires_explicit_valid_host(self):
+        source = self.fx.write("single-air/demo.f.json", json.dumps(dict(
+            schema=12, zig_version="0.17.0", name="demo.f", body=[], profile=profile("0.17.0")))).parent
+        output = self.fx.root / "single-output"
+        output.mkdir()
+        for host in (None, "", "linux-", "Linux", "linux/aarch64"):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, "explicit valid golden host identity"):
+                gi.compose([source], output, "0.17.0", require_profile=True, host=host)
+        self.assertEqual(list(output.iterdir()), [])
+
+    def test_selected_write_does_not_rewrite_an_unselected_aggregate(self):
+        self.enroll()
+        path = self.fx.root / "Proofs/Demo/Cases.lean"
+        path.write_text("-- deliberately stale aggregate\n")
+        before = path.read_bytes()
+        self.assertFails("missing or changed complete case imports", "write", "--only", "unrelated-fixture")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_case_coverage_rejects_an_empty_air_input_set(self):
+        self.enroll()
+        shutil.rmtree(self.fx.root / "tests/golden/demo/air")
+        shutil.rmtree(self.fx.root / "tests/golden/0.15.2/demo")
+        self.assertFails("namespaced case or AIR input missing", "case-coverage")
+
+    def test_new_host_and_duplicate_case_identity_fail_closed(self):
+        self.enroll()
+        self.fx.write("tests/golden/0.15.2/demo/air-freebsd/demo.f.json", air("demo.f", "0.15.2"))
+        self.assertFails("demo 0.15.2 freebsd namespaced", "case-coverage")
+        self.fx.write("examples/demo/zig-versions", "0.15.2\n0.15.2\n")
+        self.assertFails("duplicate namespaced case output", "case-coverage")
+
+    def test_marker_deletion_and_extra_output_are_not_silent_coverage(self):
+        self.enroll()
+        extra = self.fx.write("Proofs/Demo/Gen/V9_9_9/H_6c696e7578/Gen.lean", "import ZigLean\n")
+        self.assertFails("orphan or extra case-family output", "case-coverage")
+        extra.unlink()
+        (self.fx.root / "examples/demo/all-cases").unlink()
+        self.assertFails("orphan or extra case-family output", "case-coverage")
+
+    def test_case_family_namespace_collisions_fail_before_generation(self):
+        self.enroll()
+        self.fx.write("examples/Demo/Demo.zig", "")
+        self.fx.write("examples/Demo/all-cases", "complete family\n")
+        # Spell both paths explicitly: a case-insensitive filesystem cannot enumerate both.
+        markers = [self.fx.root / f"examples/{name}/all-cases" for name in ("demo", "Demo")]
+        with mock.patch.object(Path, "glob", return_value=markers):
+            with self.assertRaisesRegex(ValueError, "share namespace Demo"):
+                gi.enrolled_families()
+
+    def test_event_base_ratchet_catches_marker_and_output_deletion_across_two_commits(self):
+        self.enroll()
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "enroll")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        (self.fx.root / "examples/demo/all-cases").unlink()
+        # Enumerate files independently after marker removal, just as a real withdrawal can.
+        for path in (self.fx.root / "Proofs/Demo/Gen").rglob("*.lean"):
+            path.unlink()
+        (self.fx.root / "Proofs/Demo/Cases.lean").unlink()
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "withdraw")
+        self.fx.write("note.txt", "second commit\n")
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "prose")
+        self.assertEqual(self.fx.run("case-coverage")[0], 0)  # M/O alone cannot remember the old family.
+        self.assertFails("supported case family withdrawn", "enrollment", "--base", base)
+        with mock.patch.dict(os.environ, GITHUB_ACTIONS="true", AIR2LEAN_CASE_BASE=""):
+            self.assertFails("authenticated pre-update", "enrollment")
+        self.assertFails("authenticated pre-update", "enrollment", "--base", "0" * 40)
+        self.assertFails("is unavailable", "enrollment", "--base", "1" * 40)
+        head = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        self.assertEqual(self.fx.run("enrollment", "--base", head)[0], 0)  # no transition at HEAD
+
+    def test_local_default_main_baseline_and_ci_missing_base_are_distinct(self):
+        self.enroll()
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "enroll")
+        head = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        self.fx.git("update-ref", "refs/remotes/origin/main", head)
+        with mock.patch.dict(os.environ, GITHUB_ACTIONS="", clear=False):
+            os.environ.pop("AIR2LEAN_CASE_BASE", None)
+            self.assertEqual(self.fx.run("enrollment")[0], 0)
+            (self.fx.root / "examples/demo/all-cases").unlink()
+            self.assertFails("supported case family withdrawn", "enrollment")
+            self.fx.git("update-ref", "-d", "refs/remotes/origin/main")
+            self.assertFails("origin/main is unavailable", "enrollment")
+        with mock.patch.dict(os.environ, GITHUB_ACTIONS="true", AIR2LEAN_CASE_BASE=""):
+            self.assertFails("authenticated pre-update", "enrollment")
+
+    def test_baseline_retains_withdrawn_host_and_version_even_when_all_outputs_are_removed(self):
+        cases = self.enroll()
+        for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+            doc = json.loads(path.read_text())
+            for host, target in (("linux", "x86_64-linux-gnu"), ("darwin", "aarch64-macos-none")):
+                other = dict(doc, zig_version="0.14.1", profile=profile("0.14.1", target))
+                self.fx.write(f"tests/golden/0.14.1/demo/air-{host}/{path.name}", json.dumps(other))
+        self.fx.write("tests/golden/0.15.2/demo/Gen-darwin.lean", "import ZigLean\n")
+        self.fx.write("tests/golden/0.14.1/demo/Gen-darwin.lean", "import ZigLean\n")
+        self.assertEqual(self.fx.run("write")[0], 0)
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "cases")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        darwin = next(c for c in cases if c.host == "darwin")
+        shutil.rmtree(self.fx.root / "tests/golden/0.15.2/demo/air-darwin")
+        (self.fx.root / "tests/golden/0.15.2/demo/Gen-darwin.lean").unlink()
+        (self.fx.root / darwin.path).unlink()
+        shutil.rmtree(self.fx.root / "tests/golden/0.14.1")
+        for case in gi.all_cases():
+            # Removed version's outputs are found independently from the now-reduced mapping.
+            self.assertNotEqual(case.version, "0.14.1")
+        for path in (self.fx.root / "Proofs/Demo/Gen/V0_14_1").rglob("*.lean"):
+            path.unlink()
+        current = gi.all_cases()
+        for rel, content in gi.case_aggregates(c.path for c in current if c.namespaced).items():
+            self.fx.write(rel, content.decode())
+        self.assertEqual(self.fx.run("case-coverage")[0], 0)  # current-only coverage cannot remember deletion
+        status, _, err = self.fx.run("enrollment", "--base", base)
+        self.assertEqual(status, 1, err)
+        self.assertIn("demo 0.15.2 darwin: supported golden case withdrawn", err)
+        self.assertIn("demo 0.14.1 darwin: supported golden case withdrawn", err)
+        self.assertIn("demo 0.14.1 linux: supported golden case withdrawn", err)
+
+    def test_baseline_retains_an_air_only_host_with_git_quoted_unicode_filenames(self):
+        cases = self.enroll()
+        self.fx.git("config", "core.quotePath", "true")
+        directory = self.fx.root / "tests/golden/0.15.2/demo/air-darwin"
+        for path in directory.glob("*.json"):
+            path.rename(path.with_name("é-" + path.name))
+        self.assertFalse((directory.parent / "Gen-darwin.lean").exists())
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "unicode host")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        shutil.rmtree(directory)
+        (self.fx.root / next(c.path for c in cases if c.host == "darwin")).unlink()
+        for rel, content in gi.case_aggregates(c.path for c in gi.all_cases() if c.namespaced).items():
+            self.fx.write(rel, content.decode())
+        self.assertEqual(self.fx.run("case-coverage")[0], 0)
+        self.assertFails("demo 0.15.2 darwin: supported golden case withdrawn", "enrollment", "--base", base)
+
     def test_hand_added_definition_fails(self):
         path = self.fx.root / "Proofs/Demo/Gen.lean"
         path.write_text(path.read_text() + "def handWritten := 1\n")
@@ -136,7 +448,7 @@ class SyntheticTests(unittest.TestCase):
         path = "Proofs/Demo/Gen.lean"
         self.fx.write("tests/roadmap/shared/air/demo.f.json", air("demo.f"))
         self.fx.write("tests/roadmap/shared/air/math.sub__anon_12.json", air("math.sub__anon_12"))
-        gi.FIXTURES = [(path, "tests/roadmap/shared/air", [], "body")]
+        gi.FIXTURES = [(path, "tests/roadmap/shared/air", ["--namespace", "Demo"], "body")]
         self.assertEqual(self.fx.run("write")[0], 0)
         self.fx.git("add", "-A")
         expected = [(index, case.label) for index, case in enumerate(gi.all_cases())]

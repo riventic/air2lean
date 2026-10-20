@@ -76,6 +76,16 @@ theorem up_pts_of_region {v : T} {r : Res} (hs : bs.size = Enc.size T)
     (hv : Enc.decode bs = pure v) (h : up (Zig.region q a bs) r) : up (pts q a v) r :=
   up_pts_iff.mpr ⟨bs, sep_lift.mpr ⟨⟨hs, hv⟩, h⟩⟩
 
+/-- Expose a typed value's owned byte region for a byte operation, retaining the size and
+decoding facts. This is the reverse view of folding stored bytes into a typed value. -/
+@[fsym_view] theorem pts_region_view {v : T} :
+    EUpd (up (pts q a v)) (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K =>
+      FAssn.ex fun bs : Array Byte =>
+        ⟪bs.size = Enc.size T ∧ Enc.decode bs = pure v⟫ ⋆ up (regionIn q A S K a bs)) :=
+  EUpd.of_imp fun _ h => by
+    obtain ⟨A, S, K, bs, ⟨ha, hs, hv, hK⟩, hb⟩ := FTotalTriple.up_pts_iff_bytesAt.mp h
+    exact ⟨A, S, K, bs, sep_lift.mpr ⟨⟨hs, hv⟩, ⟨⟨ha, hK, hb.1⟩, hb.2⟩⟩⟩
+
 /-! ## Byte rules -/
 
 /-- **Load** of a `U` at byte `o` of a region whose bytes there decode to `v`. -/

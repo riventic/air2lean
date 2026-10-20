@@ -5,7 +5,7 @@ import ZigLean.Conc.Share
 /-!
 # A thread's plain steps in a protocol with a lock
 
-Two steps that every protocol with a lock (`FLock.Fits`, `ZigLean/Sep/Full/Lock.lean`) has, stated
+Plain steps that every protocol with a lock (`FLock.Fits`, `ZigLean/Sep/Full/Lock.lean`) has, stated
 once for every protocol, lock and primitive; a protocol discharges only its own obligations.
 
 - **A read of read-shared bytes of the protocol's rest** (`Fits.wp_readRest`: the `io` prefix of a
@@ -13,6 +13,10 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
   rest (`hrest`), the region is read-shared (`hsh`, `hcov`: no race, `ReadShared.noRace_read`),
   and the protocol's `U` is kept by the read's record (`hrec`). The lock's invariant is kept by
   `Inv.recordX`.
+- **A step that redistributes the holder's resource** (`Fits.wp_holdParts`): a thread triple on
+  the caller's part together with the protected resource. Its separating post gives a new caller
+  part and protected resource, whose complete sum is the triple's post-resource, including
+  knowledge and ghost state. The protocol supplies its new ghost value and pure invariant facts.
 - **A step of the lock's holder on the lock's resource** (`Fits.wp_hold`: a load or a store of the
   counter that the lock protects), a thread triple on the held resource: the holder's part is
   framed, its new ghost value `g'` (the rule's ghost argument: the transition of its place, ledger
@@ -131,6 +135,45 @@ theorem _root_.Zig.FStepIn.restX {rX : Res} {m m' : Mem}
       Option.or_eq_none_iff, not_and] at hl ⊢
     exact fun _ => hl
 
+/-- **A holder step with a new split of the complete resource.** The thread triple operates on
+the caller's part and held resource together; its separating post supplies their new split.
+The two parts reconstruct the complete post-resource of the existing thread rule, without
+assuming that the caller part stays fixed. The new ghost value realizes that split and re-establishes the
+protected assertion. The ordinary `wp_hold` rule is the fixed-caller instance below. -/
+theorem Fits.wp_holdParts (hF : L.Fits K P U ok) {α : Type} {x : MemM α}
+    {G G' : ThreadId → γ} {Pa : FAssn} {Qp Qh : α → FAssn}
+    {t : ThreadId} {m : Mem} {d : Nat} {g' : Res → Res → γ}
+    {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv G' m) (hc : m.current = t) (hh : L.ph (G' t) = .holds)
+    (htt : FTTriple Pa x (fun a => Qp a ⋆ Qh a))
+    (hpa : ∀ r, L.R G' r → FHeap.Disjoint (L.part (G' t)).heap r.heap →
+      Pa (rsum (L.part (G' t)) r))
+    (hR : ∀ a rp rh, Qp a rp → Qh a rh → L.R (upd G' t (g' rp rh)) rh)
+    (hg' : ∀ a rp rh, Qp a rp → Qh a rh →
+      L.ph (g' rp rh) = .holds ∧ L.part (g' rp rh) = rp ∧ L.held (g' rp rh) = rh)
+    (hU : ∀ rX m' rp rh, L.Inv G' rX m → U G' rX m → joinedB m t = false →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' → m'.threads = m.threads →
+      L.Inv (upd G' t (g' rp rh)) rX m' → U (upd G' t (g' rp rh)) rX m')
+    (h : ∀ a m' rp rh, m'.current = t → m'.threads = m.threads → Qp a rp → Qh a rh →
+      P.inv (upd G' t (g' rp rh)) m' → Q a G m' d)
+    (hpart : P.Partial := by
+      first
+        | exact .inl rfl
+        | exact .inr rfl
+        | assumption) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
+  obtain ⟨rX, hiL, hU₀⟩ := (hF.inv G' m).mp hi
+  obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
+  refine hiL.wp_liftMem hc ht hjt htt (hpa _ (hiL.res t hh) (hiL.pdisj t))
+    (fun a m' r' _ hq hs hc' hk => ?_) (.inl hpart)
+  obtain ⟨rp, rh, hd, rfl, hqp, hqh⟩ := hq
+  obtain ⟨hph, hpt, hhd⟩ := hg' a rp rh hqp hqh
+  have hl := hk (g' rp rh) (by rw [hph, hh]) (by rw [hpt, hhd])
+    (by rw [hpt, hhd]; exact hd) (fun h => absurd hph h) (fun h => absurd hh h)
+    (fun _ => by rw [hhd]; exact hR a rp rh hqp hqh)
+  exact h a m' rp rh hc' hs.threads hqp hqh
+    ((hF.inv _ _).mpr ⟨rX, hl, hU rX m' rp rh hiL hU₀ hjt hs hs.threads hl⟩)
+
 /-- **A step of the lock's holder `t` on the lock's resource** (module doc): a thread triple from
 what the resource `L.R G'` gives (`hpa`; the holder's part framed); after it, the holder's new
 ghost value `g' r` (holding, the same part, the new resource `r`) gives the resource (`hR`) and
@@ -155,16 +198,14 @@ theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : Th
         | exact .inr rfl
         | assumption) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
-  obtain ⟨rX, hiL, hU₀⟩ := (hF.inv G' m).mp hi
-  obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
-  refine hiL.wp_liftMem hc ht hjt (htt.frameL (R := fun r => r = L.part (G' t)))
-    ⟨_, _, hiL.pdisj t, rfl, rfl, hpa _ (hiL.res t hh)⟩ (fun a m' r' _ hq hs hc' hk => ?_) (.inl hpart)
-  obtain ⟨r₁, rQ, hdQ, rfl, rfl, hq'⟩ := hq
-  obtain ⟨hph, hpt, hhd⟩ := hg' rQ
-  have hl := hk (g' rQ) (by rw [hph, hh]) (by rw [hpt, hhd]) (by rw [hpt, hhd]; exact hdQ)
-    (fun h => absurd hph h) (fun h => absurd hh h) (fun _ => by rw [hhd]; exact hR a rQ hq')
-  exact h a m' rQ hc' hs.threads hq' ((hF.inv _ _).mpr ⟨rX, hl, hU rX m' rQ hiL hU₀ hjt hs
-    hs.threads hl⟩)
+  refine hF.wp_holdParts (Qp := fun _ r => r = L.part (G' t)) (Qh := Qa)
+    (g' := fun _ rh => g' rh) hi hc hh (htt.frameL (R := fun r => r = L.part (G' t)))
+    (fun r hr hd => ⟨_, _, hd, rfl, rfl, hpa r hr⟩)
+    (fun a _ rh _ hq => hR a rh hq) (fun a rp rh hp _ => ?_)
+    (fun rX m' _ rh => hU rX m' rh) (fun a m' _ rh hc' ht' _ hq => h a m' rh hc' ht' hq)
+    hpart
+  subst rp
+  exact hg' rh
 
 end FLock
 end Full

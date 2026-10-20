@@ -28,7 +28,7 @@ globs = ["AllocFba.+"]
 [[lean_lib]]
 name = "AllocTranslated"
 srcDir = "alloc-translated"
-globs = ["AllocTranslated.+", "KernelBytes", "ListsPage", "PageAlloc", "PageObstruction", "PageSpec",
+globs = ["AllocTranslated.+", "KernelBytes", "ListsPage", "PageAlloc", "PageCreation", "PageObstruction", "PageSpec",
          "PageSpecMacos", "PageThread", "PageTok"]
 
 [[lean_lib]]

@@ -708,7 +708,9 @@ theorem recordAccess_run_ne_none (block : BlockId) (off len : Nat) (kind : Acces
     ∀ m, ((recordAccess block off len kind).run m).run ≠ none := by
   unfold recordAccess
   refine M.bind_run_ne_none M.get_run_ne_none fun _ => ?_
-  dsimp only
+  -- Without match reduction, so `split` cases on the race check's result even when it is a
+  -- constant: the proof does not depend on what the check computes.
+  dsimp -iota only
   split
   · exact M.throw_run_ne_none _
   · exact M.set_run_ne_none _

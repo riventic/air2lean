@@ -70,7 +70,7 @@ theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.
   mine := hs.mine
   blocks := hs.blocks
   nextMsg := hs.nextMsg
-  atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.mono, ha.kept, ha.frame, ha.new, ha.seen⟩
+  atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.mono, ha.kept, ha.frame, ha.new, ha.seen, ha.own⟩
   fp e he := by
     rcases Array.mem_append.mp he with he | he
     · exact .inl ⟨e, he, .refl e⟩
@@ -545,12 +545,26 @@ theorem _root_.Zig.StepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (s
 
 /-- A new block at the end leaves the old ones as they are. -/
 theorem _root_.Zig.FStepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (size align : Nat) :
-    FStepIn hF m (m.afterAlloc kind size align) :=
-  .of_stepIn (StepIn.afterAlloc m hF kind size align)
-    (fun b hb ⟨blk, h1, h2⟩ => ⟨blk, by
-      rw [Mem.afterAlloc, Array.getElem?_push_lt hb] at h1; rwa [Array.getElem?_eq_getElem hb], h2⟩)
-    (fun _ he hn => absurd he hn)
-    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ hin => hin.push _ rfl) fun _ he => he)
+    FStepIn hF m (m.afterAlloc kind size align) where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := by simp [Mem.afterAlloc]
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const b hb h := by
+    obtain ⟨blk, h1, h2⟩ := h
+    exact ⟨blk, by
+      rw [Mem.afterAlloc, Array.getElem?_push_lt hb] at h1
+      rwa [Array.getElem?_eq_getElem hb], h2⟩
+  cov := Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ hin => hin.push _ rfl) fun _ he => he
 
 theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size align : Nat) :
     m.NoRevive (m.afterAlloc kind size align) := fun b x hb h => by

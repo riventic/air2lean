@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Native x86_64-linux differential run of one (optimize mode, backend) pair in the pinned
-# linux/amd64 local-CI image (emulated on an arm64 host), reusing scripts/local-ci.sh's cache
-# volumes. Stock Zig, the Lean model side and the comparison all run inside the container, so the
+# linux/amd64 local-CI image (emulated on an arm64 host), with its existing cache volumes.
+# Stock Zig, the Lean model side and the comparison all run inside the container, so the
 # float model's reference host (Linux x86_64) applies. Writes the differential summary and cases
 # next to the requested output directory (docs/build-modes.md).
 #
@@ -23,12 +23,21 @@ if [ "${1:-}" = --inside ]; then
   mkdir -p /artifacts /work
   cd /work
   tar -xf /snapshot/source.tar -C /work
-  sha=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
-  hostsha=$(zig-patch/toml-get.sh "[ci.host-zig.\"$version\"]" sha256)
-  export ELAN_HOME=/cache/elan-$sha LEAN_NUM_THREADS=2
+  # Serialize the existing shared tool volume, including its first pinned install.
+  exec 7>/cache/local-ci.lock
+  flock -n 7 || { echo 'error: another build-mode run owns the tool cache' >&2; exit 1; }
+  # Match local-CI's root-then-diff lock order on the same shared Lake volumes.
+  exec 9>/work/.lake/local-ci.lock
+  flock -n 9 || { echo 'error: another local CI run owns the root cache' >&2; exit 1; }
+  exec 8>/work/tests/diff/.lake/local-ci.lock
+  flock -n 8 || { echo 'error: another local CI run owns the diff cache' >&2; exit 1; }
+  source scripts/linux-ci-tools.sh
+  air2lean_linux_ci_elan
+  host_zig=$(air2lean_linux_ci_host_zig "$version")
+  export LEAN_NUM_THREADS=2
   export ZIG_GLOBAL_CACHE_DIR=/cache/zig-global
-  zig=/cache/host-zig-$hostsha/zig
-  [ -x "$zig" ] || { echo "error: no verified stock zig at $zig (run scripts/local-ci.sh once)" >&2; exit 1; }
+  zig=$host_zig/zig
+  [ -x "$zig" ] || { echo "error: pinned stock zig is not executable: $zig" >&2; exit 1; }
   export PATH="$ELAN_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   lake build
   export AIR2LEAN_ZIG=$zig AIR2LEAN_DIFF_OPTIMIZE=$optimize AIR2LEAN_DIFF_BACKEND=$backend
@@ -113,7 +122,11 @@ esac
 image="air2lean-local-ci:ubuntu24-amd64-python-$python_arch"
 lake_key=$(cat lean-toolchain lake-manifest.json | shasum -a 256 | cut -c1-16)
 diff_key=$(cat tests/diff/lean-toolchain tests/diff/lake-manifest.json | shasum -a 256 | cut -c1-16)
-tool_volume=${AIR2LEAN_LOCAL_TOOL_VOLUME:-air2lean-local-linux-toolchains}
+if [ -n "${AIR2LEAN_LOCAL_TOOL_VOLUME:-}" ]; then
+  tool_volume=$AIR2LEAN_LOCAL_TOOL_VOLUME-amd64
+else
+  tool_volume=air2lean-local-linux-toolchains
+fi
 cache_namespace=$(printf '%s' "$tool_volume" | shasum -a 256 | cut -c1-16)
 # Sized like scripts/local-ci.sh (AIR2LEAN_LOCAL_CPUS, AIR2LEAN_LOCAL_MEMORY); scripts/diff.sh
 # builds and runs that many harnesses at once.
