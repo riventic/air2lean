@@ -5629,6 +5629,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Proofs.lean",
+          "Proofs/Basic/ClampCases.lean",
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
@@ -5761,6 +5762,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Proofs.lean",
+          "Proofs/Basic/ClampCases.lean",
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
@@ -6234,6 +6236,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Proofs.lean",
+          "Proofs/Basic/ClampCases.lean",
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Layout/Proofs.lean",
@@ -30981,6 +30984,7 @@
       "Proofs/Basic/AirCert.lean": "fda4a43a4d2ae4d9b8eca1f43b65dc32135c407254b42725853ccf98c8691d72",
       "Proofs/Basic/Arith.lean": "f00e1973c38a12cfc5f5a6a2e900ab301a694479d9aa0df3889d0b881c97005e",
       "Proofs/Basic/Cases.lean": "efc15a76c9113ac6e7d78b1e7b23461184d829a05c61da9e3a92843a0cf23ef5",
+      "Proofs/Basic/ClampCases.lean": "a7767eb38aa4ebd4d6d869ab85eb473b525cc115622bc545320d91e32b5d84d5",
       "Proofs/Basic/Common.lean": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
       "Proofs/Basic/Gen/V0_14_1/H_6c696e7578/Gen.lean": "f6f3f366fe72e945e51f322ca09fb35535b39a1b31318ab651dc8d164cc35eb8",
       "Proofs/Basic/Gen/V0_15_2/H_6c696e7578/Gen.lean": "cc6b9925500b18a3a30995dd2606192092027dcea1c11464e57f302cb2c556ac",
@@ -34753,7 +34757,7 @@
     "model-boundaries": {
       "Air2Lean/StdModels.lean": "7280b453fc22d860ec9526bc5ae354cecf9c62c2f230f46447d67d58cf11dc2f",
       "Air2Lean/Memory.lean": "f0f890f66d0e044dde7ec5f9496e42da6a4f16ad97f27d725e34b8a786362e29",
-      "docs/std-models.md": "99d045822b3c4775376f729fb19df48d21fc6d01202d4c89fcac9189a7997b1b"
+      "docs/std-models.md": "eaf0ae8897be0c900cb676f67d590be18a3e51451518684f2e41a11423537170"
     }
   },
   "summary": {
