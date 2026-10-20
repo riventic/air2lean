@@ -135,7 +135,7 @@ example (P Q : FAssn) (h : EUpd P Q) : True := by
     unless ← observed.mvarId!.isAssigned do throwError "control type metavariable is not assigned"
     unless ← isUpd update do throwError "valid assigned-type update was not classified"
     let goalType ← elabTerm
-      (← `(FTotalTriple P (pure ()) (fun _ => Q))) none
+      (← `(FTotalTriple $(mkIdent `P) (pure ()) (fun _ => $(mkIdent `Q)))) none
     let goal ← mkFreshExprSyntheticOpaqueMVar goalType
     let left ← run goal.mvarId! #[update]
     unless left.isEmpty do throwError "assigned-type update did not close the full-state goal"
