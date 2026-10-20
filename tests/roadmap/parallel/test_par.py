@@ -100,7 +100,7 @@ class Output(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             # Each job records, when it starts, itself and the jobs running then.
             job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
-                   f'sleep 0.3; rm {tmp}/run.$JOB')
+                   f'sleep 1; rm {tmp}/run.$JOB')
             requests = [600, 600, 300, 300, 300]
             jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
                     for i, m in enumerate(requests)]
@@ -117,7 +117,7 @@ class Output(unittest.TestCase):
     def test_a_small_job_passes_a_waiting_large_one(self):
         with tempfile.TemporaryDirectory() as tmp:
             job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
-                   f'sleep 0.3; rm {tmp}/run.$JOB')
+                   f'sleep 1; rm {tmp}/run.$JOB')
             # 900 does not fit beside 800, 100 does: it starts at once instead of waiting behind 900.
             jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
                     for i, m in enumerate([800, 900, 100])]
