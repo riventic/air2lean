@@ -117,7 +117,7 @@ after an allocation or store. A pure Result step similarly exposes its actual va
 retain the zero-divisor error, and signed overflow uses the runtime's existing predicate. -/
 @[fsym_run] theorem divTrunc_runFacts {w : Nat} {s : Bool} {a b : BitVec w}
     {r : Except Error (BitVec w)} (h : (Zig.divTrunc s a b).run = some r) :
-    match r with
+    match (generalizing := false) r with
     | .error e => e = .illegal ∧ (b = 0 ∨ s = true ∧ a.sdivOverflow b = true)
     | .ok v => b ≠ 0 ∧ (s = true → a.sdivOverflow b = false) ∧
         v = (if s then a.sdiv b else a.udiv b) := by
