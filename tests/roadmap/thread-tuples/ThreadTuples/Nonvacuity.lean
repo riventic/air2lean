@@ -1,4 +1,5 @@
 import ThreadTuples.Proofs
+import ZigLean.Mem.Reuse
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Local
@@ -59,9 +60,9 @@ chosen independently of its run. The final memory is inferred from that run. -/
 theorem makeZeroPair_returns :
     ∃ m', (makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run =
       some (.ok (((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr)), m')) := by
-  have hr : ((makeZeroPair.run (ThreadTuples.mem0 Placement.fresh)).run).map
-      (fun result => result.map Prod.fst) =
+  have hr : runValue makeZeroPair (ThreadTuples.mem0 Placement.fresh) =
       some (.ok ((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr))) := by decide +kernel
+  unfold runValue at hr
   obtain ⟨result, hrun, hresult⟩ := Option.map_eq_some_iff.mp hr
   cases result with
   | error e => cases hresult
