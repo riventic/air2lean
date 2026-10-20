@@ -141,13 +141,15 @@ class UniverseTests(unittest.TestCase):
         units = [unit('Spoof'), unit('Real'), unit('Twice')]
         clash = "error: import Spoof failed, environment already contains 'N' from M"
 
-        def audit_modules(modules, lean_path, output, cache=None, sources=None):
+        def audit_modules(modules, lean_path, output, cache=None, sources=None, **_):
             collision = clash if {'Spoof', 'Real'} <= set(modules) or 'Twice' in modules else None
             return {'modules': modules, 'report': str(output), 'status': 'fail' if collision else 'pass',
                     'exit_code': 1 if collision else 0, 'collision': collision, 'violations': []}
 
-        with mock.patch.multiple(universe, universe=lambda: ([], units), compile_all=lambda *a: [],
-                                 audit_modules=audit_modules, write_report=lambda *a: None), \
+        with mock.patch.multiple(universe, universe=lambda: ([], units), compile_all=lambda *a, **_: [],
+                                 prepare_compilation=lambda *a: {}, seal_compilation=lambda *a: None,
+                                 audit_modules=audit_modules,
+                                 write_report=lambda *a: None), \
                 tempfile.TemporaryDirectory() as temp:
             report = universe.audit(Path(temp), False, None, None)
         audited = [r['modules'] for r in report['audits'] if r['status'] == 'pass']
