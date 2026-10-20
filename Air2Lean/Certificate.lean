@@ -1685,13 +1685,21 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
         for (helper, head, hyp) in available do
           if helper.loop.isSome then
             out := out ++ (← helper.loopClosure head hyp ns (genName helper.source) (airName helper.source) (declOf helper.source.name))
-        let definitions := ["air_sem", "id_map'", "-bind_pure_comp", "-map_pure", airName decl.source, s!"policy_{sd}", s!"entry_{sd}"] ++
+        let definitions := ["air_sem", "id_map'", airName decl.source, s!"policy_{sd}", s!"entry_{sd}"] ++
           reductionLemmasOf decl.source ++
           (if decl.loop.isSome || !decl.shape.loops.isEmpty then [s!"enc_{sd}"] else []) ++
           (available.toList.filterMap fun (member, head, _) => if head == s!"b_{member.stem}" then some head else none) ++
           ["Env.val", "Frame.cell"]
         let simpSet := ", ".intercalate definitions
         let simplify := s!"simp (config := \{ failIfUnchanged := false }) only [{simpSet}]"
+        let bindPrefix (hxy q hx : String) : String :=
+          let descend := s!"refine bind_le_ok _ {q} {hx} ?_"
+          s!"      | (refine Lean.Order.PartialOrder.rel_trans ?_ (Lean.Order.MonoBind.bind_mono_left {hxy})\n" ++
+          "         simp only [bind_map_left]\n" ++
+          "         first\n" ++
+          s!"         | {descend}\n" ++
+          "         | (conv => lhs; rw [← bind_pure_comp]\n" ++
+          s!"            {descend})\n"
         out := out ++ #[s!"    {simplify}", "    all_goals repeat (first", "      | exact Lean.Order.PartialOrder.rel_refl"]
         for (helper, _, _) in available do
           if let some info := helper.loop then
@@ -1699,8 +1707,8 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
             let proofs := " ".intercalate (List.replicate nproofs s!"(by first | assumption | rfl | simp only [{simpSet}])")
             let args := " ".intercalate (List.replicate helper.emitted.params.size "_")
             out := out.push <|
-              s!"      | (refine map_bind_le_ok _ _ (lu_{helper.stem} _ _ _ _ rfl {proofs} _) _ " ++
-              s!"(fun r hr => lx_{helper.stem} {args} _ r hr) ?_\n" ++
+              bindPrefix s!"(lu_{helper.stem} _ _ _ _ rfl {proofs} _)" "_"
+                s!"(fun r hr => lx_{helper.stem} {args} _ r hr)" ++
               "         rintro ⟨e, s⟩ ⟨h1, h2⟩\n" ++
               s!"         cases e <;> simp (config := \{ failIfUnchanged := false }) only [{simpSet}, Exit.again, exitOk] at h1 h2 ⊢)"
         for (callee, _, hyp) in available do
@@ -1711,7 +1719,7 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
               | some (.optional _) | some (.errorUnion ..) => s!"cases r <;> {simplify}"
               | _ => simplify
             out := out.push <|
-              s!"      | (refine map_bind_le_ok _ _ ({hyp} {args} _) (fun _ => True) (fun _ _ => True.intro) ?_\n" ++
+              bindPrefix s!"({hyp} {args} _)" "(fun _ => True)" "(fun _ _ => True.intro)" ++
               s!"         intro r _\n         {split})"
         out := out ++ #[
           "      | (refine map_bind_le_ok _ _ Lean.Order.PartialOrder.rel_refl (fun _ => True) (fun _ _ => True.intro) ?_",
