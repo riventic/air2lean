@@ -13,8 +13,9 @@ import ZigLean.Sep.Full.AllocSpec
 import tools.OutcomeContracts
 
 /-!
-Environment-based assurance data extraction. The generated driver imports every selected
-module and invokes `#assurance_audit`. Policy is deliberately applied outside this command:
+Environment-based assurance data extraction. The generated driver imports only this file and
+invokes `#assurance_audit`, which imports the selected modules without running their
+initializers (`importWithoutInitializers`). Policy is deliberately applied outside this command:
 the raw declaration graph and Lean's own transitive axiom inventory remain inspectable.
 -/
 
