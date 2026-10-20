@@ -44,6 +44,15 @@ claim case contract instances, native/receipt binding, a wrong-version receipt
 negative control, or retirement of the remaining version-gated proofs. Those remain
 later Task23 obligations in the sole full-state/fsym framework.
 
+Basic's four existing Linux cases are 0.17.0, 0.16.0, 0.15.2 and 0.14.1. Each
+version-local AIR directory retains a complete actual export with its own full
+Linux profile; the shared historical AIR and public `Basic` module are unchanged.
+The same Case pipeline generates all four disjoint modules and their unconditional
+`Proofs.Basic.Cases` import aggregate. This generation coverage does not establish
+Basic's functional Full contracts, profile-plus-Gen contract receipts or their
+wrong-version negative control; those obligations and version-gate retirement
+remain open.
+
 `Proofs/Sync/MutexCases.lean` supplies mutex instances for the three enrolled Sync
 profiles: 0.17.0 Linux, then 0.16.0 Linux and Darwin. Each profile's generated
 state type, encoder, locals, exits and functions supply code correspondence to the
