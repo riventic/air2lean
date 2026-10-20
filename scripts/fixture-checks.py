@@ -338,12 +338,14 @@ def main(argv=None):
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
             workers = par.workers(a.jobs, a.mem_mib, len(jobs))
             print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
-            stats = []
-            with open(os.devnull, 'wb') as null:
-                statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+            stats, statuses = [], None
+            try:
+                with open(os.devnull, 'wb') as null:
+                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+            finally:  # also the finished units of a stopped run (a guard's timeout)
+                report(units, statuses or [None] * len(units), stats, a.report)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
-        report(units, statuses, stats, a.report)
         for u, status in zip(units, statuses):
             if status != 0:
                 log = logs / (names[u['name']] + '.log')
