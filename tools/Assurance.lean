@@ -274,8 +274,8 @@ private def fixpointBinder (xs : Array Expr) (x : Expr) : MetaM Json := do
   return Json.mkObj [("index", toJson index), ("name", toJson decl.userName.toString),
     ("binder", binderJson decl.binderInfo)]
 
-private def realizeFixpointInduction (member : Name) (mutual : Bool) : MetaM ConstantInfo := do
-  let suffix ← Lean.Elab.PartialFixpoint.getInductionPrinciplePostfix member mutual
+private def realizeFixpointInduction (member : Name) (isMutual : Bool) : MetaM ConstantInfo := do
+  let suffix ← Lean.Elab.PartialFixpoint.getInductionPrinciplePostfix member isMutual
   let expected := member ++ suffix
   let actual ← realizeGlobalConstNoOverloadCore expected
   unless actual == expected do throwError "fixpoint theorem resolved to another declaration: {actual}"
@@ -340,9 +340,9 @@ private def fixpointInductionJson (info : Lean.Elab.PartialFixpoint.EqnInfo)
       fixedIndices := fixedIndices.push (xs.idxOf arg)
     let mut motives : Array (Name × Expr) := #[]
     for (name, member) in labels do
-      let matches ← xs.filterM fun x => return (← x.fvarId!.getDecl).userName == name
-      unless matches.size == 1 do throwError "fixpoint motive binder is missing or ambiguous: {name}"
-      motives := motives.push (member, matches[0]!)
+      let candidates ← xs.filterM fun x => return (← x.fvarId!.getDecl).userName == name
+      unless candidates.size == 1 do throwError "fixpoint motive binder is missing or ambiguous: {name}"
+      motives := motives.push (member, candidates[0]!)
     unless motives.any (fun (member, motive) => member == target && motive == targetMotive) do
       throwError "fixpoint target motive disagrees with the compiler's packed theorem"
     let mut members := #[]

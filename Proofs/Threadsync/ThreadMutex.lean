@@ -330,12 +330,16 @@ theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
 
 /-- `lock` (macOS) by thread `t` at `out` (`g`): it holds the mutex. -/
 theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
-    (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (_ : Io)
+    (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hplain : (L.part g).Plain) (_ : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp
   have hc1 : L.c = 1 := hc
+  refine WP.mono (fun _ _ _ _ ⟨⟨hd, hcur⟩, rL, hi', _⟩ => ⟨hd, hcur, rL, hi'⟩)
+    (hP.wp_preservePart (p := .holds) (A := fun r => r = L.part g ∧ r.Plain)
+      (B := fun _ _ m' d' => d' < d ∧ m'.current = t) (by decide) ⟨rfl, hplain⟩ ?_)
   unfold Thread_Mutex_lock
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -347,7 +351,7 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     (loopD_body hP hcost hc1 t g hg hok d) default G m d ⟨by omega, g, .inl rfl, hi⟩))
   rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', rL, hi'⟩
   simp only [StateT.run_pure, pure_bind]
-  exact WP.pure' (WP.pure' ⟨hd', hc', rL, hi'⟩)
+  exact WP.pure' (WP.pure' ⟨⟨hd', hc'⟩, rL, hi'⟩)
 
 /-- `unlock` (macOS) by the holder `t` (`g`), the current thread: it goes to `out`. -/
 theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)

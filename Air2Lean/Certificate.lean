@@ -656,12 +656,15 @@ private def compiledBinder (j : Lean.Json) : Except String CompiledBinder := do
 private def compiledStep (j : Lean.Json) : Except String CompiledStep := do
   let b ← compiledBinder j
   let approxs ← (← j.getObjValAs? (Array Lean.Json) "approxs").mapM fun a => do
-    pure { toCompiledBinder := ← compiledBinder a,
-      member := ← a.getObjValAs? String "member" : CompiledApprox }
+    let binder ← compiledBinder a
+    let member ← a.getObjValAs? String "member"
+    pure ({ toCompiledBinder := binder, member } : CompiledApprox)
   let ihs ← (← j.getObjValAs? (Array Lean.Json) "ihs").mapM fun h => do
-    pure { toCompiledApprox := { toCompiledBinder := ← compiledBinder h,
-        member := ← h.getObjValAs? String "member" },
-      approxIndex := ← h.getObjValAs? Nat "approx_index" : CompiledIH }
+    let binder ← compiledBinder h
+    let member ← h.getObjValAs? String "member"
+    let approxIndex ← h.getObjValAs? Nat "approx_index"
+    let approx : CompiledApprox := { toCompiledBinder := binder, member }
+    pure ({ toCompiledApprox := approx, approxIndex } : CompiledIH)
   let indices := approxs.map (·.index) ++ ihs.map (·.index)
   unless indices.toList == (List.range indices.size) do
     throw "compiler step binders are missing, duplicated or out of order"
@@ -698,13 +701,17 @@ private def compiledGroups (metadata : Lean.Json) : Except String (Array Compile
       let target ← induction.getObjValAs? String "target"
       unless names.contains target do throw "compiler induction targets another group"
       let fixed ← (← induction.getObjValAs? (Array Lean.Json) "fixed").mapM fun f => do
-        pure { toCompiledBinder := ← compiledBinder f,
-          groupIndex := ← f.getObjValAs? Nat "group_index" : CompiledFixed }
+        let binder ← compiledBinder f
+        let groupIndex ← f.getObjValAs? Nat "group_index"
+        pure ({ toCompiledBinder := binder, groupIndex } : CompiledFixed)
       unless (fixed.map (·.groupIndex)).toList == List.range numFixed do
         throw "compiler induction is missing or duplicates a fixed parameter"
       let roles ← (← induction.getObjValAs? (Array Lean.Json) "members").mapM fun m => do
-        pure { member := ← m.getObjValAs? String "name", motive := ← compiledBinder (← m.getObjVal? "motive"),
-          adm := ← compiledBinder (← m.getObjVal? "adm"), step := ← compiledStep (← m.getObjVal? "step") : CompiledMotive }
+        let member ← m.getObjValAs? String "name"
+        let motive ← compiledBinder (← m.getObjVal? "motive")
+        let adm ← compiledBinder (← m.getObjVal? "adm")
+        let step ← compiledStep (← m.getObjVal? "step")
+        pure ({ member, motive, adm, step } : CompiledMotive)
       unless roles.map (·.member) == names do throw "compiler motive membership/order disagrees with EqnInfo"
       let indices := fixed.map (·.index) ++ roles.flatMap (fun m => #[m.motive.index, m.adm.index, m.step.index])
       unless indices.toList.eraseDups.length == indices.size &&
@@ -724,9 +731,9 @@ private def compiledGroupFor (groups : Array CompiledGroup) (ns : String)
     (group : DeclGroup) : Except String CompiledGroup := do
   let fullName := compiledName ns
   let expected := group.members.map fullName
-  let matches := groups.filter fun compiled => compiled.members.any (fun m => expected.contains m.name)
-  unless matches.size == 1 do throw "missing or ambiguous compiler fixpoint group for emitted declarations"
-  let compiled := matches[0]!
+  let candidates := groups.filter fun compiled => compiled.members.any (fun m => expected.contains m.name)
+  unless candidates.size == 1 do throw "missing or ambiguous compiler fixpoint group for emitted declarations"
+  let compiled := candidates[0]!
   unless compiled.members.size == expected.size && compiled.members.all (fun m => expected.contains m.name) do
     throw "compiler fixpoint members disagree with the actual emitted declaration group"
   for decl in group.members do
@@ -1161,8 +1168,8 @@ private def CompleteDecl.right (decl : CompleteDecl) (air : String) : String :=
 
 private def CompleteDecl.motive (decl : CompleteDecl) (fixed : Array String)
     (ns air d : String) : Except String String := do
-  pure s!"fun g => ∀ {decl.binders} {decl.extraBinders ns}, {← decl.guard fixed} → " ++
-    s!"Lean.Order.PartialOrder.rel ({← decl.left "g" d}) {decl.right air}"
+  pure (s!"fun g => ∀ {decl.binders} {decl.extraBinders ns}, {← decl.guard fixed} → " ++
+    s!"Lean.Order.PartialOrder.rel ({← decl.left "g" d}) {decl.right air}")
 
 private def CompleteDecl.fullStatement (decl : CompleteDecl) (head ns air d : String) : String :=
   s!"∀ {decl.binders} {decl.extraBinders ns}, Lean.Order.PartialOrder.rel " ++

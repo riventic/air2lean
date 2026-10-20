@@ -98,6 +98,29 @@ theorem Fits.curU (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : M
 
 /-! ## The ops in generated code (`WP`) -/
 
+/-- An operation whose post keeps the caller part through `set` preserves every assertion on
+that complete part as a spatial frame beside its held resource. The post invariant supplies
+actual ownership, liveness and disjointness; no tick or mode assumption is introduced. -/
+theorem Fits.wp_preservePart (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p : LPh}
+    {g : γ} {t : ThreadId} {c : ConcM Tgt α} {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {B : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hp : p ≠ .gone) (hA : A (L.part g))
+    (hbody : P.WP t c (fun a G' m' d' => B a G' m' d' ∧
+      ∃ rH, P.inv (upd G' t (L.set g p rH)) m') G m d) :
+    P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ rH,
+      P.inv (upd G' t (L.set g p rH)) m' ∧
+      (A ⋆ fun r => r = rH) (L.own (upd G' t (L.set g p rH)) m' t)) G m d := by
+  refine WP.mono ?_ hbody
+  rintro a G' m' d' ⟨hB, rH, hi⟩
+  obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi
+  have hlive : L.ph (upd G' t (L.set g p rH) t) ≠ .gone := by
+    rw [upd_self, L.ph_set]; exact hp
+  refine ⟨hB, rH, hi, ?_⟩
+  rw [own_live (L := L) (hiL.ht hlive).2]
+  refine ⟨L.part g, rH, ?_, ?_, hA, rfl⟩
+  · simpa only [upd_self, L.part_set, L.held_set] using hiL.pdisj t
+  · rw [upd_self, L.part_set, L.held_set]
+
 variable {σ α : Type} [Packed α 32]
 
 /-- The common shape of an op's rule: a pick, then a `MemM` op of `t` from the invariant at the
