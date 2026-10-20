@@ -1,8 +1,8 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"arch11","endian":"big","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["dfp_packed_conversion","dfp_zoned_conversion","distinct_ops","enhanced_dat_2","execution_hint","fast_serialization","fp_extension","high_word","interlocked_access1","load_and_trap","load_and_zero_rightmost_byte","load_store_on_cond","load_store_on_cond_2","message_security_assist_extension3","message_security_assist_extension4","message_security_assist_extension5","miscellaneous_extensions","population_count","processor_assist","reset_reference_bits_multiple","transactional_execution","vector"],"float_mode":"per-instruction","name":"abi64-be-v1","pointer_bits":64,"schema":12,"target_triple":"s390x-linux.5.10...7.2-musl","zig_version":"0.17.0"}}
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"muslabi64","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"mips64r2","endian":"big","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["fp64","gp64","mips1","mips2","mips3","mips32","mips32r2","mips3_32","mips3_32r2","mips4","mips4_32","mips4_32r2","mips5","mips5_32r2","mips64","mips64r2"],"float_mode":"per-instruction","name":"abi64-be-v1","pointer_bits":64,"schema":12,"target_triple":"mips64-linux.5.10...6.16-muslabi64","zig_version":"0.15.2"}}
 import ZigLean
 
 
-namespace Conc
+namespace BigEndian.Conc.V0_15_2.Mips64
 
 open scoped Zig.BigEndian
 
@@ -10,123 +10,11 @@ structure atomic_Value_u32 where
   raw : BitVec 32
   deriving Repr, Inhabited, DecidableEq
 
-inductive Io_Threaded_Thread_Status__enum_1 where
-  | none
-  | parked
-  | blocked
-  | blocked_alertable
-  | canceling
-  | canceled
-  | blocked_canceling
-  | blocked_alertable_canceling
-  deriving Repr, Inhabited, DecidableEq
-
-def Io_Threaded_Thread_Status__enum_1.toBits : Io_Threaded_Thread_Status__enum_1 → BitVec 3
-  | .none => (0 : BitVec 3)
-  | .parked => (1 : BitVec 3)
-  | .blocked => (3 : BitVec 3)
-  | .blocked_alertable => (2 : BitVec 3)
-  | .canceling => (6 : BitVec 3)
-  | .canceled => (7 : BitVec 3)
-  | .blocked_canceling => (5 : BitVec 3)
-  | .blocked_alertable_canceling => (4 : BitVec 3)
-
-def Io_Threaded_Thread_Status__enum_1.ofInt? (v : Int) : Option Io_Threaded_Thread_Status__enum_1 :=
-  if v = 0 then Option.some .none else if v = 1 then Option.some .parked else if v = 3 then Option.some .blocked else if v = 2 then Option.some .blocked_alertable else if v = 6 then Option.some .canceling else if v = 7 then Option.some .canceled else if v = 5 then Option.some .blocked_canceling else if v = 4 then Option.some .blocked_alertable_canceling else Option.none
-
-def Io_Threaded_Thread_Status__enum_1.isNamed (_ : Io_Threaded_Thread_Status__enum_1) : Bool := true
-
-instance : Zig.Packed Io_Threaded_Thread_Status__enum_1 3 where
-  toBits := Io_Threaded_Thread_Status__enum_1.toBits
-  ofBits b := (Io_Threaded_Thread_Status__enum_1.ofInt? (Zig.val false b)).getD default
-  valid b := (Io_Threaded_Thread_Status__enum_1.ofInt? (Zig.val false b)).isSome
-
-structure Io_Threaded_AwaitableId where
-  bits : BitVec 61
-  deriving Repr, Inhabited, DecidableEq
-
-def Io_Threaded_AwaitableId.null : Io_Threaded_AwaitableId := ⟨(0 : BitVec 61)⟩
-def Io_Threaded_AwaitableId.all_ones : Io_Threaded_AwaitableId := ⟨(2305843009213693951 : BitVec 61)⟩
-
-def Io_Threaded_AwaitableId.toBits (e : Io_Threaded_AwaitableId) : BitVec 61 := e.bits
-
-def Io_Threaded_AwaitableId.ofInt? (v : Int) : Option Io_Threaded_AwaitableId :=
-  if 0 ≤ v ∧ v ≤ 2305843009213693951 then Option.some ⟨BitVec.ofInt 61 v⟩ else Option.none
-
-def Io_Threaded_AwaitableId.isNamed (e : Io_Threaded_AwaitableId) : Bool := e.bits == (0 : BitVec 61) || e.bits == (2305843009213693951 : BitVec 61)
-
-instance : Zig.Packed Io_Threaded_AwaitableId 61 where
-  toBits := Io_Threaded_AwaitableId.toBits
-  ofBits b := ⟨b⟩
-
-structure Io_Threaded_Thread_Status where
-  cancelation : Io_Threaded_Thread_Status__enum_1
-  awaitable : Io_Threaded_AwaitableId
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Packed Io_Threaded_Thread_Status 64 where
-  toBits v := ((Zig.Packed.toBits v.cancelation).setWidth 64 <<< 0) ||| ((Zig.Packed.toBits v.awaitable).setWidth 64 <<< 3)
-  ofBits b := { cancelation := Zig.Packed.get b 0, awaitable := Zig.Packed.get b 3 }
-  valid b := Zig.Packed.validAt (Io_Threaded_Thread_Status__enum_1) b 0 && Zig.Packed.validAt (Io_Threaded_AwaitableId) b 3
-
-structure atomic_Value_Io_Threaded_Thread_Status where
-  raw : Io_Threaded_Thread_Status
-  deriving Repr, Inhabited, DecidableEq
-
-inductive Io_Threaded_Future_Status__enum_1 where
-  | pending
-  | pending_awaited
-  | pending_canceled
-  | done
-  deriving Repr, Inhabited, DecidableEq
-
-def Io_Threaded_Future_Status__enum_1.toBits : Io_Threaded_Future_Status__enum_1 → BitVec 2
-  | .pending => (0 : BitVec 2)
-  | .pending_awaited => (1 : BitVec 2)
-  | .pending_canceled => (3 : BitVec 2)
-  | .done => (2 : BitVec 2)
-
-def Io_Threaded_Future_Status__enum_1.ofInt? (v : Int) : Option Io_Threaded_Future_Status__enum_1 :=
-  if v = 0 then Option.some .pending else if v = 1 then Option.some .pending_awaited else if v = 3 then Option.some .pending_canceled else if v = 2 then Option.some .done else Option.none
-
-def Io_Threaded_Future_Status__enum_1.isNamed (_ : Io_Threaded_Future_Status__enum_1) : Bool := true
-
-instance : Zig.Packed Io_Threaded_Future_Status__enum_1 2 where
-  toBits := Io_Threaded_Future_Status__enum_1.toBits
-  ofBits b := (Io_Threaded_Future_Status__enum_1.ofInt? (Zig.val false b)).getD default
-  valid b := (Io_Threaded_Future_Status__enum_1.ofInt? (Zig.val false b)).isSome
-
-structure Io_Threaded_Thread_PackedPtr where
-  bits : BitVec 62
-  deriving Repr, Inhabited, DecidableEq
-
-def Io_Threaded_Thread_PackedPtr.null : Io_Threaded_Thread_PackedPtr := ⟨(0 : BitVec 62)⟩
-def Io_Threaded_Thread_PackedPtr.all_ones : Io_Threaded_Thread_PackedPtr := ⟨(4611686018427387903 : BitVec 62)⟩
-
-def Io_Threaded_Thread_PackedPtr.toBits (e : Io_Threaded_Thread_PackedPtr) : BitVec 62 := e.bits
-
-def Io_Threaded_Thread_PackedPtr.ofInt? (v : Int) : Option Io_Threaded_Thread_PackedPtr :=
-  if 0 ≤ v ∧ v ≤ 4611686018427387903 then Option.some ⟨BitVec.ofInt 62 v⟩ else Option.none
-
-def Io_Threaded_Thread_PackedPtr.isNamed (e : Io_Threaded_Thread_PackedPtr) : Bool := e.bits == (0 : BitVec 62) || e.bits == (4611686018427387903 : BitVec 62)
-
-instance : Zig.Packed Io_Threaded_Thread_PackedPtr 62 where
-  toBits := Io_Threaded_Thread_PackedPtr.toBits
-  ofBits b := ⟨b⟩
-
-structure Io_Threaded_Future_Status where
-  tag : Io_Threaded_Future_Status__enum_1
-  thread : Io_Threaded_Thread_PackedPtr
-  deriving Repr, Inhabited, DecidableEq
-
-instance : Zig.Packed Io_Threaded_Future_Status 64 where
-  toBits v := ((Zig.Packed.toBits v.tag).setWidth 64 <<< 0) ||| ((Zig.Packed.toBits v.thread).setWidth 64 <<< 2)
-  ofBits b := { tag := Zig.Packed.get b 0, thread := Zig.Packed.get b 2 }
-  valid b := Zig.Packed.validAt (Io_Threaded_Future_Status__enum_1) b 0 && Zig.Packed.validAt (Io_Threaded_Thread_PackedPtr) b 2
-
-structure atomic_Value_Io_Threaded_Future_Status where
-  raw : Io_Threaded_Future_Status
-  deriving Repr, Inhabited, DecidableEq
+instance : Zig.Enc atomic_Value_u32 where
+  size := 4
+  align := 4
+  encode v := Zig.Enc.fields 4 [(0, Zig.Enc.encode v.raw)]
+  decode bs := do pure { raw := ← Zig.Enc.decodeAt bs 0 }
 
 structure Thread_SpawnConfig where
   stack_size : BitVec 64
@@ -158,34 +46,6 @@ a pointer or slice copies only its identity, so a spawn proof must hand over or 
 region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .adder (capture0, _) => [.ptr capture0, .value]
-
-structure atomic_Value_Io_Threaded_Future_Status_initLocals where
-  local1 : atomic_Value_Io_Threaded_Future_Status
-  deriving Inhabited
-
-inductive atomic_Value_Io_Threaded_Future_Status_initExit where
-  | ret (v : atomic_Value_Io_Threaded_Future_Status)
-
-def atomic_Value_Io_Threaded_Future_Status_init (p0 : Io_Threaded_Future_Status) : Zig.Result (atomic_Value_Io_Threaded_Future_Status) := do
-  let e ← ((do
-    modify (fun s => { s with local1 := { s.local1 with raw := p0 } })
-    pure (.ret (← get).local1)) : Zig.M atomic_Value_Io_Threaded_Future_Status_initLocals atomic_Value_Io_Threaded_Future_Status_initExit).run' (default : atomic_Value_Io_Threaded_Future_Status_initLocals)
-  match e with
-  | .ret v => pure v
-
-structure atomic_Value_Io_Threaded_Thread_Status_initLocals where
-  local1 : atomic_Value_Io_Threaded_Thread_Status
-  deriving Inhabited
-
-inductive atomic_Value_Io_Threaded_Thread_Status_initExit where
-  | ret (v : atomic_Value_Io_Threaded_Thread_Status)
-
-def atomic_Value_Io_Threaded_Thread_Status_init (p0 : Io_Threaded_Thread_Status) : Zig.Result (atomic_Value_Io_Threaded_Thread_Status) := do
-  let e ← ((do
-    modify (fun s => { s with local1 := { s.local1 with raw := p0 } })
-    pure (.ret (← get).local1)) : Zig.M atomic_Value_Io_Threaded_Thread_Status_initLocals atomic_Value_Io_Threaded_Thread_Status_initExit).run' (default : atomic_Value_Io_Threaded_Thread_Status_initLocals)
-  match e with
-  | .ret v => pure v
 
 structure atomic_Value_u32_initLocals where
   local1 : atomic_Value_u32
@@ -281,6 +141,35 @@ def casSwap (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
     | .br4 v4 => (do
       pure (.ret v4))
     | e => pure e) : Zig.CM Tgt casSwapLocals casSwapExit).run' (default : casSwapLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+structure futexNoSleepLocals where
+  word : Zig.Ptr
+  deriving Inhabited
+
+inductive futexNoSleepExit where
+  | ret (v : BitVec 32)
+  | br6 (v : BitVec 32)
+
+def futexNoSleep  : Zig.ConcM Tgt (BitVec 32) := do
+  let s0 ← Zig.allocStack 4 4
+  let e ← ((do
+    let i0 ← pure (← get).word
+    let i1 ← Zig.callRC (atomic_Value_u32_init (16909060 : BitVec 32))
+    Zig.store (α := atomic_Value_u32) 4 i0 i1
+    let i3 ← pure (i0)
+    let _i4 ← Zig.threadFutexWaitCOf .big i3 (67305985 : BitVec 32)
+    let i5 ← pure (i0)
+    match ← ((do
+      let i7 ← pure i5
+      let i8 ← Zig.atomicLoadCOf .big (n := 32) Zig.AtomicOrder.relaxed 4 i7
+      pure (.br6 i8)) : Zig.CM Tgt futexNoSleepLocals futexNoSleepExit) with
+    | .br6 v6 => (do
+      pure (.ret v6))
+    | e => pure e) : Zig.CM Tgt futexNoSleepLocals futexNoSleepExit).run' { (default : futexNoSleepLocals) with word := s0 }
+  Zig.free s0
   match e with
   | .ret v => pure v
   | _ => throw .panic
@@ -425,4 +314,4 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
     let (capture0, capture1) := a
     discard (adder capture0 capture1)
 
-end Conc
+end BigEndian.Conc.V0_15_2.Mips64

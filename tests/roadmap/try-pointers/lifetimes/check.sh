@@ -73,5 +73,6 @@ python3 -B scripts/fixtures.py build TryLifetimes
 python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}"
 python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"
 for v in "${versions[@]}"; do
-  echo "$v: $(cat "$work/out/TryLifetimes.V${v//./_}.Lifetimes.txt")"
+  line=$(cat "$work/out/TryLifetimes.V${v//./_}.Lifetimes.main.txt")
+  echo "$v: $line"
 done

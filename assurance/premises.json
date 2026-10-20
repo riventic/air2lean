@@ -23,8 +23,6 @@
     "tests/roadmap/dispatch-templates", "tests/roadmap/loop-tactics/nested", "tests/roadmap/vcs",
     "tests/roadmap/interfaces", "tests/roadmap/thread-tuples", "tests/roadmap/spawn-failure"],
   "generated_imports": {
-    "Conc.Gen": "tests/roadmap/big-endian/concurrency.sh copies conc-gen/<version>-<target>.lean to Conc/Gen.lean in its work tree and compiles it at gate time.",
-    "ConcRun": "tests/roadmap/big-endian/concurrency.sh compiles ConcRun.lean into its work tree at gate time.",
     "ExternModel": "tests/roadmap/extern-calls/check.sh compiles Model.lean as ExternModel.olean at gate time (a module name cannot contain the directory's hyphen).",
     "countdown": "tests/roadmap/dispatch/check.sh compiles the fresh Emitter.lean translation into countdown.olean at gate time.",
     "Calls": "tests/roadmap/indirect-calls/check.sh compiles the fresh Pipeline.lean translation into Calls.olean at gate time.",

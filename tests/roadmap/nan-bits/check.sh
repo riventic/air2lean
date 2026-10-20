@@ -104,7 +104,7 @@ python3 -B scripts/fixtures.py audit "${models[@]}" "${theorems[@]}"
 # Each model's lines against the retained native observations of both targets.
 python3 -B scripts/fixtures.py run "$work/lines" "${mains[@]}"
 for v in "${versions[@]}"; do
-  lines="$work/lines/NanBits.V${v//./_}.Model.txt"
+  lines="$work/lines/NanBits.V${v//./_}.Model.main.txt"
   for entry in "${arches[@]}"; do
     compare "$lines" "$dir/expected/$v-${entry%%:*}.txt"
   done

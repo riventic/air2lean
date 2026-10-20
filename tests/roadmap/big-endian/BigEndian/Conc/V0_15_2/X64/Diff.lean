@@ -1,8 +1,10 @@
-import ConcRun
+import BigEndian.Conc.V0_15_2.X64.Run
 
-/-! The lines of `concurrency_native.zig` but the futex case (`ConcRun.lean`). -/
+/-! The lines of `concurrency_native.zig` but the futex case (`Run.lean`). -/
 
-open Zig Conc
+open Zig BigEndian.Conc.V0_15_2.X64 BigEndian.Conc.V0_15_2.X64.Run
+
+namespace BigEndian.Conc.V0_15_2.X64.Diff
 
 def main : IO Unit := do
   let line (name s : String) : IO Unit := IO.println s!"{name}: {s}"
@@ -13,3 +15,5 @@ def main : IO Unit := do
   line "rmwMax" (runAll (fun v => toString v.toInt) (rmwMax (BitVec.ofInt 32 (-5)) 3))
   line "threadsAdd" (runAll ebv (threadsAdd 3))
   line "heapWord" (runAll ebv (heapWord default 0x0A0B0C0D))
+
+end BigEndian.Conc.V0_15_2.X64.Diff

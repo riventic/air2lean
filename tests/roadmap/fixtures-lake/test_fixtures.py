@@ -146,7 +146,7 @@ class Run(Repo):
         self.assertEqual(fx.run(out, ["A.Main:A.main"]), 1)
         self.assertEqual(fx.build(["A"]), 0)
         self.assertEqual(fx.run(out, ["A.Main:A.main"]), 0)
-        self.assertEqual((out / "A.Main.txt").read_text(), "a line\n")
+        self.assertEqual((out / "A.main.txt").read_text(), "a line\n")
         # A changed source is out of date until it is built again.
         self.write("tests/roadmap/a/A/Main.lean", 'namespace A\ndef main : IO Unit := IO.println "b"\nend A\n')
         self.assertEqual(fx.run(out, ["A.Main:A.main"]), 1)

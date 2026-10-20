@@ -37,7 +37,7 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   replaced by NEW, in its text and its path. Fails unless the instance file equals that text
   byte for byte (`--write`: writes it). Every OLD must occur in both text and path.
 - `run`: runs each DECL (an `IO Unit`, of the built fixture MODULE) in one `lean --run` of the
-  fixture package, its standard output to OUTDIR/MODULE.txt. The modules must be up to date in
+  fixture package, its standard output to OUTDIR/DECL.txt. The modules must be up to date in
   Lake's trace (`lake build --no-build`), so a run never loads a stale module.
 - `files`: the repository paths of the package's modules (scripts/lean-deps.py: they are not
   standalone files).
@@ -321,8 +321,8 @@ def run(outdir: Path, specs: list[str]) -> int:
             raise SystemExit(f"fixtures run: expected MODULE:DECL, not {spec!r}")
         mains.append((module, decl))
     modules = sorted({m for m, _ in mains})
-    if len(modules) != len(mains):
-        raise SystemExit("fixtures run: one DECL per module")
+    if len({d for _, d in mains}) != len(mains):
+        raise SystemExit("fixtures run: a DECL is named twice")
     check_names(PACKAGE)
     done = lake(PACKAGE, ["build", "--no-build", *modules], capture=True)
     if done.returncode:
@@ -339,7 +339,7 @@ def run(outdir: Path, specs: list[str]) -> int:
             "  let old ← IO.setStdout (IO.FS.Stream.ofHandle h)",
             "  try act finally h.flush; discard (IO.setStdout old)",
             "def main : IO Unit := do"]
-        lines += [f"  runTo {json.dumps(str(outdir / (m + '.txt')))} {d}" for m, d in mains]
+        lines += [f"  runTo {json.dumps(str(outdir / (d + '.txt')))} {d}" for _, d in mains]
         driver.write_text("\n".join(lines) + "\n", encoding="utf-8")
         done = lake(PACKAGE, ["env", "lean", "--run", str(driver)], capture=True)
     if done.returncode:

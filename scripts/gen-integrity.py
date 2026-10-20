@@ -198,10 +198,11 @@ FIXTURES = [
     for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
 ] + [
     # T03 concurrency.sh: concurrency.zig per Zig version and target.
-    (f"tests/roadmap/big-endian/conc-gen/{v}-{target}.lean",
+    (f"tests/roadmap/big-endian/BigEndian/Conc/V{v.replace('.', '_')}/{ns}/Gen.lean",
      f"tests/roadmap/big-endian/air/{v}/concurrency/{target}",
-     ["--namespace", "Conc", "--prefix", "concurrency."], "exact")
-    for v in ("0.15.2", "0.17.0") for target in ("s390x-linux", "mips64-linux", "x86_64-linux")
+     ["--namespace", f"BigEndian.Conc.V{v.replace('.', '_')}.{ns}", "--prefix", "concurrency."], "exact")
+    for v in ("0.15.2", "0.17.0")
+    for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
 ] + [
     # L07/L08 packed-casts/check.sh: one translation per source and version.
     (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/{ns}.lean",

@@ -1,8 +1,10 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.16-musl","zig_version":"0.15.2"}}
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"arch8","endian":"big","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":[],"float_mode":"per-instruction","name":"abi64-be-v1","pointer_bits":64,"schema":12,"target_triple":"s390x-linux.5.10...6.16-musl","zig_version":"0.15.2"}}
 import ZigLean
 
 
-namespace Conc
+namespace BigEndian.Conc.V0_15_2.S390x
+
+open scoped Zig.BigEndian
 
 structure atomic_Value_u32 where
   raw : BitVec 32
@@ -78,7 +80,7 @@ def adder.loop5 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.CM Tgt adderLocals adderEx
     let i7 ← pure ((← get).i)
     let i8 ← pure (Zig.lt false i7 p1)
     if i8 then (do
-      let _i10 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 4 p0 (257 : BitVec 32)
+      let _i10 ← Zig.atomicRmwCOf .big Zig.RmwOp.add false Zig.AtomicOrder.seqCst 4 p0 (257 : BitVec 32)
       let i11 ← pure ((← get).i)
       let i12 ← Zig.add false i11 (1 : BitVec 32)
       modify (fun s => { s with i := i12 })
@@ -113,7 +115,7 @@ def bytesThenLoad (p0 : BitVec 8) (p1 : BitVec 8) (p2 : BitVec 8) (p3 : BitVec 8
     Zig.store (α := BitVec 8) 1 (⟨some 0, 1⟩ : Zig.Ptr) p1
     Zig.store (α := BitVec 8) 1 (⟨some 0, 2⟩ : Zig.Ptr) p2
     Zig.store (α := BitVec 8) 1 (⟨some 0, 3⟩ : Zig.Ptr) p3
-    let i8 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 (⟨some 0, 0⟩ : Zig.Ptr)
+    let i8 ← Zig.atomicLoadCOf .big (n := 32) Zig.AtomicOrder.seqCst 4 (⟨some 0, 0⟩ : Zig.Ptr)
     pure (.ret i8)) : Zig.CM Tgt bytesThenLoadLocals bytesThenLoadExit).run' (default : bytesThenLoadLocals)
   match e with
   | .ret v => pure v
@@ -128,7 +130,7 @@ inductive casSwapExit where
 def casSwap (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   let e ← ((do
     Zig.store (α := BitVec 64) 8 (⟨some 1, 0⟩ : Zig.Ptr) p0
-    let i3 ← Zig.cmpxchgC Zig.AtomicOrder.seqCst Zig.AtomicOrder.seqCst 8 (⟨some 1, 0⟩ : Zig.Ptr) p0 p1
+    let i3 ← Zig.cmpxchgCOf .big Zig.AtomicOrder.seqCst Zig.AtomicOrder.seqCst 8 (⟨some 1, 0⟩ : Zig.Ptr) p0 p1
     match ← ((do
       let i5 ← pure ((i3).isNone)
       if i5 then (do
@@ -158,11 +160,11 @@ def futexNoSleep  : Zig.ConcM Tgt (BitVec 32) := do
     let i1 ← Zig.callRC (atomic_Value_u32_init (16909060 : BitVec 32))
     Zig.store (α := atomic_Value_u32) 4 i0 i1
     let i3 ← pure (i0)
-    let _i4 ← Zig.threadFutexWaitC i3 (67305985 : BitVec 32)
+    let _i4 ← Zig.threadFutexWaitCOf .big i3 (67305985 : BitVec 32)
     let i5 ← pure (i0)
     match ← ((do
       let i7 ← pure i5
-      let i8 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.relaxed 4 i7
+      let i8 ← Zig.atomicLoadCOf .big (n := 32) Zig.AtomicOrder.relaxed 4 i7
       pure (.br6 i8)) : Zig.CM Tgt futexNoSleepLocals futexNoSleepExit) with
     | .br6 v6 => (do
       pure (.ret v6))
@@ -189,7 +191,7 @@ def heapWord (p0 : Zig.Allocator) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
       let i6 ← pure ((.error i5) : Except Zig.ErrName (BitVec 32))
       pure (.ret i6))
     | .ok v3 => (do
-      Zig.atomicStoreC Zig.AtomicOrder.seqCst 4 v3 p1
+      Zig.atomicStoreCOf .big Zig.AtomicOrder.seqCst 4 v3 p1
       let i9 ← pure (v3)
       let i10 ← Zig.callMC (Zig.load (BitVec 8) 1 (i9.elem 1 (0 : BitVec 64)))
       let i11 ← Zig.intCast false false 32 i10 (safe := false)
@@ -212,7 +214,7 @@ inductive rmwCarryByte0Exit where
 def rmwCarryByte0 (p0 : BitVec 16) (p1 : BitVec 16) : Zig.ConcM Tgt (BitVec 8) := do
   let e ← ((do
     Zig.store (α := BitVec 16) 2 (⟨some 2, 0⟩ : Zig.Ptr) p0
-    let _i3 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.seqCst 2 (⟨some 2, 0⟩ : Zig.Ptr) p1
+    let _i3 ← Zig.atomicRmwCOf .big Zig.RmwOp.add false Zig.AtomicOrder.seqCst 2 (⟨some 2, 0⟩ : Zig.Ptr) p1
     let i4 ← Zig.load (BitVec 8) 1 (⟨some 2, 0⟩ : Zig.Ptr)
     pure (.ret i4)) : Zig.CM Tgt rmwCarryByte0Locals rmwCarryByte0Exit).run' (default : rmwCarryByte0Locals)
   match e with
@@ -227,7 +229,7 @@ inductive rmwMaxExit where
 def rmwMax (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let e ← ((do
     Zig.store (α := BitVec 32) 4 (⟨some 3, 0⟩ : Zig.Ptr) p0
-    let _i3 ← Zig.atomicRmwC Zig.RmwOp.max true Zig.AtomicOrder.seqCst 4 (⟨some 3, 0⟩ : Zig.Ptr) p1
+    let _i3 ← Zig.atomicRmwCOf .big Zig.RmwOp.max true Zig.AtomicOrder.seqCst 4 (⟨some 3, 0⟩ : Zig.Ptr) p1
     let i4 ← Zig.load (BitVec 32) 4 (⟨some 3, 0⟩ : Zig.Ptr)
     pure (.ret i4)) : Zig.CM Tgt rmwMaxLocals rmwMaxExit).run' (default : rmwMaxLocals)
   match e with
@@ -241,7 +243,7 @@ inductive storeThenBytesExit where
 
 def storeThenBytes (p0 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   let e ← ((do
-    Zig.atomicStoreC Zig.AtomicOrder.seqCst 4 (⟨some 0, 0⟩ : Zig.Ptr) p0
+    Zig.atomicStoreCOf .big Zig.AtomicOrder.seqCst 4 (⟨some 0, 0⟩ : Zig.Ptr) p0
     let i2 ← Zig.load (BitVec 8) 1 (⟨some 0, 0⟩ : Zig.Ptr)
     let i3 ← Zig.intCast false false 32 i2 (safe := false)
     let i4 ← pure (Zig.shl i3 (24 : BitVec 5))
@@ -297,7 +299,7 @@ def threadsAdd (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32))
         let i21 ← Zig.intCast false false 32 i20 (safe := false)
         let i22 ← pure (Zig.shl i21 (24 : BitVec 5))
         let i23 ← pure (i1)
-        let i24 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.seqCst 4 i23
+        let i24 ← Zig.atomicLoadCOf .big (n := 32) Zig.AtomicOrder.seqCst 4 i23
         let i25 ← pure (i24 &&& (16777215 : BitVec 32))
         let i26 ← pure (i22 ||| i25)
         let i27 ← pure ((.ok i26) : Except Zig.ErrName (BitVec 32))
@@ -312,4 +314,4 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
     let (capture0, capture1) := a
     discard (adder capture0 capture1)
 
-end Conc
+end BigEndian.Conc.V0_15_2.S390x

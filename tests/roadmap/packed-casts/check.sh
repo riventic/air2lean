@@ -142,7 +142,7 @@ for v in "${versions[@]}"; do
   for entry in "${sources[@]}"; do
     IFS=: read -r _ _ model vs <<<"$entry"
     has_version "$vs" "$v" || continue
-    cat "$work/out/PackedCasts.V${v//./_}.$model.txt" >> "$work/$v.txt"
+    cat "$work/out/PackedCasts.V${v//./_}.$model.main.txt" >> "$work/$v.txt"
   done
   # The models' lines are the retained native observations of this version.
   compare "$work/$v.txt" "$dir/expected/$v.txt"
