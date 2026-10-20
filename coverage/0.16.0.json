@@ -30773,7 +30773,7 @@
       "ZigLean/Mem/Alloc.lean": "c4d4c570b6b6f9b54618ee18d83b0b944435b0520df0d76d16113483cdd78fd9",
       "ZigLean/Mem/AllocLemmas.lean": "e00b0510cf5a9aaacca30aba2fc955476f1afcc58926e771faf637662807a6a5",
       "ZigLean/Mem/AtomicPtr.lean": "381605fe81954d627d62d1df8cb2fd323bcabee47ffb3933bd5573f0953831f6",
-      "ZigLean/Mem/Basic.lean": "6ef9ca06de103be6b0c412baac9a60b62c5944c5a0175d2f418f2b16dba10267",
+      "ZigLean/Mem/Basic.lean": "78f7576c5a689fc25dc552cfd9fa9dedd05f8a7c3d042705415f07b6aa38abb3",
       "ZigLean/Mem/ConstPtr.lean": "145200bad3d8717205c461ce9ae4d4d74fd31e4df97c6a7c6302bdb40a05e2e2",
       "ZigLean/Mem/Device.lean": "64bffb4bf935b4d226cb5746fa129aa7b794ff466040ff545808b285c256b57d",
       "ZigLean/Mem/Enc.lean": "7d2e73c95e19013aaa36382f7f00b9817bd5a634fbd19829c2c5ae0e0a3541c2",
