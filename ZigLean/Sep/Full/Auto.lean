@@ -5966,10 +5966,13 @@ def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext
 (`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory), and the Boolean
 facts (`(G 1).2.mid = false`: the case of a ghost value's flag). -/
 def fieldEqs (skip? : Option FVarId := none) : MetaM (Array Expr) := do
+  let skipType? ← skip?.mapM fun f => instantiateMVars (← f.getType)
   let mut out := #[]
   for d in ← getLCtx do
     if d.isImplementationDetail || skip? == some d.fvarId then continue
-    let some (_, l, r) := (← instantiateMVars d.type).eq? | continue
+    let ty ← instantiateMVars d.type
+    let some (_, l, r) := ty.eq? | continue
+    if skipType? == some ty then continue
     if (r.isConstOf ``Bool.true || r.isConstOf ``Bool.false) && !l.hasExprMVar &&
         !(l.isConstOf ``Bool.true || l.isConstOf ``Bool.false) then
       out := out.push d.toExpr; continue
@@ -5980,7 +5983,7 @@ def fieldEqs (skip? : Option FVarId := none) : MetaM (Array Expr) := do
   return out
 
 /-- A stop's facts and side goals use the same current context equations. A fact being
-normalized excludes itself, so its own equation cannot erase the fact. -/
+normalized excludes its equation type, including duplicate proofs, so it cannot erase itself. -/
 def wpFactCtx (extra : Array Syntax) (skip? : Option FVarId := none) : TacticM Simp.Context := do
   let ctx ← wpHypCtx extra
   let mut eqs : SimpTheorems := {}
@@ -6365,6 +6368,14 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         match ← g'.withContext (wpCurrentHyp? fn) with
         | none => g := g'
         | some fn =>
+          let original := fn
+          let some (fn, g') ← wpNorm g' fn #[] (fields := true) (keepOriginal := true)
+            | return []
+          let some g' ← if fn == original then pure (some g') else wpForward g' fn
+            | return []
+          let some fn ← g'.withContext (wpCurrentHyp? fn) | do
+            g := g'
+            continue
           -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
           let (f', g'') ← g'.withContext do
             (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
@@ -6372,6 +6383,18 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
       return [g]
   let some g ← wpForward g h | return []
   let some h ← g.withContext (wpCurrentHyp? h) | return [g]
+  let original := h
+  let some (h, g) ← wpNorm g h #[] (fields := true) (keepOriginal := true) | return []
+  let some g ← if h == original then pure (some g) else wpForward g h | return []
+  let some h ← g.withContext (wpCurrentHyp? h) | return [g]
+  let normalized ← g.withContext do whnfR (← instantiateMVars (← h.getType))
+  let compound ← g.withContext do
+    if normalized.isAppOfArity ``And 2 || normalized.isAppOfArity ``Exists 2 ||
+        normalized.isAppOfArity ``Or 2 ||
+        (normalized.getAppFn.isConstOf ``ite && normalized.getAppNumArgs ≥ 5) then return true
+    let .const c _ := normalized.getAppFn | return false
+    return isStructure (← getEnv) c && !(← isLibrary c) && (← isClass? normalized).isNone
+  if normalized != ty && compound then return ← wpSplit g h (keep := true)
   return [← destruct g h]
 
 /-- **The facts of a step's run** `h : (x.run m).run = some (.ok (a, m'))` (it stays): each run
@@ -6465,20 +6488,22 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let original := h
   let some (h, g) ← wpNorm g h extra (fields := true) (keepOriginal := true) | return []
   let some g ← if h == original then pure (some g) else wpForward g h | return []
-  let normalized? ← if h == original then pure none else
-    g.withContext (wpCurrentHyp? h)
-  -- Delay the proved normalized fact in each goal's binder, not a branch-local free variable.
-  let g ← match normalized? with
+  let equation? ← if h == original then pure none else g.withContext do
+    let some h ← wpCurrentHyp? h | return none
+    return if (← instantiateMVars (← h.getType)).eq?.isSome then some h else none
+  -- A retained whole equation can erase a leaf via fieldEqs. Preserve its substitution,
+  -- proof-locally through raw branches, without a second compound decomposition.
+  let g ← match equation? with
     | none => pure g
     | some h => g.withContext do
       g.assert `hnormalized (← h.getType) (mkFVar h)
   let gs ← match ← g.withContext (wpCurrentHyp? original) with
     | none => pure [g]
     | some original => wpSplit g original (keep := true)
-  if normalized?.isNone then return gs
+  if equation?.isNone then return gs
   gs.flatMapM fun g => do
     let (h, g) ← g.intro1P
-    wpSplit g h (keep := true)
+    return [← destruct g h]
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an

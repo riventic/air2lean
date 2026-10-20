@@ -481,6 +481,60 @@ theorem incoming_normalized_branch_lifetime {Tgt γ : Type} (P : Proto Tgt γ) (
       G m n := by
   fsym
 
+/-- A normalized whole equation may simplify a raw leaf to True; its data substitution
+still runs before the caller continues. This inspects the goal, not just eventual solvability. -/
+theorem incoming_normalized_equation_substitution (flag y : Bool) (hf : flag = false)
+    (h : if flag then True else y = false) (R : Bool → Prop) (hr : R false) : R y := by
+  run_tac withRunCaches do
+    let g ← getMainGoal
+    let h := (← getLocalDeclFromUserName `h).fvarId
+    let r := (← getLocalDeclFromUserName `R).toExpr
+    let expected := mkApp r (mkConst ``Bool.false)
+    let gs ← wpHyp g h #[]
+    if gs.isEmpty then
+      throwError "incoming_normalized_equation_substitution: no surviving goal"
+    for g in gs do
+      unless (← g.withContext (instantiateMVars (← g.getType))) == expected do
+        throwError "incoming_normalized_equation_substitution: the data was not substituted"
+    replaceMainGoal gs
+  all_goals assumption
+
+/-- Duplicate raw equations cannot erase one another before their existing substitution. -/
+theorem incoming_sibling_equation_substitution (y : Bool) (h : y = false ∧ y = false)
+    (R : Bool → Prop) (hr : R false) : R y := by
+  run_tac withRunCaches do
+    let g ← getMainGoal
+    let h := (← getLocalDeclFromUserName `h).fvarId
+    let r := (← getLocalDeclFromUserName `R).toExpr
+    let expected := mkApp r (mkConst ``Bool.false)
+    let gs ← wpHyp g h #[]
+    if gs.isEmpty then
+      throwError "incoming_sibling_equation_substitution: no surviving goal"
+    for g in gs do
+      unless (← g.withContext (instantiateMVars (← g.getType))) == expected do
+        throwError "incoming_sibling_equation_substitution: the data was not substituted"
+    replaceMainGoal gs
+  all_goals assumption
+
+/-- Context equations normalize a blocked left side before data substitution; duplicate
+evidence of the raw equation cannot erase that normalization. -/
+theorem incoming_blocked_sibling_equation_substitution (flag y : Bool) (hf : flag = false)
+    (h : (if flag then true else y) = false ∧ (if flag then true else y) = false)
+    (R : Bool → Prop) (hr : R false) : R y := by
+  run_tac withRunCaches do
+    let g ← getMainGoal
+    let h := (← getLocalDeclFromUserName `h).fvarId
+    let r := (← getLocalDeclFromUserName `R).toExpr
+    let expected := mkApp r (mkConst ``Bool.false)
+    let gs ← wpHyp g h #[]
+    if gs.isEmpty then
+      throwError "incoming_blocked_sibling_equation_substitution: no surviving goal"
+    for g in gs do
+      unless (← g.withContext (instantiateMVars (← g.getType))) == expected do
+        throwError "incoming_blocked_sibling_equation_substitution: the data was not substituted"
+    replaceMainGoal gs
+  all_goals assumption
+
 /-- Inspect the simplifier result and require that the existing normalization API closes
 the goal when a closed bit-vector comparison makes an incoming fact impossible. -/
 theorem incoming_false_result (R : Prop) (flag : Bool)
