@@ -172,12 +172,7 @@ theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
       else sigPost P C t g D r G' m' d') G m d := by
   fsym [FCond.wp_signalAs hC condS_dec, FCond.wp_bump hC, FCond.wp_wakeEp hC,
-    (fun {Gwp : ThreadId → γ} {n₀ : Nat}
-        {Q₀ : Ptr → (ThreadId → γ) → Mem → Nat → Prop}
-        {G₀ : ThreadId → γ} {m₀ : Mem} (hi₀ : P.inv G₀ m₀) =>
-      WP.liftMem_pure (P := P) (t := t) (G := Gwp) (n := n₀) (Q := Q₀)
-        (hC.projE hi₀) rfl),
-    condS_eq, condS_bits, condS_sig, condS_signal_value, condS_add1, condS_gtWS,
+    hC.wp_projE (t := t), condS_eq, condS_bits, condS_sig, condS_signal_value, condS_add1, condS_gtWS,
     C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
     sigInv, sigPost, Io_Condition_signal.again11]
 

@@ -2077,6 +2077,19 @@ theorem _root_.Zig.Full.FLock.Fits.projE (hC : L.Fits (C.prim L) P U ok) {G : Th
     (by simp [Word.ptr]; omega)) (inBounds_of (b := C.S.b) rfl hblk
     (by simp [Word.ptr, Ptr.add]; omega) (by simp [Word.ptr, Ptr.add]; omega))
 
+/-- `&cond.epoch` as a step (`projE`): no stop, the epoch's pointer, the memory unchanged. The
+invariant may hold at other ghost values than the step's (`upd G t g` at a stop). -/
+theorem _root_.Zig.Full.FLock.Fits.wp_projE (hC : L.Fits (C.prim L) P U ok)
+    {G₀ G : ThreadId → γ} {m : Mem} {n : Nat} {Q : Ptr → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv G₀ m) (h : Q (C.S.ptr.add 4) G m n) :
+    P.WP t (ConcM.liftMem (ptrProject C.S.ptr (·.add 4)) : ConcM Tgt Ptr) Q G m n := by
+  have hr : ((ptrProject C.S.ptr (·.add 4)).run m).run = some (.ok (C.S.ptr.add 4, m)) := by
+    rw [hC.projE hi]; rfl
+  refine WP.liftMem (fun e he => ?_) (fun a m' he => ?_) fun hn => ?_
+  · rw [hr] at he; cases he
+  · rw [hr] at he; cases he; exact ⟨rfl, h⟩
+  · rw [hr] at hn; cases hn
+
 /-- A byte of the epoch is not the state's. -/
 theorem ep_notS {l : Zig.Loc} (hl : C.Ep.In l) : ¬ C.S.In l := by
   obtain ⟨-, h2, -⟩ := hl
