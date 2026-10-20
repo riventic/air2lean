@@ -836,7 +836,8 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to eight at once inside their own guard (24000 MiB; `--jobs`, `--rss-mib`), the longest first by
+to eight at once inside their own guard (24000 MiB, at most the admission of an enclosing guard:
+the full build's whole admission; `--jobs`, `--rss-mib`), the longest first by
 the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
 unit's largest recent sampled peak) fit in 85% of the guard's limit; the measurements
 (`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
@@ -851,7 +852,7 @@ to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs
 own (`--only TEXT`: the units whose name or checks contain TEXT). It writes each unit's wall time,
 peak RSS (its process group, sampled) and wall time by process kind (lean, zig, the translator,
 lake, python) to `DIR/units.json` and prints the 20 longest units; these are measurements, used
-for nothing else.
+only for the order and admission above.
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 

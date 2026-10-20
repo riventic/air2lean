@@ -76,7 +76,7 @@ mkdir -p "$logs"
 # One admission for the whole build: this script runs again inside one guard, and each phase's
 # guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The phases
 # keep their own limits and reports, each within $rss (the fixture checks' guard,
-# scripts/fixture-checks.sh: 11000 MiB). A phase guard above it fails (inheritance_refused).
+# scripts/fixture-checks.sh: all of it). A phase guard above it fails (inheritance_refused).
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
   [ "$fixtures" = 1 ] || inner+=(--no-fixtures)

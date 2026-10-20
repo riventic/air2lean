@@ -88,6 +88,7 @@ NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--
 # the running units stay within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the
 # guard enforces on their sum.
 HINT_RUNS, MEM_MARGIN, MEM_FLOOR_MIB, MEM_SHARE = 5, 1.5, 1024, 0.85
+GUARD_RSS_MIB = 24000  # the units' guard on its own (`guard_rss_mib`)
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -291,6 +292,20 @@ def _stage(unit, scratch):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
+def guard_rss_mib():
+    """The default limit of the units' guard (scripts/fixture-checks.sh): GUARD_RSS_MIB, at most
+    the admission of an enclosing guard (scripts/build-guard.py INHERIT; scripts/full-build.sh),
+    which the units' guard inherits and which refuses a larger limit (inheritance_refused)."""
+    try:
+        grant = json.loads(os.environ.get('AIR2LEAN_GUARD_ADMISSION') or 'null')
+    except ValueError:
+        grant = None
+    limit = grant.get('rss_mib') if isinstance(grant, dict) else None
+    if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > 0:
+        return min(GUARD_RSS_MIB, int(limit))
+    return GUARD_RSS_MIB
+
+
 def hints_path():
     """The last runs' per-unit measurements, one file per machine (every worktree runs the same
     units, and a gate's worktree is fresh): $AIR2LEAN_FIXTURE_SCHEDULE, else beside the build
@@ -384,7 +399,12 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
                         'wall time by process kind (scripts/par.py) to this JSON file')
+    parser.add_argument('--guard-rss-mib', action='store_true',
+                        help='print the default limit of scripts/fixture-checks.sh\'s guard (`guard_rss_mib`)')
     a = parser.parse_args(argv)
+    if a.guard_rss_mib:
+        print(guard_rss_mib())
+        return 0
     tree = Tree()
     units = [u for u in discover(tree)
              if not a.only or any(t in u['name'] or any(t in c for c in u['checks']) for t in a.only)]

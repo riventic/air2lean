@@ -86,6 +86,18 @@ class NoReuse(unittest.TestCase):
         self.assertEqual([units[i]["name"] for i in order], ["new", "long", "short"])
         self.assertEqual(requests, [fc.MEM_FLOOR_MIB, int(6000 * fc.MEM_MARGIN), 5000])
 
+    def test_the_default_guard_stays_within_an_enclosing_admission(self):
+        # A nested guard above its enclosing admission is refused (build-guard.py `inherited`).
+        guard_spec = importlib.util.spec_from_file_location("air2lean_build_guard", ROOT / "scripts/build-guard.py")
+        guard = importlib.util.module_from_spec(guard_spec)
+        guard_spec.loader.exec_module(guard)
+        for grant, expected in ((None, fc.GUARD_RSS_MIB), ({"rss_mib": 22000}, 22000),
+                                ({"rss_mib": 11000.0}, 11000), ({"rss_mib": 64000}, fc.GUARD_RSS_MIB),
+                                ({"rss_mib": True}, fc.GUARD_RSS_MIB), ("not json", fc.GUARD_RSS_MIB)):
+            value = grant if isinstance(grant, str) else json.dumps(grant)
+            with self.subTest(grant=grant), mock.patch.dict(os.environ, {guard.INHERIT: value}):
+                self.assertEqual(fc.guard_rss_mib(), expected)
+
     def test_there_is_no_selection_by_key(self):
         # `--base REF` chose the units by the key's files; it is rejected, not ignored.
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exit_:
