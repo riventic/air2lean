@@ -59,6 +59,7 @@ The register below counts <!-- register:counts -->**90 requirements: 45 complete
 | [#511](https://github.com/riventic/air2lean/pull/511), [#517](https://github.com/riventic/air2lean/pull/517) | Compiler-owned Unit audits are bound to their actual inputs and outputs (#511); fixture audits carry the canonical compiler inputs (#517). |
 | [#512](https://github.com/riventic/air2lean/pull/512), [#516](https://github.com/riventic/air2lean/pull/516) | Sync is generated for every real profile (0.17.0 Linux, 0.16.0 Linux and Darwin) side by side (#512), and each profile instantiates the `IoMutexCode`/`MutexImpl` contract (#516). |
 | [#514](https://github.com/riventic/air2lean/pull/514) | Compiled premise comparison fails closed when a selected theorem has no source-derived bound. |
+| [#518](https://github.com/riventic/air2lean/pull/518) | Basic is generated for all four supported versions. |
 
 ### Merged to main on 2026-10-19
 
