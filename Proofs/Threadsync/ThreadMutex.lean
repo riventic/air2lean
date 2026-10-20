@@ -102,7 +102,8 @@ theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
   have hS : threadMutexW.c = L.c := hc3.symm
   fsym [wp_loadLock hP (g := L.set g .spin rnil),
     wp_waitOn hP threadMutexW hS (g := L.set g .wait rnil),
-    hP.toWait (g := L.set g .spin rnil),
+    hP.toWait (t := t) (g := L.set g .spin rnil)
+      ((hP.ok_set g .spin rnil).mpr hok) (L.ph_set g .spin rnil),
     WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
       (loop16_body hP hcost hc3 t g hok hu d),
     threadFutexWaitC_eq, L.ph_set, L.set_set, hP.ok_set,

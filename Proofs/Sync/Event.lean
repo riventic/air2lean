@@ -23,13 +23,13 @@ theorem ioEvent_dec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 2) →
 
 /-- Closed decoder equations remain available after the walk splits a returned enum value. -/
 theorem ioEvent_decode0 :
-    (Packed.ofBits? (α := Io_Event) 0).run = some (.ok .unset) := rfl
+    (Packed.ofBits? (α := Io_Event) 0#32).run = some (.ok .unset) := rfl
 
 theorem ioEvent_decode1 :
-    (Packed.ofBits? (α := Io_Event) 1).run = some (.ok .waiting) := rfl
+    (Packed.ofBits? (α := Io_Event) 1#32).run = some (.ok .waiting) := rfl
 
 theorem ioEvent_decode2 :
-    (Packed.ofBits? (α := Io_Event) 2).run = some (.ok .is_set) := rfl
+    (Packed.ofBits? (α := Io_Event) 2#32).run = some (.ok .is_set) := rfl
 
 attribute [local fsym_arith] ioEvent_decode0 ioEvent_decode1 ioEvent_decode2
 
@@ -88,7 +88,8 @@ theorem wait_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
       else waitPost P E t g D r G' m' d') G m d := by
   fsym [hE.wp_tick_unmetered (g := E.set g .w1),
     FEvent.wp_wait (g := E.set g .w1) hE (ε := Io_Event) (e := .waiting) (by decide),
-    FEvent.wp_loadAs (g := E.set g .w1) hE ioEvent_dec, hE.lpart, hE.lph, E.ph_set, E.set_set,
+    FEvent.wp_loadAs (g := E.set g .w1) hE ioEvent_dec (.inr (E.ph_set g .w1)),
+    hE.lpart, hE.lph, E.ph_set, E.set_set,
     FEvent.set_of hgx, ioEvent_of0, ioEvent_of1, ioEvent_of2,
     waitInv, waitPost, Io_Event_waitUncancelable.again17]
 

@@ -1,5 +1,6 @@
 import Proofs.Threadsync.Deadline
 import ZigLean.Sep.Full.Event
+import ZigLean.Sep.Full.LockSteps
 import ZigLean.Sep.Full.AutoWP
 
 /-!
@@ -135,7 +136,7 @@ theorem dwait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
     P.WP t (Thread_Futex_Deadline_wait q E.W.ptr 1) (fun x G' m' d' => x = .ok () ∧ d' < d ∧
       m'.current = t ∧ ∃ r', DPart DR q bsD r' ∧
         P.inv (upd G' t (gD L E g .w1 r')) m') G m d := by
-  fsym [FEvent.wp_liftPart hE, dload, FEvent.wp_wait hE,
+  fsym [FEvent.wp_liftPart hE, dload, FEvent.wp_wait hE (ε := BitVec 32) (w := 32),
     gD_ph, gD_lph, gD_part, gD_setPart, threadFutexWaitC_eq]
 
 /-- `waitUntilSet`'s loop invariant: `t` is a waiter at `w1` with its deadline block `q`. -/
@@ -188,7 +189,8 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
     (hi : P.inv (upd G t (gD L E g p₀ (L.part g))) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_waitUntilSet E.W.ptr none) (fun x G' m' d' =>
       x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
-  fsym [FEvent.wp_liftPartCur hE, halloc, hfree, FEvent.wp_liftPart hE, dstore,
+  fsym [FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t) (htt := halloc),
+    FEvent.wp_liftPartCur hE, halloc, hfree, FEvent.wp_liftPart hE, dstore,
     FEvent.wp_load hE, FEvent.wp_cas hE,
     (fun (q : Ptr) =>
       WP.loop _ _ (wusInv DR P L E t g q d) (fun _ => 0) (wusPost DR P L E t g q d)
