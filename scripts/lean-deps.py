@@ -50,6 +50,7 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "assurance" / "lean-files.json"
 BUILTIN = {"Init", "Std", "Lean", "Lake"}
+MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9'!?]*(?:\.[A-Za-z_][A-Za-z_0-9'!?]*)*")
 IMPORT = re.compile(r"^\s*(?:public\s+)?(?:meta\s+)?import\s+(.+?)\s*$")
 
 
