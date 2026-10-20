@@ -175,8 +175,8 @@ MUTANTS = {
     # (`premises.py compiled --strict` fails on it).
     'premises-compiled-source-gap-hidden': (
         'scripts/premises.py',
-        '                entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)\n',
-        '                entry["source_gaps"] = []\n', PREMISES, 'premises',
+        '        gaps = theorem["source_gaps"] = sorted(set(theorem["premises"]) - known, key=premise_key)\n',
+        '        gaps = theorem["source_gaps"] = []\n', PREMISES, 'premises',
         ('CompiledTests.test_compiled_source_gaps',)),
     # D03: a runtime module reached by a theorem must map to premises.
     'premises-compiled-runtime-module-unmapped': (
@@ -353,6 +353,13 @@ MUTANTS = {
     'claim-nonvacuity-not-required': (
         'scripts/claims.py', '    if strength is not None and not nonvacuous:', '    if False:',
         CLAIMS, 'claims', ('AssessTests.test_witnesses_cap_strength',)),
+    # P05/F2: a satisfiable client cannot turn a vacuous allocator contract into a claim.
+    'claim-allocator-creation-not-required': (
+        'scripts/claims.py', '    if creation_problem := uncreated(result):', '    if False:',
+        CLAIMS, 'claims', ('AssessTests.test_allocator_creation_is_required',)),
+    'claim-allocator-admit-unaudited': (
+        'scripts/claims.py', "            elif _witness(statement_of(creation) or {}, 'nonvacuity', audited) != 'verified':",
+        '            elif False:', CLAIMS, 'claims', ('AssessTests.test_allocator_creation_is_exact_and_audited',)),
     # P05/S6: partial correctness needs a liveness witness.
     'claim-liveness-not-required': (
         'scripts/claims.py', "    if strength == 'partial_correctness' and witnesses['liveness'] != 'verified':",
@@ -365,6 +372,9 @@ MUTANTS = {
     'coverage-unwitnessed-direct': (
         'scripts/project.py', '    if nonvacuity not in claims.NONVACUOUS:', '    if False:',
         COVERAGE, 'project', ('CoverageTests.test_hypotheses_and_witnesses',)),
+    'coverage-allocator-creation-unchecked': (
+        'scripts/project.py', '    if creation_problem:', '    if False:',
+        COVERAGE, 'project', ('CoverageTests.test_allocator_creation_blocks_binding_and_absence',)),
     # P05, audit 2026-10-14 S1: an absence claim needs a witnessed goal.
     'absence-claim-witness-unchecked': (
         'scripts/project.py', "            and (goal.get('witnesses') or {}).get('nonvacuity') in claims.NONVACUOUS",

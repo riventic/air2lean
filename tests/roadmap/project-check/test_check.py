@@ -23,6 +23,9 @@ HEADS = json.loads((Path(__file__).resolve().parents[3] / 'assurance/claim-heads
 LAKE = '''import json, os, pathlib, sys
 with open(os.environ['STUB_LOG'], 'a') as log:
     log.write(json.dumps(['lake', *sys.argv[1:]]) + '\\n')
+if sys.argv[1:] == ['env', 'printenv', 'LEAN_SYSROOT']:
+    print(os.environ['STUB_LEAN_SYSROOT'])
+    sys.exit(0)
 sys.exit(int(os.environ.get('STUB_LAKE_EXIT', '0')))
 '''
 AUDIT = '''import json, os, pathlib, sys
@@ -61,6 +64,13 @@ class CheckTests(unittest.TestCase):
         self.save()
         tools = Path(self.temp.name).resolve() / 'tools'
         (tools / 'bin').mkdir(parents=True)
+        toolchain = tools / 'toolchain'
+        (toolchain / 'bin').mkdir(parents=True)
+        (toolchain / 'lib/lean').mkdir(parents=True)
+        for name in ('bin/lean', 'bin/leanchecker', 'lib/lean/Init.olean'):
+            (toolchain / name).write_bytes(b'synthetic installed input')
+        self.runtime = {'lean_sysroot': str(toolchain.resolve()),
+                        'toolchain_runtime_sha256': _auditor.toolchain_runtime_sha256(toolchain)}
         self.translator = tools / 'translator'
         self.write_tool(self.translator, "import pathlib,sys\npathlib.Path(sys.argv[sys.argv.index('-o')+1]).write_text(%r)\n" % GENERATED)
         self.write_tool(tools / 'bin/lake', LAKE)
@@ -69,7 +79,8 @@ class CheckTests(unittest.TestCase):
         self.log = tools / 'calls.log'
         self.fixture = tools / 'audit.json'
         self.env = dict(os.environ, PATH=f'{tools / "bin"}{os.pathsep}{os.environ["PATH"]}', STUB_LOG=str(self.log),
-                        STUB_AUDIT=str(self.fixture), PYTHONDONTWRITEBYTECODE='1')
+                        STUB_AUDIT=str(self.fixture), STUB_LEAN_SYSROOT=self.runtime['lean_sysroot'],
+                        PYTHONDONTWRITEBYTECODE='1')
         self.lock = tools / 'build.lock'
         self.out = Path(self.temp.name).resolve() / 'records'
         self.nodes = [{'name': 'Example.root', 'module': 'Proofs.Example.Gen', 'kind': 'definition', 'dependencies': [],
@@ -95,7 +106,8 @@ class CheckTests(unittest.TestCase):
         entry = HEADS[head]
         computation = lambda fn: {'peeled': [], 'fn': fn, 'fn_module': None, 'params': ['default'] if fn else [],
                                   'args': [{'bvar': 0}] if fn else [], 'extra': [], 'atom': {'closed': None}}
-        statement = {'binders': [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}],
+        statement = {'allocator_creation': [],
+                     'binders': [{'name': 'x', 'binder': 'default', 'prop': False, 'defs': [], 'uses': []}],
                      'head': {'name': head, 'module': entry['module'], 'kind': 'definition',
                               'fingerprint': entry['fingerprint']},
                      'args': [computation(None)] * entry['program'] + [computation(subject), computation(None)],
@@ -112,7 +124,8 @@ class CheckTests(unittest.TestCase):
         self.fixture.write_text(json.dumps({'schema_version': 1, 'status': status, 'theorems': self.theorems,
                                             'nodes': self.nodes, 'theorem_count': len(self.theorems), 'violations': [],
                                             'policy_sha256': '0' * 64, 'lean_toolchain': 'leanprover/lean4:v4.34.0',
-                                            'freshness': {'revision': FRESH_REVISION, 'artifacts': [],
+                                            'extractor': dict(self.runtime),
+                                            'freshness': {**self.runtime, 'revision': FRESH_REVISION, 'artifacts': [],
                                                           'lake_trace_check': {'modules': [], 'status': 'up-to-date'}}}))
 
     def run_check(self, name='a', *extra):
@@ -143,7 +156,8 @@ class CheckTests(unittest.TestCase):
         self.assertEqual((goal['status'], goal['standard_assumptions'], goal['project_assumptions']),
                          ('allowed', ['propext'], []))
         self.assertEqual((goal['claim_binding'], goal['subject'], goal['scope']), ('direct', 'Example.root', 'universal'))
-        self.assertEqual(self.calls(), [['lake', 'build', 'Proofs.Example.Contract']])
+        self.assertEqual(self.calls(), [['lake', 'build', 'Proofs.Example.Contract'],
+                                       ['lake', 'env', 'printenv', 'LEAN_SYSROOT']])
         published = self.out / 'a'
         for name in ('record.json', 'build-guard.json', 'build.log', 'audit-guard.json', 'assumptions.json',
                      'claims.json', 'artifact/report.json', 'artifact/root/Gen.lean'):
@@ -180,6 +194,32 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(compared.returncode, 1)
         result = json.loads(compared.stdout)
         self.assertEqual((result['status'], result['differences']), ('not_reproduced', []))
+
+    def test_missing_or_mismatched_runtime_headers_fail_claims(self):
+        original = self.fixture.read_text()
+        cases = [(section, key) for section in ('extractor', 'freshness')
+                 for key in ('lean_sysroot', 'toolchain_runtime_sha256')]
+        try:
+            for index, (section, key) in enumerate(cases):
+                with self.subTest(section=section, key=key):
+                    report = json.loads(original)
+                    del report[section][key]
+                    self.fixture.write_text(json.dumps(report))
+                    result, record = self.run_check('runtime-' + str(index))
+                    self.assertEqual(result.returncode, 1)
+                    stage = record['reproducible']['stages']['claims']
+                    self.assertEqual((stage['status'], stage['exit_code']), ('error', 2))
+                    self.assertIn('runtime binding', stage['reason'])
+            report = json.loads(original)
+            report['extractor']['toolchain_runtime_sha256'] = '0' * 64
+            self.fixture.write_text(json.dumps(report))
+            result, record = self.run_check('runtime-mismatch')
+            self.assertEqual(result.returncode, 1)
+            stage = record['reproducible']['stages']['claims']
+            self.assertEqual((stage['status'], stage['exit_code']), ('error', 2))
+            self.assertIn('runtime binding', stage['reason'])
+        finally:
+            self.fixture.write_text(original)
 
     def test_committed_generated_module_must_match_translation(self):
         (self.base / 'Proofs/Example/Gen.lean').write_text(GENERATED + '-- stale\n')

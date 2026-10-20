@@ -407,10 +407,43 @@ theorem regionInEnc {U : Type} [Enc U] [LawfulEnc U] {p : Ptr} {A S a : Nat} {K 
       (up (Zig.regionIn p A S K a (Enc.encode v))) :=
   regionInAll (LawfulEnc.size_encode v) hpos (LawfulEnc.decode_encode v)
 
+/-- A whole-item read of bytes written by a defined-value memset. The provider determines
+the value from the region, while the ordinary load rule still checks physical alignment. -/
+theorem regionMemset {T : Type} [Enc T] [LawfulEnc T] {p : Ptr} {A S a count : Nat}
+    {K : BlockKind} {v : T} {k : Int} (h0 : 0 ≤ k) (hpos : 0 < Enc.size T)
+    (hitem : k.toNat % Enc.size T = 0)
+    (hfit : k.toNat + Enc.size T ≤ count * Enc.size T) :
+    ReadsAt (p.add k) (Enc.size T) (fun cs => Enc.decode cs = pure v)
+      (up (Zig.regionIn p A S K a (memsetBytes count (some v)))) := by
+  have hw := LawfulEnc.size_encode v
+  let i := k.toNat / Enc.size T
+  have hi : i < count := (Nat.div_lt_iff_lt_mul hpos).mpr (by omega)
+  have hk : Enc.size T * i = k.toNat := by
+    simpa only [i, hitem, Nat.zero_add] using Nat.mod_add_div k.toNat (Enc.size T)
+  refine regionIn h0 hpos ?_ ?_
+  · simpa only [memsetBytes, Array.size_flatten_replicate, hw] using hfit
+  · have he := Array.extract_flatten_replicate (Enc.encode v) count i hi
+    have hex : (memsetBytes count (some v)).extract k.toNat (k.toNat + Enc.size T) =
+        Enc.encode v := by
+      simpa only [memsetBytes, hw, hk] using he
+    rw [hex]
+    exact LawfulEnc.decode_encode v
+
+/-- The same provider at the region's initial pointer. Positive size and the fit guard also
+exclude a read from an empty memset, while memset itself remains valid at size/count zero. -/
+theorem regionMemset0 {T : Type} [Enc T] [LawfulEnc T] {p : Ptr} {A S a count : Nat}
+    {K : BlockKind} {v : T} (hpos : 0 < Enc.size T) (hfit : Enc.size T ≤ count * Enc.size T) :
+    ReadsAt p (Enc.size T) (fun cs => Enc.decode cs = pure v)
+      (up (Zig.regionIn p A S K a (memsetBytes count (some v)))) := by
+  have h := regionMemset (p := p) (A := A) (S := S) (a := a) (K := K) (count := count) (v := v)
+    (k := 0) (by omega) hpos (by simp) (by simpa using hfit)
+  simpa only [Ptr.add_zero] using h
+
 end ReadsAt
 
 attribute [fsym_provider] ReadsAt.pts ReadsAt.ptsField ReadsAt.ptsField0 ReadsAt.aptsE
   ReadsAt.apts ReadsAt.regionIn ReadsAt.regionInAll ReadsAt.regionInEnc
+  ReadsAt.regionMemset ReadsAt.regionMemset0
 
 /-- **An aligned address** (a provider kind): every memory that holds `P` has the address of
 `q` a multiple of `al`. Owned bytes that are aligned give it (`AlignedAt.pts`, `.aptsE`, …),

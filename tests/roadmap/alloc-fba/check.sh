@@ -37,7 +37,7 @@ python3 -B scripts/fixtures.py build AllocFba
 named=()
 for name in FBA.allocSpec Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fallocSpec \
     FBA.fthread_alloc FBA.fthread_resize FBA.fthread_remap FBA.fthread_free FBA.freset_spec \
-    FBA.fown_init FBA.ledger realloc_eq Client.client_spec; do
+    FBA.fown_init FBA.fallocator_init FBA.ledger realloc_eq Client.client_spec; do
   named+=(--declaration "AllocFba.$name")
 done
 python3 -B scripts/fixtures.py audit AllocFba.Bridge AllocFba.Fba AllocFba.Client AllocFba.Full \

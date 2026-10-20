@@ -23,3 +23,32 @@ rechecks actual dependencies. This is the configured-library portion of parked P
 on current main. It does not authenticate actual witness import headers or completed replay
 reuse, and it enables no premise reduction. Those preserved boundaries require separate
 integration and controls.
+
+## Compiler-owned non-gated Units
+
+A real control on main `b33c931b22a177de154003a63dca541bc5005521` compiles the existing
+`IdleLoop.Total` Unit and its local closure through `compile_all`, then audits it through
+`audit_modules`. The original report passes policy and kernel replay. Changing only the
+original `Total.lean` source while keeping the report, compiled artifacts, runtime and HEAD
+fixed still passes `verify_fresh(..., allow_dirty=True)`: its private artifact row has
+`source: null`. Restoring the source gives another passing admission. This establishes a
+missing source-correspondence check, not an invalid Lean theorem. The same report's actual
+headers include local imports not selected by its declaration dependency graph.
+
+The correction belongs in that same compiler-owned audit flow. Snapshot original and staged
+compiler inputs before compilation; derive their paths from the existing Unit plan. Capture
+each successful compiler output and loaded companions immediately, then keep their identities
+and the effective ordered lookup roots stable through extraction and replay. Traverse actual
+import headers, including unused imports, against the owned Unit closure, canonical
+trace-checked Lake artifacts and the pinned standard installation. Missing, shadowed,
+ambiguous or unowned private inputs refuse. Saved reports for known non-gated Units require
+the matching source/output context; stripping a scope label cannot remove that obligation.
+The existing registered-witness producer's canonical source/output binding remains distinct.
+
+The existing per-run replay cache remains the mechanism. Eligibility requires a complete
+canonical Lake/standard import closure; private, missing or cyclic closure inputs replay
+freshly. Existing byte fingerprints cover compiled companions, and final input validation
+precedes cache publication. Caller `--sources` remains declaration-classification metadata.
+This slice supplies no generated-producer authority, witness/gate qualification, NN census
+qualification or premise reduction. Synthetic controls exercise these admission paths;
+actual corrected Unit execution must be recorded separately from the historical baseline.
