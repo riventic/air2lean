@@ -1,13 +1,53 @@
 {
- "schema": 11,
+ "schema": 12,
  "zig_version": "0.16.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.19-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
  "name": "basic.totalWeightedTardiness",
+ "module": "root",
+ "src": {
+  "file": "basic.zig",
+  "module": "basic",
+  "decl_line": 35
+ },
  "params": [
   0
  ],
+ "noalias": [],
  "ret": 1,
  "body": [
   {
@@ -48,7 +88,8 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 5,
@@ -84,7 +125,8 @@
    "id": 8,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 3
+   "line": 3,
+   "column": 5
   },
   {
    "id": 9,
@@ -120,7 +162,8 @@
    "id": 12,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 4
+   "line": 4,
+   "column": 5
   },
   {
    "id": 13,
@@ -171,7 +214,8 @@
          "id": 19,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 5
+         "line": 5,
+         "column": 12
         },
         {
          "id": 20,
@@ -187,7 +231,8 @@
          "id": 21,
          "tag": "dbg_stmt",
          "ty": 3,
-         "line": 5
+         "line": 5,
+         "column": 20
         },
         {
          "id": 22,
@@ -256,7 +301,8 @@
            "id": 28,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 9
           },
           {
            "id": 29,
@@ -272,7 +318,8 @@
            "id": 30,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 34
           },
           {
            "id": 31,
@@ -288,7 +335,8 @@
            "id": 32,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 39
           },
           {
            "id": 33,
@@ -359,6 +407,7 @@
                "callee": {
                 "ty": 13,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -416,7 +465,8 @@
            "id": 44,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 34
           },
           {
            "id": 45,
@@ -425,6 +475,7 @@
            "callee": {
             "ty": 16,
             "func": "basic.weightedTardiness",
+            "module": "root",
             "noreturn": false
            },
            "args": [
@@ -450,7 +501,8 @@
            "id": 47,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 6
+           "line": 6,
+           "column": 14
           },
           {
            "id": 48,
@@ -482,7 +534,8 @@
            "id": 50,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 9
           },
           {
            "id": 51,
@@ -508,7 +561,8 @@
            "id": 53,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 18
           },
           {
            "id": 54,
@@ -579,6 +633,7 @@
                "callee": {
                 "ty": 13,
                 "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                "module": "std",
                 "noreturn": true
                },
                "args": [
@@ -616,7 +671,8 @@
            "id": 63,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 21
           },
           {
            "id": 64,
@@ -642,7 +698,8 @@
            "id": 66,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 7
+           "line": 7,
+           "column": 11
           },
           {
            "id": 67,
@@ -674,7 +731,8 @@
            "id": 69,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 8
+           "line": 8,
+           "column": 5
           },
           {
            "id": 70,
@@ -685,7 +743,8 @@
            "id": 72,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 5
+           "line": 5,
+           "column": 29
           },
           {
            "id": 73,
@@ -701,7 +760,8 @@
            "id": 74,
            "tag": "dbg_stmt",
            "ty": 3,
-           "line": 5
+           "line": 5,
+           "column": 31
           },
           {
            "id": 75,
@@ -774,7 +834,8 @@
    "id": 81,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 82,
@@ -790,7 +851,8 @@
    "id": 83,
    "tag": "dbg_stmt",
    "ty": 3,
-   "line": 9
+   "line": 9,
+   "column": 5
   },
   {
    "id": 84,
@@ -812,6 +874,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 16,
@@ -832,6 +895,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -850,6 +914,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -863,6 +928,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -883,6 +949,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -896,6 +963,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -919,6 +987,7 @@
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -941,6 +1010,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
@@ -949,6 +1019,7 @@
   {
    "k": "struct",
    "name": "basic.Job",
+   "module": "root",
    "layout": "auto",
    "fields": [
     {
@@ -982,6 +1053,7 @@
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
+   "address_space": "generic",
    "sentinel": false,
    "host_size": 0,
    "abi_size": 8,
