@@ -232,10 +232,37 @@ private partial def serialize : Expr → String
 private def fnv1a (s : String) : UInt64 :=
   s.toUTF8.foldl (fun h b => (h ^^^ b.toUInt64) * 0x100000001b3) 0xcbf29ce484222325
 
-/-- 128-bit fingerprint of a declaration's kernel type and value. -/
-private def fingerprint (c : ConstantInfo) : String :=
-  let text := serialize c.type ++ "|" ++ ((c.value? (allowOpaque := true)).map serialize).getD "-"
+/-- The 128-bit digest of a text: Lean's `String.hash` and FNV-1a, as 32 hex digits. -/
+private def digestText (text : String) : String :=
   hashHex text.hash ++ hashHex (fnv1a text)
+
+/-- The digest of a closed kernel expression: the digest of its node in `serialize`'s grammar
+with every immediate subterm written as that subterm's digest (a Merkle hash over the term, so
+it is a function of the term alone, not of how its subterms are shared). Structurally equal
+subterms are digested once: the cost follows the term's distinct subterms, not its unshared
+tree. Proof terms are built with sharing and can unfold to billions of nodes
+(`AllocFba.FBA.fthread_alloc`: 5.4·10⁹ tree nodes, 2.2·10⁵ distinct ones), which a serialized
+text would have to hold in memory at once. -/
+private partial def exprDigest (e : Expr) : StateM (ExprStructMap String) String := do
+  if let some digest := (← get).get? e then
+    return digest
+  let digest ← match e with
+    | .app f a => do pure (digestText s!"(A {← exprDigest f} {← exprDigest a})")
+    | .lam _ t b bi => do pure (digestText s!"(L {binderJson bi} {← exprDigest t} {← exprDigest b})")
+    | .forallE _ t b bi => do pure (digestText s!"(F {binderJson bi} {← exprDigest t} {← exprDigest b})")
+    | .letE _ t v b _ => do
+      pure (digestText s!"(Z {← exprDigest t} {← exprDigest v} {← exprDigest b})")
+    | .mdata _ b => exprDigest b
+    | .proj n i b => do pure (digestText s!"(P {n} {i} {← exprDigest b})")
+    | leaf => pure (digestText (serialize leaf))
+  modify (·.insert e digest)
+  return digest
+
+/-- 128-bit fingerprint of a declaration's kernel type and value (`exprDigest`). -/
+private def fingerprint (c : ConstantInfo) : String := Id.run do
+  let (type, seen) := (exprDigest c.type).run {}
+  let value := ((c.value? (allowOpaque := true)).map fun v => ((exprDigest v).run seen).1).getD "-"
+  return digestText s!"{type}|{value}"
 
 /-- Original kernel facts for the framework ratchet. These are candidate evidence, never an
 ordinary-data exemption. In particular, a non-Prop result does not prove a record harmless. -/
