@@ -304,6 +304,52 @@ end SepAuto.WP
 
 namespace SepAuto.WP
 
+open Lean Meta Zig.Full.Auto
+
+/-- A wrapper keeps an unknown inner head as a wildcard; concrete mismatches still prune
+before unfolding, including when the inner commands or assertions contain metavariables. -/
+def wrapper_keys : MetaM Unit := do
+  let a ← mkFreshExprMVar (mkApp (mkConst ``BitVec) (mkNatLit 32))
+  let add ← mkAppM ``Zig.add #[mkConst ``Bool.false, a, a]
+  let actual ← mkAppM ``StateT.lift #[add]
+  let x ← mkFreshExprMVar (← inferType add)
+  let pattern ← mkAppM ``StateT.lift #[x]
+  unless headKey pattern == .anonymous && headKey actual == `lift ++ ``Zig.add do
+    throwError "wrapper_keys: StateT.lift lost its wildcard or concrete head"
+  unless ← unifyKeyed pattern actual do
+    throwError "wrapper_keys: StateT.lift wildcard did not unify"
+  unless ← x.mvarId!.isAssigned do
+    throwError "wrapper_keys: StateT.lift left its inner command unassigned"
+  unless ← isDefEq x add do
+    throwError "wrapper_keys: StateT.lift did not determine the inner command"
+  let sub ← mkAppM ``Zig.sub #[mkConst ``Bool.false, a, a]
+  let other ← mkAppM ``StateT.lift #[sub]
+  if ← unifyKeyed actual other then
+    throwError "wrapper_keys: StateT.lift unfolded different concrete heads"
+  let emp := mkConst ``Zig.Assn.emp
+  let actual ← mkAppM ``FAssn.up #[emp]
+  let x ← mkFreshExprMVar (← inferType emp)
+  let pattern ← mkAppM ``FAssn.up #[x]
+  unless headKey pattern == .anonymous && headKey actual == `lift ++ ``Zig.Assn.emp do
+    throwError "wrapper_keys: up lost its wildcard or concrete head"
+  unless ← unifyAtom pattern actual do
+    throwError "wrapper_keys: up wildcard did not unify"
+  unless ← x.mvarId!.isAssigned do
+    throwError "wrapper_keys: up left its inner assertion unassigned"
+  unless ← isDefEq x emp do
+    throwError "wrapper_keys: up did not determine the inner assertion"
+  let prop ← mkFreshExprMVar (mkSort .zero)
+  let lifted ← mkAppM ``Zig.Assn.lift #[prop]
+  let other ← mkAppM ``FAssn.up #[lifted]
+  if ← unifyKeyed actual other then
+    throwError "wrapper_keys: up unfolded different concrete heads"
+
+run_meta wrapper_keys
+
+end SepAuto.WP
+
+namespace SepAuto.WP
+
 attribute [local irreducible] Proto.WP
 
 variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId}

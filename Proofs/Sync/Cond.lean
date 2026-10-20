@@ -56,6 +56,15 @@ theorem condS_signals_zero {v : Io_Condition_State}
   rw [hv]
   rfl
 
+/-- The checked addition in the one-waiter branch produces exactly one signal. -/
+theorem condS_signal_value {v : Io_Condition_State} {r : BitVec 16}
+    (hr : r.toNat = v.signals.toNat + 1)
+    (hv : v = Packed.ofBits (1 : BitVec 32)) : r = 1 := by
+  apply BitVec.eq_of_toNat_eq
+  calc
+    r.toNat = v.signals.toNat + 1 := hr
+    _ = (1 : BitVec 16).toNat := by rw [condS_signals_zero hv]; rfl
+
 /-- The waiter's new state after `(1, 1)`: `(0, 0)`. -/
 theorem condS_take {b : BitVec 32} (h : b = 0x10001) :
     Packed.toBits (Io_Condition_State.mk ((Packed.ofBits b : Io_Condition_State).waiters - 1)
@@ -168,8 +177,8 @@ theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         {G₀ : ThreadId → γ} {m₀ : Mem} (hi₀ : P.inv G₀ m₀) =>
       WP.liftMem_pure (P := P) (t := t) (G := Gwp) (n := n₀) (Q := Q₀)
         (hC.projE hi₀) rfl),
-    condS_eq, condS_bits, condS_sig, condS_signals_zero, condS_add1, condS_gtWS,
-    C.ph_set, hC.lph, C.set_set, FCond.set_of, FCond.ptr_ep,
+    condS_eq, condS_bits, condS_sig, condS_signal_value, condS_add1, condS_gtWS,
+    C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
     sigInv, sigPost, Io_Condition_signal.again11]
 
 /-- **`Io.Condition.signal`** outside or holding the mutex, preserving its complete resource,

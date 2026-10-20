@@ -276,7 +276,8 @@ unification (which may unfold definitions). -/
 partial def headKey (e : Expr) : Name :=
   let e := e.consumeMData
   if e.isAppOfArity ``StateT.lift 5 || e.isAppOfArity ``Zig.Full.FAssn.up 1 then
-    `lift ++ headKey e.appArg!
+    let k := headKey e.appArg!
+    if k == .anonymous then .anonymous else `lift ++ k
   else match e.getAppFn with
     | .const c _ => c
     | .fvar _ => `fvar
