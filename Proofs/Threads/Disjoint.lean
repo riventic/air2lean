@@ -345,7 +345,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
     refine WP.map (WP.liftMem_fowned (own := ownOf G m)
       (writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
         (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)) (ho.current u) rfl hut
-      (by rw [hown]; exact hcx) fun _ m' r' _ ho' hq _ hth => ?_)
+      (by rw [hown]; exact hcx) fun _ m' r' _ _ ho' hq _ hth _ _ _ _ _ => ?_)
     refine ⟨.kid r' c ac x ax v true, ?_, ⟨_, _, _, _, _, _, rfl⟩, fun _ => ?_⟩
     · refine ⟨⟨rO, ?_⟩, fun w r₁ c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
       · rw [ownOf_upd hth hj]; exact ho'
@@ -451,20 +451,20 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   -- The four blocks: stack blocks in the plain mode (`main` uses it up with the last one).
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _) ho₀ rfl
     (by simp [mem0, Mem.ofGlobals]) (by rw [plainOwn_zero]; exact plain_intro)
-    fun s2 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
+    fun s2 m₁ r₁ _ _ ho₁ hq₁ hc₁ ht₁ _ _ _ _ _ => ?_)
   obtain ⟨Ax, kx, hA⟩ := hq₁
   obtain ⟨⟨hxb, hx0, hAx⟩, hx⟩ := sep_lift.mp hA
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple plain _ _).frameL
     ho₁ hc₁ (by rw [ht₁]; simp [mem0, Mem.ofGlobals]) hx
-    fun s4 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
+    fun s4 m₂ r₂ _ _ ho₂ hq₂ hc₂ ht₂ _ _ _ _ _ => ?_)
   obtain ⟨Ay, ky, ⟨hyb, hy0, hAy⟩, hy⟩ := sep_ex2_lift hq₂
   refine WP.bind (WP.liftMem_fowned ((by fsym : FTTriple plain _ _).frameL.pre
     fun _ h => sep_assoc' h) ho₂ hc₂ (by rw [ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hy
-    fun s6 m₃ r₃ _ ho₃ hq₃ hc₃ ht₃ => ?_)
+    fun s6 m₃ r₃ _ _ ho₃ hq₃ hc₃ ht₃ _ _ _ _ _ => ?_)
   obtain ⟨A1, k1, ⟨h1b, h10, hA1⟩, hc1⟩ := sep_ex2_lift hq₃
   refine WP.bind (WP.liftMem_fowned ((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL.pre
     fun _ h => sep_assoc' h) ho₃ hc₃ (by rw [ht₃, ht₂, ht₁]; simp [mem0, Mem.ofGlobals]) hc1
-    fun s11 m₄ r₄ _ ho₄ hq₄ hc₄ ht₄ => ?_)
+    fun s11 m₄ r₄ _ _ ho₄ hq₄ hc₄ ht₄ _ _ _ _ _ => ?_)
   obtain ⟨A2, k2, ⟨h2b, h20, hA2⟩, hc2⟩ := sep_ex2_lift hq₄
   have htt₄ : m₄.threads = #[{ spawner := 0, joined := true }] := by rw [ht₄, ht₃, ht₂, ht₁] <;> rfl
   have F₄ := sep_assoc (sep_assoc hc2)
@@ -732,13 +732,13 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
   -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ => ?_)
+    ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ _ _ _ _ _ => ?_)
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ => ?_)
+    ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ _ _ _ _ _ => ?_)
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₂₂ hc₂₂
-    (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂ fun _ m₂₃ r₂₃ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ => ?_)
+    (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂ fun _ m₂₃ r₂₃ _ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ _ _ _ _ _ => ?_)
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ ht₂₄ => ?_)
+    ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ _ ht₂₄ _ _ _ _ _ => ?_)
   refine WP.pure' ⟨by simp [hr₁, hr₂, addWrap], fun r hr hs => hja r ?_ hs⟩
   rwa [ht₂₄, ht₂₃, ht₂₂, ht₂₁, ht₂₀, ht₁₉] at hr
 

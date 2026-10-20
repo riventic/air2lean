@@ -392,7 +392,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       (by rw [hc₄, Mem.tlsInstance_of_threads (ht₄.trans ht₃)]; exact hk) ?_
     refine WP.liftMem_fowned (out_spec (b := b) (v := 9) hAc' hob ho0 hA) ho₄ hc₄
       (by rw [ht₄, ht₃]; exact hut₂) (by rw [upd_self]; exact hq₄)
-      fun _ m₅ r₅ _ ho₅ hq₅ hc₅ ht₅ => ?_
+      fun _ m₅ r₅ _ _ ho₅ hq₅ hc₅ ht₅ _ _ _ _ _ => ?_
     rw [upd_upd] at ho₅
     have ht₅' : m₅.threads = (m₁.setTls u #[(0, b)]).threads := ht₅.trans (ht₄.trans ht₃)
     -- The thread end: its instance is freed.
@@ -529,13 +529,13 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- `a`, `b`: stack blocks in the plain mode (`main` uses it up with `b`).
   refine WP.bind (WP.liftMem_fowned ((by fsym : FTTriple plain _ _).frameL
     (R := cnt Ac 7)) ho₀ rfl (by rw [mem0_size]; decide)
-    hC₀ fun s0 m₁ r₁ _ ho₁ hq₁ hc₁ ht₁ => ?_)
+    hC₀ fun s0 m₁ r₁ _ _ ho₁ hq₁ hc₁ ht₁ _ _ _ _ _ => ?_)
   obtain ⟨Aa, ka, ⟨hab, ha0, hAa⟩, hq₁⟩ := FAssn.sep_ex_ex_lift hq₁
   rw [upd_upd] at ho₁
   refine WP.bind (WP.liftMem_fowned (((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frameL
     (R := cnt Ac 7 ⋆ (up (bytesAt s0 Aa 4 .stack (Array.replicate 4 .undef)) ⋆ bext ka 4 .stack))).pre
     fun _ h => sep_assoc' h) ho₁ hc₁ (by rw [ht₁, mem0_size]; decide) hq₁
-    fun s2 m₂ r₂ _ ho₂ hq₂ hc₂ ht₂ => ?_)
+    fun s2 m₂ r₂ _ _ ho₂ hq₂ hc₂ ht₂ _ _ _ _ _ => ?_)
   obtain ⟨Ab, kb, ⟨hbb, hb0, hAb⟩, hq₂⟩ := FAssn.sep_ex_ex_lift hq₂
   rw [upd_upd] at ho₂
   have htt₂ : m₂.threads = (mem0 σ).threads := by rw [ht₂, ht₁]
@@ -818,10 +818,10 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have htl₁₇ : 0 < m₁₇.threads.size := by rw [ht₁₇, ht₁₆, ht₁₅]; exact htl
   -- In reverse order of allocation (MM-18): `b`, then `a`.
   refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _)
-    ho₁₇ hc₁₇ htl₁₇ F₁₇ fun _ m₁₈ r₁₈ _ ho₁₈ hq₁₈ hc₁₈ ht₁₈ => ?_)
+    ho₁₇ hc₁₇ htl₁₇ F₁₇ fun _ m₁₈ r₁₈ _ _ ho₁₈ hq₁₈ hc₁₈ ht₁₈ _ _ _ _ _ => ?_)
   rw [upd_upd] at ho₁₈
   refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₁₈ hc₁₈
-    (by rw [ht₁₈]; exact htl₁₇) hq₁₈ fun _ m₁₉ _ _ _ _ _ ht₁₉ => ?_)
+    (by rw [ht₁₈]; exact htl₁₇) hq₁₈ fun _ m₁₉ _ _ _ _ _ _ ht₁₉ _ _ _ _ _ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hs => hja r ?_ hs⟩
   rwa [ht₁₉, ht₁₈, ht₁₇, ht₁₆, ht₁₅] at hr
 where

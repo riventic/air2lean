@@ -685,10 +685,10 @@ theorem main_spec (σ : Placement) (io : Io) (lim : Option Nat) (d : Nat) :
   refine WP.pure' ?_
   -- The frees, in reverse order of allocation (MM-18): the group, then `out`.
   refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₈ hc₈
-    (by rw [ht₈]; exact htl) hF₈ fun _ m₉ r₉ _ ho₉ hq₉ hc₉ ht₉ => ?_)
+    (by rw [ht₈]; exact htl) hF₈ fun _ m₉ r₉ _ _ ho₉ hq₉ hc₉ ht₉ _ _ _ _ _ => ?_)
   rw [upd_upd] at ho₉
   refine WP.bind (WP.liftMem_fowned (by fsym [LawfulEnc.size_encode_u32] : FTTriple _ _ _) ho₉ hc₉
-    (by rw [ht₉, ht₈]; exact htl) hq₉ fun _ m₁₀ _ _ _ _ _ ht₁₀ => ?_)
+    (by rw [ht₉, ht₈]; exact htl) hq₉ fun _ m₁₀ _ _ _ _ _ _ ht₁₀ _ _ _ _ _ => ?_)
   refine WP.pure' ⟨rfl, fun r hr hsp => hja r ?_ hsp⟩
   rwa [ht₁₀, ht₉, ht₈] at hr
 

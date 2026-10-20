@@ -162,7 +162,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     obtain ⟨⟨hpb, hp0, hA, hbs⟩, hb⟩ := sep_lift.mp hbuf
     refine WP.liftMem_fowned (own := fun u => (G u).res) (work_spec hpb hp0 hA hbs)
       (hi.own.current 1) rfl (by rw [hsz]; decide) (by simp only [hgu, Gh.res]; exact hb)
-      fun _ m' r' _ ho' hq _ hth => ?_
+      fun _ m' r' _ _ ho' hq _ hth _ _ _ _ _ => ?_
     have hown : (fun w => (upd G 1 (.wk r' p true) w).res) = upd (fun u => (G u).res) 1 r' := by
       funext w; by_cases hw : w = 1
       · subst hw; simp [Gh.res]
