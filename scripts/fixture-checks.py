@@ -278,6 +278,21 @@ def _stage(unit, scratch):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
+def report(units, statuses, stats, path, top=20):
+    """Print the `top` longest units (wall time, peak RSS, time by process kind); write every
+    unit's row to PATH (JSON) when given."""
+    # A unit's status is also in its statistics: a stopped run reports its finished units' too.
+    rows = [{'name': u['name'], 'status': status, **(s or {})} for u, status, s in zip(units, statuses, stats)]
+    if path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(rows, indent=1) + '\n')
+    print('fixture-checks: longest units (wall s, peak RSS MiB, s by process kind):')
+    for row in sorted(rows, key=lambda r: -r.get('elapsed_s', 0))[:top]:
+        print('  %7.1f %6d  %-40s %s' % (row.get('elapsed_s', 0), row.get('peak_rss_kib', 0) // 1024,
+                                         ' '.join('%s %d' % kv for kv in row.get('busy_s', {}).items()),
+                                         row['name']))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
@@ -287,6 +302,8 @@ def main(argv=None):
     # A unit's peak: three at once reached 10.4 GiB under the full build's 11000 MiB guard.
     parser.add_argument('--mem-mib', type=int, default=5000, help='peak memory of one unit (default 5000)')
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
+    parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
+                        'wall time by process kind (scripts/par.py) to this JSON file')
     a = parser.parse_args(argv)
     tree = Tree()
     units = [u for u in discover(tree)
@@ -320,10 +337,14 @@ def main(argv=None):
             for u in units:
                 command, env = stage(u, scratch / names[u['name']])
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
-            print('fixture-checks: running %d units' % len(units), flush=True)
-            with open(os.devnull, 'wb') as null:
-                statuses = par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null,
-                                   log_dir=logs)
+            workers = par.workers(a.jobs, a.mem_mib, len(jobs))
+            print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
+            stats, statuses = [], None
+            try:
+                with open(os.devnull, 'wb') as null:
+                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+            finally:  # also the finished units of a stopped run (a guard's timeout)
+                report(units, statuses or [None] * len(units), stats, a.report)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses):

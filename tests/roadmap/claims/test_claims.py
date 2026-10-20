@@ -2,6 +2,7 @@
 """Claim-strength regressions. fixture-report.json holds statement structures extracted by
 tools/Assurance.lean from Fixture.lean; check.sh regenerates and compares them."""
 import copy
+import contextlib
 import importlib.util
 import json
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -18,9 +20,9 @@ SPEC = importlib.util.spec_from_file_location('claims', SCRIPT)
 claims = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(claims)
 FIXTURE = json.loads((Path(__file__).parent / 'fixture-report.json').read_text())
-AUDIT_SPEC = importlib.util.spec_from_file_location('assumptions', ROOT / 'scripts' / 'assumptions.py')
-assumptions = importlib.util.module_from_spec(AUDIT_SPEC)
-AUDIT_SPEC.loader.exec_module(assumptions)
+sys.path.insert(0, str(ROOT / 'scripts'))
+import theorem_universe as universe
+assumptions = universe.assumptions
 HEADS = claims.load_heads()
 RESERVED = claims.reserved_names()
 RESERVED_MODULES = claims.load_registry()[1]
@@ -253,11 +255,13 @@ class ClassifyTests(unittest.TestCase):
         """The fixture's spoofs of reserved names are audited (no name clash: the fixture does not
         import `ZigLean.Conc.Total`) and concluded in their own module; they support no claim."""
         theorems = classified(FIXTURE)
+        module = next(unit.module for unit in universe.universe()[1]
+                      if unit.file == 'tests/roadmap/claims/Fixture.lean')
         for name in SPOOFS:
             with self.subTest(name=name):
                 head = theorems_of(FIXTURE)[name]['statement']['head']
                 self.assertIn(head['name'], RESERVED)
-                self.assertEqual(head['module'], 'tests.roadmap.claims.Fixture')
+                self.assertEqual(head['module'], module)
                 self.assertEqual(theorems[name]['claims'], [])
                 self.assertIn('reserved claim-head name', theorems[name]['head_problem'])
         # The same spoofs, registered under their own declaration, would claim total correctness:
@@ -689,9 +693,32 @@ class AssessTests(unittest.TestCase):
 class ManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        sysroot = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
-        cls.runtime_binding = {'lean_sysroot': str(sysroot),
-                               'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(sysroot)}
+        cls.compilation = tempfile.TemporaryDirectory(prefix='claims-synthetic-compiler-')
+        cls.addClassCleanup(cls.compilation.cleanup)
+        output = Path(cls.compilation.name)
+        _, units = universe.universe()
+        by_file = {unit.file: unit for unit in units}
+        selected = [by_file['tests/roadmap/claims/Fixture.lean']]
+        # The statement fixture is synthetic CLI input, not a kernel replay receipt. Use the
+        # ordinary writer BEFORE the fake compiler, keeping its real Unit/source/path checks.
+        # No extractor is needed to construct these already-recorded statement shapes.
+        with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext):
+            context = universe.prepare_compilation(selected, by_file, output)
+
+        def compile_fixture(source, root, olean, lean_path, log, **kwargs):
+            olean.parent.mkdir(parents=True, exist_ok=True)
+            olean.write_bytes(b'compiled fixture')
+            return None
+
+        with mock.patch.object(universe, 'compile_unit', side_effect=compile_fixture):
+            errors = universe.compile_all(universe.closure(selected, by_file), by_file, output,
+                                          compiled_units=context)
+        if errors:
+            raise AssertionError(errors)
+        universe.seal_compilation(context)
+        cls.compiler_context = context
+        cls.module = selected[0].module
+        cls.runtime_binding = {key: context[key] for key in ('lean_sysroot', 'toolchain_runtime_sha256')}
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -699,16 +726,21 @@ class ManifestTests(unittest.TestCase):
         self.base = Path(self.temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.report = self.base / 'assurance.json'
-        # Synthetic CLI input bound to this checkout, artifact and installed runtime;
-        # this is not a kernel replay receipt.
-        self.olean = self.base / 'Fixture.olean'
+        unit = self.compiler_context['units'][self.module]
+        self.olean = Path(unit['output_path'])
+        # Restore the class-owned synthetic output after a previous stale-output test.
         self.olean.write_bytes(b'compiled fixture')
-        self.fixture = dict(FIXTURE, extractor=dict(self.runtime_binding), freshness={
+        self.fixture = dict(FIXTURE, modules=[self.module],
+                            # Synthetic header data, not a claim about a real compiled header.
+                            module_imports={self.module: []},
+                            extractor=dict(self.runtime_binding), freshness={
             **self.runtime_binding,
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
-            'artifacts': [{'module': 'Fixture', 'olean': str(self.olean),
-                           'olean_sha256': assumptions.file_sha256(self.olean), 'source': None, 'source_sha256': None}]})
-        self.report.write_text(json.dumps(self.fixture))
+            'compiled_units': copy.deepcopy(self.compiler_context),
+            'artifacts': [{'module': self.module, 'olean': assumptions.display(self.olean),
+                           'olean_sha256': unit['outputs'][0][1]['sha256'],
+                           'source': unit['source']['path'], 'source_sha256': unit['source']['sha256']}]})
+        assumptions.write_report(self.report, self.fixture)
 
     def manifest(self, goals, function='ret', bounds=None):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
@@ -843,6 +875,24 @@ class ManifestTests(unittest.TestCase):
                 self.assertEqual(code, 2)
                 self.assertIn('no matching toolchain runtime binding', err)
 
+    def test_known_unit_requires_its_compiler_binding(self):
+        missing = copy.deepcopy(self.fixture)
+        del missing['freshness']['compiled_units']
+        wrong_selection = dict(self.fixture, modules=[])
+        wrong_source = copy.deepcopy(self.fixture)
+        wrong_source['freshness']['artifacts'][0]['source'] = None
+        wrong_source['freshness']['artifacts'][0]['source_sha256'] = None
+        missing_headers = dict(self.fixture, module_imports={})
+        for reason, report in [('no compiler-owned run binding', missing),
+                               ('differs from the report selection', wrong_selection),
+                               ('source/output differs', wrong_source),
+                               ('incomplete import headers', missing_headers)]:
+            with self.subTest(reason=reason):
+                assumptions.write_report(self.report, report)
+                code, _, err = self.check([('ClaimFixture.fret_total', 'total_correctness')])
+                self.assertEqual(code, 2)
+                self.assertIn(reason, err)
+
     def test_dirty_report_needs_explicit_recorded_permission(self):
         goal = [('ClaimFixture.fret_total', 'total_correctness')]
         dirty = copy.deepcopy(self.fixture)
@@ -863,7 +913,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         seen = json.loads(result.stdout)
         self.assertIn(FTOTAL, seen)
-        self.assertEqual(seen[EVENTUALLY]['module'], 'tests.roadmap.claims.Fixture')
+        self.assertEqual(seen[EVENTUALLY]['module'], self.module)
 
 
 if __name__ == '__main__':
