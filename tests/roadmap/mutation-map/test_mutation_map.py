@@ -346,6 +346,10 @@ def float_mutant(replacement, anchor=ARGS_RETURN):
 
 
 class Runner(unittest.TestCase):
+    def test_premise_source_gap_mutant_is_killed_by_a_named_failure(self):
+        killed = runner.run_mutant('premises-compiled-source-gap-hidden')
+        self.assertEqual([k.rsplit('.', 1)[-1] for k in killed], ['test_compiled_source_gaps'])
+
     def test_real_mutant_is_killed_by_a_named_failure(self):
         killed = runner.run_mutant('float-args-selection-ignored')
         self.assertEqual([k.rsplit('.', 1)[-1] for k in killed], ['test_compiler_rt_label_needs_compiler_rt_translation'])
