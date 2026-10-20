@@ -189,7 +189,8 @@ class _Sampler(threading.Thread):
 def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | None = None,
         stats: list | None = None) -> list[int]:
     """Run `jobs`, at most `max_workers` at once; return their exit statuses in job order. With
-    `stats` (a list), append each job's {'elapsed_s', 'peak_rss_kib', 'busy_s'} in job order."""
+    `stats` (a list), set each finished job's {'status', 'elapsed_s', 'peak_rss_kib', 'busy_s'} in
+    job order (None for a job that did not finish)."""
     sampler = None
     if stats is not None:
         sampler = _Sampler()
@@ -312,7 +313,7 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
                 entry.status = _status(entry.process.wait())
                 finished[index] = entry
                 if sampler:
-                    stats[index] = {'elapsed_s': round(time.monotonic() - entry.started, 1),
+                    stats[index] = {'status': entry.status, 'elapsed_s': round(time.monotonic() - entry.started, 1),
                                     **sampler.remove(entry.process.pid)}
         return statuses
     finally:

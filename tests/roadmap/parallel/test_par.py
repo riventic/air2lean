@@ -103,7 +103,8 @@ class Output(unittest.TestCase):
         stats = []
         with open(os.devnull, 'wb') as null:
             self.assertEqual(par.run(jobs, 2, null, null, stats=stats), [0, 3])
-        self.assertEqual([sorted(s) for s in stats], [['busy_s', 'elapsed_s', 'peak_rss_kib']] * 2)
+        self.assertEqual([sorted(s) for s in stats], [['busy_s', 'elapsed_s', 'peak_rss_kib', 'status']] * 2)
+        self.assertEqual([s['status'] for s in stats], [0, 3])
         self.assertGreaterEqual(stats[0]['elapsed_s'], 3 * par.SAMPLE_SECONDS)
         self.assertGreater(stats[0]['peak_rss_kib'], 64 << 10)
         self.assertGreater(stats[0]['busy_s'].get('python', 0), 0)

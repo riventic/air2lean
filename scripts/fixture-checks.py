@@ -281,6 +281,7 @@ def _stage(unit, scratch):
 def report(units, statuses, stats, path, top=20):
     """Print the `top` longest units (wall time, peak RSS, time by process kind); write every
     unit's row to PATH (JSON) when given."""
+    # A unit's status is also in its statistics: a stopped run reports its finished units' too.
     rows = [{'name': u['name'], 'status': status, **(s or {})} for u, status, s in zip(units, statuses, stats)]
     if path:
         path.parent.mkdir(parents=True, exist_ok=True)
