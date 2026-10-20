@@ -134,6 +134,32 @@ class UniverseTests(unittest.TestCase):
             self.assertFalse({'a/Main.lean', 'b/Main.lean'} <= files)
         self.assertEqual(sorted(u.file for b in bundles for u in b), sorted(by_file))
 
+    def test_a_clash_splits_the_run_and_an_unsplittable_one_fails_closed(self):
+        # `Spoof` declares a name a Lake module of `Real` declares (Fixture's claim-head spoofs and
+        # ZigLean.Conc.Total): the source parse cannot see it, so their run clashes and is split.
+        # `Twice`'s own closure clashes: it cannot be audited at all.
+        unit = lambda f: universe.Unit(f + '.lean', '.', f, (), (), None, ())
+        units = [unit('Spoof'), unit('Real'), unit('Twice')]
+        clash = "error: import Spoof failed, environment already contains 'N' from M"
+
+        def audit_modules(modules, lean_path, output, cache=None, sources=None, **_):
+            collision = clash if {'Spoof', 'Real'} <= set(modules) or 'Twice' in modules else None
+            return {'modules': modules, 'report': str(output), 'status': 'fail' if collision else 'pass',
+                    'exit_code': 1 if collision else 0, 'collision': collision, 'violations': []}
+
+        with mock.patch.multiple(universe, universe=lambda: ([], units), compile_all=lambda *a, **_: [],
+                                 prepare_compilation=lambda *a: {}, seal_compilation=lambda *a: None,
+                                 audit_modules=audit_modules,
+                                 write_report=lambda *a: None), \
+                tempfile.TemporaryDirectory() as temp:
+            report = universe.audit(Path(temp), False, None, None)
+        audited = [r['modules'] for r in report['audits'] if r['status'] == 'pass']
+        self.assertEqual(sorted(m for run in audited for m in run), ['Real', 'Spoof'])
+        self.assertFalse(any({'Spoof', 'Real'} <= set(run) for run in audited))
+        self.assertEqual(report['status'], 'fail')
+        self.assertEqual(report['errors'], [f'Twice.lean: cannot be audited, its import closure declares a name '
+                                            f'twice ({clash})'])
+
 
 class AuditModulesTests(unittest.TestCase):
     def test_all_declarations_is_opt_in_without_changing_the_audit_context(self):
