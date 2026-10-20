@@ -1331,22 +1331,46 @@ end RunFp
 
 /-- Counting an allocation attempt is a step of the thread for every frame. -/
 theorem _root_.Zig.FStepIn.bumpAllocs {m : Mem} {hF : Heap} :
-    FStepIn hF m { m with allocs := m.allocs + 1 } :=
-  .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h)
-    (fun _ he hn => absurd he hn) fun _ h => h
+    FStepIn hF m { m with allocs := m.allocs + 1 } where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := Nat.le_refl _
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const _ _ h := h
+  cov _ h := h
 
 /-- A new block at the end is a step of the thread for every frame. -/
 theorem _root_.Zig.FStepIn.push {m : Mem} {hF : Heap} (x : Block) :
-    FStepIn hF m { m with blocks := m.blocks.push x } :=
-  .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      by simp, fun _ he => .inl he, fun _ he => .inl he⟩
-    (fun b' hb' ⟨blk', e1, e2⟩ => ⟨blk', by
+    FStepIn hF m { m with blocks := m.blocks.push x } where
+  current := rfl
+  threads := rfl
+  waiters := rfl
+  woken := rfl
+  groups := rfl
+  size := rfl
+  others _ _ := rfl
+  mine := VClock.le_refl _
+  blocks := by simp
+  nextMsg := Nat.le_refl _
+  atomics := ⟨some, AMap.of_eq rfl rfl⟩
+  fp e he := .inl ⟨e, he, .refl e⟩
+  fpc e he := .inl ⟨e, he, .refl e⟩
+  const b' hb' h := by
+    obtain ⟨blk', e1, e2⟩ := h
+    exact ⟨blk', by
       have e1' : (m.blocks.push x)[b']? = some blk' := e1
       rw [Array.getElem?_push_lt hb'] at e1'
-      exact (Array.getElem?_eq_getElem hb').trans e1', e2⟩)
-    (fun _ he hn => absurd he hn)
-    (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ hin => hin.push x rfl) fun _ he => he)
+      exact (Array.getElem?_eq_getElem hb').trans e1', e2⟩
+  cov := Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ hin => hin.push x rfl) fun _ he => he
 
 /-- Every memory that holds `P` has block `b` with `S` bytes, of kind `K` (an `fsym` provider
 kind: the extent `bext b S K` gives it). -/

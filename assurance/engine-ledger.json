@@ -6,9 +6,9 @@
    "title": "Remove transitional golden case-family enrollment markers",
    "status": "open",
    "requester": "Task23; coordinator decision 6258258831",
-   "progress": "Enroll the first complete golden family through existing retranslation cases; no per-case selector.",
+   "progress": "Enroll complete golden families through existing retranslation cases; Threadsync and Sync use no per-case selector.",
    "request": "Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.",
-   "workaround_sites": ["examples/threadsync/all-cases"],
+   "workaround_sites": ["examples/threadsync/all-cases", "examples/sync/all-cases"],
    "deletion_plan": "When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks."
   },
   {
@@ -1024,9 +1024,9 @@
   {
    "id": "carve-size-probes",
    "title": "A carve's size probes searched the case facts of other regions",
-   "status": "closed",
+   "status": "open",
    "requester": "arena-retain (retaining reset over wpts headers)",
-   "progress": "DONE on codex/arena-engine (Auto.lean `carve`, `arith`/`arithGoals`/`arithCore` `cases`); regression `tests/roadmap/sep-auto/SepAuto/Region.lean` (`free_large_sized`)",
+   "progress": "PR481's isolated A/B confirms the added ordinary size attempt regressed unchanged Region.free_large_sized at its original800000 cap: current attempt times out; disabling only that attempt passes the identical control. Demand n can equal the partial24-byte header under24<=n, so failed equality search explores unrelated region-disjointness cases. Claude6280049836 approved dropping fix3: the entire carve function is restored byte-for-byte to integrated main, including protected cases=false probes; fixes1-2 remain. The new small case-fact positive goal is retained unchanged inside an explicit expected-failure control in Structs, with its original hypotheses and default cap. That obstruction remains open; no new search heuristic, budget increase or production theorem weakening. The fallback whole Structs and full29-file official sep-auto suite PASS on f9505e4e/main578aa3b2 with Auto5614ed37; guards b8bf14f3/e6cbb205 bind current source and artifacts. Earlier passes/failures keep their original bindings. Reproduce with tests/roadmap/sep-auto/check.sh; discussion6280040941, ruling6280049836 and actual report6280488414 record the bounded stop.",
    "request": "**The planner's size probes of a carve (`n = sz`, `n ≤ sz`, `sz ≤ n`) ran `omega` through the case facts** (the pairwise disjointness of the owned regions, disjunctions). Those facts never bound a region's size, and a failed search through them is exponential: a node of `n ≥ 24` bytes given back against its 24 joined header bytes in a state of three blocks took 1.8M heartbeats per probe (the arena's `loop78`, a node given back to the child while the next node is in the state). Fixed: the probes run the solver without the case facts (`cases := false`); the plain facts still decide them.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1310,6 +1310,28 @@
    "deletion_plan": ""
   },
   {
+   "id": "allocator-creation-admissibility",
+   "title": "Bind allocator creation admissibility to the visible instance claimed",
+   "status": "open",
+   "requester": "Task10 allocator-creation soundness review",
+   "progress": "Maintainer chose exact applied-argument admission (PR400 comment6209913710, 2026-10-16). Only an exact original root FAdmit hypothesis or closed checked let binds parameter-dependent admission; False/Holds contexts do not suffice. Native sequential/concurrent Page creation and actual PageLinux.mem0 admission compile for every placement and arbitrary input stream. The preserved183-theorem/73-module audit and missing-companion controls retain their original source bindings; the main3d4 changed-root refresh passes197theorems and clean complete proof/type closures for all new native/Page helpers. Unused per-start wrappers were removed after PR434 MAIN. An actual187-theorem application audit exposed a draft memo collision that skipped let/lambda bodies; original evidence is preserved. The repaired scope/context-aware collector passes a fresh225-theorem kernel audit and all application controls, including exact direct/let/projection positives and mixed admitted-zero/unadmitted-one rejection. These are metadata controls, not kernel-unsoundness evidence or real FBA acceptance. After actual PR477/397 MAIN, native existing FStepIn.bumpAllocs/push bodies preserve both original statements. Source8f1eff842 on main68b8 passes fresh9/17-root kernel audits, raw sequential/concurrent Page complete BODY+TYPE closures9128/9232nodes with no legacy judgment, Strength or step adapter, exact companion positive/absence controls and strict17nonruntime/zero skips/source gaps. All direct Mmap importers compile; historical failing raw-closure evidence remains separately bound. Real FBA creation, exact fresh-result binding, ListsPage client-root coverage and the paired real producer/checker gate remain open. F2 require-fixed remains nonzero until real positive FBA AND Page acceptance are wired. No Auto/registry change, hand seed or per-FBA facts lemma; F2 is not fixed.",
+   "request": "Keep the existing FTotalTriple/FAdmit framework. An existential nonvacuity witness for a parameterized creation theorem does not establish admissibility for every visible instance: admissionFamilySpec n has own = lift(n=0), a total creation triple from lift(n=0), and a valid witness choosing zero, while FAdmit(lift(1=0)) is impossible. Retain the actual applied visible contract arguments and require checked FAdmit of the creation precondition at those exact arguments. A parameterized client carries that same admission predicate, not a second hand-stated domain. Derive actual arguments/resources from translated initialization with general fsym and start-memory rules; PR409 owns generic struct encoding/splitting support. Do not require admission for invalid raw pointers, silently select one convenient family member, erase impossible or dependent premises, hand-write client admission walks/seeds, or weaken the contract.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Existing family/proof-binder controls remain in Fixture.lean. AllocatorApplications.lean now kernel-checks225theorems and passes actual extraction assertions for exact/mismatched dependent arguments, False/Holds/scoped lets, local type aliases, higher-order/polymorphic forwarding, direct projections, type/conclusion indices, raw recursor branches and unknown callbacks. Named foreign creation diagnostics identify zero-based contract argument positions, including the [2,0,1] visible-role mapping; a direct admitted spec0 cannot mask hidden spec1. Memo identity retains exact local scope, closed expression and pending arguments/projection context. Full proposition-alias arity and checked projection-lambda authentication prevent speculative premises and duplicate holder scans. Unsupported parameterized type-valued projector cases conservatively reject; fresh applications remain unbound until actual created-result binding. Dynamic acceptance still requires the real fsym-produced FAdmit exact-argument versus differing-argument pair (coordinator PR400 comment6214104509); arbitrary local Holds/False cannot bind it. The independent Page constant-precondition companion does not implement that future engine hook. No new judgment or tactic. Arena creation remains a subsequent instance obligation."
+  },
+  {
+   "id": "admission-at-state",
+   "title": "Expose exact FAdmit side goals from the currently held full state",
+   "status": "open",
+   "requester": "Task10 / coordinator PR400 comment6211941344, 2026-10-16",
+   "progress": "APPROVED general engine feature; no existing hook. PR409, fsym part2 and arena-retain are on main3d4. Implement as a separate fresh-main small engine PR, without stacking/copying those branches. The independent native Page global-start companion uses existing Init/At rules and a constant precondition, so it does not supply this target-aware side-goal feature. Dynamic FBA initializer/fresh-result admission and the real paired producer/checker regression remain pending. Source/API analysis is not a new kernel-checked failure of a translated FBA proof; no Auto edit has been made.",
+   "request": "Add ordinary library lemma FAdmit.of_holds with exact goal Holds m r rF -> (P ⋆ R) r -> m.FSeq -> FAdmit P. When existing fsym encounters FAdmit X as a contract-use side goal, plan X ⋆ ?R against the CURRENT held assertion using the existing planner and frame rule, retaining the actual dependent arguments and context. Add a sep-auto regression with actual state/frame and mismatched-argument rejection. After this feature reaches main, require a paired real contract-call regression: fsym-produced FAdmit(P actualArgs) through FAdmit.of_holds must be accepted by the existing extractor at exactly those arguments, while admission for differing arguments and arbitrary local Holds/False contexts must reject. This producer/checker integration gate is required for dynamic initializer-dependent instance acceptance (coordinator PR400 comment6214104509); an independent constant-precondition Page global-start proof does not discharge it. No wildcard MemFacts, new registry, judgment, tactic, proof template, per-allocator facts lemma, fabricated seed or permissive claim-gate fallback. Implement only on main after PR409, fsym part2 and arena-retain have landed; do not stack or copy those branches. F2 remains open until real FBA/Page acceptance and all binding controls pass.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Coordinator decision https://github.com/riventic/air2lean/pull/400#issuecomment-6211941344. Current memFactsOf considers single atoms and ordered pairs and atomFacts matches exact head keys; pre_mfact is only an ordinary rule. The approved target-aware feature reuses the existing state planner instead of changing that registry. Keep unbound_admissibility fail closed until real instance evidence verifies."
+  },
+  {
    "id": "conc-base-owned",
    "title": "Direct full-state ownership facts and pure concurrency vocabulary",
    "status": "open",
@@ -1513,8 +1535,40 @@
    "request": "A generic semaphore fsym holder-transfer wrapper over FLock.Fits would inherit Fits.stable -> LockWord.Step.locs : Conc.LocsKeep. The complete resource can already be repartitioned natively at FLock.Inv, but adding a new Step-typed wrapper would grow the legacy proof closure. Replace the native primitive producers and their Full consumers together with permanent native frame/location facts preserving all original guarantees, including location retirement/reindexing and unaffected histories. Do not rename or adapt the legacy record, delete fields without replacement, add a premise, or hand-walk the semaphore. Task 06 PR #397 separately retires coherent Word/WordRules and Event/Cond MStep boundaries before READY; that does not by itself promise retirement of LockWord.Step.locs. The final held/outside condition-signal rule must retain a holder's complete resource. After the actual native APIs land on main, Task 07 supplies SemImpl and translated instances/clients using fsym, retaining all six SemCounter/Mailbox spec, safety and completion statements and their mutation controls.",
    "workaround_sites": [],
    "deletion_plan": "Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code.",
-   "note": "Program-walk qualification also requires a native full-state primitive-rule closure; no legacy frame-relation adapter may remain in the proof dependency graph."
-  }
+    "note": "Program-walk qualification also requires a native full-state primitive-rule closure; no legacy frame-relation adapter may remain in the proof dependency graph."
+   },
+   {
+    "id": "typed-region-release",
+    "title": "Release a complete block from typed fields while preserving the native stack refund",
+    "status": "closed",
+    "requester": "Task14 full-state allocator client",
+    "progress": "Native typed-region/extent/release lemmas and approved size-aware matching use data-only hints, witness rollback, shared bounded substitution refresh, unresolved-token inference and independent original side premises. Comments6279182210/6279202049 approved active-path view progress and applied explicit-frame unification. Actual fallback whole Structs, including free_fields_stack with its exact original goal, and the full29-file official sep-auto suite PASS on f9505e4e/main578aa3b2, Auto5614ed37, guards b8bf14f3/e6cbb205. The five unchanged Proofs callers retain their earlier afc52032a/Auto f13fb21a PASS binding69afbe3b; an accepted fixed-size causal audit supports reuse, not a fresh current-source claim. Isolated A/B proved the added ordinary size attempt caused the large-state regression, so Claude6280049836 dropped fix3 and restored the whole carve function exactly to main. The separate case-fact positive remains an explicit expected failure tracked by open carve-size-probes. Fixes1-2 and all other controls remain; no cap increase, broader planner or weakened production statement. Reproduce with tests/roadmap/sep-auto/check.sh; actual report6280488414.",
+    "request": "Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/SepAuto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.",
+    "workaround_sites": [],
+    "deletion_plan": "",
+    "note": "The qualified controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Existing substitutions not recorded by unifyBlocks can leave a stale matching hint; such hints are skipped safely, with original side proofs retained. This does not claim complete matching for every case-based size consequence. A demanded size selects or joins whole state regions and never splits one (carve whole): splitting let memcpyRegionsAll take prefixes of both buffers in Proofs/Lists/Append.lean precise_pos instead of memcpyRegions, and the walk then exhausted its heartbeats at the following free (fix-forward after PR481). Full client and legacy retirement remain open."
+   },
+   {
+    "id": "region-memset-read",
+    "title": "Infer a region read after a defined-value memset",
+    "status": "closed",
+    "requester": "Task14 full-state allocator client",
+    "progress": "Implemented by ReadsAt.regionMemset/regionMemset0 through the existing region/extraction/decode lemmas. Reproduce with tests/roadmap/sep-auto/check.sh: Region.memset_read and Region.memset_word_reads cover byte and multibyte initial/interior loads. No new provider kind or engine change.",
+    "request": "Close tests/roadmap/sep-auto/SepAuto/Region.lean memset_read by fsym: for arbitrary p,A,S,K and bs.size=4 and v:BitVec8, FTotalTriple (up(regionIn p A S K 1 bs)) (do memset 1 p 4 (some v); load (BitVec8) 1 (p.add 3)) (fun r => ⟪r=v⟫ ⋆ up(regionIn p A S K 1 (memsetBytes 4 (some v)))). The generic fix must cover every lawful encoding/value/count and aligned in-bounds item offset using the existing ReadsAt.regionIn, Array.extract_flatten_replicate and decode_encode path, including fail-closed empty/zero-size read guards. Do not add a byte/client-specific load rule, new provider kind, Auto edit, premise or manual code walk.",
+    "workaround_sites": [],
+    "deletion_plan": "",
+    "note": "The generic providers retain positive encoding size, nonnegative whole-item offset and exact fit; ordinary load alignment checks remain. Memset itself supports zero-sized/count cases. Full FBA client and legacy retirement remain open."
+   },
+   {
+    "id": "known-bytes-on-demand",
+    "title": "Derive requested block-address knowledge from raw bytes without changing global store results",
+    "status": "closed",
+    "requester": "PR481 coordinator takeover review",
+    "progress": "The original storeBlock/storeBlock_finite posts are restored; one requested-knowledge planner precedes region planning and uses known_of_bytesAt. Approved committed-descendant retry, snapshots/fallbacks, source-first determined-block address selection, unknown-block matching and direct-update shape checks remain. Whole actual Structs, including concrete/existential/idempotence/no-request/fail-closed controls, and the full29-file official sep-auto suite PASS on f9505e4e/main578aa3b2, Auto5614ed37, guards b8bf14f3/e6cbb205. The five actual unchanged Proofs callers PASS at their original afc52032a/Auto f13fb21a binding69afbe3b; the accepted causal audit supports retaining that evidence after the final change only restores main's carve. The isolated A/B and Claude6280049836 removed the ordinary size probe while preserving fixes1-2 and the explicit case-fact expected failure. No current-source fresh-five claim or blanket full-build repeat for a head move. Reproduce with tests/roadmap/sep-auto/check.sh; actual report6280488414.",
+    "request": "Close the generic store_fields_keep_address control in tests/roadmap/sep-auto/SepAuto/Structs.lean by deriving requested known b A from nonempty bytes before typed views hide their metadata. Do not eagerly add known to global store posts: the exact old result shape is required by Proofs/Threadsync/Mutex.lean, Proofs/Sync/Mutex.lean, Proofs/Sync/SnapshotCache.lean, Proofs/Threadsync/Handoff.lean and Proofs/Sync/Handoff.lean. Use only the existing knowledge-planning mechanism and known_of_bytesAt, with exact block/address and positive-byte guards; no per-proof glue or broader leftover-resource framing. Validate the completed global-rule repair with scripts/full-build.sh.",
+    "workaround_sites": [],
+    "deletion_plan": ""
+   }
  ],
  "mechanisms": [
   {
