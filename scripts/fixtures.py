@@ -16,7 +16,8 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   `roots`) belongs to one library and is no root of the root package's libraries.
 - `audit`: the normal canonical Lake producer snapshots sources before its cached build, then
   audits those exact built outputs; an explicit custom `lib` stays graph-only. Axioms are read by
-  `scripts/assumptions.py --all-declarations` (kernel replay included), not from a message log.
+  `scripts/assumptions.py --all-declarations` (kernel replay included; in a fixture-checks run
+  through the run's one replay cache, AIR2LEAN_FIXTURE_REPLAY_CACHE), not from a message log.
   Fails unless every theorem of the modules depends on the standard axioms only (propext,
   Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
   `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
@@ -35,6 +36,7 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -161,12 +163,14 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
                     unit['outputs'] = theorem_universe.compiled_output(Path(unit['output_path']))
                 theorem_universe.seal_compilation(context)
         lib = lib or PACKAGE / ".lake" / "build" / "lib" / "lean"
+        # The kernel replays of this run's other audits (scripts/fixture-checks.py), else its own.
+        replay_cache = Path(os.environ.get("AIR2LEAN_FIXTURE_REPLAY_CACHE") or work / "replay-cache.json")
         # --all-declarations: every declaration of the modules is a graph root, so a definition
         # whose value carries proofs (a `ResetLedger` instance) is audited like a theorem.
         if context is None:
             env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
             command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
-                       "--all-declarations", "--replay-cache", str(work / "replay-cache.json"),
+                       "--all-declarations", "--replay-cache", str(replay_cache),
                        "--output", str(report_path)]
             for module in modules:
                 command += ["--module", module]
@@ -175,7 +179,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
             audit_code, audit_output = done.returncode, done.stdout
         else:
             result = theorem_universe.audit_modules(sorted(set(modules)), [], report_path,
-                                                   work / 'replay-cache.json', all_declarations=True,
+                                                   replay_cache, all_declarations=True,
                                                    compiled_units=context)
             audit_code, audit_output = result['exit_code'], ''
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"status": "error"}
@@ -291,6 +295,16 @@ def main(argv: list[str]) -> int:
     p.add_argument("--expect", action="append", default=[])
     sub.add_parser("files")
     a = parser.parse_args(argv)
+    # Every Lake of this command runs in one mode: its own builds (`lake`, through cas.py run)
+    # and the extractor's (scripts/assumptions.py, plain `lake`). With AIR2LEAN_CAS_DIR set
+    # that is the shared artifact cache's (as build-guard.py's lake_cache_env): in one checkout
+    # Lake can judge a module up to date with the cache and stale without it, and a plain build
+    # then rebuilt root modules inside an audit's compiler-owned binding.
+    if os.environ.get("AIR2LEAN_CAS_DIR"):
+        spec = importlib.util.spec_from_file_location("air2lean_cas", Path(__file__).with_name("cas.py"))
+        cas = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cas)
+        os.environ.update(cas.lake_env())
     if a.command == "build":
         return build(a.targets)
     if a.command == "audit":

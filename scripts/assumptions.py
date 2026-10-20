@@ -908,7 +908,13 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     (one build only; receipts never use it) holds `cacheable` (Lake-built) modules that already
     passed with the same checker, installed runtime inputs and identical olean bytes. Any
     differing cacheable-module digest drops the whole cache. The caller still selects cacheable
-    modules; this runtime binding does not authenticate project/private import closures."""
+    modules; this runtime binding does not authenticate project/private import closures.
+    Several audits of one build may share `cache` at once (scripts/fixture-checks.py's run): each
+    cacheable module is checked under a claim (`<cache>.d/<module>.lock`), the cache is read
+    again under it and a pass is merged in at once, so concurrent audits replay each module once
+    between them. A pass is merged in only while the compiled inputs are unchanged, and a replay
+    that merged passes in and then fails (a changed runtime or input) removes the cache (those
+    passes may come from either side of the change)."""
     from concurrent.futures import ThreadPoolExecutor  # Lazy: the offline receipt suite has a 32 MiB budget.
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
@@ -917,36 +923,73 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
         raise ValueError('toolchain runtime changed between extraction and replay')
     environment = {**os.environ, "LEAN_PATH": lean_path}
     jobs = stage_jobs("AIR2LEAN_REPLAY_JOBS")
-    try:
-        cached = json.loads(cache.read_text()) if cache else {}
-    except FileNotFoundError:
-        cached = {}
-    passed = (cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha
-              and cached.get("toolchain_runtime_sha256") == runtime_sha
-              and cached.get("compiled_inputs_sha256") == compiled_inputs_sha256 else {})
-    if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
-        passed = {}  # Another build: a reused module could depend on a changed one.
-    modules = sorted(digests)
-    reused = [m for m in modules if m in cacheable and passed.get(m) == digests[m]]
 
-    def check(module: str):
+    def load() -> dict:
+        """The cache's passes, if they are of this checker and runtime and agree with every
+        cacheable digest here; otherwise none (another build: a reused module could depend on a
+        changed one)."""
+        try:
+            cached = json.loads(cache.read_text())
+        except FileNotFoundError:
+            return {}
+        passed = (cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha
+                  and cached.get("toolchain_runtime_sha256") == runtime_sha
+                  and cached.get("compiled_inputs_sha256") == compiled_inputs_sha256 else {})
+        if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
+            passed = {}  # Another build: a reused module could depend on a changed one.
+        return passed
+
+    @contextlib.contextmanager
+    def locked(path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)  # Released when the descriptor closes.
+            yield
+        finally:
+            os.close(descriptor)
+
+    def run_checker(module: str):
         result = subprocess.run([str(checker), module], cwd=ROOT, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return None if result.returncode == 0 else {
             "module": module, "output": f"leanchecker exited {result.returncode}\n" + result.stdout[-2000:]}
 
-    with ThreadPoolExecutor(jobs) as pool:
-        rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
-    if toolchain_runtime_sha256(toolchain) != runtime_sha:
-        raise ValueError('toolchain runtime changed during kernel replay')
-    if validate_inputs is not None:
-        validate_inputs()  # No cache publication or passing result from a changed input batch.
-    if cache:
-        failed = {r["module"] for r in rejected}
-        passed.update({m: d for m, d in digests.items() if m in cacheable and m not in failed})
-        write_report(cache, {"tool_sha256": checker_sha, "toolchain_runtime_sha256": runtime_sha,
-                             "compiled_inputs_sha256": compiled_inputs_sha256,
-                             "passed": passed})
+    def check(module: str):
+        """(reused, rejection or None)."""
+        if not cache or module not in cacheable:
+            return False, run_checker(module)
+        claims = cache.with_name(cache.name + ".d")
+        with locked(claims / (module + ".lock")):
+            if load().get(module) == digests[module]:
+                return True, None
+            rejection = run_checker(module)
+            if rejection is None:
+                with locked(claims / "cache.lock"):
+                    if validate_inputs is not None:
+                        validate_inputs()  # No cache publication from a changed input batch.
+                    passed = load()
+                    passed[module] = digests[module]
+                    write_report(cache, {"tool_sha256": checker_sha, "toolchain_runtime_sha256": runtime_sha,
+                                         "compiled_inputs_sha256": compiled_inputs_sha256,
+                                         "passed": passed})
+                    published.append(module)
+            return False, rejection
+
+    modules, published = sorted(digests), []
+    try:
+        with ThreadPoolExecutor(jobs) as pool:
+            results = dict(zip(modules, pool.map(check, modules)))
+        if toolchain_runtime_sha256(toolchain) != runtime_sha:
+            raise ValueError('toolchain runtime changed during kernel replay')
+        if validate_inputs is not None:
+            validate_inputs()  # No passing result from a changed input batch.
+    except BaseException:
+        if published:  # passes this replay merged in may come from the changed runtime or inputs
+            cache.unlink(missing_ok=True)
+        raise
+    reused = [m for m in modules if results[m][0]]
+    rejected = [r for _, r in results.values() if r is not None]
     return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
             "lean_sha256": file_sha256(toolchain / "bin/lean"),
             "toolchain": (ROOT / "lean-toolchain").read_text().strip(),
