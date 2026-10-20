@@ -38,6 +38,7 @@ import argparse
 import datetime
 import fcntl
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -471,6 +472,25 @@ def free_mib(lock=None, budget_mib=None):
     return free * SLOT_MIB
 
 
+def lake_cache_env():
+    """Lake's artifact cache settings of scripts/cas.py run when AIR2LEAN_CAS_DIR is set, else
+    none, so every Lake of one guarded workload runs in the same mode. In one checkout Lake can
+    judge a module up to date with the cache and stale without it. A workload that ran some Lake
+    builds through `cas.py run` (scripts/fixtures.py) and others plain (the extractor's own build,
+    scripts/assumptions.py) rebuilt root modules in place between a compiler-owned audit's
+    binding and its check ("compiler-owned Unit imported inputs changed"), and under the units
+    running beside it."""
+    if not os.environ.get("AIR2LEAN_CAS_DIR"):
+        return {}
+    path = Path(__file__).with_name("cas.py")
+    if not path.is_file():
+        return {}
+    spec = importlib.util.spec_from_file_location("air2lean_cas", path)
+    cas = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cas)
+    return cas.lake_env()
+
+
 def workspace(cwd):
     """The Lake workspace a workload in cwd may write: the git top level (a check tree under a
     checkout's .lake and a package that requires the checkout by path, like tests/diff, write
@@ -761,7 +781,7 @@ def run(a):
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
                          "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
                          "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared",
-                         INHERIT: json.dumps(lock.grant(), sort_keys=True)}
+                         INHERIT: json.dumps(lock.grant(), sort_keys=True), **lake_cache_env()}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
             try:

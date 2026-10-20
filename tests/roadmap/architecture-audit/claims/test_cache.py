@@ -58,9 +58,27 @@ def outputs():
     return {p.name: DRIVER.sub(b'<driver>.lean', p.read_bytes()) for p in sorted(files)}
 
 
+def require_built_root():
+    """The runs below toggle the cache for the fixtures only; the root package's modules must be
+    up to date for Lake with and without it. Otherwise the uncached run would rebuild them in
+    place in the shared checkout, racing every check that imports them (scripts/fixture-checks.py
+    runs in parallel), and compare outputs built from two different root builds."""
+    env = {k: v for k, v in os.environ.items() if k != 'AIR2LEAN_CAS_DIR' and not k.startswith('LAKE_')}
+    targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
+                             env=env, text=True, stdout=subprocess.PIPE, check=True).stdout.split()
+    done = subprocess.run(['lake', 'build', '--no-build', *targets], cwd=ROOT, env=env, text=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if done.returncode:
+        stale = re.findall(r'Building (\S+)', done.stdout)
+        raise SystemExit('the root package is not up to date for Lake without the artifact cache (%s); '
+                         'build it first (scripts/full-build.sh), this test rebuilds nothing of it'
+                         % (', '.join(stale[:10]) or done.stdout[-2000:]))
+
+
 def main():
     build = ['bash', str(HERE / 'build.sh')]
     fill = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'run', '--', 'lake', 'build', 'AuditClaims']
+    require_built_root()
     # The extractor records whether its tool olean was reused; a first audit in a new checkout
     # has no record yet. Make both build.sh runs see the same state.
     import assumptions

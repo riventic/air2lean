@@ -304,6 +304,21 @@ fixture_pause()
         code, _ = self.attempt(*budget, cwd=self.worktree("z"))
         self.assertEqual(code, 75)
 
+    def test_every_lake_of_a_workload_runs_in_one_cache_mode(self):
+        # The regression of 2026-10-20 (main, alloc-fba): a plain `lake` beside `cas.py run` rebuilt
+        # root modules inside a compiler-owned audit binding.
+        source = 'import os; print(os.environ.get("LAKE_ARTIFACT_CACHE"), os.environ.get("LAKE_CACHE_DIR"))'
+        os.environ.pop("AIR2LEAN_CAS_DIR", None)
+        for key in ("LAKE_ARTIFACT_CACHE", "LAKE_CACHE_DIR", "LAKE_RESTORE_ARTIFACTS"):
+            os.environ.pop(key, None)
+        result, report, log = self.run_guard(source)
+        self.assertEqual(log.read_text(), "None None\n", result.stderr)
+        self.assertNotIn("LAKE_ARTIFACT_CACHE", report["environment_overrides"])
+        os.environ["AIR2LEAN_CAS_DIR"] = str(self.root / "cas")
+        result, report, log = self.run_guard(source)
+        self.assertEqual(log.read_text(), "true %s\n" % (self.root / "cas" / "lake"), result.stderr)
+        self.assertEqual(report["environment_overrides"]["LAKE_ARTIFACT_CACHE"], "true")
+
     def test_guard_mode_is_exported_and_recorded(self):
         for options, mode in (((), "shared"), (("--exclusive",), "exclusive")):
             result, report, log = self.run_guard('import os; print(os.environ["AIR2LEAN_GUARD_MODE"])', *options)
