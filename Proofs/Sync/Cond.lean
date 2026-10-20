@@ -108,9 +108,34 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
 registered waiter was signalled. -/
 def sigInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
     (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧ ∃ b : BitVec 32, s.prev_state = Packed.ofBits b ∧
-    (b = 0 ∨ b = 1 ∨ b = 0x10001) ∧
-    (b ≠ 1 → ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m)
+  d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
+    ((s.prev_state = Packed.ofBits (0 : BitVec 32) ∧
+        ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m) ∨
+      s.prev_state = Packed.ofBits (1 : BitVec 32) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧
+        ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m))
+
+/-- The explicit alternatives are exactly the original finite existential invariant. -/
+theorem sigInv_iff_exists (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
+    (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) :
+    sigInv P C t g D s G m d ↔
+      d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
+        ∃ b : BitVec 32, s.prev_state = Packed.ofBits b ∧
+          (b = 0 ∨ b = 1 ∨ b = 0x10001) ∧
+          (b ≠ 1 → ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m) := by
+  constructor
+  · rintro ⟨hd, hc, hi, hs⟩
+    refine ⟨hd, hc, hi, ?_⟩
+    rcases hs with ⟨hp, hs⟩ | hp | ⟨hp, hs⟩
+    · exact ⟨0, hp, .inl rfl, fun _ => hs⟩
+    · exact ⟨1, hp, .inr (.inl rfl), fun h => (h rfl).elim⟩
+    · exact ⟨0x10001, hp, .inr (.inr rfl), fun _ => hs⟩
+  · rintro ⟨hd, hc, hi, b, hp, hb, hs⟩
+    refine ⟨hd, hc, hi, ?_⟩
+    rcases hb with rfl | rfl | rfl
+    · exact .inl ⟨hp, hs (by decide)⟩
+    · exact .inr (.inl hp)
+    · exact .inr (.inr ⟨hp, hs (by decide)⟩)
 
 /-- `signal`'s loop ends with `t` out and a registered waiter signalled. -/
 def sigPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
