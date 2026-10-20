@@ -811,22 +811,10 @@ the address `A` gives `known b A`. -/
 theorem known_of_region {p : Ptr} {A S a : Nat} {K : BlockKind} {bs : Array Byte}
     (hpb : p.block = some b) (hpos : 0 < bs.size) :
     EUpd (up (regionIn p A S K a bs)) (up (regionIn p A S K a bs) ⋆ known b A) := by
-  intro m r rF hh hp _
+  intro m r rF hh hp hs
   obtain ⟨hr, hk, hg⟩ := id hp
-  obtain ⟨-, -, b', hb', -, hl⟩ := id hr
-  rw [hpb] at hb'; cases hb'
-  have e := hl (b, p.off.toNat)
-  rw [if_pos ⟨rfl, Nat.le_refl _, by omega⟩] at e
-  simp only [FHeap.erase, Option.map_eq_some_iff] at e
-  obtain ⟨fc, hfc, hfe⟩ := e
-  have hkn : m.kn (.addr b A) := by
-    obtain ⟨blk, hblk, -, -, -, ha, -⟩ := hh.block hfc
-    exact ⟨blk, hblk, by rw [← ha, hfe]⟩
-  exact ⟨⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩,
-    ⟨hh.disj, hh.heap, hh.know.union (Know.sub_single hkn),
-      hh.knowF, hh.ghost⟩,
-    ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
-      by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩⟩
+  obtain ⟨r', hh', hp'⟩ := known_of_bytesAt hpb hpos m r rF hh ⟨hr.2.2, hk, hg⟩ hs
+  exact ⟨r', hh', sep_mono_left (fun _ h => ⟨⟨hr.1, hr.2.1, h.1⟩, h.2⟩) hp'⟩
 
 /-- Knowledge can be forgotten. -/
 @[fsym_drop] theorem known_drop {A : Nat} {R : FAssn} : EUpd (known b A ⋆ R) R := by

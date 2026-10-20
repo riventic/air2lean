@@ -66,6 +66,25 @@ class Classify(unittest.TestCase):
         self.assertNotEqual(before, ld.input_key("t/Log.lean", toolchain, {}))
         self.assertNotEqual(before, ld.input_key("t/Log.lean", b"other", {}))
 
+    def test_source_roots_include_explicit_roots_and_glob_prefixes(self):
+        self.assertEqual(ld.lib_roots(), {'Lib'})
+        self.assertEqual(ld.lib_roots(self.repo, strict_sources=True), {'Lib'})
+        self.write('lakefile.toml', '[[lean_lib]]\nname = "OtherTarget"\nroots = ["Lib.B"]\n')
+        self.assertEqual(ld.lib_roots(strict_sources=True), {'Lib'})
+        self.write('lakefile.toml', '[[lean_lib]]\nname = "OtherTarget"\nroots = ["Lib.B"]\nglobs = ["Other.+"]\n')
+        self.assertEqual(ld.lib_roots(strict_sources=True), {'Lib', 'Other'})
+
+    def test_source_roots_reject_decoy_srcdir_and_unbounded_globs(self):
+        self.write('external/Lib/A.lean', 'def state := 1\n')
+        for config in ('srcDir = "external"\n[[lean_lib]]\nname = "Lib"\n',
+                       '[[lean_lib]]\nname = "Lib"\nsrcDir = "external"\n'):
+            self.write('lakefile.toml', config)
+            with self.assertRaisesRegex(ValueError, 'unsupported Lake srcDir'):
+                ld.lib_roots(strict_sources=True)
+        self.write('lakefile.toml', '[[lean_lib]]\nname = "Lib"\nglobs = ["*"]\n')
+        with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
+            ld.lib_roots(strict_sources=True)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -609,16 +609,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "c619908c76b63682d318409c8c983682b3fae0f3",
+        "head": "5062ef36d25ffa5a6a6f8968c064137160814d9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-19T23:19:49.945297+00:00",
-      "elapsed_seconds": 267.14,
+      "started_utc": "2026-10-19T23:03:17.428934+00:00",
+      "elapsed_seconds": 58.607,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1afcd718c07c9fbda2a06875e9315e22e8daa89f3c77331bf427b317888851e7",
+      "log_sha256": "ad9db145424d8c67cd5eb0b545dd292a046adf91ef7afa94f16ce471bfeacc74",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -699,16 +699,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "882cd36856772aa63910338d8936fa873cb05e1e",
+        "head": "5062ef36d25ffa5a6a6f8968c064137160814d9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-19T23:12:08.635141+00:00",
-      "elapsed_seconds": 304.733,
+      "started_utc": "2026-10-19T22:56:15.992711+00:00",
+      "elapsed_seconds": 114.886,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "67a87386f7302ae198644b479ae19aaea027ce334da21e09d1c60295f10a670c",
+      "log_sha256": "1dc3efe3dd6b38cad845350cedcd58036920f2586cea7720b991e8554968d97b",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -802,16 +802,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "c619908c76b63682d318409c8c983682b3fae0f3",
+        "head": "5062ef36d25ffa5a6a6f8968c064137160814d9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-19T23:39:51.210725+00:00",
-      "elapsed_seconds": 660.043,
+      "started_utc": "2026-10-19T23:08:42.610051+00:00",
+      "elapsed_seconds": 1.175,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "38eaf7fdf1d6a270afe144108820e016ac09a967edd6ad7d317fb901a0f53ae4",
+      "log_sha256": "2ecb9f8abba2b60f7c7c418c17e8b7e52a79e385913a4fe82511ac0e13a25797",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1269,16 +1269,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "c619908c76b63682d318409c8c983682b3fae0f3",
+        "head": "5062ef36d25ffa5a6a6f8968c064137160814d9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-19T23:24:19.496764+00:00",
-      "elapsed_seconds": 928.234,
+      "started_utc": "2026-10-19T23:04:18.220268+00:00",
+      "elapsed_seconds": 262.346,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "22f98ad6f7e3c336a7a12508a037cf5c7cb58478c49d7ae36838d96bce87270d",
+      "log_sha256": "726866d75d093f5a7ea7917cdfb68993fb415f0aa8289d6de89ea520c1a6e1ee",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1497,16 +1497,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "c619908c76b63682d318409c8c983682b3fae0f3",
+        "head": "5062ef36d25ffa5a6a6f8968c064137160814d9e",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-19T23:17:14.943600+00:00",
-      "elapsed_seconds": 152.931,
+      "started_utc": "2026-10-19T22:58:12.260062+00:00",
+      "elapsed_seconds": 301.91,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "ec9240a4deb419c239062a9718023a134f10b1a362c2a0cd4df2f4095c0fb9a1",
+      "log_sha256": "cad85aa1fd18f0446858b6a73c23ddf411799bcba6c91f828fc0d3c68b2dda47",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",

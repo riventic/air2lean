@@ -81,13 +81,7 @@ decode to `v`. -/
 /-- The first byte of a buffer of `u8`s is the encoding of its first item. -/
 theorem u8s_extract {vs : Array (BitVec 8)} (hn : 0 < vs.size) :
     (vs.map Byte.int).extract 0 (Enc.size (BitVec 8)) = Enc.encode vs[0]! := by
-  have he : Enc.encode vs[0]! = #[Byte.int vs[0]!] := by
-    have hr : Array.range 1 = #[0] := by decide
-    simp [Enc.encode, padTo, intBytes, intSize, intAlign, alignUp, hr]
-    apply BitVec.eq_of_toNat_eq
-    have := vs[0]!.isLt
-    simp only [BitVec.toNat_ofNat]
-    omega
+  have he := Enc.encode_byte vs[0]!
   rw [show Enc.size (BitVec 8) = 1 from rfl, he]
   apply Array.ext
   · simp; omega
