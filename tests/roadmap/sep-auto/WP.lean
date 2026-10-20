@@ -374,6 +374,44 @@ theorem forward_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     P.WP t (pure ()) (fun _ _ _ _ => ∀ r : BitVec 32, r.toNat = 1 → r = 1) G m n := by
   fsym [forward_to_one]
 
+/-- The generic pure-result rule learns the quotient from a symbolic unsigned run. -/
+theorem division_unsigned {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat)
+    {w : Nat} (a b : BitVec w) (hb : b ≠ 0) :
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.divTrunc false a b)))
+      (fun r _ _ _ => r = a.udiv b) G m n := by
+  fsym
+
+/-- Signed division uses the existing overflow predicate, with no width restriction. -/
+theorem division_signed {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat)
+    {w : Nat} (a b : BitVec w) (hb : b ≠ 0) (ho : a.sdivOverflow b = false) :
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.divTrunc true a b)))
+      (fun r _ _ _ => r = a.sdiv b) G m n := by
+  fsym
+
+/-- The negative controls retain actual illegal outcomes, independently of automation. -/
+theorem division_error_outcomes :
+    (Zig.divTrunc false (7 : BitVec 32) 0).run = some (.error .illegal) ∧
+    (Zig.divTrunc false (0 : BitVec 0) 1).run = some (.error .illegal) ∧
+    (Zig.divTrunc true (128 : BitVec 8) 255).run = some (.error .illegal) := by
+  decide +kernel
+
+theorem division_unsafe_rejected (G : ThreadId → Nat × Bool) (m : Mem) (n : Nat) : True := by
+  fail_if_success
+    have : ({ startProto with strict := true }).WP 0
+        (ConcM.liftMem (StateT.lift (Zig.divTrunc false (7 : BitVec 32) 0)))
+        (fun _ _ _ _ => True) G m n := by fsym
+  fail_if_success
+    have : ({ startProto with strict := true }).WP 0
+        (ConcM.liftMem (StateT.lift (Zig.divTrunc false (0 : BitVec 0) 1)))
+        (fun _ _ _ _ => True) G m n := by fsym
+  fail_if_success
+    have : ({ startProto with strict := true }).WP 0
+        (ConcM.liftMem (StateT.lift (Zig.divTrunc true (128 : BitVec 8) 255)))
+        (fun _ _ _ _ => True) G m n := by fsym
+  trivial
+
 end SepAuto.WP
 
 namespace SepAuto.WP
