@@ -48,10 +48,13 @@ Basic's four existing Linux cases are 0.17.0, 0.16.0, 0.15.2 and 0.14.1. Each
 version-local AIR directory retains a complete actual export with its own full
 Linux profile; the shared historical AIR and public `Basic` module are unchanged.
 The same Case pipeline generates all four disjoint modules and their unconditional
-`Proofs.Basic.Cases` import aggregate. This generation coverage does not establish
-Basic's functional Full contracts, profile-plus-Gen contract receipts or their
-wrong-version negative control; those obligations and version-gate retirement
-remain open.
+`Proofs.Basic.Cases` import aggregate. `Proofs.Basic.ClampCases` supplies the same
+`FTotalTriple` for each case's `clampAdd`: every pair of 16-bit inputs returns their
+sum saturated at 65535 while preserving any frame. The proofs use `fsym` and the
+existing width-generic saturating-add rule; Full returning-input witnesses cover
+every input with empty resources. Other Basic functional contracts,
+profile-plus-Gen contract receipts, their wrong-version negative control and
+version-gate retirement remain open.
 
 `Proofs/Sync/MutexCases.lean` supplies mutex instances for the three enrolled Sync
 profiles: 0.17.0 Linux, then 0.16.0 Linux and Darwin. Each profile's generated
