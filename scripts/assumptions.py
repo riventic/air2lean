@@ -763,8 +763,9 @@ def resolved_roots(lake: list[str], workspace: Path, env: dict) -> list[str] | N
     lines = done.stdout.strip().splitlines()
     if done.returncode or len(lines) != 1 or not all(lines[0].split(os.pathsep)):
         return None
-    entries = [(workspace / entry).absolute() for entry in lines[0].split(os.pathsep)]
-    own = (workspace / ".lake/build/lib/lean").absolute()
+    # Compared as resolved paths: Lake prints them with symlinks resolved (/private/var on macOS).
+    entries = [(workspace / entry).resolve() for entry in lines[0].split(os.pathsep)]
+    own = (workspace / ".lake/build/lib/lean").resolve()
     if entries.count(own) != 1:
         return None
     if own.is_dir() and any(p.name != EXTRACTION_LIBRARY for p in own.iterdir()
@@ -820,7 +821,8 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
         # Lake chooses the import paths itself: a caller's LEAN_PATH (the replay's) stays out.
         lake = [sys.executable, "-B", str(root / "scripts/cas.py"), "run", "--", "lake"]
         env = {k: v for k, v in os.environ.items() if k != "LEAN_PATH"}
-        if binding is not None and resolved_roots(lake, workspace, env) != binding['roots']:
+        if binding is not None and resolved_roots(lake, workspace, env) != [
+                str(Path(entry).resolve()) for entry in binding['roots']]:
             return None
         result = subprocess.run([*lake, "build", module], cwd=workspace, text=True, capture_output=True,
                                 env=env)
