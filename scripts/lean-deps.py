@@ -157,36 +157,45 @@ def standalone_files() -> list[str]:
     return files
 
 
-def closure(mods: set[str]) -> set[str]:
-    """The package modules that `mods` import, transitively, `mods` included."""
-    roots = lib_roots()
-    seen, todo = set(), sorted(mods)
-    while todo:
-        m = todo.pop()
-        if m in seen or m.split(".")[0] not in roots or not module_file(m).is_file():
-            continue
-        seen.add(m)
-        todo += sorted(imports(module_file(m)))
-    return seen
+def lake_query(targets: list[str]) -> list:
+    """`lake query --json TARGET...` in the package: one JSON value per target. Lake is the
+    authority on a module's imports (its own header parser) and on which library owns a module."""
+    done = subprocess.run(["lake", "query", "--json", *targets], cwd=ROOT, text=True, capture_output=True)
+    values = [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
+    if done.returncode or len(values) != len(targets):
+        raise SystemExit(f"lean-deps: lake query {' '.join(targets)} failed:\n{done.stdout}{done.stderr}")
+    return values
 
 
 DEPS_GLOBS = re.compile(r'(\[\[lean_lib\]\]\nname = "(?P<name>[^"]+)"\n(?:[^\[\n].*\n|\n)*?)globs = \[[^\]]*\]')
 
 
-def precompiled_deps() -> dict[str, list[str]]:
-    """{`<P>Deps`: its globs} for every library P with `precompileModules` (docs/build-cache.md
-    #precompiled-fsym): the modules P's modules import, transitively. Lake links P's shared
-    library against `<P>Deps`'s, so that one must hold the native code of all of them."""
+def precompiled_libs() -> dict[str, list[str]]:
+    """{P: its modules} for every library P with `precompileModules` (docs/build-cache.md
+    #precompiled-fsym); its `globs` must name its modules one by one."""
     lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+    if lake.get("precompileModules"):
+        raise SystemExit("lean-deps: a package-wide precompileModules is not supported; set it on a library")
     out = {}
     for lib in lake.get("lean_lib", []):
         if not lib.get("precompileModules"):
             continue
-        mods = set(lib.get("globs", []))
+        mods = sorted(set(lib.get("globs", [])))
         if not mods or any(not module_file(m).is_file() for m in mods):
             raise SystemExit(f"lean-deps: precompiled library {lib['name']}: globs must name "
-                             f"existing modules, got {sorted(mods)}")
-        out[lib["name"] + "Deps"] = sorted(closure(mods) - mods)
+                             f"existing modules, got {mods}")
+        out[lib["name"]] = mods
+    return out
+
+
+def precompiled_deps() -> dict[str, list[str]]:
+    """{`<P>Deps`: its globs} for every precompiled library P: the modules P's modules import,
+    transitively (Lake's `transImports`). Lake links P's shared library against `<P>Deps`'s, so
+    that one must hold the native code of all of them."""
+    out = {}
+    for name, mods in precompiled_libs().items():
+        below = set().union(*(set(v) for v in lake_query([f"{m}:transImports" for m in mods])))
+        out[name + "Deps"] = sorted(below - set(mods))
     return out
 
 
@@ -194,25 +203,36 @@ def precompiled(write: bool) -> int:
     path = ROOT / "lakefile.toml"
     text = path.read_text(encoding="utf-8")
     current = {lib["name"]: lib.get("globs") for lib in tomllib.loads(text).get("lean_lib", [])}
-    stale = []
-    for deps, globs in precompiled_deps().items():
-        if current.get(deps, None) == globs:
-            continue
-        stale.append(deps)
-        if deps not in current:
-            raise SystemExit(f"lean-deps: lakefile.toml has no library {deps} with a `globs` line")
-        if write:
-            body = "".join(f'  "{m}",\n' for m in globs)
-            text = DEPS_GLOBS.sub(lambda m: m.group(0) if m["name"] != deps else
-                                  f'{m.group(1)}globs = [\n{body}]', text)
+    expected = precompiled_deps()
+    stale = [deps for deps, globs in expected.items() if current.get(deps) != globs]
     if write and stale:
+        for deps in stale:
+            body = "".join(f'  "{m}",\n' for m in expected[deps])
+            hits = [m for m in DEPS_GLOBS.finditer(text) if m["name"] == deps]
+            if len(hits) == 1 and current.get(deps) is not None:
+                text = text[:hits[0].start()] + f'{hits[0].group(1)}globs = [\n{body}]' + text[hits[0].end():]
+            else:
+                raise SystemExit(f"lean-deps: lakefile.toml needs a library {deps} (`[[lean_lib]]`, "
+                                 f'then `name = "{deps}"`) with a `globs = [...]` line to write')
         path.write_text(text, encoding="utf-8")
-        return 0 if not precompiled(write=False) else 1
+        return precompiled(write=False)
     for deps in stale:
         print(f"lean-deps: lakefile.toml: the globs of {deps} are not the import closure of its "
               f"precompiled library; regenerate with: python3 -B scripts/lean-deps.py --precompiled write",
               file=sys.stderr)
-    return 1 if stale else 0
+    if stale:
+        return 1
+    # What Lake builds: each library's modules (a library listed before ZigLean, or an overlapping
+    # glob of a later library, would hand the modules to another library).
+    libs = [n for p in precompiled_libs() for n in (p, p + "Deps")]
+    owned = dict(zip(libs, lake_query([f"{n}:modules" for n in libs])))
+    want = {**precompiled_libs(), **expected}
+    wrong = [n for n in libs if sorted(owned[n]) != want[n]]
+    for n in wrong:
+        print(f"lean-deps: Lake builds {sorted(owned[n])} as library {n}, not its globs {want[n]}; "
+              f"keep {n} after ZigLean in lakefile.toml and no other library's globs on its modules",
+              file=sys.stderr)
+    return 1 if wrong else 0
 
 
 def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:

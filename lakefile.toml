@@ -14,8 +14,8 @@ roots = ["ZigLean.Sep.Full.Auto"]
 globs = ["ZigLean.Sep.Full.Auto"]
 precompileModules = true
 
-# The import closure of Fsym's modules: their native code is the shared library Fsym's links
-# against (not precompiled itself, so a module that does not import Auto loads no native code).
+# The import closure of Fsym's modules: their native code is the shared library that Fsym's
+# library links against (not precompiled itself, so a module that does not import Auto loads no native code).
 # Generated: `python3 -B scripts/lean-deps.py --precompiled write` (preflight checks it). The
 # `roots` of both libraries only name what they are for; their `globs` select the modules.
 [[lean_lib]]

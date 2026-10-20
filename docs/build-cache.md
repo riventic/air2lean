@@ -139,20 +139,26 @@ tables of the modules below it) runs as native code in every Lake build of a mod
 package and `tests/diff`. Lean's interpreter runs the same code otherwise. This is a build mode,
 not a proof rule: the elaborator produces the same terms and the kernel checks them as before
 (the `.olean` of every measured module is byte-identical in both modes, on aarch64-macos and
-x86_64-linux).
+x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`, `unroll_solo` in
+`Unroll`) stays interpreted. Native code does change one thing: `native_decide` and
+`Lean.ofReduceBool` would evaluate a closure function with compiled code. Both are already
+rejected (`scripts/no-sorry.sh`, the claim policy).
 
 Two libraries of `lakefile.toml` do it:
 
 - `Fsym` (`precompileModules = true`) holds `ZigLean.Sep.Full.Auto` alone. Lake compiles it to
-  C, an object file and the shared library `libair2lean_Fsym` and passes that, with its
-  dependency below, to every importer as `--load-dynlib`.
-- `FsymDeps` holds the import closure of `Auto` (87 modules). It is not precompiled: Lake builds
-  its shared library `libair2lean_FsymDeps` only because `Fsym`'s needs it. Its list of modules is
-  generated (`python3 -B scripts/lean-deps.py --precompiled write`, regen step `precompiled`;
-  preflight checks it): Lake assigns a module to the last library whose `globs` match it, so only
-  an explicit list keeps those modules out of `ZigLean` (whose shared library does not hold them).
-  A stale list fails closed: an importer of `Auto` stops with `error loading library,
-  dlopen(...libair2lean_Fsym...): symbol not found`.
+  C, an object file and the shared library `libair2lean_Fsym`. It passes that library, and the
+  `FsymDeps` library it depends on, to every importer as `--load-dynlib`.
+- `FsymDeps` holds the import closure of `Auto`. It is not precompiled: Lake builds its shared
+  library `libair2lean_FsymDeps` only because `Fsym`'s library links against it. Its list of
+  modules is generated (`python3 -B scripts/lean-deps.py --precompiled write`, regen step
+  `precompiled`; preflight checks it). The generator takes the closure from Lake
+  (`Auto:transImports`) and checks with `lake query Fsym:modules FsymDeps:modules` that Lake
+  builds exactly those modules in those libraries. Lake assigns a module to the last library
+  whose `globs` match it, so only an explicit list keeps those modules out of `ZigLean`, whose
+  shared library does not hold them. With a stale list, an importer of `Auto` stops with
+  `error loading library, dlopen(...libair2lean_Fsym...): symbol not found`, or Lake compiles
+  `ZigLean`'s root closure to C as well. The preflight check is the gate.
 
 Lake loads a precompiled import as its whole library and records that library in the importer's
 trace. The split keeps that to the importers of `Auto`: a module that imports only modules below it

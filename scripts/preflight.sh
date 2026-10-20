@@ -28,9 +28,9 @@
 #   review ledger (structure only)        release-record.py ledger --allow-unfetched
 #   coverage inventories                  coverage.py l14 over the regenerated inventories
 #   C front-end record                    tests/roadmap/c-frontend/check.sh --light
-#   precompiled fsym                      lean-deps.py --precompiled check (lakefile.toml FsymDeps)
 #   generated modules                     gen-integrity.py check, after the full build
-#                                         (scripts/full-build.sh; skipped by --no-translator)
+#                                         (scripts/full-build.sh, which first checks the
+#                                         precompiled fsym libraries; skipped by --no-translator)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail
@@ -101,7 +101,6 @@ check 'review ledger (structure)' python3 scripts/release-record.py ledger --all
 check 'runtime tag fixtures (L14)' python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json
 check 'C front-end coverage record' tests/roadmap/c-frontend/check.sh --light
 check 'lean-deps: which Lean files the full build elaborates' python3 -B -m unittest discover -s tests/roadmap/lean-deps -p 'test_*.py'
-check 'precompiled fsym: FsymDeps is the import closure of Fsym' python3 -B scripts/lean-deps.py --precompiled check
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
 trap 'rm -rf "$scratch"' EXIT
