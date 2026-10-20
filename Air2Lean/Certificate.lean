@@ -733,7 +733,8 @@ private def compiledGroupFor (groups : Array CompiledGroup) (ns : String)
   let expected := group.members.map fullName
   let candidates := groups.filter fun compiled => compiled.members.any (fun m => expected.contains m.name)
   unless candidates.size == 1 do throw "missing or ambiguous compiler fixpoint group for emitted declarations"
-  let compiled := candidates[0]!
+  let some compiled := candidates[0]?
+    | throw "missing compiler fixpoint group for emitted declarations"
   unless compiled.members.size == expected.size && compiled.members.all (fun m => expected.contains m.name) do
     throw "compiler fixpoint members disagree with the actual emitted declaration group"
   for decl in group.members do

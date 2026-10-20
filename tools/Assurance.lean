@@ -275,7 +275,18 @@ private def fixpointBinder (xs : Array Expr) (x : Expr) : MetaM Json := do
     ("binder", binderJson decl.binderInfo)]
 
 private def realizeFixpointInduction (member : Name) (isMutual : Bool) : MetaM ConstantInfo := do
-  let suffix ← Lean.Elab.PartialFixpoint.getInductionPrinciplePostfix member isMutual
+  let some info := Lean.Elab.PartialFixpoint.eqnInfoExt.find? (← getEnv) member
+    | throwError "missing compiler partial-fixpoint metadata: {member}"
+  unless !info.declNames.isEmpty && info.declNames.contains member &&
+      info.fixpointType.size == info.declNames.size &&
+      info.fixpointType.all (fun kind => kind matches .partialFixpoint) do
+    throwError "invalid compiler partial-fixpoint membership or kind: {member}"
+  if isMutual then
+    unless info.declNames.size > 1 && info.declNames[0]? == some member do
+      throwError "mutual fixpoint induction requires the actual group leader: {member}"
+  -- These are the names registered by Lean's standard partial-fixpoint reserved-name
+  -- action. The public resolver below must realize its actual checked theorem.
+  let suffix : Name := if isMutual then `mutual_fixpoint_induct else `fixpoint_induct
   let expected := member ++ suffix
   let actual ← realizeGlobalConstNoOverloadCore expected
   unless actual == expected do throwError "fixpoint theorem resolved to another declaration: {actual}"
