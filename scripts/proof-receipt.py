@@ -2,6 +2,7 @@
 """Bind a trusted local theorem audit to byte identities; never claim authenticity."""
 import argparse
 import fcntl
+import functools
 import hashlib
 import importlib.util
 import json
@@ -24,14 +25,13 @@ MAX_FILES = 30000
 MAX_DECLARATIONS = 65536
 MAX_FILE = 512 * 1024 * 1024
 MAX_TOTAL = 16 * 1024 * 1024 * 1024
-MODULE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*')
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
           'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
           'scripts/premise_markers.py', 'assurance/witness-fixtures.json', 'scripts/theorem_universe.py',
-          'scripts/premises.py')
+          'scripts/premises.py', 'scripts/lean-deps.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 REPLAY_JOBS = 2  # concurrent kernel replays that fit the guard RSS budget (worker)
 
@@ -302,8 +302,18 @@ def tree(directory):
 
 
 def module_file(module):
-    demand(isinstance(module, str) and MODULE.fullmatch(module), 'invalid module name')
+    demand(isinstance(module, str) and lean_deps().MODULE_NAME.fullmatch(module), 'invalid module name')
     return module.replace('.', '/') + '.lean'
+
+
+@functools.cache
+def lean_deps():
+    path = Path(__file__).resolve().with_name('lean-deps.py')
+    spec = importlib.util.spec_from_file_location(
+        'receipt_lean_deps', path)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
 
 
 def helper(name):
