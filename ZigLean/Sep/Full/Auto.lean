@@ -3024,8 +3024,10 @@ private def refreshExtraCtx (ctx : Simp.Context) : MetaM Simp.Context := do
       let fresh ← mkSimpTheoremFromExpr old.origin old.levelParams proof
         (post := old.post) (prio := old.priority)
       for thm in fresh do
-        thms := thms.addSimpTheorem { thm with origin := old.origin,
-          rfl := thm.rfl && old.rfl, backwardRfl := thm.backwardRfl && old.backwardRfl }
+        thms := thms.addSimpTheorem { thm with
+          origin := old.origin
+          rfl := thm.rfl && old.rfl
+          backwardRfl := thm.backwardRfl && old.backwardRfl }
     return thms
   return ctx.setSimpTheorems (← ctx.simpTheorems.mapM refresh)
 
