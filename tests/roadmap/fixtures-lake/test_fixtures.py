@@ -147,5 +147,46 @@ class Audit(unittest.TestCase):
         self.assertEqual(fx.audit(["AuditControl"], ["honest", "good_claim"], None, lib), 0)
 
 
+class LakeExtraction(unittest.TestCase):
+    """`fixtures.py audit` of a package: Lake builds the extractor's driver on the package
+    (scripts/assumptions.py --extract-in), so an unchanged audit replays Lake's stored log and a
+    changed audited module is extracted again: a sorry added after a pass is rejected."""
+
+    def test_reuse_is_lakes_trace(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-extraction-test.")
+        self.addCleanup(tmp.cleanup)
+        package = Path(tmp.name)
+        shutil.copy(ROOT / "lean-toolchain", package / "lean-toolchain")
+        (package / "lakefile.toml").write_text(
+            f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
+            '[[lean_lib]]\nname = "AuditControl"\n')
+        source = package / "AuditControl.lean"
+        workspace = package / ".lake/extraction"
+
+        def audit(text):
+            source.write_text(text)
+            with without_cache():
+                done = fx.lake(package, ["build", "AuditControl"], capture=True)
+                self.assertEqual(done.returncode, 0, done.stdout)
+                return fx.audit(["AuditControl"], ["honest"], None, package=package)
+
+        def drivers():
+            return sorted(p.name for p in (workspace / "AssuranceExtraction").glob("*.lean"))
+
+        honest = "theorem honest : 1 + 1 = 2 := rfl\n"
+        self.assertEqual(audit(honest), 0)
+        first = drivers()
+        self.assertEqual(len(first), 1)
+        olean = workspace / ".lake/build/lib/lean/AssuranceExtraction" / (Path(first[0]).stem + ".olean")
+        # The driver's outputs stay out of the package's build directory (the caller's LEAN_PATH).
+        self.assertEqual(list((package / ".lake/build/lib/lean").rglob("M*.olean")), [])
+        built = olean.stat().st_mtime_ns
+        self.assertEqual(audit(honest), 0)  # unchanged: the same driver, replayed, not rebuilt
+        self.assertEqual((drivers(), olean.stat().st_mtime_ns), (first, built))
+        self.assertEqual(audit(honest + "theorem later : (1 : Nat) = 2 := sorry\n"), 1)
+        self.assertNotEqual(olean.stat().st_mtime_ns, built)  # the import changed: extracted again
+        self.assertEqual(drivers(), first)
+
+
 if __name__ == "__main__":
     unittest.main()

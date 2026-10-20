@@ -274,6 +274,18 @@ unused private definitions and compiler-generated recursors, and records their n
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
 
+`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
+Lake instead of elaborating it with `lake env lean`: the driver is a module of a generated
+workspace `PACKAGE/.lake/extraction` that requires the Lake package of the audited modules, so
+the driver's outputs stay off the caller's LEAN_PATH. Lake elaborates it again exactly when its
+trace changes (the driver's text, with the modules, options and family checks; the trace of every
+import, `tools.Assurance` included; the toolchain); an unchanged driver replays the build's
+stored log, and the report is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON`
+message, exactly one). The driver's text names the workspace, so it is never restored from
+another checkout's artifact-cache entry, which keeps no log: a missing report fails the audit.
+Everything after the extraction (tool binding, policy, kernel replay, freshness) runs on every
+audit.
+
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
 for each exact selected root. The CLI report preserves those rows under
 `framework_candidates.declarations`, adding the summaries below. A row identifies the
