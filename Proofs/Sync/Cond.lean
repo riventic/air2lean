@@ -50,6 +50,12 @@ theorem condS_sig {b : BitVec 32} (h : b = 1) :
       0x10001 := by
   subst h; decide +kernel
 
+/-- The existing one-waiter state has no signal before the signaller's addition. -/
+theorem condS_signals_zero {v : Io_Condition_State}
+    (hv : v = Packed.ofBits (1 : BitVec 32)) : v.signals.toNat = 0 := by
+  rw [hv]
+  rfl
+
 /-- The waiter's new state after `(1, 1)`: `(0, 0)`. -/
 theorem condS_take {b : BitVec 32} (h : b = 0x10001) :
     Packed.toBits (Io_Condition_State.mk ((Packed.ofBits b : Io_Condition_State).waiters - 1)
@@ -157,9 +163,12 @@ theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
       else sigPost P C t g D r G' m' d') G m d := by
   fsym [FCond.wp_signalAs hC condS_dec, FCond.wp_bump hC, FCond.wp_wakeEp hC,
-    (fun {G₀ : ThreadId → γ} {m₀ : Mem} (hi₀ : P.inv G₀ m₀) =>
-      WP.liftMem_pure (P := P) (t := t) (hC.projE hi₀) rfl),
-    condS_eq, condS_bits, condS_sig, condS_add1, condS_gtWS,
+    (fun {Gwp : ThreadId → γ} {n₀ : Nat}
+        {Q₀ : Ptr → (ThreadId → γ) → Mem → Nat → Prop}
+        {G₀ : ThreadId → γ} {m₀ : Mem} (hi₀ : P.inv G₀ m₀) =>
+      WP.liftMem_pure (P := P) (t := t) (G := Gwp) (n := n₀) (Q := Q₀)
+        (hC.projE hi₀) rfl),
+    condS_eq, condS_bits, condS_sig, condS_signals_zero, condS_add1, condS_gtWS,
     C.ph_set, hC.lph, C.set_set, FCond.set_of, FCond.ptr_ep,
     sigInv, sigPost, Io_Condition_signal.again11]
 
