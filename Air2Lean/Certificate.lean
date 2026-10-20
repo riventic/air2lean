@@ -1685,7 +1685,7 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
         for (helper, head, hyp) in available do
           if helper.loop.isSome then
             out := out ++ (← helper.loopClosure head hyp ns (genName helper.source) (airName helper.source) (declOf helper.source.name))
-        let definitions := ["air_sem", "id_map'", airName decl.source, s!"policy_{sd}", s!"entry_{sd}"] ++
+        let definitions := ["air_sem", "id_map'", "-bind_pure_comp", "-map_pure", airName decl.source, s!"policy_{sd}", s!"entry_{sd}"] ++
           reductionLemmasOf decl.source ++
           (if decl.loop.isSome || !decl.shape.loops.isEmpty then [s!"enc_{sd}"] else []) ++
           (available.toList.filterMap fun (member, head, _) => if head == s!"b_{member.stem}" then some head else none) ++
