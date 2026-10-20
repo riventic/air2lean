@@ -124,7 +124,8 @@ private theorem topoVisitCore_visit_map {A B K : Type} [BEq K]
   | succ fuel ih =>
     by_cases hseen : visited.contains name
     · simp only [topoVisitCore.visit, hseen, if_pos]
-    · simp only [topoVisitCore.visit, hseen, if_neg, Array.find?_map, Function.comp_def]
+    · simp only [topoVisitCore.visit, hseen, Bool.false_eq_true, ite_false,
+        Array.find?_map, Function.comp_def]
       cases hfind : nodes.find? (fun x => key (project x) == name) with
       | none => simp only [hfind, Option.map_none]
       | some node =>
@@ -137,9 +138,13 @@ private theorem topoVisitCore_visit_map {A B K : Type} [BEq K]
               liftState ((next name).foldl
                 (topoVisitCore.visit nodes (fun x => key (project x)) next fuel)
                 (visited.push name, order)) := by
-          exact Array.foldl_hom liftState (fun state target => by
-            rcases state with ⟨seen, ordered⟩
-            exact ih seen ordered target)
+          exact Array.foldl_hom liftState
+            (xs := next name) (init := (visited.push name, order))
+            (g₁ := topoVisitCore.visit nodes (fun x => key (project x)) next fuel)
+            (g₂ := topoVisitCore.visit (nodes.map project) key next fuel)
+            (fun state target => by
+              rcases state with ⟨seen, ordered⟩
+              exact ih seen ordered target)
         rw [hfold]
         simp only [liftState, Array.map_push]
 
@@ -183,12 +188,45 @@ theorem callGroupsBy_map {A B K : Type} [BEq K]
       Array K × Array (Array A × Bool) → Array K × Array (Array B × Bool) :=
     fun state =>
       (state.1, state.2.map (fun (members, recursive) => (members.map project, recursive)))
-  refine congrArg Prod.snd (Array.foldl_hom liftGroups ?_)
-  intro state node
-  rcases state with ⟨done, groups⟩
-  simp only [liftGroups, Array.filter_map, Array.any_map, Array.all_map,
-    Array.map_map, Function.comp_def, Array.size_map, Array.map_push]
-  split <;> simp_all only [Array.map_push]
+  let keys := nodes.map (fun node => key (project node))
+  let nextOf := successorsBy nodes (fun node => key (project node)) (fun node => next (project node))
+  let reach := nodes.map fun node =>
+    (key (project node), reachableCore keys nextOf (key (project node)))
+  let reaches (a b : K) : Bool :=
+    ((reach.find? (·.1 == a)).map (·.2.contains b)).getD false
+  let order := topoOrderCore nodes (fun node => key (project node)) nextOf
+  let stepA : Array K × Array (Array A × Bool) → A →
+      Array K × Array (Array A × Bool) := fun (done, groups) node =>
+    let name := key (project node)
+    let done := done.push name
+    let members := order.filter fun other =>
+      key (project other) == name ||
+        (reaches name (key (project other)) && reaches (key (project other)) name)
+    if members.all (fun member => done.contains (key (project member))) &&
+        !groups.any (fun group => group.1.any (fun member => key (project member) == name)) then
+      (done, groups.push (members, members.size > 1 || reaches name name))
+    else (done, groups)
+  let stepB : Array K × Array (Array B × Bool) → A →
+      Array K × Array (Array B × Bool) := fun (done, groups) node =>
+    let name := key (project node)
+    let done := done.push name
+    let members := (order.map project).filter fun other =>
+      key other == name || (reaches name (key other) && reaches (key other) name)
+    if members.all (fun member => done.contains (key member)) &&
+        !groups.any (fun group => group.1.any (fun member => key member == name)) then
+      (done, groups.push (members, members.size > 1 || reaches name name))
+    else (done, groups)
+  change (order.foldl stepB (#[], #[])).2 =
+    ((order.foldl stepA (#[], #[])).2.map
+      (fun (members, recursive) => (members.map project, recursive)))
+  have hfold := Array.foldl_hom liftGroups
+    (xs := order) (init := (#[], #[])) (g₁ := stepA) (g₂ := stepB)
+    (fun state node => by
+      rcases state with ⟨done, groups⟩
+      simp only [stepA, stepB, liftGroups, Array.filter_map, Array.any_map, Array.all_map,
+        Array.map_map, Function.comp_def, Array.size_map, Array.map_push]
+      split <;> simp_all only [Array.map_push, Bool.false_eq_true, ite_false, ite_true])
+  simpa only [liftGroups, Array.map_empty] using congrArg Prod.snd hfold
 
 end Graph
 
