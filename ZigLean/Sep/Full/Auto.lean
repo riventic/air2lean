@@ -3444,9 +3444,12 @@ def mkLambdaFVarsBytes (_x : Expr) (r : Array Expr) : MetaM Expr := do
   withLocalDeclD `bs (← inferType r[5]!) fun v => do mkLambdaFVars #[v] (← mkRegion r[0]! r[1]! r[2]! r[3]! r[4]! v)
 
 /-- Carve the region atom `q` of the postcondition (bytes possibly unknown; `n?` its size from a
-fact) out of a region of the state: split at its start (with its alignment) and at its end. -/
-def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr := #[]) :
-    TacticM (Option (St × Expr)) := do
+fact) out of a region of the state: split at its start (with its alignment) and at its end.
+With `whole` (`n?` is a size a rule demands, matching data only) the end is never split off: the
+demand selects a state region (or adjacent ones joined) of exactly that size, and a larger region
+stays whole for a rule that takes a part of it (`memcpyRegions` before `memcpyRegionsAll`). -/
+def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr := #[])
+    (whole : Bool := false) : TacticM (Option (St × Expr)) := do
   let (qp, qA, qS, qK, qa, qbs) := (q[0]!, q[1]!, q[2]!, q[3]!, q[4]!, q[5]!)
   let some (qb, _) ← blockOf qp | return none
   for i in [0:st.ats.size] do
@@ -3517,6 +3520,7 @@ def carve (st : St) (q : Array Expr) (n? : Option Expr) (claimed : Array Expr :=
           pure (if (← proveArith (← mkAppM ``LE.le #[sz, n]) (cases := false)).isSome then none
             else some hk)
         if let some hk := hk? then
+          if whole then throwError "n (a demanded size does not split a region)"
           let some ha ← proveArith (← mkEq (← mkAppM ``HMod.hMod #[← mkAppM ``HAdd.hAdd #[
             ← mkAppM ``HAdd.hAdd #[cur[1]!, ← offNat cur[0]!], n], mkNatLit 1]) (mkNatLit 0))
             | throwError "align1"
@@ -4135,9 +4139,13 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
       if (← st.ats.anyM fun x => return x == (← instantiateMVars a)) then continue
-      -- a size fact `q.bs.size = n`, or the size that another atom names
+      -- a size fact `q.bs.size = n`, a size a rule demands (`carve`'s `whole`), or the size that
+      -- another atom names
       let qbs ← instantiateMVars q[5]!
-      let n? ← match ← sizeFact? facts qbs sizes with
+      let fact? ← sizeFact? facts qbs
+      let demand? ← if fact?.isSome then pure none else sizeFact? #[] qbs sizes
+      let whole := demand?.isSome
+      let n? ← match fact? <|> demand? with
         | some n => pure (some n)
         | none => if qbs.hasExprMVar then atomSize? qats st.ats qbs else pure none
       let mut done := false
@@ -4145,11 +4153,13 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         repeat
           let some st' ← joinOnce st claimed | break
           st := st'
-      if let some (st', x) ← carve st q n? claimed then st := st'; claimed := claimed.push x; done := true
+      if let some (st', x) ← carve st q n? claimed whole then
+        st := st'; claimed := claimed.push x; done := true
       while !done do
         let some st' ← joinOnce st claimed | break
         st := st'
-        if let some (st', x) ← carve st q n? claimed then st := st'; claimed := claimed.push x; done := true
+        if let some (st', x) ← carve st q n? claimed whole then
+          st := st'; claimed := claimed.push x; done := true
       unless done do
         noteWanted a
         throwError "fsym: no region of the state holds{indentExpr a}"

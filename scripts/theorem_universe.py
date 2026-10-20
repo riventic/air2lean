@@ -20,15 +20,18 @@ indexed module is compiled to an olean and audited by scripts/assumptions.py (ax
 from __future__ import annotations
 
 import argparse
+import contextlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -231,9 +234,12 @@ def with_lean_path(paths) -> dict:
     return {**os.environ, "LEAN_PATH": os.pathsep.join(str(p) for p in paths)}
 
 
-def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str | None:
+def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path, *,
+                 resolved_path: str | None = None) -> str | None:
     olean.parent.mkdir(parents=True, exist_ok=True)
-    result = run(["lake", "env", "lean", "-R", root, "-o", str(olean), file], with_lean_path(lean_path))
+    arguments = ['-R', root, '-o', str(olean), file]
+    result = (run(assumptions.lean_command(arguments, resolved_path)) if resolved_path is not None else
+              run(["lake", "env", "lean", *arguments], with_lean_path(lean_path)))
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(result.stdout)
     if result.returncode:
@@ -241,20 +247,37 @@ def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path) -> str
     # Examples never reach the olean, so the axiom audit cannot see a sorry inside one.
     if SORRY_WARNING in result.stdout:
         return f"{file}: {SORRY_WARNING} (log {log})"
+    if resolved_path is not None and not olean.is_file():
+        return f'{file}: missing fresh compiler-owned Unit output {olean}'
     return None
 
 
 def audit_modules(modules: list[str], lean_path, output: Path, cache: Path | None = None,
-                  sources: Path | None = None, *, all_declarations: bool = False) -> dict:
+                  sources: Path | None = None, *, all_declarations: bool = False,
+                  compiled_units: dict | None = None) -> dict:
     """Audit this exact module set; optional declaration evidence stays in the same full report."""
     started = time.monotonic()
-    result = run([sys.executable, "-B", str(ROOT / "scripts/assumptions.py"), "--no-build", "--allow-no-theorems",
-                  "--output", str(output), *(["--replay-cache", str(cache)] if cache else []),
-                  *(["--sources", str(sources)] if sources else []),
-                  *(["--all-declarations"] if all_declarations else []),
-                  *(a for m in modules for a in ("--module", m))], with_lean_path(lean_path))
+    arguments = ["--no-build", "--allow-no-theorems", "--output", str(output),
+                 *(["--replay-cache", str(cache)] if cache else []),
+                 *(["--sources", str(sources)] if sources else []),
+                 *(["--all-declarations"] if all_declarations else []),
+                 *(a for m in modules for a in ("--module", m))]
+    if compiled_units is None:
+        result = run([sys.executable, "-B", str(ROOT / "scripts/assumptions.py"), *arguments],
+                     with_lean_path(lean_path))
+    else:
+        # The compiler owner calls the SAME CLI orchestration with an internal run context.
+        # There is deliberately no public --compiled/--sources-to-freshness promotion.
+        captured = io.StringIO()
+        with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
+            code = assumptions.main(arguments, compiled_units=compiled_units)
+        result = subprocess.CompletedProcess(arguments, code, captured.getvalue())
     sys.stderr.write(result.stdout)
     report = json.loads(output.read_text())
+    if compiled_units is not None and report.get('status') == 'pass':
+        if (report.get('freshness') or {}).get('compiled_units') != compiled_units:
+            raise ValueError('compiler-owned Unit audit omitted its exact run binding')
+        verify_compilation(compiled_units)
     return {"modules": modules, "report": str(output), "status": report.get("status"),
             "exit_code": result.returncode, "theorem_count": report.get("theorem_count", 0),
             "seconds": round(time.monotonic() - started, 1),
@@ -271,14 +294,23 @@ def lib_of(output: Path, root: str | None) -> Path:
     return output / "lib" / (hashlib.sha256(root.encode()).hexdigest()[:12] + "-" + Path(root).name)
 
 
-def staged(output: Path, u: Unit) -> tuple[str, str]:
-    """Source path and `-R` root to compile; a renamed unit compiles as a byte-identical copy."""
+def compiler_paths(output: Path, u: Unit) -> tuple[str, str]:
+    """The existing source/staging plan, without writing or refreshing any input."""
     if u.root is not None:
         return u.file, u.root
     copy = output / "staged" / (u.module.replace(".", "/") + ".lean")
+    return str(copy), str(output / "staged")
+
+
+def staged(output: Path, u: Unit) -> tuple[str, str]:
+    """Source path and `-R` root to compile; a renamed unit compiles as a byte-identical copy."""
+    source, root = compiler_paths(output, u)
+    if u.root is not None:
+        return source, root
+    copy = Path(source)
     copy.parent.mkdir(parents=True, exist_ok=True)
     copy.write_bytes((ROOT / u.file).read_bytes())
-    return str(copy), str(output / "staged")
+    return source, root
 
 
 def closure(units, by_file: dict[str, Unit]) -> list[Unit]:
@@ -291,12 +323,265 @@ def closure(units, by_file: dict[str, Unit]) -> list[Unit]:
     return list(seen.values())
 
 
+def input_identity(path: Path) -> dict:
+    """Actual compiler file bytes and the identities of aliases on its selected path."""
+    path = path.absolute()
+    if not path.is_file():
+        raise ValueError(f'missing compiler-owned Unit input/output: {path}')
+    return {'path': assumptions.display(path), 'resolved': str(path.resolve(strict=True)),
+            'sha256': assumptions.file_sha256(path),
+            'links': [[str(part), os.readlink(part)] for part in (path, *path.parents)
+                      if part.is_symlink()]}
+
+
+def input_digest(value) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def unit_plan(units: list[Unit]) -> dict:
+    records = {}
+    for unit in units:
+        if unit.module in records:
+            raise ValueError(f'ambiguous compiler-owned Unit module: {unit.module}')
+        records[unit.module] = {'file': unit.file, 'root': unit.root,
+                                'deps': list(unit.deps), 'lake': list(unit.lake)}
+    return records
+
+
+def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: Path) -> dict:
+    """Snapshot actual inputs BEFORE the existing compiler writes any Unit output."""
+    output = output.absolute()
+    local = closure(selected, by_file)
+    # Prepare the SAME extractor first: its build cannot legitimately change a later frozen
+    # compiler/auditor input. extract() still validates it under its ordinary lock.
+    with assumptions.prepared_tool():
+        pass
+    libraries = sorted({lib_of(output, unit.root) for unit in local})
+    resolved = run(['lake', 'env', 'printenv', 'LEAN_PATH'], with_lean_path(libraries))
+    if resolved.returncode or not resolved.stdout.strip() or len(resolved.stdout.strip().splitlines()) != 1:
+        raise ValueError('cannot resolve the compiler-owned Unit lookup path: ' + resolved.stdout)
+    entries = resolved.stdout.strip().split(os.pathsep)
+    if any(not path for path in entries):
+        raise ValueError('compiler-owned Unit lookup roots must be nonempty')
+    paths = [(ROOT / path).absolute() for path in entries]
+    lean_path = os.pathsep.join(map(str, paths))
+    # Lean chooses the first library holding a TOP-LEVEL name, not the first matching file.
+    # Refuse ambiguous private roots instead of compiling one artifact and auditing another.
+    tops = {}
+    for unit in local:
+        library = lib_of(output, unit.root)
+        top = unit.module.split('.')[0]
+        if tops.setdefault(top, library) != library:
+            raise ValueError(f'ambiguous private lookup roots for {top}')
+    records = unit_plan(local)
+    for unit in local:
+        original = input_identity(ROOT / unit.file)
+        source, source_root = staged(output, unit)
+        compiler_source = input_identity(ROOT / source)
+        if original['sha256'] != compiler_source['sha256']:
+            raise ValueError(f'compiler-owned Unit staged source differs: {unit.module}')
+        olean = lib_of(output, unit.root) / (unit.module.replace('.', '/') + '.olean')
+        # These are this run's expected private outputs only. Never fall back to an old copy
+        # or a leftover loaded companion after a compiler failure.
+        for suffix in assumptions.COMPILED_SUFFIXES:
+            olean.with_name(olean.name[:-len('.olean')] + suffix).unlink(missing_ok=True)
+        records[unit.module].update(source=original, compiler_source=compiler_source,
+                                    compiler_root=source_root, output_path=str(olean.absolute()))
+    private_roots = {path.resolve() for path in libraries}
+    base = [path for path in paths if path.resolve() not in private_roots]
+    if not base:
+        raise ValueError('compiler-owned Unit path has no existing Lake/toolchain inputs')
+    toolchain = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
+    context = {'selected_files': sorted(unit.file for unit in selected),
+               'selected_modules': sorted(unit.module for unit in selected),
+               'units': records, 'output_dir': str(output), 'lean_path': lean_path,
+               'base_path': os.pathsep.join(map(str, base)),
+               'base_inputs': assumptions.lean_path_binding(ROOT, os.pathsep.join(map(str, base))),
+               'lean_sysroot': str(toolchain),
+               'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(toolchain),
+               'library_sources_sha256': input_digest(assumptions.library_source_inputs(ROOT))}
+    verify_compiler_inputs(context)
+    return context
+
+
+def compilation_plan(context: dict) -> list[Unit]:
+    """Re-derive the source plan; a saved context cannot choose different source paths."""
+    if (not isinstance(context, dict) or not isinstance(context.get('units'), dict)
+            or not context['units'] or not isinstance(context.get('selected_files'), list)
+            or not context['selected_files'] or not isinstance(context.get('selected_modules'), list)
+            or not isinstance(context.get('output_dir'), str)
+            or not Path(context['output_dir']).is_absolute()):
+        raise ValueError('missing compiler-owned Unit run binding')
+    _, units = universe()
+    by_file = {unit.file: unit for unit in units}
+    if any(file not in by_file or by_file[file].gate is not None for file in context['selected_files']):
+        raise ValueError('compiler-owned Unit source selection changed or needs a gate')
+    selected = [by_file[file] for file in context['selected_files']]
+    local = closure(selected, by_file)
+    planned = unit_plan(local)
+    recorded = {module: {key: unit[key] for key in ('file', 'root', 'deps', 'lake')}
+                for module, unit in context['units'].items()}
+    if (planned != recorded or sorted(unit.module for unit in selected) != context['selected_modules']
+            or sorted(set(context['selected_files'])) != context['selected_files']):
+        raise ValueError('compiler-owned Unit import/source resolution changed')
+    return local
+
+
+def verify_compiler_inputs(context: dict) -> None:
+    local = compilation_plan(context)
+    output = Path(context['output_dir'])
+    for planned in local:
+        module, unit = planned.module, context['units'][planned.module]
+        source, root = compiler_paths(output, planned)
+        expected_output = str((lib_of(output, planned.root) / (module.replace('.', '/') + '.olean')).absolute())
+        if unit['compiler_root'] != root or unit['output_path'] != expected_output:
+            raise ValueError(f'compiler-owned Unit compiler/output path differs from its source plan: {module}')
+        for kind, path in (('source', ROOT / planned.file), ('compiler_source', ROOT / source)):
+            if input_identity(path) != unit[kind]:
+                raise ValueError(f'assurance report is stale: {module} {kind} changed')
+        if unit['source']['sha256'] != unit['compiler_source']['sha256']:
+            raise ValueError(f'compiler-owned Unit staged source differs: {module}')
+    toolchain = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
+    if (str(toolchain) != context['lean_sysroot'] or
+            assumptions.toolchain_runtime_sha256(toolchain) != context['toolchain_runtime_sha256']):
+        raise ValueError('compiler-owned Unit runtime changed')
+    if input_digest(assumptions.library_source_inputs(ROOT)) != context['library_sources_sha256']:
+        raise ValueError('compiler-owned Unit library sources changed')
+    if assumptions.lean_path_binding(ROOT, context['base_path']) != context['base_inputs']:
+        raise ValueError('compiler-owned Unit imported inputs changed')
+
+
+def compiled_output(path: Path) -> list:
+    """Loaded output companions, including their absence, at compiler completion."""
+    records = []
+    for suffix in assumptions.COMPILED_SUFFIXES:
+        companion = path.with_name(path.name[:-len('.olean')] + suffix)
+        if companion.is_symlink() and not companion.is_file():
+            raise ValueError(f'missing compiler-owned Unit output target: {companion}')
+        records.append([suffix, input_identity(companion) if companion.exists() else None])
+    if records[0][1] is None:
+        raise ValueError(f'missing compiler-owned Unit output: {path}')
+    return records
+
+
+def verify_compilation(context: dict) -> None:
+    """Validate the SAME compiler-owned correspondence at audit and report admission."""
+    verify_compiler_inputs(context)
+    paths = [Path(path) for path in context['lean_path'].split(os.pathsep)]
+    for module, unit in context['units'].items():
+        path = Path(unit['output_path'])
+        if assumptions.locate(module, paths).resolve(strict=True) != path.resolve(strict=True):
+            raise ValueError(f'compiler-owned Unit output is shadowed: {module}')
+        if compiled_output(path) != unit.get('outputs'):
+            raise ValueError(f'compiler-owned Unit output changed: {module}')
+    if assumptions.lean_path_binding(ROOT, context['lean_path']) != context.get('lookup_inputs'):
+        raise ValueError('compiler-owned Unit lookup inputs changed')
+
+
+def seal_compilation(context: dict) -> None:
+    """Seal only outputs captured at each successful compiler completion."""
+    context['lookup_inputs'] = assumptions.lean_path_binding(ROOT, context['lean_path'])
+    verify_compilation(context)
+
+
+def verify_compiled_report(report: dict) -> None:
+    """Known non-gated Unit selections require their exact compiler-owned run evidence.
+
+    Inventory membership only demands evidence. It never grants source or artifact authority
+    to a name, an arbitrary external module, a gate, or the classification-only --sources map.
+    """
+    context = report['freshness'].get('compiled_units')
+    selected = report.get('modules', [])
+    artifacts = {}
+    for row in report['freshness']['artifacts']:
+        artifacts.setdefault(row['module'], []).append(row)
+    if context is None:
+        _, units = universe()
+        known = {unit.module for unit in units if unit.gate is None}
+        headers = report.get('module_imports') or {}
+        represented = set(selected) | artifacts.keys() | headers.keys()
+        for dependencies in headers.values():
+            represented.update(dependencies or [])
+        for key in ('nodes', 'theorems', 'witness_theorems'):
+            represented.update(row.get('module') for row in report.get(key, []))
+        required = known.intersection(represented)
+        if not required:
+            return
+        if known.intersection(selected):
+            raise ValueError('known non-gated Unit audit carries no compiler-owned run binding')
+        # Preserve the existing registered-witness producer's canonical source/output binding.
+        # A removable scope/witness label is not an exemption and grants no Unit authority.
+        by_file = {unit.file: unit for unit in units}
+        registered = [by_file[file] for file in assumptions.witness_fixtures()]
+        witnesses = unit_plan(closure(registered, by_file))
+        witness_output = ROOT / '.lake/assurance/witness-fixtures'
+        for module in required:
+            unit, rows = witnesses.get(module), artifacts.get(module, [])
+            if unit is None or len(rows) != 1:
+                raise ValueError('known non-gated Unit audit carries no compiler-owned run binding')
+            expected = lib_of(witness_output, unit['root']) / (module.replace('.', '/') + '.olean')
+            if (rows[0]['source'] != unit['file'] or rows[0]['olean'] != assumptions.display(expected)
+                    or rows[0]['source_sha256'] != assumptions.file_sha256(ROOT / unit['file'])):
+                raise ValueError('known non-gated Unit audit carries no matching compiler-owned run binding')
+        return
+    verify_compilation(context)
+    if selected != context['selected_modules'] or report.get('witness_modules'):
+        raise ValueError('compiled Unit context differs from the report selection')
+    for module, unit in context['units'].items():
+        rows = artifacts.get(module, [])
+        expected = {'module': module, 'olean': assumptions.display(Path(unit['output_path'])),
+                    'olean_sha256': unit['outputs'][0][1]['sha256'],
+                    'source': unit['source']['path'], 'source_sha256': unit['source']['sha256']}
+        if rows != [expected]:
+            raise ValueError(f'compiler-owned Unit report source/output differs from its run binding: {module}')
+    compiled_imports(report, context, [Path(path) for path in context['lean_path'].split(os.pathsep)],
+                     Path(context['lean_sysroot']))
+
+
+def compiled_imports(raw: dict, context: dict, paths: list[Path], toolchain: Path) -> set[str]:
+    """Actual header closure, independently of whether a declaration references an import."""
+    headers = raw.get('module_imports')
+    if not isinstance(headers, dict):
+        raise ValueError('compiler-owned Unit audit has no actual import headers')
+    seen, pending = set(), list(context['selected_modules'])
+    built, standard = ROOT / '.lake/build/lib/lean', toolchain / 'lib/lean'
+    while pending:
+        module = pending.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        actual = assumptions.locate(module, paths).resolve(strict=True)
+        relative = module.replace('.', '/') + '.olean'
+        if module in context['units']:
+            expected = Path(context['units'][module]['output_path']).resolve(strict=True)
+        elif module.split('.')[0] in TOOLCHAIN_ROOTS:
+            expected = (standard / relative).resolve(strict=True)
+        elif module.split('.')[0] in LAKE_ROOTS:
+            expected = (built / relative).resolve(strict=True)
+            if (not actual.is_relative_to(built.resolve())
+                    or not (ROOT / (module.replace('.', '/') + '.lean')).is_file()):
+                raise ValueError(f'compiler-owned Unit has unverified Lake import: {module}')
+        else:
+            raise ValueError(f'compiler-owned Unit has unowned private import: {module}')
+        if actual != expected:
+            raise ValueError(f'compiler-owned Unit import resolves to a different artifact: {module}')
+        imports = headers.get(module)
+        if module.split('.')[0] in TOOLCHAIN_ROOTS and imports is None:
+            continue  # The complete pinned installation is independently runtime-bound.
+        if not isinstance(imports, list) or not all(isinstance(dep, str) for dep in imports):
+            raise ValueError(f'compiler-owned Unit has incomplete import headers: {module}')
+        pending.extend(imports)
+    if set(context['units']) - seen:
+        raise ValueError('compiler-owned Unit planned closure differs from actual import headers')
+    return seen
+
+
 def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
     """Pack units into extractor runs that share no declaration name and whose libraries expose
     no module name twice; a collision the source parse misses splits the run (`audit`)."""
     exposed: dict[Path, set] = {}
     for u in local:
-        exposed.setdefault(lib_of(output, u.root), set()).add(u.module)
+        exposed.setdefault(lib_of(output, u.root), set()).add(u.module.split('.')[0])
     packed: list[tuple[list[Unit], set, dict]] = []
     for u in local:
         units = closure([u], by_file)
@@ -316,7 +601,7 @@ def bundles(local: list[Unit], by_file, output) -> list[list[Unit]]:
     return [bundle for bundle, _, _ in packed]
 
 
-def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
+def compile_all(local: list[Unit], by_file, output: Path, *, compiled_units: dict | None = None) -> list[str]:
     """Compile in topological levels: a module after every local module it imports."""
     # `lake env` puts its own library first on LEAN_PATH, so a top-level name present there
     # (e.g. `tests/` from fixture scripts that compile into it) would shadow a universe module.
@@ -330,10 +615,20 @@ def compile_all(local: list[Unit], by_file, output: Path) -> list[str]:
     jobs = assumptions.stage_jobs("AIR2LEAN_UNIVERSE_JOBS")
 
     def build_one(u):
-        libs = sorted({lib_of(output, c.root) for c in closure([u], by_file)})
         olean = lib_of(output, u.root) / (u.module.replace(".", "/") + ".olean")
-        source, root = staged(output, u)
-        return compile_unit(source, root, olean, libs, output / "logs" / (u.file.replace("/", "__") + ".log"))
+        if compiled_units is not None:
+            libs = []  # The SAME explicit ordered path is already frozen in this context.
+            record = compiled_units['units'][u.module]
+            source, root = record['compiler_source']['path'], record['compiler_root']
+        else:
+            libs = sorted({lib_of(output, c.root) for c in closure([u], by_file)})
+            source, root = staged(output, u)
+        error = compile_unit(source, root, olean, libs, output / "logs" / (u.file.replace("/", "__") + ".log"),
+                             **({'resolved_path': compiled_units['lean_path']}
+                                if compiled_units is not None else {}))
+        if error is None and compiled_units is not None:
+            record['outputs'] = compiled_output(olean)
+        return error
 
     with ThreadPoolExecutor(jobs) as pool:
         while remaining:
@@ -378,22 +673,30 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
         result = run(["lake", "build", *sorted({m for u in local for m in u.lake})])
         if result.returncode:
             raise RuntimeError(f"lake build failed:\n{result.stdout[-4000:]}")
-    started = time.monotonic()
-    errors = compile_all(local, by_file, output)
-    compile_seconds = round(time.monotonic() - started, 1)
-    if errors:
-        return {"schema_version": 1, "status": "fail", "errors": errors}
+    errors, compile_seconds = [], 0.0
     runs, pending = [], bundles(local, by_file, output)
+    output.mkdir(parents=True, exist_ok=True)
     while pending:
         bundle = pending.pop(0)
-        libs = sorted({lib_of(output, u.root) for u in closure(bundle, by_file)})
+        private = Path(tempfile.mkdtemp(prefix=f'bundle-{len(runs)}-', dir=output))
+        compiled = closure(bundle, by_file)
+        started = time.monotonic()
+        context = prepare_compilation(bundle, by_file, private)
+        failures = compile_all(compiled, by_file, private, compiled_units=context)
+        compile_seconds += time.monotonic() - started
+        if failures:
+            errors += failures
+            runs.append({'modules': sorted(u.module for u in bundle), 'status': 'fail',
+                         'violations': failures, 'exit_code': 2})
+            continue
+        seal_compilation(context)
         # The audit classifies generated declarations by their module's metadata (assumptions.py
         # `generated_premises`): every unit's source, the run's own closure winning a name clash.
         sources = output / f"sources-{len(runs)}.json"
         write_report(sources, {**{u.module: u.file for u in units},
-                               **{u.module: u.file for u in closure(bundle, by_file)}})
-        result = audit_modules(sorted(u.module for u in bundle), libs, output / f"audit-{len(runs)}.json",
-                               replay_cache, sources)
+                               **{u.module: u.file for u in compiled}})
+        result = audit_modules(sorted(u.module for u in bundle), [], output / f"audit-{len(runs)}.json",
+                               replay_cache, sources, compiled_units=context)
         runs.append(result)
         if result["collision"] and len(bundle) > 1:
             result["status"] = "split"
@@ -413,7 +716,7 @@ def audit(output: Path, build: bool, shipped_report: Path | None, replay_cache: 
     return {"schema_version": 1, "status": "fail" if errors else "pass", "errors": errors,
             "shipped_modules": shipped, "shipped_report": str(shipped_report) if shipped_report else None,
             "units": [{"file": u.file, "root": u.root, "module": u.module, "gate": u.gate} for u in units],
-            "compile_seconds": compile_seconds,
+            "compile_seconds": round(compile_seconds, 1),
             "audits": runs}
 
 

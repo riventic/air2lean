@@ -1,10 +1,10 @@
 {
  "schema": 12,
  "zig_version": "0.17.0",
+ "target_endian": "little",
  "unchecked_ib": [
   "for_len"
  ],
- "target_endian": "little",
  "profile": {
   "name": "abi64-le-v1",
   "target_triple": "x86_64-linux.5.10...7.2-gnu.2.31",
@@ -39,6 +39,11 @@
  },
  "name": "sync.semaphoreCounter",
  "module": "root",
+ "src": {
+  "file": "sync.zig",
+  "module": "sync",
+  "decl_line": 77
+ },
  "params": [
   0
  ],
@@ -55,7 +60,8 @@
    "id": 1,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 2
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
@@ -190,7 +196,8 @@
    "id": 10,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 12,
@@ -206,7 +213,8 @@
    "id": 14,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 3
+   "line": 3,
+   "column": 35
   },
   {
    "id": 15,
@@ -216,6 +224,7 @@
     "ty": 19,
     "func": "Thread.spawn__func_666",
     "module": "std",
+    "instance_key": "3649a8600f52142742ce15ac86a37e9133d15081d850e6d2db6e6a40e56bc649",
     "noreturn": false,
     "comptime_fn": "sync.semWork",
     "comptime_fn_module": "root"
@@ -263,7 +272,8 @@
      "id": 17,
      "tag": "dbg_stmt",
      "ty": 2,
-     "line": 3
+     "line": 3,
+     "column": 15
     },
     {
      "id": 18,
@@ -340,7 +350,8 @@
    "id": 26,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4
+   "line": 4,
+   "column": 12
   },
   {
    "id": 27,
@@ -362,7 +373,8 @@
    "id": 28,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 29,
@@ -378,7 +390,8 @@
    "id": 30,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5
+   "line": 5,
+   "column": 11
   },
   {
    "id": 31,
@@ -400,7 +413,8 @@
    "id": 32,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 13
   },
   {
    "id": 33,
@@ -426,7 +440,8 @@
    "id": 35,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 6
+   "line": 6,
+   "column": 5
   },
   {
    "id": 36,
@@ -2920,7 +2935,7 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Operation) error{Canceled}!Io.Operation.Result__union_7"
+   "name": "fn (?*anyopaque, Io.Operation) error{Canceled}!Io.Operation.Result__union_2"
   },
   {
    "k": "other",
@@ -2936,15 +2951,15 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_8) error{AccessDenied,BadPathName,Canceled,DiskQuota,FileNotFound,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_3) error{AccessDenied,BadPathName,Canceled,DiskQuota,FileNotFound,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_8) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir.CreatePathStatus"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_3) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir.CreatePathStatus"
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_8, Io.Dir.OpenOptions) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_3, Io.Dir.OpenOptions) error{AccessDenied,AntivirusInterference,BadPathName,Canceled,DeviceBusy,DiskQuota,FileBusy,FileLocksUnsupported,FileNotFound,FileTooBig,IsDir,LinkQuotaExceeded,NameTooLong,NetworkNotFound,NoDevice,NoSpaceLeft,NotDir,PathAlreadyExists,PermissionDenied,PipeBusy,ProcessFdQuotaExceeded,ReadOnlyFileSystem,Streaming,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected,WouldBlock}!Io.Dir"
   },
   {
    "k": "other",
@@ -3024,11 +3039,11 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, Io.File.Permissions__enum_8) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.Dir, Io.File.Permissions__enum_3) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_8, Io.Dir.SetFilePermissionsOptions) error{AccessDenied,BadPathName,Canceled,FileNotFound,InputOutput,NameTooLong,OperationUnsupported,PermissionDenied,ProcessFdQuotaExceeded,ReadOnlyFileSystem,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.Dir, []const u8, Io.File.Permissions__enum_3, Io.Dir.SetFilePermissionsOptions) error{AccessDenied,BadPathName,Canceled,FileNotFound,InputOutput,NameTooLong,OperationUnsupported,PermissionDenied,ProcessFdQuotaExceeded,ReadOnlyFileSystem,SymLinkLoop,SystemFdQuotaExceeded,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
@@ -3096,7 +3111,7 @@
   },
   {
    "k": "other",
-   "name": "fn (?*anyopaque, Io.File, Io.File.Permissions__enum_8) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
+   "name": "fn (?*anyopaque, Io.File, Io.File.Permissions__enum_3) error{AccessDenied,Canceled,FileNotFound,InputOutput,PermissionDenied,ReadOnlyFileSystem,SymLinkLoop,SystemResources,Unexpected}!void"
   },
   {
    "k": "other",
@@ -3328,7 +3343,7 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_2)",
+   "name": "atomic.Value(Thread.Completion__enum_4)",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -3395,7 +3410,7 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_2",
+   "name": "Thread.Completion__enum_4",
    "module": "std",
    "tag": 258,
    "exhaustive": true,
