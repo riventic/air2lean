@@ -374,6 +374,50 @@ theorem forward_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     P.WP t (pure ()) (fun _ _ _ _ => ∀ r : BitVec 32, r.toNat = 1 → r = 1) G m n := by
   fsym [forward_to_one]
 
+/-- Normalize an incoming fact with an earlier opaque Boolean equation before splitting. -/
+theorem incoming_boolean_fact {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (flag : Nat → Bool) (k : Nat)
+    (hf : flag k = false) (R : Prop) :
+    P.WP t (pure ()) (fun _ _ _ _ => (flag k = true ∨ R) → R) G m n := by
+  fsym
+
+/-- A newly introduced equation stays available instead of simplifying itself to True. -/
+theorem incoming_boolean_equation {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (flag : Nat → Bool) (k : Nat) :
+    P.WP t (pure ()) (fun _ _ _ _ => flag k = true → flag k = true) G m n := by
+  fsym
+
+/-- Without the earlier equation the opaque Boolean branch must not be discarded. -/
+theorem incoming_boolean_missing {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (flag : Nat → Bool) (k : Nat) (R : Prop) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => (flag k = true ∨ R) → R) G m n := by
+      fsym
+  trivial
+
+/-- A bare projection equation in the context is not a projection applied to an object. -/
+theorem incoming_projection_function {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (hp : Mem.current = Mem.current) :
+    P.WP t (pure ()) (fun _ _ _ _ => True → True) G m n := by
+  fsym
+
+/-- A global forward lemma may retain the unnormalized form of its first premise. -/
+theorem incoming_raw_or_bound (flag : Nat → Bool) (k j : Nat)
+    (h : flag k = true ∨ Nonempty (Fin (1 - j))) (hf : flag k = false) : j - 1 = 0 := by
+  rcases h with ht | ⟨i⟩
+  · rw [hf] at ht
+    cases ht
+  · have hi := i.isLt
+    omega
+
+/-- Forwarding sees the raw premise before context normalization, fixing its remaining index. -/
+theorem incoming_forward_compatibility {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (flag : Nat → Bool) (k j : Nat)
+    (hf : flag k = false) :
+    P.WP t (pure ())
+      (fun _ _ _ _ => (flag k = true ∨ Nonempty (Fin (1 - j))) → j - 1 = 0) G m n := by
+  fsym [incoming_raw_or_bound flag k]
+
 /-- The generic pure-result rule learns the quotient from a symbolic unsigned run. -/
 theorem division_unsigned {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)
     (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat)

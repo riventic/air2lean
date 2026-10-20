@@ -5965,18 +5965,28 @@ def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext
 /-- The equations of the context that relate a field of a local to another term
 (`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory), and the Boolean
 facts (`(G 1).2.mid = false`: the case of a ghost value's flag). -/
-def fieldEqs : MetaM (Array Expr) := do
+def fieldEqs (skip? : Option FVarId := none) : MetaM (Array Expr) := do
   let mut out := #[]
   for d in ← getLCtx do
-    if d.isImplementationDetail then continue
+    if d.isImplementationDetail || skip? == some d.fvarId then continue
     let some (_, l, r) := (← instantiateMVars d.type).eq? | continue
     if (r.isConstOf ``Bool.true || r.isConstOf ``Bool.false) && !l.hasExprMVar &&
         !(l.isConstOf ``Bool.true || l.isConstOf ``Bool.false) then
       out := out.push d.toExpr; continue
     let .const c _ := l.getAppFn | continue
-    unless (← getProjectionFnInfo? c).isSome && l.appArg!.isFVar do continue
+    let .app _ obj := l | continue
+    unless (← getProjectionFnInfo? c).isSome && obj.isFVar do continue
     out := out.push d.toExpr
   return out
+
+/-- A stop's facts and side goals use the same current context equations. A fact being
+normalized excludes itself, so its own equation cannot erase the fact. -/
+def wpFactCtx (extra : Array Syntax) (skip? : Option FVarId := none) : TacticM Simp.Context := do
+  let ctx ← wpHypCtx extra
+  let mut eqs : SimpTheorems := {}
+  for e in ← fieldEqs skip? do eqs ← eqs.add (.fvar e.fvarId!) #[] e
+  Simp.mkContext (simpTheorems := ctx.simpTheorems.push eqs)
+    (congrTheorems := ← getSimpCongrTheorems)
 
 /-- The forms of a side goal that a hypothesis may have: as stated, and with the projections of
 structure values reduced (as the context at entry, `evalFsym`; a stop's hypothesis keeps its
@@ -6118,13 +6128,15 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
 def etaAll (e : Expr) : MetaM Expr :=
   Meta.transform e (post := fun x => return .done (if x.isLambda then x.eta else x))
 
-/-- A hypothesis `h` of a stop normalized: the caller's simp terms and the ghost values' lemmas
-(`wpHypCtx`), then the data components of ghost values (`(gH x r).2` after `upd_snd`). `none`
-if it closed the goal. -/
-def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Option (FVarId × MVarId)) :=
+/-- A hypothesis `h` of a stop normalized: caller simp terms and ghost values' lemmas, then
+data components (`(gH x r).2` after `upd_snd`). Context equations are used after forwarding
+the original fact, so a caller's lemma can still infer its arguments from that fact. -/
+def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) (fields := false) :
+    TacticM (Option (FVarId × MVarId)) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  let (r, _) ← simp ty (← wpHypCtx extra) (simprocs := #[← Simp.getSimprocs])
+  let ctx ← if fields then wpFactCtx extra (some h) else wpHypCtx extra
+  let (r, _) ← simp ty ctx (simprocs := #[← Simp.getSimprocs])
   let (g, h) ← if r.expr == ty then pure (g, h) else
     let some (h', g') ← applySimpResultToLocalDecl g h r false | return none
     pure (g', h')
@@ -6439,6 +6451,8 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   if hasRun ty then return ← wpRunFacts g h extra
   let some (h, g) ← wpNorm g h extra | return []
   let some g ← wpForward g h | return []
+  let some h ← g.withContext (wpCurrentHyp? h) | return [g]
+  let some (h, g) ← wpNorm g h extra (fields := true) | return []
   wpSplit g h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
@@ -6546,11 +6560,7 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let X' ← reduceProjs (← unfoldLeaves X)
     if X' != X then return ← wpGoal (← g.replaceTargetDefEq (mkApp X' r)) user extra fuel noCases
     if ← assnByHyp g X r then return []
-  let ctx ← wpHypCtx extra
-  let mut thms := ctx.simpTheorems
-  let mut eqs : SimpTheorems := {}
-  for e in ← fieldEqs do eqs ← eqs.add (.fvar e.fvarId!) #[] e
-  let ctx ← Simp.mkContext (simpTheorems := thms.push eqs) (congrTheorems := ← getSimpCongrTheorems)
+  let ctx ← wpFactCtx extra
   let s ← saveState
   try
     let (r, _) ← simp t ctx (simprocs := #[← Simp.getSimprocs])
