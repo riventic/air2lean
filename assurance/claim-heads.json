@@ -4,35 +4,35 @@
   "heads": {
     "Zig.Full.FTriple": {
       "module": "ZigLean.Sep.Full.Triple",
-      "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+      "fingerprint": "b1969771d43534e1306ab679b18b6482",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []
     },
     "Zig.Full.FTotalTriple": {
       "module": "ZigLean.Sep.Full.Logic",
-      "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+      "fingerprint": "2300ff36779359b6a01a957397a0adc5",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 2,
       "state": []
     },
     "Zig.Full.CTriple": {
       "module": "ZigLean.Sep.Full.Conc",
-      "fingerprint": "9a4014e348add433b206b6d12bbdb7df",
+      "fingerprint": "52337a8c84e7af03ef11c8ab60144e83",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 3,
       "state": []
     },
     "Zig.Full.FTTriple": {
       "module": "ZigLean.Sep.Full.Thread",
-      "fingerprint": "267b6a68edbb353b46a816a3814cfaa3",
+      "fingerprint": "6925f4258e0f3781a89d7bb0a13efac3",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []
     },
     "Zig.Full.FTTotalTriple": {
       "module": "ZigLean.Sep.Full.Thread",
-      "fingerprint": "a160fcc9319842db3ea3d21cc9682f5e",
+      "fingerprint": "81f6b87d11eb5d3b1a01d83304614095",
       "claims": ["no-panic", "correct-if-returned", "guaranteed-return"],
       "program": 2,
       "state": []

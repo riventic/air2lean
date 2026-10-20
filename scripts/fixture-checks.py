@@ -35,6 +35,11 @@ no result is reused across runs until a sound input tracer exists (maintainer de
 reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
 tests/roadmap/asm-effects).
 
+The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
+(AIR2LEAN_FIXTURE_REPLAY_CACHE, a file in the run's scratch directory, removed with it): a
+Lake-built module that one audit replayed is not replayed again in this run
+(scripts/assumptions.py `kernel_replay`). Nothing outlives the run.
+
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
 Exit status: 0 when every unit passed, else 1 with each failure's log tail.
@@ -278,6 +283,44 @@ def _stage(unit, scratch):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
+def report(units, statuses, stats, path, top=20):
+    """Print the `top` longest units (wall time, peak RSS, time by process kind); write every
+    unit's row to PATH (JSON) when given."""
+    # A unit's status is also in its statistics: a stopped run reports its finished units' too.
+    rows = [{'name': u['name'], 'status': status, **(s or {})} for u, status, s in zip(units, statuses, stats)]
+    if path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(rows, indent=1) + '\n')
+    print('fixture-checks: longest units (wall s, peak RSS MiB, s by process kind):')
+    for row in sorted(rows, key=lambda r: -r.get('elapsed_s', 0))[:top]:
+        print('  %7.1f %6d  %-40s %s' % (row.get('elapsed_s', 0), row.get('peak_rss_kib', 0) // 1024,
+                                         ' '.join('%s %d' % kv for kv in row.get('busy_s', {}).items()),
+                                         row['name']))
+
+
+SHARED = ROOT / '.lake/build/lib/lean'
+
+
+def shared_outputs():
+    """Identity (inode, size, mtime) of every root-package module the units import, its .olean.
+    The full build compiles them before this phase; Lake has no build lock, so a unit that
+    rebuilds one in place races every unit importing it (a missing .olean mid-write, compiled
+    inputs changed during a kernel replay). Lake's trace and hash files are not compared: an
+    up-to-date check may rewrite them."""
+    found = {}
+    for path in SHARED.rglob('*.olean'):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        found[str(path.relative_to(SHARED))] = (info.st_ino, info.st_size, info.st_mtime_ns)
+    return found
+
+
+def changed_outputs(before, after):
+    return sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
@@ -287,6 +330,8 @@ def main(argv=None):
     # A unit's peak: three at once reached 10.4 GiB under the full build's 11000 MiB guard.
     parser.add_argument('--mem-mib', type=int, default=5000, help='peak memory of one unit (default 5000)')
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
+    parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
+                        'wall time by process kind (scripts/par.py) to this JSON file')
     a = parser.parse_args(argv)
     tree = Tree()
     units = [u for u in discover(tree)
@@ -319,11 +364,22 @@ def main(argv=None):
             jobs = []
             for u in units:
                 command, env = stage(u, scratch / names[u['name']])
+                if env is not None:  # one build: the units' audits share their kernel replays
+                    env['AIR2LEAN_FIXTURE_REPLAY_CACHE'] = str(scratch / 'kernel-replay.json')
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
-            print('fixture-checks: running %d units' % len(units), flush=True)
-            with open(os.devnull, 'wb') as null:
-                statuses = par.run(jobs, par.workers(a.jobs, a.mem_mib, len(jobs)), out=null, err=null,
-                                   log_dir=logs)
+            workers = par.workers(a.jobs, a.mem_mib, len(jobs))
+            print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
+            stats, statuses = [], None
+            before = shared_outputs()
+            try:
+                with open(os.devnull, 'wb') as null:
+                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+            finally:  # also the finished units of a stopped run (a guard's timeout)
+                report(units, statuses or [None] * len(units), stats, a.report)
+            if changed := changed_outputs(before, shared_outputs()):
+                failed.append('the root package\'s build outputs changed while the units ran (a unit '
+                              'built root modules, racing the units that read them): '
+                              + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses):
