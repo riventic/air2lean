@@ -369,8 +369,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   reclaim an outstanding grant, or supply a replacement token. A proof that must retain the
   ability to reset an allocator or form a pointer through an extent share must require those
   resources in its postcondition. Their intentional omission no longer makes an otherwise
-  valid return fail. Exclusive stack resources (`sp`, `ent`, `cur`) are not affine and are never
-  disposed of by these laws; a stack block must still be released with its exact refund.
+  valid return fail. Exclusive stack-depth and entry resources (`sp`, `ent`) are not affine and
+  are never disposed of by these laws; a stack block must still be released with its exact
+  refund. The running-thread token may be forgotten by the separate `EUpd.cur_drop` rule,
+  which uses `MemAuth.dropCur` and does not refund stack space.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
   invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
