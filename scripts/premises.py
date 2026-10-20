@@ -944,13 +944,15 @@ def defining_module(node: dict, nodes: dict) -> str:
     return (equation_parent(node, nodes) or node)["module"]
 
 
-def compiled_source_modules(report: dict) -> dict[str, str]:
+def compiled_source_modules(report: dict, root: Path) -> dict[str, str]:
     """Join only owner-validated compiled modules to their indexed source identities."""
     freshness = report.get('freshness')
     context = freshness.get('compiled_units') if isinstance(freshness, dict) else None
     if context is None:
         return {}
-    from theorem_universe import compilation_plan, verify_compiled_report
+    from theorem_universe import ROOT as owner_root, compilation_plan, verify_compiled_report
+    if root.resolve() != owner_root.resolve():
+        raise ValueError('source comparison root differs from compiler owner root')
     verify_compiled_report(report)
     return {unit.module: module_name(Path(unit.file)) for unit in compilation_plan(context)}
 
@@ -1133,7 +1135,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None,
     if source is not None:
         source_modules = {}
         try:
-            source_modules = compiled_source_modules(report)
+            source_modules = compiled_source_modules(report, root)
         except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
             result["errors"].append(f'source comparison unavailable: {error}')
         compare_compiled_source(result, {n["name"]: n for n in report["nodes"]}, reasons, edges,
@@ -1170,7 +1172,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 repo = load_repository(root, config)
                 source_errors, entries = check(root, repo=repo)
-                source_modules = compiled_source_modules(audit)
+                source_modules = compiled_source_modules(audit, root)
                 origins = equation_source_bounds(repo, nodes, audit['theorems'],
                                                 source_modules=source_modules)
             except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
