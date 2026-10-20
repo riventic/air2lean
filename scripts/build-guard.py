@@ -447,6 +447,30 @@ def default_budget_mib():
     return positive(value) if value else physical_mib() * 3 // 4
 
 
+def default_lock():
+    return Path(os.environ.get("AIR2LEAN_BUILD_LOCK", str(Path.home() / ".cache/air2lean/build.lock")))
+
+
+def free_mib(lock=None, budget_mib=None):
+    """MiB of the budget no guarded workload holds right now: the slots nobody has locked (a
+    snapshot, for sizing a workload before it asks for admission; admission itself still waits
+    for the slots it requests)."""
+    lock = (lock or default_lock()).expanduser()
+    capacity = max(1, int((budget_mib or default_budget_mib()) // SLOT_MIB))
+    directory = Path(str(lock) + ".d")
+    free = 0
+    for i in range(capacity):
+        try:
+            with (directory / ("slot-%03d" % i)).open("a") as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                free += 1  # closing the descriptor releases it
+        except BlockingIOError:
+            pass
+        except FileNotFoundError:
+            free += 1  # no guard has used this lock yet
+    return free * SLOT_MIB
+
+
 def workspace(cwd):
     """The Lake workspace a workload in cwd may write: the git top level (a check tree under a
     checkout's .lake and a package that requires the checkout by path, like tests/diff, write

@@ -343,6 +343,15 @@ fixture_pause()
         self.assertEqual(result.returncode, 0)
         self.assertNotIn("inherited_from", json.loads(inner_report.read_text())["admission"])
 
+    def test_free_mib_counts_the_slots_nobody_holds(self):
+        lock = self.root / "shared.lock"
+        self.assertEqual(guard.free_mib(lock, 4096), 4096)  # a lock no guard has used yet
+        holder, _ = self.start_holder("--mem-budget-mib", "4096", "--rss-mib", "2048")
+        self.assertEqual(guard.free_mib(lock, 4096), 2048)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.assertEqual(guard.free_mib(lock, 4096), 4096)
+
     def test_a_stale_grant_is_not_an_admission(self):
         os.environ[guard.INHERIT] = json.dumps({"pid": 999999, "lock": str(self.root / "shared.lock"),
                                                 "workspace": str(self.root), "rss_mib": 1e9,

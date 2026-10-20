@@ -30,12 +30,15 @@
 #     plus one fresh independent Assurance replay of the generic CanonSem theorem module.
 #     This phase always checks; it has no cached-success marker.
 # Lake runs up to LEAN_NUM_THREADS (--lean-threads) Lean processes at once, and the guard's
-# --rss-mib bounds their sum. Defaults: as many processes as the machine's memory budget holds at
-# 11000 MiB each (under the 12 GB per-process cap), at most one per core: --lean-threads
-# min(cores, budget / 11000), --rss-mib 11000 times that (budget: build-guard.py's,
-# AIR2LEAN_BUILD_MEM_MIB or 75% of physical memory; 64 GB, 18 cores: 4 processes, 44000 MiB).
-# The guard waits up to AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. Prints each
-# phase's time.
+# --rss-mib bounds their sum. Defaults: as many processes at 11000 MiB each (under the 12 GB
+# per-process cap) as fit in what no other guarded workload holds when the build starts, at most
+# half the machine's memory budget and one per core, at least one: --lean-threads
+# max(1, min(cores, budget / 2 / 11000, free / 11000)), --rss-mib 11000 times that (budget and
+# free slots: build-guard.py, AIR2LEAN_BUILD_MEM_MIB or 75% of physical memory; 64 GB, 18 cores,
+# nothing else running: 2 processes, 22000 MiB). So the build asks for no more than is free and
+# does not hold the admission queue for slots other agents' builds hold. The guard waits up to
+# AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. All phases run in one admission
+# (below). Prints each phase's time.
 set -euo pipefail
 cd "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -51,7 +54,7 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -61,7 +64,8 @@ import importlib.util, os, sys
 spec = importlib.util.spec_from_file_location('guard', 'scripts/build-guard.py')
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
-print(max(1, min(os.cpu_count() or 1, guard.default_budget_mib() // int(sys.argv[1]))))
+per_process, budget = int(sys.argv[1]), guard.default_budget_mib()
+print(max(1, min(os.cpu_count() or 1, budget // 2 // per_process, guard.free_mib(budget_mib=budget) // per_process)))
 PY
 )
 fi
@@ -71,16 +75,15 @@ mkdir -p "$logs"
 
 # One admission for the whole build: this script runs again inside one guard, and each phase's
 # guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The phases
-# keep their own limits and reports. The outer limit covers the largest phase: the Lean phases'
-# $rss and the fixture checks' guard (scripts/fixture-checks.sh, at most 24000 MiB).
+# keep their own limits and reports, each within $rss (the fixture checks' guard,
+# scripts/fixture-checks.sh: 11000 MiB). A phase guard above it fails (inheritance_refused).
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
-  outer=$(( rss > 24000 ? rss : 24000 ))
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
   [ "$fixtures" = 1 ] || inner+=(--no-fixtures)
-  echo "full-build: $threads Lean processes, phase limit $rss MiB, one admission of $outer MiB (logs: $logs)"
+  echo "full-build: $threads Lean processes, one admission of $rss MiB (logs: $logs)"
   status=0
   AIR2LEAN_FULL_BUILD_INNER=1 python3 -B scripts/build-guard.py --cwd "$PWD" --lean-threads "$threads" \
-    --jobs 8 --rss-mib "$outer" --report "$logs/full-build.json" --log "$logs/full-build.log" \
+    --jobs 8 --rss-mib "$rss" --report "$logs/full-build.json" --log "$logs/full-build.log" \
     --timeout 28800 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- bash "$0" "${inner[@]}" || status=$?
   grep -E '^(full-build|fixture-checks)' "$logs/full-build.log" || true
   exit "$status"
