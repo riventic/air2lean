@@ -21,7 +21,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
-| [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
+| [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
@@ -194,11 +194,11 @@ Planning units of the engine lane (one PR each, regressions from every requester
 
 Status: **open**. Requester: Task23; coordinator decision 6258258831.
 
-Progress: Enroll the first complete golden family through existing retranslation cases; no per-case selector.
+Progress: Enroll complete golden families through existing retranslation cases; Threadsync and Sync use no per-case selector.
 
 Request: Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.
 
-Workaround sites: `examples/threadsync/all-cases`
+Workaround sites: `examples/threadsync/all-cases`, `examples/sync/all-cases`
 
 Deletion plan: When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks.
 
@@ -1637,7 +1637,7 @@ Deletion plan: Close after native lock primitive producers and Full consumers pr
 
 Status: **closed**. Requester: Task14 full-state allocator client.
 
-Note: The qualified controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Existing substitutions not recorded by unifyBlocks can leave a stale matching hint; such hints are skipped safely, with original side proofs retained. This does not claim complete matching for every case-based size consequence. Full client and legacy retirement remain open.
+Note: The qualified controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Existing substitutions not recorded by unifyBlocks can leave a stale matching hint; such hints are skipped safely, with original side proofs retained. This does not claim complete matching for every case-based size consequence. A demanded size selects or joins whole state regions and never splits one (carve whole): splitting let memcpyRegionsAll take prefixes of both buffers in Proofs/Lists/Append.lean precise_pos instead of memcpyRegions, and the walk then exhausted its heartbeats at the following free (fix-forward after PR481). Full client and legacy retirement remain open.
 
 Progress: Native typed-region/extent/release lemmas and approved size-aware matching use data-only hints, witness rollback, shared bounded substitution refresh, unresolved-token inference and independent original side premises. Comments6279182210/6279202049 approved active-path view progress and applied explicit-frame unification. Actual fallback whole Structs, including free_fields_stack with its exact original goal, and the full29-file official sep-auto suite PASS on f9505e4e/main578aa3b2, Auto5614ed37, guards b8bf14f3/e6cbb205. The five unchanged Proofs callers retain their earlier afc52032a/Auto f13fb21a PASS binding69afbe3b; an accepted fixed-size causal audit supports reuse, not a fresh current-source claim. Isolated A/B proved the added ordinary size attempt caused the large-state regression, so Claude6280049836 dropped fix3 and restored the whole carve function exactly to main. The separate case-fact positive remains an explicit expected failure tracked by open carve-size-probes. Fixes1-2 and all other controls remain; no cap increase, broader planner or weakened production statement. Reproduce with tests/roadmap/sep-auto/check.sh; actual report6280488414.
 

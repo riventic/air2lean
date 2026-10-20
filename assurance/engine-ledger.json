@@ -6,9 +6,9 @@
    "title": "Remove transitional golden case-family enrollment markers",
    "status": "open",
    "requester": "Task23; coordinator decision 6258258831",
-   "progress": "Enroll the first complete golden family through existing retranslation cases; no per-case selector.",
+   "progress": "Enroll complete golden families through existing retranslation cases; Threadsync and Sync use no per-case selector.",
    "request": "Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.",
-   "workaround_sites": ["examples/threadsync/all-cases"],
+   "workaround_sites": ["examples/threadsync/all-cases", "examples/sync/all-cases"],
    "deletion_plan": "When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks."
   },
   {
@@ -1546,7 +1546,7 @@
     "request": "Close by plain fsym the generic goal FTotalTriple (((up (pts p 8 e) ⋆ up (pts (p.add 8) 8 sl)) ⋆ bext b 24 .stack) ⋆ (ent t (some b) D c ⋆ sp t S (D+c))) (Zig.free p) (fun _ => sp t S D), for arbitrary e : BitVec 64 and sl : Slice, p.block = some b and p.off = 0. Reproduction: tests/roadmap/sep-auto/Structs.lean free_fields_stack. A typed value hides independent byte labels; actual Owns.block/Holds.bauth metadata, not a caller premise, binds these labels to the physical extent. Do not hand-walk a client, add a struct-specific free rule, drop stack tokens or weaken its resources.",
     "workaround_sites": [],
     "deletion_plan": "",
-    "note": "The qualified controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Existing substitutions not recorded by unifyBlocks can leave a stale matching hint; such hints are skipped safely, with original side proofs retained. This does not claim complete matching for every case-based size consequence. Full client and legacy retirement remain open."
+    "note": "The qualified controls release arbitrary typed word/slice fields using physical authority metadata, preserving the original stack depth. Existing substitutions not recorded by unifyBlocks can leave a stale matching hint; such hints are skipped safely, with original side proofs retained. This does not claim complete matching for every case-based size consequence. A demanded size selects or joins whole state regions and never splits one (carve whole): splitting let memcpyRegionsAll take prefixes of both buffers in Proofs/Lists/Append.lean precise_pos instead of memcpyRegions, and the walk then exhausted its heartbeats at the following free (fix-forward after PR481). Full client and legacy retirement remain open."
    },
    {
     "id": "region-memset-read",
