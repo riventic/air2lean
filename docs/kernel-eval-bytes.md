@@ -111,7 +111,7 @@ the 512 MiB diagnostic cap at 256, and reports kernel deep recursion at 4096.
 cap at 256 and 4096. These probes use only `Init` and `trace.Kernel`; they do
 not depend on the project memory representation.
 
-Retained regressions are `tests/roadmap/sep-auto/KernelBytes.lean` (undefined
+Retained regressions are `tests/roadmap/sep-auto/SepAuto/KernelBytes.lean` (undefined
 and zero memset, 4 KiB and 16 KiB blocks, suffix preservation, end-of-page
 write) and `tests/roadmap/alloc-translated/KernelBytes.lean` (the translated
 `Lists.Open.push` with the real PageAllocator vtable and generated global
