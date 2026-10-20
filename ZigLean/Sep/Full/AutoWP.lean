@@ -122,22 +122,24 @@ retain the zero-divisor error, and signed overflow uses the runtime's existing p
     | .ok v => b ≠ 0 ∧ (s = true → a.sdivOverflow b = false) ∧
         v = (if s then a.sdiv b else a.udiv b) := by
   by_cases hb : b = 0
-  · simp [Zig.divTrunc, hb, throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
+  · rw [Zig.divTrunc, if_pos hb] at h
+    simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
     cases h
     exact ⟨rfl, .inl hb⟩
-  · cases s with
+  · rw [Zig.divTrunc, if_neg hb] at h
+    cases s with
     | false =>
-      simp [Zig.divTrunc, hb, pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+      simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
       cases h
       exact ⟨hb, by simp, rfl⟩
     | true =>
       by_cases ho : a.sdivOverflow b = true
-      · simp [Zig.divTrunc, hb, ho, throw, throwThe, MonadExceptOf.throw, ExceptT.mk,
+      · simp [ho, throw, throwThe, MonadExceptOf.throw, ExceptT.mk,
           ExceptT.run] at h
         cases h
         exact ⟨rfl, .inr ⟨rfl, ho⟩⟩
       · have ho' : a.sdivOverflow b = false := Bool.eq_false_iff.mpr ho
-        simp [Zig.divTrunc, hb, ho', pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
+        simp [ho', pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h
         cases h
         exact ⟨hb, fun _ => ho', rfl⟩
 
