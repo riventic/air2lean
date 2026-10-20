@@ -630,23 +630,27 @@ theorem roNested_inst {f : Func} {V : InstId → Option (Array Value)} {VT : Ins
     (h : roNested f V VT i = true) : roInst f V VT i = true := by
   unfold roNested at h; simp only [Bool.and_eq_true] at h; exact h.1
 
-/-- The simulation: a body of a read-only function runs, from a memory up to reads of `m₀`, as its
-view from `m₀` (`Sim`). -/
-theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle)
-    (V : InstId → Option (Array Value)) (VT : InstId → TyId) (hargs : ArgsView m₀ f V VT args) :
+/-- The simulation: a body of a canonically pure read-only function runs, from a memory up
+to reads of `m₀`, as its view from `m₀` (`Sim`). The mode is derived from the original
+program; a view never overrides tick instrumentation. -/
+theorem execBody_view (prog : Prog) (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle)
+    (V : InstId → Option (Array Value)) (VT : InstId → TyId) (hargs : ArgsView m₀ f V VT args)
+    (hpure : prog.ticked f.name = false) :
     ∀ l env, roBody f V VT l = true → EnvOk f V args env →
-      Sim m₀ ExitOk (execBody ⟨f, args, call, fun _ => none⟩ l env) (execBody ⟨f, args, call, V⟩ l env) := by
-  apply execBody.induct ⟨f, args, call, fun _ => none⟩
+      Sim m₀ ExitOk (execBody ⟨prog, f, args, call, fun _ => none⟩ l env)
+        (execBody ⟨prog, f, args, call, V⟩ l env) := by
+  apply execBody.induct ⟨prog, f, args, call, fun _ => none⟩
     (motive2 := fun i rest env => roNested f V VT i = true → roBody f V VT rest = true →
       EnvOk f V args env →
-      Sim m₀ ExitOk (execInst ⟨f, args, call, fun _ => none⟩ i rest env) (execInst ⟨f, args, call, V⟩ i rest env))
+      Sim m₀ ExitOk (execInst ⟨prog, f, args, call, fun _ => none⟩ i rest env)
+        (execInst ⟨prog, f, args, call, V⟩ i rest env))
     (motive3 := fun s w x cs el env => roCases f V VT cs = true → roBody f V VT el.toList = true →
       EnvOk f V args env →
-      Sim m₀ ExitOk (execSwitch ⟨f, args, call, fun _ => none⟩ s x cs el env)
-        (execSwitch ⟨f, args, call, V⟩ s x cs el env))
+      Sim m₀ ExitOk (execSwitch ⟨prog, f, args, call, fun _ => none⟩ s x cs el env)
+        (execSwitch ⟨prog, f, args, call, V⟩ s x cs el env))
     (motive4 := fun id body env => roBody f V VT body.toList = true → EnvOk f V args env →
-      Sim m₀ ExitOk (execLoop ⟨f, args, call, fun _ => none⟩ id body env)
-        (execLoop ⟨f, args, call, V⟩ id body env))
+      Sim m₀ ExitOk (execLoop ⟨prog, f, args, call, fun _ => none⟩ id body env)
+        (execLoop ⟨prog, f, args, call, V⟩ id body env))
   case case1 =>
     intro env _ _
     simp only [execBody]
@@ -670,7 +674,7 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
       · exact ihm hc.2 hel henv
   case case29 =>
     intro id body env ih hb henv
-    simp only [execLoop]
+    simp only [execLoop, iteration, hpure, Bool.false_eq_true, ite_false, pure_bind]
     exact sim_loop _ (ih hb henv)
   case case3 =>
     intro i rest env index hop v hv ih hro hrest henv
@@ -897,27 +901,32 @@ theorem execBody_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle
 
 /-- `execFunc` with the view `view` (`Ctx.view`). Not the meaning of AIR: a certificate normalizes
 it against the generated definition, and `execFunc_view` relates it to `execFunc`. -/
-def execFuncV (call : Oracle) (view : InstId → Option (Array Value)) (f : Func) (args : List Value) :
+def execFuncV (prog : Prog) (call : Oracle) (view : InstId → Option (Array Value))
+    (f : Func) (args : List Value) :
     MemM Value :=
   if argsOk f f.params.toList args then do
-    let (e, frame) ← (execBody ⟨f, args, call, view⟩ f.body.toList (fun _ => none)).run {}
+    if prog.entryTicked f.name then Zig.tick
+    let (e, frame) ← (execBody ⟨prog, f, args, call, view⟩ f.body.toList (fun _ => none)).run {}
     frame.blocks.forM Zig.free
     match e with
     | .ret v => pure v
     | _ => StateT.lift stuck
   else StateT.lift stuck
 
-/-- A function that reads memory only through the viewed slices: `execFunc` from `m₀` gives the
-values and errors of its view, and a memory up to reads of `m₀`; the view leaves `m₀`. -/
-theorem execFunc_view (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle)
+/-- A canonically pure function that reads memory only through the viewed slices:
+`execFunc` from `m₀` gives the values and errors of its view, and a memory up to reads of
+`m₀`; the view leaves every other field, including ticks, exactly as in `m₀`. -/
+theorem execFunc_view (prog : Prog) (m₀ : Mem) (f : Func) (args : List Value) (call : Oracle)
     (V : InstId → Option (Array Value)) (VT : InstId → TyId)
-    (hro : roBody f V VT f.body.toList = true) (hargs : ArgsView m₀ f V VT args) :
+    (hro : roBody f V VT f.body.toList = true) (hargs : ArgsView m₀ f V VT args)
+    (hpure : prog.ticked f.name = false) :
     RelR (fun (p q : Value × Mem) => p.1 = q.1 ∧ UpToReads m₀ p.2 ∧ q.2 = m₀)
-      ((execFunc call f args).run m₀) ((execFuncV call V f args).run m₀) := by
+      ((execFunc prog call f args).run m₀) ((execFuncV prog call V f args).run m₀) := by
   unfold execFunc execFuncV
+  simp only [Program.entryTicked, hpure, Bool.and_false, Bool.false_eq_true, ite_false, pure_bind]
   split
   · simp only [StateT.run_bind]
-    have hsim := execBody_view m₀ f args call V VT hargs f.body.toList (fun _ => none) hro
+    have hsim := execBody_view prog m₀ f args call V VT hargs hpure f.body.toList (fun _ => none) hro
       ⟨fun _ _ _ h => (by cases h), fun _ _ _ _ _ h => (by cases h)⟩ {} m₀
       ⟨rfl, fun _ _ h => (by cases h)⟩ (UpToReads.refl m₀)
     refine relR_bind hsim ?_

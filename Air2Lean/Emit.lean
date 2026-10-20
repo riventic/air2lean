@@ -1,5 +1,6 @@
 import Std.Data.HashSet
 import Air2Lean.Check
+import Air2Lean.Program
 import Air2Lean.ProofApi
 import Air2Lean.Device
 
@@ -736,6 +737,62 @@ inductive PathStep where
       (fresh : Option (String × Option String) := none)
   deriving Inhabited
 
+/-- The identity of an executable declaration after loop extraction. Original function
+identities remain separate from their generated Lean names. -/
+inductive DeclId where
+  | function (source : String)
+  | loop (source : String) (id : InstId)
+  deriving BEq, DecidableEq, Hashable, Repr
+
+def DeclId.sourceName : DeclId → String
+  | .function source | .loop source _ => source
+
+/-- Source text and the executable declarations referenced by that exact lowering. References
+are accumulated while choosing emitted arms, so discarded continuations contribute nothing. -/
+structure EmittedCode where
+  code : String
+  /-- `none` is opaque code supplied to a code-only rendering API. It cannot authorize a
+  declaration graph; full-program emission constructs only known references. -/
+  refs : Option (List DeclId)
+  deriving Inhabited
+
+instance : Coe String EmittedCode := ⟨fun code => ⟨code, none⟩⟩
+
+def EmittedCode.literal (code : String) : EmittedCode := ⟨code, some []⟩
+
+def EmittedCode.withRefs (code : String) (refs : Array DeclId) : EmittedCode :=
+  ⟨code, some refs.toList⟩
+
+def EmittedCode.combine (code : String) (parts : Array EmittedCode) : EmittedCode :=
+  ⟨code, parts.foldr (fun part refs => do
+    let front ← part.refs
+    let tail ← refs
+    pure (if tail.isEmpty then front else front ++ tail)) (some [])⟩
+
+def EmittedCode.mapCode (f : String → String) (body : EmittedCode) : EmittedCode :=
+  { body with code := f body.code }
+
+/-- One actual lowered definition, including its source-bound signature and unwrapped body. -/
+structure EmittedDecl where
+  id : DeclId
+  name : String
+  params : Array (String × String)
+  body : String
+  code : String
+  refs : Array DeclId
+
+def EmittedCode.declaration (body : EmittedCode) (id : DeclId) (name : String)
+    (params : Array (String × String)) (header : String) : Except String EmittedDecl := do
+  let some refs := body.refs
+    | throw s!"opaque custom code in executable declaration '{name}' has no reference graph"
+  pure { id, name, params, body := body.code, code := header ++ body.code, refs := refs.toArray }
+
+/-- An executable SCC in rendered declaration order. This order does not assert the order
+of Lean's indexed induction motives after elaboration. -/
+structure DeclGroup where
+  members : Array EmittedDecl
+  recursive : Bool
+
 structure FCtx where
   types : Array Ty
   structNames : Array (String × String)
@@ -761,6 +818,8 @@ structure FCtx where
   Bare contexts default to no certificate; recursive emission does not rescan bodies. -/
   outwardBlocks : Std.HashMap InstId Bool := {}
   retTy : TyId
+  /-- The original canonical function, before name mangling or helper extraction. -/
+  sourceName : String
   /-- This function's own generated (mangled) name, for naming its extracted loop-body defs
   (`<fnName>.loop<k>`, see `emitLoopDef`). -/
   fnName : String
@@ -772,10 +831,10 @@ structure FCtx where
   floatSemantics : FloatSemantics
   spawnSemantics : SpawnSemantics := .available
   /-- Typed caller execution of each complete capture, including pure slice adapters. -/
-  spawnFallbacks : Array (String × String) := #[]
+  spawnFallbacks : Array (String × EmittedCode) := #[]
   /-- First-match fallback lookup, prepared after assigning `spawnFallbacks`. Public callers
   changing that array must reset this cache to `none`; bare contexts retain array lookup. -/
-  spawnFallbackMap : Option (Std.HashMap String String) := none
+  spawnFallbackMap : Option (Std.HashMap String EmittedCode) := none
   /-- The function's version and target facts (`Func.dialect`): the `@bitCast` semantics, the
   float ops whose result differs by version (`docs/floats.md` §Per-version differences), the byte
   order of bit-pointer accesses and the architecture of the asm allowlist. -/
@@ -832,7 +891,7 @@ structure FCtx where
   sentinelChecked : Array InstId := #[]
   /-- This function is in a recursive call group (`callGroups`): its call depth is not bounded
   by the call graph, so a function that uses memory charges its frame to the stack budget
-  (`Zig.enterFrame`, MM-5). -/
+  (`Zig.enterFrame`, MM-5). Every MM/CM member also ticks once at its function entry. -/
   recursive : Bool := false
   /-- `some`: the function has `noalias` parameters, or one that has them may call it; the roots
   of the reads and writes of each instruction that can touch memory (`Air2Lean/Noalias.lean`),
@@ -876,8 +935,9 @@ def exactFloatDivs (insts : Array Inst) : Array InstId := Id.run do
           out := out.push r
   return out
 
-private def prepareSpawnFallbackMap (fallbacks : Array (String × String)) : Std.HashMap String String :=
-  let empty : Std.HashMap String String := {}
+private def prepareSpawnFallbackMap (fallbacks : Array (String × EmittedCode)) :
+    Std.HashMap String EmittedCode :=
+  let empty : Std.HashMap String EmittedCode := {}
   fallbacks.foldl (fun lookup (worker, body) =>
     if lookup.contains worker then lookup else lookup.insert worker body) empty
 
@@ -894,10 +954,14 @@ def FCtx.targetArch (fc : FCtx) : String := fc.dialect.arch
 def FCtx.prepareSpawnFallbacks (fc : FCtx) : FCtx :=
   { fc with spawnFallbackMap := some (prepareSpawnFallbackMap fc.spawnFallbacks) }
 
-def FCtx.spawnFallback (fc : FCtx) (worker : String) : String :=
+def FCtx.lowerSpawnFallback (fc : FCtx) (worker : String) : EmittedCode :=
   match fc.spawnFallbackMap with
-  | some lookup => lookup[worker]?.getD ""
-  | none => (fc.spawnFallbacks.find? (·.1 == worker)).map (·.2) |>.getD ""
+  | some lookup => lookup[worker]?.getD (EmittedCode.literal "")
+  | none => (fc.spawnFallbacks.find? (·.1 == worker)).map (·.2)
+      |>.getD (EmittedCode.literal "")
+
+def FCtx.spawnFallback (fc : FCtx) (worker : String) : String :=
+  (fc.lowerSpawnFallback worker).code
 
 def FCtx.memberLookup (fc : FCtx) (ty : Ty) : String → String :=
   Air2Lean.memberLookup ty (fc.structNames.map (·.2))
@@ -1773,28 +1837,28 @@ def futureEagerKey (worker : String) : String := s!"future:{worker}"
 program's `Tgt` (`emitTgt`); `args[1]` is the complete by-value captured tuple. Zero
 fields use `Unit`, one field keeps the historical scalar representation, and multiple
 fields form a right-associated product. Dispatch applies each field in source order. `.join`, `.detach`: `args[0]` is the `Thread` handle. -/
-def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
-    (args : Array Val) (ret : TyId := 0) : String :=
+def FCtx.lowerThreadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
+    (args : Array Val) (ret : TyId := 0) : EmittedCode :=
   let rv := fc.resolveVal env
   match fn with
   | .spawn =>
     let spawnFn := match callee with | .func _ _ sf => sf.getD "" | _ => ""
     let target := (fc.funcNames.find? (·.1 == spawnFn)).map (·.2) |>.getD spawnFn
     let op := if fc.spawnSemantics == .fallible then "spawnWithPolicyC .fallible" else "spawnC"
-    s!"Zig.{op} (Tgt.{target} {rv (args[1]?.getD .void)})"
-  | .join => s!"Zig.joinC {rv (args[0]?.getD .void)}"
-  | .detach => s!"Zig.detachC {rv (args[0]?.getD .void)}"
+    EmittedCode.literal s!"Zig.{op} (Tgt.{target} {rv (args[1]?.getD .void)})"
+  | .join => EmittedCode.literal s!"Zig.joinC {rv (args[0]?.getD .void)}"
+  | .detach => EmittedCode.literal s!"Zig.detachC {rv (args[0]?.getD .void)}"
   -- `Io.futex*(io, ptr, value)` (the `comptime T` argument is not a runtime argument).
-  | .futexWait => s!"{fc.atomicFn "futexWaitCancelableC"} {String.intercalate " " (args.toList.map rv)}"
-  | .futexWaitU => s!"{fc.atomicFn "futexWaitC"} {String.intercalate " " (args.toList.map rv)}"
-  | .futexWake => s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
+  | .futexWait => EmittedCode.literal s!"{fc.atomicFn "futexWaitCancelableC"} {String.intercalate " " (args.toList.map rv)}"
+  | .futexWaitU => EmittedCode.literal s!"{fc.atomicFn "futexWaitC"} {String.intercalate " " (args.toList.map rv)}"
+  | .futexWake => EmittedCode.literal s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
   -- `Thread.Futex.wait(ptr, expect)`, `Thread.Futex.wake(ptr, max_waiters)`.
-  | .threadFutexWait => s!"{fc.atomicFn "threadFutexWaitC"} {String.intercalate " " (args.toList.map rv)}"
-  | .threadFutexWake => s!"Zig.threadFutexWakeC {String.intercalate " " (args.toList.map rv)}"
+  | .threadFutexWait => EmittedCode.literal s!"{fc.atomicFn "threadFutexWaitC"} {String.intercalate " " (args.toList.map rv)}"
+  | .threadFutexWake => EmittedCode.literal s!"Zig.threadFutexWakeC {String.intercalate " " (args.toList.map rv)}"
   -- `DarwinImpl.lock(self)`: `self` points to the `os_unfair_lock` (its only field).
-  | .osLock => s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
-  | .osUnlock => s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
-  | .osTryLock => s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
+  | .osLock => EmittedCode.literal s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
+  | .osUnlock => EmittedCode.literal s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"
+  | .osTryLock => EmittedCode.literal s!"Zig.osUnfairTryLockC {rv (args[0]?.getD .void)}"
   -- `Io.Group.async(g, io, args)` (the task is `callee`'s `spawnFn`, as for `.spawn`). `async`
   -- is an oracle choice under every policy (a thread, the caller, deferred), so it always gets
   -- the task's caller execution; `concurrent` gets a thread unless the policy is fallible.
@@ -1807,13 +1871,13 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
       else if fc.spawnSemantics == .fallible then "groupConcurrentWithPolicyC .fallible"
       else "groupConcurrentC"
     let fallback := if fn == .groupAsync then
-      let body := fc.spawnFallback spawnFn
-      s!" (({body}) {capture})"
-      else ""
-    s!"Zig.{op} {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)} \
-      (Tgt.{target} {capture}){fallback}"
-  | .groupAwait => s!"Zig.groupAwaitC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
-  | .groupCancel => s!"Zig.groupCancelC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
+      (fc.lowerSpawnFallback spawnFn).mapCode fun body => s!" (({body}) {capture})"
+      else EmittedCode.literal ""
+    fallback.mapCode fun body =>
+      s!"Zig.{op} {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)} \
+        (Tgt.{target} {capture}){body}"
+  | .groupAwait => EmittedCode.literal s!"Zig.groupAwaitC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
+  | .groupCancel => EmittedCode.literal s!"Zig.groupCancelC {rv (args[0]?.getD .void)} {rv (args[1]?.getD .void)}"
   -- `Io.async(io, args)`: the task is `callee`'s `spawnFn`, its target `Tgt.<worker>_future`
   -- (`emitTgtWithStorage`); `ret` is the `Io.Future(T)` type (`docs/futures.md`).
   | .futureAsync =>
@@ -1824,15 +1888,19 @@ def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn)
     let resultTy := fc.emitTyOf result
     let mk := s!"(fun futureSlot => Tgt.{futureCtorName target} futureSlot {capture})"
     let policy := if fc.spawnSemantics == .fallible then ".fallible" else ".available"
-    let call := s!"Zig.asyncWithPolicyC (α := {resultTy}) {policy} {mk} \
-      (({fc.spawnFallback (futureEagerKey spawnFn)}) {capture})"
-    fc.storageExpr result call
+    (fc.lowerSpawnFallback (futureEagerKey spawnFn)).mapCode fun body =>
+      let call := s!"Zig.asyncWithPolicyC (α := {resultTy}) {policy} {mk} (({body}) {capture})"
+      fc.storageExpr result call
   -- `Future(T).await(&f, io)`, `.cancel(&f, io)`: `ret` is `T`.
   | .futureAwait | .futureCancel =>
     let op := if fn == .futureAwait then "awaitC" else "cancelC"
-    fc.storageExpr ret s!"Zig.{op} (α := {fc.emitTyOf ret}) {rv (args[1]?.getD .void)} \
+    EmittedCode.literal <| fc.storageExpr ret s!"Zig.{op} (α := {fc.emitTyOf ret}) {rv (args[1]?.getD .void)} \
       {rv (args[0]?.getD .void)}"
-  | .checkCancel => s!"Zig.checkCancelC {rv (args[0]?.getD .void)}"
+  | .checkCancel => EmittedCode.literal s!"Zig.checkCancelC {rv (args[0]?.getD .void)}"
+
+def FCtx.threadCall (fc : FCtx) (env : Array (InstId × String)) (fn : ThreadFn) (callee : Val)
+    (args : Array Val) (ret : TyId := 0) : String :=
+  (fc.lowerThreadCall env fn callee args ret).code
 
 /-- A load of item `i` of the slice, many-pointer or array pointer `v`, whose item pointer is
 `p`. -/
@@ -2267,6 +2335,51 @@ def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : S
     Array (InstId × String) × String :=
   let name := if fc.isReferenced id then s!"i{id}" else s!"_i{id}"
   (env.push (id, name), s!"let {name} ← {expr}")
+
+/-- Select a call's actual lowering once, using the original canonical identity for model and
+panic classification. Only arms that name executable declarations contribute graph edges. -/
+def FCtx.lowerCall (fc : FCtx) (env : Array (InstId × String)) (inst : Inst)
+    (callee : Val) (args : Array Val) : EmittedCode :=
+  let rv := fc.resolveVal env
+  let (isNoreturn, cexpr) := fc.resolveCallee callee
+  let source := match callee with | .func name .. => name | _ => ""
+  if isNoreturn then
+    EmittedCode.literal <| match panicErrorFor? source with
+      | some ctor => s!"throw {ctor}"
+      | none => placeholder s!"unchecked noreturn callee {source}"
+  else if let some fn := osFn? source fc.allocatorModel then
+    EmittedCode.literal (fc.osCall env fn args)
+  else if let some fn := allocFn? source fc.allocatorModel then
+    EmittedCode.literal s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
+  else if let some fn := threadFn? source then
+    fc.lowerThreadCall env fn callee args inst.ty
+  else if callee.isIndirectCallee then
+    let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
+      | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
+      | _ => ""
+    let arms := (fc.fnBlocks.filter (·.1 == tn)).map fun (_, name, block) =>
+      let lean := (fc.funcNames.find? (·.1 == name)).map (·.2) |>.getD name
+      let memCallee := fc.memFuncs.contains name
+      let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
+      let call := fc.callOf name term memCallee
+      EmittedCode.withRefs
+        s!"if {rv callee} == (⟨some {block}, 0⟩ : Zig.Ptr) then {call} else " #[.function name]
+    let last := match fc.openFnTys.idxOf? tn with
+      | some i => s!"Zig.callC (Zig.extCall (Ext.call{i} {rv callee} {String.intercalate " " (args.map (fc.callArg env true)).toList}))"
+      | none => "throw .illegal"
+    EmittedCode.combine s!"({String.join (arms.toList.map (·.code))}{last})" arms
+  else
+    let memCallee := fc.memFuncs.contains source
+    let term := s!"{cexpr} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
+    let expr := match callee with
+      | .func name .. => fc.callOf name term memCallee
+      | _ => fc.liftR term
+    let expr := if fc.rawFuncs.contains source && !fc.rawInsts.contains inst.id then
+      fc.storageExpr inst.ty s!"Zig.Bytes.get ({fc.emitTyOf inst.ty}) (← {expr}) 0"
+      else expr
+    match callee with
+    | .func name .. => EmittedCode.withRefs expr #[.function name]
+    | _ => EmittedCode.literal expr
 
 /-- A straight-line (non-terminator, non-`block`/`loop`) instruction on scalars: at most one
 output line. `emitSimple` lifts it to vectors; `emitScalarGuarded` adds the aarch64 `f80`
@@ -3135,54 +3248,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       bindLet fc env inst.id s!"pure \{ {String.intercalate ", " assigns} : {sname} }"
     (env, some l)
   | .call callee args =>
-    let (isNoreturn, cexpr) := fc.resolveCallee callee
-    let allocFn := match callee with | .func name .. => allocFn? name fc.allocatorModel | _ => none
-    let threadFn := match callee with | .func name .. => threadFn? name | _ => none
-    let osFn := match callee with | .func name .. => osFn? name fc.allocatorModel | _ => none
-    if let some fn := osFn then
-      let (env, l) := bindLet fc env inst.id (fc.osCall env fn args)
-      (env, some l)
-    else if let some fn := allocFn then
-      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} ({fc.allocCall env fn args inst.ty})"
-      (env, some l)
-    else if let some fn := threadFn then
-      let (env, l) := bindLet fc env inst.id (fc.threadCall env fn callee args inst.ty)
-      (env, some l)
-    else if isNoreturn then (env, none)
-    else if callee.isIndirectCallee then
-      -- An indirect call: the function whose block the pointer points to, at offset 0 (M20).
-      -- A constant address resolves through the same table of address-taken functions of
-      -- the callee's type; any other address throws `.illegal` (L11).
-      let tn := match fc.tyOfId ((fc.valTyId? callee).getD 0) with
-        | .ptr _ _ c => match fc.tyOfId c with | .other n => n | _ => ""
-        | _ => ""
-      let arms := (fc.fnBlocks.filter (·.1 == tn)).toList.map fun (_, nm, b) =>
-        let lean := (fc.funcNames.find? (·.1 == nm)).map (·.2) |>.getD nm
-        let memCallee := fc.memFuncs.contains nm
-        let term := s!"{lean} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
-        let call := fc.callOf nm term memCallee
-        s!"if {rv callee} == (⟨some {b}, 0⟩ : Zig.Ptr) then {call} else "
-      -- An open interface's type (`docs/interfaces.md`): any other pointer calls the
-      -- environment's implementation (`Ext.call<i>`, premise EXT-05).
-      let last := match fc.openFnTys.idxOf? tn with
-        | some i => s!"Zig.callC (Zig.extCall (Ext.call{i} {rv callee} {String.intercalate " " (args.map (fc.callArg env true)).toList}))"
-        | none => "throw .illegal"
-      let (env, l) := bindLet fc env inst.id s!"({String.join arms}{last})"
-      (env, some l)
-    else
-      let memCallee := match callee with | .func name .. => fc.memFuncs.contains name | _ => false
-      let term := s!"{cexpr} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
-      let expr := match callee with
-        | .func name .. => fc.callOf name term memCallee
-        | _ => fc.liftR term
-      -- A callee that returns `Zig.Bytes T`, whose value is read as a `T`: decode it.
-      let expr := match callee with
-        | .func name .. =>
-          if fc.rawFuncs.contains name && !fc.rawInsts.contains inst.id then
-            fc.storageExpr inst.ty s!"Zig.Bytes.get ({fc.emitTyOf inst.ty}) (← {expr}) 0"
-          else expr
-        | _ => expr
-      let (env, l) := bindLet fc env inst.id expr
+    if isTerminating inst.op then (env, none) else
+      let (env, l) := bindLet fc env inst.id (fc.lowerCall env inst callee args).code
       (env, some l)
   | .line _ => (env, none)
   | .dbg _ _ => (env, none)
@@ -3390,6 +3457,17 @@ def emitSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     Array (InstId × String) × Option String :=
   (emitLaneWise fc env inst).getD (emitScalarGuarded fc env inst)
 
+def lowerSimple (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    Array (InstId × String) × Option EmittedCode :=
+  match inst.op with
+  | .call callee args =>
+    let body := fc.lowerCall env inst callee args
+    let (env', line) := bindLet fc env inst.id body.code
+    (env', some (body.mapCode fun _ => line))
+  | _ =>
+    let (env', line) := emitSimple fc env inst
+    (env', line.map EmittedCode.literal)
+
 /-- The `Zig.naMark` that follows instruction `id` (`FCtx.noalias`), or `""`. -/
 def FCtx.naMarkOf (fc : FCtx) (id : InstId) : String :=
   match fc.noalias with
@@ -3407,20 +3485,21 @@ mutual
 without the surrounding `do`). The last effective instruction (per `isTerminating`) becomes the
 tail expression; anything the exporter placed after it (a defensive `unreach`) is dead and
 dropped. -/
-partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) : String :=
+partial def lowerStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) :
+    EmittedCode :=
   let fc := fc.prepareInstUses.prepareBranchTargets
   match insts with
-  | [] => placeholder "a body without a terminator"
+  | [] => EmittedCode.literal (placeholder "a body without a terminator")
   | inst :: rest =>
     -- With `noalias` parameters (or a caller that has them), each instruction that can touch
     -- memory is followed by the mark of its roots (`Zig.naMark`), which checks its accesses.
     let mark := fc.naMarkOf inst.id
     if isTerminating inst.op then
-      emitTerminator fc env inst
+      lowerTerminator fc env inst
     else
       match inst.op with
       | .block body =>
-        let inner := fc.ascribedDo (emitStmts fc env body.toList)
+        let inner := (lowerStmts fc env body.toList).mapCode fc.ascribedDo
         -- Only discard a block's continuation when no branch targets it and either
         -- AIR declares it noreturn or every reachable body path exits outward.
         if !(fc.branchTargetSet.getD {}).contains inst.id &&
@@ -3433,13 +3512,17 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         else
           match fc.targetTy inst.id with
           | .void =>
-            let restStr := emitStmts fc env rest
-            s!"match ← {inner} with\n| .br{inst.id} => {doBlock restStr}\n| e => pure e"
+            let restStr := lowerStmts fc env rest
+            EmittedCode.combine
+              s!"match ← {inner.code} with\n| .br{inst.id} => {doBlock restStr.code}\n| e => pure e"
+              #[inner, restStr]
           | _ =>
             -- `_v<id>` if nothing reads the block's result (Lean's unused-variable linter).
             let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
-            let restStr := emitStmts fc (env.push (inst.id, vname)) rest
-            s!"match ← {inner} with\n| .br{inst.id} {vname} => {doBlock restStr}\n| e => pure e"
+            let restStr := lowerStmts fc (env.push (inst.id, vname)) rest
+            EmittedCode.combine
+              s!"match ← {inner.code} with\n| .br{inst.id} {vname} => {doBlock restStr.code}\n| e => pure e"
+              #[inner, restStr]
       | .loop body =>
         -- A `loop` never falls through: the only way past it is a `br` to an *enclosing*
         -- block, so `rest` (anything after it in this same instruction array) is unreachable
@@ -3452,26 +3535,30 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
         let caps := fc.loopCaptures body
         -- The caller's name of each value: a `try` or `block` result is `v<id>` here.
         let args := String.intercalate " " ((caps.map fun (id, _, _) => fc.resolveVal env (.inst id)).toList)
-        s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
+        EmittedCode.withRefs
+          s!"Zig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
+          #[.loop fc.sourceName inst.id]
       | .loopSwitchBr initial _ _ =>
         let caps := fc.loopCaptures (dispatchCaptureBody inst)
         let args := String.intercalate " " ((caps.map fun (id, _, _) => fc.resolveVal env (.inst id)).toList)
-        s!"modify fun s => \{ s with {dispatchFieldName inst.id} := {fc.resolveVal env initial} }\nZig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
+        EmittedCode.withRefs
+          s!"modify fun s => \{ s with {dispatchFieldName inst.id} := {fc.resolveVal env initial} }\nZig.loop ({fc.fnName}.loop{inst.id} {args}) {fc.fnName}.again{inst.id}"
+          #[.loop fc.sourceName inst.id]
       | .«try» v errBody =>
-        let errStr := emitStmts fc env errBody.toList
+        let errStr := lowerStmts fc env errBody.toList
         -- `try` on `!void`: nothing reads the payload.
         let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
-        let restStr := emitStmts fc (env.push (inst.id, vname)) rest
-        s!"match {fc.resolveVal env v} with\n\
-          | .error _ => {doBlock errStr}\n\
-          | .ok {vname} => {doBlock restStr}"
+        let restStr := lowerStmts fc (env.push (inst.id, vname)) rest
+        EmittedCode.combine s!"match {fc.resolveVal env v} with\n\
+          | .error _ => {doBlock errStr.code}\n\
+          | .ok {vname} => {doBlock restStr.code}" #[errStr, restStr]
       | .tryPtr p errBody =>
         let payload := match fc.pointeeOf p with
           | .errorUnion _ c => emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId c)
           | _ => placeholder "try_ptr of a non-error-union pointer"
-        let errStr := emitStmts fc env errBody.toList
+        let errStr := lowerStmts fc env errBody.toList
         let vname := if fc.isReferenced inst.id then s!"v{inst.id}" else s!"_v{inst.id}"
-        let restStr := emitStmts fc (env.push (inst.id, vname)) rest
+        let restStr := lowerStmts fc (env.push (inst.id, vname)) rest
         let tryFn := match fc.pointeeOf p with
           | .errorUnion set _ => match fc.tyOfId set with
             | .errorSet (some names) => s!"{errOp fc.errBits "finiteTryPayloadPtr"} {emitErrorDomain names}"
@@ -3483,66 +3570,64 @@ partial def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List
           | _ => expr
         let expr := if mark.isEmpty then expr
           else s!"(do let r ← {expr}; {mark}; pure r)"
-        s!"match ← {expr} with\n\
-          | .error _ => {doBlock errStr}\n\
-          | .ok {vname} => {doBlock restStr}"
+        EmittedCode.combine s!"match ← {expr} with\n\
+          | .error _ => {doBlock errStr.code}\n\
+          | .ok {vname} => {doBlock restStr.code}" #[errStr, restStr]
       | _ =>
-        let (env', lineOpt) := emitSimple fc env inst
-        let restStr := emitStmts fc env' rest
-        let restStr := if mark.isEmpty then restStr else s!"{mark}\n{restStr}"
+        let (env', lineOpt) := lowerSimple fc env inst
+        let restStr := lowerStmts fc env' rest
+        let restStr := if mark.isEmpty then restStr else restStr.mapCode fun s => s!"{mark}\n{s}"
         match lineOpt with
-        | some line => s!"{line}\n{restStr}"
+        | some line => EmittedCode.combine s!"{line.code}\n{restStr.code}" #[line, restStr]
         | none => restStr
 
 /-- The one instruction ending a body: `br`/`repeat`/`ret`/`unreach`/`trap`/`cond_br`/
 `switch_br`/a noreturn call. -/
-partial def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) : String :=
+partial def lowerTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
+    EmittedCode :=
   let rv := fc.resolveVal env
   match inst.op with
   | .br target v =>
     match fc.targetTy target with
-    | .void => s!"pure .br{target}"
-    | _ => s!"pure (.br{target} {rv v})"
-  | .«repeat» target => s!"pure .rep{target}"
-  | .switchDispatch target v => s!"pure (.dispatch{target} {rv v})"
+    | .void => EmittedCode.literal s!"pure .br{target}"
+    | _ => EmittedCode.literal s!"pure (.br{target} {rv v})"
+  | .«repeat» target => EmittedCode.literal s!"pure .rep{target}"
+  | .switchDispatch target v => EmittedCode.literal s!"pure (.dispatch{target} {rv v})"
   | .ret v =>
     match fc.tyOfId fc.retTy with
-    | .void => "pure .ret"
+    | .void => EmittedCode.literal "pure .ret"
     | _ =>
       -- A function that returns `Zig.Bytes T` returns the bytes of a value that has none
       -- undefined.
       let raw := match v with | .inst x => fc.rawInsts.contains x | _ => false
       if fc.rawRet && !raw then
-        s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({rv v} : {fc.emitTyOf fc.retTy}))"})"
-      else s!"pure (.ret {rv v})"
+        EmittedCode.literal s!"pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({rv v} : {fc.emitTyOf fc.retTy}))"})"
+      else EmittedCode.literal s!"pure (.ret {rv v})"
   | .retLoad ptr =>
     match fc.tyOfId fc.retTy with
-    | .void => "pure .ret"
+    | .void => EmittedCode.literal "pure .ret"
     | _ =>
       let v := if fc.isMemPtr ptr then s!"(← {fc.loadMem ptr (rv ptr)})" else fc.loadPlace ptr
       let mark := fc.naMarkOf inst.id
       let (pre, v) := if mark.isEmpty then ("", v) else (s!"let r ← pure {v}\n{mark}\n", "r")
       if fc.rawRet then
-        s!"{pre}pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
-      else s!"{pre}pure (.ret {v})"
+        EmittedCode.literal s!"{pre}pure (.ret {fc.storageExpr fc.retTy s!"(Zig.Enc.encode ({v} : {fc.emitTyOf fc.retTy}))"})"
+      else EmittedCode.literal s!"{pre}pure (.ret {v})"
   -- A bare `unreach` (no panic call before it, which would end the body first) is
   -- `unreachable` without a safety check: unchecked illegal behaviour.
-  | .unreach => "throw .illegal"
-  | .trap => "throw .panic"
+  | .unreach => EmittedCode.literal "throw .illegal"
+  | .trap => EmittedCode.literal "throw .panic"
   | .condBr c thenBody elseBody =>
-    s!"if {rv c} then {doBlock (emitStmts fc env thenBody.toList)}\nelse \
-      {doBlock (emitStmts fc env elseBody.toList)}"
-  | .switchBr v cases elseBody => emitSwitch fc env v (rv v) cases elseBody
-  | .call callee _ =>
-    let (_, calleeName) := fc.resolveCallee callee
-    match panicErrorFor? calleeName with
-    | some ctor => s!"throw {ctor}"
-    | none => placeholder s!"unchecked noreturn callee {calleeName}"
-  | _ => placeholder "a terminator of another kind"
+    let th := lowerStmts fc env thenBody.toList
+    let el := lowerStmts fc env elseBody.toList
+    EmittedCode.combine s!"if {rv c} then {doBlock th.code}\nelse {doBlock el.code}" #[th, el]
+  | .switchBr v cases elseBody => lowerSwitch fc env v (rv v) cases elseBody
+  | .call callee args => fc.lowerCall env inst callee args
+  | _ => EmittedCode.literal (placeholder "a terminator of another kind")
 
 /-- Shared case selection, with loop-switch state supplied independently of SSA captures. -/
-partial def emitSwitch (fc : FCtx) (env : Array (InstId × String)) (v : Val)
-    (selector : String) (cases : Array SwitchCase) (elseBody : Array Inst) : String :=
+partial def lowerSwitch (fc : FCtx) (env : Array (InstId × String)) (v : Val)
+    (selector : String) (cases : Array SwitchCase) (elseBody : Array Inst) : EmittedCode :=
   match fc.valTy v with
   | .enum _ _ true fields =>
     -- Every name has a case: a `match` with one arm per case, no `else` arm (it is the
@@ -3554,18 +3639,18 @@ partial def emitSwitch (fc : FCtx) (env : Array (InstId × String)) (v : Val)
     let covered := caseNames.flatten
     if cases.all (·.ranges.isEmpty) && fields.all (fun (f, _) => covered.contains (fm f)) &&
         (cases.zip caseNames).all (fun (c, ns) => c.items.size == ns.size) then
-      let arms := (cases.zip caseNames).toList.map fun (c, ns) =>
+      let arms := (cases.zip caseNames).map fun (c, ns) =>
         let pats := String.intercalate " | " (ns.toList.map (s!".{·}"))
-        s!"| {pats} => {doBlock (emitStmts fc env c.body.toList)}"
-      s!"match {selector} with\n{String.intercalate "\n" arms}"
-    else emitSwitchChain fc env v selector cases.toList elseBody
-  | _ => emitSwitchChain fc env v selector cases.toList elseBody
+        (lowerStmts fc env c.body.toList).mapCode fun body => s!"| {pats} => {doBlock body}"
+      EmittedCode.combine s!"match {selector} with\n{String.intercalate "\n" (arms.toList.map (·.code))}" arms
+    else lowerSwitchChain fc env v selector cases.toList elseBody
+  | _ => lowerSwitchChain fc env v selector cases.toList elseBody
 
 /-- `switch_br` as a chain of `if`/`else if` (a `BitVec` value has no numeral match pattern). -/
-partial def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Val)
-    (selector : String) (cases : List SwitchCase) (elseBody : Array Inst) : String :=
+partial def lowerSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Val)
+    (selector : String) (cases : List SwitchCase) (elseBody : Array Inst) : EmittedCode :=
   match cases with
-  | [] => emitStmts fc env elseBody.toList
+  | [] => lowerStmts fc env elseBody.toList
   | c :: rest =>
     let sgn := if fc.valSigned v then "true" else "false"
     let rv := fc.resolveVal env
@@ -3573,10 +3658,26 @@ partial def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Va
     let rangeConds := (c.ranges.map fun (lo, hi) =>
       s!"(Zig.le {sgn} {rv lo} {selector} && Zig.le {sgn} {selector} {rv hi})").toList
     let cond := String.intercalate " || " (itemConds ++ rangeConds)
-    s!"if {cond} then {doBlock (emitStmts fc env c.body.toList)}\nelse \
-      {doBlock (emitSwitchChain fc env v selector rest elseBody)}"
+    let th := lowerStmts fc env c.body.toList
+    let el := lowerSwitchChain fc env v selector rest elseBody
+    EmittedCode.combine s!"if {cond} then {doBlock th.code}\nelse {doBlock el.code}" #[th, el]
 
 end
+
+/-- Code-only rendering APIs project the same active lowering used by full-program emission. -/
+def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) : String :=
+  (lowerStmts fc env insts).code
+
+def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) : String :=
+  (lowerTerminator fc env inst).code
+
+def emitSwitch (fc : FCtx) (env : Array (InstId × String)) (v : Val)
+    (selector : String) (cases : Array SwitchCase) (elseBody : Array Inst) : String :=
+  (lowerSwitch fc env v selector cases elseBody).code
+
+def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Val)
+    (selector : String) (cases : List SwitchCase) (elseBody : Array Inst) : String :=
+  (lowerSwitchChain fc env v selector cases elseBody).code
 
 /-- The captured parameters `(id, name, type)` of a loop's extracted body def. -/
 def FCtx.loopParams (fc : FCtx) (loopInst : Inst) : Array (InstId × String × String) :=
@@ -3586,23 +3687,39 @@ def FCtx.loopParams (fc : FCtx) (loopInst : Inst) : Array (InstId × String × S
   | _ => #[]
 
 /-- The text after `:= ` of a loop's extracted body def, starting with `do`. -/
-def emitLoopBody (fc : FCtx) (loopInst : Inst) : String :=
+def lowerLoopBody (fc : FCtx) (loopInst : Inst) : EmittedCode :=
   let initEnv := (fc.loopParams loopInst).map fun (id, name, _) => (id, name)
+  -- One tick per body run, including its final exit. Both ordinary and dispatch loops use
+  -- this same prefix; pure M bodies have no memory counter (D5).
+  let step := if fc.mem || fc.conc then [s!"  {fc.callMName} Zig.tick"] else []
   match loopInst.op with
   | .loop body =>
-    "do\n" ++ indent 2 (emitStmts fc initEnv body.toList)
+    (lowerStmts fc initEnv body.toList).mapCode fun code =>
+      String.intercalate "\n" (["do"] ++ step ++ [indent 2 code])
   | .loopSwitchBr initial cases elseBody =>
-    let branch := fc.ascribedDo (emitSwitch fc initEnv initial "dispatchValue" cases elseBody)
-    String.intercalate "\n"
-      ["do",
-       s!"  let dispatchValue := (← get).{dispatchFieldName loopInst.id}",
-       s!"  let dispatchExit ← {indentTail 2 branch}",
-       "  match dispatchExit with",
-       s!"  | .dispatch{loopInst.id} dispatchValue => do",
-       s!"    modify fun s => \{ s with {dispatchFieldName loopInst.id} := dispatchValue }",
-       "    pure dispatchExit",
-       "  | _ => pure dispatchExit"]
-  | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
+    (lowerSwitch fc initEnv initial "dispatchValue" cases elseBody).mapCode fun code =>
+      let branch := fc.ascribedDo code
+      String.intercalate "\n"
+        (["do"] ++ step ++ [
+         s!"  let dispatchValue := (← get).{dispatchFieldName loopInst.id}",
+         s!"  let dispatchExit ← {indentTail 2 branch}",
+         "  match dispatchExit with",
+         s!"  | .dispatch{loopInst.id} dispatchValue => do",
+         s!"    modify fun s => \{ s with {dispatchFieldName loopInst.id} := dispatchValue }",
+         "    pure dispatchExit",
+         "  | _ => pure dispatchExit"])
+  | _ => EmittedCode.literal "" -- unreachable: only loop forms have extracted bodies
+
+def emitLoopBody (fc : FCtx) (loopInst : Inst) : String :=
+  (lowerLoopBody fc loopInst).code
+
+def FCtx.loopSignature (fc : FCtx) (loopInst : Inst) :
+    String × Array (String × String) × String :=
+  let name := s!"{fc.fnName}.loop{loopInst.id}"
+  let params := (fc.loopParams loopInst).map fun (_, name, ty) => (name, ty)
+  let binders := String.intercalate " " (params.toList.map fun (n, ty) => s!"({n} : {ty})")
+  (name, params,
+    s!"def {name} {fc.extBinder}{binders} : {fc.monad} {fc.localsName} {fc.exitName} := ")
 
 /-- One `loop` instruction's body as its own top-level def, named `<fnName>.loop<id>` (so a
 proof can refer to it — the point of extracting it at all), taking its captured values
@@ -3610,10 +3727,8 @@ proof can refer to it — the point of extracting it at all), taking its capture
 def emitLoopDef (fc : FCtx) (loopInst : Inst) : String :=
   match loopInst.op with
   | .loop _ | .loopSwitchBr .. =>
-    let paramsStr := String.intercalate " "
-      (((fc.loopParams loopInst).map fun (_, name, ty) => s!"({name} : {ty})").toList)
-    s!"def {fc.fnName}.loop{loopInst.id} {fc.extBinder}{paramsStr} : {fc.monad} {fc.localsName} {fc.exitName} := " ++
-      emitLoopBody fc loopInst
+    let (_, _, header) := fc.loopSignature loopInst
+    header ++ emitLoopBody fc loopInst
   | _ => "" -- unreachable: only loops and loop-switches have extracted bodies
 
 -- `again` is named too: an inline `fun e => match …` gets a fresh matcher per elaboration,
@@ -3643,12 +3758,13 @@ def FCtx.stackBlocks (fc : FCtx) : Array (InstId × String × Nat × Nat) :=
     (aid, field, l.size.getD 0, align)
 
 /-- Shared body text for a definition and its opt-in unfolding theorem. -/
-def emitFunctionBody (fc : FCtx) (localsName exitName : String)
-    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) (ownerCheck : Bool := false) : String :=
-  let bodyStr := emitStmts fc #[] body.toList
+def lowerFunctionBody (fc : FCtx) (localsName exitName : String)
+    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) (ownerCheck : Bool := false) :
+    EmittedCode :=
+  let bodyStr := lowerStmts fc #[] body.toList
   -- The `M`-do-block's `σ`/`ε` never appear as a literal type anywhere inside it (`(← get)`,
   -- `.br<k>`, …), so without this ascription nothing pins them down for the elaborator.
-  let ascribedBody := s!"({doBlock bodyStr} : {fc.monad} {localsName} {exitName})"
+  let ascribedBody := s!"({doBlock bodyStr.code} : {fc.monad} {localsName} {exitName})"
   -- Each escaping local's stack block lives from function entry to the return.
   let stack := fc.stackBlocks
   let allocLines := (stack.map fun (aid, _, size, align) =>
@@ -3671,6 +3787,12 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
   let (enterLines, leaveLines) := if fc.recursive && fc.mem && !fc.conc then
       (["  Zig.enterFrame"], ["  Zig.leaveFrame"])
     else ([], [])
+  -- Original call-group members pay once per entry, independently of their extracted loop
+  -- definitions (which already pay per body run). A lifted CM tick is not a scheduler stop.
+  let tickLines := if !fc.recursive then []
+    else if fc.conc then ["  Zig.ConcM.liftMem Zig.tick"]
+    else if fc.mem then ["  Zig.tick"]
+    else []
   -- A function with `noalias` parameters checks the accesses of each call in a scope
   -- (`ZigLean/Mem/Noalias.lean`).
   let (enterLines, leaveLines) := if fc.naScope then
@@ -3686,10 +3808,14 @@ def emitFunctionBody (fc : FCtx) (localsName exitName : String)
     [s!"  {retArm}"] ++ (if hasNonRetExit then ["  | _ => throw .panic"] else [])
   -- The owner check of a mutex unlock (`ownerCheckedUnlocks`): before any other step.
   let checkLines := if ownerCheck then ["  Zig.mutexOwnerCheck p0"] else []
-  String.intercalate "\n"
-    (["do"] ++ checkLines ++ enterLines ++ allocLines ++
+  bodyStr.mapCode fun _ => String.intercalate "\n"
+    (["do"] ++ checkLines ++ tickLines ++ enterLines ++ allocLines ++
      [s!"  let e ← {indentTail 2 ascribedBody}.run' {init}"] ++ freeLines ++ leaveLines ++
      ["  match e with"] ++ matchLines)
+
+def emitFunctionBody (fc : FCtx) (localsName exitName : String)
+    (retTy : TyId) (body : Array Inst) (hasNonRetExit : Bool) (ownerCheck : Bool := false) : String :=
+  (lowerFunctionBody fc localsName exitName retTy body hasNonRetExit ownerCheck).code
 
 /-- Whether a value of type `root` contains a `target` (`Ty.allocator`, `Ty.io`): the type itself,
 or one reached through a pointer, array, vector, optional, error-union payload, struct, union or
@@ -3752,6 +3878,8 @@ structure FuncParts where
   loops : List String
   defn : String
   body : String
+  /-- Materialization fails for opaque custom code; code-only callers can still render it. -/
+  decls : Except String (Array EmittedDecl)
   /-- The prepared context, for `--proof-api` lemmas over the same text. -/
   ctx : FCtx
 
@@ -3768,7 +3896,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
     { types := f.types, structNames, funcNames,
       allocFields := allocs.map fun (i, n, _) => (i, n), blockTys := blockLoopTys allInsts,
       allInsts, brT := brTargets allInsts, repT := repTargets allInsts,
-      retTy := f.ret, fnName := leanName, localsName := mangleField s!"{plain}Locals",
+       retTy := f.ret, sourceName := f.name, fnName := leanName,
+       localsName := mangleField s!"{plain}Locals",
       exitName := mangleField s!"{plain}Exit", floatSemantics, dialect := f.dialect,
       allocatorModel := f.allocatorModel, targetOs := f.targetOs, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
@@ -3790,11 +3919,11 @@ def mkFCtx (f : Func) (structNames : Array (String × String)) (funcNames : Arra
   }.prepareInstUses.prepareBranchTargets
 
 private def emitOneFunctionWithFallbackMap (f : Func)
-    (spawnFallbackMap : Std.HashMap String String) (structNames : Array (String × String))
+    (spawnFallbackMap : Std.HashMap String EmittedCode) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
-    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[])
+    (spawnFallbacks : Array (String × EmittedCode) := #[]) (rawFuncs : Array String := #[])
     (recursive : Bool := false) (device : Option DeviceContract := none) (naCallee : Bool := false)
     (envFuncs : Array String := #[]) :
     FuncParts :=
@@ -3834,13 +3963,30 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   -- the outer one" needs (`docs/generated-code.md` §Loops).
   let loops := (allInsts.filter fun i => match i.op with | .loop _ | .loopSwitchBr .. => true | _ => false).reverse
   let hasNonRetExit := !brT.isEmpty || !repT.isEmpty || !fc.dispatchTys.isEmpty
-  let functionBody := emitFunctionBody fc localsName exitName f.ret f.body hasNonRetExit
+  let functionBody := lowerFunctionBody fc localsName exitName f.ret f.body hasNonRetExit
     (fc.conc && ownerCheckedUnlocks.contains f.name)
+  let functionHeader := interfacePremiseMarker f ++ emitFunctionHeader fc leanName f.params f.ret
+  let loopParts := loops.map fun inst =>
+    let (name, params, header) := fc.loopSignature inst
+    let body := lowerLoopBody fc inst
+    let decl := body.declaration (.loop f.name inst.id) name params header
+    let code := match decl with | .ok d => d.code | .error _ => header ++ body.code
+    (code, decl)
+  let params := f.params.mapIdx fun i ty => (s!"p{i}", fc.emitTyOf ty)
+  let entry := functionBody.declaration (.function f.name) leanName params functionHeader
+  let functionCode := match entry with
+    | .ok d => d.code
+    | .error _ => functionHeader ++ functionBody.code
+  let decls := do
+    let loopDecls ← loopParts.mapM (·.2)
+    let entry ← entry
+    pure (loopDecls.push entry)
   { types := [localsStr, exitStr]
     agains := (loops.map (emitAgainDef fc)).toList
-    loops := (loops.map (emitLoopDef fc)).toList
-    defn := interfacePremiseMarker f ++ emitFunctionHeader fc leanName f.params f.ret ++ functionBody
-    body := functionBody
+    loops := (loopParts.map (·.1)).toList
+    defn := functionCode
+    body := functionBody.code
+    decls
     ctx := fc }
 
 /-- The loop specification rule at one loop (`docs/generated-code.md`): the library rule of the
@@ -3883,7 +4029,8 @@ abbreviations, the body's unfolding lemma and the `Zig.loop` step lemma. Every e
 exposes the actual emitted text and is kernel checked: by `rfl`, or by the definition's
 equation lemma for a `partial_fixpoint` (recursive) group. No axiom is introduced. Names come
 from the source identity and the loop index (`proofLemmaIndex`), never from AIR IDs. -/
-def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
+private def emitProofApiKnown (f : Func) (p : FuncParts) (recursive : DeclId → Bool)
+    (decls : Array EmittedDecl) : String :=
   let fc := p.ctx
   let base := proofApiName f.name
   -- The definition's environment binders (`FCtx.extBinder`) come first.
@@ -3892,8 +4039,8 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
     envBinders ++ String.join (xs.toList.map fun (name, ty) => s!" ({name} : {ty})")
   let applied (head : String) (xs : Array (String × String)) :=
     head ++ String.join (xs.toList.map fun (name, _) => s!" {name}")
-  let proof (defn : String) (xs : Array (String × String)) :=
-    if recursive then applied s!"{defn}.eq_def" xs else "rfl"
+  let proof (id : DeclId) (defn : String) (xs : Array (String × String)) :=
+    if recursive id then applied s!"{defn}.eq_def" xs else "rfl"
   let params := f.params.mapIdx fun i ty => (s!"p{i}", fc.emitTyOf ty)
   let record := Lean.Json.mkObj ([("format", .str "air2lean-proof-lemmas-v1"),
     ("source", .str f.name), ("definition", .str fc.fnName)] ++ proofLemmaFields f)
@@ -3908,22 +4055,30 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : Bool) : String :=
   let function := String.intercalate "\n" (scalar ++
     ["-- air2lean-proof-lemmas: " ++ record.compress, s!"abbrev {base}_model{envBinders} := {fc.fnName}", "",
      s!"theorem {base}_unfold{binders params} : {applied (base ++ "_model") params} = ({p.body}) :=",
-     s!"  {proof fc.fnName params}"])
+      s!"  {proof (.function f.name) fc.fnName params}"])
   let monad := s!"{fc.monad} {fc.localsName} {fc.exitName}"
   let loops := (proofLoops f).toList.zipIdx.map fun (inst, k) =>
-    let (body, again, bodyUnfold, step, spec) := proofLoopNames base k
-    let defn := s!"{fc.fnName}.loop{inst.id}"
-    let caps := (fc.loopParams inst).map fun (_, name, ty) => (name, ty)
-    let call := applied body caps
-    String.intercalate "\n\n" [
-      s!"abbrev {body}{envBinders} := {defn}",
-      s!"abbrev {again} := {fc.fnName}.again{inst.id}",
-      s!"theorem {bodyUnfold}{binders caps} : {call} = ({emitLoopBody fc inst}) :=\n  {proof defn caps}",
-      s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
-        s!"      ({call} >>= fun e => if {again} e then Zig.loop ({call}) {again} else pure e : {monad}) :=\n" ++
-        "  Zig.loop.eq_1 _ _",
-      loopSpecLemma fc spec binders caps call again]
+    match decls.find? (·.id == .loop f.name inst.id) with
+    | none => placeholder s!"missing lowered declaration for loop {inst.id} of '{f.name}'"
+    | some decl =>
+      let (body, again, bodyUnfold, step, spec) := proofLoopNames base k
+      let defn := decl.name
+      let caps := decl.params
+      let call := applied body caps
+      String.intercalate "\n\n" [
+        s!"abbrev {body}{envBinders} := {defn}",
+        s!"abbrev {again} := {fc.fnName}.again{inst.id}",
+        s!"theorem {bodyUnfold}{binders caps} : {call} = ({decl.body}) :=\n  {proof (.loop f.name inst.id) defn caps}",
+        s!"theorem {step}{binders caps} :\n    (Zig.loop ({call}) {again} : {monad}) =\n" ++
+          s!"      ({call} >>= fun e => if {again} e then Zig.loop ({call}) {again} else pure e : {monad}) :=\n" ++
+          "  Zig.loop.eq_1 _ _",
+        loopSpecLemma fc spec binders caps call again]
   String.intercalate "\n\n" (function :: loops)
+
+def emitProofApi (f : Func) (p : FuncParts) (recursive : DeclId → Bool) : String :=
+  match p.decls with
+  | .ok decls => emitProofApiKnown f p recursive decls
+  | .error reason => placeholder reason
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
 emission shares one prepared map across all functions. -/
@@ -3931,7 +4086,7 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
-    (spawnFallbacks : Array (String × String) := #[]) (rawFuncs : Array String := #[]) :
+    (spawnFallbacks : Array (String × EmittedCode) := #[]) (rawFuncs : Array String := #[]) :
     FuncParts :=
   emitOneFunctionWithFallbackMap f (prepareSpawnFallbackMap spawnFallbacks) structNames funcNames
     floatSemantics memFuncs globalIds fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
@@ -4239,74 +4394,6 @@ def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : B
       s!"  if e.{hn "toBits"} == {tagLit bits v} then pure {slice k f} else"
     String.intercalate "\n" ([head] ++ arms ++ ["  throw .illegal"])
 
-/-! ## Call graph / emission order -/
-
-def dedupNames (a : Array String) : Array String :=
-  a.foldl (fun acc x => if acc.contains x then acc else acc.push x) #[]
-
-def calleesOf (allNames : Array String) (refs : Array (String × String)) (f : Func) :
-    Array String :=
-  let direct := f.allInsts.filterMap fun i => match i.op with
-    -- `spawnFn`: the function `Thread.spawn` runs, not `Thread.spawn` itself (which has no AIR
-    -- and is not in `allNames`) — a spawned function must still be emitted before its spawner.
-    | .call (.func nm _ (some spawnFn)) _ =>
-      if allNames.contains spawnFn then some spawnFn
-      else if allNames.contains nm then some nm else none
-    | .call (.func nm ..) _ => if allNames.contains nm then some nm else none
-    | _ => none
-  dedupNames (direct ++ (f.indirectCallees refs).filter allNames.contains)
-
-/-- DFS post-order over the call graph: a callee before its caller, except inside a cycle. -/
-partial def topoVisit (funcs : Array Func) (allNames : Array String) (refs : Array (String × String))
-    (vo : Array String × Array Func) (name : String) : Array String × Array Func :=
-  let (visited, order) := vo
-  if visited.contains name then (visited, order)
-  else
-    let visited := visited.push name
-    match funcs.find? (·.name == name) with
-    | none => (visited, order)
-    | some f =>
-      let callees := calleesOf allNames refs f
-      let (visited, order) := callees.foldl (topoVisit funcs allNames refs) (visited, order)
-      (visited, order.push f)
-
-def topoOrder (funcs : Array Func) : Array Func :=
-  let allNames := funcs.map (·.name)
-  (allNames.foldl (topoVisit funcs allNames (fnRefs funcs)) (#[], #[])).2
-
-/-- Every function name reachable from `name` by one or more calls. -/
-partial def reachable (funcs : Array Func) (allNames : Array String) (refs : Array (String × String))
-    (name : String) : Array String :=
-  let rec go (seen : Array String) (todo : List String) : Array String :=
-    match todo with
-    | [] => seen
-    | n :: rest =>
-      let next := match funcs.find? (·.name == n) with
-        | some f => (calleesOf allNames refs f).toList.filter (!seen.contains ·)
-        | none => []
-      go (seen ++ next.toArray) (rest ++ next)
-  go #[] [name]
-
-/-- The call-graph groups in emission order: a group is a set of functions that call each other
-(a strongly connected component), and it comes after every group that it calls. The second
-component is `true` if the group is recursive (more than one function, or a self-call). -/
-def callGroups (funcs : Array Func) : Array (Array Func × Bool) :=
-  let allNames := funcs.map (·.name)
-  let reach := allNames.map fun n => (n, reachable funcs allNames (fnRefs funcs) n)
-  let reaches (a b : String) : Bool :=
-    ((reach.find? (·.1 == a)).map (·.2.contains b)).getD false
-  let order := topoOrder funcs
-  -- A group is complete at its last member in DFS post-order (the member where the DFS entered
-  -- the group), and everything that the group calls is finished before that point.
-  let (_, groups) := order.foldl (init := ((#[] : Array String), (#[] : Array (Array Func × Bool))))
-    fun (done, groups) f =>
-      let done := done.push f.name
-      let members := order.filter fun g => g.name == f.name || (reaches f.name g.name && reaches g.name f.name)
-      if members.all (done.contains ·.name) && !groups.any (·.1.any (·.name == f.name)) then
-        (done, groups.push (members, members.size > 1 || reaches f.name f.name))
-      else (done, groups)
-  groups
-
 /-! ## Top level -/
 
 /-- Render one execution from a complete capture. Both dispatch and synchronous
@@ -4331,26 +4418,42 @@ def emitCapturedCallWithStorage (name : String) (args : Array (String × Option 
   | _ => if reads.isEmpty then s!"Zig.ConcM.liftMem (StateT.lift ({term}))" else
       "Zig.ConcM.liftMem (do\n" ++ String.intercalate "\n" reads ++ s!"\n          StateT.lift ({term}))"
 
+/-- The full-program capture-call builder retains the original identity with the actual
+generated call. The code-only API above deliberately exposes no declaration graph. -/
+private def lowerCapturedCallWithStorage (source name : String)
+    (args : Array (String × Option (String × Nat × Option String))) (kind : Nat) : EmittedCode :=
+  EmittedCode.withRefs (emitCapturedCallWithStorage name args kind) #[.function source]
+
 /-- Bind a multi-field capture `a` to the `capture<i>` names of `emitCapturedCallWithStorage`. -/
 def emitCaptureUnpack (size : Nat) : String :=
   let binders := (List.range size).map fun i => s!"capture{i}"
   if size > 1 then s!"let ({String.intercalate ", " binders}) := a; " else ""
 
+private def capturedFallbackBody (size : Nat) (call : String) : String :=
+  s!"fun a => (do {emitCaptureUnpack size}discard ({call}) : Zig.ConcM Tgt Unit)"
+
+private def futureEagerBody (size : Nat) (call : String) : String :=
+  s!"fun a => (do {emitCaptureUnpack size}{call})"
+
 def emitCapturedFallbackWithStorage (name : String) (args : Array (String × Option (String × Nat × Option String)))
     (kind : Nat) : String :=
-  s!"fun a => (do {emitCaptureUnpack args.size}discard ({emitCapturedCallWithStorage name args kind}) : Zig.ConcM Tgt Unit)"
+  capturedFallbackBody args.size (emitCapturedCallWithStorage name args kind)
 
 /-- The caller's eager execution of an `Io.async` task (fallible policy): the complete
 capture, the worker's result. -/
 def emitFutureEager (name : String) (args : Array (String × Option (String × Nat × Option String)))
     (kind : Nat) : String :=
-  s!"fun a => (do {emitCaptureUnpack args.size}{emitCapturedCallWithStorage name args kind})"
+  futureEagerBody args.size (emitCapturedCallWithStorage name args kind)
+
+private def lowerFutureEager (source name : String)
+    (args : Array (String × Option (String × Nat × Option String))) (kind : Nat) : EmittedCode :=
+  (lowerCapturedCallWithStorage source name args kind).mapCode (futureEagerBody args.size)
 
 /-- Only async sites execute a caller fallback. Scan all sites before filtering the
 ordered first-use descriptions: an earlier spawn/concurrent site can share the worker. -/
-def emitSpawnFallbacksWithStorage (funcs : Array Func)
+private def lowerSpawnFallbacksWithStorage (funcs : Array Func)
     (descriptions : Array (String × String × Array (String × Option (String × Nat × Option String)) × Nat)) :
-    Array (String × String) :=
+    Array (String × EmittedCode) :=
   let empty : Std.HashSet String := {}
   let workers := funcs.foldl (fun workers f => f.allInsts.foldl (fun workers i =>
     match i.op with
@@ -4358,7 +4461,16 @@ def emitSpawnFallbacksWithStorage (funcs : Array Func)
       if threadFn? name == some .groupAsync then workers.insert worker else workers
     | _ => workers) workers) empty
   descriptions.filterMap fun (worker, name, args, kind) =>
-    if workers.contains worker then some (worker, emitCapturedFallbackWithStorage name args kind) else none
+    if workers.contains worker then
+      let body := (lowerCapturedCallWithStorage worker name args kind).mapCode
+        (capturedFallbackBody args.size)
+      some (worker, body)
+    else none
+
+def emitSpawnFallbacksWithStorage (funcs : Array Func)
+    (descriptions : Array (String × String × Array (String × Option (String × Nat × Option String)) × Nat)) :
+    Array (String × String) :=
+  (lowerSpawnFallbacksWithStorage funcs descriptions).map fun (worker, body) => (worker, body.code)
 
 /-- Ordinary capture adapters select their existing global dictionaries. -/
 def captureStorageArgs (args : Array (String × Option (String × Nat))) :
@@ -4711,6 +4823,8 @@ structure EmitParts where
   /-- Types, inline assembly, models, globals and `Tgt`: everything the functions share. -/
   preamble : List String
   groups : Array (Array String × Array String × String)
+  /-- The exact lowered declaration SCCs used inside those source distribution groups. -/
+  declGroups : Array DeclGroup
   /-- `dispatch`, which references the spawn targets. -/
   dispatch : List String
   /-- Source names of the functions `dispatch` references. -/
@@ -4724,15 +4838,17 @@ structure EmitParts where
   /-- Each function's certificate shape (`CertShape`). -/
   shapes : Array (String × CertShape) := #[]
 
-/-- The pieces of `funcs → one Lean source file` importing `ZigLean` (`EmitParts.render`).
+/-- Emit a complete original program, using its canonical effect and call-group analysis.
 `prefix_` is stripped from every Zig name (function or struct) before mangling.
 `floatSemantics` selects `--float-semantics` (default `ieee`). -/
-def emitParts (funcs : Array Func) (prefix_ : String)
-    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
+def emitProgramParts (program : Program) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee)
     (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false)
     (device : Option DeviceContract := none) : EmitParts :=
-  let memFuncs := memoryFunctions funcs (models.map (·.symbol))
-  let concFuncs := concFunctions funcs
+  let funcs := program.funcs
+  let models := program.models
+  let memFuncs := program.memFuncs
+  let concFuncs := program.concFuncs
   let envFuncs := envFunctions funcs
   let openTys := (funcs[0]?.map (·.openFnTys)).getD #[]
   let asmDefs := collectAsmOps funcs
@@ -4815,9 +4931,9 @@ def emitParts (funcs : Array Func) (prefix_ : String)
     (nm, name, args, kind, complete, fields.map (captureClass f.types))
   -- Every `Io.Group.async` and `Io.async` call needs the task's caller execution (the eager
   -- outcome) under every spawn policy (`groupAsyncWithPolicyC`, `asyncWithPolicyC`).
-  let spawnFallbacks := emitSpawnFallbacksWithStorage funcs targetDescriptions ++
+  let spawnFallbacks := lowerSpawnFallbacksWithStorage funcs targetDescriptions ++
     futureDescriptions.map fun (nm, name, args, kind, _, _) =>
-      (futureEagerKey nm, emitFutureEager name args kind)
+      (futureEagerKey nm, lowerFutureEager nm name args kind)
   let spawnFallbackMap := prepareSpawnFallbackMap spawnFallbacks
   let (tgtStr, dispatchStr) := if concFuncs.isEmpty then ([], []) else
     emitTgtWithStorage structNames extendedCapture (targetDescriptions.map fun (_, name, args, kind) => (name, args, kind))
@@ -4834,42 +4950,75 @@ def emitParts (funcs : Array Func) (prefix_ : String)
   -- Every function that a function with `noalias` parameters may call (`FCtx.noalias`).
   let naCallees := dedupNames ((funcs.filter (!·.noalias.isEmpty)).flatMap fun f =>
     reachable funcs allNames refs f.name)
-  let groupParts := (callGroups funcs).map fun (members, recursive) =>
+  let groupParts := program.groups.map fun (members, recursive) =>
     (members, recursive, members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device
         (naCallees.contains f.name) envFuncs)
   let shapes := groupParts.flatMap fun (members, _, parts) =>
     (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)
-  let groups := groupParts.map fun (members, recursive, parts) =>
+  let sourceOwners : Std.HashMap String Nat := groupParts.zipIdx.foldl
+    (fun owners ((members, _, _), index) =>
+      members.foldl (fun owners f => owners.insert f.name index) owners) {}
+  let lowered : Except String
+      (Array DeclGroup × Array (Array DeclGroup) × Std.HashSet DeclId) := do
+    let decls ← groupParts.foldlM (init := #[]) fun decls (_, _, parts) => do
+      parts.foldlM (init := decls) fun decls part => do
+        pure (decls ++ (← part.decls))
+    let groups := (Graph.callGroupsBy decls (·.id) (·.refs)).map fun (members, recursive) =>
+      ({ members, recursive } : DeclGroup)
+    let mut byOwner : Array (Array DeclGroup) := Array.replicate groupParts.size #[]
+    let mut recursiveIds : Std.HashSet DeclId := {}
+    for group in groups do
+      let some first := group.members[0]? | throw "an empty executable declaration SCC"
+      let some owner := sourceOwners[first.id.sourceName]?
+        | throw "an executable declaration has no original source distribution group"
+      -- Lowering only removes original call edges or extracts helpers within their owner.
+      unless group.members.all (fun decl => sourceOwners[decl.id.sourceName]? == some owner) do
+        throw "an executable declaration SCC crosses original source distribution groups"
+      byOwner := byOwner.modify owner (·.push group)
+      if group.recursive then
+        for decl in group.members do recursiveIds := recursiveIds.insert decl.id
+    pure (groups, byOwner, recursiveIds)
+  let (declGroups, byOwner, recursiveIds, loweringErrors) := match lowered with
+    | .ok (groups, byOwner, recursiveIds) => (groups, byOwner, recursiveIds, [])
+    | .error reason => (#[], Array.replicate groupParts.size #[], {}, [placeholder reason])
+  let groups := groupParts.mapIdx fun index (members, _, parts) =>
     let names := members.map (·.name)
     let callees := dedupNames (members.flatMap (calleesOf allNames refs)) |>.filter (!names.contains ·)
-    let text := if recursive then
-      -- `partial_fixpoint` on every def of the group: the loop defs too, since a loop body can
-      -- call a group member. Types and `again` defs do not recurse, so they come first.
-      let fix (d : String) := s!"{d}\npartial_fixpoint"
-      let defs := parts.flatMap fun p => (p.loops ++ [p.defn]).map fix
-      String.intercalate "\n\n"
-        (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ ["mutual"] ++ defs ++ ["end"] ++
-          (if proofApi then (members.toList.zip parts).map fun (f, p) => emitProofApi f p true
-           else []))
-    else
-      String.intercalate "\n\n" ((members.toList.zip parts).flatMap fun (f, p) =>
-        p.types ++ p.agains ++ p.loops ++ [p.defn] ++
-          (if proofApi then [emitProofApi f p false] else []))
+    let executable := byOwner[index]!
+    let declarations := executable.toList.map fun group =>
+      let defs := group.members.toList.map (·.code)
+      if group.recursive then
+        String.intercalate "\n\n" (["mutual"] ++
+          defs.map (fun code => s!"{code}\npartial_fixpoint") ++ ["end"])
+      else String.intercalate "\n\n" defs
+    let text := String.intercalate "\n\n"
+      (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ declarations ++
+        (if proofApi then (members.toList.zip parts).map fun (f, p) =>
+          emitProofApi f p recursiveIds.contains else []))
     (names, callees, text)
   { header := ["import ZigLean"] ++ (models.map (fun m => s!"import {m.importModule}")).toList ++
       (if spawnSemantics == .fallible then ["/- Thread assignment policy: fallible; all declared spawn errors and Io.Group caller fallback are modeled. -/"] else [])
     -- A big-endian profile: the big-endian encodings (`ZigLean/Endian.lean`, T03).
     opens := wasm32Open funcs ++ (if funcs.any (·.dialect.bigEndian) then ["open scoped Zig.BigEndian"] else [])
-    preamble := structsStr ++ asmStr ++ modelStr ++ (device.map DeviceContract.emitDef).toList ++
+    preamble := loweringErrors ++ structsStr ++ asmStr ++ modelStr ++ (device.map DeviceContract.emitDef).toList ++
       (errorTable.map emitErrorTable).toList ++ globalsStr ++ tgtStr
     groups
+    declGroups
     dispatch := dispatchStr
     -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
     dispatchTargets := if dispatchStr.isEmpty then #[] else
       targets.map (·.1) ++ futures.map (·.1)
     declNames := ownFuncNames, memFuncs, concFuncs, shapes }
+
+/-- Convenience entry point for callers with checked source functions and model bindings. The
+CLI shares the constructed `Program` with reference semantics and certificates directly. -/
+def emitParts (funcs : Array Func) (prefix_ : String)
+    (floatSemantics : FloatSemantics := .ieee) (models : Array ModelBinding := #[])
+    (spawnSemantics : SpawnSemantics := .available) (proofApi : Bool := false)
+    (device : Option DeviceContract := none) : EmitParts :=
+  emitProgramParts ⟨funcs, models⟩ prefix_ floatSemantics spawnSemantics proofApi device
 
 /-- The single-file output: every part in order under one `namespace`. -/
 def EmitParts.render (p : EmitParts) (ns : String) : String :=

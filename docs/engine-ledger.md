@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 144 rows, 57 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 146 rows, 59 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -21,6 +21,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
+| [canonical-tick-certification](#row-canonical-tick-certification) | Match emitted ticks with canonical full-memory AIR certificates | Task09 L8b-2 emitter draft; PR393 comments 6270932171 and 6278792907 | - | - |
+| [protocol-tick-transport](#row-protocol-tick-transport) | Transport protocol observations and caller resources across composite ticks | Task09 L8b-2; Task07 challenges; PR393 comments 6271005146 and 6278792907 | - | - |
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
@@ -188,6 +190,28 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
+
+<a id="row-canonical-tick-certification"></a>
+### #canonical-tick-certification Match emitted ticks with canonical full-memory AIR certificates
+
+Status: **open**. Requester: Task09 L8b-2 emitter draft; PR393 comments 6270932171 and 6278792907.
+
+Note: The approval excludes the separate STK factual schema, authenticated producer/case boundary and carrier reductions. Checks retain their actual source bindings. For a source-present modeled panic, mangling currently produces a placeholder first; a missing induction theorem is a predicted later completeness failure after source-identity lowering, not an observed current one (PR510/6285634841). Native SCC/effects/cost policy stays canonical; derived executable function/helper references serve proof partition only.
+
+Progress: Maintainer approved A/1a on PR510/6284852746. Foundation passed Program/Memory/Reify/importers and 17 kernel analysis/catalog controls (report87b4d6e9). The later shared-graph Program and Sem/SemView/CanonSem modules also compiled; the RenumberOracle leaf remains unqualified after default-depth/heartbeat reduction failures, with no cap increase or statement weakening. Claude agreed the exact private-Gen preparation and existing-Assurance factual query (6286510181/6286614200): same-renderer executable clique membership, compiler EqnInfo order/permutations/actual induction binders, standard run_meta, no new proof interface or audit admission. That source wave and six confined mocked preparation controls are present; actual Emit/certificate/helper/sumTo qualification, official regeneration and affected consumers remain pending. The draft is not ready.
+
+Request: Derive one canonical instrumentation policy from existing whole-program memory/concurrency and original call-group classification, and use it consistently in Emit, Sem and Certificate for every supported version/backend and translate-c input. Preserve pure M/Result and viewed-slice behavior, exact full-Mem equality in loop/function certificates, and fail-closed excluded fragments. Exact boundary: a memory loop body that exits immediately now emits Zig.tick and returns ticks+1, while current Sem.execLoop/Certificate.loopCert return the old ticks. Unconditionally ticking Sem also changes pure/viewed certificates. Do not erase counters, add an unchecked caller Boolean/premise, duplicate graph analysis, reject previously supported memory loops, or claim support for the existing recursive-memory stack-frame certificate gap. Add matched positive and fail-closed controls before qualifying generated artifacts.
+
+<a id="row-protocol-tick-transport"></a>
+### #protocol-tick-transport Transport protocol observations and caller resources across composite ticks
+
+Status: **open**. Requester: Task09 L8b-2; Task07 challenges; PR393 comments 6271005146 and 6278792907.
+
+Note: A/1a/1b are approved, not pending. Source implementation and every actual public old-to-new statement still require review and causal qualification. No old unticked-runtime bug, new premise, per-client proof walk or completed cost proof is claimed.
+
+Progress: Maintainer approved composite ticks1b on PR510/6284852746; primitive atomic/futex Step/Aux remain exact. Generic caller-part Fits/kstep/IoMutex transport, Handoff/Linux ThreadMutex and genuine retained/copied Plain through MutexCounter/SnapshotCache/IoGroup are source-implemented and independently reviewed, uncompiled. IoGroup keeps unchanged immutable MainPart ownership in framed rest and collects actual child parts. Claude agreed existing native framing suffices for Darwin on PR510/6287119784: generic Fits.wp_preservePart now derives actual spatial caller ownership and arbitrary assertions from the returned Full invariant, and Darwin lock_wp uses the real exact-part/Plain frame. Its wrapper has no emitted tick; STD-06/OSL-01 debt is unchanged. The rejected ignored-Plain adapter stays unapplied; no nil-Plain/cost=None admission, new model or premise. Task07 Cond integration, D3/D5 and current Full/client kernel qualification remain pending.
+
+Request: Use existing Full triples and fsym to pay each composite tick from the current caller part and re-establish arbitrary observation U and the protocol invariant at exact m.ticked and the actual resulting setPart ghost state. Frame the complete held/protected resource, phase/role, rest and other threads. Preserve native LockWord.Step and Mem.Aux. Exact boundary: U(m):m.ticks=0 is stable under current native Step, whose Aux fixes ticks, but not after a tick from zero. Plain availability alone does not prove U transport; cost=None does not imply unmetered/Plain. A metered operation must expose its actual setPart post, not the original exact ghost state, and admission must cover internal busy phases rather than require lock-code ok. Resolve the common construction obligation without a new judgment, tactic, hidden premise or module-specific automation. Every approved public statement correction must list old/new contracts and carry D5 no-cost-bound reporting in the same correcting PR.
 
 <a id="row-case-family-enrollment"></a>
 ### #case-family-enrollment Remove transitional golden case-family enrollment markers

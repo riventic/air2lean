@@ -38,8 +38,8 @@ decoded AIR:
 | Straight-line ops | `evalPure : Func → Env → Inst → Result Value` (arithmetic, comparisons, casts) and `evalMem : … → MemM Value` (loads, stores, field pointers, pointer casts and comparisons) |
 | Control flow | `execBody`/`execInst`/`execSwitch`/`execLoop : … → Zig.MM Frame Exit`, well-founded recursion over the nested bodies; `Exit` is `br target value`, `repeat target` or `ret value`; `loop` is `execLoop`, `Zig.loop` of the body |
 | Memory | ZigLean's `Zig.Mem` (`Zig.MemM`); the state of a body is its `Frame`: the stack blocks it allocated (freed at `ret`) and its register locals' cells ([§Locals](#locals)) |
-| Function | `execFunc call f args`: arguments checked against the parameter types (`argsOk`) |
-| Program | `run p`: the least fixpoint (`partial_fixpoint`) of `execFunc` over a call oracle |
+| Function | `execFunc p call f args`: arguments checked against the parameter types (`argsOk`), with the complete original program's execution policy |
+| Program | `Program` contains the original functions and validated model inputs; `run p` is the least fixpoint (`partial_fixpoint`) of `execFunc` over its actual lookup |
 | Bottom | `stuck` (`Option.none`): non-termination and every out-of-fragment or ill-typed step |
 
 Why a function: a decoded AIR function is deterministic given the memory, and ZigLean already
@@ -56,6 +56,25 @@ emission certificate cannot identify that result with a defined generated comput
 A canonicalization equality alone can hold when both sides are stuck; it does not establish
 native behavior outside the interpreter's fragment.
 
+### Canonical program and step costs
+
+The existing memory/concurrency analysis and original call-group analysis are shared in
+`Program`. Their input is the complete checked translation program and its validated model
+bindings, before certificate selection or extracted loop helpers. Emission, interpretation
+and certificate construction consume that same value. A certificate cannot supply a separate
+policy bit, effects list or call graph. The finite analysis is kernel reducible, so its
+classification in a generated certificate is checked rather than admitted.
+
+Every memory/concurrent loop-body invocation starts with `Zig.tick`, including an iteration
+that exits immediately. Each original recursive memory/concurrent member also ticks at
+function entry, even when it takes its base branch. An extracted loop helper is not another
+original recursive member. Pure functions and their slice views remain unticked. A tick
+advances the actual memory counter; exact certificates retain this field. The existing
+recursive-memory stack-budget exclusion remains an exclusion, not a newly certified case.
+Ticks alone establish no cost bound: a bound additionally requires a proof with the relevant
+resources. These rules implement the maintainer's A/1a decision recorded on
+[PR #510](https://github.com/riventic/air2lean/pull/510#issuecomment-6284852746).
+
 ### Emission preservation (V02): a certificate per function
 
 Two ways to prove emission correct: a **verified emitter** (prove `Emit.lean` once, for a fixed
@@ -64,23 +83,47 @@ string generator with many strategies per construct; proving it would mean re-im
 in a provable form. Translation validation keeps the emitter as it is and makes it untrusted:
 `--air-certificate` writes, beside `Gen.lean`, a Lean file that the kernel checks.
 
-For each function `f` in the certificate fragment the file contains the decoded AIR `air_f`
-(printed term, checked to be the decoded golden AIR) and:
+The file first quotes every original function and validated model input with constructor
+terms (`Reify`), including bodies outside the proof fragment. The complete `program` owns
+lookup and derived classification. For each selected function `f`, `air_f` names that original
+function; native round-trip checks compare the complete program to the decoded golden AIR.
+The file then contains:
 
-* `f_step`: `(execFunc call air_f [args]).run m` equals the generated definition's result:
+* `f_step`: `(execFunc program call air_f [args]).run m` equals the generated definition's result:
   `(fun v => (enc v, m)) <$> Gen.f args` for a function in `Zig.Result`, or
   `(fun r => (enc r.1, r.2)) <$> (Gen.f args).run m` for a function in `Zig.MemM` (same memory
   before and after). With certified callees, the generated program (`gen`) answers the calls.
 * `f_fix`, `gen_fixpoint`, `run_le_gen`: the generated program satisfies every certified
-  function's equation, so the program semantics is below it.
+  function's equation. `runOn program table` restricts lookup to the certified names while
+  retaining the complete original program's policy; its semantics is below the generated
+  oracle. The table contains names, not substituted bodies or another analysis input.
 * `f_run` (no certified calls) or `f_sound` + `f_complete` + `f_eq` (calls, recursion):
-  **equality** of `run` (the least fixpoint of the AIR program) and the generated definition.
+  **equality** of that selected-domain least fixpoint and the generated definition. The
+  unrestricted `run program` remains the meaning of the complete source program.
 
 The proofs are generic: one `simp only` with the `air_sem` simp set (`Air2Lean/SemAttr.lean`)
 after one unfolding of the generated definition, and fixpoint induction over a generated
 `partial_fixpoint` clique for completeness. Nothing in a certificate is chosen per function
 by hand: the generator emits the same proof script for every function in the fragment, and a
 function the script cannot normalize fails `lake build`, it is not silently skipped.
+
+For an executable partial-fixpoint clique, certificate construction automatically compiles
+the current renderer's exact module bytes in a private module root. The existing
+`tools/Assurance` reader returns Lean's actual `EqnInfo.declNames`, fixed-parameter
+permutations and induction theorem binders through Lean's existing `run_meta`. Compiler
+metadata orders the proof; it grants no premise or assurance admission. The kernel still
+checks the certificate. Membership must match the same renderer's executable declarations,
+including loop helpers and actual call lowering. Original `Program` SCCs remain the sole
+native cost/effect policy. Source, toolchain, lookup and fresh artifact identities are bound
+before and after the query; an ambient or stale Gen is never substituted. If there is no
+executable recursive clique, construction needs no compiler query.
+
+This keeps a fresh one-shot `--air-certificate` invocation usable inside the air2lean Lean
+workspace, including split-module outputs. The exact module plan is reused for publication.
+Certificate, timing, source-map, manifest and generated module destinations must be distinct
+portable names (case-insensitive, like the split-module name allocator). Existing aliases
+are resolved before writes; dangling aliases and hard-linked regular output files refuse
+with a diagnostic, rather than allowing a later sidecar write to alter a prepared module.
 
 Per instruction family, the emission strategy and its proof obligation:
 
@@ -100,12 +143,14 @@ Per instruction family, the emission strategy and its proof obligation:
 
 ### Loops
 
-The semantics runs a loop as `execLoop c id body env`, which is `Zig.loop (execBody c body env)
+The semantics runs a loop as `execLoop c id body env`, which is `Zig.loop (execIteration c body env)
 (Exit.again id)` over the frame and `Exit`; the generated code runs `Zig.loop (f.loop<n>
 captured…) f.again<n>` over its `Locals` state and its own exit type `fExit`. `execLoop` is a
 definition of its own that the certificate's simp set does not unfold, so a whole loop is
 rewritten by its lemma instead of being expanded. The machinery, in `Sem.lean` (proved once) and
-generated per loop (`Certificate.loopCert`):
+generated per loop (`Certificate.loopCert`). `execIteration` includes the canonical tick
+prefix in memory mode, so its one-iteration equality covers the full returned memory,
+including the final-exit tick:
 
 1. an **exit encoding** `enc_f : fExit → Exit` (`.br<n> v ↦ .br n (enc v)`, `.rep<n> ↦ .rep n`,
    `.ret v ↦ .ret (enc v)`), printed from the emitter's exit table (`CertShape`);

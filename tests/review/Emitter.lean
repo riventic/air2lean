@@ -313,10 +313,301 @@ private def keywordField (keyword : String) : Json :=
       inst 1 "struct_field_val" 0 #[ref 0] [("index", num 0)],
       inst 2 "call" 0 #[ref 1] [("callee", obj [("func", .str keyword)])], inst 3 "ret" 2 #[ref 2]]
 
+/-- Real pointer/atomic reads establish MM/CM through the complete checked program. The
+controls may return without taking their read branch; classification remains static. -/
+private def tickTypes : Array Json :=
+  #[intTy 8, ptrTy 0, obj [("k", .str "bool")], voidTy, nrTy]
+
+private def tickRead (name : String) (atomic : Bool) : Json :=
+  file name tickTypes #[1] 0
+    #[inst 10 "arg" 1 #[] [("param", num 0)],
+      inst 20 (if atomic then "atomic_load" else "load") 0 #[ref 10]
+        (if atomic then [("order", .str "acquire")] else []),
+      inst 30 "ret" 4 #[ref 20]]
+
+private def tickReadBranch (name reader : String) (body : Array Json) : Json :=
+  file name tickTypes #[1, 0, 2] 0
+    #[inst 10 "arg" 1 #[] [("param", num 0)], inst 20 "arg" 0 #[] [("param", num 1)],
+      inst 30 "arg" 2 #[] [("param", num 2)], inst 35 "cond_br" 4 #[ref 30]
+        [("then", .arr #[inst 36 "call" 0 #[ref 10] [("callee", obj [("func", .str reader)])],
+          inst 37 "ret" 4 #[ref 36]]), ("else", .arr body)]]
+
+/-- `read` can return before the loop. Otherwise an ordinary loop exits at its first body
+run, or a dispatch loop changes selector 0 to 1 and exits on its second body run. -/
+private def tickLoop (name reader : String) (dispatch : Bool) : Json :=
+  let body := if dispatch then
+      inst 40 "loop_switch_br" 4 #[ref 20]
+        [("cases", .arr #[
+          obj [("items", .arr #[lit 0 "0"]), ("ranges", .arr #[]), ("body", .arr #[
+            inst 50 "switch_dispatch" 4 #[lit 0 "1"] [("target", num 40)]])],
+          obj [("items", .arr #[lit 0 "1"]), ("ranges", .arr #[]),
+            ("body", .arr #[inst 60 "ret" 4 #[lit 0 "17"]])]]),
+         ("else", .arr #[inst 70 "ret" 4 #[lit 0 "99"]])]
+    else inst 40 "loop" 4 #[] [("body", .arr #[inst 50 "ret" 4 #[lit 0 "17"]])]
+  tickReadBranch name reader #[body]
+
+/-- The original function is recursive even on a base return. Its optional extracted loop
+helper belongs to the emitted fixpoint group, but must not gain another function-entry tick. -/
+private def tickRecursive (name reader : String) (loop : Bool) : Json :=
+  let body := #[inst 50 "cmp_eq" 2 #[ref 20, lit 0 "0"], inst 60 "cond_br" 4 #[ref 50]
+    [("then", .arr #[inst 70 "ret" 4 #[lit 0 "17"]]),
+     ("else", .arr #[inst 80 "sub_wrap" 0 #[ref 20, lit 0 "1"],
+       inst 90 "call" 0 #[ref 10, ref 80, ref 30] [("callee", obj [("func", .str name)])],
+       inst 100 "ret" 4 #[ref 90]])]]
+  tickReadBranch name reader
+    (if loop then #[inst 40 "loop" 4 #[] [("body", .arr body)]] else body)
+
+private def tickPureRecursive : Json :=
+  file "tickPureRecursive" tickTypes #[0] 0
+    #[inst 10 "arg" 0 #[] [("param", num 0)], inst 20 "cmp_eq" 2 #[ref 10, lit 0 "0"],
+      inst 30 "cond_br" 4 #[ref 20]
+        [("then", .arr #[inst 40 "ret" 4 #[lit 0 "17"]]),
+         ("else", .arr #[inst 50 "sub_wrap" 0 #[ref 10, lit 0 "1"],
+           inst 60 "call" 0 #[ref 50] [("callee", obj [("func", .str "tickPureRecursive")])],
+           inst 70 "ret" 4 #[ref 60]])]]
+
+private def tickViewLoop : Json :=
+  file "tickViewLoop" #[intTy 8, ptrTy 0 true "slice", intTy 64, nrTy] #[1] 0
+    #[inst 0 "arg" 1 #[] [("param", num 0)], inst 10 "loop" 3 #[]
+      [("body", .arr #[inst 20 "slice_elem_val" 0 #[ref 0, lit 2 "0"], inst 30 "ret" 3 #[ref 20]])]]
+
+/-- Finite analysis controls use synthetic IR, not an asserted native correspondence.
+They are kernel reductions of the same original `Program` consumed by emission and semantics. -/
+private def graphFunc (name : String) (ops : Array Op := #[]) : Func :=
+  { dialect := .ofVersion .v0_17_0, name, params := #[], ret := 0,
+    body := (ops.mapIdx fun id op => { id, ty := 0, op }).push
+      { id := ops.size, ty := 0, op := .ret .void },
+    types := #[.void], layouts := #[{}], globals := #[] }
+
+private def graphCall (name : String) : Op := .call (.func name false) #[]
+
+/-- Generic declaration keys use the same engine as original functions. Duplicate edges keep
+first discovery order, and references outside the node set do not change its components. -/
+private def graphKeyed : Array (Nat × Array Nat) :=
+  #[(1, #[2, 2, 99]), (2, #[1]), (3, #[])]
+
+example : ((Graph.topoOrderBy graphKeyed Prod.fst Prod.snd).map Prod.fst) = #[2, 1, 3] ∧
+    Graph.reachableBy graphKeyed Prod.fst Prod.snd 1 = #[2, 1] ∧
+    ((Graph.callGroupsBy graphKeyed Prod.fst Prod.snd).map fun (members, recursive) =>
+      (members.map Prod.fst, recursive)) = #[(#[2, 1], true), (#[3], false)] := by
+  decide +kernel
+
+example : Graph.callGroupsBy (#[] : Array (Nat × Array Nat)) Prod.fst Prod.snd = #[] ∧
+    Graph.reachableBy graphKeyed Prod.fst Prod.snd 99 = #[] := by decide +kernel
+
+/-- The pre-existing explicit-name traversal still reports an admitted name without a body. -/
+example : (topoVisit #[graphFunc "caller" #[graphCall "external"]] #["caller", "external"] #[]
+      (#[], #[]) "caller").1 = #["caller", "external"] ∧
+    reachable #[graphFunc "caller" #[graphCall "external"]] #["caller", "external"] #[] "caller" =
+      #["external"] := by decide +kernel
+
+private def graphChain : Program :=
+  ⟨(Array.range 9).map fun i => graphFunc s!"chain{i}"
+    (if i == 8 then #[.retAddr] else #[graphCall s!"chain{i + 1}"]), #[]⟩
+
+example : graphChain.memFuncs =
+    #["chain8", "chain7", "chain6", "chain5", "chain4", "chain3", "chain2", "chain1", "chain0"] := by
+  decide +kernel
+
+example : (topoOrder graphChain.funcs).map (·.name) =
+    #["chain8", "chain7", "chain6", "chain5", "chain4", "chain3", "chain2", "chain1", "chain0"] := by
+  decide +kernel
+
+example : graphChain.ticked "chain0" = true ∧ graphChain.entryTicked "chain0" = false ∧
+    graphChain.ticked "absent" = false := by decide +kernel
+
+private def graphSelf : Program :=
+  ⟨#[graphFunc "self" #[graphCall "self", .retAddr]], #[]⟩
+
+example : graphSelf.recursive "self" = true ∧ graphSelf.entryTicked "self" = true := by decide +kernel
+
+private def graphPureSelf : Program :=
+  ⟨#[graphFunc "pureSelf" #[graphCall "pureSelf"]], #[]⟩
+
+example : graphPureSelf.recursive "pureSelf" = true ∧
+    graphPureSelf.ticked "pureSelf" = false ∧ graphPureSelf.entryTicked "pureSelf" = false := by
+  decide +kernel
+
+private def graphMutual : Program :=
+  ⟨#[graphFunc "first" #[graphCall "second"],
+     graphFunc "second" #[graphCall "first", .retAddr],
+     graphFunc "outside" #[graphCall "first"]], #[]⟩
+
+example : graphMutual.entryTicked "first" = true ∧
+    graphMutual.entryTicked "second" = true ∧ graphMutual.entryTicked "outside" = false := by
+  decide +kernel
+
+/-- Dropping an unsupported member from a certificate fragment would lose this recursion;
+the canonical policy must keep the original mutual group instead. -/
+example : (Program.recursive ⟨#[graphMutual.funcs[0]], #[]⟩ "first") = false ∧
+    graphMutual.recursive "first" = true := by decide +kernel
+
+private def graphIndirectGlobal : Global where
+  name := some "targetRef"
+  ty := 1
+  isConst := true
+  threadlocal := false
+  isExtern := false
+  init := some (.func "target" false)
+
+private def graphIndirectCaller : Func :=
+  { graphFunc "indirect" with
+    params := #[2], types := #[.void, .other "fn () void", .ptr "one" true 1],
+    layouts := #[{}, {}, {}],
+    body := #[{ id := 0, ty := 2, op := .arg 0 },
+      { id := 1, ty := 0, op := .call (.inst 0) #[] },
+      { id := 2, ty := 0, op := .ret .void }],
+    globals := #[graphIndirectGlobal] }
+
+private def graphIndirect : Program :=
+  ⟨#[graphIndirectCaller, graphFunc "target" #[graphCall "indirect"]], #[]⟩
+
+example : (calleesOf (graphIndirect.funcs.map (·.name)) (fnRefs graphIndirect.funcs)
+    graphIndirectCaller) = #["target"] ∧ graphIndirect.recursive "indirect" = true ∧
+    graphIndirect.recursive "target" = true := by decide +kernel
+
+private def graphSpawn : Program :=
+  ⟨#[graphFunc "spawner" #[.call (.func "Thread.spawn" false (some "worker")) #[]],
+     graphFunc "worker"], #[]⟩
+
+/-- The worker edge is original source context; the absent std wrapper is not invented. -/
+example : (topoOrder graphSpawn.funcs).map (·.name) = #["worker", "spawner"] ∧
+    (calleesOf (graphSpawn.funcs.map (·.name)) (fnRefs graphSpawn.funcs)
+      graphSpawn.funcs[0]) = #["worker"] ∧ (graphSpawn.lookup "Thread.spawn").isNone = true := by
+  decide +kernel
+
+private def graphNested : Func :=
+  let loop : Inst := ⟨21, 0, .loop #[⟨22, 0, .retAddr⟩]⟩
+  let err : Inst := ⟨23, 0, .«try» .void #[⟨24, 0, .retAddr⟩]⟩
+  graphFunc "nested" #[.block #[⟨20, 0, .condBr (.bool true) #[loop] #[err]⟩]]
+
+example : graphNested.allInsts.map (·.id) = #[0, 20, 21, 22, 23, 24, 1] ∧
+    graphNested.usesMemoryLocally = true := by decide +kernel
+
+private def graphNestedAtomic : Func :=
+  let branch : SwitchCase := {
+    items := #[.bool false]
+    ranges := #[]
+    body := #[⟨21, 0, .atomicLoad (.ptrInt 0 16) .monotonic⟩] }
+  let dispatch : Inst := ⟨20, 0, .loopSwitchBr (.bool false) #[branch] #[⟨22, 0, .ret .void⟩]⟩
+  graphFunc "nestedAtomic" #[.block #[dispatch]]
+
+example : graphNestedAtomic.allInsts.map (·.id) = #[0, 20, 21, 22, 1] ∧
+    (Program.concurrent ⟨#[graphNestedAtomic], #[]⟩ "nestedAtomic") = true := by decide +kernel
+
+example : hasPtr #[.optional 1, .array 2 2 false, .tuple #[3], .ptr "one" true 4, .bool] 0 = true ∧
+    hasPtr #[.optional 1, .tuple #[0]] 0 = false := by decide +kernel
+
+example : (Val.agg 0 #[.optSome 1 (.agg 2 #[.undef 3])]).hasNestedUndef = true ∧
+    (Val.agg 0 #[.unionVal 1 0 (.ptrInt 2 16)]).pointsToMem = true ∧
+    (Val.sliceConst 0 (.ptrInt 1 16) (.undef 2)).hasUndefExcept (fun _ => false) = true := by
+  decide +kernel
+
+/-- Last-match selection must precede allocator-mode filtering, even for duplicate names. -/
+private def graphModelRows : Array StdModel := #[
+  { symbol := "same", kind := .alloc .alloc, allocatorModel := some .std },
+  { symbol := "other", kind := .thread .spawn },
+  { symbol := "same", kind := .thread .join, allocatorModel := some .translated }]
+
+example : ((graphModelRows.findRev? (·.symbol == "same")).map (·.kind) ==
+      some (StdModelKind.thread .join)) = true ∧
+    ((graphModelRows.findRev? (·.symbol == "same")).filter (·.activeIn .std)).isNone = true ∧
+    (graphModelRows.findRev? (·.symbol == "absent")).isNone = true ∧
+    (anyStdModel? "absent").isNone = true := by decide +kernel
+
+private def sameStdModel (a b : StdModel) : Bool :=
+  a.symbol == b.symbol && a.kind == b.kind && a.dependencies == b.dependencies &&
+    a.allocatorModel == b.allocatorModel && a.premise == b.premise &&
+    a.reviewed.map (fun r => (r.zigVersion, r.file, r.sha256)) ==
+      b.reviewed.map (fun r => (r.zigVersion, r.file, r.sha256))
+
+/-- Every catalog row retains its complete data through canonical and anonymous lookup in
+both allocator modes; the rejected family participates alongside allocator, thread and OS rows. -/
+example : stdModels.all (fun row => #[row.symbol, row.symbol ++ "__anon_7"].all fun name =>
+    (anyStdModel? name).any (sameStdModel row) &&
+      #[AllocatorModel.std, .translated].all fun mode =>
+        match stdModel? name mode with
+        | none => !row.activeIn mode
+        | some selected => row.activeIn mode && sameStdModel row selected) = true := by
+  decide +kernel
+
+example : (threadFn? "Io.Future(error{Canceled}!u32).cancel" == some .futureCancel) = true ∧
+    (anyStdModel? "Io.Select(u32).cancel").map (·.symbol) = some "Io.Select.cancel" := by
+  decide +kernel
+
+example : stdModelBase "" = "" ∧ stdModelBase "λ__anon_3" = "λ" ∧
+    stdModelBase "___anon_3__anon_4" = "_" ∧
+    stdModelBase "Io.Future(fn (u8).u32).cancel__anon_7" = "Io.Future.cancel" ∧
+    stdModelBase "Io.Select(λ)." = "Io.Select." ∧
+    stdModelBase "Io.Future(T)" = "Io.Future(T)" ∧
+    stdModelBase "Io.Future(__anon_7).cancel" = "Io.Future(" ∧
+    stdModelBase "project.Io.Future(T).cancel" = "project.Io.Future(T).cancel" := by
+  decide +kernel
+
+/-- The previous normalizer is retained only as a regression oracle in this source driver. -/
+private def previousStdModelBase (name : String) : String :=
+  let base := (name.splitOn "__anon_").head!
+  let generic (ty : String) : Option String := do
+    unless base.startsWith (ty ++ "(") do none
+    let parts := base.splitOn ")."
+    unless parts.length ≥ 2 do none
+    some s!"{ty}.{parts.getLast!}"
+  ((generic "Io.Future").orElse fun _ => generic "Io.Select").getD base
+
+private def checkStdModelNormalization : IO Unit := do
+  let edgeCases := #["", "λ__anon_3", "___anon_3__anon_4", "Io.Future(fn (u8).u32).cancel__anon_7",
+    "Io.Select(λ).", "Io.Future(T)", "Io.Future(__anon_7).cancel", "project.Io.Future(T).cancel"]
+  let names := (stdModels.flatMap fun row => #[row.symbol, row.symbol ++ "__anon_7"]) ++ edgeCases
+  for name in names do
+    require (stdModelBase name == previousStdModelBase name)
+      s!"standard model normalization changed for {name}"
+
+/-- Step-count placement is shared by versions and profiles. Check both loop forms and the
+original function entry independently; extracted recursive-group loop defs must not pay twice. -/
+private def checkTickPlacement : IO Unit := do
+  let f ← accept blockLoopValue
+  let some loop := f.allInsts.find? (fun i => match i.op with | .loop _ => true | _ => false)
+    | throw (IO.userError "tick placement fixture has no loop")
+  let body := match loop.op with | .loop body => body | _ => #[]
+  let dispatch := { loop with op := .loopSwitchBr (.int 0 0) #[] body }
+  let base := mkFCtx f #[] #[] .ieee #[] #[]
+  let count (text token : String) := (text.splitOn token).length - 1
+  for target in Target.qualified do
+    for version in target.versions do
+      for backend in #["unverified", Target.llvmBackend, "stage2_x86_64"] do
+        let dialect := { base.dialect with
+          version, arch := target.arch, os := target.os,
+          ptrBytes := target.pointerBits / 8, endian := target.endian, backend }
+        for (mem, conc, label) in #[(false, false, "pure"), (true, false, "MM"),
+            (true, true, "CM")] do
+          let fc := { base with mem, conc, dialect }
+          let scope := s!"{version}/{target.arch}-{target.os}/{backend}/{label}"
+          for recursive in #[false, true] do
+            let fc := { fc with recursive }
+            for (inst, shape) in #[(loop, "loop"), (dispatch, "dispatch")] do
+              let text := emitLoopBody fc inst
+              require (count text "Zig.tick" == if mem then 1 else 0)
+                s!"{scope}/{shape}: missing, duplicate or pure loop tick"
+              if mem then
+                let call := if conc then "Zig.callMC" else "Zig.callM"
+                require (text.startsWith s!"do\n  {call} Zig.tick\n")
+                  s!"{scope}/{shape}: the loop tick is not before its first body step"
+            let text := emitFunctionBody fc fc.localsName fc.exitName f.ret f.body true
+            require (count text "Zig.tick" == if recursive && mem then 1 else 0)
+              s!"{scope}: recursive entry has the wrong tick count"
+            require (count text "Zig.enterFrame" == if recursive && mem && !conc then 1 else 0)
+              s!"{scope}: tick instrumentation changed the existing stack charge"
+            if recursive && mem then
+              let entry := if conc then "Zig.ConcM.liftMem Zig.tick" else "Zig.tick"
+              require (text.startsWith s!"do\n  {entry}\n")
+                s!"{scope}: recursive tick is not at the function entry"
+
 def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Emitter.lean OUTPUT_DIR")
   let directory : System.FilePath := output
   IO.FS.createDirAll directory
+  checkStdModelNormalization
+  checkTickPlacement
   let constRead ← accept (pointerRead "pointerConst" false)
   let varRead ← accept (pointerRead "pointerVar" true)
   require (!(escapingAllocs constRead).isEmpty && !(escapingAllocs varRead).isEmpty)
@@ -345,6 +636,37 @@ def main (args : List String) : IO Unit := do
     "example : successful ((((do let p ← Zig.allocStack 8 4; Zig.store 4 p (Review.UT.a 17); Review.tagLoop p Review.ET.b) : Zig.MemM Review.UT).run {}).map fun (v, _) => match v with | .b n => n.toNat | _ => 0) = some 17 := by native_decide"
   writeCase directory "spawnedSlice" #[spawnSlice, sliceWorker]
     "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 10 (fun _ => 0) (Review.spawnSlice ⟨⟨some 0, 0⟩, 1⟩) (Review.mem0 .fresh)).map fun (v, _) => v) = some () := by native_decide"
+  writeCase directory "tickControls"
+    #[tickRead "tickReadMM" false, tickRead "tickReadCM" true,
+      tickLoop "tickLoopMM" "tickReadMM" false, tickLoop "tickLoopCM" "tickReadCM" false,
+      tickLoop "tickDispatchMM" "tickReadMM" true, tickLoop "tickDispatchCM" "tickReadCM" true,
+      tickRecursive "tickRecursiveMM" "tickReadMM" false,
+      tickRecursive "tickRecursiveCM" "tickReadCM" false,
+      tickRecursive "tickRecursiveLoopMM" "tickReadMM" true,
+      tickRecursive "tickRecursiveLoopCM" "tickReadCM" true, tickPureRecursive, tickViewLoop]
+    (String.intercalate "\n" [
+      "example : successful (((Review.tickLoopMM ⟨none, 0⟩ 0 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful (((Review.tickDispatchMM ⟨none, 0⟩ 0 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 2) := by native_decide",
+      "example : successful (((Review.tickDispatchMM ⟨none, 0⟩ 1 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful (((Review.tickDispatchMM ⟨none, 0⟩ 2 false).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (99, 1) := by native_decide",
+      "example : successful ((((do let p ← Zig.allocStack 1 1; Zig.store 1 p (23 : BitVec 8); Review.tickLoopMM p 0 true) : Zig.MemM (BitVec 8)).run {}).map fun (v, m) => (v.toNat, m.ticks)) = some (23, 0) := by native_decide",
+      "example : successful (((Review.tickRecursiveMM ⟨none, 0⟩ 0 false).run (({} : Zig.Mem).withStack Zig.frameBase)).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 1, 0) := by native_decide",
+      "example : successful (((Review.tickRecursiveMM ⟨none, 0⟩ 2 false).run (({} : Zig.Mem).withStack (3 * Zig.frameBase))).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 3, 0) := by native_decide",
+      "example : failedWith ((Review.tickRecursiveMM ⟨none, 0⟩ 0 false).run (({} : Zig.Mem).withStack 0)) Zig.Error.stackOverflow = true := by native_decide",
+      "example : failedWith ((Review.tickRecursiveMM ⟨none, 0⟩ 2 false).run (({} : Zig.Mem).withStack (2 * Zig.frameBase))) Zig.Error.stackOverflow = true := by native_decide",
+      "example : successful (((Review.tickRecursiveLoopMM ⟨none, 0⟩ 0 false).run (({} : Zig.Mem).withStack Zig.frameBase)).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 2, 0) := by native_decide",
+      "example : successful (((Review.tickRecursiveLoopMM ⟨none, 0⟩ 2 false).run (({} : Zig.Mem).withStack (3 * Zig.frameBase))).map fun (v, m) => (v.toNat, m.ticks, m.stackDepth 0)) = some (17, 6, 0) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickLoopCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickDispatchCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 2) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickDispatchCM ⟨none, 0⟩ 1 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickDispatchCM ⟨none, 0⟩ 2 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (99, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (do let p ← Zig.ConcM.liftMem (Zig.allocStack 1 1); Zig.ConcM.liftMem (Zig.store 1 p (23 : BitVec 8)); Review.tickLoopCM p 0 true) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (23, 0) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 1) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveCM ⟨none, 0⟩ 2 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 3) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveLoopCM ⟨none, 0⟩ 0 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 2) := by native_decide",
+      "example : successful ((Zig.Sched.run ⟨.any, .available⟩ Review.dispatch 20 (fun _ => 0) (Review.tickRecursiveLoopCM ⟨none, 0⟩ 2 false) {}).map fun (v, m) => (v.toNat, m.ticks)) = some (17, 6) := by native_decide",
+      "example : successful ((Review.tickPureRecursive 2 : Zig.Result (BitVec 8)).map BitVec.toNat) = some 17 := by native_decide",
+      "example : successful ((Review.tickViewLoop #[23] : Zig.Result (BitVec 8)).map BitVec.toNat) = some 23 := by native_decide"])
   for (mode, name) in #[(FloatSemantics.ieee, "floatIeee"), (.compilerRt, "floatCompilerRt")] do
     let expected : Nat := match mode with | .ieee => 512 | .compilerRt => 0
     writeCase directory name #[floatConversion]

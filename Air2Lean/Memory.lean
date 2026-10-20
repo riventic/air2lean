@@ -32,11 +32,18 @@ Shared by `Check.lean` and `Emit.lean` (`docs/generated-code.md` §Memory):
 namespace Air2Lean
 
 mutual
-partial def flattenInst (acc : Array Inst) (i : Inst) : Array Inst :=
+def flattenInst (acc : Array Inst) (i : Inst) : Array Inst :=
   flattenOp (acc.push i) i.op
+termination_by sizeOf i
+decreasing_by cases i; simp; omega
 
-partial def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
-  op.effects.control.bodies.foldl (fun acc body => body.foldl flattenInst acc) acc
+def flattenOp (acc : Array Inst) (op : Op) : Array Inst :=
+  op.effects.control.bodies.attach.foldl (fun acc body =>
+    body.val.attach.foldl (fun acc inst => flattenInst acc inst.val) acc) acc
+termination_by sizeOf op
+decreasing_by
+  exact Nat.lt_trans (Array.sizeOf_lt_of_mem inst.property)
+    (Op.controlBody_size_lt op body.property)
 end
 
 def Func.allInsts (f : Func) : Array Inst := f.body.foldl flattenInst #[]
@@ -121,17 +128,23 @@ def valueOperands (op : Op) : Array Val := op.effects.values
 /-- The pointer operands that `valueOperands` leaves out (`Effects.places`). -/
 def ptrOperands (op : Op) : Array Val := op.effects.places
 
+/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
+def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
+  match v with
+  | .undef t => !admit t
+  | .agg _ elems => elems.attach.any fun ⟨e, _⟩ => e.hasUndefExcept admit
+  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
+  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
+  | _ => false
+termination_by sizeOf v
+decreasing_by all_goals simp_wf; decreasing_trivial
+
 /-- An `undefined` strictly below the root of a constant. Emission would read it as a typed
 default (`0`, `false`), so a partly undefined global initializer fails closed. -/
-partial def Val.hasNestedUndef (v : Val) : Bool :=
-  let undefOrNested (v : Val) : Bool := match v with
-    | .undef _ => true
-    | v => v.hasNestedUndef
+def Val.hasNestedUndef (v : Val) : Bool :=
   match v with
-  | .agg _ elems => elems.any undefOrNested
-  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => undefOrNested v
-  | .sliceConst _ p l => undefOrNested p || undefOrNested l
-  | _ => false
+  | .undef _ => false
+  | _ => v.hasUndefExcept (fun _ => false)
 
 /-- The type and byte offset of each of the `n` items or fields of a constant of type `tid`: an
 array, a non-`packed` struct or a tuple, from the exporter's sizes and field offsets; `none` for
@@ -276,13 +289,22 @@ def packedFieldBit (types : Array Ty) (fields : Array (String × TyId)) (idx : N
 
 /-- The type `id` contains a pointer (a slice too), through struct, tuple, union and array
 fields, optionals and error unions. -/
-partial def hasPtr (types : Array Ty) (id : TyId) : Bool :=
-  match types[id]? with
-  | some (.ptr ..) | some .allocator | some .io | some (.future _) => true
-  | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => hasPtr types c
-  | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (hasPtr types ·.2)
-  | some (.tuple fs) => fs.any (hasPtr types)
-  | _ => false
+def hasPtr (types : Array Ty) (id : TyId) : Bool :=
+  let rec visit : Nat → List TyId → TyId → Bool
+    | 0, _, _ => false
+    | depth + 1, seen, id =>
+      if seen.contains id then false else
+      let seen := id :: seen
+      match types[id]? with
+      | some (.ptr ..) | some .allocator | some .io | some (.future _) => true
+      | some (.array _ c _) | some (.optional c) | some (.errorUnion _ c) => visit depth seen c
+      | some (.struct _ _ fs) | some (.union _ _ _ fs) => fs.any (fun (_, c) => visit depth seen c)
+      | some (.tuple fs) => fs.any (visit depth seen)
+      | _ => false
+  -- A path expands at most `types.size` distinct type IDs before a repeat or absent ID;
+  -- the extra step processes that endpoint too. Keep the original short-circuit order,
+  -- without scanning unrelated types or treating a cycle as an invented pointer fact.
+  visit (types.size + 1) [] id
 
 /-- A parameter that a pure function can have: pointer-free, or a top-level `[]const T` with a
 pointer-free `T`. -/
@@ -295,8 +317,15 @@ def pureParam (types : Array Ty) (layouts : Array Layout) (id : TyId) : Bool :=
   | _ => !hasPtr types id
 
 /-- The instruction list of `body` and of each nested body. -/
-partial def bodyLists (body : Array Inst) : Array (Array Inst) :=
-  #[body] ++ body.flatMap fun i => i.op.effects.control.bodies.flatMap bodyLists
+def bodyLists (body : Array Inst) : Array (Array Inst) :=
+  #[body] ++ body.attach.flatMap fun i =>
+    i.val.op.effects.control.bodies.attach.flatMap fun nested => bodyLists nested.val
+termination_by sizeOf body
+decreasing_by
+  have hi := Array.sizeOf_lt_of_mem i.property
+  have hn := Op.controlBody_size_lt i.val.op nested.property
+  have hop : sizeOf i.val.op < sizeOf i.val := by cases i.val; simp; omega
+  omega
 
 /-- Every operand of `op` that can be a place: the value operands, the pointer operands and the
 places that an asm output writes. -/
@@ -435,21 +464,14 @@ depends on `--allocator-model` (`modelledStdFn`). -/
 def memoryOp (op : Op) (mode : AllocatorModel := .std) : Bool := (op.effectsIn mode).memoryOnly
 
 /-- A constant that points into memory. -/
-partial def Val.pointsToMem (v : Val) : Bool :=
+def Val.pointsToMem (v : Val) : Bool :=
   match v with
   | .ptrConst .. | .ptrNull .. | .ptrOther .. | .ptrInt .. | .sliceConst .. => true
-  | .agg _ elems => elems.any Val.pointsToMem
+  | .agg _ elems => elems.attach.any fun ⟨e, _⟩ => e.pointsToMem
   | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.pointsToMem
   | _ => false
-
-/-- `v` is or contains an `undefined` whose type `admit` does not admit. -/
-partial def Val.hasUndefExcept (admit : TyId → Bool) (v : Val) : Bool :=
-  match v with
-  | .undef t => !admit t
-  | .agg _ elems => elems.any (Val.hasUndefExcept admit)
-  | .optSome _ v | .errUnionOk _ v | .unionVal _ _ v => v.hasUndefExcept admit
-  | .sliceConst _ p l => p.hasUndefExcept admit || l.hasUndefExcept admit
-  | _ => false
+termination_by sizeOf v
+decreasing_by all_goals simp_wf; decreasing_trivial
 
 /-- `--allocator-model translated`: an `undefined` operand of type `t` is an arbitrary
 non-dereferenceable pointer (`Zig.undefPtr`, an oracle read): `t` is a single/many-item
@@ -556,13 +578,18 @@ def Func.callees (f : Func) (refs : Array (String × String)) : Array String :=
 
 /-- The names of the functions in `funcs` that use memory: the local reasons, then every caller
 of such a function, up to a fixpoint. -/
-partial def memoryFunctions (funcs : Array Func) (externalMemory : Array String := #[]) : Array String :=
+def memoryFunctions (funcs : Array Func) (externalMemory : Array String := #[]) : Array String := Id.run do
   let refs := fnRefs funcs
-  let rec go (mem : Array String) : Array String :=
+  let mut mem := externalMemory ++ funcs.filterMap fun f =>
+    if f.usesMemoryLocally then some f.name else none
+  -- A nonempty round adds a new source-function name. There are at most `funcs.size`
+  -- such names, so every caller in the finite graph is included after these rounds.
+  for _ in [:funcs.size] do
     let next := funcs.filterMap fun f =>
       if !mem.contains f.name && (f.callees refs).any mem.contains then some f.name else none
-    if next.isEmpty then mem else go (mem ++ next)
-  go (externalMemory ++ funcs.filterMap fun f => if f.usesMemoryLocally then some f.name else none)
+    if next.isEmpty then return mem
+    mem := mem ++ next
+  return mem
 
 /-- `f` calls through a pointer of an open interface's function type (`Func.openFnTys`): the
 call's last arm calls the environment (`docs/interfaces.md`). -/
@@ -579,13 +606,16 @@ def Func.syncLocally (f : Func) : Bool :=
 /-- The names of the concurrent functions in `funcs` (`Zig.ConcM`): the ones with a sync op,
 then every caller of such a function, up to a fixpoint. A concurrent function also uses memory
 (`memoryOp`). -/
-partial def concFunctions (funcs : Array Func) : Array String :=
+def concFunctions (funcs : Array Func) : Array String := Id.run do
   let refs := fnRefs funcs
-  let rec go (conc : Array String) : Array String :=
+  let mut conc := funcs.filterMap fun f => if f.syncLocally then some f.name else none
+  -- The same finite caller closure as `memoryFunctions`, retaining its original order.
+  for _ in [:funcs.size] do
     let next := funcs.filterMap fun f =>
       if !conc.contains f.name && (f.callees refs).any conc.contains then some f.name else none
-    if next.isEmpty then conc else go (conc ++ next)
-  go (funcs.filterMap fun f => if f.syncLocally then some f.name else none)
+    if next.isEmpty then return conc
+    conc := conc ++ next
+  return conc
 
 /-- The names of the functions in `funcs` that reach an OS primitive whose model takes the OS
 environment (`OsFn.env`): the callers of such a primitive, then every caller of such a function

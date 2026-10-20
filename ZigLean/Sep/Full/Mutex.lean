@@ -27,6 +27,10 @@ so a client proof holds for each implementation of the family. A client takes th
 of its program (`Io.Mutex` of 0.16.0: `IoMutexCode.impl`, `ZigLean/Sep/Full/IoMutex.lean`, once for
 every program, instantiated by `Proofs/Iogroup/Lock.lean` and `Proofs/Sync/IoMutex.lean`;
 `Thread.Mutex` of 0.15.2: `Proofs/Threadsync/ThreadMutex.lean`) and uses only these two rules.
+
+The unbounded lock loop additionally requires the caller's explicit plain resource. Counting no
+turns does not provide tick credits or unmetered mode. Metered tick segments use the existing
+caller-part rule with their actual `setPart` post; this interface claims no cost bound.
 -/
 
 namespace Zig
@@ -44,7 +48,8 @@ structure MutexImpl (Tgt : Type) where
   c : Nat
   lock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
-    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
+    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → (L.part g).Plain →
+    ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m →
     P.WP t (lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d

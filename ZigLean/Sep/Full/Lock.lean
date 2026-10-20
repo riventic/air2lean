@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.LockWord
 import ZigLean.Sep.Full.ThreadRest
 import ZigLean.Sep.Full.Atomic
+import ZigLean.Sep.Full.Tick
 
 /-!
 # A lock that owns a resource, over full-state resources
@@ -280,6 +281,23 @@ structure Inv (G : ThreadId → γ) (rX : Res) (m : Mem) : Prop where
   /-- The holder's resource. -/
   res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
 
+/-- An instrumented step on the caller's part, including while another sync object's internal
+phase makes `ok` false. The existing total thread rule pays for the actual tick and fixes its
+complete post-resource; the protected resource and the protocol rest are framed unchanged.
+Native atomic/futex steps still use their exact `Step`/`Mem.Aux` summaries. -/
+def PartTick (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem)
+    (G' : ThreadId → γ) (rX' : Res) (m' : Mem) : Prop :=
+  m.current = t ∧ L.ph (G t) ≠ .gone ∧ L.Inv G rX m ∧ ∃ r,
+    FTTotalTriple (fun rp => rp = L.part (G t)) Zig.tick (fun _ rp => rp = r) ∧
+    G' = upd G t (L.setPart (G t) r) ∧ rX' = rX ∧ m' = m.ticked ∧ L.Inv G' rX' m'
+
+/-- Composite instrumentation advances the counter; the primitive's exact `Mem.Aux` is not
+used to erase it. Sequential composite steps therefore retain monotone tick counts. -/
+theorem PartTick.ticks {t : ThreadId} {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem}
+    (h : L.PartTick t G rX m G' rX' m') : m.ticks < m'.ticks := by
+  obtain ⟨_, _, _, r, _, _, _, rfl, _⟩ := h
+  exact Nat.lt_succ_self _
+
 /-- **A protocol with the lock `L` keeps the primitive `K`** (module doc), where only a thread with
 `ok` runs the lock's code: its invariant is `FLock.Inv` and `U`, with the same rest `rX`; `U` keeps
 what the primitive needs (`FPrim.Sub`) and is stable under the steps of the lock's and the
@@ -319,8 +337,11 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   role_part : ∀ i g r, K.role i (L.setPart g r) ↔ K.role i g
   /-- `ok` does not read the primitive's place among the calm ones. -/
   ok_calm : ∀ g p q, K.calm p → K.calm q → (ok (K.pl.set g p) ↔ ok (K.pl.set g q))
-  /-- A step of the primitive's code keeps `U`. -/
-  kstep : ∀ t G rX m G' rX' m', K.Step t G rX m G' rX' m' → U G rX m → U G' rX' m'
+  /-- A native primitive step or an admitted caller-part tick keeps `U`. The latter transports
+  the exact memory and actual resource post through the same composite stability obligation,
+  without requiring `ok` in an internal busy phase. -/
+  kstep : ∀ t G rX m G' rX' m',
+    K.Step t G rX m G' rX' m' ∨ L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m'
 
 variable {L}
 
@@ -337,7 +358,8 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
       (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
-    (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }) :
+    (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t })
+    (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m') :
     L.Fits (FPrim.empty γ) P U ok where
   inv := inv
   fin := fin
@@ -361,7 +383,8 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
   role_l i := nomatch i
   role_part i := nomatch i
   ok_calm _ _ _ _ _ := Iff.rfl
-  kstep _ _ _ _ _ _ _ h := nomatch h
+  kstep t G rX m G' rX' m' h hU := h.elim (fun h => nomatch h)
+    (fun h => tick t G rX m G' rX' m' h hU)
 
 /-- **A protocol with the lock alone**, where every thread may run the lock's code: a stop keeps
 `U` as a step of the lock's code that changes nothing. -/
@@ -370,13 +393,15 @@ theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) �
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
       (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
-      U (upd G t (L.set (G t) p h)) rX m') :
+      U (upd G t (L.set (G t) p h)) rX m')
+    (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m') :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ => stable G rX m m' t p h) fun G rX m t hph hU => by
+    (fun G rX m m' t p h _ => stable G rX m m' t p h) (fun G rX m t hph hU => by
       have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
         (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
-      rwa [upd_set_self] at this
+      rwa [upd_set_self] at this)
+    tick
 
 /-! ## Basic facts -/
 
@@ -847,13 +872,12 @@ theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ
   exact WP.bind (hi.wp_liftMem hc ht hjt htt hp (fun a m' r' hr hq hs hc' hk =>
     WP.pure' (h a m' r' hr hq hs hc' hk)) hret)
 
-/-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock;
-the held resource is framed), with a thread triple: its part becomes the triple's post
-(`setPart`). -/
-theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+/-- **A step of any live thread on its own part**, including inside composite sync code. The
+whole held resource is framed, and the caller part becomes the thread triple's actual post. -/
+theorem Inv.wp_liftPartLive {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
     {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
-    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g ≠ .gone)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
       FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
@@ -868,7 +892,7 @@ theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : F
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
   have hgn : L.ph (upd G t g t) ≠ .gone := by
-    rw [upd_self]; rcases hgo with e | e <;> rw [e] <;> decide
+    rw [upd_self]; exact hgo
   obtain ⟨ht, hjt⟩ := hi.ht hgn
   have hd : FHeap.Disjoint (L.part g).heap (L.held g).heap := by
     have := hi.pdisj t; rwa [upd_self] at this
@@ -892,6 +916,47 @@ theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : F
       rw [L.ph_setPart] at e; rw [L.held_setPart]
       have := hi.res t (by rw [upd_self]; exact e); rw [upd_self] at this; exact hR _ this)
   rwa [upd_upd] at this
+
+/-- A same-memory caller-part update, derived from the total rule for `pure`. This is the
+resource operation used to retain, duplicate or drop plain fragments at initialization, spawn
+and join boundaries. The whole held resource and every other thread remain framed. -/
+theorem Inv.eupdPart {Tgt : Type} (P : Proto Tgt γ) {G : ThreadId → γ} {g : γ}
+    {rX : Res} {m : Mem} {t : ThreadId} {Qa : FAssn}
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (hu : EUpd (fun r => r = L.part g) Qa) :
+    ∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m := by
+  have htt : FTTotalTriple (fun r => r = L.part g) (pure () : MemM Unit) (fun _ => Qa) :=
+    .ofSeq (FTotalTriple.eupd hu (FTotalTriple.ret ())) (ThreadLocal.pure ())
+  have hw : P.WP t (ConcM.liftMem (pure () : MemM Unit) : ConcM Tgt Unit)
+      (fun _ _ _ _ => ∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m) G m 0 :=
+    hi.wp_liftPartLive hc hg htt.1 rfl (fun _ m' r hr hq _ _ hi' => by
+      have hm : m' = m :=
+        (Prod.mk.inj (Except.ok.inj (Option.some.inj hr))).2.symm
+      exact ⟨r, hq, hm ▸ hi'⟩) (.inr htt.2)
+  change m.threads.size = m.threads.size ∧
+    (∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m) at hw
+  exact hw.2
+
+/-- A caller-part step at a public lock place. The general rule also covers the live internal
+phases of composite sync code; both frame the holder's complete resource. -/
+theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n :=
+  hi.wp_liftPartLive hc (by rcases hgo with h | h <;> rw [h] <;> decide) htt hp h hret
 
 /-! ## Spawn and join -/
 

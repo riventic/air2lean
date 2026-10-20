@@ -12,31 +12,40 @@ import Proofs.Vectors.AirCert
 /-! The printed `Func` terms of the committed certificates (every one that certifies a function) are
 the decoded AIR.
 
-`Certificate.printFunc` prints every field of a `Func` with its constructor, so it is
-injective; a term whose print equals the print of the freshly decoded golden file is that
-decoded `Func`. Run from the repository root: `lake env lean tests/roadmap/air-semantics/RoundTrip.lean`.
+`Certificate.printFunc` quotes every constructor and field, including functions outside the
+certificate fragment. Compare the complete original program first, then check every selected
+name against that program's lookup. Run from the repository root:
+`lake env lean tests/roadmap/air-semantics/RoundTrip.lean`.
 -/
 
 open Air2Lean
 
-def checkTable (dir : System.FilePath) (table : Sem.Table) : IO Unit := do
+def checkTable (dir : System.FilePath) (table : Sem.Table) (program : Program) : IO Unit := do
   let entries ← dir.readDir
   let texts ← (entries.filter (·.fileName.endsWith ".json")).mapM (IO.FS.readFile ·.path)
   let (_, texts) := Anon.renumberAllWithNames texts
   let decoded ← texts.mapM fun t => IO.ofExcept (processOne t)
-  for (name, f) in table do
-    let some g := decoded.find? (·.name == name)
-      | throw (IO.userError s!"{name}: no golden AIR file")
+  unless (program.funcs.map (·.name)).toList.eraseDups.length == program.funcs.size &&
+      (decoded.map (·.name)).toList.eraseDups.length == decoded.size do
+    throw (IO.userError s!"{dir}: duplicate names prevent complete original-program binding")
+  unless program.funcs.size == decoded.size do
+    throw (IO.userError s!"{dir}: the original program omits or adds AIR functions")
+  for f in program.funcs do
+    let some g := decoded.find? (·.name == f.name)
+      | throw (IO.userError s!"{f.name}: no golden AIR file")
     unless Certificate.printFunc f == Certificate.printFunc g && (Certificate.printFunc g).isSome do
-      throw (IO.userError s!"{name}: the certificate's AIR is not the decoded golden AIR")
-  IO.println s!"{dir}: {table.length} certified AIR terms equal the decoded golden files"
+      throw (IO.userError s!"{f.name}: the original program's AIR is not the decoded golden AIR")
+  for name in table do
+    unless (program.lookup name).isSome do
+      throw (IO.userError s!"{name}: certified name is absent from its original program")
+  IO.println s!"{dir}: {program.funcs.size} original AIR terms and {table.length} certified names bound"
 
-#eval checkTable "tests/golden/basic/air" Basic.AirCert.table
-#eval checkTable "tests/golden/basic/air" Basic.AirCert.views
-#eval checkTable "tests/golden/errors/air" Errors.AirCert.table
-#eval checkTable "tests/golden/iogroup/air" Iogroup.AirCert.table
-#eval checkTable "tests/golden/options/air" Options.AirCert.views
-#eval checkTable "tests/golden/pointers/air" Pointers.AirCert.table
-#eval checkTable "tests/golden/recursion/air" Recursion.AirCert.table
-#eval checkTable "tests/golden/threads/air" Threads.AirCert.table
-#eval checkTable "tests/golden/vectors/air" Vectors.AirCert.table
+#eval checkTable "tests/golden/basic/air" Basic.AirCert.table Basic.AirCert.program
+#eval checkTable "tests/golden/basic/air" Basic.AirCert.views Basic.AirCert.program
+#eval checkTable "tests/golden/errors/air" Errors.AirCert.table Errors.AirCert.program
+#eval checkTable "tests/golden/iogroup/air" Iogroup.AirCert.table Iogroup.AirCert.program
+#eval checkTable "tests/golden/options/air" Options.AirCert.views Options.AirCert.program
+#eval checkTable "tests/golden/pointers/air" Pointers.AirCert.table Pointers.AirCert.program
+#eval checkTable "tests/golden/recursion/air" Recursion.AirCert.table Recursion.AirCert.program
+#eval checkTable "tests/golden/threads/air" Threads.AirCert.table Threads.AirCert.program
+#eval checkTable "tests/golden/vectors/air" Vectors.AirCert.table Vectors.AirCert.program

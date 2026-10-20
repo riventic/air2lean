@@ -53,39 +53,40 @@ abbrev P : Proto Tgt Gh := proto lo workOf
 /-! ## `work` -/
 
 /-- `work`'s loop invariant: thread `t` did `local1` increments and is out of the lock's code. -/
-def workInv (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  m.current = t ∧ ∃ k, P.inv (upd G t (gOut k)) m ∧ s.local1.toNat = k ∧ k ≤ 2
+def workInv (rp : Res) (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  m.current = t ∧ ∃ k, P.inv (upd G t (gOut rp k)) m ∧ s.local1.toNat = k ∧ k ≤ 2
 
 /-- `work`'s loop ends after 2 increments. -/
-def workPost (t : ThreadId) (r : workExit × workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) :
+def workPost (rp : Res) (t : ThreadId) (r : workExit × workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) :
     Prop :=
-  r.1 = .br3 ∧ m.current = t ∧ ∃ k, P.inv (upd G t (gOut k)) m ∧ k = 2
+  r.1 = .br3 ∧ m.current = t ∧ ∃ k, P.inv (upd G t (gOut rp k)) m ∧ k = 2
 
 /-- One run of `work`'s loop: `lock`, the increment of the counter, `unlock`. Walked by `fsym` in
 its `WP` mode, with the protocol's steps and the rules of `threadMutex` (`ThreadMutex.lock_wp`,
 `unlock_wp`: the contract's rules stated on the program's `Thread_Mutex_lock`/`unlock`). -/
-theorem loop4_body (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (h : workInv t s G m d) :
+theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : workLocals)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (h : workInv rp t s G m d) :
     P.WP t ((work.loop4 cPtr).run s) (fun r G' m' d' =>
-      if work.again4 r.1 then workInv t r.2 G' m' d' ∧
+      if work.again4 r.1 then workInv rp t r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : workLocals) => 0) s)
-      else workPost t r G' m' d') G m d := by
+      else workPost rp t r G' m' d') G m d := by
   obtain ⟨hc, k, hi, hk, hle⟩ := h
   unfold work.loop4
-  fsym [WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
-    ThreadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
+  fsym [(fits (Lo := lo) (workOf := workOf)).wp_tick_plain,
+    WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
+    ThreadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ hp ⟨⟩,
     ThreadMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
-    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold k),
-    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold (k + 1)),
+    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp k),
+    (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp (k + 1)),
     U_hold (Lo := lo), shape_next, sum_le4, sum_next,
     set_out, set_hold, ph_out, ph_hold, work.again4]
 
 /-- `work`: two runs of its loop. -/
-theorem work_spec (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t (gOut 0)) m) (hc : m.current = t) :
-    P.WP t (work cPtr) (fun _ G' m' _ => m'.current = t ∧ P.inv (upd G' t (gOut 2)) m') G m d := by
+theorem work_spec (rp : Res) (hp : rp.Plain) (t : ThreadId) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (gOut rp 0)) m) (hc : m.current = t) :
+    P.WP t (work cPtr) (fun _ G' m' _ => m'.current = t ∧ P.inv (upd G' t (gOut rp 2)) m') G m d := by
   unfold work
-  fsym [WP.loop _ _ (workInv t) (fun _ => 0) (workPost t) (loop4_body t)]
+  fsym [WP.loop _ _ (workInv rp t) (fun _ => 0) (workPost rp t) (loop4_body rp hp t)]
 
 /-- The kid: `work` on the `Counter`, then its end. -/
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : P.init tgt g) (u : ThreadId)
@@ -93,7 +94,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : P.init tgt g) (u : ThreadId)
     P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } d := by
   cases tgt with
   | work p =>
-    obtain ⟨hp, rfl⟩ := hg
+    obtain ⟨hp, rp, hplain, rfl⟩ := hg
     obtain rfl : p = cPtr := Option.some.inj hp
     have hu1 : u = 1 := by
       obtain ⟨rX, -, hU⟩ := id hi
@@ -101,8 +102,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : P.init tgt g) (u : ThreadId)
       unfold ThreadId at *; omega
     subst hu1
     show P.WP 1 ((fun _ => ()) <$> work cPtr) _ G _ d
-    refine WP.map (WP.mono ?_ (work_spec 1 G _ d
-      (by rw [show gOut 0 = G 1 from hgu.symm, upd_same]
+    refine WP.map (WP.mono ?_ (work_spec rp (Res.plain_of hplain) 1 G _ d
+      (by rw [show gOut rp 0 = G 1 from hgu.symm, upd_same]
           exact inv_cur 1 hi (by rw [hgu]; nofun)) rfl))
     rintro _ G' m' _ ⟨-, hi'⟩
     exact qkid hi'
@@ -161,7 +162,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   unfold mutexCounter
   -- the `Counter` (block 0, a stack block) and its store in the plain mode; the protocol's start
   -- at the spawn; `work`; the join of the kid, the load of the `Counter`, the free
-  fsym [FTriple.allocStackDrop, inv_start (Lo := lo) (workOf := workOf),
+  fsym [FTriple.allocStack', inv_start (Lo := lo) (workOf := workOf),
     inv_spawn (Lo := lo) (workOf := workOf), work_spec, inv_end (Lo := lo) (workOf := workOf),
     wp_join (Lo := lo) (workOf := workOf), wp_counter, wp_free (Lo := lo) (workOf := workOf),
     joinedAll_of_threads]

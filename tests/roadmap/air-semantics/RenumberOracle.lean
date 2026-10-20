@@ -35,23 +35,35 @@ def identity : Func :=
     ret := 1
     body := #[⟨0, 1, .arg 0⟩, ⟨1, 3, .ret (.inst 0)⟩] }
 
+/-- Both executions retain the complete original source program as their classification
+context. Changing a live ID is the proposed transformation under test, not a second
+choice of execution policy. -/
+def program (records : Array Identity.Record) : Program :=
+  { funcs := #[caller 10 records, identity] }
+
+theorem entry_unticked (records : Array Identity.Record) :
+    (program records).entryTicked "canon.caller" = false := by
+  have hrecursive : (program records).recursive "canon.caller" = false := by
+    cbv
+  simp only [Program.entryTicked, hrecursive, Bool.false_and]
+
 def oracle : Oracle := fun _ _ => pure (.cell 11)
 
 theorem identity_not_panic : panicOf? "canon.identity" = none := by rfl
 
 theorem before_run (records : Array Identity.Record) (m : Zig.Mem) (p : Zig.Ptr) :
-    ((execFunc oracle (caller 10 records) [.ptr p]).run m).run =
+    ((execFunc (program records) oracle (caller 10 records) [.ptr p]).run m).run =
       some (.ok (.bool true, m)) := by
-  simp only [caller, oracle, air_sem, Nat.reduceAdd, identity_not_panic] <;> rfl
+  simp only [caller, oracle, air_sem, entry_unticked, Nat.reduceAdd, identity_not_panic] <;> rfl
 
 theorem after_run (records : Array Identity.Record) (m : Zig.Mem) (p : Zig.Ptr) :
-    ((execFunc oracle (caller 0 records) [.ptr p]).run m).run =
+    ((execFunc (program records) oracle (caller 0 records) [.ptr p]).run m).run =
       some (.error .unspecified) := by
-  simp only [caller, oracle, air_sem, Nat.reduceAdd, identity_not_panic] <;> rfl
+  simp only [caller, oracle, air_sem, entry_unticked, Nat.reduceAdd, identity_not_panic] <;> rfl
 
 theorem same_oracle_not_preserved (records : Array Identity.Record) (m : Zig.Mem) (p : Zig.Ptr) :
-    (execFunc oracle (caller 10 records) [.ptr p]).run m ≠
-      (execFunc oracle (caller 0 records) [.ptr p]).run m := by
+    (execFunc (program records) oracle (caller 10 records) [.ptr p]).run m ≠
+      (execFunc (program records) oracle (caller 0 records) [.ptr p]).run m := by
   intro h
   have h' := congrArg (fun r => r.run) h
   rw [before_run, after_run] at h'

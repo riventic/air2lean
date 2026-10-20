@@ -189,13 +189,19 @@ class ClassifyTests(unittest.TestCase):
                          ['no-panic', 'correct-if-returned', 'guaranteed-return'])
 
     def test_bounds_are_reported_only_for_bounded_heads(self):
+        theorems = classified(FIXTURE)
         for name in EXPECTED:
             with self.subTest(name=name):
-                self.assertIsNone(classified(FIXTURE)[name]['bound'])
+                self.assertIsNone(theorems[name]['bound'])
+                self.assertEqual(theorems[name]['cost_bound_status'],
+                                 'no cost bound established')
         theorems = classified(FIXTURE, *spoof_registry())
         for name in EXPECTED:
             with self.subTest(name=name, registry='spoofs'):
                 self.assertEqual(theorems[name]['bound'], BOUNDS.get(name))
+                self.assertEqual(theorems[name]['cost_bound_status'],
+                                 'explicit bound in theorem conclusion' if name in BOUNDS
+                                 else 'no cost bound established')
         # A bounded return is a guaranteed return; the bound is additional.
         self.assertEqual(theorems['ClaimFixture.spoof_within']['claims'],
                          ['no-panic', 'correct-if-returned', 'guaranteed-return'])
