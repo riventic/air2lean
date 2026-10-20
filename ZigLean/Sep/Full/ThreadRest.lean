@@ -65,6 +65,65 @@ structure RestStep (W : Loc → Prop) (m m' : Mem) : Prop where
   /-- The messages stay covered (`Mem.MsgCov`). -/
   cov : m.MsgCov → m'.MsgCov
 
+namespace RestStep
+
+/-- Resource preservation composes across successive steps at the same shared bytes. -/
+theorem trans {W : Loc → Prop} {m m₁ m' : Mem} (h₁ : RestStep W m m₁)
+    (h₂ : RestStep W m₁ m') : RestStep W m m' := by
+  refine ⟨h₂.threads.trans h₁.threads, h₂.csize.trans h₁.csize,
+    fun u => VClock.le_trans (h₁.clocks u) (h₂.clocks u), h₂.bsize.trans h₁.bsize,
+    fun l hl => (h₂.heap l hl).trans (h₁.heap l hl), h₂.live, h₁.kn.trans h₂.kn,
+    h₁.ext.trans h₂.ext, fun h => h₂.layout (h₁.layout h),
+    fun b x hx => (h₂.tag b x hx).trans (h₁.tag b x hx), fun h => h₂.wf (h₁.wf h),
+    fun e he => ?_, ?_,
+    fun h => h₂.cov (h₁.cov h)⟩
+  · rcases h₂.fp e he with he | ⟨hw, hb⟩
+    · exact h₁.fp e he
+    · exact .inr ⟨hw, by rw [h₁.bsize] at hb; exact hb⟩
+  · refine ⟨fun c hc => ?_, h₂.auth.ticks.trans h₁.auth.ticks,
+      fun h => h₂.auth.noStack (h₁.auth.noStack h), rfl⟩
+    have hmid : StackAuth m₁ c := (h₁.auth.stack c hc).keep_shape rfl rfl rfl
+      fun _ blk hb => ⟨blk, hb, rfl, rfl, rfl, rfl⟩
+    exact (h₂.auth.stack c hmid).keep_shape rfl rfl rfl
+      fun _ blk hb => ⟨blk, hb, rfl, rfl, rfl, rfl⟩
+
+/-- A native thread step that leaves blocks intact preserves the resource rest when its
+location layout and new accesses are confined to the shared bytes. -/
+theorem of_blocks {W : Loc → Prop} {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+    (hb : m'.blocks = m.blocks) (ha : m.Aux m')
+    (hlive : ∀ l, W l → m.heap l ≠ none)
+    (htag : ∀ b x, ¬ W (b, x) → tagOf (shapes m') b x = tagOf (shapes m) b x)
+    (hwf : ShapesWF (shapes m) → ShapesWF (shapes m'))
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
+      ((∀ x, e.off ≤ x → x < e.off + e.len → W (e.block, x)) ∧ e.block < m.blocks.size)) :
+    RestStep W m m' :=
+  ⟨hs.threads, hs.size, hs.clock, by rw [hb], fun l _ => by simp only [Mem.heap, hb],
+    fun l hl => by simpa only [Mem.heap, hb] using hlive l hl,
+    KMono.of_blocks hb, KeepsExt.of_blocks hb, LDMono.of_blocks hb, htag, hwf, hfp,
+    MemAuth.Keep.of_aux (m' := {m' with current := m.current}) hb ha rfl, hs.msgCov⟩
+
+end RestStep
+
+/-- A rest-only step that acquires the publication clock owns the drained region when
+each old access was covered by that publication or by this caller's own clock.
+The future-block disjunct is retained exactly as in `Mem.OwnsC`. -/
+theorem RestStep.owns_of_acquire {A : Loc → Prop} {m m' : Mem} {t : ThreadId}
+    {h : Heap} {c : VClock} (hs : RestStep A m m')
+    (hoff : ∀ l, A l → h l = none)
+    (hacq : VClock.le c (m'.clocks[t]!) = true)
+    (hbefore : ∀ e ∈ m.footprint, (e.Touches h ∨ m.blocks.size ≤ e.block) →
+      VClock.le e.clock c = true ∨ VClock.le e.clock (m.clocks[t]!) = true) :
+    m'.Owns t h := by
+  intro e he htouch
+  rcases hs.fp e he with he | ⟨hA, hb⟩
+  · rcases hbefore e he (htouch.imp id (fun h => by rw [← hs.bsize]; exact h)) with hp | ht
+    · exact VClock.le_trans hp hacq
+    · exact VClock.le_trans ht (hs.clocks t)
+  · rcases htouch with ⟨x, h1, h2, h3⟩ | hf
+    · exact (h3 (hoff (e.block, x) (hA x h1 h2))).elim
+    · rw [hs.bsize] at hf
+      exact (Nat.not_lt_of_ge hf hb).elim
+
 namespace FOwned
 
 variable {own : ThreadId → Res} {rO Y : Res} {m m' : Mem} {t : ThreadId}

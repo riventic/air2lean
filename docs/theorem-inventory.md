@@ -38,21 +38,52 @@ A theorem must hold for the translation of every Zig version its example support
 (`examples/<ex>/zig-versions`, else every version of `compatibility.json`) and every target
 with its own translation. As in `scripts/check.sh`, the translation file is
 `tests/golden/<version>/<ex>/Gen-<os>.lean`, else `tests/golden/<version>/<ex>/Gen.lean`, else
-the committed `Proofs/<Ex>/Gen.lean` (the Linux translation of every other version). Only
-`threadsync` (0.15.2, macOS `DarwinImpl`) has a `darwin` translation of its own.
+the committed `Proofs/<Ex>/Gen.lean`. Each available target-specific golden adds a
+required translation.
 
-A check result is a `lake build` of the module run under `scripts/build-guard.py`. Its run
-records the hash of each translation file and of every `Proofs` source in the build. A
-result is current while those hashes match: an edit to a proof module or a translation makes
-it stale and `check` fails until the build is rerun and recorded. A change in `ZigLean/` does
-not make a result stale; the CI proof build (`lake build Proofs`) covers it.
+A check result is an index of a supported explicit-module build under
+`scripts/build-guard.py`, in the trusted local recorder/runtime context. The recorder
+selects Lake through the pinned `lean-toolchain`, resolves that entry physically, and
+checks its current bytes against the guard's producer capture and pin. A nested
+`swap-build` executes that same binary and requires its explicit `--tool` capture.
+The saved physical path, hash and byte count identify the captured producer; command
+spelling or a basename alone is insufficient. Existing records without that capture
+are stale and need a genuine fresh build, never inferred or relabelled identity.
+
+Offline checking validates historical producer structure and the retained command/pin
+binding without opening another host's old physical path. Renewal reconstructs the
+supported command using this host's selected Lake; it never executes a saved foreign
+producer. A recorded `--no-build` check can be current, but fresh renewal removes
+that rebuild-suppressing flag so changed sources are actually rebuilt. This guard
+index does not replace the existing proof-receipt seal/verify
+path or change its `NOT_ATTESTED` native/source-correspondence boundaries.
+
+Each theorem result checks the `Proofs` dependencies returned by the existing shared
+import-discovery API. Complete header parsing, path enrollment and compiled import
+coverage remain separate obligations. A swap keeps the canonical module identity
+while discovery reads its selected translation, including that translation's imports.
+Body validity belongs to the compiler. The
+exact canonical `Proofs.<Example>.Gen` alone owns a short example key; every deeper
+`*.Gen` or profile-bearing retained translation has its full module key/path/hash.
+The recorded canonical path must agree with the last normalized swap declared by
+the command. Missing, foreign or incomplete evidence is stale. Alias normalization
+preserves supported mixed-case examples and `./` paths; absolute/parent-escape swap
+paths, whitespace/NUL source spellings and malformed example identifiers are refused.
+
+An edit to a dependency or selected translation makes a theorem result stale. An
+unrelated generated module that the theorem does not import does not invalidate that
+theorem, but whole-invocation renewal checks every recorded entry and the complete
+module membership. A change in `ZigLean/` does not make this index current by itself;
+the actual proof/compiler gates remain separate obligations.
 
 To check another translation, build against it and record the run:
 
 ```sh
+lake=$(ELAN_TOOLCHAIN="$(cat lean-toolchain)" elan which lake)
+lake=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$lake")
 python3 scripts/build-guard.py --cwd "$PWD" --report /tmp/r.json --log /tmp/r.log \
-  --timeout 7200 --rss-mib 12000 --lock-wait 21600 --log-bytes 8388608 -- \
-  python3 scripts/theorem-inventory.py swap-build \
+  --timeout 7200 --rss-mib 12000 --lock-wait 21600 --log-bytes 8388608 --tool "$lake" -- \
+  python3 scripts/theorem-inventory.py swap-build --lake "$lake" \
     --swap lists=tests/golden/0.15.2/lists/Gen.lean -- Proofs.Lists.Append
 python3 scripts/theorem-inventory.py record --run 0.15.2-linux-lists --zig 0.15.2 \
   --guard-report /tmp/r.json --guard-log /tmp/r.log
@@ -65,10 +96,10 @@ checkout with each translation in place of `Proofs/<Ex>/Gen.lean`;
 file that `scripts/gen-integrity.py attest` does not find to be a fresh translation of its
 committed AIR (so it needs the built translator), and stores the outcome, revision and hashes. `check` (CI, offline) needs no Lean.
 
-A check result says that Lean's kernel accepts the theorem for that translation file. It is
-not an assumption audit ([assumptions-audit.md](assumptions-audit.md)), a proof receipt
-([proof-receipts.md](proof-receipts.md)) or a fresh Zig export: the translation files are the
-committed goldens.
+The index retains a guarded build outcome and its current dependency identities.
+Compiled/kernel claims use the existing [assumption audit](assumptions-audit.md) and
+[proof receipt](proof-receipts.md) mechanisms at their stated scope. The indexed
+translation files remain committed goldens; this is not a fresh Zig export.
 
 ## Remaining scope
 
@@ -171,20 +202,21 @@ committed goldens.
 
 | Run | Translation | Build | Result | Revision | Started (UTC) | Log SHA-256 |
 |---|---|---|---|---|---|---|
-| `0.14.1-linux-aarch64-floatops` | 0.14.1/linux: `tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `06ef796fb106 (dirty)` | 2026-10-11T15:31:15 | `fbda28e8ffbea868` |
-| `0.14.1-linux-floatops` | 0.14.1/linux: `tests/golden/0.14.1/floatops/Gen.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.14.1/floatops/Gen.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `100aa91c4545` | 2026-10-11T22:17:42 | `61c0f78940406136` |
-| `0.15.2-darwin-floatops` | 0.15.2/darwin: `tests/golden/0.15.2/floatops/Gen-darwin.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.15.2/floatops/Gen-darwin.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `100aa91c4545 (dirty)` | 2026-10-11T22:17:56 | `752380629caded29` |
-| `0.15.2-darwin-threadsync` | 0.15.2/linux: `tests/golden/0.15.2/threadsync/Gen-darwin.lean` | `python3 scripts/theorem-inventory.py swap-build --swap threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean -- Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff` | success (exit 0) | `4457543e3b63` | 2026-10-16T18:19:15 | `3bbc52a9d57ef034` |
-| `0.15.2-linux-aarch64-floatops` | 0.15.2/linux: `tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `06ef796fb106 (dirty)` | 2026-10-11T15:30:55 | `51b080e72412dbaf` |
-| `0.15.2-linux-aarch64-threadsync` | 0.15.2/linux: `tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean` | `python3 scripts/theorem-inventory.py swap-build --swap threadsync=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean -- Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff` | success (exit 0) | `4457543e3b63 (dirty)` | 2026-10-16T18:21:39 | `f045f78817a396cf` |
-| `0.15.2-linux-floatops` | 0.15.2/linux: `tests/golden/0.15.2/floatops/Gen.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.15.2/floatops/Gen.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `100aa91c4545 (dirty)` | 2026-10-11T22:19:40 | `9337ba510c5daa57` |
-| `0.15.2-linux-goldens` | 0.15.2/linux: `tests/golden/0.15.2/atomics/Gen.lean`, `tests/golden/0.15.2/floatops/Gen.lean`, `tests/golden/0.15.2/lists/Gen.lean`, `tests/golden/0.15.2/slices/Gen.lean`, `tests/golden/0.15.2/threads/Gen.lean` | `python3 scripts/theorem-inventory.py swap-build --swap atomics=tests/golden/0.15.2/atomics/Gen.lean --swap floatops=tests/golden/0.15.2/floatops/Gen.lean --swap lists=tests/golden/0.15.2/lists/Gen.lean --swap slices=tests/golden/0.15.2/slices/Gen.lean --swap threads=tests/golden/0.15.2/threads/Gen.lean -- Proofs.Atomics.Proofs Proofs.Atomics.MessagePassing Proofs.Atomics.Relaxed Proofs.Atomics.Stack Proofs.Floatops.Proofs Proofs.Lists.Append Proofs.Lists.Container Proofs.Lists.Cost Proofs.Lists.Linked Proofs.Slices.Proofs Proofs.Slices.Sep Proofs.Threads.Proofs Proofs.Threads.Counter Proofs.Threads.Disjoint` | success (exit 0) | `8ddcc79db301 (dirty)` | 2026-10-19T16:43:48 | `6705f5c47b89bf79` |
-| `0.16.0-darwin-floatops` | 0.16.0/darwin: `tests/golden/0.16.0/floatops/Gen-darwin.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.16.0/floatops/Gen-darwin.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `100aa91c4545 (dirty)` | 2026-10-11T22:20:16 | `3959277c09ab5998` |
-| `0.16.0-linux-aarch64-floatops` | 0.16.0/linux: `tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `06ef796fb106 (dirty)` | 2026-10-11T15:29:25 | `aa26cb90e8f3db3f` |
-| `0.16.0-linux-floatops` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `lake build Proofs.Floatops.Proofs` | success (exit 0) | `100aa91c4545 (dirty)` | 2026-10-11T22:20:26 | `9b771301573bcdf0` |
-| `0.17.0-darwin-floatops` | 0.17.0/darwin: `tests/golden/0.17.0/floatops/Gen-darwin.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.17.0/floatops/Gen-darwin.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `100aa91c4545 (dirty)` | 2026-10-11T22:20:27 | `169293dcec55e68a` |
-| `0.17.0-linux-aarch64-floatops` | 0.17.0/linux-aarch64: `tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `2cea5bdd7f86 (dirty)` | 2026-10-12T11:30:01 | `ca00b2217b23200c` |
-| `0.17.0-linux-goldens` | 0.17.0/linux: `tests/golden/0.17.0/floatops/Gen.lean`, `tests/golden/0.17.0/lists/Gen.lean`, `tests/golden/0.17.0/sync/Gen.lean` | `python3 scripts/theorem-inventory.py swap-build --swap floatops=tests/golden/0.17.0/floatops/Gen.lean --swap lists=tests/golden/0.17.0/lists/Gen.lean --swap sync=tests/golden/0.17.0/sync/Gen.lean -- Proofs.Floatops.Proofs Proofs.Lists.Append Proofs.Lists.Container Proofs.Lists.Cost Proofs.Lists.Policy Proofs.Lists.Linked Proofs.Sync.Lock Proofs.Sync.Mutex Proofs.Sync.Semaphore Proofs.Sync.SemCounter Proofs.Sync.Handoff Proofs.Sync.RwLock Proofs.Sync.RwLockContract Proofs.Sync.RwLockSnapshotPair Proofs.Sync.Proofs Proofs.Sync.Contracts Proofs.Sync.Mailbox Proofs.Sync.SnapshotCache` | success (exit 0) | `391f43b04380 (dirty)` | 2026-10-18T19:40:32 | `7e8af0db36d09ac6` |
-| `c14-sync-contracts-linux` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `lake build Proofs.Sync.Proofs` | success (exit 0) | `8cdda0a14462 (dirty)` | 2026-10-16T18:25:35 | `a68495c5db6b0960` |
-| `committed-linux-all` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `lake build Proofs` | success (exit 0) | `8ddcc79db301 (dirty)` | 2026-10-19T16:44:40 | `325c65faf1b3834e` |
+| `0.14.1-linux-aarch64-floatops` | 0.14.1/linux-aarch64: `tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:20:38 | `735af09ccdcf3d31` |
+| `0.14.1-linux-floatops` | 0.14.1/linux: `tests/golden/0.14.1/floatops/Gen.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.14.1/floatops/Gen.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:20:48 | `710d479330147a75` |
+| `0.15.2-darwin-floatops` | 0.15.2/darwin: `tests/golden/0.15.2/floatops/Gen-darwin.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.15.2/floatops/Gen-darwin.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:20:58 | `84716bfc5babf6dd` |
+| `0.15.2-darwin-threadsync` | 0.15.2/linux: `tests/golden/0.15.2/threadsync/Gen-darwin.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean -- Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:21:08 | `beacd51265141444` |
+| `0.15.2-linux-aarch64-floatops` | 0.15.2/linux-aarch64: `tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:22:16 | `a390c3a7c5dd8fa0` |
+| `0.15.2-linux-aarch64-threadsync` | 0.15.2/linux: `tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap threadsync=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean -- Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:22:20 | `9d446228ae7a871c` |
+| `0.15.2-linux-floatops` | 0.15.2/linux: `tests/golden/0.15.2/floatops/Gen.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.15.2/floatops/Gen.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:23:28 | `5f67c389ae1af887` |
+| `0.15.2-linux-goldens` | 0.15.2/linux: `tests/golden/0.15.2/atomics/Gen.lean`, `tests/golden/0.15.2/floatops/Gen.lean`, `tests/golden/0.15.2/lists/Gen.lean`, `tests/golden/0.15.2/slices/Gen.lean`, `tests/golden/0.15.2/threads/Gen.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap atomics=tests/golden/0.15.2/atomics/Gen.lean --swap floatops=tests/golden/0.15.2/floatops/Gen.lean --swap lists=tests/golden/0.15.2/lists/Gen.lean --swap slices=tests/golden/0.15.2/slices/Gen.lean --swap threads=tests/golden/0.15.2/threads/Gen.lean -- Proofs.Atomics.Proofs Proofs.Atomics.MessagePassing Proofs.Atomics.Relaxed Proofs.Atomics.Stack Proofs.Floatops.Proofs Proofs.Lists.Append Proofs.Lists.Container Proofs.Lists.Cost Proofs.Lists.Linked Proofs.Slices.Proofs Proofs.Slices.Sep Proofs.Threads.Proofs Proofs.Threads.Counter Proofs.Threads.Disjoint` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:23:32 | `88d65d9becb7f70e` |
+| `0.16.0-darwin-floatops` | 0.16.0/darwin: `tests/golden/0.16.0/floatops/Gen-darwin.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.16.0/floatops/Gen-darwin.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:24:13 | `cc4a306452895c4e` |
+| `0.16.0-linux-aarch64-floatops` | 0.16.0/linux-aarch64: `tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:24:23 | `79b3a1ff63c154d3` |
+| `0.16.0-linux-floatops` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake build Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:00:10 | `d571ab172694729e` |
+| `0.17.0-darwin-floatops` | 0.17.0/darwin: `tests/golden/0.17.0/floatops/Gen-darwin.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.17.0/floatops/Gen-darwin.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:24:32 | `3a37668ecddb30fb` |
+| `0.17.0-linux-aarch64-floatops` | 0.17.0/linux-aarch64: `tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:24:42 | `0843eb2e29862537` |
+| `0.17.0-linux-goldens` | 0.17.0/linux: `tests/golden/0.17.0/floatops/Gen.lean`, `tests/golden/0.17.0/lists/Gen.lean`, `tests/golden/0.17.0/sync/Gen.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.17.0/floatops/Gen.lean --swap lists=tests/golden/0.17.0/lists/Gen.lean --swap sync=tests/golden/0.17.0/sync/Gen.lean -- Proofs.Floatops.Proofs Proofs.Lists.Append Proofs.Lists.Container Proofs.Lists.Cost Proofs.Lists.Policy Proofs.Lists.Linked Proofs.Sync.Lock Proofs.Sync.Mutex Proofs.Sync.Semaphore Proofs.Sync.SemCounter Proofs.Sync.Handoff Proofs.Sync.RwLock Proofs.Sync.RwLockContract Proofs.Sync.RwLockSnapshotPair Proofs.Sync.Proofs Proofs.Sync.Contracts Proofs.Sync.Mailbox Proofs.Sync.SnapshotCache` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:24:52 | `f832e8bd15f47a2f` |
+| `c14-sync-contracts-linux` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake build Proofs.Sync.Proofs` | success (exit 0) | `6b0efac6cdc8 (dirty)` | 2026-10-20T07:27:14 | `42162959f5f67806` |
+| `committed-linux-all` | committed `Proofs/*/Gen.lean` (Linux, every version without a golden) | `/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake build Proofs` | success (exit 0) | `3768b4a823ba` | 2026-10-20T09:06:28 | `03b4ddbb7efba2d3` |
+| `cx-floatops-0.17.0-linux` | 0.17.0/linux: `tests/golden/0.17.0/floatops/Gen.lean` | `/opt/homebrew/opt/python@3.14/bin/python3.14 -B scripts/theorem-inventory.py swap-build --lake /Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake --swap floatops=tests/golden/0.17.0/floatops/Gen.lean -- Proofs.Floatops.Proofs` | success (exit 0) | `6b0efac6cdc8` | 2026-10-20T06:57:09 | `f9d9d7ab41628fe6` |
 <!-- END theorem-inventory -->

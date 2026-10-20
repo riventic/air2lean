@@ -21,8 +21,8 @@ and `T.returns` of a full-state claim `T` therefore end in these definitions:
 
 An admissible input is a memory `m` with `Mem.FSeq` (thread triples: `Mem.FConc` and ownership of
 the precondition's bytes) and resources `r`, `rF` that `m` holds with `P r`. `FAdmit.of_mem`
-builds one from any `FSeq` memory, owning all of its bytes with an empty frame
-(`holds_ofHeap`); `FAdmit.of_exts` adds knowledge and the full extents (`bext`) that are true in
+builds one from any `FSeq` memory, owning its native full heap with an empty frame
+(`holds_mem`); `FAdmit.of_exts` adds knowledge and the full extents (`bext`) that are true in
 it (`holds_exts`); `FAdmit.up` does it for a legacy precondition `up P` that holds of the
 memory's heap, `FAdmit.init` for the globals at program start (`initRes_holds`). The default
 memory and `Witness.mem1` are `FSeq` memories (`fseq_default`, `mem1_fseq`). A total triple turns an admissible input into a returning
@@ -84,10 +84,13 @@ def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop :=
   ∃ (n : Nat) (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
     (_ : m.Owns m.current r.heap.erase), ∃ v, soloTree (x n m) = some (.ok v)
 
-/-- A memory without stack budgets holds all of its bytes, with an empty frame (`holds_ofHeap`). -/
+/-- A memory without stack budgets holds its native full heap with an empty frame. -/
 theorem holds_mem (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
-    ∃ rF, Holds m ⟨m.fheap, Know.none, Ghost.unit⟩ rF :=
-  ⟨_, holds_ofHeap (Heap.disjoint_empty m.heap) (Heap.union_empty m.heap).symm hns⟩
+    ∃ rF, Holds m ⟨m.fheap, Know.none, Ghost.unit⟩ rF := by
+  refine ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, ?_⟩
+  simpa only [Ghost.exts_none] using
+    (holds_exts (E := fun _ => none) (FMatch.fheap m) (fun _ h => h.elim)
+      (exts_true (fun _ _ _ h => nomatch h)) hns)
 
 theorem FAdmit.of_mem {P : FAssn} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
     (hs : m.FSeq) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit P :=
@@ -156,6 +159,23 @@ theorem _root_.Zig.Full.FTriple.holds_of_ok {P : FAssn} {c : MemM α} {Q : α �
   have := ht m r rF hh hp hs
   rwa [hrun] at this
 
+/-- A total initialization admits its postcondition at the value that its actual run returns.
+Keeping the run equation prevents an admission witness from substituting unrelated arguments. -/
+theorem _root_.Zig.Full.FTotalTriple.admit_run {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) :
+    ∃ v m', c.run m = pure (v, m') ∧ FAdmit (Q v) := by
+  obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hs
+  obtain ⟨r', hh', hq, hs'⟩ := ht.1.holds_of_ok hh hp hs (by rw [e]; rfl)
+  exact ⟨v, m', e, m', r', rF, hh', hq, hs', trivial⟩
+
+/-- Total creation from an admissible input establishes an admissible postcondition. -/
+theorem FAdmit.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    (ht : FTotalTriple P c Q) (h : FAdmit P) : ∃ v, FAdmit (Q v) := by
+  obtain ⟨m, r, rF, hh, hp, hs, -⟩ := h
+  obtain ⟨v, _, _, hv⟩ := ht.admit_run hh hp hs
+  exact ⟨v, hv⟩
+
 theorem CAdmit.of {P : FAssn} (h : FTTAdmit P) : CAdmit P := ⟨0, h⟩
 
 theorem CLive.of_run {Tgt : Type} {P : FAssn} {x : ConcM Tgt α} (n : Nat)
@@ -205,6 +225,10 @@ theorem FTTLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTTo
 theorem fseq_default : ({} : Mem).FSeq :=
   ⟨⟨singleThread_empty rfl (by decide)⟩, by simp [shapes, ShapesWF], fun _ _ _ _ _ hb => by simp at hb,
     fun _ _ hb => by simp at hb⟩
+
+/-- Empty resources are admissible at the native program start with no globals. -/
+theorem FAdmit.of_emp : FAdmit emp :=
+  FAdmit.init .fresh [] (by decide) (by simp)
 
 /-- `mem1 bs` (one block at address 4096) is an `FSeq` memory when the block ends inside the
 address space. -/

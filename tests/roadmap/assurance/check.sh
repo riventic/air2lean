@@ -32,8 +32,12 @@ scripts/assumptions.sh --no-build --module tests.roadmap.assurance.ExternDefinit
 scripts/assumptions.sh --no-build --module tests.roadmap.assurance.MetaCode --output "$out/MetaCode.json"
 for fixture in HiddenWrapper ProjectAxiom UnexpectedOpaque PartialInTheorem CompilerRedirection NativeProof ExternDefinition; do
   status=0
+  flags=()
+  case "$fixture" in
+    ProjectAxiom|UnexpectedOpaque|CompilerRedirection|ExternDefinition) flags+=(--all-declarations);;
+  esac
   scripts/assumptions.sh --no-build --module "tests.roadmap.assurance.$fixture" \
-    --output "$out/$fixture.json" || status=$?
+    --output "$out/$fixture.json" "${flags[@]}" || status=$?
   [ "$status" = 1 ] || { echo "error: $fixture must fail policy (exit 1), got $status" >&2; exit 1; }
 done
 # Statement-only dependencies (I06 goal binding): the real extraction must match the
@@ -43,17 +47,86 @@ scripts/assumptions.sh --no-build --module tests.roadmap.assurance.StatementBind
 # Ordinary imports must expose unused private definitions and generated recursors to the
 # opt-in all-declaration audit without changing the default theorem/boundary audit.
 python3 - "$out" "$fixtures" <<'PY'
-import json, subprocess, sys
+import contextlib, copy, importlib.util, io, json, subprocess, sys, tempfile
 from pathlib import Path
 root, fixtures = map(Path, sys.argv[1:])
 module = 'AssuranceAllDeclarations'
 fixture = root / (module + '.lean')
-fixture.write_text('''namespace AssuranceAllDeclarations
+fixture.write_text('''import ZigLean.Sep.Full.Triple
+import ZigLean.Sep.Full.Conc
+namespace AssuranceAllDeclarations
 private def unusedHelper : Nat := 41
 def unusedValue : Nat := unusedHelper + 1
 inductive UnusedTag where | value (payload : Nat)
 theorem checked : True := True.intro
 end AssuranceAllDeclarations
+namespace AssuranceProgramControls
+open Zig
+def noAnswer {α : Type} (c : MemM α) : Prop := ∀ m, (c.run m).run ≠ none
+private def hiddenNoAnswer {α : Type} (c : MemM α) : Prop := ∀ m, (c.run m).run ≠ none
+abbrev ProgramAlias (α : Type) := MemM α
+def aliasNoAnswer (c : ProgramAlias Unit) : Prop := ∀ m, (c.run m).run ≠ none
+def higherOrder (c : Nat → MemM Unit) : Prop := ∀ n m, ((c n).run m).run ≠ none
+abbrev PredicateAlias := (Nat → MemM Unit) → Prop
+def predicateAlias : PredicateAlias := fun c => ∀ n m, ((c n).run m).run ≠ none
+def PredicateSort := Prop
+def predicateSort (c : MemM Unit) : PredicateSort := ∀ m, (c.run m).run ≠ none
+def HiddenProp : Type := Prop
+def hiddenPropJudgment (c : MemM Unit) : HiddenProp := ∀ m, (c.run m).run ≠ none
+def hiddenProofProposition : HiddenProp := True
+def hiddenProofValue : hiddenProofProposition := True.intro
+def hiddenForallProof (_ : MemM Unit) : hiddenProofProposition := True.intro
+def hiddenLetProof : (let T := MemM Unit; ∀ _ : T, hiddenProofProposition) := fun _ => True.intro
+attribute [irreducible] HiddenProp
+def programValue : MemM Unit := pure ()
+def writtenOut (_ : Zig.Mem → Option (Except Zig.Error (Unit × Zig.Mem))) : Prop := True
+def localResult (Result : Type) (x : Result) : Prop := x = x
+def proofValue : ∀ (_ : MemM Unit), True := fun _ => True.intro
+def bodyOnly : Prop := ∀ (_ : MemM Unit), True
+theorem bodyOnlyProof : bodyOnly := fun _ => True.intro
+def proofTypeDependency (_ : bodyOnly) : Prop := True
+def proofBodyDependency : Prop := bodyOnlyProof = bodyOnlyProof
+structure Box (α : Type) where
+  payload : α
+def ordinaryBox (b : Box Nat) : Prop := b.payload = 0
+def programBox (b : Box (MemM Unit)) : Prop := ∀ m, (b.payload.run m).run ≠ none
+structure Paused where
+  «continue» : Unit → MemM Unit
+def pausedProperty (p : Paused) : Prop := ∀ m, ((p.«continue» ()).run m).run ≠ none
+structure PlainSpec where
+  count : Nat
+  values : List Nat
+structure ContractSpec where
+  action : Unit → MemM Unit
+  law : ∀ m, ((action ()).run m).run ≠ none
+structure IndexedSpec (c : MemM Unit) : Type where
+  law : ∀ m, (c.run m).run ≠ none
+structure UnknownSpec (HiddenProof : Type) where
+  payload : HiddenProof
+structure StringSpec where
+  label : String
+end AssuranceProgramControls
+-- Validate the existing kernel API contract separately from the report: check returns
+-- the signature's TYPE (its sort up to kernel equality), including metadata/let wrappers.
+run_meta do
+  let env ← Lean.getEnv
+  for (name, expected) in [(``AssuranceProgramControls.hiddenProofValue, true),
+      (``AssuranceProgramControls.hiddenForallProof, true),
+      (``AssuranceProgramControls.hiddenLetProof, true),
+      (``AssuranceProgramControls.programValue, false),
+      (``AssuranceProgramControls.PlainSpec, false)] do
+    let info ← Lean.getConstInfo name
+    for signature in [info.type, Lean.Expr.mdata {} info.type,
+        Lean.Expr.letE `unused (Lean.mkConst ``Nat) (Lean.mkNatLit 0) info.type true] do
+      let .ok sort := Lean.Kernel.check env {} signature
+        | throwError "kernel signature check failed: {name}"
+      let .ok proof := Lean.Kernel.isDefEq env {} sort (Lean.mkSort .zero)
+        | throwError "kernel sort check failed: {name}"
+      unless proof == expected do
+        throwError "kernel check did not return the expected signature sort: {name}"
+  match Lean.Kernel.check env {} (Lean.mkConst `AssuranceMissingSignature) with
+  | .error _ => pure ()
+  | .ok _ => throwError "unknown kernel signature must return an error"
 ''')
 
 def lean(*args):
@@ -74,7 +147,7 @@ records = [line.removeprefix('AIR2LEAN_ASSURANCE_JSON:') for line in output.spli
 assert len(records) == 2, output
 default, enabled = map(json.loads, records)
 assert 'selected_declaration_roots' not in default
-assert set(enabled) == set(default) | {'selected_declaration_roots'}
+assert set(enabled) == set(default) | {'selected_declaration_roots', 'selected_declaration_evidence'}
 for field in ('schema_version', 'modules', 'theorems', 'project_declarations'):
     assert default[field] == enabled[field], field
 default_nodes = {n['name']: n for n in default['nodes']}
@@ -82,6 +155,7 @@ enabled_nodes = {n['name']: n for n in enabled['nodes']}
 assert all(enabled_nodes[name] == node for name, node in default_nodes.items())
 roots = enabled['selected_declaration_roots']
 assert len(roots) == len(set(roots)), roots
+assert roots != sorted(roots), 'the fixture must exercise Lean Name.lt rather than string ordering'
 assert set(roots) == {n['name'] for n in enabled['nodes'] if n['module'] == module}
 assert module + '.unusedValue' in roots and module + '.unusedValue' not in default_nodes
 private = [n for n in enabled['nodes'] if n.get('user_name') == module + '.unusedHelper']
@@ -89,6 +163,12 @@ assert len(private) == 1 and private[0]['name'] in roots, private
 assert private[0]['name'] not in default_nodes, private
 assert any(n['name'] == module + '.UnusedTag.rec' and n['kind'] == 'recursor'
            and n['name'] in roots for n in enabled['nodes'])
+evidence = enabled['selected_declaration_evidence']
+assert [row['name'] for row in evidence] == roots
+by_user = {row['user_name']: row for row in evidence}
+assert by_user['AssuranceProgramControls.hiddenNoAnswer']['name'] in roots
+assert by_user['AssuranceProgramControls.hiddenNoAnswer']['prop_valued'] is True
+assert 'Zig.Result' not in by_user['AssuranceProgramControls.localResult']['original_type_constants']
 # Exercise the supported policy/kernel-replay consumer, not just the raw extractor.
 reports = []
 for name, flags in [('default', []), ('all', ['--all-declarations'])]:
@@ -99,9 +179,108 @@ for name, flags in [('default', []), ('all', ['--all-declarations'])]:
 default_report, enabled_report = reports
 assert all(report['status'] == 'pass' for report in reports), reports
 assert 'selected_declaration_roots' not in default_report
+assert 'framework_candidates' not in default_report
 assert enabled_report['selected_declaration_roots'] == roots
 assert {n['name'] for n in enabled_report['nodes']} == set(enabled_nodes)
 assert all(report['kernel_replay']['status'] == 'pass' for report in reports)
+framework = enabled_report['framework_candidates']
+assert framework['scope'] == 'selected-modules-only' and framework['complete'] is False
+assert framework['ordinary_exemptions'] == []
+assert [row['name'] for row in framework['declarations']] == roots
+classified = {row['user_name']: row for row in framework['declarations']}
+for name in ('noAnswer', 'hiddenNoAnswer', 'aliasNoAnswer', 'higherOrder', 'predicateAlias', 'predicateSort', 'hiddenPropJudgment', 'programBox', 'pausedProperty', 'bodyOnly', 'proofTypeDependency', 'proofBodyDependency'):
+    row = classified['AssuranceProgramControls.' + name]
+    assert row['prop_valued'] is True and row['verdict'] == 'candidate', row
+    assert 'Zig.MemM' in row['program_dependencies'], row
+for name in ('localResult', 'ordinaryBox', 'writtenOut'):
+    row = classified['AssuranceProgramControls.' + name]
+    assert row['verdict'] == 'unknown' and row['program_dependencies'] == [], row
+assert classified['AssuranceProgramControls.proofValue']['is_proof'] is True
+assert classified['AssuranceProgramControls.proofValue']['prop_valued'] is False
+assert classified['AssuranceProgramControls.proofValue']['verdict'] == 'unknown'
+assert classified['AssuranceProgramControls.hiddenProofValue']['is_proof'] is True
+assert classified['AssuranceProgramControls.hiddenProofValue']['prop_valued'] is False
+assert classified['AssuranceProgramControls.hiddenProofValue']['verdict'] == 'unknown'
+assert classified['AssuranceProgramControls.hiddenProofValue']['original_type_constants'] == ['AssuranceProgramControls.hiddenProofProposition']
+assert classified['AssuranceProgramControls.hiddenForallProof']['is_proof'] is True
+assert classified['AssuranceProgramControls.hiddenForallProof']['prop_valued'] is False
+assert classified['AssuranceProgramControls.hiddenForallProof']['verdict'] == 'unknown'
+assert 'AssuranceProgramControls.hiddenProofProposition' in classified['AssuranceProgramControls.hiddenForallProof']['original_type_constants']
+assert 'Zig.MemM' in classified['AssuranceProgramControls.hiddenForallProof']['original_type_constants']
+assert classified['AssuranceProgramControls.hiddenLetProof']['is_proof'] is True
+assert classified['AssuranceProgramControls.hiddenLetProof']['prop_valued'] is False
+assert classified['AssuranceProgramControls.hiddenLetProof']['verdict'] == 'unknown'
+assert classified['AssuranceProgramControls.programValue']['is_proof'] is False
+assert classified['AssuranceProgramControls.programValue']['verdict'] == 'unknown'
+assert classified['AssuranceProgramControls.bodyOnly']['original_type_constants'] == []
+assert 'Zig.MemM' in classified['AssuranceProgramControls.bodyOnly']['original_body_constants']
+assert 'AssuranceProgramControls.bodyOnly' in classified['AssuranceProgramControls.proofTypeDependency']['original_type_constants']
+assert 'AssuranceProgramControls.bodyOnlyProof' in classified['AssuranceProgramControls.proofBodyDependency']['original_body_constants']
+assert classified['AssuranceProgramControls.bodyOnlyProof']['is_proof'] is True
+assert 'AssuranceProgramControls.HiddenProp' in classified['AssuranceProgramControls.hiddenPropJudgment']['original_type_constants']
+assert classified['AssuranceProgramControls.writtenOut']['prop_valued'] is True
+for name in ('PlainSpec', 'ContractSpec', 'IndexedSpec', 'UnknownSpec', 'StringSpec'):
+    row = classified['AssuranceProgramControls.' + name]
+    assert row['verdict'] == 'unknown' and row['ordinary_exemption'] is False, row
+assert classified['AssuranceProgramControls.IndexedSpec']['prop_valued'] is False
+assert 'Zig.MemM' in classified['AssuranceProgramControls.IndexedSpec']['program_dependencies']
+# Typed evidence uses the existing artifact freshness binding; changed oleans must reject it.
+spec = importlib.util.spec_from_file_location('assumptions', Path('scripts/assumptions.py').resolve())
+audit = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(audit)
+# Malformed evidence must use the normal validation error, not leak re's TypeError.
+malformed = copy.deepcopy(enabled)
+malformed['selected_declaration_evidence'][0]['kernel_fingerprint'] = 17
+try:
+    audit.framework_candidates(malformed)
+except ValueError as error:
+    assert 'kernel fingerprint' in str(error), error
+else:
+    raise AssertionError('non-string kernel fingerprint must be rejected')
+# Resolve every canonical name even when the selected source does not mention it. This
+# mutation changes only this Python process's input, not a shared source or tool artifact.
+canonical = audit.framework_runtime_types
+missing_name = 'Zig.Conc.MissingFrameworkFamily'
+audit.framework_runtime_types = lambda: (*canonical()[:-1], missing_name)
+try:
+    diagnostic = io.StringIO()
+    with contextlib.redirect_stderr(diagnostic):
+        try:
+            audit.extract([module], False, all_declarations=True)
+        except RuntimeError as error:
+            assert 'command failed' in str(error), error
+            assert missing_name in diagnostic.getvalue(), diagnostic.getvalue()
+            assert 'unknown' in diagnostic.getvalue().lower(), diagnostic.getvalue()
+        else:
+            raise AssertionError('a missing canonical family must fail actual Lean extraction')
+finally:
+    audit.framework_runtime_types = canonical
+audit.verify_fresh(enabled_report, allow_dirty=True)
+artifact = Path(next(row['olean'] for row in enabled_report['freshness']['artifacts']
+                     if row['module'] == module))
+assert artifact.resolve() == (fixtures / (module + '.olean')).resolve()
+before = audit.file_sha256(artifact)
+with tempfile.TemporaryDirectory(dir=root) as scratch:
+    original = Path(scratch) / 'original.olean'
+    artifact.replace(original)
+    try:
+        artifact.write_bytes(b'changed fixture artifact')
+        mutated = audit.file_sha256(artifact)
+        try:
+            audit.verify_fresh(enabled_report, allow_dirty=True)
+        except ValueError as error:
+            assert f'{module} olean changed' in str(error), error
+            rejection = str(error)
+        else:
+            raise AssertionError('changed artifact must invalidate typed evidence')
+    finally:
+        artifact.unlink(missing_ok=True)
+        original.replace(artifact)
+audit.verify_fresh(enabled_report, allow_dirty=True)
+restored = audit.file_sha256(artifact)
+assert restored == before and mutated != before
+print('typed freshness control: ' + json.dumps({'before': before, 'mutated': mutated,
+                                               'restored': restored, 'rejection': rejection}))
 print('assurance opt-in all-declaration regression passed')
 PY
 python3 - "$out/statement-binding.json" <<'PY'
@@ -192,5 +371,71 @@ assert any(v['trust_class'] == 'compiler-proof-axiom' and '._native.native_decid
 assert all(not t['allowed'] for t in native['theorems'])
 redirected = json.loads((root/'CompilerRedirection.json').read_text())
 assert any(v['name'] == 'AssuranceFixture.logicalDefinition' and v['trust_class'] == 'unexpected-compiler-redirection' for v in redirected['violations'])
+# These ACTUAL compiled negative fixtures still fail policy; their independent candidate
+# evidence must expose non-definitional boundaries on both the boundary and its dependent.
+for fixture, names in {
+    'ProjectAxiom': ('unexpectedProjectAxiom', 'axiomWrapper'),
+    'UnexpectedOpaque': ('unexpectedOpaque', 'opaqueWrapper'),
+    'CompilerRedirection': ('logicalDefinition', 'logicalWrapper'),
+    'ExternDefinition': ('externalDefinition', 'unusedExternalDefinition', 'external_spec'),
+}.items():
+    report = json.loads((root/(fixture+'.json')).read_text())
+    summary = report['framework_candidates']
+    assert summary['complete'] is False and summary['ordinary_exemptions'] == []
+    by_name = {n['user_name']: n for n in summary['declarations']}
+    for name in names:
+        row = by_name['AssuranceFixture.' + name]
+        assert row['unresolved_dependency'] is True and row['ordinary_exemption'] is False, row
 print('assurance environment regressions passed')
+PY
+
+bash tests/roadmap/assurance/import-metadata.sh "$out/import-metadata.json"
+
+# The same universe adapter retains all declarations in three canonical Lake contexts.
+# These are bounded candidate controls, not a full census or the external NN Unit binding.
+python3 - "$out" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+sys.path.insert(0, str(Path('scripts').resolve()))
+import assumptions
+import theorem_universe
+
+out = Path(sys.argv[1])
+contexts = [
+    ('full-triple', ['ZigLean.Mem.Basic', 'ZigLean.Sep.Full.Triple'],
+     [('Zig.Full.Tame', 'ZigLean.Sep.Full.Triple', 'Zig.MemM')]),
+    ('full-thread-step', ['ZigLean.Sep.Full.ThreadStep'],
+     [('Zig.Full.RunFp', 'ZigLean.Sep.Full.ThreadStep', 'Zig.MemM')]),
+    ('lists-client', ['Proofs.Lists.Client'],
+     [('Lists.Client.NoIllegal', 'Proofs.Lists.Client', 'Zig.ConcM'),
+      ('Lists.Client.NoLeak', 'Proofs.Lists.Client', 'Zig.ConcM')]),
+]
+subprocess.run(['lake', 'build', *sorted({m for _, modules, _ in contexts for m in modules})], check=True)
+for label, modules, seeds in contexts:
+    path = out / (label + '-all-declarations.json')
+    result = theorem_universe.audit_modules(modules, [], path, all_declarations=True)
+    assert result['status'] == 'pass' and result['exit_code'] == 0, result
+    report = json.loads(path.read_text())
+    assert report['modules'] == modules and report['scope'] == 'explicit-modules', path
+    assert 'framework_candidates' in report and 'selected_declaration_roots' in report, path
+    roots, summary = report['selected_declaration_roots'], report['framework_candidates']
+    assert summary['scope'] == 'selected-modules-only' and summary['complete'] is False
+    assert summary['ordinary_exemptions'] == []
+    assert [row['name'] for row in summary['declarations']] == roots
+    nodes = {row['name']: row for row in report['nodes']}
+    assert set(roots) == {name for name, row in nodes.items() if row['module'] in modules}
+    assert all(row['ordinary_exemption'] is False for row in summary['declarations'])
+    assert all(row.get('framework_status') is None and row.get('classification_approval') is None
+               for row in summary['declarations'])
+    by_name = {row['name']: row for row in summary['declarations']}
+    for name, module, program in seeds:
+        row = by_name[name]
+        assert row['module'] == module and row['is_proof'] is False, row
+        assert row['prop_valued'] is True and row['verdict'] == 'candidate', row
+        assert program in row['original_type_constants'] and program in row['program_dependencies'], row
+    assert set(name for name, _, _ in seeds) < set(roots), path
+    assert any(row['verdict'] == 'unknown' for row in summary['declarations']), path
+    assert report['kernel_replay']['status'] == 'pass' and report['kernel_replay']['reused'] == []
+    assumptions.verify_fresh(report, allow_dirty=True)
+    print(label, 'all selected declarations retained; complete=false; zero exemptions; approvals unset')
 PY

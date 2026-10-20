@@ -577,9 +577,11 @@
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "atomics=tests/golden/0.15.2/atomics/Gen.lean",
         "--swap",
@@ -606,19 +608,24 @@
         "Proofs.Threads.Counter",
         "Proofs.Threads.Disjoint"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8ddcc79db301730618be6ed7f37523ea7d93ddf5",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-19T16:43:48.148343+00:00",
-      "elapsed_seconds": 51.568,
+      "started_utc": "2026-10-20T07:23:32.566541+00:00",
+      "elapsed_seconds": 40.358,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "6705f5c47b89bf79001d265f31a6bbf6b09e10717a19d934499be47420683611",
+      "log_sha256": "88d65d9becb7f70ea236dbbabad10452b4413ed7cc3eba4e2c34a4b76049ac43",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -669,7 +676,7 @@
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
         "Proofs.Atomics.Relaxed": "46bef6fe4716ad04ecbd4c9af96da96797dd5858edd11b69d6bd356229352c97",
         "Proofs.Atomics.Stack": "7bd01dd6e64bbef416a036c1b198fdacfd4f04a6722ed4c23a7433cece6b1477",
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628",
         "Proofs.Lists.Alloc": "b5014a7d07eca05329bbd6c4b6cce6655bf99980c94cc93776626a3828d74143",
         "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
@@ -686,9 +693,11 @@
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean",
         "--",
@@ -696,19 +705,24 @@
         "Proofs.Threadsync.WaitGroup",
         "Proofs.Threadsync.Handoff"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "4457543e3b63cd4ed8c93751e05752f5e3e31b15",
-        "tracked_dirty": false
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-16T18:19:15.192006+00:00",
-      "elapsed_seconds": 143.334,
+      "started_utc": "2026-10-20T07:21:08.923757+00:00",
+      "elapsed_seconds": 66.573,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3bbc52a9d57ef034382b14f462150e092e3a84d46bd1727c8150c6e2eb726aee",
+      "log_sha256": "beacd512651414442684027ad18755c996052d9e959d321da3109c0820e0e450",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -735,10 +749,10 @@
       },
       "sources": {
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
-        "Proofs.Handoff.Ops": "087862a2bdc53abf91a5359a373cdc158c16f278ff37229d266738614d5811b6",
-        "Proofs.Handoff.Protocol": "1275909a6ce4aeaebaff2914a781649fd914c7752934c6d8fae6e224ed408cdf",
-        "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
-        "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
+        "Proofs.Handoff.Ops": "673a5badbd2cdcaea72a7015c0f32363bc8c7f9fd6416fe02a5cb38c72f1f115",
+        "Proofs.Handoff.Protocol": "7b486a56c62bd399c47a3553e1c33f29a086c01336be75fb92f689ce5d4f254d",
+        "Proofs.Handoff.Start": "eabfb0aa075ab8ef3329d8981b1ba6fe942c26e71ab24555cbe03aabc7d4ea6d",
+        "Proofs.Handoff.Steps": "063d955740db4833db54f7baca41b7ea3b73739ece5d82794d95e733d17fdbad",
         "Proofs.MutexCounter.Protocol": "03c7c08f863c1e55e366f70beb42393c464a0d1cad895f6a3c1a2db0b4a6afc6",
         "Proofs.Threadsync.Cond": "f717bb29932c3cded598470964386009b9847d1392aca2df7f50213658c083e1",
         "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
@@ -755,27 +769,34 @@
       "zig": "0.14.1",
       "target": "linux",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.14.1/floatops/Gen.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
-        "tracked_dirty": false
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:17:42.622462+00:00",
-      "elapsed_seconds": 13.433,
+      "started_utc": "2026-10-20T07:20:48.044979+00:00",
+      "elapsed_seconds": 9.725,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "61c0f78940406136f64fc0bc15529a69bf496c509168835bc8ee8631a3822c43",
+      "log_sha256": "710d479330147a754d4d0979f8ece2be066e6c09adb6bf0ada3a375099872bf6",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -787,30 +808,35 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "committed-linux-all": {
       "zig": "0.16.0",
       "target": "linux",
       "command": [
-        "lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "build",
         "Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8ddcc79db301730618be6ed7f37523ea7d93ddf5",
-        "tracked_dirty": true
+        "head": "3768b4a823ba2214f0366139535cae8e74258ba2",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-10-19T16:44:40.769716+00:00",
-      "elapsed_seconds": 0.432,
+      "started_utc": "2026-10-20T09:06:28.339698+00:00",
+      "elapsed_seconds": 1.024,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "325c65faf1b3834e6e40dc694ff63f0dd8a017bed18ab4da5be32783f68e3e89",
+      "log_sha256": "03b4ddbb7efba2d31f2baa540befe110cc7a95661c01140ccbc535743bc048f6",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -824,6 +850,8 @@
         "Proofs.Atomics.Stack",
         "Proofs.Basic.AirCert",
         "Proofs.Basic.Arith",
+        "Proofs.Basic.Cases",
+        "Proofs.Basic.ClampCases",
         "Proofs.Basic.Common",
         "Proofs.Basic.Proofs",
         "Proofs.Basic.Twt",
@@ -872,6 +900,7 @@
         "Proofs.Recursion.Proofs",
         "Proofs.Slices.Proofs",
         "Proofs.Slices.Sep",
+        "Proofs.Sync.Cases",
         "Proofs.Sync.Cond",
         "Proofs.Sync.Contracts",
         "Proofs.Sync.Event",
@@ -880,6 +909,7 @@
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mailbox",
         "Proofs.Sync.Mutex",
+        "Proofs.Sync.MutexCases",
         "Proofs.Sync.Proofs",
         "Proofs.Sync.RwLock",
         "Proofs.Sync.RwLockContract",
@@ -891,6 +921,7 @@
         "Proofs.Threads.Counter",
         "Proofs.Threads.Disjoint",
         "Proofs.Threads.Proofs",
+        "Proofs.Threadsync.Cases",
         "Proofs.Threadsync.Cond",
         "Proofs.Threadsync.Deadline",
         "Proofs.Threadsync.Event",
@@ -907,9 +938,49 @@
         "Proofs.Vectors.Proofs"
       ],
       "gens": {
+        "Proofs.Basic.Gen.V0_14_1.H_6c696e7578.Gen": {
+          "path": "Proofs/Basic/Gen/V0_14_1/H_6c696e7578/Gen.lean",
+          "sha256": "f6f3f366fe72e945e51f322ca09fb35535b39a1b31318ab651dc8d164cc35eb8"
+        },
+        "Proofs.Basic.Gen.V0_15_2.H_6c696e7578.Gen": {
+          "path": "Proofs/Basic/Gen/V0_15_2/H_6c696e7578/Gen.lean",
+          "sha256": "cc6b9925500b18a3a30995dd2606192092027dcea1c11464e57f302cb2c556ac"
+        },
+        "Proofs.Basic.Gen.V0_16_0.H_6c696e7578.Gen": {
+          "path": "Proofs/Basic/Gen/V0_16_0/H_6c696e7578/Gen.lean",
+          "sha256": "dd0983dc2513d887aee5022653e4ebc8e5437f5934d56fb634f69f87c8690231"
+        },
+        "Proofs.Basic.Gen.V0_17_0.H_6c696e7578.Gen": {
+          "path": "Proofs/Basic/Gen/V0_17_0/H_6c696e7578/Gen.lean",
+          "sha256": "6c53805c95c29ecd690fb5c43cd7126625f2c1c6678638feb25fb46d998b8719"
+        },
         "Proofs.Lists.Open": {
           "path": "Proofs/Lists/Open.lean",
           "sha256": "195f9fd4b05a909c401a855dccad6390d60d83067cda62a5068e52f296916d18"
+        },
+        "Proofs.Sync.Gen.V0_16_0.H_64617277696e.Gen": {
+          "path": "Proofs/Sync/Gen/V0_16_0/H_64617277696e/Gen.lean",
+          "sha256": "2a9e94cdfd645bbd74782969beea9ee66f24427c08570c2b32919e83f826148c"
+        },
+        "Proofs.Sync.Gen.V0_16_0.H_6c696e7578.Gen": {
+          "path": "Proofs/Sync/Gen/V0_16_0/H_6c696e7578/Gen.lean",
+          "sha256": "a94204c49a045ee438b6b8a5deef212441d33a3ab60e46828372429a07c48868"
+        },
+        "Proofs.Sync.Gen.V0_17_0.H_6c696e7578.Gen": {
+          "path": "Proofs/Sync/Gen/V0_17_0/H_6c696e7578/Gen.lean",
+          "sha256": "a963ae3570796ad6845ba40bc2fa9a99d43fd4ef1536c643ff1e37af4ba67467"
+        },
+        "Proofs.Threadsync.Gen.V0_15_2.H_64617277696e.Gen": {
+          "path": "Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean",
+          "sha256": "5cf297e91e821e08e4cf020130e9ef49536535d41d8a70800868e3c54a9e234f"
+        },
+        "Proofs.Threadsync.Gen.V0_15_2.H_6c696e7578.Gen": {
+          "path": "Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean",
+          "sha256": "0a20711099eeccfc241b3192492a809d9836affa47b69e50c3126a074ae13102"
+        },
+        "Proofs.Threadsync.Gen.V0_15_2.H_6c696e75782d61617263683634.Gen": {
+          "path": "Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean",
+          "sha256": "ca0b1d43a263eef329805c28ce72631209241c91f40ac91d738de0cc384ca97e"
         },
         "asm": {
           "path": "Proofs/Asm/Gen.lean",
@@ -1008,6 +1079,8 @@
         "Proofs.Atomics.Stack": "7bd01dd6e64bbef416a036c1b198fdacfd4f04a6722ed4c23a7433cece6b1477",
         "Proofs.Basic.AirCert": "fda4a43a4d2ae4d9b8eca1f43b65dc32135c407254b42725853ccf98c8691d72",
         "Proofs.Basic.Arith": "f00e1973c38a12cfc5f5a6a2e900ab301a694479d9aa0df3889d0b881c97005e",
+        "Proofs.Basic.Cases": "efc15a76c9113ac6e7d78b1e7b23461184d829a05c61da9e3a92843a0cf23ef5",
+        "Proofs.Basic.ClampCases": "a7767eb38aa4ebd4d6d869ab85eb473b525cc115622bc545320d91e32b5d84d5",
         "Proofs.Basic.Common": "213d6d0991bd97d4d18ee3416f3642689a4fcff658b5036887c585a43688fc0d",
         "Proofs.Basic.Proofs": "f07ee76778d7587490edde4bf70627ed397759e3af85a909ed2112e8fee21f8c",
         "Proofs.Basic.Twt": "c2fc8247e0e9b47b1d5787f09287cf27874a6c654737a2499a9e8e5e38aef9b9",
@@ -1020,16 +1093,16 @@
         "Proofs.Errors.Proofs": "4f0167b71938299b74bb99a36dcb976749aaaed0855645fce59878cd76966dca",
         "Proofs.Floatconv.AirCert": "cf1010a8e0fab479845db8978dc86b327ad7e21121afcc881730ad3808e942ac",
         "Proofs.Floatconv.Proofs": "2b29d446af3ced3269487565d35a68aaa1db83d74591077cfcd37cbc55d03525",
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628",
         "Proofs.Floats.AirCert": "09f29e431623ccc06e15279afd18f59f4edda95d1eded089989bc71822b7231d",
         "Proofs.Floats.Dot": "fbe5daf8119c0b33b8d33eeaf589bc191c5e7e7d7ca11631ad8638710cd1bca8",
         "Proofs.Floats.Fitness": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
         "Proofs.Floats.Proofs": "37acbc5c06dc0f00bcfaf422e17c73b78245c860d8b109b9aade2ec33fd473e0",
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
-        "Proofs.Handoff.Ops": "087862a2bdc53abf91a5359a373cdc158c16f278ff37229d266738614d5811b6",
-        "Proofs.Handoff.Protocol": "1275909a6ce4aeaebaff2914a781649fd914c7752934c6d8fae6e224ed408cdf",
-        "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
-        "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
+        "Proofs.Handoff.Ops": "673a5badbd2cdcaea72a7015c0f32363bc8c7f9fd6416fe02a5cb38c72f1f115",
+        "Proofs.Handoff.Protocol": "7b486a56c62bd399c47a3553e1c33f29a086c01336be75fb92f689ce5d4f254d",
+        "Proofs.Handoff.Start": "eabfb0aa075ab8ef3329d8981b1ba6fe942c26e71ab24555cbe03aabc7d4ea6d",
+        "Proofs.Handoff.Steps": "063d955740db4833db54f7baca41b7ea3b73739ece5d82794d95e733d17fdbad",
         "Proofs.Iogroup.AirCert": "478ef5622c84ae2d1075693e65af5e50e04352af2861d4aa8fa4592f2dc011ff",
         "Proofs.Iogroup.Counter": "e3009576184323d607ec51ae2c5389a27fef7a611bdbda024e216591a8e89224",
         "Proofs.Iogroup.Lock": "19346879c3d59dbe4bc0b36f399c7fc981cf3df262ee9eb969a13041991105c9",
@@ -1055,6 +1128,7 @@
         "Proofs.Recursion.Proofs": "03a4aecb6eb40699c265a527fb4899a1e7dc34a49eff5ab3ecaacaabb7e08270",
         "Proofs.Slices.Proofs": "2626be020120a31c877198f9b345820c48666fe22061a8744693851bcd0b0ebb",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
+        "Proofs.Sync.Cases": "aea70dca286ca9f99183cf3fd260fb4c13e08e59b5c74ab309effb3667b47f3b",
         "Proofs.Sync.Cond": "7aed9b9da98f2a2ff1ab13d125ae551cb5acfd2046134773964c59c769bf60e4",
         "Proofs.Sync.Contracts": "0d7a537b5982fa4f88547fd32fb605eeb9f0a39b0921cf1acf8e62722df1f617",
         "Proofs.Sync.Event": "5853ee26d8166692407aca6cad4f251fc8ea7e312f38dab7026efd6239b849fa",
@@ -1063,6 +1137,7 @@
         "Proofs.Sync.Lock": "b1a07c42dac125f1d8c0f53e9a910c918f54999823c93475d4ab146d732801e0",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
         "Proofs.Sync.Mutex": "dc973c9863d70ebe8f2afcbce7d2e07be71f11f78bcf73eb830abbf642d38269",
+        "Proofs.Sync.MutexCases": "a59c50342d614e64de8749fd42cb2d614a0bd93efe88792a2242feb81b19f3cd",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
         "Proofs.Sync.RwLock": "807ad592ceca602c77c370c6461e0126c4ab7ecf7cc22918882570ab5c6372da",
         "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
@@ -1074,6 +1149,7 @@
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
         "Proofs.Threads.Disjoint": "a22c3c3a82c7451f254dd5a447d9596370a686e2a73e56d26ca9b634beb32dd2",
         "Proofs.Threads.Proofs": "d93dd4fff8a8fa3256a166675a6584399be81f4662146d198e472e9bdacd0ab2",
+        "Proofs.Threadsync.Cases": "288ae8f77d8eb80a7105bf0dc92f704810d4a54264dfe7273b48d62501a89633",
         "Proofs.Threadsync.Cond": "f717bb29932c3cded598470964386009b9847d1392aca2df7f50213658c083e1",
         "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
         "Proofs.Threadsync.Event": "28936ad8884a3ca663a1ac7b7f63dfc9ae2d706a410c36bceb8d78f94f3a011f",
@@ -1094,23 +1170,28 @@
       "zig": "0.16.0",
       "target": "linux",
       "command": [
-        "lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "build",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:20:26.597511+00:00",
-      "elapsed_seconds": 0.258,
+      "started_utc": "2026-10-20T07:00:10.672141+00:00",
+      "elapsed_seconds": 0.278,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "9b771301573bcdf0f0907d5ce67b4e99de219a7b248c581ed47fe3f506d3b048",
+      "log_sha256": "d571ab172694729e922910c8bced9010cd4f4d6c8d5716c2ec4ecbf970b34b4c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1122,34 +1203,41 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.15.2-linux-floatops": {
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.15.2/floatops/Gen.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:19:40.738709+00:00",
-      "elapsed_seconds": 2.24,
+      "started_utc": "2026-10-20T07:23:28.678536+00:00",
+      "elapsed_seconds": 3.375,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "9337ba510c5daa573cfc4eabe16e78bdf696ef58724810156d648751a3c00741",
+      "log_sha256": "5f67c389ae1af88738afa334eadd407182d9fbfa2a814f731516f0642a840130",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1161,30 +1249,35 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "c14-sync-contracts-linux": {
       "zig": "0.16.0",
       "target": "linux",
       "command": [
-        "lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "build",
         "Proofs.Sync.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8cdda0a144625a38fb19ad929c77ddcd3165ecdf",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-16T18:25:35.837183+00:00",
-      "elapsed_seconds": 257.301,
+      "started_utc": "2026-10-20T07:27:14.474236+00:00",
+      "elapsed_seconds": 0.377,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "a68495c5db6b0960308a0088a7f100d3fc0eba8909c42c48bc34b98cb66e6be7",
+      "log_sha256": "42162959f5f678061b222a4291bcbfb42e3fb4e453d78cadbc29e7c0c22843ae",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1221,9 +1314,11 @@
       "zig": "0.17.0",
       "target": "linux",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.17.0/floatops/Gen.lean",
         "--swap",
@@ -1250,19 +1345,24 @@
         "Proofs.Sync.Mailbox",
         "Proofs.Sync.SnapshotCache"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "391f43b04380f8b9d58fb98937292128a314bedd",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-18T19:40:32.603110+00:00",
-      "elapsed_seconds": 164.168,
+      "started_utc": "2026-10-20T07:24:52.222360+00:00",
+      "elapsed_seconds": 141.234,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "7e8af0db36d09ac673b20a9ac4c86827c064b5ad316704a25b859d257c5ec764",
+      "log_sha256": "f832e8bd15f47a2f77e98c712fc87604ea4bbc3e40f24992badb56b79a919206",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1314,12 +1414,12 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d",
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628",
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
-        "Proofs.Handoff.Ops": "087862a2bdc53abf91a5359a373cdc158c16f278ff37229d266738614d5811b6",
-        "Proofs.Handoff.Protocol": "1275909a6ce4aeaebaff2914a781649fd914c7752934c6d8fae6e224ed408cdf",
-        "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
-        "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
+        "Proofs.Handoff.Ops": "673a5badbd2cdcaea72a7015c0f32363bc8c7f9fd6416fe02a5cb38c72f1f115",
+        "Proofs.Handoff.Protocol": "7b486a56c62bd399c47a3553e1c33f29a086c01336be75fb92f689ce5d4f254d",
+        "Proofs.Handoff.Start": "eabfb0aa075ab8ef3329d8981b1ba6fe942c26e71ab24555cbe03aabc7d4ea6d",
+        "Proofs.Handoff.Steps": "063d955740db4833db54f7baca41b7ea3b73739ece5d82794d95e733d17fdbad",
         "Proofs.Lists.Alloc": "b5014a7d07eca05329bbd6c4b6cce6655bf99980c94cc93776626a3828d74143",
         "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
@@ -1348,27 +1448,34 @@
       "zig": "0.15.2",
       "target": "darwin",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.15.2/floatops/Gen-darwin.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:17:56.791044+00:00",
-      "elapsed_seconds": 12.367,
+      "started_utc": "2026-10-20T07:20:58.273874+00:00",
+      "elapsed_seconds": 10.113,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "752380629caded292bede7ed824d34d56498d0bf9685f62cc4c2ae270f93da27",
+      "log_sha256": "84716bfc5babf6ddba3ea59b3c32827316fe928cb81ce4a7037bb8ec5e844f65",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1380,34 +1487,41 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.16.0-darwin-floatops": {
       "zig": "0.16.0",
       "target": "darwin",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.16.0/floatops/Gen-darwin.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:20:16.888809+00:00",
-      "elapsed_seconds": 9.444,
+      "started_utc": "2026-10-20T07:24:13.909842+00:00",
+      "elapsed_seconds": 9.278,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3959277c09ab59981b7a3b7ab9e5edd1393d1821511882cea6c6e57f664bca5b",
+      "log_sha256": "cc4a306452895c4e8a61bbaf18a0871d27cc8722658b13310d33b7cb59865020",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1419,34 +1533,41 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.17.0-darwin-floatops": {
       "zig": "0.17.0",
       "target": "darwin",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.17.0/floatops/Gen-darwin.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "100aa91c45459f27c415b55ed205a3eff8f4c66f",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T22:20:27.117332+00:00",
-      "elapsed_seconds": 5.976,
+      "started_utc": "2026-10-20T07:24:32.848952+00:00",
+      "elapsed_seconds": 9.065,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "169293dcec55e68abcca00228581ed63dfdd4f00a3351773eeb5dd044fca38fc",
+      "log_sha256": "3a37668ecddb30fbb585637a8b25a6b30e5682877cc0fa36e4d12e2460cb34f1",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1458,16 +1579,18 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.15.2-linux-aarch64-threadsync": {
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "threadsync=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean",
         "--",
@@ -1475,19 +1598,24 @@
         "Proofs.Threadsync.WaitGroup",
         "Proofs.Threadsync.Handoff"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "4457543e3b63cd4ed8c93751e05752f5e3e31b15",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-16T18:21:39.096057+00:00",
-      "elapsed_seconds": 84.71,
+      "started_utc": "2026-10-20T07:22:20.596205+00:00",
+      "elapsed_seconds": 67.284,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f045f78817a396cfe03203132562488fa5b5eca7f2175eac8de482edeb026262",
+      "log_sha256": "9d446228ae7a871cd30b120ac3f1c7cc387123d03f6ab94f815ac711981af048",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -1514,10 +1642,10 @@
       },
       "sources": {
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
-        "Proofs.Handoff.Ops": "087862a2bdc53abf91a5359a373cdc158c16f278ff37229d266738614d5811b6",
-        "Proofs.Handoff.Protocol": "1275909a6ce4aeaebaff2914a781649fd914c7752934c6d8fae6e224ed408cdf",
-        "Proofs.Handoff.Start": "3e449474fc6a2b8d052b52dea04b0cbd255c69770ef8ede5d80509016b05228d",
-        "Proofs.Handoff.Steps": "87350e97f76f0b1df6c8dcd7e86f025f17b24b3bfeac47828265995c1459a15e",
+        "Proofs.Handoff.Ops": "673a5badbd2cdcaea72a7015c0f32363bc8c7f9fd6416fe02a5cb38c72f1f115",
+        "Proofs.Handoff.Protocol": "7b486a56c62bd399c47a3553e1c33f29a086c01336be75fb92f689ce5d4f254d",
+        "Proofs.Handoff.Start": "eabfb0aa075ab8ef3329d8981b1ba6fe942c26e71ab24555cbe03aabc7d4ea6d",
+        "Proofs.Handoff.Steps": "063d955740db4833db54f7baca41b7ea3b73739ece5d82794d95e733d17fdbad",
         "Proofs.MutexCounter.Protocol": "03c7c08f863c1e55e366f70beb42393c464a0d1cad895f6a3c1a2db0b4a6afc6",
         "Proofs.Threadsync.Cond": "f717bb29932c3cded598470964386009b9847d1392aca2df7f50213658c083e1",
         "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
@@ -1532,29 +1660,36 @@
     },
     "0.15.2-linux-aarch64-floatops": {
       "zig": "0.15.2",
-      "target": "linux",
+      "target": "linux-aarch64",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.15.2/floatops/Gen-linux-aarch64.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T15:30:55.762283+00:00",
-      "elapsed_seconds": 9.851,
+      "started_utc": "2026-10-20T07:22:16.176354+00:00",
+      "elapsed_seconds": 3.582,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "51b080e72412dbafbe8197d8cd4a9290291be3db7635c95e8ce47cb189aa10f5",
+      "log_sha256": "a390c3a7c5dd8fa0e727df09cb3539289209153b8b94632c2d52e02ccb45895c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1566,34 +1701,41 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.16.0-linux-aarch64-floatops": {
       "zig": "0.16.0",
-      "target": "linux",
+      "target": "linux-aarch64",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.16.0/floatops/Gen-linux-aarch64.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T15:29:25.544541+00:00",
-      "elapsed_seconds": 10.546,
+      "started_utc": "2026-10-20T07:24:23.714511+00:00",
+      "elapsed_seconds": 8.591,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "aa26cb90e8f3db3f466e6fcf2d3b3796aaec2ef2f897eb88d98d8a8752293429",
+      "log_sha256": "79b3a1ff63c154d35049aca68d9c59c3a0ad9c11c795020d2f8f5ab7b344d0c4",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1605,34 +1747,41 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.14.1-linux-aarch64-floatops": {
       "zig": "0.14.1",
-      "target": "linux",
+      "target": "linux-aarch64",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.14.1/floatops/Gen-linux-aarch64.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "06ef796fb106098e0015953b02f48e745c3cb610",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-11T15:31:15.960178+00:00",
-      "elapsed_seconds": 9.719,
+      "started_utc": "2026-10-20T07:20:38.205856+00:00",
+      "elapsed_seconds": 9.287,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "fbda28e8ffbea86827872029bcd107a6304498ffe1e11c541c7110182fcb5ec1",
+      "log_sha256": "735af09ccdcf3d31d1d83231ee30703e4b29fa3b84d1f8233981f26293eb4a28",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1644,34 +1793,41 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     },
     "0.17.0-linux-aarch64-floatops": {
       "zig": "0.17.0",
       "target": "linux-aarch64",
       "command": [
-        "python3",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
         "--swap",
         "floatops=tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean",
         "--",
         "Proofs.Floatops.Proofs"
       ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "2cea5bdd7f86d0a68f40b9ed85496a7a656becbc",
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-12T11:30:01.598957+00:00",
-      "elapsed_seconds": 10.152,
+      "started_utc": "2026-10-20T07:24:42.389000+00:00",
+      "elapsed_seconds": 9.264,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "ca00b2217b23200c84fbe8628afeeecbe041be6bec66468f5f3c787e2c4b8f8b",
+      "log_sha256": "0843eb2e298625374704044d5c3d4e6a881b8db4f6d97a178566fde8c71a6cb9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs"
@@ -1683,7 +1839,54 @@
         }
       },
       "sources": {
-        "Proofs.Floatops.Proofs": "ad1e390e70b4481ea3e217de216c30f3fca8bda85d0b6238f685f311dc54f34d"
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
+      }
+    },
+    "cx-floatops-0.17.0-linux": {
+      "zig": "0.17.0",
+      "target": "linux",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "scripts/theorem-inventory.py",
+        "swap-build",
+        "--lake",
+        "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "--swap",
+        "floatops=tests/golden/0.17.0/floatops/Gen.lean",
+        "--",
+        "Proofs.Floatops.Proofs"
+      ],
+      "producer": {
+        "path": "/Users/konstantinrr/.elan/toolchains/leanprover--lean4---v4.34.0/bin/lake",
+        "sha256": "c8c24f1398162ab4004e2a869952d8469f54293651151feaad4526f2b8474c6e",
+        "bytes": 51824
+      },
+      "outcome": "success",
+      "exit_code": 0,
+      "revision": {
+        "head": "6b0efac6cdc88eb8e97c7ae3ba092dd04e77d003",
+        "tracked_dirty": false
+      },
+      "started_utc": "2026-10-20T06:57:09.698669+00:00",
+      "elapsed_seconds": 5.472,
+      "host": {
+        "machine": "arm64",
+        "system": "Darwin"
+      },
+      "log_sha256": "f9d9d7ab41628fe6b1aaa7ac8cfd6480d0449e231114b0f9ea797b560ea9a667",
+      "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
+      "modules": [
+        "Proofs.Floatops.Proofs"
+      ],
+      "gens": {
+        "floatops": {
+          "path": "tests/golden/0.17.0/floatops/Gen.lean",
+          "sha256": "a02019a5ee040517a28d064443199970a0a5fa59fa3ef8601c48bd875026f874"
+        }
+      },
+      "sources": {
+        "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628"
       }
     }
   }

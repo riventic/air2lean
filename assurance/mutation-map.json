@@ -1782,35 +1782,35 @@
       ],
       "negative_tests": [
         {
-          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Steps.lean",
           "anchor": "/-- No points-to for the loaded address: the walk fails instead of inventing ownership. -/"
         },
         {
-          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Steps.lean",
           "anchor": "/-- A rule about another command is not used: the goal holds only if the (unsound) rule about a"
         }
       ],
       "mutants": [
         {
           "name": "array-update-wrong-neighbor",
-          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Steps.lean",
           "category": "layout",
           "anchor": "(fun _ => up (pts p 4 w) \u22c6 up (pts (p.add 4) 4 w) \u22c6 up (pts (p.add 8) 4 z))"
         },
         {
           "name": "store-keeps-old-value",
-          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Steps.lean",
           "category": "other",
           "anchor": "(Zig.store 4 p w) (fun _ => up (pts p 4 x))"
         },
         {
           "name": "frame-atom-dropped",
-          "path": "tests/roadmap/sep-auto/Steps.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Steps.lean",
           "category": "other",
           "anchor": "FTotalTriple (up (pts p 4 x) \u22c6 R) (Zig.load (BitVec 32) 4 p)"
         }
       ],
-      "note": "Mutated specifications of fsym walks (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (tests/roadmap/sep-auto/Steps.lean, CI step Full-state separation logic)."
+      "note": "Mutated specifications of fsym walks (a wrong array neighbor, a store that keeps the old value, a dropped frame atom) must fail inside fail_if_success (tests/roadmap/sep-auto/SepAuto/Steps.lean, CI step Full-state separation logic)."
     },
     "P02": {
       "categories": [],
@@ -1850,15 +1850,15 @@
       "categories": [],
       "negative_tests": [
         {
-          "path": "tests/roadmap/sep-auto/Total.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Total.lean",
           "anchor": "/-- … but not with the distance to the bound, which grows. -/"
         },
         {
-          "path": "tests/roadmap/sep-auto/Total.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Total.lean",
           "anchor": "theorem spin_no_measure"
         },
         {
-          "path": "tests/roadmap/sep-auto/Arith.lean",
+          "path": "tests/roadmap/sep-auto/SepAuto/Arith.lean",
           "anchor": "/-- Without a range premise the sum may wrap: nothing is proved. -/"
         }
       ],
@@ -1883,6 +1883,18 @@
         {
           "path": "tests/roadmap/claims/test_claims.py",
           "anchor": "def test_witnesses_cap_strength"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_allocator_creation_is_required"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_allocator_creation_is_exact_and_audited"
+        },
+        {
+          "path": "tests/roadmap/coverage-report/test_coverage.py",
+          "anchor": "def test_allocator_creation_blocks_binding_and_absence"
         },
         {
           "path": "tests/roadmap/claims/test_claims.py",
@@ -1915,6 +1927,16 @@
           "category": "other"
         },
         {
+          "name": "claim-allocator-creation-not-required",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claim-allocator-admit-unaudited",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
           "name": "claim-liveness-not-required",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
@@ -1926,6 +1948,11 @@
         },
         {
           "name": "coverage-unwitnessed-direct",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "coverage-allocator-creation-unchecked",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },
@@ -2376,6 +2403,10 @@
       "categories": [],
       "negative_tests": [
         {
+          "path": "tests/roadmap/outcome-taxonomy/test_theorem_contracts.py",
+          "anchor": "def test_narrower_than_theorem_fails_without_samples"
+        },
+        {
           "path": "tests/roadmap/outcome-accounting/test_report.py",
           "anchor": "def test_pointer_fragment_remains_mismatch_not_setup_failure"
         },
@@ -2408,6 +2439,11 @@
         {
           "name": "b",
           "path": "scripts/mutate.sh",
+          "category": "other"
+        },
+        {
+          "name": "outcome-contract-ignores-theorem",
+          "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },
         {

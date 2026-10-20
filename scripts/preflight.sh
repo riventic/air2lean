@@ -29,7 +29,8 @@
 #   coverage inventories                  coverage.py l14 over the regenerated inventories
 #   C front-end record                    tests/roadmap/c-frontend/check.sh --light
 #   generated modules                     gen-integrity.py check, after the full build
-#                                         (scripts/full-build.sh; skipped by --no-translator)
+#                                         (scripts/full-build.sh, which first checks the
+#                                         precompiled fsym libraries; skipped by --no-translator)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail
@@ -65,6 +66,17 @@ if [ "$materialize" = 1 ]; then
 fi
 check 'CI matrix derived from compatibility.json' python3 scripts/ci-matrix.py check
 check 'CI parts declared and guarded for reuse' python3 scripts/ci-reuse.py check-workflow
+# The normal full-build/certify and retranslation checks include case coverage. Keep the
+# metadata-only path covered too. Transitional hooks: ledger #case-family-enrollment.
+if [ "$translator" = 0 ]; then
+  check 'complete namespaced golden cases' python3 -B scripts/gen-integrity.py case-coverage
+fi
+# Restricted CI steps have no history; the mandatory unrestricted generated producer checks
+# the authenticated event baseline before restriction. Local callers default to origin/main;
+# AIR2LEAN_CASE_BASE can pin another already fetched comparison commit.
+if [ "${GITHUB_ACTIONS:-}" != true ]; then
+  check 'case family enrollment history' python3 -B scripts/gen-integrity.py enrollment
+fi
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate
@@ -98,6 +110,8 @@ if [ "$translator" = 1 ]; then
   # pushed was checked against stale oleans. Through Lake's shared artifact cache when
   # AIR2LEAN_CAS_DIR is set.
   check 'full build (scripts/full-build.sh)' scripts/full-build.sh --logs "$scratch/full-build"
+  check 'proof-fixture package: module names and mutant verdicts' \
+    python3 -B -m unittest discover -s tests/roadmap/fixtures-lake -p 'test_*.py'
   check 'generated modules are fresh translations' python3 -B scripts/gen-integrity.py check
 fi
 

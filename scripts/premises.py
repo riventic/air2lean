@@ -726,7 +726,7 @@ def binding_premises(repo: Repository, rel: str, tokens) -> list[tuple[str, str]
 def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     config = repo.config
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
-    seen, pending, tokens = {id(theorem)}, [theorem], set()
+    seen, pending, tokens = set(), [], set()
     runtime: set[str] = set()
     generated: set[str] = set()
     visible = repo.visible(theorem.file)
@@ -749,6 +749,8 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
             seen.add(id(target))
             pending.append(target)
 
+    # The starting declaration has runtime/generated/profile/marker facts of its own too.
+    visit(theorem)
     while True:
         while pending:
             current = pending.pop()
@@ -888,7 +890,7 @@ def runtime_errors(repo: Repository) -> list[str]:
     return errors
 
 
-def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]]:
+def check(root: Path = ROOT, write: bool = False, *, repo: Repository | None = None) -> tuple[list[str], list[dict]]:
     config = load_config(root / CONFIG)
     premises, reports, errors = load_catalog(root / config["catalog"])
     referenced = set()
@@ -904,7 +906,7 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
     if set(config["profiles"]) - {"abi64-be-v1"} != {"absent", "legacy-abi64-le", "abi64-le-v1", "gate-time"}:
         errors.append(f"{CONFIG}: profiles must map absent, legacy-abi64-le, abi64-le-v1 and gate-time "
                       "(and optionally abi64-be-v1)")
-    repo = load_repository(root, config)
+    repo = repo if repo is not None else load_repository(root, config)
     errors += repo.errors + runtime_errors(repo)
     entries, index_errors = build_index(repo)
     errors += index_errors
@@ -930,32 +932,69 @@ def check(root: Path = ROOT, write: bool = False) -> tuple[list[str], list[dict]
 EQUATION_RE = re.compile(r"\.(?:eq_\d+|eq_def|eq_unfold)$")
 
 
+def equation_parent(node: dict, nodes: dict) -> dict | None:
+    name = node["name"]
+    return nodes.get(EQUATION_RE.sub("", name)) if EQUATION_RE.search(name) else None
+
+
 def defining_module(node: dict, nodes: dict) -> str:
     """The module a declaration belongs to for premises. Lean realizes the equation lemmas of a
     definition (`d.eq_1`, `d.eq_def`) in the module whose proof first unfolds it, which can be
     another one than the definition's; they belong to the definition."""
-    name = node["name"]
-    parent = nodes.get(EQUATION_RE.sub("", name)) if EQUATION_RE.search(name) else None
-    return (parent or node)["module"]
+    return (equation_parent(node, nodes) or node)["module"]
 
 
-def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) -> dict:
-    """Derive premises from the kernel dependency graph of scripts/assumptions.py."""
+def compiled_source_files(report: dict, root: Path) -> dict[str, str]:
+    """Join only owner-validated compiled modules to their indexed source identities."""
+    freshness = report.get('freshness')
+    context = freshness.get('compiled_units') if isinstance(freshness, dict) else None
+    if context is None:
+        return {}
+    from theorem_universe import ROOT as owner_root, compilation_plan, verify_compiled_report
+    if root.resolve() != owner_root.resolve():
+        raise ValueError('source comparison root differs from compiler owner root')
+    verify_compiled_report(report)
+    return {unit.module: unit.file for unit in compilation_plan(context)}
+
+
+def equation_source_bounds(repo: Repository, nodes: dict, roots: list[dict], *,
+                           source_files: dict[str, str] | None = None) -> dict[tuple[str, str], set[str]]:
+    """Conservative source bounds for existing equation parents, not exact origin evidence."""
+    bounds = {}
+    for theorem in roots:
+        if is_runtime(theorem['module']):
+            continue
+        parent = equation_parent(nodes[theorem['name']], nodes)
+        if parent is None:
+            continue
+        key = (parent["module"], parent.get("user_name", parent["name"]))
+        if key not in bounds:
+            source_file = (source_files or {}).get(key[0])
+            candidates = [decl for decl in repo.table.get(key[1], ())
+                          if decl.name == key[1] and (decl.file.rel == source_file if source_file is not None
+                                                    else decl.file.module == key[0])]
+            if candidates:
+                bound = {p for decl in candidates for p in derive(repo, decl)}
+                if bound:
+                    bounds[key] = bound
+    return bounds
+
+
+def compiled_graph(report: dict, root: Path, config: dict, *,
+                   source_files: dict[str, str] | None = None) -> tuple[dict, dict, dict]:
+    """Derive every selected compiled root independently of the limited source index."""
     if report.get("schema_version") != 1 or report.get("status") not in {"pass", "fail"}:
         raise ValueError("assumption report is not a completed schema-1 audit")
     nodes = {n["name"]: n for n in report["nodes"]}
     errors, theorems, skipped = [], [], 0
     profiles: dict[str, tuple[list[str], str]] = {}
-    markers = GeneratedMarkers(root)
-    # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules and the
-    # source comparison use the user-facing name so module paths cannot trigger token rules.
+    markers = GeneratedMarkers(root, source_files=source_files)
+    # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules use the
+    # user-facing name so module paths cannot trigger token rules.
     def user(name: str) -> str:
         return nodes[name].get("user_name", name) if name in nodes else name
 
-    by_name: dict[tuple[str, str], set] = {}
-    for entry in source or ():
-        key = (module_name(Path(entry["file"])), entry["theorem"])
-        by_name.setdefault(key, set()).update(entry["premises"])
+    reasons, edges = {}, {}
 
     def external(module: str) -> bool:
         return module.split(".")[0] in EXTERNAL_IMPORTS
@@ -983,6 +1022,7 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
                 continue
             if external(module):
                 continue
+            edges[name] = node["dependencies"]
             names.add(user(name))
             if node["kind"] == "axiom" and name not in STANDARD_AXIOMS:
                 for premise in config["source_axiom"]:
@@ -1012,10 +1052,11 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         apply_rules(config, via, {user(n) for n in statement}, "statement")
         for module in sorted(generated):
             if module not in profiles:
-                path = generated_path(root, module)
+                path = generated_path(root, module, source_files=source_files)
                 if path.is_file():
                     header = profile_header(path.read_text())
-                    profiles[module] = profile_premises(config, LeanFile(path, module, module, [], header))
+                    profiles[module] = profile_premises(
+                        config, LeanFile(path, path.relative_to(root).as_posix(), module, [], header))
                 else:
                     profiles[module] = ([config["profiles"]["gate-time"]], "generated module not in repository")
             profile, reason = profiles[module]
@@ -1024,19 +1065,92 @@ def compiled(report: dict, root: Path, config: dict, source: list[dict] | None) 
         via = close(config, via)
         entry = {"name": theorem["name"], "module": theorem["module"],
                  "premises": sorted(via, key=premise_key)}
-        if source is not None:
-            known = by_name.get((theorem["module"], user(theorem["name"])))
-            if known is not None:
-                entry["source_gaps"] = sorted(set(entry["premises"]) - known, key=premise_key)
-                if entry["source_gaps"]:
-                    entry["gap_via"] = {p: sorted(set(via[p])) for p in entry["source_gaps"]}
+        reasons[theorem["name"]] = via
         theorems.append(entry)
     errors += markers.errors
     errors += memory_model_errors(config, theorems, lambda t: t["name"])
-    gaps = [t for t in theorems if t.get("source_gaps")]
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,
-            "source_gap_count": len(gaps), "errors": errors, "theorems": theorems}
+            "source_gap_count": 0, "errors": errors, "theorems": theorems}, reasons, edges
+
+
+def compare_compiled_source(result: dict, nodes: dict, reasons: dict, edges: dict,
+                            source: list[dict], origins: dict | None = None, *,
+                            source_files: dict[str, str] | None = None) -> None:
+    """Compare complete compiled closures; missing source evidence is never an empty success."""
+    by_name: dict[tuple[str, str], set] = {}
+    by_file: dict[tuple[str, str], set] = {}
+    for entry in source:
+        key = (module_name(Path(entry["file"])), entry["theorem"])
+        by_name.setdefault(key, set()).update(entry["premises"])
+        if source_files:
+            by_file.setdefault((entry["file"], entry["theorem"]), set()).update(entry["premises"])
+
+    def compare(theorem: dict, known: set) -> bool:
+        gaps = theorem["source_gaps"] = sorted(set(theorem["premises"]) - known, key=premise_key)
+        if gaps:
+            theorem["gap_via"] = {p: sorted(set(reasons[theorem["name"]][p])) for p in gaps}
+        return not gaps
+
+    passed, missing = [], []
+    for theorem in result["theorems"]:
+        node = nodes[theorem["name"]]
+        name = node.get("user_name", node["name"])
+        source_file = (source_files or {}).get(theorem["module"])
+        known = by_file.get((source_file, name)) if source_file is not None else \
+            by_name.get((theorem["module"], name))
+        if known is None:
+            missing.append(theorem)
+        elif compare(theorem, known):
+            passed.append((theorem["name"], frozenset(known)))
+    if missing:
+        # Retain each independent passing source bound along actual root-to-helper edges.
+        # A helper's own statement rules can add facts absent from its caller's premise set.
+        covered, pending = {}, passed
+        while pending:
+            name, bound = pending.pop()
+            bounds = covered.setdefault(name, set())
+            if bound not in bounds:
+                bounds.add(bound)
+                pending.extend((dependency, bound) for dependency in edges.get(name, ()))
+        for theorem in missing:
+            candidates = list(covered.get(theorem["name"], ()))
+            parent = equation_parent(nodes[theorem["name"]], nodes)
+            key = (parent["module"], parent.get("user_name", parent["name"])) if parent else None
+            bound = (origins or {}).get(key)
+            if bound is not None:
+                candidates.append(bound)
+            if candidates:
+                # Never union unrelated source bounds to manufacture complete coverage.
+                if len(candidates) == 1:
+                    best = candidates[0]
+                else:
+                    complete = set(theorem["premises"])
+                    best = min(candidates, key=lambda known: (len(complete - known), tuple(sorted(known))))
+                compare(theorem, best)
+            else:
+                result["errors"].append(f'{theorem["name"]}: source comparison unavailable: no indexed '
+                                        'theorem row, passing indexed root covering it, or equation-parent source bound')
+    result["source_gap_count"] = sum(bool(t.get("source_gaps")) for t in result["theorems"])
+    if result["errors"]:
+        result["status"] = "fail"
+
+
+def compiled(report: dict, root: Path, config: dict, source: list[dict] | None,
+             source_origins: dict | None = None) -> dict:
+    """Derive compiled premises, optionally requiring the separate source comparison."""
+    source_files, errors = {}, []
+    if source is not None:
+        try:
+            source_files = compiled_source_files(report, root)
+        except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
+            errors.append(f'source comparison unavailable: {error}')
+    result, reasons, edges = compiled_graph(report, root, config, source_files=source_files)
+    result["errors"] += errors
+    if source is not None:
+        compare_compiled_source(result, {n["name"]: n for n in report["nodes"]}, reasons, edges,
+                                source, source_origins, source_files=source_files)
+    return result
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -1061,8 +1175,26 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if command == "compiled":
             config = load_config(root / CONFIG)
-            _, entries = check(root)
-            report = compiled(json.loads(args.assurance.read_text()), root, config, entries)
+            audit = json.loads(args.assurance.read_text())
+            source_files, source_errors = {}, []
+            try:
+                source_files = compiled_source_files(audit, root)
+            except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
+                source_errors.append(f'source comparison unavailable: {error}')
+            report, reasons, edges = compiled_graph(audit, root, config, source_files=source_files)
+            nodes = {n["name"]: n for n in audit["nodes"]}
+            entries, origins = [], {}
+            try:
+                repo = load_repository(root, config)
+                index_errors, entries = check(root, repo=repo)
+                source_errors += index_errors
+                origins = equation_source_bounds(repo, nodes, audit['theorems'],
+                                                source_files=source_files)
+            except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError, re.error) as error:
+                source_errors.append(f'source comparison unavailable: {error}')
+            report["errors"] += source_errors
+            compare_compiled_source(report, nodes, reasons, edges, entries, origins,
+                                    source_files=source_files)
             write_report(args.output, report)
             for error in report["errors"]:
                 print(f"  {error}", file=sys.stderr)

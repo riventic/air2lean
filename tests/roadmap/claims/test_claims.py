@@ -2,6 +2,7 @@
 """Claim-strength regressions. fixture-report.json holds statement structures extracted by
 tools/Assurance.lean from Fixture.lean; check.sh regenerates and compares them."""
 import copy
+import contextlib
 import importlib.util
 import json
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -18,9 +20,9 @@ SPEC = importlib.util.spec_from_file_location('claims', SCRIPT)
 claims = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(claims)
 FIXTURE = json.loads((Path(__file__).parent / 'fixture-report.json').read_text())
-AUDIT_SPEC = importlib.util.spec_from_file_location('assumptions', ROOT / 'scripts' / 'assumptions.py')
-assumptions = importlib.util.module_from_spec(AUDIT_SPEC)
-AUDIT_SPEC.loader.exec_module(assumptions)
+sys.path.insert(0, str(ROOT / 'scripts'))
+import theorem_universe as universe
+assumptions = universe.assumptions
 HEADS = claims.load_heads()
 RESERVED = claims.reserved_names()
 RESERVED_MODULES = claims.load_registry()[1]
@@ -36,6 +38,62 @@ SPOOFS = ('ClaimFixture.spoof_eventually', 'ClaimFixture.spoof_within', 'ClaimFi
 
 # (claim class, strength after witness caps); classification ignores the root binding.
 EXPECTED = {
+    'ClaimAllocator.goodSpec': ('unclassified', None),
+    'ClaimAllocator.outOfRange_noCreation': ('unclassified', None),
+    'ClaimAllocator.goodSpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.goodSpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.falseSpec': ('unclassified', None),
+    'ClaimAllocator.wrongSpec': ('unclassified', None),
+    'ClaimAllocator.wrongSpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.wrongSpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.wrongAdmit': ('unclassified', None),
+    'ClaimAllocator.wrongAdmit.creation': ('guaranteed-return', None),
+    'ClaimAllocator.wrongAdmit.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.impossibleSpec': ('unclassified', None),
+    'ClaimAllocator.impossibleSpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.impossibleSpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.emptyDomainSpec': ('unclassified', None),
+    'ClaimAllocator.emptyDomainSpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.emptyDomainSpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.familySpec': ('unclassified', None),
+    'ClaimAllocator.familySpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.familySpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.forgedRole': ('unclassified', None),
+    'ClaimAllocator.forgedRole.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.forgedRole.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.admissionFamilySpec': ('unclassified', None),
+    'ClaimAllocator.admissionFamilySpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.admissionFamilySpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.admissionFamily_not_admit_one': ('unclassified', None),
+    'ClaimAllocator.telescopeFamilySpec': ('unclassified', None),
+    'ClaimAllocator.telescopeFamilySpec.creation': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.telescopeFamilySpec.creation.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.emptyDomain_client': ('guaranteed-return', None),
+    'ClaimAllocator.emptyDomain_client.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.use_contract': ('guaranteed-return', None),
+    'ClaimAllocator.good_client': ('guaranteed-return', 'total_correctness'),
+    'ClaimAllocator.false_client': ('guaranteed-return', None),
+    'ClaimAllocator.inline_client': ('guaranteed-return', None),
+    'ClaimAllocator.alias_client': ('guaranteed-return', None),
+    'ClaimAllocator.alias_client.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.boxed_client': ('guaranteed-return', None),
+    'ClaimAllocator.boxed_client.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.good_client.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.false_client.nonvacuous': ('unclassified', None),
+    'ClaimAllocator.inline_client.nonvacuous': ('unclassified', None),
+    # These exact checked auxiliary declarations are part of the fixture audit too. Keep the
+    # complete root-set check: none of their equalities, activity facts or projections is a
+    # program claim. Do not silently filter generated declarations out of the report.
+    **{f'ClaimAllocator.{stem}._simp_1_{index}': ('unclassified', None)
+       for stem in ('admissionFamilySpec', 'admissionFamilySpec.creation', 'alias_client',
+                    'boxed_client', 'emptyDomainSpec', 'emptyDomainSpec.creation', 'falseSpec',
+                    'goodSpec', 'goodSpec.creation', 'inline_client',
+                    'telescopeFamilySpec.creation', 'use_contract')
+       for index in (1, 2, 3)},
+    **{f'ClaimAllocator.{name}': ('unclassified', None)
+       for name in ('ContractBox.contract', 'admissionFamilyInv._proof_1', 'falseInv._proof_1',
+                    'familyInv.eq_1', 'goodInv._proof_1', 'goodInv._proof_2', 'goodInv._proof_3',
+                    'outOfRange_noCreation._proof_1_1')},
     'ClaimFixture.ret_run': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_run_ground': ('guaranteed-return', 'total_correctness'),
     'ClaimFixture.ret_some': ('guaranteed-return', 'total_correctness'),
@@ -191,11 +249,13 @@ class ClassifyTests(unittest.TestCase):
         """The fixture's spoofs of reserved names are audited (no name clash: the fixture does not
         import `ZigLean.Conc.Total`) and concluded in their own module; they support no claim."""
         theorems = classified(FIXTURE)
+        module = next(unit.module for unit in universe.universe()[1]
+                      if unit.file == 'tests/roadmap/claims/Fixture.lean')
         for name in SPOOFS:
             with self.subTest(name=name):
                 head = theorems_of(FIXTURE)[name]['statement']['head']
                 self.assertIn(head['name'], RESERVED)
-                self.assertEqual(head['module'], 'tests.roadmap.claims.Fixture')
+                self.assertEqual(head['module'], module)
                 self.assertEqual(theorems[name]['claims'], [])
                 self.assertIn('reserved claim-head name', theorems[name]['head_problem'])
         # The same spoofs, registered under their own declaration, would claim total correctness:
@@ -423,6 +483,77 @@ class AssessTests(unittest.TestCase):
         goal = self.goal('ClaimFixture.fret_partial', 'partial_correctness', 'ClaimFixture.ret', report=report)
         self.assertIn('liveness witness mismatch', goal['reason'])
 
+    def test_allocator_creation_is_required(self):
+        """F2: even a witnessed client supports no claim through an impossible allocator own."""
+        audited = theorems_of(FIXTURE)
+        good = claims.assess(audited['ClaimAllocator.good_client'], HEADS, audited=audited)
+        bad = claims.assess(audited['ClaimAllocator.false_client'], HEADS, audited=audited)
+        self.assertEqual(good['allocator_creation']['status'], 'verified')
+        self.assertEqual(good['strength'], 'total_correctness')
+        self.assertIsNone(bad['strength'])
+        self.assertEqual(bad['witnesses']['nonvacuity'], 'verified')
+        self.assertIn('allocator creation companion absent', claims.uncreated(bad))
+        inline = claims.assess(audited['ClaimAllocator.inline_client'], HEADS, audited=audited)
+        self.assertIsNone(inline['strength'])
+        self.assertEqual(inline['allocator_creation']['status'], 'unnamed')
+        alias = claims.assess(audited['ClaimAllocator.alias_client'], HEADS, audited=audited)
+        self.assertIsNone(alias['strength'])
+        self.assertEqual(alias['allocator_creation']['status'], 'unnamed')
+        boxed = claims.assess(audited['ClaimAllocator.boxed_client'], HEADS, audited=audited)
+        self.assertIsNone(boxed['strength'])
+        self.assertNotIn(boxed['allocator_creation']['status'], ('verified', 'not_required'))
+        empty = claims.assess(audited['ClaimAllocator.emptyDomain_client'], HEADS, audited=audited)
+        self.assertIsNone(empty['strength'])
+        self.assertEqual(empty['allocator_creation']['status'], 'mismatch')
+        # A stale extractor must not silently assert that the proof uses no allocator.
+        report = copy.deepcopy(FIXTURE)
+        del theorems_of(report)['ClaimAllocator.good_client']['statement']['allocator_creation']
+        found = claims.assess(theorems_of(report)['ClaimAllocator.good_client'], HEADS,
+                              audited=theorems_of(report))
+        self.assertIsNone(found['strength'])
+        self.assertIn('allocator creation companion absent', claims.uncreated(found))
+
+    def test_allocator_creation_is_exact_and_audited(self):
+        original = theorems_of(FIXTURE)
+        for name, expected in (('ClaimAllocator.wrongSpec', 'mismatch'),
+                               ('ClaimAllocator.wrongAdmit', 'verified'),
+                               ('ClaimAllocator.impossibleSpec', 'mismatch'),
+                               ('ClaimAllocator.familySpec', 'mismatch'),
+                               ('ClaimAllocator.forgedRole', 'mismatch'),
+                               ('ClaimAllocator.telescopeFamilySpec', 'mismatch')):
+            entries = original[name]['statement']['allocator_creation']
+            own = next(entry for entry in entries if entry['contract'] == name)
+            self.assertEqual(own['status'], expected)
+            if name.endswith('wrongAdmit'):
+                self.assertEqual(own['admissibility']['status'], 'mismatch')
+        for field, value, expected in (('status', 'mismatch', 'mismatch'),
+                                       ('status', None, 'malformed'), ('status', '', 'malformed'),
+                                       ('admissibility', {'status': 'absent', 'theorem': None}, 'inadmissible')):
+            report = copy.deepcopy(FIXTURE)
+            audited = theorems_of(report)
+            audited['ClaimAllocator.good_client']['statement']['allocator_creation'][0][field] = value
+            found = claims.assess(audited['ClaimAllocator.good_client'], HEADS, audited=audited)
+            self.assertIsNone(found['strength'])
+            self.assertEqual(found['allocator_creation']['status'], expected)
+        for companion in ('ClaimAllocator.goodSpec.creation', 'ClaimAllocator.goodSpec.creation.nonvacuous'):
+            report = copy.deepcopy(FIXTURE)
+            audited = theorems_of(report)
+            audited[companion]['allowed'] = False
+            found = claims.assess(audited['ClaimAllocator.good_client'], HEADS, audited=audited)
+            self.assertIsNone(found['strength'])
+            self.assertIn(found['allocator_creation']['status'], ('unaudited', 'inadmissible'))
+
+    def test_allocator_creation_admits_the_used_visible_instance(self):
+        """A single existential FAdmit witness must not authenticate every visible member."""
+        audited = theorems_of(FIXTURE)
+        found = claims.assess(audited['ClaimAllocator.admissionFamilySpec'], HEADS, audited=audited)
+        self.assertIsNotNone(claims.uncreated(found), found['allocator_creation'])
+        own = next(entry for entry in found['allocator_creation']['contracts']
+                   if entry['contract'] == 'ClaimAllocator.admissionFamilySpec')
+        self.assertEqual(own['post_status'], 'verified')
+        self.assertEqual(own['admissibility']['status'], 'verified')
+        self.assertEqual(own['status'], 'unbound_admissibility')
+
     def test_companion_from_witness_fixture(self):
         # A companion declared in a registered witness fixture (assurance/witness-fixtures.json)
         # is audited as a witness theorem: it counts for the claim, but is not itself a claim.
@@ -554,20 +685,56 @@ class AssessTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.compilation = tempfile.TemporaryDirectory(prefix='claims-synthetic-compiler-')
+        cls.addClassCleanup(cls.compilation.cleanup)
+        output = Path(cls.compilation.name)
+        _, units = universe.universe()
+        by_file = {unit.file: unit for unit in units}
+        selected = [by_file['tests/roadmap/claims/Fixture.lean']]
+        # The statement fixture is synthetic CLI input, not a kernel replay receipt. Use the
+        # ordinary writer BEFORE the fake compiler, keeping its real Unit/source/path checks.
+        # No extractor is needed to construct these already-recorded statement shapes.
+        with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext):
+            context = universe.prepare_compilation(selected, by_file, output)
+
+        def compile_fixture(source, root, olean, lean_path, log, **kwargs):
+            olean.parent.mkdir(parents=True, exist_ok=True)
+            olean.write_bytes(b'compiled fixture')
+            return None
+
+        with mock.patch.object(universe, 'compile_unit', side_effect=compile_fixture):
+            errors = universe.compile_all(universe.closure(selected, by_file), by_file, output,
+                                          compiled_units=context)
+        if errors:
+            raise AssertionError(errors)
+        universe.seal_compilation(context)
+        cls.compiler_context = context
+        cls.module = selected[0].module
+        cls.runtime_binding = {key: context[key] for key in ('lean_sysroot', 'toolchain_runtime_sha256')}
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.report = self.base / 'assurance.json'
-        # A report bound (H1) to this checkout's revision and to one artifact digest.
-        self.olean = self.base / 'Fixture.olean'
+        unit = self.compiler_context['units'][self.module]
+        self.olean = Path(unit['output_path'])
+        # Restore the class-owned synthetic output after a previous stale-output test.
         self.olean.write_bytes(b'compiled fixture')
-        self.fixture = dict(FIXTURE, freshness={
+        self.fixture = dict(FIXTURE, modules=[self.module],
+                            # Synthetic header data, not a claim about a real compiled header.
+                            module_imports={self.module: []},
+                            extractor=dict(self.runtime_binding), freshness={
+            **self.runtime_binding,
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
-            'artifacts': [{'module': 'Fixture', 'olean': str(self.olean),
-                           'olean_sha256': assumptions.file_sha256(self.olean), 'source': None, 'source_sha256': None}]})
-        self.report.write_text(json.dumps(self.fixture))
+            'compiled_units': copy.deepcopy(self.compiler_context),
+            'artifacts': [{'module': self.module, 'olean': assumptions.display(self.olean),
+                           'olean_sha256': unit['outputs'][0][1]['sha256'],
+                           'source': unit['source']['path'], 'source_sha256': unit['source']['sha256']}]})
+        assumptions.write_report(self.report, self.fixture)
 
     def manifest(self, goals, function='ret', bounds=None):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
@@ -690,6 +857,36 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('stale', err)
 
+    def test_runtime_headers_must_match(self):
+        missing = dict(self.fixture, freshness={k: v for k, v in self.fixture['freshness'].items()
+                                               if k != 'toolchain_runtime_sha256'})
+        mismatch = dict(self.fixture, extractor=dict(self.fixture['extractor'],
+                                                     toolchain_runtime_sha256='0' * 64))
+        for reason, report in [('missing', missing), ('mismatch', mismatch)]:
+            with self.subTest(reason=reason):
+                self.report.write_text(json.dumps(report))
+                code, _, err = self.check([('ClaimFixture.fret_total', 'total_correctness')])
+                self.assertEqual(code, 2)
+                self.assertIn('no matching toolchain runtime binding', err)
+
+    def test_known_unit_requires_its_compiler_binding(self):
+        missing = copy.deepcopy(self.fixture)
+        del missing['freshness']['compiled_units']
+        wrong_selection = dict(self.fixture, modules=[])
+        wrong_source = copy.deepcopy(self.fixture)
+        wrong_source['freshness']['artifacts'][0]['source'] = None
+        wrong_source['freshness']['artifacts'][0]['source_sha256'] = None
+        missing_headers = dict(self.fixture, module_imports={})
+        for reason, report in [('no compiler-owned run binding', missing),
+                               ('differs from the report selection', wrong_selection),
+                               ('source/output differs', wrong_source),
+                               ('incomplete import headers', missing_headers)]:
+            with self.subTest(reason=reason):
+                assumptions.write_report(self.report, report)
+                code, _, err = self.check([('ClaimFixture.fret_total', 'total_correctness')])
+                self.assertEqual(code, 2)
+                self.assertIn(reason, err)
+
     def test_dirty_report_needs_explicit_recorded_permission(self):
         goal = [('ClaimFixture.fret_total', 'total_correctness')]
         dirty = copy.deepcopy(self.fixture)
@@ -710,7 +907,7 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         seen = json.loads(result.stdout)
         self.assertIn(FTOTAL, seen)
-        self.assertEqual(seen[EVENTUALLY]['module'], 'tests.roadmap.claims.Fixture')
+        self.assertEqual(seen[EVENTUALLY]['module'], self.module)
 
 
 if __name__ == '__main__':

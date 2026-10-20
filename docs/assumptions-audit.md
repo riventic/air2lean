@@ -37,8 +37,17 @@ without it are not current. Replaying the shipped scope takes about 40 s on 8 co
 280 s of CPU; `AIR2LEAN_REPLAY_JOBS` sets the parallelism, default `min(4, cores)`).
 `--replay-cache FILE` lets the theorem-universe run skip modules whose olean bytes passed
 earlier in the same build; the architecture-audit fixtures' four audits
-(`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way.
+(`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way, and
+so do the `theorem_universe.py gate --replay-cache` calls of a gate script (a fresh file in its
+temporary directory; no gate caches by default).
 Receipts reject reused replays.
+
+Existing replay-cache hits also require the current installed runtime/logical/IR input digest
+from `toolchain_runtime_sha256`, the same byte traversal the extractor uses. Missing or changed
+cache bindings trigger fresh replay. The digest is recomputed after the replay batch, before a
+cache record or successful result is published. Extraction's recorded runtime must match at
+replay entry. This tightens existing admission; it does not expand the cacheable module set or
+authenticate complete project/private import closures.
 
 `no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
 `set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
@@ -69,6 +78,15 @@ from another revision, a changed artifact, or a dirty report or tree unless `--a
 given (recorded in its output). `proof-receipt.py prepare` refuses a dirty tree unless
 `--allow-dirty` (`AIR2LEAN_RECEIPT_ALLOW_DIRTY=1` for `tests/roadmap/proof-receipts/check.sh`);
 the receipt records `tree.dirty_allowed`.
+
+Freshness also records the canonical `lean_sysroot` and `toolchain_runtime_sha256` connected to
+the extractor's existing runtime identity. Verification requires matching extractor/freshness
+bindings, resolves the current sysroot through the existing `lake env printenv` path and
+freshly hashes its installed inputs. A different selected root is rejected even while the old
+bound installation still exists. Sysroot resolution does not request a build.
+Missing bindings require a new audit; changing only an installed standard module, IR/signature
+or shared library makes a report stale even if every recorded project artifact stays fixed.
+This does not establish external source/compiler correspondence or registered-witness closure.
 
 The regression command compiles intentionally untrusted fixtures outside the shipped
 source scope. It checks that a clean wrapper importing a hidden `sorry` fails, a new
@@ -190,6 +208,12 @@ The report has a versioned schema and contains:
   module inventory, whether the wrapper built it, and the policy/toolchain identity.
 - `extractor`: exact SHA256 hashes of the extractor source, toolchain pin, Lake configuration,
   Lake dependency trace, and imported extractor olean, plus whether validated output was reused.
+- `module_imports`: each actually imported module's direct import names, read from Lean's loaded
+  module data, including imports unused by the declaration graph. A module loaded only for IR has
+  `null` rather than an invented empty import list. An older extractor's absent metadata remains
+  `null` in the policy report. This field is observational: it changes neither policy nor replay
+  admission and does not authenticate resolved artifact paths, compiled/source correspondence,
+  registered-witness completeness or replay-cache freshness by itself.
 - `theorems`: every checked theorem name and defining module, its transitive `axioms`,
   direct `dependencies`, transitive `opaque_dependencies`, logical dependencies carrying
   `compiler_redirections` and `extern_dependencies`, per-theorem `violations`, and `allowed` status,
@@ -229,15 +253,105 @@ scope stays `all-shipped-modules` with `modules` the shipped inventory.
 `--module <module>` (repeatable) selects a **scoped** audit; its report says
 `scope: explicit-modules`. `--no-build` is intended for the regression harness and callers
 that have independently built current artifacts; its report says `build_checked: false`.
+Module arguments, receipt module paths, numerical registry module keys and project contract
+paths share `lean-deps.py`'s bounded ASCII module spelling, including `'`, `!` and `?`.
+Quoted or escaped spellings are refused. Project paths must end in `.lean`, with one literal
+module component per directory or filename: `A.B.lean` cannot stand for `A/B.lean`.
+This does not change declaration-name or Zig-namespace validation, module enrollment, policy
+or the compiler-owned source/output checks.
+
+Project check records hash the actual project validator and the selected auditor's physical
+adjacent `lean-deps.py`, in addition to their declared scripts. A custom auditor stub without
+that helper remains supported; no repository helper is substituted. An existing malformed
+helper fails, and changes in known-script bytes, presence or physical identity fail the existing
+input-stability stage. Each check reloads its project validator before validation. These are
+known input checks within the trusted Python runtime, not arbitrary import discovery,
+immutable execution, writer authentication or additional receipt qualification.
+
 `--all-declarations` additionally seeds every declaration in the selected modules, including
 unused private definitions and compiler-generated recursors, and records their names in
 `selected_declaration_roots`. It uses the same dependency traversal, policy and kernel replay.
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
+
+`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
+Lake instead of elaborating it with `lake env lean`: the driver is a module of a generated
+workspace `PACKAGE/.lake/extraction` that requires the Lake package of the audited modules, so
+the driver's outputs stay off the caller's LEAN_PATH. Lake elaborates it again exactly when its
+trace changes (the driver's text, with the modules, options and family checks; the trace of every
+import, `tools.Assurance` included; the toolchain); an unchanged driver replays the build's
+stored log, and the report is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON`
+message, exactly one). The driver's text names the workspace, so it is never restored from
+another checkout's artifact-cache entry, which keeps no log: a missing report fails the audit.
+A compiler-owned Unit audit uses that driver only while Lake resolves exactly its bound lookup
+path there; otherwise the driver is elaborated afresh on that path.
+
+With `--extract-in PACKAGE` the kernel replay is Lake-built as well: each audited module `M` has
+a receipt module in `PACKAGE/.lake/replay` that imports only `tools.KernelReplay` and runs
+`run_meta Air2Lean.KernelReplay.run `M`. The helper runs the toolchain's `leanchecker` on `M` as
+its own process, under Lake's lookup path, and logs one `AIR2LEAN_KERNEL_REPLAY` line. The receipt
+never imports `M`, because importing would run `M`'s `initialize` code in the receipt's process
+([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Instead, the receipt's
+generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M` again exactly
+when the receipt's trace changes: `M`'s olean, `M`'s dependency trace (everything below it), the
+toolchain, and the receipt's text, which names the checker's and the installed runtime's digests. Otherwise
+Lake replays the stored receipt. A failing check stays a failing receipt. The receipts are used
+only while Lake resolves exactly the audit's lookup path in that workspace; a missing, foreign or
+repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
+
+The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
+for each exact selected root. The CLI report preserves those rows under
+`framework_candidates.declarations`, adding the summaries below. A row identifies the
+original kernel name, user name, module and declaration kind; the original type/body
+constant identities and kernel-expression fingerprint are preserved before reduction.
+`is_proof` distinguishes a proof value using the existing kernel signature checker and
+kernel equality of its inferred sort to `Prop`, with a theorem shortcut. It does not
+inspect a proof body or use normalization of the proposition as a substitute for checking
+its sort. Kernel signature checking can reduce types. A free or
+metavariable signature, or any kernel API error, fails the audit. This performs a signature
+check per non-theorem selected declaration; its cost depends on the selected environment.
+A Prop-valued predicate's `prop_valued` and binder
+evidence come from opening its full type telescope with transparency `.all`, including
+irreducible aliases. Unknown result
+sorts remain `null`. Projection, matcher and auxiliary-recursor flags are provenance, not
+exemptions. Imported dependencies can occur in `nodes` without being selected roots.
+
+`framework_candidates` propagates the framework gate's canonical computation-family
+identities through that same original dependency graph. The opt-in driver first resolves
+every canonical identity in its actual Lean environment; a missing name fails the audit.
+`program_dependencies` is syntactic positive evidence, not recognition of all computation
+types: a written-out `Zig.Mem → Option (Except …)` can have an empty list. **An empty list
+means unknown, never ordinary data.** A Prop-valued definition/opaque/inductive with a
+computation-family witness has verdict `candidate`; every other row has verdict `unknown`.
+Neither verdict approves a framework status or changes policy.
+
+`unresolved_dependency` is a conservative boundary flag: it is true if the declaration's
+original dependency closure (including itself) contains an unresolved constant, an opaque,
+an axiom, an `implemented_by` redirection or an extern entry. Opaques with checked values and
+standard logical axioms still set it, independently of whether policy permits them. The
+replacement implementation is recorded separately, not followed as a kernel dependency.
+A candidate can have this flag; a false flag does not certify a closed type or complete
+execution semantics. This is not a restatement of policy violations.
+
+This evidence is explicitly `scope: selected-modules-only`, `complete: false`, with
+`ordinary_exemption: false` in every row and no ordinary exemptions. It establishes no
+recursive closed-data classification, status approval, legacy-free result, complete module
+enrollment, producer authority or additional source/artifact binding. The existing policy,
+kernel replay, freshness and audit-scope requirements still apply. The default extractor
+omits `selected_declaration_evidence` and `selected_declaration_roots`; the default CLI
+report omits `framework_candidates` and `selected_declaration_roots`.
+
 The extractor always runs `lake --rehash build AssuranceTools` to validate its source,
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
 and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt
 output and changed source or release pin force rebuilding. There is no skip-compile flag.
+These hashes are kept as one record per context (`.lake/assurance/tool-traces/<context
+hash>.json`), so invocations with different contexts do not invalidate each other's records; a
+context without a valid record unlinks the olean and Lake rebuilds it. All invocations in one
+worktree share the olean: an exclusive lock (`.lake/assurance/tool.lock`) is held from
+preparation until the `lake env lean` run that imports the olean ends, so parallel audits never
+remove or rebuild it under each other. Kernel replay runs outside the lock. A lock or IO error
+fails the audit.
 The regression harness reuses a validated extractor while still importing every fixture
 into a separate real Lean driver, in serial order.
 Neither is a substitute for the default complete build-and-audit release gate. The report

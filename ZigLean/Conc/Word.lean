@@ -1068,7 +1068,12 @@ theorem Ok.read {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder} (
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.atomics,
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.blocks, .of_eq hg.atomics,
       by unfold Mem.Aux loadM acqM observeM; split <;> simp,
-      (FStepIn.loadM (hF := fun _ => none) hcs₁ li ord (l.msgs[pos]!)).msgCov⟩⟩
+      (FStepIn.loadM (hF := fun _ => none) hcs₁ ord (l.msgs[pos]!) (by
+        intro hin
+        have hlen := (hw₁.loc li l hl).1
+        have hpos := W.sz_pos
+        rw [hl0] at hin
+        exact hin l.off (Nat.le_refl _) (by omega) rfl)).msgCov⟩⟩
   · by_cases hk0 : k = 0
     · omega
     · rw [hist_size hl] at hk

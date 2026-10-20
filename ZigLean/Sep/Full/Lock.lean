@@ -44,9 +44,6 @@ namespace Full
 
 open FAssn Conc Proto
 
-theorem rsum_rnil (r : Res) : rsum r rnil = r := by
-  simp [rsum, Know.union_none]
-
 namespace LockWord
 
 variable {L : LockWord}
@@ -672,11 +669,16 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
       have := (hholds u).mp hu; rw [e] at this; exact hnh this
     rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
 
-/-- A change of thread `t`'s ghost value that keeps its place, its part and its resource in the
-lock (a step of `t` in another sync object's code, also while it holds the lock). -/
-theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
-    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t)) (hpart : L.part g = L.part (G t))
-    (hheld : L.held g = L.held (G t)) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+/-- A new split of a thread's complete resource at the same lock phase. Equality of `Res`
+preserves bytes, knowledge and ghost state together. A holder re-establishes the protected
+assertion on its new held part; otherwise every protected assertion is preserved. -/
+theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t))
+    (hsum : rsum (L.part g) (L.held g) = rsum (L.part (G t)) (L.held (G t)))
+    (hdisj : FHeap.Disjoint (L.part g).heap (L.held g).heap)
+    (hidle : L.ph g ≠ .holds → L.held g = rnil)
+    (hRk : L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r)
+    (hres : L.ph g = .holds → L.R (upd G t g) (L.held g)) :
     L.Inv (upd G t g) rX m := by
   have hphu : ∀ u, L.ph (upd G t g u) = L.ph (G u) := fun u => by
     by_cases e : u = t
@@ -686,25 +688,189 @@ theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g
   have hown : L.own (upd G t g) m = L.own G m := by
     funext u; unfold FLock.own
     by_cases e : u = t
-    · subst e; rw [upd_self, hpart, hheld]
+    · subst e; rw [upd_self, hsum]
     · rw [upd_ne _ _ e]
   have hfree : L.Free (upd G t g) ↔ L.Free G := by unfold FLock.Free; rw [hpl]
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   refine ⟨by rw [hpl]; exact hi.w, ⟨rL, by rw [hown]; exact ho, hLoff, hLX, fun hF' => ?_,
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
     fun u hu => ?_⟩
-  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF'); exact ⟨hRk rL h1, by rw [hpl]; exact h2⟩
+  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
+    exact ⟨hRk (hfree.mp hF' t) rL h1, by rw [hpl]; exact h2⟩
   · by_cases e : u = t
-    · subst e; rw [upd_self, hpart, hheld]; exact hi.pdisj _
+    · subst e; rw [upd_self]; exact hdisj
     · rw [upd_ne _ _ e]; exact hi.pdisj u
   · rw [hphu] at hu
     by_cases e : u = t
-    · subst e; rw [upd_self, hheld]; exact hi.idle _ hu
+    · subst e; rw [upd_self]; exact hidle (by rw [hph]; exact hu)
     · rw [upd_ne _ _ e]; exact hi.idle u hu
   · rw [hphu] at hu
     by_cases e : u = t
-    · subst e; rw [upd_self, hheld]; exact hRk _ (hi.res _ hu)
-    · rw [upd_ne _ _ e]; exact hRk _ (hi.res u hu)
+    · subst e; rw [upd_self]; exact hres (by rw [hph]; exact hu)
+    · rw [upd_ne _ _ e]
+      exact hRk (fun ht => e (hi.w.one u t hu ht)) _ (hi.res u hu)
+
+/-- Take one complete resource from protocol rest into this caller's part at the same
+mutex phase. The free/held lock resource, all other callers, memory and phase map stay.
+This uses actual clock ownership, without requiring this caller to hold the mutex. -/
+theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId}
+    (hi : L.Inv G (rsum rA rX) m) (hg : L.ph (G t) ≠ .gone)
+    (hd : FHeap.Disjoint rA.heap rX.heap) (howns : m.Owns t rA.heap.erase) :
+    L.Inv (upd G t (L.setPart (G t) (rsum (L.part (G t)) rA))) rX m := by
+  obtain ⟨ht, hjt⟩ := hi.ht hg
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hoff : ∀ l, L.In l → rA.heap l = none ∧ rX.heap l = none := by
+    intro l hl
+    have h := LockWord.off_erase.mp hi.xoff l hl
+    simpa only [rsum, FHeap.union_apply, Option.or_eq_none_iff] using h
+  have hWA : FHeap.Disjoint (L.wordR m).heap rA.heap := fun l => by
+    by_cases hl : L.In l
+    · exact .inr (hoff l hl).1
+    · exact .inl (cellsAt_none hl)
+  have hLA := (FHeap.disjoint_union_right.mp hLX).1
+  have hLX' := (FHeap.disjoint_union_right.mp hLX).2
+  have he : rsum (L.wordR m) (rsum rL (rsum rA rX)) =
+      rsum rA (rsum (L.wordR m) (rsum rL rX)) := by
+    rw [← rsum_assoc (a := rL), rsum_comm hLA, rsum_assoc,
+      ← rsum_assoc (a := L.wordR m), rsum_comm hWA, rsum_assoc]
+  rw [he] at ho
+  have hAR : FHeap.Disjoint rA.heap (rsum (L.wordR m) (rsum rL rX)).heap :=
+    FHeap.disjoint_union_right.mpr ⟨hWA.symm,
+      FHeap.disjoint_union_right.mpr ⟨hLA.symm, hd⟩⟩
+  have hTA : FHeap.Disjoint (L.own G m t).heap rA.heap := fun l => by
+    cases ha : rA.heap l with
+    | none => exact .inr rfl
+    | some fc => exact .inl (ho.part_off ht (by simp [FHeap.union_apply, ha]))
+  have hHA : FHeap.Disjoint (L.held (G t)).heap rA.heap := by
+    rw [own_live hjt] at hTA
+    exact (FHeap.disjoint_union_left.mp hTA).2
+  have ho' := ho.take ht hAR howns
+  let g := L.setPart (G t) (rsum (L.part (G t)) rA)
+  let G' := upd G t g
+  have hpl : L.pl G' = L.pl G := by
+    change L.pl (upd G t (L.setPart (G t) _)) = L.pl G
+    rw [pl_upd, L.ph_setPart]
+    exact upd_same (L.pl G) t
+  have hph : ∀ u, L.ph (G' u) = L.ph (G u) := fun u => congrFun hpl u
+  have hfree : L.Free G' ↔ L.Free G := by unfold FLock.Free; rw [hpl]
+  have hpart : rsum (L.part g) (L.held g) = rsum (L.own G m t) rA := by
+    dsimp [g]
+    rw [L.part_setPart, L.held_setPart, own_live hjt, rsum_assoc,
+      rsum_comm hHA.symm, ← rsum_assoc]
+  have hown : L.own G' m = upd (L.own G m) t (rsum (L.own G m t) rA) := by
+    rw [own_upd rfl hjt, hpart]
+  have hheld : ∀ u, L.held (G' u) = L.held (G u) := by
+    intro u
+    by_cases h : u = t
+    · subst u
+      change L.held (upd G t g t) = L.held (G t)
+      rw [upd_self]
+      exact L.held_setPart _ _
+    · exact congrArg L.held (upd_ne _ _ h)
+  refine ⟨by rw [hpl]; exact hi.w,
+    ⟨rL, by rw [hown]; exact ho', hLoff, hLX', ?_, ?_⟩,
+    LockWord.off_erase.mpr (fun l hl => (hoff l hl).2), ?_, ?_, ?_⟩
+  · intro hf
+    obtain ⟨hR, hO⟩ := hF (hfree.mp hf)
+    exact ⟨(L.R_setPart G t _ rL).mpr hR, by rw [hpl]; exact hO⟩
+  · intro hf
+    exact hnF (fun h => hf (hfree.mpr h))
+  · intro u
+    by_cases h : u = t
+    · subst u
+      simp only [upd_self, L.part_setPart, L.held_setPart]
+      exact FHeap.disjoint_union_left.mpr ⟨hi.pdisj t, hHA.symm⟩
+    · simpa only [G', upd_ne _ _ h] using hi.pdisj u
+  · intro u hu
+    rw [hheld u]
+    exact hi.idle u (by rw [← hph u]; exact hu)
+  · intro u hu
+    rw [hheld u]
+    exact (L.R_setPart G t _ _).mpr (hi.res u (by rw [← hph u]; exact hu))
+
+/-- Publish one complete caller-owned resource into protocol rest while retaining the
+caller's mutex phase and complete held resource. No mutex release or Free is required. -/
+theorem Inv.giveRest {G : ThreadId → γ} {rP rA rX : Res} {m : Mem} {t : ThreadId}
+    (hi : L.Inv G rX m) (hg : L.ph (G t) ≠ .gone)
+    (hpart : L.part (G t) = rsum rP rA) (hd : FHeap.Disjoint rP.heap rA.heap) :
+    L.Inv (upd G t (L.setPart (G t) rP)) (rsum rA rX) m := by
+  obtain ⟨ht, hjt⟩ := hi.ht hg
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hp := hi.pdisj t
+  rw [hpart] at hp
+  obtain ⟨hPH, hAH⟩ := FHeap.disjoint_union_left.mp hp
+  have hAR : FHeap.Disjoint rA.heap (rsum (L.wordR m) (rsum rL rX)).heap := fun l => by
+    cases he : (rsum (L.wordR m) (rsum rL rX)).heap l with
+    | none => exact .inr rfl
+    | some fc =>
+      have hp := ho.part_off ht (by rw [he]; simp)
+      rw [own_live hjt, hpart] at hp
+      simp only [FHeap.union_apply, Option.or_eq_none_iff] at hp
+      exact .inl hp.1.2
+  have hAW := (FHeap.disjoint_union_right.mp hAR).1
+  have hAL := (FHeap.disjoint_union_right.mp
+    (FHeap.disjoint_union_right.mp hAR).2).1
+  have hAoff : ∀ l, L.In l → rA.heap l = none := fun l hl =>
+    (hAW l).resolve_right (LockWord.wordR_some hi.w.blk hl)
+  have hsplit : L.own G m t = rsum (rsum rP (L.held (G t))) rA := by
+    rw [own_live hjt, hpart, rsum_assoc, rsum_comm hAH, ← rsum_assoc]
+  have ho' := ho.give ht hsplit (FHeap.disjoint_union_left.mpr ⟨hd, hAH.symm⟩)
+  have he : rsum (L.wordR m) (rsum rL (rsum rA rX)) =
+      rsum rA (rsum (L.wordR m) (rsum rL rX)) := by
+    rw [← rsum_assoc (a := rL), rsum_comm hAL.symm, rsum_assoc,
+      ← rsum_assoc (a := L.wordR m), rsum_comm hAW.symm, rsum_assoc]
+  rw [← he] at ho'
+  let g := L.setPart (G t) rP
+  let G' := upd G t g
+  have hpl : L.pl G' = L.pl G := by
+    change L.pl (upd G t (L.setPart (G t) _)) = L.pl G
+    rw [pl_upd, L.ph_setPart]
+    exact upd_same (L.pl G) t
+  have hph : ∀ u, L.ph (G' u) = L.ph (G u) := fun u => congrFun hpl u
+  have hfree : L.Free G' ↔ L.Free G := by unfold FLock.Free; rw [hpl]
+  have hown : L.own G' m = upd (L.own G m) t (rsum rP (L.held (G t))) := by
+    rw [own_upd rfl hjt]
+    simp only [g, L.part_setPart, L.held_setPart]
+  have hheld : ∀ u, L.held (G' u) = L.held (G u) := by
+    intro u
+    by_cases h : u = t
+    · subst u
+      change L.held (upd G t g t) = L.held (G t)
+      rw [upd_self]
+      exact L.held_setPart _ _
+    · exact congrArg L.held (upd_ne _ _ h)
+  refine ⟨by rw [hpl]; exact hi.w,
+    ⟨rL, by rw [hown]; exact ho', hLoff,
+      FHeap.disjoint_union_right.mpr ⟨hAL.symm, hLX⟩, ?_, ?_⟩,
+    LockWord.off_erase.mpr (fun l hl => by
+      simp only [FHeap.union_apply, Option.or_eq_none_iff]
+      exact ⟨hAoff l hl, LockWord.off_erase.mp hi.xoff l hl⟩), ?_, ?_, ?_⟩
+  · intro hf
+    obtain ⟨hR, hO⟩ := hF (hfree.mp hf)
+    exact ⟨(L.R_setPart G t rP rL).mpr hR, by rw [hpl]; exact hO⟩
+  · intro hf
+    exact hnF (fun h => hf (hfree.mpr h))
+  · intro u
+    by_cases h : u = t
+    · subst u
+      simpa only [G', upd_self, g, L.part_setPart, L.held_setPart] using hPH
+    · simpa only [G', upd_ne _ _ h] using hi.pdisj u
+  · intro u hu
+    rw [hheld u]
+    exact hi.idle u (by rw [← hph u]; exact hu)
+  · intro u hu
+    rw [hheld u]
+    exact (L.R_setPart G t rP _).mpr (hi.res u (by rw [← hph u]; exact hu))
+
+/-- A change of thread `t`'s ghost value that keeps its place, its part and its resource in the
+lock (a step of `t` in another sync object's code, also while it holds the lock). -/
+theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t)) (hpart : L.part g = L.part (G t))
+    (hheld : L.held g = L.held (G t)) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+    L.Inv (upd G t g) rX m := by
+  exact hi.repartition hph (by rw [hpart, hheld]) (by rw [hpart, hheld]; exact hi.pdisj t)
+    (fun hn => hheld.trans (hi.idle t (hph ▸ hn))) (fun _ => hRk)
+    (fun hh => by rw [hheld]; exact hRk _ (hi.res t (hph ▸ hh)))
 
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives

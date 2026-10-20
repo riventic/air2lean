@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # Build the architecture-audit claim fixtures (module root AuditClaims), then extract their
-# assurance report. The fixtures are a Lake package of their own (lakefile.toml next to this
-# script): `lake build` there builds them, and every library module they import, into this
-# directory's .lake/build, outside the root .lake/build/lib/lean (proof receipts reject untracked
-# compiled modules there). With AIR2LEAN_CAS_DIR set, unchanged modules come from the shared
-# artifact cache (scripts/cas.py run). Run it under scripts/build-guard.py.
+# assurance report. The fixtures are the library AuditClaims of the proof-fixture package
+# (tests/roadmap/lakefile.toml): scripts/fixtures.py builds them, and the library modules they
+# import, into tests/roadmap/.lake/build, outside the root .lake/build/lib/lean (proof receipts
+# reject untracked compiled modules there). With AIR2LEAN_CAS_DIR set, unchanged modules come from
+# the shared artifact cache (scripts/cas.py run). Run it under scripts/build-guard.py.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
-src=tests/roadmap/architecture-audit/claims
 out=.lake/architecture-audit/claims
-(cd "$src" && python3 -B "$repo_root/scripts/cas.py" run -- lake build AuditClaims)
+python3 -B scripts/fixtures.py build AuditClaims
 mkdir -p "$out"
-export LEAN_PATH="$repo_root/$src/.lake/build/lib/lean"
+export LEAN_PATH="$repo_root/tests/roadmap/.lake/build/lib/lean"
 # The audits below share their kernel replays of identical Lake-built oleans (this build only).
 replay_cache=$out/replay-cache.json
 rm -f "$replay_cache"

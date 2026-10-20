@@ -95,7 +95,7 @@ def retry_while_busy(name, attempt, busy):
         time.sleep(120)
 
 
-def guarded(name, argv, env=None, timeout=18000):
+def guarded(name, argv, env=None, timeout=18000, tools=()):
     """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
     its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 11000 MiB, as the full build's; the guard
     reserves that much of the machine's build memory budget while the step runs).
@@ -106,7 +106,8 @@ def guarded(name, argv, env=None, timeout=18000):
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
          '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--log-bytes', 16 << 20,
-         '--report', report, '--log', logfile, '--', *argv],
+         '--report', report, '--log', logfile,
+         *[arg for tool in tools for arg in ('--tool', str(tool))], '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
     if code != 0:
         raise Failed('%s failed (exit %d); log %s' % (name, code, logfile))
@@ -248,6 +249,37 @@ def step_claims(check):
             env=lake_env(), timeout=7200)
 
 
+def step_assurance_statements(check):
+    """The kernel statement structures consumed by the coverage-report regressions."""
+    source = 'tests/roadmap/assurance/StatementBinding.lean'
+    module = 'tests.roadmap.assurance.StatementBinding'
+    fixtures = ROOT / '.lake/assurance/fixtures/lean'
+    olean = fixtures / (module.replace('.', '/') + '.olean')
+    olean.parent.mkdir(parents=True, exist_ok=True)
+    inherited_path = os.environ.get('LEAN_PATH', '')
+    env = dict(lake_env(), LEAN_PATH=str(fixtures) +
+               (os.pathsep + inherited_path if inherited_path else ''))
+    guarded('assurance-statements-deps', [PY, '-B', 'scripts/lean-deps.py', '--build', source], env=env)
+    guarded('assurance-statements-compile', ['lake', 'env', 'lean', '-o', olean, source], env=env)
+    audit = WORK / 'statement-binding.json'
+    guarded('assurance-statements-audit', ['bash', 'scripts/assumptions.sh', '--no-build',
+                                           '--module', module, '--output', audit], env=env)
+    report = json.loads(audit.read_text())
+    if report['status'] != 'pass':
+        raise Failed('statement-binding assurance audit failed')
+    fields = ('name', 'module', 'dependencies', 'statement_dependencies', 'conclusion_dependencies',
+              'conclusion', 'statement')
+    target = 'tests/roadmap/coverage-report/statement-binding.json'
+    expected = json.loads((ROOT / target).read_text())
+    expected['theorems'] = [{k: t[k] for k in fields} for t in report['theorems']]
+    data = (json.dumps(expected, indent=2) + '\n').encode()
+    if check:
+        if (ROOT / target).read_bytes() != data:
+            raise Failed(target + ' is stale; run scripts/regen.sh --only assurance-statements')
+    else:
+        write_if_changed(target, data)
+
+
 def step_audit_exposure(check):
     """tests/roadmap/architecture-audit/claims/exposure-report.json: the kernel statements of the
     audit fixtures (their fingerprints and redirections follow the library they import)."""
@@ -278,14 +310,12 @@ def run_is_current(inv_mod, run_record):
         path = ROOT / inv_mod.module_path(mod)
         if not path.is_file() or inv_mod.sha256(path) != digest:
             return False
-    command = run_record['command']
-    modules = command[command.index('build') + 1:] if 'build' in command and 'lake' in command[0] \
-        else command[command.index('--') + 1:]
-    try:
-        built = inv_mod.library_modules(ROOT) if 'Proofs' in modules else inv_mod.closure(ROOT, modules)
-    except inv_mod.Error:
+    prepared = inv_mod.prepare_run(ROOT, run_record)
+    if prepared is None:
         return False
-    return sorted(m for m in built if not m.endswith('.Gen')) == run_record.get('modules')
+    build, built = prepared
+    return (sorted(m for m in built if not m.endswith('.Gen')) == run_record.get('modules')
+            and all(inv_mod.module_evidence_matches(ROOT, run_record, mod, build.swaps) for mod in built))
 
 
 def step_inventory(check):
@@ -298,10 +328,25 @@ def step_inventory(check):
             raise Failed('stale theorem-inventory runs: ' + ', '.join(stale))
         run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
         return
+    # Reject unsupported producers/commands before dispatching any stale run, even if its
+    # hashes are stale for another reason. Never replay arbitrary historical argv.
+    plans = {}
+    for rid in stale:
+        try:
+            record = inventory['runs'][rid]
+            plans[rid] = inv_mod.parse_build_command(ROOT, record.get('command'), lake=inv_mod.producer_path(record))
+        except inv_mod.Error as error:
+            raise Failed(f'theorem-inventory run {rid}: refusing replay: {error}') from error
+    try:
+        lake = inv_mod.selected_lake(ROOT) if stale else None
+    except inv_mod.Error as error:
+        raise Failed(f'theorem-inventory: cannot select Lake for renewal: {error}') from error
     for rid in stale:
         record = inventory['runs'][rid]
         log('re-recording theorem-inventory run %s' % rid)
-        report, logfile = guarded('inventory-' + rid, record['command'], env=lake_env())
+        plan = plans[rid]
+        report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
+                                  tools=[lake] if plan.kind == 'swap' else [])
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
     if not ok([PY, '-B', 'scripts/theorem-inventory.py', 'check']):
@@ -352,6 +397,9 @@ def step_provenance(check, allow_commit, written):
 # name, scope, outputs, function; in dependency order (provenance is handled last, separately).
 STEPS = [
     ('translator', 'pr', [], step_translator),
+    ('precompiled', 'pr', ['lakefile.toml (the globs of FsymDeps)'],
+     simple([PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'check'],
+            [PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'write'])),
     ('gen', 'pr', ['Gen.lean modules (scripts/gen-integrity.py list)'], step_gen),
     ('ci-matrix', 'pr', ['.github/workflows/ci.yml (generated matrix regions)'],
      simple([PY, 'scripts/ci-matrix.py', 'check'], [PY, 'scripts/ci-matrix.py', 'write'])),
@@ -376,6 +424,7 @@ STEPS = [
     ('support-matrix', 'pr', ['docs/support-matrix.md', 'README.md and PLAN.md (marked regions)'],
      simple([PY, 'scripts/support-matrix.py', 'check'], [PY, 'scripts/support-matrix.py', 'generate'])),
     ('claims', 'pr', ['tests/roadmap/claims/fixture-report.json'], step_claims),
+    ('assurance-statements', 'pr', ['tests/roadmap/coverage-report/statement-binding.json'], step_assurance_statements),
     ('audit-exposure', 'pr', ['tests/roadmap/architecture-audit/claims/exposure-report.json'],
      step_audit_exposure),
     ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),

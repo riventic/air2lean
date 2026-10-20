@@ -67,7 +67,11 @@ SUFFIXES = ("Triple", "TripleIn", "Returns", "ReturnsUnder", "Within", "Stk", "S
 #             separation-logic assertions (`ResetLedger`: `B : W → FAssn`);
 #  (step)     it is a Prop-valued structure relating two memories (`FStepIn hF m m'`), the step
 #             relation of a program logic.
-PROGRAM_TYPE = re.compile(r"\b(?:Result|MemM|ConcM|CoN|StateT|ExceptT|Proto)\b")
+# The same resolved identities seed the opt-in compiled candidate report. Keep the textual
+# spelling test derived from them; it remains only the existing lexical ratchet.
+PROGRAM_TYPES = ("ExceptT", "StateT", "Zig.CoN", "Zig.Conc.Proto", "Zig.ConcM", "Zig.MemM", "Zig.Result")
+PROGRAM_TYPE = re.compile(r"\b(?:" + "|".join(re.escape(name.rsplit(".", 1)[-1])
+                                            for name in PROGRAM_TYPES) + r")\b")
 ASSERTION_TYPE = re.compile(r"\b(?:F?Assn|Res)\b|→\s*Prop\b")
 SEP_ASSERTION = re.compile(r"\bF?Assn\b")
 MEM_BINDER = re.compile(r"((?:[\w']+\s+)+):\s*Mem\b")
@@ -415,6 +419,30 @@ def base_revision(root, explicit):
     return ref
 
 
+def comparison_entries(root, rev):
+    """Read the inventory from a commit, never from the index or a path expression."""
+    prefix = f"{FILE}: cannot read comparison base {rev!r}; "
+    resolved = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", "--end-of-options", rev],
+        capture_output=True, text=True)
+    if resolved.returncode != 0:
+        raise ValueError(prefix + "must resolve to a commit; base ratchet was not checked")
+    # Resolve first: a <rev>:<path> expression can absorb a peel suffix into its literal path.
+    commit = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", f"{resolved.stdout.strip()}^{{commit}}"],
+        capture_output=True, text=True)
+    if commit.returncode != 0:
+        raise ValueError(prefix + "must resolve to a commit; base ratchet was not checked")
+    inventory = subprocess.run(
+        ["git", "-C", str(root), "show", f"{commit.stdout.strip()}:{FILE}"], capture_output=True)
+    if inventory.returncode != 0:
+        raise ValueError(prefix + f"commit has no readable {FILE}; base ratchet was not checked")
+    try:
+        return entry_keys(json.loads(inventory.stdout))
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise ValueError(prefix + "inventory is not valid JSON; base ratchet was not checked") from error
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
@@ -422,6 +450,8 @@ def main(argv=None):
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--approve", metavar="WHO", help="with --write: record WHO as the approval of every new entry")
     args = ap.parse_args(argv)
+    if args.base == "":
+        ap.error("--base must name a comparison revision")
     root, path = args.root, args.root / FILE
     old = json.loads(path.read_text()) if path.exists() else {}
     judgments, tactics, registries, users = scan(root)
@@ -454,9 +484,11 @@ def main(argv=None):
         errors.append(f"{FILE}: {p} no longer uses the legacy logic; delete it from legacy_users")
     rev = base_revision(root, args.base)
     if rev:
-        r = subprocess.run(["git", "-C", str(root), "show", f"{rev}:{FILE}"], capture_output=True)
-        if r.returncode == 0:
-            before = entry_keys(json.loads(r.stdout))
+        try:
+            before = comparison_entries(root, rev)
+        except ValueError as error:
+            errors.append(str(error))
+        else:
             # A status is part of the ratchet too: an entry to retire stays to retire, also when it
             # moves (same name and kind, another module), unless the flip records its own approval.
             now = entry_keys(old)

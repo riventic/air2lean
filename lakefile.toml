@@ -5,6 +5,112 @@ defaultTargets = ["ZigLean", "Air2Lean", "air2lean"]
 [[lean_lib]]
 name = "ZigLean"
 
+# fsym's engine, compiled to native code (docs/build-cache.md#precompiled-fsym): Lake loads it
+# into every build of a module that imports ZigLean.Sep.Full.Auto, so the tactic runs natively
+# instead of in Lean's interpreter. The kernel checks the same proof terms either way.
+[[lean_lib]]
+name = "Fsym"
+roots = ["ZigLean.Sep.Full.Auto"]
+globs = ["ZigLean.Sep.Full.Auto"]
+precompileModules = true
+
+# The import closure of Fsym's modules: their native code is the shared library that Fsym's
+# library links against (not precompiled itself, so a module that does not import Auto loads no native code).
+# Generated: `python3 -B scripts/lean-deps.py --precompiled write` (preflight checks it). The
+# `roots` of both libraries only name what they are for; their `globs` select the modules.
+[[lean_lib]]
+name = "FsymDeps"
+roots = ["ZigLean.Sep.Full.Auto"]
+globs = [
+  "ZigLean.Basic",
+  "ZigLean.BitCast",
+  "ZigLean.Conc.AtomicWord",
+  "ZigLean.Conc.Basic",
+  "ZigLean.Conc.Call",
+  "ZigLean.Conc.Clock",
+  "ZigLean.Conc.Lemmas",
+  "ZigLean.Conc.Logic",
+  "ZigLean.Conc.PtrAtomic",
+  "ZigLean.Conc.PtrAtomicLemmas",
+  "ZigLean.Conc.Sched",
+  "ZigLean.Conc.WeakCas",
+  "ZigLean.Endian",
+  "ZigLean.Env.Host",
+  "ZigLean.External",
+  "ZigLean.Float.Format",
+  "ZigLean.Float.Value",
+  "ZigLean.Lemmas",
+  "ZigLean.Mem.Alloc",
+  "ZigLean.Mem.AllocLemmas",
+  "ZigLean.Mem.AtomicPtr",
+  "ZigLean.Mem.Basic",
+  "ZigLean.Mem.Enc",
+  "ZigLean.Mem.Lemmas",
+  "ZigLean.Mem.Null",
+  "ZigLean.Mem.Repr",
+  "ZigLean.Mem.Reuse",
+  "ZigLean.Mem.Thread",
+  "ZigLean.Os.Mmap",
+  "ZigLean.Os.MmapRun",
+  "ZigLean.Packed",
+  "ZigLean.PackedLayout",
+  "ZigLean.PackedRepr",
+  "ZigLean.Range",
+  "ZigLean.Sep.AllocSpec.Norm",
+  "ZigLean.Sep.AllocSpec.Ops",
+  "ZigLean.Sep.AllocSpec.Region",
+  "ZigLean.Sep.Assert",
+  "ZigLean.Sep.Base.Alloc",
+  "ZigLean.Sep.Base.Block",
+  "ZigLean.Sep.Base.Pts",
+  "ZigLean.Sep.Full.ACell",
+  "ZigLean.Sep.Full.AllocSpec",
+  "ZigLean.Sep.Full.Arr",
+  "ZigLean.Sep.Full.Atomic",
+  "ZigLean.Sep.Full.AtomicPlain",
+  "ZigLean.Sep.Full.AtomicPtr",
+  "ZigLean.Sep.Full.AtomicRules",
+  "ZigLean.Sep.Full.AutoArith",
+  "ZigLean.Sep.Full.AutoAttr",
+  "ZigLean.Sep.Full.AutoConc",
+  "ZigLean.Sep.Full.AutoReport",
+  "ZigLean.Sep.Full.AutoRules",
+  "ZigLean.Sep.Full.AutoThread",
+  "ZigLean.Sep.Full.Block",
+  "ZigLean.Sep.Full.Claims",
+  "ZigLean.Sep.Full.Conc",
+  "ZigLean.Sep.Full.Const",
+  "ZigLean.Sep.Full.Disjoint",
+  "ZigLean.Sep.Full.Dispatch",
+  "ZigLean.Sep.Full.Extent",
+  "ZigLean.Sep.Full.Ghost",
+  "ZigLean.Sep.Full.Init",
+  "ZigLean.Sep.Full.Logic",
+  "ZigLean.Sep.Full.MemAuth",
+  "ZigLean.Sep.Full.Mmap",
+  "ZigLean.Sep.Full.Ops",
+  "ZigLean.Sep.Full.OwnedBound",
+  "ZigLean.Sep.Full.Parts",
+  "ZigLean.Sep.Full.Reclaim",
+  "ZigLean.Sep.Full.Region",
+  "ZigLean.Sep.Full.Res",
+  "ZigLean.Sep.Full.Seq",
+  "ZigLean.Sep.Full.Stack",
+  "ZigLean.Sep.Full.StackDepth",
+  "ZigLean.Sep.Full.Strength",
+  "ZigLean.Sep.Full.Struct",
+  "ZigLean.Sep.Full.Tame",
+  "ZigLean.Sep.Full.Thread",
+  "ZigLean.Sep.Full.ThreadStep",
+  "ZigLean.Sep.Full.Triple",
+  "ZigLean.Sep.Full.Typed",
+  "ZigLean.Sep.Heap",
+  "ZigLean.Simp",
+  "ZigLean.SimpAttr",
+  "ZigLean.Union",
+  "ZigLean.Vec",
+]
+
 [[lean_lib]]
 name = "Air2Lean"
 
@@ -14,7 +120,7 @@ globs = ["Proofs.+"]
 
 [[lean_lib]]
 name = "AssuranceTools"
-roots = ["tools.Assurance"]
+roots = ["tools.Assurance", "tools.AllocatorAdmission", "tools.OutcomeContracts", "tools.KernelReplay"]
 
 [[lean_exe]]
 name = "air2lean"

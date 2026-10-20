@@ -483,6 +483,39 @@ theorem noBytes_sep {r : Res} (h : (NoBytes ⋆ NoBytes) r) : NoBytes r := by
     (r1.gh.add r2.gh).Affine
   rw [h1, h2, k1, k2]; exact ⟨FHeap.union_empty _, Know.union_none _, a1.add a2⟩
 
+/-- Empty resources and finite separating products of byte-free resources stay byte-free. -/
+theorem noBytes_emp {r : Res} (h : emp r) : NoBytes r :=
+  ⟨h.1, h.2.1, by rw [h.2.2]; exact Ghost.affine_unit⟩
+
+theorem sepN_noBytes {f : Nat → FAssn} (hf : ∀ i r, f i r → NoBytes r) :
+    ∀ n r, sepN n f r → NoBytes r
+  | 0, _, h => noBytes_emp h
+  | n + 1, _, h => noBytes_sep (sep_mono (hf n) (sepN_noBytes hf n) h)
+
+/-- Grant receipts, including their fees, own no bytes or exclusive stack tokens. -/
+theorem ledgerRcpt_noBytes {γ e : Nat} : ∀ g r, ledgerRcpt γ e g r → NoBytes r
+  | none, _, h => noBytes_emp h
+  | some g, _, h => by
+    obtain ⟨p, n, q, A, K, φ⟩ := g
+    apply noBytes_sep
+    exact sep_mono
+      (fun _ h => by
+        obtain ⟨b, h⟩ := h
+        obtain ⟨k, h⟩ := h
+        have h := (sep_lift.mp h).2
+        exact ⟨h.2.1, h.2.2.1, by rw [h.2.2.2]; exact fun _ _ => rfl⟩)
+      (fun _ h => epFee_ghost h) h
+
+theorem ledgerRcpts_noBytes {γ e : Nat} {M : GMap} {r : Res}
+    (h : LedgerRcpts γ e M r) : NoBytes r := by
+  obtain ⟨N, h⟩ := h
+  exact sepN_noBytes (fun i r h => ledgerRcpt_noBytes (M i) r h) N r (sep_lift.mp h).2
+
+/-- A client may forget the receipts without reclaiming any outstanding grant's bytes. -/
+@[fsym_drop] theorem EUpd.ledgerRcpts_drop {γ e : Nat} {M : GMap} {R : FAssn} :
+    EUpd (LedgerRcpts γ e M ⋆ R) R :=
+  EUpd.dropL fun _ h => ledgerRcpts_noBytes h
+
 /-- The receipts of a grant map as a list of pieces, with the grants' fractions per block, and
 their fees. -/
 theorem ledgerRcpts_list {γ e : Nat} {M : GMap} :
@@ -608,6 +641,16 @@ structure ResetLedger (I : FAllocInv) (γ e : Nat) where
 namespace ResetLedger
 
 variable {I : FAllocInv} {γ e : Nat}
+
+/-- The whole epoch token supplies a positive available fee for creation. The accepted request
+is still an obligation of the concrete invariant; no capacity or success guarantee is added. -/
+theorem creationPost (L : ResetLedger I γ e)
+    (hf : ∃ len : BitVec 64, ∃ k, 0 < len.toNat ∧ k < 64 ∧ I.fits len.toNat k) :
+    EUpd (I.own ⋆ epTok γ e Frac.one) I.creationPost := by
+  refine EUpd.trans (EUpd.of_imp fun _ h => sep_mono_right (fun _ ht => ?_) h)
+    (I.creationPost_intro Frac.one (by decide) hf)
+  rw [L.fee_eq]
+  exact sep_comm (sep_lift.mpr ⟨by decide, ht⟩)
 
 /-- **The state next to the whole epoch token has no grant.** -/
 theorem own_epTok_empty (L : ResetLedger I γ e) :

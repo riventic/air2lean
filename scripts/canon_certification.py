@@ -93,22 +93,41 @@ def audit_certificates(work):
           f"{time.monotonic() - start:.3f}s", flush=True)
 
 
+def certify_case(translator, index, case):
+    difference = translator.matches(index, case, case.path)
+    if difference is not None:
+        raise ValueError(f"{case.label}: generated module changed ({difference})")
+    try:
+        report = native_binding(translator.certificate(index, case))
+    except ValueError as error:
+        raise ValueError(f"{case.label}: {error}") from error
+    (translator.work / f"NativeBinding{index}.json").write_text(json.dumps(report, sort_keys=True) + "\n")
+    print(f"{case.label}: TRU-02 native binding checked ({report['functions']} functions)", flush=True)
+    return report
+
+
 def certify(translator, indexed_cases):
-    cases = functions = 0
-    changed = False
-    for index, case in indexed_cases:
-        difference = translator.matches(index, case, case.path)
-        if difference is not None:
-            raise ValueError(f"{case.label}: generated module changed ({difference})")
+    """Cases are independent (each index owns its work files), so they run on AIR2LEAN_JOBS
+    workers. The generic audit still starts only after every case has passed."""
+    from concurrent.futures import ThreadPoolExecutor  # Lazy import, like assumptions.py.
+    import threading
+    failed = threading.Event()  # Fail fast: no case starts after one has failed.
+
+    def run_case(item):
+        if failed.is_set():
+            return None
         try:
-            report = native_binding(translator.certificate(index, case))
-        except ValueError as error:
-            raise ValueError(f"{case.label}: {error}") from error
-        (translator.work / f"NativeBinding{index}.json").write_text(json.dumps(report, sort_keys=True) + "\n")
-        cases += 1
-        functions += report["functions"]
-        changed = changed or (report["changed"] and report["functions"] > 0)
-        print(f"{case.label}: TRU-02 native binding checked ({report['functions']} functions)", flush=True)
+            return certify_case(translator, *item)
+        except BaseException:
+            failed.set()
+            raise
+
+    jobs = max(1, int(os.environ.get("AIR2LEAN_JOBS") or 1))
+    with ThreadPoolExecutor(jobs) as pool:
+        reports = list(pool.map(run_case, indexed_cases))
+    cases = len(reports)
+    functions = sum(report["functions"] for report in reports)
+    changed = any(report["changed"] and report["functions"] > 0 for report in reports)
     if not cases:
         raise ValueError("no translation cases selected for canonicalization certification")
     if not functions:

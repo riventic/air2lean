@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Fast policy regressions; actual Lean environment regressions are in check.sh."""
 import importlib.util
+import contextlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 import sys
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -32,6 +34,65 @@ def apply_policy(raw, *args):
     return audit.apply_policy(raw, *args)
 
 
+class ExtractTests(unittest.TestCase):
+    """Driver/validation units; every compiler and extractor operation is mocked."""
+
+    def test_supported_module_names_reach_the_same_driver_and_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            commands, drivers = [], []
+            def run(command, *, root):
+                commands.append((command, root))
+                if command[1] != 'build':
+                    drivers.append(Path(command[-1]).read_text())
+                return audit.MARKER + '{}\n'
+            @contextlib.contextmanager
+            def prepared(root, runner):
+                yield {'prepared': True}
+            with mock.patch.object(audit, 'run', side_effect=run), \
+                 mock.patch.object(audit, 'prepared_tool', side_effect=prepared), \
+                 mock.patch.object(audit, 'verify_extractor_inputs') as verify, \
+                 mock.patch.object(audit, 'lean_path_binding', return_value={'same': 'inputs'}):
+                result = audit.extract(["Proofs.Dep'", 'Proofs.Check!'], True,
+                                       ['Fixture.Witness?'], root=root, lean_path='selected:libs')
+            self.assertEqual(commands[0], (['lake', 'build', "Proofs.Dep'", 'Proofs.Check!'], root))
+            self.assertEqual(commands[1][0][1:5], ['env', 'env', 'LEAN_PATH=selected:libs', 'lean'])
+            self.assertTrue(all(cwd == root for _, cwd in commands))
+            for module in ("Proofs.Dep'", 'Proofs.Check!', 'Fixture.Witness?'):
+                self.assertIn('import ' + module + '\n', drivers[0])
+            self.assertEqual(result['extractor'], {'prepared': True})
+            verify.assert_called_once_with({'prepared': True}, root, 'extraction')
+            self.assertEqual(list((root / '.lake/assurance').iterdir()), [])
+
+    def test_invalid_selected_and_witness_names_never_dispatch(self):
+        for invalid in ('', 'A..B', 'A/B', '../A', 'A B', '«A»', 'A\\B', 1):
+            for witness in (False, True):
+                with self.subTest(invalid=invalid, witness=witness), \
+                     mock.patch.object(audit, 'run') as run, \
+                     mock.patch.object(audit, 'prepared_tool') as prepared:
+                    with self.assertRaisesRegex(ValueError, 'invalid Lean module name'):
+                        audit.extract(['Proofs.One'] if witness else [invalid], False,
+                                      [invalid] if witness else [])
+                    run.assert_not_called()
+                    prepared.assert_not_called()
+
+    def test_helper_is_cached_at_the_physical_script_sibling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            alias = Path(directory) / 'audit.py'
+            alias.symlink_to(ROOT / 'scripts/assumptions.py')
+            (alias.parent / 'lean-deps.py').write_text('raise RuntimeError("wrong sibling")\n')
+            audit.lean_deps.cache_clear()
+            try:
+                with mock.patch.object(audit, '__file__', str(alias)), \
+                     mock.patch.object(audit.importlib.util, 'spec_from_file_location',
+                                       wraps=audit.importlib.util.spec_from_file_location) as loader:
+                    first = audit.lean_deps()
+                    self.assertIs(audit.lean_deps(), first)
+                loader.assert_called_once_with('assumptions_lean_deps', ROOT / 'scripts/lean-deps.py')
+            finally:
+                audit.lean_deps.cache_clear()
+
+
 class PolicyTests(unittest.TestCase):
     def setUp(self):
         self.policy = audit.load_policy(ROOT / "assurance/policy.json")
@@ -50,6 +111,17 @@ class PolicyTests(unittest.TestCase):
         report = apply_policy(raw, self.policy)
         self.assertEqual(report["status"], "pass")
         self.assertEqual(report["nodes"][0]["trust_class"], "standard-logical-axiom")
+
+    def test_import_headers_are_distinct_from_declaration_dependencies(self):
+        raw = self.raw([], [])
+        raw['module_imports'] = {'Proofs.Fixture': ['Unused.Import'], 'Unused.Import': ['Init'],
+                                 'Runtime.Only': None, 'Init': []}
+        report = apply_policy(raw, self.policy)
+        self.assertEqual(report['module_imports'], raw['module_imports'])
+        self.assertEqual({node['module'] for node in report['nodes']}, {'Proofs.Fixture'})
+        self.assertEqual(report['status'], 'pass')
+        del raw['module_imports']
+        self.assertIsNone(apply_policy(raw, self.policy)['module_imports'])
 
     def test_transitive_hidden_sorry(self):
         raw = self.raw(["imported"], [self.node("imported", "theorem", ["sorryAx"], module="Other.Hidden"),

@@ -115,7 +115,7 @@
     },
     {
       "name": "FI",
-      "module": "tests.roadmap.sep-auto.Views",
+      "module": "tests.roadmap.sep-auto.SepAuto.Views",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate, engine)"
     },
@@ -608,12 +608,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "fma_case",
-      "kind": "syntax",
-      "module": "Proofs.Floatops.Proofs",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "fsym",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Auto",
@@ -656,23 +650,11 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "mono_step",
-      "kind": "syntax",
-      "module": "Air2Lean.Sem",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "nonvacuity_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
       "status": "target",
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
-    },
-    {
-      "tactic": "ok_step",
-      "kind": "syntax",
-      "module": "Air2Lean.Sem",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "pure_norm",
@@ -703,12 +685,6 @@
       "tactic": "sep_normalize",
       "kind": "syntax",
       "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "spec_case",
-      "kind": "syntax",
-      "module": "Proofs.Floatops.Proofs",
       "status": "legacy-to-retire"
     },
     {
@@ -967,10 +943,6 @@
       "path": "ZigLean/Sep/Cost.lean"
     },
     {
-      "path": "ZigLean/Sep/Full/LockWord.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "ZigLean/Sep/Loop.lean"
     },
     {
@@ -992,59 +964,7 @@
       "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
     },
     {
-      "path": "tests/roadmap/spawn-failure/Runtime.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/DispatchTemplates.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/GlobalInit.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/GlobalPayloadPointers.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/LoopTactics.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/OutcomeTaxonomy.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsLayout.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsLists.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsPointers.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/ProofsSlices.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/TryPointers.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
-      "path": "tests/roadmap/strength-log/Vcs.lean",
-      "approved": "coordinator 2026-10-12 (strength-log class)"
-    },
-    {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     }
   ]

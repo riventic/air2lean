@@ -4,14 +4,20 @@
 No Lean, Lake or Zig: Lean and leanchecker are replaced by small scripts. The compiled audit
 itself runs in CI (`theorem_universe.py audit`) and in tests/roadmap/architecture-audit/claims.
 """
+import concurrent.futures
 import importlib.util
+import contextlib
+import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -30,6 +36,16 @@ def load(name, filename):
 universe = load('theorem_universe', 'theorem_universe.py')
 assumptions = load('assumptions', 'assumptions.py')
 premises = load('premises', 'premises.py')
+
+
+def installed_inputs(root):
+    """Synthetic installed inputs; the tests never invoke Lean or Lake."""
+    (root / 'bin').mkdir(parents=True)
+    for name in ('lean', 'leanchecker'):
+        (root / 'bin' / name).write_bytes(name.encode())
+    (root / 'lib/lean').mkdir(parents=True)
+    for name in ('lib/libleanshared.so', 'lib/lean/Init.olean', 'lib/lean/Init.ir.sig'):
+        (root / name).write_bytes(b'original')
 
 
 class UniverseTests(unittest.TestCase):
@@ -121,6 +137,82 @@ class UniverseTests(unittest.TestCase):
             self.assertFalse({'a/Main.lean', 'b/Main.lean'} <= files)
         self.assertEqual(sorted(u.file for b in bundles for u in b), sorted(by_file))
 
+    def test_a_clash_splits_the_run_and_an_unsplittable_one_fails_closed(self):
+        # `Spoof` declares a name a Lake module of `Real` declares (Fixture's claim-head spoofs and
+        # ZigLean.Conc.Total): the source parse cannot see it, so their run clashes and is split.
+        # `Twice`'s own closure clashes: it cannot be audited at all.
+        unit = lambda f: universe.Unit(f + '.lean', '.', f, (), (), None, ())
+        units = [unit('Spoof'), unit('Real'), unit('Twice')]
+        clash = "error: import Spoof failed, environment already contains 'N' from M"
+
+        def audit_modules(modules, lean_path, output, cache=None, sources=None, **_):
+            collision = clash if {'Spoof', 'Real'} <= set(modules) or 'Twice' in modules else None
+            return {'modules': modules, 'report': str(output), 'status': 'fail' if collision else 'pass',
+                    'exit_code': 1 if collision else 0, 'collision': collision, 'violations': []}
+
+        with mock.patch.multiple(universe, universe=lambda: ([], units), compile_all=lambda *a, **_: [],
+                                 prepare_compilation=lambda *a: {}, seal_compilation=lambda *a: None,
+                                 audit_modules=audit_modules,
+                                 write_report=lambda *a: None), \
+                tempfile.TemporaryDirectory() as temp:
+            report = universe.audit(Path(temp), False, None, None)
+        audited = [r['modules'] for r in report['audits'] if r['status'] == 'pass']
+        self.assertEqual(sorted(m for run in audited for m in run), ['Real', 'Spoof'])
+        self.assertFalse(any({'Spoof', 'Real'} <= set(run) for run in audited))
+        self.assertEqual(report['status'], 'fail')
+        self.assertEqual(report['errors'], [f'Twice.lean: cannot be audited, its import closure declares a name '
+                                            f'twice ({clash})'])
+
+
+class AuditModulesTests(unittest.TestCase):
+    def test_all_declarations_is_opt_in_without_changing_the_audit_context(self):
+        modules = ['Example.Main', 'Example.Other']
+        self.addCleanup(setattr, universe, 'run', universe.run)
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            libs = [work / 'one', work / 'two']
+            cache, sources = work / 'replay.json', work / 'sources.json'
+            for flags in ({}, {'all_declarations': False}, {'all_declarations': True}):
+                with self.subTest(flags=flags):
+                    enabled = flags.get('all_declarations', False)
+                    output = work / 'audit.json'
+                    report = {'status': 'pass', 'theorem_count': 2,
+                              'kernel_replay': {'status': 'pass'}, 'violations': []}
+                    if enabled:
+                        report.update(selected_declaration_roots=['Example.Main.unused'],
+                                      framework_candidates={'complete': False,
+                                                            'ordinary_exemptions': [],
+                                                            'declarations': [
+                                                                {'name': 'Example.Main.unused',
+                                                                 'verdict': 'unknown',
+                                                                 'ordinary_exemption': False}]})
+                    calls = []
+
+                    def run(command, env):
+                        calls.append((command, env))
+                        output.write_text(json.dumps(report))
+                        return subprocess.CompletedProcess(command, 0, '')
+
+                    universe.run = run
+                    result = universe.audit_modules(modules, libs, output, cache, sources, **flags)
+                    self.assertEqual(len(calls), 1)
+                    command, env = calls[0]
+                    self.assertEqual(command.count('--all-declarations'), int(enabled))
+                    self.assertEqual([command[i + 1] for i, arg in enumerate(command)
+                                      if arg == '--module'], modules)
+                    self.assertEqual(command[command.index('--replay-cache') + 1], str(cache))
+                    self.assertEqual(command[command.index('--sources') + 1], str(sources))
+                    self.assertEqual(command[command.index('--output') + 1], str(output))
+                    self.assertIn('--no-build', command)
+                    self.assertIn('--allow-no-theorems', command)
+                    self.assertEqual(env['LEAN_PATH'], os.pathsep.join(map(str, libs)))
+                    self.assertEqual(json.loads(output.read_text()), report)
+                    self.assertEqual(set(result), {'modules', 'report', 'status', 'exit_code',
+                                                   'theorem_count', 'seconds', 'kernel_replay',
+                                                   'collision', 'violations'})
+                    self.assertEqual((result['modules'], result['status'], result['exit_code']),
+                                     (modules, 'pass', 0))
+
 
 class ReplayTests(unittest.TestCase):
     """assumptions.kernel_replay against a stand-in leanchecker that rejects module `Bad`."""
@@ -129,10 +221,11 @@ class ReplayTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.toolchain = Path(self.temp.name)
-        (self.toolchain / 'bin').mkdir()
+        installed_inputs(self.toolchain)
         self.calls = self.toolchain / 'calls'
         checker = self.toolchain / 'bin/leanchecker'
-        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n')
+        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n'
+                           '[ "$1" != Killed ] || kill -9 $$\n')
         checker.chmod(0o755)
         (self.toolchain / 'bin/lean').write_text('lean')
 
@@ -143,6 +236,13 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g'}, self.toolchain, '')
         self.assertEqual((record['status'], [r['module'] for r in record['rejected']]), ('fail', ['Bad']))
         self.assertEqual(assumptions.replay_record(record), ({'Bad', 'Good'}, {'Bad'}))
+
+    def test_rejection_records_the_checker_exit_status(self):
+        record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g', 'Killed': 'k'}, self.toolchain, '')
+        self.assertEqual(record['status'], 'fail')
+        self.assertEqual({r['module']: r['output'] for r in record['rejected']},
+                         {'Bad': 'leanchecker exited 1\nrejected\n', 'Killed': 'leanchecker exited -9\n'})
+        self.assertEqual(sorted(record['rejected'][0]), ['module', 'output'])
 
     def test_cache_reuses_only_identical_passed_lake_oleans(self):
         cache, lake = self.toolchain / 'cache.json', frozenset({'Bad', 'Good', 'Other'})
@@ -156,6 +256,343 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Good': 'g', 'Other': 'changed'}, self.toolchain, '', cache, lake)
         self.assertEqual((record['reused'], self.checked()), ([], ['Good', 'Other']))
 
+    def test_installed_input_changes_invalidate_cache_with_fixed_project_bytes(self):
+        checker = (self.toolchain / 'bin/leanchecker').read_bytes()
+        project = self.toolchain / 'project/Lib.olean'
+        project.parent.mkdir()
+        project.write_bytes(b'fixed project artifact')
+        digests, lake = {'Lib': assumptions.file_sha256(project)}, frozenset({'Lib'})
+        for index, name in enumerate(('lib/libleanshared.so', 'lib/lean/Init.olean', 'lib/lean/Init.ir.sig')):
+            with self.subTest(name=name):
+                cache = self.toolchain / f'runtime-cache-{index}.json'
+                assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+                self.calls.unlink()
+                self.assertEqual(assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)['reused'], ['Lib'])
+                self.assertEqual(self.checked(), [])
+                changed = self.toolchain / name
+                saved = changed.stat()
+                changed.write_bytes(b'modified')
+                os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                replay = assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+                self.assertEqual((replay['reused'], self.checked()), ([], ['Lib']))
+                self.assertEqual((self.toolchain / 'bin/leanchecker').read_bytes(), checker)
+                self.assertEqual(project.read_bytes(), b'fixed project artifact')
+                self.calls.unlink()
+
+    def test_missing_runtime_cache_binding_requires_replay(self):
+        cache, lake, digests = self.toolchain / 'cache.json', frozenset({'Lib'}), {'Lib': 'fixed'}
+        assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        record = json.loads(cache.read_text())
+        del record['toolchain_runtime_sha256']
+        cache.write_text(json.dumps(record))
+        self.calls.unlink()
+        replay = assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        self.assertEqual((replay['reused'], self.checked()), ([], ['Lib']))
+
+    def test_runtime_mutation_during_replay_does_not_publish_cache(self):
+        cache, lake, digests = self.toolchain / 'cache.json', frozenset({'Lib'}), {'Lib': 'fixed'}
+        assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        original_cache = cache.read_bytes()
+        runner = subprocess.run
+
+        def changed(*args, **kwargs):
+            result = runner(*args, **kwargs)
+            (self.toolchain / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+            return result
+
+        with mock.patch.object(assumptions.subprocess, 'run', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'runtime changed during kernel replay'):
+                assumptions.kernel_replay({**digests, 'Local': 'fixed'}, self.toolchain, '', cache, lake)
+        self.assertEqual(cache.read_bytes(), original_cache)
+
+    def test_extraction_runtime_mismatch_rejects_before_checker(self):
+        expected = assumptions.toolchain_runtime_sha256(self.toolchain)
+        (self.toolchain / 'lib/lean/Init.olean').write_bytes(b'modified')
+        with self.assertRaisesRegex(ValueError, 'between extraction and replay'):
+            assumptions.kernel_replay({'Lib': 'fixed'}, self.toolchain, '', expected_runtime=expected)
+        self.assertEqual(self.checked(), [])
+
+    def test_concurrent_audits_replay_each_module_once(self):
+        # Two audits of one build at once through one cache (a fixture-checks run): each Lake
+        # module is replayed by one of them; a non-Lake module by each; a rejection is not shared.
+        checker = self.toolchain / 'bin/leanchecker'
+        checker.write_text(checker.read_text().replace('#!/bin/sh\n', '#!/bin/sh\nsleep 0.2\n'))
+        cache, lake = self.toolchain / 'cache.json', frozenset({'A', 'B', 'C', 'Bad'})
+        digests = {'A': 'a', 'B': 'b', 'C': 'c', 'Bad': 'x', 'Local': 'l'}
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            records = list(pool.map(lambda _: assumptions.kernel_replay(digests, self.toolchain, '', cache, lake),
+                                    range(2)))
+        self.assertEqual(self.checked(), ['A', 'B', 'Bad', 'Bad', 'C', 'Local', 'Local'])
+        self.assertEqual(sorted(m for r in records for m in r['reused']), ['A', 'B', 'C'])
+        self.assertEqual([r['status'] for r in records], ['fail', 'fail'])
+
+    def test_gates_share_one_replay_cache(self):
+        # Every gate of a build audits through one cache: only changed artifacts replay again.
+        cache = self.toolchain / 'gate-cache.json'
+        lake = frozenset({'Lib', 'Other'})
+        original = (universe.compile_unit, universe.audit_modules)
+        digests = {'Lib': 'l1', 'Other': 'o1'}
+
+        def audit(modules, lean_path, output, cache=None, sources=None):
+            # What assumptions.py does for the gate's module: the gate-time module is never cacheable.
+            assumptions.kernel_replay({**digests, modules[0]: 'g'}, self.toolchain, '', cache, lake)
+            return {'status': 'pass', 'exit_code': 0, 'theorem_count': 1, 'violations': []}
+
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            gated = sorted(universe.GATES)[0]  # a real gate-audited file: gate() checks the copy's bytes
+            source = work / Path(gated).name
+            source.write_bytes((ROOT / gated).read_bytes())
+            universe.compile_unit = lambda *a, **k: None
+            universe.audit_modules = audit
+            try:
+                run = lambda name: universe.gate(source, work, work, work / name, cache)
+                self.assertEqual(run('a')['status'], 'pass')
+                module = universe.module_of(str(source), str(work))
+                self.assertEqual(self.checked(), sorted([module, 'Lib', 'Other']))
+                self.calls.unlink()
+                self.assertEqual(run('b')['status'], 'pass')  # identical library: only the gate module replays
+                self.assertEqual(self.checked(), [module])
+                self.calls.unlink()
+                digests['Lib'] = 'l2'  # a changed artifact drops the cache: everything replays again
+                self.assertEqual(run('c')['status'], 'pass')
+                self.assertEqual(self.checked(), sorted([module, 'Lib', 'Other']))
+            finally:
+                universe.compile_unit, universe.audit_modules = original
+
+    def worker_counts(self, env, work):
+        """Pool sizes `work()` requests under `env` (stage and build-guard variables otherwise cleared)."""
+        import concurrent.futures
+        sizes, real = [], concurrent.futures.ThreadPoolExecutor
+
+        def pool(n):
+            sizes.append(n)
+            return real(n)
+
+        keys = ('AIR2LEAN_JOBS', 'AIR2LEAN_REPLAY_JOBS', 'AIR2LEAN_UNIVERSE_JOBS')
+        saved = {k: os.environ.pop(k, None) for k in keys}
+        os.environ.update(env)
+        concurrent.futures.ThreadPoolExecutor, universe.ThreadPoolExecutor = pool, pool
+        try:
+            work()
+        finally:
+            concurrent.futures.ThreadPoolExecutor, universe.ThreadPoolExecutor = real, real
+            for k in keys:
+                os.environ.pop(k, None)
+            os.environ.update({k: v for k, v in saved.items() if v is not None})
+        return sizes
+
+    def test_worker_counts_follow_the_stage_override_then_the_build_budget(self):
+        modules = {'A': 'a', 'B': 'b', 'C': 'c'}
+        original = universe.compile_unit
+        compiled = []
+        universe.compile_unit = lambda source, *a, **k: compiled.append(source)
+        units = [universe.Unit(f'{m}.lean', 'r', f'ZZ{m}', (), (), None, ()) for m in modules]
+        by_file = {u.file: u for u in units}
+
+        def replay():
+            self.calls.unlink(missing_ok=True)
+            assumptions.kernel_replay(modules, self.toolchain, '')
+            self.assertEqual(self.checked(), sorted(modules))  # every requested module is still checked
+
+        def compile_all():
+            compiled.clear()
+            universe.compile_all(units, by_file, self.toolchain / 'out')
+            self.assertEqual(sorted(compiled), sorted(by_file))
+
+        try:
+            for stage, work in (('AIR2LEAN_REPLAY_JOBS', replay), ('AIR2LEAN_UNIVERSE_JOBS', compile_all)):
+                self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1'}, work), [1])
+                self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1', stage: '2'}, work), [2])
+                self.assertEqual(self.worker_counts({}, work), [min(4, os.cpu_count() or 1)])
+        finally:
+            universe.compile_unit = original
+
+    def test_a_second_gate_run_does_not_reuse_the_first_runs_replay(self):
+        # A run's cache is a fresh file in the run's temporary directory; without one nothing is cached.
+        self.assertIsNone(universe.gate.__defaults__[0])
+        lake, digests = frozenset({'Lib'}), {'Lib': 'l1'}
+        for _ in range(2):
+            with tempfile.TemporaryDirectory() as run_dir:
+                cache = Path(run_dir) / 'replay-cache.json'
+                for _ in range(2):  # the second gate of the same run reuses the first one's replay
+                    self.calls.unlink(missing_ok=True)
+                    assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+                    self.assertEqual(self.checked(), ['Lib'] if _ == 0 else [])
+        self.calls.unlink(missing_ok=True)
+        for _ in range(2):  # no cache: every gate replays
+            assumptions.kernel_replay(digests, self.toolchain, '', None, lake)
+        self.assertEqual(self.checked(), ['Lib', 'Lib'])
+
+    def test_gate_scripts_keep_their_replay_cache_in_the_run_directory(self):
+        for script in ('nan-bits', 'enc-exactness', 'packed-casts', 'try-pointers/lifetimes'):
+            text = (ROOT / 'tests/roadmap' / script / 'check.sh').read_text()
+            self.assertIn('--replay-cache "$work/replay-cache.json"', text, script)
+            self.assertIn('work=$(mktemp -d', text, script)
+
+
+class LakeExtractionTests(unittest.TestCase):
+    """assumptions.lake_extraction (--extract-in) with a stand-in Lake: the persistent workspace's
+    pin follows the repository's, and the installed runtime is part of the driver's identity."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        self.workspace = self.package / '.lake/extraction'
+        self.built = []
+        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')]
+        # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
+        self.own = str(self.workspace / '.lake/build/lib/lean')
+        self.resolved = [*self.roots, self.own]
+
+        def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                code = 0 if self.resolved is not None else 1
+                return subprocess.CompletedProcess(command, code, os.pathsep.join(self.resolved or []) + '\n', '')
+            module = command[-1]
+            self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
+            path = module.replace('.', '/') + '.lean'
+            return subprocess.CompletedProcess(command, 0, f'info: {path}:9:0: {assumptions.MARKER}{{}}\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def extract(self, runtime='a' * 64, binding=None):
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root, binding)
+
+    def test_a_bound_lookup_path_is_used_only_as_lake_resolves_it(self):
+        binding = {'roots': list(self.roots), 'sha256': 'c' * 64}
+        self.assertEqual(self.extract(binding=binding), ['{}'])
+        self.assertEqual(len(self.built), 1)
+        # A changed bound input (same roots) is another driver: Lake builds another module.
+        self.assertEqual(self.extract(binding=dict(binding, sha256='d' * 64)), ['{}'])
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        # One entry of Lake's resolved path differs from the bound one: nothing is built or reused.
+        self.resolved[1] = self.resolved[1] + '-other'
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.roots[1], self.roots[0], self.own]  # the same roots, another order
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = None  # Lake resolves nothing
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.own, *self.roots, self.own]  # the driver library twice
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [*self.roots, self.own]
+        (self.workspace / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
+        self.assertIsNone(self.extract(binding=binding))
+        self.assertEqual(len(self.built), 2)
+
+    def test_report_line_and_unchanged_driver(self):
+        self.assertEqual(self.extract(), ['{}'])
+        source = next(self.workspace.rglob('M*.lean'))
+        written = source.stat().st_mtime_ns
+        self.assertEqual(self.extract(), ['{}'])  # same inputs: the same driver, not rewritten
+        self.assertEqual((self.built[0], source.stat().st_mtime_ns), (self.built[1], written))
+
+    def test_the_child_pin_follows_the_repository(self):
+        self.extract()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v2\n')  # only the root pin changes
+        self.extract()
+        self.assertEqual([pin for _, pin in self.built], ['leanprover/lean4:v1\n', 'leanprover/lean4:v2\n'])
+        self.assertEqual((self.workspace / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+
+    def test_a_changed_runtime_is_another_driver(self):
+        self.extract('a' * 64)
+        self.extract('b' * 64)  # only the installed runtime changes: Lake must build another module
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        with self.assertRaises(ValueError):
+            self.extract(None)  # no runtime binding: fail closed
+
+
+class LakeKernelReplayTests(unittest.TestCase):
+    """assumptions.lake_kernel_replay with a stand-in Lake: one receipt per module, only on
+    Lake's exact lookup path, and every receipt accounted for."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        (self.root / 'lakefile.toml').write_text('name = "air2lean"\n')
+        for owner, module in ((self.root, 'A'), (self.package, 'B')):  # A in the root package, B in the fixtures'
+            (owner / '.lake/build/lib/lean').mkdir(parents=True, exist_ok=True)
+            (owner / '.lake/build/lib/lean' / (module + '.olean')).write_bytes(b'olean')
+        self.workspace = self.package / '.lake/replay'
+        self.lean_path = os.pathsep.join([str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')])
+        self.resolved = [*self.lean_path.split(os.pathsep), str(self.workspace / '.lake/build/lib/lean')]
+        self.builds, self.status, self.drop, self.foreign = [], {}, set(), {}
+
+        def lake(command, cwd, **kwargs):
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                return subprocess.CompletedProcess(command, 0, os.pathsep.join(self.resolved) + '\n', '')
+            targets = command[command.index('build') + 1:]
+            self.builds.append(targets)
+            lines = []
+            for target in targets:
+                path = target.replace('.', '/') + '.lean'
+                module = re.search(r'KernelReplay\.run `(\S+)', (Path(cwd) / path).read_text()).group(1)
+                if module in self.drop:
+                    continue
+                record = {'module': self.foreign.get(module, module), 'status': self.status.get(module, 'pass'),
+                          'exit_code': 0 if self.status.get(module, 'pass') == 'pass' else 1, 'output': ''}
+                lines.append(f'info: {path}:3:0: {assumptions.REPLAY_MARKER}{json.dumps(record)}')
+            return subprocess.CompletedProcess(command, 0, '\n'.join(lines) + '\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def replay(self, modules=('A', 'B'), checker='c' * 64, runtime='a' * 64):
+        return assumptions.lake_kernel_replay(list(modules), self.package, checker, runtime, self.lean_path, self.root)
+
+    def test_one_receipt_per_module_named_by_checker_and_runtime(self):
+        self.status['B'] = 'fail'
+        receipts = self.replay()
+        self.assertEqual({m: r['status'] for m, r in receipts.items()}, {'A': 'pass', 'B': 'fail'})
+        first = self.builds[-1]
+        # No receipt imports its module (its `initialize` would run there); each receipt's library
+        # needs the module's olean and dependency trace in the package that builds it.
+        texts = [p.read_text() for p in (self.workspace / 'KernelReplay').glob('*.lean')]
+        self.assertTrue(texts and all('import A' not in t and 'import B' not in t for t in texts))
+        manifest = tomllib.loads((self.workspace / 'lakefile.toml').read_text())
+        self.assertEqual(sorted(lib['needs'] for lib in manifest['lean_lib']),
+                         [['@air2lean/+A:olean', '@air2lean/+A:depTrace'],
+                          ['@fixtures/+B:olean', '@fixtures/+B:depTrace']])
+        self.replay()
+        self.assertEqual(self.builds[-1], first)  # same inputs: the same receipt modules
+        self.replay(checker='d' * 64)
+        self.assertFalse(set(self.builds[-1]) & set(first))  # another checker: other receipts
+        self.replay(runtime='b' * 64)
+        self.assertFalse(set(self.builds[-1]) & set(first))  # another runtime: other receipts
+
+    def test_only_on_lakes_exact_lookup_path(self):
+        self.resolved[0] += '-other'
+        self.assertIsNone(self.replay())
+        self.assertEqual(self.builds, [])  # nothing built
+        self.resolved = self.lean_path.split(os.pathsep)  # its own library missing
+        self.assertIsNone(self.replay())
+
+    def test_a_missing_or_foreign_receipt_fails(self):
+        self.drop.add('B')
+        with self.assertRaises(ValueError):
+            self.replay()
+        self.drop.clear()
+        self.foreign['B'] = 'A'
+        with self.assertRaises(ValueError):
+            self.replay()
+        with self.assertRaises(ValueError):
+            self.replay(checker=None)  # no checker binding: fail closed
+
 
 class FreshnessTests(unittest.TestCase):
     def setUp(self):
@@ -163,10 +600,92 @@ class FreshnessTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.olean = Path(self.temp.name) / 'M.olean'
         self.olean.write_bytes(b'olean')
-        self.report = {'freshness': {
+        self.toolchain = Path(self.temp.name) / 'toolchain'
+        installed_inputs(self.toolchain)
+        sysroot = mock.patch.object(assumptions, 'lake_env',
+                                    side_effect={'LEAN_SYSROOT': str(self.toolchain)}.__getitem__)
+        sysroot.start()
+        self.addCleanup(sysroot.stop)
+        runtime = assumptions.toolchain_runtime_sha256(self.toolchain)
+        self.report = {'extractor': {'lean_sysroot': str(self.toolchain), 'toolchain_runtime_sha256': runtime},
+                      'freshness': {
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
+            'lean_sysroot': str(self.toolchain), 'toolchain_runtime_sha256': runtime,
             'artifacts': [{'module': 'M', 'olean': str(self.olean), 'olean_sha256': assumptions.file_sha256(self.olean),
                            'source': None, 'source_sha256': None}]}}
+
+    def test_installed_input_change_is_stale_with_fixed_report_and_project_artifact(self):
+        original_report, original_olean = json.dumps(self.report), self.olean.read_bytes()
+        for name in ('lib/libleanshared.so', 'lib/lean/Init.olean', 'lib/lean/Init.ir.sig'):
+            with self.subTest(name=name):
+                changed = self.toolchain / name
+                saved = changed.stat()
+                changed.write_bytes(b'modified')
+                os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                try:
+                    with self.assertRaisesRegex(ValueError, 'stale: toolchain runtime changed'):
+                        assumptions.verify_fresh(self.report, allow_dirty=True)
+                    self.assertEqual((json.dumps(self.report), self.olean.read_bytes()), (original_report, original_olean))
+                finally:
+                    changed.write_bytes(b'original')
+                    os.utime(changed, ns=(saved.st_atime_ns, saved.st_mtime_ns))
+                self.assertEqual(assumptions.verify_fresh(self.report, allow_dirty=True)['artifacts'], 1)
+
+    def test_missing_or_inconsistent_runtime_bindings_are_rejected(self):
+        for section, key in (('freshness', 'lean_sysroot'), ('freshness', 'toolchain_runtime_sha256'),
+                             ('extractor', 'lean_sysroot'), ('extractor', 'toolchain_runtime_sha256')):
+            with self.subTest(section=section, key=key):
+                broken = json.loads(json.dumps(self.report))
+                del broken[section][key]
+                with self.assertRaisesRegex(ValueError, 'runtime binding'):
+                    assumptions.verify_fresh(broken, allow_dirty=True)
+        broken = json.loads(json.dumps(self.report))
+        broken['extractor']['toolchain_runtime_sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'runtime binding'):
+            assumptions.verify_fresh(broken, allow_dirty=True)
+
+    def test_changed_selected_sysroot_rejects_the_unchanged_old_bound_tree(self):
+        other = Path(self.temp.name) / 'other-toolchain'
+        installed_inputs(other)
+        self.assertEqual(assumptions.toolchain_runtime_sha256(other),
+                         self.report['freshness']['toolchain_runtime_sha256'])
+        with mock.patch.object(assumptions, 'lake_env', return_value=str(other)):
+            with self.assertRaisesRegex(ValueError, 'runtime root changed'):
+                assumptions.verify_fresh(self.report, allow_dirty=True)
+
+    def test_runtime_is_recomputed_after_project_artifact_verification(self):
+        digest = assumptions.file_sha256
+
+        def changed(path):
+            value = digest(path)
+            if path == self.olean:
+                (self.toolchain / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+            return value
+
+        with mock.patch.object(assumptions, 'file_sha256', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'stale: toolchain runtime changed'):
+                assumptions.verify_fresh(self.report, allow_dirty=True)
+
+    def test_existing_extractor_runtime_is_forwarded_to_replay_and_freshness(self):
+        raw = {'modules': ['M'], 'nodes': [], 'extractor': self.report['extractor']}
+        values = {'LEAN_SYSROOT': str(self.toolchain), 'LEAN_PATH': self.temp.name}
+        with mock.patch.object(assumptions, 'lake_env', side_effect=values.__getitem__), \
+                mock.patch.object(assumptions, 'kernel_replay', return_value={'status': 'pass'}) as replay, \
+                mock.patch.object(assumptions, 'library_compiled_inputs', return_value=[]) as inputs:
+            freshness = assumptions.replay_and_freshness(raw)
+            self.assertEqual(set(replay.call_args.kwargs),
+                             {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs', 'lake_package'})
+            self.assertIsNone(replay.call_args.kwargs['lake_package'])  # no package: no receipts
+            self.assertEqual(replay.call_args.kwargs['compiled_inputs_sha256'], universe.input_digest([]))
+            validate = replay.call_args.kwargs['validate_inputs']
+            validate()
+            inputs.return_value = [['changed synthetic compiled input']]
+            with self.assertRaisesRegex(ValueError, 'canonical Lake compiled inputs changed'):
+                validate()
+        runtime = self.report['extractor']['toolchain_runtime_sha256']
+        self.assertEqual(replay.call_args.kwargs['expected_runtime'], runtime)
+        self.assertEqual((freshness['lean_sysroot'], freshness['toolchain_runtime_sha256']),
+                         (str(self.toolchain.resolve()), runtime))
 
     def test_changed_artifact_or_revision_is_stale(self):
         self.assertEqual(assumptions.verify_fresh(self.report, allow_dirty=True)['artifacts'], 1)
@@ -182,6 +701,781 @@ class FreshnessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'allow-dirty'):
             assumptions.verify_fresh(self.report)
         self.assertTrue(assumptions.verify_fresh(self.report, allow_dirty=True)['dirty_allowed'])
+
+
+class CompiledUnitTests(unittest.TestCase):
+    """Same compiler/audit/freshness flow; all compiler and installation inputs are synthetic."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.toolchain = self.root / 'toolchain'
+        installed_inputs(self.toolchain)
+        checker = self.toolchain / 'bin/leanchecker'
+        checker.write_text('#!/bin/sh\nexit 0\n')
+        checker.chmod(0o755)
+        self.built = self.root / '.lake/build/lib/lean'
+        for rel, data in {'ZigLean/Basic.lean': b'import Init\n',
+                          '.lake/build/lib/lean/ZigLean/Basic.olean': b'canonical Lake output',
+                          'local/Owned/Basic.lean': b'import ZigLean.Basic\n',
+                          'local/Owned/Main.lean': b'import Owned.Basic\ntheorem p : True := trivial\n',
+                          'other/Owned/Main.lean': b'import ZigLean.Basic\ntheorem q : True := trivial\n',
+                          'local-parent/Proofs.lean': b'theorem staged : True := trivial\n',
+                          'lean-toolchain': b'synthetic installation',
+                          'lakefile.toml': b'name = "synthetic"\n',
+                          'assurance/policy.json': b'{}'}.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        self.basic = universe.Unit('local/Owned/Basic.lean', 'local', 'Owned.Basic', (),
+                                   ('ZigLean.Basic',), None, ())
+        self.main = universe.Unit('local/Owned/Main.lean', 'local', 'Owned.Main',
+                                  (self.basic.file,), (), None, ('p',))
+        self.other = universe.Unit('other/Owned/Main.lean', 'other', 'Owned.Main',
+                                   (), ('ZigLean.Basic',), None, ('q',))
+        self.staged = universe.Unit('local-parent/Proofs.lean', None, 'Universe.Staged', (), (), None, ())
+        self.units = [self.basic, self.main, self.other, self.staged]
+        self.headers = {'Owned.Main': ['Owned.Basic'], 'Owned.Basic': ['ZigLean.Basic'],
+                        'Universe.Staged': ['Init'], 'ZigLean.Basic': ['Init'], 'Init': []}
+        self.cache = self.root / 'replay-cache.json'
+        self.paths = [self.built, self.toolchain / 'lib/lean']
+        self.expected_witnesses = []
+        self.patch(universe, 'ROOT', self.root)
+        self.patch(assumptions, 'ROOT', self.root)
+        self.patch(universe, 'assumptions', assumptions)
+        self.patch(universe, 'universe', lambda: ([], self.units))
+        prepare = universe.prepare_compilation
+
+        def preparing(*args, **kwargs):
+            self.active_context = prepare(*args, **kwargs)
+            return self.active_context
+
+        self.patch(universe, 'prepare_compilation', preparing)
+        self.patch(universe, 'run', self.compiler)
+        self.patch(assumptions, 'run', lambda command: '')
+        self.patch(assumptions, 'lake_env', {'LEAN_SYSROOT': str(self.toolchain),
+                                          'LEAN_PATH': os.pathsep.join(map(str, self.paths))}.__getitem__)
+        self.patch(assumptions, 'library_roots', lambda root: ['ZigLean'])
+        self.patch(assumptions, 'prepared_tool', contextlib.nullcontext)
+        self.patch(assumptions, 'git_revision', lambda: {'head': '1' * 40, 'tracked_dirty': False})
+        self.patch(assumptions, 'load_policy', lambda path: {})
+        self.registry_files = assumptions.witness_fixtures
+        self.patch(assumptions, 'witness_fixtures', lambda: [])
+        self.patch(assumptions, 'float_semantics', lambda: mock.Mock(load_registry=lambda *a, **k: {}))
+        self.patch(assumptions, 'extract', self.extract)
+        self.patch(assumptions, 'apply_policy', lambda raw, *a: {
+            'status': 'pass', 'theorem_count': 0, 'theorems': [], 'violations': [],
+            'modules': raw['modules'], 'module_imports': raw['module_imports'],
+            'kernel_replay': raw['kernel_replay']})
+        environment = mock.patch.dict(os.environ, {'AIR2LEAN_UNIVERSE_JOBS': '1', 'AIR2LEAN_REPLAY_JOBS': '1'})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def patch(self, obj, name, value):
+        patcher = mock.patch.object(obj, name, value)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def compiler(self, command, env=None):
+        if command == ['lake', 'env', 'printenv', 'LEAN_PATH']:
+            return subprocess.CompletedProcess(command, 0,
+                                               os.pathsep.join([*map(str, self.paths),
+                                                                *filter(None, [env['LEAN_PATH']])]) + '\n')
+        # This is the existing explicit-path Lean invocation, not an executable compiler.
+        self.assertEqual(command[:3], ['lake', 'env', 'env'])
+        self.assertEqual(command[3], 'LEAN_PATH=' + self.active_context['lean_path'])
+        self.assertEqual(command[4], 'lean')
+        unit = next(record for record in self.active_context['units'].values()
+                    if record['compiler_source']['path'] == command[-1])
+        self.assertEqual(command[command.index('-R') + 1], unit['compiler_root'])
+        output, source = Path(command[command.index('-o') + 1]), self.root / command[-1]
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b'compiled: ' + source.read_bytes())
+        return subprocess.CompletedProcess(command, 0, '')
+
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
+        self.assertFalse(build)
+        self.assertIsNone(extract_in)
+        self.assertEqual(witnesses, self.expected_witnesses)
+        self.assertEqual(lean_path, self.active_context['lean_path'])
+        audited = sorted({*modules, *witnesses})
+        headers, pending = {}, list(audited)
+        while pending:
+            module = pending.pop()
+            if module in headers or module not in self.headers:
+                continue
+            headers[module] = list(self.headers[module])
+            pending.extend(headers[module])
+        return {'modules': audited, 'nodes': [{'module': module} for module in modules],
+                'module_imports': headers,
+                'extractor': {'lean_sysroot': str(self.toolchain),
+                              'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(self.toolchain)}}
+
+    def compiled(self, selected=None, *, output=None, extra_outputs=None):
+        selected = selected or [self.main]
+        by_file = {unit.file: unit for unit in self.units}
+        output = output or Path(tempfile.mkdtemp(prefix='owned-', dir=self.root))
+        context = universe.prepare_compilation(selected, by_file, output)
+        for relative, content in (extra_outputs or {}).items():
+            extra = universe.lib_of(output, selected[0].root) / relative
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_bytes(content)
+        self.assertEqual(universe.compile_all(universe.closure(selected, by_file), by_file, output,
+                                             compiled_units=context), [])
+        universe.seal_compilation(context)
+        return context
+
+    def audited(self, context=None):
+        context = context or self.compiled()
+        output = Path(context['output_dir']) / 'audit.json'
+        result = universe.audit_modules(context['selected_modules'], [], output, self.cache,
+                                        compiled_units=context)
+        self.assertEqual((result['status'], result['exit_code']), ('pass', 0), result)
+        report = json.loads(output.read_text())
+        assumptions.verify_fresh(report, allow_dirty=True)
+        return report
+
+    def test_default_audit_binds_unused_header_closure_and_preserves_safe_reuse(self):
+        # Main's declaration graph deliberately has no Basic node. The header still owns it.
+        context = self.compiled(extra_outputs={'Owned/Private.olean': b'private dependency'})
+        report = self.audited(context)
+        rows = {row['module']: row for row in report['freshness']['artifacts']}
+        self.assertIn('Owned.Basic', rows)
+        self.assertEqual(rows['Owned.Basic']['source'], self.basic.file)
+        repeated = self.audited()
+        self.assertEqual(repeated['kernel_replay']['reused'], ['ZigLean.Basic'])
+        self.assertTrue({'Owned.Main', 'Owned.Basic'} <= set(repeated['kernel_replay']['modules']))
+        self.assertEqual(assumptions.cacheable_modules(
+            {**self.headers, 'ZigLean.Basic': ['Owned.Private'], 'Owned.Private': ['Init']}, ['ZigLean.Basic'],
+            [*self.paths, universe.lib_of(Path(context['output_dir']), 'local')],
+            self.toolchain), frozenset())
+
+    def test_default_owner_forwards_binding_and_uses_fresh_output_namespaces(self):
+        output = self.root / 'default-audit'
+        with mock.patch.object(self, 'units', [self.basic, self.main, self.staged]):
+            first = universe.audit(output, False, None, self.cache)
+            self.assertEqual(first['status'], 'pass', first)
+            first_report = json.loads(Path(first['audits'][0]['report']).read_text())
+            assumptions.verify_fresh(first_report, allow_dirty=True)
+            second = universe.audit(output, False, None, self.cache)
+            self.assertEqual(second['status'], 'pass', second)
+            second_report = json.loads(Path(second['audits'][0]['report']).read_text())
+            assumptions.verify_fresh(second_report, allow_dirty=True)
+            self.assertNotEqual(first_report['freshness']['compiled_units']['output_dir'],
+                                second_report['freshness']['compiled_units']['output_dir'])
+            assumptions.verify_fresh(first_report, allow_dirty=True)
+
+    def test_fixed_report_and_outputs_reject_original_and_unused_helper_source_mutation(self):
+        report = self.audited()
+        fixed = json.dumps(report)
+        outputs = {row['olean']: assumptions.file_sha256(self.root / row['olean'])
+                   for row in report['freshness']['artifacts']}
+        for unit in (self.main, self.basic):
+            with self.subTest(module=unit.module):
+                path, original = self.root / unit.file, (self.root / unit.file).read_bytes()
+                try:
+                    path.write_bytes(original + b'-- changed source only\n')
+                    with self.assertRaisesRegex(ValueError, f'{unit.module} source changed'):
+                        assumptions.verify_fresh(report, allow_dirty=True)
+                    self.assertEqual(json.dumps(report), fixed)
+                    self.assertEqual(outputs, {path: assumptions.file_sha256(self.root / path) for path in outputs})
+                finally:
+                    path.write_bytes(original)
+                assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_missing_transplanted_or_stripped_context_is_refused_by_generic_admission(self):
+        report = self.audited()
+        missing = json.loads(json.dumps(report))
+        del missing['freshness']['compiled_units']
+        for row in missing['freshness']['artifacts']:
+            if row['module'].startswith('Owned.'):
+                row.update(source=None, source_sha256=None)
+        for selection in (None, [], ['Unrelated']):
+            with self.subTest(selection=selection):
+                if selection is None:
+                    missing.pop('modules', None)
+                else:
+                    missing['modules'] = selection
+                with self.assertRaisesRegex(ValueError, 'no compiler-owned run binding'):
+                    assumptions.verify_fresh(missing, allow_dirty=True)
+        header_only = json.loads(json.dumps(missing))
+        header_only.update(modules=['Unrelated'], module_imports={'Unrelated': ['Owned.Main']})
+        for row in header_only['freshness']['artifacts']:
+            if row['module'].startswith('Owned.'):
+                row['module'] = 'Unrelated.' + row['module']
+        with self.assertRaisesRegex(ValueError, 'no compiler-owned run binding'):
+            assumptions.verify_fresh(header_only, allow_dirty=True)
+        other = self.compiled([self.other])
+        transplanted = json.loads(json.dumps(report))
+        transplanted['freshness']['compiled_units'] = other
+        with self.assertRaisesRegex(ValueError, 'report source/output differs'):
+            assumptions.verify_fresh(transplanted, allow_dirty=True)
+        stripped = json.loads(json.dumps(report))
+        next(row for row in stripped['freshness']['artifacts']
+             if row['module'] == self.basic.module).update(source=None, source_sha256=None)
+        with self.assertRaisesRegex(ValueError, 'report source/output differs'):
+            assumptions.verify_fresh(stripped, allow_dirty=True)
+
+    def test_staged_input_does_not_substitute_for_original_source_identity(self):
+        report = self.audited(self.compiled([self.staged]))
+        unit = report['freshness']['compiled_units']['units'][self.staged.module]
+        unit['source'] = dict(unit['compiler_source'])
+        row = next(row for row in report['freshness']['artifacts'] if row['module'] == self.staged.module)
+        row.update(source=unit['source']['path'], source_sha256=unit['source']['sha256'])
+        original = self.root / self.staged.file
+        original.write_bytes(original.read_bytes() + b'-- original-only mutation\n')
+        with self.assertRaisesRegex(ValueError, 'Universe.Staged source changed'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_missing_changed_or_added_output_companion_is_refused(self):
+        context = self.compiled()
+        output = Path(context['units'][self.basic.module]['output_path'])
+        original = output.read_bytes()
+        for kind in ('missing', 'changed', 'added'):
+            with self.subTest(kind=kind):
+                companion = output.with_suffix('.ir')
+                try:
+                    if kind == 'missing':
+                        output.unlink()
+                    elif kind == 'changed':
+                        output.write_bytes(b'replaced after compilation')
+                    else:
+                        companion.write_bytes(b'new loader input')
+                    with self.assertRaises(ValueError):
+                        universe.verify_compilation(context)
+                finally:
+                    output.write_bytes(original)
+                    companion.unlink(missing_ok=True)
+                universe.verify_compilation(context)
+
+    def test_later_compiler_action_cannot_replace_an_earlier_captured_output(self):
+        by_file = {unit.file: unit for unit in self.units}
+        output = self.root / 'later-action'
+        context = universe.prepare_compilation([self.main], by_file, output)
+        compiler = self.compiler
+
+        def replace_earlier(command, env=None):
+            result = compiler(command, env)
+            if command[-1] == self.main.file:
+                Path(context['units'][self.basic.module]['output_path']).write_bytes(b'replacement')
+            return result
+
+        with mock.patch.object(universe, 'run', side_effect=replace_earlier):
+            self.assertEqual(universe.compile_all([self.basic, self.main], by_file, output,
+                                                 compiled_units=context), [])
+        with self.assertRaisesRegex(ValueError, 'Unit output changed: Owned.Basic'):
+            universe.seal_compilation(context)
+
+    def test_unowned_or_missing_actual_header_import_is_refused(self):
+        for headers, diagnostic in (({key: value for key, value in self.headers.items() if key != 'Owned.Basic'},
+                                     'incomplete import headers: Owned.Basic'),
+                                    ({**self.headers, 'Owned.Basic': ['Foreign.Unused'], 'Foreign.Unused': []},
+                                     'unowned private import: Foreign.Unused')):
+            with self.subTest(headers=headers), mock.patch.object(self, 'headers', headers):
+                context = self.compiled(extra_outputs={'Foreign/Unused.olean': b'existing foreign output'})
+                output = Path(context['output_dir']) / 'audit.json'
+                result = universe.audit_modules(context['selected_modules'], [], output, compiled_units=context)
+                self.assertEqual((result['status'], result['exit_code']), ('error', 2))
+                self.assertFalse(json.loads(output.read_text()).get('freshness'))
+                self.assertIn(diagnostic, result['violations'][0])
+
+    def registered(self, files=None):
+        """The real registry reader and the same producer; only compiler/installation are fake."""
+        files = [self.main.file] if files is None else files
+        registry = self.root / assumptions.WITNESS_FIXTURES
+        # Use valid test-source locations under the real registry's existing validation rule.
+        for unit in self.units:
+            source = self.root / unit.file
+            target = self.root / 'tests' / unit.file
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        self.units = [universe.Unit('tests/' + unit.file, 'tests/' + unit.root if unit.root else None,
+                                    unit.module, tuple('tests/' + dep for dep in unit.deps),
+                                    unit.lake, unit.gate, unit.names) for unit in self.units]
+        self.main, self.basic = (next(unit for unit in self.units if unit.file == 'tests/' + original.file)
+                                 for original in (self.main, self.basic))
+        registry.write_text(json.dumps({'description': 'Synthetic registered witnesses',
+                                        'fixtures': [{'file': 'tests/' + file, 'reason': 'test'} for file in files]}))
+        self.patch(assumptions, 'witness_fixtures', lambda: self.registry_files(self.root))
+        self.patch(assumptions, 'shipped_modules', lambda: ['ZigLean.Basic'])
+        self.patch(universe, 'shipped_modules', lambda: ['ZigLean.Basic'])
+        by_file = {unit.file: unit for unit in self.units}
+        self.expected_witnesses = sorted(unit.module for unit in universe.closure(
+            [by_file[file] for file in assumptions.witness_fixtures()], by_file))
+        self.patch(assumptions, 'apply_policy', lambda raw, *args: {
+            'status': 'pass', 'theorem_count': len(raw['modules']), 'violations': [],
+            'theorems': [{'name': module + '.proof', 'module': module} for module in raw['modules']],
+            'modules': raw['modules'], 'module_imports': raw['module_imports'],
+            'kernel_replay': raw['kernel_replay']})
+        return registry
+
+    def shipped(self):
+        output = self.root / 'shipped.json'
+        code = assumptions.main(['--no-build', '--replay-cache', str(self.cache), '--output', str(output)])
+        report = json.loads(output.read_text())
+        self.assertEqual(code, 0, report)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        return report
+
+    def test_registered_witness_default_flow_binds_unused_imports_and_splits_companions(self):
+        self.registered()
+        report = self.shipped()
+        self.assertEqual(report['modules'], ['ZigLean.Basic'])
+        self.assertEqual(report['witness_modules'], ['Owned.Basic', 'Owned.Main'])
+        self.assertEqual([row['module'] for row in report['theorems']], ['ZigLean.Basic'])
+        self.assertEqual([row['module'] for row in report['witness_theorems']], self.expected_witnesses)
+        # Neither private module is in the fake declaration graph. Both actual headers own rows.
+        rows = {row['module']: row for row in report['freshness']['artifacts']}
+        self.assertEqual(rows['Owned.Basic']['source'], self.basic.file)
+        self.assertEqual(rows['Owned.Main']['source'], self.main.file)
+        self.assertEqual(self.shipped()['kernel_replay']['reused'], ['ZigLean.Basic'])
+
+    def test_registered_witness_postcompile_source_change_cannot_be_stamped_as_current(self):
+        self.registered()
+        report = self.shipped()
+        fixed = json.dumps(report)
+        compiler = assumptions.compile_witness_fixtures
+        for unit in (self.main, self.basic):
+            source, original = self.root / unit.file, (self.root / unit.file).read_bytes()
+            outputs = {}
+
+            def changed(build):
+                sources, context = compiler(build)
+                outputs.update({record['output_path']: Path(record['output_path']).read_bytes()
+                                for record in context['units'].values()})
+                source.write_bytes(original + b'-- source-only change after compiler completion\n')
+                return sources, context
+
+            try:
+                with self.subTest(module=unit.module), \
+                        mock.patch.object(assumptions, 'compile_witness_fixtures', side_effect=changed):
+                    output = self.root / 'changed.json'
+                    self.assertEqual(assumptions.main(['--no-build', '--output', str(output)]), 2)
+                    self.assertIn(f'{unit.module} source changed', json.loads(output.read_text())['error'])
+                    self.assertEqual(outputs, {path: Path(path).read_bytes() for path in outputs})
+                    self.assertEqual(json.dumps(report), fixed)
+            finally:
+                source.write_bytes(original)
+            assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_witness_registry_changes_and_missing_or_transplanted_context_are_refused(self):
+        registry = self.registered()
+        report = self.shipped()
+        original = registry.read_bytes()
+        try:
+            registry.write_bytes(original + b'\n')
+            with self.assertRaisesRegex(ValueError, 'witness registry changed'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            registry.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        missing = json.loads(json.dumps(report))
+        del missing['freshness']['compiled_units']
+        with self.assertRaisesRegex(ValueError, 'no compiler-owned run binding'):
+            assumptions.verify_fresh(missing, allow_dirty=True)
+        for field in ('witness_registry', 'selected_files'):
+            changed = json.loads(json.dumps(report))
+            del changed['freshness']['compiled_units'][field]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'run binding|report selection'):
+                assumptions.verify_fresh(changed, allow_dirty=True)
+        replaced = json.loads(json.dumps(report))
+        replaced['freshness']['compiled_units']['witness_registry']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'witness registry changed'):
+            assumptions.verify_fresh(replaced, allow_dirty=True)
+        hybrid = json.loads(json.dumps(report))
+        hybrid['freshness']['compiled_units']['fixture_package'] = 'tests/roadmap'
+        with self.assertRaisesRegex(ValueError, 'fixture package/output selection changed'):
+            assumptions.verify_fresh(hybrid, allow_dirty=True)
+        other = self.compiled()
+        transplanted = json.loads(json.dumps(report))
+        transplanted['freshness']['compiled_units'] = other
+        with self.assertRaisesRegex(ValueError, 'report selection'):
+            assumptions.verify_fresh(transplanted, allow_dirty=True)
+        source = next(row for row in missing['freshness']['artifacts'] if row['module'] == 'Owned.Basic')
+        source.update(source=None, source_sha256=None)
+        missing.pop('scope')
+        missing.pop('witness_modules')
+        with self.assertRaisesRegex(ValueError, 'no compiler-owned run binding'):
+            assumptions.verify_fresh(missing, allow_dirty=True)
+
+    def test_registered_witness_headers_outputs_and_resolved_source_plan_are_required(self):
+        self.registered()
+        report = self.shipped()
+        missing_header = json.loads(json.dumps(report))
+        del missing_header['module_imports']['Owned.Basic']
+        with self.assertRaisesRegex(ValueError, 'incomplete import headers: Owned.Basic'):
+            assumptions.verify_fresh(missing_header, allow_dirty=True)
+        context = report['freshness']['compiled_units']
+        output = Path(context['units']['Owned.Basic']['output_path'])
+        original = output.read_bytes()
+        # An older alternative is present, but this producer's exact expected output is required.
+        alternative = self.root / 'old/Owned/Basic.olean'
+        alternative.parent.mkdir(parents=True)
+        alternative.write_bytes(original)
+        try:
+            output.unlink()
+            with self.assertRaisesRegex(ValueError, 'Owned.Basic|compiler-owned Unit input/output'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            output.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        # The existing resolver now returns a nearer source with identical bytes. Context cannot
+        # retain the old source/output pairing merely because registry/helper/report bytes match.
+        lean = premises.parse_file(self.root / self.main.file, self.root)
+        self.assertEqual(premises.resolve_import('Owned.Basic', lean, self.root), self.root / self.basic.file)
+        nearer = self.root / 'tests/local/Owned/Owned/Basic.lean'
+        nearer.parent.mkdir(parents=True)
+        nearer.write_bytes((self.root / self.basic.file).read_bytes())
+        self.assertEqual(premises.resolve_import('Owned.Basic', lean, self.root), nearer)
+        changed_basic = universe.Unit(nearer.relative_to(self.root).as_posix(), 'tests/local/Owned', 'Owned.Basic',
+                                       (), self.basic.lake, None, ())
+        changed_main = universe.Unit(self.main.file, self.main.root, self.main.module,
+                                      (changed_basic.file,), self.main.lake, None, self.main.names)
+        with mock.patch.object(self, 'units', [changed_basic, changed_main]):
+            with self.assertRaisesRegex(ValueError, 'compiled witness closure differs from the registry'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_shipped_build_precedes_witness_input_snapshot_and_extraction(self):
+        self.registered()
+        events = []
+        prepare, compiler, extract = universe.prepare_compilation, universe.run, self.extract
+
+        def preparing(*args, **kwargs):
+            events.append('snapshot')
+            return prepare(*args, **kwargs)
+
+        def building(command, env=None):
+            if command[:2] == ['lake', 'build']:
+                self.assertEqual(command[2:], ['ZigLean.Basic'])
+                events.append('import build')
+                return subprocess.CompletedProcess(command, 0, '')
+            return compiler(command, env)
+
+        def extracting(*args, **kwargs):
+            events.append('extract')
+            return extract(*args, **kwargs)
+
+        def lake(command):
+            if command == ['lake', 'build', 'ZigLean.Basic']:
+                events.append('shipped build')
+            else:
+                self.assertEqual(command, ['lake', '--rehash', 'build', '--no-build', 'ZigLean.Basic'])
+                events.append('trace check')
+            return ''
+
+        with mock.patch.object(assumptions, 'run', side_effect=lake), \
+                mock.patch.object(universe, 'run', side_effect=building), \
+                mock.patch.object(universe, 'prepare_compilation', side_effect=preparing), \
+                mock.patch.object(assumptions, 'extract', side_effect=extracting):
+            output = self.root / 'built-shipped.json'
+            self.assertEqual(assumptions.main(['--output', str(output)]), 0)
+        self.assertEqual(events, ['shipped build', 'import build', 'snapshot', 'extract', 'trace check'])
+        self.assertTrue(json.loads(output.read_text())['build_checked'])
+
+    def test_registered_witness_cannot_compile_through_a_shadowing_library(self):
+        self.registered()
+        self.shipped()
+        stray = self.built / 'Owned/Main.olean'
+        stray.parent.mkdir(parents=True)
+        stray.write_bytes(b'older shadowing artifact')
+        output = self.root / 'shadowed.json'
+        self.assertEqual(assumptions.main(['--no-build', '--output', str(output)]), 2)
+        report = json.loads(output.read_text())
+        self.assertIn('would shadow theorem-universe modules', report['error'])
+        self.assertFalse(report.get('freshness'))
+        self.assertEqual(stray.read_bytes(), b'older shadowing artifact')
+
+    def test_empty_registry_still_binds_default_shipped_audit_without_changing_explicit_scope(self):
+        registry = self.registered([])
+        report = self.shipped()
+        self.assertEqual(report['witness_modules'], [])
+        self.assertEqual(report['freshness']['compiled_units']['units'], {})
+        for removed in ('compiled_units', 'witness_registry'):
+            changed = json.loads(json.dumps(report))
+            if removed == 'compiled_units':
+                del changed['freshness'][removed]
+            else:
+                del changed['freshness']['compiled_units'][removed]
+            with self.subTest(removed=removed), self.assertRaisesRegex(ValueError, 'run binding'):
+                assumptions.verify_fresh(changed, allow_dirty=True)
+        original = registry.read_bytes()
+        try:
+            registry.write_bytes(original + b'\n')
+            with self.assertRaisesRegex(ValueError, 'witness registry changed'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            registry.write_bytes(original)
+        explicit = json.loads(json.dumps(report))
+        del explicit['freshness']['compiled_units']
+        explicit['scope'] = 'explicit-modules'
+        assumptions.verify_fresh(explicit, allow_dirty=True)
+
+    def test_changed_compiled_input_does_not_publish_a_replay_cache_entry(self):
+        report = self.audited()
+        original_cache = self.cache.read_bytes()
+        original_run = subprocess.run
+        companion = self.built / 'ZigLean/Basic.ir'
+
+        def changed(*args, **kwargs):
+            result = original_run(*args, **kwargs)
+            companion.write_bytes(b'changed while checking')
+            return result
+
+        context = report['freshness']['compiled_units']
+        raw = self.extract(context['selected_modules'], False, [], lean_path=context['lean_path'])
+        with mock.patch.object(assumptions.subprocess, 'run', side_effect=changed):
+            with self.assertRaisesRegex(ValueError, 'canonical Lake compiled inputs changed'):
+                assumptions.replay_and_freshness(raw, self.cache, compiled_units=context)
+        self.assertEqual(self.cache.read_bytes(), original_cache)
+
+    def test_native_top_level_lookup_does_not_fall_back_to_a_later_child(self):
+        first, second = self.root / 'first', self.root / 'second'
+        (first / 'Foo').mkdir(parents=True)
+        (second / 'Foo').mkdir(parents=True)
+        (second / 'Foo/Child.olean').write_bytes(b'later child')
+        with self.assertRaisesRegex(ValueError, 'Foo.Child'):
+            assumptions.locate('Foo.Child', [first, second])
+
+
+class FixtureCompilationTests(unittest.TestCase):
+    """Canonical fixture producer; synthetic files, mocked Lake/compiler/extractor only.
+
+    This class never runs the real fixture/Lake test classes. The only executable is the
+    existing tiny synthetic leanchecker from CompiledUnitTests, not an installed toolchain.
+    """
+
+    patch = CompiledUnitTests.patch
+    compiler = CompiledUnitTests.compiler
+
+    def setUp(self):
+        prepare = universe.prepare_compilation
+        CompiledUnitTests.setUp(self)
+        self.fx = load('fixtures', 'fixtures.py')
+        self.package = self.root / 'tests/roadmap'
+        self.fixture_lib = self.package / '.lake/build/lib/lean'
+        self.fixture_lib.mkdir(parents=True)
+        self.patch(self.fx, 'ROOT', self.root)
+        self.patch(self.fx, 'PACKAGE', self.package)
+        for relative, text in {
+                'lakefile.toml': 'name = "fixtures"\n[[lean_lib]]\nname = "Fx"\nsrcDir = "src"\n',
+                'src/Fx/Main.lean': 'import Fx.Helper\nimport ZigLean.Basic\ntheorem fix_p : True := trivial\n',
+                'src/Fx/Helper.lean': 'import ZigLean.Basic\n',
+                'src/Fx/Unused.lean': 'def unused := 1\n',
+                '.lake/build/lib/lean/Fx/Unused.olean': 'unowned fixed input'}.items():
+            path = self.package / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        self.patch(self.fx, 'lake_modules', lambda package, libs: {'Fx': ['Fx.Main', 'Fx.Helper', 'Fx.Unused']})
+        self.patch(self.fx, 'lake', self.lake)
+        self.paths = [self.built, self.fixture_lib, self.toolchain / 'lib/lean']
+        self.headers = {'Fx.Main': ['Fx.Helper', 'ZigLean.Basic'], 'Fx.Helper': ['ZigLean.Basic'],
+                        'ZigLean.Basic': ['Init'], 'Init': []}
+        self.units = [universe.Unit('tests/roadmap/src/Fx/Main.lean', 'tests/roadmap/src',
+                                    'Fx.Main', ('tests/roadmap/src/Fx/Helper.lean',),
+                                    ('ZigLean.Basic',), None, ('fix_p',)),
+                      universe.Unit('tests/roadmap/src/Fx/Helper.lean', 'tests/roadmap/src',
+                                    'Fx.Helper', (), ('ZigLean.Basic',), None, ())]
+        self.patch(universe, 'premises_module', lambda: premises)
+        self.patch(assumptions, 'framework_candidates', lambda raw: {})
+        self.patch(assumptions, 'apply_policy', lambda raw, *a: {
+            'status': 'pass', 'theorem_count': len(raw['theorems']), 'theorems': raw['theorems'],
+            'violations': [], 'nodes': raw['nodes'], 'modules': raw['modules'],
+            'module_imports': raw['module_imports'], 'kernel_replay': raw['kernel_replay']})
+
+        def preparing(*args, **kwargs):
+            self.active_context = prepare(*args, **kwargs)
+            return self.active_context
+
+        self.patch(universe, 'prepare_compilation', preparing)
+        self.commands = []
+        self.after_build = lambda: None
+        self.effective_paths = list(map(str, self.paths))
+
+    def lake(self, package, args, capture=False):
+        self.assertEqual(package, self.package)
+        self.commands.append(args)
+        if args == ['env', 'printenv', 'LEAN_PATH']:
+            return subprocess.CompletedProcess(args, 0, os.pathsep.join(self.effective_paths) + '\n')
+        self.assertEqual(args[:2], ['--rehash', 'build'])
+        if '--no-build' not in args and any(module.startswith('Fx.') for module in args[2:]):
+            for unit in self.active_context['units'].values():
+                output = Path(unit['output_path'])
+                output.write_bytes(b'compiled: ' + (self.root / unit['compiler_source']['path']).read_bytes())
+            self.after_build()
+        return subprocess.CompletedProcess(args, 0, '')
+
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
+        self.assertTrue(all_declarations)
+        # The fixture package may build the driver, still bound to the compiled lookup path
+        # (lake_extraction's resolved-roots controls: LakeExtractionTests).
+        self.assertIn(extract_in and Path(extract_in), (None, Path(self.package)))
+        self.assertIsNotNone(lean_path)
+        raw = CompiledUnitTests.extract(self, modules, build, witnesses,
+                                        all_declarations=all_declarations, lean_path=lean_path)
+        # Helper has no declaration-graph node: only its unused header import reveals it.
+        nodes = [{'name': 'fix_p' if module == 'Fx.Main' else 'root_p', 'module': module,
+                  'kind': 'theorem', 'dependencies': [], 'axioms': []} for module in modules]
+        raw.update(nodes=nodes, theorems=nodes,
+                   selected_declaration_roots=[row['name'] for row in nodes])
+        return raw
+
+    def audited(self, modules=None):
+        modules = modules or ['Fx.Main']
+        output = self.root / 'fixture-report.json'
+        self.assertEqual(self.fx.audit(modules, ['fix_p'], output), 0)
+        report = json.loads(output.read_text())
+        assumptions.verify_fresh(report, allow_dirty=True)
+        return report
+
+    def test_default_producer_preserves_canonical_identity_scope_headers_and_cache(self):
+        report = self.audited(['Fx.Main', 'ZigLean.Basic'])
+        context = report['freshness']['compiled_units']
+        self.assertEqual(report['modules'], ['Fx.Main', 'ZigLean.Basic'])
+        self.assertEqual(context['selected_modules'], report['modules'])
+        self.assertEqual(set(context['units']), {'Fx.Main', 'Fx.Helper'})
+        self.assertEqual(report['selected_declaration_roots'], ['fix_p', 'root_p'])
+        rows = {row['module']: row for row in report['freshness']['artifacts']}
+        self.assertEqual(rows['Fx.Helper']['source'], 'tests/roadmap/src/Fx/Helper.lean')
+        self.assertEqual((self.root / rows['Fx.Main']['olean']).resolve(), self.fixture_lib / 'Fx/Main.olean')
+        self.assertIn(['--rehash', 'build', '--no-build', 'Fx.Main', 'ZigLean.Basic'], self.commands)
+        for index in range(2):
+            output = self.root / f'repeated-{index}.json'
+            result = universe.audit_modules(report['modules'], [], output, self.cache,
+                                            all_declarations=True, compiled_units=context)
+            self.assertEqual((result['status'], result['exit_code']), ('pass', 0), result)
+        repeated = json.loads(output.read_text())
+        self.assertEqual(repeated['kernel_replay']['reused'], ['ZigLean.Basic'])
+
+    def test_relative_lookup_entries_use_the_actual_fixture_compiler_cwd(self):
+        self.effective_paths = [os.path.relpath(path, self.package) for path in self.paths]
+        report = self.audited()
+        context = report['freshness']['compiled_units']
+        self.assertEqual([Path(path).resolve() for path in context['lean_path'].split(os.pathsep)], self.paths)
+
+    def test_failed_producer_clears_previous_success_before_build(self):
+        self.audited()
+        output = self.root / 'fixture-report.json'
+        with mock.patch.object(universe, 'prepare_fixture_compilation',
+                               side_effect=ValueError('source plan failed')):
+            self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], output), 1)
+        self.assertFalse(output.exists())
+
+    def test_source_comment_change_rejects_fixed_report_and_outputs_then_restores(self):
+        report = self.audited()
+        fixed = json.dumps(report)
+        outputs = {path: path.read_bytes() for path in self.fixture_lib.rglob('*.olean')}
+        source = self.package / 'src/Fx/Main.lean'
+        before = source.read_bytes()
+        source.write_bytes(before + b'\n-- source-only change\n')
+        with self.assertRaisesRegex(ValueError, 'Fx.Main source changed'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+        self.assertEqual(json.dumps(report), fixed)
+        self.assertEqual({path: path.read_bytes() for path in outputs}, outputs)
+        source.write_bytes(before)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_postcompile_source_change_refuses_before_extraction_with_fixed_outputs(self):
+        report = self.audited()
+        report_file = self.root / 'fixture-report.json'
+        fixed_report = report_file.read_bytes()
+        outputs = {path: path.read_bytes() for path in self.fixture_lib.rglob('*.olean')}
+        source = self.package / 'src/Fx/Main.lean'
+        original = source.read_bytes()
+        self.after_build = lambda: source.write_bytes(original + b'\n-- changed after compilation\n')
+        diagnostic = io.StringIO()
+        try:
+            with mock.patch.object(universe, 'audit_modules') as audit, contextlib.redirect_stderr(diagnostic):
+                self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], self.root / 'rejected.json'), 1)
+            audit.assert_not_called()
+            self.assertIn('Fx.Main source changed', diagnostic.getvalue())
+            self.assertEqual(report_file.read_bytes(), fixed_report)
+            self.assertEqual({path: path.read_bytes() for path in outputs}, outputs)
+        finally:
+            source.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_shared_library_remainder_is_not_a_mutable_subtree(self):
+        self.audited()
+        unowned = self.fixture_lib / 'Fx/Unused.olean'
+        original = unowned.read_bytes()
+        added = self.fixture_lib / 'Fx/Unplanned.olean'
+        for action in ('change', 'add', 'remove'):
+            with self.subTest(action=action):
+                def mutate():
+                    if action == 'add':
+                        added.write_bytes(b'new unowned artifact')
+                    elif action == 'remove':
+                        unowned.unlink()
+                    else:
+                        unowned.write_bytes(b'changed unowned artifact')
+                self.after_build = mutate
+                diagnostic = io.StringIO()
+                with mock.patch.object(universe, 'audit_modules') as audit, \
+                        contextlib.redirect_stderr(diagnostic):
+                    self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], None), 1)
+                audit.assert_not_called()
+                self.assertIn('compiler-owned Unit imported inputs changed', diagnostic.getvalue())
+                added.unlink(missing_ok=True)
+                unowned.write_bytes(original)
+
+    def test_changed_configuration_or_context_cannot_rebind_saved_outputs(self):
+        report = self.audited()
+        config = self.package / 'lakefile.toml'
+        original = config.read_bytes()
+        config.write_bytes(original + b'\n# configuration changed\n')
+        with self.assertRaisesRegex(ValueError, 'fixture configuration changed'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+        config.write_bytes(original)
+        for mutation, diagnostic in (
+                ('strip', 'no compiler-owned run binding'),
+                ('private-output', 'fixture package/output selection changed'),
+                ('scope', 'differs from the report selection'),
+                ('source', 'import/source resolution changed')):
+            with self.subTest(mutation=mutation):
+                broken = json.loads(json.dumps(report))
+                context = broken['freshness']['compiled_units']
+                if mutation == 'strip':
+                    del broken['freshness']['compiled_units']
+                elif mutation == 'private-output':
+                    context['output_dir'] = str(self.root / 'private-lib')
+                elif mutation == 'scope':
+                    broken['modules'] = sorted([*broken['modules'], 'Fx.Helper'])
+                else:
+                    context['units']['Fx.Main']['file'] = 'tests/roadmap/src/Fx/Helper.lean'
+                with self.assertRaisesRegex(ValueError, diagnostic):
+                    assumptions.verify_fresh(broken, allow_dirty=True)
+        assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_missing_shadowed_and_unowned_header_outputs_refuse(self):
+        report = self.audited()
+        context = report['freshness']['compiled_units']
+        owned = self.fixture_lib / 'Fx/Main.olean'
+        original = owned.read_bytes()
+        owned.unlink()
+        with self.assertRaisesRegex(ValueError, 'Fx.Main|missing compiler-owned'):
+            assumptions.verify_fresh(report, allow_dirty=True)
+        owned.write_bytes(original)
+        shadow = self.built / 'Fx'
+        shadow.mkdir()
+        with self.assertRaisesRegex(ValueError, 'compiler-owned Unit imported inputs changed'):
+            universe.verify_compilation(context)
+        shadow.rmdir()
+        shadow.mkdir()  # A namespace already present before the next producer snapshot.
+        diagnostic = io.StringIO()
+        try:
+            with mock.patch.object(universe, 'audit_modules') as audit, contextlib.redirect_stderr(diagnostic):
+                self.assertEqual(self.fx.audit(['Fx.Main'], ['fix_p'], None), 1)
+            audit.assert_not_called()
+            self.assertIn('no compiled module for Fx.', diagnostic.getvalue())
+        finally:
+            shadow.rmdir()
+        broken = json.loads(json.dumps(report))
+        broken['module_imports']['Fx.Helper'].append('Fx.Unused')
+        with self.assertRaisesRegex(ValueError, 'unowned private import: Fx.Unused'):
+            assumptions.verify_fresh(broken, allow_dirty=True)
+        assumptions.verify_fresh(report, allow_dirty=True)
 
 
 if __name__ == '__main__':

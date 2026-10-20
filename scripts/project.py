@@ -42,6 +42,15 @@ outcomes = _sibling('outcomes')
 def _export_module():
     return _sibling('project-export')
 
+
+@functools.cache
+def _lean_deps():
+    path = Path(__file__).resolve().with_name('lean-deps.py')
+    spec = importlib.util.spec_from_file_location('project_lean_deps', path)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
 claims = _sibling('claims')
 ARTIFACT_MANIFEST = Path(__file__).resolve().with_name('artifact-manifest.py')
 CLAIM_HEADS = claims.load_heads()
@@ -865,8 +874,12 @@ def load_receipt(attempt, verifier, limits):
 
 
 def module_of(relative):
-    parts = Path(relative).with_suffix('').parts
-    return '.'.join(parts) if all(IDENT.fullmatch(p) for p in parts) else None
+    path = Path(relative)
+    if path.is_absolute() or path.suffix != '.lean':
+        return None
+    parts = path.with_suffix('').parts
+    module_name = _lean_deps().MODULE_NAME
+    return '.'.join(parts) if all('.' not in p and module_name.fullmatch(p) for p in parts) else None
 
 
 def self_relation(theorem, definition):
@@ -1012,6 +1025,11 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                 binding, reason, relation = trivial
             if binding == 'direct' and 'bound' in goal and (problem := claims.check_bound(goal['bound'], found['bound'])):
                 binding, reason = 'bound_mismatch', problem
+            row['theorem_outcome_contract'] = outcomes.theorem_contract(
+                goal['strength'], (goal.get('outcomes') or {}).get('admits'),
+                (claims.statement_of(theorem) or {}).get('outcomes'))
+            if binding == 'direct' and row['theorem_outcome_contract']['status'] == 'rejected':
+                binding, reason = 'outcome_contract_mismatch', row['theorem_outcome_contract']['reason']
             row.update(binding=binding, reason=reason)
             if binding in ('trivial_conclusion', 'relational_property'):
                 row.update(derived_strength=found['strength'], claim_class=found['claim_class'])
@@ -1024,7 +1042,7 @@ def bind_receipt(root, base, generated, bundle, file_hashes):
                                                 ('axioms', 'opaque_dependencies', 'extern_dependencies', 'compiler_redirections')},
                            derived_strength=found['strength'], claim_class=found['claim_class'],
                            derived_domain=found['domain'], scope=found['scope'], caps=found['caps'],
-                           witnesses=found['witnesses'],
+                           witnesses=found['witnesses'], allocator_creation=found['allocator_creation'],
                            premises=claims.premises_of(theorem, found['claims']))
         goals.append(row)
     return compiled, goals
@@ -1045,6 +1063,8 @@ def goal_binding(found, definition, nodes, gen_modules):
         return 'unbound', 'audit lacks the statement structure; regenerate it with the current extractor'
     if found['head_problem']:
         return 'spoofed_head', found['head_problem']
+    if found['binding_problem']:
+        return 'unsupported_runner', found['binding_problem']
     module = nodes.get(definition, {}).get('module')
     if found['binding'] != 'direct' or module not in gen_modules:
         return 'wrapper_or_unrelated', (f'theorem conclusion is about {found["subject"] or "no recognised computation"} '
@@ -1056,6 +1076,9 @@ def goal_binding(found, definition, nodes, gen_modules):
         # No witness, no claim (audit soundness-2026-10-14 S1): unsatisfiable premises prove nothing.
         return 'unwitnessed', (f'non-vacuity witness {nonvacuity}: the premises may be unsatisfiable, so the theorem '
                                'may prove nothing about the root (nonvacuity_witness, ZigLean/Witness.lean)')
+    creation_problem = claims.uncreated(found)
+    if creation_problem:
+        return 'unwitnessed', creation_problem
     unreached = claims.unreached(found)
     if unreached:
         # A root is an entry point: its premises must hold at program start (audit F3).
@@ -1141,6 +1164,7 @@ def absence_backing(goal, claim):
     return (goal['binding'] == 'direct' and strength_supported(goal)
             and claim in outcomes.STRENGTH_ABSENCE.get(goal['strength'], ())
             and (goal.get('witnesses') or {}).get('nonvacuity') in claims.NONVACUOUS
+            and claims.uncreated(goal) is None
             and (goal.get('scope') == 'universal' or claims.declares_scoped(goal['domain'])))
 
 
@@ -1365,6 +1389,10 @@ def coverage_text(result):
         for goal in root['goals']:
             lines.append(f'  goal {goal["theorem"]} [{goal["strength"]}] domain: {goal["domain"]} -> {goal["binding"]}')
             lines.append(f'    outcome contract: {goal["outcome_contract"]["status"]} (admits {", ".join(goal["outcome_contract"]["admits"])})')
+            checked = goal.get('theorem_outcome_contract')
+            if checked:
+                lines.append(f'    theorem outcome contract: {checked["status"]}'
+                             + (f' ({checked["reason"]})' if checked['reason'] else ''))
         lines.append(f'  assumptions: declared {root["assumptions"]["declared"]}; audited axioms '
                      f'{root["assumptions"]["audited"].get("axioms", [])}')
         lines.extend(f'  exclusion: {e}' for e in root['exclusions'])
@@ -1405,6 +1433,32 @@ CHECK_TOOLS = {'project': Path(__file__).resolve()}
 CHECK_TOOLS.update({key: CHECK_TOOLS['project'].with_name(name) for key, name in
                     (('build_guard', 'build-guard.py'), ('assumptions', 'assumptions.py'), ('claims', 'claims.py'),
                      ('normalize', 'normalize-generated.py'))})
+
+
+def script_inputs(tools):
+    """Snapshot declared tools and their two known physical module-validator helpers.
+
+    A custom auditor may omit its adjacent helper. An existing malformed helper fails;
+    these known inputs do not resolve arbitrary Python imports or make execution immutable.
+    """
+    paths = dict(tools, lean_deps=Path(__file__).resolve().with_name('lean-deps.py'),
+                 assumptions_lean_deps=tools['assumptions'].with_name('lean-deps.py'))
+    hashes, identities, errors, read = {}, {}, {}, {}
+    for role, path in sorted(paths.items()):
+        try:
+            path = Path(path)
+            if role == 'assumptions_lean_deps':
+                try:
+                    path.lstat()
+                except FileNotFoundError:
+                    continue
+            physical = path.resolve(strict=True)
+            if physical not in read:
+                read[physical] = hash_bounded(physical, 64 * 1024 * 1024)[0]
+            hashes[role], identities[role] = read[physical], physical
+        except (OSError, ValueError, RuntimeError) as error:
+            errors[role] = str(error)
+    return hashes, identities, errors
 
 
 def check_budget(manifest):
@@ -1536,6 +1590,7 @@ def audit_goal(root, goal, theorems, nodes, modules):
     row.update(standard_assumptions=standard, project_assumptions=project, subject=found['subject'],
                claim_binding=found['binding'], derived_strength=found['strength'], derived_domain=found['domain'],
                scope=found['scope'], caps=found['caps'], witnesses=found['witnesses'],
+               allocator_creation=found['allocator_creation'],
                root_definition_module=nodes.get(definition, {}).get('module'))
     if unallowed:
         return dict(row, status='unallowed_assumption', unallowed=unallowed,
@@ -1576,18 +1631,30 @@ def run_claims(tools, manifest_path, audit_path, staging):
 
 def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0):
     """Run the whole check into `staging`; stage failures are recorded, not raised."""
+    # A new check must validate with the helper whose current bytes it records.
+    _lean_deps.cache_clear()
+    overrides = set(tools or {}) & {'lean_deps', 'assumptions_lean_deps'}
+    if overrides:
+        raise Invalid(f'helper script roles are derived, not configurable: {sorted(overrides)}')
     tools = dict(CHECK_TOOLS, **(tools or {}))
     started = time.monotonic()
+    base = path.parent
+    try:
+        tools['assumptions'] = (base / tools['assumptions']).resolve(strict=True)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise Invalid(f'assumptions script unavailable: {error}') from error
+    scripts, script_identities, script_errors = script_inputs(tools)
+    if script_errors:
+        raise Invalid(f'script inputs unavailable: {script_errors}')
     manifest, limits, data, report = collect(path)
     budget = check_budget(manifest)
     modules = check_modules(manifest)
-    base = path.parent
     failures = []
     inputs = dict(report['files'])
     toolchain = base / 'lean-toolchain'
     reproducible = {'manifest_sha256': report['manifest_sha256'], 'inputs': inputs, 'check_budget': budget,
                     'modules': modules,
-                    'scripts': {key: hash_bounded(tool, 64 * 1024 * 1024)[0] for key, tool in sorted(tools.items())},
+                    'scripts': scripts,
                     'lean_toolchain': toolchain.read_text().strip() if toolchain.is_file() else None,
                     'float_semantics': manifest['float_semantics'], 'spawn_policy': spawn_policy(manifest),
                     'stages': {name: {'status': 'not_run'} for name in CHECK_STAGES}, 'roots': []}
@@ -1598,7 +1665,9 @@ def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0)
     record = {'schema': SCHEMA, 'kind': RECORD_KIND, 'status': 'failed', 'failures': failures,
               'reproducible': reproducible, 'host': host,
               'note': 'compare-records compares only `reproducible`; `host` holds machine-specific '
-                      'evidence (translator and Lake binaries, paths, timing, Git state).'}
+                      'evidence (translator and Lake binaries, paths, timing, Git state). '
+                      'Script hashes cover declared tools and two known helper roles; Python execution '
+                      'and other imports remain within the trusted runtime.'}
 
     def finish():
         host['elapsed_seconds'] = round(time.monotonic() - started, 3)
@@ -1691,6 +1760,10 @@ def project_check(path, translator, staging, tools=None, lock=None, lock_wait=0)
     # 6. Inputs (manifest, sources, contracts, committed generated modules) unchanged throughout.
     after = collect(path)[3]['files']
     changed = sorted(name for name in set(inputs) | set(after) if inputs.get(name) != after.get(name))
+    after_scripts, after_identities, errors = script_inputs(tools)
+    changed += ['script/' + role for role in sorted(set(scripts) | set(after_scripts) | set(errors))
+                if (scripts.get(role) != after_scripts.get(role)
+                    or script_identities.get(role) != after_identities.get(role) or role in errors)]
     stages['inputs_stable'] = {'status': 'failed' if changed else 'passed', 'changed': changed}
     if changed:
         failures.append(f'inputs changed during check: {changed}')

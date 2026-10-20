@@ -776,8 +776,9 @@ token of epoch `e` and gives back that of `e + 1`; `FBA.fown_init` starts a ledg
 arena's is the epoch-token fraction (`free_spec`, `resize_spec` and `remap_spec` of
 `tests/roadmap/alloc-arena` are proved with it, `free` refunding it), with `grant_return`,
 `own_epTok_empty` and `granted_epTok_false`, `reset`'s ghost part (`reset_release`) and
-`reset(.free_all)` (`reset_free_all_spec`); the retaining modes are open
-([alloc-arena.md](alloc-arena.md), the mixed-size atomic model). The clients of an arbitrary
+`reset(.free_all)` (`reset_free_all_spec`) and the retaining modes (`reset_retain_capacity_spec`,
+`reset_retain_with_limit_spec`; [alloc-arena.md](alloc-arena.md), over `wpts` header words of the
+mixed-size atomic model). The clients of an arbitrary
 allocator carry the fee as well: `Lists.Alloc.push_spec` takes one and keeps it in the node's
 token (or gives it back with `error.OutOfMemory`), `freeAll_spec` gives one back per node,
 `Lists.Append.append_spec` takes one and gives it back (an empty list keeps its unspent fee for
@@ -931,7 +932,7 @@ new block of `allocStack_sp` is pushed in the memory without stack budgets (`Hol
 the cell is changed into `alloc`'s memory after it. In a thread `fsym` derives the thread rules
 (`FTTotalTriple.ofSeq`) with the providers `ThreadLocal.allocStack`, `ThreadLocal.free_of`,
 `ThreadLocal.enterFrame` and `ThreadLocal.leaveFrame`. Regressions:
-`tests/roadmap/sep-auto/Stack.lean` (walks in sequence and in a thread, from program start, and
+`tests/roadmap/sep-auto/SepAuto/Stack.lean` (walks in sequence and in a thread, from program start, and
 rejected: a charge that does not fit, no `cur t`, a free below the top, a frame left open) and
 `tests/roadmap/stack-region/Rules.lean` (`push_over_cx`: no total push from `sp 0 16 16` when one
 frame used the budget up).
@@ -1274,6 +1275,15 @@ requires every grant back needs. The `FixedBufferAllocator` is the second instan
   state), at the cost of adding a camera when another proof needs a different one.
 
 ## Concurrency (RC11 approximation, `ZigLean/Conc`)
+
+**D4 decision (2026-10-18): seen floors and framed views.** The native full-state
+relation preserves the stepping thread's observed message id exactly at wholly
+framed atomic locations, including injective reindexing (`AMap.own`). This follows
+from no access to the frame; coherence alone permits observations to advance.
+Actual word operations supply their floor, freshness and result-position facts
+through the existing rules, without a new environmental premise or judgment.
+See [sep-threads.md, “Seen floors and frame locality”](sep-threads.md) for the
+model argument, standards references and necessity/advancing-read controls.
 
 * **Ownership by threads** (`Mem.Owns`, `Owned` in `Conc/Csl.lean`) is about legacy heaps. It
   carries over by putting `FHeap`s in the parts. A thread's part then owns its constraints too,

@@ -107,7 +107,7 @@ For an atom of `Q` whose head `X` has a range law, the planner carves it out of 
 `X lo hi ⟶ X lo a ⋆ X a c ⋆ X c hi`); when none covers it, adjacent state atoms (the second from
 the first's end) are joined first (the law forwards). The law's hypotheses are side goals of the
 arithmetic solver. A head with a law is an atom (never unfolded). Regression:
-`tests/roadmap/sep-auto/Plan.lean` (claims and a user's own range assertion).
+`tests/roadmap/sep-auto/SepAuto/Plan.lean` (claims and a user's own range assertion).
 
 ### Providers
 
@@ -138,7 +138,7 @@ within its share) gives `decide (b = b' ∧ p.off = q.off)`; an invariant may pr
 of a block it owns no bytes of in the precondition (the arena's `grant_live`: a grant lies past an
 owned word of its block). The Boolean test becomes facts
 (`b = b'` substitutes the block). `fsym_entail` closes a goal `Within X P` the same way, through
-definitions of `P`. Regression: `tests/roadmap/sep-auto/Providers.lean`.
+definitions of `P`. Regression: `tests/roadmap/sep-auto/SepAuto/Providers.lean`.
 
 ### Fields
 
@@ -155,7 +155,7 @@ struct's decoding (`do pure { f := ← Enc.decodeAt bs o, … }`, as the transla
 another shape, or an access that straddles fields, gives no field: the rules do not apply.
 Equations of such values (`{ h with capacity := c }` against a module's `hdr ptr len cap`) are
 proved field by field up to arithmetic (`proveEq` unfolds a user definition of a value; a fact
-`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/Fields.lean`.
+`p.elem 4 i = p.elem 4 j` by `congrEq`). Regression: `tests/roadmap/sep-auto/SepAuto/Fields.lean`.
 
 ### Atomic words
 
@@ -173,7 +173,7 @@ analogues of `Ops.lean`'s `…_bytesAt` rules) with the word's facts. `aptsE`/`a
 at the word's own location (definitionally, `aptsE_tpts`), `wptsE`/`wpts` at some constraint
 (`wptsE_tpts`, `FTotalTriple.wptsE_of`); since `fsym` matches atoms by their head, each has the
 family's rules under its name as `@[fsym]` instances (`aptsE_load`, `apts_loadPacked`,
-`wpts_store`, …). Regression: `tests/roadmap/sep-auto/AtomicPlain.lean`. In a thread the same rules
+`wpts_store`, …). Regression: `tests/roadmap/sep-auto/SepAuto/AtomicPlain.lean`. In a thread the same rules
 apply through `FTTotalTriple.ofSeq`: the word's 8 bytes are owned (`@[fsym_provider]`
 `OwnsPtr.apts`/`.aptsE`/`.wpts`/`.wptsE`, instances of `OwnsPtr.tptsE`), so the access is local.
 An atomic op on a `wpts` leaves an `apts` (MM-21), which `apts_wpts_view` shows as a `wpts` where a
@@ -181,7 +181,7 @@ rule, a return or an update wants one. A struct over several parts needs its
 whole range owned: `fsym` splits the range where a part of the precondition starts and joins
 the parts' own ranges (`ownsJoin` in `solveSides`, `OwnsPtr.join_at`), as it composes the
 struct's `ReadsAt` from its fields. Regression: the `…_thread` theorems of
-`tests/roadmap/sep-auto/Parts.lean`.
+`tests/roadmap/sep-auto/SepAuto/Parts.lean`.
 
 ### Parts
 
@@ -210,7 +210,7 @@ part keeps its view and an atomic word its tag:
   of the part that owns it (a struct-valued field again by its pieces) and the padding as bytes
   (`storeSplitRule?`).
 
-Regression: `tests/roadmap/sep-auto/Parts.lean` (the arena header loaded whole and its list heads
+Regression: `tests/roadmap/sep-auto/SepAuto/Parts.lean` (the arena header loaded whole and its list heads
 stored by `reset`, a list header held as one atom per field).
 
 ### Views
@@ -231,7 +231,7 @@ walk gets past the step. So the arena's `deinit` gives a free-list node back to 
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
 the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
-Regression: `tests/roadmap/sep-auto/Views.lean` (a node given back, a load of a value's encoding,
+Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
 
@@ -258,7 +258,7 @@ its value the struct of the fields' values); a view's alignment that the wanted 
 is the type's (`defaultAligns`). A packed struct, a union, a storage-wrapped field, a field of
 size zero and an encoding that does not write each field where its decoding reads it get no
 layout or no `LawfulEnc`: the folds and views do not apply (fail closed). Regression:
-`tests/roadmap/sep-auto/Structs.lean` (a stored struct folded, its fields split and joined, a
+`tests/roadmap/sep-auto/SepAuto/Structs.lean` (a stored struct folded, its fields split and joined, a
 struct with padding, a field of a field, the fail-closed cases); the lists witness's allocator
 struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words by `fsym_entail`.
 
@@ -341,7 +341,7 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
   state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
   `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
-  (`proveEq`; regression `tests/roadmap/sep-auto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
+  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
   allocator's own share and its grants' tagged shares of the same block stay apart; regression
   `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
@@ -361,6 +361,16 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   is carved to the size of the state's atom of that head; `up` atoms left over go into `Junk`; `Q`'s facts go to the
   arithmetic solver. Unproved side goals are left to the caller. `fsym_entail` is the planner on
   an `EUpd P Q` goal.
+
+  Return planning may forget affine ghost resources when the postcondition does not request
+  them: epoch tokens, grant-map authority/fragments, extent shares/claim receipts and ledger
+  receipts, as well as persistent constant/address knowledge and pure facts. The registered
+  `fsym_drop` laws use `EUpd.drop`: forgetting a ghost token does not release physical bytes,
+  reclaim an outstanding grant, or supply a replacement token. A proof that must retain the
+  ability to reset an allocator or form a pointer through an extent share must require those
+  resources in its postcondition. Their intentional omission no longer makes an otherwise
+  valid return fail. Exclusive stack resources (`sp`, `ent`, `cur`) are not affine and are never
+  disposed of by these laws; a stack block must still be released with its exact refund.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
   invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
@@ -382,7 +392,7 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   adds its fields next to it; two owned nonempty regions of one block have the same address and
   kind labels (`facts_regions_labels`). A postcondition atom whose head (a user definition) an
   update produces stays folded for the update to close; only a return's last attempt, after the
-  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/Updates.lean`.
+  updates, unfolds it like any other atom. Regression `tests/roadmap/sep-auto/SepAuto/Updates.lean`.
 
 ## The concurrent backend (`CTriple`)
 
@@ -433,9 +443,10 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   `hl : ThreadLocal P₀ c` proved last by the providers. So each sequential rule is a thread rule;
   nothing is copied by hand.
 * **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`, each with
-  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `loadBytes`,
-  `storeBytes`, `memset_of`, `memmove`, `memcpy`) is local when `P₀` owns its bytes
-  (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
+  `of_within`): an owned access (`ThreadLocal.load`, `store`, `store_lawful`, `store_sized`,
+  `loadBytes`, `storeBytes`, `memset_of`, `memmove`, `memcpy`; a store of an encoding without
+  `LawfulEnc`, a packed struct's through its bits, by the size the arithmetic solver reads,
+  `store_sized`) is local when `P₀` owns its bytes (`OwnsPtr` of `bytesAt`, `regionIn`, `region`, `pts`, `arr`: a pointer of the same block
   inside the view, arithmetic side goals; an array item `arr_elem`; an error union's payload
   `errPayload`; a field pointer `ptrProject` of a block whose extent `P₀` holds: `Reaches.bauth`);
   `alloc`, `pure`, `throw` and pure steps (`liftR`, `StateT.lift`) always are, and
@@ -472,10 +483,10 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   side (`p.block = some ?b`) takes the context's fact about `t` before the precondition is
   planned, so an atom of the same shape about another block is not taken.
 
-Regressions: `tests/roadmap/sep-auto/Threads.lean` (the former hand-written thread rules of
+Regressions: `tests/roadmap/sep-auto/SepAuto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both
-thread logics; `const` reads; the rejected store to unowned bytes; §Bridges: one step's post, a
-`free` among two blocks of one size).
+thread logics; `const` reads; the rejected store to unowned bytes; a packed struct stored into
+an owned word, `packedWord`; §Bridges: one step's post, a `free` among two blocks of one size).
 
 ## A thread's run in a protocol (`Proto.WP`)
 
@@ -505,6 +516,8 @@ backend):
   keeps the place, a store moves it). The walk applies the holder's step itself (below: rules for
   every step, side goals after a segment, the protocol's lemmas); the protocol supplies its
   lemmas about `U` and its shape, no per-field rule.
+  `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
+  caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
@@ -615,7 +628,7 @@ waiter, no block):
   `ThreadId` order is the arithmetic's (`numAliases`); the first part of a conjunction left with
   an unknown that the second part fixed is tried again.
 
-Regressions: `tests/roadmap/sep-auto/WP.lean` (two segments of any protocol, the second's
+Regressions: `tests/roadmap/sep-auto/SepAuto/WP.lean` (two segments of any protocol, the second's
 precondition the first's inferred post; a call by its contract, `call_contract`; a thread's own
 stack block and its fields, `block_fields`; the facts of the steps' runs, `run_facts`; a
 `ThreadId` bound, `thread_bound`; `wpAssumptionArgs`, `same_pred`; a Boolean fact,
@@ -666,7 +679,7 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    else by a hypothesis or the discharger. The per-type round trips of the
    proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
    union field or a vector field gets no law (fail closed; ledger #packed-lawful-split). Regression:
-   `tests/roadmap/sep-auto/Packed.lean`;
+   `tests/roadmap/sep-auto/SepAuto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of
    opaque words (`a &&& b` with `b = 2 ^ x - 1` or `b = 2 ^ w - 2 ^ x`, checked by `omega`),
@@ -713,6 +726,28 @@ obligation without a budget, or a query of a type nested inside one past the bud
 The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
+## Recursive groups
+
+`FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
+The supplied invocation type is a tagged union of the members' arguments and their logical
+contract parameters; each invocation has its own precondition, postcondition and result type.
+The measure maps invocations into any well-founded order. Its natural-number specialization,
+`FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
+the latter is itself an instance of this rule.
+
+The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
+unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
+smaller measures. The induction is in the library once for the whole group. Logical parameters
+may change at a recursive call without changing the program arguments: a memory-backed
+contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
+depth after `enterFrame`.
+
+The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
+consume and restore the stack-depth token `sp t S D`, with the room requirement proved from
+the caller's precondition. A decreasing argument does not establish stack room. Pure
+`Result` recursion has no modeled frame operations; its native interpretation retains premise
+STK-01 even when its lifted program has a total triple.
+
 ## Extending it
 
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
@@ -740,6 +775,66 @@ parallel; a run is identified by the option `fsym.run`).
   arithmetic solver reads literal high masks (`2 ^ w - 2 ^ j`) directly.
 
 ## Debugging and budget
+
+### Machine-readable residual reports (P09-E1)
+
+`set_option fsym.report true in fsym` emits one info message beginning with `fsym-report `,
+followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
+fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
+A reporting call suppresses the ordinary
+human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
+enabling a report.
+
+Reporting currently formats origins during the walk. That work consumes heartbeats, including
+inside speculative rule probes, so enabling it can change where a finite-budget probe stops.
+There is no guarantee of identical outcomes under a finite resource limit. Moving rendering to
+the final report is a follow-up. Two other opt-in attribution limits remain: a split that derives
+a descendant of a temporary goal label can lose its origin, and an untagged fallback residual is
+labelled `postcondition_not_proved` even when its precise cause is unknown. These diagnostic
+follow-ups are recorded in [PR #416's takeover review](https://github.com/riventic/air2lean/pull/416#issuecomment-6270717508);
+none supplies a proof or closes an obligation.
+
+The schema is versioned by `schemaVersion` (currently `1`):
+
+* `status`: `complete` when no goals remain, otherwise `stopped`.
+* `residuals`: one entry per returned goal, in the same order. Each entry has a zero-based
+  `index`, the `goal` (`head`, a fully qualified constant name or null, and `text`, Lean's
+  pretty-printed target), and an `origin`.
+* `origin.judgment`: the judgment at the program point, as a fully qualified constant name.
+  `origin.source` is that point's target before the residual was generated, including its
+  precondition, postcondition and logic arguments. `origin.program` and `origin.rule` use the
+  same `{head, text}` form. `program` is null when fuel ran out before command inspection;
+  `rule` is null when the stop has no selected rule (including a no-rule, panic or fuel stop).
+* `origin.condition`: `program`, `reachability`, `postcondition`, `rule_premise`,
+  `update_premise`, or `rule_continuation`. For a postcondition, the goal is its unproved
+  conjunct or the remaining `EUpd`; for a rule premise, `goal.head` identifies its family
+  (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
+* `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
+  `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
+  or `match_without_discriminant`.
+
+The JSON structure and discriminator strings are the API. The expression text follows Lean's
+pretty printer and its local names; it is display text, not an expression serialization. The
+index identifies a residual within one report, not across proof runs. Reports describe the
+residuals of a normally returning walk; an elaboration error or a heartbeat/recursion limit
+still raises the existing diagnostic.
+
+Meta-level clients use `Zig.Full.Auto.run g user extra` for the ordinary entry, including its
+introductions, context preparation and per-run caches. `Zig.Full.Auto.runReport g user extra`
+uses that entry and returns `(goals, report)` without logging the report. The goals retain their
+original labels and contexts. Both entries also accept the original `userCtx` and the classified
+`chain`, `forward`, `runFwd` and `forwardEx` caller facts that `fsym [...]` supplies to its
+per-run caches. Run-fact and existential-forward arguments retain the same classification
+with reporting enabled.
+Provenance tags participate in Lean's saved metavariable state,
+so backtracking discards an abandoned candidate's attribution. `AutoReport.lean` owns the data,
+collection and JSON rendering; it does no proof search.
+
+Regression: `tests/roadmap/sep-auto/SepAuto/Report.lean` compares ordinary and reporting runs on
+deliberately incomplete proofs (including their proof terms), checks the sequential and thread
+logics and internal protocol-backend residuals (including post-dependent rule premises), and
+checks rollback of speculative attribution. These incomplete backend exercises do not declare
+program correctness theorems.
 
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;

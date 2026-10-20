@@ -5,6 +5,7 @@
     python3 -B scripts/lean-deps.py --all
     python3 -B scripts/lean-deps.py --files
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
+    python3 -B scripts/lean-deps.py --precompiled check|write
 
 Prints the imports of the given `.lean` files (a directory: every `.lean` file below it) that are
 modules of this package's libraries (`lakefile.toml`; `import ZigLean.Sep.Full.Auto` with
@@ -25,12 +26,17 @@ library imports' sources (transitively), the toolchain and the lakefile (`$AIR2L
 lean-files/`, else `.lake/lean-files/`), so only files whose inputs changed are elaborated again.
 A file with imports of a fixture's own modules is elaborated by the check of that fixture.
 
+`--precompiled check|write` checks (or writes) the `globs` of each library `<P>Deps` of
+`lakefile.toml`: the modules that the precompiled library P's modules import, transitively
+(`precompiled_deps`; docs/build-cache.md#precompiled-fsym).
+
 A check that runs `lake env lean` on test files builds their imports first with `--build`: the
 modules are derived from the files, so the list cannot drift, and a stale `.olean` (a merge that
 changed a library module without a rebuild) is never tested silently.
 """
 
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -44,6 +50,7 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "assurance" / "lean-files.json"
 BUILTIN = {"Init", "Std", "Lean", "Lake"}
+MODULE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9'!?]*(?:\.[A-Za-z_][A-Za-z_0-9'!?]*)*")
 IMPORT = re.compile(r"^\s*(?:public\s+)?(?:meta\s+)?import\s+(.+?)\s*$")
 
 
@@ -63,13 +70,26 @@ def imports(path: pathlib.Path) -> set[str]:
     return mods
 
 
-def lib_roots() -> set[str]:
-    """The first components of the package's library modules (`lakefile.toml`: names, roots)."""
-    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+def lib_roots(root: pathlib.Path | None = None, *, strict_sources: bool = False) -> set[str]:
+    """Library module roots; strict source selection also overapproximates each glob by its
+    first component and rejects unsupported nondefault source directories."""
+    root = ROOT if root is None else root
+    lake = tomllib.loads((root / "lakefile.toml").read_text(encoding="utf-8"))
+    if strict_sources:
+        for config in [lake, *lake.get('lean_lib', [])]:
+            source_dir = config.get('srcDir', '.')
+            if not isinstance(source_dir, str) or pathlib.Path(source_dir) != pathlib.Path('.'):
+                raise ValueError(f'unsupported Lake srcDir for library source binding: {source_dir!r}')
     roots = set()
     for lib in lake.get("lean_lib", []):
         for r in lib.get("roots", [lib.get("root", lib["name"])]):
             roots.add(r.split(".")[0])
+        if strict_sources:
+            for glob in lib.get('globs', []):
+                top = glob.split('.')[0] if isinstance(glob, str) else ''
+                if not top or top in {'*', '+'}:
+                    raise ValueError(f'unsupported Lake source glob: {glob!r}')
+                roots.add(top)
     return roots
 
 
@@ -103,12 +123,21 @@ def library_files() -> list[str]:
     return [t.replace(".", "/") + ".lean" for t in all_targets() if "." in t]
 
 
+def fixture_files() -> list[str]:
+    """The modules of the proof-fixture package (tests/roadmap/lakefile.toml): their checks build
+    them with Lake (scripts/fixtures.py), so they are not standalone files."""
+    spec = importlib.util.spec_from_file_location("air2lean_fixtures", pathlib.Path(__file__).with_name("fixtures.py"))
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+    return fixtures.files(ROOT)
+
+
 def classify() -> tuple[list[str], list[str]]:
     """(standalone files, errors): the tracked `.lean` files outside the libraries, split by their
     imports (see the module docstring). An import of a library root that names no file is an error
     for every file, standalone or not."""
     roots = lib_roots()
-    owned = set(library_files())
+    owned = set(library_files()) | set(fixture_files())
     tracked = subprocess.run(["git", "ls-files", "-z", "--", "*.lean"], cwd=ROOT, check=True,
                              capture_output=True, text=True).stdout.split("\0")
     files, errors = [], []
@@ -126,6 +155,85 @@ def standalone_files() -> list[str]:
     if errors:
         raise SystemExit("\n".join(errors))
     return files
+
+
+def lake_query(targets: list[str]) -> list:
+    """`lake query --json TARGET...` in the package: one JSON value per target. Lake is the
+    authority on a module's imports (its own header parser) and on which library owns a module."""
+    done = subprocess.run(["lake", "query", "--json", *targets], cwd=ROOT, text=True, capture_output=True)
+    values = [json.loads(line) for line in done.stdout.splitlines() if line.strip()]
+    if done.returncode or len(values) != len(targets):
+        raise SystemExit(f"lean-deps: lake query {' '.join(targets)} failed:\n{done.stdout}{done.stderr}")
+    return values
+
+
+DEPS_GLOBS = re.compile(r'(\[\[lean_lib\]\]\nname = "(?P<name>[^"]+)"\n(?:[^\[\n].*\n|\n)*?)globs = \[[^\]]*\]')
+
+
+def precompiled_libs() -> dict[str, list[str]]:
+    """{P: its modules} for every library P with `precompileModules` (docs/build-cache.md
+    #precompiled-fsym); its `globs` must name its modules one by one."""
+    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+    if lake.get("precompileModules"):
+        raise SystemExit("lean-deps: a package-wide precompileModules is not supported; set it on a library")
+    out = {}
+    for lib in lake.get("lean_lib", []):
+        if not lib.get("precompileModules"):
+            continue
+        mods = sorted(set(lib.get("globs", [])))
+        if not mods or any(not module_file(m).is_file() for m in mods):
+            raise SystemExit(f"lean-deps: precompiled library {lib['name']}: globs must name "
+                             f"existing modules, got {mods}")
+        out[lib["name"]] = mods
+    return out
+
+
+def precompiled_deps(libs: dict[str, list[str]]) -> dict[str, list[str]]:
+    """{`<P>Deps`: its globs} for every precompiled library P of `libs` (`precompiled_libs`): the
+    modules P's modules import, transitively (Lake's `transImports`). Lake links P's shared
+    library against `<P>Deps`'s, so that one must hold the native code of all of them."""
+    out = {}
+    for name, mods in libs.items():
+        below = set().union(*(set(v) for v in lake_query([f"{m}:transImports" for m in mods])))
+        out[name + "Deps"] = sorted(below - set(mods))
+    return out
+
+
+def precompiled(write: bool) -> int:
+    path = ROOT / "lakefile.toml"
+    text = path.read_text(encoding="utf-8")
+    current = {lib["name"]: lib.get("globs") for lib in tomllib.loads(text).get("lean_lib", [])}
+    precompiled_mods = precompiled_libs()
+    expected = precompiled_deps(precompiled_mods)
+    stale = [deps for deps, globs in expected.items() if current.get(deps) != globs]
+    if write and stale:
+        for deps in stale:
+            body = "".join(f'  "{m}",\n' for m in expected[deps])
+            hits = [m for m in DEPS_GLOBS.finditer(text) if m["name"] == deps]
+            if len(hits) == 1 and current.get(deps) is not None:
+                text = text[:hits[0].start()] + f'{hits[0].group(1)}globs = [\n{body}]' + text[hits[0].end():]
+            else:
+                raise SystemExit(f"lean-deps: lakefile.toml needs a library {deps} (`[[lean_lib]]`, "
+                                 f'then `name = "{deps}"`) with a `globs = [...]` line to write')
+        path.write_text(text, encoding="utf-8")
+        return precompiled(write=False)
+    for deps in stale:
+        print(f"lean-deps: lakefile.toml: the globs of {deps} are not the import closure of its "
+              f"precompiled library; regenerate with: python3 -B scripts/lean-deps.py --precompiled write",
+              file=sys.stderr)
+    if stale:
+        return 1
+    # What Lake builds: each library's modules (a library listed before ZigLean, or an overlapping
+    # glob of a later library, would hand the modules to another library).
+    want = {**precompiled_mods, **expected}
+    libs = list(want)
+    owned = dict(zip(libs, lake_query([f"{n}:modules" for n in libs])))
+    wrong = [n for n in libs if sorted(owned[n]) != want[n]]
+    for n in wrong:
+        print(f"lean-deps: Lake builds {sorted(owned[n])} as library {n}, not its globs {want[n]}; "
+              f"keep {n} after ZigLean in lakefile.toml and no other library's globs on its modules",
+              file=sys.stderr)
+    return 1 if wrong else 0
 
 
 def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
@@ -194,6 +302,11 @@ def main(argv: list[str]) -> int:
     if argv == ["--files"]:
         print("\n".join(standalone_files()))
         return 0
+    if argv[:1] == ["--precompiled"]:
+        if argv[1:] not in (["check"], ["write"]):
+            print("usage: lean-deps.py --precompiled check|write", file=sys.stderr)
+            return 2
+        return precompiled(argv[1] == "write")
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:
