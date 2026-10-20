@@ -16,7 +16,11 @@ out=.lake/assurance/claims
 mkdir -p "$out"
 # The unit tests (Python only) run meanwhile; their result is required below.
 tests_pid=
-trap '[ -z "$tests_pid" ] || kill "$tests_pid" 2>/dev/null || true' EXIT
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-claims.XXXXXX")
+trap '[ -z "$tests_pid" ] || kill "$tests_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
+# The four audits below replay the same Lake-built imports: one replay cache for this run (a
+# fixture-checks run passes its own, shared by all its audits; nothing outlives the run).
+export AIR2LEAN_FIXTURE_REPLAY_CACHE="${AIR2LEAN_FIXTURE_REPLAY_CACHE:-$work/replay-cache.json}"
 if [ "$write" = 0 ]; then
   python3 tests/roadmap/claims/test_claims.py > "$out/test_claims.log" 2>&1 &
   tests_pid=$!
