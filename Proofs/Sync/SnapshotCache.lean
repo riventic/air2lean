@@ -155,7 +155,6 @@ def BlkOk (m : Mem) : Prop :=
 /-- The rest of the invariant; the protocol's rest `rX` is the cache's full extent. -/
 structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   shape : Shape (fun u => (G u).2) m
-  parts : ∀ u, (G u).1.part = rnil
   rest : bext 0 12 .stack rX
   mid : ∀ u, (G u).2.mid = true → (G u).1.ph = .holds
 
@@ -163,7 +162,7 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
 def proto : Proto Tgt Gh where
   inv G m := ∃ rX, L.Inv G rX m ∧ U G rX m
   init tgt g := match tgt with
-    | .work p => p = cPtr ∧ g = (⟨.out, rnil, rnil⟩, .wk 0 false)
+    | .work p => p = cPtr ∧ ∃ rp, plain rp ∧ g = (⟨.out, rp, rnil⟩, .wk 0 false)
     | _ => False
   fin g := g.1.ph = .gone ∧ g.2 = .fin
   strict := true
@@ -179,21 +178,35 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     (hok : ok (G t)) (_ : L.ph (G t) ≠ .gone) (hu : U G rX m) (hs : L.Step t m m')
     (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) rX m' := by
-  obtain ⟨hsh, hpart, hrest, hmid⟩ := hu
-  refine ⟨?_, fun u => ?_, hrest, fun u hu' => ?_⟩
+  obtain ⟨hsh, hrest, hmid⟩ := hu
+  refine ⟨?_, hrest, fun u hu' => ?_⟩
   · rw [FLock.snd_set]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
-  · unfold upd; split
-    · rename_i e; subst e; exact hpart u
-    · exact hpart u
   · by_cases e : u = t
     · subst e
       rw [upd_self] at hu'
       exact absurd hu' (by change (G u).2.mid ≠ true; rw [show (G u).2.mid = false from hok]; decide)
     · rw [upd_ne _ _ e] at hu' ⊢; exact hmid u hu'
 
+/-- Caller ghost fragments are owned by `Full.Inv`; changing them leaves the cache observations
+and the requirement that a mid-update thread holds the mutex unchanged. -/
+theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Res}
+    (hu : U G rX m) : U (upd G t (L.setPart (G t) r)) rX m := by
+  have hx : (fun u => (upd G t (L.setPart (G t) r) u).2) = fun u => (G u).2 := by
+    rw [upd_snd]; exact upd_same _ _
+  refine ⟨by rw [hx]; exact hu.shape, hu.rest, fun u hm => ?_⟩
+  by_cases e : u = t
+  · subst e; rw [upd_self] at hm ⊢; exact hu.mid u hm
+  · rw [upd_ne _ _ e] at hm ⊢; exact hu.mid u hm
+
+theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
+    (G' : ThreadId → Gh) (rX' : Res) (m' : Mem)
+    (hs : L.PartTick t G rX m G' rX' m') (hu : U G rX m) : U G' rX' m' := by
+  obtain ⟨_, _, _, r, _, rfl, rfl, rfl, _⟩ := hs
+  exact U_part ⟨hu.shape, hu.rest, hu.mid⟩
+
 theorem fits : L.Fits (FPrim.empty Gh) proto U ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
-    (fun _ _ => Iff.rfl) stable fun _ _ _ _ _ hu => ⟨hu.shape, hu.parts, hu.rest, hu.mid⟩
+    (fun _ _ => Iff.rfl) stable (fun _ _ _ _ _ hu => ⟨hu.shape, hu.rest, hu.mid⟩) tickStable
 
 /-- The protocol's invariant at a stop of `t`. -/
 theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : proto.inv G m)
@@ -275,40 +288,37 @@ theorem R_congr {X Y : ThreadId → Ph} {r : Res} (ha : aVal (X 1) = aVal (Y 1))
 /-! ## The holder's steps on the cache -/
 
 /-- A thread out of the lock's code at place `x`. -/
-def gOut (x : Ph) : Gh := (⟨.out, rnil, rnil⟩, x)
+def gOut (rp : Res) (x : Ph) : Gh := (⟨.out, rp, rnil⟩, x)
 
 /-- A thread that holds the mutex, at place `x`, with the cache's fields `rL`. -/
-def gH (x : Ph) (rL : Res) : Gh := (⟨.holds, rnil, rL⟩, x)
+def gH (rp : Res) (x : Ph) (rL : Res) : Gh := (⟨.holds, rp, rL⟩, x)
 
 /-! The ghost values of the lock's product (`rfl`), for the walks. -/
-theorem set_out (x : Ph) (rL : Res) : L.set (gOut x) .holds rL = gH x rL := rfl
-theorem set_hold (x : Ph) (rL : Res) : L.set (gH x rL) .out rnil = gOut x := rfl
-theorem ph_out (x : Ph) : L.ph (gOut x) = .out := rfl
-theorem ph_hold (x : Ph) (rL : Res) : L.ph (gH x rL) = .holds := rfl
-theorem ok_out (k : Nat) : ok (gOut (.wk k false)) := rfl
-theorem ok_hold (k : Nat) (rL : Res) : ok (gH (.wk k false) rL) := rfl
+theorem set_out (rp : Res) (x : Ph) (rL : Res) : L.set (gOut rp x) .holds rL = gH rp x rL := rfl
+theorem set_hold (rp : Res) (x : Ph) (rL : Res) : L.set (gH rp x rL) .out rnil = gOut rp x := rfl
+theorem ph_out (rp : Res) (x : Ph) : L.ph (gOut rp x) = .out := rfl
+theorem ph_hold (rp : Res) (x : Ph) (rL : Res) : L.ph (gH rp x rL) = .holds := rfl
+theorem ok_out (rp : Res) (k : Nat) : ok (gOut rp (.wk k false)) := rfl
+theorem ok_hold (rp : Res) (k : Nat) (rL : Res) : ok (gH rp (.wk k false) rL) := rfl
 
-/-- A step of thread `t` that keeps the threads keeps `U`, with `t`'s new ghost value `g` (no
-part; mid-update only while it holds the mutex) and the shape `hsh`. -/
+/-- A step of thread `t` that keeps the threads keeps `U`, with `t`'s new ghost value `g`
+(mid-update only while it holds the mutex) and the shape `hsh`. -/
 theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
-    (hu : U G rX m) (hth : m'.threads = m.threads) (hpart : g.1.part = rnil)
+    (hu : U G rX m) (hth : m'.threads = m.threads)
     (hmid : g.2.mid = true → g.1.ph = .holds) (hsh : Shape (upd (fun u => (G u).2) t g.2) m) :
     U (upd G t g) rX m' := by
-  refine ⟨?_, fun u => ?_, hu.rest, fun u hu' => ?_⟩
+  refine ⟨?_, hu.rest, fun u hu' => ?_⟩
   · rw [upd_snd]; unfold Shape at hsh ⊢; rw [hth]; exact hsh
-  · unfold upd; split
-    · exact hpart
-    · exact hu.parts u
   · by_cases e : u = t
     · subst e; rw [upd_self] at hu' ⊢; exact hmid hu'
     · rw [upd_ne _ _ e] at hu' ⊢; exact hu.mid u hu'
 
-/-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): no part, holding, the
+/-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): holding, the
 shape at its new place `x₁`. -/
-theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {x₀ x₁ : Ph} {rL r rX : Res} {m m' : Mem}
-    (hsh : Shape (upd (fun u => (G u).2) t x₁) m) (hu : U (upd G t (gH x₀ rL)) rX m)
-    (hth : m'.threads = m.threads) : U (upd (upd G t (gH x₀ rL)) t (gH x₁ r)) rX m' :=
-  U_step hu hth rfl (fun _ => rfl) (by rw [upd_snd, upd_upd]; exact hsh)
+theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {x₀ x₁ : Ph} {rp rL r rX : Res} {m m' : Mem}
+    (hsh : Shape (upd (fun u => (G u).2) t x₁) m) (hu : U (upd G t (gH rp x₀ rL)) rX m)
+    (hth : m'.threads = m.threads) : U (upd (upd G t (gH rp x₀ rL)) t (gH rp x₁ r)) rX m' :=
+  U_step hu hth (fun _ => rfl) (by rw [upd_snd, upd_upd]; exact hsh)
 
 /-- The writer's shape after its store of `a` in an update `k < 2`: mid-update. -/
 theorem shape_mid {X : ThreadId → Ph} {m : Mem} {k : Nat} (h : Shape (upd X 1 (.wk k false)) m)
@@ -335,44 +345,45 @@ include hmc in
 with the contract's rules and the lock holder's step (`FLock.Fits.wp_hold`) at the writer's
 places (the store of `a` goes mid-update, the store of `b` ends the update); the shape at the
 new place is `shape_mid` or `shape_done`, `U` is kept by `U_hold`. -/
-theorem update_spec {k : Nat} (hk : k < 2) (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : proto.inv (upd G 1 (gOut (.wk k false))) m) :
+theorem update_spec (rp : Res) (hp : rp.Plain) {k : Nat} (hk : k < 2)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hi : proto.inv (upd G 1 (gOut rp (.wk k false))) m) :
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
-      proto.inv (upd G' 1 (gOut (.wk (k + 1) false))) m') G m d := by
+      proto.inv (upd G' 1 (gOut rp (.wk (k + 1) false))) m') G m d := by
   unfold update
-  fsym [mi.lock_wp fits rfl rfl hmc.symm, mi.unlock_wp fits rfl rfl hmc.symm,
-    fits.wp_hold (g' := gH (.wk k false)), fits.wp_hold (g' := gH (.wk k true)),
-    fits.wp_hold (g' := gH (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
+  fsym [mi.lock_wp fits rfl rfl hmc.symm _ _ _ _ hp, mi.unlock_wp fits rfl rfl hmc.symm,
+    fits.wp_hold (g' := gH rp (.wk k false)), fits.wp_hold (g' := gH rp (.wk k true)),
+    fits.wp_hold (g' := gH rp (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
     set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold, aVal, Ph.cnt, Ph.mid]
 
 include hmc in
-theorem writer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : proto.inv (upd G 1 (gOut (.wk 0 false))) m) :
+theorem writer_spec (rp : Res) (hp : rp.Plain) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 1 (gOut rp (.wk 0 false))) m) :
     proto.WP 1 (writer mi.lock mi.unlock cPtr) (fun _ G' m' _ => m'.current = 1 ∧
-      proto.inv (upd G' 1 (gOut (.wk 2 false))) m') G m d := by
+      proto.inv (upd G' 1 (gOut rp (.wk 2 false))) m') G m d := by
   unfold writer
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind]
-  refine WP.bind (WP.mono ?_ (update_spec mi hmc (by decide) G m d hi))
+  refine WP.bind (WP.mono ?_ (update_spec mi hmc rp hp (by decide) G m d hi))
   rintro _ G₁ m₁ d₁ ⟨-, hi₁⟩
-  exact update_spec mi hmc (by decide) G₁ m₁ d₁ hi₁
+  exact update_spec mi hmc rp hp (by decide) G₁ m₁ d₁ hi₁
 
 end Proofs
 
 /-- The writer's end: it goes to `fin` and `gone`. -/
-theorem kid_end {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 1 (gOut (.wk 2 false))) m) :
-    proto.inv (upd G 1 (⟨.gone, rnil, rnil⟩, .fin)) m := by
+theorem kid_end {G : ThreadId → Gh} {m : Mem} {rp : Res}
+    (hi : proto.inv (upd G 1 (gOut rp (.wk 2 false))) m) :
+    proto.inv (upd G 1 (⟨.gone, rp, rnil⟩, .fin)) m := by
   obtain ⟨rX, hiL, hU⟩ := hi
-  have hl := hiL.ghost (t := 1) (g := (⟨.gone, rnil, rnil⟩, .fin)) (by rw [upd_self]; rfl)
+  have hl := hiL.ghost (t := 1) (g := (⟨.gone, rp, rnil⟩, .fin)) (by rw [upd_self]; rfl)
     (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl (fun h => absurd rfl h) (fun r hR => by
-      show R (fun u => (upd (upd G 1 (gOut (.wk 2 false))) 1 _ u).2) r
+      show R (fun u => (upd (upd G 1 (gOut rp (.wk 2 false))) 1 _ u).2) r
       rw [upd_upd]
-      exact R_congr (Y := fun u => (upd G 1 (gOut (.wk 2 false)) u).2)
+      exact R_congr (Y := fun u => (upd G 1 (gOut rp (.wk 2 false)) u).2)
         (by simp [upd_self, gOut, aVal, Ph.cnt, Ph.mid]) (by simp [upd_self, gOut, Ph.cnt]) hR)
   rw [upd_upd] at hl
   have hsh := shape_set hU.shape (by show (upd G 1 _ 1).2 = _; rw [upd_self]; rfl) .fin (.inr rfl)
-  have hU' := U_step (t := 1) (g := (⟨.gone, rnil, rnil⟩, .fin)) hU rfl rfl (fun h => by cases h) hsh
+  have hU' := U_step (t := 1) (g := (⟨.gone, rp, rnil⟩, .fin)) hU rfl (fun h => by cases h) hsh
   rw [upd_upd] at hU'
   exact ⟨rX, hl, hU'⟩
 
@@ -387,13 +398,13 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     proto.WP u (dispatch mi.lock mi.unlock tgt) (proto.QKid u) G { m with current := u } d := by
   cases tgt with
   | work p =>
-    obtain ⟨rfl, rfl⟩ := hg
+    obtain ⟨rfl, rp, hplain, rfl⟩ := hg
     obtain rfl : u = 1 := by
       obtain ⟨rX, -, hU⟩ := id hi
       exact (shape_wk hU.shape (t := u) (k := 0) (b := false) (by show (G u).2 = _; rw [hgu])).1
     show proto.WP 1 (writer mi.lock mi.unlock cPtr) _ G _ d
-    refine WP.mono ?_ (writer_spec mi hmc G _ d (by
-      rw [show gOut (.wk 0 false) = G 1 from hgu.symm, upd_same]
+    refine WP.mono ?_ (writer_spec mi hmc rp (Res.plain_of hplain) G _ d (by
+      rw [show gOut rp (.wk 0 false) = G 1 from hgu.symm, upd_same]
       exact inv_cur 1 hi (by rw [hgu]; nofun)))
     rintro _ G' m' _ ⟨-, hi'⟩
     have hk := kid_end hi'
@@ -412,11 +423,11 @@ end Proofs
 def G0 : ThreadId → Gh := fun _ => (⟨.gone, rnil, rnil⟩, .none)
 
 /-- `main` before its spawn. -/
-def gPre : Gh := gOut .pre
+def gPre (rp : Res) : Gh := gOut rp .pre
 /-- `main` after its spawn. -/
-def gRun : Gh := gOut .run
+def gRun (rp : Res) : Gh := gOut rp .run
 /-- `main` at its join. -/
-def gJoin : Gh := gOut .joins
+def gJoin (rp : Res) : Gh := gOut rp .joins
 
 /-- The cache's bytes `bs` in three parts: the mutex's word, `a`, `b`. -/
 theorem split3 {A : Nat} {bs : Array Byte} {r : Res} (hs : bs.size = 12)
@@ -428,14 +439,14 @@ theorem split3 {A : Nat} {bs : Array Byte} {r : Res} (hs : bs.size = 12)
   sep_mono_right (fun _ h => up_sep ⟨bytesAt_split h.1 (k := 4) (by simp; omega), h.2⟩)
     (up_sep ⟨bytesAt_split h.1 (k := 4) (by omega), h.2⟩)
 
-theorem sep_start {W A B E : FAssn} {r : Res} (h : ((W ⋆ (A ⋆ B)) ⋆ E) r) :
-    (((A ⋆ B) ⋆ W) ⋆ E) r := by
-  have e : ((W ⋆ (A ⋆ B)) ⋆ E) = (((A ⋆ B) ⋆ W) ⋆ E) := by ac_rfl
+theorem sep_start {W A B E pl : FAssn} {r : Res} (h : (((W ⋆ (A ⋆ B)) ⋆ E) ⋆ pl) r) :
+    ((pl ⋆ ((A ⋆ B) ⋆ W)) ⋆ E) r := by
+  have e : (((W ⋆ (A ⋆ B)) ⋆ E) ⋆ pl) = ((pl ⋆ ((A ⋆ B) ⋆ W)) ⋆ E) := by ac_rfl
   rw [e] at h; exact h
 
-theorem sep_word {W A B E : FAssn} {r : Res} (h : (((A ⋆ B) ⋆ W) ⋆ E) r) :
-    ((W ⋆ E) ⋆ (A ⋆ B)) r := by
-  have e : (((A ⋆ B) ⋆ W) ⋆ E) = ((W ⋆ E) ⋆ (A ⋆ B)) := by ac_rfl
+theorem sep_word {W A B E pl : FAssn} {r : Res} (h : ((pl ⋆ ((A ⋆ B) ⋆ W)) ⋆ E) r) :
+    ((W ⋆ E) ⋆ (pl ⋆ (A ⋆ B))) r := by
+  have e : ((pl ⋆ ((A ⋆ B) ⋆ W)) ⋆ E) = ((W ⋆ E) ⋆ (pl ⋆ (A ⋆ B))) := by ac_rfl
   rw [e] at h; exact h
 
 /-- A field of the cache as the lock's resource holds it (`pts`). -/
@@ -447,25 +458,27 @@ theorem pts_of {r : Res} {k A : Nat} {v : BitVec 32} (hA : A % 4 = 0) (hk : k % 
 
 /-- **Before the spawn**: `main` owns the cache after its stores (the bytes `bs`: the mutex and
 `a` are 0, `b` is 10) with its extent. It gives the extent to the protocol's rest
-(`FOwned.give`), and the mutex and the fields to the lock (`FLock.Inv.make`). -/
+(`FOwned.give`), and the mutex and the fields to the lock (`FLock.Inv.make`), retaining its
+real plain resource in the caller part. -/
 theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (ho : FOwned (upd (fun _ => rnil) 0 r) rnil m)
-    (hF : (up (bytesAt cPtr A 12 .stack bs) ⋆ bext 0 12 .stack) r) (hs : bs.size = 12)
+    (hF : ((up (bytesAt cPtr A 12 .stack bs) ⋆ bext 0 12 .stack) ⋆ plain) r) (hs : bs.size = 12)
     (hW : bs.extract 0 4 = Enc.encode (0 : BitVec 32))
     (ha : (bs.extract 4 bs.size).extract 0 4 = Enc.encode (0 : BitVec 32))
     (hb : (bs.extract 4 bs.size).extract 4 (bs.extract 4 bs.size).size =
       Enc.encode (10 : BitVec 32))
     (hA : A % 4 = 0) (hth : m.threads = #[{ spawner := 0, joined := true }])
     (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
-    proto.inv (upd G0 0 gPre) m := by
+    ∃ rp, rp.Plain ∧ proto.inv (upd G0 0 (gPre rp)) m := by
   have h1 : m.threads.size = 1 := by rw [hth]; rfl
   have ht : 0 < m.threads.size := by rw [h1]; decide
   have hs4 : (Enc.encode (0 : BitVec 32)).size = 4 := LawfulEnc.size_encode _
   have hpB : (cPtr.add 4).add 4 = cPtr.add 8 := by simp only [cPtr, Ptr.add]; congr 1
-  have hF' := sep_start (sep_mono_left (fun _ h => split3 hs h) hF)
+  have hF' := sep_start (sep_mono_left (fun _ h => sep_mono_left (fun _ h => split3 hs h) h) hF)
   rw [hW, ha, hb, hpB] at hF'
   have hown0 := sep_word hF'
-  obtain ⟨_, rE, hd, rfl, ⟨rAB, rW, hdW, rfl, hAB, hW₁⟩, hE⟩ := hF'
+  obtain ⟨_, rE, hd, rfl, ⟨rp, _, hdP, rfl, hp, ⟨rAB, rW, hdW, rfl, hAB, hW₁⟩⟩, hE⟩ := hF'
+  refine ⟨rp, Res.plain_of hp, ?_⟩
   -- the word's block and bytes
   obtain ⟨blk, hblk, hl, hA', hS', hK', hx⟩ :=
     ho.bytesOf ht (rfl : cPtr.block = some 0) (by rw [hs4]; decide)
@@ -480,7 +493,7 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
   -- the extent to the rest
   have ho' := ho.give (t := 0) ht (by rw [upd_self]) hd
   rw [upd_upd, rsum_rnil] at ho'
-  have hGu : ∀ u, u ≠ 0 → upd G0 0 gPre u = G0 u := fun u h => upd_ne _ _ h
+  have hGu : ∀ u, u ≠ 0 → upd G0 0 (gPre rp) u = G0 u := fun u h => upd_ne _ _ h
   have hjb : ∀ u, joinedB m u = false := by
     intro u; unfold joinedB
     by_cases hu : u = 0
@@ -488,8 +501,8 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     · have : m.threads.size ≤ u := by rw [h1]; unfold ThreadId at *; omega
       simp [Array.getElem?_eq_none this]
   refine ⟨rE, FLock.Inv.make (t := 0) (rL := rAB) (rW := rW) ho' (hjb 0) ht (fun u hu => ?_)
-    (by rw [upd_self, upd_self]; exact (rnil_rsum _).symm)
-    (by rw [upd_self]; exact (FHeap.disjoint_empty _).symm)
+    (by rw [upd_self, upd_self]; rfl)
+    (by rw [upd_self]; exact hdP)
     hdW (fun l => ?_) hW₁.2.1 hW₁.2.2
     (fun u => ?_) (fun u => ?_) ?_ ⟨blk, hblk, hl, by rw [hS']; decide,
       by show (blk.addr + 0) % 4 = 0; rw [hA']; omega, by rw [hK']; decide,
@@ -507,27 +520,24 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     · subst hu; rw [upd_self]; rfl
     · rw [hGu u hu]; rfl
   · -- `a = 0`, `b = 10`
-    change R (fun u => (upd G0 0 gPre u).2) rAB
-    have e1 : (upd G0 0 gPre 1).2 = .none := by rw [hGu 1 (by decide)]; rfl
+    change R (fun u => (upd G0 0 (gPre rp) u).2) rAB
+    have e1 : (upd G0 0 (gPre rp) 1).2 = .none := by rw [hGu 1 (by decide)]; rfl
     unfold R; simp only [e1]
     obtain ⟨rA, rB, dAB, eAB, hA₁, hB₁⟩ := hAB
     exact ⟨rA, rB, dAB, eAB, pts_of hA (by decide) hA₁, pts_of hA (by decide) hB₁⟩
-  · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by show (upd G0 0 gPre 0).2 = _; rw [upd_self]; rfl,
-      fun u hu => ?_⟩⟩, fun u => ?_, hE, fun u hu => ?_⟩
-    · show (upd G0 0 gPre u).2 = _; rw [hGu u (by unfold ThreadId at *; omega)]; rfl
-    · by_cases hu : u = 0
-      · subst hu; rw [upd_self]; rfl
-      · rw [hGu u hu]; rfl
+  · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, by show (upd G0 0 (gPre rp) 0).2 = _; rw [upd_self]; rfl,
+      fun u hu => ?_⟩⟩, hE, fun u hu => ?_⟩
+    · show (upd G0 0 (gPre rp) u).2 = _; rw [hGu u (by unfold ThreadId at *; omega)]; rfl
     · by_cases h0 : u = 0
       · subst h0; rw [upd_self] at hu; cases hu
       · rw [hGu u h0] at hu; cases hu
 
-/-- **The spawn** of the writer by `main` at `pre`: `main` goes to `run`, the writer starts at
-`wk 0 false` (its part is empty). -/
-theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId}
-    (hi : proto.inv G m) (hg : G 0 = gPre)
+/-- **The spawn** after copying plain mode: `main` keeps its part and goes to `run`; the writer
+starts at `wk 0 false` with its actual copy. -/
+theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP : Res}
+    (hP : plain rP) (hi : proto.inv G m) (hg : G 0 = gPre (rsum rM rP))
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
-    c = 1 ∧ m'.current = 0 ∧ proto.inv (upd (upd G 1 (gOut (.wk 0 false))) 0 gRun) m' := by
+    c = 1 ∧ m'.current = 0 ∧ proto.inv (upd (upd G 1 (gOut rP (.wk 0 false))) 0 (gRun rM)) m' := by
   obtain ⟨rX, hL, hu⟩ := hi
   obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, h0, -⟩⟩ := hu.shape
   rotate_left
@@ -539,33 +549,29 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId}
   rw [Proto.fork_run] at hf'
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf'
   obtain ⟨rfl, rfl⟩ := hf'
-  have hX : ∀ u, (upd (upd G 1 (gOut (.wk 0 false))) 0 gRun u).2 =
+  have hX : ∀ u, (upd (upd G 1 (gOut rP (.wk 0 false))) 0 (gRun rM) u).2 =
       if u = 0 then .run else if u = 1 then .wk 0 false else (G u).2 := fun u => by
     unfold upd; split
     · rfl
     · split <;> rfl
-  have hL' := hL.fork (t := 0) (g₁ := gRun) (g₀ := gOut (.wk 0 false)) (gt := false)
-    (by rw [hg]; rfl) hf (by rw [hg]; exact (rsum_rnil rnil).symm) (FHeap.disjoint_empty _) rfl rfl
+  have hL' := hL.fork (t := 0) (g₁ := gRun rM) (g₀ := gOut rP (.wk 0 false)) (gt := false)
+    (by rw [hg]; rfl) hf (by rw [hg]; rfl)
+    (by rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
-      show R (fun u => (upd (upd G m.threads.size (gOut (.wk 0 false))) 0 gRun u).2) r
+      show R (fun u => (upd (upd G m.threads.size (gOut rP (.wk 0 false))) 0 (gRun rM) u).2) r
       rw [hs1]
       exact R_congr (Y := fun u => (G u).2) (by rw [hX, hG1]; rfl) (by rw [hX, hG1]; rfl) hR
   rw [hs1] at hL'
   refine ⟨hs1, rfl, rX, hL', ⟨⟨?_, .inr ⟨by simp [hs1], ?_,
       .inl (by dsimp only; rw [hX]; rfl),
       .inr ⟨0, by decide, false, by dsimp only; rw [hX]; rfl, fun h => by cases h⟩,
-      fun u hu => ?_⟩⟩, fun u => ?_, hu.rest, fun u hu' => ?_⟩⟩
+      fun u hu => ?_⟩⟩, hu.rest, fun u hu' => ?_⟩⟩
   · simp only [Array.getElem?_push]; rw [ite_eq_right (by omega)]; exact h00
   · simp only [Array.getElem?_push, hs1, ↓reduceIte]
   · dsimp only
     rw [hX, ite_eq_right (by unfold ThreadId at *; omega),
       ite_eq_right (by unfold ThreadId at *; omega)]
     exact hnone u (by unfold ThreadId at *; omega)
-  · unfold upd; split
-    · rfl
-    · split
-      · rfl
-      · exact hu.parts u
   · rw [hX] at hu'; unfold upd
     split at hu'
     · cases hu'
@@ -573,31 +579,57 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId}
       · cases hu'
       · rename_i h0 h1; simp only [h0, h1, ↓reduceIte]; exact hu.mid u hu'
 
+/-- Copy the parent's actual plain fragments before the native fork, keeping the entire
+original caller part in `main` and framing the whole protected resource and rest. -/
+theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
+    (hp : rM.Plain) (hi : proto.inv G m) (hg : G 0 = gPre rM)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = 1 ∧ m'.current = 0 ∧ ∃ rP, plain rP ∧
+      proto.inv (upd (upd G 1 (gOut rP (.wk 0 false))) 0 (gRun rM)) m' := by
+  obtain ⟨rX, hL, hu⟩ := hi
+  have hL₀ : L.Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
+    rw [upd_same]; exact hL.cur 0
+  obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart proto rfl
+    (by rw [hg]; decide) (EUpd.plain_split (P := fun r => r = L.part (G 0))
+      fun r hr => by rw [hr, hg]; exact hp)
+  have hrM : r₁ = rM := by simpa only [hg] using hr₁
+  subst r₁
+  have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.rest, hu.mid⟩
+  have hG' : upd G 0 (L.setPart (G 0) (rsum rM rP)) 0 = gPre (rsum rM rP) := by
+    rw [upd_self, hg]; rfl
+  obtain ⟨hc, hcur, hi'⟩ := inv_spawnParts hpP
+    ⟨rX, by simpa only [upd_same] using hL', U_part hu₀⟩ hG' hf
+  refine ⟨hc, hcur, rP, hpP, ?_⟩
+  have he : upd (upd (upd G 0 (L.setPart (G 0) (rsum rM rP))) 1 (gOut rP (.wk 0 false)))
+      0 (gRun rM) = upd (upd G 1 (gOut rP (.wk 0 false))) 0 (gRun rM) := by
+    rw [upd_comm G _ _ (by decide : (0 : ThreadId) ≠ 1), upd_upd]
+  rwa [he] at hi'
+
 /-- `main` goes from `run` to `joins` (out of the lock's code). -/
-theorem main_join {G : ThreadId → Gh} {m : Mem} (hi : proto.inv (upd G 0 gRun) m) :
-    proto.inv (upd G 0 gJoin) m := by
+theorem main_join {G : ThreadId → Gh} {m : Mem} {rp : Res} (hi : proto.inv (upd G 0 (gRun rp)) m) :
+    proto.inv (upd G 0 (gJoin rp)) m := by
   obtain ⟨rX, hiL, hU⟩ := hi
-  have hl := hiL.ghost (t := 0) (g := gJoin) (by rw [upd_self]; rfl) (.inl rfl)
+  have hl := hiL.ghost (t := 0) (g := gJoin rp) (by rw [upd_self]; rfl) (.inl rfl)
     (by rw [upd_self]; rfl) rfl
     (fun _ => hiL.ht (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)))
     (fun r hR => by
-      show R (fun u => (upd (upd G 0 gRun) 0 gJoin u).2) r
+      show R (fun u => (upd (upd G 0 (gRun rp)) 0 (gJoin rp) u).2) r
       rw [upd_upd]
       have e : ∀ g : Gh, (upd G 0 g 1).2 = (G 1).2 := fun _ => by rw [upd_ne _ _ (by decide)]
-      exact R_congr (Y := fun u => (upd G 0 gRun u).2) (by rw [e, e]) (by rw [e, e]) hR)
+      exact R_congr (Y := fun u => (upd G 0 (gRun rp) u).2) (by rw [e, e]) (by rw [e, e]) hR)
   rw [upd_upd] at hl
   have hsh := shape_main hU.shape (by show (upd G 0 _ 0).2 = _ ∨ _; rw [upd_self]; exact .inl rfl)
     .joins (.inr rfl)
-  have hU' := U_step (t := 0) (g := gJoin) hU rfl rfl (fun h => by cases h) hsh
+  have hU' := U_step (t := 0) (g := gJoin rp) hU rfl (fun h => by cases h) hsh
   rw [upd_upd] at hU'
   exact ⟨rX, hl, hU'⟩
 
 /-- While `main` holds the mutex, the writer is not in the middle of an update, and its
 finished updates are at most 2. -/
-theorem snapshot_ok {G : ThreadId → Gh} {m : Mem} {hL : Res}
-    (hi : proto.inv (upd G 0 (gH .run hL)) m) : (G 1).2.mid = false ∧ (G 1).2.cnt ≤ 2 := by
+theorem snapshot_ok {G : ThreadId → Gh} {m : Mem} {rp hL : Res}
+    (hi : proto.inv (upd G 0 (gH rp .run hL)) m) : (G 1).2.mid = false ∧ (G 1).2.cnt ≤ 2 := by
   obtain ⟨rX, hiL, hU⟩ := hi
-  have h10 : upd G 0 (gH .run hL) 1 = G 1 := upd_ne _ _ (by decide)
+  have h10 : upd G 0 (gH rp .run hL) 1 = G 1 := upd_ne _ _ (by decide)
   refine ⟨?_, ?_⟩
   · cases hm : (G 1).2.mid
     · rfl
@@ -615,8 +647,8 @@ theorem snapshot_ok {G : ThreadId → Gh} {m : Mem} {hL : Res}
 
 /-- **`main`'s join of the writer** at `joins`: then every thread is joined, the cache is block
 0 and every clock is below `main`'s. -/
-theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat}
-    (hi : proto.inv (upd G 0 gJoin) m) {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {rp : Res}
+    (hi : proto.inv (upd G 0 (gJoin rp)) m) {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k G₁ m', n = k + 1 → m'.current = 0 → BlkOk m' → m'.ClocksLe → joinedAll 0 m' →
       Q ((), s) G₁ m' k) :
     proto.WP 0 ((joinC 1 : CM Tgt σ Unit).run s) Q G m n := by
@@ -667,9 +699,9 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the spawn; `lock`; the snapshot (`a`, then `b`, in one hold: the lock holder's step; the
   -- writer is not mid-update, `snapshot_ok`), `unlock`, the join of the writer and the free of
   -- the cache
-  fsym [FTriple.allocStackDrop, inv_start, inv_spawn,
-    mi.lock_wp fits rfl rfl hmc.symm 0 gRun rfl rfl io, snapshot_ok,
-    fits.wp_hold (g' := gH .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
+  fsym [FTriple.allocStack', inv_start, inv_spawn,
+    mi.lock_wp fits rfl rfl hmc.symm 0 (gRun _) rfl rfl, snapshot_ok,
+    fits.wp_hold (g' := gH _ .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
     main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, gRun, gJoin, aVal]
 
 end Proofs

@@ -1,4 +1,3 @@
-import Std.Data.HashMap
 import Air2Lean.Air.Op
 import Air2Lean.Air.Dialect
 
@@ -308,29 +307,44 @@ def stdModels : Array StdModel := #[
   -- requests come from `Io.Group.cancel` and `Io.Future.cancel`. Every other cancelable `std.Io`
   -- API above is rejected with its reason.
 
-private def stdModelIndex : Std.HashMap String StdModel :=
-  stdModels.foldl (fun index m => index.insert m.symbol m) {}
+/-- Split on non-overlapping occurrences of a sequence, retaining empty pieces. Structural
+list recursion avoids the UTF-8 position machinery of `String.splitOn` in kernel reduction. -/
+private def splitOnSequence {α : Type} [BEq α] (separator input : List α) : List (List α) :=
+  if separator.isEmpty then [input] else
+    let skipCount := separator.length - 1
+    let rec scan : List α → Nat → List α → List (List α) → List (List α)
+      | [], _, current, parts => (current.reverse :: parts).reverse
+      | _ :: rest, skip + 1, current, parts => scan rest skip current parts
+      | whole@(c :: rest), 0, current, parts =>
+        if separator.isPrefixOf whole then scan rest skipCount [] (current.reverse :: parts)
+        else scan rest 0 (c :: current) parts
+    scan input 0 [] []
 
 /-- The qualified std name of `name`: an instance `<fn>__anon_<n>` names its generic `<fn>`, and
 a method of an instantiated generic type `Io.Future(T).<fn>` or `Io.Select(U).<fn>` names
 `Io.Future.<fn>` or `Io.Select.<fn>` (the type argument is everything up to the last `).`). -/
 def stdModelBase (name : String) : String :=
-  let base := (name.splitOn "__anon_").head!
+  let base := (splitOnSequence "__anon_".toList name.toList).headD []
   let generic (ty : String) : Option String := do
-    unless base.startsWith (ty ++ "(") do none
-    let parts := base.splitOn ")."
+    unless (ty ++ "(").toList.isPrefixOf base do none
+    let parts := splitOnSequence ").".toList base
     unless parts.length ≥ 2 do none
-    some s!"{ty}.{parts.getLast!}"
-  ((generic "Io.Future").orElse fun _ => generic "Io.Select").getD base
-
-/-- The built-in std model (modelled or rejected) that the function `name` is an instance of,
-among the rows active under `mode` (`StdModel.activeIn`). -/
-def stdModel? (name : String) (mode : AllocatorModel := .std) : Option StdModel :=
-  (stdModelIndex[stdModelBase name]?).filter (·.activeIn mode)
+    some (ty ++ "." ++ String.ofList (parts.getLast!))
+  ((generic "Io.Future").orElse fun _ => generic "Io.Select").getD (String.ofList base)
 
 /-- The built-in std model row of `name` in any `--allocator-model`: the names that a project
-binding (`ModelRegistry`) can never claim, the OS boundary included. -/
-def anyStdModel? (name : String) : Option StdModel := stdModelIndex[stdModelBase name]?
+binding (`ModelRegistry`) can never claim, the OS boundary included. Searching the single table
+from the end preserves insertion's last-row precedence and reduces in the kernel without an
+opaque string hash. -/
+def anyStdModel? (name : String) : Option StdModel :=
+  let symbol := stdModelBase name
+  stdModels.findRev? (·.symbol == symbol)
+
+/-- The built-in std model (modelled or rejected) that the function `name` is an instance of,
+among the rows active under `mode` (`StdModel.activeIn`). Selection precedes filtering: an
+inactive last row does not expose an earlier row with the same name. -/
+def stdModel? (name : String) (mode : AllocatorModel := .std) : Option StdModel :=
+  (anyStdModel? name).filter (·.activeIn mode)
 
 private def stdKind? (name : String) (mode : AllocatorModel := .std) : Option StdModelKind :=
   (stdModel? name mode).map (·.kind)

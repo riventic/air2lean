@@ -203,16 +203,42 @@ theorem FTotalTriple.tick_plain : FTotalTriple plain Zig.tick (fun _ => plain �
   (FLogic.frameL (L := FLogic.total) (R := noStack) FTotalTriple.tick_unmetered).post
     fun _ _ h => sep_assoc' h
 
+/-- A caller part carrying the unmetered fragment keeps its exact resource after a tick when
+the unused receipt is dropped. No assumption about turn cost supplies this fragment. The rule
+does not require or discard any stack-budget fact. -/
+theorem FTotalTriple.tick_part_unmetered (r₀ : Res) (hu : 0 < r₀.gh.ac.frag .unmetered) :
+    FTotalTriple (fun r => r = r₀) Zig.tick (fun _ r => r = r₀) :=
+  FTotalTriple.of_run fun m r rF hh hr hs => by
+    subst r
+    let r' : Res := ⟨r₀.heap, r₀.know, r₀.gh.add Ghost.spent1⟩
+    have hh' : Holds m.ticked r' rF := hh.tick_unmetered hu
+    have hsep : ((fun r => r = r₀) ⋆ spent 1) r' :=
+      ⟨r₀, ⟨FHeap.empty, Know.none, Ghost.spent1⟩, fun _ => .inr rfl,
+        by simp [r', rsum, FHeap.union_empty, Know.union_none], rfl, rfl, rfl, rfl⟩
+    obtain ⟨r'', hh'', hr''⟩ := EUpd.spent_drop m.ticked r' rF hh' (sep_comm hsep) hs.ticked
+    exact ⟨(), m.ticked, r'', tick_run' m, hh'', hr'', hs.ticked⟩
+
 /-! ## Thread locality (`fsym` derives the thread rules) -/
+
+/-- A tick preserves every framed byte and every thread's native state. Only the counter
+changes; this summary does not assert the primitive-only `Mem.Aux`. -/
+theorem _root_.Zig.FStepIn.ticked (m : Mem) (hF : Heap) : FStepIn hF m m.ticked :=
+  .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
+    Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩
+    (fun _ _ h => h) (fun _ he hn => absurd he hn) (fun _ h => h)
 
 /-- **A step is local**: it reads no record and touches no byte. -/
 @[fsym_provider] theorem ThreadLocal.tick {P : FAssn} : ThreadLocal P Zig.tick :=
   ThreadLocal.intro fun m _ _ _ _ _ _ => ⟨rfl, fun v m₀ e => by
     rw [tick_run'] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-    exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (fun _ _ h => h) (fun _ he hn => absurd he hn)
-      (fun _ h => h), fun _ _ _ h => h⟩⟩
+    exact ⟨FStepIn.ticked _ _, fun _ _ _ h => h⟩⟩
+
+/-- The exact caller-part rule in a concurrent memory. Its complete frame, including a held
+resource, is preserved by the existing thread-local lifting kernel. -/
+theorem FTTotalTriple.tick_part_unmetered (r : Res) (hu : 0 < r.gh.ac.frag .unmetered) :
+    FTTotalTriple (fun r' => r' = r) Zig.tick (fun _ r' => r' = r) :=
+  .ofSeq (FTotalTriple.tick_part_unmetered r hu) ThreadLocal.tick
 
 attribute [fsym] FTotalTriple.tick_plain FTotalTriple.tick_unmetered FTotalTriple.tick_credit
 

@@ -1,5 +1,6 @@
 import Air2Lean.Air.Op
 import Air2Lean.StdModels
+import Lean.Elab.Tactic.Omega
 
 /-!
 # Op effects
@@ -274,6 +275,42 @@ def Op.effectsIn (mode : AllocatorModel) (op : Op) : Effects :=
 /-- `Op.effectsIn` of the default allocator model; every fact but `memoryOnly` of a call is the
 same in both models. -/
 def Op.effects (op : Op) : Effects := op.effectsIn .std
+
+/-- The shared control-flow classifier returns only actual, strictly nested bodies. This lets
+kernel-reducible analyses recurse through `effects` without a second constructor classifier. -/
+theorem Op.controlBody_size_lt (op : Op) {body : Array Inst}
+    (h : body ∈ op.effects.control.bodies) : sizeOf body < sizeOf op := by
+  cases op <;>
+    simp only [Op.effects, Op.effectsIn, Effects.pure, Effects.address, Effects.projection,
+      Effects.placeAccess, Effects.valueAccess, Effects.atomicAccess, Effects.flow,
+      Control.bodies, switchBodies, Array.mem_append, Array.mem_map, Array.mem_singleton,
+      Array.mem_empty_iff] at h
+  all_goals try contradiction
+  all_goals try (rcases h with rfl | rfl <;> simp <;> omega)
+  all_goals try (subst body; simp; omega)
+  case call callee args =>
+    cases callee <;> try simp_all [Effects.pure, Control.bodies]
+    case func name noreturn spawnFn =>
+      cases noreturn <;> simp_all [Effects.pure, Control.bodies]
+  case condBr condition thenBody elseBody =>
+    simp only [Array.mem_def, List.mem_cons, List.not_mem_nil, or_false] at h
+    rcases h with rfl | rfl <;> simp <;> omega
+  case switchBr v cases elseBody =>
+    rcases h with ⟨sc, hsc, rfl⟩ | rfl
+    · have hscSize := Array.sizeOf_lt_of_mem hsc
+      cases sc
+      simp_all
+      omega
+    · simp
+      omega
+  case loopSwitchBr v cases elseBody =>
+    rcases h with ⟨sc, hsc, rfl⟩ | rfl
+    · have hscSize := Array.sizeOf_lt_of_mem hsc
+      cases sc
+      simp_all
+      omega
+    · simp
+      omega
 
 /-- How `Emit.lean`'s `emitStmts` emits an op: the op table's emitter column. -/
 inductive EmitRoute where

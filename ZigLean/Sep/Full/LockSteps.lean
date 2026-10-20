@@ -40,6 +40,42 @@ open FAssn Conc Proto
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
+/-- An instrumentation tick paid by the caller's own part. The existing total thread rule
+fixes the actual resource post, while `Inv.wp_liftPartLive` frames the entire held resource.
+The composite protocol's existing `kstep` obligation re-establishes arbitrary `U` at the exact
+ticked memory. Internal busy phases need no lock-code `ok` admission. -/
+theorem Fits.wp_tick (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} {r : Res}
+    {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (htt : FTTotalTriple (fun rp => rp = L.part g) Zig.tick (fun _ rp => rp = r))
+    (h : ∀ m', m'.current = t → P.inv (upd G t (L.setPart g r)) m' → Q () G₀ m' d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  obtain ⟨rX, hL, hU⟩ := (hF.inv _ _).mp hi
+  refine hL.wp_liftPartLive hc hg htt.1 rfl (fun a m' r' hr hq _ hc' hL' => ?_) (.inr htt.2)
+  cases a
+  subst r'
+  have hm : m' = m.ticked := by
+    rw [tick_run' m] at hr
+    exact (Prod.mk.inj (Except.ok.inj (Option.some.inj hr))).2.symm
+  have hU' := hF.kstep t (upd G t g) rX m (upd G t (L.setPart g r)) rX m'
+    (.inr ⟨hc, by rw [upd_self]; exact hg, hL, r,
+      by simpa only [upd_self] using htt,
+      by rw [upd_self, upd_upd], rfl, hm, hL'⟩) hU
+  exact h m' hc' ((hF.inv _ _).mpr ⟨rX, hL', hU'⟩)
+
+/-- Plain sync clients retain their exact caller part. The explicit plain admission supplies
+the unmetered fragment; `P.cost = none` alone does not. -/
+theorem Fits.wp_tick_plain (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}
+    {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (hp : (L.part g).Plain)
+    (h : ∀ m', m'.current = t → P.inv (upd G t g) m' → Q () G₀ m' d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  refine hF.wp_tick hi hc hg (FTTotalTriple.tick_part_unmetered (L.part g) hp.2) ?_
+  intro m' hc' hi'
+  rw [L.setPart_self] at hi'
+  exact h m' hc' hi'
+
 /-- **A plain load from invariant rest by a race-free reader.** The bytes occur once in `rX`;
 the caller's admission need only justify its own `NoRace` fact. In particular, no prior write
 has to precede an unrelated live thread. The exact load run and its read record preserve the

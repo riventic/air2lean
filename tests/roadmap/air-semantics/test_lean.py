@@ -12,6 +12,9 @@ Needs `lake build Proofs.<Ex>.AirCert Air2Lean.Main` (every committed certificat
     fresh certificate checks.
 (e) PlacementCounterexample.lean: an extra block changes a later allocation's address, so a
     memory extension cannot relate a promoted local to a block.
+(f) Fresh recursive certificates use the compiled clique's actual motive order; replacing it
+    with rendered declaration order fails. A present modeled-panic handler can break executable
+    recursion without changing the complete original program's recursive cost classification.
 """
 import argparse
 import json
@@ -126,6 +129,103 @@ def check_caller(binary, tmp):
     print('caller fixture: scaleTwice_eq checks')
 
 
+def translate_fixture(binary, tmp, fixture, namespace):
+    gen, cert = tmp / f'{namespace}Gen.lean', tmp / f'{namespace}Cert.lean'
+    result = subprocess.run([str(binary), str(ROOT / 'tests/roadmap/air-semantics/fixtures' / fixture),
+                             '-o', str(gen), '--namespace', namespace, '--prefix', f'{fixture}.',
+                             '--profile', 'legacy-abi64-le', '--air-certificate', str(cert),
+                             '--air-certificate-import', gen.stem],
+                            capture_output=True, text=True, timeout=1800)
+    assert result.returncode == 0, result.stdout + result.stderr
+    return gen, cert
+
+
+def compiler_metadata(gen, tmp):
+    """Read facts from the freshly compiled Gen through the existing Assurance helper."""
+    marker = 'AIR2LEAN_FIXPOINT_JSON:'
+    query = tmp / f'{gen.stem}Facts.lean'
+    query.write_text(f'import tools.Assurance\nimport {gen.stem}\n'
+                     'run_meta do\n'
+                     f'  let result ← Air2Lean.Assurance.partialFixpointData #["{gen.stem}"]\n'
+                     f'  liftIO <| IO.println ("{marker}" ++ result.compress)\n')
+    result = check_certificate(query, tmp)
+    payloads = [line[len(marker):] for line in result.stdout.splitlines() if line.startswith(marker)]
+    assert len(payloads) == 1, result.stdout
+    return json.loads(payloads[0])['fixpoint_groups']
+
+
+def check_clique_order(binary, tmp):
+    gen, cert = translate_fixture(binary, tmp, 'clique', 'Clique')
+    source = cert.read_text()
+    names = ['aB', 'bC', 'cA']
+    for name in names:
+        for suffix in ('sound', 'complete', 'eq'):
+            assert f'theorem {name}_{suffix} ' in source, (name, suffix)
+    check_module(gen, cert, tmp)
+    definitions = r'^def (' + '|'.join(re.escape(name) for name in names) + r') '
+    rendered = [f'Clique.{name}' for name in re.findall(definitions, gen.read_text(), re.M)]
+    groups = compiler_metadata(gen, tmp)
+    assert len(groups) == 1, groups
+    group = groups[0]
+    actual = [member['name'] for member in group['members']]
+    assert len(rendered) == len(actual) == len(names) and set(actual) == set(rendered), (rendered, actual)
+    # B's immediate branch drops its dead call to C from the emitted body. The original
+    # Program retains that source edge, so the two existing graph passes expose this mismatch.
+    assert rendered != actual, (rendered, actual)
+    lines, changed = source.splitlines(keepends=True), []
+    for induction in group['inductions']:
+        roles = induction['members']
+        assert [role['name'] for role in roles] == actual, induction
+        guessed = dict(zip(rendered, roles))
+        labels = {role['motive']['name']: guessed[role['name']]['motive']['name'] for role in roles}
+        pattern = r'\((' + '|'.join(re.escape(label) for label in labels) + r') :='
+        matching = [i for i, line in enumerate(lines)
+                    if line.lstrip().startswith(f'apply {induction["name"]} ')]
+        assert len(matching) == 1, (induction['name'], matching)
+        index = matching[0]
+        mutated, count = re.subn(pattern, lambda match: f'({labels[match[1]]} :=', lines[index])
+        assert count == len(names) and mutated != lines[index], (induction['name'], lines[index])
+        lines[index] = mutated
+        changed.append(index + 1)
+    assert len(changed) == len(names), changed
+    mutant = tmp / 'CliqueGuessedOrder.lean'
+    mutant.write_text(''.join(lines))
+    result = run_certificate(mutant, tmp)
+    output = result.stdout + result.stderr
+    errors = [int(line.split(':')[1]) for line in output.splitlines()
+              if line.startswith(str(mutant) + ':') and ': error' in line]
+    assert result.returncode != 0 and errors and errors[0] in changed, output
+    print(f'clique: rendered {rendered}, compiler {actual}; guessed motive order rejected')
+
+
+def check_modeled_panic_cycle(binary, tmp):
+    gen, cert = translate_fixture(binary, tmp, 'panic', 'PanicCycle')
+    source, generated = cert.read_text(), gen.read_text()
+    assert 'theorem f_run ' in source and 'theorem f_complete ' in source, source
+    body = re.search(r'^def f [^\n]*\n(?:[ \t].*\n|\n)*', generated, re.M)
+    assert body and 'throw .overflow' in body[0], generated
+    assert 'partial_fixpoint' not in generated, generated
+    assert 'PanicCycle.f.fixpoint_induct' not in source, source
+    # Check the actual certificate plus independent kernel-computed facts about its complete
+    # original Program. The executable graph is acyclic; native recursion and D5 stay original.
+    # This pure case does not cover a positive MM/CM entry charge: source-recursive memory
+    # and concurrent functions remain outside the certificate fragment.
+    handler = "debug.FullPanic((function 'defaultPanic')).integerOverflow"
+    checks = tmp / 'PanicCyclePolicy.lean'
+    program = 'PanicCycle.AirCert.program'
+    checks.write_text(source + '\n' + '\n'.join([
+        f'example : ({program}.lookup {json.dumps(handler)}).isSome = true := by decide +kernel',
+        f'example : {program}.recursive {json.dumps(handler)} = true := by decide +kernel',
+        f'example : {program}.recursive "panic.f" = true := by decide +kernel',
+        f'example : {program}.usesMemory "panic.f" = false := by decide +kernel',
+        f'example : {program}.ticked "panic.f" = false := by decide +kernel',
+        f'example : {program}.entryTicked "panic.f" = false := by decide +kernel',
+    ]) + '\n')
+    check_module(gen, checks, tmp)
+    assert compiler_metadata(gen, tmp) == [], 'modeled panic must remove the executable cycle'
+    print('modeled panic: acyclic executable certificate checks; original recursive policy retained')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=Path)
@@ -178,6 +278,8 @@ def main():
             print(f'mutant {index}: {theorem} rejected')
         check_caller(args.binary, Path(tmp))
         check_slices(args.binary, Path(tmp))
+        check_clique_order(args.binary, Path(tmp))
+        check_modeled_panic_cycle(args.binary, Path(tmp))
     print('AIR semantics Lean checks passed')
 
 

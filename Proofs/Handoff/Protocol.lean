@@ -217,7 +217,7 @@ variable {Tgt : Type}
 /-- The protocol, in strict mode; `prodOf` reads the producer's argument from a spawn target. -/
 def proto (prodOf : Tgt → Option Ptr) : Proto Tgt Gh where
   inv G m := ∃ rX, (L Lo).Inv G rX m ∧ U Lo G rX m
-  init tgt g := prodOf tgt = some bPtr ∧ g = (⟨.out, rnil, rnil⟩, { ph := .lk })
+  init tgt g := prodOf tgt = some bPtr ∧ ∃ rp, plain rp ∧ g = (⟨.out, rp, rnil⟩, { ph := .lk })
   fin g := g.1.ph = .gone ∧ g.2 = { ph := .fin }
   strict := true
   joins g := g.1.ph = .out ∧ g.2 = { ph := .joins }
@@ -1222,10 +1222,31 @@ theorem R_congr {Y Y' : ThreadId → X} (h : (Y' 1).ph = (Y 1).ph) : R Lo Y' = R
 
 variable {prodOf : Tgt → Option Ptr}
 
+/-- A same-memory change of the caller's part leaves this protocol's observations unchanged.
+Its physical invariant does not constrain caller ghost fragments. -/
+theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Res}
+    (hu : U Lo G rX m) (hi : (L Lo).Inv G rX m)
+    (hi' : (L Lo).Inv (upd G t ((L Lo).setPart (G t) r)) rX m) :
+    U Lo (upd G t ((L Lo).setPart (G t) r)) rX m := by
+  obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => Lo.ws_box) hu.rest
+  subst rX
+  exact U_own_native (.inl rfl) hu hi hY (FStepIn.refl _ _) hu.ws rfl hi' rfl rfl
+
+/-- The composite tick obligation reuses native framed invariant transport. Ticks stay visible
+in the exact memory; this proof preserves the observation because its actual fields ignore
+only that counter and caller ghost fragments. -/
+theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
+    (G' : ThreadId → Gh) (rX' : Res) (m' : Mem)
+    (hs : (L Lo).PartTick t G rX m G' rX' m') (hu : U Lo G rX m) : U Lo G' rX' m' := by
+  obtain ⟨_, _, hi, r, _, rfl, rfl, rfl, hi'⟩ := hs
+  obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => Lo.ws_box) hu.rest
+  subst rX
+  exact U_own_native (.inl rfl) hu hi hY (FStepIn.ticked _ _) hu.ws rfl hi' rfl rfl
+
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
 theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
-    (fun _ _ => Iff.rfl) stable fun _ _ _ t _ hu => atStop t hu
+    (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
 
 /-- **The protocol has the condition** (the lock's laws as for `fitsL`). -/
 theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
@@ -1255,10 +1276,13 @@ theorem fitsC : (L Lo).Fits ((C Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
   role_part _ _ _ := Iff.rfl
   ok_calm _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
   kstep := by
-    rintro t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
-    · exact cstep G rY m m' t p q h W hW hn hq hu hY hs hEp hI
-    · exact U_own_native (hW.imp id .inl) hu hi hY hs hw' hh hL rfl rfl }
+    intro t G rX m G' rX' m' hs hu
+    rcases hs with hs | hs
+    · rcases hs with ⟨W, rY, hW, rfl, rfl, hY, hI,
+      ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      · exact cstep G rY m m' t p q h W hW hn hq hu hY hs hEp hI
+      · exact U_own_native (hW.imp id .inl) hu hi hY hs hw' hh hL rfl rfl
+    · exact tickStable t G rX m G' rX' m' hs hu }
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
 theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
@@ -1285,10 +1309,13 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
   role_part _ _ _ := Iff.rfl
   ok_calm _ _ _ h := h.elim
   kstep := by
-    rintro t G _ m _ _ m' ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
-    · exact estep G rY m m' t p q hl hq hu hY hs hI
-    · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl }
+    intro t G rX m G' rX' m' hs hu
+    rcases hs with hs | hs
+    · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
+      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      · exact estep G rY m m' t p q hl hq hu hY hs hI
+      · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl
+    · exact tickStable t G rX m G' rX' m' hs hu }
 
 end Handoff
 end Zig

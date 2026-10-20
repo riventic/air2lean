@@ -2,7 +2,9 @@ import Air2Lean.CanonCertificate
 
 /-! Native debug-ID binding evidence. These controls exercise complete Func equality,
 nested instruction families and metadata; none is represented as a kernel proof of Raw.
-The generic semantic theorem is checked once in CanonSem, independently of this fixture. -/
+The generic semantic theorem is checked once in CanonSem for an arbitrary original
+Program, call oracle, arguments and full memory, independently of this fixture. This
+native evidence format remains snapshots-only and does not select a semantic policy. -/
 
 namespace CanonBinding
 

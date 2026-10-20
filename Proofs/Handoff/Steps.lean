@@ -390,12 +390,12 @@ theorem einv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     (fun h => absurd (by rw [upd_self]; exact h₁) h) (fun h => by rw [upd_self]; exact hwx h)
     (fun h => by rw [upd_self]; exact hsx h)
 
-/-- **`main`'s spawn** of the producer (`main` at `pre`): the producer is thread 1, at `lk`
-with no part; `main` goes to `run`. -/
-theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
-    (hi : (proto Lo prodOf).inv G m) (hg : G 0 = gO rM { ph := .pre })
+/-- Spawn after the parent's caller part has been split. The child gets the copied plain
+resource; `main` keeps its entire original caller part. -/
+theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP : Res}
+    (hP : plain rP) (hi : (proto Lo prodOf).inv G m) (hg : G 0 = gO (rsum rM rP) { ph := .pre })
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
-    c = 1 ∧ (proto Lo prodOf).inv (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run })) m' := by
+    c = 1 ∧ (proto Lo prodOf).inv (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .run })) m' := by
   obtain ⟨rX, hL, hu⟩ := hi
   obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, -, h0, -⟩⟩ := hu.shape
   rotate_left
@@ -412,12 +412,13 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   change ((Thread.forkWith false).run { m with current := 0 }).run = some (.ok (c, m')) at hfork
   rw [Proto.forkWith_run] at hfork
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfork
-  have hL' := hL.fork (t := 0) (g₁ := gO rM { ph := .run }) (g₀ := gO rnil { ph := .lk })
-    (by rw [hg]; rfl) hf (by rw [hg]; exact (rsum_rnil rM).symm) (FHeap.disjoint_empty _) rfl rfl
+  have hL' := hL.fork (t := 0) (g₁ := gO rM { ph := .run }) (g₀ := gO rP { ph := .lk })
+    (by rw [hg]; rfl) hf (by rw [hg]; rfl)
+    (by rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
       rw [← hfork.1]
       have hR' : R Lo (fun u => (G u).2) r := hR
-      show R Lo (fun u => (upd (upd G m.threads.size (gO rnil { ph := .lk })) 0
+      show R Lo (fun u => (upd (upd G m.threads.size (gO rP { ph := .lk })) 0
         (gO rM { ph := .run }) u).2) r
       rw [R_eq (Y := fun u => (G u).2) (by rw [hs1, upd0_1, upd_self, hG1]; rfl)
         (by rw [hs1, upd0_1, upd_self, hG1]; rfl)]
@@ -426,11 +427,11 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   rw [hs1] at hL' ⊢
   have hclk := clk_fork (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
   -- the new ghost values
-  have hX0 : (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run }) 0).2 = { ph := .run } := by
+  have hX0 : (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .run }) 0).2 = { ph := .run } := by
     rw [upd_self]; rfl
-  have hX1 : (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run }) 1).2 = { ph := .lk } := by
+  have hX1 : (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .run }) 1).2 = { ph := .lk } := by
     rw [upd0_1, upd_self]; rfl
-  have hXu : ∀ u, 2 ≤ u → (upd (upd G 1 (gO rnil { ph := .lk })) 0 (gO rM { ph := .run }) u).2 = {} :=
+  have hXu : ∀ u, 2 ≤ u → (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .run }) u).2 = {} :=
     fun u hu => by
       rw [upd_ne _ _ (by unfold ThreadId at *; omega), upd_ne _ _ (by unfold ThreadId at *; omega)]
       exact hnone u (by unfold ThreadId at *; omega)
@@ -438,12 +439,12 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   have hG0e : (G 0).2.e = .out := by rw [hg]; rfl
   -- the condition's and the event's invariants
   have hI := (hu.cinv.stay 0 hhS hhE apE.ptr_ne (fun _ _ h => h) hclk)
-  have hI' := cinv_out (cinv_out hI (t := 1) (g := gO rnil { ph := .lk }) (by rw [hG1]) rfl)
+  have hI' := cinv_out (cinv_out hI (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl)
     (t := 0) (g := gO rM { ph := .run })
     (by rw [upd1_0]; exact hG0c) rfl
   have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
     hu.einv.fresh
-  have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rnil { ph := .lk }) (by rw [hG1]) rfl
+  have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl
       (fun h => by
         have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h
         rw [hG1] at h'; rcases h' with h' | h' <;> cases h')
@@ -476,6 +477,34 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     · by_cases e1 : u = 1
       · subst e1; rw [hX1] at hu'; exact hu' rfl
       · rw [hXu u (by unfold ThreadId at *; omega)] at hu'; exact hu' rfl
+
+/-- `main` copies its duplicable plain mode before spawning. Both threads own the fragments
+needed by their instrumented loops; no credit or held resource is borrowed. -/
+theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
+    (hp : rM.Plain) (hi : (proto Lo prodOf).inv G m) (hg : G 0 = gO rM { ph := .pre })
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = 1 ∧ ∃ rP, plain rP ∧
+      (proto Lo prodOf).inv (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .run })) m' := by
+  obtain ⟨rX, hL, hU⟩ := hi
+  have hL₀ : (L Lo).Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
+    rw [upd_same]
+    exact hL.cur 0
+  obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart (proto Lo prodOf) rfl
+    (by rw [hg]; decide) (EUpd.plain_split (P := fun r => r = (L Lo).part (G 0))
+      fun r hr => by rw [hr, hg]; exact hp)
+  have hrM : r₁ = rM := by simpa only [hg] using hr₁
+  subst r₁
+  have hU₀ := atStop 0 hU
+  have hU' := U_part hU₀ (by simpa only [upd_same] using hL₀) (by
+    simpa only [upd_upd] using hL')
+  have hG' : upd G 0 ((L Lo).setPart (G 0) (rsum rM rP)) 0 =
+      gO (rsum rM rP) { ph := .pre } := by rw [upd_self, hg]; rfl
+  obtain ⟨hc, hi'⟩ := inv_spawnParts hpP ⟨rX, by simpa only [upd_upd] using hL', hU'⟩ hG' hf
+  refine ⟨hc, rP, hpP, ?_⟩
+  have he : upd (upd (upd G 0 ((L Lo).setPart (G 0) (rsum rM rP))) 1 (gO rP { ph := .lk }))
+      0 (gO rM { ph := .run }) = upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .run }) := by
+    rw [upd_comm G _ _ (by decide : (0 : ThreadId) ≠ 1), upd_upd]
+  rwa [he] at hi'
 
 /-! ## The holder's accesses to `v` and `ready` -/
 

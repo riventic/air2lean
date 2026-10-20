@@ -834,7 +834,7 @@ theorem Fits.wStep (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move ow
     (hU : U G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
     (hI : Inv (upd G t (L.set (pl.set (G t) p) q h)) m') :
     U (upd G t (L.set (pl.set (G t) p) q h)) (rsum (W.cellsR m') rY) m' :=
-  hK.kstep t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI, .inl ⟨p, q, h, hmv, rfl⟩⟩ hU
+  hK.kstep t G _ m _ _ m' (.inl ⟨W, rY, hW, rfl, rfl, hY, hI, .inl ⟨p, q, h, hmv, rfl⟩⟩) hU
 
 /-- **A step of a thread on its own part** in the primitive's code (at a lock place `ownAt`; a
 stack block) keeps the rest, with the thread's new part `r`, given the lock's invariant before it
@@ -848,8 +848,8 @@ theorem Fits.wOwn (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move own
     (hL' : L.Inv (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m')
     (hI : Inv (upd G t (L.setPart (G t) r)) m') :
     U (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m' :=
-  hK.kstep t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
-    .inr ⟨r, hat, hL, hc, hs, hcW, hw', hh, hL', rfl⟩⟩ hU
+  hK.kstep t G _ m _ _ m' (.inl ⟨W, rY, hW, rfl, rfl, hY, hI,
+    .inr ⟨r, hat, hL, hc, hs, hcW, hw', hh, hL', rfl⟩⟩) hU
 
 /-- **After a step of the primitive's code** by `t` (`g`, new place `p`) at the word `W` that
 keeps `t`'s lock place and resource: the protocol's invariant, from the lock's invariant after the

@@ -1,6 +1,7 @@
 import ZigLean.Mem
 import Air2Lean.Air.Op
 import Air2Lean.SemAttr
+import Air2Lean.Program
 
 /-!
 # Formal semantics of canonical AIR (fragment)
@@ -119,9 +120,14 @@ inductive Exit where
 /-- A call oracle: the meaning of a direct call by fully qualified name. -/
 abbrev Oracle := String → List Value → MemM Value
 
-/-- Everything a body needs besides its environment: the function (its type table) and a
-call oracle for direct calls by fully qualified name. -/
+/-- The complete original source program. Its execution classification is derived from its
+functions and model bindings, never supplied independently of them. -/
+abbrev Prog := Program
+
+/-- Everything a body needs besides its environment: the complete original program, the
+function (its type table), and a call oracle for direct calls by fully qualified name. -/
 structure Ctx where
+  prog : Prog
   func : Func
   /-- The runtime arguments, in parameter order. -/
   args : List Value
@@ -437,6 +443,14 @@ theorem sizeOf_case_body (sc : SwitchCase) : sizeOf sc.body < sizeOf sc := by
 def liftR {α : Type} (x : Result α) : SM α := StateT.lift (StateT.lift x)
 
 def liftMem {α : Type} (x : MemM α) : SM α := StateT.lift x
+
+/-- One invocation of a loop body pays one tick in the original program's MM/CM
+classification, including the invocation that exits. A pure function and its slice view
+pay none. Keeping this prefix separate lets whole-loop and one-body certificates use the
+same semantics. -/
+def iteration {α : Type} (c : Ctx) (body : SM α) : SM α := do
+  if c.prog.ticked c.func.name then liftMem Zig.tick
+  body
 
 /-- The size and ABI alignment of a type, from the export's layout table. -/
 def layoutOf (f : Func) (t : TyId) : Option (Nat × Nat) := do
@@ -847,11 +861,16 @@ decreasing_by
 through. A separate definition, so that a certificate rewrites a whole loop by its own lemma
 instead of unfolding the body. -/
 def execLoop (c : Ctx) (id : InstId) (body : Array Inst) (env : Env) : SM Exit :=
-  Zig.loop (execBody c body.toList env) (Exit.again id)
+  Zig.loop (iteration c (execBody c body.toList env)) (Exit.again id)
 termination_by (sizeOf body, 1)
 decreasing_by simp_wf; simp only [sizeOf_toList]; omega
 
 end
+
+/-- The exact prefixed body that `execLoop` invokes, also used by a certificate proving a
+single invocation. This does not add a function-entry tick to an extracted loop helper. -/
+def execIteration (c : Ctx) (body : List Inst) (env : Env) : SM Exit :=
+  iteration c (execBody c body env)
 
 /-- Do the arguments match the parameter types, one for one? (`valOkIn`, through two levels of
 optionals and error unions.) -/
@@ -862,10 +881,14 @@ def argsOk (f : Func) : List TyId → List Value → Bool
 
 /-- Run a function on its argument values: an empty SSA environment (each `arg` instruction
 binds its parameter) and no local cells. A call whose arguments do not match the parameter
-types, and a function that ends other than by `ret`, are stuck. -/
-def execFunc (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
+types, and a function that ends other than by `ret`, are stuck. The original program fixes
+instrumentation even when a generic preservation theorem changes debug IDs in `f`;
+`run` and `runOn` bind `f` to that program's actual lookup. The existing recursive-MM
+stack-budget certificate exclusion is unchanged. -/
+def execFunc (prog : Prog) (call : Oracle) (f : Func) (args : List Value) : MemM Value :=
   if argsOk f f.params.toList args then do
-    let (e, frame) ← (execBody ⟨f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
+    if prog.entryTicked f.name then Zig.tick
+    let (e, frame) ← (execBody ⟨prog, f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
     -- The stack frame ends at the return (a panic leaves the memory behind), its blocks in
     -- reverse order of their allocation (`Frame.blocks` is newest first; MM-18: every free is
     -- of the top of the stack).
@@ -941,12 +964,13 @@ theorem monotone_loopMM {σ ε γ : Type} [PartialOrder γ] (f : γ → Zig.MM �
 
 /-- A body is monotone in its call oracle: a more defined callee gives a more defined
 caller. -/
-theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (Array Value)) :
-    ∀ l env, monotone (fun o : Oracle => execBody ⟨f, args, o, view⟩ l env) := by
-  apply execBody.induct ⟨f, args, fun _ _ => StateT.lift stuck, view⟩
-    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨f, args, o, view⟩ i rest env))
-    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨f, args, o, view⟩ s x cs el env))
-    (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨f, args, o, view⟩ id body env))
+theorem execBody_mono (prog : Prog) (f : Func) (args : List Value)
+    (view : InstId → Option (Array Value)) :
+    ∀ l env, monotone (fun o : Oracle => execBody ⟨prog, f, args, o, view⟩ l env) := by
+  apply execBody.induct ⟨prog, f, args, fun _ _ => StateT.lift stuck, view⟩
+    (motive2 := fun i rest env => monotone (fun o : Oracle => execInst ⟨prog, f, args, o, view⟩ i rest env))
+    (motive3 := fun s w x cs el env => monotone (fun o : Oracle => execSwitch ⟨prog, f, args, o, view⟩ s x cs el env))
+    (motive4 := fun id body env => monotone (fun o : Oracle => execLoop ⟨prog, f, args, o, view⟩ id body env))
   case case1 =>
     intro env
     simp only [execBody]
@@ -967,9 +991,13 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
     assumption
   case case29 =>
     intros
-    simp only [execLoop]
+    simp only [execLoop, iteration]
     apply monotone_loopMM
-    assumption
+    apply monotone_ite
+    · apply monotone_bind
+      · exact monotone_const _
+      · apply monotone_of_monotone_apply; intro; assumption
+    · assumption
   all_goals first
     | (intro i; obtain ⟨id, ty, op⟩ := i; intro rest env; intros
        simp only at *
@@ -1003,57 +1031,123 @@ theorem execBody_mono (f : Func) (args : List Value) (view : InstId → Option (
              | monotonicity
              | (apply_assumption <;> rfl)); done))
 
+/-- A prefixed iteration is monotone in the same call oracle as its body. Its canonical
+program and tick prefix stay fixed while the oracle becomes more defined. -/
+theorem execIteration_mono (prog : Prog) (f : Func) (args : List Value)
+    (view : InstId → Option (Array Value)) (body : List Inst) (env : Env) :
+    monotone (fun o : Oracle => execIteration ⟨prog, f, args, o, view⟩ body env) := by
+  unfold execIteration iteration
+  change monotone (fun o : Oracle =>
+    if prog.ticked f.name = true then
+      liftMem Zig.tick >>= fun _ => execBody ⟨prog, f, args, o, view⟩ body env
+    else execBody ⟨prog, f, args, o, view⟩ body env)
+  apply monotone_ite
+  · apply monotone_bind
+    · exact monotone_const _
+    · apply monotone_of_monotone_apply; intro
+      exact execBody_mono prog f args view body env
+  · exact execBody_mono prog f args view body env
+
 @[partial_fixpoint_monotone]
-theorem execFunc_mono {γ : Type} [PartialOrder γ] (g : γ → Oracle) (hg : monotone g)
-    (f : Func) (args : List Value) : monotone (fun x => execFunc (g x) f args) := by
+theorem execFunc_mono {γ : Type} [PartialOrder γ] (prog : Prog) (g : γ → Oracle) (hg : monotone g)
+    (f : Func) (args : List Value) : monotone (fun x => execFunc prog (g x) f args) := by
+  have hbody : monotone (fun x => do
+      let (e, frame) ← (execBody ⟨prog, f, args, g x, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
+      frame.blocks.forM Zig.free
+      match e with
+      | .ret v => pure v
+      | _ => StateT.lift stuck) := by
+    apply monotone_bind
+    · exact monotone_compose (g := fun o : Oracle =>
+        (execBody ⟨prog, f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) hg
+        (monotone_stateTRun _ (execBody_mono prog f args _ _ _) _)
+    · exact monotone_const _
   unfold execFunc
   apply monotone_ite _ _ _ _ (monotone_const _)
-  apply monotone_bind
-  · exact monotone_compose (g := fun o : Oracle =>
-      (execBody ⟨f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) hg
-      (monotone_stateTRun _ (execBody_mono f args _ _ _) _)
-  · exact monotone_const _
+  apply monotone_ite
+  · apply monotone_bind
+    · exact monotone_const _
+    · apply monotone_of_monotone_apply; intro
+      exact hbody
+  · exact hbody
 
 end Monotone
 
-
-/-- A program: its functions by fully qualified name. -/
-abbrev Prog := String → Option Func
 
 /-- The semantics of a program: the least oracle that each function's body satisfies (the
 least fixpoint of `execFunc`, in `Zig.MemM`'s order where non-termination and stuck states
 are the bottom). A call to a name outside the program is stuck. -/
 def run (p : Prog) (name : String) (args : List Value) : MemM Value :=
-  match p name with
-  | some f => execFunc (run p) f args
+  match p.lookup name with
+  | some f => execFunc p (run p) f args
   | none => StateT.lift stuck
 partial_fixpoint
 
 open Lean.Order in
 /-- Soundness of any fixpoint: if an oracle `G` satisfies every function's equation on
-well-typed arguments (`execFunc G f args = G name args`), the program semantics is below it.
+well-typed arguments (`execFunc p G f args = G name args`), the program semantics is below it.
 So every terminating AIR behaviour (a value or a panic) is `G`'s behaviour too
 (`Result.eq_of_le`). -/
 theorem run_le_of_fixpoint (p : Prog) (G : Oracle)
-    (hG : ∀ name f args, p name = some f → argsOk f f.params.toList args = true →
-      execFunc G f args = G name args) :
+    (hG : ∀ name f args, p.lookup name = some f → argsOk f f.params.toList args = true →
+      execFunc p G f args = G name args) :
     run p ⊑ G := by
   apply run.fixpoint_induct p (motive := fun r => r ⊑ G)
   · exact fun c hc h => csup_le hc h
   · intro r hr name args
-    show (match p name with | some f => execFunc r f args | none => StateT.lift stuck) ⊑ G name args
+    show (match p.lookup name with | some f => execFunc p r f args | none => StateT.lift stuck) ⊑ G name args
     split
     · rename_i f hf
       by_cases ht : argsOk f f.params.toList args = true
       · rw [← hG name f args hf ht]
-        exact execFunc_mono (fun o : Oracle => o) monotone_id f args _ _ hr
+        exact execFunc_mono p (fun o : Oracle => o) monotone_id f args _ _ hr
       · simp only [execFunc, ht]
         intro m; exact FlatOrder.rel.bot
     · intro m; exact FlatOrder.rel.bot
 
-theorem run_of_lookup {p : Prog} {name : String} {f : Func} (h : p name = some f)
-    (args : List Value) : run p name args = execFunc (run p) f args := by
+theorem run_of_lookup {p : Prog} {name : String} {f : Func} (h : p.lookup name = some f)
+    (args : List Value) : run p name args = execFunc p (run p) f args := by
   rw [run]; simp only [h]
+
+/-- Execute a certified subprogram's names while retaining the complete original program
+for every MM/CM and recursion decision. Restricting the lookup domain never rebuilds its
+call graph or supplies replacement bodies for functions outside the fragment. -/
+def runOn (p : Prog) (names : List String) (name : String) (args : List Value) : MemM Value :=
+  if names.contains name then
+    match p.lookup name with
+    | some f => execFunc p (runOn p names) f args
+    | none => StateT.lift stuck
+  else StateT.lift stuck
+partial_fixpoint
+
+open Lean.Order in
+theorem runOn_le_of_fixpoint (p : Prog) (names : List String) (G : Oracle)
+    (hG : ∀ name f args, name ∈ names → p.lookup name = some f →
+      argsOk f f.params.toList args = true → execFunc p G f args = G name args) :
+    runOn p names ⊑ G := by
+  apply runOn.fixpoint_induct p names (motive := fun r => r ⊑ G)
+  · exact fun c hc h => csup_le hc h
+  · intro r hr name args
+    show (if names.contains name then
+      match p.lookup name with | some f => execFunc p r f args | none => StateT.lift stuck
+      else StateT.lift stuck) ⊑ G name args
+    split
+    · rename_i hn
+      split
+      · rename_i f hf
+        by_cases ht : argsOk f f.params.toList args = true
+        · rw [← hG name f args (List.contains_iff_mem.mp hn) hf ht]
+          exact execFunc_mono p (fun o : Oracle => o) monotone_id f args _ _ hr
+        · simp only [execFunc, ht]
+          intro m; exact FlatOrder.rel.bot
+      · intro m; exact FlatOrder.rel.bot
+    · intro m; exact FlatOrder.rel.bot
+
+theorem runOn_of_lookup {p : Prog} {names : List String} {name : String} {f : Func}
+    (hn : name ∈ names) (hf : p.lookup name = some f) (args : List Value) :
+    runOn p names name args = execFunc p (runOn p names) f args := by
+  rw [runOn]
+  simp only [List.contains_iff_mem.mpr hn, ite_true, hf]
 
 open Lean.Order in
 /-- In `Zig.Result`'s order a defined result is maximal: below means equal. -/
@@ -1093,9 +1187,17 @@ theorem adm_app4 {A B C D β γ : Type} (f : β → γ) (a : A) (b : B) (d : C) 
     admissible (fun g : A → B → C → D → Result β => f <$> g a b d e ⊑ c) :=
   admissible_apply (fun _ (h : B → C → D → Result β) => f <$> h b d e ⊑ c) a (adm_app3 f b d e c)
 
-theorem execFunc_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (f : Func) (args : List Value) :
-    execFunc o₁ f args ⊑ execFunc o₂ f args :=
-  execFunc_mono (fun o : Oracle => o) monotone_id f args _ _ h
+theorem execFunc_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (prog : Prog) (f : Func) (args : List Value) :
+    execFunc prog o₁ f args ⊑ execFunc prog o₂ f args :=
+  execFunc_mono prog (fun o : Oracle => o) monotone_id f args _ _ h
+
+/-- Oracle approximation for a single prefixed iteration, retaining the whole returned
+frame, memory, error and nontermination behavior. -/
+theorem execIteration_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (prog : Prog) (f : Func)
+    (args : List Value) (view : InstId → Option (Array Value)) (body : List Inst) (env : Env) :
+    execIteration ⟨prog, f, args, o₁, view⟩ body env ⊑
+      execIteration ⟨prog, f, args, o₂, view⟩ body env :=
+  execIteration_mono prog f args view body env _ _ h
 
 end Complete
 
@@ -1124,6 +1226,56 @@ open Lean.Order
 theorem adm_le {α : Type} [CCPO α] (k : α) : admissible (fun x : α => x ⊑ k) :=
   fun _ hc h => csup_le hc h
 
+/-- One-way loop commutation: a mapped body approximation gives the same approximation
+of whole loops. This direction supports completeness of generated helper approximants;
+it preserves the entire memory component rather than projecting away effects. -/
+theorem loop_comm_le {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (b₂ : Zig.MM σ₂ ε₂)
+    (a₁ : ε₁ → Bool) (a₂ : ε₂ → Bool) (enc : ε₂ → ε₁) (F : σ₂ → σ₁)
+    (hb : ∀ s, mapRes enc F <$> b₂.run s ⊑ b₁.run (F s))
+    (ha : ∀ e, a₁ (enc e) = a₂ e) (s : σ₂) :
+    mapRes enc F <$> (Zig.loop b₂ a₂).run s ⊑ (Zig.loop b₁ a₁).run (F s) := by
+  revert s
+  apply Zig.loop.fixpoint_induct b₂ a₂
+    (motive := fun l => ∀ s, mapRes enc F <$> l.run s ⊑ (Zig.loop b₁ a₁).run (F s))
+  · apply admissible_pi; intro s
+    apply admissible_apply (fun x (v : MemM (ε₂ × σ₂)) =>
+      mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F x)) s
+    have e : (fun v : MemM (ε₂ × σ₂) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F s)) =
+        (fun v => ∀ m, (fun p => (mapRes enc F p.1, p.2)) <$> v m ⊑ (Zig.loop b₁ a₁).run (F s) m) := by
+      funext v
+      apply propext
+      constructor
+      · intro h m
+        have := h m
+        change StateT.run (mapRes enc F <$> v) m ⊑ _ at this
+        rw [StateT.run_map] at this
+        exact this
+      · intro h m
+        have := h m
+        change StateT.run (mapRes enc F <$> v) m ⊑ _
+        rw [StateT.run_map]
+        exact this
+    rw [e]
+    exact admissible_pi_apply _ fun _ => adm_app0 _ _
+  · intro l hl s
+    rw [Zig.loop.eq_1 b₁ a₁]
+    show mapRes enc F <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
+      (b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)
+    simp only [StateT.run_bind, map_bind]
+    apply PartialOrder.rel_trans (y := (mapRes enc F <$> b₂.run s) >>= fun r =>
+      if a₁ r.1 then (Zig.loop b₁ a₁).run r.2 else pure r)
+    · simp only [bind_map_left, ha]
+      apply MonoBind.bind_mono_right
+      intro r
+      split
+      · exact hl _
+      · exact PartialOrder.rel_refl
+    · apply PartialOrder.rel_trans (MonoBind.bind_mono_left (hb s))
+      apply MonoBind.bind_mono_right
+      intro r
+      by_cases h : a₁ r.1 = true <;>
+        simp only [h, ite_true, ite_false, StateT.run_pure] <;> exact PartialOrder.rel_refl
+
 /-- Loop commutation: if one run of body `b₁` from a mapped state is the mapped run of `b₂`,
 and the exit encoding commutes with the repeat test, then the loops commute too. Proved by
 fixpoint induction in both directions. -/
@@ -1148,38 +1300,41 @@ theorem loop_comm {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (
       split
       · exact hl _
       · exact PartialOrder.rel_refl
-  · revert s
-    apply Zig.loop.fixpoint_induct b₂ a₂
-      (motive := fun l => ∀ s, mapRes enc F <$> l.run s ⊑ (Zig.loop b₁ a₁).run (F s))
-    · apply admissible_pi; intro s
-      apply admissible_apply (fun x (v : MemM (ε₂ × σ₂)) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F x)) s
-      have e : (fun v : MemM (ε₂ × σ₂) => mapRes enc F <$> v ⊑ (Zig.loop b₁ a₁).run (F s)) =
-          (fun v => ∀ m, (fun p => (mapRes enc F p.1, p.2)) <$> v m ⊑ (Zig.loop b₁ a₁).run (F s) m) := by
-        funext v
-        apply propext
-        constructor
-        · intro h m
-          have := h m
-          change StateT.run (mapRes enc F <$> v) m ⊑ _ at this
-          rw [StateT.run_map] at this
-          exact this
-        · intro h m
-          have := h m
-          change StateT.run (mapRes enc F <$> v) m ⊑ _
-          rw [StateT.run_map]
-          exact this
-      rw [e]
-      exact admissible_pi_apply _ fun _ => adm_app0 _ _
-    · intro l hl s
-      rw [Zig.loop.eq_1 b₁ a₁]
-      show mapRes enc F <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
-        (b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)
-      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
+  · exact loop_comm_le b₁ b₂ a₁ a₂ enc F (fun s => rel_of_eq (hb s).symm) ha s
+
+/-- One-way loop commutation for a pure generated body. The reference run keeps the full
+memory in the relation, so this cannot discharge a memory-changing iteration by erasure. -/
+theorem loop_comm_pure_le {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε₁) (b₂ : Zig.M σ₂ ε₂)
+    (a₁ : ε₁ → Bool) (a₂ : ε₂ → Bool) (enc : ε₂ → ε₁) (F : σ₂ → σ₁)
+    (hb : ∀ s m, (fun r => (mapRes enc F r, m)) <$> b₂.run s ⊑ (b₁.run (F s)).run m)
+    (ha : ∀ e, a₁ (enc e) = a₂ e) (s : σ₂) (m : Zig.Mem) :
+    (fun r => (mapRes enc F r, m)) <$> (Zig.loop b₂ a₂).run s ⊑
+      ((Zig.loop b₁ a₁).run (F s)).run m := by
+  revert s m
+  apply Zig.loop.fixpoint_induct b₂ a₂
+    (motive := fun l => ∀ s m, (fun r => (mapRes enc F r, m)) <$> l.run s ⊑
+      ((Zig.loop b₁ a₁).run (F s)).run m)
+  · apply admissible_pi; intro s; apply admissible_pi; intro m
+    exact admissible_apply (fun _ (r : Result (ε₂ × σ₂)) =>
+      (fun r => (mapRes enc F r, m)) <$> r ⊑ ((Zig.loop b₁ a₁).run (F s)).run m) s (adm_app0 _ _)
+  · intro l hl s m
+    rw [Zig.loop.eq_1 b₁ a₁]
+    show (fun r => (mapRes enc F r, m)) <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
+      ((b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)).run m
+    simp only [StateT.run_bind, map_bind]
+    apply PartialOrder.rel_trans (y := ((fun r => (mapRes enc F r, m)) <$> b₂.run s) >>= fun r =>
+      if a₁ r.1.1 then ((Zig.loop b₁ a₁).run r.1.2).run r.2 else pure r)
+    · simp only [bind_map_left, ha]
       apply MonoBind.bind_mono_right
       intro r
       split
-      · exact hl _
+      · exact hl _ _
       · exact PartialOrder.rel_refl
+    · apply PartialOrder.rel_trans (MonoBind.bind_mono_left (hb s m))
+      apply MonoBind.bind_mono_right
+      intro r
+      by_cases h : a₁ r.1.1 = true <;>
+        simp only [h, ite_true, ite_false, StateT.run_pure] <;> exact PartialOrder.rel_refl
 
 /-- `loop_comm` for a generated loop of a function without memory (`Zig.M`): the semantics' loop
 runs over memory, which no iteration changes. -/
@@ -1204,22 +1359,7 @@ theorem loop_comm_pure {σ₁ σ₂ ε₁ ε₂ : Type} (b₁ : Zig.MM σ₁ ε�
       split
       · exact hl _ _
       · exact PartialOrder.rel_refl
-  · revert s m
-    apply Zig.loop.fixpoint_induct b₂ a₂
-      (motive := fun l => ∀ s m, (fun r => (mapRes enc F r, m)) <$> l.run s ⊑ ((Zig.loop b₁ a₁).run (F s)).run m)
-    · apply admissible_pi; intro s; apply admissible_pi; intro m
-      exact admissible_apply (fun _ (r : Result (ε₂ × σ₂)) => (fun r => (mapRes enc F r, m)) <$> r ⊑
-        ((Zig.loop b₁ a₁).run (F s)).run m) s (adm_app0 _ _)
-    · intro l hl s m
-      rw [Zig.loop.eq_1 b₁ a₁]
-      show (fun r => (mapRes enc F r, m)) <$> (b₂ >>= fun e => if a₂ e then l else pure e).run s ⊑
-        ((b₁ >>= fun e => if a₁ e then Zig.loop b₁ a₁ else pure e).run (F s)).run m
-      simp only [StateT.run_bind, hb, map_bind, bind_map_left, ha]
-      apply MonoBind.bind_mono_right
-      intro r
-      split
-      · exact hl _ _
-      · exact PartialOrder.rel_refl
+  · exact loop_comm_pure_le b₁ b₂ a₁ a₂ enc F (fun s m => rel_of_eq (hb s m).symm) ha s m
 
 end LoopComm
 
@@ -1375,6 +1515,13 @@ theorem ok_bind {σ α β : Type} {P : β → Prop} {x : Zig.MM σ α} {f : α �
     (h : ∀ a, Ok P (f a)) : Ok P (x >>= f) :=
   ok_bind' (Q := fun _ => True) (fun _ _ _ _ => trivial) fun a _ => h a
 
+theorem ok_iteration {α : Type} {P : α → Prop} (c : Ctx) {body : SM α}
+    (h : Ok P body) : Ok P (iteration c body) := by
+  unfold iteration
+  split
+  · exact ok_bind fun _ => h
+  · exact h
+
 theorem ok_ite {σ α : Type} {P : α → Prop} {c : Prop} [Decidable c] {x y : Zig.MM σ α}
     (hx : Ok P x) (hy : Ok P y) : Ok P (if c then x else y) := by
   split <;> assumption
@@ -1431,7 +1578,8 @@ theorem execBody_ok (c : Ctx) : ∀ l env (bs ls : List InstId), wfBody bs ls l 
   case case29 =>
     intro id body env ih bs ls h
     simp only [execLoop]
-    refine ok_mono (ok_loop (ok_mono (ih bs (id :: ls) h) (Q := fun e => Exit.again id e = true ∨ exitOk bs ls e = true) ?_)) ?_
+    refine ok_mono (ok_loop (ok_iteration c (ok_mono (ih bs (id :: ls) h)
+      (Q := fun e => Exit.again id e = true ∨ exitOk bs ls e = true) ?_))) ?_
     · intro e he
       cases e <;> simp_all [exitOk, Exit.again]
     · intro e he; exact he.2
@@ -1458,7 +1606,7 @@ theorem execLoop_ok (c : Ctx) (id : InstId) (body : Array Inst) (env : Env) (bs 
     (h : wfBody bs (id :: ls) body.toList = true) :
     Ok (fun e => Exit.again id e = false ∧ exitOk bs ls e = true) (execLoop c id body env) := by
   simp only [execLoop]
-  refine ok_loop (ok_mono (execBody_ok c _ env bs (id :: ls) h) ?_)
+  refine ok_loop (ok_iteration c (ok_mono (execBody_ok c _ env bs (id :: ls) h) ?_))
   intro e he
   cases e <;> simp_all [exitOk, Exit.again]
 
@@ -1490,6 +1638,26 @@ theorem ok_transfer_pure {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop} {
   rw [heq]
   exact Result.map_ok hr
 
+open Lean.Order in
+/-- Exit safety transfers from a reference computation to a generated approximation. A
+successful generated result is maximal in the flat order, with its complete memory retained. -/
+theorem ok_transfer_pure_le {σ₁ σ₂ ε₁ ε₂ : Type} {P : ε₁ → Prop}
+    {x₁ : Zig.MM σ₁ ε₁} {x₂ : Zig.M σ₂ ε₂}
+    {enc : ε₂ → ε₁} {F : σ₂ → σ₁} {s : σ₂}
+    (hle : ∀ m, (fun r => (mapRes enc F r, m)) <$> x₂.run s ⊑ (x₁.run (F s)).run m)
+    (hok : Ok P x₁) (r : ε₂ × σ₂) (hr : (x₂.run s).run = some (.ok r)) : P (enc r.1) := by
+  let m : Zig.Mem := default
+  have hmapped : ((fun r => (mapRes enc F r, m)) <$> x₂.run s).run =
+      some (.ok (mapRes enc F r, m)) := Result.map_ok hr
+  have hnonbottom : (fun r => (mapRes enc F r, m)) <$> x₂.run s ≠ stuck := by
+    intro hbot
+    rw [hbot] at hmapped
+    cases hmapped
+  have heq := Result.eq_of_le (hle m) hnonbottom
+  apply hok (F s) m (mapRes enc F r, m)
+  rw [← heq]
+  exact hmapped
+
 /-- After a generated loop, two continuations need to agree only on the results the loop has. -/
 theorem bind_congr_ok {α β : Type} (x : Result α) (Q : α → Prop) (hx : ∀ r, x.run = some (.ok r) → Q r)
     {k₁ k₂ : α → Result β} (h : ∀ r, Q r → k₁ r = k₂ r) : x >>= k₁ = x >>= k₂ := by
@@ -1506,35 +1674,56 @@ theorem bind_congr_ok {α β : Type} (x : Result α) (Q : α → Prop) (hx : ∀
       simp only [hxr, Option.bind_eq_bind, Option.bind_some, ExceptT.bindCont]
       exact congrArg ExceptT.run (h a (hx a (by simp [ExceptT.run, hxr])))
 
-/-- A program as a table of fully qualified names and functions (`progOf`). -/
-abbrev Table := List (String × Func)
+open Lean.Order in
+/-- Order between continuations needs to hold only on successful results of the shared
+computation. Nontermination and errors retain their original `Result` behavior. -/
+theorem bind_le_ok {α β : Type} (x : Result α) (Q : α → Prop)
+    (hx : ∀ a, x.run = some (.ok a) → Q a) {k₁ k₂ : α → Result β}
+    (hk : ∀ a, Q a → k₁ a ⊑ k₂ a) : x >>= k₁ ⊑ x >>= k₂ := by
+  change (x.run >>= ExceptT.bindCont k₁) ⊑ (x.run >>= ExceptT.bindCont k₂)
+  cases hxr : x.run with
+  | none => exact PartialOrder.rel_refl
+  | some e =>
+    cases e with
+    | error err => exact PartialOrder.rel_refl
+    | ok a => exact hk a (hx a hxr)
 
-def progOf (t : Table) : Prog := fun name => (t.find? (·.1 == name)).map (·.2)
+open Lean.Order in
+/-- Lift an encoded computation approximation through encoded continuations. Their order is
+required only for successful input values, including any frame and complete memory encoded
+there. Taking `Q := fun _ => True` gives the unrestricted form. -/
+theorem map_bind_le_ok {α β γ δ : Type} {x : Result α} {y : Result β}
+    (f : α → β) (g : γ → δ) {k₁ : α → Result γ} {k₂ : β → Result δ}
+    (hxy : f <$> x ⊑ y) (Q : α → Prop) (hx : ∀ a, x.run = some (.ok a) → Q a)
+    (hk : ∀ a, Q a → g <$> k₁ a ⊑ k₂ (f a)) : g <$> (x >>= k₁) ⊑ y >>= k₂ := by
+  rw [map_bind]
+  apply PartialOrder.rel_trans (y := (f <$> x) >>= k₂)
+  · simpa only [bind_map_left] using bind_le_ok x Q hx hk
+  · exact MonoBind.bind_mono_left hxy
 
-/-- Every function of the table satisfies its equation under `G` on well-typed arguments. -/
-def Fixpoint (G : Oracle) : Table → Prop
+/-- The selected names of a certified fragment. Bodies and execution classification remain
+in the one complete original program. -/
+abbrev Table := List String
+
+/-- Every selected function satisfies its equation under `G` on well-typed arguments,
+using the actual lookup in the complete original program. -/
+def Fixpoint (p : Prog) (G : Oracle) : Table → Prop
   | [] => True
-  | (n, f) :: t =>
-    (∀ args, argsOk f f.params.toList args = true → execFunc G f args = G n args) ∧ Fixpoint G t
+  | n :: t =>
+    (∀ f args, p.lookup n = some f → argsOk f f.params.toList args = true →
+      execFunc p G f args = G n args) ∧ Fixpoint p G t
 
-theorem run_le_of_table {t : Table} {G : Oracle} (h : Fixpoint G t) :
-    Lean.Order.PartialOrder.rel (run (progOf t)) G := by
-  apply run_le_of_fixpoint
-  intro name f args hp
+theorem run_le_of_table {p : Prog} {t : Table} {G : Oracle} (h : Fixpoint p G t) :
+    Lean.Order.PartialOrder.rel (runOn p t) G := by
+  apply runOn_le_of_fixpoint
+  intro name f args hmem hp
   induction t with
-  | nil => simp [progOf] at hp
-  | cons e t ih =>
-    obtain ⟨n, g⟩ := e
+  | nil => cases hmem
+  | cons n t ih =>
     obtain ⟨hn, ht⟩ := h
-    simp only [progOf, List.find?_cons] at hp
-    by_cases he : n = name
-    · subst he
-      simp only [beq_self_eq_true, Option.map_some, Option.some.injEq] at hp
-      subst hp
-      exact hn args
-    · have : (n == name) = false := by simp [he]
-      simp only [this] at hp
-      exact ih ht hp
+    rcases List.mem_cons.mp hmem with he | he
+    · subst name; exact hn f args hp
+    · exact ih ht he
 
 /-- An item of the encoded items of an array (a view, `Ctx.view`) is the encoded item. -/
 theorem index_map {α β : Type} (f : α → β) (a : Array α) (j : BitVec 64) :
@@ -1665,9 +1854,9 @@ theorem ptrProject_elem_size_zero (p : Zig.Ptr) (k : BitVec 64) :
 /-- A field offset, a natural-number literal, as the integer literal the generated code writes. -/
 theorem natCast_ofNat (n : Nat) : ((no_index (OfNat.ofNat n : Nat)) : Int) = (OfNat.ofNat n : Int) := rfl
 
-attribute [air_sem] execFunc argsOk valOk valOkIn errIn errUnionIn List.contains_toArray List.contains_cons List.contains_nil execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
+attribute [air_sem] execFunc execIteration iteration argsOk valOk valOkIn errIn errUnionIn List.contains_toArray List.contains_cons List.contains_nil execBody execInst execSwitch caseHit evalPure intBin intTy? tyOf
   evalMem ptrOperand operandTy Func.plainPtr loadAs storeAs Func.fieldOffset? pointee? ptrAlignOf layoutOf
-  Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR
+  Val.constTy? Value.toPtr ptrProject_add_zero Zig.callM Zig.callR Zig.tick
   Bool.true_or Bool.or_true Bool.not_false Bool.not_true Bool.false_and Bool.and_false
   Option.map_some Option.map_none Option.bind_some Option.bind_none Option.pure_def
   Option.bind_eq_bind String.reduceBEq String.reduceBNe Nat.reduceBEq Nat.reduceBNe Option.getD_none

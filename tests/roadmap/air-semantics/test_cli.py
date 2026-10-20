@@ -1,4 +1,4 @@
-"""AIR semantics certificates (V01 slice): translator-side checks, no Lean or Zig.
+"""AIR semantics certificates (V01 slice): translator-side checks, no Zig extraction.
 
 Runs the built translator on the committed golden AIR of every example whose Proofs/<Ex>/Gen.lean
 is that AIR's translation, and checks that
@@ -9,6 +9,8 @@ is that AIR's translation, and checks that
     with a reason (fail closed);
 (d) the flag's argument checks reject incomplete or clashing outputs;
 (e) the semantics, the generator and the certificates contain no sorry/admit/native_decide.
+Recursive emitted cliques prepare exact Gen through Lean to read compiler induction facts;
+acyclic-only certificates need no preparation. Confined preparation controls use no compiler.
 `lake build Proofs` kernel-checks the committed certificates; test_lean.py runs the round
 trip and mutation checks. `--write` regenerates the committed certificates instead
 (`scripts/regen.sh`, step `aircert`).
@@ -18,6 +20,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -116,6 +119,28 @@ def check_flags(binary, work):
     assert lone.returncode == 1 and 'go together' in lone.stderr, lone
     clash = run(binary, 'basic', out, '--air-certificate', str(out), '--air-certificate-import', 'M')
     assert clash.returncode == 1 and 'another output' in clash.stderr, clash
+    split_out = work / 'Collision/Gen.lean'
+    for destination in (work / 'Collision/Gen/Types.lean', work / 'Collision/Gen/types.lean',
+                        work / 'Collision/Gen.modules.json'):
+        clash = run(binary, 'basic', split_out, '--split-modules', 'Collision.Gen',
+                    '--air-certificate', str(destination), '--air-certificate-import', 'Collision.Gen')
+        assert clash.returncode == 1 and 'must not name' in clash.stderr, clash
+        assert not destination.exists() and not split_out.exists(), 'collision wrote a public output'
+    for option in ('--timing-json', '--source-map-json'):
+        clash = run(binary, 'basic', split_out, '--split-modules', 'Collision.Gen',
+                    '--air-certificate', str(work / 'SeparateCert.lean'),
+                    '--air-certificate-import', 'Collision.Gen', option, str(work / 'Collision/Gen/Types.lean'))
+        assert clash.returncode == 1 and 'must not name' in clash.stderr, clash
+        assert not split_out.exists(), 'sidecar collision wrote a public output'
+    linked = work / 'Linked/Gen/Types.lean'
+    linked.parent.mkdir(parents=True)
+    linked.write_bytes(b'preserve linked output\n')
+    linked_cert = work / 'LinkedCert.lean'
+    linked_cert.hardlink_to(linked)
+    clash = run(binary, 'basic', work / 'Linked/Gen.lean', '--split-modules', 'Linked.Gen',
+                '--air-certificate', str(linked_cert), '--air-certificate-import', 'Linked.Gen')
+    assert clash.returncode == 1 and 'hard-linked output' in clash.stderr, clash
+    assert linked.read_bytes() == linked_cert.read_bytes() == b'preserve linked output\n'
     twice = run(binary, 'basic', out, '--air-certificate', 'a.lean', '--air-certificate', 'b.lean',
                 '--air-certificate-import', 'M')
     assert twice.returncode == 1 and 'duplicate --air-certificate' in twice.stderr, twice
@@ -169,7 +194,7 @@ def check_coverage():
     committed = sorted(p.parent.name.lower() for p in (ROOT / 'Proofs').glob('*/AirCert.lean'))
     assert committed == EXAMPLES, (committed, EXAMPLES)
     round_trip = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text()
-    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" \w+\.AirCert\.(table|views)$', round_trip, re.M)
+    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" \w+\.AirCert\.(table|views) \w+\.AirCert\.program$', round_trip, re.M)
     assert sorted({ex for ex, _ in listed}) == sorted(CERTIFIED), (listed, 'RoundTrip.lean')
     # Both tables of a certificate (`table`: the fixpoint program, `views`: functions with a viewed
     # slice parameter) are checked.
@@ -186,6 +211,9 @@ def main():
     parser.add_argument('--write', action='store_true',
                         help='regenerate the committed Proofs/<Ex>/AirCert.lean, then check')
     args = parser.parse_args()
+    controls = subprocess.run([sys.executable, '-I', '-B', str(Path(__file__).with_name('test_prepare.py'))],
+                              cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert controls.returncode == 0, controls.stdout + controls.stderr
     if args.write:
         with tempfile.TemporaryDirectory() as tmp:
             for ex in EXAMPLES:

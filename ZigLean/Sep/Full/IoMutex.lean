@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Mutex
+import ZigLean.Sep.Full.LockSteps
 
 /-!
 # `Io.Mutex` as a mutex (`MutexImpl`), once for every program
@@ -24,9 +25,10 @@ namespace IoMutexCode
 
 variable {Tgt S σ E : Type} [Packed S 32] [DecidableEq S] [Inhabited σ]
 
-/-- `lockUncancelable`'s loop body, in normal form: `xchg(contended)`, and the futex wait if the
-word was not `unlocked`. -/
+/-- `lockUncancelable`'s loop body, in normal form: the shared loop-entry tick,
+`xchg(contended)`, and the futex wait if the word was not `unlocked`. -/
 def bodyOf (st : States S) (rep stop : E) (p : Ptr) (io : Io) : CM Tgt σ E := do
+  callMC tick
   let x ← atomicRmwAsC .xchg .acquire 4 p st.two
   if x != st.unl then do
     futexWaitC io p st.two
@@ -128,16 +130,22 @@ def lockPost (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
 /-- One repeat of `lock`'s loop: `xchg(contended)`; the thread holds the mutex, or it waits at
 the futex (a stop, so the depth gets smaller). -/
 theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.c)
-    (t : ThreadId) (g : γ) (hok : ok g) (D : Nat) (io : Io) (s : C.σ) (G : ThreadId → γ)
+    (t : ThreadId) (g : γ) (hok : ok g) (hp : (L.part g).Plain)
+    (D : Nat) (io : Io) (s : C.σ) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (h : C.lockInv P L t g D s G m d) :
     P.WP t ((C.body L.ptr io).run s) (fun r G' m' d' =>
       if C.again r.1 then C.lockInv P L t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : C.σ) => 0) s)
       else C.lockPost P L t g D r G' m' d') G m d := by
-  obtain ⟨hD, -, hi⟩ := h
+  obtain ⟨hD, hc, hi⟩ := h
   rw [C.body_eq, bodyOf, StateT.run_bind]
+  refine WP.bind ?_
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (hP.wp_tick_plain hi hc (by rw [L.ph_set]; decide)
+    (by simpa only [L.part_set] using hp) fun m₀ hc₀ hi₀ => WP.pure' ?_)
+  rw [StateT.run_bind]
   refine WP.bind (wp_xchgLockOn hP C.st hS (g := L.set g .spin rnil) (L.ph_set _ _ _)
-    ((hP.ok_set _ _ _).mpr hok) hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
+    ((hP.ok_set _ _ _).mpr hok) hi₀ fun k hk G₁ m₁ r hc₁ hcase => ?_)
   simp only [L.set_set] at hcase
   rcases hcase with ⟨rfl, rL, hi₁⟩ | ⟨hr, hi₁⟩
   · simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, StateT.run_pure]
@@ -156,7 +164,8 @@ theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.
 
 /-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
 theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
-    (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
+    (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hplain : (L.part g).Plain) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
@@ -177,7 +186,7 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
     intro G₃ m₃ d₃ h₃
     rw [StateT.run_bind]
     refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lockInv P L t g d) (fun _ => 0)
-      (C.lockPost P L t g d) (C.body_wp hP hcost hS t g hok d io) default G₃ m₃ d₃ h₃))
+      (C.lockPost P L t g d) (C.body_wp hP hcost hS t g hok hplain d io) default G₃ m₃ d₃ h₃))
     rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', rL, hi'⟩
     rw [hkL, StateT.run_pure]
     exact WP.pure' (by rw [hfin]; exact WP.pure' ⟨hd', hc', rL, hi'⟩)
