@@ -10,7 +10,7 @@
    "conclusion_dependencies": [
     "ClaimAllocator.ContractAlias"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.ContractBox.contract",
    "statement": {
     "allocator_creation": [],
@@ -48,7 +48,7 @@
     "head": {
      "fingerprint": "6bf7ba0f5cbb9a152cbf90e656ae2ffd",
      "kind": "definition",
-     "module": "tests.roadmap.claims.Fixture",
+     "module": "Fixture",
      "name": "ClaimAllocator.ContractAlias"
     },
     "outcomes": {
@@ -113,7 +113,7 @@
     "Zig.Full.Ghost.ls",
     "Zig.Full.Res.gh"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilyInv._proof_1",
    "statement": {
     "allocator_creation": [],
@@ -170,7 +170,7 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "r._@.tests.roadmap.claims.Fixture.175755792._hygCtx._hyg.42",
+      "name": "r._@.Fixture.175755792._hygCtx._hyg.42",
       "prop": false,
       "uses": []
      },
@@ -179,7 +179,7 @@
       "defs": [
        "Zig.Full.FAssn.lift"
       ],
-      "name": "a._@._internal.0.tests.roadmap.claims.Fixture.175755792._hygCtx._hyg.43",
+      "name": "a._@._internal.0.Fixture.175755792._hygCtx._hyg.43",
       "prop": true,
       "uses": [
        0,
@@ -241,7 +241,7 @@
     "Zig.Witness.p0",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec",
    "statement": {
     "allocator_creation": [
@@ -285,7 +285,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -314,7 +314,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.admissionFamilyInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -400,7 +400,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -519,7 +519,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -698,7 +698,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -889,7 +889,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.lift"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -1050,7 +1050,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec.creation._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -1169,7 +1169,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec.creation._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -1348,7 +1348,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec.creation._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -1529,7 +1529,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.lift"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamilySpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -1625,7 +1625,7 @@
     "Zig.Witness.FAdmit",
     "Zig.Full.FAssn.lift"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.admissionFamily_not_admit_one",
    "statement": {
     "allocator_creation": [],
@@ -1720,7 +1720,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.alias_client",
    "statement": {
     "allocator_creation": [
@@ -1895,7 +1895,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.alias_client._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -2014,7 +2014,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.alias_client._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -2193,7 +2193,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.alias_client._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -2372,7 +2372,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.alias_client.nonvacuous",
    "statement": {
     "allocator_creation": [
@@ -2403,7 +2403,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.ContractAlias",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -2503,7 +2503,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.boxed_client",
    "statement": {
     "allocator_creation": [
@@ -2664,7 +2664,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.boxed_client._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -2783,7 +2783,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.boxed_client._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -2962,7 +2962,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.boxed_client._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -3141,7 +3141,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.boxed_client.nonvacuous",
    "statement": {
     "allocator_creation": [
@@ -3165,7 +3165,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.ContractBox",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -3254,7 +3254,7 @@
     "Zig.Full.FAllocSpec",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec",
    "statement": {
     "allocator_creation": [
@@ -3298,7 +3298,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -3320,7 +3320,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.emptyDomainInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -3403,7 +3403,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -3522,7 +3522,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -3701,7 +3701,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -3891,7 +3891,7 @@
     "Zig.Full.FAssn.sep",
     "Zig.Full.Frac.one"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -4036,7 +4036,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec.creation._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -4155,7 +4155,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec.creation._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -4334,7 +4334,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec.creation._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -4512,7 +4512,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomainSpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -4617,7 +4617,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomain_client",
    "statement": {
     "allocator_creation": [
@@ -4779,7 +4779,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.emptyDomain_client.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -4874,7 +4874,7 @@
     "Zig.Full.Ghost.ls",
     "Zig.Full.Res.gh"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.falseInv._proof_1",
    "statement": {
     "allocator_creation": [],
@@ -4924,7 +4924,7 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "r._@.tests.roadmap.claims.Fixture.3815315921._hygCtx._hyg.34",
+      "name": "r._@.Fixture.3815315921._hygCtx._hyg.34",
       "prop": false,
       "uses": []
      },
@@ -4933,7 +4933,7 @@
       "defs": [
        "Zig.Full.FAssn.lift"
       ],
-      "name": "a._@._internal.0.tests.roadmap.claims.Fixture.3815315921._hygCtx._hyg.35",
+      "name": "a._@._internal.0.Fixture.3815315921._hygCtx._hyg.35",
       "prop": true,
       "uses": [
        0
@@ -4993,7 +4993,7 @@
     "Zig.Full.FAllocSpec",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.falseSpec",
    "statement": {
     "allocator_creation": [
@@ -5024,7 +5024,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -5046,7 +5046,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.falseInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -5129,7 +5129,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.falseSpec._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -5248,7 +5248,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.falseSpec._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -5427,7 +5427,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.falseSpec._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -5612,7 +5612,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.false_client",
    "statement": {
     "allocator_creation": [
@@ -5761,7 +5761,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.false_client.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -5865,7 +5865,7 @@
     "OfNat.ofNat",
     "Zig.Full.FAllocInv"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.familyInv.eq_1",
    "statement": {
     "allocator_creation": [],
@@ -5895,7 +5895,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.familyInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -6009,7 +6009,7 @@
     "Zig.Witness.p0",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.familySpec",
    "statement": {
     "allocator_creation": [
@@ -6066,7 +6066,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -6095,7 +6095,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.familyInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -6191,7 +6191,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.familySpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -6339,7 +6339,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.familySpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -6432,7 +6432,7 @@
     "Zig.Full.FAllocSpec",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.forgedRole",
    "statement": {
     "allocator_creation": [
@@ -6482,7 +6482,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -6504,7 +6504,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.goodInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -6597,7 +6597,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.forgedRole.creation",
    "statement": {
     "allocator_creation": [],
@@ -6736,7 +6736,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.forgedRole.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -6831,7 +6831,7 @@
     "Zig.Full.Ghost.ls",
     "Zig.Full.Res.gh"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodInv._proof_1",
    "statement": {
     "allocator_creation": [],
@@ -6881,7 +6881,7 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "r._@.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.34",
+      "name": "r._@.Fixture.356263321._hygCtx._hyg.34",
       "prop": false,
       "uses": []
      },
@@ -6890,7 +6890,7 @@
       "defs": [
        "Zig.Full.FAssn.emp"
       ],
-      "name": "a._@._internal.0.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.35",
+      "name": "a._@._internal.0.Fixture.356263321._hygCtx._hyg.35",
       "prop": true,
       "uses": [
        0
@@ -6955,7 +6955,7 @@
     "Zig.Full.FAssn.emp",
     "Zig.Full.FAssn.sep"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodInv._proof_2",
    "statement": {
     "allocator_creation": [],
@@ -7004,21 +7004,21 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "a._@.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.41",
+      "name": "a._@.Fixture.356263321._hygCtx._hyg.41",
       "prop": false,
       "uses": []
      },
      {
       "binder": "default",
       "defs": [],
-      "name": "b._@.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.42",
+      "name": "b._@.Fixture.356263321._hygCtx._hyg.42",
       "prop": false,
       "uses": []
      },
      {
       "binder": "default",
       "defs": [],
-      "name": "a._@._internal.0.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.43",
+      "name": "a._@._internal.0.Fixture.356263321._hygCtx._hyg.43",
       "prop": true,
       "uses": [
        0
@@ -7027,7 +7027,7 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "a._@._internal.0.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.44",
+      "name": "a._@._internal.0.Fixture.356263321._hygCtx._hyg.44",
       "prop": true,
       "uses": [
        1
@@ -7092,7 +7092,7 @@
     "Zig.Full.Res.gh",
     "Zig.Full.Res.heap"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodInv._proof_3",
    "statement": {
     "allocator_creation": [],
@@ -7164,14 +7164,14 @@
      {
       "binder": "default",
       "defs": [],
-      "name": "p._@.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.56",
+      "name": "p._@.Fixture.356263321._hygCtx._hyg.56",
       "prop": false,
       "uses": []
      },
      {
       "binder": "default",
       "defs": [],
-      "name": "r._@.tests.roadmap.claims.Fixture.356263321._hygCtx._hyg.57",
+      "name": "r._@.Fixture.356263321._hygCtx._hyg.57",
       "prop": false,
       "uses": []
      },
@@ -7240,7 +7240,7 @@
     "Zig.Full.FAllocSpec",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec",
    "statement": {
     "allocator_creation": [
@@ -7284,7 +7284,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -7306,7 +7306,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.goodInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -7389,7 +7389,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -7508,7 +7508,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -7687,7 +7687,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -7874,7 +7874,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -8020,7 +8020,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec.creation._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -8139,7 +8139,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec.creation._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -8318,7 +8318,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec.creation._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -8496,7 +8496,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.goodSpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -8601,7 +8601,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.good_client",
    "statement": {
     "allocator_creation": [
@@ -8763,7 +8763,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.good_client.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -8862,7 +8862,7 @@
     "Zig.Ptr.mk",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.impossibleSpec",
    "statement": {
     "allocator_creation": [
@@ -8899,7 +8899,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -8931,7 +8931,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.goodInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -9023,7 +9023,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.impossibleSpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -9162,7 +9162,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.impossibleSpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -9266,7 +9266,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.inline_client",
    "statement": {
     "allocator_creation": [
@@ -9415,7 +9415,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.inline_client._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -9534,7 +9534,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.inline_client._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -9713,7 +9713,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.inline_client._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -9890,7 +9890,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.inline_client.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -9980,7 +9980,7 @@
    "conclusion_dependencies": [
     "False"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.outOfRange_noCreation",
    "statement": {
     "allocator_creation": [],
@@ -10058,7 +10058,7 @@
    "conclusion_dependencies": [
     "False"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.outOfRange_noCreation._proof_1_1",
    "statement": {
     "allocator_creation": [],
@@ -10083,7 +10083,7 @@
       "defs": [
        "BitVec.toNat"
       ],
-      "name": "left._@.tests.roadmap.claims.Fixture.2151445124._hygCtx._hyg.22",
+      "name": "left._@.Fixture.2151445124._hygCtx._hyg.22",
       "prop": true,
       "uses": [
        0
@@ -10148,7 +10148,7 @@
     "Zig.Witness.p0",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.telescopeFamilySpec",
    "statement": {
     "allocator_creation": [
@@ -10198,7 +10198,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -10227,7 +10227,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.admissionFamilyInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -10323,7 +10323,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.telescopeFamilySpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -10481,7 +10481,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.telescopeFamilySpec.creation._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -10600,7 +10600,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.telescopeFamilySpec.creation._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -10779,7 +10779,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.telescopeFamilySpec.creation._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -10960,7 +10960,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.telescopeFamilySpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -11064,7 +11064,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.use_contract",
    "statement": {
     "allocator_creation": [],
@@ -11226,7 +11226,7 @@
     "Eq",
     "Not"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.use_contract._simp_1_1",
    "statement": {
     "allocator_creation": [],
@@ -11345,7 +11345,7 @@
     "BEq.beq",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.use_contract._simp_1_2",
    "statement": {
     "allocator_creation": [],
@@ -11524,7 +11524,7 @@
     "bne",
     "Bool.false"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.use_contract._simp_1_3",
    "statement": {
     "allocator_creation": [],
@@ -11698,7 +11698,7 @@
     "Zig.Full.FAllocSpec",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.wrongAdmit",
    "statement": {
     "allocator_creation": [
@@ -11762,7 +11762,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -11784,7 +11784,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.goodInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -11877,7 +11877,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.wrongAdmit.creation",
    "statement": {
     "allocator_creation": [],
@@ -12017,7 +12017,7 @@
    "conclusion_dependencies": [
     "True"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.wrongAdmit.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -12067,7 +12067,7 @@
     "Zig.Full.FAllocSpec",
     "Zig.Full.FLogic.total"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.wrongSpec",
    "statement": {
     "allocator_creation": [
@@ -12111,7 +12111,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.vt",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -12133,7 +12133,7 @@
       },
       "extra": [],
       "fn": "ClaimAllocator.falseInv",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      }
@@ -12226,7 +12226,7 @@
     "Zig.Full.FAllocInv.creationPost",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.wrongSpec.creation",
    "statement": {
     "allocator_creation": [],
@@ -12373,7 +12373,7 @@
     "Zig.Mem.FSeq",
     "Zig.Full.FAssn.emp"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimAllocator.wrongSpec.creation.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -12471,7 +12471,7 @@
     "Zig.ConcM.instMonad",
     "Zig.Full.CTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.cret_partial",
    "statement": {
     "allocator_creation": [],
@@ -12653,7 +12653,7 @@
     "Zig.Full.FHeap.erase",
     "Zig.Full.Res.heap"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.cret_partial.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -12767,7 +12767,7 @@
     "Zig.Full.FHeap.erase",
     "Zig.Full.Res.heap"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.cret_partial.returns",
    "statement": {
     "allocator_creation": [],
@@ -12864,7 +12864,7 @@
     "ClaimFixture.diverge",
     "Zig.Full.FTotalTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fdiverge_not_total",
    "statement": {
     "allocator_creation": [],
@@ -12997,7 +12997,7 @@
     "Zig.Full.FTriple",
     "Zig.Full.Res"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fdiverge_partial",
    "statement": {
     "allocator_creation": [],
@@ -13031,7 +13031,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.diverge",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -13124,7 +13124,7 @@
     "Zig.Full.Res",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fdiverge_partial.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -13216,7 +13216,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.Res"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.ffalse_total",
    "statement": {
     "allocator_creation": [],
@@ -13250,7 +13250,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.diverge",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": []
      },
@@ -13342,7 +13342,7 @@
     "Zig.Full.FReturns",
     "Zig.Full.FTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fpartial_and_returns",
    "statement": {
     "allocator_creation": [],
@@ -13496,7 +13496,7 @@
     "ClaimFixture.ret",
     "Zig.Full.FTotalTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fpremise_total",
    "statement": {
     "allocator_creation": [],
@@ -13537,7 +13537,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -13656,7 +13656,7 @@
     "Zig.Full.Res",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fpremise_total.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -13746,7 +13746,7 @@
     "ClaimFixture.ret",
     "Zig.Full.FTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fret_partial",
    "statement": {
     "allocator_creation": [],
@@ -13787,7 +13787,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -13896,7 +13896,7 @@
     "Zig.Full.Res",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fret_partial.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -14001,7 +14001,7 @@
     "Zig.Full.Res",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fret_partial.returns",
    "statement": {
     "allocator_creation": [],
@@ -14091,7 +14091,7 @@
     "ClaimFixture.ret",
     "Zig.Full.FTotalTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fret_total",
    "statement": {
     "allocator_creation": [],
@@ -14132,7 +14132,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -14238,7 +14238,7 @@
     "Zig.Full.Res",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fret_total.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -14327,7 +14327,7 @@
     "ClaimFixture.FWrapped",
     "ClaimFixture.ret"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.fwrapped_total",
    "statement": {
     "allocator_creation": [],
@@ -14357,7 +14357,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -14385,7 +14385,7 @@
     "head": {
      "fingerprint": "b6c1e960f844cf2ac0fbedd8bc0c7cd8",
      "kind": "definition",
-     "module": "tests.roadmap.claims.Fixture",
+     "module": "Fixture",
      "name": "ClaimFixture.FWrapped"
     },
     "outcomes": {
@@ -14468,7 +14468,7 @@
     "Zig.Result",
     "Zig.Error.panic"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.panic_pure",
    "statement": {
     "allocator_creation": [],
@@ -14504,7 +14504,7 @@
        }
       ],
       "fn": "ClaimFixture.boom",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": [
        "ExceptT.run",
@@ -14616,7 +14616,7 @@
     "Zig.Result",
     "Zig.Error.panic"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.panic_run",
    "statement": {
     "allocator_creation": [],
@@ -14652,7 +14652,7 @@
        }
       ],
       "fn": "ClaimFixture.boom",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": [
        "StateT.run"
@@ -14772,7 +14772,7 @@
     "Zig.Result",
     "Zig.Error.panic"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.panic_some",
    "statement": {
     "allocator_creation": [],
@@ -14808,7 +14808,7 @@
        }
       ],
       "fn": "ClaimFixture.boom",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [],
       "peeled": [
        "ExceptT.run",
@@ -14923,7 +14923,7 @@
     "Zig.Mem",
     "Zig.Result"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.ret_pure_ok",
    "statement": {
     "allocator_creation": [],
@@ -14964,7 +14964,7 @@
        }
       ],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -15102,7 +15102,7 @@
     "Zig.Mem",
     "Zig.Result"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.ret_run",
    "statement": {
     "allocator_creation": [],
@@ -15143,7 +15143,7 @@
        }
       ],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -15282,7 +15282,7 @@
     "Zig.Mem",
     "Zig.Result"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.ret_run_ground",
    "statement": {
     "allocator_creation": [],
@@ -15322,7 +15322,7 @@
        }
       ],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -15446,7 +15446,7 @@
     "Zig.Mem",
     "Zig.Result"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.ret_some",
    "statement": {
     "allocator_creation": [],
@@ -15487,7 +15487,7 @@
        }
       ],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -15630,7 +15630,7 @@
     "Zig.Env.Host.mk",
     "Zig.Env.Ops.closedAll"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.spoof_eventually",
    "statement": {
     "allocator_creation": [],
@@ -15660,7 +15660,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -15796,7 +15796,7 @@
     "head": {
      "fingerprint": "b56293117a5895d9d720b39f409e6ceb",
      "kind": "definition",
-     "module": "tests.roadmap.claims.Fixture",
+     "module": "Fixture",
      "name": "Zig.Conc.Total.EventuallyReturns"
     },
     "outcomes": {
@@ -15841,7 +15841,7 @@
     "ClaimFixture.ret",
     "Zig.Conc.Total.EventuallyReturnsUnder"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.spoof_under",
    "statement": {
     "allocator_creation": [],
@@ -15882,7 +15882,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -15901,7 +15901,7 @@
     "head": {
      "fingerprint": "4a724eedc76405de634d9e84ce781e69",
      "kind": "definition",
-     "module": "tests.roadmap.claims.Fixture",
+     "module": "Fixture",
      "name": "Zig.Conc.Total.EventuallyReturnsUnder"
     },
     "outcomes": {
@@ -15947,7 +15947,7 @@
     "OfNat.ofNat",
     "Zig.Conc.Total.ReturnsWithin"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.spoof_within",
    "statement": {
     "allocator_creation": [],
@@ -16006,7 +16006,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -16025,7 +16025,7 @@
     "head": {
      "fingerprint": "17236c73bd43a2b02f8e368ed05fa5ec",
      "kind": "definition",
-     "module": "tests.roadmap.claims.Fixture",
+     "module": "Fixture",
      "name": "Zig.Conc.Total.ReturnsWithin"
     },
     "outcomes": {
@@ -16074,7 +16074,7 @@
     "OfNat.ofNat",
     "Zig.Conc.Total.ReturnsWithin"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.spoof_within_sym",
    "statement": {
     "allocator_creation": [],
@@ -16148,7 +16148,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -16174,7 +16174,7 @@
     "head": {
      "fingerprint": "17236c73bd43a2b02f8e368ed05fa5ec",
      "kind": "definition",
-     "module": "tests.roadmap.claims.Fixture",
+     "module": "Fixture",
      "name": "Zig.Conc.Total.ReturnsWithin"
     },
     "outcomes": {
@@ -16218,7 +16218,7 @@
     "ClaimFixture.ret",
     "Zig.Full.FTTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.tret_partial",
    "statement": {
     "allocator_creation": [],
@@ -16259,7 +16259,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -16374,7 +16374,7 @@
     "Zig.Full.FHeap.erase",
     "Zig.Full.Res.heap"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.tret_partial.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -16485,7 +16485,7 @@
     "Zig.Full.FHeap.erase",
     "Zig.Full.Res.heap"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.tret_partial.returns",
    "statement": {
     "allocator_creation": [],
@@ -16577,7 +16577,7 @@
     "ClaimFixture.ret",
     "Zig.Full.FTTotalTriple"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.tret_total",
    "statement": {
     "allocator_creation": [],
@@ -16618,7 +16618,7 @@
       },
       "extra": [],
       "fn": "ClaimFixture.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -16730,7 +16730,7 @@
     "Zig.Full.FHeap.erase",
     "Zig.Full.Res.heap"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimFixture.tret_total.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -16828,7 +16828,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.globals"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimStart.start_total",
    "statement": {
     "allocator_creation": [],
@@ -16875,7 +16875,7 @@
       },
       "extra": [],
       "fn": "ClaimStart.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -16977,7 +16977,7 @@
     "Zig.Full.globals",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimStart.start_total.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -17080,7 +17080,7 @@
     "Zig.Full.globals",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimStart.start_total.reachable",
    "statement": {
     "allocator_creation": [],
@@ -17177,7 +17177,7 @@
     "Zig.Full.FTotalTriple",
     "Zig.Full.globals"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimStart.start_unreached",
    "statement": {
     "allocator_creation": [],
@@ -17224,7 +17224,7 @@
       },
       "extra": [],
       "fn": "ClaimStart.ret",
-      "fn_module": "tests.roadmap.claims.Fixture",
+      "fn_module": "Fixture",
       "params": [
        "default"
       ],
@@ -17326,7 +17326,7 @@
     "Zig.Full.globals",
     "Zig.Mem.FSeq"
    ],
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "name": "ClaimStart.start_unreached.nonvacuous",
    "statement": {
     "allocator_creation": [],
@@ -17413,717 +17413,717 @@
  "nodes": [
   {
    "name": "ClaimAllocator.ContractAlias",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.ContractBox",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "inductive"
   },
   {
    "name": "ClaimAllocator.ContractBox.contract",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.ContractBox.mk",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "constructor"
   },
   {
    "name": "ClaimAllocator.admissionFamilyInv",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.admissionFamilyInv._proof_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec.creation._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec.creation._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec.creation._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamilySpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.admissionFamily_not_admit_one",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.alias_client",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.alias_client._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.alias_client._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.alias_client._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.alias_client.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.boxed_client",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.boxed_client._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.boxed_client._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.boxed_client._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.boxed_client.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainInv",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec.creation._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec.creation._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec.creation._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomainSpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomain_client",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.emptyDomain_client.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.falseInv",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.falseInv._proof_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.falseSpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.falseSpec._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.falseSpec._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.falseSpec._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.false_client",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.false_client.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.familyInv",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.familyInv.eq_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.familySpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.familySpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.familySpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.forgedRole",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.forgedRole.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.forgedRole.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodInv",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.goodInv._proof_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodInv._proof_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodInv._proof_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec.creation._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec.creation._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec.creation._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.goodSpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.good_client",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.good_client.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.impossibleSpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.impossibleSpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.impossibleSpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.inline_client",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.inline_client._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.inline_client._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.inline_client._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.inline_client.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.outOfRangeInv",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.outOfRange_noCreation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.outOfRange_noCreation._proof_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.telescopeFamilySpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.telescopeFamilySpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.telescopeFamilySpec.creation._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.telescopeFamilySpec.creation._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.telescopeFamilySpec.creation._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.telescopeFamilySpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.use_contract",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.use_contract._simp_1_1",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.use_contract._simp_1_2",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.use_contract._simp_1_3",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.vt",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimAllocator.wrongAdmit",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.wrongAdmit.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.wrongAdmit.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.wrongSpec",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.wrongSpec.creation",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimAllocator.wrongSpec.creation.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.FWrapped",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimFixture.boom",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimFixture.cret_partial",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.cret_partial.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.cret_partial.returns",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.diverge",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimFixture.fdiverge_not_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fdiverge_partial",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fdiverge_partial.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.ffalse_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fpartial_and_returns",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fpremise_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fpremise_total.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fret_partial",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fret_partial.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fret_partial.returns",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fret_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fret_total.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.fwrapped_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.panic_pure",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.panic_run",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.panic_some",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.ret",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimFixture.ret_pure_ok",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.ret_run",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.ret_run_ground",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.ret_some",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.spoof_eventually",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.spoof_under",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.spoof_within",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.spoof_within_sym",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.tret_partial",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.tret_partial.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.tret_partial.returns",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.tret_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimFixture.tret_total.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimStart.mem0",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimStart.ret",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "ClaimStart.start_total",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimStart.start_total.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimStart.start_total.reachable",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimStart.start_unreached",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "ClaimStart.start_unreached.nonvacuous",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "theorem"
   },
   {
    "name": "Zig.Conc.Total.EventuallyReturns",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "Zig.Conc.Total.EventuallyReturnsUnder",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   },
   {
    "name": "Zig.Conc.Total.ReturnsWithin",
-   "module": "tests.roadmap.claims.Fixture",
+   "module": "Fixture",
    "kind": "definition"
   }
  ]
