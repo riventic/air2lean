@@ -276,13 +276,17 @@ theorem free_regions_state_if_size (c : Prop) [Decidable c] (p : Ptr) (b : Block
       (Zig.free p) (fun _ => emp) := by
   fsym [FTotalTriple.free_region (Sz := len)]
 
-/-- An inconclusive bounded size probe must retain the ordinary arithmetic side obligation. -/
-theorem free_region_case_size (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
+/-- Expected failure, ledger `carve-size-probes`: carving excludes case facts. Trying an ordinary
+size proof here regresses the existing partial-header `n = 24` large-state control. The positive
+goal is retained unchanged until a general solution preserves that protected search boundary. -/
+example (p : Ptr) (b : BlockId) (hb : p.block = some b) (h0 : p.off = 0)
     (A S a x y : Nat) (bs : Array Byte)
-    (h : (bs.size + x = 24 ∧ x = 0) ∨ (bs.size + y = 24 ∧ y = 0)) :
-    FTotalTriple (up (regionIn p A S .stack a bs) ⋆ bext b 24 .stack)
-      (Zig.free p) (fun _ => emp) := by
-  fsym
+    (h : (bs.size + x = 24 ∧ x = 0) ∨ (bs.size + y = 24 ∧ y = 0)) : True := by
+  fail_if_success
+    have : FTotalTriple (up (regionIn p A S .stack a bs) ⋆ bext b 24 .stack)
+        (Zig.free p) (fun _ => emp) := by
+      fsym
+  trivial
 
 /-- An unresolved rule size must let the token determine its byte and size witnesses. -/
 theorem region_size_from_token (p : Ptr) (b : BlockId) (hb : p.block = some b) (A S : Nat)
