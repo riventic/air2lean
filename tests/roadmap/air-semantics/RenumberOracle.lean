@@ -92,6 +92,7 @@ private theorem program_rows (records : Array Identity.Record) :
   apply Array.ext'
   simp only [Array.toList_map, program, List.map_cons, List.map_nil,
     caller_edges, identity_edges]
+  rfl
 
 private theorem recursive_false_of_rows (records : Array Identity.Record)
     (hrows : (program records).funcs.map (fun f =>
