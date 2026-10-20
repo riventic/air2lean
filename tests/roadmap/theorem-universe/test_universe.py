@@ -661,7 +661,8 @@ class FreshnessTests(unittest.TestCase):
                 mock.patch.object(assumptions, 'library_compiled_inputs', return_value=[]) as inputs:
             freshness = assumptions.replay_and_freshness(raw)
             self.assertEqual(set(replay.call_args.kwargs),
-                             {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs'})
+                             {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs', 'lake_package'})
+            self.assertIsNone(replay.call_args.kwargs['lake_package'])  # no package: no receipts
             self.assertEqual(replay.call_args.kwargs['compiled_inputs_sha256'], universe.input_digest([]))
             validate = replay.call_args.kwargs['validate_inputs']
             validate()
