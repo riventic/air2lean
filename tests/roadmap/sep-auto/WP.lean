@@ -404,11 +404,15 @@ theorem incoming_projection_function {Tgt γ : Type} (P : Proto Tgt γ) (t : Thr
 /-- A global forward lemma may retain the unnormalized form of its first premise. -/
 theorem incoming_raw_or_bound (flag : Nat → Bool) (k j : Nat)
     (h : flag k = true ∨ Nonempty (Fin (1 - j))) (hf : flag k = false) : j - 1 = 0 := by
-  rcases h with ht | ⟨i⟩
-  · rw [hf] at ht
+  cases h with
+  | inl ht =>
+    rw [hf] at ht
     cases ht
-  · have hi := i.isLt
-    omega
+  | inr hn =>
+    cases hn with
+    | intro i =>
+      have hi := i.isLt
+      omega
 
 /-- Forwarding sees the raw premise before context normalization, fixing its remaining index. -/
 theorem incoming_forward_compatibility {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
