@@ -1695,8 +1695,8 @@ there. Taking `Q := fun _ => True` gives the unrestricted form. -/
 theorem map_bind_le_ok {α β γ δ : Type} {x : Result α} {y : Result β}
     (f : α → β) (g : γ → δ) {k₁ : α → Result γ} {k₂ : β → Result δ}
     (hxy : f <$> x ⊑ y) (Q : α → Prop) (hx : ∀ a, x.run = some (.ok a) → Q a)
-    (hk : ∀ a, Q a → g <$> k₁ a ⊑ k₂ (f a)) : g <$> (x >>= k₁) ⊑ y >>= k₂ := by
-  rw [map_bind]
+    (hk : ∀ a, Q a → g <$> k₁ a ⊑ k₂ (f a)) :
+    (x >>= fun a => g <$> k₁ a) ⊑ y >>= k₂ := by
   apply PartialOrder.rel_trans (y := (f <$> x) >>= k₂)
   · simpa only [bind_map_left] using bind_le_ok x Q hx hk
   · exact MonoBind.bind_mono_left hxy
