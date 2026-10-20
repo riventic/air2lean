@@ -102,6 +102,9 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
   echo "full-build: $name $((SECONDS - start)) s"
 }
 
+# The precompiled fsym libraries (docs/build-cache.md#precompiled-fsym): FsymDeps must be the import
+# closure of Fsym and Lake must build them as listed, else an importer of Auto fails to load them.
+python3 -B scripts/lean-deps.py --precompiled check || { echo 'full-build: precompiled libraries are stale' >&2; exit 1; }
 root=()
 # The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
