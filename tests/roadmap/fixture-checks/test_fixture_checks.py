@@ -100,6 +100,24 @@ class NoReuse(unittest.TestCase):
                 self.assertEqual(self.run_checks("--prepare")[0], 0)
         self.assertEqual(resolved, [("stock", "0.16.0")] * 2)
 
+    def test_a_unit_that_rebuilds_a_root_module_fails_the_run(self):
+        # The race of 2026-10-20: a unit rebuilt root modules in place while others imported them.
+        shared = self.temp / "build"
+        (shared / "M").mkdir(parents=True)
+        (shared / "M" / "A.olean").write_text("a")
+        (shared / "M" / "A.trace").write_text("t")
+        (self.hidden / "input").write_text("ok\n")
+        self.unit["env"]["SHARED"] = str(shared)
+        with mock.patch.object(fc, "SHARED", shared):
+            self.assertEqual(self.run_checks()[0], 0)
+            self.unit["run"] = 'printf t2 > "$SHARED/M/A.trace"\n'  # an up-to-date check: no race
+            self.assertEqual(self.run_checks()[0], 0)
+            self.unit["run"] = 'rm "$SHARED/M/A.olean"; printf b > "$SHARED/M/A.olean"\n'
+            status, out, err = self.run_checks()
+        self.assertEqual(status, 1, out + err)
+        self.assertIn("build outputs changed while the units ran", err)
+        self.assertIn("M/A.olean", err)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -304,6 +304,21 @@ fixture_pause()
         code, _ = self.attempt(*budget, cwd=self.worktree("z"))
         self.assertEqual(code, 75)
 
+    def test_every_lake_of_a_workload_runs_in_one_cache_mode(self):
+        # The regression of 2026-10-20 (main, alloc-fba): a plain `lake` beside `cas.py run` rebuilt
+        # root modules inside a compiler-owned audit binding.
+        source = 'import os; print(os.environ.get("LAKE_ARTIFACT_CACHE"), os.environ.get("LAKE_CACHE_DIR"))'
+        os.environ.pop("AIR2LEAN_CAS_DIR", None)
+        for key in ("LAKE_ARTIFACT_CACHE", "LAKE_CACHE_DIR", "LAKE_RESTORE_ARTIFACTS"):
+            os.environ.pop(key, None)
+        result, report, log = self.run_guard(source)
+        self.assertEqual(log.read_text(), "None None\n", result.stderr)
+        self.assertNotIn("LAKE_ARTIFACT_CACHE", report["environment_overrides"])
+        os.environ["AIR2LEAN_CAS_DIR"] = str(self.root / "cas")
+        result, report, log = self.run_guard(source)
+        self.assertEqual(log.read_text(), "true %s\n" % (self.root / "cas" / "lake"), result.stderr)
+        self.assertEqual(report["environment_overrides"]["LAKE_ARTIFACT_CACHE"], "true")
+
     def test_guard_mode_is_exported_and_recorded(self):
         for options, mode in (((), "shared"), (("--exclusive",), "exclusive")):
             result, report, log = self.run_guard('import os; print(os.environ["AIR2LEAN_GUARD_MODE"])', *options)
@@ -311,6 +326,54 @@ fixture_pause()
             self.assertEqual(log.read_text(), mode + "\n")
             self.assertEqual(report["environment_overrides"]["AIR2LEAN_GUARD_MODE"], mode)
             self.assertEqual(report["admission"]["exclusive"], bool(options))
+
+    def nested(self, outer, inner):
+        """A guard (options `outer`) whose workload runs a guard (options `inner`) of the same
+        lock and workspace; returns (outer exit, outer report, inner report)."""
+        inner_args, inner_report, _ = self.command("pass", *inner)
+        source = "import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % inner_args
+        result, report, _ = self.run_guard(source, *outer)
+        return result.returncode, report, json.loads(inner_report.read_text())
+
+    def test_a_nested_guard_inherits_the_enclosing_admission(self):
+        # One slot: without inheritance the inner guard waits for the slot and the workspace
+        # its ancestor holds (lock_busy at --lock-wait 0).
+        code, report, inner = self.nested(("--mem-budget-mib", "1024", "--rss-mib", "512"), ("--mem-budget-mib", "1024"))
+        self.assertEqual(code, 0)
+        self.assertEqual(inner["outcome"], "success")
+        self.assertEqual(inner["admission"]["inherited_from"]["pid"], json.loads(
+            report["environment_overrides"][guard.INHERIT])["pid"])
+        self.assertNotIn("inherited_from", report["admission"])
+
+    def test_a_nested_guard_that_cannot_inherit_fails_instead_of_waiting(self):
+        for inner, reason in ((("--rss-mib", "1024"), "exceeds"), (("--exclusive",), "--exclusive")):
+            code, _, report = self.nested(("--rss-mib", "512"), inner)
+            self.assertEqual(code, 75)
+            self.assertEqual(report["outcome"], "inheritance_refused")
+            self.assertIn(reason, report["error"])
+        # Another workspace (another checkout) is admitted on its own, as before.
+        inner_args, inner_report, _ = self.command("pass", cwd=self.worktree("other"))
+        source = "import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % inner_args
+        result, _, _ = self.run_guard(source, "--rss-mib", "512")
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("inherited_from", json.loads(inner_report.read_text())["admission"])
+
+    def test_free_mib_counts_the_slots_nobody_holds(self):
+        lock = self.root / "shared.lock"
+        self.assertEqual(guard.free_mib(lock, 4096), 4096)  # a lock no guard has used yet
+        holder, _ = self.start_holder("--mem-budget-mib", "4096", "--rss-mib", "2048")
+        self.assertEqual(guard.free_mib(lock, 4096), 2048)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.assertEqual(guard.free_mib(lock, 4096), 4096)
+
+    def test_a_stale_grant_is_not_an_admission(self):
+        os.environ[guard.INHERIT] = json.dumps({"pid": 999999, "lock": str(self.root / "shared.lock"),
+                                                "workspace": str(self.root), "rss_mib": 1e9,
+                                                "exclusive": True, "shared_workspace": False})
+        code, report = self.attempt()
+        self.assertEqual(code, 0)
+        self.assertNotIn("inherited_from", report["admission"])
 
     def test_an_older_guard_holding_the_lock_still_runs_alone(self):
         import fcntl

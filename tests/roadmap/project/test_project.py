@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import os
+import py_compile
 from pathlib import Path
 import signal
 import shutil
@@ -615,6 +616,168 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual([d['code'] for d in observed[3]['diagnostics']],
                          ['AIR_EXPORT_UNSUPPORTED', 'AIR_JSON'] * 2)
 
+
+
+class ModuleIdentityTests(unittest.TestCase):
+    """Pure path/hash controls and a fully mocked check; no tool process is launched."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name).resolve()
+        self.auditor = self.base / 'auditor/assumptions.py'
+        self.auditor.parent.mkdir()
+        self.auditor.write_text('# custom auditor stub\n')
+        self.helper = self.auditor.with_name('lean-deps.py')
+        self.tools = dict(project.CHECK_TOOLS, assumptions=self.auditor)
+        self.addCleanup(project._lean_deps.cache_clear)
+
+    def test_exact_lean_paths_and_literal_components(self):
+        for path, module in (("Cases'/Gen.lean", "Cases'.Gen"),
+                             ('Checks!/Contract?.lean', 'Checks!.Contract?')):
+            self.assertEqual(project.module_of(path), module)
+        for path in ('Contract.txt', 'Contract', 'Contract.lean.bak', '/Contract.lean',
+                     'A.B.lean', 'A.B/Contract.lean', '../Contract.lean', 'A/Bad Name.lean'):
+            with self.subTest(path=path):
+                self.assertIsNone(project.module_of(path))
+                with self.assertRaisesRegex(project.Invalid, 'Lean module paths'):
+                    project.check_modules({'roots': [{'id': 'r', 'generated': "Cases'/Gen.lean",
+                                                     'contracts': [path]}]})
+        self.assertEqual(project.check_modules({'roots': [{'id': 'r', 'generated': "Cases'/Gen.lean",
+                                                          'contracts': ['Checks!/Contract?.lean']}]}),
+                         {'r': {'generated': "Cases'.Gen", 'contracts': ['Checks!.Contract?']}})
+        self.assertIsNone(project.IDENT.fullmatch("Cases'"))  # Zig namespaces stay unchanged.
+
+    def test_known_helpers_are_physical_distinct_and_not_overridable(self):
+        self.helper.write_text('# external validator\n')
+        hashes, identities, errors = project.script_inputs(self.tools)
+        own = SCRIPT.resolve().with_name('lean-deps.py')
+        self.assertEqual(errors, {})
+        self.assertEqual(identities['lean_deps'], own)
+        self.assertEqual(identities['assumptions_lean_deps'], self.helper)
+        self.assertEqual(hashes['lean_deps'], project.digest(own.read_bytes()))
+        self.assertEqual(hashes['assumptions_lean_deps'], project.digest(self.helper.read_bytes()))
+        for role in ('lean_deps', 'assumptions_lean_deps'):
+            with self.subTest(role=role), self.assertRaisesRegex(project.Invalid, 'derived, not configurable'), \
+                 mock.patch.object(project, 'collect') as collect, \
+                 mock.patch.object(project, 'run_guarded') as guarded:
+                project.project_check(self.base / 'project.json', None, self.base,
+                                      tools={role: own})
+            collect.assert_not_called()
+            guarded.assert_not_called()
+
+    def test_absent_custom_helper_is_not_substituted_and_malformed_fails(self):
+        hashes, identities, errors = project.script_inputs(self.tools)
+        self.assertEqual(errors, {})
+        self.assertNotIn('assumptions_lean_deps', hashes)
+        self.assertNotIn('assumptions_lean_deps', identities)
+        for kind in ('directory', 'dangling'):
+            with self.subTest(kind=kind):
+                if kind == 'directory':
+                    self.helper.mkdir()
+                else:
+                    self.helper.symlink_to(self.base / 'missing')
+                self.assertIn('assumptions_lean_deps', project.script_inputs(self.tools)[2])
+                with mock.patch.object(project, 'collect') as collect, \
+                     mock.patch.object(project, 'publish_translation') as publish, \
+                     self.assertRaisesRegex(project.Invalid, 'script inputs unavailable'):
+                    project.project_check(self.base / 'project.json', None, self.base, tools=self.tools)
+                collect.assert_not_called()
+                publish.assert_not_called()
+                self.helper.rmdir() if kind == 'directory' else self.helper.unlink()
+
+    def checked(self, mutation=lambda: None):
+        """Exercise the real validation/snapshot lifecycle with translation/guards mocked."""
+        generated, contract = "Cases'/Gen.lean", 'Checks!/Contract?.lean'
+        committed = self.base / generated
+        committed.parent.mkdir(exist_ok=True)
+        committed.write_bytes(b'namespace Example\nend Example\n')
+        manifest = {'roots': [{'id': 'r', 'generated': generated, 'contracts': [contract],
+                               'goals': [{'theorem': 'Example.spec'}]}], 'float_semantics': 'ieee'}
+        report = {'files': {'input/' + generated: {'sha256': project.digest(committed.read_bytes())}},
+                  'manifest_sha256': 'f' * 64, 'profile': None, 'diagnostics': [], 'git': {}}
+        def publish(manifest, limits, data, report, translator, artifact):
+            path = artifact / 'r/Gen.lean'
+            path.parent.mkdir(parents=True)
+            path.write_bytes(committed.read_bytes())
+            report['files']['generated/r/Gen.lean'] = {'sha256': project.digest(committed.read_bytes())}
+        def guarded(tools, base, staging, name, phase, timeout, budget, lock, command, lock_wait):
+            if name == 'audit':
+                (staging / 'assumptions.json').write_text(json.dumps({
+                    'status': 'pass', 'modules': ['Checks!.Contract?'], 'theorems': [], 'nodes': []}))
+                self.assertEqual(command[1], str(self.auditor.resolve()))
+            return {'outcome': 'success', 'exit_code': 0}, {}
+        def claims(*args):
+            mutation()
+            return {'status': 'pass'}
+        with tempfile.TemporaryDirectory(dir=self.base) as staging, \
+             mock.patch.object(project, 'collect', side_effect=lambda _: (manifest, {}, {}, copy.deepcopy(report))), \
+             mock.patch.object(project, 'publish_translation', side_effect=publish), \
+             mock.patch.object(project, 'verify'), \
+             mock.patch.object(project, 'run_guarded', side_effect=guarded), \
+             mock.patch.object(project, 'audit_goal', return_value={'theorem': 'Example.spec', 'status': 'allowed'}), \
+             mock.patch.object(project, 'run_claims', side_effect=claims):
+            return project.project_check(self.base / 'project.json', None, Path(staging), tools=self.tools)
+
+    def test_check_records_the_effective_auditor_physical_helper(self):
+        self.helper.write_text('# custom helper\n')
+        alias = self.base / 'alias/assumptions.py'
+        alias.parent.mkdir()
+        alias.symlink_to(self.auditor)
+        alias.with_name('lean-deps.py').write_text('raise RuntimeError("wrong sibling")\n')
+        self.tools['assumptions'] = alias
+        result = self.checked()
+        self.assertEqual(result['status'], 'reproduced', result['failures'])
+        self.assertEqual(result['reproducible']['scripts']['assumptions_lean_deps'],
+                         project.digest(self.helper.read_bytes()))
+
+    def test_check_detects_helper_bytes_presence_and_physical_identity_changes(self):
+        changes = ('bytes', 'removed', 'added', 'retargeted')
+        for change in changes:
+            with self.subTest(change=change):
+                self.helper.unlink(missing_ok=True)
+                if change == 'retargeted':
+                    first, second = self.base / 'first.py', self.base / 'second.py'
+                    first.write_text('# identical\n')
+                    second.write_text('# identical\n')
+                    self.helper.symlink_to(first)
+                    def mutation():
+                        self.helper.unlink()
+                        self.helper.symlink_to(second)
+                else:
+                    if change != 'added':
+                        self.helper.write_text('# before\n')
+                    def mutation():
+                        self.helper.unlink() if change == 'removed' else self.helper.write_text('# after\n')
+                result = self.checked(mutation)
+                self.assertEqual(result['status'], 'failed')
+                self.assertEqual(result['reproducible']['stages']['inputs_stable'],
+                                 {'status': 'failed', 'changed': ['script/assumptions_lean_deps']})
+
+    def test_each_check_reloads_the_recorded_project_validator(self):
+        with mock.patch.object(project.importlib.util, 'spec_from_file_location',
+                               wraps=project.importlib.util.spec_from_file_location) as load:
+            project._lean_deps.cache_clear()
+            for _ in range(2):
+                result = self.checked()
+                self.assertEqual(result['status'], 'reproduced', result['failures'])
+        self.assertEqual([call for call in load.call_args_list if call.args[0] == 'project_lean_deps'],
+                         [mock.call('project_lean_deps', SCRIPT.resolve().with_name('lean-deps.py'))] * 2)
+
+    def test_validator_reloads_source_instead_of_timestamp_valid_bytecode(self):
+        path = self.base / 'lean-deps.py'
+        path.write_text('import re\nMODULE_NAME = re.compile("Alpha")\n')
+        py_compile.compile(str(path), doraise=True,
+                           invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+        before = path.stat()
+        path.write_text('import re\nMODULE_NAME = re.compile("Bravo")\n')
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertEqual(path.stat().st_size, before.st_size)
+        with mock.patch.object(project, '__file__', str(self.base / 'project.py')):
+            project._lean_deps.cache_clear()
+            validator = project._lean_deps().MODULE_NAME
+        self.assertIsNotNone(validator.fullmatch('Bravo'))
+        self.assertIsNone(validator.fullmatch('Alpha'))
 
 
 class SpawnPolicyTests(unittest.TestCase):

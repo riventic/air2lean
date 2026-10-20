@@ -932,7 +932,7 @@ new block of `allocStack_sp` is pushed in the memory without stack budgets (`Hol
 the cell is changed into `alloc`'s memory after it. In a thread `fsym` derives the thread rules
 (`FTTotalTriple.ofSeq`) with the providers `ThreadLocal.allocStack`, `ThreadLocal.free_of`,
 `ThreadLocal.enterFrame` and `ThreadLocal.leaveFrame`. Regressions:
-`tests/roadmap/sep-auto/Stack.lean` (walks in sequence and in a thread, from program start, and
+`tests/roadmap/sep-auto/SepAuto/Stack.lean` (walks in sequence and in a thread, from program start, and
 rejected: a charge that does not fit, no `cur t`, a free below the top, a frame left open) and
 `tests/roadmap/stack-region/Rules.lean` (`push_over_cx`: no total push from `sp 0 16 16` when one
 frame used the budget up).

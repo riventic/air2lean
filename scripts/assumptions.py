@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import functools
 import hashlib
 import importlib.util
 import json
@@ -39,6 +40,17 @@ LAKE_ROOTS = ("ZigLean", "Air2Lean", "Proofs", "tools")
 COMPILED_SUFFIXES = (".olean", ".olean.private", ".olean.server", ".ir", ".ir.sig")
 REPLAY_FIELDS = {"schema_version", "tool", "tool_sha256", "lean_sha256", "toolchain",
                  "modules", "modules_sha256", "reused", "rejected", "status"}
+
+
+@functools.cache
+def lean_deps():
+    path = Path(__file__).resolve().with_name("lean-deps.py")
+    spec = importlib.util.spec_from_file_location(
+        "assumptions_lean_deps", path)
+    module = importlib.util.module_from_spec(spec)
+    # Validate with source bytes, not a timestamp-valid cache of older helper code.
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
 
 
 def is_compiler_axiom(name: str) -> bool:
@@ -750,7 +762,8 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     LEAN_PATH) in one environment, so that a shipped claim sees its companion."""
     root = (ROOT if root is None else root).resolve()
     runner = lambda command: run(command, root=root)
-    if not all(re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*", m) for m in [*modules, *witnesses]):
+    module_name = lean_deps().MODULE_NAME
+    if not all(isinstance(m, str) and module_name.fullmatch(m) for m in [*modules, *witnesses]):
         raise ValueError("invalid Lean module name")
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
@@ -908,7 +921,13 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     (one build only; receipts never use it) holds `cacheable` (Lake-built) modules that already
     passed with the same checker, installed runtime inputs and identical olean bytes. Any
     differing cacheable-module digest drops the whole cache. The caller still selects cacheable
-    modules; this runtime binding does not authenticate project/private import closures."""
+    modules; this runtime binding does not authenticate project/private import closures.
+    Several audits of one build may share `cache` at once (scripts/fixture-checks.py's run): each
+    cacheable module is checked under a claim (`<cache>.d/<module>.lock`), the cache is read
+    again under it and a pass is merged in at once, so concurrent audits replay each module once
+    between them. A pass is merged in only while the compiled inputs are unchanged, and a replay
+    that merged passes in and then fails (a changed runtime or input) removes the cache (those
+    passes may come from either side of the change)."""
     from concurrent.futures import ThreadPoolExecutor  # Lazy: the offline receipt suite has a 32 MiB budget.
     checker = toolchain / "bin/leanchecker"
     checker_sha = file_sha256(checker)
@@ -917,36 +936,73 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
         raise ValueError('toolchain runtime changed between extraction and replay')
     environment = {**os.environ, "LEAN_PATH": lean_path}
     jobs = stage_jobs("AIR2LEAN_REPLAY_JOBS")
-    try:
-        cached = json.loads(cache.read_text()) if cache else {}
-    except FileNotFoundError:
-        cached = {}
-    passed = (cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha
-              and cached.get("toolchain_runtime_sha256") == runtime_sha
-              and cached.get("compiled_inputs_sha256") == compiled_inputs_sha256 else {})
-    if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
-        passed = {}  # Another build: a reused module could depend on a changed one.
-    modules = sorted(digests)
-    reused = [m for m in modules if m in cacheable and passed.get(m) == digests[m]]
 
-    def check(module: str):
+    def load() -> dict:
+        """The cache's passes, if they are of this checker and runtime and agree with every
+        cacheable digest here; otherwise none (another build: a reused module could depend on a
+        changed one)."""
+        try:
+            cached = json.loads(cache.read_text())
+        except FileNotFoundError:
+            return {}
+        passed = (cached.get("passed", {}) if cached.get("tool_sha256") == checker_sha
+                  and cached.get("toolchain_runtime_sha256") == runtime_sha
+                  and cached.get("compiled_inputs_sha256") == compiled_inputs_sha256 else {})
+        if any(passed.get(m, d) != d for m, d in digests.items() if m in cacheable):
+            passed = {}  # Another build: a reused module could depend on a changed one.
+        return passed
+
+    @contextlib.contextmanager
+    def locked(path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)  # Released when the descriptor closes.
+            yield
+        finally:
+            os.close(descriptor)
+
+    def run_checker(module: str):
         result = subprocess.run([str(checker), module], cwd=ROOT, env=environment, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return None if result.returncode == 0 else {
             "module": module, "output": f"leanchecker exited {result.returncode}\n" + result.stdout[-2000:]}
 
-    with ThreadPoolExecutor(jobs) as pool:
-        rejected = [r for r in pool.map(check, sorted(set(modules) - set(reused))) if r is not None]
-    if toolchain_runtime_sha256(toolchain) != runtime_sha:
-        raise ValueError('toolchain runtime changed during kernel replay')
-    if validate_inputs is not None:
-        validate_inputs()  # No cache publication or passing result from a changed input batch.
-    if cache:
-        failed = {r["module"] for r in rejected}
-        passed.update({m: d for m, d in digests.items() if m in cacheable and m not in failed})
-        write_report(cache, {"tool_sha256": checker_sha, "toolchain_runtime_sha256": runtime_sha,
-                             "compiled_inputs_sha256": compiled_inputs_sha256,
-                             "passed": passed})
+    def check(module: str):
+        """(reused, rejection or None)."""
+        if not cache or module not in cacheable:
+            return False, run_checker(module)
+        claims = cache.with_name(cache.name + ".d")
+        with locked(claims / (module + ".lock")):
+            if load().get(module) == digests[module]:
+                return True, None
+            rejection = run_checker(module)
+            if rejection is None:
+                with locked(claims / "cache.lock"):
+                    if validate_inputs is not None:
+                        validate_inputs()  # No cache publication from a changed input batch.
+                    passed = load()
+                    passed[module] = digests[module]
+                    write_report(cache, {"tool_sha256": checker_sha, "toolchain_runtime_sha256": runtime_sha,
+                                         "compiled_inputs_sha256": compiled_inputs_sha256,
+                                         "passed": passed})
+                    published.append(module)
+            return False, rejection
+
+    modules, published = sorted(digests), []
+    try:
+        with ThreadPoolExecutor(jobs) as pool:
+            results = dict(zip(modules, pool.map(check, modules)))
+        if toolchain_runtime_sha256(toolchain) != runtime_sha:
+            raise ValueError('toolchain runtime changed during kernel replay')
+        if validate_inputs is not None:
+            validate_inputs()  # No passing result from a changed input batch.
+    except BaseException:
+        if published:  # passes this replay merged in may come from the changed runtime or inputs
+            cache.unlink(missing_ok=True)
+        raise
+    reused = [m for m in modules if results[m][0]]
+    rejected = [r for _, r in results.values() if r is not None]
     return {"schema_version": 1, "tool": "leanchecker", "tool_sha256": checker_sha,
             "lean_sha256": file_sha256(toolchain / "bin/lean"),
             "toolchain": (ROOT / "lean-toolchain").read_text().strip(),
@@ -1033,11 +1089,11 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
         if olean.is_relative_to(built) and module.split(".")[0] in LAKE_ROOTS and source.is_file():
             row.update(source=display(source), source_sha256=file_sha256(source))
             lake_modules.append(module)
-        elif module in (bound or {}):  # a witness fixture: bound to its source too
-            row.update(source=bound[module], source_sha256=file_sha256(ROOT / bound[module]))
         elif compiled_units is not None and module in compiled_units['units']:
             source_record = compiled_units['units'][module]['source']
             row.update(source=source_record['path'], source_sha256=source_record['sha256'])
+        elif module in (bound or {}):
+            raise ValueError(f'witness source has no compiler-owned run binding: {module}')
         artifacts.append(row)
     if lake_modules:
         # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
@@ -1120,16 +1176,11 @@ def write_report(path: Path, report: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def compile_witness_fixtures(build: bool) -> dict[str, str]:
-    """Compile the registered witness fixtures and put them on LEAN_PATH (`lake env` keeps a
-    caller's LEAN_PATH after its own). Returns module -> source of every compiled module."""
+def compile_witness_fixtures(build: bool) -> tuple[dict[str, str], dict]:
+    """Compile registered witnesses with the same precompile input/output binding as Units."""
     files = witness_fixtures()
-    if not files:
-        return {}
     import theorem_universe  # Lazy: theorem_universe imports this module.
-    sources, libs = theorem_universe.compile_witness_fixtures(files, ROOT / ".lake/assurance/witness-fixtures", build)
-    os.environ["LEAN_PATH"] = os.pathsep.join([*map(str, libs), *filter(None, [os.environ.get("LEAN_PATH")])])
-    return sources
+    return theorem_universe.compile_witness_fixtures(files, ROOT / ".lake/assurance/witness-fixtures", build)
 
 
 def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> None:
@@ -1170,14 +1221,27 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
             raise ValueError("--sources must map module names to source paths")
         labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
         modules = sorted(set(args.module)) if args.module else shipped_modules()
-        fixtures = {} if args.module else compile_witness_fixtures(not args.no_build)
+        fixtures = {}
+        if not args.module:
+            if compiled_units is not None:
+                raise ValueError('default shipped audit requires its own registered witness compilation')
+            if not args.no_build:
+                # Complete the SAME selected-module prerequisite before freezing witness inputs.
+                # extract() must not change those Lake artifacts after the compiler snapshot.
+                run(['lake', 'build', *modules])
+            fixtures, compiled_units = compile_witness_fixtures(not args.no_build)
         witnesses = sorted(m for m in fixtures if m not in modules)
         if compiled_units is not None:
             import theorem_universe
             theorem_universe.verify_compilation(compiled_units)
-            if modules != compiled_units['selected_modules'] or witnesses:
-                raise ValueError('compiled Unit context differs from the requested audit scope')
-        raw = extract(modules, not args.no_build, witnesses,
+            if args.module:
+                if (modules != compiled_units['selected_modules'] or witnesses
+                        or 'witness_registry' in compiled_units):
+                    raise ValueError('compiled Unit context differs from the requested audit scope')
+            elif ('witness_registry' not in compiled_units
+                  or witnesses != compiled_units['selected_modules']):
+                raise ValueError('compiled witness context differs from the requested audit scope')
+        raw = extract(modules, bool(args.module) and not args.no_build, witnesses,
                       all_declarations=args.all_declarations,
                       **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
         if raw["modules"] != sorted({*modules, *witnesses}):

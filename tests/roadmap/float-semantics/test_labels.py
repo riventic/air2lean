@@ -41,6 +41,15 @@ def write(path, text):
 
 
 class GeneratedNameTests(unittest.TestCase):
+    def test_registry_module_spelling_keeps_declaration_grammar(self):
+        for module in ("Proofs.Dep'", 'Proofs.Check!', 'Fixture.Witness?'):
+            self.assertEqual(fs.split_key(module + '::value_spec'), (module, 'value_spec'))
+        for module in ('A..B', 'A/B', '../A', 'A B', '«A»', ''):
+            with self.subTest(module=module), self.assertRaisesRegex(ValueError, 'invalid registry key'):
+                fs.split_key(module + '::value_spec')
+        with self.assertRaisesRegex(ValueError, 'invalid registry key'):
+            fs.split_key('Proofs.Valid::bad/name')
+
     def test_private_theorems_are_not_compiler_generated(self):
         self.assertFalse(fs.is_auxiliary('_private.ZigLean.Float.Ops.0.add_comm'))
         self.assertFalse(fs.is_auxiliary('Foo._bar'))

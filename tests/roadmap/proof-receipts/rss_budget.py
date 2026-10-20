@@ -8,13 +8,20 @@ test_receipt.py peaked at 27.1 MB on Linux CI and 34.0 MB on macOS, i.e. ~17-19.
 The budget therefore bounds growth over a bare interpreter of the same build (`baseline()`, measured in a child), so
 one number catches a real regression on both platforms: GROWTH_BUDGET leaves ~20% headroom over the observed ~19.5 MB.
 Do not raise it without a measured reason; test_rss_budget.py proves a deliberate large allocation trips it.
+
+2026-10-20, raised from 24 to 32 MiB: test_receipt.py grew 24.3-25.9 MB on macOS (Python 3.14.8, 4 of 4 standalone
+runs), over the 24 MiB budget. About 11 MB of it is importing the suite (bare interpreter 15.0 MB, after the suite's
+imports 25.7 MB). These are the standard modules the code under test needs: unittest alone adds 4.4 MB, and with
+tempfile, subprocess, json, pathlib, dataclasses, argparse, hashlib and shutil the total is 10.4 MB. No cheap lazy import
+removes them. The tests themselves add about 8 MB, the largest being test_audit_module_checks_cache_success_locally_and_reset
+at 4 MB. 32 MiB leaves ~20% headroom over the measured 25.9 MB.
 """
 import resource
 import subprocess
 import sys
 
 MIB = 1024 * 1024
-GROWTH_BUDGET = 24 * MIB
+GROWTH_BUDGET = 32 * MIB
 _PROBE = 'import resource,sys; r=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss; ' \
          'print(r if sys.platform=="darwin" else r*1024)'
 
