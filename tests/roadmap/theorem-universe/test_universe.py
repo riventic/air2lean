@@ -10,10 +10,12 @@ import contextlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest import mock
 
@@ -429,6 +431,169 @@ class ReplayTests(unittest.TestCase):
             self.assertIn('work=$(mktemp -d', text, script)
 
 
+class LakeExtractionTests(unittest.TestCase):
+    """assumptions.lake_extraction (--extract-in) with a stand-in Lake: the persistent workspace's
+    pin follows the repository's, and the installed runtime is part of the driver's identity."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        self.workspace = self.package / '.lake/extraction'
+        self.built = []
+        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')]
+        # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
+        self.own = str(self.workspace / '.lake/build/lib/lean')
+        self.resolved = [*self.roots, self.own]
+
+        def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                code = 0 if self.resolved is not None else 1
+                return subprocess.CompletedProcess(command, code, os.pathsep.join(self.resolved or []) + '\n', '')
+            module = command[-1]
+            self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
+            path = module.replace('.', '/') + '.lean'
+            return subprocess.CompletedProcess(command, 0, f'info: {path}:9:0: {assumptions.MARKER}{{}}\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def extract(self, runtime='a' * 64, binding=None):
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root, binding)
+
+    def test_a_bound_lookup_path_is_used_only_as_lake_resolves_it(self):
+        binding = {'roots': list(self.roots), 'sha256': 'c' * 64}
+        self.assertEqual(self.extract(binding=binding), ['{}'])
+        self.assertEqual(len(self.built), 1)
+        # A changed bound input (same roots) is another driver: Lake builds another module.
+        self.assertEqual(self.extract(binding=dict(binding, sha256='d' * 64)), ['{}'])
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        # One entry of Lake's resolved path differs from the bound one: nothing is built or reused.
+        self.resolved[1] = self.resolved[1] + '-other'
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.roots[1], self.roots[0], self.own]  # the same roots, another order
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = None  # Lake resolves nothing
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [self.own, *self.roots, self.own]  # the driver library twice
+        self.assertIsNone(self.extract(binding=binding))
+        self.resolved = [*self.roots, self.own]
+        (self.workspace / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
+        self.assertIsNone(self.extract(binding=binding))
+        self.assertEqual(len(self.built), 2)
+
+    def test_report_line_and_unchanged_driver(self):
+        self.assertEqual(self.extract(), ['{}'])
+        source = next(self.workspace.rglob('M*.lean'))
+        written = source.stat().st_mtime_ns
+        self.assertEqual(self.extract(), ['{}'])  # same inputs: the same driver, not rewritten
+        self.assertEqual((self.built[0], source.stat().st_mtime_ns), (self.built[1], written))
+
+    def test_the_child_pin_follows_the_repository(self):
+        self.extract()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v2\n')  # only the root pin changes
+        self.extract()
+        self.assertEqual([pin for _, pin in self.built], ['leanprover/lean4:v1\n', 'leanprover/lean4:v2\n'])
+        self.assertEqual((self.workspace / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+
+    def test_a_changed_runtime_is_another_driver(self):
+        self.extract('a' * 64)
+        self.extract('b' * 64)  # only the installed runtime changes: Lake must build another module
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        with self.assertRaises(ValueError):
+            self.extract(None)  # no runtime binding: fail closed
+
+
+class LakeKernelReplayTests(unittest.TestCase):
+    """assumptions.lake_kernel_replay with a stand-in Lake: one receipt per module, only on
+    Lake's exact lookup path, and every receipt accounted for."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        (self.root / 'lakefile.toml').write_text('name = "air2lean"\n')
+        for owner, module in ((self.root, 'A'), (self.package, 'B')):  # A in the root package, B in the fixtures'
+            (owner / '.lake/build/lib/lean').mkdir(parents=True, exist_ok=True)
+            (owner / '.lake/build/lib/lean' / (module + '.olean')).write_bytes(b'olean')
+        self.workspace = self.package / '.lake/replay'
+        self.lean_path = os.pathsep.join([str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')])
+        self.resolved = [*self.lean_path.split(os.pathsep), str(self.workspace / '.lake/build/lib/lean')]
+        self.builds, self.status, self.drop, self.foreign = [], {}, set(), {}
+
+        def lake(command, cwd, **kwargs):
+            if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
+                return subprocess.CompletedProcess(command, 0, os.pathsep.join(self.resolved) + '\n', '')
+            targets = command[command.index('build') + 1:]
+            self.builds.append(targets)
+            lines = []
+            for target in targets:
+                path = target.replace('.', '/') + '.lean'
+                module = re.search(r'KernelReplay\.run `(\S+)', (Path(cwd) / path).read_text()).group(1)
+                if module in self.drop:
+                    continue
+                record = {'module': self.foreign.get(module, module), 'status': self.status.get(module, 'pass'),
+                          'exit_code': 0 if self.status.get(module, 'pass') == 'pass' else 1, 'output': ''}
+                lines.append(f'info: {path}:3:0: {assumptions.REPLAY_MARKER}{json.dumps(record)}')
+            return subprocess.CompletedProcess(command, 0, '\n'.join(lines) + '\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def replay(self, modules=('A', 'B'), checker='c' * 64, runtime='a' * 64):
+        return assumptions.lake_kernel_replay(list(modules), self.package, checker, runtime, self.lean_path, self.root)
+
+    def test_one_receipt_per_module_named_by_checker_and_runtime(self):
+        self.status['B'] = 'fail'
+        receipts = self.replay()
+        self.assertEqual({m: r['status'] for m, r in receipts.items()}, {'A': 'pass', 'B': 'fail'})
+        first = self.builds[-1]
+        # No receipt imports its module (its `initialize` would run there); each receipt's library
+        # needs the module's olean and dependency trace in the package that builds it.
+        texts = [p.read_text() for p in (self.workspace / 'KernelReplay').glob('*.lean')]
+        self.assertTrue(texts and all('import A' not in t and 'import B' not in t for t in texts))
+        manifest = tomllib.loads((self.workspace / 'lakefile.toml').read_text())
+        self.assertEqual(sorted(lib['needs'] for lib in manifest['lean_lib']),
+                         [['@air2lean/+A:olean', '@air2lean/+A:depTrace'],
+                          ['@fixtures/+B:olean', '@fixtures/+B:depTrace']])
+        self.replay()
+        self.assertEqual(self.builds[-1], first)  # same inputs: the same receipt modules
+        self.replay(checker='d' * 64)
+        self.assertFalse(set(self.builds[-1]) & set(first))  # another checker: other receipts
+        self.replay(runtime='b' * 64)
+        self.assertFalse(set(self.builds[-1]) & set(first))  # another runtime: other receipts
+
+    def test_only_on_lakes_exact_lookup_path(self):
+        self.resolved[0] += '-other'
+        self.assertIsNone(self.replay())
+        self.assertEqual(self.builds, [])  # nothing built
+        self.resolved = self.lean_path.split(os.pathsep)  # its own library missing
+        self.assertIsNone(self.replay())
+
+    def test_a_missing_or_foreign_receipt_fails(self):
+        self.drop.add('B')
+        with self.assertRaises(ValueError):
+            self.replay()
+        self.drop.clear()
+        self.foreign['B'] = 'A'
+        with self.assertRaises(ValueError):
+            self.replay()
+        with self.assertRaises(ValueError):
+            self.replay(checker=None)  # no checker binding: fail closed
+
+
 class FreshnessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -509,7 +674,8 @@ class FreshnessTests(unittest.TestCase):
                 mock.patch.object(assumptions, 'library_compiled_inputs', return_value=[]) as inputs:
             freshness = assumptions.replay_and_freshness(raw)
             self.assertEqual(set(replay.call_args.kwargs),
-                             {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs'})
+                             {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs', 'lake_package'})
+            self.assertIsNone(replay.call_args.kwargs['lake_package'])  # no package: no receipts
             self.assertEqual(replay.call_args.kwargs['compiled_inputs_sha256'], universe.input_digest([]))
             validate = replay.call_args.kwargs['validate_inputs']
             validate()
@@ -628,8 +794,9 @@ class CompiledUnitTests(unittest.TestCase):
         output.write_bytes(b'compiled: ' + source.read_bytes())
         return subprocess.CompletedProcess(command, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertFalse(build)
+        self.assertIsNone(extract_in)
         self.assertEqual(witnesses, self.expected_witnesses)
         self.assertEqual(lean_path, self.active_context['lean_path'])
         audited = sorted({*modules, *witnesses})
@@ -1139,8 +1306,12 @@ class FixtureCompilationTests(unittest.TestCase):
             self.after_build()
         return subprocess.CompletedProcess(args, 0, '')
 
-    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None):
+    def extract(self, modules, build, witnesses, *, all_declarations=False, lean_path=None, extract_in=None):
         self.assertTrue(all_declarations)
+        # The fixture package may build the driver, still bound to the compiled lookup path
+        # (lake_extraction's resolved-roots controls: LakeExtractionTests).
+        self.assertIn(extract_in and Path(extract_in), (None, Path(self.package)))
+        self.assertIsNotNone(lean_path)
         raw = CompiledUnitTests.extract(self, modules, build, witnesses,
                                         all_declarations=all_declarations, lean_path=lean_path)
         # Helper has no declaration-graph node: only its unused header import reveals it.
