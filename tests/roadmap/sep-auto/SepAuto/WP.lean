@@ -731,4 +731,52 @@ theorem witness_retry_kernel (B Missing : Prop) (D : Nat → Prop) (x : Nat)
   have hx : x = 1 := by simpa using hx
   exact good (by omega)
 
+universe u
+
+/-- The applied term has trailing implicit arguments that must be fresh at every rewrite. -/
+private theorem applied_reverse_twice (_ : Unit) {α : Type u} {xs : List α} :
+    xs.reverse.reverse = xs := List.reverse_reverse xs
+
+/-- One applied simp term rewrites two independent values in the same cached WP context. -/
+theorem applied_simp_repeated {Tgt γ α : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (xs ys : List α) :
+    P.WP t (pure (xs, ys))
+      (fun v _ _ _ => v.1.reverse.reverse = xs ∧ v.2.reverse.reverse = ys) G m n := by
+  fsym [applied_reverse_twice ()]
+
+/-- The named-constant simp path continues to generalize its existing binders. -/
+theorem named_simp_repeated {Tgt γ α : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (xs ys : List α) :
+    P.WP t (pure (xs, ys))
+      (fun v _ _ _ => v.1.reverse.reverse = xs ∧ v.2.reverse.reverse = ys) G m n := by
+  fsym [List.reverse_reverse]
+
+/-- Generalizing implicit arguments does not establish a different requested result. -/
+theorem applied_simp_rejects_wrong_result {Tgt γ α : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (xs ys : List α) (_hne : xs ≠ ys) : True := by
+  fail_if_success
+    have : P.WP t (pure xs) (fun v _ _ _ => v.reverse.reverse = ys) G m n := by
+      fsym [applied_reverse_twice ()]
+  trivial
+
+private theorem applied_conditional {Gate Inv : Nat → Prop}
+    (hP : ∀ k, Gate k → Inv k) {k : Nat} (hk : Gate k) : Inv k := hP k hk
+
+/-- The same applied conditional proposition is used below two fresh continuation binders. -/
+theorem applied_conditional_repeated {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Gate Inv : Nat → Prop)
+    (hP : ∀ k, Gate k → Inv k) :
+    P.WP t (pure ()) (fun _ _ _ _ =>
+      ∀ i, Gate i → Inv i ∧ ∀ j, Gate j → Inv j) G m n := by
+  fsym [applied_conditional hP]
+
+/-- The conditional helper never supplies its missing admission premise. -/
+theorem applied_conditional_missing {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Gate Inv : Nat → Prop)
+    (hP : ∀ k, Gate k → Inv k) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => ∀ k, Inv k) G m n := by
+      fsym [applied_conditional hP]
+  trivial
+
 end SepAuto.WP

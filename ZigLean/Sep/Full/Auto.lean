@@ -2933,8 +2933,17 @@ def addExtra (thms : SimpTheorems) (extra : Array Syntax) : TacticM SimpTheorems
         -- a definition is unfolded (its equations), a theorem rewrites
         thms ← if ← isProp (← getConstInfo n).type then thms.addConst n else thms.addDeclToUnfold n
         continue
-    let e ← Term.elabTerm x none
-    thms ← thms.add (.stx (← mkFreshId) x) #[] e
+    let (levelParams, e) ← Term.withoutModifyingElabMetaStateWithInfo <| withRef x do
+      let e ← Term.elabTerm x none
+      Term.synthesizeSyntheticMVars (postpone := .no) (ignoreStuckTC := true)
+      let e ← instantiateMVars e
+      let e := e.eta
+      if e.hasMVar then
+        let r ← abstractMVars e
+        return (r.paramNames, r.expr)
+      else
+        return (#[], e)
+    thms ← thms.add (.stx (← mkFreshId) x) levelParams e
   return thms
 
 /-- Every rewrite carries its proof, also a definitional one (`StateT.run_bind`, a `rfl`
