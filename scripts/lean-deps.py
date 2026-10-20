@@ -5,6 +5,7 @@
     python3 -B scripts/lean-deps.py --all
     python3 -B scripts/lean-deps.py --files
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
+    python3 -B scripts/lean-deps.py --precompiled check|write
 
 Prints the imports of the given `.lean` files (a directory: every `.lean` file below it) that are
 modules of this package's libraries (`lakefile.toml`; `import ZigLean.Sep.Full.Auto` with
@@ -24,6 +25,10 @@ does not exist (a renamed or split module). A result is remembered under the key
 library imports' sources (transitively), the toolchain and the lakefile (`$AIR2LEAN_CAS_DIR/
 lean-files/`, else `.lake/lean-files/`), so only files whose inputs changed are elaborated again.
 A file with imports of a fixture's own modules is elaborated by the check of that fixture.
+
+`--precompiled check|write` checks (or writes) the `globs` of each library `<P>Deps` of
+`lakefile.toml`: the modules that the precompiled library P's modules import, transitively
+(`precompiled_deps`; docs/build-cache.md#precompiled-fsym).
 
 A check that runs `lake env lean` on test files builds their imports first with `--build`: the
 modules are derived from the files, so the list cannot drift, and a stale `.olean` (a merge that
@@ -151,6 +156,64 @@ def standalone_files() -> list[str]:
     return files
 
 
+def closure(mods: set[str]) -> set[str]:
+    """The package modules that `mods` import, transitively, `mods` included."""
+    roots = lib_roots()
+    seen, todo = set(), sorted(mods)
+    while todo:
+        m = todo.pop()
+        if m in seen or m.split(".")[0] not in roots or not module_file(m).is_file():
+            continue
+        seen.add(m)
+        todo += sorted(imports(module_file(m)))
+    return seen
+
+
+DEPS_GLOBS = re.compile(r'(\[\[lean_lib\]\]\nname = "(?P<name>[^"]+)"\n(?:[^\[\n].*\n|\n)*?)globs = \[[^\]]*\]')
+
+
+def precompiled_deps() -> dict[str, list[str]]:
+    """{`<P>Deps`: its globs} for every library P with `precompileModules` (docs/build-cache.md
+    #precompiled-fsym): the modules P's modules import, transitively. Lake links P's shared
+    library against `<P>Deps`'s, so that one must hold the native code of all of them."""
+    lake = tomllib.loads((ROOT / "lakefile.toml").read_text(encoding="utf-8"))
+    out = {}
+    for lib in lake.get("lean_lib", []):
+        if not lib.get("precompileModules"):
+            continue
+        mods = set(lib.get("globs", []))
+        if not mods or any(not module_file(m).is_file() for m in mods):
+            raise SystemExit(f"lean-deps: precompiled library {lib['name']}: globs must name "
+                             f"existing modules, got {sorted(mods)}")
+        out[lib["name"] + "Deps"] = sorted(closure(mods) - mods)
+    return out
+
+
+def precompiled(write: bool) -> int:
+    path = ROOT / "lakefile.toml"
+    text = path.read_text(encoding="utf-8")
+    current = {lib["name"]: lib.get("globs") for lib in tomllib.loads(text).get("lean_lib", [])}
+    stale = []
+    for deps, globs in precompiled_deps().items():
+        if current.get(deps, None) == globs:
+            continue
+        stale.append(deps)
+        if deps not in current:
+            raise SystemExit(f"lean-deps: lakefile.toml has no library {deps} with a `globs` line")
+        if write:
+            body = "".join(f'  "{m}",\n' for m in globs)
+            text = DEPS_GLOBS.sub(lambda m: m.group(0) if m["name"] != deps else
+                                  f'{m.group(1)}globs = [\n{body}]', text)
+    if write and stale:
+        path.write_text(text, encoding="utf-8")
+        return 0 if not precompiled(write=False) else 1
+    for deps in stale:
+        print(f"lean-deps: lakefile.toml: the globs of {deps} are not the import closure of its "
+              f"precompiled library; regenerate with: python3 -B scripts/lean-deps.py --precompiled write",
+              file=sys.stderr)
+    return 1 if stale else 0
+
+
 def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
     """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
     the library modules it imports (transitively), the lakefile and the toolchain."""
@@ -217,6 +280,11 @@ def main(argv: list[str]) -> int:
     if argv == ["--files"]:
         print("\n".join(standalone_files()))
         return 0
+    if argv[:1] == ["--precompiled"]:
+        if argv[1:] not in (["check"], ["write"]):
+            print("usage: lean-deps.py --precompiled check|write", file=sys.stderr)
+            return 2
+        return precompiled(argv[1] == "write")
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:

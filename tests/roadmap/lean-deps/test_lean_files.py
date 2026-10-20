@@ -85,6 +85,25 @@ class Classify(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
             ld.lib_roots(strict_sources=True)
 
+    def test_precompiled_deps_are_the_import_closure(self):
+        # docs/build-cache.md#precompiled-fsym: `<P>Deps` holds what P's modules import.
+        self.write("Lib/C.lean", "import Lib.B\ndef c := b\n")
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "Lib"\n\n[[lean_lib]]\nname = "P"\n'
+                   'roots = ["Lib.C"]\nglobs = ["Lib.C"]\nprecompileModules = true\n\n'
+                   '[[lean_lib]]\nname = "PDeps"\nroots = ["Lib.C"]\nglobs = []\n')
+        self.assertEqual(ld.precompiled_deps(), {"PDeps": ["Lib.A", "Lib.B"]})
+        self.assertEqual(ld.precompiled(write=False), 1)
+        self.assertEqual(ld.precompiled(write=True), 0)
+        self.assertEqual(ld.precompiled(write=False), 0)
+        self.assertIn('name = "PDeps"\nroots = ["Lib.C"]\nglobs = [\n  "Lib.A",\n  "Lib.B",\n]',
+                      (self.repo / "lakefile.toml").read_text())
+        self.write("Lib/B.lean", "def b := 1\n")  # no longer imports Lib.A: the list is stale
+        self.assertEqual(ld.precompiled(write=False), 1)
+        self.write("Lib/C.lean", "import Lib.Gone\n")
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "P"\nglobs = ["Lib.Gone"]\nprecompileModules = true\n')
+        with self.assertRaisesRegex(SystemExit, "must name existing modules"):
+            ld.precompiled_deps()
+
 
 if __name__ == "__main__":
     unittest.main()
