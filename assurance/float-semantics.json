@@ -307,6 +307,24 @@
       ],
       "correspondence": "model"
     },
+    "Packed::SepAuto.Packed.fl_bits": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Packed::SepAuto.Packed.fl_val": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Model::T04.linuxGnu_layouts": {
       "semantics": "ieee",
       "targets": [
