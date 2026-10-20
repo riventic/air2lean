@@ -67,7 +67,7 @@ theorem cas_keeps_rest {succ fail : AtomicOrder} {exp new : BitVec bits}
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
   · intro j b hne hj hv hfloor hacq hhist hseen
-    exact ⟨by intro h; cases h, hw', rY, hInv⟩
+    exact ⟨(by intro h; cases h), hw', rY, hInv⟩
 
 theorem casAs_keeps_rest {α : Type} [Packed α bits] {succ fail : AtomicOrder} {exp new : α}
     (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
@@ -84,7 +84,7 @@ theorem casAs_keeps_rest {α : Type} [Packed α bits] {succ fail : AtomicOrder} 
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
   · intro j b r hne hd hj hv hfloor hacq hhist hseen
-    exact ⟨by intro h; cases h, hw', rY, hInv⟩
+    exact ⟨(by intro h; cases h), hw', rY, hInv⟩
 
 theorem weakCas_keeps_rest {succ fail : AtomicOrder} {exp new : BitVec bits}
     (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
@@ -98,7 +98,7 @@ theorem weakCas_keeps_rest {succ fail : AtomicOrder} {exp new : BitVec bits}
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
   · intro j b hj hv hfloor hacq hhist hseen
-    exact ⟨by intro h; cases h, hw', rY, hInv⟩
+    exact ⟨(by intro h; cases h), hw', rY, hInv⟩
 
 theorem weakCasAs_keeps_rest {α : Type} [Packed α bits] {succ fail : AtomicOrder} {exp new : α}
     (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
@@ -115,7 +115,7 @@ theorem weakCasAs_keeps_rest {α : Type} [Packed α bits] {succ fail : AtomicOrd
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
   · intro j b r hd hj hv hfloor hacq hhist hseen
-    exact ⟨by intro h; cases h, hw', rY, hInv⟩
+    exact ⟨(by intro h; cases h), hw', rY, hInv⟩
 
 end Generic
 
