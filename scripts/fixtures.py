@@ -3,6 +3,7 @@
 
     python3 -B scripts/fixtures.py build [TARGET...]
     python3 -B scripts/fixtures.py audit MODULE... [--declaration NAME]... [--output FILE]
+    python3 -B scripts/fixtures.py audit --library LIB [MODULE...] [--declaration NAME]...
     python3 -B scripts/fixtures.py mutant NAME --src DIR --fails MODULE [--expect TEXT]...
     python3 -B scripts/fixtures.py files
 
@@ -21,7 +22,9 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   Fails unless every theorem of the modules depends on the standard axioms only (propext,
   Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
   `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
-  reaches only the standard axioms in the extractor's dependency graph.
+  reaches only the standard axioms in the extractor's dependency graph. `--library LIB` audits
+  every module of LIB too, and fails when a `.lean` file below LIB's directory is no module of
+  it: a fixture whose every file is a module leaves none unaudited.
 - `mutant`: a negative check. DIR holds a fixture's sources with one mutation (module paths as in
   the fixture). They are built as a workspace of their own (`tests/roadmap/.lake/mutants/NAME`)
   with the fixture package's name, so an unchanged copy has the same Lake trace as the fixture's
@@ -121,6 +124,22 @@ def source_modules(root: Path | None = None) -> dict[str, tuple[str, str]]:
 def files(root: Path | None = None) -> list[str]:
     """The repository-relative source paths of the configured fixture modules."""
     return sorted(file for file, _ in source_modules(root).values())
+
+
+def library_modules(name: str) -> list[str]:
+    """Every module of the library `name`; fails unless each `.lean` file below its directory is
+    one of them."""
+    lib = next((lib for lib in libraries(PACKAGE) if lib["name"] == name), None)
+    if lib is None:
+        raise SystemExit(f"fixtures: no library {name} in {PACKAGE / 'lakefile.toml'}")
+    modules = check_names(PACKAGE)[name]
+    src = PACKAGE / lib.get("srcDir", ".")
+    stray = sorted(str(p.relative_to(ROOT)) for p in src.rglob("*.lean")
+                   if ".".join(p.relative_to(src).with_suffix("").parts) not in modules)
+    if stray or not modules:
+        raise SystemExit(f"fixtures: {name}: Lean files that are no module of the library: "
+                         f"{', '.join(stray) or 'none, and no modules'}")
+    return sorted(modules)
 
 
 def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
@@ -285,7 +304,8 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("build")
     p.add_argument("targets", nargs="*")
     p = sub.add_parser("audit")
-    p.add_argument("modules", nargs="+")
+    p.add_argument("modules", nargs="*")
+    p.add_argument("--library")
     p.add_argument("--declaration", action="append", default=[])
     p.add_argument("--output", type=Path)
     p = sub.add_parser("mutant")
@@ -308,7 +328,10 @@ def main(argv: list[str]) -> int:
     if a.command == "build":
         return build(a.targets)
     if a.command == "audit":
-        return audit(a.modules, a.declaration, a.output)
+        modules = sorted(set(a.modules) | set(library_modules(a.library) if a.library else []))
+        if not modules:
+            parser.error("audit: name MODULEs or --library LIB")
+        return audit(modules, a.declaration, a.output)
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
     print("\n".join(files()))
