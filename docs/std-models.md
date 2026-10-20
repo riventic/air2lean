@@ -44,6 +44,19 @@ claim case contract instances, native/receipt binding, a wrong-version receipt
 negative control, or retirement of the remaining version-gated proofs. Those remain
 later Task23 obligations in the sole full-state/fsym framework.
 
+`Proofs/Sync/MutexCases.lean` supplies mutex instances for the three enrolled Sync
+profiles: 0.17.0 Linux, then 0.16.0 Linux and Darwin. Each profile's generated
+state type, encoder, locals, exits and functions supply code correspondence to the
+existing `IoMutexCode` interface. Its general proof establishes `MutexImpl` once;
+clients use that contract's rules through `fsym`, as in `Proofs/Sync/Mutex.lean`.
+The three instances have disjoint `Sync.CaseContracts` namespaces, import every
+case unconditionally and retain their own ABI facts. No generated body or public
+`Sync.ioMutex` symbol changes. This is only the mutex facet: the remaining Sync
+contracts, other families, full-profile plus Gen receipt matching, the wrong-version
+receipt control, contract coverage and version-gate retirement remain open. The
+generation/debug-ID evidence does not establish those later obligations or native
+behavior, and a report/profile hash does not authenticate a producer invocation.
+
 A std function that an example calls is one of these:
 
 | Kind | How | Where |
