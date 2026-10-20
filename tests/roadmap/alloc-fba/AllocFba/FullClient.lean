@@ -39,8 +39,9 @@ theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
           (bshare 0 q 12 ⋆ bclaim 0 0 12 none))))))
       (fba_client v)
       (fun r => ⟪Res v r⟫ ⋆ (sp 0 S D ⋆ Junk)) := by
-  have init := fun (ctx : Ptr) (Ac : Nat) =>
-    @fallocator_init ctx (buf A₀ Ac) q
+  have hprefix : (bs.extract 0 12).size = 12 := by simp [Array.size_extract, hs]
+  have init := fun (ctx : Ptr) (Ac : Nat) (cb : BlockId) =>
+    @fallocator_init ctx (buf A₀ Ac) q 0 cb (bs.extract 0 12) hprefix
   have reset := freset_spec
   have halfFees (γ e : Nat) :
       epTok γ e Frac.one = (epFee γ e Frac.one.half ⋆ epFee γ e Frac.one.half) := by
