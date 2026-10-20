@@ -311,9 +311,9 @@ before unfolding, including when the inner commands or assertions contain metava
 def wrapper_keys : MetaM Unit := do
   let a ← mkFreshExprMVar (mkApp (mkConst ``BitVec) (mkNatLit 32))
   let add ← mkAppM ``Zig.add #[mkConst ``Bool.false, a, a, mkConst ``Bool.true]
-  let actual ← mkAppM ``StateT.lift #[add]
+  let actual ← mkAppOptM ``StateT.lift #[some (mkConst ``Mem), none, none, none, some add]
   let x ← mkFreshExprMVar (← inferType add)
-  let pattern ← mkAppM ``StateT.lift #[x]
+  let pattern ← mkAppOptM ``StateT.lift #[some (mkConst ``Mem), none, none, none, some x]
   unless headKey pattern == .anonymous && headKey actual == `lift ++ ``Zig.add do
     throwError "wrapper_keys: StateT.lift lost its wildcard or concrete head"
   unless ← unifyKeyed pattern actual do
@@ -323,7 +323,7 @@ def wrapper_keys : MetaM Unit := do
   unless ← isDefEq x add do
     throwError "wrapper_keys: StateT.lift did not determine the inner command"
   let sub ← mkAppM ``Zig.sub #[mkConst ``Bool.false, a, a, mkConst ``Bool.true]
-  let other ← mkAppM ``StateT.lift #[sub]
+  let other ← mkAppOptM ``StateT.lift #[some (mkConst ``Mem), none, none, none, some sub]
   if ← unifyKeyed actual other then
     throwError "wrapper_keys: StateT.lift unfolded different concrete heads"
   let emp := mkConst ``Zig.Assn.emp
