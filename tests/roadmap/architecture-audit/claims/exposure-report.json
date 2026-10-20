@@ -259,7 +259,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -372,7 +372,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -610,7 +610,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -796,7 +796,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -1017,7 +1017,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -1217,7 +1217,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -1465,7 +1465,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -1660,7 +1660,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "7af54b3fd1f0fc0a0c8bb2da6ae26e57",
+     "fingerprint": "b1969771d43534e1306ab679b18b6482",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Triple",
      "name": "Zig.Full.FTriple"
@@ -1839,7 +1839,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d28ae852483d5ee1389fcf35b5c697c0",
+     "fingerprint": "0f05408bcb6ee88eab998afeb6d84b08",
      "kind": "inductive",
      "module": "Init.Core",
      "name": "Exists"
@@ -2042,7 +2042,7 @@
      }
     ],
     "head": {
-     "fingerprint": "197143b96af7aa5dffcfee31395b4b3e",
+     "fingerprint": "2300ff36779359b6a01a957397a0adc5",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Logic",
      "name": "Zig.Full.FTotalTriple"
@@ -2230,7 +2230,7 @@
     ],
     "binders": [],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2441,7 +2441,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2706,7 +2706,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -2926,7 +2926,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"
@@ -3143,7 +3143,7 @@
      }
     ],
     "head": {
-     "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+     "fingerprint": "e006f7006589ff2b988fd107cef23c04",
      "kind": "inductive",
      "module": "Init.Prelude",
      "name": "Eq"

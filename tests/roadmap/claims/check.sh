@@ -15,17 +15,40 @@ esac
 python3 -B scripts/lean-deps.py --build tests/roadmap/claims
 [ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
-fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
-mkdir -p "$out" "$fixtures/tests/roadmap/claims"
-export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
-lake env lean -o "$fixtures/tests/roadmap/claims/Fixture.olean" tests/roadmap/claims/Fixture.lean
-scripts/assumptions.sh --no-build --module tests.roadmap.claims.Fixture --output "$out/assurance.json"
-lake env lean -o "$fixtures/tests/roadmap/claims/AllocatorApplications.olean" tests/roadmap/claims/AllocatorApplications.lean
-scripts/assumptions.sh --no-build --module tests.roadmap.claims.AllocatorApplications --output "$out/allocator-applications.json"
+mkdir -p "$out"
+# These are known non-gated Units. Bind the same compiler-owned sources BEFORE compilation,
+# then carry that exact context through ordinary extraction/replay and saved-report admission.
+python3 -B - "$out" <<'PY'
+import sys, tempfile
+from pathlib import Path
+sys.path.insert(0, 'scripts')
+import theorem_universe as universe
+out = Path(sys.argv[1])
+_, units = universe.universe()
+by_file = {unit.file: unit for unit in units}
+source_map = {unit.module: unit.file for unit in units}
+for name, reports in [('Fixture', [('assurance.json', False)]),
+                      ('AllocatorApplications', [('allocator-applications.json', False)]),
+                      ('AllocatorImported', [('allocator-imported.json', False),
+                                             ('allocator-imported-all.json', True)])]:
+    selected = [by_file[f'tests/roadmap/claims/{name}.lean']]
+    work = Path(tempfile.mkdtemp(prefix=name + '-', dir=out))
+    local = universe.closure(selected, by_file)
+    context = universe.prepare_compilation(selected, by_file, work)
+    errors = universe.compile_all(local, by_file, work, compiled_units=context)
+    if errors:
+        raise RuntimeError('; '.join(errors))
+    universe.seal_compilation(context)
+    sources = work / 'sources.json'
+    universe.write_report(sources, {**source_map, **{unit.module: unit.file for unit in local}})
+    for filename, all_declarations in reports:
+        result = universe.audit_modules(context['selected_modules'], [], out / filename,
+                                        sources=sources, all_declarations=all_declarations,
+                                        compiled_units=context)
+        if result['exit_code'] or result['status'] != 'pass':
+            raise RuntimeError(f'{name}: {result}')
+PY
 python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
-lake env lean -o "$fixtures/tests/roadmap/claims/AllocatorImported.olean" tests/roadmap/claims/AllocatorImported.lean
-scripts/assumptions.sh --no-build --module tests.roadmap.claims.AllocatorImported --output "$out/allocator-imported.json"
-scripts/assumptions.sh --no-build --all-declarations --module tests.roadmap.claims.AllocatorImported --output "$out/allocator-imported-all.json"
 python3 -B tests/roadmap/claims/test_allocator_imported.py "$out/allocator-imported.json" "$out/allocator-imported-all.json"
 if [ "$write" = 1 ]; then
   python3 - "$out/assurance.json" <<'PY'
@@ -34,7 +57,8 @@ from pathlib import Path
 path = Path('tests/roadmap/claims/fixture-report.json')
 old, new = json.loads(path.read_text()), json.loads(Path(sys.argv[1]).read_text())
 fields = set().union(*(t.keys() for t in old['theorems']))
-modules = {n['module'] for n in old['nodes']}
+# The selected source is unchanged; its defining module comes from the real Unit plan.
+modules = set(new['modules'])
 nodes = new['nodes'] if isinstance(new['nodes'], list) else [dict(name=n, **v) for n, v in new['nodes'].items()]
 report = {key: new[key] for key in old}
 report['theorems'] = [{k: v for k, v in t.items() if k in fields} for t in new['theorems']]
