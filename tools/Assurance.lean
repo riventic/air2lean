@@ -677,22 +677,56 @@ private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Js
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
 
+/-- A copy of `n` outside the compacted region its components live in. -/
+private def copyName : Name → Name
+  | .anonymous => .anonymous
+  | .str p s => .str (copyName p) (String.ofList s.toList)
+  | .num p k => .num (copyName p) k
+
+/-- The copied import names of `data`: an action of its own (not inlined), so the copies are made
+before `importClosure` frees the region `data` lives in. -/
+@[noinline] private def copyImports (data : ModuleData) : IO (Array Name) :=
+  return data.imports.map (copyName ·.module)
+
+/-- The modules `roots` import transitively, without the `loaded` ones (this process's own
+closure, closed under imports), read from their `.olean` headers. Each module's data is freed
+once its imports are copied out: building an environment here instead would hold a second copy
+of every module in memory, since a region mapped at its base address once is copied, not mapped,
+by every later import of it. -/
+private unsafe def importClosure (loaded : NameSet) (roots : Array Name) : IO (Array Name) := do
+  let mut seen := loaded
+  let mut closure := #[]
+  let mut todo := roots.toList
+  while true do
+    match todo with
+    | [] => break
+    | m :: rest =>
+      todo := rest
+      if seen.contains m then continue
+      seen := seen.insert m
+      closure := closure.push m
+      let (data, region) ← readModuleData (← findOLean m)
+      let imports ← copyImports data
+      region.free
+      todo := imports.toList ++ todo
+  return closure
+
 /-- The current imports and `modules`, imported the way `leanchecker` loads them: no newly
 imported module's initializer runs (docs/architecture-audit/soundness-2026-10-20.md E1). Importing
 an audited module through the driver's header would run its `initialize` code in this process,
-which writes the report. The closure is read first without loading extensions; each of its
-modules is then marked as already initialized, so the extension-loading import runs no `[init]`
-of it. Only the extractor's own imports, initialized when this file was elaborated, keep theirs. -/
+which writes the report. The closure of `modules` beyond this process's own (`importClosure`) is
+read first; each of its modules is then marked as already initialized, so the extension-loading
+import runs no `[init]` of it. Only the extractor's own imports, initialized when this file was
+elaborated, keep theirs. -/
 private unsafe def importWithoutInitializersImpl (env : Environment) (modules : Array Name)
     (opts : Options) : IO Environment := do
-  let imports := env.header.imports ++ modules.map ({ module := · })
-  -- Not `withImportModules`: freeing that environment's regions would also free module data the
-  -- second import below and this process's own environment can share.
-  let closure := (← importModules imports opts (loadExts := false) (leakEnv := true)).header.moduleNames
+  let loaded := env.header.moduleNames.foldl (init := {}) NameSet.insert
+  let closure ← importClosure loaded modules
   let initialized ← interpretedModInits.get
   interpretedModInits.set (closure.foldl (init := initialized) (·.insert ·))
   enableInitializersExecution
-  importModules imports opts (loadExts := true) (leakEnv := true)
+  importModules (env.header.imports ++ modules.map ({ module := · })) opts (loadExts := true)
+    (leakEnv := true)
 
 @[implemented_by importWithoutInitializersImpl]
 private opaque importWithoutInitializers (env : Environment) (modules : Array Name) (opts : Options) :

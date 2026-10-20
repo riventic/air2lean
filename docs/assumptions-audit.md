@@ -275,11 +275,16 @@ The default roots remain theorems and project boundary declarations; the flag do
 every unused declaration in imported modules or certify that a dependency is legacy-free.
 
 The driver imports only `tools.Assurance`. `#assurance_audit` imports the audited modules itself
-and runs none of their initializers (`importWithoutInitializers`): the closure is read once
-without extensions, every module of it is recorded as initialized in Lean's
+and runs none of their initializers (`importWithoutInitializers`): the closure beyond the
+extractor's own is read from the `.olean` headers (`importClosure`, each module's data freed after
+its imports are read), every module of it is recorded as initialized in Lean's
 `interpretedModInits`, and then the closure is imported with extensions loaded. An audited
 module's `initialize` code therefore never runs in the process that writes the report
-([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1).
+([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). The import still holds
+a second copy of the extractor's own imports (the `ZigLean.Sep.Full` claim heads among them):
+a module already mapped at its base address is copied, not mapped, by a later import. One audit
+of `ZigLean.Sep.Full.Triple --all-declarations` peaks at about 3.6 GB, against 1.5 GB when the
+driver's header imported the audited modules.
 
 `--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
 Lake instead of elaborating it with `lake env lean`. The driver is the module of a generated
