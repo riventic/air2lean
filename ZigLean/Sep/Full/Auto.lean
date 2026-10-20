@@ -479,8 +479,10 @@ def RunCaches.new : IO RunCaches :=
            fuelOut := ← IO.mkRef false }
 
 /-- Restore the existing arithmetic search state with a failed speculative proof choice.
-The simp contexts are prepared before backtracking and are not part of this state. -/
-def RunCaches.saveArith (c : RunCaches) : IO (IO Unit) := do
+The simp contexts are prepared before backtracking and are not part of this state. Off
+(`on = false`), the restore does nothing. -/
+def RunCaches.saveArith (c : RunCaches) (on := true) : IO (IO Unit) := do
+  unless on do return pure ()
   let hyp ← c.hyp.get
   let disch ← c.disch.get
   let facts ← c.facts.get
@@ -6268,6 +6270,16 @@ def wpLocalHead (ty goal : Expr) : MetaM Bool := do
     unless stable head do return false
     withReducible (isDefEq head goal)
 
+/-- A fact `h` of a stop normalized with the context equations (`wpNorm`, `fields`), its original
+evidence kept, and a changed result forwarded (`wpForward`). `none` if the goal closed; else
+whether the fact changed, its current local (`none`: consumed by substitution), the goal. -/
+def wpNormFields (g : MVarId) (h : FVarId) (extra : Array Syntax) :
+    TacticM (Option (Bool × Option FVarId × MVarId)) := do
+  let some (h', g) ← wpNorm g h extra (fields := true) (keepOriginal := true) | return none
+  let changed := h' != h
+  let some g ← if changed then wpForward g h' else pure (some g) | return none
+  return some (changed, ← g.withContext (wpCurrentHyp? h'), g)
+
 mutual
 
 /-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
@@ -6370,12 +6382,8 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         match ← g'.withContext (wpCurrentHyp? fn) with
         | none => g := g'
         | some fn =>
-          let original := fn
-          let some (fn, g') ← wpNorm g' fn #[] (fields := true) (keepOriginal := true)
-            | return []
-          let some g' ← if fn == original then pure (some g') else wpForward g' fn
-            | return []
-          let some fn ← g'.withContext (wpCurrentHyp? fn) | do
+          let some (_, fn?, g') ← wpNormFields g' fn #[] | return []
+          let some fn := fn? | do
             g := g'
             continue
           -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
@@ -6385,10 +6393,8 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
       return [g]
   let some g ← wpForward g h | return []
   let some h ← g.withContext (wpCurrentHyp? h) | return [g]
-  let original := h
-  let some (h, g) ← wpNorm g h #[] (fields := true) (keepOriginal := true) | return []
-  let some g ← if h == original then pure (some g) else wpForward g h | return []
-  let some h ← g.withContext (wpCurrentHyp? h) | return [g]
+  let some (_, h?, g) ← wpNormFields g h #[] | return []
+  let some h := h? | return [g]
   let normalized ← g.withContext do whnfR (← instantiateMVars (← h.getType))
   let compound ← g.withContext do
     if normalized.isAppOfArity ``And 2 || normalized.isAppOfArity ``Exists 2 ||
@@ -6488,11 +6494,11 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let some g ← wpForward g h | return []
   let some h ← g.withContext (wpCurrentHyp? h) | return [g]
   let original := h
-  let some (h, g) ← wpNorm g h extra (fields := true) (keepOriginal := true) | return []
-  let some g ← if h == original then pure (some g) else wpForward g h | return []
-  let equation? ← if h == original then pure none else g.withContext do
-    let some h ← wpCurrentHyp? h | return none
-    return if (← instantiateMVars (← h.getType)).eq?.isSome then some h else none
+  let some (changed, h?, g) ← wpNormFields g h extra | return []
+  let equation? ← match h?, changed with
+    | some h, true => g.withContext do
+      return if (← instantiateMVars (← h.getType)).eq?.isSome then some h else none
+    | _, _ => pure none
   -- A retained whole equation can erase a leaf via fieldEqs. Preserve its substitution,
   -- proof-locally through raw branches, without a second compound decomposition.
   let g ← match equation? with
@@ -6565,7 +6571,7 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   if t.isAppOfArity ``Or 2 then
     for (i, side) in [(0, ``Or.inl), (1, ``Or.inr)] do
       let s ← saveState
-      let restoreArith ← if noCases then (← caches).saveArith else pure (pure ())
+      let restoreArith ← (← caches).saveArith noCases
       let a ← mkFreshExprSyntheticOpaqueMVar (t.getArg! i)
       try
         if (← wpGoal a.mvarId! user extra fuel noCases).isEmpty then
@@ -6646,7 +6652,6 @@ partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fue
   let depth ← c.chainDepth.get
   if depth ≥ 3 then return false
   let t ← instantiateMVars (← g.getType)
-  let mut tried : Array FVarId := #[]
   for local_ in [false, true] do
     let head ← if local_ then do
         pure (← whnfR t).consumeMData.getAppFn
@@ -6661,18 +6666,13 @@ partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fue
       else pure lemmas
     for raw in candidates do
       let s ← saveState
-      let restoreArith ← if local_ || noCases then c.saveArith else pure (pure ())
+      let restoreArith ← c.saveArith (local_ || noCases)
       let u? ← try
           pure (some (← if local_ then pure raw else refreshUser raw))
         catch ex =>
           trace[fsym] "chain {raw}: {ex.toMessageData}"
           pure none
       let some u := u? | s.restore; restoreArith; continue
-      -- Keep this outside the catching try: failed attempts still count at this level.
-      if let .fvar f := u then
-        if local_ && tried.contains f then
-          s.restore; restoreArith; continue
-        tried := tried.push f
       let pf? ← try
           let ty ← inferType u
           if local_ && !(← wpLocalHead ty head) then throwError "conclusion head"
@@ -6729,7 +6729,7 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
         if d.isImplementationDetail then acc else acc.push d
     for d in hyps do
       let s ← saveState
-      let restoreArith ← if noCases then (← caches).saveArith else pure (pure ())
+      let restoreArith ← (← caches).saveArith noCases
       try
         if ← sg.withContext (hypIs ts d) then
           sg.assign d.toExpr
@@ -6741,7 +6741,7 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
     if budget > 0 && !rest.isEmpty then
       return ← wpSides (rest ++ [sg]) strict (budget - 1) user extra fuel noCases
     let s ← saveState
-    let restoreArith ← if noCases then (← caches).saveArith else pure (pure ())
+    let restoreArith ← (← caches).saveArith noCases
     let r ← try solve catch ex =>
       s.restore; restoreArith; throw ex
     if r.isNone then
