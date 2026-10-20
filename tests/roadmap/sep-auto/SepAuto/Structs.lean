@@ -597,4 +597,33 @@ example (p : Ptr) (b : BlockId) (hb : p.block = some b)
       fsym_entail
   trivial
 
+open Lean Meta Zig.Full.Auto in
+/-- The consumer contract retains the true target, including a known-only, opaque or
+multi-atom target. Prefix multiplicity is distinct from request deduplication. -/
+example (b : BlockId) (A : Nat) (X R : FAssn) : True := by
+  run_tac do
+    let b := (← getLocalDeclFromUserName `b).toExpr
+    let A := (← getLocalDeclFromUserName `A).toExpr
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let k ← mkAppM ``Zig.Full.known #[b, A]
+    let lastTarget ← mkAppM ``Zig.Full.known #[b, ← mkAppM ``Nat.add #[A, mkNatLit 1]]
+    let (target, hints) := viewDemand lastTarget
+    unless target == lastTarget && hints.isEmpty do
+      throwError "known-only failure became a hint"
+    let (target, hints) := viewDemand (mkSep (mkSep k k) lastTarget)
+    unless target == lastTarget && hints == #[k, k] do
+      throwError "combined demand lost its true target or repeated knowledge"
+    let (target, hints) := viewDemand (mkSep k X)
+    unless target == X && hints == #[k] do
+      throwError "opaque failed target was unfolded"
+    let multiple := mkSep X R
+    let (target, hints) := viewDemand (mkSep k multiple)
+    unless target == multiple && hints == #[k] do
+      throwError "multi-atom failed target was reduced to its last leaf"
+    let (target, hints) := viewDemand multiple
+    unless target == multiple && hints.isEmpty do
+      throwError "ordinary multi-atom request changed"
+  trivial
+
 end SepAuto.Structs
