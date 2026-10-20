@@ -1465,8 +1465,8 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     k (← mkAppM ``Within.refl #[part])
 
 /-- A rule's hypothesis `t = u` whose left side is known and whose right side has unknowns (the
-block of a pointer, `p.block = some ?b`) is a function of the context's facts: a local
-hypothesis with the same left side fixes the unknowns before the rule's precondition is planned.
+block of a pointer, `p.block = some ?b`) fixes the unknowns before its precondition is planned:
+local equations with the same left side are tried first, then `solveBlock` computes its block.
 Else the planner may take an atom of the same shape about another block (two stack blocks of
 one size: the extent of the wrong one, ledger #27). -/
 def fixByFacts (args : Array Expr) : MetaM Unit := do
@@ -1490,6 +1490,10 @@ def fixByFacts (args : Array Expr) : MetaM Unit := do
       let s ← saveState
       if ← isDefEq ty t then a.mvarId!.assign h; break
       s.restore
+    if ← a.mvarId!.isAssigned then continue
+    if isBlockEq ty then
+      if let some pf ← solveBlock ty then
+        a.mvarId!.assign pf
 
 /-! ## Fields of typed values (`EncField`)
 
