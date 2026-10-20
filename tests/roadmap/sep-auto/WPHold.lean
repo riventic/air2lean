@@ -152,8 +152,14 @@ theorem return_payload_wp {Tgt : Type} {K : FPrim (FLG × Bool)} {P : Proto Tgt 
     P.WP 0 (ConcM.liftMem (load (BitVec 32) 4 p))
       (fun a _ m' _ => a = v ∧ m'.current = 0 ∧ ∃ rp rh,
         P.inv (upd G 0 (gPool true rp rh)) m' ∧ emp rp ∧ payload v T rh) G m d := by
-  fsym [hF.wp_holdParts (Qp := fun a => ⟪a = v⟫) (Qh := fun _ => payload v T)
-    (g' := gPool true), hUs]
+  fsym [hF.wp_holdParts (Pa := payload v T)
+    (Qp := fun a => ⟪a = v⟫) (Qh := fun _ => payload v T) (g' := gPool true)
+    (hi := hi) (hc := hc) (hpa := by
+      intro rh hr _
+      change emp rh at hr
+      change payload v T (rsum r rh)
+      have hrnil : rh = rnil := by simpa only [← partOf_rnil] using hr
+      simpa only [hrnil, rsum_rnil] using hp), hUs]
 
 /-- The same load while taking the complete payload into the caller's part. -/
 theorem take_payload_wp {Tgt : Type} {K : FPrim (FLG × Bool)} {P : Proto Tgt (FLG × Bool)}
@@ -167,7 +173,12 @@ theorem take_payload_wp {Tgt : Type} {K : FPrim (FLG × Bool)} {P : Proto Tgt (F
     P.WP 0 (ConcM.liftMem (load (BitVec 32) 4 p))
       (fun a _ m' _ => a = v ∧ m'.current = 0 ∧ ∃ rp rh,
         P.inv (upd G 0 (gPool false rp rh)) m' ∧ payload v T rp ∧ emp rh) G m d := by
-  fsym [hF.wp_holdParts (Qp := fun _ => payload v T) (Qh := fun a => ⟪a = v⟫)
-    (g' := gPool false), hUs]
+  fsym [hF.wp_holdParts (Pa := payload v T)
+    (Qp := fun _ => payload v T) (Qh := fun a => ⟪a = v⟫) (g' := gPool false)
+    (hi := hi) (hc := hc) (hpa := by
+      intro rh hr _
+      change payload v T rh at hr
+      change payload v T (rsum rnil rh)
+      simpa only [rnil_rsum] using hr), hUs]
 
 end SepAuto.WPHold
