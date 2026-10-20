@@ -224,7 +224,8 @@ theorem callGroupsBy_map {A B K : Type} [BEq K]
     (fun state node => by
       rcases state with ⟨done, groups⟩
       simp only [stepA, stepB, liftGroups, Array.filter_map, Array.any_map, Array.all_map,
-        Array.map_map, Function.comp_def, Array.size_map, Array.map_push]
+        Array.map_map, Function.comp_def, Array.map_push]
+      simp only [Array.size_map]
       split <;> simp_all only [Array.map_push, Bool.false_eq_true, ite_false, ite_true])
   simpa only [liftGroups, Array.map_empty] using congrArg Prod.snd hfold
 
