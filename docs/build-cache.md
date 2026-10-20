@@ -107,8 +107,8 @@ mutant copy. Without the variable (CI) the package builds into its own `.lake` l
 package.
 
 **One mode.** Every elaboration in a converted fixture's check goes through Lake (proofs,
-`#guard` files, obstructions, counterexamples, mutants), so the precompiled `fsym` engine of step 2
-(`precompileModules`, loaded by Lake for its own builds) applies to all of them at once, and a
+`#guard` files, obstructions, counterexamples, mutants), so the precompiled `fsym` engine
+([below](#precompiled-fsym), loaded by Lake for its own builds) applies to all of them at once, and a
 mutant cannot fail on a heartbeat budget that the native proof meets. Outside the checks,
 `scripts/theorem_universe.py audit` (CI part `audit`) still compiles the theorem-indexed fixture
 files itself with `lake env lean -o`: it rejects a file whose elaboration printed `declaration
@@ -130,6 +130,47 @@ every `.olean`, `.ilean`, `.c` and the executable).
 Proof receipts (`scripts/proof-receipt.py`) refuse any `LAKE_*` environment overlay, so a
 receipt never runs with the cache variables; `scripts/regen.sh` removes them for the provenance
 step. The hard-linked outputs it finds in `.lake/build` are ordinary up-to-date Lake outputs.
+
+## Precompiled fsym
+
+`fsym` (`ZigLean/Sep/Full/Auto.lean`, with the attribute handlers, arithmetic solver and rule
+tables of the modules below it) runs as native code in every Lake build of a module that imports
+`ZigLean.Sep.Full.Auto`, directly or through `AutoAll`, in the root package, the proof-fixture
+package and `tests/diff`. Lean's interpreter runs the same code otherwise. This is a build mode,
+not a proof rule: the elaborator produces the same terms and the kernel checks them as before
+(the `.olean` of every measured module is byte-identical in both modes, on aarch64-macos and
+x86_64-linux).
+
+Two libraries of `lakefile.toml` do it:
+
+- `Fsym` (`precompileModules = true`) holds `ZigLean.Sep.Full.Auto` alone. Lake compiles it to
+  C, an object file and the shared library `libair2lean_Fsym` and passes that, with its
+  dependency below, to every importer as `--load-dynlib`.
+- `FsymDeps` holds the import closure of `Auto` (87 modules). It is not precompiled: Lake builds
+  its shared library `libair2lean_FsymDeps` only because `Fsym`'s needs it. Its list of modules is
+  generated (`python3 -B scripts/lean-deps.py --precompiled write`, regen step `precompiled`;
+  preflight checks it): Lake assigns a module to the last library whose `globs` match it, so only
+  an explicit list keeps those modules out of `ZigLean` (whose shared library does not hold them).
+  A stale list fails closed: an importer of `Auto` stops with `error loading library,
+  dlopen(...libair2lean_Fsym...): symbol not found`.
+
+Lake loads a precompiled import as its whole library and records that library in the importer's
+trace. The split keeps that to the importers of `Auto`: a module that imports only modules below it
+(`ZigLean.Basic`, the translator's `Air2Lean` modules) loads no native code, does not wait for the
+C compile, and is not rebuilt when only `Auto` changes. Importers of `Auto` already depend on every
+module of the closure, so the shared libraries add no rebuild they did not have.
+
+The shared cache needs nothing extra: Lake stores `.c.o.export`, both shared libraries and the
+importers' outputs in its artifact cache under traces that include the toolchain, the platform
+and the compiler arguments, and restores the shared libraries under their names
+(`buildLeanSharedLib`, `restore := true`).
+
+`lake env lean FILE` loads no native code; the checks that still elaborate with it (the ones not
+yet converted to the proof-fixture package, `perf-budgets.py heartbeats`,
+`theorem_universe.py audit`, `lean-deps.py --elaborate`) run `fsym` interpreted. Results agree,
+but a heartbeat count does not: the native engine spends fewer heartbeats (ArenaSpec: see the
+PR), so a budget measured interpreted is an upper bound for the native build. `lake lean FILE`
+elaborates a file with Lake's setup, dynlibs included.
 
 ## Use
 
