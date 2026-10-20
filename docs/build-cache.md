@@ -174,8 +174,10 @@ and the compiler arguments, and restores the shared libraries under their names
 `lake env lean FILE` loads no native code; the checks that still elaborate with it (the ones not
 yet converted to the proof-fixture package, `perf-budgets.py heartbeats`,
 `theorem_universe.py audit`, `lean-deps.py --elaborate`) run `fsym` interpreted. Results agree,
-but a heartbeat count does not: the native engine spends fewer heartbeats (ArenaSpec: see the
-PR), so a budget measured interpreted is an upper bound for the native build. `lake lean FILE`
+but a heartbeat count does not. The native engine spends no more heartbeats than the interpreter
+in every declaration measured (2026-10-20: `ArenaSpec.resize_ct` 3 383 680 thousand interpreted,
+1 913 890 thousand native; `Proofs/Lists` up to 23 % fewer), so a budget measured interpreted
+(`perf-budgets.py heartbeats`) is an upper bound for the native build. `lake lean FILE`
 elaborates a file with Lake's setup, dynlibs included.
 
 ## Use
