@@ -55,7 +55,7 @@ theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
           exact (sep_lift.mp (sep_comm h)).2
       _ = _ := by
         simpa only [Frac.half_add_half] using
-          (epFee_add γ e (a := Frac.one.half) (b := Frac.one.half) (by decide) (by decide))
+          (epFee_add γ e (a := Frac.one.half) (b := Frac.one.half) (Frac.half_pos (by decide)) (Frac.half_pos (by decide)))
   simp only [halfFees] at init reset
   fsym [init,
     fun ctx Ac γ e n => Wrappers.alloc_of (fallocSpec ctx (buf A₀ Ac) γ e)
