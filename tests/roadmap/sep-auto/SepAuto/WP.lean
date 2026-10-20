@@ -488,14 +488,17 @@ theorem incoming_normalized_equation_substitution (flag y : Bool) (hf : flag = f
   run_tac withRunCaches do
     let g ← getMainGoal
     let h := (← getLocalDeclFromUserName `h).fvarId
-    let r := (← getLocalDeclFromUserName `R).toExpr
-    let expected := mkApp r (mkConst ``Bool.false)
     let gs ← wpHyp g h #[]
     if gs.isEmpty then
       throwError "incoming_normalized_equation_substitution: no surviving goal"
     for g in gs do
-      unless (← g.withContext (instantiateMVars (← g.getType))) == expected do
-        throwError "incoming_normalized_equation_substitution: the data was not substituted"
+      g.withContext do
+        -- Raw conditional replacement reintroduces later locals, including R.
+        let r := (← getLocalDeclFromUserName `R).toExpr
+        let expected := mkApp r (mkConst ``Bool.false)
+        let actual ← instantiateMVars (← g.getType)
+        unless actual == expected do
+          throwError "incoming_normalized_equation_substitution: expected {expected}, got {actual}"
     replaceMainGoal gs
   all_goals assumption
 
