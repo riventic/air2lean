@@ -44,9 +44,6 @@ namespace Full
 
 open FAssn Conc Proto
 
-theorem rsum_rnil (r : Res) : rsum r rnil = r := by
-  simp [rsum, Know.union_none]
-
 namespace LockWord
 
 variable {L : LockWord}

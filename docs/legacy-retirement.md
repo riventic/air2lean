@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-10-19, after #397): 54 `legacy_users` left.** The sections below are the 2026-10-14 plan;
+**Status (2026-10-20, after #503): 43 `legacy_users` left.** The sections below are the 2026-10-14 plan;
 their tables still list files that are gone. `assurance/proof-framework.json` is the current list.
 
 | lane | state | PRs |
@@ -52,16 +52,19 @@ Findings about the ratchet itself (lane L1):
 * **False negatives.** `LEGACY_MODULES` omits `Conc.{Csl,TlsLemmas,Witness,Lock,LockBase,LockRules}` and the
   other legacy Conc modules. Their importers are invisible: Conc/{Detach,Lock,Transfer,Unroll},
   Full/{ThreadOwned,ThreadTls}, Proofs/Threads/Disjoint, spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs,
-  thread-locals/ThreadLocals/Leak (10 files). "Ratchet empty" is not enough to delete Conc/Csl. L1 extends the regex
+  thread-locals/ThreadLocals/Leak (10 files; spawn-failure/Runtime and thread-tuples moved to `FOwned` with #520). "Ratchet empty" is not enough to delete Conc/Csl. L1 extends the regex
   (needs maintainer approval, +10 entries) so the list is exact.
-* Legacy-status entries outside `legacy_users` that also must reach zero: 43 judgments (Conc.Lock `Lock/Fits/FitsOn/Step`,
-  Conc.Logic `WP`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas `Grows`,
-  LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests:
-  futures `CancelSpec`, asm-wrappers `Spec`, claims.Fixture `Wrapped/FWrapped`, sep-full `FTripleCell/FTripleExact`)
-  and 23 tactic entries (Sep.Step 7, Automation 2, Wrappers 2, Norm `gen_norm`, Full.Conc `conc_norm`, Full.Tame `tame`,
+* Legacy-status entries outside `legacy_users` that also must reach zero (`legacy-to-retire` in
+  `assurance/proof-framework.json`, 2026-10-20): 41 judgments (Sep.Triple `Triple`, Sep.Total
+  `Returns/TotalTriple/TotalTripleIn`, Sep.Bounded `TotalTripleWithin`, Sep.Cost `Mem.SameAllocs`, Sep.AllocSpec
+  `AllocInv/AllocSpec/Logic`, Conc.Own `TTriple`, Conc.TlsLemmas `TTripleIn`, Conc.Word `BlkStep/Keep/KeepK`, Conc.Lock
+  `Lock/Fits/FitsOn/Step`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas
+  `Grows`, LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests: futures `CancelSpec`,
+  asm-wrappers `Spec`, claims.Fixture `FWrapped`, sep-full `FTripleCell/FTripleExact`) and 22 tactic entries
+  (Automation `sep_frame/sep_normalize`, Wrappers `sep_from/tame_prim`, Full.Conc `conc_norm`, Full.Tame `tame`,
   Full.Extent `within`, Full.Unroll `unroll_solo`, Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
-  `tomega`, VC.Extract (3), Witness (2), VersionGate `when_defined`, Threadsync.Lock `if_decl`, AllocArena.Core 12,
-  AllocFba 3, Air2Lean.Sem 2, Floatops 2, idle-loops `nn_step`, Assurance/audit commands). Section 5 assigns them.
+  `tomega`, VC.Extract (3), VersionGate `when_defined`, Threadsync.Variant `if_decl`, AllocFba 3, Assurance/audit
+  commands 3). Section 5 assigns them.
 
 ## 1. Legacy library modules and their importers
 
