@@ -197,7 +197,8 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
     job order (None for a job that did not finish).
     `order`: the job indices in the order to start them (default: job order). `mem_budget_mib`:
     a job starts only while the `mem_mib` requests of the running jobs and its own fit in it (one
-    job always runs); the next job in `order` waits, the others wait behind it."""
+    job always runs). The first job in `order` that fits starts; jobs pass the first waiting one
+    at most `max_workers` times, then it is next (a large job is delayed, never starved)."""
     sampler = None
     if stats is not None:
         sampler = _Sampler()
@@ -215,6 +216,7 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
     if sorted(pending) != list(range(len(jobs))):
         raise ValueError('order must be a permutation of the job indices')
     reserved = 0  # MiB: the requests of the running jobs
+    bypassed = 0  # jobs started past the first pending one since it became first
     received = []
 
     def on_signal(sig, _frame):
@@ -293,10 +295,17 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
                     entry = finished.get(index) or running[index]
                     replay(entry)
                 raise Interrupted(received[0])
-            while pending and len(running) < max_workers and (
-                    mem_budget_mib is None or not running
-                    or reserved + (jobs[pending[0]].mem_mib or 0) <= mem_budget_mib):
-                index = pending.pop(0)
+            while pending and len(running) < max_workers:
+                # The first pending job that fits; a later one passes the first at most
+                # max_workers times, then the first waits for room (it is not starved).
+                fits = [i for i in (pending if bypassed < max_workers else pending[:1])
+                        if mem_budget_mib is None or not running
+                        or reserved + (jobs[i].mem_mib or 0) <= mem_budget_mib]
+                if not fits:
+                    break
+                index = fits[0]
+                bypassed = 0 if index == pending[0] else bypassed + 1
+                pending.remove(index)
                 start(index)
                 if index in running:
                     reserved += jobs[index].mem_mib or 0

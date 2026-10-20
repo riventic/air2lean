@@ -114,6 +114,19 @@ class Output(unittest.TestCase):
         with self.assertRaises(ValueError):
             par.run(jobs, 1, order=[0, 0, 1, 2, 3])
 
+    def test_a_small_job_passes_a_waiting_large_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
+                   f'sleep 0.3; rm {tmp}/run.$JOB')
+            # 900 does not fit beside 800, 100 does: it starts at once instead of waiting behind 900.
+            jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
+                    for i, m in enumerate([800, 900, 100])]
+            with open(os.devnull, 'wb') as null:
+                self.assertEqual(par.run(jobs, 3, null, null, mem_budget_mib=1000), [0] * 3)
+            seen = {line.split()[0]: line.split()[1:] for line in (Path(tmp) / 'seen').read_text().splitlines()}
+        self.assertEqual(sorted(seen['2']), ['run.0', 'run.2'])
+        self.assertEqual(seen['1'], ['run.1'])
+
     def test_stats(self):
         # A child that holds 64 MiB for a few samples: its group's peak and its kind are recorded.
         hold = f'{sys.executable} -c "x = bytearray(64 << 20); import time; time.sleep(3 * {par.SAMPLE_SECONDS})"'
