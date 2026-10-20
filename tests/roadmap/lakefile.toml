@@ -50,3 +50,30 @@ globs = ["Interfaces.Sentinel", "Interfaces.SentinelSpec"]
 name = "AuditClaims"
 srcDir = "architecture-audit/claims"
 globs = ["AuditClaims.+"]
+
+# One retained translation and one model per Zig version (`NanBits.V0_17_0.Gen`, `.Model`); the
+# models of the older versions are instances of the 0.17.0 one (scripts/fixtures.py instance).
+[[lean_lib]]
+name = "NanBits"
+srcDir = "nan-bits"
+globs = ["NanBits.+"]
+
+# As NanBits: two retained translations and one model per Zig version, and the
+# version-independent regression rows (EncExactness.Rows).
+[[lean_lib]]
+name = "EncExactness"
+srcDir = "enc-exactness"
+globs = ["EncExactness.+"]
+
+# As NanBits: per Zig version the retained translations of four sources (not every source at
+# every version) and their models, and the shared formatting (PackedCasts.Show).
+[[lean_lib]]
+name = "PackedCasts"
+srcDir = "packed-casts"
+globs = ["PackedCasts.+"]
+
+# As NanBits: one retained translation and one model per Zig version.
+[[lean_lib]]
+name = "TryLifetimes"
+srcDir = "try-pointers/lifetimes"
+globs = ["TryLifetimes.+"]

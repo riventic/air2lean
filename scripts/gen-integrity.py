@@ -204,8 +204,9 @@ FIXTURES = [
     for v in ("0.15.2", "0.17.0") for target in ("s390x-linux", "mips64-linux", "x86_64-linux")
 ] + [
     # L07/L08 packed-casts/check.sh: one translation per source and version.
-    (f"tests/roadmap/packed-casts/gen/{v}/{ns}.lean", f"tests/roadmap/packed-casts/air/{v}/{src}",
-     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/{ns}.lean",
+     f"tests/roadmap/packed-casts/air/{v}/{src}",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.{ns}", "--prefix", f"{src}."], "exact")
     for src, ns, versions in (
         ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.0")),
         ("logical017", "Logical017", ("0.17.0",)),
@@ -214,20 +215,21 @@ FIXTURES = [
     for v in versions
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
-    (f"tests/roadmap/nan-bits/gen/{v}/NanBits.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
-     ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
+    (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
+     ["--namespace", f"NanBits.V{v.replace('.', '_')}", "--prefix", "nan_bits."], "exact")
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     # enc-exactness/check.sh (docs/architecture-audit/enc-exactness.md): two sources per version.
-    (f"tests/roadmap/enc-exactness/gen/{v}/{out}.lean", f"tests/roadmap/enc-exactness/air/{v}/{src}",
-     ["--namespace", ns, "--prefix", f"{src}."], "exact")
-    for src, out, ns in (("enc_exactness", "EncExactness", "EncExactness"),
-                         ("opaque_bytes", "Opaque", "EncExactness.Opaque"))
+    (f"tests/roadmap/enc-exactness/EncExactness/V{v.replace('.', '_')}/{out}.lean",
+     f"tests/roadmap/enc-exactness/air/{v}/{src}",
+     ["--namespace", f"EncExactness.V{v.replace('.', '_')}{ns}", "--prefix", f"{src}."], "exact")
+    for src, out, ns in (("enc_exactness", "Gen", ""), ("opaque_bytes", "Opaque", ".Opaque"))
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     # L04 try-pointers/lifetimes/check.sh.
-    (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
-     ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")
+    (f"tests/roadmap/try-pointers/lifetimes/TryLifetimes/V{v.replace('.', '_')}/Gen.lean",
+     f"tests/roadmap/try-pointers/lifetimes/air/{v}",
+     ["--namespace", f"TryLifetimes.V{v.replace('.', '_')}", "--prefix", "try_lifetimes."], "exact")
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",

@@ -56,8 +56,8 @@ The Lean files of the proof fixtures (`tests/roadmap/<fixture>/check.sh`) are on
 `ArenaSpec`). The outputs go to `tests/roadmap/.lake/build`, outside the root
 `.lake/build/lib/lean`, where proof receipts reject untracked compiled modules. Converted so far:
 `alloc-arena`, `alloc-fba`, `alloc-translated`, `lists-fba` (and the two `interfaces` modules it
-imports) and the architecture-audit claim fixtures; the other checks still elaborate with
-`lake env lean`.
+imports), the architecture-audit claim fixtures, `packed-casts`, `nan-bits`, `enc-exactness` and
+`try-pointers/lifetimes`; the other checks still elaborate with `lake env lean`.
 
 `scripts/fixtures.py` is the one entry point; a converted check runs nothing else on Lean files:
 
@@ -66,6 +66,8 @@ imports) and the architecture-audit claim fixtures; the other checks still elabo
 | `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
 | `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration of the modules depends on `sorry`, every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. |
 | `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
+| `fixtures.py instance PRIMARY --subst OLD=NEW... [--write]` | a module stated once for several Zig versions or targets: the instance is PRIMARY with each OLD name component (`V0_17_0`) replaced by NEW, in its text and its path. Fails unless the committed instance is that text byte for byte (`--write` writes it). |
+| `fixtures.py run OUTDIR M:DECL...` | runs each `IO Unit` DECL of a built module M in one `lean --run` of the package, its output to `OUTDIR/M.txt`; fails unless the modules are up to date in Lake's trace (`lake build --no-build`) |
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
 **Reuse is Lake's trace, nothing else.** A module is elaborated again exactly when its trace
@@ -85,6 +87,15 @@ check result is never reused.
 is a tracked module of the library. The check first translates the AIR afresh and requires the
 output to be byte-identical (`cmp`), then builds: a changed translator output fails the comparison
 before any proof runs, and a regenerated file has new content, so a new trace.
+
+**One model, several versions.** A fixture that checks the same model against the translation of
+each Zig version (or target) has one translation and one model module per version, with distinct
+module names and namespaces (`NanBits.V0_16_0.Gen`, `NanBits.V0_16_0.Model`): two same-named
+modules cannot share a workspace, and distinct namespaces let one audit load every version. The
+model is written once, for the newest version; the check requires every other version's module to
+be that file with the version name replaced (`fixtures.py instance`), so no version's theorems can
+drift. A model's `main` (the lines compared with native output) runs from the built modules
+(`fixtures.py run`), not by elaborating the file again.
 
 **Mutants** are other files: copying the fixture's modules with one changed keeps every module
 name, and a workspace of their own keeps the two apart (in one workspace Lake would build only

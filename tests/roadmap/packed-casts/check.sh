@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # L07/L08 packed representations and logical casts (README.md). Sources and their versions:
-#   packed_casts.zig   0.14.1 0.15.2 0.16.0 0.17.0   (namespace PackedCasts,  Model.lean)
-#   logical017.zig     0.17.0                        (namespace Logical017,   ModelLogical.lean)
-#   vector_fields.zig  0.14.1 0.15.2                 (namespace VectorFields, ModelVector.lean)
-#   auto_items.zig     0.14.1 0.15.2                 (namespace AutoItems,    ModelAuto.lean)
+#   packed_casts.zig   0.14.1 0.15.2 0.16.0 0.17.0   (PackedCasts/<version>/PackedCasts.lean, Model.lean)
+#   logical017.zig     0.17.0                        (PackedCasts/<version>/Logical017.lean, ModelLogical.lean)
+#   vector_fields.zig  0.14.1 0.15.2                 (PackedCasts/<version>/VectorFields.lean, ModelVector.lean)
+#   auto_items.zig     0.14.1 0.15.2                 (PackedCasts/<version>/AutoItems.lean, ModelAuto.lean)
 #   reject_lanes.zig   0.14.1 0.15.2                 (rejected: docs/upstream/packed-vector-lane-ptr.md)
+# (<version> as a name: V0_17_0). Each model is written for the newest version of its source; the
+# other versions' models are that one with the version renamed (scripts/fixtures.py instance).
 #
-#   check.sh [--check]            translate every retained export, compare with gen/<version>/,
-#                                 build the translations, check the kernel proofs of the Model*.lean
-#                                 files, compare their lines with expected/<version>.txt, and check
-#                                 the rejections
+#   check.sh [--check]            translate every retained export, compare with the retained
+#                                 translation, check the model instances, build the library
+#                                 PackedCasts (tests/roadmap/lakefile.toml: the translations and
+#                                 the kernel proofs of the models), audit the models' axioms,
+#                                 compare the lines the models' `main`s print with
+#                                 expected/<version>.txt, and check the rejections
 #   check.sh --native VERSION     build native.zig with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE)
 #                                 for x86_64-linux-musl (ReleaseSafe and Debug), run it (Docker
 #                                 linux/amd64 unless AIR2LEAN_X86_64_RUN is set; empty: the host),
@@ -18,19 +22,20 @@
 #                                 Zig VERSION (AIR2LEAN_ZIG_NATIVE) as compile-errors/expected.txt says
 #   check.sh --export VERSION DIR write fresh AIR with a patched Zig VERSION (AIR2LEAN_ZIG_AIR)
 #
-# A model line `unspecified` matches any native value (a NaN's bits, padding bytes). Needs
-# `lake build ZigLean Air2Lean air2lean`; run in the serialized build queue.
+# A model line `unspecified` matches any native value (a NaN's bits, padding bytes). Needs a built
+# translator; Lake builds the library with what it imports (scripts/fixtures.py; run it under
+# scripts/build-guard.py).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/packed-casts
 versions=(0.14.1 0.15.2 0.16.0 0.17.0)
-# source:namespace:model:versions
+# source:translation:model:versions (the newest first: its model is the written one)
 sources=(
-  "packed_casts:PackedCasts:Model:0.14.1 0.15.2 0.16.0 0.17.0"
+  "packed_casts:PackedCasts:Model:0.17.0 0.16.0 0.15.2 0.14.1"
   "logical017:Logical017:ModelLogical:0.17.0"
-  "vector_fields:VectorFields:ModelVector:0.14.1 0.15.2"
-  "auto_items:AutoItems:ModelAuto:0.14.1 0.15.2"
+  "vector_fields:VectorFields:ModelVector:0.15.2 0.14.1"
+  "auto_items:AutoItems:ModelAuto:0.15.2 0.14.1"
 )
 has_version() { [[ " $1 " == *" $2 "* ]]; }
 
@@ -100,40 +105,48 @@ case "${1:---check}" in
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native VERSION|--compile-errors VERSION|--export VERSION DIR]' >&2; exit 2 ;;
 esac
-python3 -B scripts/lean-deps.py --build tests/roadmap/packed-casts
-
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-packed-casts.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for v in "${versions[@]}"; do
-  w="$work/$v"
-  mkdir -p "$w"
-  cp "$dir/Show.lean" "$w/"
-  "${lean_cmd[@]}" -R "$w" -o "$w/Show.olean" "$w/Show.lean"
-  : > "$w/lines.txt"
-  for entry in "${sources[@]}"; do
-    IFS=: read -r src ns model vs <<<"$entry"
-    has_version "$vs" "$v" || continue
-    mkdir -p "$w/$ns"
-    "$translator" "$dir/air/$v/$src" -o "$w/$ns/Gen.lean" --namespace "$ns" --prefix "$src."
-    cmp "$w/$ns/Gen.lean" "$dir/gen/$v/$ns.lean"
-    LEAN_PATH="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" \
-      "${lean_cmd[@]}" -R "$w" -o "$w/$ns/Gen.olean" "$w/$ns/Gen.lean"
-    cp "$dir/$model.lean" "$w/"
-    LEAN_PATH="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" \
-      "${lean_cmd[@]}" -R "$w" --run "$w/$model.lean" > "$w/$model.txt" \
-      || { cat "$w/$model.txt" >&2; exit 1; }
-    cat "$w/$model.txt" >> "$w/lines.txt"
-    # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
-    python3 -B scripts/theorem_universe.py gate "$w/$model.lean" --root "$w" --lean-path "$w" \
-      --output-dir "$w/universe-$model" --replay-cache "$work/replay-cache.json" > /dev/null
+models=() mains=() theorems=()
+for entry in "${sources[@]}"; do
+  IFS=: read -r src ns model vs <<<"$entry"
+  read -r newest _ <<<"$vs"
+  newest="V${newest//./_}"
+  for v in $vs; do
+    t="V${v//./_}"
+    # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+    "$translator" "$dir/air/$v/$src" -o "$work/$t-$ns.lean" --namespace "PackedCasts.$t.$ns" --prefix "$src."
+    cmp "$work/$t-$ns.lean" "$dir/PackedCasts/$t/$ns.lean"
+    # Every version's model states the same theorems: the newest version's, the version renamed.
+    [ "$t" = "$newest" ] ||
+      python3 -B scripts/fixtures.py instance "$dir/PackedCasts/$newest/$model.lean" --subst "$newest=$t"
+    models+=("PackedCasts.$t.$model")
+    mains+=("PackedCasts.$t.$model:PackedCasts.$t.$model.main")
   done
-  # The model's lines are the retained native observations of this version.
-  compare "$w/lines.txt" "$dir/expected/$v.txt"
-  echo "$v: translations, kernel proofs and $(wc -l < "$w/lines.txt" | tr -d ' ') model lines match"
+done
+for t in V0_14_1 V0_15_2 V0_16_0 V0_17_0; do
+  theorems+=(--declaration "PackedCasts.$t.Model.setUnion_ok" --declaration "PackedCasts.$t.Model.floatField_nan")
+done
+for t in V0_14_1 V0_15_2; do
+  theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding")
+done
+theorems+=(--declaration PackedCasts.V0_17_0.ModelLogical.intToModes_unnamed)
+python3 -B scripts/fixtures.py build PackedCasts
+# Compiled and audited (axioms, sorry, kernel replay), not only run: they are indexed (F2).
+python3 -B scripts/fixtures.py audit "${models[@]}" "${theorems[@]}"
+python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"
+for v in "${versions[@]}"; do
+  : > "$work/$v.txt"
+  for entry in "${sources[@]}"; do
+    IFS=: read -r _ _ model vs <<<"$entry"
+    has_version "$vs" "$v" || continue
+    cat "$work/out/PackedCasts.V${v//./_}.$model.txt" >> "$work/$v.txt"
+  done
+  # The models' lines are the retained native observations of this version.
+  compare "$work/$v.txt" "$dir/expected/$v.txt"
+  echo "$v: translations, kernel proofs and $(wc -l < "$work/$v.txt" | tr -d ' ') model lines match"
 done
 # Lane pointers into a vector field of a packed struct are rejected (0.14.1, 0.15.2).
 for v in 0.14.1 0.15.2; do

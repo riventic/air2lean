@@ -19,8 +19,8 @@
 | File | Role |
 |---|---|
 | `air/<version>/` | Patched-compiler exports for 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
-| `gen/<version>.lean` | Their retained translations. They are identical apart from the profile header, except that 0.14.1 has one extra `unwrapPayload` read in `danglingPayload` |
-| `Lifetimes.lean` | Kernel-checked results of `freeOnError` and `readDangling` (the memory ends with every heap block freed). Then 32 scheduler oracles for each concurrent case: the native results, and `.illegal` for the race |
+| `TryLifetimes/<version>/Gen.lean` | Their retained translations (`<version>` as a name: `V0_17_0`). They are identical apart from the profile header and the namespace, except that 0.14.1 has one extra `unwrapPayload` read in `danglingPayload` |
+| `TryLifetimes/<version>/Lifetimes.lean` | Written for 0.17.0; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit). Kernel-checked results of `freeOnError` and `readDangling` (the memory ends with every heap block freed). Then 32 scheduler oracles for each concurrent case: the native results, and `.illegal` for the race |
 
 `check.sh --native VERSION` runs the tests of `try_pointers.zig`, `try_aliases.zig` (the alias
 fixture) and `try_lifetimes.zig` on x86_64-linux-musl, ReleaseSafe and Debug, in Docker
