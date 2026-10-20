@@ -59,19 +59,22 @@ def definitions(raw: str, rel: str) -> tuple[dict[str, dict], list[str]]:
     return named, errors
 
 
-def module_path(root: Path, module: str) -> Path:
+def module_path(root: Path, module: str, *, source_files: dict[str, str] | None = None) -> Path:
+    if source_files is not None and module in source_files:
+        return root / source_files[module]
     return root / Path(*module.split(".")).with_suffix(".lean")
 
 
 class GeneratedMarkers:
     """The markers of generated modules, read once per module."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, source_files: dict[str, str] | None = None):
         self.root, self.errors, self.by_module = root, [], {}
+        self.source_files = source_files
 
     def of(self, module: str, name: str) -> dict:
         if module not in self.by_module:
-            path = module_path(self.root, module)
+            path = module_path(self.root, module, source_files=self.source_files)
             named, errors = definitions(path.read_text(), str(path.relative_to(self.root))) \
                 if path.is_file() else ({}, [])
             self.errors += errors

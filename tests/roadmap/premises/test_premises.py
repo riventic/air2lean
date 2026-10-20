@@ -577,6 +577,19 @@ class CompiledTests(unittest.TestCase):
                 "theorems": [{"name": "wrap_spec", "module": "Proofs.Asm.Proofs", "axioms": list(axioms)},
                              {"name": "Zig.lemma", "module": "ZigLean.Basic", "axioms": []}]}
 
+    def owned_generated_report(self):
+        import theorem_universe
+        report = self.report()
+        for row in [*report['nodes'], *report['theorems']]:
+            if row['module'] in {'Proofs.Asm.Gen', 'Proofs.Asm.Proofs'}:
+                row['module'] = row['module'].removeprefix('Proofs.')
+        report['freshness'] = {'compiled_units': {'synthetic': 'owner calls are mocked'}}
+        self.fixture.files['Proofs/Asm/Proofs.lean'] = self.fixture.files['Proofs/Asm/Proofs.lean'].replace(
+            'import Proofs.Asm.Gen', 'import Asm.Gen')
+        units = [theorem_universe.Unit(f'Proofs/Asm/{name}.lean', 'Proofs', f'Asm.{name}', (), (), None, ())
+                 for name in ('Gen', 'Proofs')]
+        return report, units
+
     def test_compiled_closure_stops_at_runtime(self):
         result = premises.compiled(self.report(), self.fixture.root, self.config, None)
         self.assertEqual(result["status"], "pass")
@@ -738,21 +751,87 @@ class CompiledTests(unittest.TestCase):
         with mock.patch.object(theorem_universe, 'ROOT', self.fixture.root), \
                 mock.patch.object(theorem_universe, 'verify_compiled_report'), \
                 mock.patch.object(theorem_universe, 'compilation_plan', return_value=[unit]):
-            modules = premises.compiled_source_modules(report, self.fixture.root)
+            files = premises.compiled_source_files(report, self.fixture.root)
         nodes = {node['name']: node for node in report['nodes']}
-        bounds = premises.equation_source_bounds(repo, nodes, report['theorems'], source_modules=modules)
+        bounds = premises.equation_source_bounds(repo, nodes, report['theorems'], source_files=files)
         self.assertIn(('Asm.Gen', 'Asm.wrap'), bounds)
         nodes['Asm.wrap']['module'] = 'Other.Gen'
         self.assertEqual(premises.equation_source_bounds(
-            repo, nodes, report['theorems'], source_modules=modules), {})
+            repo, nodes, report['theorems'], source_files=files), {})
         report = self.report()
         report['nodes'][0]['module'] = report['theorems'][0]['module'] = 'Other.Proofs'
         graph, reasons, edges = premises.compiled_graph(report, self.fixture.root, self.config)
         premises.compare_compiled_source(graph, {node['name']: node for node in report['nodes']},
-                                         reasons, edges, source, source_modules=modules)
+                                         reasons, edges, source, source_files=files)
         self.assertEqual(graph['status'], 'fail')
         self.assertTrue(any(error.startswith('wrap_spec: source comparison unavailable:')
                             for error in graph['errors']))
+
+    def test_owned_generated_profile_uses_compiler_source(self):
+        import theorem_universe
+        report, units = self.owned_generated_report()
+        self.fixture.files['Proofs/Asm/Gen.lean'] = PROFILE + textwrap.dedent(
+            self.fixture.files['Proofs/Asm/Gen.lean'])
+        errors, source = self.fixture.check(write=True)
+        self.assertEqual(errors, [])
+        with mock.patch.object(theorem_universe, 'ROOT', self.fixture.root), \
+                mock.patch.object(theorem_universe, 'verify_compiled_report') as owner, \
+                mock.patch.object(theorem_universe, 'compilation_plan', return_value=units) as plan:
+            result = premises.compiled(report, self.fixture.root, self.config, source)
+        owner.assert_called_once_with(report)
+        plan.assert_called_once_with(report['freshness']['compiled_units'])
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['source_gap_count'], 0)
+        self.assertIn('PRF-02', result['theorems'][0]['premises'])
+        self.assertNotIn('PRF-03', result['theorems'][0]['premises'])
+
+    def test_owned_generated_profile_ignores_a_same_named_unowned_path(self):
+        import theorem_universe
+        report, units = self.owned_generated_report()
+        body = textwrap.dedent(self.fixture.files['Proofs/Asm/Gen.lean'])
+        self.fixture.files['Proofs/Asm/Gen.lean'] = PROFILE + body
+        self.fixture.files['Asm/Gen.lean'] = PROFILE.replace('abi64-le-v1', 'legacy-abi64-le') + body
+        errors, source = self.fixture.check(write=True)
+        self.assertEqual(errors, [])
+        with mock.patch.object(theorem_universe, 'ROOT', self.fixture.root), \
+                mock.patch.object(theorem_universe, 'verify_compiled_report'), \
+                mock.patch.object(theorem_universe, 'compilation_plan', return_value=units):
+            result = premises.compiled(report, self.fixture.root, self.config, source)
+        self.assertEqual(result['status'], 'pass')
+        self.assertIn('PRF-02', result['theorems'][0]['premises'])
+        self.assertNotIn('PRF-01', result['theorems'][0]['premises'])
+        self.assertNotIn('PRF-03', result['theorems'][0]['premises'])
+
+    def test_owned_generated_markers_use_the_same_compiler_source(self):
+        import theorem_universe
+        report, units = self.owned_generated_report()
+        self.fixture.files['Proofs/Asm/Gen.lean'] = PROFILE + textwrap.dedent(
+            self.fixture.files['Proofs/Asm/Gen.lean']).replace(
+                'def wrap', '-- air2lean-premises: {"ALC-09":[0],"IOM-01":[0]}\ndef wrap')
+        errors, source = self.fixture.check(write=True)
+        self.assertEqual(errors, [])
+        with mock.patch.object(theorem_universe, 'ROOT', self.fixture.root), \
+                mock.patch.object(theorem_universe, 'verify_compiled_report'), \
+                mock.patch.object(theorem_universe, 'compilation_plan', return_value=units):
+            result = premises.compiled(report, self.fixture.root, self.config, source)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['source_gap_count'], 0)
+        self.assertLessEqual({'ALC-09', 'IOM-01'}, set(result['theorems'][0]['premises']))
+
+    def test_owned_headerless_example_retains_translate_args_admission(self):
+        import theorem_universe
+        report, units = self.owned_generated_report()
+        self.fixture.files['examples/asm/translate.args'] = '--assume-no-libc\n'
+        errors, source = self.fixture.check(write=True)
+        self.assertEqual(errors, [])
+        self.assertIn('MTH-05', next(row for row in source if row['theorem'] == 'wrap_spec')['premises'])
+        with mock.patch.object(theorem_universe, 'ROOT', self.fixture.root), \
+                mock.patch.object(theorem_universe, 'verify_compiled_report'), \
+                mock.patch.object(theorem_universe, 'compilation_plan', return_value=units):
+            result = premises.compiled(report, self.fixture.root, self.config, source)
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['source_gap_count'], 0)
+        self.assertIn('MTH-05', result['theorems'][0]['premises'])
 
     def test_internal_helper_requires_directed_coverage_by_a_passing_indexed_root(self):
         _, source = premises.check(self.fixture.root)
