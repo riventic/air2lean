@@ -337,9 +337,7 @@ private partial def peelComputationCore (fuel : Nat) (e : Expr) :
   return applyComputation view (args.extract arity args.size)
 
 def peelComputation (e : Expr) : MetaM (Except String ComputationView) := withInspectionLimits do
-  try
-    peelComputationCore 64 e
-  catch error =>
+  tryCatchRuntimeEx (peelComputationCore 64 e) fun error => do
     if error.isInterrupt then throw error
     return .error "computation runner inspection exceeded its reduction limits"
 
@@ -354,7 +352,7 @@ def computationArgument? (body : Expr) : Option Nat :=
 /-- A triple must reach its declared terminal family. Definitionally equal ReaderT or plain
 function types do not justify interpreting genuine source data as the terminal memory state. -/
 def statementComputation (body : Expr) : MetaM (Except String ComputationView) := withInspectionLimits do
-  try
+  tryCatchRuntimeEx (do
     let some index := computationArgument? body |
       return .error "conclusion has no supported outcome postcondition"
     let checked ← peelComputation (body.getArg! index)
@@ -385,8 +383,7 @@ def statementComputation (body : Expr) : MetaM (Except String ComputationView) :
       let expected := if body.isAppOfArity ``Zig.Full.CTriple 5 then [] else [true]
       unless layers == expected do
         return .error "triple computation does not expose its declared terminal effect"
-    return .ok view
-  catch error =>
+    return .ok view) fun error => do
     if error.isInterrupt then throw error
     return .error s!"computation inspection failed: {← error.toMessageData.toString}"
 
@@ -457,7 +454,9 @@ private partial def equationOutcomes (fuel pairs : Nat) (layers : List Bool)
 identity is checked separately by claims.py; wrappers and unregistered heads remain unknown. -/
 def outcomeJson (body : Expr) (computationView : Option (Except String ComputationView) := none) :
     MetaM Json := withInspectionLimits do
-  try
+  -- The inspection limits raise runtime exceptions (heartbeats, recursion depth), which a
+  -- plain `try` rethrows: catch those too, so a limit yields an unsupported outcome.
+  tryCatchRuntimeEx (do
     let checked ← match computationView with
       | some view => pure view
       | none => statementComputation body
@@ -475,8 +474,7 @@ def outcomeJson (body : Expr) (computationView : Option (Except String Computati
         let some layers := view.layers |
           return unsupportedOutcome "equation uses an unrecognised function runner"
         return ← equationOutcomes 12 view.pairs layers lhs (body.getArg! 2)
-      return unsupportedOutcome "conclusion has no supported outcome postcondition"
-  catch error =>
+      return unsupportedOutcome "conclusion has no supported outcome postcondition") fun error => do
     if error.isInterrupt then throw error
     return unsupportedOutcome "outcome extraction exceeded its reduction limits or could not inspect the predicate"
 

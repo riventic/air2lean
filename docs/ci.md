@@ -845,7 +845,10 @@ reached by a path built in code, a false green: `tests/roadmap/callbacks/mutants
 `tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the unit "test: Callback
 contracts" kept its key and its stale pass while `callbacks/check.sh` failed. The phase takes 16
 to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
-own (`--only TEXT`: the units whose name or checks contain TEXT).
+own (`--only TEXT`: the units whose name or checks contain TEXT). It writes each unit's wall time,
+peak RSS (its process group, sampled) and wall time by process kind (lean, zig, the translator,
+lake, python) to `DIR/units.json` and prints the 20 longest units; these are measurements, used
+for nothing else.
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 
