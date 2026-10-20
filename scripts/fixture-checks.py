@@ -298,6 +298,29 @@ def report(units, statuses, stats, path, top=20):
                                          row['name']))
 
 
+SHARED = ROOT / '.lake/build/lib/lean'
+
+
+def shared_outputs():
+    """Identity (inode, size, mtime) of every root-package module the units import, its .olean.
+    The full build compiles them before this phase; Lake has no build lock, so a unit that
+    rebuilds one in place races every unit importing it (a missing .olean mid-write, compiled
+    inputs changed during a kernel replay). Lake's trace and hash files are not compared: an
+    up-to-date check may rewrite them."""
+    found = {}
+    for path in SHARED.rglob('*.olean'):
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            continue
+        found[str(path.relative_to(SHARED))] = (info.st_ino, info.st_size, info.st_mtime_ns)
+    return found
+
+
+def changed_outputs(before, after):
+    return sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
@@ -347,11 +370,16 @@ def main(argv=None):
             workers = par.workers(a.jobs, a.mem_mib, len(jobs))
             print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
             stats, statuses = [], None
+            before = shared_outputs()
             try:
                 with open(os.devnull, 'wb') as null:
                     statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
             finally:  # also the finished units of a stopped run (a guard's timeout)
                 report(units, statuses or [None] * len(units), stats, a.report)
+            if changed := changed_outputs(before, shared_outputs()):
+                failed.append('the root package\'s build outputs changed while the units ran (a unit '
+                              'built root modules, racing the units that read them): '
+                              + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses):
