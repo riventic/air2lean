@@ -12,42 +12,23 @@ case "${1:-}" in
   --write) write=1 ;;
   *) echo "usage: tests/roadmap/claims/check.sh [--write]" >&2; exit 2 ;;
 esac
-python3 -B scripts/lean-deps.py --build tests/roadmap/claims
-[ "$write" = 1 ] || python3 tests/roadmap/claims/test_claims.py
 out=.lake/assurance/claims
 mkdir -p "$out"
-# These are known non-gated Units. Bind the same compiler-owned sources BEFORE compilation,
-# then carry that exact context through ordinary extraction/replay and saved-report admission.
-python3 -B - "$out" <<'PY'
-import sys, tempfile
-from pathlib import Path
-sys.path.insert(0, 'scripts')
-import theorem_universe as universe
-out = Path(sys.argv[1])
-_, units = universe.universe()
-by_file = {unit.file: unit for unit in units}
-source_map = {unit.module: unit.file for unit in units}
-for name, reports in [('Fixture', [('assurance.json', False)]),
-                      ('AllocatorApplications', [('allocator-applications.json', False)]),
-                      ('AllocatorImported', [('allocator-imported.json', False),
-                                             ('allocator-imported-all.json', True)])]:
-    selected = [by_file[f'tests/roadmap/claims/{name}.lean']]
-    work = Path(tempfile.mkdtemp(prefix=name + '-', dir=out))
-    local = universe.closure(selected, by_file)
-    context = universe.prepare_compilation(selected, by_file, work)
-    errors = universe.compile_all(local, by_file, work, compiled_units=context)
-    if errors:
-        raise RuntimeError('; '.join(errors))
-    universe.seal_compilation(context)
-    sources = work / 'sources.json'
-    universe.write_report(sources, {**source_map, **{unit.module: unit.file for unit in local}})
-    for filename, all_declarations in reports:
-        result = universe.audit_modules(context['selected_modules'], [], out / filename,
-                                        sources=sources, all_declarations=all_declarations,
-                                        compiled_units=context)
-        if result['exit_code'] or result['status'] != 'pass':
-            raise RuntimeError(f'{name}: {result}')
-PY
+# The unit tests (Python only) run meanwhile; their result is required below.
+tests_pid=
+trap '[ -z "$tests_pid" ] || kill "$tests_pid" 2>/dev/null || true' EXIT
+if [ "$write" = 0 ]; then
+  python3 tests/roadmap/claims/test_claims.py > "$out/test_claims.log" 2>&1 &
+  tests_pid=$!
+fi
+# The fixtures are the library Claims (tests/roadmap/lakefile.toml), built by Lake with what they
+# import (scripts/fixtures.py; run this under scripts/build-guard.py). Each audit binds the
+# Lake-built outputs it audits (the compiler-owned run binding, theorem_universe).
+python3 -B scripts/fixtures.py build Claims
+python3 -B scripts/fixtures.py audit Fixture --theorem-roots --output "$out/assurance.json"
+python3 -B scripts/fixtures.py audit AllocatorApplications --theorem-roots --output "$out/allocator-applications.json"
+python3 -B scripts/fixtures.py audit AllocatorImported --theorem-roots --output "$out/allocator-imported.json"
+python3 -B scripts/fixtures.py audit AllocatorImported --output "$out/allocator-imported-all.json"
 python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
 python3 -B tests/roadmap/claims/test_allocator_imported.py "$out/allocator-imported.json" "$out/allocator-imported-all.json"
 if [ "$write" = 1 ]; then
@@ -100,7 +81,16 @@ def run(strength, theorem='ClaimFixture.fret_partial', namespace='ClaimFixture',
     # A regression fixture, not a release claim: CI's selected translation may dirty the tree.
     return subprocess.run([sys.executable, 'scripts/claims.py', 'check', str(path), '--allow-dirty',
                            '--assurance', str(out / 'assurance.json')], capture_output=True, text=True)
-accepted, rejected = run('partial_correctness'), run('total_correctness')
+spoofs = ('ClaimFixture.spoof_eventually', 'ClaimFixture.spoof_within', 'ClaimFixture.spoof_within_sym',
+          'ClaimFixture.spoof_under')
+# The runs are independent (one manifest file each): they run at once.
+from concurrent.futures import ThreadPoolExecutor
+import os
+calls = [lambda: run('partial_correctness'), lambda: run('total_correctness'),
+         lambda: run('total_correctness', 'ClaimFixture.tret_total'),
+         *(lambda t=t: run('safety', t, domain='scoped: fixture') for t in spoofs)]
+with ThreadPoolExecutor(int(os.environ.get('AIR2LEAN_JOBS') or min(4, os.cpu_count() or 1))) as pool:
+    accepted, rejected, accepted_thread, *rejected_spoofs = pool.map(lambda call: call(), calls)
 assert accepted.returncode == 0, accepted.stderr
 assert rejected.returncode == 1, rejected.stderr
 goal = json.loads(rejected.stdout)['roots'][0]['goals'][-1]
@@ -108,11 +98,8 @@ assert (goal['status'], goal['derived_strength']) == ('rejected', 'partial_corre
 # The total thread triple meets a total goal about the root. The spoofs of reserved head names
 # (declared in Fixture.lean, audited without a name clash) meet no goal, not even safety: a
 # reserved name supports no claim, whatever its declaration.
-accepted = run('total_correctness', 'ClaimFixture.tret_total')
-assert accepted.returncode == 0, accepted.stderr
-for theorem in ('ClaimFixture.spoof_eventually', 'ClaimFixture.spoof_within', 'ClaimFixture.spoof_within_sym',
-                'ClaimFixture.spoof_under'):
-    rejected = run('safety', theorem, domain='scoped: fixture')
+assert accepted_thread.returncode == 0, accepted_thread.stderr
+for theorem, rejected in zip(spoofs, rejected_spoofs):
     assert rejected.returncode == 1, (theorem, rejected.stderr)
     goal = json.loads(rejected.stdout)['roots'][0]['goals'][-1]
     assert (goal['status'], goal['derived_strength']) == ('rejected', None), goal
@@ -135,3 +122,10 @@ w = found['Zig.shlExact_of_noOverflow']['nonvacuity']
 assert w == {'status': 'verified', 'theorem': 'Zig.shlExact_of_noOverflow.nonvacuous'}, w
 print('library witness companions verified')
 PY
+if [ -n "$tests_pid" ]; then
+  status=0
+  wait "$tests_pid" || status=$?
+  tests_pid=
+  [ "$status" = 0 ] || { cat "$out/test_claims.log" >&2; echo 'test_claims.py failed' >&2; exit 1; }
+  tail -3 "$out/test_claims.log"
+fi

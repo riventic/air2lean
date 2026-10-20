@@ -24,7 +24,9 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
   reaches only the standard axioms in the extractor's dependency graph. `--library LIB` audits
   every module of LIB too, and fails when a `.lean` file below LIB's directory is no module of
-  it: a fixture whose every file is a module leaves none unaudited.
+  it: a fixture whose every file is a module leaves none unaudited. `--theorem-roots`: only the
+  theorems are graph roots (the extractor without `--all-declarations`), for a check that
+  compares the report of that mode; every other requirement is the same.
 - `mutant`: a negative check. DIR holds a fixture's sources with one mutation (module paths as in
   the fixture). They are built as a workspace of their own (`tests/roadmap/.lake/mutants/NAME`)
   with the fixture package's name, so an unchanged copy has the same Lake trace as the fixture's
@@ -158,7 +160,8 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
     return axioms
 
 
-def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None) -> int:
+def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
+          all_declarations: bool = True) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
     `lib`: the directory of the built modules (default: the fixture package's)."""
     if str(Path(__file__).resolve().parent) not in sys.path:
@@ -189,7 +192,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
         if context is None:
             env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
             command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
-                       "--all-declarations", "--replay-cache", str(replay_cache),
+                       *(["--all-declarations"] if all_declarations else []), "--replay-cache", str(replay_cache),
                        "--output", str(report_path)]
             for module in modules:
                 command += ["--module", module]
@@ -198,7 +201,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
             audit_code, audit_output = done.returncode, done.stdout
         else:
             result = theorem_universe.audit_modules(sorted(set(modules)), [], report_path,
-                                                   replay_cache, all_declarations=True,
+                                                   replay_cache, all_declarations=all_declarations,
                                                    compiled_units=context)
             audit_code, audit_output = result['exit_code'], ''
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"status": "error"}
@@ -306,6 +309,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("audit")
     p.add_argument("modules", nargs="*")
     p.add_argument("--library")
+    p.add_argument("--theorem-roots", action="store_true")
     p.add_argument("--declaration", action="append", default=[])
     p.add_argument("--output", type=Path)
     p = sub.add_parser("mutant")
@@ -331,7 +335,7 @@ def main(argv: list[str]) -> int:
         modules = sorted(set(a.modules) | set(library_modules(a.library) if a.library else []))
         if not modules:
             parser.error("audit: name MODULEs or --library LIB")
-        return audit(modules, a.declaration, a.output)
+        return audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
     print("\n".join(files()))
