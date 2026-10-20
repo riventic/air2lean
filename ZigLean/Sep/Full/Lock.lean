@@ -1195,7 +1195,7 @@ theorem Inv.eupdPart {Tgt : Type} (P : Proto Tgt γ) {G : ThreadId → γ} {g : 
     (hu : EUpd (fun r => r = L.part g) Qa) :
     ∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m := by
   have htt : FTTotalTriple (fun r => r = L.part g) (pure () : MemM Unit) (fun _ => Qa) :=
-    .ofSeq (FTotalTriple.eupd hu (FTotalTriple.ret ())) (ThreadLocal.pure ())
+    .ofSeq (FTotalTriple.eupd hu (FTotalTriple.ret (Q := fun _ : Unit => Qa) ())) (ThreadLocal.pure ())
   have hw : P.WP t (ConcM.liftMem (pure () : MemM Unit) : ConcM Tgt Unit)
       (fun _ _ _ _ => ∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m) G m 0 :=
     hi.wp_liftPartLive hc hg htt.1 rfl (fun _ m' r hr hq _ _ hi' => by
