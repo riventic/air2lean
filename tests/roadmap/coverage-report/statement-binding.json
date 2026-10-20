@@ -51,7 +51,7 @@
           }
         ],
         "head": {
-          "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+          "fingerprint": "5b12ecbac9bdb84d7bdbd59961f1040e",
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "True"
@@ -198,7 +198,7 @@
           }
         ],
         "head": {
-          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "fingerprint": "e006f7006589ff2b988fd107cef23c04",
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
@@ -345,7 +345,7 @@
           }
         ],
         "head": {
-          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "fingerprint": "e006f7006589ff2b988fd107cef23c04",
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
@@ -510,7 +510,7 @@
           }
         ],
         "head": {
-          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "fingerprint": "e006f7006589ff2b988fd107cef23c04",
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
@@ -567,7 +567,7 @@
         "args": [],
         "binders": [],
         "head": {
-          "fingerprint": "79fcfc6a508a3f3a2cfc7ef12df4818c",
+          "fingerprint": "5b12ecbac9bdb84d7bdbd59961f1040e",
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "True"
@@ -733,7 +733,7 @@
           }
         ],
         "head": {
-          "fingerprint": "d08d1038e740560766f56c1fa94ad990",
+          "fingerprint": "e006f7006589ff2b988fd107cef23c04",
           "kind": "inductive",
           "module": "Init.Prelude",
           "name": "Eq"
