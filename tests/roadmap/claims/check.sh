@@ -26,8 +26,7 @@ import theorem_universe as universe
 out = Path(sys.argv[1])
 _, units = universe.universe()
 by_file = {unit.file: unit for unit in units}
-sources = out / 'sources.json'
-universe.write_report(sources, {unit.module: unit.file for unit in units})
+source_map = {unit.module: unit.file for unit in units}
 for name, reports in [('Fixture', [('assurance.json', False)]),
                       ('AllocatorApplications', [('allocator-applications.json', False)]),
                       ('AllocatorImported', [('allocator-imported.json', False),
@@ -40,6 +39,8 @@ for name, reports in [('Fixture', [('assurance.json', False)]),
     if errors:
         raise RuntimeError('; '.join(errors))
     universe.seal_compilation(context)
+    sources = work / 'sources.json'
+    universe.write_report(sources, {**source_map, **{unit.module: unit.file for unit in local}})
     for filename, all_declarations in reports:
         result = universe.audit_modules(context['selected_modules'], [], out / filename,
                                         sources=sources, all_declarations=all_declarations,
