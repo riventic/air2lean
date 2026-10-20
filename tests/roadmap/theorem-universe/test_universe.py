@@ -386,6 +386,57 @@ class ReplayTests(unittest.TestCase):
             self.assertIn('work=$(mktemp -d', text, script)
 
 
+class LakeExtractionTests(unittest.TestCase):
+    """assumptions.lake_extraction (--extract-in) with a stand-in Lake: the persistent workspace's
+    pin follows the repository's, and the installed runtime is part of the driver's identity."""
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        base = Path(temp.name)
+        self.root, self.package = base / 'root', base / 'package'
+        self.root.mkdir()
+        self.package.mkdir()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
+        (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
+        self.workspace = self.package / '.lake/extraction'
+        self.built = []
+
+        def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
+            module = command[-1]
+            self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
+            path = module.replace('.', '/') + '.lean'
+            return subprocess.CompletedProcess(command, 0, f'info: {path}:9:0: {assumptions.MARKER}{{}}\n', '')
+
+        patch = mock.patch.object(assumptions.subprocess, 'run', side_effect=lake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def extract(self, runtime='a' * 64):
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root)
+
+    def test_report_line_and_unchanged_driver(self):
+        self.assertEqual(self.extract(), ['{}'])
+        source = next(self.workspace.rglob('M*.lean'))
+        written = source.stat().st_mtime_ns
+        self.assertEqual(self.extract(), ['{}'])  # same inputs: the same driver, not rewritten
+        self.assertEqual((self.built[0], source.stat().st_mtime_ns), (self.built[1], written))
+
+    def test_the_child_pin_follows_the_repository(self):
+        self.extract()
+        (self.root / 'lean-toolchain').write_text('leanprover/lean4:v2\n')  # only the root pin changes
+        self.extract()
+        self.assertEqual([pin for _, pin in self.built], ['leanprover/lean4:v1\n', 'leanprover/lean4:v2\n'])
+        self.assertEqual((self.workspace / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+
+    def test_a_changed_runtime_is_another_driver(self):
+        self.extract('a' * 64)
+        self.extract('b' * 64)  # only the installed runtime changes: Lake must build another module
+        self.assertNotEqual(self.built[0][0], self.built[1][0])
+        with self.assertRaises(ValueError):
+            self.extract(None)  # no runtime binding: fail closed
+
+
 class FreshnessTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

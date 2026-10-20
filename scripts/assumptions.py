@@ -11,7 +11,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -724,34 +723,41 @@ globs = ["{library}.+"]
 """
 
 
-def lake_extraction(driver: str, package: Path) -> list[str]:
+def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = ROOT) -> list[str]:
     """The extractor's report lines from `driver` built by Lake as a module of a generated
     workspace (`package/.lake/extraction`) that requires the Lake package `package` of the
     audited modules. Lake elaborates the driver again exactly when its trace changes (the
     driver's text: the modules, options and families; the traces of every import, tools.Assurance
     included; the toolchain) and otherwise replays the build's stored log, which holds the
-    report: reuse is Lake's trace, nothing else. The driver's first line names the workspace, so
-    its trace is this checkout's own: the shared artifact cache keeps no log, and a driver
-    restored from another checkout's build would replay none (no report: this fails rather than
-    trusting anything). A driver builds under its own lock; its outputs stay out of `package`'s
-    build directory, which the caller's LEAN_PATH binding covers."""
+    report: reuse is Lake's trace, nothing else. The driver's text also names the installed
+    toolchain runtime (`runtime_sha`, toolchain_runtime_sha256 of the prepared tool's trace),
+    which Lake's trace need not cover: a changed runtime input is a different driver, so it is
+    extracted again. The workspace's toolchain pin is `root`'s, written on every call before Lake
+    starts. The driver's first line names the workspace, so its trace is this checkout's own:
+    the shared artifact cache keeps no log, and a driver restored from another checkout's build
+    would replay none (no report: this fails rather than trusting anything). A driver builds
+    under its own lock; its outputs stay out of `package`'s build directory, which the caller's
+    LEAN_PATH binding covers."""
+    if not re.fullmatch(r"[0-9a-f]{64}", runtime_sha or ""):
+        raise ValueError("extraction requires the prepared tool's toolchain runtime binding")
     name = tomllib.loads((package / "lakefile.toml").read_text(encoding="utf-8"))["name"]
     workspace = package / ".lake/extraction"
-    text = f"-- The assurance extractor's driver in {workspace} (scripts/assumptions.py).\n" + driver
+    text = (f"-- The assurance extractor's driver in {workspace} (scripts/assumptions.py).\n"
+            f"-- toolchain runtime {runtime_sha}\n" + driver)
     module = f"{EXTRACTION_LIBRARY}.M{hashlib.sha256(text.encode()).hexdigest()[:32]}"
     source = workspace / (module.replace(".", "/") + ".lean")
     source.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(source.with_suffix(".lock"), os.O_RDWR | os.O_CREAT, 0o644)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)  # Released when the descriptor closes.
-        for path, content in ((workspace / "lakefile.toml", EXTRACTION_MANIFEST.format(
-                package=json.dumps(name), library=EXTRACTION_LIBRARY)), (source, text)):
+        for path, content in ((workspace / "lean-toolchain", (root / "lean-toolchain").read_text()),
+                              (workspace / "lakefile.toml", EXTRACTION_MANIFEST.format(
+                                  package=json.dumps(name), library=EXTRACTION_LIBRARY)),
+                              (source, text)):
             if not path.is_file() or path.read_text() != content:
                 path.write_text(content)
-        if not (workspace / "lean-toolchain").is_file():
-            shutil.copy(ROOT / "lean-toolchain", workspace / "lean-toolchain")
         # Lake chooses the import paths itself: a caller's LEAN_PATH (the replay's) stays out.
-        result = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/cas.py"), "run", "--",
+        result = subprocess.run([sys.executable, "-B", str(root / "scripts/cas.py"), "run", "--",
                                  "lake", "build", module], cwd=workspace, text=True, capture_output=True,
                                 env={k: v for k, v in os.environ.items() if k != "LEAN_PATH"})
     finally:
@@ -798,7 +804,7 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
                + ", ".join(json.dumps(m) for m in audited) + "]\n")
     if extract_in is not None:
         with prepared_tool(root, runner) as tool_trace:  # The build imports the olean the trace records.
-            lines = lake_extraction(driver, extract_in.resolve())
+            lines = lake_extraction(driver, extract_in.resolve(), tool_trace.get("toolchain_runtime_sha256"), root)
     else:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
             handle.write(driver)
