@@ -471,6 +471,16 @@ theorem incoming_tagged_whole {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
       G m n := by
   fsym
 
+/-- Each raw branch substitutes its own data in the retained normalized evidence. -/
+theorem incoming_normalized_branch_lifetime {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (x : Nat) (R : Nat → Prop)
+    (flag : Nat → Bool) (k : Nat) (hf : flag k = false) :
+    P.WP t (pure ())
+      (fun _ _ _ _ =>
+        ((x = 0 ∧ flag k = false ∧ R x) ∨ (x = 1 ∧ flag k = false ∧ R x)) → R x)
+      G m n := by
+  fsym
+
 /-- Inspect the simplifier result and require that the existing normalization API closes
 the goal when a closed bit-vector comparison makes an incoming fact impossible. -/
 theorem incoming_false_result (R : Prop) (flag : Bool)

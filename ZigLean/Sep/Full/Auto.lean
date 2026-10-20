@@ -6465,8 +6465,20 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   let original := h
   let some (h, g) ← wpNorm g h extra (fields := true) (keepOriginal := true) | return []
   let some g ← if h == original then pure (some g) else wpForward g h | return []
-  let some h ← g.withContext (wpCurrentHyp? original) | return [g]
-  wpSplit g h (keep := true)
+  let normalized? ← if h == original then pure none else
+    g.withContext (wpCurrentHyp? h)
+  -- Delay the proved normalized fact in each goal's binder, not a branch-local free variable.
+  let g ← match normalized? with
+    | none => pure g
+    | some h => g.withContext do
+      g.assert `hnormalized (← h.getType) (mkFVar h)
+  let gs ← match ← g.withContext (wpCurrentHyp? original) with
+    | none => pure [g]
+    | some original => wpSplit g original (keep := true)
+  if normalized?.isNone then return gs
+  gs.flatMapM fun g => do
+    let (h, g) ← g.intro1P
+    wpSplit g h (keep := true)
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an
