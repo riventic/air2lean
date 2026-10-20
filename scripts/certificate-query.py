@@ -164,7 +164,7 @@ def query(request: dict) -> dict:
         driver.write_text('import tools.Assurance\nimport ' + target + '\n'
                           'run_meta do\n'
                           '  let result ← Air2Lean.Assurance.partialFixpointData ' + quoted + '\n'
-                          '  liftIO <| IO.println (' + json.dumps(MARKER) + ' ++ result.compress)\n')
+                          '  liftM <| IO.println (' + json.dumps(MARKER) + ' ++ result.compress)\n')
         response = run(assumptions.lean_command([str(driver)], lean_path))
         verify_inputs()
         if assumptions.lean_path_binding(ROOT, lean_path, mutable_outputs=mutable) != before:

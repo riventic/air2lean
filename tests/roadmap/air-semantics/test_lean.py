@@ -147,7 +147,7 @@ def compiler_metadata(gen, tmp):
     query.write_text(f'import tools.Assurance\nimport {gen.stem}\n'
                      'run_meta do\n'
                      f'  let result ← Air2Lean.Assurance.partialFixpointData #["{gen.stem}"]\n'
-                     f'  liftIO <| IO.println ("{marker}" ++ result.compress)\n')
+                     f'  liftM <| IO.println ("{marker}" ++ result.compress)\n')
     result = check_certificate(query, tmp)
     payloads = [line[len(marker):] for line in result.stdout.splitlines() if line.startswith(marker)]
     assert len(payloads) == 1, result.stdout
