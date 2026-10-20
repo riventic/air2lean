@@ -616,6 +616,55 @@ class Admission:
             handle.close()
         self.handles = []
 
+    def grant(self):
+        """What a guard nested in this workload may inherit (INHERIT, `inherited`)."""
+        return {"pid": os.getpid(), "lock": str(self.a.lock), "workspace": str(self.workspace),
+                "rss_mib": self.a.rss_mib, "exclusive": self.a.exclusive,
+                "shared_workspace": self.a.shared_workspace}
+
+
+# A guard's workload runs with INHERIT set to its admission (`Admission.grant`). A guard started
+# inside that workload (a phase of scripts/full-build.sh) holds no locks of its own: the outer
+# guard's admission covers it when it is the same lock and Lake workspace, a limit within the
+# outer one, no stronger exclusivity, and the granting guard is its ancestor. The outer guard
+# keeps sampling the whole tree against its own limit; the nested one enforces its own limit and
+# writes its own report. A nested guard of the same workspace that cannot inherit would wait for
+# the workspace lock its ancestor holds: it fails instead (`inheritance_refused`, exit 75).
+INHERIT = "AIR2LEAN_GUARD_ADMISSION"
+
+
+def ancestors(pid=None):
+    rows = processes()
+    pid, seen = (os.getpid() if pid is None else pid), set()
+    while pid in rows and pid not in seen and pid > 1:
+        seen.add(pid)
+        pid = rows[pid]["parent"]
+    return seen | {pid}
+
+
+def inherited(lock):
+    """(grant, None) when the enclosing guard's admission covers this guard, (None, reason) when
+    an enclosing guard of the same lock and workspace does not, (None, None) without one."""
+    try:
+        grant = json.loads(os.environ.get(INHERIT) or "null")
+    except ValueError:
+        grant = None
+    if not isinstance(grant, dict) or grant.get("lock") != str(lock.a.lock) \
+            or grant.get("workspace") != str(lock.workspace):
+        return None, None
+    try:
+        if not isinstance(grant.get("pid"), int) or grant["pid"] not in ancestors():
+            return None, None  # a stale variable, not an enclosing guard
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
+        return None, "the enclosing guard could not be confirmed (ps failed)"
+    if not isinstance(grant.get("rss_mib"), (int, float)) or lock.a.rss_mib > grant["rss_mib"]:
+        return None, f"--rss-mib {lock.a.rss_mib} exceeds the enclosing guard's {grant.get('rss_mib')}"
+    if lock.a.exclusive and not grant.get("exclusive"):
+        return None, "--exclusive inside a shared admission"
+    if not lock.a.shared_workspace and grant.get("shared_workspace"):
+        return None, "an exclusive workspace inside a shared-workspace admission"
+    return grant, None
+
 
 def run(a):
     cancelled = [None]
@@ -646,7 +695,15 @@ def run(a):
         lock = Admission(a)
         report["admission"] = lock.evidence()
         lock_start = time.monotonic()
-        refused = lock.acquire(cancelled)
+        grant, reason = inherited(lock)
+        if reason:
+            print(f"build-guard: cannot run inside the enclosing guard's admission: {reason}",
+                  file=sys.stderr, flush=True)
+            report.update(outcome="inheritance_refused", exit_code=75, error=reason)
+            return report
+        if grant:
+            report["admission"]["inherited_from"] = grant
+        refused = None if grant else lock.acquire(cancelled)
         if refused == "cancelled":
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
             return report
@@ -679,7 +736,8 @@ def run(a):
             # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
                          "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
-                         "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared"}
+                         "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared",
+                         INHERIT: json.dumps(lock.grant(), sort_keys=True)}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
             try:
