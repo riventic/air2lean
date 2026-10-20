@@ -774,6 +774,48 @@ theorem wakePick_mem : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat} {u : Th
     · exact List.getElem_mem _
     · exact List.mem_of_mem_eraseIdx (wakePick_mem h)
 
+/-- A request covering the queue selects every member, for every choice list,
+including empty choice lists and lists containing duplicate thread IDs. -/
+theorem mem_wakePick_of_length_le :
+    ∀ {n : Nat} {l : List ThreadId} {cs : List Nat} {u : ThreadId},
+      l.length ≤ n → u ∈ l → u ∈ wakePick n l cs
+  | 0, l, _, _, hn, hu => by
+    have hl : l = [] := List.eq_nil_of_length_eq_zero (by omega)
+    rw [hl] at hu
+    cases hu
+  | _ + 1, [], _, _, _, hu => by cases hu
+  | n + 1, w :: ws, cs, u, hn, hu => by
+    let i := cs.headD 0 % (ws.length + 1)
+    have hi : i < (w :: ws).length := Nat.mod_lt _ (Nat.succ_pos _)
+    change u ∈ (w :: ws)[i] :: wakePick n ((w :: ws).eraseIdx i) cs.tail
+    by_cases he : (w :: ws)[i] = u
+    · exact List.mem_cons.mpr (.inl he.symm)
+    · apply List.mem_cons.mpr
+      right
+      apply mem_wakePick_of_length_le
+      · rw [List.length_eraseIdx_of_lt hi]
+        simp only [List.length_cons] at hn ⊢
+        omega
+      · obtain ⟨j, hj, hju⟩ := List.mem_iff_getElem.mp hu
+        apply List.mem_eraseIdx_iff_getElem.mpr
+        refine ⟨j, hj, ?_, hju⟩
+        intro hji
+        subst hji
+        exact he hju
+
+/-- A request covering the actual queue at `p` selects each of its entries' IDs.
+No singleton-waiter or distinct-thread-ID premise is required. -/
+theorem mem_wakeSet_of_count {ws : Array (ThreadId × Ptr)} {p : Ptr}
+    {n : Nat} {cs : List Nat} {w : ThreadId × Ptr}
+    (hn : waitersAt ws p ≤ n) (hw : w ∈ ws) (hp : w.2 = p) :
+    w.1 ∈ wakeSet ws p n cs := by
+  have hl : ((ws.filter (·.2 == p)).toList.map (·.1)).length ≤ n := by
+    simpa only [waitersAt, List.length_map, Array.length_toList] using hn
+  have hu : w.1 ∈ (ws.filter (·.2 == p)).toList.map (·.1) :=
+    List.mem_map.mpr ⟨w, by simp [hw, hp], rfl⟩
+  unfold wakeSet
+  exact List.mem_toArray.mpr (mem_wakePick_of_length_le hl hu)
+
 theorem wakePick_ne_nil {n : Nat} {l : List ThreadId} {cs : List Nat} (hn : 0 < n)
     (hl : l ≠ []) : wakePick n l cs ≠ [] := by
   obtain ⟨n, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (Nat.pos_iff_ne_zero.mp hn)
