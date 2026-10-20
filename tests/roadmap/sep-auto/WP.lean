@@ -304,7 +304,7 @@ end SepAuto.WP
 
 namespace SepAuto.WP
 
-open Lean Meta Zig.Full.Auto
+open Lean Meta Elab Tactic Zig.Full.Auto
 
 /-- A wrapper keeps an unknown inner head as a wildcard; concrete mismatches still prune
 before unfolding, including when the inner commands or assertions contain metavariables. -/
@@ -421,6 +421,56 @@ theorem incoming_forward_compatibility {Tgt γ : Type} (P : Proto Tgt γ) (t : T
     P.WP t (pure ())
       (fun _ _ _ _ => (flag k = true ∨ Nonempty (Fin (1 - j))) → j - 1 = 0) G m n := by
   fsym [incoming_raw_or_bound flag k]
+
+/-- Inspect the simplifier result and require that the existing normalization API closes
+the goal when a closed bit-vector comparison makes an incoming fact impossible. -/
+theorem incoming_false_result (R : Prop) (flag : Bool)
+    (h : (1 : BitVec 32) = 0 ∨ false = true ∧ flag = true) : R := by
+  run_tac withRunCaches do
+    let g ← getMainGoal
+    let h := (← getLocalDeclFromUserName `h).fvarId
+    let ty ← instantiateMVars (← h.getType)
+    let (r, _) ← simp ty (← wpHypCtx #[]) (simprocs := #[← Simp.getSimprocs])
+    unless r.expr.isFalse do
+      throwError "incoming_false_result: the incoming fact did not simplify to False"
+    if (← wpNorm g h #[]).isSome then
+      throwError "incoming_false_result: False was retained as an open hypothesis"
+    unless ← g.isAssigned do
+      throwError "incoming_false_result: the goal was not closed"
+    replaceMainGoal []
+
+/-- An already-False premise follows the same closed-goal result, including the no-rewrite path. -/
+theorem incoming_false_unchanged (R : Prop) (h : False) : R := by
+  run_tac withRunCaches do
+    let g ← getMainGoal
+    let h := (← getLocalDeclFromUserName `h).fvarId
+    if (← wpNorm g h #[]).isSome then
+      throwError "incoming_false_unchanged: False was retained as an open hypothesis"
+    unless ← g.isAssigned do
+      throwError "incoming_false_unchanged: the goal was not closed"
+    replaceMainGoal []
+
+/-- An opaque Boolean premise cannot close an unrelated opaque proposition; it also cannot
+rewrite itself to True through the context-equation set. -/
+theorem incoming_unknown_stays (R : Prop) (flag : Bool) (h : flag = true) : True := by
+  run_tac withRunCaches do
+    let g ← mkFreshExprSyntheticOpaqueMVar (← getLocalDeclFromUserName `R).toExpr
+    let h := (← getLocalDeclFromUserName `h).fvarId
+    let some (h', g') ← wpNorm g.mvarId! h #[] (fields := true)
+      | throwError "incoming_unknown_stays: an unknown Boolean closed the goal"
+    if ← g'.isAssigned then
+      throwError "incoming_unknown_stays: an unknown Boolean assigned the goal"
+    unless (← instantiateMVars (← h'.getType)) == (← h.getType) do
+      throwError "incoming_unknown_stays: the premise erased its own equation"
+  trivial
+
+/-- A closed nonzero unsigned divisor needs no caller-provided nonzero fact. This is the
+same pure-result rule as the symbolic all-width control and the actual translated client. -/
+theorem division_unsigned_literal {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat) (a : BitVec 32) :
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.divTrunc false a 1)))
+      (fun r _ _ _ => r = a.udiv 1) G m n := by
+  fsym
 
 /-- The generic pure-result rule learns the quotient from a symbolic unsigned run. -/
 theorem division_unsigned {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)

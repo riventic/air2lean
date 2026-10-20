@@ -6137,8 +6137,8 @@ def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) (fields := false) :
   let ty ← instantiateMVars (← h.getType)
   let ctx ← if fields then wpFactCtx extra (some h) else wpHypCtx extra
   let (r, _) ← simp ty ctx (simprocs := #[← Simp.getSimprocs])
-  let (g, h) ← if r.expr == ty then pure (g, h) else
-    let some (h', g') ← applySimpResultToLocalDecl g h r false | return none
+  let (g, h) ← if r.expr == ty && !r.expr.isFalse then pure (g, h) else
+    let some (h', g') ← applySimpResultToLocalDecl g h r true | return none
     pure (g', h')
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
