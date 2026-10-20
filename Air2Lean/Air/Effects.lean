@@ -276,6 +276,20 @@ def Op.effectsIn (mode : AllocatorModel) (op : Op) : Effects :=
 same in both models. -/
 def Op.effects (op : Op) : Effects := op.effectsIn .std
 
+/-- A call's control projection is independent of unrelated memory and sync fields. -/
+theorem Op.call_control (mode : AllocatorModel) (name : String) (nr : Bool)
+    (spawn : Option String) (args : Array Val) :
+    ((Op.call (.func name nr spawn) args).effectsIn mode).control =
+      (if nr then Control.exit else Control.next) := by
+  rfl
+
+theorem Op.call_control_bodies (name : String) (nr : Bool)
+    (spawn : Option String) (args : Array Val) :
+    (Op.call (.func name nr spawn) args).effects.control.bodies = #[] := by
+  change ((Op.call (.func name nr spawn) args).effectsIn .std).control.bodies = #[]
+  rw [Op.call_control]
+  cases nr <;> rfl
+
 /-- The shared control-flow classifier returns only actual, strictly nested bodies. This lets
 kernel-reducible analyses recurse through `effects` without a second constructor classifier. -/
 theorem Op.controlBody_size_lt (op : Op) {body : Array Inst}

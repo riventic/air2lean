@@ -1,6 +1,7 @@
 import Air2Lean.CanonCertificate
 import Air2Lean.Air.Normalize
 import Air2Lean.Check
+import Init.Data.Array.Bootstrap
 
 /-!
 Audit regression: full live-ID renumbering cannot preserve `Sem.execFunc` for the same
@@ -41,10 +42,71 @@ choice of execution policy. -/
 def program (records : Array Identity.Record) : Program :=
   { funcs := #[caller 10 records, identity] }
 
+private theorem caller_allInsts (base : Nat) (records : Array Identity.Record) :
+    (caller base records).allInsts = (caller base records).body := by
+  rw [Func.allInsts, ← Array.foldl_toList]
+  simp only [caller, List.foldl_cons, List.foldl_nil, flattenInst_without_children,
+    Op.call_control_bodies, Op.effects, Op.effectsIn, Effects.pure,
+    Effects.placeAccess, Effects.flow, Control.bodies]
+
+private theorem identity_allInsts : identity.allInsts = identity.body := by
+  rw [Func.allInsts, ← Array.foldl_toList]
+  simp only [identity, List.foldl_cons, List.foldl_nil, flattenInst_without_children,
+    Op.effects, Op.effectsIn, Effects.pure, Effects.flow, Control.bodies]
+
+private theorem caller_edges (base : Nat) (records : Array Identity.Record) :
+    calleesOf #["canon.caller", "canon.identity"] #[] (caller base records) =
+      #["canon.identity"] := by
+  simp only [calleesOf, Func.indirectCallees, caller_allInsts] <;> rfl
+
+private theorem identity_edges :
+    calleesOf #["canon.caller", "canon.identity"] #[] identity = #[] := by
+  simp only [calleesOf, Func.indirectCallees, identity_allInsts] <;> rfl
+
+/-- The actual source graph, retaining arbitrary identity records in its original nodes. -/
+private theorem program_rows (records : Array Identity.Record) :
+    (program records).funcs.map (fun f =>
+      (f.name, calleesOf ((program records).funcs.map (·.name))
+        (fnRefs (program records).funcs) f)) =
+      #[("canon.caller", #["canon.identity"]), ("canon.identity", #[])] := by
+  have hnames : (program records).funcs.map (·.name) =
+      #["canon.caller", "canon.identity"] := by rfl
+  have hrefs : fnRefs (program records).funcs = #[] := by rfl
+  rw [hnames, hrefs]
+  change #[((caller 10 records).name,
+      calleesOf #["canon.caller", "canon.identity"] #[] (caller 10 records)),
+    (identity.name, calleesOf #["canon.caller", "canon.identity"] #[] identity)] =
+      #[("canon.caller", #["canon.identity"]), ("canon.identity", #[])]
+  rw [caller_edges, identity_edges] <;> rfl
+
+private theorem recursive_false_of_rows (records : Array Identity.Record)
+    (hrows : (program records).funcs.map (fun f =>
+      (f.name, calleesOf ((program records).funcs.map (·.name))
+        (fnRefs (program records).funcs) f)) =
+      #[("canon.caller", #["canon.identity"]), ("canon.identity", #[])]) :
+    (program records).recursive "canon.caller" = false := by
+  let nodes := (program records).funcs
+  let project (f : Func) :=
+    (f.name, calleesOf (nodes.map (·.name)) (fnRefs nodes) f)
+  let observe (groups : Array (Array (String × Array String) × Bool)) :=
+    groups.any fun (members, recursive) =>
+      recursive && members.any (fun member => member.1 == "canon.caller")
+  have hmapped := congrArg observe
+    (Graph.callGroupsBy_map nodes project Prod.fst Prod.snd)
+  have hrecursive : (program records).recursive "canon.caller" =
+      observe (Graph.callGroupsBy (nodes.map project) Prod.fst Prod.snd) := by
+    simpa only [observe, nodes, project, Program.recursive, Program.groups, callGroups,
+      Array.any_map, Function.comp_def] using hmapped.symm
+  rw [hrecursive]
+  change observe (Graph.callGroupsBy ((program records).funcs.map (fun f =>
+    (f.name, calleesOf ((program records).funcs.map (·.name))
+      (fnRefs (program records).funcs) f))) Prod.fst Prod.snd) = false
+  rw [hrows]
+  decide +kernel
+
 theorem entry_unticked (records : Array Identity.Record) :
     (program records).entryTicked "canon.caller" = false := by
-  have hrecursive : (program records).recursive "canon.caller" = false := by
-    cbv
+  have hrecursive := recursive_false_of_rows records (program_rows records)
   simp only [Program.entryTicked, hrecursive, Bool.false_and]
 
 def oracle : Oracle := fun _ _ => pure (.cell 11)

@@ -1,4 +1,6 @@
 import Air2Lean.ModelRegistry
+import Init.Data.Array.Find
+import Init.Data.Array.Lemmas
 
 /-!
 # Original source programs
@@ -100,6 +102,93 @@ def callGroupsBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
         (done, groups.push (members, members.size > 1 || reaches name name))
       else (done, groups)
   groups
+
+/-- The adjacency table depends only on the projected node fields. -/
+private theorem successorsBy_map {A B K : Type} [BEq K]
+    (nodes : Array A) (project : A → B) (key : B → K) (next : B → Array K) :
+    successorsBy (nodes.map project) key next =
+      successorsBy nodes (fun x => key (project x)) (fun x => next (project x)) := by
+  simp only [successorsBy, Array.map_map, Function.comp_def]
+
+/-- Naturality of the existing bounded walk, with its fuel left unchanged. -/
+private theorem topoVisitCore_visit_map {A B K : Type} [BEq K]
+    (nodes : Array A) (project : A → B) (key : B → K) (next : K → Array K)
+    (fuel : Nat) (visited : Array K) (order : Array A) (name : K) :
+    topoVisitCore.visit (nodes.map project) key next fuel
+        (visited, order.map project) name =
+      let r := topoVisitCore.visit nodes (fun x => key (project x)) next fuel
+        (visited, order) name
+      (r.1, r.2.map project) := by
+  induction fuel generalizing visited order name with
+  | zero => rfl
+  | succ fuel ih =>
+    by_cases hseen : visited.contains name
+    · simp only [topoVisitCore.visit, hseen, if_pos]
+    · simp only [topoVisitCore.visit, hseen, if_neg, Array.find?_map, Function.comp_def]
+      cases hfind : nodes.find? (fun x => key (project x) == name) with
+      | none => simp only [hfind, Option.map_none]
+      | some node =>
+        simp only [hfind, Option.map_some]
+        let liftState : Array K × Array A → Array K × Array B :=
+          fun state => (state.1, state.2.map project)
+        have hfold :
+            (next name).foldl (topoVisitCore.visit (nodes.map project) key next fuel)
+                (visited.push name, order.map project) =
+              liftState ((next name).foldl
+                (topoVisitCore.visit nodes (fun x => key (project x)) next fuel)
+                (visited.push name, order)) := by
+          exact Array.foldl_hom liftState (fun state target => by
+            rcases state with ⟨seen, ordered⟩
+            exact ih seen ordered target)
+        rw [hfold]
+        simp only [liftState, Array.map_push]
+
+private theorem topoVisitCore_map {A B K : Type} [BEq K]
+    (nodes : Array A) (project : A → B) (key : B → K) (next : K → Array K)
+    (visited : Array K) (order : Array A) (name : K) :
+    topoVisitCore (nodes.map project) key next (visited, order.map project) name =
+      let r := topoVisitCore nodes (fun x => key (project x)) next (visited, order) name
+      (r.1, r.2.map project) := by
+  simpa only [topoVisitCore, Array.size_map] using
+    topoVisitCore_visit_map nodes project key next (nodes.size + 1) visited order name
+
+private theorem topoOrderCore_map {A B K : Type} [BEq K]
+    (nodes : Array A) (project : A → B) (key : B → K) (next : K → Array K) :
+    topoOrderCore (nodes.map project) key next =
+      (topoOrderCore nodes (fun x => key (project x)) next).map project := by
+  let liftState : Array K × Array A → Array K × Array B :=
+    fun state => (state.1, state.2.map project)
+  have hfold := Array.foldl_hom liftState
+    (xs := nodes.map (fun x => key (project x)))
+    (init := (#[], #[]))
+    (g₁ := topoVisitCore nodes (fun x => key (project x)) next)
+    (g₂ := topoVisitCore (nodes.map project) key next)
+    (fun state target => by
+      rcases state with ⟨seen, ordered⟩
+      exact topoVisitCore_map nodes project key next seen ordered target)
+  simpa only [topoOrderCore, Array.map_map, Function.comp_def, liftState, Array.map_empty]
+    using congrArg Prod.snd hfold
+
+/-- Mapping node payloads preserves the existing ordered components. Keys, successors,
+fuel, ordering and the recursive flag all come from the same graph computation. -/
+theorem callGroupsBy_map {A B K : Type} [BEq K]
+    (nodes : Array A) (project : A → B) (key : B → K) (next : B → Array K) :
+    callGroupsBy (nodes.map project) key next =
+      (callGroupsBy nodes (fun x => key (project x)) (fun x => next (project x))).map
+        (fun (members, recursive) => (members.map project, recursive)) := by
+  simp only [callGroupsBy, successorsBy_map, Array.map_map, Function.comp_def,
+    topoOrderCore_map]
+  rw [Array.foldl_map]
+  let liftGroups :
+      Array K × Array (Array A × Bool) → Array K × Array (Array B × Bool) :=
+    fun state =>
+      (state.1, state.2.map (fun (members, recursive) => (members.map project, recursive)))
+  refine congrArg Prod.snd (Array.foldl_hom liftGroups ?_)
+  intro state node
+  rcases state with ⟨done, groups⟩
+  simp only [liftGroups, Array.filter_map, Array.any_map, Array.all_map,
+    Array.map_map, Function.comp_def, Array.size_map, Array.map_push]
+  split <;> simp_all only [Array.map_push]
 
 end Graph
 

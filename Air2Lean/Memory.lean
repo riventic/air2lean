@@ -46,6 +46,13 @@ decreasing_by
     (Op.controlBody_size_lt op body.property)
 end
 
+/-- A generic equation of the existing flattening pass, not a second traversal. -/
+theorem flattenInst_without_children (acc : Array Inst) (inst : Inst)
+    (h : inst.op.effects.control.bodies = #[]) :
+    flattenInst acc inst = acc.push inst := by
+  rw [flattenInst, flattenOp, h]
+  rfl
+
 def Func.allInsts (f : Func) : Array Inst := f.body.foldl flattenInst #[]
 
 /-- Every place of `insts` with its `alloc`: `(place, alloc)`. -/
