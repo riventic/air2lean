@@ -306,6 +306,18 @@ namespace SepAuto.WP
 
 open Lean Meta Elab Tactic Zig.Full.Auto
 
+/-- An unrelated polymorphic definition unfolds by name without instantiating its class. -/
+theorem global_definition_hint :
+    FTotalTriple emp (pure (7 : Nat) : MemM Nat) (fun _ => emp) := by
+  fsym [Functor.discard]
+
+/-- A definition hint supplies no proof of an opaque postcondition. -/
+theorem global_definition_missing_fact (R : Prop) : True := by
+  fail_if_success
+    have : FTotalTriple emp (pure (7 : Nat) : MemM Nat) (fun _ => ⟪R⟫) := by
+      fsym [Functor.discard]
+  trivial
+
 /-- A wrapper keeps an unknown inner head as a wildcard; concrete mismatches still prune
 before unfolding, including when the inner commands or assertions contain metavariables. -/
 def wrapper_keys : MetaM Unit := do

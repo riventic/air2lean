@@ -7003,7 +7003,9 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
     for u in user do
       unless ← isUpd u do continue
       let heads ← withNewMCtxDepth do
-        let (_, _, concl) ← forallMetaTelescope (← inferType u)
+        let (_, _, concl) ← forallMetaTelescope (← instantiateMVars (← inferType u))
+        let concl ← instantiateMVars concl
+        unless concl.isAppOfArity ``EUpd 2 do throwError "fsym: caller update has no EUpd conclusion after instantiation"
         (atoms concl.appArg!).filterMapM fun a => do
           let .const c _ := a.getAppFn | return none
           if ← isLibrary c then return none
@@ -7057,6 +7059,12 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
           let (_, _, concl) ← forallMetaTelescope (← inferType c)
           return (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
         user := user.push c; continue
+      -- Definitions unfold by name through addExtra; elaborating a polymorphic definition
+      -- here would demand its instances before any command fixes their arguments.
+      if let .defnInfo info ← getConstInfo c.constName! then
+        unless ← isProp info.type do
+          extra := extra.push a
+          continue
     -- the term's unknowns (implicit arguments) become its leading binders, so that each use
     -- instantiates them afresh in the context of that step (where the walk's witnesses live)
     let e ← instantiateMVars (← elabTerm a none)
