@@ -35,6 +35,7 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -291,6 +292,16 @@ def main(argv: list[str]) -> int:
     p.add_argument("--expect", action="append", default=[])
     sub.add_parser("files")
     a = parser.parse_args(argv)
+    # Every Lake of this command runs in one mode: its own builds (`lake`, through cas.py run)
+    # and the extractor's (scripts/assumptions.py, plain `lake`). With AIR2LEAN_CAS_DIR set
+    # that is the shared artifact cache's (as build-guard.py's lake_cache_env): in one checkout
+    # Lake can judge a module up to date with the cache and stale without it, and a plain build
+    # then rebuilt root modules inside an audit's compiler-owned binding.
+    if os.environ.get("AIR2LEAN_CAS_DIR"):
+        spec = importlib.util.spec_from_file_location("air2lean_cas", Path(__file__).with_name("cas.py"))
+        cas = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cas)
+        os.environ.update(cas.lake_env())
     if a.command == "build":
         return build(a.targets)
     if a.command == "audit":
