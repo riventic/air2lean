@@ -681,16 +681,24 @@ class AssessTests(unittest.TestCase):
 
 
 class ManifestTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sysroot = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
+        cls.runtime_binding = {'lean_sysroot': str(sysroot),
+                               'toolchain_runtime_sha256': assumptions.toolchain_runtime_sha256(sysroot)}
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
         (self.base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.16.0'}))
         self.report = self.base / 'assurance.json'
-        # A report bound (H1) to this checkout's revision and to one artifact digest.
+        # Synthetic CLI input bound to this checkout, artifact and installed runtime;
+        # this is not a kernel replay receipt.
         self.olean = self.base / 'Fixture.olean'
         self.olean.write_bytes(b'compiled fixture')
-        self.fixture = dict(FIXTURE, freshness={
+        self.fixture = dict(FIXTURE, extractor=dict(self.runtime_binding), freshness={
+            **self.runtime_binding,
             'revision': assumptions.git_revision(), 'lake_trace_check': {'modules': [], 'status': 'up-to-date'},
             'artifacts': [{'module': 'Fixture', 'olean': str(self.olean),
                            'olean_sha256': assumptions.file_sha256(self.olean), 'source': None, 'source_sha256': None}]})
@@ -816,6 +824,18 @@ class ManifestTests(unittest.TestCase):
         code, _, err = self.check(goal)
         self.assertEqual(code, 2)
         self.assertIn('stale', err)
+
+    def test_runtime_headers_must_match(self):
+        missing = dict(self.fixture, freshness={k: v for k, v in self.fixture['freshness'].items()
+                                               if k != 'toolchain_runtime_sha256'})
+        mismatch = dict(self.fixture, extractor=dict(self.fixture['extractor'],
+                                                     toolchain_runtime_sha256='0' * 64))
+        for reason, report in [('missing', missing), ('mismatch', mismatch)]:
+            with self.subTest(reason=reason):
+                self.report.write_text(json.dumps(report))
+                code, _, err = self.check([('ClaimFixture.fret_total', 'total_correctness')])
+                self.assertEqual(code, 2)
+                self.assertIn('no matching toolchain runtime binding', err)
 
     def test_dirty_report_needs_explicit_recorded_permission(self):
         goal = [('ClaimFixture.fret_total', 'total_correctness')]
