@@ -121,5 +121,8 @@ jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certif
 # in parallel, and two Lake builds of one workspace must not build the same module at once.
 if [ "$fixtures" = 1 ]; then
   guarded fixtures-lean "$PWD" python3 -B scripts/fixtures.py build
-  scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
+  # Within this build's admission ($rss): the units share it, the longest first, each admitted by
+  # its measured peak (scripts/fixture-checks.py `schedule`).
+  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 \
+    || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi
