@@ -11,6 +11,7 @@ modules (seconds), without the shared artifact cache.
   that still builds or a missing expected message is no kill.
 """
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shutil
@@ -193,6 +194,117 @@ class Audit(unittest.TestCase):
                          "def good_claim : Claim := ⟨rfl⟩\n")
         self.assertEqual(fx.audit(["AuditControl"], ["honest", "gone"], None, lib), 1)
         self.assertEqual(fx.audit(["AuditControl"], ["honest", "good_claim"], None, lib), 0)
+
+
+class LakeExtraction(unittest.TestCase):
+    """`fixtures.py audit` of a package: Lake builds the extractor's driver on the package
+    (scripts/assumptions.py --extract-in), so an unchanged audit replays Lake's stored log and a
+    changed audited module is extracted again: a sorry added after a pass is rejected."""
+
+    def test_reuse_is_lakes_trace(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-extraction-test.")
+        self.addCleanup(tmp.cleanup)
+        package = Path(tmp.name)
+        shutil.copy(ROOT / "lean-toolchain", package / "lean-toolchain")
+        (package / "lakefile.toml").write_text(
+            f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
+            '[[lean_lib]]\nname = "AuditControl"\n')
+        source = package / "AuditControl.lean"
+        workspace = package / ".lake/extraction"
+
+        def audit(text):
+            source.write_text(text)
+            with without_cache():
+                done = fx.lake(package, ["build", "AuditControl"], capture=True)
+                self.assertEqual(done.returncode, 0, done.stdout)
+                return fx.audit(["AuditControl"], ["honest"], None, package=package)
+
+        def drivers():
+            return sorted(p.name for p in (workspace / "AssuranceExtraction").glob("*.lean"))
+
+        honest = "theorem honest : 1 + 1 = 2 := rfl\n"
+        self.assertEqual(audit(honest), 0)
+        first = drivers()
+        self.assertEqual(len(first), 1)
+        olean = workspace / ".lake/build/lib/lean/AssuranceExtraction" / (Path(first[0]).stem + ".olean")
+        # The driver's outputs stay out of the package's build directory (the caller's LEAN_PATH).
+        self.assertEqual(list((package / ".lake/build/lib/lean").rglob("M*.olean")), [])
+        built = olean.stat().st_mtime_ns
+        self.assertEqual(audit(honest), 0)  # unchanged: the same driver, replayed, not rebuilt
+        self.assertEqual((drivers(), olean.stat().st_mtime_ns), (first, built))
+        self.assertEqual(audit(honest + "theorem later : (1 : Nat) = 2 := sorry\n"), 1)
+        self.assertNotEqual(olean.stat().st_mtime_ns, built)  # the import changed: extracted again
+        self.assertEqual(drivers(), first)
+
+
+class LakeKernelReplay(unittest.TestCase):
+    """A module's kernel check as a Lake-built receipt (tools/KernelReplay.lean,
+    scripts/assumptions.py lake_kernel_replay) on the package's own lookup path, as a fixture
+    Unit audit uses it: an unchanged module's receipt is replayed, a changed module is checked
+    again, and a module the kernel rejects keeps a failing receipt, built and replayed alike."""
+
+    def test_receipts_are_lakes_trace(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-replay-test.")
+        self.addCleanup(tmp.cleanup)
+        package = Path(tmp.name)
+        shutil.copy(ROOT / "lean-toolchain", package / "lean-toolchain")
+        (package / "lakefile.toml").write_text(
+            f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
+            '[[lean_lib]]\nname = "AuditControl"\n')
+        source = package / "AuditControl.lean"
+        workspace = package / ".lake/replay"
+        receipts = workspace / ".lake/build/lib/lean/KernelReplay"
+
+        spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
+        assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(assumptions)
+        sysroot = Path(assumptions.lake_env("LEAN_SYSROOT")).resolve()
+        checker = assumptions.file_sha256(sysroot / "bin/leanchecker")
+        runtime = assumptions.toolchain_runtime_sha256(sysroot)
+
+        def audit(text):
+            """0 when the receipt passes, 1 when it records a rejection."""
+            source.write_text(text)
+            with without_cache():
+                done = fx.lake(package, ["build", "AuditControl"], capture=True)
+                self.assertEqual(done.returncode, 0, done.stdout)
+                lean_path = fx.lake(package, ["env", "printenv", "LEAN_PATH"], capture=True).stdout.strip()
+                found = assumptions.lake_kernel_replay(["AuditControl"], package, checker, runtime, lean_path)
+            self.assertIsNotNone(found)  # the package's own lookup path: receipts are used
+            return 0 if found["AuditControl"]["status"] == "pass" else 1
+
+        def built():
+            # The receipt of AuditControl: the one whose source names it.
+            sources = [p for p in workspace.glob("KernelReplay/*.lean")
+                       if "run `AuditControl\n" in p.read_text()]
+            self.assertEqual(len(sources), 1, sources)
+            return sources[0].name, (receipts / (sources[0].stem + ".olean")).stat().st_mtime_ns
+
+        honest = "theorem honest : 1 + 1 = 2 := rfl\n"
+        self.assertEqual(audit(honest), 0)
+        first = built()
+        self.assertEqual(audit(honest), 0)
+        self.assertEqual(built(), first)  # unchanged: the receipt is replayed, not rechecked
+        self.assertEqual(audit(honest + "theorem other : 2 + 2 = 4 := rfl\n"), 0)
+        self.assertNotEqual(built()[1], first[1])  # the module changed: checked again
+        # Kernel-unchecked (debug.skipKernelTC): leanchecker rejects it, built and replayed alike.
+        unchecked = ("import Lean\nopen Lean Elab Command Term\nelab \"#unchecked\" : command => liftTermElabM do\n"
+                     "  let type ← elabType (← `((1 : Nat) = 2))\n"
+                     "  withOptions (fun o => o.setBool `debug.skipKernelTC true) do\n"
+                     "    addDecl (.thmDecl { name := `bad, levelParams := [], type, value := mkConst ``True.intro })\n"
+                     "#unchecked\n" + honest)
+        self.assertEqual(audit(unchecked), 1)
+        rejected = built()
+        self.assertEqual(audit(unchecked), 1)
+        self.assertEqual(built(), rejected)  # the failing receipt is replayed and still fails
+        # An `initialize` that forges a passing receipt line (and marks that it ran) next to the
+        # kernel-unchecked theorem: no receipt process runs it, and the verdict stays a rejection.
+        marker = package / "initialize-ran"
+        fake = json.dumps({"module": "AuditControl", "status": "pass", "exit_code": 0, "output": ""})
+        forged = (f"initialize do\n  IO.FS.writeFile {json.dumps(str(marker))} \"ran\"\n"
+                  f"  IO.println {json.dumps('info: KernelReplay/R0.lean:3:0: AIR2LEAN_KERNEL_REPLAY:' + fake)}\n")
+        self.assertEqual(audit(unchecked + forged), 1)
+        self.assertFalse(marker.exists())
 
 
 if __name__ == "__main__":

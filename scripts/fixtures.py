@@ -168,9 +168,13 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
     return axioms
 
 
-def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None) -> int:
+def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
+          package: Path | None = None) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
-    `lib`: the directory of the built modules (default: the fixture package's)."""
+    `lib`: the directory of the built modules (default: the fixture package's). An audit with a
+    Lake package (`package`, else the fixture package when `lib` is not given) has Lake build the
+    extractor's driver on that package (scripts/assumptions.py --extract-in); a fixture Unit
+    audit only while Lake resolves exactly its compiler-owned lookup path."""
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
@@ -180,7 +184,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
         report_path = output or work / "assurance.json"
         report_path.unlink(missing_ok=True)
         context = None
-        if lib is None:
+        if lib is None and package is None:
             # This producer owns the canonical Lake outputs. Snapshot before the ordinary
             # cached build, rather than attaching source names to a pre-existing artifact.
             context = theorem_universe.prepare_fixture_compilation(modules)
@@ -191,7 +195,8 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
                 for unit in context['units'].values():
                     unit['outputs'] = theorem_universe.compiled_output(Path(unit['output_path']))
                 theorem_universe.seal_compilation(context)
-        lib = lib or PACKAGE / ".lake" / "build" / "lib" / "lean"
+        extract_in = package or (None if lib else PACKAGE)
+        lib = lib or extract_in / ".lake" / "build" / "lib" / "lean"
         # The kernel replays of this run's other audits (scripts/fixture-checks.py), else its own.
         replay_cache = Path(os.environ.get("AIR2LEAN_FIXTURE_REPLAY_CACHE") or work / "replay-cache.json")
         # --all-declarations: every declaration of the modules is a graph root, so a definition
@@ -200,6 +205,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
             env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [str(lib), os.environ.get("LEAN_PATH")])))
             command = [sys.executable, "-B", str(ROOT / "scripts" / "assumptions.py"), "--no-build",
                        "--all-declarations", "--replay-cache", str(replay_cache),
+                       *(["--extract-in", str(extract_in)] if extract_in else []),
                        "--output", str(report_path)]
             for module in modules:
                 command += ["--module", module]
@@ -209,7 +215,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
         else:
             result = theorem_universe.audit_modules(sorted(set(modules)), [], report_path,
                                                    replay_cache, all_declarations=True,
-                                                   compiled_units=context)
+                                                   compiled_units=context, extract_in=extract_in)
             audit_code, audit_output = result['exit_code'], ''
         report = json.loads(report_path.read_text()) if report_path.is_file() else {"status": "error"}
         problems = []
