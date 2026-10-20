@@ -5966,7 +5966,9 @@ def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext
 (`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory), and the Boolean
 facts (`(G 1).2.mid = false`: the case of a ghost value's flag). -/
 def fieldEqs (skip? : Option FVarId := none) : MetaM (Array Expr) := do
-  let skipType? ← skip?.mapM fun f => instantiateMVars (← f.getType)
+  let skipType? ← skip?.mapM fun f => do
+    let ty ← f.getType
+    instantiateMVars ty
   let mut out := #[]
   for d in ← getLCtx do
     if d.isImplementationDetail || skip? == some d.fvarId then continue
