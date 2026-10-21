@@ -426,7 +426,19 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)), ioMutex.unlock_wp hC hcost,
     WP.loop _ _ (inv23 P L C t g _ _ _ d) (fun _ => 0) (post23 P L g t d)
       (loop23_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
-    condS_eq, (condS_lt0 (b := (0 : BitVec 32)) rfl), debugAssert_true, gR_ph, gR_lph hC, gR,
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (debug_assert
+          (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+            (65535 : BitVec 16)))) (v := ()) (by
+          have hs : debug_assert
+              (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+                (65535 : BitVec 16)) = pure () := by
+            rw [condS_lt0 (b := (0 : BitVec 32)) rfl]
+            exact debugAssert_true
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    condS_eq, gR_ph, gR_lph hC, gR,
     hC.lpart, hC.lph, hC.ph_l, hC.set_l, hC.ok_calm, hC.ok_set,
     L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
     FCond.ptr_ep, inv23, post23]
@@ -613,7 +625,19 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)), ioMutex.unlock_wp hC hcost,
     WP.loop _ _ (inv22 P L C t g _ _ _ d) (fun _ => 0) (post22 P L g t d)
       (loop22_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
-    condS_eq, (condS_lt0 (b := (0 : BitVec 32)) rfl), debugAssert_true, gR_ph, gR_lph hC, gR,
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (debug_assert
+          (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+            (65535 : BitVec 16)))) (v := ()) (by
+          have hs : debug_assert
+              (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+                (65535 : BitVec 16)) = pure () := by
+            rw [condS_lt0 (b := (0 : BitVec 32)) rfl]
+            exact debugAssert_true
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    condS_eq, gR_ph, gR_lph hC, gR,
     hC.lpart, hC.lph, hC.ph_l, hC.set_l, hC.ok_calm, hC.ok_set,
     L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
     FCond.ptr_ep, inv22, post22]

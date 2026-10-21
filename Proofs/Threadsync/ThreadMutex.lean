@@ -26,6 +26,9 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FLock
 
 namespace Threadsync
 
+-- Unification must not unfold `WP` into the generated program.
+attribute [local irreducible] Proto.WP
+
 /-- The states of `Thread.Mutex.FutexImpl`: `unlocked`, `locked`, `contended` (`3`). -/
 def threadMutexW : LockWord.States (BitVec 32) where
   unl := 0
