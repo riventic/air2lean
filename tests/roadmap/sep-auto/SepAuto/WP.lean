@@ -732,3 +732,250 @@ theorem witness_retry_kernel (B Missing : Prop) (D : Nat → Prop) (x : Nat)
   exact good (by omega)
 
 end SepAuto.WP
+
+/-!
+NEW UNCOMPILED source-only control proposal for the existing assnByHyp function.
+These are finite matcher controls, not a Counter proof or a new proof interface.
+They belong in the existing SepAuto.WP module when the Auto writer is released.
+No control below was imported, elaborated or executed during source preparation.
+-/
+
+open Zig Zig.Full Zig.Full.FAssn
+open Lean Meta Elab Tactic Zig.Full.Auto
+
+namespace SepAuto.WP
+
+/-- The same source term occurs twice, but only the second occurrence changes.
+The matcher constructs the assertion equality; no fvar equation normalization runs first. -/
+theorem matcher_one_occurrence (tok : Ptr → Nat → FAssn) (p q : Ptr)
+    (hpq : p = q) (r : Res) (h : (tok p 1 ⋆ tok p 1) r) :
+    (tok p 1 ⋆ tok q 1) r := by
+  run_tac withRunCaches do
+    let g ← getMainGoal
+    let some (X, r) ← assnAt? (← g.getType) | throwError "matcher: not an assertion"
+    unless ← assnByHyp g X r do throwError "matcher: lost the second source occurrence"
+    unless ← g.isAssigned do throwError "matcher: no assertion proof was constructed"
+    replaceMainGoal []
+
+/-- Unknown value witnesses are inferred while two independent pointer equalities are
+checked. The identical source occurrences remain distinct resources throughout transport. -/
+theorem matcher_duplicate_mixed (tok : Ptr → Nat → FAssn) (s p q : Ptr)
+    (hsp : s = p) (hsq : s = q) (r : Res) (h : (tok s 1 ⋆ tok s 1) r) :
+    ∃ a b, (tok p a ⋆ tok q b) r := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let q := (← getLocalDeclFromUserName `q).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let a ← mkFreshExprMVar (mkConst ``Nat)
+    let b ← mkFreshExprMVar (mkConst ``Nat)
+    let X := mkSep (mkApp2 tok p a) (mkApp2 tok q b)
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    unless ← assnByHyp g.mvarId! X r do throwError "matcher: mixed duplicate atoms refused"
+    unless (← instantiateMVars a) == mkNatLit 1 && (← instantiateMVars b) == mkNatLit 1 do
+      throwError "matcher: source witnesses were not inferred"
+    let target ← (← getMainGoal).getType
+    let a ← instantiateMVars a
+    let b ← instantiateMVars b
+    let innerType := (mkApp target.appArg! a).headBeta
+    let inner ← mkAppOptM ``Exists.intro
+      #[innerType.getArg! 0, innerType.getArg! 1, b, ← instantiateMVars g]
+    let proof ← mkAppOptM ``Exists.intro #[target.getArg! 0, target.getArg! 1, a, inner]
+    (← getMainGoal).assign proof
+    replaceMainGoal []
+
+/-- A mixed-only earlier local premise must not take the witness from a later old match. -/
+theorem matcher_original_context_priority (tok : Ptr → Nat → FAssn) (p q : Ptr)
+    (hpq : p = q) (r : Res) (early : tok p 1 r) (later : tok q 2 r) :
+    ∃ a, tok q a r := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let q := (← getLocalDeclFromUserName `q).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let a ← mkFreshExprMVar (mkConst ``Nat)
+    let X := mkApp2 tok q a
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    unless ← assnByHyp g.mvarId! X r do throwError "matcher: original context match refused"
+    unless (← instantiateMVars a) == mkNatLit 2 do
+      throwError "matcher: mixed hypothesis preempted an old match"
+    let target ← (← getMainGoal).getType
+    let proof ← mkAppOptM ``Exists.intro
+      #[target.getArg! 0, target.getArg! 1, ← instantiateMVars a, ← instantiateMVars g]
+    (← getMainGoal).assign proof
+    replaceMainGoal []
+
+/-- The original atom search precedes the mixed fallback within a local assertion too. -/
+theorem matcher_original_atom_priority (tok : Ptr → Nat → FAssn) (p q : Ptr)
+    (hpq : p = q) (r : Res) (h : (tok p 1 ⋆ tok q 2) r) :
+    ∃ a b, (tok q a ⋆ tok p b) r := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let q := (← getLocalDeclFromUserName `q).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let a ← mkFreshExprMVar (mkConst ``Nat)
+    let b ← mkFreshExprMVar (mkConst ``Nat)
+    let X := mkSep (mkApp2 tok q a) (mkApp2 tok p b)
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    unless ← assnByHyp g.mvarId! X r do throwError "matcher: original atom match refused"
+    unless (← instantiateMVars a) == mkNatLit 2 && (← instantiateMVars b) == mkNatLit 1 do
+      throwError "matcher: mixed atom preempted an old match"
+    let target ← (← getMainGoal).getType
+    let a ← instantiateMVars a
+    let b ← instantiateMVars b
+    let innerType := (mkApp target.appArg! a).headBeta
+    let inner ← mkAppOptM ``Exists.intro
+      #[innerType.getArg! 0, innerType.getArg! 1, b, ← instantiateMVars g]
+    let proof ← mkAppOptM ``Exists.intro #[target.getArg! 0, target.getArg! 1, a, inner]
+    (← getMainGoal).assign proof
+    replaceMainGoal []
+
+/-- Counter's second index is k+1 for arbitrary initial k; the equality to1 uses hk.
+In the real client hk comes from start0_facts, never from an invented memory seed. -/
+theorem matcher_counter_initial_index (tok : Ptr → Nat → Array Byte → FAssn)
+    (k A : Nat) (bs : Array Byte) (hk : k = 0) (r : Res)
+    (h : tok ⟨some (k + 1), 0⟩ A bs r) :
+    ∃ A' bs', tok ⟨some 1, 0⟩ A' bs' r := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let bs := (← getLocalDeclFromUserName `bs).toExpr
+    let A := (← getLocalDeclFromUserName `A).toExpr
+    let p ← Term.elabTerm (← `(term| (⟨some 1, 0⟩ : Ptr))) none
+    let addr ← mkFreshExprMVar (mkConst ``Nat)
+    let bytes ← mkFreshExprMVar (← inferType bs)
+    let X := mkAppN tok #[p, addr, bytes]
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    unless ← assnByHyp g.mvarId! X r do throwError "matcher: initial index equation not used"
+    unless (← instantiateMVars addr) == A && (← instantiateMVars bytes) == bs do
+      throwError "matcher: address/byte witnesses were changed"
+    let target ← (← getMainGoal).getType
+    let addr ← instantiateMVars addr
+    let bytes ← instantiateMVars bytes
+    let innerType := (mkApp target.appArg! addr).headBeta
+    let inner ← mkAppOptM ``Exists.intro
+      #[innerType.getArg! 0, innerType.getArg! 1, bytes, ← instantiateMVars g]
+    let proof ← mkAppOptM ``Exists.intro #[target.getArg! 0, target.getArg! 1, addr, inner]
+    (← getMainGoal).assign proof
+    replaceMainGoal []
+
+/-- A failed pointer equality must not retain inferred address/byte witnesses or a proof.
+The second call checks that refusal did not poison the same run's later assertion match. -/
+theorem matcher_unknown_pointer_rollback (tok : Ptr → Nat → Array Byte → FAssn)
+    (p q : Ptr) (A : Nat) (bs : Array Byte) (r : Res) (h : tok p A bs r) : True := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let q := (← getLocalDeclFromUserName `q).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let bs := (← getLocalDeclFromUserName `bs).toExpr
+    let addr ← mkFreshExprMVar (mkConst ``Nat)
+    let bytes ← mkFreshExprMVar (← inferType bs)
+    let X := mkAppN tok #[q, addr, bytes]
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    if ← assnByHyp g.mvarId! X r then throwError "matcher: unknown pointer accepted"
+    if (← addr.mvarId!.isAssigned) || (← bytes.mvarId!.isAssigned) ||
+        (← g.mvarId!.isAssigned) then
+      throwError "matcher: refused atom retained an assignment"
+    let c ← caches
+    unless (← c.hyp.get).isEmpty && (← c.disch.get).isEmpty &&
+        (← c.facts.get).isEmpty && (← c.probe.get).isEmpty && (← c.detFail.get).isEmpty do
+      throwError "matcher: refused atom retained speculative arithmetic state"
+    let Y := mkAppN tok #[p, addr, bytes]
+    let next ← mkFreshExprSyntheticOpaqueMVar (mkApp Y r)
+    unless ← assnByHyp next.mvarId! Y r do throwError "matcher: refusal poisoned a later match"
+    unless ← next.mvarId!.isAssigned do throwError "matcher: later assertion has no proof"
+  trivial
+
+/-- A failed first mixed candidate must not fix the witnesses of the later valid candidate. -/
+theorem matcher_candidate_rollback (tok : Ptr → Nat → Array Byte → FAssn)
+    (bad good q : Ptr) (hgood : good = q) (badBytes goodBytes : Array Byte) (r : Res)
+    (h : (tok bad 1 badBytes ⋆ tok good 2 goodBytes) r) :
+    ∃ A bs, (tok q A bs ⋆ tok bad 1 badBytes) r := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let bad := (← getLocalDeclFromUserName `bad).toExpr
+    let q := (← getLocalDeclFromUserName `q).toExpr
+    let badBytes := (← getLocalDeclFromUserName `badBytes).toExpr
+    let goodBytes := (← getLocalDeclFromUserName `goodBytes).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let addr ← mkFreshExprMVar (mkConst ``Nat)
+    let bytes ← mkFreshExprMVar (← inferType goodBytes)
+    let X := mkSep (mkAppN tok #[q, addr, bytes])
+      (mkAppN tok #[bad, mkNatLit 1, badBytes])
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    unless ← assnByHyp g.mvarId! X r do throwError "matcher: later mixed candidate refused"
+    unless (← instantiateMVars addr) == mkNatLit 2 &&
+        (← instantiateMVars bytes) == goodBytes do
+      throwError "matcher: refused candidate's witnesses escaped rollback"
+    let target ← (← getMainGoal).getType
+    let addr ← instantiateMVars addr
+    let bytes ← instantiateMVars bytes
+    let innerType := (mkApp target.appArg! addr).headBeta
+    let inner ← mkAppOptM ``Exists.intro
+      #[innerType.getArg! 0, innerType.getArg! 1, bytes, ← instantiateMVars g]
+    let proof ← mkAppOptM ``Exists.intro #[target.getArg! 0, target.getArg! 1, addr, inner]
+    (← getMainGoal).assign proof
+    replaceMainGoal []
+
+/-- A known wrong byte payload is not replaced by inferred witnesses or pointer equalities. -/
+theorem matcher_wrong_bytes_refusal (tok : Ptr → Nat → Array Byte → FAssn)
+    (p : Ptr) (A : Nat) (bs cs : Array Byte) (hne : bs ≠ cs) (r : Res)
+    (h : tok p A bs r) : True := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let cs := (← getLocalDeclFromUserName `cs).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let addr ← mkFreshExprMVar (mkConst ``Nat)
+    let X := mkAppN tok #[p, addr, cs]
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    if ← assnByHyp g.mvarId! X r then throwError "matcher: known wrong bytes accepted"
+    if (← addr.mvarId!.isAssigned) || (← g.mvarId!.isAssigned) then
+      throwError "matcher: wrong-byte refusal retained an assignment"
+  trivial
+
+/-- A known address argument cannot be changed merely because other arguments match. -/
+theorem matcher_wrong_address_refusal (tok : Ptr → Nat → Array Byte → FAssn)
+    (p : Ptr) (A : Nat) (bs : Array Byte) (r : Res) (h : tok p A bs r) : True := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let A := (← getLocalDeclFromUserName `A).toExpr
+    let bs := (← getLocalDeclFromUserName `bs).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let wrong := mkApp2 (mkConst ``Nat.add) A (mkNatLit 1)
+    let X := mkAppN tok #[p, wrong, bs]
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    if ← assnByHyp g.mvarId! X r then throwError "matcher: wrong known address accepted"
+    if ← g.mvarId!.isAssigned then throwError "matcher: wrong-address refusal assigned a proof"
+  trivial
+
+/-- A proof about one resource is never transported to an unrelated resource. -/
+theorem matcher_resource_refusal (tok : Ptr → Nat → FAssn) (p : Ptr)
+    (r other : Res) (h : tok p 1 r) : True := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let other := (← getLocalDeclFromUserName `other).toExpr
+    let X := mkApp2 tok p (mkNatLit 1)
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X other)
+    if ← assnByHyp g.mvarId! X other then throwError "matcher: unrelated resource accepted"
+    if ← g.mvarId!.isAssigned then throwError "matcher: wrong-resource refusal assigned a proof"
+  trivial
+
+/-- Two source occurrences cannot discharge three target occurrences. -/
+theorem matcher_multiplicity_refusal (tok : Ptr → Nat → FAssn) (p : Ptr)
+    (r : Res) (h : (tok p 1 ⋆ tok p 1) r) : True := by
+  run_tac withRunCaches do
+    let tok := (← getLocalDeclFromUserName `tok).toExpr
+    let p := (← getLocalDeclFromUserName `p).toExpr
+    let r := (← getLocalDeclFromUserName `r).toExpr
+    let atom := mkApp2 tok p (mkNatLit 1)
+    let X := mkSep atom (mkSep atom atom)
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp X r)
+    if ← assnByHyp g.mvarId! X r then throwError "matcher: source occurrence was duplicated"
+    if ← g.mvarId!.isAssigned then throwError "matcher: multiplicity refusal assigned a proof"
+  trivial
+
+end SepAuto.WP
