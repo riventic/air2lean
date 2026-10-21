@@ -137,8 +137,12 @@ theorem dwait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
       m'.current = t ∧ ∃ r', DPart DR q bsD r' ∧
         P.inv (upd G' t (gD L E g .w1 r')) m') G m d := by
   fsym [FEvent.wp_liftPart hE (g := gD L E g .w1 r) (t := t)
-      (htt := dload (P := DR) (q := q)),
-    FEvent.wp_wait hE (g := gD L E g .w1 _) (ε := BitVec 32) (w := 32),
+      (hgo := by simpa only [gD_lph hE] using hgo) (hi := hi) (hc := hc)
+      (htt := dload (P := DR) (q := q))
+      (hp := by simpa only [gD_part] using hdp) (hret := .inl (.inr hcost)),
+    FEvent.wp_wait hE (g := gD L E g .w1 _) (ε := BitVec 32) (w := 32)
+      (e := (1 : BitVec 32)) rfl (gD_ph hE)
+      (by simpa only [gD_lph hE] using hgo),
     gD_ph hE, gD_lph hE, gD_part, gD_setPart, threadFutexWaitC_eq]
 
 /-- `waitUntilSet`'s loop invariant: `t` is a waiter at `w1` with its deadline block `q`. -/
@@ -172,7 +176,8 @@ theorem wus_body [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
       else wusPost DR P L E t g q D x G' m' d') G m d := by
   fsym [hE.wp_tick_unmetered (g := gD L E g .w1 _) (t := t),
     DPart.unmetered hu, dwait_wp hE hcost hgo hlive,
-    FEvent.wp_load hE (g := gD L E g .w1 _),
+    FEvent.wp_load hE (g := gD L E g .w1 _) (.inr (gD_ph hE))
+      (by simpa only [gD_lph hE] using hgo),
     gD_ph hE, gD_lph hE, gD_set hE, gD_part, gD_setPart, wusInv, wusPost,
     Thread_ResetEvent_FutexImpl_waitUntilSet.again37]
 
@@ -193,10 +198,18 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
     (hi : P.inv (upd G t (gD L E g p₀ (L.part g))) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_waitUntilSet E.W.ptr none) (fun x G' m' d' =>
       x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
-  fsym [FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t) (htt := halloc),
-    FEvent.wp_liftPartCur hE, halloc, hfree, FEvent.wp_liftPart hE, dstore,
+  fsym [WP.liftMem_pure (x := StateT.lift (debug_assert true)) (by rfl) rfl,
+    FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t)
+      (hgo := by simpa only [gD_lph hE] using hgo) (htt := halloc)
+      (hp := by simp only [gD_part]) (hret := .inl (.inr hcost)),
+    (fun (q : Ptr) (bs : Array Byte) (hbs : bs.size = 48) =>
+      FEvent.wp_liftPartCur hE (g := gD L E g .out _) (t := t)
+        (hgo := by simpa only [gD_lph hE] using hgo) (htt := hfree q bs hbs)
+        (hret := .inl (.inr hcost))),
     FEvent.wp_liftPart hE (g := gD L E g .w1 _) (t := t)
-      (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp)),
+      (hgo := by simpa only [gD_lph hE] using hgo)
+      (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp))
+      (hret := .inl (.inr hcost)),
     FEvent.wp_load hE (g := gD L E g p₀ _),
     FEvent.wp_cas hE (g := gD L E g .w0 _),
     (WP.liftMem_liftR (P := P) (t := t)
@@ -205,7 +218,7 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       WP.loop _ _ (wusInv DR P L E t g q d) (fun _ => 0) (wusPost DR P L E t g q d)
         (wus_body hE hcost DR hu hgo hlive q d)),
     dinit_eq, debugAssert_true, bsD_size, gD_ph hE, gD_lph hE, gD_set hE, gD_part, gD_setPart,
-    gD_self hE, FEvent.set_of, wusInv, wusPost]
+    gD_self hE, hE.lph, hE.lpart, FEvent.set_of, FEvent.IsSet, FEvent.newest, wusInv, wusPost]
 
 /-- **`ResetEvent.wait`** by a thread out of the event's and the lock's code, as the only waiter
 (`hone`, `hhb`): it returns when the event is set. -/

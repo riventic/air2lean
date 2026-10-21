@@ -100,10 +100,15 @@ theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
       m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp
   have hS : threadMutexW.c = L.c := hc3.symm
+  have hwait (G₁ : ThreadId → γ) (m₁ : Mem)
+      (hspin : P.inv (upd G₁ t (L.set g .spin rnil)) m₁) :
+      P.inv (upd G₁ t (L.set g .wait rnil)) m₁ := by
+    simpa only [L.set_set] using
+      (hP.toWait (t := t) (G := G₁) (m := m₁) (g := L.set g .spin rnil)
+        ((hP.ok_set g .spin rnil).mpr hok) (L.ph_set g .spin rnil) hspin)
   fsym [wp_loadLock hP (g := L.set g .spin rnil),
     wp_waitOn hP threadMutexW hS (g := L.set g .wait rnil),
-    hP.toWait (t := t) (g := L.set g .spin rnil)
-      ((hP.ok_set g .spin rnil).mpr hok) (L.ph_set g .spin rnil),
+    hwait,
     WP.loop _ _ (lockInv P L t g d) (fun _ => 0) (lockPost P L t g d)
       (loop16_body hP hcost hc3 t g hok hu d),
     threadFutexWaitC_eq, L.ph_set, L.set_set, hP.ok_set,

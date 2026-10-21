@@ -280,9 +280,36 @@ value it read, and its epoch value `e` while it has not seen the signal. -/
 def inv56 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
     (e : BitVec 32) (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → γ) (m : Mem)
     (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
-    ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
-    P.inv (upd G t (gR L C g i jr sn e)) m
+  d < D ∧ m.current = t ∧
+    ((s.prev_state = Packed.ofBits (1 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧
+        P.inv (upd G t (gR L C g i jr true e)) m))
+
+/-- The alternatives are exactly the original existential invariant. -/
+theorem inv56_iff_exists (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId)
+    (g : γ) (i jr : Nat) (e : BitVec 32) (D : Nat) (s : Io_Condition_waitInnerLocals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) :
+    inv56 P L C t g i jr e D s G m d ↔
+      d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
+        ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
+        P.inv (upd G t (gR L C g i jr sn e)) m := by
+  constructor
+  · rintro ⟨hd, hc, hs⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hs with ⟨hp, he, hi⟩ | ⟨hp, he, hi⟩ | ⟨hp, hi⟩
+    · exact ⟨false, 1, hp, .inl ⟨rfl, rfl⟩, fun _ => he, hi⟩
+    · exact ⟨false, 0x10001, hp, .inr rfl, fun _ => he, hi⟩
+    · exact ⟨true, 0x10001, hp, .inr rfl, (by intro h; cases h), hi⟩
+  · rintro ⟨hd, hc, sn, b, hp, hb, he, hi⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hb with ⟨rfl, rfl⟩ | rfl
+    · exact .inl ⟨hp, he rfl, hi⟩
+    · cases sn with
+      | false => exact .inr (.inl ⟨hp, he rfl, hi⟩)
+      | true => exact .inr (.inr ⟨hp, hi⟩)
 
 /-- The inner loop ends with no signal to take (`br55`), or with `t` holding the mutex again. -/
 def post56 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
@@ -302,7 +329,9 @@ theorem loop56_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
       else post56 P L C t g i jr e D r G' m' d') G m d := by
   fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr _ e),
-    ioMutexCode.lock_wp_unmetered hC hcost,
+    ioMutexCode.lock_wp_unmetered hC hcost (g := L.set g .out rnil)
+      (hg := L.ph_set g .out rnil)
+      (hok := (hC.ok_set g .out rnil).mpr hok),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
         {Q : BitVec 16 → (ThreadId → γ) → Mem → Nat → Prop}
         (v : Io_Condition_State) (hv : v = Packed.ofBits (0x10001 : BitVec 32)) =>
@@ -397,7 +426,7 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)), ioMutex.unlock_wp hC hcost,
     WP.loop _ _ (inv23 P L C t g _ _ _ d) (fun _ => 0) (post23 P L g t d)
       (loop23_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
-    condS_eq, condS_lt0, debugAssert_true, gR_ph, gR_lph hC, gR,
+    condS_eq, (condS_lt0 (b := (0 : BitVec 32)) rfl), debugAssert_true, gR_ph, gR_lph hC, gR,
     hC.lpart, hC.lph, hC.ph_l, hC.set_l, hC.ok_calm, hC.ok_set,
     L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
     FCond.ptr_ep, inv23, post23]
@@ -435,9 +464,36 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
 def inv45 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
     (e : BitVec 32) (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → γ)
     (m : Mem) (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
-    ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
-    P.inv (upd G t (gR L C g i jr sn e)) m
+  d < D ∧ m.current = t ∧
+    ((s.prev_state = Packed.ofBits (1 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧
+        P.inv (upd G t (gR L C g i jr true e)) m))
+
+/-- The alternatives are exactly the original existential invariant. -/
+theorem inv45_iff_exists (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId)
+    (g : γ) (i jr : Nat) (e : BitVec 32) (D : Nat) (s : Io_Condition_waitUncancelableLocals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) :
+    inv45 P L C t g i jr e D s G m d ↔
+      d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
+        ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
+        P.inv (upd G t (gR L C g i jr sn e)) m := by
+  constructor
+  · rintro ⟨hd, hc, hs⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hs with ⟨hp, he, hi⟩ | ⟨hp, he, hi⟩ | ⟨hp, hi⟩
+    · exact ⟨false, 1, hp, .inl ⟨rfl, rfl⟩, fun _ => he, hi⟩
+    · exact ⟨false, 0x10001, hp, .inr rfl, fun _ => he, hi⟩
+    · exact ⟨true, 0x10001, hp, .inr rfl, (by intro h; cases h), hi⟩
+  · rintro ⟨hd, hc, sn, b, hp, hb, he, hi⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hb with ⟨rfl, rfl⟩ | rfl
+    · exact .inl ⟨hp, he rfl, hi⟩
+    · cases sn with
+      | false => exact .inr (.inl ⟨hp, he rfl, hi⟩)
+      | true => exact .inr (.inr ⟨hp, hi⟩)
 
 /-- The inner loop ends with no signal to take (`br44`), or with `t` holding the mutex again. -/
 def post45 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
@@ -459,7 +515,9 @@ theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
           (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitUncancelableLocals) => 0) s)
       else post45 P L C t g i jr e D r G' m' d') G m d := by
   fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr _ e),
-    ioMutexCode.lock_wp_unmetered hC hcost,
+    ioMutexCode.lock_wp_unmetered hC hcost (g := L.set g .out rnil)
+      (hg := L.ph_set g .out rnil)
+      (hok := (hC.ok_set g .out rnil).mpr hok),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
         {Q : BitVec 16 → (ThreadId → γ) → Mem → Nat → Prop}
         (v : Io_Condition_State) (hv : v = Packed.ofBits (0x10001 : BitVec 32)) =>
@@ -555,7 +613,7 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)), ioMutex.unlock_wp hC hcost,
     WP.loop _ _ (inv22 P L C t g _ _ _ d) (fun _ => 0) (post22 P L g t d)
       (loop22_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
-    condS_eq, condS_lt0, debugAssert_true, gR_ph, gR_lph hC, gR,
+    condS_eq, (condS_lt0 (b := (0 : BitVec 32)) rfl), debugAssert_true, gR_ph, gR_lph hC, gR,
     hC.lpart, hC.lph, hC.ph_l, hC.set_l, hC.ok_calm, hC.ok_set,
     L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
     FCond.ptr_ep, inv22, post22]
