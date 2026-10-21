@@ -157,10 +157,9 @@ theorem failed_rule_retry (op : MemM Unit) (b : BlockId) (A : Nat) (bs : Array B
       op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ R) := by
   fsym [bad, good]
 
-/- SOURCE-ONLY proposed control v2; not compiled or an old-fail claim.
-Append inside the existing SepAuto.Updates namespace. The preceding contract atom forces the
-conditional's structural reorder. The supplied opaque command prevents a pure-body bypass;
-the complete arbitrary exclusive frame remains in both precondition and postcondition. -/
+/-- A preceding contract atom forces the conditional's structural reorder before witness
+selection. The opaque command prevents a pure-body bypass; the arbitrary exclusive frame
+remains in both the precondition and postcondition. -/
 example (F : Array Byte → FAssn) (base fee R : FAssn) (c : MemM Unit)
     (bytes : Array Byte) (hne : bytes.size ≠ 0)
     (rule : ∀ bs : Array Byte,
