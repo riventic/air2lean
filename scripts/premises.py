@@ -196,11 +196,25 @@ def profile_header(text: str) -> str:
     return first if first.startswith(PROFILE_MARKER) else ""
 
 
+# The characters that can start a comment, string or character token (outside a block comment),
+# and a block comment's delimiters (inside one): every other run is copied or blanked at once.
+_TOKEN_START = re.compile(r"[/\-\"']")
+_DELIMITER_START = re.compile(r"[/\-]")
+_NOT_NEWLINE = re.compile(r"[^\n]")
+
+
 def strip_comments(text: str) -> str:
     """Blank comments and string contents, preserving line structure."""
     out = []
     i, n, depth = 0, len(text), 0
     while i < n:
+        # A run of characters that start no token is copied (blanked in a comment) unchanged.
+        found = (_DELIMITER_START if depth else _TOKEN_START).search(text, i)
+        k = found.start() if found else n
+        if k > i:
+            out.append(_NOT_NEWLINE.sub(" ", text[i:k]) if depth else text[i:k])
+            i = k
+            continue
         c = text[i]
         if depth:
             if text.startswith("/-", i):

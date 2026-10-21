@@ -117,6 +117,32 @@ the address (`wakeSets`), with no FIFO order (audit finding #6). The woken threa
 next turn. A wake accesses no memory and gives no edge: std re-reads the word with an acquire.
 macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std retries.
 
+The Linux WAIT/WAKE wrappers reject an unaligned numeric address with `-EINVAL` before any
+interrupt, scheduling choice, word read or queue effect. WAIT copies and validates a supplied
+timespec before this check, following Linux's syscall/key order. A private WAKE still reads
+no futex word: an aligned unmapped or known freed address, including zero, is not rejected
+by alignment. A pointer into a block the memory does not have resolves to no numeric
+address: WAIT and WAKE at it are `.illegal`, a conservative over-approximation. This does
+not implement every native user-range/shared-VM error. The existing
+raw WP rules expose both the immediate EINVAL post and aligned generic operation; valid
+lock/Event calls derive alignment from their existing block invariants, with no new caller
+premise. The queue's missing numeric-address/domain distinction remains separate under S6.
+
+The reusable address run/cases/alignment facts live beside `Full.ptrAddr_run`. Typed lock
+and shared-word invariants supply their numeric alignment there, and `Fits`/`Word.InRest`
+forward those facts through the existing WP walker. Clients supply these library invariant
+facts; they do not open the block invariant or select an aligned specialization themselves.
+The aligned and returned-error specializations use the existing fsym registry.
+
+The rule-boundary correction is explicit:
+
+| Declaration | Previous obligation | Corrected obligation |
+| --- | --- | --- |
+| `WP.futex_4arg` (untimed WAIT) | Every supported call reduces to the generic successful wait | Actual address resolution, returned EINVAL at the same ghost/memory/depth when unaligned, generic wait when aligned |
+| `WP.futex_3arg` (WAKE) | Every supported call reduces to the generic successful wake | The same returned-error/aligned-success split, with no futex-word read |
+| `WP.osFutexWait`, `WP.osFutexWake` | Generic operation over the current queue | Unchanged |
+| WPOsFutex Linux lock/Event statements | Existing public postconditions | Exact headers retained; address facts derived from existing invariants and the generic aligned specialization |
+
 ## Threads
 
 **Create.** Linux `clone` with std's exact flags and macOS `pthread_create` are the scheduler's

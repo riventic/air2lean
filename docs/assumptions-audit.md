@@ -65,8 +65,8 @@ that do not share declaration names into one extractor run. `--shipped REPORT` a
 passing, replayed all-shipped-modules report. A file that imports a module generated at gate
 time is listed in `GATES`; its gate script runs `theorem_universe.py gate` on its copy. `lake env` searches
 `.lake/build/lib/lean` before the universe libraries, so the audit refuses to run while a
-non-Lake top-level name there (the `tests/` fixture oleans of `tests/roadmap/claims` and
-`tests/roadmap/assurance`) could shadow a universe module; CI removes that directory first.
+non-Lake top-level name there (the `tests/` fixture oleans of `tests/roadmap/assurance`) could
+shadow a universe module; CI removes that directory first.
 
 ## Freshness (H1)
 
