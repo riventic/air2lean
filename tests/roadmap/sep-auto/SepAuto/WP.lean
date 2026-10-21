@@ -787,3 +787,61 @@ theorem applied_simp_after_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : 
   fsym [applied_reverse_twice (xs := xs) ()]
 
 end SepAuto.WP
+
+namespace SepAuto.WP
+
+open Lean Meta Elab Tactic Zig.Full.Auto
+
+/-- Positive equations may determine fields inside an application, rather than a bare
+unknown endpoint. Inspect the existing atomic path before any broader side search. -/
+theorem atomic_equation_fields (α β : Type) (a : α) (b : β) : True := by
+  run_tac withRunCaches do
+    let a := (← getLocalDeclFromUserName `a).toExpr
+    let b := (← getLocalDeclFromUserName `b).toExpr
+    let x ← mkFreshExprMVar (← inferType a)
+    let y ← mkFreshExprMVar (← inferType b)
+    let left ← mkAppM ``Prod.mk #[a, b]
+    let right ← mkAppM ``Prod.mk #[x, y]
+    let target ← mkEq left right
+    let proof ← mkFreshExprSyntheticOpaqueMVar target
+    unless (← wpAtom proof.mvarId! #[] #[] 4 (noCases := true)).isEmpty do
+      throwError "atomic_equation_fields: constructor fields remained unresolved"
+    unless (← instantiateMVars x) == a && (← instantiateMVars y) == b do
+      throwError "atomic_equation_fields: fields did not take the exact values"
+    let proof ← instantiateMVars proof
+    if proof.hasExprMVar then throwError "atomic_equation_fields: proof has unknowns"
+    checkWithKernel (← mkExpectedTypeHint proof (← instantiateMVars target))
+  trivial
+
+/-- A later disagreement must undo an earlier field assignment, so a subsequent positive
+equation can choose the actual value. No opaque proposition or False is discharged. -/
+theorem atomic_equation_field_rollback : True := by
+  run_tac withRunCaches do
+    let x ← mkFreshExprMVar (mkConst ``Nat)
+    let left ← mkAppM ``Prod.mk #[x, mkNatLit 0]
+    let wrong ← mkAppM ``Prod.mk #[mkNatLit 7, mkNatLit 1]
+    let target ← mkEq left wrong
+    let proof ← mkFreshExprSyntheticOpaqueMVar target
+    let rest ← wpAtom proof.mvarId! #[] #[] 4 (noCases := true)
+    unless rest == [proof.mvarId!] && !(← proof.mvarId!.isAssigned) &&
+        !(← x.mvarId!.isAssigned) do
+      throwError "atomic_equation_field_rollback: failed equality changed its inputs"
+    let right ← mkAppM ``Prod.mk #[mkNatLit 9, mkNatLit 0]
+    let target ← mkEq left right
+    let proof ← mkFreshExprSyntheticOpaqueMVar target
+    unless (← wpAtom proof.mvarId! #[] #[] 4 (noCases := true)).isEmpty do
+      throwError "atomic_equation_field_rollback: later valid equality did not close"
+    unless (← instantiateMVars x) == mkNatLit 9 do
+      throwError "atomic_equation_field_rollback: failed choice contaminated the retry"
+    let proof ← instantiateMVars proof
+    if proof.hasExprMVar then throwError "atomic_equation_field_rollback: proof has unknowns"
+    checkWithKernel (← mkExpectedTypeHint proof (← instantiateMVars target))
+  trivial
+
+/-- The public WP post uses the same constructor equation with fresh fields. -/
+theorem equation_fields_post {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n a b : Nat) :
+    P.WP t (pure ()) (fun _ _ _ _ => ∃ x y : Nat, (x, y) = (a, b)) G m n := by
+  fsym
+
+end SepAuto.WP
