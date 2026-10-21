@@ -27091,6 +27091,7 @@
         "paths": [
           "ZigLean/Conc/Clock.lean",
           "ZigLean/Float/CompilerRt.lean",
+          "ZigLean/Sep/Full/Auto.lean",
           "ZigLean/Sep/Full/AutoConc.lean",
           "ZigLean/Sep/Full/OsFutex.lean",
           "ZigLean/Sep/Full/Word.lean",
@@ -30878,7 +30879,7 @@
       "ZigLean/Sep/Full/AtomicPlain.lean": "74c73257fbfdabf011c93839f2d77fd9cba2edf77e5dc17e596b906108ffd476",
       "ZigLean/Sep/Full/AtomicPtr.lean": "15123f84791a4e2c9c99e800ab17dd481518389260e26c8106cfe7ab28b81ef3",
       "ZigLean/Sep/Full/AtomicRules.lean": "72c56f4c4192fd5cbee9b076a4178b86d72236e4df9effa790b4132a198d97be",
-      "ZigLean/Sep/Full/Auto.lean": "8229a7496de97dbb7e0cbd95bd791f8136e87b0f73740df2b9998dcd21ad5b9f",
+      "ZigLean/Sep/Full/Auto.lean": "8b2b355d4da9a77ff777116f0564fc336be6d0e6013f4e33ec011b19aeb75007",
       "ZigLean/Sep/Full/AutoAll.lean": "a0ef457546401de3a7aa1f9a576f69d49491f897a323194ccfcb697843390c22",
       "ZigLean/Sep/Full/AutoArith.lean": "26e5120b2f6a5ce59b418b7ed3599ae69457d9ac5a8e8d6d3a502672f58e044e",
       "ZigLean/Sep/Full/AutoAttr.lean": "ddca0bf6f111a7040aa0f237bbe83113d0b91f24dd964c1c90b885205da91ebe",
