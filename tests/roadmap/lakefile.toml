@@ -62,3 +62,10 @@ globs = ["OneLogic.+"]
 name = "AuditClaims"
 srcDir = "architecture-audit/claims"
 globs = ["AuditClaims.+"]
+
+# The claim-strength regression fixtures (tests/roadmap/claims/check.sh, docs/claim-strength.md).
+# Fixture declares spoofs of reserved claim-head names; no module imports it.
+[[lean_lib]]
+name = "Claims"
+srcDir = "claims"
+globs = ["Fixture", "AllocatorApplications", "AllocatorImported"]
