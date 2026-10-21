@@ -421,8 +421,8 @@ structure RunCaches where
   (`lawfulEncOf?`, `lawfulPackedOf?`) by type, or `none`. -/
   layouts : IO.Ref (Std.HashMap Expr (Option (Expr × Array (Nat × Nat × Nat × Option Nat))))
   lawful : IO.Ref (Std.HashMap Expr (Option Expr))
-  /-- The atoms the planner did not find in the state during the current step (its unknowns
-  abstracted): what a view of a state atom may provide (`viewStep`). -/
+  /-- The failed demands of the current step (unknowns abstracted): an original failed atom,
+  or requested known atoms separated from that intact target on the right (`viewDemand`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
   /-- The program a view retries and its active retry states. A new intermediate resource or
   request, or a new fact, can progress; repeating the same state cannot start another view.
@@ -1465,8 +1465,8 @@ def withinCands (X P : Expr) (unfold := false) : MetaM (Array (MetaM Expr)) := d
     k (← mkAppM ``Within.refl #[part])
 
 /-- A rule's hypothesis `t = u` whose left side is known and whose right side has unknowns (the
-block of a pointer, `p.block = some ?b`) is a function of the context's facts: a local
-hypothesis with the same left side fixes the unknowns before the rule's precondition is planned.
+block of a pointer, `p.block = some ?b`) fixes the unknowns before its precondition is planned:
+local equations with the same left side are tried first, then `solveBlock` computes its block.
 Else the planner may take an atom of the same shape about another block (two stack blocks of
 one size: the extent of the wrong one, ledger #27). -/
 def fixByFacts (args : Array Expr) : MetaM Unit := do
@@ -1490,6 +1490,10 @@ def fixByFacts (args : Array Expr) : MetaM Unit := do
       let s ← saveState
       if ← isDefEq ty t then a.mvarId!.assign h; break
       s.restore
+    if ← a.mvarId!.isAssigned then continue
+    if isBlockEq ty then
+      if let some pf ← solveBlock ty then
+        a.mvarId!.assign pf
 
 /-! ## Fields of typed values (`EncField`)
 
@@ -3973,11 +3977,51 @@ def atomSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
 def pushWanted (ws : Array AbstractMVarsResult) (r : AbstractMVarsResult) : Array AbstractMVarsResult :=
   if ws.any (·.expr == r.expr) then ws else ws.push r
 
-/-- Note an atom that the planner did not find in the state (its unknowns abstracted): a view
-of a state atom may provide it (`viewStep`). -/
-def noteWanted (a : Expr) : MetaM Unit := do
-  let r ← abstractMVars (← instantiateMVars a)
+/-- Note the original failed atom with the current demand's requested knowledge, retaining
+its multiplicity. The prefix is matching data, not an asserted fact or a proof of knowledge. -/
+def noteWanted (a : Expr) (requested : Array Expr := #[]) : MetaM Unit := do
+  let a ← instantiateMVars a
+  let requested ← requested.mapM instantiateMVars
+  let mut knowledge := requested.filter (·.isAppOfArity ``Zig.Full.known 2)
+  -- The original failed target remains on the right, so do not count it twice.
+  if a.isAppOfArity ``Zig.Full.known 2 then knowledge := knowledge.erase a
+  let demand := if knowledge.isEmpty then a else mkSep (sepOf knowledge) a
+  let r ← abstractMVars demand
   (← caches).wanted.modify (pushWanted · r)
+
+/-- The current raw-byte/region source of one requested address, with its guarded update.
+Each probe restores the arithmetic refs before leaving; only a successful proof keeps its Lean
+environment and witness assignments. Rejected probes restore Lean state, including before a
+real exception is rethrown. -/
+def knownSource? (ats : Array Expr) (a : Expr) : TacticM (Option (Nat × Expr × Expr)) := do
+  for i in [0:ats.size] do
+    let atom := ats[i]!
+    let raw := atom.isAppOfArity ``Zig.Full.FAssn.up 1 &&
+      atom.appArg!.isAppOfArity ``Zig.bytesAt 5
+    let some r := regionArgs? atom <|> (if raw then
+      let xs := atom.appArg!.getAppArgs
+      some #[xs[0]!, xs[1]!, xs[2]!, xs[3]!, mkNatLit 1, xs[4]!]
+      else none) | continue
+    let s ← saveState
+    let restoreArith ← (← caches).saveArith
+    let result ← try
+      tryCatchRuntimeEx (do
+        let some (b, hb) ← blockOf r[0]! | pure none
+        if !(← withReducible (isDefEq b (a.getArg! 0)) <&&>
+            withReducible (isDefEq r[1]! (a.getArg! 1))) then pure none
+        else
+          let some hpos ← proveArith (← mkAppM ``LT.lt #[mkNatLit 0,
+              ← mkAppM ``Array.size #[r[5]!]]) (quick := true) | pure none
+          let h ← if raw then
+            mkAppOptM ``Zig.Full.known_of_bytesAt #[r[0]!, r[1]!, r[2]!, r[3]!, r[5]!, b, hb, hpos]
+            else
+            mkAppOptM ``known_of_region #[b, r[0]!, r[1]!, r[2]!, r[4]!, r[3]!, r[5]!, hb, hpos]
+          pure (some (i, atom, h)))
+        fun ex => do s.restore; throw ex
+    finally restoreArith
+    if result.isSome then return result
+    s.restore
+  return none
 
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
@@ -4083,6 +4127,7 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
   return r
 where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List MVarId) := g.withContext do
   let s ← saveState
+  let restoreArith ← (← caches).saveArith
   try
     let t ← instantiateMVars (← g.getType)
     let P := t.appFn!.appArg!
@@ -4175,32 +4220,10 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     for a in qats do
       let a ← instantiateMVars a
       unless a.isAppOfArity ``Zig.Full.known 2 do continue
-      let source (st : St) : TacticM (Option (Nat × Expr × Expr)) := do
-        for i in [0:st.ats.size] do
-          let atom := st.ats[i]!
-          let raw := atom.isAppOfArity ``Zig.Full.FAssn.up 1 &&
-            atom.appArg!.isAppOfArity ``Zig.bytesAt 5
-          let some r := regionArgs? atom <|> (if raw then
-            let xs := atom.appArg!.getAppArgs
-            some #[xs[0]!, xs[1]!, xs[2]!, xs[3]!, mkNatLit 1, xs[4]!]
-            else none) | continue
-          let s' ← saveState
-          let some (b, hb) ← blockOf r[0]! | s'.restore; continue
-          unless ← withReducible (isDefEq b (a.getArg! 0)) <&&>
-              withReducible (isDefEq r[1]! (a.getArg! 1)) do
-            s'.restore; continue
-          let some hpos ← proveArith (← mkAppM ``LT.lt #[mkNatLit 0,
-              ← mkAppM ``Array.size #[r[5]!]]) (quick := true) | s'.restore; continue
-          let h ← if raw then
-            mkAppOptM ``Zig.Full.known_of_bytesAt #[r[0]!, r[1]!, r[2]!, r[3]!, r[5]!, b, hb, hpos]
-            else
-            mkAppOptM ``known_of_region #[b, r[0]!, r[1]!, r[2]!, r[4]!, r[3]!, r[5]!, hb, hpos]
-          return some (i, atom, h)
-        return none
       -- Fix a fresh address for a determined block before speculative existing knowledge can
       -- cover it. An unknown block keeps ordinary matching; do not guess it from another region.
       let unresolved := (a.getArg! 1).hasExprMVar && !(a.getArg! 0).hasExprMVar
-      let source? ← if unresolved then source st else pure none
+      let source? ← if unresolved then knownSource? st.ats a else pure none
       let mut have_ := none
       for i in [0:st.ats.size] do
         if knowUsed.contains i || !st.ats[i]!.isAppOfArity ``Zig.Full.known 2 then continue
@@ -4209,7 +4232,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         s'.restore
         if ok then have_ := some i; break
       if let some i := have_ then knowUsed := knowUsed.push i; continue
-      let some (i, atom, h) ← if unresolved then pure source? else source st | continue
+      let some (i, atom, h) ← if unresolved then pure source? else knownSource? st.ats a | continue
       st ← st.step #[i] #[atom, ← instantiateMVars a] h
       knowUsed := (knowUsed.map fun k => if k < i then k + 2 else k + 1) |>.push 1
     if st.ats.size > beforeKnowledge then
@@ -4270,7 +4293,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         if let some (st', x) ← carve st q n? claimed whole then
           st := st'; claimed := claimed.push x; done := true
       unless done do
-        noteWanted a
+        noteWanted a qats
         throwError "fsym: no region of the state holds{indentExpr a}"
     trace[fsym] "plan: regions done"
     -- shares
@@ -4339,7 +4362,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
               found := true; break
           s'.restore
       unless found do
-        noteWanted a
+        noteWanted a qats
         throwError "fsym: the state has no atom for{indentExpr a}"
     -- atoms left over that a drop lemma forgets (`@[fsym_drop]`: knowledge, claims)
     if frame?.isNone then
@@ -4427,6 +4450,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
   catch ex =>
     trace[fsym] "entailment: {ex.toMessageData}"
     s.restore
+    restoreArith
     return [g]
 
 /-! ## Facts of atoms -/
@@ -4605,12 +4629,14 @@ backends); in the concurrent backend it executes a `ConcM.liftMem c` command (ab
 def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId × List MVarId)) :=
   g.withContext do
   let s ← saveState
+  let restoreArith ← (← caches).saveArith
+  let restore : TacticM Unit := do s.restore; restoreArith
   try
     let (_, L, α, P, _, Q) ← view g
     let (args, _, concl) ← forallMetaTelescope (← inferType rule)
     let concl ← whnfR concl
     let some (kind, cmd) := ruleConcl? concl | do
-      trace[fsym] "rule {rule}: not a triple {concl}"; s.restore; return none
+      trace[fsym] "rule {rule}: not a triple {concl}"; restore; return none
     let ca := concl.getAppArgs
     let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
     -- the command the rule is about, and whether the rule applies in this backend: a thread's
@@ -4623,7 +4649,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       else if L.conc then memCmd? x
       else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
-    let some tx := target? | s.restore; return none
+    let some tx := target? | restore; return none
     -- a sequential rule in a thread: its command must be local to the thread that owns the
     -- rule's precondition (`ThreadLocal`, solved last by the locality providers, once `P₀` is
     -- known); a command that no provider is about gets no plan
@@ -4632,7 +4658,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     if let some t := local? then
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
       -- (or its definition, unfolded by the provider search: `providerCands`)
-      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then s.restore; return none
+      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then restore; return none
     let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
@@ -4640,16 +4666,16 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       -- argument unifies as written, not in its unfolded form
       let cmd ← reduceProjs (← unfoldToHead (← instantiateMVars cmd) tx)
       let cmd ← reduceProjs (← expandMapLits cmd)
-      unless headKey cmd == headKey tx do s.restore; return none
+      unless headKey cmd == headKey tx do restore; return none
       unless ← isDefEq cmd tx do
         trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"
-        s.restore; return none
+        restore; return none
     else
-      unless ← unifyKeyed cmd tx do s.restore; return none
+      unless ← unifyKeyed cmd tx do restore; return none
     trace[fsym] "rule {rule}: command unified"
     fixByFacts args
     if ← instArgsMissing args then
-      trace[fsym] "rule {rule}: no instance"; s.restore; return none
+      trace[fsym] "rule {rule}: no instance"; restore; return none
     let P₀i ← normNatLits (← instantiateMVars P₀)
     let sizes ← ruleRegionSizes P₀i args
     let whole := P₀i.isMVar
@@ -4657,7 +4683,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     -- `EUpd P (P₀ ⋆ R)` by the planner, when the rule's precondition is not literally there
     let mut planned : Option Expr := none
     if whole then
-      unless ← isDefEq P₀ P do s.restore; return none
+      unless ← isDefEq P₀ P do restore; return none
     else
       -- frame inference: each atom of the rule's precondition is an atom of `P`
       let ats := atoms P
@@ -4686,7 +4712,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
         let left ← closeEntail hE.mvarId! sizes
         unless left.isEmpty do
           trace[fsym] "rule {rule}: no plan for its precondition"
-          s.restore; return none
+          restore; return none
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
     synthInstArgs args
@@ -4695,14 +4721,14 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
     let some left ← solveSides sides | do
       trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
-      s.restore; return none
+      restore; return none
     -- every argument must be determined (a proof by a provider too)
     for a in args do
       let a ← instantiateMVars a
       if a.hasExprMVar && !(left.any fun m => a == .mvar m) then
         unless (← isProp (← inferType a)) && (a.collectMVars {}).result.all (left.contains ·) do
           trace[fsym] "rule {rule}: undetermined {a}"
-          s.restore; return none
+          restore; return none
     let mut r ← instantiateMVars (mkAppN rule args)
     let Q₀ ← normNatLits (← instantiateMVars Q₀)
     let P₀ ← normNatLits (← instantiateMVars P₀)
@@ -4749,7 +4775,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     return some (k', left)
   catch ex =>
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
-    s.restore; return none
+    restore; return none
 
 /-- Try a **bind rule** (a `CTriple` rule about a command and the rest of the program, such as
 an oracle's pick with its op, `CTriple.weakCasPtr_bind`) on the goal's whole program `c`: its
@@ -5014,6 +5040,46 @@ def splitFor (x w : Expr) : TacticM Bool := do
   if U.hasExprMVar || (← withNewMCtxDepth (withReducible (isDefEq T U))) then return false
   return (← structLayoutOf? T).isSome
 
+/-- A combined demand records requested knowledge on the left and the original failed atom
+on the right. Keep that target opaque, even when it contains several atoms. Other requests keep
+their entire old expression; knowledge is never itself removed from the final target. -/
+def viewDemand (request : Expr) : Expr × Array Expr :=
+  if request.isAppOfArity sepN 2 then
+    let knowledge := atoms request.appFn!.appArg!
+    if !knowledge.isEmpty && knowledge.all (·.isAppOfArity ``Zig.Full.known 2) then
+      (request.appArg!, knowledge)
+    else (request, #[])
+  else (request, #[])
+
+/-- Retain a combined demand's knowledge only from the source selected by a successful view.
+Existing knowledge covers one requested occurrence each; new occurrences use the planner's
+guarded extraction. Every heap atom, gap and framed occurrence stays intact. -/
+def viewKnowledge (ats : Array Expr) (x Y h : Expr)
+    (knowledge : Array Expr) : TacticM (Expr × Expr) := do
+  if knowledge.isEmpty then return (Y, h)
+  let known := ats.filter (·.isAppOfArity ``Zig.Full.known 2)
+  let mut used : Array Nat := #[]
+  let mut viewSt? : Option St := none
+  for a in knowledge do
+    let a ← instantiateMVars a
+    let unresolved := (a.getArg! 1).hasExprMVar && !(a.getArg! 0).hasExprMVar
+    let source? ← if unresolved then knownSource? #[x] a else pure none
+    let mut have_ := none
+    for i in [0:known.size] do
+      if used.contains i then continue
+      let s ← saveState
+      let ok ← unifyAtom a known[i]!
+      s.restore
+      if ok then have_ := some i; break
+    if let some i := have_ then used := used.push i; continue
+    let some (_, atom, hK) ← if unresolved then pure source? else knownSource? #[x] a
+      | continue
+    let viewSt ← match viewSt? with | some st => pure st | none => St.init x
+    viewSt? := some (← viewSt.step #[0] #[atom, ← instantiateMVars a] hK)
+  let some viewSt := viewSt? | return (Y, h)
+  let viewSt ← viewSt.step #[0] #[Y] h
+  return (sepOf viewSt.ats, viewSt.pf)
+
 /-- View the state atoms that provide an atom the planner did not find (`wanted`, from
 `noteWanted`): an atom `x` of the head of a view lemma `EUpd X Y` whose `Y` has an atom of the
 wanted head, in the wanted atom's block; `Y`'s atoms of that head unify with the wanted one where
@@ -5032,7 +5098,8 @@ def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option 
   let mut st ← St.init P
   let mut viewed : Array Expr := #[]
   for wa in wanted do
-    let (_, _, w) ← openAbstractMVarsResult wa
+    let (_, _, request) ← openAbstractMVarsResult wa
+    let (w, knowledge) := viewDemand request
     let k := headKey w
     if k == .anonymous || k == `fvar then continue
     -- (an atom of an unknown block names no atoms to view: a one-way view would lose others)
@@ -5091,6 +5158,13 @@ def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option 
           trace[fsym] "view {n} of {x}: {ex.toMessageData}"
           s'.restore
       let some (Y, h) := y? | i := i + 1; continue
+      -- (requested knowledge that cannot be derived keeps the view without it, like the
+      -- planner's other failed probes; `viewKnowledge` itself only extends `Y`)
+      let sv ← saveState
+      let (Y, h) ← try viewKnowledge st.ats x Y h knowledge
+        catch ex =>
+          trace[fsym] "view knowledge of {x}: {ex.toMessageData}"
+          sv.restore; pure (Y, h)
       -- (the view is now first, the atoms before `i` one further: the next is still at `i + 1`)
       st ← st.step #[i] #[Y] h
       viewed := viewed.push Y
@@ -5144,8 +5218,8 @@ def closePre (g : MVarId) : TacticM Bool := do
   unless ← isUpd (.mvar m) do return false
   m.withContext do
     let t ← instantiateMVars (← m.getType)
-    -- (only the atom the plan failed on, noted last: the atoms that the branches of an `if` of
-    -- the precondition missed, under other unknowns, would view other atoms of the block)
+    -- (only this invocation's last failed demand: viewDemand keeps its original target intact
+    -- and uses only its own requested knowledge. Other branches' targets must not select views.)
     let some w := wanted.back? | return false
     let some (P', h) ← viewAtoms t.appFn!.appArg! #[w] | return false
     let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P', t.appArg!])

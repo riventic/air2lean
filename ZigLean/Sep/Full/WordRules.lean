@@ -68,6 +68,14 @@ section Atomic
 
 variable {bits bytes : Nat} {W : Word bits bytes}
 
+/-- Any shared word kept in a protocol's rest supplies actual numeric alignment. This is
+the generic fact for event, condition and other word clients of the Linux futex rules. -/
+theorem Fits.wordPtrAddr_aligned {W : Word 32 4} (hP : L.Fits K P U ok) (hW : W.InRest U)
+    {G : ThreadId → γ} {m : Mem} (hi : P.inv G m) :
+    ∃ a, (Zig.ptrAddr W.ptr).run m = pure (a, m) ∧ a % 4 = 0 := by
+  obtain ⟨rX, -, hU⟩ := (hP.inv _ _).mp hi
+  exact (hW _ _ _ hU).1.ptrAddr_aligned
+
 /-- The invariant at a stop of `t` (`current := t`), with the word's cells in the rest. -/
 theorem Fits.stopW (hP : L.Fits K P U ok) (hW : W.InRest U) {G₁ : ThreadId → γ} {m₁ : Mem}
     {t : ThreadId} (hi₁ : P.inv G₁ m₁) (hgone : L.ph (G₁ t) ≠ .gone) :
