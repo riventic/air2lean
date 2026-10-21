@@ -1098,13 +1098,19 @@ where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array E
     | some pf => pure (some (r.expr, ← mkEqMP pf h))
     | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
   -- Retain the normalized equality proof when Lean refutes its constructor equation.
-  if !r.expr.hasExprMVar && (r.expr.isEq || r.expr.isHEq) then
-    if let some refute ← commitWhenSomeNoEx? (do
-        let ty ← mkArrow r.expr (mkConst ``False)
-        unless Simp.isEqnThmHypothesis ty do return none
-        Simp.dischargeEqnThmHypothesis? ty) then
-      let hn := (out.map (·.2)).getD h
-      out := some (mkConst ``False, mkApp refute hn)
+  if !r.expr.hasExprMVar then
+    let sides? := match r.expr.eq?, r.expr.heq? with
+      | some (_, lhs, rhs), _ => some (lhs, rhs)
+      | _, some (_, lhs, _, rhs) => some (lhs, rhs)
+      | _, _ => none
+    if let some (lhs, rhs) := sides? then
+      if (← isConstructorAppCore? lhs).isSome && (← isConstructorAppCore? rhs).isSome then
+        if let some refute ← commitWhenSomeNoEx? (do
+            let ty ← mkArrow r.expr (mkConst ``False)
+            unless Simp.isEqnThmHypothesis ty do return none
+            Simp.dischargeEqnThmHypothesis? ty) then
+          let hn := (out.map (·.2)).getD h
+          out := some (mkConst ``False, mkApp refute hn)
   if cases then (← caches).hyp.modify (·.insert d.fvarId out)
   return out
 
