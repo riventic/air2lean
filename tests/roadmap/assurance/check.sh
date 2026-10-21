@@ -10,7 +10,7 @@ out=.lake/assurance/regressions
 fixtures=.lake/assurance/fixtures/lean  # not .lake/build: `lake env` would let tests/ shadow theorem-universe modules
 mkdir -p "$out" "$fixtures/tests/roadmap/assurance"
 export LEAN_PATH="$PWD/$fixtures${LEAN_PATH:+:$LEAN_PATH}"
-for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels StatementBinding MetaCode PartialInTheorem; do
+for fixture in Good HiddenDependency HiddenWrapper ProjectAxiom UnexpectedOpaque CompilerRedirection NativeProof ExternDefinition FloatLabels StatementBinding MetaCode PartialInTheorem ForgedReport; do
   lake env lean -o "$fixtures/tests/roadmap/assurance/$fixture.olean" \
     "tests/roadmap/assurance/$fixture.lean"
 done
@@ -30,6 +30,22 @@ scripts/assumptions.sh --no-build --module tests.roadmap.assurance.ExternDefinit
 # Engine code (a `partial def` and an `initialize` no theorem reaches) needs no premise; the same
 # kind of opaque that a theorem uses does, whatever it is named.
 scripts/assumptions.sh --no-build --module tests.roadmap.assurance.MetaCode --output "$out/MetaCode.json"
+# E1: the extractor runs no initializer of an audited module. ForgedReport's would write a marker
+# and print a forged passing report; the real report rejects its sorry.
+marker="$out/forged-initializer-ran"
+rm -f "$marker"
+status=0
+AIR2LEAN_INIT_MARKER="$PWD/$marker" scripts/assumptions.sh --no-build \
+  --module tests.roadmap.assurance.ForgedReport --output "$out/ForgedReport.json" || status=$?
+[ "$status" -ne 0 ] || { echo "ForgedReport: the audit passed" >&2; exit 1; }
+[ ! -e "$marker" ] || { echo "ForgedReport: the audited module's initializer ran in the extractor" >&2; exit 1; }
+python3 - "$out/ForgedReport.json" <<'PY'
+import json, sys
+report = json.loads(open(sys.argv[1]).read())
+assert report['status'] == 'fail', report.get('status')
+assert any(v['trust_class'] == 'sorry' for v in report['violations']), report['violations']
+assert [t['name'] for t in report['theorems']] == ['AssuranceFixture.sorried'], report['theorems']
+PY
 for fixture in HiddenWrapper ProjectAxiom UnexpectedOpaque PartialInTheorem CompilerRedirection NativeProof ExternDefinition; do
   status=0
   flags=()
