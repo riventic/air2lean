@@ -307,7 +307,7 @@
       ],
       "correspondence": "model"
     },
-    "Packed::SepAuto.Packed.fl_bits": {
+    "SepAuto.Packed::SepAuto.Packed.fl_bits": {
       "semantics": "abstract-spec",
       "targets": [
         "aarch64-linux",
@@ -316,7 +316,7 @@
       ],
       "correspondence": "model"
     },
-    "Packed::SepAuto.Packed.fl_val": {
+    "SepAuto.Packed::SepAuto.Packed.fl_val": {
       "semantics": "abstract-spec",
       "targets": [
         "aarch64-linux",
