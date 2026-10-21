@@ -121,7 +121,9 @@ The Linux WAIT/WAKE wrappers reject an unaligned numeric address with `-EINVAL` 
 interrupt, scheduling choice, word read or queue effect. WAIT copies and validates a supplied
 timespec before this check, following Linux's syscall/key order. A private WAKE still reads
 no futex word: an aligned unmapped or known freed address, including zero, is not rejected
-by alignment. This does not implement every native user-range/shared-VM error. The existing
+by alignment. A pointer into a block the memory does not have resolves to no numeric
+address: WAIT and WAKE at it are `.illegal`, a conservative over-approximation. This does
+not implement every native user-range/shared-VM error. The existing
 raw WP rules expose both the immediate EINVAL post and aligned generic operation; valid
 lock/Event calls derive alignment from their existing block invariants, with no new caller
 premise. The queue's missing numeric-address/domain distinction remains separate under S6.
