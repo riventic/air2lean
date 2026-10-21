@@ -207,7 +207,9 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       (hp := by simp only [gD_part]) (hret := .inl (.inr hcost)),
     FEvent.wp_liftPartCur hE (t := t) (hret := .inl (.inr hcost)), hfree,
     FEvent.wp_liftPart hE (g := gD L E g .w1 _) (t := t)
-      (hgo := by simpa only [gD_lph hE] using hgo) (hret := .inl (.inr hcost)), dstore,
+      (hgo := by simpa only [gD_lph hE] using hgo)
+      (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp))
+      (hret := .inl (.inr hcost)), dstore,
     FEvent.wp_load hE (g := gD L E g p₀ _),
     FEvent.wp_cas hE (g := gD L E g .w0 _),
     (WP.liftMem_liftR (P := P) (t := t)
@@ -236,7 +238,8 @@ theorem resetEvent_wait_wp_resource [Zig.Os.HasEnv]
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
   obtain ⟨DR, hu, halloc, hfree⟩ := deadlineResources.elim hpre
-  fsym [FEvent.wp_load hE,
+  fsym [FEvent.wp_load hE (g := E.set g .w0) (t := t)
+      (hg := .inl (E.ph_set _ _)) (hgo := by rw [hE.lph]; exact hgo) (hi := hi0),
     wus_wp hE hcost DR hu hgx hgo hlive,
     halloc, hfree, gD_self, E.set_set, FEvent.set_of, hE.lph, hE.lpart,
     deadlineResources, L.setPart_self]
