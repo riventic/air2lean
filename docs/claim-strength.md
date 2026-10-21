@@ -326,8 +326,10 @@ for that budget (premise STK-01 in its budgeted form, STK-02).
 `python3 tests/roadmap/claims/test_claims.py` runs fast classification, binding, domain,
 hypothesis, witness and manifest regressions over `fixture-report.json`, including negative
 controls for overstated goals, renamed theorems, spoofed heads, wrapper definitions,
-conjunctions and panicking runs. `tests/roadmap/claims/check.sh` builds the fixture's imports,
-compiles it, extracts its statements with `scripts/assumptions.sh`, requires them and the head
+conjunctions and panicking runs. `tests/roadmap/claims/check.sh` builds the fixtures as the
+Lake library `Claims` of `tests/roadmap/lakefile.toml` (`Fixture`, `AllocatorApplications`,
+`AllocatorImported`; `scripts/fixtures.py build`), extracts their statements from the Lake-built
+outputs (`scripts/fixtures.py audit`, bound to those outputs), requires them and the head
 registry to match, and checks an accepted and a rejected manifest end to end.
 `tests/roadmap/architecture-audit/claims/check.sh --require-fixed=S2,S3,S4,S5,S6` replays the
 architecture-audit counterexamples through `claims.py` and `project.py coverage`.

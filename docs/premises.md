@@ -1260,16 +1260,23 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 ### OSF-01 — Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`)
 
 - Kind: trusted.
-- Statement: The kernel compares the `u32` at the address with the expected value as one atomic
-  read of the newest message of that word: an atomic-read footprint and a read-view update. A
-  bad pointer is `.illegal` (stricter than `EFAULT`). A different value returns at once
+- Statement: For supported Linux WAIT, any supplied timespec is copied and validated before
+  the futex address. Invalid timespec values return `-EINVAL`; timeout-copy access failures
+  retain the model's existing conservative refusal behavior. Next the kernel checks four-byte
+  numeric-address alignment before `access_ok` and key/queue lookup. An unaligned address
+  returns `-EINVAL` without reading the futex word, changing its queue or spending a scheduling
+  turn. This alignment validation adds no state effect after any timeout copy.
+  The existing comparison and sleep path follows these checks on Linux. The kernel compares
+  the `u32` at the address with the expected value as one atomic read of the newest message
+  of that word: an atomic-read footprint and a read-view update. A bad futex-word pointer is
+  `.illegal` (stricter than `EFAULT`). A different value returns at once
   (`EAGAIN`, `0` on macOS). An equal value either returns at once with `EINTR`, or with
   `ETIMEDOUT` if a timeout was given, or sleeps. An untimed sleeper waits in the queue until a
   wake or an interrupt; the scheduler reads the word again first and a changed word is a return
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
   `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
   `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
-  (`.unspecified`); an invalid timeout is `EINVAL`. The translator binds `os.linux.futex_4arg`
+  (`.unspecified`). The translator binds `os.linux.futex_4arg`
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
   `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
   `std.Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from its std code.
@@ -1285,11 +1292,19 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 ### OSF-02 — Futex wake (`futex_3arg` WAKE, `__ulock_wake`)
 
 - Kind: trusted.
-- Statement: A wake of up to `n` waiters at an address wakes an oracle-chosen subset of
+- Statement: Supported Linux WAKE checks four-byte numeric-address alignment before
+  `access_ok` and key/queue lookup. An unaligned address returns `-EINVAL` without a
+  futex-word access, wake selection, scheduling turn or state change. On the post-validation
+  wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
-  is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux returns
-  the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
+  is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
+  result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge.
+- Model gaps (OSF-01 and OSF-02): native Linux user-range/shared-key `EFAULT` paths and Darwin
+  address-validation/refusal cases remain explicitly open in
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open).
+  These include conservative model refusals; they are not caller assumptions authorizing a
+  zero result for a native error. No caller alignment or address-domain premise is added.
 - Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
   rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.

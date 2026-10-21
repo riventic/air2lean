@@ -1,4 +1,4 @@
-import tests.roadmap.claims.AllocatorApplications
+import AllocatorApplications
 
 /-! A selected client imports its concrete contract and creation companions from another module.
 Opt-in declaration auditing must retain those reported roots without calling them selected. -/
