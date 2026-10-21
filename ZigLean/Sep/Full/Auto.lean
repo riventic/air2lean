@@ -1093,10 +1093,18 @@ where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array E
   let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
   let (r, _) ← simp ty ctx procs (discharge? := some (omegaDisch cases))
-  let out ← if r.expr == ty0 then pure none else
+  let mut out ← if r.expr == ty0 then pure none else
     match r.proof? with
     | some pf => pure (some (r.expr, ← mkEqMP pf h))
     | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
+  -- Retain the normalized equality proof when Lean refutes its constructor equation.
+  if !r.expr.hasExprMVar && (r.expr.isEq || r.expr.isHEq) then
+    if let some refute ← commitWhenSomeNoEx? (do
+        let ty ← mkArrow r.expr (mkConst ``False)
+        unless Simp.isEqnThmHypothesis ty do return none
+        Simp.dischargeEqnThmHypothesis? ty) then
+      let hn := (out.map (·.2)).getD h
+      out := some (mkConst ``False, mkApp refute hn)
   if cases then (← caches).hyp.modify (·.insert d.fvarId out)
   return out
 

@@ -731,4 +731,22 @@ theorem witness_retry_kernel (B Missing : Prop) (D : Nat → Prop) (x : Nat)
   have hx : x = 1 := by simpa using hx
   exact good (by omega)
 
+/-- Both shared outer constructors must retain a contradiction in the nested sum. -/
+theorem nested_ctor_refutation {Tgt γ α β ε : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Q : Prop) (x : α) (y : β)
+    (h : (some (.ok (Sum.inl x)) : Option (Except ε (Sum α β))) =
+      some (.ok (Sum.inr y))) :
+    P.WP t (pure ()) (fun _ _ _ _ => Q) G m n := by
+  fsym
+
+/-- A consistent equality in the same nested branch must not prove an unrelated post. -/
+theorem nested_ctor_consistent {Tgt γ α β ε : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Q : Prop) (x y : α)
+    (h : (some (.ok (Sum.inl x)) : Option (Except ε (Sum α β))) =
+      some (.ok (Sum.inl y))) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => Q) G m n := by
+      fsym
+  trivial
+
 end SepAuto.WP
