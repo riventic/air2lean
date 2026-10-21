@@ -32,6 +32,53 @@ theorem two_segments {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t :
       (fun w _ _ _ => w = 7) G m n := by
   fsym
 
+/-- The partial memory wrapper retains protocol fields across a load, for arbitrary fields. -/
+theorem wrapper_load_fields {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : up (pts q 4 v) (own t)) :
+    P.WP t (ConcM.liftMem (load (BitVec 32) 4 q))
+      (fun w _ m' _ => w = v ∧ m'.waiters = m.waiters ∧ m'.woken = m.woken ∧
+        m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size) G m n := by
+  fsym [WP.liftMem_fowned]
+
+/-- The total wrapper retains the same fields without assuming a partial protocol. -/
+theorem wrapper_store_load_fields {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : up (pts q 4 v) (own t)) :
+    P.WP t (ConcM.liftMem (store (α := BitVec 32) 4 q 7) >>= fun _ =>
+        ConcM.liftMem (load (BitVec 32) 4 q))
+      (fun w _ m' _ => w = 7 ∧ m'.waiters = m.waiters ∧ m'.woken = m.woken ∧
+        m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size) G m n := by
+  fsym [WP.liftMem_fownedT (x := store (α := BitVec 32) 4 q 7),
+    WP.liftMem_fownedT (x := load (BitVec 32) 4 q)]
+
+/-- A final load must not lose the protocol fields retained by allocation and store. -/
+theorem wrapper_alloc_store_load_fields {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : plain (own t)) :
+    P.WP t (ConcM.liftMem (allocStack 8 8) >>= fun q =>
+        ConcM.liftMem (store (α := BitVec 64) 8 q 7) >>= fun _ =>
+        ConcM.liftMem (load (BitVec 64) 8 q))
+      (fun w _ m' _ => w = 7 ∧ m'.waiters = m.waiters ∧ m'.woken = m.woken ∧
+        m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size) G m n := by
+  fsym [FTriple.allocStackDrop]
+
+/-- The wrapper passes the actual step frame, its ownership and its atomic map together.
+This is a generic API control for every memory segment, not an atomic-array equality. -/
+theorem wrapper_frame_relation {Tgt γ α : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (x : MemM α) (Pa : FAssn) (Qa : α → FAssn) (ht : FTTriple Pa x Qa)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t)) :
+    P.WP t (ConcM.liftMem x)
+      (fun a _ m' _ => ∃ r' hF, FOwned (upd own t r') rO m' ∧ Qa a r' ∧
+        FStepIn hF m m' ∧ ∃ σ, AMap hF m m' σ) G m n := by
+  exact WP.liftMem_fowned ht ho hc htl hp
+    (fun _ _ r' hF _ ho' hq _ _ _ _ _ _ hs => ⟨r', hF, ho', hq, hs, hs.atomics⟩)
+    (.inl hpart)
+
 /-- **Steps of a concurrent body** (`callMC`, `callRC`: one rule form, `ConcM.liftMem`): a field
 pointer whose run the caller's lemma gives (`WP.liftMem_pure`), then a pure step
 (`WP.liftMem_liftR`). -/
