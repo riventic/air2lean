@@ -660,12 +660,15 @@ theorem WP.liftMem_fownedCurS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
   · obtain ⟨v, m', e⟩ := hr m _ _ hh₁ hp₁ hcs (hc ▸ ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 
-/-- `WP.liftMem_fownedS` with the current thread and the threads of the step. -/
+/-- `WP.liftMem_fownedS` with the step's protocol-field equalities and its actual frame relation.
+The atomic relation is `FStepIn.atomics` (`AMap`), not equality of the atomic arrays. -/
 theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
-      m'.current = t → m'.threads = m.threads → Q a G m' n)
+    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
+      m'.current = t → m'.threads = m.threads → m'.waiters = m.waiters →
+      m'.woken = m.woken → m'.groups = m.groups → m'.clocks.size = m.clocks.size →
+      FStepIn hF m m' → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
@@ -675,8 +678,9 @@ theorem WP.liftMem_fowned {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
         | exact .inl (.inr (by assumption))
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
-  WP.liftMem_fownedS ht ho hc htl hp (fun a m' r' _ hr ho' hq hs =>
-    h a m' r' hr ho' hq (hs.current.trans hc) hs.threads) hret
+  WP.liftMem_fownedS ht ho hc htl hp (fun a m' r' hF hr ho' hq hs =>
+    h a m' r' hF hr ho' hq (hs.current.trans hc) hs.threads hs.waiters hs.woken
+      hs.groups hs.size hs) hret
 
 /-- `WP.liftMem_fownedS` for a call of a `MemM` function (`callMC`). -/
 theorem WP.callMC_fownedS {x : MemM α} {s : σ} {Pa : FAssn} {Qa : α → FAssn}
