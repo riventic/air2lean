@@ -256,7 +256,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
   fsym [hC.wp_tick_unmetered, DPart.unmetered hu,
     FCond.wp_consume hC (g := gRD L C g i jr _ e _) (t := t)
       (i := i) (jr := jr) (e := e) (hg := gRD_ph hC) (hgo := gRD_lph hC),
-    threadMutex.lock_wp_resource hC hcost rfl hLc t (L.setPart (L.set g .out rnil) _)
+    threadMutex.lock_wp_resource (io := {}) hC hcost rfl hLc t (L.setPart (L.set g .out rnil) _)
       (by simp only [L.ph_setPart, L.ph_set])
       ((hC.ok_setPart _ _).mpr ((hC.ok_set g .out rnil).mpr hok)),
     mutex_pre_unmetered, mutex_post_exact,
@@ -332,13 +332,14 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
   fsym [FCond.wp_liftPartCur hC (g := C.set g .en) (t := t)
       (hgo := .inr (by simpa only [hC.lph] using hgh)) (hi := hi0) (hc := hc)
       (htt := halloc) (hp := by simp only [hC.lpart]) (hret := .inl (.inr hcost)),
-    FCond.wp_liftPartCur hC, hfree, FCond.wp_liftPart hC, dstore,
+    FCond.wp_liftPartCur hC (hret := .inl (.inr hcost)), hfree,
+    FCond.wp_liftPart hC (hret := .inl (.inr hcost)), dstore,
     hC.wp_projE (t := t),
     FCond.wp_ldEp hC (g := gD L C g .en _) (t := t) (hg := gD_ph hC)
       (hgh := by simpa only [gD_lph hC] using hgh),
     FCond.wp_reg hC (g := gD L C g (.ld _ _) _) (t := t) (hg := gD_ph hC)
       (hgh := by simpa only [gD_lph hC] using hgh),
-    threadMutex.unlock_wp hC,
+    threadMutex.unlock_wp (io := {}) hC,
     (fun (q : Ptr) (i jr : Nat) (e : BitVec 32) =>
       WP.loop _ _ (inv29 DR P L C t g q i jr e d) (fun _ => 0)
         (post29 DR P L t g q d)
