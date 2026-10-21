@@ -304,6 +304,7 @@ theorem loop29_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.c
     WP.loop _ _ (inv107 DR P L C t g q i jr e d) (fun _ => 0)
       (post107 DR P L C t g q i jr e d)
       (loop107_body hC hcost DR hu hLc t g hgx hok q i jr e d),
+    Bool.true_eq_false,
     gRD_ph hC, gRD_lph hC, gRD_set hC, L.part_setPart,
     FCond.ptr_ep, inv29, post29, inv107, post107,
     Thread_Condition_FutexImpl_wait.again29]
@@ -339,7 +340,12 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
       (hgh := by simpa only [gD_lph hC] using hgh),
     FCond.wp_reg hC (g := gD L C g (.ld _ _) _) (t := t) (hg := gD_ph hC)
       (hgh := by simpa only [gD_lph hC] using hgh),
-    threadMutex.unlock_wp (io := {}) hC,
+    threadMutex.unlock_wp (io := {}) hC hcost rfl hLc t
+      (gD L C g (.reg _ _ false _) _)
+      (by simpa only [gD_lph hC] using hgh)
+      ((hC.ok_setPart _ _).mpr
+        ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
+          (by simpa only [FCond.set_of hgx] using hok))),
     (fun (q : Ptr) (i jr : Nat) (e : BitVec 32) =>
       WP.loop _ _ (inv29 DR P L C t g q i jr e d) (fun _ => 0)
         (post29 DR P L t g q d)
