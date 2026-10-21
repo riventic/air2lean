@@ -119,4 +119,42 @@ theorem upd_view (p : Ptr) (x : BitVec 64) :
     FTotalTriple (apts p x) (pure ()) (fun _ => PubW p) := by
   fsym [pubR_upd p, pubW_upd p]
 
+/- An update proof can have an assigned proposition metavariable as its raw type.
+This checks that representation and the completed proof. Absence of the previously recovered
+PANIC must also be checked in captured output from a fresh actual Full elaboration. -/
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (P Q : FAssn) (h : EUpd P Q) : True := by
+  run_tac do
+    let value := (← getLocalDeclFromUserName `h).toExpr
+    let rawType ← mkFreshExprMVar (mkSort Level.zero)
+    rawType.mvarId!.assign (← inferType value)
+    let update ← mkFreshExprSyntheticOpaqueMVar rawType
+    update.mvarId!.assign value
+    let observed ← inferType update
+    unless observed.isMVar do throwError "control lost its raw type metavariable"
+    unless ← observed.mvarId!.isAssigned do throwError "control type metavariable is not assigned"
+    unless ← isUpd update do throwError "valid assigned-type update was not classified"
+    let goalType ← elabTerm
+      (← `(FTotalTriple $(mkIdent `P) (pure ()) (fun _ => $(mkIdent `Q)))) none
+    let goal ← mkFreshExprSyntheticOpaqueMVar goalType
+    let left ← run goal.mvarId! #[update]
+    unless left.isEmpty do throwError "assigned-type update did not close the full-state goal"
+    if (← instantiateMVars goal).hasExprMVar then
+      throwError "assigned-type update left proof unknowns"
+  trivial
+
+/-- An unavailable provider rejects the first rule after planning; the next rule keeps all
+bytes and the arbitrary exclusive frame. A portable arithmetic proof may make this pass on
+the old engine too; no disappearing declaration or exact cache contents are asserted. -/
+theorem failed_rule_retry (op : MemM Unit) (b : BlockId) (A : Nat) (bs : Array Byte)
+    (hsize : bs.size = 24) (R : FAssn)
+    (bad : Within (cur 0) emp →
+      FTotalTriple (up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ known b A)
+        op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs)))
+    (good : FTotalTriple (up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ known b A)
+      op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs))) :
+    FTotalTriple (up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ R)
+      op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ R) := by
+  fsym [bad, good]
+
 end SepAuto.Updates

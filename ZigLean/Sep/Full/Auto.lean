@@ -276,7 +276,8 @@ unification (which may unfold definitions). -/
 partial def headKey (e : Expr) : Name :=
   let e := e.consumeMData
   if e.isAppOfArity ``StateT.lift 5 || e.isAppOfArity ``Zig.Full.FAssn.up 1 then
-    `lift ++ headKey e.appArg!
+    let k := headKey e.appArg!
+    if k == .anonymous then .anonymous else `lift ++ k
   else match e.getAppFn with
     | .const c _ => c
     | .fvar _ => `fvar
@@ -476,6 +477,23 @@ def RunCaches.new : IO RunCaches :=
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
            runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
            fuelOut := ← IO.mkRef false }
+
+/-- Restore the existing arithmetic search state with a failed speculative proof choice.
+The simp contexts are prepared before backtracking and are not part of this state. Off
+(`on = false`), the restore does nothing. -/
+def RunCaches.saveArith (c : RunCaches) (on := true) : IO (IO Unit) := do
+  unless on do return pure ()
+  let hyp ← c.hyp.get
+  let disch ← c.disch.get
+  let facts ← c.facts.get
+  let probe ← c.probe.get
+  let detFail ← c.detFail.get
+  return do
+    c.hyp.set hyp
+    c.disch.set disch
+    c.facts.set facts
+    c.probe.set probe
+    c.detFail.set detFail
 
 /-- The caches of the runs in progress, by run id (the option `fsym.run` of a run). -/
 initialize fsymRuns : IO.Ref (Std.HashMap Nat RunCaches) ← IO.mkRef {}
@@ -841,7 +859,7 @@ which `omega` treats as atoms: `0 < 2 ^ x`; `2 ^ x < 2 ^ c` from `x < c` (`c` a 
 `b = 2 ^ w - 2 ^ x` (`a - a % 2 ^ x`), by `omega`; and for a remainder `z % 2 ^ x`: it is below
 `2 ^ x` and at most `z`, `z - z % 2 ^ x` is a multiple, and it is `z` (`z < 2 ^ x`) or `0`
 (`z = 2 ^ x`) where `omega` shows so. Returns the new facts. -/
-def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
+def extraFacts (facts : Array Expr) (tgt : Expr) (cases := true) : MetaM (Array Expr) := do
   let mut srcs := #[tgt]
   for f in facts do srcs := srcs.push (← instantiateMVars (← inferType f))
   let mut pows := #[]
@@ -889,7 +907,7 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
         if sum &&& (sum - 1) == 0 then
           let w := sum.log2
           let base := facts ++ out
-          if let some ha ← omegaFacts base (← mkAppM ``LT.lt #[a, mkNatLit (2 ^ w)]) then
+          if let some ha ← omegaFacts base (← mkAppM ``LT.lt #[a, mkNatLit (2 ^ w)]) cases then
             let hj ← mkDecideProof (← mkAppM ``LE.le #[mkNatLit j, mkNatLit w])
             let hb ← mkDecideProof (← mkEq b (← mkAppM ``HSub.hSub #[
               ← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit w], ← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit j]]))
@@ -898,15 +916,15 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
     for p in pows do
       let x := p.getAppArgs[5]!
       let base := facts ++ out
-      let found ← probe (mkApp2 (mkConst `fsym.mask) t p) base.size do
-        if let some h ← omegaFacts base (← mkEq b (← mkAppM ``HSub.hSub #[p, mkNatLit 1])) then
+      let found ← probe (mkApp3 (mkConst `fsym.mask) t p (toExpr cases)) base.size do
+        if let some h ← omegaFacts base (← mkEq b (← mkAppM ``HSub.hSub #[p, mkNatLit 1])) cases then
           pure (some (← mkAppOptM ``land_low #[a, b, x, h]))
         else
           let mut r := none
           for w in widths do
-            let some hj ← omegaFacts base (← mkAppM ``LE.le #[x, mkNatLit w]) | continue
-            let some h ← omegaFacts base (← mkEq b (← mkAppM ``HSub.hSub #[mkNatLit (2 ^ w), p])) | continue
-            let some ha ← omegaFacts base (← mkAppM ``LT.lt #[a, mkNatLit (2 ^ w)]) | continue
+            let some hj ← omegaFacts base (← mkAppM ``LE.le #[x, mkNatLit w]) cases | continue
+            let some h ← omegaFacts base (← mkEq b (← mkAppM ``HSub.hSub #[mkNatLit (2 ^ w), p])) cases | continue
+            let some ha ← omegaFacts base (← mkAppM ``LT.lt #[a, mkNatLit (2 ^ w)]) cases | continue
             r := some (← mkAppOptM ``land_high #[a, b, x, mkNatLit w, ha, hj, h])
             break
           pure r
@@ -928,8 +946,8 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
       let c := L.log2
       let x := M.getAppArgs[5]!
       let base := facts ++ out
-      let some hx ← probe (mkApp2 (mkConst `fsym.modlit) m (mkNatLit L)) base.size
-          (omegaFacts base (← mkAppM ``LE.le #[x, mkNatLit c])) | continue
+      let some hx ← probe (mkApp3 (mkConst `fsym.modlit) m (mkNatLit L) (toExpr cases)) base.size
+          (omegaFacts base (← mkAppM ``LE.le #[x, mkNatLit c]) cases) | continue
       let hM ← mkDecideProof (← mkEq (mkNatLit L) (← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit c]))
       out := out.push (← mkAppOptM ``mod_pow_of_le #[z, x, mkNatLit c, mkNatLit L, hM, hx])
       out := out.push (← mkAppM ``Nat.mod_le #[← mkAppM ``HMod.hMod #[z, mkNatLit L], M])
@@ -938,10 +956,10 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
     out := out.push (← mkAppM ``Nat.mod_le #[z, M])
     out := out.push (← mkAppM ``sub_mod_self_mod #[z, M])
     let base := facts ++ out
-    let r ← probe (mkApp (mkConst `fsym.mod) m) base.size do
-      if let some h ← omegaFacts base (← mkAppM ``LT.lt #[z, M]) then
+    let r ← probe (mkApp2 (mkConst `fsym.mod) m (toExpr cases)) base.size do
+      if let some h ← omegaFacts base (← mkAppM ``LT.lt #[z, M]) cases then
         return some (← mkAppM ``Nat.mod_eq_of_lt #[h])
-      if let some h ← omegaFacts base (← mkEq z M) then
+      if let some h ← omegaFacts base (← mkEq z M) cases then
         return some (← mkAppM ``mod_eq_zero_of_eq #[h])
       return none
     if let some pf := r then out := out.push pf
@@ -949,7 +967,7 @@ def extraFacts (facts : Array Expr) (tgt : Expr) : MetaM (Array Expr) := do
 
 /-- `t % M = c` from a fact `u % M = c` with `t = u` (by `omega`): `omega` treats a remainder by
 a symbolic `M` as an atom. -/
-def modCongr (facts : Array Expr) (tgt : Expr) : MetaM (Option Expr) := do
+def modCongr (facts : Array Expr) (tgt : Expr) (cases := true) : MetaM (Option Expr) := do
   let some (_, l, c) := tgt.eq? | return none
   unless l.isAppOfArity ``HMod.hMod 6 && (l.getArg! 0).isConstOf ``Nat do return none
   let M := l.appArg!
@@ -959,7 +977,7 @@ def modCongr (facts : Array Expr) (tgt : Expr) : MetaM (Option Expr) := do
     let some (_, l2, c2) := ty.eq? | continue
     unless l2.isAppOfArity ``HMod.hMod 6 && l2.appArg! == M && c2 == c do continue
     let u := l2.appFn!.appArg!
-    let some e ← omegaFacts facts (← mkEq tt u) | continue
+    let some e ← omegaFacts facts (← mkEq tt u) cases | continue
     let fn ← withLocalDeclD `x (mkConst ``Nat) fun x => do mkLambdaFVars #[x] (← mkAppM ``HMod.hMod #[x, M])
     let e1 ← mkExpectedTypeHint (← mkCongrArg fn e) (← mkEq l l2)
     return some (← mkEqTrans e1 f)
@@ -997,7 +1015,7 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
 /-- The discharger of the arithmetic simp set (no wrap-around, `pow_mod_elim`, …): the bound of
 a word, else the side goal in normal form by `omega` from the current facts (`dischFacts`);
 cached. -/
-def omegaDisch : Simp.Discharge := fun e => do
+def omegaDisch (cases := true) : Simp.Discharge := fun e => do
   let r : MetaM (Option Expr) := do
     let e ← instantiateMVars e
     let lctx ← getLCtx
@@ -1022,9 +1040,9 @@ def omegaDisch : Simp.Discharge := fun e => do
           | some eq => pure (some (← mkOfEqTrue eq))
           | none => pure (some (mkConst ``True.intro))
         else
-          let extra ← extraFacts facts r.expr
+          let extra ← extraFacts facts r.expr cases
           -- (a rewrite's side condition, a bound: a probe, ledger #probe-case-budget)
-          match ← omegaFacts (facts ++ extra) r.expr (budget := true) with
+          match ← omegaFacts (facts ++ extra) r.expr cases (budget := true) with
           | none => pure none
           | some pf => match r.proof? with
             | some eq => pure (some (← mkEqMPR eq pf))
@@ -1045,7 +1063,7 @@ def numAliases (e : Expr) : MetaM Expr :=
 
 /-- The facts of the current context: its hypotheses in normal form, each normalized with the
 facts before it (`none`: a hypothesis normalized to `False`, with its proof). -/
-def normFacts : MetaM (Array Expr × Option Expr) := do
+def normFacts (cases := true) : MetaM (Array Expr × Option Expr) := do
   let (ctx, procs) ← arithSimpCtx
   let mut facts : Array Expr := #[]
   let lctx ← getLCtx
@@ -1055,27 +1073,31 @@ def normFacts : MetaM (Array Expr × Option Expr) := do
     | some (_, pf) => !pf.hasAnyFVar (fun f => !lctx.contains f)
     | none => true
   for d in ← propHyps do
-    let r ← match (← (← caches).hyp.get).get? d.fvarId with
-      | some r => if inScope r then pure r else normHyp ctx procs facts d
-      | none => normHyp ctx procs facts d
+    -- A restricted pass must not leave a weaker normalization in the ordinary cache.
+    let r ← if cases then
+        match (← (← caches).hyp.get).get? d.fvarId with
+        | some r => if inScope r then pure r else normHyp ctx procs facts d cases
+        | none => normHyp ctx procs facts d cases
+      else normHyp ctx procs facts d cases
     match r with
     | none => facts := facts.push d.toExpr
     | some (t, pf) =>
       if t.isFalse then return (facts, some pf)
       unless t.isTrue do facts := facts.push pf
   return (facts, none)
-where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array Expr) (d : LocalDecl) :
+where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array Expr) (d : LocalDecl)
+    (cases : Bool) :
     MetaM (Option (Expr × Expr)) := do
   let ty0 ← instantiateMVars d.type
   let ty ← numAliases ty0
   let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
-  let (r, _) ← simp ty ctx procs (discharge? := some omegaDisch)
+  let (r, _) ← simp ty ctx procs (discharge? := some (omegaDisch cases))
   let out ← if r.expr == ty0 then pure none else
     match r.proof? with
     | some pf => pure (some (r.expr, ← mkEqMP pf h))
     | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
-  (← caches).hyp.modify (·.insert d.fvarId out)
+  if cases then (← caches).hyp.modify (·.insert d.fvarId out)
   return out
 
 /-- Close `g` by a hypothesis whose type is the target up to reducible unfolding and instances
@@ -1103,13 +1125,13 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
   try
     let tgt0 ← numAliases (← instantiateMVars (← g.getType))
     let h0 ← IO.getNumHeartbeats
-    let (facts, ff) ← normFacts
+    let (facts, ff) ← normFacts cases
     trace[fsym.prof] "normFacts {((← IO.getNumHeartbeats) - h0) / 1000}"
     if let some f := ff then
       g.assign (← mkFalseElim tgt0 f); return true
     (← caches).facts.set facts
     let (ctx, procs) ← arithSimpCtx
-    let (r, _) ← simp tgt0 ctx procs (discharge? := some omegaDisch)
+    let (r, _) ← simp tgt0 ctx procs (discharge? := some (omegaDisch cases))
     let close (pf : Expr) : MetaM Unit := do
       match r.proof? with
       | some eq => g.assign (← mkEqMPR eq pf)
@@ -1121,7 +1143,7 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
       for f in facts do
         if ← withReducible (isDefEq (← inferType f) r.expr) then close f; return true
     let h0 ← IO.getNumHeartbeats
-    let extra ← extraFacts facts r.expr
+    let extra ← extraFacts facts r.expr cases
     let all := facts ++ extra
     trace[fsym.prof] "extra {((← IO.getNumHeartbeats) - h0) / 1000} facts {facts.size}+{extra.size}"
     trace[fsym.arith] "omega {r.expr} from {← all.mapM fun f => inferType f}"
@@ -1133,7 +1155,7 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
     trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
     if let some pf := ok then close pf; return true
     unless quick do
-      if let some pf ← modCongr all r.expr then close pf; return true
+      if let some pf ← modCongr all r.expr cases then close pf; return true
     s.restore; return false
   catch ex =>
     trace[fsym.arith] "exception {ex.toMessageData}"
@@ -1142,13 +1164,13 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
 /-- `x = y` up to arithmetic: equal up to reducible unfolding and proof irrelevance, numbers and
 words equal by the arithmetic solver, applications of one function equal argument by argument
 (`replicate x.toNat b` and `replicate (n + 1) b` with the fact `x.toNat = n + 1`). -/
-partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
+partial def congrEq (x y : Expr) (fuel : Nat := 8) (cases := true) : TacticM (Option Expr) := do
   if ← withReducibleAndInstances (isDefEq x y) then return some (← mkEqRefl x)
   if fuel == 0 then return none
   let ty ← whnfR (← inferType x)
   if ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isAppOfArity ``BitVec 1 then
     let m ← mkFreshExprMVar (← mkEq x y)
-    unless ← arithCore m.mvarId! (quick := true) do return none
+    unless ← arithCore m.mvarId! (quick := true) (cases := cases) do return none
     return some (← instantiateMVars m)
   let (fx, fy) := (x.getAppFn, y.getAppFn)
   -- (one constant, or one local function: a caller's predicate `tok : Ptr → … → FAssn`)
@@ -1162,7 +1184,7 @@ partial def congrEq (x y : Expr) (fuel : Nat := 8) : TacticM (Option Expr) := do
       if ← withReducibleAndInstances (isDefEq a b) then
         pf ← mkCongrFun pf a
       else
-        let some e ← congrEq a b (fuel - 1) | s.restore; return none
+        let some e ← congrEq a b (fuel - 1) cases | s.restore; return none
         -- a dependent argument (`mkCongr` needs a nondependent function) fails
         pf ← mkCongr pf e
     return some pf
@@ -1173,7 +1195,7 @@ it up to arithmetic in the arguments (`I.fits (n + 1) 0` for `I.fits x.toNat 0` 
 `x.toNat = n + 1`, `congrEq`), or up to projections of structure values and unfolding in one
 Boolean argument, the others equal (`{ names := ns, .. }.names.contains e = true` by
 `Option.all domain.names.contains (some e) = true`). -/
-def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
+def assumptionEq (g : MVarId) (cases := true) : TacticM Bool := g.withContext do
   let t ← instantiateMVars (← g.getType)
   if ← isArithProp t then return false
   let t' ← reduceProjs t
@@ -1185,7 +1207,7 @@ def assumptionEq (g : MVarId) : TacticM Bool := g.withContext do
     if ← isArithProp dt then continue
     let dt' ← reduceProjs dt
     let s ← saveState
-    if let some e ← congrEq dt' t' then
+    if let some e ← congrEq dt' t' (cases := cases) then
       g.assign (← mkExpectedTypeHint (← mkEqMP e (← mkExpectedTypeHint d.toExpr dt')) t)
       return true
     s.restore
@@ -1276,7 +1298,7 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     let ty ← whnfR ty
     unless quick || ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isAppOfArity ``BitVec 1 do
       let s ← saveState
-      if let some e ← congrEq x y then g.assign e; return []
+      if let some e ← congrEq x y (cases := cases) then g.assign e; return []
       s.restore
   -- `x ≤ x` (a carved region that starts where the state's does)
   if t.isAppOfArity ``LE.le 4 then
@@ -1288,7 +1310,7 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   if ← arithCore g quick cases then return []
   unless quick do
     if ← closeWith g (← `(tactic| fsym_fact)) then return []
-    if ← assumptionEq g then return []
+    if ← assumptionEq g cases then return []
   return [g]
 
 def arith (g : MVarId) (quick := false) (cases := true) : TacticM Bool := g.withContext do
@@ -3955,6 +3977,7 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
   return r
 where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List MVarId) := g.withContext do
   let s ← saveState
+  let restoreArith ← (← caches).saveArith
   try
     let t ← instantiateMVars (← g.getType)
     let P := t.appFn!.appArg!
@@ -4299,6 +4322,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
   catch ex =>
     trace[fsym] "entailment: {ex.toMessageData}"
     s.restore
+    restoreArith
     return [g]
 
 /-! ## Facts of atoms -/
@@ -4477,12 +4501,14 @@ backends); in the concurrent backend it executes a `ConcM.liftMem c` command (ab
 def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId × List MVarId)) :=
   g.withContext do
   let s ← saveState
+  let restoreArith ← (← caches).saveArith
+  let restore : TacticM Unit := do s.restore; restoreArith
   try
     let (_, L, α, P, _, Q) ← view g
     let (args, _, concl) ← forallMetaTelescope (← inferType rule)
     let concl ← whnfR concl
     let some (kind, cmd) := ruleConcl? concl | do
-      trace[fsym] "rule {rule}: not a triple {concl}"; s.restore; return none
+      trace[fsym] "rule {rule}: not a triple {concl}"; restore; return none
     let ca := concl.getAppArgs
     let (β, P₀, Q₀) := if kind == ``CTriple then (ca[1]!, ca[2]!, ca[4]!) else (ca[0]!, ca[1]!, ca[3]!)
     -- the command the rule is about, and whether the rule applies in this backend: a thread's
@@ -4495,7 +4521,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       else if L.conc then memCmd? x
       else if (kind == ``FTriple || kind == ``FTTriple) && !L.part then none
       else some x
-    let some tx := target? | s.restore; return none
+    let some tx := target? | restore; return none
     -- a sequential rule in a thread: its command must be local to the thread that owns the
     -- rule's precondition (`ThreadLocal`, solved last by the locality providers, once `P₀` is
     -- known); a command that no provider is about gets no plan
@@ -4504,7 +4530,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     if let some t := local? then
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
       -- (or its definition, unfolded by the provider search: `providerCands`)
-      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then s.restore; return none
+      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then restore; return none
     let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
@@ -4512,16 +4538,16 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       -- argument unifies as written, not in its unfolded form
       let cmd ← reduceProjs (← unfoldToHead (← instantiateMVars cmd) tx)
       let cmd ← reduceProjs (← expandMapLits cmd)
-      unless headKey cmd == headKey tx do s.restore; return none
+      unless headKey cmd == headKey tx do restore; return none
       unless ← isDefEq cmd tx do
         trace[fsym] "rule {rule}: command{indentExpr cmd}\ndoes not unify with{indentExpr tx}"
-        s.restore; return none
+        restore; return none
     else
-      unless ← unifyKeyed cmd tx do s.restore; return none
+      unless ← unifyKeyed cmd tx do restore; return none
     trace[fsym] "rule {rule}: command unified"
     fixByFacts args
     if ← instArgsMissing args then
-      trace[fsym] "rule {rule}: no instance"; s.restore; return none
+      trace[fsym] "rule {rule}: no instance"; restore; return none
     let P₀i ← normNatLits (← instantiateMVars P₀)
     let sizes ← ruleRegionSizes P₀i args
     let whole := P₀i.isMVar
@@ -4529,7 +4555,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     -- `EUpd P (P₀ ⋆ R)` by the planner, when the rule's precondition is not literally there
     let mut planned : Option Expr := none
     if whole then
-      unless ← isDefEq P₀ P do s.restore; return none
+      unless ← isDefEq P₀ P do restore; return none
     else
       -- frame inference: each atom of the rule's precondition is an atom of `P`
       let ats := atoms P
@@ -4558,7 +4584,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
         let left ← closeEntail hE.mvarId! sizes
         unless left.isEmpty do
           trace[fsym] "rule {rule}: no plan for its precondition"
-          s.restore; return none
+          restore; return none
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
     synthInstArgs args
@@ -4567,14 +4593,14 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
       isProp (← inferType a)).toList.map (·.mvarId!) ++ (local?.map (·.mvarId!)).toList
     let some left ← solveSides sides | do
       trace[fsym] "rule {rule}: side goals failed {← sides.mapM fun g => do instantiateMVars (← g.getType)}"
-      s.restore; return none
+      restore; return none
     -- every argument must be determined (a proof by a provider too)
     for a in args do
       let a ← instantiateMVars a
       if a.hasExprMVar && !(left.any fun m => a == .mvar m) then
         unless (← isProp (← inferType a)) && (a.collectMVars {}).result.all (left.contains ·) do
           trace[fsym] "rule {rule}: undetermined {a}"
-          s.restore; return none
+          restore; return none
     let mut r ← instantiateMVars (mkAppN rule args)
     let Q₀ ← normNatLits (← instantiateMVars Q₀)
     let P₀ ← normNatLits (← instantiateMVars P₀)
@@ -4621,7 +4647,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) : TacticM (Option (MVarId ×
     return some (k', left)
   catch ex =>
     trace[fsym] "rule {rule} failed: {ex.toMessageData}"
-    s.restore; return none
+    restore; return none
 
 /-- Try a **bind rule** (a `CTriple` rule about a command and the rest of the program, such as
 an oracle's pick with its op, `CTriple.weakCasPtr_bind`) on the goal's whole program `c`: its
@@ -5130,14 +5156,16 @@ def refreshUser (e : Expr) : MetaM Expr := do
     body := .lam n (ty.abstract (xs.extract 0 i)) body .default
   return body
 
-/-- Is `r` a `WP` rule whose command is any `MemM` step (`ConcM.liftMem x`, `x` unknown: a
-segment that the thread backend walks, as `FLock.Fits.wp_hold`)? Such a rule is tried after the
-others and applies only completely (`wpRule`). -/
+/-- Is `r` a `WP` rule for any memory step, or any lifted result step? Such wildcard rules
+are tried after specific commands and apply only completely (`wpRule`). -/
 def wpGenericRule (r : Expr) : MetaM Bool := withNewMCtxDepth do
   let (_, _, concl) ← forallMetaTelescope (← inferType r)
   let some a := wpArgs? (← instantiateMVars concl) | return false
   let x := (← instantiateMVars a[5]!).consumeMData
-  return x.isAppOf ``Zig.ConcM.liftMem && x.appArg!.getAppFn.isMVar
+  unless x.isAppOf ``Zig.ConcM.liftMem do return false
+  let c := x.appArg!.consumeMData
+  return c.getAppFn.isMVar ||
+    (c.isAppOfArity ``StateT.lift 5 && c.appArg!.consumeMData.getAppFn.isMVar)
 
 /-- The registered rules and the caller's. -/
 def rules (user : Array Expr) (x : Expr) (wp := false) : MetaM (Array Expr) := do
@@ -5943,18 +5971,33 @@ def wpSimp (g : MVarId) (extra : Array Syntax) : TacticM MVarId := g.withContext
 /-- The equations of the context that relate a field of a local to another term
 (`m'.threads = m.threads`, `m'.current = t`: what a step keeps of the memory), and the Boolean
 facts (`(G 1).2.mid = false`: the case of a ghost value's flag). -/
-def fieldEqs : MetaM (Array Expr) := do
+def fieldEqs (skip? : Option FVarId := none) : MetaM (Array Expr) := do
+  let skipType? ← skip?.mapM fun f => do
+    let ty ← f.getType
+    instantiateMVars ty
   let mut out := #[]
   for d in ← getLCtx do
-    if d.isImplementationDetail then continue
-    let some (_, l, r) := (← instantiateMVars d.type).eq? | continue
+    if d.isImplementationDetail || skip? == some d.fvarId then continue
+    let ty ← instantiateMVars d.type
+    let some (_, l, r) := ty.eq? | continue
+    if skipType? == some ty then continue
     if (r.isConstOf ``Bool.true || r.isConstOf ``Bool.false) && !l.hasExprMVar &&
         !(l.isConstOf ``Bool.true || l.isConstOf ``Bool.false) then
       out := out.push d.toExpr; continue
     let .const c _ := l.getAppFn | continue
-    unless (← getProjectionFnInfo? c).isSome && l.appArg!.isFVar do continue
+    let .app _ obj := l | continue
+    unless (← getProjectionFnInfo? c).isSome && obj.isFVar do continue
     out := out.push d.toExpr
   return out
+
+/-- A stop's facts and side goals use the same current context equations. A fact being
+normalized excludes its equation type, including duplicate proofs, so it cannot erase itself. -/
+def wpFactCtx (extra : Array Syntax) (skip? : Option FVarId := none) : TacticM Simp.Context := do
+  let ctx ← wpHypCtx extra
+  let mut eqs : SimpTheorems := {}
+  for e in ← fieldEqs skip? do eqs ← eqs.add (.fvar e.fvarId!) #[] e
+  Simp.mkContext (simpTheorems := ctx.simpTheorems.push eqs)
+    (congrTheorems := ← getSimpCongrTheorems)
 
 /-- The forms of a side goal that a hypothesis may have: as stated, and with the projections of
 structure values reduced (as the context at entry, `evalFsym`; a stop's hypothesis keeps its
@@ -6096,16 +6139,28 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
 def etaAll (e : Expr) : MetaM Expr :=
   Meta.transform e (post := fun x => return .done (if x.isLambda then x.eta else x))
 
-/-- A hypothesis `h` of a stop normalized: the caller's simp terms and the ghost values' lemmas
-(`wpHypCtx`), then the data components of ghost values (`(gH x r).2` after `upd_snd`). `none`
-if it closed the goal. -/
-def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Option (FVarId × MVarId)) :=
+/-- A hypothesis `h` of a stop normalized: caller simp terms and ghost values' lemmas, then
+data components (`(gH x r).2` after `upd_snd`). Context equations are used after forwarding
+the original fact. `keepOriginal` also keeps its compound's original leaf evidence. -/
+def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) (fields := false)
+    (keepOriginal := false) :
+    TacticM (Option (FVarId × MVarId)) :=
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
-  let (r, _) ← simp ty (← wpHypCtx extra) (simprocs := #[← Simp.getSimprocs])
-  let (g, h) ← if r.expr == ty then pure (g, h) else
-    let some (h', g') ← applySimpResultToLocalDecl g h r false | return none
-    pure (g', h')
+  let ctx ← if fields then wpFactCtx extra (some h) else wpHypCtx extra
+  let (r, _) ← simp ty ctx (simprocs := #[← Simp.getSimprocs])
+  let (g, h) ← if r.expr == ty && !r.expr.isFalse then pure (g, h) else
+    if keepOriginal && !r.expr.isFalse then
+      let known := (← getLCtx).foldl (init := none) fun acc d =>
+        if !d.isImplementationDetail && d.type == r.expr then some d.fvarId else acc
+      if let some h' := known then pure (g, h') else
+        -- Normalize before adding a copy: its own equation stays excluded from the context.
+        let some (pf, ty') ← Lean.Meta.applySimpResult g (mkFVar h) ty r true | return none
+        let (h', g') ← (← g.assert (← h.getUserName) ty' pf).intro1P
+        pure (g', h')
+    else
+      let some (h', g') ← applySimpResultToLocalDecl g h r true | return none
+      pure (g', h')
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
   let ty' ← etaAll (← reduceProjs ty (data := true))
@@ -6156,6 +6211,19 @@ def forwardAt? (u : Expr) (h : FVarId) (pick : Expr → MetaM Bool) : MetaM (Opt
     return some pf
   catch _ => s.restore; return none
 
+/-- A forwarded equality may replace the hypothesis it came from. Follow the existing
+substitution map before reading that local again. A recorded non-local proof was consumed by
+substitution; an unexplained missing local remains an error. -/
+def wpCurrentHyp? (h : FVarId) : MetaM (Option FVarId) := do
+  let lctx ← getLCtx
+  if lctx.contains h then return some h
+  let e := (← refreshSubsts (mkFVar h)).consumeMData
+  if e.hasAnyFVar (fun f => !lctx.contains f) then
+    throwError "unresolved WP hypothesis after substitution"
+  if let .fvar f := e then return some f
+  unless ← isProof e do throwError "substituted WP hypothesis is not a proof"
+  return none
+
 /-- **Forward facts** (`forward`): each caller's lemma whose first premise is the new hypothesis
 `h` of a `WP` walk (a protocol's `Shape X m` at a stop), whose other premises are hypotheses, and
 whose conclusion is then determined: that conclusion as a new hypothesis, split (`destruct`). -/
@@ -6164,6 +6232,7 @@ def wpForward (g : MVarId) (h : FVarId) : TacticM (Option MVarId) := do
   if lemmas.isEmpty then return some g
   let mut g := g
   for u in lemmas do
+    let some h ← g.withContext (wpCurrentHyp? h) | return some g
     let s ← saveState
     -- (`some none`: a fact that closes the goal, `False` after `wpNorm`)
     let g' : Option (Option MVarId) ← g.withContext do
@@ -6190,6 +6259,31 @@ def isChainConcl (concl : Expr) : MetaM Bool := do
   return !(c.isAppOf ``Eq || c.isAppOf ``Iff || c.isAppOf ``HEq || c.isAppOf ``Ne ||
     c.isAppOf ``Not || c.isConstOf ``True || c.isConstOf ``False || c.getAppFn.isMVar)
 
+/-- Filter a current local function by its final conclusion's stable head before allocating
+its argument unknowns. A bound predicate is not a wildcard; a current free predicate stays
+eligible. The caller still unifies the entire conclusion, including every argument. -/
+def wpLocalHead (ty goal : Expr) : MetaM Bool := do
+  let lctx ← getLCtx
+  let stable (e : Expr) := match e with
+    | .const _ _ => true
+    | .fvar f => lctx.contains f
+    | _ => false
+  unless stable goal do return false
+  forallTelescope ty fun _ concl => do
+    let head := (← whnfR (← instantiateMVars concl)).consumeMData.getAppFn
+    unless stable head do return false
+    withReducible (isDefEq head goal)
+
+/-- A fact `h` of a stop normalized with the context equations (`wpNorm`, `fields`), its original
+evidence kept, and a changed result forwarded (`wpForward`). `none` if the goal closed; else
+whether the fact changed, its current local (`none`: consumed by substitution), the goal. -/
+def wpNormFields (g : MVarId) (h : FVarId) (extra : Array Syntax) :
+    TacticM (Option (Bool × Option FVarId × MVarId)) := do
+  let some (h', g) ← wpNorm g h extra (fields := true) (keepOriginal := true) | return none
+  let changed := h' != h
+  let some g ← if changed then wpForward g h' else pure (some g) | return none
+  return some (changed, ← g.withContext (wpCurrentHyp? h'), g)
+
 mutual
 
 /-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
@@ -6197,6 +6291,7 @@ the rest by `destruct` (equations substituted, user definitions unfolded). The e
 step's run (`(x.run m).run = …`) stays. -/
 partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MVarId) :=
   g.withContext do
+  let some h ← wpCurrentHyp? h | return [g]
   let ty0 ← instantiateMVars (← h.getType)
   let ty ← whnfR ty0
   if hasRun ty then return [g]
@@ -6288,12 +6383,30 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         unless (← g.withContext f.findDecl?).isSome do continue
         let some (fn, g') ← wpNorm g f #[] | return []
         let some g' ← wpForward g' fn | return []
-        -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
-        let (f', g'') ← g'.withContext do
-          (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
-        g ← destruct g'' f'
+        match ← g'.withContext (wpCurrentHyp? fn) with
+        | none => g := g'
+        | some fn =>
+          let some (_, fn?, g') ← wpNormFields g' fn #[] | return []
+          let some fn := fn? | do
+            g := g'
+            continue
+          -- (the field stays folded, a premise of the protocol's lemmas: its copy is split)
+          let (f', g'') ← g'.withContext do
+            (← g'.assert (← fn.getUserName) (← instantiateMVars (← fn.getType)) (mkFVar fn)).intro1
+          g ← destruct g'' f'
       return [g]
   let some g ← wpForward g h | return []
+  let some h ← g.withContext (wpCurrentHyp? h) | return [g]
+  let some (_, h?, g) ← wpNormFields g h #[] | return []
+  let some h := h? | return [g]
+  let normalized ← g.withContext do whnfR (← instantiateMVars (← h.getType))
+  let compound ← g.withContext do
+    if normalized.isAppOfArity ``And 2 || normalized.isAppOfArity ``Exists 2 ||
+        normalized.isAppOfArity ``Or 2 ||
+        (normalized.getAppFn.isConstOf ``ite && normalized.getAppNumArgs ≥ 5) then return true
+    let .const c _ := normalized.getAppFn | return false
+    return isStructure (← getEnv) c && !(← isLibrary c) && (← isClass? normalized).isNone
+  if normalized != ty && compound then return ← wpSplit g h (keep := true)
   return [← destruct g h]
 
 /-- **The facts of a step's run** `h : (x.run m).run = some (.ok (a, m'))` (it stays): each run
@@ -6383,29 +6496,53 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
   if hasRun ty then return ← wpRunFacts g h extra
   let some (h, g) ← wpNorm g h extra | return []
   let some g ← wpForward g h | return []
-  wpSplit g h (keep := true)
+  let some h ← g.withContext (wpCurrentHyp? h) | return [g]
+  let original := h
+  let some (changed, h?, g) ← wpNormFields g h extra | return []
+  let equation? ← match h?, changed with
+    | some h, true => g.withContext do
+      return if (← instantiateMVars (← h.getType)).eq?.isSome then some h else none
+    | _, _ => pure none
+  -- A retained whole equation can erase a leaf via fieldEqs. Preserve its substitution,
+  -- proof-locally through raw branches, without a second compound decomposition.
+  let g ← match equation? with
+    | none => pure g
+    | some h => g.withContext do
+      g.assert `hnormalized (← h.getType) (mkFVar h)
+  let gs ← match ← g.withContext (wpCurrentHyp? original) with
+    | none => pure [g]
+    | some original => wpSplit g original (keep := true)
+  if equation?.isNone then return gs
+  gs.flatMapM fun g => do
+    let (h, g) ← g.intro1P
+    return [← destruct g h]
 
 /-- A proposition of a run: introduced (a hypothesis split), an `∃` with an unknown witness, an
 `∧` part by part (the part without a run first: it may fix a witness), a `WP` walked, else an
 atom (`wpAtom`). The goals left. -/
-partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat)
+    (noCases := false) :
     TacticM (List MVarId) := g.withContext do
   if ← g.isAssigned then return []
   let t0 ← instantiateMVars (← g.getType)
   let t ← whnfR t0
   if (wpArgs? t).isSome then
+    if noCases then
+      if ← wpAssumption g then return []
+      return [g]
     let g ← if t == t0 then pure g else g.replaceTargetDefEq t
     return ← wpWalk g user extra fuel
   if let .forallE _ ty _ _ := t then
     let g ← if t == t0 then pure g else g.replaceTargetDefEq t
     let (h, g) ← g.intro1P
+    if noCases then return ← wpGoal g user extra fuel noCases
     let tyi ← whnfR (← instantiateMVars ty)
     if tyi.isAppOfArity ``Prod 2 then
       let gs ← g.cases h
-      return ← gs.toList.flatMapM (wpGoal ·.mvarId user extra fuel)
+      return ← gs.toList.flatMapM (wpGoal ·.mvarId user extra fuel noCases)
     if ← isProp ty then
-      return ← (← wpHyp g h extra).flatMapM (wpGoal · user extra fuel)
-    return ← wpGoal g user extra fuel
+      return ← (← wpHyp g h extra).flatMapM (wpGoal · user extra fuel noCases)
+    return ← wpGoal g user extra fuel noCases
   if t.isAppOfArity ``Exists 2 then
     -- (an unreachable case needs no witness)
     if ← closeWith g (← `(tactic| contradiction)) then return []
@@ -6413,7 +6550,7 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let w ← mkFreshExprMVar β
     let g' ← mkFreshExprSyntheticOpaqueMVar (mkApp p w).headBeta
     g.assign (← mkAppOptM ``Exists.intro #[β, p, w, g'])
-    let left ← wpGoal g'.mvarId! user extra fuel
+    let left ← wpGoal g'.mvarId! user extra fuel noCases
     -- a witness that the proof does not need (a case closed by a contradiction): any
     if !(← w.mvarId!.isAssigned) &&
         !(← left.anyM fun m => return ((← m.getType).find? (· == w)).isSome) then
@@ -6426,11 +6563,11 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     g.assign (← mkAppM ``And.intro #[a, b])
     let (x, y) := if hasWP (t.getArg! 0) then (b, a) else (a, b)
     let unknowns := (← instantiateMVars (← x.mvarId!.getType)).hasExprMVar
-    let lx ← wpGoal x.mvarId! user extra fuel
-    let ly ← wpGoal y.mvarId! user extra fuel
+    let lx ← wpGoal x.mvarId! user extra fuel noCases
+    let ly ← wpGoal y.mvarId! user extra fuel noCases
     -- (a first part left with unknowns that the second part fixed: again, `L.ph (g' ?r) = .holds`
     -- before `L.part (g' ?r) = L.part (G t)`)
-    let lx ← if unknowns && !lx.isEmpty then lx.flatMapM (wpGoal · user extra fuel) else pure lx
+    let lx ← if unknowns && !lx.isEmpty then lx.flatMapM (wpGoal · user extra fuel noCases) else pure lx
     return lx ++ ly
   if t.isConstOf ``True then g.assign (mkConst ``True.intro); return []
   -- a disjunction (a post over branches that end in different states): a side that is proved
@@ -6438,20 +6575,26 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   if t.isAppOfArity ``Or 2 then
     for (i, side) in [(0, ``Or.inl), (1, ``Or.inr)] do
       let s ← saveState
+      let restoreArith ← (← caches).saveArith noCases
       let a ← mkFreshExprSyntheticOpaqueMVar (t.getArg! i)
-      if (← wpGoal a.mvarId! user extra fuel).isEmpty then
-        g.assign (← mkAppOptM side #[t.getArg! 0, t.getArg! 1, a]); return []
+      try
+        if (← wpGoal a.mvarId! user extra fuel noCases).isEmpty then
+          g.assign (← mkAppOptM side #[t.getArg! 0, t.getArg! 1, a]); return []
+      catch ex =>
+        s.restore; restoreArith; throw ex
       s.restore
-  wpAtom g user extra fuel
+      restoreArith
+  wpAtom g user extra fuel noCases
 
 /-- An atomic proposition: by a hypothesis, arithmetic and providers; else rewritten by the
 caller's simp terms, the ghost values' lemmas and the memory's equations and tried again; else
 a user definition unfolded. -/
-partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat)
+    (noCases := false) :
     TacticM (List MVarId) := g.withContext do
   if ← wpAssumption g then return []
   if ← wpAssumptionArgs g then return []
-  if ← wpChain g user extra fuel then return []
+  if ← wpChain g user extra fuel noCases then return []
   let t ← instantiateMVars (← g.getType)
   -- an equation that fixes an unknown (a ghost value `?g = (…)` of a protocol's `init`)
   if let some (_, l, r) := t.eq? then
@@ -6461,6 +6604,11 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       s.restore
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
+  -- Local function premises stay on the pure no-case path: no provider/program search,
+  -- hypothesis splitting or forward saturation. Ordinary callers keep their existing path.
+  if noCases then
+    if ← arith g (cases := false) then return []
+    return [g]
   if !t.hasExprMVar then
     let s ← saveState
     if let some [] ← solveSides [g] then return []
@@ -6472,13 +6620,9 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   -- ghost values in its atoms (`upd_snd`)
   if let some (X, r) ← assnAt? t then
     let X' ← reduceProjs (← unfoldLeaves X)
-    if X' != X then return ← wpGoal (← g.replaceTargetDefEq (mkApp X' r)) user extra fuel
+    if X' != X then return ← wpGoal (← g.replaceTargetDefEq (mkApp X' r)) user extra fuel noCases
     if ← assnByHyp g X r then return []
-  let ctx ← wpHypCtx extra
-  let mut thms := ctx.simpTheorems
-  let mut eqs : SimpTheorems := {}
-  for e in ← fieldEqs do eqs ← eqs.add (.fvar e.fvarId!) #[] e
-  let ctx ← Simp.mkContext (simpTheorems := thms.push eqs) (congrTheorems := ← getSimpCongrTheorems)
+  let ctx ← wpFactCtx extra
   let s ← saveState
   try
     let (r, _) ← simp t ctx (simprocs := #[← Simp.getSimprocs])
@@ -6489,54 +6633,79 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       -- (as a hypothesis, `wpNorm`: the data components of ghost values, eta-reduced)
       let t' ← instantiateMVars (← g'.getType)
       let t'' ← etaAll (← reduceProjs t' (data := true))
-      return ← wpGoal (← if t'' == t' then pure g' else g'.replaceTargetDefEq t'') user extra fuel
+      return ← wpGoal (← if t'' == t' then pure g' else g'.replaceTargetDefEq t'') user extra fuel noCases
   catch _ => s.restore
   if let .const c _ := t.getAppFn then
     unless ← isLibrary c do
       if let some t' ← unfold1 t then
-        return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
+        return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel noCases
     -- a field of a structure value that no lemma proves (a protocol's `P.init tgt ?g`): its
     -- value, whose equations fix the unknowns
     if (← getProjectionFnInfo? c).isSome then
       let t' ← reduceProjs t
-      if t' != t then return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel
+      if t' != t then return ← wpGoal (← g.replaceTargetDefEq t') user extra fuel noCases
   return [g]
 
-/-- An atom by a caller's lemma (`fsym [l]`, `chain`: a protocol's step lemma, `U G rX m → …
-→ U (upd G t g) rX m'`) whose conclusion unifies with it (reducibly): its premises are goals of
-the walk again, all proved (to depth 3). -/
-partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat) :
+/-- An atom by a caller's lemma, then a current local function whose conclusion unifies with
+it in full (reducibly). Local premises use the same bounded chain with no case search. -/
+partial def wpChain (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel : Nat)
+    (noCases := false) :
     TacticM Bool := g.withContext do
   let c ← caches
   let lemmas ← c.chain.get
   let depth ← c.chainDepth.get
-  if lemmas.isEmpty || depth ≥ 3 then return false
+  if depth ≥ 3 then return false
   let t ← instantiateMVars (← g.getType)
-  for u in lemmas do
-    let s ← saveState
-    let pf? ← try
-        let u ← refreshUser u
-        let (args, _, concl) ← forallMetaTelescope (← inferType u)
-        unless ← withReducible (isDefEq concl t) do throwError "conclusion"
-        c.chainDepth.set (depth + 1)
+  for local_ in [false, true] do
+    let head ← if local_ then do
+        pure (← whnfR t).consumeMData.getAppFn
+      else pure t
+    if local_ && !(head.isConst ||
+        (head.isFVar && (← getLCtx).contains head.fvarId!)) then continue
+    -- Existing caller lemmas keep priority without paying for a local-context scan.
+    let candidates ← if local_ then do
+        let locals ← (← propHyps).filterM fun d => do
+          return (← whnfR (← instantiateMVars d.type)).isForall
+        pure (locals.map (·.toExpr))
+      else pure lemmas
+    for raw in candidates do
+      let s ← saveState
+      let restoreArith ← c.saveArith (local_ || noCases)
+      let u? ← try
+          pure (some (← if local_ then pure raw else refreshUser raw))
+        catch ex =>
+          trace[fsym] "chain {raw}: {ex.toMessageData}"
+          pure none
+      let some u := u? | s.restore; restoreArith; continue
+      let pf? ← try
+          let ty ← inferType u
+          if local_ && !(← wpLocalHead ty head) then throwError "conclusion head"
+          let (args, _, concl) ← forallMetaTelescope ty
+          unless ← withReducible (isDefEq concl t) do throwError "conclusion"
+          c.chainDepth.set (depth + 1)
+          try
+            -- (as a rule's side goals: a premise with unknowns takes each hypothesis that fits)
+            let prems ← args.filterM fun a => do
+              return !(← a.mvarId!.isAssigned) && (← isProp (← a.mvarId!.getType))
+            let prems := prems.map (·.mvarId!)
+            unless (← wpSides prems.toList true (2 * prems.size) user extra fuel
+                (noCases || local_)) == some [] do
+              throwError "premises {← prems.mapM fun p => do instantiateMVars (← p.getType)}"
+          finally c.chainDepth.set depth
+          let pf ← instantiateMVars (mkAppN u args)
+          if pf.hasExprMVar then throwError "undetermined"
+          pure (some pf)
+        catch ex =>
+          trace[fsym] "chain {u}: {ex.toMessageData}"
+          pure none
+      if let some pf := pf? then
+        trace[fsym] "chain: {u}"
         try
-          -- (as a rule's side goals: a premise with unknowns takes each hypothesis that fits)
-          let prems ← args.filterM fun a => do
-            return !(← a.mvarId!.isAssigned) && (← isProp (← a.mvarId!.getType))
-          let prems := prems.map (·.mvarId!)
-          unless (← wpSides prems.toList true (2 * prems.size) user extra fuel) == some [] do
-            throwError "premises {← prems.mapM fun p => do instantiateMVars (← p.getType)}"
-        finally c.chainDepth.set depth
-        let pf ← instantiateMVars (mkAppN u args)
-        if pf.hasExprMVar then throwError "undetermined"
-        pure (some pf)
-      catch ex =>
-        trace[fsym] "chain {u}: {ex.toMessageData}"
-        pure none
-    if let some pf := pf? then
-      trace[fsym] "chain: {u}"
-      g.assign pf; return true
-    s.restore
+          g.assign pf; return true
+        catch ex =>
+          s.restore; restoreArith; throw ex
+      s.restore
+      restoreArith
   return false
 
 /-- The side goals of a rule, with their unknowns (a ghost value at a stop, a segment's
@@ -6544,19 +6713,19 @@ precondition): a determined goal is solved (`strict`: completely); a goal with u
 each hypothesis that unifies with it (and the rest must follow), or waits for the others to fix
 its unknowns (`budget` waits in all), or goes to the solver. `none` if no choice works. -/
 partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : Array Expr)
-    (extra : Array Syntax) (fuel : Nat) : TacticM (Option (List MVarId)) := do
+    (extra : Array Syntax) (fuel : Nat) (noCases := false) : TacticM (Option (List MVarId)) := do
   match todo with
   | [] => return some []
   | sg :: rest =>
-    if ← sg.isAssigned then return ← wpSides rest strict budget user extra fuel
+    if ← sg.isAssigned then return ← wpSides rest strict budget user extra fuel noCases
     let ts ← sg.withContext (goalForms sg)
     let solve : TacticM (Option (List MVarId)) := do
-      let l ← wpGoal sg user extra fuel
+      let l ← wpGoal sg user extra fuel noCases
       if strict && !l.isEmpty then
         trace[fsym] "side goal left: {← l.mapM fun m => do instantiateMVars (← m.getType)}"
         return none
       if ← l.anyM fun m => return (← instantiateMVars (← m.getType)).hasExprMVar then return none
-      return (← wpSides rest strict budget user extra fuel).map (l ++ ·)
+      return (← wpSides rest strict budget user extra fuel noCases).map (l ++ ·)
     if !ts[0]!.hasExprMVar then return ← solve
     let hyps ← sg.withContext do
       let lctx ← getLCtx
@@ -6564,15 +6733,24 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
         if d.isImplementationDetail then acc else acc.push d
     for d in hyps do
       let s ← saveState
-      if ← sg.withContext (hypIs ts d) then
-        sg.assign d.toExpr
-        if let some l ← wpSides rest strict budget user extra fuel then return some l
+      let restoreArith ← (← caches).saveArith noCases
+      try
+        if ← sg.withContext (hypIs ts d) then
+          sg.assign d.toExpr
+          if let some l ← wpSides rest strict budget user extra fuel noCases then return some l
+      catch ex =>
+        s.restore; restoreArith; throw ex
       s.restore
+      restoreArith
     if budget > 0 && !rest.isEmpty then
-      return ← wpSides (rest ++ [sg]) strict (budget - 1) user extra fuel
+      return ← wpSides (rest ++ [sg]) strict (budget - 1) user extra fuel noCases
     let s ← saveState
-    let r ← solve
-    if r.isNone then s.restore
+    let restoreArith ← (← caches).saveArith noCases
+    let r ← try solve catch ex =>
+      s.restore; restoreArith; throw ex
+    if r.isNone then
+      s.restore
+      restoreArith
     return r
 
 /-- A rule `r` on the command `x` of the goal `g` (arguments `a`): `none` if it does not apply,
@@ -6881,7 +7059,9 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
     for u in user do
       unless ← isUpd u do continue
       let heads ← withNewMCtxDepth do
-        let (_, _, concl) ← forallMetaTelescope (← inferType u)
+        let (_, _, concl) ← forallMetaTelescope (← instantiateMVars (← inferType u))
+        let concl ← instantiateMVars concl
+        unless concl.isAppOfArity ``EUpd 2 do throwError "fsym: caller update has no EUpd conclusion after instantiation"
         (atoms concl.appArg!).filterMapM fun a => do
           let .const c _ := a.getAppFn | return none
           if ← isLibrary c then return none
@@ -6935,6 +7115,12 @@ syntax (name := fsymTac) "fsym" (" [" term,* "]")? : tactic
           let (_, _, concl) ← forallMetaTelescope (← inferType c)
           return (ruleConcl? (← whnfR concl)).isSome || (wpArgs? concl).isSome then
         user := user.push c; continue
+      -- Definitions unfold by name through addExtra; elaborating a polymorphic definition
+      -- here would demand its instances before any command fixes their arguments.
+      if let .defnInfo info ← getConstInfo c.constName! then
+        unless ← isProp info.type do
+          extra := extra.push a
+          continue
     -- the term's unknowns (implicit arguments) become its leading binders, so that each use
     -- instantiates them afresh in the context of that step (where the walk's witnesses live)
     let e ← instantiateMVars (← elabTerm a none)
