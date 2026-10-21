@@ -83,6 +83,11 @@ abbrev newest (m : Mem) : Word.Entry := (E.W.hist m)[(E.W.hist m).size - 1]!
 /-- The event is set: its newest write is `is_set`. -/
 def IsSet (m : Mem) : Prop := (E.newest m).Val (2 : BitVec 32)
 
+/-- A step preserving the event's history preserves its set state. -/
+theorem IsSet_of_hist_eq {m m' : Mem} (hh : E.W.hist m' = E.W.hist m)
+    (hs : E.IsSet m) : E.IsSet m' := by
+  simpa only [IsSet, newest, hh] using hs
+
 /-- The event's invariant, with the lock's places (module doc). -/
 structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- The writes are `unset`, `waiting` or `is_set`. -/

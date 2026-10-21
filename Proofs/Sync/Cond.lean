@@ -424,7 +424,10 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       (hg := C.ph_set g _) (hgh := by rw [hC.lph]; exact hgh)
       condS_bits1 ⟨_, condS_of 0⟩,
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)),
-    ioMutex.unlock_wp hC hcost (g := C.set g (.reg _ _ false _)),
+    ioMutex.unlock_wp hC hcost rfl hLc t (C.set g (.reg _ _ false _))
+      (by rw [hC.lph]; exact hgh)
+      ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
+        (by simpa only [FCond.set_of hgx] using hok)),
     WP.loop _ _ (inv23 P L C t g _ _ _ d) (fun _ => 0) (post23 P L g t d)
       (loop23_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
@@ -624,7 +627,10 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
       (hg := C.ph_set g _) (hgh := by rw [hC.lph]; exact hgh)
       condS_bits1 ⟨_, condS_of 0⟩,
     hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)),
-    ioMutex.unlock_wp hC hcost (g := C.set g (.reg _ _ false _)),
+    ioMutex.unlock_wp hC hcost rfl hLc t (C.set g (.reg _ _ false _))
+      (by rw [hC.lph]; exact hgh)
+      ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
+        (by simpa only [FCond.set_of hgx] using hok)),
     WP.loop _ _ (inv22 P L C t g _ _ _ d) (fun _ => 0) (post22 P L g t d)
       (loop22_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}

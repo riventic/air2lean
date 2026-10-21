@@ -19,6 +19,9 @@ open Zig Zig.Conc Zig.Full Zig.Full.FAssn Zig.Conc.Proto
 
 namespace Threadsync
 
+-- Unification must not unfold `WP` into the generated program.
+attribute [local irreducible] Proto.WP
+
 theorem debugAssert_true : (debug_assert true).run = some (.ok ()) := rfl
 
 namespace ResetEvent
@@ -203,7 +206,8 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       (hgo := by simpa only [gD_lph hE] using hgo) (htt := halloc)
       (hp := by simp only [gD_part]) (hret := .inl (.inr hcost)),
     FEvent.wp_liftPartCur hE (t := t) (hret := .inl (.inr hcost)), hfree,
-    FEvent.wp_liftPart hE (t := t) (hret := .inl (.inr hcost)), dstore,
+    FEvent.wp_liftPart hE (g := gD L E g .w1 _) (t := t)
+      (hgo := by simpa only [gD_lph hE] using hgo) (hret := .inl (.inr hcost)), dstore,
     FEvent.wp_load hE (g := gD L E g p₀ _),
     FEvent.wp_cas hE (g := gD L E g .w0 _),
     (WP.liftMem_liftR (P := P) (t := t)
@@ -212,7 +216,7 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       WP.loop _ _ (wusInv DR P L E t g q d) (fun _ => 0) (wusPost DR P L E t g q d)
         (wus_body hE hcost DR hu hgo hlive q d)),
     dinit_eq, debugAssert_true, bsD_size, gD_ph hE, gD_lph hE, gD_set hE, gD_part, gD_setPart,
-    gD_self hE, hE.lph, hE.lpart, FEvent.set_of, FEvent.IsSet, FEvent.newest, wusInv, wusPost]
+    gD_self hE, hE.lph, hE.lpart, FEvent.set_of, E.IsSet_of_hist_eq, wusInv, wusPost]
 
 /-- **`ResetEvent.wait`** by a thread out of the event's and the lock's code, as the only waiter
 (`hone`, `hhb`): it returns when the event is set. -/
