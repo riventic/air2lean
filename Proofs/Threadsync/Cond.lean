@@ -259,7 +259,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
     threadMutex.lock_wp_resource (io := {}) hC hcost rfl hLc t (L.setPart (L.set g .out rnil) _)
       (by simp only [L.ph_setPart, L.ph_set])
       ((hC.ok_setPart _ _).mpr ((hC.ok_set g .out rnil).mpr hok)),
-    mutex_pre_unmetered, mutex_post_exact,
+    mutex_pre_unmetered, ThreadMutex.lockResources,
     gRD_ph hC, gRD_lph hC, gRD_out hC hgx, gD_lock, hC.ok_setPart, hC.ok_set,
     L.part_setPart, L.setPart_setPart, inv107, post107,
     Thread_Condition_FutexImpl_wait.again107]
