@@ -73,6 +73,8 @@ theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (WP.liftMem_liftR (P := P) (t := t)
       (hnone := fun _ => (show P.Partial from Or.inr hcost))),
     C.ph_set, hC.lph, C.set_set, FCond.set_of, FCond.ptr_ep,
+    FCond.Signalled, FCond.lastS,
+    (fun (m : Mem) => Word.hist_congr (W := C.S) (m := m) (m' := m.ticked) rfl rfl),
     threadFutexWakeC_eq, wakeInv, wakePost,
     Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9]
 
@@ -197,8 +199,8 @@ theorem dwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
     P.WP t (Thread_Futex_Deadline_wait q C.Ep.ptr e) (fun x G' m' d' => x = .ok () ∧ d' < d ∧
       m'.current = t ∧ ∃ r', DPart DR q bsD r' ∧
         P.inv (upd G' t (gRD L C g i jr false e r')) m') G m d := by
-  fsym [FCond.wp_liftPart hC, dload, FCond.wp_waitEp hC,
-    gRD_ph, gRD_lph, L.part_setPart, L.setPart_setPart, threadFutexWaitC_eq]
+  fsym [FCond.wp_liftPart hC, dload, FCond.wp_waitEp (ε := BitVec 32) (w := 32) hC,
+    gRD_ph hC, gRD_lph hC, L.part_setPart, L.setPart_setPart, threadFutexWaitC_eq]
 
 /-- The inner loop's invariant: `t` registered (`sn`: it loaded the next epoch write), the state
 value it read, its epoch value `e` while it has not seen the signal, and its deadline block. -/
@@ -241,7 +243,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
       else post107 DR P L C t g q i jr e D x G' m' d') G m d := by
   fsym [hC.wp_tick_unmetered, DPart.unmetered hu, FCond.wp_consume hC,
     threadMutex.lock_wp_resource hC, mutex_pre_unmetered, mutex_post_exact,
-    gRD_ph, gRD_lph, gRD_out, gD_lock, hC.ok_setPart, hC.ok_set,
+    gRD_ph hC, gRD_lph hC, gRD_out hC hgx, gD_lock, hC.ok_setPart, hC.ok_set,
     L.part_setPart, L.setPart_setPart, inv107, post107,
     Thread_Condition_FutexImpl_wait.again107]
 
@@ -280,7 +282,8 @@ theorem loop29_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.c
     WP.loop _ _ (inv107 DR P L C t g q i jr e d) (fun _ => 0)
       (post107 DR P L C t g q i jr e d)
       (loop107_body hC hcost DR hu hLc t g hgx hok q i jr e d),
-    gRD_ph, gRD_lph, gRD_set, inv29, post29, inv107, post107,
+    gRD_ph hC, gRD_lph hC, gRD_set hC, L.part_setPart,
+    inv29, post29, inv107, post107,
     Thread_Condition_FutexImpl_wait.again29]
 
 /-- `FutexImpl.wait(null)` by the mutex's holder, out of the condition's code: its deadline
@@ -304,14 +307,17 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
     P.WP t (Thread_Condition_FutexImpl_wait C.S.ptr L.ptr none) (fun x G' m' d' => d' < d ∧
       x = .ok () ∧ m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   have hi0 := hC.enterEn hgx hgh hone hhb hent hi
-  fsym [FCond.wp_liftPartCur hC, halloc, hfree, FCond.wp_liftPart hC, dstore,
+  fsym [FCond.wp_liftPartCur hC (g := C.set g .en) (t := t)
+      (hgo := .inr (by simpa only [hC.lph] using hgh)) (hi := hi0) (hc := hc)
+      (htt := halloc) (hp := by simp only [hC.lpart]) (hret := .inl (.inr hcost)),
+    FCond.wp_liftPartCur hC, hfree, FCond.wp_liftPart hC, dstore,
     hC.wp_projE (t := t), FCond.wp_ldEp hC, FCond.wp_reg hC,
     threadMutex.unlock_wp hC,
     (fun (q : Ptr) (i jr : Nat) (e : BitVec 32) =>
       WP.loop _ _ (inv29 DR P L C t g q i jr e d) (fun _ => 0)
         (post29 DR P L t g q d)
         (loop29_body hC hcost DR hu hLc t g hgx hok q i jr e d hlive)),
-    dinit_eq, bsD_size, gD_ph, gD_lph, gD_set, gD_unlock, gD_free,
+    dinit_eq, bsD_size, gD_ph hC, gD_lph hC, gD_set hC, gD_unlock hC, gD_free,
     hC.lpart, hC.ok_setPart, hC.ok_calm, FCond.set_of, L.part_setPart, L.setPart_setPart,
     inv29, post29]
 

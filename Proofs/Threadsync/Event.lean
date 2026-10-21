@@ -202,17 +202,8 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
     FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t)
       (hgo := by simpa only [gD_lph hE] using hgo) (htt := halloc)
       (hp := by simp only [gD_part]) (hret := .inl (.inr hcost)),
-    (fun (q : Ptr) (bs : Array Byte) (r : Res) (hdp : DPart DR q bs r)
-        (hbs : bs.size = 48) =>
-      FEvent.wp_liftPartCur hE (g := gD L E g .out r) (t := t)
-        (hgo := by simpa only [gD_lph hE] using hgo) (htt := hfree q bs hbs)
-        (hp := by simpa only [gD_part] using hdp)
-        (hret := .inl (.inr hcost))),
-    (fun (q : Ptr) (r : Res) (hdp : DPart DR q (Array.replicate 48 .undef) r) =>
-      FEvent.wp_liftPart hE (g := gD L E g .w1 r) (t := t)
-        (hgo := by simpa only [gD_lph hE] using hgo)
-        (htt := dstore (P := DR) (q := q) (bs := Array.replicate 48 .undef) (by simp))
-        (hp := by simpa only [gD_part] using hdp) (hret := .inl (.inr hcost))),
+    FEvent.wp_liftPartCur hE (t := t) (hret := .inl (.inr hcost)), hfree,
+    FEvent.wp_liftPart hE (t := t) (hret := .inl (.inr hcost)), dstore,
     FEvent.wp_load hE (g := gD L E g p₀ _),
     FEvent.wp_cas hE (g := gD L E g .w0 _),
     (WP.liftMem_liftR (P := P) (t := t)
