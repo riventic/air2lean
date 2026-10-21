@@ -2715,11 +2715,9 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
           let rhs := fs.apply r
           let lctx ← getLCtx
           if lhs.hasAnyFVar (fun f => !lctx.contains f) ||
-              rhs.hasAnyFVar (fun f => !lctx.contains f) then return fs
-          let checkedRefl ← mkEqRefl lhs
-          unless ← isDefEq (← inferType checkedRefl) (← mkEq lhs rhs) do
-            throwError "fsym: substituted equality is not reflexive"
-          pure { fs with map := fs.map.insert h checkedRefl }
+              rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
+          -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
+          pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
         -- (recorded: a caller's term that names an eliminated local takes its value)
         (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
         return g'
@@ -3012,7 +3010,10 @@ private def refreshExtraCtx (ctx : Simp.Context) : MetaM Simp.Context := do
     let collect (changed : Array (SimpTheorem × Expr)) (thm : SimpTheorem) := do
       unless stale thms thm do return changed
       let proof ← refreshUser thm.proof
-      return if proof == thm.proof then changed else changed.push (thm, proof)
+      -- (a proof that still names a local out of scope stays as it was: rebuilding it would
+      -- throw for every simp step here, the old entry only fails where its key matches)
+      return if proof == thm.proof || proof.hasAnyFVar (fun f => !lctx.contains f) then changed
+        else changed.push (thm, proof)
     let changed ← thms.pre.foldValuesM collect #[]
     let changed ← thms.post.foldValuesM collect changed
     if changed.isEmpty then return thms
