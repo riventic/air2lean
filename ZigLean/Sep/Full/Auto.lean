@@ -6666,11 +6666,15 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   if ← wpAssumptionArgs g then return []
   if ← wpChain g user extra fuel noCases then return []
   let t ← instantiateMVars (← g.getType)
-  -- an equation that fixes an unknown (a ghost value `?g = (…)` of a protocol's `init`)
+  -- An equation can fix an unknown endpoint or fields inside its applications.
   if let some (_, l, r) := t.eq? then
-    if l.isMVar || r.isMVar then
+    if l.hasExprMVar || r.hasExprMVar then
       let s ← saveState
-      if ← isDefEq l r then g.assign (← mkEqRefl l); return []
+      try
+        if ← isDefEq l r then
+          g.assign (← mkEqRefl l)
+          return []
+      catch _ => pure ()
       s.restore
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
