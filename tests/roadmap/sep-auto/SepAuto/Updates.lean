@@ -143,4 +143,241 @@ example (P Q : FAssn) (h : EUpd P Q) : True := by
       throwError "assigned-type update left proof unknowns"
   trivial
 
+/-! ## Several inferred frames (a caller contract's frame plus the walk's outer frame)
+
+Only the first hole takes unconsumed resources; independent later holes are empty.
+Shared holes and explicit spatial atoms retain their ordinary multiplicity. -/
+
+example {α : Type} {φ : Prop} (hφ : φ) (x : MemM α) (X R : FAssn)
+    (h : ∀ F, FTotalTriple ((⟪φ⟫ ⋆ X) ⋆ F) x (fun _ => F)) :
+    FTotalTriple (X ⋆ R) x (fun _ => R) := by
+  fsym [h]
+
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example {φ : Prop} (hφ : φ) (X R : FAssn) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let φ := (← getLocalDeclFromUserName `φ).toExpr
+    for count in [2, 3] do
+      let frames ← (List.range count).toArray.mapM fun _ => mkFreshExprMVar (mkConst ``FAssn)
+      let target := sepOf (#[mkSep (mkApp (mkConst ``FAssn.lift) φ) X] ++ frames)
+      let g ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[mkSep X R, target])
+      unless (← closeEntail g.mvarId!).isEmpty do
+        throwError "independent frame holes did not close"
+      unless (← instantiateMVars frames[0]!) == R do
+        throwError "first frame did not retain the exact remainder"
+      for frame in frames.extract 1 frames.size do
+        unless (← instantiateMVars frame).isConstOf ``FAssn.emp do
+          throwError "later independent frame is not empty"
+      if (← instantiateMVars g).hasExprMVar then
+        throwError "independent frame proof has unknowns"
+  trivial
+
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (X R : FAssn) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let frame ← mkFreshExprMVar (mkConst ``FAssn)
+    let g ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, frame, frame]])
+    let left ← closeEntail g.mvarId!
+    unless left == [g.mvarId!] && !(← g.mvarId!.isAssigned) &&
+        !(← frame.mvarId!.isAssigned) do
+      throwError "shared frame duplicated resources or leaked its rejected choice"
+    let later ← mkFreshExprMVar (mkConst ``FAssn)
+    let good ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, frame, later]])
+    unless (← closeEntail good.mvarId!).isEmpty do
+      throwError "a rejected shared frame spoiled a later independent choice"
+    if (← instantiateMVars good).hasExprMVar then
+      throwError "later frame proof has unknowns"
+    let source ← mkFreshExprMVar (mkConst ``FAssn)
+    let shared ← mkFreshExprMVar (mkConst ``FAssn)
+    let alias ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X source, sepOf #[X, shared, shared]])
+    unless (← closeEntail alias.mvarId!) == [alias.mvarId!] &&
+        !(← source.mvarId!.isAssigned) && !(← shared.mvarId!.isAssigned) do
+      throwError "a shared frame forced its source remainder to empty"
+  trivial
+
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (X : FAssn) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let frame ← mkFreshExprMVar (mkConst ``FAssn)
+    let later ← mkFreshExprMVar (mkConst ``FAssn)
+    let g ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[X, sepOf #[X, frame, frame, later]])
+    unless (← closeEntail g.mvarId!).isEmpty do
+      throwError "empty shared and independent frames did not close"
+    unless (← instantiateMVars frame).isConstOf ``FAssn.emp &&
+        (← instantiateMVars later).isConstOf ``FAssn.emp do
+      throwError "an empty remainder acquired resources"
+    if (← instantiateMVars g).hasExprMVar then throwError "empty frame proof has unknowns"
+  trivial
+
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (X R : FAssn) (a b : Nat) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let a := (← getLocalDeclFromUserName `a).toExpr
+    let b := (← getLocalDeclFromUserName `b).toExpr
+    let fnType ← mkArrow (mkConst ``Nat) (mkConst ``FAssn)
+    let first ← mkFreshExprMVar fnType
+    let later ← mkFreshExprMVar fnType
+    let g ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, mkApp first a, mkApp later b]])
+    unless (← closeEntail g.mvarId!).isEmpty do
+      throwError "independent applied frames did not close"
+    unless ← withNewMCtxDepth (isDefEq (← instantiateMVars (mkApp first a)) R) do
+      throwError "applied first frame lost its remainder"
+    unless ← withNewMCtxDepth
+        (isDefEq (← instantiateMVars (mkApp later b)) (mkConst ``FAssn.emp)) do
+      throwError "applied later frame is not empty"
+    if (← instantiateMVars g).hasExprMVar then throwError "applied frame proof has unknowns"
+    let dependent ← mkFreshExprMVar
+      (← mkArrow (mkConst ``FAssn) (mkConst ``FAssn))
+    let root ← mkFreshExprMVar (mkConst ``FAssn)
+    let dep ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, root, mkApp dependent root]])
+    unless (← closeEntail dep.mvarId!).isEmpty do
+      throwError "a dependent independent-head frame did not close"
+    unless (← instantiateMVars root) == R do
+      throwError "a dependent frame changed its input remainder"
+    if (← instantiateMVars dep).hasExprMVar then
+      throwError "dependent frame proof has unknowns"
+    let shared ← mkFreshExprMVar fnType
+    let bad ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, mkApp shared a, mkApp shared b]])
+    unless (← closeEntail bad.mvarId!) == [bad.mvarId!] &&
+        !(← bad.mvarId!.isAssigned) && !(← shared.mvarId!.isAssigned) do
+      throwError "a shared application head duplicated resources or leaked assignments"
+  trivial
+
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (X R : FAssn) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let frame ← mkFreshExprMVar (mkConst ``FAssn)
+    let g ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, R, frame]])
+    unless (← closeEntail g.mvarId!).isEmpty do
+      throwError "a determined explicit frame was not preserved"
+    unless (← instantiateMVars frame).isConstOf ``FAssn.emp do
+      throwError "a determined frame was overwritten"
+    let extra ← mkFreshExprMVar (mkConst ``FAssn)
+    let bad ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, R, R, extra]])
+    unless (← closeEntail bad.mvarId!) == [bad.mvarId!] &&
+        !(← bad.mvarId!.isAssigned) && !(← extra.mvarId!.isAssigned) do
+      throwError "an explicit spatial atom was duplicated or dropped"
+    if (← instantiateMVars g).hasExprMVar then throwError "explicit frame proof has unknowns"
+  trivial
+
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (X R : FAssn) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let first ← mkFreshExprMVar (mkConst ``FAssn)
+    let later ← mkFreshExprMVar (mkConst ``FAssn)
+    let target := sepOf #[mkSep (mkApp (mkConst ``FAssn.lift) (mkConst ``False)) X,
+      first, later]
+    let g ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[mkSep X R, target])
+    let left ← closeEntail g.mvarId!
+    unless ← left.anyM fun m => return (← instantiateMVars (← m.getType)).isFalse do
+      throwError "a false pure fact was not retained as an actual False obligation"
+    unless (← instantiateMVars first) == R &&
+        (← instantiateMVars later).isConstOf ``FAssn.emp do
+      throwError "the false-fact residual changed the frame allocation"
+  trivial
+
+end SepAuto.Updates
+
+namespace SepAuto.Updates
+
+open Zig Zig.Full Zig.Full.FAssn Lean Meta Elab Tactic Zig.Full.Auto
+
+/-- Matching a structured atom can introduce a live alias into a still-raw source atom. -/
+example (U : FAssn → FAssn) (a : Nat) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let U := (← getLocalDeclFromUserName `U).toExpr
+    let a := (← getLocalDeclFromUserName `a).toExpr
+    let source ← mkFreshExprMVar (mkConst ``FAssn)
+    let first ← mkFreshExprMVar (mkConst ``FAssn)
+    let shared ← mkFreshExprMVar (← mkArrow (mkConst ``Nat) (mkConst ``FAssn))
+    let value := mkApp shared a
+    let g ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep (mkApp U source) source,
+        sepOf #[mkApp U value, first, value]])
+    unless (← closeEntail g.mvarId!) == [g.mvarId!] && !(← g.mvarId!.isAssigned) &&
+        !(← source.mvarId!.isAssigned) && !(← first.mvarId!.isAssigned) &&
+        !(← shared.mvarId!.isAssigned) do
+      throwError "matching an atom forced its aliased source remainder to empty"
+  trivial
+
+/-- Positive direct API controls check their completed intermediate proofs with the kernel,
+in addition to the public caller-contract theorem and Meta-level allocation/refusal checks. -/
+example {φ : Prop} (hφ : φ) (X R : FAssn) (a b : Nat) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let φ := (← getLocalDeclFromUserName `φ).toExpr
+    for count in [2, 3] do
+      let frames ← (List.range count).toArray.mapM fun _ => mkFreshExprMVar (mkConst ``FAssn)
+      let g ← mkFreshExprSyntheticOpaqueMVar
+        (← mkAppM ``EUpd #[mkSep X R,
+          sepOf (#[mkSep (mkApp (mkConst ``FAssn.lift) φ) X] ++ frames)])
+      unless (← closeEntail g.mvarId!).isEmpty do
+        throwError "independent frame proof did not close for kernel checking"
+      checkWithKernel (← mkExpectedTypeHint (← instantiateMVars g)
+        (← instantiateMVars (← g.mvarId!.getType)))
+    let shared ← mkFreshExprMVar (mkConst ``FAssn)
+    let later ← mkFreshExprMVar (mkConst ``FAssn)
+    let empty ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[X, sepOf #[X, shared, shared, later]])
+    unless (← closeEntail empty.mvarId!).isEmpty do
+      throwError "empty shared frame proof did not close for kernel checking"
+    checkWithKernel (← mkExpectedTypeHint (← instantiateMVars empty)
+      (← instantiateMVars (← empty.mvarId!.getType)))
+    let a := (← getLocalDeclFromUserName `a).toExpr
+    let b := (← getLocalDeclFromUserName `b).toExpr
+    let fnType ← mkArrow (mkConst ``Nat) (mkConst ``FAssn)
+    let first ← mkFreshExprMVar fnType
+    let second ← mkFreshExprMVar fnType
+    let applied ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, mkApp first a, mkApp second b]])
+    unless (← closeEntail applied.mvarId!).isEmpty do
+      throwError "applied frame proof did not close for kernel checking"
+    checkWithKernel (← mkExpectedTypeHint (← instantiateMVars applied)
+      (← instantiateMVars (← applied.mvarId!.getType)))
+    let root ← mkFreshExprMVar (mkConst ``FAssn)
+    let dependent ← mkFreshExprMVar (← mkArrow (mkConst ``FAssn) (mkConst ``FAssn))
+    let dep ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, root, mkApp dependent root]])
+    unless (← closeEntail dep.mvarId!).isEmpty do
+      throwError "dependent frame proof did not close for kernel checking"
+    checkWithKernel (← mkExpectedTypeHint (← instantiateMVars dep)
+      (← instantiateMVars (← dep.mvarId!.getType)))
+    let explicit ← mkFreshExprMVar (mkConst ``FAssn)
+    let determined ← mkFreshExprSyntheticOpaqueMVar
+      (← mkAppM ``EUpd #[mkSep X R, sepOf #[X, R, explicit]])
+    unless (← closeEntail determined.mvarId!).isEmpty do
+      throwError "explicit frame proof did not close for kernel checking"
+    checkWithKernel (← mkExpectedTypeHint (← instantiateMVars determined)
+      (← instantiateMVars (← determined.mvarId!.getType)))
+  trivial
+
 end SepAuto.Updates
