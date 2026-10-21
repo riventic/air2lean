@@ -480,8 +480,10 @@ logic has no `ofTotal`: a sequential rule reads its part of the state without a 
   hand-written thread copy of a sequential rule. When the post is needed before the term's
   tactic blocks run (an argument that names it), `have h := (by fsym : FTTriple P c _)` first.
 * **Arguments fixed by the facts** (`fixByFacts`): a rule's hypothesis `t = ?u` with a known left
-  side (`p.block = some ?b`) takes the context's fact about `t` before the precondition is
-  planned, so an atom of the same shape about another block is not taken.
+  side (`p.block = some ?b`) first takes the context's fact about `t`, then uses the existing
+  `solveBlock` to compute a literal or added pointer's block if it is still unknown. This fixes
+  the block before the precondition is planned, so another block's equal-sized extent is not
+  taken. The positive and missing-target controls are in `SepAuto.Stack`.
 
 Regressions: `tests/roadmap/sep-auto/SepAuto/Threads.lean` (the former hand-written thread rules of
 `Full/Ops`, `Full/Region`, `Full/Typed`, `Full/Arr` and `Full/Mmap`, each one `fsym` call; programs in both

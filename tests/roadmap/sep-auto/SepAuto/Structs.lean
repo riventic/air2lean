@@ -510,4 +510,131 @@ example : True := by
       throwError "N2's word: the failure under the nesting budget was cached"
   trivial
 
+/-! ## Requested knowledge across a successful raw-to-typed view -/
+
+theorem fba_encode_size (v : Fba) : (Enc.encode v).size = 24 := by
+  change (Enc.fields 24 [(0, Enc.encode v.end_index), (8, Enc.encode v.buffer)]).size = 24
+  apply fields_size
+  simp only [partSizes, List.map_cons, List.map_nil, LawfulEnc.size_encode]
+  decide
+
+/-- An opaque command needs both exact fields and address knowledge after folding. Every
+unrelated resource remains in the explicit frame; the command cannot be solved by inlining. -/
+theorem view_step_known_frame (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) (R : FAssn) (op : MemM Unit)
+    (hStep : FTotalTriple
+      ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ known b A)
+      op (fun _ =>
+        (up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ known b A)) :
+    FTotalTriple (up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ R) op
+      (fun _ => ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
+        known b A) ⋆ R) := by
+  have hsize := fba_encode_size v
+  fsym [hStep]
+
+/-- Repeated knowledge remains repeated inside one combined demand. The heap fields and
+arbitrary exclusive frame are each retained once, without contracting their occurrences. -/
+theorem view_step_known_twice (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) (R : FAssn) (op : MemM Unit)
+    (hStep : FTotalTriple
+      ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ (known b A ⋆ known b A))
+      op (fun _ =>
+        (up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
+          (known b A ⋆ known b A))) :
+    FTotalTriple (up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ R) op
+      (fun _ => ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
+        (known b A ⋆ known b A)) ⋆ R) := by
+  have hsize := fba_encode_size v
+  fsym [hStep]
+
+/-- Existing knowledge is counted once against the FULL requested multiplicity. The view
+must derive one missing copy; it must not cover an additional request with the old copy twice. -/
+theorem view_step_existing_known_twice (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) (R : FAssn) (op : MemM Unit)
+    (hStep : FTotalTriple
+      ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ (known b A ⋆ known b A))
+      op (fun _ =>
+        (up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
+          (known b A ⋆ known b A))) :
+    FTotalTriple ((up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ known b A) ⋆ R) op
+      (fun _ => ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
+        (known b A ⋆ known b A)) ⋆ R) := by
+  have hsize := fba_encode_size v
+  fsym [hStep]
+
+/-- A rejected update's other block must not choose closePre's structural view or supply
+its knowledge. Only the successful update's local combined demand is used. -/
+theorem return_update_known_frame (p q : Ptr) (b c : BlockId)
+    (hb : p.block = some b) (hq : q.block = some c) (hne : b ≠ c)
+    (A B : Nat) (v w : Fba) (ha : (A + p.off.toNat) % 8 = 0) (R T : FAssn)
+    (bad : EUpd
+      ((up (pts q 8 w.end_index) ⋆ up (pts (q.add 8) 8 w.buffer)) ⋆ known c B) T)
+    (good : EUpd
+      ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ known b A) T) :
+    FTotalTriple (up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ R)
+      (pure ()) (fun _ => T ⋆ R) := by
+  have hsize := fba_encode_size v
+  fsym [bad, good]
+
+/-- closePre can view a residual precondition after committing a real knowledge update.
+Its actual state already has both copies, so the full demand must not add either again. -/
+theorem return_update_known_existing_twice (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A : Nat) (v : Fba) (ha : (A + p.off.toNat) % 8 = 0) (R T : FAssn)
+    (update : EUpd
+      ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ (known b A ⋆ known b A)) T) :
+    FTotalTriple ((up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ known b A) ⋆ R)
+      (pure ()) (fun _ => T ⋆ R) := by
+  have hsize := fba_encode_size v
+  fsym [update]
+
+/-- A zero-sized lawful encoding still folds without a knowledge request or a new
+positive-size premise on the successful view. -/
+theorem zero_view_no_request {T : Type} [Enc T] [LawfulEnc T] (v : T)
+    (hz : Enc.size T = 0) (p : Ptr) (A S a : Nat)
+    (ha : (A + p.off.toNat) % a = 0) (R : FAssn) (op : MemM Unit)
+    (hStep : FTotalTriple (up (pts p a v)) op (fun _ => up (pts p a v))) :
+    FTotalTriple (up (bytesAt p A S .stack (Enc.encode v)) ⋆ R)
+      op (fun _ => up (pts p a v) ⋆ R) := by
+  fsym [hStep]
+
+set_option linter.unusedVariables false in
+/-- The first address can be preserved, but the actual last known-only failure is not
+reclassified as a hint or silently dropped from the demand. -/
+example (p : Ptr) (b : BlockId) (hb : p.block = some b)
+    (A S : Nat) (K : BlockKind) (bs : Array Byte) (hn : 0 < bs.size) : True := by
+  fail_if_success
+    have : EUpd (up (bytesAt p A S K bs))
+        (up (bytesAt p A S K bs) ⋆ (known b A ⋆ known b (A + 1))) := by
+      fsym_entail
+  trivial
+
+open Lean Meta Zig.Full.Auto in
+/-- The consumer contract retains the true target, including a known-only, opaque or
+multi-atom target. Prefix multiplicity is distinct from request deduplication. -/
+example (b : BlockId) (A : Nat) (X R : FAssn) : True := by
+  run_tac do
+    let b := (← getLocalDeclFromUserName `b).toExpr
+    let A := (← getLocalDeclFromUserName `A).toExpr
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let R := (← getLocalDeclFromUserName `R).toExpr
+    let k ← mkAppM ``Zig.Full.known #[b, A]
+    let lastTarget ← mkAppM ``Zig.Full.known #[b, ← mkAppM ``Nat.add #[A, mkNatLit 1]]
+    let (target, hints) := viewDemand lastTarget
+    unless target == lastTarget && hints.isEmpty do
+      throwError "known-only failure became a hint"
+    let (target, hints) := viewDemand (mkSep (mkSep k k) lastTarget)
+    unless target == lastTarget && hints == #[k, k] do
+      throwError "combined demand lost its true target or repeated knowledge"
+    let (target, hints) := viewDemand (mkSep k X)
+    unless target == X && hints == #[k] do
+      throwError "opaque failed target was unfolded"
+    let multiple := mkSep X R
+    let (target, hints) := viewDemand (mkSep k multiple)
+    unless target == multiple && hints == #[k] do
+      throwError "multi-atom failed target was reduced to its last leaf"
+    let (target, hints) := viewDemand multiple
+    unless target == multiple && hints.isEmpty do
+      throwError "ordinary multi-atom request changed"
+  trivial
+
 end SepAuto.Structs
