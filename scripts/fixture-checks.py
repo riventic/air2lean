@@ -78,6 +78,7 @@ def _load(name, rel):
 CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
+GUARD = _load('air2lean_build_guard', 'scripts/build-guard.py')
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
@@ -294,16 +295,18 @@ def _stage(unit, scratch):
 
 def guard_rss_mib():
     """The default limit of the units' guard (scripts/fixture-checks.sh): GUARD_RSS_MIB, at most
-    the admission of an enclosing guard (scripts/build-guard.py INHERIT; scripts/full-build.sh),
-    which the units' guard inherits and which refuses a larger limit (inheritance_refused)."""
+    the machine's guard budget (AIR2LEAN_BUILD_MEM_MIB, build-guard.py `default_budget_mib`) and
+    the admission of an enclosing guard (build-guard.py INHERIT; scripts/full-build.sh), which
+    the units' guard inherits and which refuses a larger limit (inheritance_refused)."""
+    limits = [GUARD_RSS_MIB, GUARD.default_budget_mib()]  # the budget may be fractional
     try:
-        grant = json.loads(os.environ.get('AIR2LEAN_GUARD_ADMISSION') or 'null')
+        grant = json.loads(os.environ.get(GUARD.INHERIT) or 'null')
     except ValueError:
         grant = None
     limit = grant.get('rss_mib') if isinstance(grant, dict) else None
     if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > 0:
-        return min(GUARD_RSS_MIB, int(limit))
-    return GUARD_RSS_MIB
+        limits.append(int(limit))
+    return int(min(limits))
 
 
 def hints_path():

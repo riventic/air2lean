@@ -836,7 +836,8 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to eight at once inside their own guard (24000 MiB, at most the admission of an enclosing guard:
+to eight at once inside their own guard (24000 MiB, at most the guard budget `AIR2LEAN_BUILD_MEM_MIB`
+and the admission of an enclosing guard:
 the full build's whole admission; `--jobs`, `--rss-mib`), the longest first by
 the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
 unit's largest recent sampled peak) fit in 85% of the guard's limit; the measurements

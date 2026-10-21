@@ -6,7 +6,8 @@
 #
 # The units' compilers are resolved first, outside the guard (a patched-compiler miss builds
 # under its own guard), then up to --jobs units (default 8) run at once in a --rss-mib guard
-# (default 24000, at most an enclosing guard's admission: scripts/full-build.sh), the longest
+# (default 24000, at most the guard budget AIR2LEAN_BUILD_MEM_MIB and an enclosing guard's
+# admission: scripts/full-build.sh), the longest
 # first, each admitted by its measured peak (scripts/fixture-checks.py `schedule`). Every unit
 # runs on every invocation; no result is reused (scripts/fixture-checks.py). Each unit's wall
 # time, peak RSS and time by process kind go to DIR/units.json; the longest are printed. The
@@ -21,11 +22,11 @@ while [ $# -gt 0 ]; do
     --jobs) jobs=${2:?--jobs needs a number}; shift 2 ;;
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --only) args+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "fixture-checks: unknown argument $1" >&2; exit 2 ;;
   esac
 done
-# At most an enclosing guard's admission, which the guard below inherits (fixture-checks.py).
+# At most the guard budget and an enclosing admission (fixture-checks.py guard_rss_mib).
 [ -n "$rss" ] || rss=$(python3 -B scripts/fixture-checks.py --guard-rss-mib)
 [ -n "$logs" ] || logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-fixture-checks.XXXXXX")
 mkdir -p "$logs"
