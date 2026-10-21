@@ -6073,62 +6073,101 @@ def assnAt? (t : Expr) : MetaM (Option (Expr × Expr)) := do
 reducible unfolding, else an atom of the same head with provably equal arguments (`proveEq`: a
 stored value that the facts give, `a + 1` for `BitVec.ofNat 32 (k + 1)`); `Y`'s atoms rewritten
 by those equations, then reordered (`acEq`). An atom of `X` with unknowns (a premise of a
-caller's lemma, `bytesAt cPtr ?A S K ?bs` of a protocol's start) takes the first atom of `Y` of
-its head that unifies with it, up to unfolding (`cPtr` and the pointer the walk has); the
+caller's lemma, `bytesAt cPtr ?A S K ?bs` of a protocol's start) first uses existing matches
+across the whole context. Only then may a second pass infer unknowns with `matchArgs` and
+check remaining equalities with `proveEq`. Each source occurrence has its own equality;
+rewriting one never rewrites another occurrence of the same expression. The
 resource may be an unknown too, and `Y`'s atoms are unfolded as `X`'s (`bext` is `bauth … one`). -/
 def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
-  -- the equations `b = a` of an atom `b` of `Y` and its atom `a` of `X`, and the atoms that
-  -- unified (equal by unfolding); `none` if one is missing
-  let pair (xs ys : Array Expr) :
-      TacticM (Option (Array (Expr × Expr × Expr) × Array (Expr × Expr))) := do
+  -- The existing cached simp context may create auxiliaries: prepare it before rollback.
+  discard <| arithSimpCtx
+  -- One target and checked equality per source occurrence, in source order.
+  let pair (mixed : Bool) (xs ys : Array Expr) : TacticM (Option (Array (Expr × Expr))) := do
     unless ys.size == xs.size do return none
-    let mut rest := ys
-    let mut eqs := #[]
-    let mut unified := #[]
+    let mut rest := Array.range ys.size
+    let mut out : Array (Option (Expr × Expr)) := ys.map fun _ => none
     for a in xs do
       let a ← instantiateMVars a
-      if let some i ← rest.findIdxM? fun b => return a == b ||
-          (← withNewMCtxDepth (withReducibleAndInstances (isDefEq a b))) then
-        rest := rest.eraseIdx! i; continue
+      if let some i ← rest.findIdxM? fun j => do
+          if a == ys[j]! then return true
+          let s ← saveState
+          let restoreArith ← (← caches).saveArith
+          let ok ← try
+              withNewMCtxDepth (withReducibleAndInstances (isDefEq a ys[j]!))
+            catch ex =>
+              s.restore; restoreArith; throw ex
+          unless ok do s.restore; restoreArith
+          return ok then
+        let j := rest[i]!
+        let b := ys[j]!
+        let pf ← mkExpectedTypeHint (← mkEqRefl b) (← mkEq b a)
+        out := out.set! j (some (a, pf))
+        rest := rest.eraseIdx! i
+        continue
       let mut found := false
       for i in [0:rest.size] do
-        let b := rest[i]!
+        let j := rest[i]!
+        let b := ys[j]!
         unless b.getAppFn == a.getAppFn do continue
-        if a.hasExprMVar then
+        let s ← saveState
+        let restoreArith ← (← caches).saveArith
+        try
+          if a.hasExprMVar then
+            if ← isDefEq a b then
+              let a' ← instantiateMVars a
+              let pf ← mkExpectedTypeHint (← mkEqRefl b) (← mkEq b a')
+              out := out.set! j (some (a', pf))
+              rest := rest.eraseIdx! i; found := true; break
+          else if let some pf ← proveEq b a then
+            out := out.set! j (some (a, pf))
+            rest := rest.eraseIdx! i; found := true; break
+        catch ex =>
+          s.restore; restoreArith; throw ex
+        s.restore
+        restoreArith
+      if mixed && !found && a.hasExprMVar then
+        for i in [0:rest.size] do
+          let j := rest[i]!
+          let b := ys[j]!
+          unless b.getAppFn == a.getAppFn do continue
           let s ← saveState
-          if ← isDefEq a b then
-            unified := unified.push (b, a); rest := rest.eraseIdx! i; found := true; break
+          let restoreArith ← (← caches).saveArith
+          try
+            if ← matchArgs a b then
+              let a' ← instantiateMVars a
+              if let some pf ← proveEq b a' then
+                out := out.set! j (some (a', pf))
+                rest := rest.eraseIdx! i; found := true; break
+          catch ex =>
+            s.restore; restoreArith; throw ex
           s.restore
-        else if let some pf ← proveEq b a then
-          eqs := eqs.push (b, a, pf); rest := rest.eraseIdx! i; found := true; break
+          restoreArith
       unless found do return none
-    return some (eqs, unified)
-  for d in ← getLCtx do
-    if d.isImplementationDetail then continue
-    let some (Y0, r') ← assnAt? (← instantiateMVars d.type) | continue
-    let s ← saveState
-    try
-      unless r' == r || (r.hasExprMVar && (← isDefEq r r')) do throwError "resource"
-      let Y ← if X.hasExprMVar then reduceProjs (← unfoldLeaves Y0) else pure Y0
-      let some (eqs, unified) ← pair (atoms X) (atoms Y) | throwError "atoms"
-      -- the unified atoms of `Y` as `X` has them (the same up to unfolding), then `Y = Y'` with
-      -- the atoms rewritten, then `Y' = X` by AC
-      let X ← instantiateMVars X
-      let mut Y := Y
-      for (b, a) in unified do
-        let a ← instantiateMVars a
-        Y := Y.replace fun y => if y == b then some a else none
-      let mut Y' := Y
-      let mut e ← mkEqRefl Y
-      for (b, a, pf) in eqs do
-        let f ← withLocalDeclD `z (← inferType b) fun z => do
-          mkLambdaFVars #[z] (Y'.replace fun y => if y == b then some z else none)
-        Y' := (mkApp f a).headBeta
-        e ← mkEqTrans e (← mkCongrArg f pf)
-      e ← mkEqTrans e (← acEq Y' X)
-      g.assign (← mkEqMP (← mkCongrFun e r') (← mkExpectedTypeHint d.toExpr (mkApp Y r')))
-      return true
-    catch _ => s.restore
+    return out.mapM (m := Option) id
+  for mixed in (if X.hasExprMVar then [false, true] else [false]) do
+    for d in ← getLCtx do
+      if d.isImplementationDetail then continue
+      let some (Y0, r') ← assnAt? (← instantiateMVars d.type) | continue
+      let s ← saveState
+      let restoreArith ← (← caches).saveArith
+      try
+        unless r' == r || (r.hasExprMVar && (← isDefEq r r')) do throwError "resource"
+        let Y ← if X.hasExprMVar then reduceProjs (← unfoldLeaves Y0) else pure Y0
+        let ys := atoms Y
+        let some paired ← pair mixed (atoms X) ys | throwError "atoms"
+        let X ← instantiateMVars X
+        let targets ← paired.mapM fun entry => instantiateMVars entry.1
+        let proofs ← paired.mapM fun entry => instantiateMVars entry.2
+        let byAtoms ← if proofs.isEmpty then mkEqRefl (mkConst empN) else do
+          let mut e := proofs.back!
+          for i in (List.range (proofs.size - 1)).reverse do
+            e ← mkCongr (← mkCongrArg (mkConst sepN) proofs[i]!) e
+          pure e
+        let e ← mkEqTrans (← acEq Y (sepOf ys)) byAtoms
+        let e ← mkEqTrans e (← acEq (sepOf targets) X)
+        g.assign (← mkEqMP (← mkCongrFun e r') (← mkExpectedTypeHint d.toExpr (mkApp Y r')))
+        return true
+      catch _ => s.restore; restoreArith
   return false
 
 /-- `e` with its functions `fun x => f x` eta-reduced (`upd_snd_apply` under a binder). -/
