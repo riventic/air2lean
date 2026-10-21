@@ -5048,7 +5048,13 @@ def viewAtoms (P : Expr) (wanted : Array AbstractMVarsResult) : TacticM (Option 
           trace[fsym] "view {n} of {x}: {ex.toMessageData}"
           s'.restore
       let some (Y, h) := y? | i := i + 1; continue
-      let (Y, h) ← viewKnowledge st.ats x Y h knowledge
+      -- (requested knowledge that cannot be derived keeps the view without it, like the
+      -- planner's other failed probes; `viewKnowledge` itself only extends `Y`)
+      let sv ← saveState
+      let (Y, h) ← try viewKnowledge st.ats x Y h knowledge
+        catch ex =>
+          trace[fsym] "view knowledge of {x}: {ex.toMessageData}"
+          sv.restore; pure (Y, h)
       -- (the view is now first, the atoms before `i` one further: the next is still at `i + 1`)
       st ← st.step #[i] #[Y] h
       viewed := viewed.push Y
