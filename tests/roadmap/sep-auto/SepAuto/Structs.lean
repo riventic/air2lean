@@ -512,6 +512,12 @@ example : True := by
 
 /-! ## Requested knowledge across a successful raw-to-typed view -/
 
+theorem fba_encode_size (v : Fba) : (Enc.encode v).size = 24 := by
+  change (Enc.fields 24 [(0, Enc.encode v.end_index), (8, Enc.encode v.buffer)]).size = 24
+  apply fields_size
+  simp only [partSizes, List.map_cons, List.map_nil, LawfulEnc.size_encode]
+  decide
+
 /-- An opaque command needs both exact fields and address knowledge after folding. Every
 unrelated resource remains in the explicit frame; the command cannot be solved by inlining. -/
 theorem view_step_known_frame (p : Ptr) (b : BlockId) (hb : p.block = some b)
@@ -523,6 +529,7 @@ theorem view_step_known_frame (p : Ptr) (b : BlockId) (hb : p.block = some b)
     FTotalTriple (up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ R) op
       (fun _ => ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
         known b A) ⋆ R) := by
+  have hsize := fba_encode_size v
   fsym [hStep]
 
 /-- Repeated knowledge remains repeated inside one combined demand. The heap fields and
@@ -537,6 +544,7 @@ theorem view_step_known_twice (p : Ptr) (b : BlockId) (hb : p.block = some b)
     FTotalTriple (up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ R) op
       (fun _ => ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
         (known b A ⋆ known b A)) ⋆ R) := by
+  have hsize := fba_encode_size v
   fsym [hStep]
 
 /-- Existing knowledge is counted once against the FULL requested multiplicity. The view
@@ -551,6 +559,7 @@ theorem view_step_existing_known_twice (p : Ptr) (b : BlockId) (hb : p.block = s
     FTotalTriple ((up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ known b A) ⋆ R) op
       (fun _ => ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆
         (known b A ⋆ known b A)) ⋆ R) := by
+  have hsize := fba_encode_size v
   fsym [hStep]
 
 /-- A rejected update's other block must not choose closePre's structural view or supply
@@ -564,6 +573,7 @@ theorem return_update_known_frame (p q : Ptr) (b c : BlockId)
       ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ known b A) T) :
     FTotalTriple (up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ R)
       (pure ()) (fun _ => T ⋆ R) := by
+  have hsize := fba_encode_size v
   fsym [bad, good]
 
 /-- closePre can view a residual precondition after committing a real knowledge update.
@@ -574,6 +584,7 @@ theorem return_update_known_existing_twice (p : Ptr) (b : BlockId) (hb : p.block
       ((up (pts p 8 v.end_index) ⋆ up (pts (p.add 8) 8 v.buffer)) ⋆ (known b A ⋆ known b A)) T) :
     FTotalTriple ((up (bytesAt p A 24 .stack (Enc.encode v)) ⋆ known b A) ⋆ R)
       (pure ()) (fun _ => T ⋆ R) := by
+  have hsize := fba_encode_size v
   fsym [update]
 
 /-- A zero-sized lawful encoding still folds without a knowledge request or a new
