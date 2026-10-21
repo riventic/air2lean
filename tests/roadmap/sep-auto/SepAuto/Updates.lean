@@ -143,4 +143,18 @@ example (P Q : FAssn) (h : EUpd P Q) : True := by
       throwError "assigned-type update left proof unknowns"
   trivial
 
+/-- An unavailable provider rejects the first rule after planning; the next rule keeps all
+bytes and the arbitrary exclusive frame. A portable arithmetic proof may make this pass on
+the old engine too; no disappearing declaration or exact cache contents are asserted. -/
+theorem failed_rule_retry (op : MemM Unit) (b : BlockId) (A : Nat) (bs : Array Byte)
+    (hsize : bs.size = 24) (R : FAssn)
+    (bad : Within (cur 0) emp →
+      FTotalTriple (up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ known b A)
+        op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs)))
+    (good : FTotalTriple (up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ known b A)
+      op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs))) :
+    FTotalTriple (up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ R)
+      op (fun _ => up (bytesAt ⟨some b, 0⟩ A 24 .stack bs) ⋆ R) := by
+  fsym [bad, good]
+
 end SepAuto.Updates

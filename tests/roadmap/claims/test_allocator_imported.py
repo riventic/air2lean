@@ -9,7 +9,7 @@ import claims
 
 
 def check(default, enabled):
-    module = 'tests.roadmap.claims.AllocatorImported'
+    module = 'AllocatorImported'
     assert 'selected_declaration_roots' not in default
     assert 'framework_candidates' not in default
     assert 'selected_declaration_roots' in enabled

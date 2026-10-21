@@ -56,8 +56,8 @@ The Lean files of the proof fixtures (`tests/roadmap/<fixture>/check.sh`) are on
 `ArenaSpec`). The outputs go to `tests/roadmap/.lake/build`, outside the root
 `.lake/build/lib/lean`, where proof receipts reject untracked compiled modules. Converted so far:
 `alloc-arena`, `alloc-fba`, `alloc-translated`, `lists-fba` (and the two `interfaces` modules it
-imports) and the architecture-audit claim fixtures; the other checks still elaborate with
-`lake env lean`.
+imports), the architecture-audit claim fixtures and the claim-strength fixtures
+(`tests/roadmap/claims`); the other checks still elaborate with `lake env lean`.
 
 `scripts/fixtures.py` is the one entry point; a converted check runs nothing else on Lean files:
 

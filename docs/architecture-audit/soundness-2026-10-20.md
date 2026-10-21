@@ -9,7 +9,7 @@ the user), **FAIL-OPEN** (the guard that should reject is missing; a constructed
 
 | # | Severity | Finding | Status |
 |---|---|---|---|
-| E1 | FAIL-OPEN (evidence integrity) | The assurance extractor imports every audited module into the Lean process that writes the report, so an audited module's `initialize` code runs there and can forge or alter the report. | **open** |
+| E1 | FAIL-OPEN (evidence integrity) | The assurance extractor imports every audited module into the Lean process that writes the report, so an audited module's `initialize` code runs there and can forge or alter the report. | **fixed** (§Fix) |
 
 ## E1: an audited module's `initialize` runs inside the extractor
 
@@ -48,7 +48,7 @@ on `perf/lake-kernel-replay` keeps that property (§Related). What E1 weakens is
 audit takes from the extractor's report alone: the axiom inventory (`collectAxioms`, `sorryAx`
 detection), the declaration graph, statement shapes, framework evidence and the claim heads.
 
-**Options for a fix** (proposed, not implemented):
+**Options for a fix** (as proposed when the finding was opened):
 1. **Extract without importing.** Read the audited oleans with `Lean.readModuleData` and assemble
    the environment without running initializers, the way `leanchecker` imports. This removes the
    exposure. It needs the extractor to work on an environment with no extensions initialized: the
@@ -63,6 +63,15 @@ detection), the declaration graph, statement shapes, framework evidence and the 
    agree. This narrows the exposure but duplicates the extractor's core logic.
 
 The recommendation is (1), with (2) as defence in depth.
+
+**Fix (status: fixed).** This is option (1) with the extensions kept.
+- **The driver.** It imports only `tools.Assurance`.
+- **The import.** `#assurance_audit` imports the audited modules itself (`importWithoutInitializers`). It first reads their closure beyond the extractor's own imports from the `.olean` headers (`importClosure`), freeing each module's data once its imports are read. Then it records every module of that closure in Lean's `interpretedModInits`, the set of modules whose initializers the interpreter has already run. Finally it imports with extensions loaded. Lean's `runInitAttrForMod` skips every recorded module, so no `[init]` of an imported module runs. The builtin extensions are still populated from the imported data, so instances, projections and attributes read the same as before. Only the extractor's own imports, which the driver's header loaded, have run their initializers; they are the tool.
+- **The Lake-built driver (#505).** It no longer gets its trace through imports. Its generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace` for every audited module, the mechanism the kernel-replay receipts use.
+- **Control:** `tests/roadmap/assurance/ForgedReport.lean`. Its initializer writes a marker file and prints a forged passing report.
+  - On the old extractor, the marker is written and the audit fails on two report lines.
+  - Now no marker appears, and the report is the real one: it rejects the module's `sorry`.
+- **Option (2), refusing `[init]` in audited modules: considered, not adopted.** By construction, the extractor never executes an audited module's initializers, and `ForgedReport.lean` is the control for that. A refusal would add little. It would also conflict with `tests/roadmap/assurance/MetaCode.lean`, which pins an `initialize`d cache that no theorem reaches as passing engine code, and with the root library's own `initialize`d attributes (`ZigLean/Sep/Full/AutoAttr.lean` and others). A variant limited to non-library modules would be a special case. The maintainer can revisit this.
 
 ## Related
 
