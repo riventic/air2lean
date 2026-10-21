@@ -59,11 +59,11 @@ theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
           (epFee_add γ e (a := Frac.one.half) (b := Frac.one.half) (Frac.half_pos (by decide)) (Frac.half_pos (by decide)))
   simp only [halfFees] at init reset
   fsym [init,
-    fun ctx Ac γ e n => Wrappers.alloc_of (fallocSpec ctx (buf A₀ Ac) γ e)
+    fun ctx Ac γ e n => Wrappers.alloc_of (vtp := vtp) (fallocSpec ctx (buf A₀ Ac) γ e)
       Frac.one.half n,
-    fun ctx Ac γ e s n bs => Wrappers.realloc_of (fallocSpec ctx (buf A₀ Ac) γ e)
+    fun ctx Ac γ e s n bs => Wrappers.realloc_of (vtp := vtp) (fallocSpec ctx (buf A₀ Ac) γ e)
       Frac.one.half s n bs,
-    fun ctx Ac γ e s bs => Wrappers.free_of (fallocSpec ctx (buf A₀ Ac) γ e)
+    fun ctx Ac γ e s bs => Wrappers.free_of (vtp := vtp) (fallocSpec ctx (buf A₀ Ac) γ e)
       Frac.one.half s bs,
     reset, fun (h : Heap) => EUpd.of_imp (@JunkAt.junk h)]
 
