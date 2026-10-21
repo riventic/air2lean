@@ -537,4 +537,517 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
       throwError "run-fact control did not require its caller fact"
   trivial
 
+/-! Task15 causal recursive-contract controls. -/
+
+namespace RecursiveGroup
+
+def descend (n : Nat) : MemM Unit := do
+  Zig.enterFrame
+  if n == 0 then pure () else descend (n - 1)
+  Zig.leaveFrame
+partial_fixpoint
+
+def pre (t S : Nat) (a : Nat × Nat) : FAssn :=
+  ⟪a.2 + frameBase * (a.1 + 1) ≤ S⟫ ⋆ (cur t ⋆ sp t S a.2)
+
+def post (t S : Nat) (a : Nat × Nat) (_ : Unit) : FAssn := cur t ⋆ sp t S a.2
+
+theorem self_total (t S : Nat) (a : Nat × Nat) :
+    FTotalTriple (pre t S a) (descend a.1) (post t S a) := by
+  refine FTotalTriple.rec_group (fun a : Nat × Nat => descend a.1)
+    (pre t S) (post t S) Prod.fst ?_ a
+  intro a smaller
+  fsym
+
+theorem self_thread_total (t S : Nat) (a : Nat × Nat) :
+    FTTotalTriple (pre t S a) (descend a.1) (post t S a) := by
+  refine FTTotalTriple.rec_group (fun a : Nat × Nat => descend a.1)
+    (pre t S) (post t S) Prod.fst ?_ a
+  intro a smaller
+  fsym
+
+/-- The general well-founded relation is not restricted to a Nat-valued measure. -/
+theorem pair_measure (t S : Nat) (a : Nat × Nat) :
+    FTotalTriple (pre t S a) (descend a.1) (post t S a) := by
+  refine FTotalTriple.rec_group_wf (fun a : Nat × Nat => descend a.1)
+    (pre t S) (post t S) id (InvImage.wf Prod.fst Nat.lt_wfRel.wf) ?_ a
+  intro a smaller
+  fsym
+
+/-- An impossible same-input IH still permits the one initial base-case entry. -/
+theorem initial_zero (t S D : Nat)
+    (smaller : ∀ a : Nat × Nat, a.1 < 0 →
+      FTotalTriple (pre t S a) (descend a.1) (post t S a)) :
+    FTotalTriple (pre t S (0, D)) (descend 0) (post t S (0, D)) := by
+  fsym
+
+/-- These deliberately retain the existing caller-supplied bounded unfolding behavior. -/
+theorem no_ih_total (t S D : Nat) :
+    FTotalTriple (pre t S (1, D)) (descend 1) (post t S (1, D)) := by
+  fsym [descend.eq_def]
+
+theorem no_ih_partial (t S D : Nat) :
+    FTriple (pre t S (1, D)) (descend 1) (post t S (1, D)) := by
+  fsym [descend.eq_def]
+
+/-- The relation cannot supply invocation data absent from the entire contract. -/
+theorem unrelated_conditional (t S D : Nat)
+    (unrelated : ∀ b : Nat, b < 0 →
+      FTotalTriple (pre t S (1, D)) (descend 1) (post t S (1, D))) :
+    FTotalTriple (pre t S (1, D)) (descend 1) (post t S (1, D)) := by
+  fsym [descend.eq_def]
+
+
+mutual
+def left (n : Nat) : MemM Nat := do
+  Zig.enterFrame
+  let out ← if n == 0 then pure 0 else do
+    right n
+    pure n
+  Zig.leaveFrame
+  pure out
+partial_fixpoint
+
+def right (n : Nat) : MemM Unit := do
+  Zig.enterFrame
+  if n == 0 then pure () else do
+    let _ ← left (n - 1)
+    pure ()
+  Zig.leaveFrame
+partial_fixpoint
+end
+
+inductive Invocation where
+  | left (n D : Nat)
+  | right (n D : Nat)
+
+def Return : Invocation → Type
+  | .left _ _ => Nat
+  | .right _ _ => Unit
+
+def code : (a : Invocation) → MemM (Return a)
+  | .left n _ => left n
+  | .right n _ => right n
+
+def rank : Invocation → Nat
+  | .left n _ => 2 * n + 1
+  | .right n _ => 2 * n
+
+def inv (t S : Nat) : Invocation → FAssn
+  | .left n D => ⟪D + frameBase * (2 * n + 2) ≤ S⟫ ⋆ (cur t ⋆ sp t S D)
+  | .right n D => ⟪D + frameBase * (2 * n + 1) ≤ S⟫ ⋆ (cur t ⋆ sp t S D)
+
+def out (t S : Nat) : (a : Invocation) → Return a → FAssn
+  | .left n D => fun v => ⟪v = n⟫ ⋆ (cur t ⋆ sp t S D)
+  | .right _ D => fun _ => cur t ⋆ sp t S D
+
+/-- One fsym for the whole tagged step: sibling entry state and dependent returns both matter.
+The left-to-right edge preserves n and decreases only the member rank. -/
+theorem mutual_total (t S : Nat) (a : Invocation) :
+    FTotalTriple (inv t S a) (code a) (out t S a) := by
+  refine FTotalTriple.rec_group code (inv t S) (out t S) rank ?_ a
+  intro a smaller
+  fsym
+
+/-- An inline dispatcher has the same positional boundary as a named definition. -/
+theorem mutual_inline_total (t S : Nat) (a : Invocation) :
+    FTotalTriple (inv t S a) (code a) (out t S a) := by
+  refine FTotalTriple.rec_group (B := Return)
+    (fun a : Invocation => match a with | .left n _ => left n | .right n _ => right n)
+    (inv t S) (out t S) rank ?_ a
+  intro a smaller
+  fsym
+
+def nestedCode (a : Invocation × Unit) : MemM (Return a.1) := code a.1
+
+/-- Splitting an outer tuple must preserve the inner dependent invocation anchor. -/
+theorem nested_total (t S : Nat) (a : Invocation × Unit) :
+    FTotalTriple (inv t S a.1) (nestedCode a) (out t S a.1) := by
+  refine FTotalTriple.rec_group nestedCode (fun a => inv t S a.1)
+    (fun a => out t S a.1) (fun a => rank a.1) ?_ a
+  intro a smaller
+  fsym
+
+def argOnly : Invocation → Nat
+  | .left n _ | .right n _ => n
+
+/-- Dropping the member rank exposes the exact nondecrease despite sufficient stack room. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ a : Invocation, argOnly a < 1 →
+        FTotalTriple (inv 0 (frameBase * 4) a) (code a) (out 0 (frameBase * 4) a)) →
+      FTotalTriple (inv 0 (frameBase * 4) (.left 1 0))
+        (left 1) (out 0 (frameBase * 4) (.left 1 0)))) none
+    Term.synthesizeSyntheticMVarsNoPostponing
+    let ty ← instantiateMVars ty
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+    unless gs.length == 1 do throwError "expected exactly the dropped-rank decrease"
+    gs[0]!.withContext do
+      let expected ← mkAppM ``Nat.lt #[mkNatLit 1, mkNatLit 1]
+      unless ← withDefault (isDefEq (← instantiateMVars (← gs[0]!.getType)) expected) do
+        throwError "the framed same-argument edge did not leave its actual 1 < 1 target: {← gs[0]!.getType}"
+    unless report.residuals.all (fun r => r.origin.reason != "fuel_exhausted") do
+      throwError "dropped rank permitted recursive body unfolding"
+  trivial
+
+/-- Compiler membership includes a sibling for which no contract was supplied. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ a : Nat × Nat, 2 * a.1 + 1 < 3 →
+        FTotalTriple (inv 0 (frameBase * 4) (.left a.1 a.2)) (left a.1)
+          (out 0 (frameBase * 4) (.left a.1 a.2))) →
+      FTotalTriple (inv 0 (frameBase * 4) (.left 1 0))
+        (left 1) (out 0 (frameBase * 4) (.left 1 0)))) none
+    Term.synthesizeSyntheticMVarsNoPostponing
+    let ty ← instantiateMVars ty
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+    unless gs.length == 1 do throwError "expected exactly the missing-member call"
+    gs[0]!.withContext do
+      let (_, _, _, _, c, _) ← view gs[0]!
+      let x := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
+      let expected ← mkAppM ``right #[mkNatLit 1]
+      unless ← withReducibleAndInstances (isDefEq (← recCommandHead x) expected) do
+        throwError "a missing member contract did not retain right 1"
+    unless report.residuals.all (fun r => r.origin.reason == "no_rule") do
+      throwError "a missing member was unfolded or replaced by an invented obligation"
+  trivial
+
+def repeats (a : Nat) : MemM Unit := repeats a
+partial_fixpoint
+
+/-- Negative targets are actual typed residuals, with and without an explicit caller equation.
+Existing compareRuns checks parity, assembled proof terms and original labels. -/
+example : True := by
+  run_tac do
+    for extra in #[#[], #[← `(repeats.eq_def)]] do
+      let ty ← Term.elabTerm (← `(∀ (a : Nat)
+        (smaller : ∀ b : Nat, b < a → FTotalTriple emp (repeats b) (fun _ => emp)),
+        FTotalTriple emp (repeats a) (fun _ => emp))) none
+      let (gs, report) ← compareRuns ty (fun g => Auto.run g (extra := extra))
+        (fun g => Auto.runReport g (extra := extra))
+      unless gs.length == 1 && report.status == "stopped" do
+        throwError "expected exactly the identical-argument decrease, not completion or fuel stop"
+      gs[0]!.withContext do
+        let some a := (← getLCtx).findDecl? (fun d =>
+          if d.userName.eraseMacroScopes == `a then some d else none)
+          | throwError "missing original input"
+        let expected ← mkAppM ``Nat.lt #[a.toExpr, a.toExpr]
+        unless ← withReducibleAndInstances (isDefEq (← instantiateMVars (← gs[0]!.getType)) expected) do
+          throwError "identical recursion: expected {expected}, got {← gs[0]!.getType}"
+      unless report.residuals.all (fun r => r.origin.reason != "fuel_exhausted") do
+        throwError "repeated body unfolding exhausted fuel"
+  trivial
+
+/-- Initial stack room is independent of the impossible smaller-call family. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(∀ (t S D : Nat)
+      (smaller : ∀ a : Nat × Nat, a.1 < 0 →
+        FTotalTriple (⟪a.2 + frameBase * a.1 ≤ S⟫ ⋆ (cur t ⋆ sp t S a.2))
+          (descend a.1) (post t S a)),
+      FTotalTriple (⟪D ≤ S⟫ ⋆ (cur t ⋆ sp t S D)) (descend 0) (post t S (0, D)))) none
+    let (gs, _) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+    unless gs.length == 1 do throwError "expected the actual one-frame-short obligation"
+    gs[0]!.withContext do
+      let lctx ← getLCtx
+      let some d := lctx.findDecl? (fun d =>
+        if d.userName.eraseMacroScopes == `D then some d else none)
+        | throwError "missing caller depth"
+      let some s := lctx.findDecl? (fun d =>
+        if d.userName.eraseMacroScopes == `S then some d else none)
+        | throwError "missing actual budget"
+      let depth ← mkAppM ``Nat.add #[d.toExpr, mkConst ``Zig.frameBase]
+      let expected ← mkAppM ``Nat.le #[depth, s.toExpr]
+      unless ← withReducibleAndInstances (isDefEq (← instantiateMVars (← gs[0]!.getType)) expected) do
+        throwError "stack shortage: expected {expected}, got {← gs[0]!.getType}"
+  trivial
+def caller (n : Nat) : MemM Unit := do
+  Zig.enterFrame
+  Zig.leaveFrame
+  descend n
+
+/-- An ordinary prefix cannot grant an initial entry to its nested group call. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(∀ (t S D : Nat)
+      (smaller : ∀ n : Nat, n < 0 →
+        FTotalTriple (pre t S (n, D)) (caller n) (post t S (n, D))),
+      FTotalTriple (pre t S (0, D)) (caller 0) (post t S (0, D)))) none
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let (_, g) ← g.mvarId!.intros
+    withRunCaches do
+      (← caches).userCtx.set (← g.withContext getLCtx)
+      unless (← recRoot? g).isNone do
+        throwError "ordinary caller prefix activated a nested entry"
+  trivial
+
+namespace CompleteContracts
+
+def settles (n : Nat) : MemM Unit := if n == 0 then pure () else settles 0
+partial_fixpoint
+
+def rank (n : Nat) : Nat := if n == 0 then 1 else 0
+
+theorem zero : FTotalTriple emp (settles 0) (fun _ => emp) := by
+  fsym [settles.eq_def]
+
+/-- A complete explicit contract is usable even though the active IH cannot decrease. -/
+theorem explicit_complete (n : Nat) : FTotalTriple emp (settles n) (fun _ => emp) := by
+  refine FTotalTriple.rec_group settles (fun _ => emp) (fun _ _ => emp) rank ?_ n
+  intro a smaller
+  fsym [zero]
+
+/-- The specialized contract belongs to the current context; no client rule argument is needed. -/
+theorem local_complete (n : Nat) : FTotalTriple emp (settles n) (fun _ => emp) := by
+  refine FTotalTriple.rec_group settles (fun _ => emp) (fun _ _ => emp) rank ?_ n
+  intro a smaller
+  have finished := zero
+  fsym
+
+/-- A quantified complete local contract uses the same forall instantiation as an explicit rule. -/
+theorem local_function_complete (n : Nat) : FTotalTriple emp (settles n) (fun _ => emp) := by
+  refine FTotalTriple.rec_group settles (fun _ => emp) (fun _ _ => emp) rank ?_ n
+  intro a smaller
+  have finished := explicit_complete
+  fsym
+
+theorem local_after_subst (a : Nat × Nat) :
+    FTotalTriple (⟪a.2 = 0⟫ ⋆ emp) (settles a.1) (fun _ => emp) := by
+  refine FTotalTriple.rec_group (fun a : Nat × Nat => settles a.1)
+    (fun a => ⟪a.2 = 0⟫ ⋆ emp) (fun _ _ => emp) (fun a => rank a.1) ?_ a
+  intro a smaller
+  have finished := zero
+  fsym
+
+theorem rejected (h : False) : FTotalTriple emp (settles 0) (fun _ => emp) := False.elim h
+
+/-- A failed ordinary candidate rolls back before a complete contract wins. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ b : Nat, rank b < rank 1 →
+        FTotalTriple emp (settles b) (fun _ => emp)) →
+      FTotalTriple emp (settles 1) (fun _ => emp))) none
+    let user := #[mkConst ``rejected, mkConst ``zero]
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g user)
+      (fun g => Auto.runReport g user) [``zero]
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "a rejected ordinary candidate hid the complete contract or leaked attribution"
+  trivial
+/-- Without a complete contract, the actual failed decrease remains visible. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ b : Nat, rank b < rank 1 →
+        FTotalTriple emp (settles b) (fun _ => emp)) →
+      FTotalTriple emp (settles 1) (fun _ => emp))) none
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+    unless gs.length == 1 do throwError "expected exactly the failed independent-contract decrease"
+    gs[0]!.withContext do
+      let expected ← mkAppM ``Nat.lt #[mkNatLit 1, mkNatLit 0]
+      unless ← withDefault (isDefEq (← instantiateMVars (← gs[0]!.getType)) expected) do
+        throwError "missing complete contract did not expose rank 0 < rank 1"
+    unless report.residuals.all (fun r => r.origin.reason != "fuel_exhausted") do
+      throwError "missing complete contract permitted body inlining"
+  trivial
+
+def needsStack (a : Nat × Nat) : FAssn :=
+  if a.1 == 1 then emp else sp 0 4096 a.2
+
+def remembers (a : Nat × Nat) (_ : Unit) : FAssn := ⟪a.2 = a.2⟫
+
+/-- A known root does not determine an absent recursive-call resource or frame. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ a : Nat × Nat, a.1 < 1 →
+        FTotalTriple (needsStack a) (settles a.1) (remembers a)) →
+      FTotalTriple (needsStack (1, 0)) (settles 1) (remembers (1, 0)))) none
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+    unless gs.length == 1 do throwError "expected the actual undetermined-resource call"
+    gs[0]!.withContext do
+      let (_, _, _, _, c, _) ← view gs[0]!
+      let x := if c.isAppOfArity ``Bind.bind 6 then c.getArg! 4 else c
+      let expected ← mkAppM ``settles #[mkNatLit 0]
+      unless ← withReducibleAndInstances (isDefEq x expected) do
+        throwError "missing stack frame was replaced by a guessed ghost or decrease"
+      if (← instantiateMVars (← gs[0]!.getType)).hasExprMVar then
+        throwError "undetermined-resource residual contains an invented unknown"
+    unless report.residuals.all (fun r => r.origin.reason == "no_rule") do
+      throwError "undetermined resource did not retain the actual call"
+  trivial
+
+section Registered
+
+attribute [local fsym] zero
+
+/-- The ordinary registered selector also beats the independently impossible IH edge. -/
+theorem registered_complete (n : Nat) : FTotalTriple emp (settles n) (fun _ => emp) := by
+  refine FTotalTriple.rec_group settles (fun _ => emp) (fun _ _ => emp) rank ?_ n
+  intro a smaller
+  fsym
+
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ b : Nat, rank b < rank 1 →
+        FTotalTriple emp (settles b) (fun _ => emp)) →
+      FTotalTriple emp (settles 1) (fun _ => emp))) none
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g) [``zero]
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "registered direct contract did not displace the false IH decrease"
+  trivial
+
+end Registered
+
+section AliasRegistered
+
+def zeroAlias := settles
+
+@[local fsym] theorem registered_alias : FTotalTriple emp (zeroAlias 0) (fun _ => emp) := zero
+
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ b : Nat, rank b < rank 1 →
+        FTotalTriple emp (settles b) (fun _ => emp)) →
+      FTotalTriple emp (settles 1) (fun _ => emp))) none
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+      [``registered_alias]
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "registered alias contract was hidden by its raw key"
+  trivial
+
+end AliasRegistered
+
+section DecidedRegistered
+
+@[local fsym] theorem registered_decided :
+    FTotalTriple emp (dite (true = true) (fun _ => settles 0) (fun _ => repeats 0))
+      (fun _ => emp) := by
+  simpa using zero
+
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(
+      (smaller : ∀ b : Nat, rank b < rank 1 →
+        FTotalTriple emp (settles b) (fun _ => emp)) →
+      FTotalTriple emp (settles 1) (fun _ => emp))) none
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+      [``registered_decided]
+    unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
+      throwError "registered constructor-selected contract lost its equality transport"
+  trivial
+
+end DecidedRegistered
+
+end CompleteContracts
+
+def alias01 := descend
+def alias02 := alias01
+def alias03 := alias02
+def alias04 := alias03
+def alias05 := alias04
+def alias06 := alias05
+def alias07 := alias06
+def alias08 := alias07
+def alias09 := alias08
+def alias10 := alias09
+def alias11 := alias10
+def alias12 := alias11
+def alias13 := alias12
+def alias14 := alias13
+def alias15 := alias14
+def alias16 := alias15
+def alias17 := alias16
+
+/-- Safe aliases are not limited by an arbitrary unfolding-count heuristic. -/
+theorem aliases_total (t S : Nat) (a : Nat × Nat) :
+    FTotalTriple (pre t S a) (alias17 a.1) (post t S a) := by
+  refine FTotalTriple.rec_group (fun a : Nat × Nat => alias17 a.1)
+    (pre t S) (post t S) Prod.fst ?_ a
+  intro a smaller
+  fsym
+
+def routed (n : Nat) : MemM Unit :=
+  if n == 0 then pure () else (fun f : Nat → MemM Unit => f (n - 1)) (fun m => routed m)
+partial_fixpoint
+
+theorem routed_total (n : Nat) : FTotalTriple emp (routed n) (fun _ => emp) := by
+  refine FTotalTriple.rec_group routed (fun _ => emp) (fun _ _ => emp) id ?_ n
+  intro a smaller
+  fsym
+
+/-- The invocation can be entirely logical data, inferred from owned memory. -/
+def drain (p : Ptr) : MemM Unit := do
+  let n ← Zig.load (BitVec 64) 8 p
+  if n == 0 then pure () else do
+    let next ← StateT.lift (Zig.sub false n 1)
+    Zig.store 8 p next
+    drain p
+partial_fixpoint
+
+theorem ghost_memory_total (p : Ptr) (w : BitVec 64) :
+    FTotalTriple (up (pts p 8 w)) (drain p) (fun _ => up (pts p 8 (0 : BitVec 64))) := by
+  refine FTotalTriple.rec_group (fun _ : BitVec 64 => drain p)
+    (fun w => up (pts p 8 w)) (fun _ _ => up (pts p 8 (0 : BitVec 64))) BitVec.toNat ?_ w
+  intro a smaller
+  fsym
+
+/-- A condition view touches neither branch bodies nor the traversal/cache state. -/
+example : True := by
+  run_tac do
+    let expected ← Term.elabTerm (← `(descend 0)) none
+    let other ← Term.elabTerm (← `(repeats 0)) none
+    let some (_, members) ← recMember? expected | throwError "missing compiler member metadata"
+    withRunCaches do
+      (← caches).recBoundary.set (some { members, invocation := mkNatLit 0 })
+      for term in #[← `(if true then descend 0 else repeats 0),
+          ← `(if false then repeats 0 else descend 0),
+          ← `(dite (true = true) (fun _ => descend 0) (fun _ => repeats 0))] do
+        let c ← Term.elabTerm term none
+        Term.synthesizeSyntheticMVarsNoPostponing
+        let c ← instantiateMVars c
+        let some r ← recConditionalView? c
+          | throwError "constructor condition was not decided: {c}"
+        unless ← withReducibleAndInstances (isDefEq r.expr expected) do
+          throwError "conditional reducer executed or changed the selected member"
+        let pf ← r.getProof' c
+        unless ← withReducibleAndInstances (isDefEq (← inferType pf) (← mkEq c r.expr)) do
+          throwError "conditional view discarded its equality proof"
+        if (pf.find? (fun e => e.isConstOf ``descend.eq_def || e.isConstOf ``repeats.eq_def)).isSome then
+          throwError "conditional proof exposed a member equation"
+      unless (← (← caches).prog.get).isNone &&
+          ((← (← caches).recBoundary.get).map (·.entered)) == some false do
+        throwError "condition reduction contaminated program context or consumed entry"
+    withLocalDeclD `flag (mkConst ``Bool) fun flag => do
+      let c ← mkAppM ``ite #[← mkEq flag (mkConst ``Bool.true), expected, other]
+      unless (← recConditionalView? c).isNone do
+        throwError "an unknown condition triggered a search or case split"
+  trivial
+
+def flagged (a : Bool × Nat) : MemM Unit :=
+  if a.1 then descend a.2 else repeats a.2
+
+/-- Constructor-specialized discovery does not license an unknown initial conditional walk. -/
+example : True := by
+  run_tac do
+    let ty ← Term.elabTerm (← `(∀ (t S D : Nat) (a : Bool × Nat)
+      (smaller : ∀ b : Bool × Nat, b.2 < a.2 →
+        FTotalTriple (pre t S (b.2, D)) (flagged b) (post t S (b.2, D))),
+      FTotalTriple (pre t S (a.2, D)) (flagged a) (post t S (a.2, D)))) none
+    let (gs, report) ← compareRuns ty (fun g => Auto.run g) (fun g => Auto.runReport g)
+    unless gs.length == 1 do throwError "unknown initial ite was walked instead of left open"
+    gs[0]!.withContext do
+      let (_, _, _, _, c, _) ← view gs[0]!
+      unless c.isAppOf ``flagged && recUnknownConditional (← recCommandHead c) do
+        throwError "unknown entry changed its actual program or consumed a member body"
+    unless report.residuals.all (fun r => r.origin.reason == "no_rule") do
+      throwError "unknown initial conditional lost its explicit no-rule boundary"
+  trivial
+
+end RecursiveGroup
+
 end SepAuto.Report

@@ -733,7 +733,9 @@ The supplied invocation type is a tagged union of the members' arguments and the
 contract parameters; each invocation has its own precondition, postcondition and result type.
 The measure maps invocations into any well-founded order. Its natural-number specialization,
 `FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
-the latter is itself an instance of this rule.
+the latter is itself an instance of this rule. `FTTotalTriple.rec_group_wf` and `rec_group`
+(`Full/ThreadLoop`) retain the stronger thread-total contract, including locality and frame
+safety, for every smaller invocation.
 
 The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
 unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
@@ -741,6 +743,22 @@ smaller measures. The induction is in the library once for the whole group. Logi
 may change at a recursive call without changing the program arguments: a memory-backed
 contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
 depth after `enterFrame`.
+
+After applying the group rule and introducing the current invocation and smaller-call
+contract, one `fsym` walks the step. It recognizes the compiler's complete recursive group
+through proof-carrying aliases and constructor-known dispatch. The full current contract must
+determine the invocation, including logical data supplied only by its pre/postcondition; the
+measure cannot supply missing data. Exactly one positional own-member equation is exposed.
+Every later occurrence of any member, including an identical call or a sibling lacking a
+contract, must use the ordinary contract selector and frame planner. Complete explicit, local
+or registered contracts have priority over a smaller-call contract. A failed decrease remains
+its actual side goal; it does not permit another body unfolding.
+
+An unknown initial conditional is still a refusal boundary. Constructor-decided condition
+views do not authorize a branch search or entry after an ordinary caller prefix. Without a
+recognized local smaller-call family, the existing bounded unfolding behavior is unchanged.
+These engine rules do not complete the remaining concrete recursive clients or protocol/P03
+integration; the `recursive-group-total` engine-ledger row remains open.
 
 The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
 consume and restore the stack-depth token `sp t S D`, with the room requirement proved from

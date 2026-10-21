@@ -247,6 +247,12 @@ attribute [fsym_arith] BitVec.toNat_ofNat BitVec.toNat_ofInt BitVec.toNat_add Bi
   Bool.not_eq_true' beq_iff_eq bne_iff_ne Int.natCast_add Int.natCast_mul Int.toNat_natCast
   Bool.or_eq_true Bool.and_eq_true Nat.not_lt Nat.not_le BlockKind.mapped.injEq
 
+-- The fixed recursive frame charge is a numeral in stack-room arithmetic.
+attribute [fsym_arith] Zig.frameBase
+
+-- Pulling back a well-founded measure exposes its underlying arithmetic relation.
+attribute [fsym_arith] InvImage id WellFoundedRelation.rel
+
 open Lean Meta Simp in
 /-- `x &&& m` for a literal mask `m = 2 ^ k - 1`: `x % 2 ^ k` (for `omega`). -/
 simproc [fsym_arith] reduceLandMask ((_ : Nat) &&& _) := fun e => do
