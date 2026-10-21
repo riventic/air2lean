@@ -6,6 +6,8 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -1225,6 +1227,75 @@ class RepositoryTests(unittest.TestCase):
 
     def test_assurance_fixtures_are_excluded(self):
         self.assertFalse(any(f.startswith("tests/roadmap/assurance/") for f, _ in self.entries))
+
+
+def strip_comments_reference(text: str) -> str:
+    """`premises.strip_comments` one character at a time (its definition before the run skipping)."""
+    out = []
+    i, n, depth = 0, len(text), 0
+    while i < n:
+        c = text[i]
+        if depth:
+            if text.startswith("/-", i):
+                depth += 1
+                i += 2
+            elif text.startswith("-/", i):
+                depth -= 1
+                i += 2
+            else:
+                out.append("\n" if c == "\n" else " ")
+                i += 1
+            continue
+        if text.startswith("/-", i):
+            depth = 1
+            i += 2
+            out.append("  ")
+            continue
+        if text.startswith("--", i):
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            out.append(" " * (end - i))
+            i = end
+            continue
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            out.append('""')
+            i = j + 1
+            continue
+        if c == "'" and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "_'!?")):
+            match = re.match(r"'(?:\\.|[^\\'\n])'", text[i:i + 8])
+            if match:
+                out.append(" " * len(match.group(0)))
+                i += len(match.group(0))
+                continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+class StripCommentsTests(unittest.TestCase):
+    """The fast `strip_comments` equals the character-at-a-time definition on every tracked Lean
+    file and on edge cases (nested and unclosed comments, delimiters at the ends, strings with
+    escapes, character literals, `-/-` and `/-/` overlaps, non-ASCII text)."""
+
+    CASES = ["", "-", "/", "'", '"', "--", "/-", "-/", "/-/", "-/-", "/--/", "/- /- -/ x -/ y",
+             "a /- b\nc -/ d", "unclosed /- comment\nlines", "x -- c\ny", "x--", 'a "s\\"t" b',
+             'a "unterminated', "f 'a' g' 'b' h'' '\\n' '", "λ x ⟨y⟩ -- ∀\n/- ∃ -/ z", "a-b/c'd\"e\"",
+             "/-! doc -/\ndef x := 1 -/-/ /-/-/", "''' '-' '/'", "a\\\"b"]
+
+    def test_equals_reference(self):
+        for text in self.CASES:
+            with self.subTest(text=text):
+                self.assertEqual(premises.strip_comments(text), strip_comments_reference(text))
+        files = subprocess.run(["git", "ls-files", "*.lean"], cwd=ROOT, text=True, capture_output=True,
+                               check=True).stdout.split()
+        self.assertTrue(files)
+        for name in files:
+            text = (ROOT / name).read_text(encoding="utf-8", errors="replace")
+            with self.subTest(file=name):
+                self.assertEqual(premises.strip_comments(text), strip_comments_reference(text))
 
 
 if __name__ == "__main__":

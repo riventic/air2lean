@@ -444,19 +444,28 @@ class LakeExtractionTests(unittest.TestCase):
         self.package.mkdir()
         (self.root / 'lean-toolchain').write_text('leanprover/lean4:v1\n')
         (self.package / 'lakefile.toml').write_text('name = "fixtures"\n')
-        self.workspace = self.package / '.lake/extraction'
-        self.built = []
-        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')]
+        (self.root / 'lakefile.toml').write_text('name = "air2lean"\n')
+        lib = self.package / '.lake/build/lib/lean'
+        lib.mkdir(parents=True)
+        (lib / 'M.olean').write_bytes(b'olean')  # the audited module, built by the fixtures package
+        self.extraction = self.package / '.lake/extraction'
+        self.built, self.workspaces = [], []
+        self.roots = [str(base / 'root/.lake/build/lib/lean'), str(lib)]
         # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
-        self.own = str(self.workspace / '.lake/build/lib/lean')
+        self.own = 'OWN'
         self.resolved = [*self.roots, self.own]
 
         def lake(command, cwd, **kwargs):  # what `lake build MODULE` prints for the driver
             if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
-                code = 0 if self.resolved is not None else 1
-                return subprocess.CompletedProcess(command, code, os.pathsep.join(self.resolved or []) + '\n', '')
+                if self.resolved is None:
+                    return subprocess.CompletedProcess(command, 1, '', '')
+                own = str(Path(cwd) / '.lake/build/lib/lean')
+                entries = [e for e in self.resolved if e != 'OWN'] if Path(cwd) == self.package else [
+                    own if e == 'OWN' else e for e in self.resolved]
+                return subprocess.CompletedProcess(command, 0, os.pathsep.join(entries) + '\n', '')
             module = command[-1]
             self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
+            self.workspaces.append(Path(cwd))
             path = module.replace('.', '/') + '.lean'
             return subprocess.CompletedProcess(command, 0, f'info: {path}:9:0: {assumptions.MARKER}{{}}\n', '')
 
@@ -465,7 +474,19 @@ class LakeExtractionTests(unittest.TestCase):
         self.addCleanup(patch.stop)
 
     def extract(self, runtime='a' * 64, binding=None):
-        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root, binding)
+        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root,
+                                           binding, ['M'])
+
+    def test_the_driver_imports_no_audited_module_and_needs_its_traces(self):
+        self.assertEqual(self.extract(), ['{}'])
+        workspace = self.workspaces[0]
+        self.assertTrue(workspace.is_relative_to(self.extraction))
+        source = next(workspace.rglob('M*.lean'))
+        self.assertNotIn('import M', source.read_text())
+        manifest = tomllib.loads((workspace / 'lakefile.toml').read_text())
+        self.assertEqual(manifest['lean_lib'][0]['needs'], ['@fixtures/+M:olean', '@fixtures/+M:depTrace'])
+        (self.package / '.lake/build/lib/lean/M.olean').unlink()  # no package builds it
+        self.assertIsNone(self.extract())
 
     def test_a_bound_lookup_path_is_used_only_as_lake_resolves_it(self):
         binding = {'roots': list(self.roots), 'sha256': 'c' * 64}
@@ -484,13 +505,13 @@ class LakeExtractionTests(unittest.TestCase):
         self.resolved = [self.own, *self.roots, self.own]  # the driver library twice
         self.assertIsNone(self.extract(binding=binding))
         self.resolved = [*self.roots, self.own]
-        (self.workspace / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
+        (self.workspaces[0] / '.lake/build/lib/lean/Shadow').mkdir(parents=True)  # a name of its own
         self.assertIsNone(self.extract(binding=binding))
         self.assertEqual(len(self.built), 2)
 
     def test_report_line_and_unchanged_driver(self):
         self.assertEqual(self.extract(), ['{}'])
-        source = next(self.workspace.rglob('M*.lean'))
+        source = next(self.extraction.rglob('M*.lean'))
         written = source.stat().st_mtime_ns
         self.assertEqual(self.extract(), ['{}'])  # same inputs: the same driver, not rewritten
         self.assertEqual((self.built[0], source.stat().st_mtime_ns), (self.built[1], written))
@@ -500,7 +521,8 @@ class LakeExtractionTests(unittest.TestCase):
         (self.root / 'lean-toolchain').write_text('leanprover/lean4:v2\n')  # only the root pin changes
         self.extract()
         self.assertEqual([pin for _, pin in self.built], ['leanprover/lean4:v1\n', 'leanprover/lean4:v2\n'])
-        self.assertEqual((self.workspace / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+        self.assertEqual((self.workspaces[1] / 'lean-toolchain').read_text(), 'leanprover/lean4:v2\n')
+        self.assertEqual(self.workspaces[0], self.workspaces[1])  # the same driver's workspace
 
     def test_a_changed_runtime_is_another_driver(self):
         self.extract('a' * 64)
