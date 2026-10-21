@@ -39,6 +39,13 @@ Roadmap requirements resume on the framework afterwards. Parked tracks with push
 
 The register below counts <!-- register:counts -->**90 requirements: 45 complete, 34 partial, 2 open and 9 research**<!-- /register:counts --> (generated from `assurance/register/`); each PR updates its own rows.
 
+### Merged to main on 2026-10-21
+
+| PR | Content |
+|---|---|
+| [#548](https://github.com/riventic/air2lean/pull/548) | Premises OSF-01/OSF-02 state Linux's futex alignment check (`-EINVAL` before the word read or queue lookup); the model change is [#465](https://github.com/riventic/air2lean/pull/465). |
+| [#545](https://github.com/riventic/air2lean/pull/545) | Build speed: the claims fixtures are the Lake library `Claims`, with a shared replay cache and parallel CLI checks. |
+
 ### Merged to main on 2026-10-20
 
 | PR | Content |
@@ -74,6 +81,10 @@ The register below counts <!-- register:counts -->**90 requirements: 45 complete
 | [#537](https://github.com/riventic/air2lean/pull/537) | Docs: this table lists #525-#535; the "One proof logic" row's legacy count is 41. |
 | [#538](https://github.com/riventic/air2lean/pull/538), [#505](https://github.com/riventic/air2lean/pull/505) | Build speed: `full-build` takes one admission for all phases (#538); `fixtures.py audit` builds the extractor's driver with Lake (`assumptions.py --extract-in`, #505). |
 | [#539](https://github.com/riventic/air2lean/pull/539) | Architecture audit E1 (open, FAIL-OPEN): the assurance extractor imports audited modules, so their `initialize` code runs in the process that writes the report ([soundness-2026-10-20](docs/architecture-audit/soundness-2026-10-20.md)). |
+| [#542](https://github.com/riventic/air2lean/pull/542) | Docs: this table lists #505, #523 and #536-#539. |
+| [#541](https://github.com/riventic/air2lean/pull/541), [#547](https://github.com/riventic/air2lean/pull/547) | Full-state atomic word rules for 32- and 64-bit words (#541); rest transfer (`Inv.takeRest`/`Inv.giveRest`) and the admitted-reader load rule (#547). |
+| [#540](https://github.com/riventic/air2lean/pull/540), [#546](https://github.com/riventic/air2lean/pull/546) | Build speed: kernel replay as Lake-built receipts that never import audited code (#540); `fsym` is precompiled to native code, with byte-identical `.olean` files (#546). |
+| [#529](https://github.com/riventic/air2lean/pull/529) | `fsym` applies local proof functions; the four condition-signal bodies are one `fsym` call each over one outside-or-holding contract. |
 
 ### Merged to main on 2026-10-19
 
