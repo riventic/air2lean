@@ -96,6 +96,37 @@ class Output(unittest.TestCase):
     def test_jobs_see_a_single_worker(self):
         self.assertEqual(run_par('--jobs', '4', '--', 'bash', '-c', 'echo $AIR2LEAN_JOBS', ':::', 'x')[1], '1\n')
 
+    def test_order_and_memory_requests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # Each job records, when it starts, itself and the jobs running then.
+            job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
+                   f'sleep 1; rm {tmp}/run.$JOB')
+            requests = [600, 600, 300, 300, 300]
+            jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
+                    for i, m in enumerate(requests)]
+            with open(os.devnull, 'wb') as null:
+                self.assertEqual(par.run(jobs, 5, null, null, order=[4, 3, 2, 1, 0], mem_budget_mib=1000), [0] * 5)
+            seen = [line.split() for line in (Path(tmp) / 'seen').read_text().splitlines()]
+        self.assertEqual(sorted(s[0] for s in seen[:3]), ['2', '3', '4'])  # the order, within the budget
+        self.assertEqual([s[0] for s in seen[3:]], ['1', '0'])
+        for _started, *running in seen:  # the running jobs' requests never exceed the budget
+            self.assertLessEqual(sum(requests[int(r.split('.')[1])] for r in running), 1000)
+        with self.assertRaises(ValueError):
+            par.run(jobs, 1, order=[0, 0, 1, 2, 3])
+
+    def test_a_small_job_passes_a_waiting_large_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
+                   f'sleep 1; rm {tmp}/run.$JOB')
+            # 900 does not fit beside 800, 100 does: it starts at once instead of waiting behind 900.
+            jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
+                    for i, m in enumerate([800, 900, 100])]
+            with open(os.devnull, 'wb') as null:
+                self.assertEqual(par.run(jobs, 3, null, null, mem_budget_mib=1000), [0] * 3)
+            seen = {line.split()[0]: line.split()[1:] for line in (Path(tmp) / 'seen').read_text().splitlines()}
+        self.assertEqual(sorted(seen['2']), ['run.0', 'run.2'])
+        self.assertEqual(seen['1'], ['run.1'])
+
     def test_stats(self):
         # A child that holds 64 MiB for a few samples: its group's peak and its kind are recorded.
         hold = f'{sys.executable} -c "x = bytearray(64 << 20); import time; time.sleep(3 * {par.SAMPLE_SECONDS})"'

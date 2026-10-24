@@ -76,7 +76,7 @@ mkdir -p "$logs"
 # One admission for the whole build: this script runs again inside one guard, and each phase's
 # guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The phases
 # keep their own limits and reports, each within $rss (the fixture checks' guard,
-# scripts/fixture-checks.sh: 11000 MiB). A phase guard above it fails (inheritance_refused).
+# scripts/fixture-checks.sh: all of it). A phase guard above it fails (inheritance_refused).
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
   [ "$fixtures" = 1 ] || inner+=(--no-fixtures)
@@ -124,5 +124,8 @@ jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certif
 # in parallel, and two Lake builds of one workspace must not build the same module at once.
 if [ "$fixtures" = 1 ]; then
   guarded fixtures-lean "$PWD" python3 -B scripts/fixtures.py build
-  scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
+  # Within this build's admission ($rss): the units share it, the longest first, each admitted by
+  # its measured peak (scripts/fixture-checks.py `schedule`).
+  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 \
+    || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi
