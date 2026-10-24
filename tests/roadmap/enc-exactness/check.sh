@@ -3,9 +3,12 @@
 #
 #   check.sh [--check]            translate each retained export (0.14.1 0.15.2 0.16.0 0.17.0) of
 #                                 enc_exactness.zig and opaque_bytes.zig, compare with
-#                                 gen/<version>/, build the translations, check the kernel proofs
-#                                 of Model.lean and Rows.lean, and compare the model's lines with
-#                                 the recorded ReleaseSafe (LLVM) native outputs
+#                                 EncExactness/<version>/{Gen,Opaque}.lean, check that each
+#                                 version's Model.lean is the 0.17.0 one with the version renamed,
+#                                 build the library EncExactness (tests/roadmap/lakefile.toml: the
+#                                 translations, the kernel proofs of the models and of
+#                                 EncExactness/Rows.lean), audit their axioms, and compare each
+#                                 model's lines with the recorded ReleaseSafe (LLVM) native outputs
 #                                 expected/<version>-{x86_64,aarch64}-ReleaseSafe.txt
 #   check.sh --native VERSION     build native.zig with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE)
 #                                 for x86_64-linux-musl and aarch64-linux-musl (ReleaseSafe and
@@ -17,8 +20,8 @@
 #                                 `Dialect.intExtOrder?` on that backend)
 #   check.sh --export VERSION DIR write fresh AIR with a patched Zig VERSION (AIR2LEAN_ZIG_AIR)
 #
-# A model line `unspecified` matches any native value. Needs
-# `lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas`; run in the serialized build queue.
+# A model line `unspecified` matches any native value. Needs a built translator; Lake builds the
+# library with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py).
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -83,38 +86,45 @@ case "${1:---check}" in
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native VERSION|--export VERSION DIR]' >&2; exit 2 ;;
 esac
-python3 -B scripts/lean-deps.py --build "$dir"
-
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-enc-exactness.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+primary="$dir/EncExactness/V0_17_0/Model.lean"
+modules=(EncExactness.Rows) mains=() theorems=()
+for v in "${versions[@]}"; do
+  t="V${v//./_}"
+  w="$work/$v"
+  mkdir -p "$w"
+  # The retained translations are the fresh ones, byte for byte (Lake builds the retained files).
+  "$translator" "$dir/air/$v/enc_exactness" -o "$w/Gen.lean" --namespace "EncExactness.$t" --prefix enc_exactness.
+  cmp "$w/Gen.lean" "$dir/EncExactness/$t/Gen.lean"
+  # Model-handle bytes (docs/architecture-audit/model-handle-bytes.md): translated, read as no value.
+  "$translator" "$dir/air/$v/opaque_bytes" -o "$w/Opaque.lean" \
+    --namespace "EncExactness.$t.Opaque" --prefix opaque_bytes.
+  cmp "$w/Opaque.lean" "$dir/EncExactness/$t/Opaque.lean"
+  # Every version's model states the same theorems: the 0.17.0 one, the version renamed.
+  [ "$t" = V0_17_0 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_0=$t"
+  modules+=("EncExactness.$t.Model")
+  mains+=("EncExactness.$t.Model:EncExactness.$t.Model.main")
+  theorems+=(--declaration "EncExactness.$t.Model.i24RoundTrip_exact"
+             --declaration "EncExactness.$t.Model.allocatorWord_unspecified")
+done
+# The library: the translations, the models and the version-independent regression rows
+# (EncExactness/Rows.lean: one row per value kind, exact round trip and foreign bytes).
+python3 -B scripts/fixtures.py build EncExactness
+# Compiled and audited (axioms, sorry, kernel replay), not only run: they are indexed (F2).
+python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}" \
+  --declaration EncRows.row_f32_exact --declaration EncRows.row_f80_padding
+python3 -B scripts/fixtures.py run "$work/lines" "${mains[@]}"
 for v in "${versions[@]}"; do
   w="$work/$v"
-  mkdir -p "$w/EncExactness"
-  "$translator" "$dir/air/$v/enc_exactness" -o "$w/EncExactness/Gen.lean" --namespace EncExactness --prefix enc_exactness.
-  cmp "$w/EncExactness/Gen.lean" "$dir/gen/$v/EncExactness.lean"
-  # Model-handle bytes (docs/architecture-audit/model-handle-bytes.md): translated, read as no value.
-  "$translator" "$dir/air/$v/opaque_bytes" -o "$w/EncExactness/Opaque.lean" \
-    --namespace EncExactness.Opaque --prefix opaque_bytes.
-  cmp "$w/EncExactness/Opaque.lean" "$dir/gen/$v/Opaque.lean"
-  lp="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-  for m in Gen Opaque; do
-    LEAN_PATH="$lp" "${lean_cmd[@]}" -R "$w" -o "$w/EncExactness/$m.olean" "$w/EncExactness/$m.lean"
-  done
-  cp "$dir/Model.lean" "$w/"
-  LEAN_PATH="$lp" "${lean_cmd[@]}" -R "$w" --run "$w/Model.lean" > "$w/Model.txt" ||
-    { cat "$w/Model.txt" >&2; exit 1; }
-  # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
-  python3 -B scripts/theorem_universe.py gate "$w/Model.lean" --root "$w" --lean-path "$w" \
-    --output-dir "$w/universe" --replay-cache "$work/replay-cache.json" > /dev/null
+  lines="$work/lines/EncExactness.V${v//./_}.Model.main.txt"
   # The model's lines against the retained native observations of both targets.
   for entry in "${arches[@]}"; do
-    compare "$w/Model.txt" "$dir/expected/$v-${entry%%:*}-ReleaseSafe.txt"
+    compare "$lines" "$dir/expected/$v-${entry%%:*}-ReleaseSafe.txt"
   done
-  echo "$v: translation, kernel proofs and $(wc -l < "$w/Model.txt" | tr -d ' ') model lines match x86_64 and aarch64"
+  echo "$v: translation, kernel proofs and $(wc -l < "$lines" | tr -d ' ') model lines match x86_64 and aarch64"
   # The same AIR under a profile whose backend has no known padding encoding (`Dialect.intPadding`
   # `unknown`): a legacy profile (no backend) and a backend other than LLVM and self-hosted
   # x86_64. Both reject the integers with padding bits in memory instead of guessing an encoding.
@@ -143,7 +153,4 @@ PY
   done
   echo "$v: a legacy profile and an unknown backend reject integers with padding bits in memory"
 done
-# One regression row per value kind (exact round trip, foreign bytes), version-independent. It
-# imports only library modules, so the theorem universe audits it with the tree.
-LEAN_PATH="$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" "${lean_cmd[@]}" "$dir/Rows.lean"
 echo 'enc-exactness translation, proof and native-agreement gates passed'

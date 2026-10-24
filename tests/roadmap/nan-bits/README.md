@@ -10,8 +10,8 @@ exact bits, and so does every float that is not a NaN.
 |---|---|
 | `nan_bits.zig` | The cases: a store read back through `*const u32`/`*const u64`, an `extern union`, `@bitCast` of an array and a vector, an `extern struct` read as one integer, `@memcpy` into an integer, a finite quotient, NaN constants stored and in a global initializer, and a stored NaN read back as a float. Compiles on 0.14.1, 0.15.2, 0.16.0 and 0.17.0 |
 | `air/<version>/nan_bits/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
-| `gen/<version>/NanBits.lean` | Their retained translations |
-| `Model.lean` | Kernel-checked results (`decide +kernel`) of each translation, then `main` prints `native.zig`'s lines |
+| `NanBits/<version>/Gen.lean` | Their retained translations (`<version>` as a name: `V0_17_0`) |
+| `NanBits/<version>/Model.lean` | Kernel-checked results (`decide +kernel`) of each translation, then `main` prints `native.zig`'s lines. Written for 0.17.0; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `native.zig`, `expected/<version>-<arch>.txt` | The native program (volatile operands) and its output on x86_64-linux-musl and aarch64-linux-musl, ReleaseSafe and Debug |
 
 ```sh

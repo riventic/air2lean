@@ -1,6 +1,6 @@
 //! T03: atomics, futexes, threads and the allocator model on a big-endian target. Every function
 //! observes byte order: atomic values are read back through their bytes, and bytes written
-//! plainly are read atomically. `concurrency_native.zig` prints each case; `ConcDiff.lean` prints
+//! plainly are read atomically. `concurrency_native.zig` prints each case; `BigEndian/Conc/*/*/Diff.lean` prints
 //! the model's lines.
 const std = @import("std");
 

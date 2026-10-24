@@ -105,6 +105,54 @@ class Mutant(Repo):
                                      ["did not evaluate to"]), 1)
 
 
+class Instance(unittest.TestCase):
+    """`fixtures.py instance`: an instance is its primary with whole name components renamed, in
+    text and path; a drifted instance, a partial-name match or an absent name fails."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-instance-test.")
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        self.primary = self.dir / "Fix/V0_17_0/Model.lean"
+        self.primary.parent.mkdir(parents=True)
+        self.primary.write_text("import Fix.V0_17_0.Gen\nnamespace Fix.V0_17_0.Model\n"
+                                "-- XV0_17_0 V0_17_0x stay\nend Fix.V0_17_0.Model\n")
+        self.instance = self.dir / "Fix/V0_14_1/Model.lean"
+
+    def test_write_then_check(self):
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], True), 0)
+        self.assertEqual(self.instance.read_text(), "import Fix.V0_14_1.Gen\nnamespace Fix.V0_14_1.Model\n"
+                         "-- XV0_17_0 V0_17_0x stay\nend Fix.V0_14_1.Model\n")
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 0)
+
+    def test_drift_fails(self):
+        fx.instance(self.primary, ["V0_17_0=V0_14_1"], True)
+        self.instance.write_text(self.instance.read_text() + "theorem extra : True := trivial\n")
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 1)
+
+    def test_missing_instance_fails(self):
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 1)
+
+    def test_absent_name_fails(self):
+        with self.assertRaises(SystemExit):
+            fx.instance(self.primary, ["V0_16_0=V0_14_1"], False)
+
+
+class Run(Repo):
+    def test_runs_built_modules_only(self):
+        self.write("tests/roadmap/a/A/Main.lean", 'namespace A\ndef main : IO Unit := IO.println "a line"\nend A\n')
+        self.fixtures([("A", "a", '["A.+"]')])
+        out = self.repo / "out"
+        # Not built yet: the run refuses instead of loading a stale or missing module.
+        self.assertEqual(fx.run(out, ["A.Main:A.main"]), 1)
+        self.assertEqual(fx.build(["A"]), 0)
+        self.assertEqual(fx.run(out, ["A.Main:A.main"]), 0)
+        self.assertEqual((out / "A.main.txt").read_text(), "a line\n")
+        # A changed source is out of date until it is built again.
+        self.write("tests/roadmap/a/A/Main.lean", 'namespace A\ndef main : IO Unit := IO.println "b"\nend A\n')
+        self.assertEqual(fx.run(out, ["A.Main:A.main"]), 1)
+
+
 class Audit(unittest.TestCase):
     """Controls of `fixtures.py audit` against this repository's extractor (tools.Assurance,
     built by scripts/assumptions.py): a Lake-built module with a `sorry` or a non-standard axiom

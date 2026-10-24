@@ -5,6 +5,8 @@
     python3 -B scripts/fixtures.py audit MODULE... [--declaration NAME]... [--output FILE]
     python3 -B scripts/fixtures.py audit --library LIB [MODULE...] [--declaration NAME]...
     python3 -B scripts/fixtures.py mutant NAME --src DIR --fails MODULE [--expect TEXT]...
+    python3 -B scripts/fixtures.py instance PRIMARY --subst OLD=NEW... [--write]
+    python3 -B scripts/fixtures.py run OUTDIR MODULE:DECL...
     python3 -B scripts/fixtures.py files
 
 Every Lean file of a converted fixture is elaborated by Lake, in one mode:
@@ -35,6 +37,14 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   MODULE (so its imports built) and an error is reported in MODULE's source; each `--expect`
   text must occur in the output. A failed import, a missing module or a killed process is not a
   rejection of the mutant.
+- `instance`: a module stated once for several Zig versions or targets (one module per
+  translation, as Lake needs distinct module names). PRIMARY is the hand-written instance;
+  another instance is PRIMARY with each OLD identifier token (`V0_17_0`, a whole name component)
+  replaced by NEW, in its text and its path. Fails unless the instance file equals that text
+  byte for byte (`--write`: writes it). Every OLD must occur in both text and path.
+- `run`: runs each DECL (an `IO Unit`, of the built fixture MODULE) in one `lean --run` of the
+  fixture package, its standard output to OUTDIR/DECL.txt. The modules must be up to date in
+  Lake's trace (`lake build --no-build`), so a run never loads a stale module.
 - `files`: the repository paths of the package's modules (scripts/lean-deps.py: they are not
   standalone files).
 """
@@ -306,6 +316,71 @@ def mutant(name: str, src: Path, fails: list[str], expect: list[str]) -> int:
     return 0
 
 
+def token(name: str) -> re.Pattern:
+    """`name` as a whole identifier component (not part of a longer identifier)."""
+    return re.compile(r"(?<![A-Za-z0-9_'])" + re.escape(name) + r"(?![A-Za-z0-9_'])")
+
+
+def instance(primary: Path, substs: list[str], write: bool) -> int:
+    text, path = primary.read_text(encoding="utf-8"), primary.as_posix()
+    for subst in substs:
+        old, sep, new = subst.partition("=")
+        if not (sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", old) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new)):
+            raise SystemExit(f"fixtures instance: --subst needs OLD=NEW identifiers, not {subst!r}")
+        pattern = token(old)
+        if not pattern.search(text) or not pattern.search(path):
+            raise SystemExit(f"fixtures instance: {old} does not occur in {primary} and its path")
+        text, path = pattern.sub(new, text), pattern.sub(new, path)
+    target = Path(path)
+    if write:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        return 0
+    if not target.is_file() or target.read_bytes() != text.encode("utf-8"):
+        print(f"fixtures instance: {target} is not {primary} with {' '.join(substs)} "
+              f"(fixtures.py instance {primary} {' '.join('--subst ' + s for s in substs)} --write)",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def run(outdir: Path, specs: list[str]) -> int:
+    mains = []
+    for spec in specs:
+        module, sep, decl = spec.partition(":")
+        if not (sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", module) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.']*", decl)):
+            raise SystemExit(f"fixtures run: expected MODULE:DECL, not {spec!r}")
+        mains.append((module, decl))
+    modules = sorted({m for m, _ in mains})
+    if len({d for _, d in mains}) != len(mains):
+        raise SystemExit("fixtures run: a DECL is named twice")
+    check_names(PACKAGE)
+    done = lake(PACKAGE, ["build", "--no-build", *modules], capture=True)
+    if done.returncode:
+        sys.stdout.write(done.stdout[-4000:])
+        print(f"fixtures run: {', '.join(modules)} not up to date (fixtures.py build first)", file=sys.stderr)
+        return 1
+    outdir = outdir.resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="air2lean-fixtures-run.") as work:
+        driver = Path(work) / "Run.lean"
+        lines = [f"import {m}" for m in modules] + [
+            "def runTo (path : System.FilePath) (act : IO Unit) : IO Unit := do",
+            "  let h ← IO.FS.Handle.mk path .write",
+            "  let old ← IO.setStdout (IO.FS.Stream.ofHandle h)",
+            "  try act finally h.flush; discard (IO.setStdout old)",
+            "def main : IO Unit := do"]
+        lines += [f"  runTo {json.dumps(str(outdir / (d + '.txt')))} {d}" for _, d in mains]
+        driver.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        done = lake(PACKAGE, ["env", "lean", "--run", str(driver)], capture=True)
+    if done.returncode:
+        sys.stdout.write(done.stdout[-4000:])
+        print(f"fixtures run: FAILED ({', '.join(d for _, d in mains)})", file=sys.stderr)
+        return 1
+    sys.stdout.write(done.stdout)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -322,6 +397,13 @@ def main(argv: list[str]) -> int:
     p.add_argument("--src", type=Path, required=True)
     p.add_argument("--fails", action="append", required=True)
     p.add_argument("--expect", action="append", default=[])
+    p = sub.add_parser("instance")
+    p.add_argument("primary", type=Path)
+    p.add_argument("--subst", action="append", required=True)
+    p.add_argument("--write", action="store_true")
+    p = sub.add_parser("run")
+    p.add_argument("outdir", type=Path)
+    p.add_argument("mains", nargs="+")
     sub.add_parser("files")
     a = parser.parse_args(argv)
     # Every Lake of this command runs in one mode: its own builds (`lake`, through cas.py run)
@@ -343,6 +425,10 @@ def main(argv: list[str]) -> int:
         return audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
+    if a.command == "instance":
+        return instance(a.primary, a.subst, a.write)
+    if a.command == "run":
+        return run(a.outdir, a.mains)
     print("\n".join(files()))
     return 0
 
