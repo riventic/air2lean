@@ -18,7 +18,9 @@ esac
 here=tests/roadmap/dispatch-templates
 python3 -B scripts/lean-deps.py --build "$here"
 lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Arr ZigLean.Sep.Full.Strength air2lean
-lake env lean "$here/Template.lean"
+# The small machines (DispatchTemplate/Template.lean): the fixture library DispatchTemplate
+# (tests/roadmap/lakefile.toml), built by Lake (scripts/fixtures.py).
+python3 -B scripts/fixtures.py build DispatchTemplate
 if [ "$native" = 0 ]; then echo 'dispatch loop regressions passed'; exit 0; fi
 
 version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default

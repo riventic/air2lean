@@ -48,7 +48,7 @@ tests. In coverage reports, a refused claim blocks `correct_if_returns` and `fun
 it rejects the goal. An observed panic is a refusal even if the theorem's precondition
 excludes that input: domains are not machine-checked.
 
-`tests/roadmap/outcome-taxonomy/Taxonomy.lean` shows that the contract types already
+`tests/roadmap/outcome-taxonomy/Outcomes/Taxonomy.lean` shows that the contract types already
 keep error returns and model failures apart. A partial triple (`FTriple`) holds for an
 `Except ErrName` error return and fails, on every admissible input, for `.panic`, `.illegal`,
 `.unspecified`, `.unsupportedTimer`, `.deadlock` and `.trap`; divergence and a stack overflow

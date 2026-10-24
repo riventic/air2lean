@@ -307,11 +307,11 @@
           "anchor": "next (.foreign n) = none"
         },
         {
-          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "path": "tests/roadmap/dispatch-templates/DispatchTemplate/Template.lean",
           "anchor": "(have : ∀ N n acc, Step (badInv N) rank N ⟨n, acc, .count⟩ := by"
         },
         {
-          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "path": "tests/roadmap/dispatch-templates/DispatchTemplate/Template.lean",
           "anchor": "(have : ∀ N n acc, Step (inv N) flatRank N ⟨n, acc, .idle⟩ := by"
         },
         {
