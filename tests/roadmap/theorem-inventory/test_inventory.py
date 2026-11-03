@@ -578,6 +578,13 @@ class FixtureTests(unittest.TestCase):
             self.fx.root, ['python3', 'scripts/theorem-inventory.py', 'swap-build', '--lake',
                            str(self.fx.lake), '--', module, 'Proofs.Gone.Deleted'])
         self.assertEqual(swap.renewal(self.fx.lake, 'python3', root=self.fx.root)[-2:], ['--', module])
+        # a swapped Gen module is resolved to its swap source, even without its own file
+        (self.fx.root / 'Proofs/Demo/Gen.lean').unlink()
+        swapped = ti.parse_build_command(
+            self.fx.root, ['python3', 'scripts/theorem-inventory.py', 'swap-build', '--lake',
+                           str(self.fx.lake), '--swap', 'demo=tests/golden/0.15.2/demo/Gen.lean',
+                           '--', 'Proofs.Demo.Gen', module])
+        self.assertEqual(swapped.deleted(self.fx.root), [])
         gone = ti.parse_build_command(self.fx.root, [str(self.fx.lake), 'build', 'Proofs.Gone.Deleted'],
                                       lake=str(self.fx.lake))
         with self.assertRaisesRegex(ti.Error, 'every recorded module is deleted'):
