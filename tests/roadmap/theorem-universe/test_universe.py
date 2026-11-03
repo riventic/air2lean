@@ -105,7 +105,7 @@ class UniverseTests(unittest.TestCase):
         # every Lake-built audit (`Outcomes.Contracts`).
         import fixtures
         lake = fixtures.source_modules(ROOT)  # Lake's own enumeration (`lake query`)
-        self.assertEqual(universe.fixture_lake_roots(ROOT), {file: root for file, root in lake.values()})
+        self.assertEqual(fixtures.source_roots(ROOT), {file: root for file, root in lake.values()})
         units = {u.file: u for u in universe.universe()[1]}
         for module, (file, root) in lake.items():
             if file in units:

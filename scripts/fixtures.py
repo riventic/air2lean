@@ -123,6 +123,31 @@ def source_modules(root: Path | None = None) -> dict[str, tuple[str, str]]:
     return out
 
 
+def source_roots(root: Path | None = None) -> dict[str, str]:
+    """`source_modules` without Lake (the source scan runs where no Lean is installed): each
+    configured module's repository source -> its library's source root, read from the lakefile's
+    `srcDir` and `globs` (else `roots`): `M` is M, `M.+` M and its submodules, `M.*` its
+    submodules. A file in two libraries (nested source roots) fails."""
+    root = root or ROOT
+    package = root / PACKAGE.relative_to(ROOT)
+    if not (package / "lakefile.toml").is_file():
+        return {}
+    out: dict[str, str] = {}
+    for lib in libraries(package):
+        src = package / lib.get("srcDir", ".")
+        for pattern in lib.get("globs") or lib.get("roots") or [lib["name"]]:
+            base = pattern.removesuffix(".+").removesuffix(".*")
+            directory = src / base.replace(".", "/")
+            paths = [] if pattern.endswith(".*") else [directory.with_suffix(".lean")]
+            if pattern != base:
+                paths += sorted(directory.rglob("*.lean"))
+            for path in filter(Path.is_file, paths):
+                rel, source_root = path.relative_to(root).as_posix(), src.relative_to(root).as_posix()
+                if out.setdefault(rel, source_root) != source_root:
+                    raise ValueError(f"{rel} is in two fixture libraries ({out[rel]}, {source_root})")
+    return out
+
+
 def files(root: Path | None = None) -> list[str]:
     """The repository-relative source paths of the configured fixture modules."""
     return sorted(file for file, _ in source_modules(root).values())
