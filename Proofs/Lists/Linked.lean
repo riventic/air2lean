@@ -3,7 +3,7 @@ import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.ThreadLoop
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Auto
-import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.Cost
 
 /-!
 # The linked list of `examples/lists/lists.zig` in the full-state logic
@@ -73,30 +73,31 @@ theorem list_cons {hd : Option Ptr} {z : BitVec 32} {zs : List (BitVec 32)} {R :
 
 /-! ## `reverse` -/
 
-/-- The body at the end of the list: it exits (a step of the thread that owns the list,
-`FTTotalTriple`). -/
+/-- The body at the end of the list: it takes its step in the plain mode and exits (a step of the
+thread that owns the list, `FTTotalTriple`). -/
 theorem reverse_tstep_nil (pr : Option Ptr) (R : FAssn) :
-    FTTotalTriple R (reverse.loop6.run ⟨pr, none⟩) (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ R) := by
+    FTTotalTriple (R ⋆ plain) (reverse.loop6.run ⟨pr, none⟩)
+      (fun r => ⟪r = (.br5, ⟨pr, none⟩)⟫ ⋆ (R ⋆ plain)) := by
   unfold reverse.loop6
   fsym
 
 /-- The body at a node: it points the node back at `prev` and moves on (a thread's step). -/
 theorem reverse_tstep_cons (pr : Option Ptr) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn) :
-    FTTotalTriple (node X p z q ⋆ R) (reverse.loop6.run ⟨pr, some p⟩)
-      (fun r => ⟪r = (.rep6, ⟨some p, q⟩)⟫ ⋆ (node X p z pr ⋆ R)) := by
+    FTTotalTriple ((node X p z q ⋆ R) ⋆ plain) (reverse.loop6.run ⟨pr, some p⟩)
+      (fun r => ⟪r = (.rep6, ⟨some p, q⟩)⟫ ⋆ ((node X p z pr ⋆ R) ⋆ plain)) := by
   unfold reverse.loop6 node
   fsym
 
 variable (X)
 
 /-- The invariant of `reverse`: `prev` holds the first items of `xs` reversed, `cur` the other
-`n`. -/
+`n`; the steps run in the plain mode. -/
 def revInv (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) : FAssn :=
   FAssn.ex fun ys => FAssn.ex fun zs =>
-    ⟪xs = ys.reverse ++ zs ∧ zs.length = n⟫ ⋆ (list X s.prev ys ⋆ list X s.cur zs)
+    ⟪xs = ys.reverse ++ zs ∧ zs.length = n⟫ ⋆ ((list X s.prev ys ⋆ list X s.cur zs) ⋆ plain)
 
 def revPost (xs : List (BitVec 32)) (r : reverseExit × reverseLocals) : FAssn :=
-  ⟪r.1 = .br5⟫ ⋆ list X r.2.prev xs.reverse
+  ⟪r.1 = .br5⟫ ⋆ (list X r.2.prev xs.reverse ⋆ plain)
 
 variable {X}
 
@@ -108,7 +109,10 @@ theorem reverse_step (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) :
   refine FTTotalTriple.ex fun ys => FTTotalTriple.ex fun zs => FTTotalTriple.lift fun ⟨hxs, hn⟩ => ?_
   cases zs with
   | nil =>
-    refine FTTotalTriple.conseq (P := ⟪cu = none⟫ ⋆ list X pr ys) ?_ (fun _ h => sep_comm h)
+    refine FTTotalTriple.conseq (P := ⟪cu = none⟫ ⋆ (list X pr ys ⋆ plain)) ?_ (fun _ h => by
+        have h' : ((list X pr ys ⋆ ⟪cu = none⟫) ⋆ plain) _ := h
+        rwa [show ((list X pr ys ⋆ ⟪cu = none⟫) ⋆ plain) = (⟪cu = none⟫ ⋆ (list X pr ys ⋆ plain))
+          by ac_rfl] at h')
       fun _ _ h => h
     refine FTTotalTriple.lift fun hcu => ?_
     subst hcu
@@ -118,10 +122,13 @@ theorem reverse_step (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) :
     exact floopNext_exit rfl (sep_lift.mpr ⟨rfl, by simpa [hxs] using h'⟩)
   | cons z zs =>
     refine FTTotalTriple.conseq (P := FAssn.ex fun p => FAssn.ex fun q =>
-      ⟪cu = some p⟫ ⋆ (node X p z q ⋆ (list X pr ys ⋆ list X q zs))) ?_ (fun _ h => by
-        obtain ⟨p, q, hp, h⟩ := list_cons (sep_comm h)
+      ⟪cu = some p⟫ ⋆ ((node X p z q ⋆ (list X pr ys ⋆ list X q zs)) ⋆ plain)) ?_ (fun _ h => by
+        rw [show ((list X pr ys ⋆ list X cu (z :: zs)) ⋆ plain) =
+          (list X cu (z :: zs) ⋆ (list X pr ys ⋆ plain)) by ac_rfl] at h
+        obtain ⟨p, q, hp, h⟩ := list_cons h
         refine ⟨p, q, sep_lift.mpr ⟨hp, ?_⟩⟩
-        exact sep_mono_right (fun _ h => sep_comm h) h) fun _ _ h => h
+        rwa [show (node X p z q ⋆ (list X q zs ⋆ (list X pr ys ⋆ plain))) =
+          ((node X p z q ⋆ (list X pr ys ⋆ list X q zs)) ⋆ plain) by ac_rfl] at h) fun _ _ h => h
     refine FTTotalTriple.ex fun p => FTTotalTriple.ex fun q => FTTotalTriple.lift fun hp => ?_
     subst hp
     refine (reverse_tstep_cons pr p q z _).conseq (fun _ h => h) fun r x h => ?_
@@ -129,53 +136,57 @@ theorem reverse_step (xs : List (BitVec 32)) (s : reverseLocals) (n : Nat) :
     subst hr
     refine floopNext_repeat rfl (n' := zs.length) (by simp at hn; omega)
       ⟨z :: ys, zs, sep_lift.mpr ⟨⟨by simp [hxs], rfl⟩, ?_⟩⟩
-    exact sep_mono_left (fun _ h => ⟨p, pr, sep_lift.mpr ⟨rfl, h⟩⟩) (sep_assoc' h')
+    exact sep_mono_left (sep_mono_left (fun _ h => ⟨p, pr, sep_lift.mpr ⟨rfl, h⟩⟩))
+      (sep_mono_left (fun _ h => sep_assoc' h) h')
 
 /-- The generated loop of `reverse`, as a rule for `fsym`: from `prev = null` and the list at
 `cur`, it exits with the reversed list at `prev` (a step of the thread that owns the list; the
-sequential rule is its reading in one thread). -/
+sequential rule is its reading in one thread). Its steps run in the plain mode. -/
 theorem reverse_loop {mb : Lean.Order.MonoBind (MM reverseLocals)} (hd : Option Ptr)
     (xs : List (BitVec 32)) (s : reverseLocals) (hp : s.prev = none) (hc : s.cur = hd) :
-    FTTotalTriple (list X hd xs)
+    FTTotalTriple (list X hd xs ⋆ plain)
       ((@Zig.loop (MM reverseLocals) _ _ mb _ reverse.loop6 reverse.again6).run s)
-      (fun r => FAssn.ex fun t : reverseLocals => ⟪r = (.br5, t)⟫ ⋆ list X t.prev xs.reverse) :=
+      (fun r => FAssn.ex fun t : reverseLocals => ⟪r = (.br5, t)⟫ ⋆ (list X t.prev xs.reverse ⋆ plain)) :=
   (FTTotalTriple.loop_ghost (revInv X xs) (revPost X xs) (reverse_step xs) s xs.length).conseq
     (fun _ h => ⟨[], xs, sep_lift.mpr ⟨⟨rfl, rfl⟩,
-      sep_lift.mpr ⟨hp, by rwa [hc]⟩⟩⟩)
+      sep_mono_left (fun _ h => sep_lift.mpr ⟨hp, by rwa [hc]⟩) h⟩⟩)
     fun ⟨e, t⟩ _ h => by
       obtain ⟨he, h⟩ := sep_lift.mp h
       exact ⟨t, sep_lift.mpr ⟨by simp only at he; rw [he], h⟩⟩
 
 /-- **`reverse`** turns the list at `hd` into the list of the items in the other order, in the
-thread that owns the list. It returns. -/
+thread that owns the list, in the plain mode. It returns. -/
 theorem reverse_thread (hd : Option Ptr) (xs : List (BitVec 32)) :
-    FTTotalTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) := by
+    FTTotalTriple (list X hd xs ⋆ plain) (reverse hd) (fun r => list X r xs.reverse ⋆ plain) := by
   unfold reverse
   fsym [reverse_loop]
 
 /-- `reverse_thread` read in one thread. -/
 theorem reverse_total (hd : Option Ptr) (xs : List (BitVec 32)) :
-    FTotalTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) :=
+    FTotalTriple (list X hd xs ⋆ plain) (reverse hd) (fun r => list X r xs.reverse ⋆ plain) :=
   (reverse_thread hd xs).toFTotalTriple
 
 theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
-    FTriple (list X hd xs) (reverse hd) (fun r => list X r xs.reverse) :=
+    FTriple (list X hd xs ⋆ plain) (reverse hd) (fun r => list X r xs.reverse ⋆ plain) :=
   (reverse_total hd xs).toPartial
 
 
 /-! ## `sum` -/
 
-/-- The body at the end of the list: it exits. -/
+/-- The body at the end of the list: it pays its step with a credit, returns the receipt and
+exits. -/
 theorem sum_step_nil (t : BitVec 64) (R : FAssn) :
-    FTotalTriple R (sum.loop6.run ⟨t, none⟩) (fun r => ⟪r = (.br5, ⟨t, none⟩)⟫ ⋆ R) := by
+    FTotalTriple (R ⋆ credits 1) (sum.loop6.run ⟨t, none⟩)
+      (fun r => ⟪r = (.br5, ⟨t, none⟩)⟫ ⋆ (R ⋆ spent 1)) := by
   unfold sum.loop6
   fsym
 
-/-- The body at a node: it adds the node's item and moves to the next node. -/
+/-- The body at a node: it pays its step, adds the node's item and moves to the next node. -/
 theorem sum_step_cons (t : BitVec 64) (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn)
     (hfit : t.toNat + z.toNat < 2 ^ 64) :
-    FTotalTriple (node X p z q ⋆ R) (sum.loop6.run ⟨t, some p⟩)
-      (fun r => ⟪r.1 = .rep6 ∧ r.2.p = q ∧ r.2.s.toNat = t.toNat + z.toNat⟫ ⋆ (node X p z q ⋆ R)) := by
+    FTotalTriple ((node X p z q ⋆ R) ⋆ credits 1) (sum.loop6.run ⟨t, some p⟩)
+      (fun r => ⟪r.1 = .rep6 ∧ r.2.p = q ∧ r.2.s.toNat = t.toNat + z.toNat⟫ ⋆
+        ((node X p z q ⋆ R) ⋆ spent 1)) := by
   unfold sum.loop6 node
   fsym
 
@@ -198,21 +209,38 @@ theorem sum_step (hd : Option Ptr) (xs : List (BitVec 32))
     FTotalTriple (sumInv X hd xs s n) (sum.loop6.run s)
       (floopNext sum.again6 (sumInv X hd xs) (sumPost X hd xs) n) := by
   obtain ⟨t, sp⟩ := s
+  refine FTotalTriple.pre (P := FAssn.ex fun ys => FAssn.ex fun zs =>
+    ⟪xs = ys ++ zs ∧ zs.length = n ∧ t.toNat = (ys.map BitVec.toNat).sum⟫ ⋆
+      ((lseg X hd sp ys ⋆ list X sp zs) ⋆ credits 1)) ?_ fun _ h => by
+    obtain ⟨ys, h⟩ := sep_ex.mp h
+    obtain ⟨zs, h⟩ := sep_ex.mp h
+    exact ⟨ys, zs, sep_assoc h⟩
   refine FTotalTriple.ex fun ys => FTotalTriple.ex fun zs => FTotalTriple.lift fun ⟨hxs, hn, hsum⟩ => ?_
-  simp only at hsum
   cases zs with
   | nil =>
-    refine FTotalTriple.pre (P := ⟪sp = none⟫ ⋆ lseg X hd sp ys) ?_ fun _ h => sep_comm h
+    simp only [List.length_nil] at hn
+    subst hn
+    refine FTotalTriple.pre (P := ⟪sp = none⟫ ⋆ (lseg X hd sp ys ⋆ credits 1)) ?_ fun _ h => by
+      have h' : ((lseg X hd sp ys ⋆ ⟪sp = none⟫) ⋆ credits 1) _ := h
+      rwa [show ((lseg X hd sp ys ⋆ ⟪sp = none⟫) ⋆ credits 1) =
+        (⟪sp = none⟫ ⋆ (lseg X hd sp ys ⋆ credits 1)) by ac_rfl] at h'
     refine FTotalTriple.lift fun hsp => ?_
     subst hsp
     refine (sum_step_nil t _).post fun r x h => ?_
     obtain ⟨rfl, h'⟩ := sep_lift.mp h
-    exact floopNext_exit rfl (sep_lift.mpr ⟨⟨rfl, by simpa [hxs] using hsum⟩, by simpa [hxs] using h'⟩)
+    exact sep_mono_left (fun _ h => floopExact_exit rfl
+      (sep_lift.mpr ⟨⟨rfl, by simpa [hxs] using hsum⟩, by simpa [hxs] using h⟩)) h'
   | cons z zs =>
+    simp only [List.length_cons] at hn
+    subst hn
     refine FTotalTriple.pre (P := FAssn.ex fun p => FAssn.ex fun q =>
-      ⟪sp = some p⟫ ⋆ (node X p z q ⋆ (lseg X hd sp ys ⋆ list X q zs))) ?_ fun _ h => by
-        obtain ⟨p, q, hp, h⟩ := list_cons (sep_comm h)
-        exact ⟨p, q, sep_lift.mpr ⟨hp, sep_mono_right (fun _ h => sep_comm h) h⟩⟩
+      ⟪sp = some p⟫ ⋆ ((node X p z q ⋆ (lseg X hd sp ys ⋆ list X q zs)) ⋆ credits 1)) ?_ fun _ h => by
+        rw [show ((lseg X hd sp ys ⋆ list X sp (z :: zs)) ⋆ credits 1) =
+          (list X sp (z :: zs) ⋆ (lseg X hd sp ys ⋆ credits 1)) by ac_rfl] at h
+        obtain ⟨p, q, hp, h⟩ := list_cons h
+        refine ⟨p, q, sep_lift.mpr ⟨hp, ?_⟩⟩
+        rwa [show (node X p z q ⋆ (list X q zs ⋆ (lseg X hd sp ys ⋆ credits 1))) =
+          ((node X p z q ⋆ (lseg X hd sp ys ⋆ list X q zs)) ⋆ credits 1) by ac_rfl] at h
     refine FTotalTriple.ex fun p => FTotalTriple.ex fun q => FTotalTriple.lift fun hp => ?_
     subst hp
     have hfit : t.toNat + z.toNat < 2 ^ 64 := by
@@ -223,35 +251,59 @@ theorem sum_step (hd : Option Ptr) (xs : List (BitVec 32))
     obtain ⟨⟨he, hq, hs⟩, h2⟩ := sep_lift.mp h
     simp only at he hq hs
     subst he
-    refine floopNext_repeat rfl (n' := zs.length) (by simp at hn; omega)
-      ⟨ys ++ [z], zs, sep_lift.mpr ⟨⟨by simp [hxs], rfl, by simp [hs, hsum]⟩, ?_⟩⟩
+    refine sep_mono_left (fun _ h => floopExact_repeat rfl
+      ⟨ys ++ [z], zs, sep_lift.mpr ⟨⟨by simp [hxs], rfl, by simp [hs, hsum]⟩, ?_⟩⟩) h2
     rw [hq]
     refine sep_mono_left (P := lseg X hd (some p) ys ⋆ node X p z q) (fun _ => lseg_snoc) ?_
     rwa [show ((lseg X hd (some p) ys ⋆ node X p z q) ⋆ list X q zs) =
       (node X p z q ⋆ (lseg X hd (some p) ys ⋆ list X q zs)) by ac_rfl]
 
-/-- The generated loop of `sum`, as a rule for `fsym`: from the list's head and a zero total it
-exits with the exact sum. -/
+/-- **The generated loop of `sum` with its exact step count**: from the list's head and a zero
+total it exits with the sum after `xs.length + 1` body runs (one per node and the final null
+test), paid by as many credits and returning as many receipts. -/
+theorem sum_loop_exact {mb : Lean.Order.MonoBind (MM sumLocals)} (hd : Option Ptr)
+    (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) (s : sumLocals)
+    (hs : s.s = 0) (hp : s.p = hd) :
+    FTotalTriple (list X hd xs ⋆ credits (xs.length + 1))
+      ((@Zig.loop (MM sumLocals) _ _ mb _ sum.loop6 sum.again6).run s)
+      (fun r => (FAssn.ex fun t : sumLocals =>
+        ⟪r = (.br5, t) ∧ t.s.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs) ⋆
+          spent (xs.length + 1)) :=
+  (FTotalTriple.loop_exact (sum_step hd xs htot) s xs.length).conseq
+    (fun _ h => sep_mono_left (fun _ h => ⟨[], xs, sep_lift.mpr ⟨⟨rfl, rfl, by simp [hs]⟩,
+      sep_lift.mpr ⟨hp.symm, by rwa [hp]⟩⟩⟩) h)
+    fun ⟨e, t⟩ _ h => sep_mono_left (fun _ h => by
+      obtain ⟨⟨he, ht⟩, h⟩ := sep_lift.mp h
+      exact ⟨t, sep_lift.mpr ⟨⟨by simp only at he; rw [he], ht⟩, h⟩⟩) h
+
+/-- The generated loop of `sum`, as a rule for `fsym`, in the plain mode
+(`FTotalTriple.of_credits_plain`). -/
 theorem sum_loop {mb : Lean.Order.MonoBind (MM sumLocals)} (hd : Option Ptr) (xs : List (BitVec 32))
     (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) (s : sumLocals) (hs : s.s = 0) (hp : s.p = hd) :
-    FTotalTriple (list X hd xs) ((@Zig.loop (MM sumLocals) _ _ mb _ sum.loop6 sum.again6).run s)
+    FTotalTriple (list X hd xs ⋆ plain) ((@Zig.loop (MM sumLocals) _ _ mb _ sum.loop6 sum.again6).run s)
       (fun r => FAssn.ex fun t : sumLocals =>
-        ⟪r = (.br5, t) ∧ t.s.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs) :=
-  (FTotalTriple.loop_ghost (sumInv X hd xs) (sumPost X hd xs) (sum_step hd xs htot) s xs.length).pre
-    (fun _ h => ⟨[], xs, sep_lift.mpr ⟨⟨rfl, rfl, by simp [hs]⟩,
-      sep_lift.mpr ⟨hp.symm, by rwa [hp]⟩⟩⟩)
-    |>.post fun ⟨e, t⟩ _ h => by
-      obtain ⟨⟨he, ht⟩, h⟩ := sep_lift.mp h
-      exact ⟨t, sep_lift.mpr ⟨⟨by simp only at he; rw [he], ht⟩, h⟩⟩
+        ⟪r = (.br5, t) ∧ t.s.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ (list X hd xs ⋆ plain)) :=
+  (sum_loop_exact (mb := mb) hd xs htot s hs hp).of_credits_plain.eupd_post fun _ => by
+    fsym_entail
 
 /-- **`sum`** returns the sum of the list's items and leaves the list unchanged, if the sum fits
-in a `u64`. -/
+in a `u64` (in the plain mode). -/
 theorem sum_total (hd : Option Ptr) (xs : List (BitVec 32))
     (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
-    FTotalTriple (list X hd xs) (sum hd)
-      (fun r => ⟪r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs) := by
+    FTotalTriple (list X hd xs ⋆ plain) (sum hd)
+      (fun r => ⟪r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⟫ ⋆ (list X hd xs ⋆ plain)) := by
   unfold sum
   fsym [sum_loop (htot := htot)]
+
+/-- **`sum` with its exact step count**: `xs.length + 1` steps (the loop's body runs), paid by as
+many credits and returning as many receipts. -/
+theorem sum_exact (hd : Option Ptr) (xs : List (BitVec 32))
+    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
+    FTotalTriple (list X hd xs ⋆ credits (xs.length + 1)) (sum hd)
+      (fun r => (⟪r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs) ⋆
+        spent (xs.length + 1)) := by
+  unfold sum
+  fsym [sum_loop_exact (htot := htot)]
 
 /-! ## Admissible inputs -/
 
@@ -260,10 +312,15 @@ theorem list_nil_admit : Witness.FAdmit (list X none []) :=
   Witness.FAdmit.of_mem ⟨rfl, by funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty], rfl, rfl⟩
     Witness.fseq_default
 
-nonvacuity_witness reverse_total := ⟨fun _ => emp, none, [], list_nil_admit⟩
-nonvacuity_witness reverse_spec := ⟨fun _ => emp, none, [], list_nil_admit⟩
+/-- The empty list in the plain mode. -/
+theorem list_nil_admit_plain : Witness.FAdmit (list X none [] ⋆ plain) :=
+  Witness.FAdmit.of_mem_plain ⟨rfl, by funext ⟨b, o⟩; simp [Mem.fheap, Mem.heap, FHeap.empty], rfl, rfl⟩
+    Witness.fseq_default
+
+nonvacuity_witness reverse_total := ⟨fun _ => emp, none, [], list_nil_admit_plain⟩
+nonvacuity_witness reverse_spec := ⟨fun _ => emp, none, [], list_nil_admit_plain⟩
 liveness_witness reverse_spec :=
-  ⟨fun _ => emp, none, [], Witness.FLive.of_total (reverse_total none []) list_nil_admit⟩
-nonvacuity_witness sum_total := ⟨fun _ => emp, none, [], by decide, list_nil_admit⟩
+  ⟨fun _ => emp, none, [], Witness.FLive.of_total (reverse_total none []) list_nil_admit_plain⟩
+nonvacuity_witness sum_total := ⟨fun _ => emp, none, [], by decide, list_nil_admit_plain⟩
 
 end Lists.Linked
