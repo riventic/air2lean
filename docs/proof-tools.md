@@ -256,7 +256,7 @@ translation of a fresh compiler export. `countTokens_total` shows that over a bu
 leaves the buffer unchanged; its legacy total triple through `FTotalTriple.toTotal_on` is in
 `tests/roadmap/strength-log/DispatchTemplates.lean`. The byte load is the library rule `FTotalTriple.arr_load`, the index
 check `checkIndex_of`, and the generated classifiers are rules proved against `alpha`/`digit` on
-all 256 bytes. `Template.lean` instantiates the rule for small machines with an enum and an
+all 256 bytes. `DispatchTemplate/Template.lean` instantiates the rule for small machines with an enum and an
 integer selector, and shows that a wrong invariant (at `count`) and a rank that does not order the
 states (at `idle`) are not established by the walk, next to positive controls. `check.sh` also requires air2lean to reject
 the real exported AIR when one `switch_dispatch` target is changed to a block, an absent ID, or
