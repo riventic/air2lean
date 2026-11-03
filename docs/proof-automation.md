@@ -230,12 +230,13 @@ again on the new state, whose facts and existentials open as usual. A view is ke
 walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
-the granted region, whose size the grant's token names (`tok p bs.size …`). A measure of an
-unknown (`?bs.size`, anywhere in an atom: a token's argument, a field of a ledger fragment's
-tuple) gives only its value, never the unknown (`abstractMeasures`: `Array.size` is not
-injective, so the token's `?bs.size` against the state's `old.size` must not take `?bs := old`,
-the bytes the grant had before a write); the region planner carves the bytes at that size
-(`measureOf?`) and the final match checks the token up to arithmetic.
+the granted region, whose size the grant's token names (`tok p bs.size …`). When the planner
+pre-assigns unknowns by unifying atoms with the state's, a measure of an unknown (`?bs.size`,
+`?l.length`: a token's argument, a field of a ledger fragment's tuple, under arithmetic) gives
+only its value, never the unknown (`abstractMeasures`: `Array.size` is not injective, so the
+token's `?bs.size` against the state's `old.size` must not take `?bs := old`, the bytes the
+grant had before a write). The region planner carves the bytes at the size the token names
+(`measuredSize?`), and the final match checks the token up to arithmetic.
 Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).

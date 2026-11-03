@@ -268,6 +268,21 @@ theorem hidden_bytes_in_sum (T : Nat → FAssn) (p : Ptr) (old cur : Array Byte)
       (fun _ => HdrGrant T p A S K cur) := by
   fsym [rule]
 
+/-- Two grants under one token: the first one's bytes a size the rule demands (the token waits
+for them), the second one's named by the token alone. -/
+def TwoGrant (T : Nat → Nat → FAssn) (p q : Ptr) (A S : Nat) (K : BlockKind) (bs cs : Array Byte) :
+    FAssn :=
+  T bs.size cs.size ⋆ (up (regionIn p A S K 1 bs) ⋆ up (regionIn q A S K 1 cs))
+
+/-- The token that waits for demanded bytes does not fix the other grant's bytes either. -/
+theorem hidden_bytes_waiting (T : Nat → Nat → FAssn) (p q : Ptr) (b0 old cur : Array Byte)
+    (n m : Nat) (c : MemM Unit) (hb0 : b0.size = n) (hold : old.size = m) (hcur : cur.size = m)
+    (rule : ∀ bs cs : Array Byte, bs.size = n →
+      FTotalTriple (TwoGrant T p q A S K bs cs) c (fun _ => TwoGrant T p q A S K bs cs)) :
+    FTotalTriple (T b0.size old.size ⋆ (up (regionIn p A S K 1 b0) ⋆ up (regionIn q A S K 1 cur))) c
+      (fun _ => TwoGrant T p q A S K b0 cur) := by
+  fsym [rule]
+
 /-- A measure of an unknown that nothing else determines: the final match still takes the
 state's array (any array of that size is a witness). -/
 theorem measure_only (T : Nat → FAssn) (old : Array Byte) (c : MemM Unit)
