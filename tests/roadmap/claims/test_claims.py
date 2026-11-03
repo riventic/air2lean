@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Claim-strength regressions. fixture-report.json holds statement structures extracted by
 tools/Assurance.lean from Fixture.lean; check.sh regenerates and compares them."""
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import contextlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -736,7 +738,7 @@ class ManifestTests(unittest.TestCase):
                            'source': unit['source']['path'], 'source_sha256': unit['source']['sha256']}]})
         assumptions.write_report(self.report, self.fixture)
 
-    def manifest(self, goals, function='ret', bounds=None):
+    def manifest(self, goals, function='ret', bounds=None, name='project.json'):
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee', 'source_closure': ['a.zig'],
                     'components': {'compiler_patch': ['p'], 'runtime': ['r'], 'toolchain': ['t']},
                     'allowed_assumptions': [],
@@ -747,43 +749,64 @@ class ManifestTests(unittest.TestCase):
                                           **({'bound': bounds[t]} if bounds and t in bounds else {})}
                                          for t, s in goals],
                                'assumptions': [], 'exclusions': []}]}
-        path = self.base / 'project.json'
+        path = self.base / name
         path.write_text(json.dumps(manifest))
         return path
 
     def cli(self, *args):
+        # Several run at once (check_all): each spends its time hashing the bound inputs.
         return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)],
-                              capture_output=True, text=True, timeout=30)
+                              capture_output=True, text=True, timeout=180)
 
-    def check(self, goals, function='ret', flags=('--allow-dirty',), bounds=None):
+    def check(self, goals, function='ret', flags=('--allow-dirty',), bounds=None, report=None,
+              name='project.json'):
         # The checkout under test may have uncommitted changes; refusal tests pass no flag.
-        result = self.cli('check', self.manifest(goals, function, bounds), '--assurance', self.report, *flags)
+        result = self.cli('check', self.manifest(goals, function, bounds, name), '--assurance',
+                          report or self.report, *flags)
         return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
+    def check_all(self, cases):
+        """`check(**case)` for each case, run concurrently (each its own manifest and, for a
+        case with a `report` object, its own report file); the results in the order of `cases`."""
+        def one(index, case):
+            case = dict(case, name=f'project-{index}.json')
+            if case.get('report') is not None:
+                path = self.base / f'assurance-{index}.json'
+                assumptions.write_report(path, case['report'])
+                case['report'] = path
+            return self.check(**case)
+        jobs = int(os.environ.get('AIR2LEAN_JOBS') or min(4, os.cpu_count() or 1))
+        with ThreadPoolExecutor(max(1, jobs)) as pool:
+            return list(pool.map(one, range(len(cases)), cases))
+
     def test_matching_and_weaker_goals_accepted(self):
-        code, result, err = self.check([('ClaimFixture.fret_total', 'total_correctness'),
-                                        ('ClaimFixture.fret_total', 'partial_correctness'),
-                                        ('ClaimFixture.ret_run', 'total_correctness'),
-                                        ('ClaimFixture.fret_partial', 'partial_correctness'),
-                                        ('ClaimFixture.fret_partial', 'safety'),
-                                        ('ClaimFixture.tret_total', 'total_correctness')])
+        (code, result, err), (code2, _, err2) = self.check_all([
+            {'goals': [('ClaimFixture.fret_total', 'total_correctness'),
+                       ('ClaimFixture.fret_total', 'partial_correctness'),
+                       ('ClaimFixture.ret_run', 'total_correctness'),
+                       ('ClaimFixture.fret_partial', 'partial_correctness'),
+                       ('ClaimFixture.fret_partial', 'safety'),
+                       ('ClaimFixture.tret_total', 'total_correctness')]},
+            {'goals': [('ClaimFixture.fdiverge_partial', 'safety')], 'function': 'diverge'}])
         self.assertEqual(code, 0, err)
         self.assertEqual(result['status'], 'pass')
         self.assertTrue(all(g['status'] == 'accepted' for g in result['roots'][0]['goals']))
-        code, result, err = self.check([('ClaimFixture.fdiverge_partial', 'safety')], function='diverge')
-        self.assertEqual(code, 0, err)
+        self.assertEqual(code2, 0, err2)
 
     def test_declared_bound_is_checked_in_the_manifest(self):
         goals = [('ClaimFixture.fret_total', 'total_correctness')]
-        for bound in ({'unit': 'loop_body_runs', 'max': 1}, {'unit': 'scheduler_turns', 'max': 9}, {'unit': 'loop_body_runs'}):
+        bounds = ({'unit': 'loop_body_runs', 'max': 1}, {'unit': 'scheduler_turns', 'max': 9}, {'unit': 'loop_body_runs'})
+        results = self.check_all([{'goals': goals, 'bounds': {goals[0][0]: bound}} for bound in bounds])
+        for bound, (code, result, err) in zip(bounds, results):
             with self.subTest(bound=bound):
-                code, result, err = self.check(goals, bounds={goals[0][0]: bound})
                 self.assertEqual(code, 1, err)
                 self.assertIn('bound', result['roots'][0]['goals'][-1]['reason'])
 
     def test_diverging_program_cannot_be_declared_correct(self):
-        for strength in ('total_correctness', 'partial_correctness'):
-            code, result, err = self.check([('ClaimFixture.fdiverge_partial', strength)], function='diverge')
+        strengths = ('total_correctness', 'partial_correctness')
+        results = self.check_all([{'goals': [('ClaimFixture.fdiverge_partial', strength)], 'function': 'diverge'}
+                                  for strength in strengths])
+        for code, result, err in results:
             self.assertEqual(code, 1)
             goal = result['roots'][0]['goals'][0]
             self.assertEqual((goal['status'], goal['derived_strength']), ('rejected', 'safety'))
@@ -791,7 +814,7 @@ class ManifestTests(unittest.TestCase):
             self.assertIn('fdiverge_partial', err)
 
     def test_overstated_goals_rejected(self):
-        for name, strength, function in [('ClaimFixture.fret_partial', 'total_correctness', 'ret'),
+        cases = [('ClaimFixture.fret_partial', 'total_correctness', 'ret'),
                                          ('ClaimFixture.fwrapped_total', 'total_correctness', 'ret'),
                                          ('ClaimFixture.fpartial_and_returns', 'total_correctness', 'ret'),
                                          ('ClaimFixture.panic_run', 'safety', 'boom'),
@@ -803,9 +826,11 @@ class ManifestTests(unittest.TestCase):
                                          ('ClaimFixture.fret_total', 'correspondence', 'ret'),
                                          ('ClaimFixture.fret_total', 'total_correctness', 'boom'),
                                          ('ClaimFixture.ret_run_ground', 'total_correctness', 'ret'),
-                                         *((name, 'safety', 'ret') for name in SPOOFS)]:
+                                         *((name, 'safety', 'ret') for name in SPOOFS)]
+        results = self.check_all([{'goals': [(name, strength)], 'function': function}
+                                  for name, strength, function in cases])
+        for (name, strength, _), (code, result, _) in zip(cases, results):
             with self.subTest(name=name, strength=strength):
-                code, result, _ = self.check([(name, strength)], function)
                 self.assertEqual(code, 1)
                 self.assertEqual(result['roots'][0]['goals'][0]['status'], 'rejected')
 
@@ -816,39 +841,38 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual([g['status'] for g in result['roots'][0]['goals']], ['accepted', 'rejected'])
 
     def test_missing_and_unaudited_theorems_rejected(self):
-        code, result, _ = self.check([('fret_total', 'safety')])
-        self.assertEqual(code, 1)
-        self.assertIn('absent', result['roots'][0]['goals'][0]['reason'])
         report = copy.deepcopy(self.fixture)
         for theorem in report['theorems']:
             theorem['allowed'] = False
-        self.report.write_text(json.dumps(report))
-        code, result, _ = self.check([('ClaimFixture.fret_total', 'safety')])
+        (code, result, _), (code2, result2, _) = self.check_all([
+            {'goals': [('fret_total', 'safety')]},
+            {'goals': [('ClaimFixture.fret_total', 'safety')], 'report': report}])
         self.assertEqual(code, 1)
-        self.assertIn('violations', result['roots'][0]['goals'][0]['reason'])
+        self.assertIn('absent', result['roots'][0]['goals'][0]['reason'])
+        self.assertEqual(code2, 1)
+        self.assertIn('violations', result2['roots'][0]['goals'][0]['reason'])
 
     def test_invalid_inputs_exit_2(self):
-        self.report.write_text(json.dumps({'schema_version': 1, 'status': 'error', 'error': 'x'}))
-        code, _, err = self.check([('ClaimFixture.fret_total', 'safety')])
+        (code, _, err), (code2, _, _) = self.check_all([
+            {'goals': [('ClaimFixture.fret_total', 'safety')],
+             'report': {'schema_version': 1, 'status': 'error', 'error': 'x'}},
+            {'goals': [('ClaimFixture.fret_total', 'proved')], 'report': self.fixture}])
         self.assertEqual(code, 2)
         self.assertIn('claims error', err)
-        self.report.write_text(json.dumps(self.fixture))
-        code, _, _ = self.check([('ClaimFixture.fret_total', 'proved')])
-        self.assertEqual(code, 2)
+        self.assertEqual(code2, 2)
 
     def test_report_must_be_fresh_for_this_tree(self):
         goal = [('ClaimFixture.fret_total', 'total_correctness')]
-        code, result, err = self.check(goal)
-        self.assertEqual(code, 0, err)
-        self.assertEqual(result['freshness']['artifacts'], 1)
         cases = {'no freshness binding': {k: v for k, v in self.fixture.items() if k != 'freshness'},
                  'revision': dict(self.fixture, freshness=dict(self.fixture['freshness'],
                                                                revision={'head': '0' * 40, 'tracked_dirty': False})),
                  'trace check': dict(self.fixture, freshness=dict(self.fixture['freshness'], lake_trace_check={}))}
-        for reason, report in cases.items():
+        (code, result, err), *stale = self.check_all([{'goals': goal}] +
+                                                     [{'goals': goal, 'report': report} for report in cases.values()])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(result['freshness']['artifacts'], 1)
+        for reason, (code, _, err) in zip(cases, stale):
             with self.subTest(reason=reason):
-                self.report.write_text(json.dumps(report))
-                code, _, err = self.check(goal)
                 self.assertEqual(code, 2)
                 self.assertIn(reason, err)
         self.report.write_text(json.dumps(self.fixture))
@@ -862,10 +886,11 @@ class ManifestTests(unittest.TestCase):
                                                if k != 'toolchain_runtime_sha256'})
         mismatch = dict(self.fixture, extractor=dict(self.fixture['extractor'],
                                                      toolchain_runtime_sha256='0' * 64))
-        for reason, report in [('missing', missing), ('mismatch', mismatch)]:
+        cases = [('missing', missing), ('mismatch', mismatch)]
+        results = self.check_all([{'goals': [('ClaimFixture.fret_total', 'total_correctness')], 'report': report}
+                                  for _, report in cases])
+        for (reason, _), (code, _, err) in zip(cases, results):
             with self.subTest(reason=reason):
-                self.report.write_text(json.dumps(report))
-                code, _, err = self.check([('ClaimFixture.fret_total', 'total_correctness')])
                 self.assertEqual(code, 2)
                 self.assertIn('no matching toolchain runtime binding', err)
 
@@ -877,13 +902,14 @@ class ManifestTests(unittest.TestCase):
         wrong_source['freshness']['artifacts'][0]['source'] = None
         wrong_source['freshness']['artifacts'][0]['source_sha256'] = None
         missing_headers = dict(self.fixture, module_imports={})
-        for reason, report in [('no compiler-owned run binding', missing),
-                               ('differs from the report selection', wrong_selection),
-                               ('source/output differs', wrong_source),
-                               ('incomplete import headers', missing_headers)]:
+        cases = [('no compiler-owned run binding', missing),
+                 ('differs from the report selection', wrong_selection),
+                 ('source/output differs', wrong_source),
+                 ('incomplete import headers', missing_headers)]
+        results = self.check_all([{'goals': [('ClaimFixture.fret_total', 'total_correctness')], 'report': report}
+                                  for _, report in cases])
+        for (reason, _), (code, _, err) in zip(cases, results):
             with self.subTest(reason=reason):
-                assumptions.write_report(self.report, report)
-                code, _, err = self.check([('ClaimFixture.fret_total', 'total_correctness')])
                 self.assertEqual(code, 2)
                 self.assertIn(reason, err)
 
@@ -891,11 +917,11 @@ class ManifestTests(unittest.TestCase):
         goal = [('ClaimFixture.fret_total', 'total_correctness')]
         dirty = copy.deepcopy(self.fixture)
         dirty['freshness']['revision']['tracked_dirty'] = True
-        self.report.write_text(json.dumps(dirty))
-        code, _, err = self.check(goal, flags=())
+        (code, _, err), (code2, result, err2) = self.check_all([
+            {'goals': goal, 'flags': (), 'report': dirty}, {'goals': goal, 'report': dirty}])
         self.assertEqual(code, 2)
         self.assertIn('--allow-dirty', err)
-        code, result, err = self.check(goal)
+        code, err = code2, err2
         self.assertEqual(code, 0, err)
         self.assertEqual((result['freshness']['tracked_dirty'], result['freshness']['dirty_allowed']), (True, True))
 

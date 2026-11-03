@@ -32,6 +32,53 @@ theorem two_segments {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t :
       (fun w _ _ _ => w = 7) G m n := by
   fsym
 
+/-- The partial memory wrapper retains protocol fields across a load, for arbitrary fields. -/
+theorem wrapper_load_fields {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : up (pts q 4 v) (own t)) :
+    P.WP t (ConcM.liftMem (load (BitVec 32) 4 q))
+      (fun w _ m' _ => w = v ∧ m'.waiters = m.waiters ∧ m'.woken = m.woken ∧
+        m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size) G m n := by
+  fsym [WP.liftMem_fowned]
+
+/-- The total wrapper retains the same fields without assuming a partial protocol. -/
+theorem wrapper_store_load_fields {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res) (q : Ptr)
+    (v : BitVec 32) (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : up (pts q 4 v) (own t)) :
+    P.WP t (ConcM.liftMem (store (α := BitVec 32) 4 q 7) >>= fun _ =>
+        ConcM.liftMem (load (BitVec 32) 4 q))
+      (fun w _ m' _ => w = 7 ∧ m'.waiters = m.waiters ∧ m'.woken = m.woken ∧
+        m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size) G m n := by
+  fsym [WP.liftMem_fownedT (x := store (α := BitVec 32) 4 q 7),
+    WP.liftMem_fownedT (x := load (BitVec 32) 4 q)]
+
+/-- A final load must not lose the protocol fields retained by allocation and store. -/
+theorem wrapper_alloc_store_load_fields {Tgt γ : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size)
+    (hp : plain (own t)) :
+    P.WP t (ConcM.liftMem (allocStack 8 8) >>= fun q =>
+        ConcM.liftMem (store (α := BitVec 64) 8 q 7) >>= fun _ =>
+        ConcM.liftMem (load (BitVec 64) 8 q))
+      (fun w _ m' _ => w = 7 ∧ m'.waiters = m.waiters ∧ m'.woken = m.woken ∧
+        m'.groups = m.groups ∧ m'.clocks.size = m.clocks.size) G m n := by
+  fsym [FTriple.allocStackDrop]
+
+/-- The wrapper passes the actual step frame, its ownership and its atomic map together.
+This is a generic API control for every memory segment, not an atomic-array equality. -/
+theorem wrapper_frame_relation {Tgt γ α : Type} (P : Proto Tgt γ) (hpart : P.Partial)
+    (t : ThreadId) (G : ThreadId → γ) (m : Mem) (n : Nat) (own : ThreadId → Res) (rO : Res)
+    (x : MemM α) (Pa : FAssn) (Qa : α → FAssn) (ht : FTTriple Pa x Qa)
+    (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t)) :
+    P.WP t (ConcM.liftMem x)
+      (fun a _ m' _ => ∃ r' hF, FOwned (upd own t r') rO m' ∧ Qa a r' ∧
+        FStepIn hF m m' ∧ ∃ σ, AMap hF m m' σ) G m n := by
+  exact WP.liftMem_fowned ht ho hc htl hp
+    (fun _ _ r' hF _ ho' hq _ _ _ _ _ _ hs => ⟨r', hF, ho', hq, hs, hs.atomics⟩)
+    (.inl hpart)
+
 /-- **Steps of a concurrent body** (`callMC`, `callRC`: one rule form, `ConcM.liftMem`): a field
 pointer whose run the caller's lemma gives (`WP.liftMem_pure`), then a pure step
 (`WP.liftMem_liftR`). -/
@@ -730,6 +777,79 @@ theorem witness_retry_kernel (B Missing : Prop) (D : Nat → Prop) (x : Nat)
   intro hx
   have hx : x = 1 := by simpa using hx
   exact good (by omega)
+
+/-- Both shared outer constructors must retain a contradiction in the nested sum. -/
+theorem nested_ctor_refutation {Tgt γ α β ε : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Q : Prop) (x : α) (y : β)
+    (h : (some (.ok (Sum.inl x)) : Option (Except ε (Sum α β))) =
+      some (.ok (Sum.inr y))) :
+    P.WP t (pure ()) (fun _ _ _ _ => Q) G m n := by
+  fsym
+
+/-- A consistent equality in the same nested branch must not prove an unrelated post. -/
+theorem nested_ctor_consistent {Tgt γ α β ε : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Q : Prop) (x y : α)
+    (h : (some (.ok (Sum.inl x)) : Option (Except ε (Sum α β))) =
+      some (.ok (Sum.inl y))) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => Q) G m n := by
+      fsym
+  trivial
+
+universe u
+
+/-- The applied term has trailing implicit arguments that must be fresh at every rewrite. -/
+private theorem applied_reverse_twice (_ : Unit) {α : Type u} {xs : List α} :
+    xs.reverse.reverse = xs := List.reverse_reverse xs
+
+/-- One applied simp term rewrites two independent values in the same cached WP context. -/
+theorem applied_simp_repeated {Tgt γ α : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (xs ys : List α) :
+    P.WP t (pure (xs, ys))
+      (fun v _ _ _ => v.1.reverse.reverse = xs ∧ v.2.reverse.reverse = ys) G m n := by
+  fsym [applied_reverse_twice ()]
+
+/-- The named-constant simp path continues to generalize its existing binders. -/
+theorem named_simp_repeated {Tgt γ α : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (xs ys : List α) :
+    P.WP t (pure (xs, ys))
+      (fun v _ _ _ => v.1.reverse.reverse = xs ∧ v.2.reverse.reverse = ys) G m n := by
+  fsym [List.reverse_reverse]
+
+/-- Generalizing implicit arguments does not establish a different requested result. -/
+theorem applied_simp_rejects_wrong_result {Tgt γ α : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (xs ys : List α) (_hne : xs ≠ ys) : True := by
+  fail_if_success
+    have : P.WP t (pure xs) (fun v _ _ _ => v.reverse.reverse = ys) G m n := by
+      fsym [applied_reverse_twice ()]
+  trivial
+
+private theorem applied_conditional {Gate Inv : Nat → Prop}
+    (hP : ∀ k, Gate k → Inv k) {k : Nat} (hk : Gate k) : Inv k := hP k hk
+
+/-- The same applied conditional proposition is used below two fresh continuation binders. -/
+theorem applied_conditional_repeated {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Gate Inv : Nat → Prop)
+    (hP : ∀ k, Gate k → Inv k) :
+    P.WP t (pure ()) (fun _ _ _ _ =>
+      ∀ i, Gate i → Inv i ∧ ∀ j, Gate j → Inv j) G m n := by
+  fsym [applied_conditional hP]
+
+/-- The conditional helper never supplies its missing admission premise. -/
+theorem applied_conditional_missing {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (Gate Inv : Nat → Prop)
+    (hP : ∀ k, Gate k → Inv k) : True := by
+  fail_if_success
+    have : P.WP t (pure ()) (fun _ _ _ _ => ∀ k, Inv k) G m n := by
+      fsym [applied_conditional hP]
+  trivial
+
+/-- Prepared applied proofs follow a substitution even when their data type names its witness. -/
+theorem applied_simp_after_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n k : Nat) (heq : k = m.current)
+    (A : (j : Nat) → j = m.current → Type) (xs : List (A k heq)) :
+    P.WP t (pure xs) (fun v _ _ _ => v.reverse.reverse = xs) G m n := by
+  fsym [applied_reverse_twice (xs := xs) ()]
 
 end SepAuto.WP
 
