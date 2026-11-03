@@ -569,7 +569,7 @@ class LakeKernelReplayTests(unittest.TestCase):
             lines = []
             for target in targets:
                 path = target.replace('.', '/') + '.lean'
-                module = re.search(r'KernelReplay\.run `(\S+)', (Path(cwd) / path).read_text()).group(1)
+                module = json.loads(re.search(r'KernelReplay\.run (".*")', (Path(cwd) / path).read_text()).group(1))
                 if module in self.drop:
                     continue
                 record = {'module': self.foreign.get(module, module), 'status': self.status.get(module, 'pass'),

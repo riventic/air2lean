@@ -239,7 +239,7 @@ class LakeKernelReplay(unittest.TestCase):
         def built():
             # The receipt of AuditControl: the one whose source names it.
             sources = [p for p in workspace.glob("KernelReplay/*.lean")
-                       if "run `AuditControl\n" in p.read_text()]
+                       if 'run "AuditControl"\n' in p.read_text()]
             self.assertEqual(len(sources), 1, sources)
             return sources[0].name, (receipts / (sources[0].stem + ".olean")).stat().st_mtime_ns
 
@@ -275,10 +275,10 @@ class LakeKernelReplay(unittest.TestCase):
         cache = self.package.parent / (self.package.name + "-cache")
         self.addCleanup(shutil.rmtree, cache, True)
 
-        def cached():
+        def cached():  # scripts/cas.py lake_env, with a cache of this test's own
             env = {k: v for k, v in os.environ.items() if k != "AIR2LEAN_CAS_DIR" and not k.startswith("LAKE_")}
-            return mock.patch.dict(os.environ, {**env, "LAKE_ARTIFACT_CACHE": "true", "LAKE_CACHE_DIR": str(cache)},
-                                   clear=True)
+            return mock.patch.dict(os.environ, {**env, "LAKE_ARTIFACT_CACHE": "true", "LAKE_CACHE_DIR": str(cache),
+                                                "LAKE_RESTORE_ARTIFACTS": "true"}, clear=True)
 
         honest = "theorem honest : 1 + 1 = 2 := rfl\n"
         self.assertEqual(self.replay(honest, cached)["status"], "pass")

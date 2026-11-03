@@ -305,8 +305,9 @@ path there; otherwise the driver is elaborated afresh on that path.
 
 With `--extract-in PACKAGE` the kernel replay is Lake-built as well: each audited module `M` has
 a receipt module in `PACKAGE/.lake/replay` that imports only `tools.KernelReplay` and runs
-`run_meta Air2Lean.KernelReplay.run `M`. The helper runs the toolchain's `leanchecker` on `M` as
-its own process, under Lake's lookup path, and logs one `AIR2LEAN_KERNEL_REPLAY` line. The receipt
+`#eval Air2Lean.KernelReplay.run "M"`. The helper runs the toolchain's `leanchecker` on `M` as
+its own process, under Lake's lookup path, and logs one `AIR2LEAN_KERNEL_REPLAY` line. The helper
+imports only `Init`, so a receipt's process holds little besides its checker. The receipt
 never imports `M`, because importing would run `M`'s `initialize` code in the receipt's process
 ([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Instead, the receipt's
 generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M` again exactly
