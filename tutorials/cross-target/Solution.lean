@@ -5,7 +5,7 @@ running, for either target. -/
 
 namespace CrossTarget
 
-open Zig Zig.Conc Zig.Conc.Proto Zig.Full Threadsync Threadsync.ThreadMutex
+open Zig Zig.Conc Zig.Conc.Proto Zig.Full Threadsync
 
 /- `WP` is only a name here: unfolding it would run the program. -/
 attribute [local irreducible] Proto.WP
@@ -18,6 +18,7 @@ theorem unlock_keeps_current (hP : L.Fits K P U ok) (hc : L.c = mutexC) {p : Ptr
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcur : m.current = t)
     (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_unlock p) (fun _ _ m' _ => m'.current = t) G m d :=
-  WP.mono (fun _ _ _ _ h => h.2.1) (unlock_wp hP hcost hp hc t g hg hok io G m d hi hcur)
+  WP.mono (fun _ _ _ _ h => h.2.1)
+    (threadMutex.unlock_wp hP hcost hp hc t g hg hok io G m d hi hcur)
 
 end CrossTarget
