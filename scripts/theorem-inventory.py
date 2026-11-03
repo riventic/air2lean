@@ -80,6 +80,11 @@ def module_path(module: str) -> Path:
     return Path(*module.split('.')).with_suffix('.lean')
 
 
+def module_source(root: Path, module: str, swaps: dict[str, str]) -> Path:
+    """The source a build selects for `module`: its swapped-in translation, else its own file."""
+    return root / swaps.get(canonical_example(module), module_path(module))
+
+
 def gen_module(example: str) -> str:
     return f'Proofs.{example.capitalize()}.Gen'
 
@@ -145,8 +150,9 @@ class BuildCommand:
     def deleted(self, root: Path) -> list[str]:
         """Explicit module targets (dotted names) whose source file is gone from `root`: a run
         recorded before a module was deleted names it, and Lake cannot build it any more. A library
-        or executable target (an undotted name) is never dropped."""
-        return [m for m in self.modules if '.' in m and not (root / module_path(m)).is_file()]
+        or executable target (an undotted name) is never dropped; a swapped module is resolved to
+        its swap source, as `closure` does."""
+        return [m for m in self.modules if '.' in m and not module_source(root, m, self.swaps).is_file()]
 
     def renewal(self, lake: Path, python: str, root: Path | None = None) -> list[str]:
         """Fresh renewal permits rebuilding; historical recording keeps captured policy. With `root`,
@@ -417,7 +423,7 @@ def closure(root: Path, modules: list[str], swaps: dict[str, str] | None = None)
         if mod in seen:
             continue
         seen.add(mod)
-        path = root / swaps.get(canonical_example(mod), module_path(mod))
+        path = module_source(root, mod, swaps)
         if not path.is_file():
             raise Error(f'{mod}: no source file {module_path(mod)}')
         try:
