@@ -147,7 +147,7 @@ def wusPost (P : Proto Tgt γ) (L : FLock γ) (E : FEvent γ) (t : ThreadId) (g 
     (D : Nat) (x : Thread_ResetEvent_FutexImpl_waitUntilSetExit ×
       Thread_ResetEvent_FutexImpl_waitUntilSetLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) :
     Prop :=
-  x.1 = .br36 ∧ x.2.state = 2 ∧ d ≤ D ∧ m.current = t ∧ E.IsSet m ∧
+  x.1 = .br36 ∧ x.2.state = 2 ∧ d ≤ D ∧ m.current = t ∧ E.IsSet m ∧ E.Synced t m ∧
     ∃ r, DPart (L.part g) q bsD r ∧ P.inv (upd G t (gD L E g .out r)) m
 
 /-- One repeat of `waitUntilSet`'s loop: `Deadline.wait`, then an acquire load. -/
@@ -170,7 +170,7 @@ theorem wus_body [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
   simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc]
   refine WP.bind (FEvent.wp_load hE (.inr (gD_ph hE)) (by rw [gD_lph hE]; exact hgo)
     hi₁ fun k hk G₂ m₂ b hc₂ hcase => ?_)
-  rcases hcase with ⟨-, h0, -⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs₂, hi₂⟩
+  rcases hcase with ⟨-, h0, -⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs₂, hy₂, hi₂⟩
   · rw [gD_ph hE] at h0; cases h0
   · rw [gD_set hE] at hi₂
     simp only [StateT.run_modify, StateT.run_get, StateT.run_pure, pure_bind,
@@ -184,7 +184,7 @@ theorem wus_body [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
     simp only [StateT.run_modify, StateT.run_get, StateT.run_pure, pure_bind,
       show ((2 : BitVec 32) != 1) = true from rfl, ↓reduceIte]
     repeat (first
-      | exact ⟨rfl, rfl, by omega, hc₂, hs₂, r₁, hdp₁, hi₂⟩
+      | exact ⟨rfl, rfl, by omega, hc₂, hs₂, hy₂ rfl, r₁, hdp₁, hi₂⟩
       | refine WP.pure' ?_
       | simp only [StateT.run_pure, Thread_ResetEvent_FutexImpl_waitUntilSet.again37,
           Bool.false_eq_true, ↓reduceIte])
@@ -226,7 +226,7 @@ def wusEnd (P : Proto Tgt γ) (L : FLock γ) (E : FEvent γ) (t : ThreadId) (g :
     (D : Nat) (x : Thread_ResetEvent_FutexImpl_waitUntilSetExit ×
       Thread_ResetEvent_FutexImpl_waitUntilSetLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) :
     Prop :=
-  x.1 = .ret (.ok ()) ∧ d ≤ D ∧ m.current = t ∧ E.IsSet m ∧ ∃ bs r, bs.size = 48 ∧
+  x.1 = .ret (.ok ()) ∧ d ≤ D ∧ m.current = t ∧ E.IsSet m ∧ E.Synced t m ∧ ∃ bs r, bs.size = 48 ∧
     DPart (L.part g) q bs r ∧ P.inv (upd G t (gD L E g .out r)) m
 
 set_option maxHeartbeats 400000 in
@@ -239,7 +239,8 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
     (hc : m.current = t) (hpl : (L.part g).Plain)
     (hi : P.inv (upd G t (gD L E g p₀ (L.part g))) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_waitUntilSet E.W.ptr none) (fun x G' m' d' =>
-      x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+      x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ E.Synced t m' ∧
+        P.inv (upd G' t g) m') G m d := by
   have hgoD : ∀ {p r}, L.ph (gD L E g p r) = .out := fun {_ _} => by rw [gD_lph hE]; exact hgo
   unfold Thread_ResetEvent_FutexImpl_waitUntilSet
   refine WP.bind (FEvent.wp_liftPart hE hgoD hi hc (dalloc _ (by rw [gD_part]; exact hpl)) rfl
@@ -250,21 +251,23 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
   rw [StateT.run'_eq]
   refine WP.map (WP.mono (Q := wusEnd P L E t g q d) (fun x G₂ m₂ d₂ hx => ?_) ?_)
   · -- the tail: `free` the deadline block
-    obtain ⟨hx, hd₂, hc₂, hs₂, bs, r₂, hbs, hdp₂, hi₂⟩ := hx
+    obtain ⟨hx, hd₂, hc₂, hs₂, hy₂, bs, r₂, hbs, hdp₂, hi₂⟩ := hx
     show P.WP t (ConcM.liftMem (free q) >>= fun _ => _) _ G₂ m₂ d₂
     refine WP.bind (FEvent.wp_liftPart hE hgoD hi₂ hc₂ (dfree hbs)
-      (by rw [gD_part]; exact hdp₂) fun _ m₃ r₃ _ hr₃ hc₃ hh₃ hi₃ => ?_)
+      (by rw [gD_part]; exact hdp₂) fun _ m₃ r₃ hf₃ hr₃ hc₃ hh₃ hi₃ => ?_)
     subst hr₃
     rw [gD_setPart, gD_self hE, FEvent.set_of hgx] at hi₃
     rw [hx]
-    refine WP.pure' ⟨rfl, hd₂, hc₃, ?_, hi₃⟩
+    -- `free` keeps the clocks
+    obtain ⟨_, _, _, _, rfl⟩ := free_ok hf₃
+    refine WP.pure' ⟨rfl, hd₂, hc₃, ?_, hy₂.mono hh₃ (VClock.le_refl _), hi₃⟩
     unfold FEvent.IsSet FEvent.newest; rw [hh₃]; exact hs₂
   -- the body
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   refine WP.bind (FEvent.wp_load hE (g := gD L E g p₀ r₁) (by rw [gD_ph hE]; exact hp₀)
     hgoD hi₁ fun k hk G₂ m₂ b hc₂ hcase => ?_)
   simp only [StateT.run_modify, StateT.run_get, pure_bind]
-  rcases hcase with ⟨rfl, hw0, hi₂⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs₂, hi₂⟩
+  rcases hcase with ⟨rfl, hw0, hi₂⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs₂, hy₂, hi₂⟩
   · rw [gD_ph hE] at hw0; subst hw0
     rw [gD_set hE] at hi₂
     simp only [show ((0 : BitVec 32) == 0) = true from rfl, ↓reduceIte, StateT.run_bind,
@@ -280,13 +283,13 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       refine WP.bind (wus_loopPath hE hcost hgo hlive (D := d) (fun x G₄ m₄ d₄ hx => ?_) _
         G₃ m₃ k₃ (Nat.le_of_lt (by omega)) hc₃ hdp₁ hi₃)
       obtain ⟨e, s'⟩ := x
-      obtain ⟨rfl, hst, hd₄, hc₄, hs₄, r₄, hdp₄, hi₄⟩ := hx
+      obtain ⟨rfl, hst, hd₄, hc₄, hs₄, hy₄, r₄, hdp₄, hi₄⟩ := hx
       change s'.state = 2 at hst
       refine WP.pure' ?_
       simp only [StateT.run_bind, StateT.run_get, pure_bind, hst]
       refine WP.bind (WP.callRC_ok debugAssert_true ?_)
-      exact WP.pure' ⟨rfl, hd₄, hc₄, hs₄, bsD, r₄, bsD_size, hdp₄, hi₄⟩
-    · rcases hcase with ⟨rfl, hi₃⟩ | ⟨rfl, hs₃, hi₃⟩
+      exact WP.pure' ⟨rfl, hd₄, hc₄, hs₄, hy₄, bsD, r₄, bsD_size, hdp₄, hi₄⟩
+    · rcases hcase with ⟨rfl, hi₃⟩ | ⟨rfl, hs₃, hy₃, hi₃⟩
       · rw [gD_set hE] at hi₃
         simp only [Option.isSome_some, ↓reduceIte, StateT.run_pure, optPayload, StateT.run_bind]
         refine WP.bind (WP.bind (WP.pure' ?_))
@@ -299,12 +302,12 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
         refine WP.bind (wus_loopPath hE hcost hgo hlive (D := d) (fun x G₄ m₄ d₄ hx => ?_)
           _ G₃ m₃ k₃ hk₃ hc₃ hdp₁ hi₃)
         obtain ⟨e, s'⟩ := x
-        obtain ⟨rfl, hst, hd₄, hc₄, hs₄, r₄, hdp₄, hi₄⟩ := hx
+        obtain ⟨rfl, hst, hd₄, hc₄, hs₄, hy₄, r₄, hdp₄, hi₄⟩ := hx
         change s'.state = 2 at hst
         refine WP.pure' ?_
         simp only [StateT.run_bind, StateT.run_get, pure_bind, hst]
         refine WP.bind (WP.callRC_ok debugAssert_true ?_)
-        exact WP.pure' ⟨rfl, hd₄, hc₄, hs₄, bsD, r₄, bsD_size, hdp₄, hi₄⟩
+        exact WP.pure' ⟨rfl, hd₄, hc₄, hs₄, hy₄, bsD, r₄, bsD_size, hdp₄, hi₄⟩
       · rw [gD_set hE] at hi₃
         simp only [Option.isSome_some, ↓reduceIte, StateT.run_pure, optPayload, StateT.run_bind]
         refine WP.bind (WP.bind (WP.pure' ?_))
@@ -316,25 +319,26 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
           StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
         refine WP.bind (WP.callRC_ok debugAssert_true ?_)
         have hk₃ : k₃ ≤ d := by omega
-        exact WP.pure' ⟨rfl, hk₃, hc₃, hs₃, Array.replicate 48 .undef, r₁, by simp, hdp₁, hi₃⟩
+        exact WP.pure' ⟨rfl, hk₃, hc₃, hs₃, hy₃ rfl, Array.replicate 48 .undef, r₁, by simp, hdp₁,
+          hi₃⟩
   · rw [gD_set hE] at hi₂
     simp only [show ((1 : BitVec 32) == 0) = false from rfl, show ((1 : BitVec 32) == 1) = true from rfl,
       Bool.false_eq_true, ↓reduceIte, StateT.run_pure, StateT.run_bind, StateT.run_get, pure_bind]
     refine WP.bind (wus_loopPath hE hcost hgo hlive (D := d) (fun x G₃ m₃ d₃ hx => ?_) _
       G₂ m₂ k (Nat.le_of_lt (by omega)) hc₂ hdp₁ hi₂)
     obtain ⟨e, s'⟩ := x
-    obtain ⟨rfl, hst, hd₃, hc₃, hs₃, r₃, hdp₃, hi₃⟩ := hx
+    obtain ⟨rfl, hst, hd₃, hc₃, hs₃, hy₃, r₃, hdp₃, hi₃⟩ := hx
     change s'.state = 2 at hst
     refine WP.pure' ?_
     simp only [StateT.run_bind, StateT.run_get, pure_bind, hst]
     refine WP.bind (WP.callRC_ok debugAssert_true ?_)
-    exact WP.pure' ⟨rfl, hd₃, hc₃, hs₃, bsD, r₃, bsD_size, hdp₃, hi₃⟩
+    exact WP.pure' ⟨rfl, hd₃, hc₃, hs₃, hy₃, bsD, r₃, bsD_size, hdp₃, hi₃⟩
   · rw [gD_set hE] at hi₂
     simp only [show ((2 : BitVec 32) == 0) = false from rfl,
       show ((2 : BitVec 32) == 1) = false from rfl, show ((2 : BitVec 32) == 2) = true from rfl,
       Bool.false_eq_true, ↓reduceIte, StateT.run_pure, StateT.run_bind, StateT.run_get, pure_bind]
     repeat (first
-      | exact ⟨rfl, by omega, hc₂, hs₂, _, r₁, by simp, hdp₁, hi₂⟩
+      | exact ⟨rfl, by omega, hc₂, hs₂, hy₂ rfl, _, r₁, by simp, hdp₁, hi₂⟩
       | refine WP.pure' ?_
       | refine WP.bind (WP.callRC_ok debugAssert_true ?_)
       | simp only [StateT.run_pure, StateT.run_bind, StateT.run_get, pure_bind])
@@ -352,7 +356,7 @@ theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcos
       P.Live t G₁ m₁)
     (hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_wait p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+      E.IsSet m' ∧ E.Synced t m' ∧ P.inv (upd G' t g) m') G m d := by
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
   unfold Thread_ResetEvent_wait
@@ -374,7 +378,7 @@ theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcos
   simp only [StateT.run_bind, pure_bind]
   refine WP.bind (WP.bind (FEvent.wp_load hE (.inl (E.ph_set _ _)) (by rw [hE.lph]; exact hgo)
     hi0 fun k hk G₂ m₂ b hc₂ hcase => ?_))
-  rcases hcase with ⟨rfl, -, hi₂⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs₂, hi₂⟩
+  rcases hcase with ⟨rfl, -, hi₂⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs₂, hy₂, hi₂⟩
   · rw [E.set_set, ← gD_self hE] at hi₂
     repeat (first
       | refine WP.pure' ?_
@@ -382,9 +386,9 @@ theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcos
           show ((0 : BitVec 32) == 2) = false from rfl, Bool.not_false, ↓reduceIte])
     refine WP.bind (WP.callC (WP.mono (fun x G₄ m₄ d₄ h₄ => ?_)
       (wus_wp hE hcost hgx hgo hlive (.inl rfl) G₂ m₂ k hc₂ hpl hi₂)))
-    obtain ⟨rfl, hd₄, hc₄, hs₄, hi₄⟩ := h₄
+    obtain ⟨rfl, hd₄, hc₄, hs₄, hy₄, hi₄⟩ := h₄
     repeat (first
-      | exact ⟨by omega, hc₄, hs₄, hi₄⟩
+      | exact ⟨by omega, hc₄, hs₄, hy₄, hi₄⟩
       | refine WP.pure' ?_
       | simp only [StateT.run_pure, StateT.run_bind, pure_bind, isNonErr, ↓reduceIte])
     done
@@ -395,15 +399,15 @@ theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcos
           show ((1 : BitVec 32) == 2) = false from rfl, Bool.not_false, ↓reduceIte])
     refine WP.bind (WP.callC (WP.mono (fun x G₄ m₄ d₄ h₄ => ?_)
       (wus_wp hE hcost hgx hgo hlive (.inr rfl) G₂ m₂ k hc₂ hpl hi₂)))
-    obtain ⟨rfl, hd₄, hc₄, hs₄, hi₄⟩ := h₄
+    obtain ⟨rfl, hd₄, hc₄, hs₄, hy₄, hi₄⟩ := h₄
     repeat (first
-      | exact ⟨by omega, hc₄, hs₄, hi₄⟩
+      | exact ⟨by omega, hc₄, hs₄, hy₄, hi₄⟩
       | refine WP.pure' ?_
       | simp only [StateT.run_pure, StateT.run_bind, pure_bind, isNonErr, ↓reduceIte])
     done
   · rw [E.set_set, FEvent.set_of hgx] at hi₂
     repeat (first
-      | exact ⟨by omega, hc₂, hs₂, hi₂⟩
+      | exact ⟨by omega, hc₂, hs₂, hy₂ rfl, hi₂⟩
       | refine WP.pure' ?_
       | simp only [StateT.run_pure, StateT.run_bind, pure_bind, isNonErr,
           show ((2 : BitVec 32) == 2) = true from rfl, Bool.not_true, Bool.false_eq_true,

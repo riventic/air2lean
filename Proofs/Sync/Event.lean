@@ -75,7 +75,7 @@ def waitInv (P : Proto Tgt γ) (E : FEvent γ) (t : ThreadId) (g : γ) (D : Nat)
 def waitPost (P : Proto Tgt γ) (E : FEvent γ) (t : ThreadId) (g : γ) (D : Nat)
     (r : Io_Event_waitUncancelableExit × Io_Event_waitUncancelableLocals) (G : ThreadId → γ)
     (m : Mem) (d : Nat) : Prop :=
-  r.1 = .ret ∧ d < D ∧ m.current = t ∧ E.IsSet m ∧ P.inv (upd G t g) m
+  r.1 = .ret ∧ d < D ∧ m.current = t ∧ E.IsSet m ∧ E.Synced t m ∧ P.inv (upd G t g) m
 
 /-- One repeat of `waitUncancelable`'s loop: the futex wait, then an acquire load. -/
 theorem wait_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
@@ -97,7 +97,7 @@ theorem wait_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     fun k hk G₁ m₁ hc₁ hi₁ => ?_)
   refine WP.bind (FEvent.wp_loadAs hE ioEvent_dec (.inr hg1) hgo1 hi₁
     fun k₂ hk₂ G₂ m₂ b r hc₂ hd hcase => ?_)
-  rcases hcase with ⟨-, h0, -⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs, hi₂⟩
+  rcases hcase with ⟨-, h0, -⟩ | ⟨rfl, hi₂⟩ | ⟨rfl, hs, hy, hi₂⟩
   · rw [hg1] at h0; cases h0
   · obtain rfl := ioEvent_of1 hd
     rw [E.set_set] at hi₂
@@ -106,7 +106,7 @@ theorem wait_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
   · obtain rfl := ioEvent_of2 hd
     rw [E.set_set, FEvent.set_of hgx] at hi₂
-    exact WP.pure' ⟨rfl, by omega, hc₂, hs, hi₂⟩
+    exact WP.pure' ⟨rfl, by omega, hc₂, hs, hy rfl, hi₂⟩
 
 /-- **`Io.Event.waitUncancelable`** by a thread out of the event's and the lock's code, as the
 only waiter (`hone`, `hhb`): it returns when the event is set. -/
@@ -120,7 +120,7 @@ theorem ioEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
       P.Live t G₁ m₁)
     (_hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+      E.IsSet m' ∧ E.Synced t m' ∧ P.inv (upd G' t g) m') G m d := by
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
   have hg0 : E.ph (E.set g .w0) = .w0 := E.ph_set _ _
@@ -140,22 +140,22 @@ theorem ioEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
   · rw [E.set_set] at hi₁
     simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind]
     refine WP.mono ?_ (hloop G₁ m₁ k ⟨by omega, hc₁, hi₁⟩)
-    rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hs', hi'⟩
-    exact WP.pure' ⟨hd', hc', hs', hi'⟩
+    rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hs', hy', hi'⟩
+    exact WP.pure' ⟨hd', hc', hs', hy', hi'⟩
   · simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind, bind_assoc]
     refine WP.bind (WP.callRC (fun e he => by cases he) fun a ha => ?_)
     cases ha
-    rcases hcase with ⟨rfl, hi₁⟩ | ⟨rfl, hs, hi₁⟩
+    rcases hcase with ⟨rfl, hi₁⟩ | ⟨rfl, hs, hy, hi₁⟩
     · obtain rfl := ioEvent_of1 hd
       rw [E.set_set] at hi₁
       simp only [StateT.run_pure, pure_bind]
       refine WP.mono ?_ (hloop G₁ m₁ k ⟨by omega, hc₁, hi₁⟩)
-      rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hs', hi'⟩
-      exact WP.pure' ⟨hd', hc', hs', hi'⟩
+      rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', hs', hy', hi'⟩
+      exact WP.pure' ⟨hd', hc', hs', hy', hi'⟩
     · obtain rfl := ioEvent_of2 hd
       rw [E.set_set, FEvent.set_of hgx] at hi₁
       simp only [StateT.run_pure, pure_bind]
-      exact WP.pure' (WP.pure' ⟨by omega, hc₁, hs, hi₁⟩)
+      exact WP.pure' (WP.pure' ⟨by omega, hc₁, hs, hy rfl, hi₁⟩)
 
 end
 

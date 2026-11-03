@@ -83,6 +83,29 @@ abbrev newest (m : Mem) : Word.Entry := (E.W.hist m)[(E.W.hist m).size - 1]!
 /-- The event is set: its newest write is `is_set`. -/
 def IsSet (m : Mem) : Prop := (E.newest m).Val (2 : BitVec 32)
 
+/-- Thread `t` synchronized with a set: an `is_set` write of the word happened before it (its
+release clock is below `t`'s clock). An acquire read of `is_set` gives it (`Synced.of_read`); a
+waiter that returns has it (`EventImpl.wait_wp`), so what happened before a set happened before
+the waiter's next step. -/
+def Synced (t : ThreadId) (m : Mem) : Prop :=
+  ∃ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (2 : BitVec 32) ∧
+    VClock.le (E.W.hist m)[j]!.relClock (m.clocks[t]!) = true
+
+/-- An acquire read of the write `j`, which is `is_set` (the facts of the word's rules: the read
+write, its acquire, the unchanged history): the reader synchronized with a set. -/
+theorem Synced.of_read {E : FEvent γ} {t : ThreadId} {m₁ m' : Mem} {j : Nat} (hj : j < (E.W.hist m₁).size)
+    (hv : (E.W.hist m₁)[j]!.Val (2 : BitVec 32))
+    (hacq : VClock.le (E.W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true)
+    (hh : E.W.hist m' = E.W.hist m₁) : E.Synced t m' :=
+  ⟨j, by rw [hh]; exact hj, by rw [hh]; exact hv, by rw [hh]; exact hacq⟩
+
+/-- `Synced` after a step that keeps the word's history and does not lower `t`'s clock. -/
+theorem Synced.mono {E : FEvent γ} {t : ThreadId} {m m' : Mem} (hs : E.Synced t m)
+    (hh : E.W.hist m' = E.W.hist m) (hc : VClock.le (m.clocks[t]!) (m'.clocks[t]!) = true) :
+    E.Synced t m' :=
+  let ⟨j, hj, hv, hle⟩ := hs
+  ⟨j, by rw [hh]; exact hj, by rw [hh]; exact hv, by rw [hh]; exact VClock.le_trans hle hc⟩
+
 /-- The event's invariant, with the lock's places (module doc). -/
 structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- The writes are `unset`, `waiting` or `is_set`. -/
@@ -1243,7 +1266,8 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
       (P.inv (upd G₁ t (E.set g .w1)) m' → Q (none, s) G₁ m' k) ∧
       (∀ b r, (Packed.ofBits? (α := α) b).run = some (.ok r) →
         (b = 1 ∧ P.inv (upd G₁ t (E.set g .w1)) m') ∨
-        (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (some r, s) G₁ m' k))
+        (b = 2 ∧ E.IsSet m' ∧ (fail.isAcq = true → E.Synced t m') ∧
+          P.inv (upd G₁ t (E.set g .out)) m') → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 E.W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
   refine FLock.wp_wordCasAs hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
@@ -1256,15 +1280,16 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
           rcases hrun with ⟨c, r, hr⟩
           exact .inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩))) hw'
       ⟨fun hv _ hh _ _hR => ?_,
-      fun j b r hne hd hj hv hfl _ hh _hR => ?_⟩
+      fun j b r hne hd hj hv hfl hacq hh _hR => ?_⟩
   · rw [he] at hv; rw [hn] at hh
     exact (h k hk G₁ m' (hop.current.trans hc₁)).1
       (hE.afterCasOk hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
   · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
-      ⟨rfl, -⟩ | h1 | h1
+      ⟨rfl, -⟩ | h1 | ⟨rfl, hs, hi'⟩
     · exact absurd he.symm hne
     · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b r hd (.inl h1)
-    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b r hd (.inr h1)
+    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 _ r hd
+        (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩)
 
 /-- The waiter's `cmpxchg(unset → waiting)` at `w0` on bits (`cmpxchgC`,
 `Thread.ResetEvent`). -/
@@ -1275,7 +1300,8 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (P.inv (upd G₁ t (E.set g .w1)) m' → Q (none, s) G₁ m' k) ∧
       (∀ b, (b = 1 ∧ P.inv (upd G₁ t (E.set g .w1)) m') ∨
-        (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (some b, s) G₁ m' k))
+        (b = 2 ∧ E.IsSet m' ∧ (fail.isAcq = true → E.Synced t m') ∧
+          P.inv (upd G₁ t (E.set g .out)) m') → Q (some b, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC (n := 32) succ fail 4 E.W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst he hn
@@ -1288,14 +1314,15 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
           rcases hrun with ⟨c, r, hr⟩
           exact .inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩))) hw'
       ⟨fun hv _ hh _ _hR => ?_,
-      fun j b hne hj hv hfl _ hh _hR => ?_⟩
+      fun j b hne hj hv hfl hacq hh _hR => ?_⟩
   · exact (h k hk G₁ m' (hop.current.trans hc₁)).1
       (hE.afterCasOk hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
   · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
-      ⟨rfl, -⟩ | h1 | h1
+      ⟨rfl, -⟩ | h1 | ⟨rfl, hs, hi'⟩
     · exact absurd rfl hne
     · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b (.inl h1)
-    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b (.inr h1)
+    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 _
+        (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩)
 
 /-- A waiter's load at the word (`w0` or `w1`; `atomicLoadC`). -/
 theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
@@ -1304,17 +1331,22 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t →
       (b = 0 ∧ E.ph g = .w0 ∧ P.inv (upd G₁ t (E.set g .w0)) m') ∨
       (b = 1 ∧ P.inv (upd G₁ t (E.set g .w1)) m') ∨
-      (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (b, s) G₁ m' k)
+      (b = 2 ∧ E.IsSet m' ∧ (ord.isAcq = true → E.Synced t m') ∧
+        P.inv (upd G₁ t (E.set g .out)) m') → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl hacq hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
-
-      h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
-        rw [FEvent.cur_eq hc₁]
-        exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl)
+      h k hk G₁ m' b (hop.current.trans hc₁) (by
+        rcases hE.afterRead hg₁ hg hgo hU hY (by
+          refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+          rw [FEvent.cur_eq hc₁]
+          exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl
+          with h0 | h1 | ⟨rfl, hs, hi'⟩
+        · exact .inl h0
+        · exact .inr (.inl h1)
+        · exact .inr (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩))
 
 /-- A waiter's load at the word with a decode (`atomicLoadAsC`). -/
 theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
@@ -1327,19 +1359,23 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
       (Packed.ofBits? (α := α) b).run = some (.ok r) →
       (b = 0 ∧ E.ph g = .w0 ∧ P.inv (upd G₁ t (E.set g .w0)) m') ∨
       (b = 1 ∧ P.inv (upd G₁ t (E.set g .w1)) m') ∨
-      (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (r, s) G₁ m' k)
+      (b = 2 ∧ E.IsSet m' ∧ (ord.isAcq = true → E.Synced t m') ∧
+        P.inv (upd G₁ t (E.set g .out)) m') → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α ord 4 E.W.ptr : CM Tgt σ α).run s) Q G m n :=
   FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
-    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl hacq hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
-
-      h k hk G₁ m' b r (hop.current.trans hc₁) hd
-        (hE.afterRead hg₁ hg hgo hU hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
-        rw [FEvent.cur_eq hc₁]
-        exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl)
+      h k hk G₁ m' b r (hop.current.trans hc₁) hd (by
+        rcases hE.afterRead hg₁ hg hgo hU hY (by
+          refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+          rw [FEvent.cur_eq hc₁]
+          exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl
+          with h0 | h1 | ⟨rfl, hs, hi'⟩
+        · exact .inl h0
+        · exact .inr (.inl h1)
+        · exact .inr (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩))
 
 /-- A load at the word by a thread out of the event's code (`atomicLoadC`). -/
 theorem wp_peek (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
@@ -1689,7 +1725,9 @@ and counts no turns.
   that its sleep at an event that is not set is not a deadlock (`hlive`). The waiter's part holds
   the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): an implementation may keep
   state in a stack block (`Thread.ResetEvent` 0.15.2: its deadline), which needs it
-  (`FTriple.allocStackDrop`).
+  (`FTriple.allocStackDrop`). The waiter returns synchronized with a set (`FEvent.Synced`: it
+  read an `is_set` write with acquire), so what happened before the set happened before the
+  waiter's next step: an event orders memory, not only control.
 - `set_wp`: a thread out of the event's and the lock's code, with a ghost value that may set
   (`FEvent.sx`), that sets it returns with the event set. -/
 structure EventImpl (Tgt : Type) where
@@ -1706,7 +1744,7 @@ structure EventImpl (Tgt : Type) where
       P.Live t G₁ m₁) →
     (L.part g).Plain → P.inv (upd G t g) m →
     P.WP t (wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      P.inv (upd G' t g) m') G m d
+      E.Synced t m' ∧ P.inv (upd G' t g) m') G m d
   set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →

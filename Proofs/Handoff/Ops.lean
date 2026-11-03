@@ -289,7 +289,7 @@ theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} 
     (proto Lo prodOf).WP 0 (ei.wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       (proto Lo prodOf).inv (upd G' 0 (gO rM { ph := .joins })) m') G m d := by
   obtain ⟨hone, hhb⟩ := ewait_ok hi
-  exact WP.mono (fun _ _ _ _ ⟨hd, hc, _, hi'⟩ => ⟨hd, hc, inv_joins hi'⟩)
+  exact WP.mono (fun _ _ _ _ ⟨hd, hc, _, _, hi'⟩ => ⟨hd, hc, inv_joins hi'⟩)
     (ei.wait_wp fitsE rfl hp 0 (gO rM { ph := .ev }) rfl rfl (.inl rfl) io G m d hone hhb
       ewait_live hpl hi)
 
