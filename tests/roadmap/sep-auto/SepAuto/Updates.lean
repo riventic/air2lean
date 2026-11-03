@@ -380,6 +380,26 @@ example {φ : Prop} (hφ : φ) (X R : FAssn) (a b : Nat) : True := by
       (← instantiateMVars (← determined.mvarId!.getType)))
   trivial
 
+/-- An applied hole whose argument is a local out of the head's scope (`?Q v` at a return,
+`v` introduced after `?Q`): a rest that names `v` is taken by abstracting it. -/
+open Lean Meta Elab Tactic Zig.Full.Auto in
+example (X : FAssn) (F : Nat → FAssn) : True := by
+  run_tac withRunCaches do
+    discard arithSimpCtx
+    let X := (← getLocalDeclFromUserName `X).toExpr
+    let F := (← getLocalDeclFromUserName `F).toExpr
+    let q ← mkFreshExprMVar (← mkArrow (mkConst ``Nat) (mkConst ``FAssn))
+    withLocalDeclD `v (mkConst ``Nat) fun v => do
+      let g ← mkFreshExprSyntheticOpaqueMVar
+        (← mkAppM ``EUpd #[mkSep X (mkApp F v), mkSep X (mkApp q v)])
+      unless (← closeEntail g.mvarId!).isEmpty do
+        throwError "an out-of-scope argument's rest was not taken"
+      unless (← instantiateMVars (mkApp q v)).headBeta == mkApp F v do
+        throwError "the applied hole did not take the rest that names its argument"
+      checkWithKernel (← mkExpectedTypeHint (← instantiateMVars g)
+        (← instantiateMVars (← g.mvarId!.getType)))
+  trivial
+
 /-- An unavailable provider rejects the first rule after planning; the next rule keeps all
 bytes and the arbitrary exclusive frame. A portable arithmetic proof may make this pass on
 the old engine too; no disappearing declaration or exact cache contents are asserted. -/

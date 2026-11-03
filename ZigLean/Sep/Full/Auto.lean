@@ -4424,7 +4424,9 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
             else do
               let lam ← forallBoundedTelescope (← head.getType) (some fr.getAppNumArgs) fun xs _ =>
                 mkLambdaFVars xs wanted
-              isDefEq (mkMVar head) lam
+              -- (a rest that names an argument out of the head's scope, `?Q v` with `pts p 8 v`
+              -- at a return: the pattern abstracts the argument, as before)
+              if ← isDefEq (mkMVar head) lam then pure true else isDefEq fr wanted
           unless ok do throwError "fsym: cannot assign the explicit frame{indentExpr fr}"
           seen := seen.push head
       catch ex =>
