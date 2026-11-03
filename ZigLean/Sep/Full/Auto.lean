@@ -4859,7 +4859,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
               let fr ← instantiateMVars fr
               pure (!fr.hasExprMVar && (← left.allM fun m => m.withContext do
                 let t ← instantiateMVars (← m.getType)
-                pure (!t.hasExprMVar && !t.isAppOfArity ``EUpd 2)))
+                pure (!t.hasExprMVar && !t.isAppOfArity ``EUpd 2) <&&> isProp t))
             else pure false
           unless determined do
             trace[fsym] "rule {rule}: no plan for its precondition"
@@ -5569,6 +5569,10 @@ def recRoot? (g : MVarId) : TacticM (Option RecBoundary) := g.withContext do
                 (← withDefault (isDefEq rs[rs.size - 2]! rs[rs.size - 1]!)) then
               return some { members, invocation }
         rollback
+    return none
+  catch ex =>
+    -- (a goal or a local hypothesis this recognition cannot read: the ordinary walk)
+    trace[fsym] "recursive root: {ex.toMessageData}"
     return none
   finally
     saved.restore
