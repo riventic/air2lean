@@ -491,6 +491,7 @@ def audit_ok(plan, audit):
     for key, path in [('source_sha256', ROOT / 'tools/Assurance.lean'),
                       ('olean_sha256', ROOT / '.lake/build/lib/lean/tools/Assurance.olean'),
                       ('lake_trace_sha256', ROOT / '.lake/build/lib/lean/tools/Assurance.trace'),
+                      ('executable_sha256', ROOT / '.lake/build/bin/assurance'),
                       ('lean_toolchain_sha256', ROOT / 'lean-toolchain'), ('lake_config_sha256', ROOT / 'lakefile.toml')]:
         demand(extractor[key] == fingerprint(path)['sha256'], 'extractor identity mismatch: ' + key)
 

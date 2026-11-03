@@ -169,6 +169,8 @@ class ReceiptTests(unittest.TestCase):
             base = own / module.replace('.', '/')
             self.put(base.with_suffix('.olean'), b'checked artifact ' + module.encode())
             self.put(base.with_suffix('.trace'), b'Lake trace ' + module.encode())
+        executable = self.root / '.lake/build/bin/assurance'
+        self.put(executable, b'compiled extractor')
         auditor = r.helper('assumptions')
         raw = {'schema_version': 1, 'modules': ['Proofs.One'], 'project_declarations': [],
                'nodes': [{'name': 'Example.checked', 'module': 'Proofs.One', 'kind': 'theorem',
@@ -184,6 +186,7 @@ class ReceiptTests(unittest.TestCase):
         audit['extractor'] = {'source_sha256': r.fingerprint(self.root / 'tools/Assurance.lean')['sha256'],
               'olean_sha256': r.fingerprint(own / 'tools/Assurance.olean')['sha256'],
               'lake_trace_sha256': r.fingerprint(own / 'tools/Assurance.trace')['sha256'],
+              'executable_sha256': r.fingerprint(executable)['sha256'],
               'lean_toolchain_sha256': r.fingerprint(self.root / 'lean-toolchain')['sha256'],
               'lake_config_sha256': r.fingerprint(self.root / 'lakefile.toml')['sha256']}
         self.write('audit.json', audit)

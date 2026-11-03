@@ -145,19 +145,20 @@ run_meta do
   | .ok _ => throwError "unknown kernel signature must return an error"
 ''')
 
-def lean(*args):
-    result = subprocess.run(['lake', 'env', 'lean', *map(str, args)], text=True,
+def lake(*args):
+    result = subprocess.run(['lake', *map(str, args)], text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode:
         raise SystemExit(result.stdout)
     return result.stdout
 
-lean('-R', root, '-o', fixtures / (module + '.olean'), fixture)
-driver = root / 'all-declarations.lean'
-audit = '#assurance_audit ["' + module + '"]\n'
-driver.write_text('import tools.Assurance\nimport ' + module + '\n' + audit +
-                  'set_option air2lean.assurance.allDeclarations true\n' + audit)
-output = lean(driver)
+lake('env', 'lean', '-R', root, '-o', fixtures / (module + '.olean'), fixture)
+# The compiled extractor (scripts/assumptions.py extractor_command), without and with
+# --all-declarations.
+lake('build', 'assurance')
+sysroot = lake('env', 'printenv', 'LEAN_SYSROOT').strip()
+extractor = ['env', '.lake/build/bin/assurance', '--sysroot', sysroot]
+output = lake(*extractor, module) + lake(*extractor, '--all-declarations', module)
 records = [line.removeprefix('AIR2LEAN_ASSURANCE_JSON:') for line in output.splitlines()
            if line.startswith('AIR2LEAN_ASSURANCE_JSON:')]
 assert len(records) == 2, output

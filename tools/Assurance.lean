@@ -13,18 +13,14 @@ import ZigLean.Sep.Full.AllocSpec
 import tools.OutcomeContracts
 
 /-!
-Environment-based assurance data extraction. The generated driver imports only this file and
-invokes `#assurance_audit`, which imports the selected modules without running their
-initializers (`importWithoutInitializers`). Policy is deliberately applied outside this command:
-the raw declaration graph and Lean's own transitive axiom inventory remain inspectable.
+Environment-based assurance data extraction. The compiled extractor (`tools/AssuranceMain.lean`,
+the `assurance` executable) imports this file's closure and the selected modules once, running
+no interpreted initializer of any of them (`importAudited`), and prints the report (`report`).
+Policy is deliberately applied outside it: the raw declaration graph and Lean's own transitive
+axiom inventory remain inspectable.
 -/
 
-open Lean Elab Command Meta
-
-register_option air2lean.assurance.allDeclarations : Bool := {
-  defValue := false
-  descr := "seed the assurance graph with every checked declaration in selected modules"
-}
+open Lean Meta
 
 namespace Air2Lean.Assurance
 
@@ -688,13 +684,12 @@ before `importClosure` frees the region `data` lives in. -/
 @[noinline] private def copyImports (data : ModuleData) : IO (Array Name) :=
   return data.imports.map (copyName ·.module)
 
-/-- The modules `roots` import transitively, without the `loaded` ones (this process's own
-closure, closed under imports), read from their `.olean` headers. Each module's data is freed
-once its imports are copied out: building an environment here instead would hold a second copy
-of every module in memory, since a region mapped at its base address once is copied, not mapped,
-by every later import of it. -/
-private unsafe def importClosure (loaded : NameSet) (roots : Array Name) : IO (Array Name) := do
-  let mut seen := loaded
+/-- The modules `roots` import transitively, read from their `.olean` headers. Each module's data
+is freed once its imports are copied out: building an environment here instead would hold a
+second copy of every module in memory, since a region mapped at its base address once is copied,
+not mapped, by every later import of it. -/
+private unsafe def importClosure (roots : Array Name) : IO (Array Name) := do
+  let mut seen : NameSet := {}
   let mut closure := #[]
   let mut todo := roots.toList
   while true do
@@ -711,45 +706,41 @@ private unsafe def importClosure (loaded : NameSet) (roots : Array Name) : IO (A
       todo := imports.toList ++ todo
   return closure
 
-/-- The current imports and `modules`, imported the way `leanchecker` loads them: no newly
-imported module's initializer runs (docs/architecture-audit/soundness-2026-10-20.md E1). Importing
-an audited module through the driver's header would run its `initialize` code in this process,
-which writes the report. The closure of `modules` beyond this process's own (`importClosure`) is
-read first; each of its modules is then marked as already initialized, so the extension-loading
-import runs no `[init]` of it. Only the extractor's own imports, initialized when this file was
-elaborated, keep theirs. -/
-private unsafe def importWithoutInitializersImpl (env : Environment) (modules : Array Name)
-    (opts : Options) : IO Environment := do
-  let loaded := env.header.moduleNames.foldl (init := {}) NameSet.insert
-  let closure ← importClosure loaded modules
-  let initialized ← interpretedModInits.get
-  interpretedModInits.set (closure.foldl (init := initialized) (·.insert ·))
+/-- The extractor's own modules (this file) and `modules`, in one environment, imported the way
+`leanchecker` loads them: no interpreted initializer runs (docs/architecture-audit/
+soundness-2026-10-20.md E1). Importing an audited module the way `lean` imports a file's header
+would run its `initialize` code in this process, which writes the report. The closure
+(`importClosure`) is read first and every module of it marked as already initialized, so the
+extension-loading import runs no `[init]` of it. Only the extractor's own modules keep theirs:
+this process is the compiled extractor (`tools/AssuranceMain.lean`), which ran their native
+initializers when it started. It holds no imported module before this call, so each module is
+loaded once: a second import of a loaded module would copy it (`importClosure`), the whole of
+`Lean` alone about 2.1 GB. The extractor's own modules are imported too: the claim heads they
+import make an audited module's declaration of the same name fail, and the report's terms name
+their constants (tools/OutcomeContracts.lean). -/
+unsafe def importAudited (modules : Array Name) (opts : Options) : IO Environment := do
+  let imports := #[`tools.Assurance] ++ modules
+  let closure ← importClosure imports
+  interpretedModInits.modify fun initialized => closure.foldl (init := initialized) (·.insert ·)
   enableInitializersExecution
-  importModules (env.header.imports ++ modules.map ({ module := · })) opts (loadExts := true)
-    (leakEnv := true)
+  importModules (imports.map ({ module := · })) opts (loadExts := true) (leakEnv := true)
 
-@[implemented_by importWithoutInitializersImpl]
-private opaque importWithoutInitializers (env : Environment) (modules : Array Name) (opts : Options) :
-  IO Environment
-
-syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
-
-elab_rules : command
-  | `(#assurance_audit [$modules:str,*]) => do
-    let selected := modules.getElems.map (·.getString)
+/-- The report of the `selected` modules in the current environment (`importAudited`):
+`seedAll` makes every checked declaration of them a graph root (`--all-declarations`), and each
+of `families` must resolve there (a renamed family fails, even when no selected declaration
+references its old name). -/
+def report (selected : Array String) (seedAll : Bool) (families : Array Name) : MetaM Json := do
     if selected.isEmpty then throwError "assurance audit requires modules"
-    -- The driver imports only this file; the audited modules are imported here, running none
-    -- of their initializers (`importWithoutInitializers`).
-    setEnv (← importWithoutInitializers (← getEnv) (selected.map String.toName) (← getOptions))
     -- The checked environment excludes erroneous elaborator placeholders. Private olean
     -- data is loaded by ordinary (non-`module`) imports, so proof bodies are available.
     let env := (← getEnv).setExporting false
+    for family in families do
+      unless env.contains family do throwError "unknown framework family {family}"
     if env.header.modules.size != env.header.moduleData.size then
       throwError "assurance import metadata is incomplete"
     let moduleImports := (env.header.modules.zip env.header.moduleData).map fun (entry, data) =>
       (entry.module.toString, if entry.hasData then namesJson (data.imports.map (·.module)) else Json.null)
     let selectedSet := Std.HashSet.ofArray selected
-    let seedAll := air2lean.assurance.allDeclarations.get (← getOptions)
     let (roots, declarations, selectedDeclarations) := env.checked.get.constants.fold
       (init := ((#[] : Array Name), (#[] : Array Name), (#[] : Array Name)))
       fun (roots, declarations, selectedDeclarations) n c =>
@@ -764,7 +755,7 @@ elab_rules : command
     let (allocatorDeps, contracts) := allocatorGraph env roots.toList
     let mut creationRecords : Std.HashMap Name (Json × List Nat) := {}
     for contract in contracts do
-      let record ← liftTermElabM <| withoutExporting <| allocatorCreationJson env contract
+      let record ← withoutExporting <| allocatorCreationJson env contract
       creationRecords := creationRecords.insert contract record
     let namedContracts := contracts.filter fun name =>
       ((env.checked.get.find? name).bind fun ci => allocatorInvariant? ci.type).isSome
@@ -776,7 +767,7 @@ elab_rules : command
     -- those bodies once here, and propagate any failure into every client's cached record.
     for contract in namedContracts do
       let records := allocatorReachable allocatorDeps creationRecords [contract]
-      let found ← liftTermElabM <| withoutExporting <|
+      let found ← withoutExporting <|
         allocatorUses env contract contractSet relevant
       applicationUses := applicationUses.insert contract found
       let inspected := allocatorApplications contract records found
@@ -817,7 +808,7 @@ elab_rules : command
     if seedAll then
       for n in selectedDeclarations do
         let some c := env.checked.get.find? n | throwError "selected declaration disappeared: {n}"
-        let evidence ← liftTermElabM <| withoutExporting <| frameworkEvidence env n c
+        let evidence ← withoutExporting <| frameworkEvidence env n c
         framework := framework.push evidence
     let mut theorems : Array Json := #[]
     for n in roots do
@@ -825,7 +816,7 @@ elab_rules : command
       let (conclusion, statement, shape) ← match env.checked.get.find? n with
         | some c => do
           let creation := allocatorReachable allocatorDeps creationRecords [n]
-          let shape ← liftTermElabM <| withoutExporting do
+          let shape ← withoutExporting do
             let creation ← if creation.isEmpty && !relevant.contains n then pure creation else do
               let found ← match applicationUses.get? n with
                 | some found => pure found
@@ -846,6 +837,6 @@ elab_rules : command
         else roots.toList ++ declarations.toList)))] ++
       if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations),
         ("selected_declaration_evidence", Json.arr framework)] else []
-    liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)
+    return result
 
 end Air2Lean.Assurance
