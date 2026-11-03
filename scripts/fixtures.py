@@ -160,6 +160,12 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
     return axioms
 
 
+def scripts_on_path() -> None:
+    """Lazy imports of the sibling scripts (assumptions, theorem_universe)."""
+    if str(Path(__file__).resolve().parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
 def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
           package: Path | None = None, all_declarations: bool = True) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
@@ -167,8 +173,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
     Lake package (`package`, else the fixture package when `lib` is not given) has Lake build the
     extractor's driver on that package (scripts/assumptions.py --extract-in); a fixture Unit
     audit only while Lake resolves exactly its compiler-owned lookup path."""
-    if str(Path(__file__).resolve().parent) not in sys.path:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
+    scripts_on_path()
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
     import theorem_universe
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
@@ -340,8 +345,7 @@ def main(argv: list[str]) -> int:
         modules = sorted(set(a.modules) | set(library_modules(a.library) if a.library else []))
         if not modules:
             parser.error("audit: name MODULEs or --library LIB")
-        if str(Path(__file__).resolve().parent) not in sys.path:
-            sys.path.insert(0, str(Path(__file__).resolve().parent))
+        scripts_on_path()
         from assumptions import runtime_run
         try:
             # One toolchain-runtime digest for the audit's steps, hashed again at its end.

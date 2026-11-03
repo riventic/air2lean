@@ -49,6 +49,16 @@ cache record or successful result is published. Extraction's recorded runtime mu
 replay entry. This tightens existing admission; it does not expand the cacheable module set or
 authenticate complete project/private import closures.
 
+One run hashes the runtime's bytes once (`runtime_run`: `assumptions.py`, `theorem_universe.py`,
+`fixtures.py audit`, `fixture-checks.py`; nested audits, also in child processes, share it through
+`AIR2LEAN_TOOLCHAIN_RUNTIME_RUN`). Every later `toolchain_runtime_sha256` of that toolchain in the
+run returns the shared digest only while the runtime's stat identity is unchanged: each selected
+file's and link's path, link target, device, inode, size, mtime and ctime, taken before and after
+the run's hash (they must agree). A different identity hashes the bytes afresh. At the end of the
+run the bytes are hashed again; a different digest fails the run, so a runtime changed during the
+run (even with every stat field kept) never passes with the digest of the old one. Another
+toolchain is always hashed afresh.
+
 `no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
 `set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
 `extern` and `implemented_by` outside the reviewed counts in `assurance/kernel-escapes.json`.
