@@ -569,26 +569,30 @@ class FixtureTests(unittest.TestCase):
         build = ti.parse_build_command(
             self.fx.root, [str(self.fx.lake), 'build', 'Proofs', module, 'Proofs.Gone.Deleted'],
             lake=str(self.fx.lake))
-        self.assertEqual(build.deleted(self.fx.root), ['Proofs.Gone.Deleted'])
-        self.assertEqual(build.renewal(self.fx.lake, 'python3', root=self.fx.root),
+        gone = build.deleted(self.fx.root)
+        self.assertEqual(gone, ['Proofs.Gone.Deleted'])
+        self.assertEqual(build.without(gone).renewal(self.fx.lake, 'python3'),
                          [str(self.fx.lake), 'build', 'Proofs', module])
-        # without a root the historical command is replayed unchanged
-        self.assertIn('Proofs.Gone.Deleted', build.renewal(self.fx.lake, 'python3'))
         swap = ti.parse_build_command(
             self.fx.root, ['python3', 'scripts/theorem-inventory.py', 'swap-build', '--lake',
                            str(self.fx.lake), '--', module, 'Proofs.Gone.Deleted'])
-        self.assertEqual(swap.renewal(self.fx.lake, 'python3', root=self.fx.root)[-2:], ['--', module])
-        # a swapped Gen module is resolved to its swap source, even without its own file
+        self.assertEqual(swap.without(swap.deleted(self.fx.root)).renewal(self.fx.lake, 'python3')[-2:],
+                         ['--', module])
+        # nothing left (a module named twice included): refused, never a bare `lake build`
+        for args in (['Proofs.Gone.Deleted'], ['Proofs.Gone.Deleted', 'Proofs.Gone.Deleted']):
+            only = ti.parse_build_command(self.fx.root, [str(self.fx.lake), 'build', *args],
+                                          lake=str(self.fx.lake))
+            with self.assertRaisesRegex(ti.Error, 'every recorded module is deleted'):
+                only.without(only.deleted(self.fx.root))
+        # a swapped Gen module is checked at its own path, which swap_build replaces: refused
         (self.fx.root / 'Proofs/Demo/Gen.lean').unlink()
         swapped = ti.parse_build_command(
             self.fx.root, ['python3', 'scripts/theorem-inventory.py', 'swap-build', '--lake',
                            str(self.fx.lake), '--swap', 'demo=tests/golden/0.15.2/demo/Gen.lean',
                            '--', 'Proofs.Demo.Gen', module])
-        self.assertEqual(swapped.deleted(self.fx.root), [])
-        gone = ti.parse_build_command(self.fx.root, [str(self.fx.lake), 'build', 'Proofs.Gone.Deleted'],
-                                      lake=str(self.fx.lake))
-        with self.assertRaisesRegex(ti.Error, 'every recorded module is deleted'):
-            gone.renewal(self.fx.lake, 'python3', root=self.fx.root)
+        self.assertEqual(swapped.deleted(self.fx.root), ['Proofs.Demo.Gen'])
+        with self.assertRaisesRegex(ti.Error, 'a swapped module is deleted'):
+            swapped.without(swapped.deleted(self.fx.root))
 
     def test_swapped_imports_are_recorded_and_checked_from_the_selected_source(self):
         helper_module = 'Proofs.Extra.Helper'

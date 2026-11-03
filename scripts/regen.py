@@ -329,12 +329,15 @@ def step_inventory(check):
         run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
         return
     # Reject unsupported producers/commands before dispatching any stale run, even if its
-    # hashes are stale for another reason. Never replay arbitrary historical argv.
-    plans = {}
+    # hashes are stale for another reason. Never replay arbitrary historical argv. Modules deleted
+    # since a run was recorded are left out of its renewal (refused if nothing is left).
+    plans, dropped = {}, {}
     for rid in stale:
         try:
             record = inventory['runs'][rid]
-            plans[rid] = inv_mod.parse_build_command(ROOT, record.get('command'), lake=inv_mod.producer_path(record))
+            plan = inv_mod.parse_build_command(ROOT, record.get('command'), lake=inv_mod.producer_path(record))
+            dropped[rid] = plan.deleted(ROOT)
+            plans[rid] = plan.without(dropped[rid]) if dropped[rid] else plan
         except inv_mod.Error as error:
             raise Failed(f'theorem-inventory run {rid}: refusing replay: {error}') from error
     try:
@@ -345,14 +348,9 @@ def step_inventory(check):
         record = inventory['runs'][rid]
         log('re-recording theorem-inventory run %s' % rid)
         plan = plans[rid]
-        gone = plan.deleted(ROOT)
-        if gone:
-            log('  not rebuilding deleted modules: ' + ', '.join(gone))
-        try:
-            command = plan.renewal(lake, python=PY, root=ROOT)
-        except inv_mod.Error as error:
-            raise Failed(f'theorem-inventory run {rid}: {error}') from error
-        report, logfile = guarded('inventory-' + rid, command, env=lake_env(),
+        if dropped[rid]:
+            log('  not rebuilding deleted modules: ' + ', '.join(dropped[rid]))
+        report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
                                   tools=[lake] if plan.kind == 'swap' else [])
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])

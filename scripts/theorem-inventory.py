@@ -80,11 +80,6 @@ def module_path(module: str) -> Path:
     return Path(*module.split('.')).with_suffix('.lean')
 
 
-def module_source(root: Path, module: str, swaps: dict[str, str]) -> Path:
-    """The source a build selects for `module`: its swapped-in translation, else its own file."""
-    return root / swaps.get(canonical_example(module), module_path(module))
-
-
 def gen_module(example: str) -> str:
     return f'Proofs.{example.capitalize()}.Gen'
 
@@ -148,22 +143,28 @@ class BuildCommand:
         return [*command, '--', *self.modules]
 
     def deleted(self, root: Path) -> list[str]:
-        """Explicit module targets (dotted names) whose source file is gone from `root`: a run
+        """Explicit module targets (dotted names) whose own source file is gone from `root`: a run
         recorded before a module was deleted names it, and Lake cannot build it any more. A library
-        or executable target (an undotted name) is never dropped; a swapped module is resolved to
-        its swap source, as `closure` does."""
-        return [m for m in self.modules if '.' in m and not module_source(root, m, self.swaps).is_file()]
+        or executable target (an undotted name) is never dropped. A swapped `Proofs.<Ex>.Gen` is
+        checked at its own path too: `swap_build` replaces that file, so it must exist."""
+        return [m for m in self.modules if '.' in m and not (root / module_path(m)).is_file()]
 
-    def renewal(self, lake: Path, python: str, root: Path | None = None) -> list[str]:
-        """Fresh renewal permits rebuilding; historical recording keeps captured policy. With `root`,
-        modules deleted since the recording are not rebuilt (`deleted`); the new record then no
-        longer names them, and a theorem of a deleted module has no current run (fail closed)."""
-        gone = set(self.deleted(root)) if root is not None else set()
-        if gone and len(gone) == len(self.modules):
-            raise Error('every recorded module is deleted: ' + ', '.join(sorted(gone)))
-        build = BuildCommand(self.kind, self.lake, [m for m in self.modules if m not in gone], self.swaps,
-                             [a for a in self.lake_args if a not in gone], self.python)
-        command = build.invocation(lake, python)
+    def without(self, gone: list[str]) -> 'BuildCommand':
+        """This command without the deleted modules `gone` (`deleted`). The renewed record no longer
+        names them, and a theorem of a deleted module has no current run (fail closed). Refused when
+        no module is left or a swapped translation's module is gone."""
+        modules = [m for m in self.modules if m not in gone]
+        if not modules:
+            raise Error('every recorded module is deleted: ' + ', '.join(gone))
+        swapped = [m for m in gone if canonical_example(m) in self.swaps]
+        if swapped:
+            raise Error('a swapped module is deleted: ' + ', '.join(swapped))
+        return BuildCommand(self.kind, self.lake, modules, self.swaps,
+                            [a for a in self.lake_args if a not in gone], self.python)
+
+    def renewal(self, lake: Path, python: str) -> list[str]:
+        """Fresh renewal permits rebuilding; historical recording keeps captured policy."""
+        command = self.invocation(lake, python)
         return [arg for arg in command if arg != '--no-build'] if self.kind == 'lake' else command
 
 
@@ -423,7 +424,7 @@ def closure(root: Path, modules: list[str], swaps: dict[str, str] | None = None)
         if mod in seen:
             continue
         seen.add(mod)
-        path = module_source(root, mod, swaps)
+        path = root / swaps.get(canonical_example(mod), module_path(mod))
         if not path.is_file():
             raise Error(f'{mod}: no source file {module_path(mod)}')
         try:
