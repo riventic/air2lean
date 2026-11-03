@@ -369,7 +369,7 @@ class ReplayTests(unittest.TestCase):
             sizes.append(n)
             return real(n)
 
-        keys = ('AIR2LEAN_JOBS', 'AIR2LEAN_REPLAY_JOBS', 'AIR2LEAN_UNIVERSE_JOBS')
+        keys = ('AIR2LEAN_JOBS', 'AIR2LEAN_REPLAY_JOBS', 'AIR2LEAN_UNIVERSE_JOBS', 'AIR2LEAN_MEM_MIB')
         saved = {k: os.environ.pop(k, None) for k in keys}
         os.environ.update(env)
         concurrent.futures.ThreadPoolExecutor, universe.ThreadPoolExecutor = pool, pool
@@ -405,6 +405,13 @@ class ReplayTests(unittest.TestCase):
                 self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1'}, work), [1])
                 self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1', stage: '2'}, work), [2])
                 self.assertEqual(self.worker_counts({}, work), [min(4, os.cpu_count() or 1)])
+            # Replays also fit the guard's memory budget, REPLAY_MIB each, and at least one runs.
+            per = assumptions.REPLAY_MIB
+            self.assertEqual(self.worker_counts({'AIR2LEAN_REPLAY_JOBS': '4', 'AIR2LEAN_MEM_MIB': str(2 * per + 1)},
+                                                replay), [2])
+            self.assertEqual(self.worker_counts({'AIR2LEAN_REPLAY_JOBS': '4', 'AIR2LEAN_MEM_MIB': '100'}, replay), [1])
+            self.assertEqual(self.worker_counts({'AIR2LEAN_REPLAY_JOBS': '2', 'AIR2LEAN_MEM_MIB': str(9 * per)},
+                                                replay), [2])
         finally:
             universe.compile_unit = original
 

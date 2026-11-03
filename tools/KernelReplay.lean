@@ -11,7 +11,10 @@ trace changes. That trace covers the receipt's text, which names the checker and
 runtime, and the trace of `M`, which covers `M`'s olean and every module below it. Otherwise
 Lake replays the stored log. So a module is re-checked once per change of itself or of anything
 it imports, not once per audit. A failed check is logged like a passing one (the build itself
-succeeds), so it is replayed as a failure until an input changes.
+succeeds), so it is replayed as a failure until an input changes. A checker that did not finish
+(it could not start, or a signal ended it: exit code 128 + signal, e.g. 137 for a SIGKILL under
+memory pressure) decided nothing about `M`: the receipt's build fails instead, so Lake stores no
+receipt, the audit fails, and the next build checks `M` again.
 -/
 
 open Lean Meta
@@ -26,6 +29,8 @@ def run (module : Name) : MetaM Unit := do
   let checker := (← findSysroot) / "bin" / "leanchecker"
   let out ← IO.Process.output { cmd := checker.toString, args := #[module.toString] }
   let text := out.stdout ++ out.stderr
+  if out.exitCode ≥ 128 then
+    throwError "leanchecker {module} did not finish (exit code {out.exitCode}):\n{text.takeRight 2000}"
   let receipt := Json.mkObj [("module", toJson module.toString),
     ("status", toJson (if out.exitCode == 0 then "pass" else "fail")),
     ("exit_code", toJson out.exitCode.toNat),

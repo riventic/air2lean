@@ -34,7 +34,9 @@ module outside the replayed set is `kernel-replay-missing`; either fails the rep
 module shadowed by a project olean is an error. Proof receipts require a passing, uncached replay
 by the planned toolchain's `leanchecker` and copy its summary into `receipt.json`; receipts
 without it are not current. Replaying the shipped scope takes about 40 s on 8 cores (about
-280 s of CPU; `AIR2LEAN_REPLAY_JOBS` sets the parallelism, default `min(4, cores)`).
+280 s of CPU). `AIR2LEAN_REPLAY_JOBS` sets the parallelism, else build-guard's `AIR2LEAN_JOBS`,
+else `min(4, cores)`; under build-guard it is at most `AIR2LEAN_MEM_MIB / REPLAY_MIB` (one replay's
+memory, `scripts/assumptions.py`), at least one (`replay_jobs`).
 `--replay-cache FILE` lets the theorem-universe run skip modules whose olean bytes passed
 earlier in the same build; the architecture-audit fixtures' four audits
 (`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way, and
@@ -295,8 +297,9 @@ elaborates it again exactly when its trace changes: the driver's text (with the 
 options and family checks), `tools.Assurance`, those needs (each audited module and everything
 below it), and the toolchain. An unchanged driver replays the build's stored log, and the report
 is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON` message, exactly one). The
-driver's text names the package path, so it is never restored from another checkout's
-artifact-cache entry, which keeps no log: a missing report fails the audit.
+workspace does not use Lake's artifact cache (`enableArtifactCache = false`): the cache keeps no
+build log, so a driver restored from it (another checkout's build, or an earlier checkout at the
+same path) would replay no report. A missing report fails the audit.
 A compiler-owned Unit audit uses that driver only while Lake resolves exactly its bound lookup
 path there; otherwise the driver is elaborated afresh on that path.
 
@@ -309,9 +312,13 @@ never imports `M`, because importing would run `M`'s `initialize` code in the re
 generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M` again exactly
 when the receipt's trace changes: `M`'s olean, `M`'s dependency trace (everything below it), the
 toolchain, and the receipt's text, which names the checker's and the installed runtime's digests. Otherwise
-Lake replays the stored receipt. A failing check stays a failing receipt. The receipts are used
-only while Lake resolves exactly the audit's lookup path in that workspace; a missing, foreign or
-repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
+Lake replays the stored receipt. A failing check stays a failing receipt. A checker that did not
+finish (it could not start, or a signal ended it, e.g. exit 137 for a SIGKILL under memory
+pressure) decided nothing: its receipt's build fails, so the audit fails and the next one checks
+the module again. Like the driver's, the receipts' workspace does not use the artifact cache (a
+receipt is a build log). Lake runs at most `replay_jobs` receipts at once, and no more than the
+caller's `LEAN_NUM_THREADS`. The receipts are used only while Lake resolves exactly the audit's
+lookup path in that workspace; a missing, foreign or repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
 
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
 for each exact selected root. The CLI report preserves those rows under
