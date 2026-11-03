@@ -344,8 +344,10 @@ def parse_args(argv):
         p.error("command/profile exceeds evidence limits")
     if len(a.input) > 32 or len(a.output) > 32 or len(a.tool) > 32 or len(a.zig_name) > 32:
         p.error("at most 32 inputs, outputs, tools or extra Zig names")
-    if a.measured is not None and not MEASURED_KEY.fullmatch(a.measured):
-        p.error("--measured KEY: letters, digits and . _ : / - (at most 128)")
+    if a.measured is not None:  # any name; other characters become _
+        a.measured = re.sub(r"[^A-Za-z0-9._:/-]", "_", a.measured)[:128]
+        if not a.measured:
+            p.error("--measured needs a key")
     if len(json.dumps([str(path) for path in [a.cwd, a.lock, a.report, a.log, *a.input, *a.output]]
                       + a.tool + a.zig_name).encode()) > 16 * 1024:
         p.error("metadata paths exceed evidence limits")
@@ -919,7 +921,6 @@ def run(a):
 # a successful or outgrown run's peak is recorded. The workload still sizes itself by --rss-mib
 # (AIR2LEAN_MEM_MIB, `sizing_mib`): sized by its request, a smaller pool would use less, and the
 # requests would shrink run by run. --timeout and --lock-wait hold per attempt.
-MEASURED_KEY = re.compile(r"[A-Za-z0-9._:/-]{1,128}")
 MEASURED_RUNS = 5
 MEASURED_MARGIN = 1.5
 MEASURED_FLOOR_MIB = 2048
@@ -944,16 +945,22 @@ def peaks(lock):
             atomic_report(directory / "peaks.json", data)
 
 
+def recorded(data, key):
+    """KEY's usable peaks in DATA (peaks.json), newest last."""
+    runs = data.get(key) if isinstance(data, dict) else None
+    return [p for p in runs if isinstance(p, (int, float)) and p > 0] if isinstance(runs, list) else []
+
+
 def measured_request(a):
     """The request of KEY (`--measured`): see MEASURED_*. Without a usable record: the most."""
-    try:
-        with peaks(a.lock) as data:
-            runs = data.get(a.measured)
-    except (OSError, RuntimeError) as error:
+    try:  # peaks.json is replaced atomically: read without the lock
+        recent = recorded(json.loads((Path(str(a.lock) + ".d") / "peaks.json").read_text()), a.measured)
+    except FileNotFoundError:
+        recent = []
+    except (OSError, ValueError) as error:
         print(f"build-guard: no measured request ({error}): asking for {a.rss_mib:g} MiB",
               file=sys.stderr, flush=True)
         return a.rss_mib
-    recent = [p for p in runs if isinstance(p, (int, float)) and p > 0] if isinstance(runs, list) else []
     if not recent:
         return a.rss_mib
     return min(a.rss_mib, max(MEASURED_FLOOR_MIB, math.ceil(max(recent) * MEASURED_MARGIN)))
@@ -968,9 +975,8 @@ def record_peak(a, report):
         return
     try:
         with peaks(a.lock) as data:
-            runs = data.get(a.measured)
-            runs = [p for p in runs if isinstance(p, (int, float))] if isinstance(runs, list) else []
-            data[a.measured] = (runs + [math.ceil(report["peak_sampled_rss_kib"] / 1024)])[-MEASURED_RUNS:]
+            data[a.measured] = (recorded(data, a.measured)
+                                + [math.ceil(report["peak_sampled_rss_kib"] / 1024)])[-MEASURED_RUNS:]
     except (OSError, RuntimeError) as error:  # the next run asks for what it did before
         print(f"build-guard: the peak was not recorded: {error}", file=sys.stderr, flush=True)
 

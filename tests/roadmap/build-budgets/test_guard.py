@@ -240,8 +240,10 @@ fixture_pause()
         guard.record_peak(args, {"samples": 0, "peak_sampled_rss_kib": 0})  # nothing sampled: no peak
         with guard.peaks(args.lock) as data:
             self.assertEqual(data, {"regen:x": [1000] * guard.MEASURED_RUNS})
+        self.assertEqual(guard.parse_args(["--report", "r", "--log", "l", "--measured", "a b+c", "--", "true"]).measured,
+                         "a_b_c")
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-            guard.parse_args(["--report", "r", "--log", "l", "--measured", "a b", "--", "true"])
+            guard.parse_args(["--report", "r", "--log", "l", "--measured", "", "--", "true"])
 
     def test_a_workload_that_outgrows_its_measured_request_runs_again_with_the_most(self):
         lock, report = self.root / "shared.lock", self.root / "report.json"
