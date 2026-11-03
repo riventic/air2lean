@@ -125,7 +125,8 @@ jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certif
 if [ "$fixtures" = 1 ]; then
   guarded fixtures-lean "$PWD" python3 -B scripts/fixtures.py build
   # Within this build's admission ($rss): the units share it, the longest first, each admitted by
-  # its measured peak (scripts/fixture-checks.py `schedule`).
-  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 \
+  # its measured peak (scripts/fixture-checks.py `schedule`), each Lake with this build's Lean
+  # processes ($threads: one 11000 MiB process each, so a unit fits its share).
+  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 --lean-threads "$threads" \
     || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi

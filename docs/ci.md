@@ -837,8 +837,9 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
 to eight at once inside their own guard (24000 MiB, at most the guard budget `AIR2LEAN_BUILD_MEM_MIB`
-and the admission of an enclosing guard:
-the full build's whole admission; `--jobs`, `--rss-mib`), the longest first by
+and the admission of an enclosing guard: the full build's whole admission; `--jobs`, `--rss-mib`),
+each with up to two Lean processes (`--lean-threads`; the full build passes its own count, one
+11000 MiB process per thread), the longest first by
 the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
 unit's largest recent sampled peak) fit in 85% of the guard's limit; the measurements
 (`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
