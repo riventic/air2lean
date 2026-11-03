@@ -92,10 +92,11 @@ if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   grep -E '^(full-build|fixture-checks)' "$logs/full-build.log" || true
   exit "$status"
 fi
-# Inside the guard: its admission (a measured one may be smaller), one Lean process per 11000 MiB.
+# Inside the guard: its admission (a measured one may be smaller). The Lean processes stay as many:
+# the measured peak is what they used together, and a phase that outgrows the admission stops the
+# whole build, which then runs again with $rss.
 if [ "${AIR2LEAN_MEM_MIB:-$rss}" -lt "$rss" ]; then
   rss=$AIR2LEAN_MEM_MIB
-  threads=$(( rss / per_process > 0 ? (rss / per_process < threads ? rss / per_process : threads) : 1 ))
   echo "full-build: measured admission of $rss MiB, $threads Lean processes"
 fi
 

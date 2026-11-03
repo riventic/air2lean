@@ -270,6 +270,26 @@ fixture_pause()
         self.assertEqual([a["rss_mib"] for a in written["measured"]["stopped_attempts"]], [3000])
         with guard.peaks(lock) as data:
             self.assertEqual(data["full-build"], [2000, 3001, 11001])
+        # A nested guard stopped at the admission (`outgrown`) also makes the workload run again.
+        limits.clear()
+        with guard.peaks(lock) as data:
+            data["full-build"] = [2000]
+
+        def nested_stop(a):
+            limits.append(a.rss_mib)
+            if len(limits) == 1:
+                guard.outgrown(a).touch()
+            result = {"outcome": "child_failed" if len(limits) == 1 else "success",
+                      "exit_code": 1 if len(limits) == 1 else 0, "samples": 1,
+                      "peak_sampled_rss_kib": 1024, "elapsed_seconds": 1}
+            guard.atomic_report(a.report, result)
+            return result
+
+        with mock.patch.object(guard, "run", nested_stop), mock.patch.object(sys, "argv", argv), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(guard.main(), 0)
+        self.assertEqual(limits[1], 11000)
+        self.assertFalse(guard.outgrown(args).exists())
 
     def start_holder(self, *options, cwd=None):
         """A guarded workload that holds its admission until cancelled."""
@@ -413,6 +433,19 @@ fixture_pause()
         holder.send_signal(signal.SIGTERM)
         holder.communicate(timeout=12)
         self.assertEqual(guard.free_mib(lock, 4096), 4096)
+
+    def test_a_nested_guard_stopped_at_a_measured_admission_marks_it_outgrown(self):
+        mark = self.root / "outer.json.outgrown"
+        for admission, marked in ((1, True), (2, False)):  # a smaller limit of its own: its own failure
+            with self.subTest(admission=admission):
+                os.environ[guard.INHERIT] = json.dumps({
+                    "pid": os.getpid(), "lock": str(self.root / "shared.lock"), "workspace": str(self.root),
+                    "rss_mib": admission, "exclusive": False, "shared_workspace": False, "outgrown": str(mark)})
+                result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
+                self.assertIn("inherited_from", report["admission"], result.stderr)
+                self.assertEqual(report["outcome"], "rss_limit")
+                self.assertEqual(mark.exists(), marked)
+                mark.unlink(missing_ok=True)
 
     def test_a_stale_grant_is_not_an_admission(self):
         os.environ[guard.INHERIT] = json.dumps({"pid": 999999, "lock": str(self.root / "shared.lock"),

@@ -789,7 +789,8 @@ def run(a):
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
                          "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
                          "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared",
-                         INHERIT: json.dumps(lock.grant(), sort_keys=True), **lake_cache_env()}
+                         INHERIT: json.dumps(lock.grant() | ({"outgrown": str(outgrown(a))} if a.measured else {}),
+                                             sort_keys=True), **lake_cache_env()}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
             try:
@@ -858,6 +859,9 @@ def run(a):
             report.update(outcome=reason, exit_code=code, child_status=peek_status(child),
                           workload_seconds=round(time.monotonic() - build_start, 3),
                           log_truncated=report["output_bytes"] > a.log_bytes or report["drain_incomplete"])
+            if reason == "rss_limit" and grant and isinstance(grant.get("outgrown"), str) \
+                    and a.rss_mib >= grant["rss_mib"]:
+                Path(grant["outgrown"]).touch()  # stopped at the enclosing measured admission (main)
         report["log_sha256"] = digest(a.log)
         report["log_bytes"] = a.log.stat().st_size
         report["outputs"] = [file_evidence(a.cwd / path) for path in a.output]
@@ -894,7 +898,9 @@ def run(a):
 # MEASURED_RUNS peaks (at least MEASURED_FLOOR_MIB, at most --rss-mib), so it waits only for the
 # memory it uses; with no peak recorded it asks for --rss-mib. Its request is its limit, as
 # always: one that outgrows it is stopped (rss_limit), its peak is recorded, and it runs once more
-# with --rss-mib (the next run asks for more, from that peak).
+# with --rss-mib (the next run asks for more, from that peak). A nested guard that inherits the
+# admission with a limit as large and is stopped at it (a phase of scripts/full-build.sh) marks the
+# workload as outgrown too (`outgrown`, through its grant), so the workload also runs again.
 MEASURED_KEY = re.compile(r"[A-Za-z0-9._:/-]{1,128}")
 MEASURED_RUNS = 5
 MEASURED_MARGIN = 1.5
@@ -929,6 +935,10 @@ def measured_request(a):
     return min(a.rss_mib, max(MEASURED_FLOOR_MIB, math.ceil(max(recent) * MEASURED_MARGIN)))
 
 
+def outgrown(a):
+    return Path(str(a.report) + ".outgrown")
+
+
 def record_peak(a, report):
     if report.get("samples"):
         with peaks(a.lock) as data:
@@ -942,13 +952,17 @@ def main():
     if a.measured:
         a.rss_mib = measured_request(a)
     while True:
+        if a.measured:
+            outgrown(a).unlink(missing_ok=True)
         report = run(a)
         if not a.measured:
             break
         record_peak(a, report)
+        stopped = report["outcome"] == "rss_limit" or outgrown(a).exists()
+        outgrown(a).unlink(missing_ok=True)
         report["measured"] = {"key": a.measured, "rss_mib": a.rss_mib, "most_mib": ceiling,
                               "stopped_attempts": attempts}
-        if report["outcome"] != "rss_limit" or a.rss_mib >= ceiling:
+        if not stopped or a.rss_mib >= ceiling:
             atomic_report(a.report, report)
             break
         print(f"build-guard: the workload outgrew its measured request of {a.rss_mib:g} MiB "
