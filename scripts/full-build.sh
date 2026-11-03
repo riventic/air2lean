@@ -24,7 +24,8 @@
 #     proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
-#     the shared cache. Every unit runs on every invocation; no result is reused. --no-fixtures
+#     the shared cache. A unit runs unless a pass of exactly its inputs (every file of the tree,
+#     the build outputs, the toolchains) is recorded: an unchanged tree runs none. --no-fixtures
 #     skips this phase (scripts/worktree-init.sh).
 #   - debug-ID canonicalization: complete native Func binding for every gen-integrity case,
 #     plus one fresh independent Assurance replay of the generic CanonSem theorem module.

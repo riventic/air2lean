@@ -2,11 +2,12 @@
 # The proof-fixture checks CI runs (scripts/fixture-checks.py, docs/ci.md#full-build), under
 # scripts/build-guard.py and through the shared cache; scripts/full-build.sh runs it last.
 #
-#   scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...
+#   scripts/fixture-checks.sh [--logs DIR] [--only TEXT]... [--rerun]
 #
 # The units' compilers are resolved first, outside the guard (a patched-compiler miss builds
-# under its own guard), then up to 2 units run at once in an 11000 MiB guard. Every unit runs on
-# every invocation; no result is reused (scripts/fixture-checks.py). Each unit's wall time, peak
+# under its own guard). A unit with a recorded pass of exactly its inputs does not run
+# (scripts/fixture-checks.py; --rerun: every unit runs); when no unit is left, nothing waits for
+# the guard. The others run up to 2 at once in an 11000 MiB guard. Each unit's wall time, peak
 # RSS and time by process kind go to DIR/units.json; the longest are printed. The guard waits up
 # to AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
 set -euo pipefail
@@ -17,7 +18,8 @@ while [ $# -gt 0 ]; do
   case $1 in
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --only) args+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
-    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --rerun) args+=("$1"); shift ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "fixture-checks: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -26,6 +28,11 @@ mkdir -p "$logs"
 
 python3 -B scripts/fixture-checks.py --prepare ${args[@]+"${args[@]}"}
 start=$SECONDS
+# The same environment as the guarded run below (the shared cache's Lake variables), so the same keys.
+if python3 -B scripts/cas.py run -- python3 -B scripts/fixture-checks.py --pending ${args[@]+"${args[@]}"}; then
+  echo "fixture-checks: $((SECONDS - start)) s"
+  exit 0
+fi
 if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" \
     --lean-threads 2 --jobs 2 --rss-mib 11000 --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
     --timeout 7200 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- \

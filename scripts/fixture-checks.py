@@ -2,7 +2,8 @@
 """Every proof-fixture check that CI runs, run locally (scripts/full-build.sh, docs/ci.md#full-build).
 
     scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...   (guarded; full-build.sh)
-    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR]
+    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR] [--rerun]
+    python3 -B scripts/fixture-checks.py --pending [--only TEXT]...
     python3 -B scripts/fixture-checks.py --list [--only TEXT]...
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
@@ -29,11 +30,19 @@ are no-ops: they run binaries of the runner's target (scripts/local-ci.sh part P
 the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their count.
 
 Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budget/--mem-mib at
-once), in the checkout, after the full build's Lean phases. Every unit runs on every invocation:
-no result is reused across runs until a sound input tracer exists (maintainer decision on #443,
-2026-10-19; docs/ci.md#full-build). A key over the files a unit's text names missed every input
-reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
-tests/roadmap/asm-effects).
+once), in the checkout, after the full build's Lean phases.
+
+A unit runs unless a pass of exactly its inputs is recorded. Its key covers everything it can
+read, not the files it names (a key over those missed every input reached by a path built in
+code: a stale pass of tests/roadmap/callbacks after an edit of tests/roadmap/asm-effects, #443):
+the content of every file of the checkout, tracked or not, and of the whole-tree generated
+files; every build output of the three Lake packages; the Lean toolchain's runtime digest; the
+content of each Zig compiler it names; python3, bash and git on PATH; the host; the inherited
+environment (all of it but RUN_VARIABLES, RUN_PREFIXES); and its CI step (`run_inputs`, `unit_key`). So any edit
+anywhere runs every unit again, and an unchanged tree runs none (docs/ci.md#full-build). A pass
+is recorded (~/.cache/air2lean/fixture-checks/passes, AIR2LEAN_FIXTURE_PASSES) only when those
+inputs are the same at the end of the run as at its start. `--rerun` runs every unit;
+`--pending` exits 0 when no unit would run (scripts/fixture-checks.sh then takes no admission).
 
 The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
 (AIR2LEAN_FIXTURE_REPLAY_CACHE, a file in the run's scratch directory, removed with it): a
@@ -48,6 +57,7 @@ Exit status: 0 when every unit passed, else 1 with each failure's log tail.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -58,6 +68,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -75,6 +86,8 @@ def _load(name, rel):
 CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
+GENERATED = _load('air2lean_generated', 'scripts/generated.py')
+import assumptions as AS  # noqa: E402
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
@@ -321,6 +334,96 @@ def changed_outputs(before, after):
     return sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
 
 
+# ---- passes of unchanged inputs ---------------------------------------------------------------
+
+SCHEMA = 'air2lean-fixture-pass-v1'
+PASSES = Path(os.environ.get('AIR2LEAN_FIXTURE_PASSES') or Path.home() / '.cache/air2lean/fixture-checks/passes')
+# The Lake packages whose build outputs the units read (and the full build builds first).
+PACKAGES = ('.', 'tests/roadmap', 'tests/diff')
+# The environment a unit inherits is an input, every variable of it except these: the run's own
+# scratch paths, admission, worker counts and pass store, which differ per run and select no
+# result (the guard always sets ELAN_NO_OVERRIDE_NOTICE for the units); and the shell's and the
+# terminal's session state (RUN_PREFIXES), which no check reads. A variable not named here is an
+# input: a new one runs every unit again.
+RUN_VARIABLES = ('AIR2LEAN_FIXTURE_REPLAY_CACHE', 'AIR2LEAN_TOOLCHAIN_RUNTIME_RUN', 'AIR2LEAN_GUARD_ADMISSION',
+                 'AIR2LEAN_GUARD_MODE', 'AIR2LEAN_GUARD_PRIORITY', 'AIR2LEAN_JOBS', 'AIR2LEAN_MEM_MIB',
+                 'AIR2LEAN_LOCK_WAIT', 'AIR2LEAN_BUILD_LOCK', 'AIR2LEAN_BUILD_MEM_MIB',
+                 'AIR2LEAN_FIXTURE_PASSES', 'AIR2LEAN_FULL_BUILD_INNER', 'GITHUB_WORKSPACE',
+                 'LEAN_NUM_THREADS', 'ELAN_NO_OVERRIDE_NOTICE', 'PWD', 'OLDPWD', 'SHLVL', '_')
+RUN_PREFIXES = ('CLAUDE', 'AI_AGENT', 'WARP_', 'TERM', 'COLORTERM', 'SSH_', 'XPC_', '__CF', 'HIST')
+
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def directory_records(path):
+    """Every file below PATH (followed through aliases) with its content digest, and each alias's
+    target (scripts/assumptions.py input_tree_records)."""
+    if not path.exists():
+        return None
+    return [[str(p.relative_to(path)), link, content]
+            for p, link, content in AS.input_tree_records(path, binaries=True)]
+
+
+def run_inputs(tree):
+    """Everything a unit can read that the run does not choose per unit: the content of every
+    file of the checkout (tracked and untracked, `Tree`) and of the whole-tree generated files,
+    every build output of the Lake packages the units read, the Lean toolchain, the interpreter,
+    the host and the inherited environment (ENV_*). A unit's own key adds its CI step and its
+    Zig compilers (`unit_key`)."""
+    files = sorted(set(tree.files) | {f for f in GENERATED.paths(ROOT) if (ROOT / f).is_file()})
+    return {
+        'schema': SCHEMA,
+        'checkout': [[f, AS.file_sha256(ROOT / f)] for f in files],
+        'builds': {p: directory_records(ROOT / p / '.lake/build') for p in PACKAGES},
+        'lean': AS.toolchain_runtime_sha256(Path(AS.lake_env('LEAN_SYSROOT')).resolve()),
+        'tools': {name: path and [path, AS.file_sha256(Path(path)), subprocess.run(
+                      [path, '--version'], capture_output=True, text=True).stdout.strip()]
+                  for name in ('python3', 'bash', 'git') for path in [shutil.which(name)]},
+        'host': [platform.platform(), platform.machine(), HOST],
+        'environment': {k: v for k, v in os.environ.items()
+                        if k not in RUN_VARIABLES and not k.startswith(RUN_PREFIXES)},
+    }
+
+
+def unit_key(unit, run_digest, compilers):
+    """The key of UNIT's pass: the run's inputs (`run_inputs`, as RUN_DIGEST), the CI step it is
+    (its rendered script, environment and the native runs it leaves out on this host) and the
+    content of each Zig compiler it names (COMPILERS: (kind, version) -> digest)."""
+    return digest([SCHEMA, run_digest, unit['name'], unit['run'], unit['env'], unit['skipped'], unit['error'],
+                   [[kind, version, compilers[kind, version]]
+                    for kind, versions in sorted(unit['toolchains'].items()) for version in versions]])
+
+
+def compiler_digests(units):
+    """(kind, version) -> digest of the content of that Zig compiler's installation; None when this
+    host cannot provide it (its unit fails, and a failing unit records no pass)."""
+    found = {}
+    for kind, version in sorted({(k, v) for u in units for k, vs in u['toolchains'].items() for v in vs}):
+        try:
+            zig = resolve(kind, version)
+        except Unavailable:
+            found[kind, version] = None
+            continue
+        found[kind, version] = digest(directory_records(zig.parent.parent if kind == 'patched' else zig.parent))
+    return found
+
+
+def recorded(key):
+    try:
+        return json.loads((PASSES / (key + '.json')).read_text()).get('key') == key
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def record(key, unit, elapsed):
+    PASSES.mkdir(parents=True, exist_ok=True)
+    AS.write_report(PASSES / (key + '.json'), {'key': key, 'unit': unit['name'], 'elapsed_s': elapsed,
+                                                'head': AS.git_revision(ROOT)['head'],
+                                                'recorded': time.strftime('%Y-%m-%dT%H:%M:%S%z')})
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
@@ -332,6 +435,9 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
                         'wall time by process kind (scripts/par.py) to this JSON file')
+    parser.add_argument('--rerun', action='store_true', help='run every unit, also one with a recorded pass')
+    parser.add_argument('--pending', action='store_true',
+                        help='exit 0 when every unit has a recorded pass of its inputs (nothing to run), else 1')
     a = parser.parse_args(argv)
     tree = Tree()
     units = [u for u in discover(tree)
@@ -354,7 +460,18 @@ def main(argv=None):
             except Unavailable as error:  # the units that need it fail in the run, naming it
                 print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
-    failed = []
+    failed, keys, inputs = [], {}, None
+    if units:
+        inputs = digest(run_inputs(tree))
+        compilers = compiler_digests(units)
+        keys = {u['name']: unit_key(u, inputs, compilers) for u in units}
+    reused = [u for u in units if not a.rerun and recorded(keys[u['name']])]
+    for u in reused:
+        print('fixture-checks: %s: a pass of the same inputs is recorded (%s)' % (u['name'], keys[u['name']][:16]))
+    units = [u for u in units if u not in reused]
+    if a.pending:
+        print('fixture-checks: %d units to run, %d with a recorded pass' % (len(units), len(reused)))
+        return 1 if units else 0
     if units:
         scratch = Path(tempfile.mkdtemp(prefix='air2lean-fixture-checks.'))
         logs = a.logs or Path(tempfile.mkdtemp(prefix='air2lean-fixture-logs.'))
@@ -380,6 +497,14 @@ def main(argv=None):
                 failed.append('the root package\'s build outputs changed while the units ran (a unit '
                               'built root modules, racing the units that read them): '
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
+            # A pass is recorded only for the inputs the whole run saw: unchanged from its start
+            # to its end (a unit that changed an input, or an edit during the run, records none).
+            elif digest(run_inputs(Tree())) == inputs:
+                for u, status, s in zip(units, statuses, stats):
+                    if status == 0:
+                        record(keys[u['name']], u, (s or {}).get('elapsed_s'))
+            else:
+                print('fixture-checks: the inputs changed during the run: no pass is recorded')
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses):
@@ -391,8 +516,8 @@ def main(argv=None):
         if not failed and not a.logs:
             shutil.rmtree(logs, ignore_errors=True)
     skipped = sum(len(u['skipped']) for u in units)
-    print('fixture-checks: %d units (%d checks) run, %d failed'
-          % (len(units), len({c for u in units for c in u['checks']}), len(failed)))
+    print('fixture-checks: %d units (%d checks) run, %d failed, %d with a recorded pass of the same inputs'
+          % (len(units), len({c for u in units for c in u['checks']}), len(failed), len(reused)))
     if skipped:
         print('fixture-checks: %d native runs need their CI host, not %s (--list names them; '
               'scripts/local-ci.sh part PART runs them)' % (skipped, HOST))
