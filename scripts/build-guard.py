@@ -657,6 +657,7 @@ class Admission:
         self.overcommit = False
         self.why_declared = self.charge_mib = self.history_runs = self.preempted_at_mib = None
         self.backstop = backstop_mib()
+        self.next_backstop_check = 0.0
         # The admission lane: an exclusive guard drains in arrival order with merge guards, so a
         # merge priority adds nothing to it.
         self.priority = "exclusive" if a.exclusive else a.priority
@@ -754,23 +755,32 @@ class Admission:
     def preempt(self):
         """The backstop: whether this workload is to stop now, being the youngest overcommitted
         workload while MemAvailable is below the backstop (at most one per PREEMPT_HOLDOFF). The
-        chosen one leaves the registry at once, so the next one can be chosen during its teardown."""
-        if not self.registered:
+        chosen one leaves the registry at once, so the next one can be chosen during its teardown.
+        MemAvailable is read once a second; the choice is made under the marker's flock, so two
+        guards never both choose within one hold-off."""
+        if not self.registered or time.monotonic() < self.next_backstop_check:
             return False
+        self.next_backstop_check = time.monotonic() + 1
         available = mem_available_mib()
         if available is None or available >= self.backstop:
             return False
-        marker = self.directory / "preempted"
-        try:
-            if time.time() - marker.stat().st_mtime < PREEMPT_HOLDOFF:
+        with (self.directory / "preempted").open("a+") as marker:  # the last preemption's time
+            try:
+                fcntl.flock(marker, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return False  # another guard is choosing now
+            marker.seek(0)
+            try:
+                last = float(marker.read() or 0)
+            except ValueError:
+                last = 0.0
+            if time.time() - last < PREEMPT_HOLDOFF:
                 return False
-        except FileNotFoundError:
-            pass
-        overcommitted = [name for name, entry in held_entries(self.running).items()
-                         if entry.get("excess_slots", 0) > 0]
-        if overcommitted[-1:] != [self.registered]:
-            return False
-        marker.touch()
+            if list(held_entries(self.running))[-1:] != [self.registered]:  # every entry is overcommitted
+                return False
+            marker.seek(0)
+            marker.truncate()
+            marker.write(str(time.time()))
         self.preempted_at_mib = available
         self.unregister()
         return True

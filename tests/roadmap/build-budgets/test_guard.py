@@ -685,16 +685,20 @@ fixture_pause()
             admission.weight = 2
             admission.register()
         low, high = guard.backstop_mib() - 1, guard.backstop_mib()
+
+        def preempt(admission):
+            admission.next_backstop_check = 0.0  # MemAvailable is read at most once a second
+            return admission.preempt()
         with mock.patch.object(guard, "mem_available_mib", return_value=high):
-            self.assertFalse(younger.preempt())
+            self.assertFalse(preempt(younger))
         with mock.patch.object(guard, "mem_available_mib", return_value=low):
-            self.assertFalse(declared.preempt())  # it holds its declared slots
-            self.assertFalse(older.preempt())
-            self.assertTrue(younger.preempt())
+            self.assertFalse(preempt(declared))  # it holds its declared slots
+            self.assertFalse(preempt(older))
+            self.assertTrue(preempt(younger))
             self.assertEqual(len(os.listdir(younger.running)), 1)  # it left the registry at once
-            self.assertFalse(older.preempt())  # now the youngest, but within the hold-off
-            os.utime(older.directory / "preempted", (0, 0))
-            self.assertTrue(older.preempt())
+            self.assertFalse(preempt(older))  # now the youngest, but within the hold-off
+            (older.directory / "preempted").write_text("0")
+            self.assertTrue(preempt(older))
 
     def test_waiting_for_lock_can_be_cancelled_without_spawning(self):
         import fcntl

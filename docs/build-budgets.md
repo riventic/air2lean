@@ -91,8 +91,9 @@ does not hold the admission queue for slots that other running builds hold.
     stays within 0.5 x the budget, and a workload that would break that collects its declared
     slots instead. Guards at their declared charge and guards of older checkouts need no check.
   - Backstop: when MemAvailable falls below max(2 GiB, 10% of RAM), the youngest overcommitted
-    workload (the least work lost) is stopped, outcome `preempted`, at most one per 5 s per lock;
-    it leaves the registry at once, so the next can be chosen while it is torn down. The guard
+    workload (the least work lost) is stopped, outcome `preempted`, at most one per 5 s per lock
+    (chosen under the flock of `<lock>.d/preempted`, which holds the last preemption's time;
+    MemAvailable is read once a second); it leaves the registry at once, so the next can be chosen while it is torn down. The guard
     runs it again holding its declared slots, within what is left of `--lock-wait` and
     `--timeout`; the log keeps both runs' output, the report the stopped run in
     `preempted_run`, and the command stays at its declared charge while the preemption is among
