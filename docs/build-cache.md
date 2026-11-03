@@ -346,13 +346,6 @@ Which work runs where:
   host). These run in the Mac's native `linux/arm64` container ([CLAUDE.md](../CLAUDE.md),
   [rosetta.md](rosetta.md)).
 
-Measured (origin/main b3a9a97, 2026-11-03; host: 16 cores, WSL2 with 26 GB, budget 23048 MiB,
-other jobs running alongside; Mac: 18 cores, 64 GB, budget 16000 MiB):
-
-| step | development Mac | remote host |
-| --- | --- | --- |
-| TODO | | |
-
 ## `scripts/regen.sh`
 
 Run it after every merge of `main`; do not write private regeneration scripts.
