@@ -841,7 +841,8 @@ and the admission of an enclosing guard: the full build's whole admission; `--jo
 each with up to two Lean processes (`--lean-threads`; the full build passes its own count, one
 11000 MiB process per thread), the longest first by
 the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
-unit's largest recent sampled peak) fit in 85% of the guard's limit; the measurements
+unit's largest recent sampled peak, scaled up when the run has more Lean threads than the
+measured one) fit in 85% of the guard's limit; the measurements
 (`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
 result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named

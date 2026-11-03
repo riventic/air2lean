@@ -96,14 +96,19 @@ class Output(unittest.TestCase):
     def test_jobs_see_a_single_worker(self):
         self.assertEqual(run_par('--jobs', '4', '--', 'bash', '-c', 'echo $AIR2LEAN_JOBS', ':::', 'x')[1], '1\n')
 
+    @staticmethod
+    def recording_jobs(tmp, requests):
+        """Jobs with these memory requests, each recording, when it starts, itself and the jobs
+        running then (a line of TMP/seen)."""
+        job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
+               f'sleep 1; rm {tmp}/run.$JOB')
+        return [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
+                for i, m in enumerate(requests)]
+
     def test_order_and_memory_requests(self):
         with tempfile.TemporaryDirectory() as tmp:
-            # Each job records, when it starts, itself and the jobs running then.
-            job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
-                   f'sleep 1; rm {tmp}/run.$JOB')
             requests = [600, 600, 300, 300, 300]
-            jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
-                    for i, m in enumerate(requests)]
+            jobs = self.recording_jobs(tmp, requests)
             with open(os.devnull, 'wb') as null:
                 self.assertEqual(par.run(jobs, 5, null, null, order=[4, 3, 2, 1, 0], mem_budget_mib=1000), [0] * 5)
             seen = [line.split() for line in (Path(tmp) / 'seen').read_text().splitlines()]
@@ -116,11 +121,8 @@ class Output(unittest.TestCase):
 
     def test_a_small_job_passes_a_waiting_large_one(self):
         with tempfile.TemporaryDirectory() as tmp:
-            job = (f'touch {tmp}/run.$JOB; echo "$JOB $(ls {tmp} | grep run | tr \'\\n\' \' \')" >> {tmp}/seen; '
-                   f'sleep 1; rm {tmp}/run.$JOB')
             # 900 does not fit beside 800, 100 does: it starts at once instead of waiting behind 900.
-            jobs = [par.Job(str(i), ['bash', '-c', job], env=dict(os.environ, JOB=str(i)), mem_mib=m)
-                    for i, m in enumerate([800, 900, 100])]
+            jobs = self.recording_jobs(tmp, [800, 900, 100])
             with open(os.devnull, 'wb') as null:
                 self.assertEqual(par.run(jobs, 3, null, null, mem_budget_mib=1000), [0] * 3)
             seen = {line.split()[0]: line.split()[1:] for line in (Path(tmp) / 'seen').read_text().splitlines()}

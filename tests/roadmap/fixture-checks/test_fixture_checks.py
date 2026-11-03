@@ -75,16 +75,25 @@ class NoReuse(unittest.TestCase):
         (self.hidden / "input").write_text("ok\n")
         self.assertEqual(self.run_checks()[0], 0)
         hint = json.loads((self.temp / "schedule.json").read_text())[self.unit["name"]]
-        self.assertEqual(sorted(hint), ["elapsed_s", "peak_rss_kib"])  # measurements, no status
+        self.assertEqual(sorted(hint), ["elapsed_s", "lean_threads", "peak_rss_kib"])  # no status
         (self.hidden / "input").write_text("broken\n")
         self.assertEqual(self.run_checks()[0], 1)  # a measured unit still runs and fails
-        units = [{"name": n} for n in ("short", "long", "new")]
+        units = [{"name": n} for n in ("short", "long", "new", "bad", "wide")]
         (self.temp / "schedule.json").write_text(json.dumps({
-            "short": {"elapsed_s": 1, "peak_rss_kib": [100 << 10]},
-            "long": {"elapsed_s": 9, "peak_rss_kib": [4000 << 10, 6000 << 10]}}))
-        order, requests = fc.schedule(units, 5000)
-        self.assertEqual([units[i]["name"] for i in order], ["new", "long", "short"])
-        self.assertEqual(requests, [fc.MEM_FLOOR_MIB, int(6000 * fc.MEM_MARGIN), 5000])
+            "short": {"elapsed_s": 1, "lean_threads": 2, "peak_rss_kib": [100 << 10]},
+            "long": {"elapsed_s": 9, "lean_threads": 2, "peak_rss_kib": [4000 << 10, 6000 << 10]},
+            "bad": {"elapsed_s": 5},  # malformed: unmeasured, not a crash
+            "wide": {"elapsed_s": 3, "lean_threads": 1, "peak_rss_kib": [1000 << 10]}}))
+        with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "2"}):
+            order, requests = fc.schedule(units, 5000)
+        self.assertEqual([units[i]["name"] for i in order], ["new", "bad", "long", "wide", "short"])
+        # A peak measured with fewer Lean threads is scaled up to this run's count.
+        self.assertEqual(requests, [fc.MEM_FLOOR_MIB, int(6000 * fc.MEM_MARGIN), 5000, 5000,
+                                    int(1000 * fc.MEM_MARGIN * 2)])
+        with mock.patch.dict(os.environ, {"AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp)}), \
+             contextlib.redirect_stderr(io.StringIO()) as err:
+            fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
+        self.assertIn("not recorded", err.getvalue())
 
     def test_the_default_guard_stays_within_the_budget_and_an_enclosing_admission(self):
         # A nested guard above its enclosing admission is refused (build-guard.py `inherited`);

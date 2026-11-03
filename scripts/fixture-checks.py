@@ -317,39 +317,66 @@ def hints_path():
     return Path(path) if path else Path.home() / '.cache' / 'air2lean' / 'fixture-checks' / 'schedule.json'
 
 
+def lean_threads():
+    """The Lean processes each unit's Lake runs at once (LEAN_NUM_THREADS, set by the guard)."""
+    text = os.environ.get('LEAN_NUM_THREADS', '')
+    return int(text) if text.isdigit() and int(text) > 0 else 1
+
+
+def _hint(entry):
+    """A well-formed measurement, else None (the file is a cache: a bad entry is unmeasured)."""
+    number = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0
+    if (isinstance(entry, dict) and number(entry.get('elapsed_s'))
+            and isinstance(entry.get('peak_rss_kib'), list) and all(map(number, entry['peak_rss_kib']))
+            and isinstance(entry.get('lean_threads'), int) and entry['lean_threads'] > 0):
+        return entry
+    return None
+
+
 def read_hints():
     try:
         data = json.loads(hints_path().read_text())
-        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+    return {k: v for k, v in data.items() if _hint(v)} if isinstance(data, dict) else {}
 
 
 def write_hints(units, stats):
-    """Record each measured unit's wall time and its peaks of the last HINT_RUNS runs."""
-    hints = read_hints()
+    """Record each measured unit's wall time and its peaks of the last HINT_RUNS runs with this
+    run's Lean thread count (peaks measured with another count are dropped). A file that cannot
+    be written only loses the measurements: a warning, never a failed run."""
+    hints, threads = read_hints(), lean_threads()
     for u, s in zip(units, stats):
         if s:
-            old = hints.get(u['name'], {})
-            hints[u['name']] = {'elapsed_s': s['elapsed_s'],
-                                'peak_rss_kib': ([s['peak_rss_kib']] + old.get('peak_rss_kib', []))[:HINT_RUNS]}
-    path = hints_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile('w', dir=path.parent, delete=False) as handle:
-        json.dump(hints, handle, indent=1, sort_keys=True)
-    os.replace(handle.name, path)
+            old = hints.get(u['name'])
+            peaks = old['peak_rss_kib'] if old and old['lean_threads'] == threads else []
+            hints[u['name']] = {'elapsed_s': s['elapsed_s'], 'lean_threads': threads,
+                                'peak_rss_kib': ([s['peak_rss_kib']] + peaks)[:HINT_RUNS]}
+    path, written = hints_path(), None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile('w', dir=path.parent, delete=False) as handle:
+            written = handle.name
+            json.dump(hints, handle, indent=1, sort_keys=True)
+        os.replace(written, path)
+    except OSError as error:
+        print('fixture-checks: the schedule was not recorded: %s' % error, file=sys.stderr)
+        if written:
+            Path(written).unlink(missing_ok=True)
 
 
 def schedule(units, default_mib):
     """(start order, memory requests in MiB): the longest units first by their last wall time, an
     unmeasured one before all; a request is the largest recent peak with a margin (MEM_MARGIN,
-    at least MEM_FLOOR_MIB), `default_mib` for an unmeasured unit. Only order and admission
-    depend on these measurements, never a unit's result."""
-    hints = read_hints()
+    at least MEM_FLOOR_MIB), scaled up by the ratio of Lean threads when this run has more than
+    the measured one, `default_mib` for an unmeasured unit. Only order and admission depend on
+    these measurements, never a unit's result."""
+    hints, threads = read_hints(), lean_threads()
     known = [hints.get(u['name']) for u in units]
     order = sorted(range(len(units)), key=lambda i: -(known[i]['elapsed_s'] if known[i] else float('inf')))
-    requests = [max(MEM_FLOOR_MIB, int(max(h['peak_rss_kib']) / 1024 * MEM_MARGIN)) if h and h['peak_rss_kib']
-                else default_mib for h in known]
+    requests = [max(MEM_FLOOR_MIB, int(max(h['peak_rss_kib']) / 1024 * MEM_MARGIN
+                                       * max(1, threads / h['lean_threads'])))
+                if h and h['peak_rss_kib'] else default_mib for h in known]
     return order, requests
 
 
@@ -455,8 +482,8 @@ def main(argv=None):
                     statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
                                        order=order, mem_budget_mib=budget)
             finally:  # also the finished units of a stopped run (a guard's timeout)
-                write_hints(units, stats)
                 report(units, statuses or [None] * len(units), stats, a.report)
+                write_hints(units, stats)
             if changed := changed_outputs(before, shared_outputs()):
                 failed.append('the root package\'s build outputs changed while the units ran (a unit '
                               'built root modules, racing the units that read them): '
