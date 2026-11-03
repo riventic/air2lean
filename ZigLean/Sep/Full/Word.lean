@@ -351,30 +351,40 @@ theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G 
   simp only [FHeap.union_apply]
   cases (L.wordR m).heap l <;> cases rL.heap l <;> simp_all
 
-/-- A byte of the rest is the memory's, up to `Cell.norm`. -/
-theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
-    {fc : FCell} (hl : rX.heap l = some fc) : (m.heap l).map Cell.norm = some fc.cell.norm := by
+/-- The protocol's rest is in the lock's complete rest (with the word's cells and the free lock's
+resource). -/
+theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) :
+    ∃ rL, FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧
+      ∀ l fc, rX.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc := by
   obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
+  refine ⟨rL, ho, fun l fc hl => ?_⟩
   have hrL : rL.heap l = none := (hLX l).resolve_right (by simp [hl])
   have hwr : (L.wordR m).heap l = none := by
     by_cases hin : L.In l
     · have := LockWord.off_erase.mp hi.xoff l hin
       simp [hl] at this
     · exact cellsAt_none hin
-  exact ho.rest_cell (by simp only [FHeap.union_apply, hl, hwr, hrL, Option.none_or])
+  simp only [rsum, FHeap.union_apply, hl, hwr, hrL, Option.none_or]
 
-/-- **Bytes of the rest are the memory's**: a part `r` of the rest with the bytes `bs` at `p`
-(`0 < bs.size`): `p`'s block holds `bs` there. -/
-theorem Inv.restBytes {G : ThreadId → γ} {rX r : Res} {m : Mem} (hi : L.Inv G rX m) {p : Ptr}
+/-- A byte of the rest is the memory's, up to `Cell.norm`. -/
+theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
+    {fc : FCell} (hl : rX.heap l = some fc) : (m.heap l).map Cell.norm = some fc.cell.norm := by
+  obtain ⟨rL, ho, hin⟩ := hi.restIn
+  exact ho.rest_cell (hin _ _ hl)
+
+/-- **Bytes of a thread rest are the memory's**: a part `r` of the rest `rO` (`FOwned`) with the
+bytes `bs` at `p` (`0 < bs.size`): `p`'s block holds `bs` there. -/
+theorem _root_.Zig.Full.FOwned.restBytes {own : ThreadId → Res} {rO r : Res} {m : Mem}
+    (ho : FOwned own rO m) {p : Ptr}
     {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId} (hp : up (bytesAt p A S K bs) r)
-    (hpb : p.block = some b) (hsub : ∀ l fc, r.heap l = some fc → rX.heap l = some fc)
+    (hpb : p.block = some b) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)
     (hpos : 0 < bs.size) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
   have cell : ∀ j (hj : j < bs.size), ∃ blk, m.blocks[b]? = some blk ∧
       blk.bytes[p.off.toNat + j]? = some bs[j] := by
     intro j hj
     obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hp hpb hj
-    have hn := hi.restCell (hsub _ _ hfc)
+    have hn := ho.rest_cell (hsub _ _ hfc)
     cases e : m.heap (b, p.off.toNat + j) with
     | none => rw [e] at hn; cases hn
     | some c =>

@@ -1398,6 +1398,27 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
   · obtain ⟨h1, h2⟩ := hF hF'
     exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
 
+/-- A plain read by the current thread `t`, the only thread that has not left the lock (every other
+thread is `gone`), of bytes that no thread's part has: the protocol's rest, the word's cells, the
+free lock's resource. The invariant holds after it. -/
+theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hb : b < m.blocks.size) (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none) :
+    L.Inv G rX (m.recordAt b o n .read) := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hs : ∀ u < m.threads.size, u ≠ m.current → L.pl G u = .gone := fun u hu h =>
+    hsole u hu (by rw [← hc]; exact h)
+  refine ⟨hi.w.readAll (by rw [hc]; exact ht) hs, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩,
+    hi.xoff, hi.pdisj, hi.idle, hi.res⟩
+  · have : L.wordR (m.recordAt b o n .read) = L.wordR m := wordR_congr rfl
+    rw [this]
+    have e : L.own G (m.recordAt b o n .read) = L.own G m := rfl
+    rw [e]
+    exact ho.recordRest hc ht hb hno
+  · obtain ⟨h1, h2⟩ := hF hF'
+    exact ⟨h1, h2.readAll (by rw [hi.w.csize, hc]; exact ht) hs⟩
+
 end FLock
 
 end Full
