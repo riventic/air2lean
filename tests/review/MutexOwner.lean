@@ -1,5 +1,5 @@
 import Proofs.Sync.Gen
-import Proofs.Threadsync.Lock
+import Proofs.Threadsync.Variant
 
 /-! Owner check of a mutex unlock (`Thread.mutexOwnerCheck`) on the translated std code. For
 `Thread.Mutex` (0.15.2, `Proofs/Threadsync/Gen.lean`: `FutexImpl` on Linux, `DarwinImpl` with

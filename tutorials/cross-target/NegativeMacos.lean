@@ -1,4 +1,4 @@
-import Proofs.Threadsync.Lock
+import Proofs.Threadsync.ThreadMutex
 
 /-! Negative control for the macOS translation (run by CI after the golden swap, see
 README.md; on the Linux translation this file would elaborate). It uses the Linux contended
@@ -7,17 +7,18 @@ value (3) with the translation of macOS, whose `mutexC` is 1. Lean must reject i
 
 namespace CrossTarget
 
-open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Threadsync Threadsync.ThreadMutexOps
+open Zig Zig.Conc Zig.Conc.Proto Zig.Full Threadsync Threadsync.ThreadMutex
 
 /- `WP` is only a name here: unfolding it would run the program. -/
 attribute [local irreducible] Proto.WP
 
-variable {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
+variable {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
+  {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-theorem lock_keeps_current_linux_constant (hP : L.Fits P U) (hc : L.c = 3) {p : Ptr}
-    (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) (hi : P.inv (upd G t g) m) (hcost : P.cost = none) :
+theorem lock_keeps_current_linux_constant (hP : L.Fits K P U ok) (hc : L.c = 3) {p : Ptr}
+    (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_lock p) (fun _ _ m' _ => m'.current = t) G m d :=
-  WP.mono (fun _ _ _ _ h => h.2.1) (lock_spec hP hc hp t g hg G m d hi)
+  WP.mono (fun _ _ _ _ h => h.2.1) (lock_wp hP hcost hp hc t g hg hok io G m d hi)
 
 end CrossTarget

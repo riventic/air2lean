@@ -21,11 +21,12 @@ In Zig 0.15.2 `Thread.Mutex` is `FutexImpl` on Linux and `os_unfair_lock` on mac
 translated `Thread_Mutex_lock` is a different function. The Linux translation is the committed
 [`Proofs/Threadsync/Gen.lean`](../../Proofs/Threadsync/Gen.lean); the macOS translation is the
 golden `tests/golden/0.15.2/threadsync/Gen-darwin.lean`, which CI copies over `Gen.lean` and
-rebuilds natively on aarch64-macos. [`Proofs/Threadsync/Lock.lean`](../../Proofs/Threadsync/Lock.lean)
-proves `lock_spec` and `unlock_spec` for whichever translation is present. Its only
-target-specific input is `Threadsync.mutexC`, the contended value of the mutex word: 3 on Linux
-(`FutexImpl`), 1 on macOS. A client proof that states its hypothesis as `L.c = mutexC` and
-goes through `lock_spec` therefore compiles against either translation unchanged.
+rebuilds natively on aarch64-macos. [`Proofs/Threadsync/ThreadMutex.lean`](../../Proofs/Threadsync/ThreadMutex.lean)
+proves `ThreadMutex.lock_wp` and `ThreadMutex.unlock_wp` for whichever translation is present,
+for every protocol that has the lock (`FLock.Fits`). Their only target-specific input is
+`Threadsync.mutexC`, the contended value of the mutex word: 3 on Linux (`FutexImpl`), 1 on
+macOS. A client proof that states its hypothesis as `L.c = mutexC` and goes through `lock_wp`
+therefore compiles against either translation unchanged.
 
 Other qualified evidence per target (not part of this checked proof):
 
@@ -41,12 +42,12 @@ Other qualified evidence per target (not part of this checked proof):
 ## Steps
 
 ```sh
-lake build Proofs.Threadsync.Lock
+lake build Proofs.Threadsync.ThreadMutex
 lake env lean tutorials/cross-target/Main.lean
 ```
 
 [`Main.lean`](Main.lean) proves `lock_keeps_current`: after `Thread.Mutex.lock` by thread `t`
-the running thread is still `t`. It weakens the postcondition of `lock_spec` and never names the
+the running thread is still `t`. It weakens the postcondition of `lock_wp` and never names the
 contended value, so the same file is the proof for both targets.
 
 To run it against macOS, copy the golden over the generated module and rebuild, then restore
@@ -56,7 +57,7 @@ the file. The CI step "Build threadsync proofs (macOS translation)" does exactly
 
 ```sh
 cp tests/golden/0.15.2/threadsync/Gen-darwin.lean Proofs/Threadsync/Gen.lean
-lake build Proofs.Threadsync.Lock
+lake build Proofs.Threadsync.ThreadMutex
 lake env lean tutorials/cross-target/Main.lean
 lake env lean tutorials/cross-target/Solution.lean
 lake env lean tutorials/cross-target/NegativeMacos.lean   # must fail
@@ -73,9 +74,10 @@ expected profile premise.
 Prove the same for `Thread.Mutex.unlock` by the holder:
 
 ```lean
-theorem unlock_keeps_current (hP : L.Fits P U) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
-    (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) (hcur : m.current = t) (hcost : P.cost = none) :
+theorem unlock_keeps_current (hP : L.Fits K P U ok) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
+    (t : ThreadId) (g : γ) (hg : L.ph g = .holds) (hok : ok g) (io : Io) (G : ThreadId → γ)
+    (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcur : m.current = t)
+    (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_unlock p) (fun _ _ m' _ => m'.current = t) G m d
 ```
 
@@ -109,7 +111,7 @@ lake env lean tutorials/cross-target/Negative.lean   # must fail
   premise instead.
 - [THR-01](../../docs/premises.md#thr-01), [THR-05](../../docs/premises.md#thr-05),
   [THR-08](../../docs/premises.md#thr-08): the interleaving scheduler, the futex model and the
-  protocol rules `lock_spec` is built on.
+  protocol rules `lock_wp` is built on.
 - [ORD-01](../../docs/premises.md#ord-01), [ORD-02](../../docs/premises.md#ord-02),
   [ORD-04](../../docs/premises.md#ord-04): the RC11 approximation, no load buffering and weak
   CAS failure for the atomics of the lock.
