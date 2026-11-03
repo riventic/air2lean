@@ -807,7 +807,10 @@ that fixture's check, and a module of the proof-fixture package (`scripts/fixtur
 Lake. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
-the files that import it run again (about 3.5 min for all 360 on the dev Mac).
+the files that import it run again (about 3.5 min for all 360 on the dev Mac). The phase prints
+its five largest sampled peaks (summed RSS of each file's process group, in MiB) with their files,
+because they size its guard. On the remote build host the phase peaked at 10.4 GB with one Lean
+thread (2026-11-03), and the guard's whole-tree sample could not name the file.
 
 A fourth phase builds the **proof-fixture package** and runs the **proof-fixture checks**. The
 package (`tests/roadmap/lakefile.toml`, one library per converted fixture directory,

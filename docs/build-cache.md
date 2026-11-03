@@ -212,6 +212,24 @@ build-guard already, and a nested guarded build on the same lock would wait for 
 `scripts/preflight.sh` builds the translator through `cas.py run` and reads pristine sources
 through `cas.py src`.
 
+## Hung Lake
+
+`scripts/assumptions.py` builds two generated workspaces with Lake: the extractor's driver
+(`.lake/extraction`) and the kernel-replay receipts (`.lake/replay`). Such a `lake build` fails
+closed when it hangs. If its process tree shows neither new output nor new CPU time for
+`AIR2LEAN_LAKE_IDLE_MINUTES` minutes (default 15; 0 turns the check off), the tree is stopped.
+The audit then ends with `lake hung: no CPU time and no output ...`, so it never waits until
+the guard's `--timeout`. A working build always shows one of the two: Lean elaborating uses CPU,
+and Lake replaying its stored logs prints. CPU time is read with `ps`. If `ps` fails, the poll
+counts as progress, so a build is stopped only on evidence that it is idle.
+
+Some hosts hang Lake inside libuv's io_uring backend. On 2026-11-03 such builds sat at 0% CPU
+for 20 minutes or more, on a WSL2 6.6.87 kernel. The main thread waited in a futex, an io_uring
+SQPOLL thread idled, no child had started, and `.lake` was not yet written. On such a host,
+export `UV_USE_IO_URING=0` for every build. libuv then uses its epoll backend; the build's
+inputs and outputs are unchanged. The setting belongs to the host's environment, not to the
+repository. Test the host again after a kernel update.
+
 ## Concurrency and eviction
 
 Assurance extractor traces include fresh input records for all configured library `.lean` files,

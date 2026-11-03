@@ -85,6 +85,39 @@ class Classify(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
             ld.lib_roots(strict_sources=True)
 
+    def test_elaborate_names_the_largest_peaks(self):
+        # The guard samples the phase's whole tree; the per-file peaks name the file that sized it.
+        import contextlib, io, json, os, sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import par
+        self.write("t/Small.lean", "import Lib.A\n")
+        self.write("t/Big.lean", "import Lib.B\n")
+        self.write("assurance/lean-files.json", json.dumps({"reject": []}))
+        self.addCleanup(setattr, ld, "REGISTRY", ld.REGISTRY)
+        ld.REGISTRY = self.repo / "assurance/lean-files.json"
+        peaks = {"t/Big.lean": 9770 * 1024, "t/Small.lean": 300 * 1024}
+
+        def fake_run(jobs, workers, out=None, err=None, log_dir=None, stats=None):
+            files = [job.argv[-1] for job in jobs]
+            stats[:] = [{"status": 0, "elapsed_s": 2.5, "peak_rss_kib": peaks[f], "busy_s": {}} for f in files]
+            return [0] * len(files)
+        self.addCleanup(setattr, par, "run", par.run)
+        par.run = fake_run
+        saved = os.environ.get("AIR2LEAN_CAS_DIR")
+        os.environ["AIR2LEAN_CAS_DIR"] = str(self.repo / "cas")
+        self.addCleanup(lambda: os.environ.pop("AIR2LEAN_CAS_DIR") if saved is None
+                        else os.environ.__setitem__("AIR2LEAN_CAS_DIR", saved))
+        self.classify()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(ld.elaborate(None, 4000), 0)
+        self.assertIn("largest peaks (MiB, wall s): 9770 2.5 t/Big.lean, 300 2.5 t/Small.lean",
+                      output.getvalue())
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):  # both passes remembered: nothing elaborated
+            self.assertEqual(ld.elaborate(None, 4000), 0)
+        self.assertNotIn("largest peaks", output.getvalue())
+
     def fake_lake_query(self, targets):
         # Lake's answers in the tiny repo: transitive imports by the file headers, a library's
         # modules by its globs (as Lake assigns them when the lakefile is well-formed).

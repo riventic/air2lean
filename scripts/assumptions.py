@@ -12,9 +12,12 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -515,6 +518,105 @@ def run(command: list[str], *, root: Path | None = None) -> str:
     return result.stdout
 
 
+# A generated workspace's `lake build` (extraction driver, kernel-replay receipts) fails closed when
+# its process tree makes no progress, neither CPU time nor output, for this many minutes (0: never).
+# A working build always shows one of them: Lean elaborating burns CPU, Lake replaying prints.
+# Observed 2026-11-03: Lake hung at 0% CPU before writing `.lake`, main thread in a futex, under
+# libuv's io_uring backend on a WSL2 6.6 kernel (docs/build-cache.md#hung-lake).
+LAKE_IDLE_MINUTES = "AIR2LEAN_LAKE_IDLE_MINUTES"
+LAKE_IDLE_DEFAULT = 15
+
+
+def cpu_seconds(text: str) -> float:
+    """A `ps -o time` value in seconds: `[[dd-]hh:]mm:ss[.cc]` (Linux, macOS)."""
+    days, _, clock = text.rpartition("-")
+    seconds = 0.0
+    for field in clock.split(":"):
+        seconds = seconds * 60 + float(field)
+    return (int(days) if days else 0) * 86400 + seconds
+
+
+def tree_cpu_seconds(pid: int) -> float | None:
+    """CPU time used so far by `pid` and its living descendants, or None when `ps` fails."""
+    try:
+        listing = subprocess.run(["ps", "-axo", "pid=,ppid=,time="], capture_output=True, text=True,
+                                 timeout=30, env=os.environ | {"LC_ALL": "C"}, check=True).stdout
+        rows = [line.split() for line in listing.splitlines()]
+        children, used = {}, {}
+        for child, parent, cpu in rows:
+            children.setdefault(int(parent), []).append(int(child))
+            used[int(child)] = cpu_seconds(cpu)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    total, stack = 0.0, [pid]
+    while stack:
+        current = stack.pop()
+        total += used.get(current, 0.0)
+        stack.extend(children.get(current, []))
+    return total
+
+
+def lake_build(command: list[str], cwd: Path, env: dict, *, poll: float = 5.0,
+               idle_seconds: float | None = None) -> subprocess.CompletedProcess:
+    """`subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True)` for a `lake
+    build` that fails closed when it hangs: after `idle_seconds` (default: LAKE_IDLE_MINUTES) with
+    neither new output nor new CPU time in its process tree, the tree (its own session) is stopped
+    and RuntimeError("lake hung: ...") raised. When `ps` fails, a poll counts as progress: the
+    build is only ever stopped on evidence that it is idle."""
+    if idle_seconds is None:
+        idle_seconds = 60 * float(os.environ.get(LAKE_IDLE_MINUTES) or LAKE_IDLE_DEFAULT)
+    child = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             start_new_session=True)
+    chunks = {"stdout": [], "stderr": []}
+    received = [0]
+
+    def drain(stream, into):
+        for chunk in iter(lambda: stream.read1(65536), b""):
+            into.append(chunk)
+            received[0] += len(chunk)
+
+    readers = [threading.Thread(target=drain, args=(child.stdout, chunks["stdout"]), daemon=True),
+               threading.Thread(target=drain, args=(child.stderr, chunks["stderr"]), daemon=True)]
+    for reader in readers:
+        reader.start()
+    hung = False
+    try:
+        last, progress = time.monotonic(), None
+        while True:
+            try:
+                child.wait(timeout=poll)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            now, cpu = time.monotonic(), tree_cpu_seconds(child.pid)
+            if cpu is None or (received[0], cpu) != progress:
+                last, progress = now, (received[0], cpu)
+            elif idle_seconds and now - last >= idle_seconds:
+                hung = True
+                break
+    finally:
+        if child.poll() is None:  # hung, or this process is being stopped: never leave Lake behind
+            for sig, grace in ((signal.SIGTERM, 10), (signal.SIGKILL, None)):
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(child.pid, sig)
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    child.wait(timeout=grace)
+                    break
+        for reader in readers:
+            reader.join(timeout=10)
+        child.stdout.close()
+        child.stderr.close()
+    stdout, stderr = (b"".join(chunks[name]).decode(errors="replace") for name in ("stdout", "stderr"))
+    if hung:
+        sys.stderr.write(stdout[-20000:] + stderr)
+        raise RuntimeError(
+            f"lake hung: no CPU time and no output from `{' '.join(command)}` in {cwd} for "
+            f"{idle_seconds / 60:g} min; stopped it. If Lake idles at 0% CPU before writing .lake, "
+            f"check libuv's io_uring backend on this host (UV_USE_IO_URING=0, docs/build-cache.md#hung-lake); "
+            f"{LAKE_IDLE_MINUTES} sets the limit (0: none)")
+    return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -872,8 +974,7 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
                 path.write_text(content)
         if resolved_roots(lake, workspace, env) != list(map(str, roots)):
             return None
-        result = subprocess.run([*lake, "build", module], cwd=workspace, text=True, capture_output=True,
-                                env=env)
+        result = lake_build([*lake, "build", module], workspace, env)
     finally:
         os.close(descriptor)
     if result.returncode:
@@ -964,8 +1065,7 @@ def lake_kernel_replay(modules: list[str], package: Path, checker_sha: str, runt
         for path, content in sources_files:
             if not path.is_file() or path.read_text() != content:
                 path.write_text(content)
-        result = subprocess.run([*lake, "build", *sorted(sources)], cwd=workspace, text=True,
-                                capture_output=True, env=env)
+        result = lake_build([*lake, "build", *sorted(sources)], workspace, env)
     finally:
         os.close(descriptor)
     if result.returncode:
