@@ -3953,11 +3953,23 @@ def regionSizesMeet (sizes : Array (Expr × Expr)) : TacticM Bool := do
     if wrong.isSome then return false
   return true
 
+/-- `x` is `bs.size`, or a constructor application with it among its fields (a tuple
+`(p, bs.size, …)`, a ghost map's key). -/
+partial def sizeField (x bs : Expr) : MetaM Bool := do
+  if x.isAppOfArity ``Array.size 2 && x.appArg! == bs then return true
+  let .const c _ := x.getAppFn | return false
+  unless (← getEnv).isConstructor c do return false
+  x.getAppArgs.anyM (sizeField · bs)
+
 /-- An atom of the postcondition (not a region, not a fact) with the size of the unknown bytes
-`bs` as an argument (a grant's token `tok p bs.size …`): its position. -/
-def sizeArg? (a bs : Expr) : Option Nat :=
-  if a.isAppOfArity liftN 1 || (regionArgs? a).isSome then none
-  else a.getAppArgs.findIdx? fun x => x.isAppOfArity ``Array.size 2 && x.appArg! == bs
+`bs` as an argument or a field of one (`sizeField`: a grant's token `tok p bs.size …`, its ledger
+fragment `gfrag γ e i (p, bs.size, …)`): that argument's position. -/
+def sizeArg? (a bs : Expr) : MetaM (Option Nat) := do
+  if a.isAppOfArity liftN 1 || (regionArgs? a).isSome then return none
+  let args := a.getAppArgs
+  for i in [0:args.size] do
+    if ← sizeField args[i]! bs then return some i
+  return none
 
 /-- The unknowns of the bytes of the postcondition's regions that the region planner carves:
 those with a size fact or demand, and those whose size another atom names (`sizeArg?`, a grant's
@@ -3972,26 +3984,32 @@ def sizedRegionBytes (qats : Array Expr) (sizes : Array (Expr × Expr) := #[]) :
     let some q := regionArgs? a | continue
     let bs ← instantiateMVars q[5]!
     unless bs.hasExprMVar do continue
-    if (← sizeFact? facts bs sizes).isSome || qats.any (sizeArg? · bs |>.isSome) then
-      out := out ++ (bs.collectMVars {}).result
+    let sized ← if (← sizeFact? facts bs sizes).isSome then pure true
+      else qats.anyM fun b => return (← sizeArg? b bs).isSome
+    if sized then out := out ++ (bs.collectMVars {}).result
   return out
 
 /-- The size of the unknown bytes `bs` of a postcondition region from an atom of the
-postcondition that has `bs.size` as an argument (`sizeArg?`): the argument of the state atom of
-that head whose other arguments unify with it (they are assigned). -/
+postcondition that has `bs.size` as an argument or a field of one (`sizeArg?`): the size in the
+state atom of that head whose arguments unify with it, `bs.size` abstracted (the other arguments
+are assigned). -/
 def atomSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
   for a in qats do
     let a ← instantiateMVars a
-    let some k := sizeArg? a bs | continue
+    let some k ← sizeArg? a bs | continue
     let args := a.getAppArgs
     for x in sats do
       unless headKey x == headKey a && x.getAppNumArgs == args.size do continue
       let s ← saveState
       let xs := x.getAppArgs
-      if ← (List.range args.size).allM fun j => do
-          if j == k then return true
-          withReducible (isDefEq args[j]! xs[j]!) then
-        return some xs[k]!
+      let n ← mkFreshExprMVar (mkConst ``Nat)
+      let ak := args[k]!.replace fun e =>
+        if e.isAppOfArity ``Array.size 2 && e.appArg! == bs then some n else none
+      if (ak.find? (· == bs)).isNone then
+        if ← (List.range args.size).allM fun j => do
+            withReducible (isDefEq (if j == k then ak else args[j]!) xs[j]!) then
+          let n ← instantiateMVars n
+          unless n.isMVar do return some n
       s.restore
   return none
 
@@ -4283,7 +4301,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       let qbs ← instantiateMVars q[5]!
       if qbs.hasExprMVar then
         if (← sizeFact? facts qbs sizes).isSome then continue
-        if ← qats.anyM fun b => return (sizeArg? (← instantiateMVars b) qbs).isSome then continue
+        if ← qats.anyM fun b => return (← sizeArg? (← instantiateMVars b) qbs).isSome then continue
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
         let s' ← saveState

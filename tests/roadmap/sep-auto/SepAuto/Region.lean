@@ -221,4 +221,19 @@ theorem hidden_bytes_no_premise (T : Nat → FAssn) (p : Ptr) (old cur : Array B
       (fun _ => TokGrant T p A S K cur) := by
   fsym [rule]
 
+/-- A grant whose token names its size in a field of an argument, as a ledger fragment keys a
+grant by `(p, bs.size, …)`. -/
+def TupGrant (T : Ptr × Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) :
+    FAssn :=
+  T (p, bs.size) ⋆ up (regionIn p A S K 1 bs)
+
+/-- The same with the size in a field of the token's argument (`sizeField`). -/
+theorem hidden_bytes_in_field (T : Ptr × Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (TupGrant T p A S K bs) c (fun _ => TupGrant T p A S K bs)) :
+    FTotalTriple (T (p, old.size) ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => TupGrant T p A S K cur) := by
+  fsym [rule]
+
 end SepAuto.Region
