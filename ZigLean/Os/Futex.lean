@@ -41,6 +41,12 @@ The return conventions are the ABI's: a Linux wrapper returns the raw `usize` (`
 failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` return `-errno` as
 a `c_int`. Arguments that std never passes (other futex commands, flags, `val2`) are outside the
 model: `.unspecified`.
+
+The Linux WAIT/WAKE wrappers first resolve the numeric address and reject a remainder modulo
+four with `-EINVAL`, before an interrupt, pick, word read or queue change. WAIT copies and
+validates its optional timespec first. WAKE performs no word read: an aligned unmapped, zero
+or known freed address is not rejected by this alignment check. Other native address/VM
+errors are not exhaustively modelled here; existing conservative access failures stay.
 -/
 
 namespace Zig
@@ -206,13 +212,14 @@ def FUTEX_PRIVATE : BitVec 32 := 0x80
 
 /-- `os.linux.futex_4arg(uaddr: *const anyopaque, futex_op: FUTEX_OP, val: u32,
 timeout: ?*const timespec) usize` with `cmd = .WAIT` (private or not): `0` (woken),
-`-EAGAIN`, `-EINTR`, `-ETIMEDOUT`, or `-EINVAL` for an invalid timeout (module doc).
+`-EAGAIN`, `-EINTR`, `-ETIMEDOUT`, or `-EINVAL` for an invalid timeout or unaligned address.
 `futex_op` is the `FUTEX_OP`'s bits. -/
 def futex_4arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) (timeout : Option Ptr) :
     ConcM Tgt (BitVec 64) := do
   if futex_op ≠ FUTEX_WAIT ∧ futex_op ≠ FUTEX_WAIT ||| FUTEX_PRIVATE then throw .unspecified
   if let some ts := timeout then
     if (← ConcM.liftMem (readTimespec ts)).isNone then return negErrno E.INVAL
+  if (← ConcM.liftMem (ptrAddr uaddr)) % 4 ≠ 0 then return negErrno E.INVAL
   match ← futexWait uaddr val timeout.isSome with
   | .woken => return 0
   | .mismatch => return negErrno E.AGAIN
@@ -224,9 +231,11 @@ def futex_4arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) (timeout :
 def wakeLimit (val : BitVec 32) : Nat := if val.toInt ≤ 0 then 1 else val.toNat
 
 /-- `os.linux.futex_3arg(uaddr: *const anyopaque, futex_op: FUTEX_OP, val: u32) usize` with
-`cmd = .WAKE` (private or not): the number of threads woken (module doc). -/
+`cmd = .WAKE` (private or not): the number of threads woken, or `-EINVAL` for an unaligned
+numeric address (module doc). -/
 def futex_3arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) : ConcM Tgt (BitVec 64) := do
   if futex_op ≠ FUTEX_WAKE ∧ futex_op ≠ FUTEX_WAKE ||| FUTEX_PRIVATE then throw .unspecified
+  if (← ConcM.liftMem (ptrAddr uaddr)) % 4 ≠ 0 then return negErrno E.INVAL
   let r ← futexWake uaddr (some (wakeLimit val))
   return BitVec.ofNat 64 (r.getD 0)
 

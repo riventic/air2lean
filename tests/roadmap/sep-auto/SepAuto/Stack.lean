@@ -103,6 +103,36 @@ theorem local8_start_claims (σ : Placement) (gs : List (Array Byte × Nat × Bl
   unfold local8 stackStart
   fsym
 
+/-! ## Known pointer blocks before extent planning -/
+
+/-- A known pointer selects its own extent even when an equal-sized extent comes first. -/
+theorem store_with_other_extent_first (b c : BlockId) (A B : Nat) (hA : A % 4 = 0) :
+    FTotalTriple
+      (bext c 4 .stack ⋆
+        (up (bytesAt ⟨some b, 0⟩ A 4 .stack (Array.replicate 4 .undef)) ⋆
+          (up (bytesAt ⟨some c, 0⟩ B 4 .stack (Array.replicate 4 .undef)) ⋆
+            bext b 4 .stack)))
+      (store (α := BitVec 32) 4 ⟨some b, 0⟩ 0)
+      (fun _ => bext c 4 .stack ⋆
+        (up (bytesAt ⟨some b, 0⟩ A 4 .stack
+          (writeBytes (Array.replicate 4 .undef) 0 (Enc.encode (0 : BitVec 32)))) ⋆
+          (up (bytesAt ⟨some c, 0⟩ B 4 .stack (Array.replicate 4 .undef)) ⋆
+            bext b 4 .stack))) := by
+  fsym
+
+set_option linter.unusedVariables false in
+/-- Owning only the other block must still refuse the target store. -/
+example (b c : BlockId) (B : Nat) (hbc : b ≠ c) (hB : B % 4 = 0) : True := by
+  fail_if_success
+    have : FTotalTriple
+        (up (bytesAt ⟨some c, 0⟩ B 4 .stack (Array.replicate 4 .undef)) ⋆
+          bext c 4 .stack)
+        (store (α := BitVec 32) 4 ⟨some b, 0⟩ 0)
+        (fun _ => up (bytesAt ⟨some c, 0⟩ B 4 .stack (Array.replicate 4 .undef)) ⋆
+          bext c 4 .stack) := by
+      fsym
+  trivial
+
 /-! ## Mutations: rejected -/
 
 set_option linter.unusedVariables false in
