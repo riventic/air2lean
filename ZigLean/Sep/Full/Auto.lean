@@ -3923,26 +3923,35 @@ def sizeFact? (facts : Array Expr) (bs : Expr)
 
 /-- A rule's region bytes and demanded sizes, as matching data only. The original equality
 premises remain independent rule side goals; no proposition or proof is added to the context.
-The bytes are those of the precondition's regions and the rule's unknown arrays that its
+The bytes are those of the precondition's regions and the rule's unknown byte arrays that its
 precondition holds behind a definition (an allocator's `owned`/`granted`, whose region the planner
 opens later): their size is demanded the same way, so the planner takes them from the state's
 region, not from a token that only names their size. -/
 def ruleRegionSizes (P : Expr) (args : Array Expr) : MetaM (Array (Expr × Expr)) := do
-  let mut bytes := (atoms P).filterMap fun a => (regionArgs? a).map (·[5]!)
-  let inP := (P.collectMVars {}).result
-  for a in args do
-    if bytes.contains a || !inP.contains a.mvarId! then continue
-    if (← instantiateMVars (← inferType a)).isAppOfArity ``Array 1 then bytes := bytes.push a
-  if bytes.isEmpty then return #[]
-  let mut out := #[]
+  let mut eqs := #[]
+  let mut others := #[]
   for a in args do
     if ← a.mvarId!.isAssigned then continue
     let t ← instantiateMVars (← inferType a)
-    let some (_, l, r) := t.eq? | continue
-    for (l, r) in [(l, r), (r, l)] do
-      unless l.isAppOfArity ``Array.size 2 && bytes.contains l.appArg! do continue
-      out := out.push (l.appArg!, r)
-      break
+    if let some (_, l, r) := t.eq? then eqs := eqs.push (l, r) else others := others.push (a, t)
+  if eqs.isEmpty then return #[]
+  let shown := (atoms P).filterMap fun a => (regionArgs? a).map (·[5]!)
+  let mut hidden ← others.filterMapM fun (a, t) => do
+    let t ← whnfR t
+    return if t.isAppOfArity ``Array 1 && t.appArg!.isConstOf ``Zig.Byte && !shown.contains a then
+      some a else none
+  unless hidden.isEmpty do
+    let inP := (P.collectMVars {}).result
+    hidden := hidden.filter (inP.contains ·.mvarId!)
+  -- one demand per premise, a shown region's first (`a.size = b.size` with `a` hidden demands
+  -- `b`'s size)
+  let sized (bytes : Array Expr) (lr : Expr × Expr) :=
+    lr.1.isAppOfArity ``Array.size 2 && bytes.contains lr.1.appArg!
+  let mut out := #[]
+  for (l, r) in eqs do
+    let both := [(l, r), (r, l)]
+    let some (l, r) := both.find? (sized shown) <|> both.find? (sized hidden) | continue
+    out := out.push (l.appArg!, r)
   return out
 
 /-- Reject a determined candidate only when the bounded solver refutes its demanded size in
