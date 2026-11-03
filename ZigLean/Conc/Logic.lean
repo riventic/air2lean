@@ -16,8 +16,9 @@ invariant and ghost values.
   spawner picks (so it can give the new thread a part of what it owns); `fin g` holds of the
   ghost value of a thread that has ended.
 - **One thread** (`Safe`). A thread's run is a tree (`CoN`). At each stop the thread picks its
-  new ghost value and shows the invariant. When it goes on, it knows only the invariant and its
-  own ghost value: the other threads can have done anything that keeps the invariant (the rely),
+  new ghost value and shows the invariant. When it goes on, it knows only the invariant, its
+  own ghost value and that it exists (`t < m.threads.size`: the scheduler resumes only a thread
+  it has): the other threads can have done anything that keeps the invariant (the rely),
   and each thread keeps it (the guarantee). A thread does not change the ghost value of another
   thread, and a run between two stops keeps the number of threads.
 - **Join.** A `join` of thread `u` goes on only after `u` ended, so the thread learns `fin (G u)`.
@@ -428,7 +429,7 @@ def QKid (t : ThreadId) : Unit → (ThreadId → γ) → Mem → Nat → Prop :=
 
 variable (P) in
 /-- Thread `t`, which waits at `p` with the ghost value `g`, keeps the protocol when it goes on
-(as a thread of `m₁.threads`, as at `Safe`'s stop). -/
+(knowing, as at `Safe`'s stop, that it exists: `t < m₁.threads.size`). -/
 def PausedOk {β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem → Nat → Prop) (g : γ)
     (p : Sched.Paused Tgt β) : Prop :=
   ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
@@ -1152,6 +1153,13 @@ theorem mem_ready {α : Type} {s : Sched.State Tgt α} {t : ThreadId} (h : t ∈
       · simp at hf
     | done => simp at hf
 
+/-- Every thread the scheduler resumes exists: `main` is thread `0` and kid `i` is thread
+`i + 1`, below `kids.size + 1` (`SInv.size`). -/
+theorem SInv.lt_size {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
+    {s : Sched.State Tgt α} {G : ThreadId → γ} (hs : P.SInv QM s G) {u : ThreadId}
+    (h : u < s.kids.size + 1) : u < s.mem.threads.size :=
+  hs.size ▸ h
+
 theorem SInv.done {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
     {s : Sched.State Tgt α} {G : ThreadId → γ} (hs : P.SInv QM s G) :
     ∀ u, s.isDone u = true → P.fin (G u) := by
@@ -1404,8 +1412,6 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
       have hk₁ : s₁.kids = s.kids := by rw [← hs₁]
       have hgo₁ : ∀ t (op : SyncOp Tgt), Sched.canGo s t op = true → Sched.canGo s₁ t op = true := by
         intro t op h; rw [← hs₁]; exact h
-      -- Every thread the scheduler resumes exists: `main` is thread `0`, kid `i` is thread `i + 1`.
-      have hex : ∀ i, i < s₁.kids.size + 1 → i < s₁.mem.threads.size := fun _ hi => hS₁.size ▸ hi
       split at h
       · -- `main`'s turn
         rename_i ht0
@@ -1426,11 +1432,11 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
             subst h
             exact good_of (fun _ _ h => by cases h) fun _ heq => by
               cases heq
-              exact turn_err env henv dispatch fuel o hS₁.inv hok (hex 0 (Nat.succ_pos _)) hQM hgo
-                hS₁.done he
+              exact turn_err env henv dispatch fuel o hS₁.inv hok (hS₁.lt_size (Nat.succ_pos _))
+                hQM hgo hS₁.done he
         · rename_i ts v' s₂ ht
           obtain ⟨G₂, -, -, -, -, hr⟩ := turn_ok env henv dispatch fuel o hdisp hS₁.inv hS₁.size
-            hok (hex 0 (Nat.succ_pos _)) hgo hS₁.done ht
+            hok (hS₁.lt_size (Nat.succ_pos _)) hgo hS₁.done ht
           simp only [Option.some.injEq] at h
           subst h
           refine good_of (fun v m h => ?_) fun _ h => by cases h
@@ -1441,7 +1447,7 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
           · cases hov; exact ⟨G₂, d, hq⟩
         · rename_i ts s₂ ht
           obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok env henv dispatch fuel o hdisp
-            hS₁.inv hS₁.size hok (hex 0 (Nat.succ_pos _)) hgo hS₁.done ht
+            hS₁.inv hS₁.size hok (hS₁.lt_size (Nat.succ_pos _)) hgo hS₁.done ht
           rcases hr with ⟨-, p', g, rfl, hi, hpk, -⟩ | ⟨b, d, -, hov, -⟩
           · refine ih { s₂ with main := .paused p' } (upd G₂ 0 g)
               ⟨hi, hsize, ⟨p', rfl, by rw [upd_self]; exact hpk⟩, ?_⟩ h
@@ -1469,11 +1475,12 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
               subst h
               exact good_of (fun _ _ h => by cases h) fun _ heq => by
                 cases heq; exact turn_err (s := s₁) env henv dispatch fuel o hS₁.inv hok
-                  (hex _ (Nat.succ_lt_succ hlt)) (fun hstr _ _ _ _ ⟨_, _, _, hj⟩ => hj hstr)
+                  (hS₁.lt_size (Nat.succ_lt_succ hlt)) (fun hstr _ _ _ _ ⟨_, _, _, hj⟩ => hj hstr)
                   (hgo₁ _ _ hgo) hS₁.done he
           · rename_i ts ov s₂ ht
             obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok (s := s₁) env henv dispatch fuel o
-              hdisp hS₁.inv hS₁.size hok (hex _ (Nat.succ_lt_succ hlt)) (hgo₁ _ _ hgo) hS₁.done ht
+              hdisp hS₁.inv hS₁.size hok (hS₁.lt_size (Nat.succ_lt_succ hlt)) (hgo₁ _ _ hgo)
+              hS₁.done ht
             obtain ⟨p₀, hp₀, hok₀⟩ := hS₁.main
             have hmain' : ∀ g, ∃ p, s₂.main = .paused p ∧
                 P.PausedOk 0 QM (upd G₂ (i + 1) g 0) p :=

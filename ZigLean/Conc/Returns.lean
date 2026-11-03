@@ -327,8 +327,6 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
     have hk₁ : s₁.kids = s.kids := by rw [← hs₁]
     have hgo₁ : ∀ t (op : SyncOp Tgt), Sched.canGo s t op = true → Sched.canGo s₁ t op = true := by
       intro t op h; rw [← hs₁]; exact h
-    -- Every thread the scheduler resumes exists: `main` is thread `0`, kid `i` is thread `i + 1`.
-    have hex : ∀ i, i < s₁.kids.size + 1 → i < s₁.mem.threads.size := fun _ hi => hS₁.size ▸ hi
     rw [← hk₁] at hbk hle
     split
     · -- `main`'s turn
@@ -341,8 +339,8 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
         · exact absurd hi.symm (Nat.succ_ne_zero i)
       rw [hp₀] at hbm
       simp only [hp₀]
-      have hnn := turn_ne_none env henv dispatch fuel o hnp hS₁.inv hok (hex 0 (Nat.succ_pos _))
-        hbm hgo hS₁.done
+      have hnn := turn_ne_none env henv dispatch fuel o hnp hS₁.inv hok
+        (hS₁.lt_size (Nat.succ_pos _)) hbm hgo hS₁.done
       unfold Sched.turn at hnn
       split
       · rename_i e he
@@ -353,7 +351,7 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
       · simp
       · rename_i ts s₂ ht
         obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok env henv dispatch fuel o hdisp
-          hS₁.inv hS₁.size hok (hex 0 (Nat.succ_pos _)) hgo hS₁.done ht
+          hS₁.inv hS₁.size hok (hS₁.lt_size (Nat.succ_pos _)) hgo hS₁.done ht
         have hG0 : G₂ 0 = G 0 := hagree 0 (Nat.succ_pos _)
         rcases hr with ⟨-, p', g, rfl, hi, hpk, hc⟩ | ⟨b, d, -, hov, -⟩
         · have hpb' := turn_budget hcost hbm hG0 hc
@@ -422,7 +420,7 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
         have hbi : bk i ≤ bsum bk s₁.kids.size := by
           have := bsum_set (f := bk) (v := 0) hlt; omega
         have hnn := turn_ne_none (s := s₁) env henv dispatch fuel o hnp hS₁.inv hok
-          (hex _ (Nat.succ_lt_succ hlt)) hpb (hgo₁ _ _ hgo) hS₁.done
+          (hS₁.lt_size (Nat.succ_lt_succ hlt)) hpb (hgo₁ _ _ hgo) hS₁.done
         unfold Sched.turn at hnn
         split
         · rename_i e he'
@@ -432,7 +430,8 @@ theorem go_some {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
           | some e => simp [Sched.outOf]
         · rename_i ts ov s₂ ht
           obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok (s := s₁) env henv dispatch fuel o
-            hdisp hS₁.inv hS₁.size hok (hex _ (Nat.succ_lt_succ hlt)) (hgo₁ _ _ hgo) hS₁.done ht
+            hdisp hS₁.inv hS₁.size hok (hS₁.lt_size (Nat.succ_lt_succ hlt)) (hgo₁ _ _ hgo)
+            hS₁.done ht
           have hGi : G₂ (i + 1) = G (i + 1) := hagree _ (by omega)
           obtain ⟨p₀, hp₀, hok₀⟩ := hS₁.main
           have hmain' : ∀ g, ∃ p, s₂.main = .paused p ∧
