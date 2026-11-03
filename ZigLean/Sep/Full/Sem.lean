@@ -71,13 +71,19 @@ theorem HB.le {G : ThreadId → γ} {m : Mem} {c : VClock} (hw : L.WInv (L.pl G)
   · exact hlive t (hw.live t (by show L.ph (G t) ≠ .gone; rw [ht]; decide)).1
       (by show L.ph (G t) ≠ .gone; rw [ht]; decide)
 
-/-- A clock below `c'`. -/
-theorem HB.of_le {G : ThreadId → γ} {m : Mem} {c c' : VClock} (h : L.HB G m c')
-    (hle : VClock.le c c' = true) : L.HB G m c := by
-  rcases h with ⟨u, hu, h'⟩ | hb | hlive
-  · exact .inl ⟨u, hu, VClock.le_trans hle h'⟩
-  · exact .inr (.inl (L.before_le hb hle))
-  · exact .inr (.inr (LockWord.LiveLe.le hle hlive))
+/-- The word's releases stay over a step that has the lock's word in its frame. -/
+theorem Inv.before_fstep {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
+    (hfs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') :
+    ∀ c, L.Before m c → L.Before m' c := by
+  rintro c ⟨i, l, hl, hle⟩
+  obtain ⟨i', hl'⟩ := (LockWord.loc_fstep (L := L.toLockWord) hfs
+    (fun x h1 h2 => by
+      have := LockWord.wordR_some hL.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
+      simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+        Option.or_eq_none_iff, not_and]
+      intro h; exact absurd h this)
+    (fun i l hl => (hL.w.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
+  exact ⟨i', l, hl', hle⟩
 
 /-- **`HB` stays** over a step that keeps the holders (or releases with the release fact), grows
 the clocks, keeps the word's newest release and the threads that have not ended. -/
@@ -558,21 +564,21 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
           intro l hl
           have hnW : ¬ W.In l := notIn_apart hapW hl
           have hsome : (rsum (W.cellsR m) rY).heap l ≠ none := by
-            rw [hrV]; simp only [rsum, FHeap.union_apply, Word.cellsR]
+            rw [hrV]; simp only [FHeap.union_apply, Word.cellsR]
             have := cellsAt_some (W := V.In) hl (hwV.cellIn hl) (m := m)
             cases e : (cellsAt V.In m).heap l <;> simp_all
           have heq : (rsum (W.cellsR m) rY).heap l = rY.heap l := by
-            simp only [rsum, FHeap.union_apply, Word.cellsR, cellsAt_none hnW, Option.none_or]
+            simp only [FHeap.union_apply, Word.cellsR, cellsAt_none hnW, Option.none_or]
           cases e : (rsum (W.cellsR m) rY).heap l with
           | none => exact absurd e hsome
           | some fc => exact ⟨fc, rfl, heq ▸ e⟩
         refine Word.hist_fstep hwV hfs (fun l hl => ?_) (fun l hl => ?_)
         · obtain ⟨fc, -, hy⟩ := hcell l hl
-          simp [rsum, FHeap.erase, FHeap.union_apply, hy]
+          simp [FHeap.erase, FHeap.union_apply, hy]
         · obtain ⟨fc, hfc, hy⟩ := hcell l hl
           have hnW : (W.cellsR m').heap l = none := cellsAt_none (notIn_apart hapW hl)
           have h' : (rsum (W.cellsR m') rY).heap l = some fc := by
-            simp only [rsum, FHeap.union_apply, hnW, Option.none_or, hy]
+            simp only [FHeap.union_apply, hnW, Option.none_or, hy]
           rw [hL'.restCell h', hL0.restCell hfc]
     have hsph : ∀ u, S.ph (upd G t (L.setPart (G t) r) u) = S.ph (G u) := fun u => by
       by_cases e : u = t
@@ -586,31 +592,18 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
       by_cases e : u = t
       · subst e; rw [upd_self, L.ph_setPart]
       · rw [upd_ne _ _ e]
-    have hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := hfs.clock
-    have hbef : ∀ c, L.Before m c → L.Before m' c := by
-      rintro c ⟨i, l, hl, hle⟩
-      obtain ⟨i', hl'⟩ := (LockWord.loc_fstep (L := L.toLockWord) hfs
-        (fun x h1 h2 => by
-          have := LockWord.wordR_some hL0.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
-          simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-            Option.or_eq_none_iff, not_and]
-          intro h; exact absurd h this)
-        (fun i l hl => (hL0.w.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
-      exact ⟨i', l, hl', hle⟩
-    exact hI.mono hsph hcph (by rw [pv_pupd, upd_same]) (fun u hu => by rw [hlph]; exact hu) hcl hbef
-      hfs.threads (fun u hu => by rwa [hlph] at hu) (hY' C.S (.inl rfl)) (hY' C.Ep (.inr rfl))
+    exact hI.mono hsph hcph (by rw [pv_pupd, upd_same]) (fun u hu => by rw [hlph]; exact hu)
+      hfs.clock (FLock.Inv.before_fstep hL0 hfs) hfs.threads (fun u hu => by rwa [hlph] at hu) (hY' C.S (.inl rfl)) (hY' C.Ep (.inr rfl))
 
-/-- **A lock step of a thread out of the condition's busy code and the semaphore's code** keeps
-the semaphore's invariant (for a client's `FLock.Fits.stable`, whose `ok` excludes them). -/
+/-- **A lock step of a thread out of the semaphore's code** keeps the semaphore's invariant (for a
+client's `FLock.Fits.stable`, whose `ok` excludes the semaphore's code). -/
 theorem Inv.lstep (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
     {t : ThreadId} {q : LPh} {h : Res} (hI : S.Inv G m) (hsub : (C.prim L).Sub G rX m)
-    (hb : (C.ph (G t)).busy = false) (hst : S.ph (G t) = .out) (hg : L.ph (G t) ≠ .gone)
+    (hst : S.ph (G t) = .out) (hg : L.ph (G t) ≠ .gone)
     (hs : L.Step t m m') (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
     S.Inv (upd G t (L.set (G t) q h)) m' := by
   have hap : ∀ W, (W = C.S ∨ W = C.Ep) → W.ApartL L.toLockWord := hS.apart
   have hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := hs.clocks
-  have hnc : (C.ph (G t)).crit = false := by
-    unfold CPh.busy at hb; revert hb; cases (C.ph (G t)).crit <;> simp
   have hsph : ∀ u, S.ph (upd G t (L.set (G t) q h) u) = S.ph (G u) := fun u => by
     by_cases e : u = t
     · subst e; rw [upd_self, sph_l hS]
@@ -658,21 +651,16 @@ theorem Inv.lstep (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {
     · exact .inl (by rw [hpv]; exact h0)
     · exact .inr ⟨v, by rw [hsph]; exact hv⟩
 
-/-- The condition's cells stay (up to `Cell.norm`) over a step with the lock's invariant before
-and after it, with the same rest (the cells are in the rest: `FCond.prim`'s `Sub`). -/
+/-- The condition's cells stay (up to `Cell.norm`) over a step with the lock's invariant after
+it, with the same rest (the cells are in the rest: `FCond.prim`'s `Sub`; `FLock.Inv.cellsN`). -/
 theorem cells_of_inv {G G' : ThreadId → γ} {rX : Res} {m m' : Mem}
-    (hsub : (C.prim L).Sub G rX m) (hL : L.Inv G rX m) (hL' : L.Inv G' rX m') :
+    (hsub : (C.prim L).Sub G rX m) (hL' : L.Inv G' rX m') :
     ∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
       (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
   intro W hW l hl
   obtain ⟨hw, rY, hrX, -⟩ := hsub.2 W hW
-  have := cellsAt_some (W := W.In) hl (hw.cellIn hl) (m := m)
-  obtain ⟨fc, hfc⟩ : ∃ fc, rX.heap l = some fc := by
-    rw [hrX]; simp only [rsum, FHeap.union_apply, Word.cellsR]
-    cases e : (cellsAt W.In m).heap l with
-    | none => exact absurd e this
-    | some fc => exact ⟨fc, rfl⟩
-  rw [hL'.restCell hfc, hL.restCell hfc]
+  rw [hrX] at hL'
+  exact hL'.cellsN hl (hw.cellIn hl)
 
 /-- The words' writes stay over a holder's step with the condition's cells. -/
 theorem hist_hold {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hsub : (C.prim L).Sub G rX m)
@@ -684,7 +672,7 @@ theorem hist_hold {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hsub : (C.prim 
   refine Word.hist_fstep hw hfs (fun l hl => ?_) (hcells W hW)
   have := cellsAt_some (W := W.In) hl (hw.cellIn hl) (m := m)
   rw [hrX]
-  simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+  simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
     Option.or_eq_none_iff, not_and, Word.cellsR] at this ⊢
   intro _ h; exact absurd h this
 
@@ -709,16 +697,7 @@ theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
   have hpv : S.cnt (upd G t (S.set (L.set (G t) .holds h) s)) = S.cnt G := by
     rw [pv_supd, pv_lupd, upd_same]
   have hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := hfs.clock
-  have hbef : ∀ c, L.Before m c → L.Before m' c := by
-    rintro c ⟨i, l, hl, hle⟩
-    obtain ⟨i', hl'⟩ := (LockWord.loc_fstep (L := L.toLockWord) hfs
-      (fun x h1 h2 => by
-        have := LockWord.wordR_some hL.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
-        simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-          Option.or_eq_none_iff, not_and]
-        intro h; exact absurd h this)
-      (fun i l hl => (hL.w.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
-    exact ⟨i', l, hl', hle⟩
+  have hbef := FLock.Inv.before_fstep hL hfs
   have hmono : ∀ c, L.HB G m c → L.HB (upd G t (S.set (L.set (G t) .holds h) s)) m' c :=
     fun c hc => hc.mono (fun u hu => .inl (by rw [hlph]; exact hu)) hcl hbef hfs.threads
       (fun u hu => by rwa [hlph] at hu)
@@ -1059,7 +1038,7 @@ theorem Fits.wp_cnt (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : Ty
   have hht : L.ph (upd G t (L.set g .holds rL) t) = .holds := by rw [upd_self, L.ph_set]
   have hcxt : C.ph (upd G t (L.set g .holds rL) t) = .out := by
     rw [upd_self, cph_l hS]; exact hgx
-  have hcells := cells_of_inv hsub.1 hL hL'
+  have hcells := cells_of_inv hsub.1 hL'
   have hpz : S.ph (upd G t (L.set g .holds rL) t) = .pst → S.ph g = .out →
       ∀ u i jr sn e, C.ph (upd G t (L.set g .holds rL) u) = .reg i jr sn e →
       (C.S.hist m).size = jr + 1 → S.cnt (upd G t (L.set g .holds rL)) = 0 := by
@@ -1080,8 +1059,7 @@ theorem Fits.wp_cnt (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : Ty
 store of the count): a step of the semaphore's own code to `pst` (`Move.hold`), then the client's
 move (`hUc`) with both invariants at `gf`. -/
 theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {g gf : γ}
-    {rL rX : Res} {m m' : Mem} (hgx : C.ph g = .out) (hgs : S.ph g = .out)
-    (hfx : C.ph gf = .out) (hfs : S.ph gf = .pst) (hfh : L.ph gf = .holds)
+    {rL rX : Res} {m m' : Mem} (hgx : C.ph g = .out) (hfx : C.ph gf = .out) (hfs : S.ph gf = .pst) (hfh : L.ph gf = .holds)
     (hUc : U (upd G t (S.set (L.set g .holds rL) .pst)) rX m' → L.Inv (upd G t gf) rX m' →
       S.Inv (upd G t gf) m' → C.Inv L (upd G t gf) m' → U (upd G t gf) rX m')
     (hL : L.Inv (upd G t (L.set g .holds rL)) rX m) (hU : U (upd G t (L.set g .holds rL)) rX m)
@@ -1091,7 +1069,7 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
   have hht : L.ph (upd G t (L.set g .holds rL) t) = .holds := by rw [upd_self, L.ph_set]
   have hcxt : C.ph (upd G t (L.set g .holds rL) t) = .out := by
     rw [upd_self, cph_l hS]; exact hgx
-  have hcells := cells_of_inv hsub.1 hL hL'
+  have hcells := cells_of_inv hsub.1 hL'
   have hpz : S.ph (upd G t (L.set g .holds rL) t) = .pst → SPh.pst = .out →
       ∀ u i jr sn e, C.ph (upd G t (L.set g .holds rL) u) = .reg i jr sn e →
       (C.S.hist m).size = jr + 1 → S.cnt (upd G t (L.set g .holds rL)) = 0 :=
@@ -1134,7 +1112,7 @@ theorem Fits.wp_take (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       S.Inv (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) .pst)) m →
       C.Inv L (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) .pst)) m →
       U (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) .pst)) rX m)
-    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hxx : C.ph gx = .out)
+    (hgx : C.ph g = .out) (hxx : C.ph gx = .out)
     (hi : P.inv (upd G t (L.set g .holds rL)) m) (hc : m.current = t)
     (hnz : S.cnt (upd G t g) ≠ 0)
     (htt : FTTriple (⟪S.cnt (upd G t g) ≠ 0⟫ ⋆ up (pts S.p 8 (S.cnt (upd G t g)))) x Qa)
@@ -1175,7 +1153,7 @@ theorem Fits.wp_take (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       by rw [lheld_s hS, L.held_set]⟩
   · rintro _ rX m' rp rh ⟨r, hT, hd, rfl⟩ _ hL hU' _ hfs _ hL'
     rw [upd_upd] at hL' ⊢
-    exact U_pst hS hgx hgs (by rw [S.cph_set, cph_l hS, cph_part hS]; exact hxx) (S.ph_set _ _)
+    exact U_pst hS hgx (by rw [S.cph_set, cph_l hS, cph_part hS]; exact hxx) (S.ph_set _ _)
       (by rw [lph_s hS, L.ph_set]) (hU G rX m' rL rh r hnz hT hd) hL hU' hc hfs hL'
   · rintro a m' rp rh hc' ht ⟨r, hT, hd, rfl⟩ hq hi'
     rw [upd_upd, lset_s hS] at hi'
@@ -1199,7 +1177,7 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       S.Inv (upd G t (S.set (L.set gx .holds h₂) .pst)) m →
       C.Inv L (upd G t (S.set (L.set gx .holds h₂) .pst)) m →
       U (upd G t (S.set (L.set gx .holds h₂) .pst)) rX m)
-    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hxx : C.ph gx = .out)
+    (hgx : C.ph g = .out) (hxx : C.ph gx = .out)
     (hsplit : L.part g = rsum (L.part gx) rT) (hdj : FHeap.Disjoint (L.part gx).heap rT.heap)
     (hi : P.inv (upd G t (L.set g .holds rL)) m) (hc : m.current = t)
     (htt : FTTriple (⟪(S.cnt (upd G t g)).toNat + 1 < 2 ^ 64⟫ ⋆
@@ -1238,7 +1216,7 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       by rw [lheld_s hS, L.held_set]⟩
   · intro _ rX m' rp rh _ _ hL hU' _ hfs _ hL'
     rw [upd_upd] at hL' ⊢
-    exact U_pst hS hgx hgs (by rw [S.cph_set, cph_l hS]; exact hxx) (S.ph_set _ _)
+    exact U_pst hS hgx (by rw [S.cph_set, cph_l hS]; exact hxx) (S.ph_set _ _)
       (by rw [lph_s hS, L.ph_set]) (hU G rX m' rL rh) hL hU' hc hfs hL'
   · intro a m' rp rh hc' ht _ hq hi'
     rw [upd_upd, lset_s hS] at hi'
@@ -1380,8 +1358,8 @@ structure SemImpl (Tgt : Type) where
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits S.prim P U ok →
     P.cost = none → (∀ g, ok g → S.ph g = .out) → L.c = c → ∀ {p : Ptr}, p = S.p →
     ∀ (t : ThreadId) (g gx : γ) (T : FAssn),
-    L.ph g = .out → C.ph g = .out → S.ph g = .out → ok g → (L.part g).Plain →
-    L.ph gx = .out → L.held gx = rnil → C.ph gx = .out → S.ph gx = .out → ok gx →
+    L.ph g = .out → C.ph g = .out → ok g → (L.part g).Plain →
+    L.ph gx = .out → L.held gx = rnil → C.ph gx = .out → ok gx →
     (∀ G rL m, P.inv (upd G t (L.set g .holds rL)) m → S.cnt (upd G t g) ≠ 0 →
       S.cnt (upd G t gx) = S.cnt (upd G t g) - 1) →
     (∀ G rL m, P.inv (upd G t (L.set g .holds rL)) m → S.cnt (upd G t g) ≠ 0 →
@@ -1404,8 +1382,8 @@ structure SemImpl (Tgt : Type) where
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits S.prim P U ok →
     P.cost = none → (∀ g, ok g → S.ph g = .out) → L.c = c → ∀ {p : Ptr}, p = S.p →
     ∀ (t : ThreadId) (g gx : γ) (rT : Res),
-    L.ph g = .out → C.ph g = .out → S.ph g = .out → ok g →
-    L.ph gx = .out → L.held gx = rnil → C.ph gx = .out → S.ph gx = .out → ok gx →
+    L.ph g = .out → C.ph g = .out → ok g →
+    L.ph gx = .out → L.held gx = rnil → C.ph gx = .out → ok gx →
     L.part g = rsum (L.part gx) rT → FHeap.Disjoint (L.part gx).heap rT.heap →
     (∀ G rL m, P.inv (upd G t (L.set g .holds rL)) m →
       S.cnt (upd G t gx) = S.cnt (upd G t g) + 1 ∧ (S.cnt (upd G t g)).toNat + 1 < 2 ^ 64) →

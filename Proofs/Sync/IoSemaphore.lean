@@ -37,7 +37,7 @@ def semWaitPost (P : Proto Tgt γ) (L : FLock γ) (S : FSem γ X L C) (t : Threa
 
 theorem semWaitLoop_body (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
     (hok : ∀ g, ok g → S.ph g = .out) (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ)
-    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g) (hpl : (L.part g).Plain)
+    (hgx : C.ph g = .out) (hokg : ok g) (hpl : (L.part g).Plain)
     (hone : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set g .holds rL)) m₁ → S.cnt (upd G₁ t g) = 0 →
       ∀ u, u ≠ t → ∀ i jr sn e, C.ph (G₁ u) ≠ .reg i jr sn e)
     (hlive : ∀ G₁ m₁, P.inv G₁ m₁ → (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) →
@@ -52,17 +52,16 @@ theorem semWaitLoop_body (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
   obtain ⟨hd, hc, rL, hi⟩ := h
   unfold Io_Semaphore_waitUncancelable.loop5
   fsym [Fits.wp_cnt hS hcost, WP.liftMem_pure (projI hS _ _ _) rfl,
-    wp_cwait ioCond hS hcost hok hLc S.ptr_c.symm S.ptr_l.symm t g hgx hgs hokg hpl hone hlive,
+    wp_cwait ioCond hS hcost hok hLc S.ptr_c.symm S.ptr_l.symm t g hgx (hok g hokg) hokg hpl hone
+      hlive,
     semWaitInv, semWaitPost, Io_Semaphore_waitUncancelable.again5]
 
 /-- **`Io.Semaphore.waitUncancelable`** (`SemImpl.wait_wp`). -/
 theorem ioSem_wait_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
     (hok : ∀ g, ok g → S.ph g = .out) (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p)
     (t : ThreadId) (g gx : γ) (T : FAssn)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
-    (hpl : (L.part g).Plain)
-    (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
-    (hokx : ok gx)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hokg : ok g) (hpl : (L.part g).Plain)
+    (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hokx : ok gx)
     (hcnt : ∀ G rL m, P.inv (upd G t (L.set g .holds rL)) m → S.cnt (upd G t g) ≠ 0 →
       S.cnt (upd G t gx) = S.cnt (upd G t g) - 1)
     (hpool : ∀ G rL m, P.inv (upd G t (L.set g .holds rL)) m → S.cnt (upd G t g) ≠ 0 →
@@ -84,12 +83,13 @@ theorem ioSem_wait_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
         P.inv (upd G' t (L.setPart gx (rsum (L.part g) r))) m') G m d := by
   subst hp
   have hokp : ∀ r, ok (L.setPart gx r) := fun r => (hS.ok_setPart gx r).mpr hokx
+  have hxs := hok gx hokx
   unfold Io_Semaphore_waitUncancelable
   fsym [WP.liftMem_pure (projI hS _ _ _) rfl,
     ioMutex.lock_wp hS hcost S.ptr_l.symm hLc t g hgo hokg,
     WP.loop _ _ (semWaitInv P L t g d) (fun _ => 0) (semWaitPost P L S t g d)
-      (semWaitLoop_body hS hcost hok hLc t g hgx hgs hokg hpl hone hlive d io),
-    Fits.wp_cnt hS hcost, Fits.wp_take hS hcost hcnt hpool hU hgx hgs hxx,
+      (semWaitLoop_body hS hcost hok hLc t g hgx hokg hpl hone hlive d io),
+    Fits.wp_cnt hS hcost, Fits.wp_take hS hcost hcnt hpool hU hgx hxx,
     wp_csignal ioCond hS hcost hok S.ptr_c.symm t,
     Fits.wp_unlockPst ioMutex hS hcost S.ptr_l.symm hLc t,
     wp_unlock ioMutex hS hcost S.ptr_l.symm hLc t, hokp,
@@ -102,9 +102,8 @@ theorem ioSem_wait_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
 theorem ioSem_post_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
     (hok : ∀ g, ok g → S.ph g = .out) (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p)
     (t : ThreadId) (g gx : γ) (rT : Res)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
-    (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
-    (hokx : ok gx)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hokg : ok g)
+    (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hokx : ok gx)
     (hsplit : L.part g = rsum (L.part gx) rT) (hdj : FHeap.Disjoint (L.part gx).heap rT.heap)
     (hcnt : ∀ G rL m, P.inv (upd G t (L.set g .holds rL)) m →
       S.cnt (upd G t gx) = S.cnt (upd G t g) + 1 ∧ (S.cnt (upd G t g)).toNat + 1 < 2 ^ 64)
@@ -123,9 +122,10 @@ theorem ioSem_post_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
   unfold Io_Semaphore_post
   have hbound : ∀ {G rL m}, P.inv (upd G t (L.set g .holds rL)) m →
       (S.cnt (upd G t g)).toNat + 1 < 2 ^ 64 := fun hi => (hcnt _ _ _ hi).2
+  have hxs := hok gx hokx
   fsym [WP.liftMem_pure (projI hS _ _ _) rfl,
     ioMutex.lock_wp hS hcost S.ptr_l.symm hLc t g hgo hokg,
-    Fits.wp_cnt hS hcost, hbound, Fits.wp_give hS hcost hcnt hpool hU hgx hgs hxx hsplit hdj,
+    Fits.wp_cnt hS hcost, hbound, Fits.wp_give hS hcost hcnt hpool hU hgx hxx hsplit hdj,
     wp_csignal ioCond hS hcost hok S.ptr_c.symm t,
     wp_unlock ioMutex hS hcost S.ptr_l.symm hLc t, hokx,
     S.cph_set, S.ph_set, cph_l hS, sph_l hS, L.ph_set, hxo, hxh, hxx, hxs]
