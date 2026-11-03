@@ -12,8 +12,8 @@ the receipt's library `needs` (every module below `M`). Otherwise Lake replays t
 So a module is re-checked once per change of itself or of anything it imports, not once per
 audit. A failed check is logged like a passing one (the build itself succeeds), so it is
 replayed as a failure until an input changes. A checker that did not finish (it could not start,
-or a signal ended it: exit code 128 + signal, e.g. 137 for a SIGKILL under memory pressure)
-decided nothing about `M`: the receipt's build fails instead, so Lake stores no receipt, the
+a signal ended it: exit code 128 + signal, e.g. 137 for a SIGKILL under memory pressure, or its
+runtime panicked, e.g. out of memory) decided nothing about `M`: the receipt's build fails instead, so Lake stores no receipt, the
 audit fails, and the next build checks `M` again.
 
 This file imports only `Init`: the receipt's process then holds little besides its checker
@@ -25,28 +25,38 @@ namespace Air2Lean.KernelReplay
 /-- The marker of a receipt line: `AIR2LEAN_KERNEL_REPLAY:` and a JSON object. -/
 def marker : String := "AIR2LEAN_KERNEL_REPLAY:"
 
-/-- `s` as a JSON string (RFC 8259: `"` and `\` escaped, control characters as `\u00XX`). -/
+/-- `s` as a JSON string on one line (RFC 8259: `"` and `\` escaped, control characters and the
+line separators U+0085, U+2028 and U+2029, which a reader may split lines on, as `\uXXXX`). -/
 def jsonString (s : String) : String :=
-  let hex (n : Nat) : Char := "0123456789abcdef".toList[n % 16]!
+  let hex (n : Nat) : String := (Nat.toDigits 16 (0x10000 + n)).drop 1 |> String.ofList
   let body := s.foldl (init := "") fun acc c =>
     if c == '"' then acc ++ "\\\""
     else if c == '\\' then acc ++ "\\\\"
-    else if c.toNat < 0x20 then acc ++ "\\u00" ++ (hex (c.toNat / 16)).toString ++ (hex c.toNat).toString
+    else if c.toNat < 0x20 || c.toNat == 0x85 || c.toNat == 0x2028 || c.toNat == 0x2029 then
+      acc ++ "\\u" ++ hex c.toNat
     else acc.push c
   "\"" ++ body ++ "\""
 
-/-- Run the toolchain's `leanchecker` (beside the running `lean`) on `module` and print its
-receipt line; fail when the checker did not finish. -/
+/-- The toolchain's `leanchecker`: under `LEAN_SYSROOT` (which Lake sets, and which
+scripts/assumptions.py hashes the checker under), else beside the running `lean`. -/
+def checker : IO System.FilePath := do
+  match ← IO.getEnv "LEAN_SYSROOT" with
+  | some root => return System.FilePath.mk root / "bin" / "leanchecker"
+  | none => return (← IO.appDir) / "leanchecker"
+
+/-- Run the toolchain's `leanchecker` on `module` and print its receipt line; fail when the
+checker did not finish: a signal ended it, or the runtime panicked (`INTERNAL PANIC`, such as
+running out of memory, exits with code 1 but decides nothing about `module`). -/
 def run (module : String) : IO Unit := do
-  let checker := (← IO.appDir) / "leanchecker"
-  let out ← IO.Process.output { cmd := checker.toString, args := #[module] }
+  let out ← IO.Process.output { cmd := (← checker).toString, args := #[module] }
   let text := out.stdout ++ out.stderr
-  let tail := String.ofList (text.toList.drop (text.length - 2000))
-  if out.exitCode ≥ 128 then
-    throw <| IO.userError s!"leanchecker {module} did not finish (exit code {out.exitCode}):\n{tail}"
   let pass := out.exitCode == 0
+  let tail := if pass then "" else (text.takeEnd 2000).toString
+  if out.exitCode ≥ 128 || (!pass && text.contains "INTERNAL PANIC:") then
+    throw <| IO.userError s!"leanchecker {module} did not finish (exit code {out.exitCode}):\n{tail}"
+  -- Key order does not matter to the reader (scripts/assumptions.py parses the JSON).
   IO.println <| marker ++ "{\"exit_code\":" ++ toString out.exitCode.toNat ++ ",\"module\":" ++
-    jsonString module ++ ",\"output\":" ++ jsonString (if pass then "" else tail) ++
+    jsonString module ++ ",\"output\":" ++ jsonString tail ++
     ",\"status\":" ++ jsonString (if pass then "pass" else "fail") ++ "}"
 
 end Air2Lean.KernelReplay

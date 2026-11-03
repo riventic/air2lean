@@ -290,9 +290,15 @@ class LakeKernelReplay(unittest.TestCase):
         # receipt's build fails, and the next audit checks the module again instead of replaying a
         # failure. The module imports Lean, so its checker runs long enough to be stopped.
         text = "import Lean\ntheorem honest : 1 + 1 = 2 := rfl\n"
-        killed, stop = [], threading.Event()
+        killed, errors, stop = [], [], threading.Event()
 
         def kill_own_checker():
+            try:
+                find_and_kill()
+            except Exception as error:  # reported by the test, not lost with the thread
+                errors.append(error)
+
+        def find_and_kill():
             command = f"{self.sysroot / 'bin/leanchecker'} AuditControl"
             while not stop.is_set() and not killed:
                 rows = {}
@@ -307,7 +313,7 @@ class LakeKernelReplay(unittest.TestCase):
                     if rest == command and ancestor == os.getpid():  # a descendant of this test only
                         os.kill(pid, signal.SIGKILL)
                         killed.append(pid)
-                time.sleep(0.01)
+                time.sleep(0.05)
 
         killer = threading.Thread(target=kill_own_checker)
         killer.start()
@@ -317,6 +323,7 @@ class LakeKernelReplay(unittest.TestCase):
         finally:
             stop.set()
             killer.join()
+        self.assertEqual(errors, [])
         self.assertTrue(killed)
         self.assertEqual(self.replay(text)["status"], "pass")
 

@@ -35,8 +35,9 @@ module shadowed by a project olean is an error. Proof receipts require a passing
 by the planned toolchain's `leanchecker` and copy its summary into `receipt.json`; receipts
 without it are not current. Replaying the shipped scope takes about 40 s on 8 cores (about
 280 s of CPU). `AIR2LEAN_REPLAY_JOBS` sets the parallelism, else build-guard's `AIR2LEAN_JOBS`,
-else `min(4, cores)`; under build-guard it is at most `AIR2LEAN_MEM_MIB / REPLAY_MIB` (one replay's
-memory, `scripts/assumptions.py`), at least one (`replay_jobs`).
+else `min(4, cores)`, and at most the memory budget (build-guard's `AIR2LEAN_MEM_MIB`, else 80% of
+the machine's, `scripts/par.py`) divided by `REPLAY_MIB` (one replay's memory,
+`scripts/assumptions.py`), at least one (`replay_jobs`).
 `--replay-cache FILE` lets the theorem-universe run skip modules whose olean bytes passed
 earlier in the same build; the architecture-audit fixtures' four audits
 (`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way, and
@@ -314,10 +315,11 @@ generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M
 when the receipt's trace changes: `M`'s olean, `M`'s dependency trace (everything below it), the
 toolchain, and the receipt's text, which names the checker's and the installed runtime's digests. Otherwise
 Lake replays the stored receipt. A failing check stays a failing receipt. A checker that did not
-finish (it could not start, or a signal ended it, e.g. exit 137 for a SIGKILL under memory
-pressure) decided nothing: its receipt's build fails, so the audit fails and the next one checks
-the module again. Like the driver's, the receipts' workspace does not use the artifact cache (a
-receipt is a build log). Lake runs at most `replay_jobs` receipts at once, and no more than the
+finish (it could not start, a signal ended it, e.g. exit 137 for a SIGKILL under memory
+pressure, or its runtime panicked, `INTERNAL PANIC`, e.g. out of memory) decided nothing: its
+receipt's build fails, so the audit fails and the next one checks the module again (the replay
+without Lake records any nonzero exit as a rejection of this audit and caches only passes). Like the driver's, the receipts' workspace does not use the
+artifact cache (a receipt is a build log; the packages it requires still may). Lake runs at most `replay_jobs` receipts at once, and no more than the
 caller's `LEAN_NUM_THREADS`. The receipts are used only while Lake resolves exactly the audit's
 lookup path in that workspace; a missing, foreign or repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
 
