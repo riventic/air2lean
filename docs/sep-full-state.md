@@ -1135,6 +1135,24 @@ authorized before a step and not after it), `tick_without_credit`
 (`¬ FTriple emp Zig.tick (fun _ => emp)`, decision D3), `no_mint_spent`,
 `no_plain_under_meter` and the positive control `tick_credit_live`.
 
+**Cost bounds** (`ZigLean/Sep/Full/Cost.lean`) are statements over these resources, not a
+judgment of their own:
+
+* *Plain mode from a cost proof.* No meter runs where `unmetered` is held, so credits can be
+  added there (`Holds.mintCredits`, `EUpd.credits_mint`). A proof with `n` credits gives the
+  plain-mode proof of the same program (`FTotalTriple.of_credits_unmetered`, `of_credits_plain`).
+* *Exact counts.* From a start without credits, meter, plain mode or receipts (`CreditFree`), a
+  run proved with `N` credits makes at most `N` steps (`FTotalTriple.ticks_le`), and a run that
+  returns `N` receipts makes at least `N` (`ticks_ge`; `Holds.addSpent` is the adequacy step that
+  puts the receipts of the past steps in the frame). A statement with both counts exactly
+  (`ticks_eq`), and `FTotalTriple.not_fewer_credits` makes it tight: no proof pays the same run
+  with fewer credits.
+* *Counted loops.* `FTotalTriple.loop_exact`: when one body run pays one credit, returns its
+  receipt and lowers the measure by exactly one (`floopExact`), the loop from the measure `n`
+  takes `n + 1` credits and returns `n + 1` receipts.
+
+Kernel-checked in `TicksCX.lean`: `two_steps_exact`, `two_steps_tight` and `two_steps_plain`.
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem

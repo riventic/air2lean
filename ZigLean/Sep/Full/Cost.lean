@@ -18,8 +18,8 @@ function of a recursive call group. A step needs a credit or the plain mode
   (`FTotalTriple.ticks_ge`), from a start whose resources hold no credit, meter, receipt or plain
   mode (`CreditFree`; the adequacy steps `Holds.addCredits` and `Holds.addSpent` put the meter and
   the receipts of the steps run so far in the frame). A statement with both counts its steps
-  exactly, and no proof pays the same run with fewer credits: `FTotalTriple.not_fewer_credits`
-  makes a bound tight.
+  exactly (`FTotalTriple.ticks_eq`), and no proof pays the same run with fewer credits:
+  `FTotalTriple.not_fewer_credits` makes a bound tight.
 * **Counted loops.** `FTotalTriple.loop_exact`: a loop whose measure drops by exactly one per body
   run and is zero at the exit runs its body `n + 1` times from the measure `n`; it spends `n + 1`
   credits and returns `n + 1` receipts. The client proves one body run with `fsym`
@@ -80,7 +80,7 @@ theorem sep_credits_intro {P : FAssn} {r : Res} (hp : P r) (n : Nat) :
 theorem EUpd.credits_mint (n : Nat) : EUpd unmetered (unmetered ⋆ credits n) :=
   fun _ r _ hh hp _ => by
     obtain ⟨h0, k0, g0⟩ := hp
-    exact ⟨_, hh.mintCredits n (by simp [g0, Ghost.ofAC]), sep_credits_intro ⟨h0, k0, g0⟩ n⟩
+    exact ⟨_, hh.mintCredits n (by simp [g0, Ghost.ofAC]; omega), sep_credits_intro ⟨h0, k0, g0⟩ n⟩
 
 /-- **A cost proof gives the plain-mode proof**: a program proved with `n` credits runs in the
 plain mode, with the same postcondition. -/
@@ -155,7 +155,7 @@ theorem FTotalTriple.ticks_le {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
   obtain ⟨v, m', r', hr, hh', -, -⟩ :=
     h.runs (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
   refine ⟨v, m', hr, ?_⟩
-  have := hh'.ghost.2.2.2.tick.meter (m.ticks + N) (by simp [Ghost.credAuth])
+  have := hh'.ghost.2.2.2.tick.meter (m.ticks + N) (by simp [Ghost.credAuth]; omega)
   omega
 
 /-- **At least `N` steps**: from a start without receipts, a run that returns `N` receipts raises
@@ -171,6 +171,19 @@ theorem FTotalTriple.ticks_ge {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
   simp [g₂] at this
   omega
 
+/-- **Exactly `N` steps**: from a credit-free start, a run proved with `N` credits and `N` receipts
+raises the step count by exactly `N`. -/
+theorem FTotalTriple.ticks_eq {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
+    (h : FTotalTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
+    ∃ v m', c.run m = pure (v, m') ∧ m'.ticks = m.ticks + N := by
+  obtain ⟨v, m', hr, hle⟩ := h.ticks_le hh hp hs hc
+  obtain ⟨v₂, m₂, hr₂, hge⟩ := h.ticks_ge (Holds.addCredits N hh hc.cred hc.auth hc.unmetered)
+    (sep_credits_intro hp N) hs (by simpa [Ghost.cred, Ghost.credAuth] using hc.spent)
+  rw [hr] at hr₂
+  obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj hr₂)
+  exact ⟨v, m', hr, by omega⟩
+
 /-- **The step count is tight**: a run proved with `N` credits and `N` receipts cannot be paid
 with fewer credits, from any credit-free start that holds the precondition. -/
 theorem FTotalTriple.not_fewer_credits {α : Type} {P : FAssn} {c : MemM α} {Q Q' : α → FAssn}
@@ -178,8 +191,7 @@ theorem FTotalTriple.not_fewer_credits {α : Type} {P : FAssn} {c : MemM α} {Q 
     {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
     ¬ FTotalTriple (P ⋆ credits M) c Q' := fun h' => by
   obtain ⟨v₁, m₁, hr₁, hle⟩ := h'.ticks_le hh hp hs hc
-  obtain ⟨v₂, m₂, hr₂, hge⟩ := h.ticks_ge (Holds.addCredits N hh hc.cred hc.auth hc.unmetered)
-    (sep_credits_intro hp N) hs (by simpa [Ghost.cred, Ghost.credAuth] using hc.spent)
+  obtain ⟨v₂, m₂, hr₂, heq⟩ := h.ticks_eq hh hp hs hc
   rw [hr₁] at hr₂
   obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj hr₂)
   omega
@@ -205,7 +217,7 @@ theorem floopExact_repeat {n : Nat} {e : ε} {s : σ} {r : Res} (ha : again e = 
 theorem floopExact_exit {e : ε} {s : σ} {r : Res} (ha : again e = false) (hp : post (e, s) r) :
     floopExact again inv post 0 (e, s) r := by
   simp only [floopExact, ha, Bool.false_eq_true, ↓reduceIte]
-  exact sep_lift.mpr ⟨rfl, hp⟩
+  exact sep_lift.mpr ⟨by trivial, hp⟩
 
 /-- One body run of `loop_exact`, given the loop from the next measure. -/
 private theorem loop_exact_run
@@ -254,9 +266,10 @@ theorem FTotalTriple.loop_exact
   intro s n
   induction n generalizing s with
   | zero => exact loop_exact_run step s 0 fun n' h => absurd h (by omega)
-  | succ n ih => exact loop_exact_run step s (n + 1) fun n' h => by
-      obtain rfl : n = n' := by omega
-      exact ih
+  | succ n ih =>
+    refine loop_exact_run step s (n + 1) fun n' h => ?_
+    obtain rfl : n = n' := by omega
+    exact ih
 
 end LoopExact
 
