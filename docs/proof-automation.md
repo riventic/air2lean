@@ -758,7 +758,10 @@ its actual side goal; it does not permit another body unfolding.
 
 An unknown initial conditional is still a refusal boundary. Constructor-decided condition
 views do not authorize a branch search or entry after an ordinary caller prefix. Without a
-recognized local smaller-call family, the existing bounded unfolding behavior is unchanged.
+recognized local smaller-call family, the existing bounded unfolding behavior is unchanged,
+except two changes shared by every run: an `if` is rewritten in its condition only
+(`ite_cond_congr`; its branches are normalized once the walk reaches them), and the arithmetic
+simp set unfolds `frameBase` and `InvImage id WellFoundedRelation.rel`.
 These engine rules do not complete the remaining concrete recursive clients or protocol/P03
 integration; the `recursive-group-total` engine-ledger row remains open.
 
