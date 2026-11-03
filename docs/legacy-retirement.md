@@ -289,6 +289,17 @@ Deletable after L6: Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation (and Ste
   strength example derives the token from the program-start adequacy (`Full/Init`), and the log
   records the change as "premise → resource".
 - Automation's only importer left is Sep/AllocSpec/Wrappers, so it goes with D-b.
+**L6 status (2026-11-04, claude/l6-fba-client, #567):**
+- `AllocFba.Client.client_spec` proves the translated client through the generated wrappers'
+  contracts over `FBA.fallocSpec`, walked by `fsym`; the stack push is the `sp` token resource
+  (premise → resource, as approved). `client_start` derives the token and the buffer's parts from
+  the actual program start (`FTotalTriple.run_init_stack_claims`): the strength example.
+- Engine rules it needed, as general `fsym` rules with sep-auto regressions: a token does not fix
+  the bytes of the region whose size it names (#578, `sizedRegionBytes`/`sizeField`) and a block
+  variable equal to a value is that value (#585, `unifyBlocks`).
+- Bridge, the legacy Client and Fba are deleted, with the `bridge_close`/`bridge_norm`/`pure_norm`
+  tactics. Sep/AllocSpec, Wrap, Wrappers, Dispatch (and Automation) have no importer left: the
+  follow-up PR deletes them.
 - `PageObstruction.lean` no longer imports the legacy logic: the heap-only negative theorem is
   recorded in `docs/alloc-page.md`, while the equal-heap counterexample and allocation outcomes
   stay kernel-checked in the fixture, alongside its real-run executable guards.

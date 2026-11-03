@@ -16,7 +16,7 @@ strength example must check before the legacy proof and its last library imports
 
 open Zig Zig.Full Zig.Full.FAssn AllocFba AllocFba.Gen AllocFba.FBA
 
-namespace AllocFba.ClientFull
+namespace AllocFba.Client
 
 abbrev bufp : Ptr := ⟨some 0, 0⟩
 abbrev vtp : Ptr := ⟨some 5, 0⟩
@@ -69,4 +69,4 @@ theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
       Frac.one.half s bs,
     reset, fun (h : Heap) => EUpd.of_imp (@JunkAt.junk h)]
 
-end AllocFba.ClientFull
+end AllocFba.Client
