@@ -5,8 +5,8 @@ import ZigLean.Sep.Full.Witness
 /-!
 # Step counts: cost bounds over step ticks (`docs/sep-full-state.md` §Step ticks)
 
-The translator puts a step (`Zig.tick`) at every run of a loop body and at the entry of every
-function of a recursive call group. A step needs a credit or the plain mode
+The translator is to put a step (`Zig.tick`) at every run of a loop body and at the entry of every
+function of a recursive call group (L8b). A step needs a credit or the plain mode
 (`ZigLean/Sep/Full/Tick.lean`). This module turns that into cost statements:
 
 * **Credits under the plain mode.** Where `unmetered` is held no meter runs (`TickAuth.plain`), so
@@ -15,8 +15,8 @@ function of a recursive call group. A step needs a credit or the plain mode
   program without a second proof (`FTotalTriple.of_credits_unmetered`, `of_credits_plain`).
 * **Exact step counts.** A run proved with `N` credits makes at most `N` steps
   (`FTotalTriple.ticks_le`), and a run that returns `N` receipts makes at least `N`
-  (`FTotalTriple.ticks_ge`), from a start whose resources hold no credit, meter, receipt or plain
-  mode (`CreditFree`; the adequacy steps `Holds.addCredits` and `Holds.addSpent` put the meter and
+  (`FTotalTriple.ticks_ge`), from a start whose resources hold no credit, meter, receipt or
+  `unmetered` fragment (`CreditFree`; the adequacy steps `Holds.addCredits` and `Holds.addSpent` put the meter and
   the receipts of the steps run so far in the frame). A statement with both counts its steps
   exactly (`FTotalTriple.ticks_eq`), and no proof pays the same run with fewer credits:
   `FTotalTriple.not_fewer_credits` makes a bound tight.
@@ -25,10 +25,13 @@ function of a recursive call group. A step needs a credit or the plain mode
   credits and returns `n + 1` receipts. The client proves one body run with `fsym`
   (`tick_credit` pays the step).
 * **Admissible inputs** with the plain mode or with credits (`FAdmit.of_mem_plain`,
-  `FAdmit.of_mem_credits`).
+  `FAdmit.up_plain`, `FAdmit.of_mem_credits`).
 
 The unit is the step of the model, not CPU time: straight-line code outside a loop body or a
 recursive entry takes none, and pure code (`Zig.M`, `Result`) takes none (plan decision D5).
+
+The counts are read off sequential runs (`FTotalTriple.runs`); a thread's steps pay with the same
+rules, and their counts are not read off yet.
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -40,8 +43,8 @@ open FAssn
 
 /-! ## Credits under the plain mode -/
 
-/-- **Credits next to the plain mode**: a memory whose resources hold `unmetered` holds them with
-`n` more credits. -/
+/-- **Credits next to the plain mode**: a memory whose resources or frame hold `unmetered` holds the
+resources with `n` more credits. -/
 theorem Holds.mintCredits {m : Mem} {r rF : Res} (n : Nat) (hh : Holds m r rF)
     (hu : 0 < (r.gh.add rF.gh).ac.frag .unmetered) :
     Holds m ⟨r.heap, r.know, r.gh.add (Ghost.cred n)⟩ rF := by
@@ -138,19 +141,23 @@ theorem Holds.addSpent {m : Mem} {r rF : Res} (hh : Holds m r rF)
       fun hp => hn (by simpa using hp), fun k L hk => by simpa using ho k L hk,
       fun v hv => hcur v (by simpa using hv)⟩
 
-/-- A credit-free start: the resources and the frame hold no credit, meter, plain mode or
-receipt. -/
-structure CreditFree (r rF : Res) : Prop where
+/-- A meter-free start: the resources and the frame hold no credit, meter or `unmetered`
+fragment, so a meter can be added (`Holds.addCredits`). -/
+structure MeterFree (r rF : Res) : Prop where
   cred : (r.gh.add rF.gh).ac.frag .cred = 0
   auth : ∀ L, (r.gh.add rF.gh).ac.auth .cred L = 0
   unmetered : (r.gh.add rF.gh).ac.frag .unmetered = 0
+
+/-- A credit-free start: meter-free, and without receipts, so the receipts of the steps run so far
+can be added (`Holds.addSpent`). -/
+structure CreditFree (r rF : Res) : Prop extends MeterFree r rF where
   spent : (r.gh.add rF.gh).ac.frag .spent = 0
 
-/-- **At most `N` steps**: from a credit-free start, a run proved with `N` credits raises the step
+/-- **At most `N` steps**: from a meter-free start, a run proved with `N` credits raises the step
 count by at most `N`. -/
 theorem FTotalTriple.ticks_le {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
     (h : FTotalTriple (P ⋆ credits N) c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r)
-    (hs : m.FSeq) (hc : CreditFree r rF) :
+    (hs : m.FSeq) (hc : MeterFree r rF) :
     ∃ v m', c.run m = pure (v, m') ∧ m'.ticks ≤ m.ticks + N := by
   obtain ⟨v, m', r', hr, hh', -, -⟩ :=
     h.runs (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
@@ -177,7 +184,7 @@ theorem FTotalTriple.ticks_eq {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
     (h : FTotalTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
     ∃ v m', c.run m = pure (v, m') ∧ m'.ticks = m.ticks + N := by
-  obtain ⟨v, m', hr, hle⟩ := h.ticks_le hh hp hs hc
+  obtain ⟨v, m', hr, hle⟩ := h.ticks_le hh hp hs hc.toMeterFree
   obtain ⟨v₂, m₂, hr₂, hge⟩ := h.ticks_ge (Holds.addCredits N hh hc.cred hc.auth hc.unmetered)
     (sep_credits_intro hp N) hs (by simpa [Ghost.cred, Ghost.credAuth] using hc.spent)
   rw [hr] at hr₂
@@ -185,12 +192,12 @@ theorem FTotalTriple.ticks_eq {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
   exact ⟨v, m', hr, by omega⟩
 
 /-- **The step count is tight**: a run proved with `N` credits and `N` receipts cannot be paid
-with fewer credits, from any credit-free start that holds the precondition. -/
+with fewer credits: a credit-free start that holds the precondition refutes it. -/
 theorem FTotalTriple.not_fewer_credits {α : Type} {P : FAssn} {c : MemM α} {Q Q' : α → FAssn}
     {N M : Nat} (h : FTotalTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) (hM : M < N)
     {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
     ¬ FTotalTriple (P ⋆ credits M) c Q' := fun h' => by
-  obtain ⟨v₁, m₁, hr₁, hle⟩ := h'.ticks_le hh hp hs hc
+  obtain ⟨v₁, m₁, hr₁, hle⟩ := h'.ticks_le hh hp hs hc.toMeterFree
   obtain ⟨v₂, m₂, hr₂, heq⟩ := h.ticks_eq hh hp hs hc
   rw [hr₁] at hr₂
   obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj hr₂)
@@ -292,6 +299,11 @@ theorem holds_mem_empty (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_st
 theorem FAdmit.of_mem_plain {P : FAssn} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
     (hs : m.FSeq) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit (P ⋆ plain) :=
   ⟨m, _, _, (holds_mem_empty m hns).addPlain hns fun _ => by simp, sep_plain_intro hp, hs, trivial⟩
+
+/-- `FAdmit.up` in the plain mode. -/
+theorem FAdmit.up_plain {P : Assn} {m : Mem} (hp : P m.heap) (hs : m.FSeq)
+    (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FAdmit (FAssn.up P ⋆ plain) :=
+  FAdmit.of_mem_plain ⟨by simpa using hp, rfl, rfl⟩ hs hns
 
 /-- `FAdmit.of_mem` with `n` credits (`Holds.addCredits`): the frame holds the meter `●n`. -/
 theorem FAdmit.of_mem_credits {P : FAssn} {m : Mem} (n : Nat)

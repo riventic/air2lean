@@ -1140,13 +1140,14 @@ judgment of their own:
 
 * *Plain mode from a cost proof.* No meter runs where `unmetered` is held, so credits can be
   added there (`Holds.mintCredits`, `EUpd.credits_mint`). A proof with `n` credits gives the
-  plain-mode proof of the same program (`FTotalTriple.of_credits_unmetered`, `of_credits_plain`).
-* *Exact counts.* From a start without credits, meter, plain mode or receipts (`CreditFree`), a
-  run proved with `N` credits makes at most `N` steps (`FTotalTriple.ticks_le`), and a run that
-  returns `N` receipts makes at least `N` (`ticks_ge`; `Holds.addSpent` is the adequacy step that
-  puts the receipts of the past steps in the frame). A statement with both counts exactly
-  (`ticks_eq`), and `FTotalTriple.not_fewer_credits` makes it tight: no proof pays the same run
-  with fewer credits.
+  plain-mode proof of the same program (`FTotalTriple.of_credits_unmetered`, `of_credits_plain`;
+  admissible inputs: `Witness.FAdmit.of_mem_plain`, `up_plain`, `of_mem_credits`).
+* *Exact counts.* From a start without credits, meter or `unmetered` (`MeterFree`), a run proved
+  with `N` credits makes at most `N` steps (`FTotalTriple.ticks_le`); from a start without
+  receipts, a run that returns `N` receipts makes at least `N` (`ticks_ge`; `Holds.addSpent` is
+  the adequacy step that puts the receipts of the past steps in the frame). A statement with both
+  counts its steps exactly (`ticks_eq`, from a `CreditFree` start), and
+  `FTotalTriple.not_fewer_credits` makes it tight: no proof pays the same run with fewer credits.
 * *Counted loops.* `FTotalTriple.loop_exact`: when one body run pays one credit, returns its
   receipt and lowers the measure by exactly one (`floopExact`), the loop from the measure `n`
   takes `n + 1` credits and returns `n + 1` receipts.
