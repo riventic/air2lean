@@ -31,17 +31,21 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   the merge lane: guards of checkouts since then treat every ticket as a merge ticket, so they
   wait behind an exclusive one too.
 - Usage-aware charge (Linux only). --rss-mib stays the hard limit, but a workload whose command
-  ran before is charged its measured need instead: the guard keeps the last runs of each command
-  (`<lock>.d/history/<key>.json`; the key is the command with its workspace path abstracted,
-  the phase, profile, jobs and Lean threads), and after 2 successes among them, with no run
-  stopped at its limit or preempted, it holds ceil(1.3 x the largest recent peak) instead of
-  --rss-mib (at least one slot). The declared limits of the running workloads still add up to at
-  most 1.5 x the budget: an overcommitted workload registers its excess (declared minus held
-  slots) in `<lock>.d/running/`, flock-held, and one that would break the bound holds its declared
-  slots instead. Backstop: when MemAvailable falls below max(2 GiB, 10% of RAM), the youngest
-  overcommitted workload is stopped (outcome `preempted`, 5 s apart per lock) and the guard runs
-  it again at its declared charge; the record keeps the preempted run. macOS has no
-  MemAvailable, so it is never overcommitted (nor are --exclusive and --no-overcommit guards).
+  ran before is charged its measured need instead: the guard keeps the last 5 runs of each
+  command (`<lock>.d/history/<key>.json`; the key is the command with its workspace path
+  abstracted, its directory in the workspace, the phase, profile, jobs and Lean threads), and
+  after 2 successes among them, with none stopped at its limit, preempted or SIGKILLed (exit 137,
+  the OOM killer), it holds the slots of ceil(1.3 x the largest sampled peak of those successes)
+  MiB instead of those of --rss-mib. The declared limits of the running workloads still add up to
+  at most 1.5 x the budget: an overcommitted workload registers its excess (declared minus held
+  slots) in `<lock>.d/running/`, flock-held, the registered excess stays within 0.5 x the budget,
+  and a workload that would break that holds its declared slots instead. Backstop: when
+  MemAvailable falls below max(2 GiB, 10% of RAM), the youngest overcommitted workload is stopped
+  (outcome `preempted`, at most one per 5 s and lock) and the guard runs it again holding its
+  declared slots, within what is left of --lock-wait and --timeout; the report keeps the stopped
+  run in `preempted_run`, the log its output. Never overcommitted: macOS (no MemAvailable), a
+  cgroup-limited process (a container's --memory: MemAvailable does not show it), --lock-wait 0
+  (a preempted run could not wait), --exclusive and --no-overcommit.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
 is only a bound when every heavy workload of the machine goes through the same lock.
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
@@ -524,26 +528,65 @@ CHARGE_MARGIN = 1.3     # charge = margin x the largest recent peak
 DECLARED_BOUND = 1.5    # declared limits of the running workloads <= bound x budget
 PREEMPT_HOLDOFF = 5     # seconds between two preemptions under one lock
 UNSAFE_OUTCOMES = ("rss_limit", "preempted")
+KILLED = 128 + signal.SIGKILL  # exit code of a workload SIGKILLed from outside (the OOM killer)
 
 
 def command_key(a, workspace):
     """The history key: the command (its workspace path abstracted, so every checkout of one
-    command shares it) and what else shapes its memory."""
+    command shares it), its directory in the workspace and what else shapes its memory."""
     command = [part.replace(str(workspace), "<workspace>") for part in a.command]
-    text = json.dumps([command, a.phase, a.profile, a.jobs, a.lean_threads])
+    text = json.dumps([command, os.path.relpath(a.cwd, workspace), a.phase, a.profile, a.jobs, a.lean_threads])
     return hashlib.sha256(text.encode()).hexdigest()[:32]
 
 
 def history_charge(runs, declared_mib):
-    """(MiB to hold, None) from a command's recent runs, or (declared_mib, why not less)."""
-    recent = runs[-HISTORY_RUNS:]
-    if any(run.get("outcome") in UNSAFE_OUTCOMES for run in recent):
-        return declared_mib, "a recent run hit its limit or was preempted"
+    """(MiB to hold, None) from a command's recent runs, or (declared_mib, why not less). Only
+    successes measure the need; a run stopped at its limit, preempted or SIGKILLed (exit 137, the
+    OOM killer) keeps the command at its declared charge while it is among the recent runs."""
+    recent = [run for run in runs[-HISTORY_RUNS:] if isinstance(run, dict)]
+    if any(run.get("outcome") in UNSAFE_OUTCOMES or run.get("exit_code") == KILLED for run in recent):
+        return declared_mib, "a recent run hit its limit, was preempted or was killed"
     peaks = [run["peak_mib"] for run in recent
              if run.get("outcome") == "success" and isinstance(run.get("peak_mib"), (int, float))]
     if len(peaks) < 2:
         return declared_mib, "fewer than 2 recent successes"
     return min(declared_mib, max(SLOT_MIB, math.ceil(CHARGE_MARGIN * max(peaks)))), None
+
+
+def read_runs(handle):
+    """The run list of a history file (anything else reads as none)."""
+    try:
+        runs = json.loads(handle.read() or "[]")
+    except ValueError:
+        return []
+    return runs if isinstance(runs, list) else []
+
+
+def cgroup_limited():
+    """Whether a cgroup limits this process's memory below the machine's (a container's
+    --memory, a systemd slice): MemAvailable does not show the pressure of that limit."""
+    try:
+        lines = Path("/proc/self/cgroup").read_text().splitlines()
+    except OSError:
+        return False
+    machine = physical_mib() * 1024 * 1024
+    for line in lines:
+        _, controllers, path = line.split(":", 2)
+        if controllers == "":  # cgroup v2
+            root, name = Path("/sys/fs/cgroup"), "memory.max"
+        elif "memory" in controllers.split(","):
+            root, name = Path("/sys/fs/cgroup/memory"), "memory.limit_in_bytes"
+        else:
+            continue
+        group = Path(path)
+        for directory in (group, *group.parents):  # the limit of any enclosing group applies
+            try:
+                value = (root / directory.relative_to("/") / name).read_text().strip()
+            except (OSError, ValueError):
+                continue
+            if value != "max" and value.isdigit() and int(value) < machine:
+                return True
+    return False
 
 
 def mem_available_mib():
@@ -577,7 +620,8 @@ def held_entries(directory):
                 try:
                     fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
-                    entries[name] = json.loads(handle.read() or "{}")
+                    entry = json.loads(handle.read() or "{}")
+                    entries[name] = entry if isinstance(entry, dict) else {}
                     continue
                 (directory / name).unlink(missing_ok=True)
         except (FileNotFoundError, ValueError):
@@ -609,8 +653,10 @@ class Admission:
         self.workspace = workspace(a.cwd)
         self.history = self.directory / "history" / (command_key(a, self.workspace) + ".json")
         self.running = self.directory / "running"
-        self.registered = None
-        self.charge = {"declared_slots": self.declared, "overcommit": False}
+        self.registered = None  # its entry in `running` while it is overcommitted
+        self.overcommit = False
+        self.why_declared = self.charge_mib = self.history_runs = self.preempted_at_mib = None
+        self.backstop = backstop_mib()
         # The admission lane: an exclusive guard drains in arrival order with merge guards, so a
         # merge priority adds nothing to it.
         self.priority = "exclusive" if a.exclusive else a.priority
@@ -625,7 +671,10 @@ class Admission:
     def evidence(self):
         return {"budget_mib": self.a.mem_budget_mib, "slot_mib": SLOT_MIB, "capacity": self.capacity,
                 "weight": self.weight, "exclusive": self.a.exclusive, "workspace": str(self.workspace),
-                "shared_workspace": self.a.shared_workspace, "priority": self.priority, **self.charge}
+                "shared_workspace": self.a.shared_workspace, "priority": self.priority,
+                "declared_slots": self.declared, "overcommit": self.overcommit,
+                "charge_mib": self.charge_mib, "history_runs": self.history_runs,
+                "why_declared": self.why_declared, "preempted_at_available_mib": self.preempted_at_mib}
 
     def open(self, name):
         """A handle on `<lock>.d/name` (a path: that path; None: `<lock>`), held until release."""
@@ -638,56 +687,56 @@ class Admission:
         try:
             with self.history.open() as handle:
                 fcntl.flock(handle, fcntl.LOCK_SH)
-                runs = json.loads(handle.read() or "[]")
-        except (FileNotFoundError, ValueError):
+                return read_runs(handle)
+        except FileNotFoundError:
             return []
-        return runs if isinstance(runs, list) else []
 
     def record(self, report):
-        """Append this run (outcome, sampled peak) to the command's history."""
+        """Append this run (outcome, exit code, sampled peak) to the command's history."""
         peak = math.ceil(report["peak_sampled_rss_kib"] / 1024) if report["samples"] else None
         self.history.parent.mkdir(exist_ok=True)
         with self.history.open("a+") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             handle.seek(0)
-            try:
-                runs = json.loads(handle.read() or "[]")
-            except ValueError:
-                runs = []
-            runs = (runs if isinstance(runs, list) else [])[-(HISTORY_RUNS - 1):]
-            runs.append({"utc": report["started_utc"], "outcome": report["outcome"], "peak_mib": peak,
-                         "declared_mib": self.a.rss_mib, "held_slots": self.weight})
+            runs = read_runs(handle)[-(HISTORY_RUNS - 1):]
+            runs.append({"utc": report["started_utc"], "outcome": report["outcome"],
+                         "exit_code": report["exit_code"], "peak_mib": peak})
             handle.seek(0)
             handle.truncate()
             handle.write(json.dumps(runs))
 
+    def overcommit_refused(self):
+        """Why this guard holds its declared slots whatever its history says, else None."""
+        if self.a.exclusive:
+            return "--exclusive"
+        if self.a.no_overcommit:
+            return "--no-overcommit"
+        if not self.a.lock_wait:
+            return "--lock-wait 0 (a preempted run could not wait to run again)"
+        if mem_available_mib() is None:
+            return "no MemAvailable (not Linux)"
+        if cgroup_limited():
+            return "a cgroup memory limit (MemAvailable does not show its pressure)"
+        return None
+
     def plan(self):
         """Charge the command's measured need when its history allows (module docstring)."""
-        if self.a.exclusive or self.a.no_overcommit or mem_available_mib() is None:
-            self.charge["why_declared"] = ("--exclusive" if self.a.exclusive else "--no-overcommit"
-                                           if self.a.no_overcommit else "no MemAvailable (not Linux)")
+        if refused := self.overcommit_refused():
+            self.why_declared = refused
             return
         runs = self.runs()
-        mib, why = history_charge(runs, self.a.rss_mib)
-        self.charge.update(history_runs=len(runs[-HISTORY_RUNS:]), charge_mib=mib)
-        if why:
-            self.charge["why_declared"] = why
-        self.weight = self.slots(mib)
+        self.history_runs = len(runs[-HISTORY_RUNS:])
+        self.charge_mib, self.why_declared = history_charge(runs, self.a.rss_mib)
+        self.weight = self.slots(self.charge_mib)
 
-    def within_bound(self, unheld):
-        """Whether the declared limits of the running workloads and this one stay within
-        DECLARED_BOUND x the budget: the slots in use (probed among `unheld`, the slots this guard
-        does not hold) plus the excess the overcommitted workloads registered plus this one's."""
-        in_use = self.capacity
-        for handle in unheld:
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                continue
-            fcntl.flock(handle, fcntl.LOCK_UN)
-            in_use -= 1
+    def within_bound(self):
+        """Whether the declared limits of the running workloads stay within DECLARED_BOUND x the
+        budget with this one overcommitted. Held slots never exceed the budget, so it suffices that
+        the excess of the overcommitted workloads (declared minus held slots, registered under the
+        queue lock) stays within (DECLARED_BOUND - 1) x the budget, whatever else is admitted
+        (guards at their declared charge, guards of older checkouts)."""
         excess = sum(entry.get("excess_slots", 0) for entry in held_entries(self.running).values())
-        return in_use + excess + self.declared - self.weight <= DECLARED_BOUND * self.capacity
+        return excess + self.declared - self.weight <= (DECLARED_BOUND - 1) * self.capacity
 
     def register(self):
         """Publish this workload's excess (declared minus held slots) while it runs."""
@@ -695,19 +744,21 @@ class Admission:
         publish_entry(self.running, name, {"pid": os.getpid(), "excess_slots": self.declared - self.weight},
                       self.open)
         self.registered = name
-        self.charge["overcommit"] = True
+        self.overcommit = True
+
+    def unregister(self):
+        if self.registered:
+            (self.running / self.registered).unlink(missing_ok=True)
+            self.registered = None
 
     def preempt(self):
         """The backstop: whether this workload is to stop now, being the youngest overcommitted
-        workload while MemAvailable is below backstop_mib() (at most one per PREEMPT_HOLDOFF)."""
+        workload while MemAvailable is below the backstop (at most one per PREEMPT_HOLDOFF). The
+        chosen one leaves the registry at once, so the next one can be chosen during its teardown."""
         if not self.registered:
             return False
         available = mem_available_mib()
-        if available is None or available >= backstop_mib():
-            return False
-        overcommitted = [name for name, entry in held_entries(self.running).items()
-                         if entry.get("excess_slots", 0) > 0]
-        if not overcommitted or overcommitted[-1] != self.registered:
+        if available is None or available >= self.backstop:
             return False
         marker = self.directory / "preempted"
         try:
@@ -715,8 +766,13 @@ class Admission:
                 return False
         except FileNotFoundError:
             pass
+        overcommitted = [name for name, entry in held_entries(self.running).items()
+                         if entry.get("excess_slots", 0) > 0]
+        if overcommitted[-1:] != [self.registered]:
+            return False
         marker.touch()
-        self.charge["preempted_at_available_mib"] = available
+        self.preempted_at_mib = available
+        self.unregister()
         return True
 
     def queued_tickets(self):
@@ -812,9 +868,9 @@ class Admission:
                             free.remove(handle)
                             held += 1
                     admitted = held == self.weight
-                    if admitted and self.weight < self.declared and not self.within_bound(free):
+                    if admitted and self.weight < self.declared and not self.within_bound():
                         self.weight = self.declared  # the bound: collect the declared slots
-                        self.charge["why_declared"] = f"declared limits above {DECLARED_BOUND} x budget"
+                        self.why_declared = f"declared limits would exceed {DECLARED_BOUND} x budget"
                         continue
                 if admitted:
                     if self.weight < self.declared:
@@ -831,9 +887,7 @@ class Admission:
 
     def release(self):
         self.leave_queue()
-        if self.registered:
-            (self.running / self.registered).unlink(missing_ok=True)
-            self.registered = None
+        self.unregister()
         for handle in self.handles:
             handle.close()
         self.handles = []
@@ -956,7 +1010,8 @@ def run(a, preempted=None):
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
             return report
         a.log.parent.mkdir(parents=True, exist_ok=True)
-        with a.log.open("wb") as output:
+        # After a preemption the log keeps the stopped run's output (`main`).
+        with a.log.open("ab" if preempted else "wb") as output:
             # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
             # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
@@ -998,8 +1053,8 @@ def run(a, preempted=None):
                             reason, code = "rss_limit", 125
                         if not reason and parallel_zig(rows, owned, names, a.jobs):
                             reason, code = "parallel_zig", 126
-                        if not reason and lock.preempt():
-                            reason, code = "preempted", 75
+                    if not reason and lock.preempt():  # also when ps stalls under memory pressure
+                        reason, code = "preempted", 75
                     report["failed_samples"] = sampler.failures
                 status = peek_status(child)
                 if reason:
@@ -1062,6 +1117,8 @@ def run(a, preempted=None):
                 except OSError as error:
                     print(f"build-guard: warning: run history not recorded: {error}", file=sys.stderr, flush=True)
             lock.release()
+        if cancelled[0] and report["outcome"] == "preempted":  # a cancellation during the teardown
+            report.update(outcome="cancelled", exit_code=128 + cancelled[0])
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         report["log_truncated"] = report["output_bytes"] > a.log_bytes or report["drain_incomplete"]
@@ -1074,12 +1131,15 @@ def main():
     a = parse_args(sys.argv[1:])
     report = run(a)
     if report["outcome"] == "preempted":
-        # The backstop stopped it: run it again holding its declared slots (module docstring).
+        # The backstop stopped it: run it again holding its declared slots (module docstring),
+        # within what is left of --lock-wait and --timeout, so the caller's bounds still hold.
         print("build-guard: preempted (memory low, the youngest overcommitted workload); "
               "running it again at --rss-mib", file=sys.stderr, flush=True)
         a.no_overcommit = True
+        a.lock_wait = max(0.0, a.lock_wait - report.get("lock_wait_seconds", 0))
+        a.timeout = max(1.0, a.timeout - report.get("workload_seconds", 0))
         report = run(a, preempted={key: report.get(key) for key in (
-            "started_utc", "elapsed_seconds", "peak_sampled_rss_kib", "admission")})
+            "started_utc", "lock_wait_seconds", "workload_seconds", "peak_sampled_rss_kib", "admission")})
     print(json.dumps({key: report[key] for key in ("outcome", "exit_code", "elapsed_seconds", "peak_sampled_rss_kib")}))
     return report["exit_code"]
 

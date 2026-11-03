@@ -572,12 +572,15 @@ fixture_pause()
         with mock.patch.dict(os.environ, {"AIR2LEAN_BUILD_MEM_MIB": "-1"}), self.assertRaises(SystemExit):
             guard.parse_args(["--report", "r.json", "--log", "l.log", "--", "true"])
 
-    # Usage-aware charge (build-guard.py's docstring). /proc/meminfo is mocked: the policy is
-    # the same on every host, only its MemAvailable source is Linux's.
+    # Usage-aware charge (build-guard.py's docstring). /proc/meminfo and the cgroup limit are
+    # mocked: the policy is the same on every host, only its MemAvailable source is Linux's.
     def admission(self, *options, budget="8192", rss="6000"):
+        cgroup = mock.patch.object(guard, "cgroup_limited", return_value=False)
+        cgroup.start()
+        self.addCleanup(cgroup.stop)
         a = guard.parse_args(["--cwd", str(self.root), "--lock", str(self.root / "shared.lock"),
                               "--report", "r.json", "--log", "l.log", "--mem-budget-mib", budget,
-                              "--rss-mib", rss, *options, "--", "lake", "build"])
+                              "--rss-mib", rss, "--lock-wait", "1", *options, "--", "lake", "build"])
         admission = guard.Admission(a)
         admission.directory.mkdir(parents=True, exist_ok=True)
         self.addCleanup(admission.release)
@@ -604,9 +607,12 @@ fixture_pause()
         self.assertEqual(admission.evidence()["charge_mib"], 2600)
 
     def test_overcommit_falls_back_to_the_declared_limit_after_a_limit_hit(self):
-        for outcome in guard.UNSAFE_OUTCOMES:
+        oom = {"outcome": "child_failed", "exit_code": guard.KILLED, "peak_mib": 900}
+        for unsafe in [{"outcome": outcome, "peak_mib": 6100} for outcome in guard.UNSAFE_OUTCOMES] + [oom]:
             admission = self.admission()
-            self.history(admission, ("success", 1000), (outcome, 6100), ("success", 1000), ("success", 1000))
+            ok = {"outcome": "success", "peak_mib": 1000}
+            admission.history.parent.mkdir(exist_ok=True)
+            admission.history.write_text(json.dumps([ok, unsafe, ok, ok]))
             with mock.patch.object(guard, "mem_available_mib", return_value=6000):
                 admission.plan()
             self.assertEqual(admission.weight, admission.declared)
@@ -616,45 +622,57 @@ fixture_pause()
         with mock.patch.object(guard, "mem_available_mib", return_value=6000):
             admission.plan()
         self.assertEqual(admission.weight, 2)
+        # Entries that are not runs (a damaged file) are skipped, not fatal.
+        admission.history.write_text(json.dumps([1, None, "x", {"outcome": "success", "peak_mib": 1000}]))
+        self.assertEqual(guard.history_charge(admission.runs(), 6000), (6000, "fewer than 2 recent successes"))
 
     def test_recorded_runs_feed_the_next_charge(self):
         admission = self.admission()
         for peak in (900, 1500):
-            admission.record({"started_utc": "t", "outcome": "success", "samples": 3,
+            admission.record({"started_utc": "t", "outcome": "success", "exit_code": 0, "samples": 3,
                               "peak_sampled_rss_kib": peak * 1024})
-        admission.record({"started_utc": "t", "outcome": "cancelled", "samples": 0, "peak_sampled_rss_kib": 0})
+        admission.record({"started_utc": "t", "outcome": "cancelled", "exit_code": 143, "samples": 0,
+                          "peak_sampled_rss_kib": 0})
         self.assertEqual([(run["outcome"], run["peak_mib"]) for run in admission.runs()],
                          [("success", 900), ("success", 1500), ("cancelled", None)])
+        # One key for every checkout of the command, another for another directory in the checkout.
+        one, two, sub = (self.admission("--cwd", str(self.root / path)).a for path in ("w1", "w2", "w1/tests"))
+        self.assertEqual(guard.command_key(one, one.cwd), guard.command_key(two, two.cwd))
+        self.assertNotEqual(guard.command_key(one, one.cwd), guard.command_key(sub, one.cwd))
         other = self.admission()  # the same command in the same workspace shares the history
         with mock.patch.object(guard, "mem_available_mib", return_value=6000):
             other.plan()
         self.assertEqual(other.weight, 2)  # ceil(1.3 x 1500) = 1950 MiB
 
     def test_macos_and_opted_out_guards_are_never_overcommitted(self):
-        for options, available, why in (((), None, "not Linux"), (("--no-overcommit",), 6000, "--no-overcommit"),
-                                        (("--exclusive",), 6000, "--exclusive")):
+        cases = (((), None, False, "not Linux"), (("--no-overcommit",), 6000, False, "--no-overcommit"),
+                 (("--exclusive",), 6000, False, "--exclusive"), (("--lock-wait", "0"), 6000, False, "--lock-wait 0"),
+                 ((), 6000, True, "cgroup"))
+        for options, available, limited, why in cases:
             admission = self.admission(*options)
             self.history(admission, ("success", 1000), ("success", 1000))
-            with mock.patch.object(guard, "mem_available_mib", return_value=available):
+            with mock.patch.object(guard, "mem_available_mib", return_value=available), \
+                    mock.patch.object(guard, "cgroup_limited", return_value=limited):
                 admission.plan()
             self.assertEqual(admission.weight, admission.declared)
             self.assertIn(why, admission.evidence()["why_declared"])
             self.assertFalse(admission.evidence()["overcommit"])
 
     def test_declared_limits_stay_within_the_bound(self):
-        admission = self.admission(budget="4096", rss="4096")  # 4 slots, all declared
+        # 8 slots: the registered excess may reach 4 (declared limits <= 1.5 x budget, as held
+        # slots never exceed the budget), whatever runs at its declared charge besides.
+        admission = self.admission(rss="4096")
         admission.weight = 1
-        unheld = [admission.open("slot-%03d" % i) for i in range(1, 4)]
-        self.assertTrue(admission.within_bound(unheld))  # 1 in use + 3 excess <= 6
-        other = self.admission(budget="4096")
+        self.assertTrue(admission.within_bound())  # excess 3 <= 4
+        other = self.admission()
         guard.publish_entry(other.running, "00000000000000000001-1", {"excess_slots": 3}, other.open)
-        self.assertFalse(admission.within_bound(unheld))  # + 3 registered excess > 6
+        self.assertFalse(admission.within_bound())  # 3 + 3 > 4
         other.release()  # its guard ended: the entry no longer counts
-        self.assertTrue(admission.within_bound(unheld))
+        self.assertTrue(admission.within_bound())
 
-    @unittest.skipIf(guard.mem_available_mib() is None, "no MemAvailable: never overcommitted")
+    @unittest.skipIf(guard.mem_available_mib() is None or guard.cgroup_limited(), "never overcommitted here")
     def test_a_repeated_command_is_admitted_at_its_measured_need(self):
-        options = ("--mem-budget-mib", "8192", "--rss-mib", "4096")
+        options = ("--mem-budget-mib", "8192", "--rss-mib", "4096", "--lock-wait", "5")
         reports = [self.run_guard("import time; time.sleep(0.1)", *options)[1] for _ in range(3)]
         self.assertEqual([report["admission"]["weight"] for report in reports], [4, 4, 1])
         self.assertEqual([report["admission"]["overcommit"] for report in reports], [False, False, True])
@@ -673,7 +691,7 @@ fixture_pause()
             self.assertFalse(declared.preempt())  # it holds its declared slots
             self.assertFalse(older.preempt())
             self.assertTrue(younger.preempt())
-            younger.release()
+            self.assertEqual(len(os.listdir(younger.running)), 1)  # it left the registry at once
             self.assertFalse(older.preempt())  # now the youngest, but within the hold-off
             os.utime(older.directory / "preempted", (0, 0))
             self.assertTrue(older.preempt())
