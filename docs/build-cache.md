@@ -276,6 +276,79 @@ restoring hard link updates; a Lake artifact still linked from a worktree frees 
 skipped. Nothing used within the last hour (`--min-age`) is evicted. A deleted Lake artifact is
 a miss: Lake rebuilds the module.
 
+## Remote build host
+
+The heavy work of a worktree (full builds, fixture checks, `scripts/regen.sh`, a PR's gate) can
+run on a second machine, while the development machine only edits and runs git. The repository
+needs nothing special for this. The host is an ordinary checkout with its own cache, and the
+coordinator's tooling holds the host's name and the runner script. The mechanism:
+
+- **Host.** Linux on x86_64; a VM such as WSL2 works. It needs git, curl, tar, xz and
+  python ≥ 3.12: build-guard needs `os.waitid`, which Linux has from 3.3 and macOS only from
+  3.13. Install elan from the `[ci.elan]` pin of `zig-patch/versions.toml` (sha256-checked) and
+  the `lean-toolchain` release. Install the stock Zig of each version from `[ci.host-zig."V"]` as
+  `$AIR2LEAN_CACHE/host-V/zig`, where `cas.py host-zig` finds it. `scripts/zig-air.sh V` then
+  builds the patched compilers into the host's own `AIR2LEAN_CAS_DIR`. Set that variable in every
+  job, so the host's worktrees share Lake artifacts and compilers as on any machine.
+- **Code transfer.** A bare repository on the host receives pushes over ssh:
+  `git push --receive-pack='<prefix> git-receive-pack' <host>:<path>/repo.git <sha>:refs/heads/<name>`.
+  `<prefix>` reaches the Linux shell when the ssh login shell is a different one, e.g.
+  `wsl -d <distro> --`. Set `receive.shallowUpdate=true` if the pushing clone is shallow. Push
+  `refs/remotes/origin/main` too, so merge bases and main-relative steps see the lane's main. No
+  GitHub credential goes on the host. For `scripts/generated.py fetch` (the `generated` branch),
+  its bare repository fetches the public origin read-only. A dirty worktree is shipped as one
+  snapshot commit, made through a private index: `git add -A` into a temporary
+  `GIT_INDEX_FILE`, `git write-tree`, `git commit-tree -p HEAD`. The lane's index, worktree and
+  refs stay unchanged.
+- **Worktrees and concurrency.** The host keeps one worktree per branch, reset to the pushed
+  commit before each job (`checkout -f`, `clean -fd`). Ignored build outputs stay, so `.lake` is
+  warm. A lock file serializes the jobs of one worktree. Jobs in different worktrees run at once,
+  and the host's own build-guard lock admits them within the host's budget:
+  `AIR2LEAN_BUILD_MEM_MIB` is the host's memory less about 3000 MiB for the OS and unguarded
+  tools. Every job runs under `scripts/build-guard.py`. The runner skips its own wrapper guard
+  only for a command that is itself a guarded entry point: `full-build.sh`, `worktree-init.sh`,
+  `fixture-checks.sh`, `regen.sh`, `preflight.sh`, `zig-air.sh` or `build-guard.py`. It rejects
+  any other command without a guard, a `bash -c` script included; this check fails closed. Its
+  reason: an unguarded gate script's cold kernel replay (`leanchecker ZigLean`, over 24 GB with
+  no Lake-built replay receipts in the cache yet) once drove a shared host into the kernel's
+  OOM killer, and every job on it died. A guarded entry point inside a wrapper guard inherits the
+  wrapper's admission when its limit fits, and otherwise fails with `inheritance_refused`. A
+  watchdog applies the development machine's per-process cap (12 GiB) to every `lean`, `lake`
+  and `leanchecker` process.
+- **Results.** The job's output streams back over the ssh connection, which also carries its
+  exit status. Files the job produced, such as regenerated generated files, come back as a binary
+  diff of the host worktree against the pushed commit, which the lane applies with `git apply`.
+- **Lifetime.** A job lives exactly as long as the connection that started it: its stdin is that
+  connection, and end of file stops its process group. WSL ends every process a session started
+  when the session ends, `setsid` and `nohup` included, so a detached job is not an option there
+  anyway.
+- **Docker.** The few steps that call `docker run` themselves need Docker inside the host's
+  Linux. Examples are `scripts/local-ci.sh` parts, `scripts/build-mode-docker.sh` and the
+  `--docker-linux` modes. A job that needs Docker checks `docker info` first and fails at once
+  if it is not available. The native x86_64-linux runs need no container on an x86_64 Linux
+  host.
+
+Which work runs where:
+
+- Oleans are portable between hosts, but the precompiled `fsym` library
+  ([above](#precompiled-fsym)) is a native library for one platform. Each host therefore builds
+  its own `.lake` through its own cache. Never copy `.lake` between hosts.
+- An x86_64-linux host runs the x86_64-linux parts natively, without Rosetta: the CI `test`
+  rows, and every `--native` invocation of a fixture check. `scripts/fixture-checks.py` treats
+  those invocations as no-ops on the Mac (`not on aarch64-macos (needs x86_64-linux)`, 42 on main
+  b3a9a97).
+- The aarch64-macos parts stay on the Mac: the `macos` CI part (Darwin AIR export, native
+  differential, ABI probes and T04 qualification, the proof build of the Darwin translations).
+  So do the aarch64-linux native parts: the `ubuntu-24.04-arm` jobs and the fixture unit
+  `tests/roadmap/dispatch/check.sh --native-only`. These run in the Mac's native `linux/arm64`
+  container ([CLAUDE.md](../CLAUDE.md), [rosetta.md](rosetta.md)).
+
+Measured (origin/main b3a9a97, 2026-11-03; host: 16 cores, WSL2 with 15.6 GB, budget 12952 MiB):
+
+| step | development Mac | remote host |
+| --- | --- | --- |
+| TODO | | |
+
 ## `scripts/regen.sh`
 
 Run it after every merge of `main`; do not write private regeneration scripts.
