@@ -156,6 +156,16 @@ structure FPrim (γ : Type) where
   before it to those after it. -/
   Step : ThreadId → (ThreadId → γ) → Res → Mem → (ThreadId → γ) → Res → Mem → Prop
 
+/-- **Thread `t` with the ghost value `g` exists** at every state of the protocol `P`: the liveness
+of a stepping thread that the rules of the ops at a shared word need (an op reads the thread's
+clock). It comes from the protocol, not from the thread's place in a lock: a thread out of the
+lock's code exists by the lock's invariant (`FLock.Fits.runs`), and a thread that left a lock for
+good (`gone`, e.g. a task after its last access to the lock's resource, or a detached thread, whose
+handle is consumed) still runs other sync code (an event's set) when its protocol shows that it
+exists. -/
+def Runs {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId) (g : γ) : Prop :=
+  ∀ G m, G t = g → P.inv G m → t < m.threads.size
+
 /-- No primitive next to the lock (a protocol with the lock alone). -/
 def FPrim.empty (γ : Type) : FPrim γ where
   Ph := Unit
@@ -297,9 +307,10 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) rX m'
-  /-- A stop of any thread (`current := t`) keeps `U`: a thread without `ok` (one inside another
-  sync object's code, which runs no lock code) stops too. -/
-  atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }
+  /-- A stop of any thread (`current := t`, a thread that exists) keeps `U`: a thread without `ok`
+  (one inside another sync object's code, which runs no lock code) stops too, and so does a thread
+  that left the lock (`gone`) and runs other sync code (`Runs`). -/
+  atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t }
   /-- A finished or joinable thread is out of the primitive's code. -/
   kfin : ∀ g, P.fin g → K.pl.ph g = K.out
   kjoins : ∀ g, P.joins g → K.pl.ph g = K.out
@@ -337,7 +348,7 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
       (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
-    (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }) :
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t }) :
     L.Fits (FPrim.empty γ) P U ok where
   inv := inv
   fin := fin
@@ -363,20 +374,17 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
   ok_calm _ _ _ _ _ := Iff.rfl
   kstep _ _ _ _ _ _ _ h := nomatch h
 
-/-- **A protocol with the lock alone**, where every thread may run the lock's code: a stop keeps
-`U` as a step of the lock's code that changes nothing. -/
+/-- **A protocol with the lock alone**, where every thread may run the lock's code. -/
 theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
       (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
-      U (upd G t (L.set (G t) p h)) rX m') :
+      U (upd G t (L.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t }) :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ => stable G rX m m' t p h) fun G rX m t hph hU => by
-      have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
-        (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
-      rwa [upd_set_self] at this
+    (fun G rX m m' t p h _ => stable G rX m m' t p h) atStop
 
 /-! ## Basic facts -/
 

@@ -24,9 +24,10 @@ namespace ResetEvent
 variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-/-- `FutexImpl.set` by a thread out of the event's and the lock's code. -/
+/-- `FutexImpl.set` by a thread out of the event's code, out of the lock's code or gone from it. -/
 theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
-    (t : ThreadId) (g : γ) (hgx : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g)
+    (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
+    (hgo : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) (hsx : E.sx g)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_set E.W.ptr) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
@@ -47,7 +48,8 @@ theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
   rcases hcase with ⟨rfl, hi₂⟩ | ⟨ho, hi₂⟩
   · simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind,
       threadFutexWakeC_eq, bind_assoc]
-    refine WP.bind (FEvent.wp_wake hE (by decide) (E.ph_set _ _) (by rw [hE.lph]; exact hgo)
+    refine WP.bind (FEvent.wp_wake hE (by decide) (E.ph_set _ _)
+      (by rw [hE.lph]; exact hgo.imp_right And.left)
       hi₂ fun k₃ hk₃ G₃ m₃ hc₃ hs₃ hi₃ => ?_)
     rw [E.set_set, FEvent.set_of hgx] at hi₃
     repeat (first
@@ -64,10 +66,12 @@ theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
       | simp only [StateT.run_pure, pure_bind])
     done
 
-/-- `ResetEvent.set` by a thread out of the event's and the lock's code. -/
+/-- `ResetEvent.set` by a thread out of the event's code, out of the lock's code or gone from
+it. -/
 theorem resetEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : E.sx g) (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hgo : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) (hsx : E.sx g) (_io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_set p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by

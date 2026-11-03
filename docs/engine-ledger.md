@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 145 rows, 57 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 146 rows, 58 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -78,6 +78,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [arena-retained-capacity](#row-arena-retained-capacity) | The retaining reset's retained capacity is not stated | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01. |
 | [region-end-opt-in](#row-region-end-opt-in) | The owned-region end bound is a per-file opt-in fact | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost). |
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
+| [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 
 ## Closed rows
 
@@ -1678,3 +1679,16 @@ Progress: Qualified in PR529: at2f1b/main737, Auto/AutoWP fe270e1f/b9839887, who
 Request: At an existing Proto.WP pure side goal, use a current local h : R -> forall u, A u -> B after current facts supply R and A u. Keep whole-hypothesis matching and caller-lemma priority; try each current local function once at the current chain level only after its final stable conclusion head matches, then unify every conclusion argument, prove every premise through the existing bounded backward side-proof path, close all data metavariables and restore failed choices. Share existing fuel/depth3; no new case search, forward saturation, provider search or unsupplied nested program walk. Scope-valid already-built proof reuse is permitted; case-free proof ancestry is not promised.
 
 Deletion plan: Completed in PR529: all four actual translated signal walks (Sync.sig_body, Sync.ioCond_signal_wp, Threadsync.wake_body and Threadsync.cond_signal_wp) use one fsym each with exact initial ghost, hseen, complete holder resource and unchanged six public result/safety/completion statements. Current ROOT/all Proofs/Append, official fixture/axiom gates, genuine inventory renewal and focused metadata/framework pass with their original source bindings. The all-width Result run fact preserves zero-width, zero-divisor and signed-overflow errors through unchanged Basic semantics; no legacy VC rule or manual WP walk remains for this capability. Wait-family, general condition accounting and SemImpl/L8 obligations remain separately open.
+
+<a id="row-l11-waitgroup-rwlock-impl"></a>
+### #l11-waitgroup-rwlock-impl Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic
+
+Status: **open**. Requester: L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03).
+
+Note: Rejected alternative: a new lock place `.done` that keeps `WInv.live` (existence and unjoined) for a thread past the lock. It cannot hold for a detached thread (joined while running), so such a thread could never use an FEvent or FCond; `Runs` needs only existence, which every protocol that keeps its threads in `m.threads` gives. No new judgment, tactic or premise.
+
+Progress: Maintainer decision 2026-11-03: (1) the lock-word atomic rules take the stepping thread's existence from the protocol (`FLock.Runs P t g`) instead of a non-gone lock place, and `FEvent`'s set path admits a lock-gone setter (`Inv.swex` keeps a setter at `sw` existing for `Fits.liveSet`); (2) the L10/L11 implementation gate is released: `SemImpl` (L10) and `RwLockImpl` are built like `MutexImpl`/`CondImpl`. Step 1 is the library PR on branch claude/l11-runs.
+
+Request: WaitGroup's last `finish` sets the ResetEvent after its `fetchSub` left the lock's protocol (lock place `gone`). The word rules required `L.ph g != .gone` only to get `t < m.threads.size` at the scheduler's resumption; the scheduler cannot supply liveness (`Thread.detach` sets `joined` on a running thread), only existence, which `Runs` states. Then: a general FLock plain-read rule spanning the rest, the lock word and the free lock resource, by the only non-gone thread (WaitGroup's waiter reads the result after the event); WaitGroup on fsym with ThreadMutex and ResetEvent `EventImpl`; `RwLockImpl` over L10's `SemImpl`; the three RwLock files on it.
+
+Deletion plan: Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged.

@@ -428,7 +428,8 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
   ⟨hu.shape, hu.io, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we, wordOk _ hu.wv,
     hu.cinv.stay t rfl rfl apE.ptr_ne (fun _ _ h => h) (fun _ => VClock.le_refl _),
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id
+    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _)
+      (Nat.le_refl _) id id
       hu.einv.fresh,
     hu.places, hu.ep1, hu.ep0, hu.ent, hu.hold, hu.reg, hu.lvc, hu.fin, hu.q, hu.xc⟩
 
@@ -487,7 +488,7 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
     hu.cinv.frame (t := t) (g' := g) (congrArg (·.c) hX) hph
       (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE apE.ptr_ne hs.waiters hs.clock,
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
-      (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
+      (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock (Nat.le_of_eq (by rw [hs.threads]))
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
       (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h)
       (hu.einv.fresh.fstep hs (fun x h1 h2 => hwB _ (Lo.wv_box ⟨rfl, h1, h2⟩))
@@ -922,7 +923,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · have := Lo.ok; have := hr.2.2; omega
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2 (fun hne => ?_) hV (fun w hw => ?_)
-      hclk (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
+      hclk (Nat.le_of_eq (by rw [hth])) (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
       (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h') hFV
     · by_cases hl : (L Lo).ph (upd G t ((L Lo).set ((C Lo).set (G t) p) q h) t) = (L Lo).ph (G t)
       · exact .inl hl
@@ -1064,8 +1065,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 
 /-- **A step of the event's code keeps `U`** (`FLock.Fits.kstep` of `FEvent.prim`). -/
 theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : EPh) (q : LPh)
-    (hlo : (L Lo).ph (G t) = .out ∨ (L Lo).ph (G t) = .away)
-    (hq : q = .out ∨ (q = .away ∧ p = .w1))
+    (hlq : (((L Lo).ph (G t) = .out ∨ (L Lo).ph (G t) = .away) ∧
+      (q = .out ∨ (q = .away ∧ p = .w1))) ∨ ((L Lo).ph (G t) = .gone ∧ q = .gone))
     (hu : U Lo G (rsum ((E Lo).W.cellsR m) rY) m) (hY : ∀ l, (E Lo).W.In l → rY.heap l = none)
     (hs : (E Lo).MStep t m m')
     (hI : (E Lo).Inv (L Lo) (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil)) m') :
@@ -1095,7 +1096,8 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rw [hG u e]; exact ⟨rfl, rfl⟩
   -- `t` is not `holds`
   have hnh : (G t).1.ph ≠ .holds := fun h => by
-    rcases hlo with h' | h' <;> rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;> cases h'
+    rcases hlq with ⟨h' | h', -⟩ | ⟨h', -⟩ <;>
+      rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;> cases h'
   -- a waiter of the event is `main` from its event wait on
   have hEt : (E Lo).ph (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t) = p := by
     rw [upd_self]; rfl
@@ -1174,9 +1176,10 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         · have := hu.cinv.crit t hc; exact absurd this hnh
       have hlp : (G t).1.ph = .out := (hu.cinv.lp t hsig).resolve_right hnh
       have hsg : (G t).2.ph = .sg := hu.cinv.sx t hsig
-      rcases hq with rfl | ⟨rfl, rfl⟩
+      rcases hlq with ⟨-, rfl | ⟨rfl, rfl⟩⟩ | ⟨hg', -⟩
       · rw [upd_self]; show LPh.out = (G t).1.ph; rw [hlp]
       · rcases hwx (.inr rfl) with h' | h' <;> rw [hsg] at h' <;> cases h'
+      · exact absurd (hlp.symm.trans hg') (by decide)
     · rcases hnw w hw with h' | ⟨rfl, hp⟩
       · exact .inl h'
       · refine .inr ⟨rfl, fun h => ptr_EV h.symm, ?_⟩
@@ -1286,8 +1289,8 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
   ok_calm _ _ _ h := h.elim
   kstep := by
     rintro t G _ m _ _ m' ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
-    · exact estep G rY m m' t p q hl hq hu hY hs hI
+      ⟨p, q, h, ⟨hlq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
+    · exact estep G rY m m' t p q hlq hu hY hs hI
     · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl }
 
 end Handoff

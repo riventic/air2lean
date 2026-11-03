@@ -92,17 +92,35 @@ theorem Inv.cur {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (
     L.Inv G rX { m with current := t } :=
   hi.lstay (t := t) (Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (hi.w.current t)
 
-/-- The protocol's invariant at a stop of `t`: the same, with `current := t`. -/
-theorem Fits.cur (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
-    (hi : P.inv G m) (hph : L.ph (G t) ≠ .gone) :
+/-- A thread out of the lock's code (not `gone`) exists (`Runs`), by the lock's invariant. -/
+theorem Fits.runs (hP : L.Fits K P U ok) {t : ThreadId} {g : γ} (hph : L.ph g ≠ .gone) :
+    Runs P t g := fun G m hg hi => by
+  obtain ⟨rX, hiL, -⟩ := (hP.inv G m).mp hi
+  exact (hiL.ht (by rw [hg]; exact hph)).1
+
+/-- A thread out of the lock's code, or gone from it and known to exist, exists. -/
+theorem Fits.runsOr (hP : L.Fits K P U ok) {t : ThreadId} {g : γ}
+    (h : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) : Runs P t g :=
+  h.elim (fun h => hP.runs (by rw [h]; decide)) And.right
+
+/-- The protocol's invariant at a stop of `t`, a thread that exists: the same, with
+`current := t`. -/
+theorem Fits.curT (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
+    (hi : P.inv G m) (ht : t < m.threads.size) :
     ∃ rX, L.Inv G rX { m with current := t } ∧ U G rX m ∧ P.inv G { m with current := t } := by
   obtain ⟨rX, hiL, hU⟩ := (hP.inv G m).mp hi
-  exact ⟨rX, hiL.cur t, hU, (hP.inv _ _).mpr ⟨rX, hiL.cur t, hP.atStop G rX m t hph hU⟩⟩
+  exact ⟨rX, hiL.cur t, hU, (hP.inv _ _).mpr ⟨rX, hiL.cur t, hP.atStop G rX m t ht hU⟩⟩
 
-/-- `U` at a stop of `t`. -/
+/-- The protocol's invariant at a stop of `t` (not `gone`): the same, with `current := t`. -/
+theorem Fits.cur (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
+    (hi : P.inv G m) (hph : L.ph (G t) ≠ .gone) :
+    ∃ rX, L.Inv G rX { m with current := t } ∧ U G rX m ∧ P.inv G { m with current := t } :=
+  hP.curT t hi (hP.runs hph G m rfl hi)
+
+/-- `U` at a stop of `t`, a thread that exists. -/
 theorem Fits.curU (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : Mem} (t : ThreadId)
-    (hU : U G rX m) (hph : L.ph (G t) ≠ .gone) : U G rX { m with current := t } :=
-  hP.atStop G rX m t hph hU
+    (hU : U G rX m) (ht : t < m.threads.size) : U G rX { m with current := t } :=
+  hP.atStop G rX m t ht hU
 
 /-! ## The ops in generated code (`WP`) -/
 
@@ -127,7 +145,7 @@ theorem Fits.pick {count : Mem → Nat} {x : Nat → MemM β} (hP : L.Fits K P U
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   have hgone₁ : L.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hgone
   obtain ⟨rX, hiL, hU, -⟩ := hP.cur t hi₁ hgone₁
-  have hU' := hP.curU t hU hgone₁
+  have hU' := hP.curU t hU (hP.runs hgone G₁ m₁ hg₁ hi₁)
   refine WP.callMC (fun e he => (hnoErr G₁ rX m₁ c hg₁ hiL hcr e he).elim) fun r m' hr => ?_
   obtain ⟨h1, h2⟩ := h k hk G₁ rX m₁ c r m' hg₁ hiL hU' hr
   exact ⟨by rw [h1], h2⟩
@@ -568,8 +586,8 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   have hng₁ : L.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hng
   have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
   obtain ⟨rX, hiL, hU, -⟩ := hP.cur t hi₁ hng₁
-  have hU' := hP.curU t hU hng₁
   have ht : t < m₁.threads.size := (hiL.ht hng₁).1
+  have hU' := hP.curU t hU ht
   have hpl : L.pl G₁ t ≠ .gone := hng₁
   refine ⟨fun er he => absurd he (hiL.w.load_noErr (c := 0) (ord := .relaxed) ht hpl
       ((Nat.eq_zero_or_pos _).symm.imp_right (⟨·, rfl⟩)) er),
