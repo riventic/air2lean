@@ -40,11 +40,12 @@ example (sl : Slice) (vs : List (BitVec 8)) (v : BitVec 8) (hlen : sl.len.toNat 
         m'.heap = hQ ∪ hF ∧ arr sl.ptr (List.replicate vs.length v) hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on (fill_sep sl vs v hlen) fun _ => SizeFree.arr _ _
 
-/-- `reverse_spec` (legacy: the same pre- and postcondition as a `Triple`). -/
+/-- `reverse_spec` (legacy: the same pre- and postcondition as a `Triple`; the full-state loop
+runs in the plain mode, `FTotalTriple.toTotal_on_plain`). -/
 example (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
     ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → arr sl.ptr vs hP → m.Seq →
       m.FSeqPlain → ∃ v m' hQ, (reverse sl).run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
         m'.heap = hQ ∪ hF ∧ arr sl.ptr vs.reverse hQ ∧ m'.Seq :=
-  FTotalTriple.toTotal_on (reverse_spec sl vs hlen) fun _ => SizeFree.arr _ _
+  FTotalTriple.toTotal_on_plain (reverse_spec sl vs hlen) fun _ => SizeFree.arr _ _
 
 end StrengthLog.ProofsSlices

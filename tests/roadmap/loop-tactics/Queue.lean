@@ -25,8 +25,8 @@ abbrev list (hd : Option Ptr) (xs : List (BitVec 32)) : FAssn := Linked.list (fu
 /-- `sum` returns the exact sum of the queue's items and leaves the queue unchanged, under the
 capacity premise `xs.length ≤ 2 ^ 32` (`length · (2 ^ 32 - 1) < 2 ^ 64`, `sum_toNat_lt`). -/
 theorem sum_total (hd : Option Ptr) (xs : List (BitVec 32)) (hlen : xs.length ≤ 2 ^ 32) :
-    FTotalTriple (list hd xs) (sum hd)
-      (fun r => ⟪r.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ list hd xs) :=
+    FTotalTriple (list hd xs ⋆ plain) (sum hd)
+      (fun r => ⟪r.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ (list hd xs ⋆ plain)) :=
   have htot := sum_toNat_lt (k := 32) xs hlen
   (Linked.sum_total hd xs htot).post fun _ _ h => by
     obtain ⟨hr, hl⟩ := Full.sep_lift.mp h
