@@ -131,9 +131,19 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
             edges[rel].append((module, dep, "local"))
             pending.append(dep)
 
+    import fixtures
+    # A configured fixture Lake module has the name Lake gives it (its library's source root),
+    # also when nothing imports it and it imports no local module (`EncExactness.Rows`).
+    lake_roots = dict(fixtures.source_modules(root).values())
+
     def root_of(rel: str) -> str:
-        if rel in named:
-            return rel[:-len(named[rel].replace(".", "/") + ".lean")].rstrip("/") or "."
+        imported = rel[:-len(named[rel].replace(".", "/") + ".lean")].rstrip("/") or "." if rel in named else None
+        if rel in lake_roots:
+            if imported is not None and imported != lake_roots[rel]:
+                raise ValueError(f"{rel} is imported as {named[rel]}, not by its Lake name")
+            return lake_roots[rel]
+        if imported is not None:
+            return imported
         # Not imported: the shallowest source root of its own local imports above it.
         bases = [root_of(dep) for _, dep, kind in edges[rel] if kind == "local"]
         bases = [b for b in bases if b == "." or rel.startswith(b + "/")]
