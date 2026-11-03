@@ -104,7 +104,8 @@ provable. Now no `CTriple` with an admissible precondition holds across such a s
 relied on the old answers: none of the clients spawns, joins or waits.
 
 **Why not `∀ n, FTTriple P (soloRun n x) Q`** (the first plan, withdrawn): `Proto.WP` resumes a
-thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran) and for a pick with
+thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran; it knows only the
+invariant, its ghost value and that it exists, `t < m₁.threads.size`) and for a pick with
 *any* `c < count m₁` (`Conc/Logic.lean`, `Safe`/`Step`). A thread triple of the uninterrupted
 `soloRun` from `m` says nothing about the continuation `k c m₁`, so no rule for a thread follows;
 its only consumer would stay the sequential caller, which the current definition already serves.
