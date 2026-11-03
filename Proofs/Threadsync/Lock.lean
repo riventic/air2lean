@@ -107,6 +107,9 @@ theorem loop16_body (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr)
   unfold Thread_Mutex_FutexImpl_lockSlow.loop16
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [hp, atomicRmwC_eq]
+  refine WP.bind (wp_tick hP (g := L.set g .spin Heap.empty) (by rw [L.ph_set]; decide) hi
+    fun m _ hi => ?_)
+  dsimp only
   refine WP.bind (wp_xchgLock hP threadMutexS hS (g := L.set g .spin Heap.empty) (L.ph_set _ _ _)
     hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, hL, hi₁⟩ | ⟨hr, hi₁⟩
