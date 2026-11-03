@@ -52,20 +52,23 @@ heap's `releaseAttempt_run`/`releaseAttempts_run`, retired with the legacy logic
 [alloc-spec.md](alloc-spec.md#retired-claims)); the `releaseAttempts` client stays as a
 test-local def of the executable checks below.
 
-`Lists.appendEach` (`Proofs/Lists/Policy.lean`) calls the translated
+`Lists.Append.appendEach` (`Proofs/Lists/Policy.lean`) calls the translated
 `ArrayListUnmanaged(u32).append` once per value and continues after `OutOfMemory`.
-`appendEach_run` and its explicit form `appendEach_anyPolicy` hold for every policy `P` and
-legacy index `f`, with no success or resource premise. The client returns one actual
-result per value, never a panic or `.illegal`. Each result is `ok` or `OutOfMemory`. The
-final well-formed list `alist` is the original items followed by exactly the successfully
-appended values, with the frame and `Mem.Seq` preserved. A failure leaves the list unchanged
-(`append_run`), and any number of failures can occur in one run.
+`appendEach_spec` holds for every allocator that meets the allocator contract `CAllocSpec`,
+so for every failure decision of the allocator, with no success premise. The client returns
+one result per value, never a panic or `.illegal`. Each result is `ok` or `OutOfMemory`. The
+final list `alist` is the original items followed by exactly the successfully appended
+values, and the fee of its buffer comes back. A failure leaves the list unchanged
+(`append_spec`), and any number of failures can occur in one run. It is a `CTriple`, as the
+allocator contract is. It replaces the `std` heap's `appendEach_run`/`appendEach_anyPolicy`
+over `append_run` (`Proofs/Lists/Cost.lean`), retired with the legacy logic (L8).
 
 `tests/roadmap/allocation-policy/Oracle.lean` is a Lean-only runtime check. It covers
 index and size oracles, list-to-oracle agreement, a budget that is freed and reused, the
 uncapped default against the explicit harness cap, and a translated `Lists.dupe` of
 1 MiB + 1 bytes. That request succeeds by default and fails under the harness cap. It also
-runs `appendEach` with three failures before successful appends. These checks have no
+runs the `append` loop of the `std` heap model's translation (a test-local `appendEach`) with
+three failures before successful appends. These checks have no
 native counterpart because `TestAllocator` has neither an oracle nor a budget. `check.sh`
 runs this check after the ten native comparisons.
 
