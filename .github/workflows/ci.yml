@@ -1241,7 +1241,7 @@ jobs:
           # Step ticks: a step needs a credit or the plain mode (the meter, TickAuth); no update
           # creates a receipt or enters the plain mode under a meter; credits and receipts count
           # steps exactly, so a bound is tight.
-          lake build ZigLean.Sep.Full.Tick
+          lake build ZigLean.Sep.Full.Cost
           lake env lean tests/roadmap/sep-full/TicksCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/ticks-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/ticks-cx.log" <<'EOF'
           import re, sys

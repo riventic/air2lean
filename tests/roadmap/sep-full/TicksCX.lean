@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.Tick
+import ZigLean.Sep.Full.Cost
 import ZigLean.Sep.Full.Init
 
 /-!
@@ -17,7 +17,8 @@ import ZigLean.Sep.Full.Init
 6. `two_steps_exact` / `two_steps_tight` (T6, exact cost): two steps are paid by two credits and
    return two receipts, so they count exactly two steps, and no proof pays them with one credit
    from the credit-free start (`FTotalTriple.not_fewer_credits`). `two_steps_plain`: the same
-   proof gives the plain-mode statement (`FTotalTriple.of_credits_unmetered`).
+   proof gives the plain-mode statement (`FTotalTriple.of_credits_unmetered`). The cost rules are
+   in `ZigLean/Sep/Full/Cost.lean`.
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound`.
 -/
