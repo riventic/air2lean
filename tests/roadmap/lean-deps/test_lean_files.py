@@ -6,13 +6,21 @@ fixture's own import is left to its check; an import of a `Lib` module that does
 renamed or split module, the break of the strength logs after #342) is an error for every file;
 a stale cache entry is never hit (the key covers the transitive library sources).
 """
+import contextlib
 import importlib.util
+import io
+import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+import par  # noqa: E402  (the module lean-deps.py --elaborate imports)
 spec = importlib.util.spec_from_file_location("lean_deps", ROOT / "scripts/lean-deps.py")
 ld = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ld)
@@ -87,26 +95,18 @@ class Classify(unittest.TestCase):
 
     def test_elaborate_names_the_largest_peaks(self):
         # The guard samples the phase's whole tree; the per-file peaks name the file that sized it.
-        import contextlib, io, json, os, sys
-        sys.path.insert(0, str(ROOT / "scripts"))
-        import par
         self.write("t/Small.lean", "import Lib.A\n")
         self.write("t/Big.lean", "import Lib.B\n")
         self.write("assurance/lean-files.json", json.dumps({"reject": []}))
-        self.addCleanup(setattr, ld, "REGISTRY", ld.REGISTRY)
-        ld.REGISTRY = self.repo / "assurance/lean-files.json"
         peaks = {"t/Big.lean": 9770 * 1024, "t/Small.lean": 300 * 1024}
 
         def fake_run(jobs, workers, out=None, err=None, log_dir=None, stats=None):
             files = [job.argv[-1] for job in jobs]
             stats[:] = [{"status": 0, "elapsed_s": 2.5, "peak_rss_kib": peaks[f], "busy_s": {}} for f in files]
             return [0] * len(files)
-        self.addCleanup(setattr, par, "run", par.run)
-        par.run = fake_run
-        saved = os.environ.get("AIR2LEAN_CAS_DIR")
-        os.environ["AIR2LEAN_CAS_DIR"] = str(self.repo / "cas")
-        self.addCleanup(lambda: os.environ.pop("AIR2LEAN_CAS_DIR") if saved is None
-                        else os.environ.__setitem__("AIR2LEAN_CAS_DIR", saved))
+        self.enterContext(mock.patch.object(ld, "REGISTRY", self.repo / "assurance/lean-files.json"))
+        self.enterContext(mock.patch.object(par, "run", fake_run))
+        self.enterContext(mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.repo / "cas")}))
         self.classify()
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

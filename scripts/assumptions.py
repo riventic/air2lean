@@ -577,14 +577,14 @@ def run_lake(command: list[str], cwd: Path, env: dict, *, poll: float = 5.0,
         previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGTERM, signal.SIGHUP)}
     child = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True)
-    chunks = {"stdout": [], "stderr": []}  # list.append is atomic: the count is the progress
+    chunks = []  # (1 stdout | 2 stderr, bytes); list.append is atomic: the count is the progress
 
-    def drain(stream, into):
+    def drain(stream, number):
         for chunk in iter(lambda: stream.read1(65536), b""):
-            into.append(chunk)
+            chunks.append((number, chunk))
 
-    readers = [threading.Thread(target=drain, args=(child.stdout, chunks["stdout"]), daemon=True),
-               threading.Thread(target=drain, args=(child.stderr, chunks["stderr"]), daemon=True)]
+    readers = [threading.Thread(target=drain, args=(stream, number), daemon=True)
+               for number, stream in ((1, child.stdout), (2, child.stderr))]
     for reader in readers:
         reader.start()
     failure = None
@@ -598,8 +598,8 @@ def run_lake(command: list[str], cwd: Path, env: dict, *, poll: float = 5.0,
             except subprocess.TimeoutExpired:
                 pass
             now = time.monotonic()
-            if len(chunks["stdout"]) + len(chunks["stderr"]) != count:
-                count, last = len(chunks["stdout"]) + len(chunks["stderr"]), now
+            if len(chunks) != count:
+                count, last = len(chunks), now
                 continue
             cpu = group_cpu_seconds(child.pid)
             if cpu is not None:
@@ -635,11 +635,13 @@ def run_lake(command: list[str], cwd: Path, env: dict, *, poll: float = 5.0,
         child.wait()
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+        deadline = time.monotonic() + LAKE_GRACE
         for reader, stream in zip(readers, (child.stdout, child.stderr)):
-            reader.join(timeout=LAKE_GRACE)
+            reader.join(timeout=max(0, deadline - time.monotonic()))
             if not reader.is_alive():  # else a process outside the group holds the pipe: leave it
                 stream.close()
-    stdout, stderr = (b"".join(chunks[name]).decode(errors="replace") for name in ("stdout", "stderr"))
+    stdout, stderr = (b"".join(chunk for number, chunk in list(chunks) if number == wanted).decode(errors="replace")
+                      for wanted in (1, 2))
     if failure:
         sys.stderr.write(stdout[-20000:] + stderr)
         raise RuntimeError(failure)

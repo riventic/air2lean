@@ -93,15 +93,15 @@ class RunLake(unittest.TestCase):
             self.run_lake("import time; time.sleep(20)", 1.0)
 
     def test_limit_from_the_environment(self):
-        for value, seconds in (("0", 0.0), ("2.5", 150.0), (None, 900.0)):
-            with mock.patch.dict(os.environ, {assumptions.LAKE_IDLE_MINUTES: value} if value else {}):
-                if value is None:
-                    os.environ.pop(assumptions.LAKE_IDLE_MINUTES, None)
+        for value, seconds in (("0", 0.0), ("2.5", 150.0), ("", 900.0)):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {assumptions.LAKE_IDLE_MINUTES: value}):
                 self.assertEqual(assumptions.lake_idle_seconds(), seconds)
         for value in ("-1", "x", "inf", "nan"):
-            with mock.patch.dict(os.environ, {assumptions.LAKE_IDLE_MINUTES: value}), \
+            with self.subTest(value=value), mock.patch.dict(os.environ, {assumptions.LAKE_IDLE_MINUTES: value}), \
                     self.assertRaisesRegex(ValueError, "AIR2LEAN_LAKE_IDLE_MINUTES"):
                 assumptions.lake_idle_seconds()
+
+    def test_zero_disables_the_limit(self):
         with mock.patch.dict(os.environ, {assumptions.LAKE_IDLE_MINUTES: "0"}):
             result = assumptions.run_lake([PY, "-c", "import time; time.sleep(1.5)"], Path.cwd(),
                                           dict(os.environ), poll=0.2)
