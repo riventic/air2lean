@@ -74,8 +74,25 @@ does not hold the admission queue for slots that other running builds hold.
   and a guard of a checkout older than #424 does not know the tickets. The lane is only for the
   coordinator's integration gate, never for agent or Codex builds; a waiting guard prints one
   line naming its lane (`normal`, `merge` or `exclusive` priority) and the tickets queued.
-- The report's `admission` records the budget, slots, weight, mode, priority and workspace;
-  `lock_wait_seconds` the time to admission.
+- Usage-aware charge (Linux): `--rss-mib` is a ceiling a workload seldom reaches (a regen step
+  declared 11000 MiB and peaked below 4.2 GB), so declared slots alone kept a 23 GB build host
+  idle while 20 guards queued. The guard therefore records each command's runs in
+  `<lock>.d/history/<key>.json` (the key: the command with its workspace path abstracted, the
+  phase, profile, jobs and Lean threads; the last 5 runs). After 2 successes among them, with no
+  run stopped at its limit (`rss_limit`) or preempted, it holds ceil(1.3 x the largest recent
+  peak) slots, at least one, instead of `--rss-mib`, which stays the hard limit. Two bounds keep
+  this safe. The declared limits of the running workloads add up to at most 1.5 x the budget: an
+  overcommitted workload registers its excess (declared minus held slots) in `<lock>.d/running/`,
+  flock-held, and one that would break the bound collects its declared slots instead. And a
+  backstop: when MemAvailable falls below max(2 GiB, 10% of RAM), the youngest overcommitted
+  workload is stopped (outcome `preempted`, at most one per 5 s per lock) and the guard runs it
+  again holding its declared slots; the report keeps the stopped run in `preempted_run`, and the
+  preemption keeps the command at its declared charge for its next 5 runs. macOS reports no
+  MemAvailable, so the Mac is never overcommitted; nor are `--exclusive` and `--no-overcommit`
+  guards. A nested guard inherits its admission and records nothing.
+- The report's `admission` records the budget, slots, weight (the slots held), mode, priority
+  and workspace, and the charge: `declared_slots`, `overcommit`, `charge_mib`, `history_runs`
+  and `why_declared` when it holds its declared slots; `lock_wait_seconds` the time to admission.
 
 A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the
 machine overcommits memory and thrashes, and every build gets slower. Do not use one; lower
