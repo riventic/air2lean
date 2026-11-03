@@ -96,6 +96,32 @@ def is_lake(module: str, target: Path, root: Path) -> bool:
     return module.split(".")[0] in LAKE_ROOTS and target == root / (module.replace(".", "/") + ".lean")
 
 
+def fixture_lake_roots(root: Path) -> dict[str, str]:
+    """Each configured fixture Lake module's source file -> its library's source root, from the
+    fixture package's lakefile (`srcDir`, and `globs`, else `roots`: `M` is M itself, `M.+` M and
+    its submodules, `M.*` its submodules), without running Lake: the source scan runs where no
+    Lean is installed. A file in two libraries (nested source roots) fails."""
+    import fixtures
+    package = root / fixtures.PACKAGE.relative_to(fixtures.ROOT)
+    if not (package / "lakefile.toml").is_file():
+        return {}
+    out: dict[str, str] = {}
+    for lib in fixtures.libraries(package):
+        src = package / lib.get("srcDir", ".")
+        for pattern in lib.get("globs") or lib.get("roots") or [lib["name"]]:
+            base, kind = (pattern[:-2], pattern[-1]) if pattern[-2:] in (".+", ".*") else (pattern, "")
+            own = src / (base.replace(".", "/") + ".lean")
+            sources = ([own] if kind != "*" else []) + (sorted((src / base.replace(".", "/")).rglob("*.lean"))
+                                                       if kind else [])
+            for path in sources:
+                if not path.is_file():
+                    continue
+                rel, source_root = path.relative_to(root).as_posix(), src.relative_to(root).as_posix()
+                if out.setdefault(rel, source_root) != source_root:
+                    raise ValueError(f"{rel} is in two fixture libraries ({out[rel]}, {source_root})")
+    return out
+
+
 def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
     """Shipped Lake modules and every indexed file outside them, with its module root."""
     premises = premises_module()
@@ -131,10 +157,9 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
             edges[rel].append((module, dep, "local"))
             pending.append(dep)
 
-    import fixtures
     # A configured fixture Lake module has the name Lake gives it (its library's source root),
-    # also when nothing imports it and it imports no local module (`EncExactness.Rows`).
-    lake_roots = dict(fixtures.source_modules(root).values())
+    # also when nothing imports it and it imports no local module (`Outcomes.Contracts`).
+    lake_roots = fixture_lake_roots(root)
 
     def root_of(rel: str) -> str:
         imported = rel[:-len(named[rel].replace(".", "/") + ".lean")].rstrip("/") or "." if rel in named else None
@@ -173,6 +198,8 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
             m.split(".")[0] == module.split(".")[0] for m, dep, kind in edges[rel]
             if kind == "local" and root_of(dep) != base)
         if not MODULE.fullmatch(module) or module.split(".")[0] in RESERVED or clash:
+            if rel in lake_roots:
+                raise ValueError(f"{rel}: its Lake name {module} is invalid, reserved or clashes with an import")
             # Not imported, so its name is free: `local-parent/Proofs.lean` must neither be an
             # invalid name nor the Lake library root `Proofs`, nor shadow its own imports.
             base, module = None, "Universe." + re.sub(r"\W", "_", str(Path(rel).with_suffix("")))
