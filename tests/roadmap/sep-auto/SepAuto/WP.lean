@@ -854,10 +854,10 @@ theorem applied_simp_after_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : 
 end SepAuto.WP
 
 /-!
-NEW UNCOMPILED source-only control proposal for the existing assnByHyp function.
-These are finite matcher controls, not a Counter proof or a new proof interface.
-They belong in the existing SepAuto.WP module when the Auto writer is released.
-No control below was imported, elaborated or executed during source preparation.
+## Mixed assertion witnesses (`assnByHyp`)
+
+Finite matcher controls: per-occurrence equalities, the original whole-context priority, mixed
+unknown witnesses by `matchArgs` and a checked `proveEq`, and rollback of refused candidates.
 -/
 
 open Zig Zig.Full Zig.Full.FAssn
