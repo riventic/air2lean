@@ -493,6 +493,33 @@ class RuntimeRunTests(unittest.TestCase):
                 self.assertEqual(hashed.call_count, 1)
             self.assertNotIn(audit.RUNTIME_RUN, os.environ)
 
+    def test_a_record_no_ancestor_published_is_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            forged = Path(directory) / 'forged.json'
+            forged.write_text(json.dumps({'pid': 999999, 'runtimes': {str(root.resolve()): {
+                'sha256': '0' * 64, 'identity': audit.runtime_identity(root)}}}))
+            with self.run_on(root):
+                os.environ[audit.RUNTIME_RUN] = str(forged)
+                self.assertEqual(audit.toolchain_runtime_sha256(root), audit.hash_runtime(root))
+                with audit.runtime_run():  # a run of its own, not the leftover's
+                    self.assertNotEqual(os.environ[audit.RUNTIME_RUN], str(forged))
+                self.assertEqual(os.environ[audit.RUNTIME_RUN], str(forged))
+            # A record that cannot be read fails.
+            with self.run_on(root):
+                os.environ[audit.RUNTIME_RUN] = str(Path(directory) / 'missing.json')
+                with self.assertRaises(ValueError), audit.runtime_run():
+                    pass
+
+    def test_a_process_of_the_run_checks_the_metadata_when_it_ends(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            with self.run_on(root), self.assertRaisesRegex(ValueError, 'changed during the run'):
+                with audit.runtime_run():
+                    with self.assertRaisesRegex(ValueError, 'changed during the run'):
+                        with audit.runtime_run():  # an enclosing run's
+                            (root / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+
 
 class SourceInputTests(unittest.TestCase):
     prepare = staticmethod(ToolCacheTests.prepare)

@@ -382,7 +382,7 @@ def main(argv=None):
                         if job.env is not None:
                             job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
                     statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
-            except (ValueError, RuntimeError) as error:
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
                 failed.append('the toolchain runtime: %s' % error)
             finally:  # also the finished units of a stopped run (a guard's timeout)
                 report(units, statuses or [None] * len(units), stats, a.report)

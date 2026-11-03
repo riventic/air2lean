@@ -666,10 +666,32 @@ def runtime_identity(toolchain: Path) -> str:
     return digest.hexdigest()
 
 
+def ancestors() -> set[int]:
+    """This process and its ancestors (`ps`)."""
+    rows = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True,
+                          check=True, timeout=30).stdout.split()
+    parent = dict(zip(map(int, rows[0::2]), map(int, rows[1::2])))
+    pid, seen = os.getpid(), set()
+    while pid not in seen and pid > 1:
+        seen.add(pid)
+        pid = parent.get(pid, 1)
+    return seen
+
+
+_SHARED: dict = {}
+
+
 def shared_runtime() -> dict:
-    """The enclosing run's toolchain digests (`runtime_run`): resolved sysroot -> record."""
+    """The enclosing run's toolchain digests (`runtime_run`): resolved sysroot -> record. Only a
+    record that an ancestor of this process published counts (a leftover or foreign variable is
+    ignored, and every digest is hashed afresh); a published record that cannot be read fails."""
     path = os.environ.get(RUNTIME_RUN)
-    return json.loads(Path(path).read_text()) if path else {}
+    if not path:
+        return {}
+    if path not in _SHARED:
+        record = json.loads(Path(path).read_text())
+        _SHARED[path] = record['runtimes'] if record.get('pid') in ancestors() else {}
+    return _SHARED[path]
 
 
 @contextlib.contextmanager
@@ -678,26 +700,45 @@ def runtime_run():
 
     The run's toolchain (Lake's LEAN_SYSROOT) is hashed once when the run starts and its
     digest is published to the run's processes (`RUNTIME_RUN`, a file in a private temporary
-    directory); `toolchain_runtime_sha256` returns it while the toolchain's metadata is unchanged.
-    When the run ends the toolchain is hashed afresh: a different digest raises, so a run during
-    which the toolchain changed fails. Inside an enclosing run this is that run's."""
+    directory, with the publishing process; `shared_runtime`); `toolchain_runtime_sha256` returns
+    it while the toolchain's metadata is unchanged. When the run ends the toolchain is hashed
+    afresh: a different digest raises, so a run during which the toolchain changed fails. A
+    process of the run that uses the published digest checks the metadata again when it ends
+    (before its caller writes a report)."""
     if os.environ.get(RUNTIME_RUN):
-        yield
-        return
-    toolchain = Path(lake_env('LEAN_SYSROOT')).resolve()
+        try:
+            records = shared_runtime()
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            raise ValueError(f'unreadable toolchain-runtime record {os.environ[RUNTIME_RUN]}: {error}') from error
+        if records:  # an enclosing run's: it hashes the bytes again when it ends
+            yield
+            for toolchain, record in records.items():
+                if runtime_identity(Path(toolchain)) != record['identity']:
+                    raise ValueError('toolchain runtime changed during the run')
+            return
+    sysroot = lake_env('LEAN_SYSROOT')
+    if not sysroot or not Path(sysroot).is_absolute():
+        raise ValueError(f'Lake reports no absolute LEAN_SYSROOT: {sysroot!r}')
+    toolchain = Path(sysroot).resolve()
     check_runtime_layout(toolchain)
     identity = runtime_identity(toolchain)
     sha = hash_runtime(toolchain)
     if runtime_identity(toolchain) != identity:
         raise ValueError('toolchain runtime changed while it was hashed')
+    previous = os.environ.get(RUNTIME_RUN)
     with tempfile.TemporaryDirectory(prefix='air2lean-runtime.') as directory:
         record = Path(directory) / 'runtime.json'
-        record.write_text(json.dumps({str(toolchain): {'sha256': sha, 'identity': identity}}))
+        record.write_text(json.dumps({'pid': os.getpid(),
+                                      'runtimes': {str(toolchain): {'sha256': sha, 'identity': identity}}}))
         os.environ[RUNTIME_RUN] = str(record)
         try:
             yield
         finally:
-            del os.environ[RUNTIME_RUN]
+            _SHARED.pop(str(record), None)
+            if previous is None:
+                del os.environ[RUNTIME_RUN]
+            else:
+                os.environ[RUNTIME_RUN] = previous
     if hash_runtime(toolchain) != sha:
         raise ValueError('toolchain runtime changed during the run')
 
@@ -1616,7 +1657,7 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
                              "elaborating it with `lake env lean`")
     args = parser.parse_args(argv)
     try:
-        # One toolchain-runtime digest for the audit and the processes it starts, hashed again
+        # One toolchain-runtime digest for the audit and the processes it starts, checked again
         # before the report is written (runtime_run).
         with runtime_run():
             report = audit_report(args, compiled_units)

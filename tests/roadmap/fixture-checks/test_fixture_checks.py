@@ -29,6 +29,18 @@ def no_toolchain(kind, version):
     raise fc.Unavailable("no %s Zig %s in this test" % (kind, version))
 
 
+@contextlib.contextmanager
+def offline_runtime_run(fails=None):
+    """assumptions.runtime_run without Lake or a Lean toolchain: publishes a record, or fails."""
+    os.environ[fc.assumptions.RUNTIME_RUN] = "offline-record"
+    try:
+        yield
+    finally:
+        del os.environ[fc.assumptions.RUNTIME_RUN]
+    if fails:
+        raise fails
+
+
 class NoReuse(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix="air2lean fixture-checks ")
@@ -46,6 +58,7 @@ class NoReuse(unittest.TestCase):
                      "error": None, "toolchains": {"patched": [], "stock": []}}
         for patch in (mock.patch.object(fc, "discover", lambda tree: [dict(self.unit)]),
                       mock.patch.object(fc, "resolve", no_toolchain),
+                      mock.patch.object(fc.assumptions, "runtime_run", offline_runtime_run),
                       mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas)})):
             patch.start()
             self.addCleanup(patch.stop)
@@ -100,6 +113,16 @@ class NoReuse(unittest.TestCase):
         self.assertEqual(status, 1, out + err)
         self.assertIn("build outputs changed while the units ran", err)
         self.assertIn("M/A.olean", err)
+
+    def test_the_units_share_the_runs_toolchain_digest_and_a_change_fails_the_run(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.unit["run"] = '[ "$AIR2LEAN_TOOLCHAIN_RUNTIME_RUN" = offline-record ]\n'
+        self.assertEqual(self.run_checks()[0], 0)
+        for error in (ValueError("toolchain runtime changed during the run"), OSError("no lake")):
+            with mock.patch.object(fc.assumptions, "runtime_run", lambda: offline_runtime_run(error)):
+                status, out, err = self.run_checks()
+            self.assertEqual(status, 1, out + err)
+            self.assertIn("the toolchain runtime: " + str(error), err)
 
 
 if __name__ == "__main__":
