@@ -27,8 +27,8 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
   #52) keeps the lock's resource (`hR`) and the protocol's `U` (`hU`). The lock's invariant is
   kept by `Inv.wp_liftMem`.
 
-`fsym`'s `WP` backend applies both as caller rules: the read with the protocol's obligations as
-arguments (`fsym [hF.wp_readRest …]`, as the lock's contract rules `MutexImpl.lock_wp`), the
+`fsym`'s `WP` backend applies them as caller rules: a read with the protocol's obligations as
+arguments (`fsym [hF.wp_readRest …]`, `fsym [hF.wp_readAll …]`, as the lock's contract rules `MutexImpl.lock_wp`), the
 holder's step with the holder's next place (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per
 place a walk reaches): the walk takes the segment's precondition from `hpa`, infers its post,
 proves `hR` from the post and `hU` by the protocol's lemmas given as terms
@@ -57,7 +57,7 @@ theorem _root_.Zig.Full.FOwned.loadRun {own : ThreadId → Res} {rO r : Res} {m 
       b < m.blocks.size ∧
       ∀ x, p.off.toNat ≤ x → x < p.off.toNat + Enc.size T → r.heap (b, x) ≠ none := by
   have hpos : 0 < bs.size := by omega
-  obtain ⟨blk, hblk, hx⟩ := ho.restBytes hr hpb hsub hpos
+  obtain ⟨blk, hblk, hx⟩ := ho.rest_bytes hr hpb hsub hpos
   obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hr hpb hpos
   have hm := ho.rest_cell (hsub _ _ hfc)
   rw [Nat.add_zero] at hm
@@ -113,12 +113,13 @@ theorem Inv.loadRest {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T
 /-- **A plain load by the only thread that has not left the lock** (every other thread is
 `gone`): the bytes are in the lock's complete rest (the protocol's rest `rX`, the word's cells and
 the free lock's resource `rL`), so the read may span the word and what the lock protects. The
-caller shows the bytes for every `rL` the invariant allows, and that the read does not race. -/
+caller shows the bytes for every `rL` the invariant allows (with `R` when the lock is free,
+`rnil` when it is held, apart from the word and from `rX`), and that the read does not race. -/
 theorem Inv.loadAll {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T}
     {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
     (hpb : p.block = some b) (hn : 0 < Enc.size T)
-    (hrest : ∀ rL, (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) →
-      ∃ r A S K' bs, up (bytesAt p A S K' bs) r ∧
+    (hrest : ∀ rL, (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase →
+      FHeap.Disjoint rL.heap rX.heap → ∃ r A S K' bs, up (bytesAt p A S K' bs) r ∧
       (∀ l fc, r.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc) ∧
       bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧ (A + p.off.toNat) % a = 0 ∧
       K' ≠ .constGlobal)
@@ -128,9 +129,9 @@ theorem Inv.loadAll {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T}
     (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) ∧
       L.Inv G rX (m.recordAt b p.off.toNat (Enc.size T) .read) := by
   obtain ⟨ht, _⟩ := hi.ht hg
-  obtain ⟨rL, ho, -, -, hF, hnF⟩ := hi.rest
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   obtain ⟨r, A, S, K', bs, hr, hsub, hbs, hdec, ha, hK⟩ :=
-    hrest rL (fun h => (hF h).1) hnF
+    hrest rL (fun h => (hF h).1) hnF hLoff hLX
   obtain ⟨hrun, hb, hcov⟩ := ho.loadRun hpb hn hr hsub hbs hdec ha hK hread
   refine ⟨hrun, hi.recordAll hc ht hb hsole fun u hu x h1 h2 => ho.part_off hu ?_⟩
   obtain ⟨fc', hfc'⟩ := Option.ne_none_iff_exists'.mp (hcov x h1 h2)
@@ -152,7 +153,7 @@ theorem _root_.Zig.Full.noRace_read_of_publication {m : Mem} {b o n : Nat}
 
 /-- A plain load whose run reads `v` and records the read, with the protocol's invariant after
 the record. -/
-theorem wp_loadRecord {T : Type} [Enc T] {p : Ptr} {b : BlockId} {o n a : Nat} {v : T}
+theorem _root_.Zig.Conc.Proto.WP.loadRecord {T : Type} [Enc T] {p : Ptr} {b : BlockId} {o n a : Nat} {v : T}
     {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
     {Q : T → (ThreadId → γ) → Mem → Nat → Prop} (hc : m.current = t)
     (hrun : (load T a p).run m = pure (v, m.recordAt b o n .read))
@@ -190,7 +191,7 @@ theorem Fits.wp_readRestOf (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {
   obtain ⟨ht, hjt⟩ := hiL.ht hg
   obtain ⟨hrun, hiL'⟩ := hiL.loadRest hpb hn (hrest G' rX m t hU ha) hc hg
     (hread G' rX m t hU ha hc ht)
-  exact wp_loadRecord hc hrun ((hF.inv G' _).mpr
+  exact WP.loadRecord hc hrun ((hF.inv G' _).mpr
     ⟨rX, hiL', hrec G' rX m t hU ha hc ht hjt hiL.w.csize⟩) h
 
 /-- **A read by the only thread that has not left the lock** (`Inv.loadAll`): the bytes are in the
@@ -204,7 +205,8 @@ theorem Fits.wp_readAll (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b :
     (hn : 0 < Enc.size T)
     (hsole : ∀ G rX m u, U G rX m → A u (G u) → ∀ w < m.threads.size, w ≠ u → L.ph (G w) = .gone)
     (hrest : ∀ G rX m u rL, L.Inv G rX m → U G rX m → A u (G u) → (L.Free G → L.R G rL) →
-      (¬ L.Free G → rL = rnil) → ∃ r B S K' bs, up (bytesAt p B S K' bs) r ∧
+      (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase → FHeap.Disjoint rL.heap rX.heap →
+      ∃ r B S K' bs, up (bytesAt p B S K' bs) r ∧
       (∀ l fc, r.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc) ∧
       bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧ (B + p.off.toNat) % a = 0 ∧
       K' ≠ .constGlobal)
@@ -223,7 +225,7 @@ theorem Fits.wp_readAll (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b :
   obtain ⟨ht, hjt⟩ := hiL.ht hg
   obtain ⟨hrun, hiL'⟩ := hiL.loadAll hpb hn (hrest G' rX m t · hiL hU ha) hc hg
     (hsole G' rX m t hU ha) (hread G' rX m t hU ha hc ht)
-  exact wp_loadRecord hc hrun ((hF.inv G' _).mpr
+  exact WP.loadRecord hc hrun ((hF.inv G' _).mpr
     ⟨rX, hiL', hrec G' rX m t hU ha hc ht hjt hiL.w.csize⟩) h
 
 /-- **A read of read-shared bytes of the protocol's rest** (module doc) by a live thread `t`:

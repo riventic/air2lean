@@ -520,6 +520,8 @@ backend):
   lemmas about `U` and its shape, no per-field rule.
   `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
   caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
+  `Fits.wp_readAll` (over `FLock.Inv.loadAll`) is the read by the only thread that has not left
+  the lock: its bytes may span the protocol's rest, the lock's word and the free lock's resource.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the

@@ -1398,9 +1398,9 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
   · obtain ⟨h1, h2⟩ := hF hF'
     exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
 
-/-- A plain read by the current thread `t`, the only thread that has not left the lock (every other
-thread is `gone`), of bytes that no thread's part has: the protocol's rest, the word's cells, the
-free lock's resource. The invariant holds after it. -/
+/-- A plain read by the current thread `t`, when every other thread has left the lock (`gone`), of
+bytes that no thread's part has (`hno`; e.g. bytes of the protocol's rest, the word's cells and the
+free lock's resource): the invariant holds after it. -/
 theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
     {o n : Nat} (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size)
     (hb : b < m.blocks.size) (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)

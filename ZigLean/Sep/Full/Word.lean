@@ -374,7 +374,7 @@ theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX
 
 /-- **Bytes of a thread rest are the memory's**: a part `r` of the rest `rO` (`FOwned`) with the
 bytes `bs` at `p` (`0 < bs.size`): `p`'s block holds `bs` there. -/
-theorem _root_.Zig.Full.FOwned.restBytes {own : ThreadId → Res} {rO r : Res} {m : Mem}
+theorem _root_.Zig.Full.FOwned.rest_bytes {own : ThreadId → Res} {rO r : Res} {m : Mem}
     (ho : FOwned own rO m) {p : Ptr}
     {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId} (hp : up (bytesAt p A S K bs) r)
     (hpb : p.block = some b) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)

@@ -59,15 +59,16 @@ protocol's rest, the word's cells and the free lock's resource): `FLock.Inv.load
 theorem load_u32_by_sole {γ : Type} {L : FLock γ} {G : ThreadId → γ} {m : Mem}
     {rX : Res} {p : Ptr} {b : BlockId} {t : ThreadId} {v : BitVec 32}
     (hi : L.Inv G rX m)
-    (hr : ∀ rL, ∃ r, up (pts p 4 v) r ∧
+    (hr : ∀ rL, (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase →
+      FHeap.Disjoint rL.heap rX.heap → ∃ r, up (pts p 4 v) r ∧
       ∀ l fc, r.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc)
     (hpb : p.block = some b) (hc : m.current = t) (hg : L.ph (G t) ≠ .gone)
     (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)
     (hread : NoRace m b p.off.toNat 4 .read) :
     (load (BitVec 32) 4 p).run m = pure (v, m.recordAt b p.off.toNat 4 .read) ∧
       L.Inv G rX (m.recordAt b p.off.toNat 4 .read) := by
-  refine hi.loadAll hpb (by decide) (fun rL _ _ => ?_) hc hg hsole hread
-  obtain ⟨r, hr, hsub⟩ := hr rL
+  refine hi.loadAll hpb (by decide) (fun rL hF hnF hoff hd => ?_) hc hg hsole hread
+  obtain ⟨r, hr, hsub⟩ := hr rL hF hnF hoff hd
   obtain ⟨A, S, K, bs, ⟨ha, hbs, hdec, hK⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hr
   exact ⟨r, A, S, K, bs, hbytes, hsub, hbs, hdec, ha, hK⟩
 
