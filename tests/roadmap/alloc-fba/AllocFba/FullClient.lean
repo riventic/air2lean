@@ -21,7 +21,7 @@ namespace AllocFba.ClientFull
 abbrev bufp : Ptr := ⟨some 0, 0⟩
 abbrev vtp : Ptr := ⟨some 5, 0⟩
 
-def buf (A₀ Ac : Nat) : FBuf := ⟨bufp, 12, A₀, 16, .global, Ac⟩
+abbrev buf (A₀ Ac : Nat) : FBuf := ⟨bufp, 12, A₀, 16, .global, Ac⟩
 
 def expected (v : BitVec 8) : BitVec 32 :=
   BitVec.ofNat 32 (v.toNat + v.toNat + (v + 1).toNat)
@@ -30,6 +30,7 @@ def Res (v : BitVec 8) (r : BitVec 32) : Prop :=
   r = 1 ∨ r = 2 ∨ r = 3 ∨ r = 4 ∨ r = expected v
 
 set_option maxHeartbeats 4000000 in
+set_option trace.fsym true in
 /-- The full-state client contract: the old stack-room premise is an owned resource, and the
 buffer carries only the extent share and claim approved for the native invariant. -/
 theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
