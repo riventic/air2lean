@@ -46,8 +46,10 @@ turns, where `Proto.Partial` fails). -/
 theorem WP.liftMem_fownedT {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTotalTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
-      m'.current = t → m'.threads = m.threads → Q a G m' n) :
+    (h : ∀ a m' r' hF, (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' → Qa a r' →
+      m'.current = t → m'.threads = m.threads → m'.waiters = m.waiters →
+      m'.woken = m.woken → m'.groups = m.groups → m'.clocks.size = m.clocks.size →
+      FStepIn hF m m' → Q a G m' n) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   WP.liftMem_fowned ht.1 ho hc htl hp h (.inr ht.2)
 
