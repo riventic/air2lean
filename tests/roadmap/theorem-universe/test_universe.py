@@ -592,6 +592,18 @@ class LakeKernelReplayTests(unittest.TestCase):
     def replay(self, modules=('A', 'B'), checker='c' * 64, runtime='a' * 64):
         return assumptions.lake_kernel_replay(list(modules), self.package, checker, runtime, self.lean_path, self.root)
 
+    def test_a_receipt_needs_every_module_its_checker_reads(self):
+        # `leanchecker A` also checks every A.* olean on the lookup path, imported by A or not: the
+        # receipt needs them all, so Lake refreshes a stale one before the checker reads it.
+        built = self.root / '.lake/build/lib/lean'
+        for module in ('A/Sub', 'A/Deep/Leaf', 'AB'):  # AB is not below A
+            (built / module).parent.mkdir(parents=True, exist_ok=True)
+            (built / (module + '.olean')).write_bytes(b'olean')
+        self.replay(('A',))
+        manifest = tomllib.loads((self.workspace / 'lakefile.toml').read_text())
+        self.assertEqual([lib['needs'] for lib in manifest['lean_lib']],
+                         [[f'@air2lean/+{m}:{t}' for m in ('A', 'A.Deep.Leaf', 'A.Sub') for t in ('olean', 'depTrace')]])
+
     def test_one_receipt_per_module_named_by_checker_and_runtime(self):
         self.status['B'] = 'fail'
         receipts = self.replay()

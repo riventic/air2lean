@@ -311,7 +311,11 @@ its own process, under Lake's lookup path, and logs one `AIR2LEAN_KERNEL_REPLAY`
 imports only `Init`, so a receipt's process holds little besides its checker. The receipt
 never imports `M`, because importing would run `M`'s `initialize` code in the receipt's process
 ([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Instead, the receipt's
-generated library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace`. Lake checks `M` again exactly
+generated library `needs` `@pkg/+X:olean` and `@pkg/+X:depTrace` for every module `X` its checker
+reads: `M` and every `M.*` module with an olean on the lookup path (`checked_modules`;
+`leanchecker` takes its argument as a prefix). Lake therefore brings each of them up to date
+first: an olean left behind by an older build, which no import of `M` reaches, would otherwise
+reach the checker and fail as a kernel error. Lake checks `M` again exactly
 when the receipt's trace changes: `M`'s olean, `M`'s dependency trace (everything below it), the
 toolchain, and the receipt's text, which names the checker's and the installed runtime's digests. Otherwise
 Lake replays the stored receipt. A failing check stays a failing receipt. A checker that did not

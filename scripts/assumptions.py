@@ -397,7 +397,9 @@ def apply_policy(raw: dict, policy: dict, labels: dict | None = None, require_th
         # TRU-01 is enforced, not assumed: a declaration counts only if the kernel re-checked its
         # module. An elaborator option such as debug.skipKernelTC writes unchecked oleans.
         if node["module"] in rejected:
-            trust, problem = "kernel-replay-rejected", "module rejected by kernel replay"
+            trust, problem = "kernel-replay-rejected", ("module rejected by kernel replay (without a "
+                "Lake-built receipt, an olean older than its source, which `lake build` refreshes, is "
+                "rejected the same way)")
         elif needs_replay(node["module"]) and node["module"] not in replayed:
             trust, problem = "kernel-replay-missing", "module was not replayed through the kernel"
         node["trust_class"] = trust
@@ -777,6 +779,21 @@ needs = [{needs}]
 """
 
 
+def checked_modules(module: str, roots: list[Path]) -> list[str]:
+    """The modules `leanchecker module` checks on the lookup roots `roots`: `module` and every
+    module `module.*` with an olean there (leanchecker takes its argument as a prefix). A receipt
+    `needs` all of them, so Lake brings each olean up to date before the checker reads it: an
+    olean left behind by an older build (no import of `module` reaches it, so building `module`
+    does not refresh it) would otherwise reach the checker, which rejects it as a kernel error."""
+    found = {module}
+    for root in roots:
+        below = root / module.replace(".", "/")
+        if below.is_dir():
+            found |= {module + "." + ".".join(path.relative_to(below).with_suffix("").parts)
+                      for path in below.rglob("*.olean")}
+    return sorted(found)
+
+
 def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) -> list[str] | None:
     """Lake targets that put each module's olean and dependency trace into a generated module's
     trace without importing it (`@pkg/+M:olean`, `@pkg/+M:depTrace`): an import would run the
@@ -952,7 +969,7 @@ def lake_kernel_replay(modules: list[str], package: Path, checker_sha: str, runt
     roots = [(root / entry).resolve() for entry in lean_path.split(os.pathsep)]
     sources, manifest = {}, REPLAY_MANIFEST.format(package=json.dumps(name))
     for module in sorted(modules):
-        needs = module_needs([module], roots, [root, package])
+        needs = module_needs(checked_modules(module, roots), roots, [root, package])
         if needs is None:
             return None  # no Lake package of this workspace builds it: replay afresh
         text = (f"-- The kernel-replay receipt of {module} in {workspace} (scripts/assumptions.py).\n"
