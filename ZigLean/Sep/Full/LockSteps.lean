@@ -180,7 +180,8 @@ theorem _root_.Zig.FStepIn.restX {rX : Res} {m m' : Mem}
 the caller's part and held resource together; its separating post supplies their new split.
 The two parts reconstruct the complete post-resource of the existing thread rule, without
 assuming that the caller part stays fixed. The new ghost value realizes that split and re-establishes the
-protected assertion. The ordinary `wp_hold` rule is the fixed-caller instance below. -/
+protected assertion. The rest's move (`hU`) gets the post's facts `Qp a rp` and `Qh a rh` on the
+new split. The ordinary `wp_hold` rule is the fixed-caller instance below. -/
 theorem Fits.wp_holdParts (hF : L.Fits K P U ok) {α : Type} {x : MemM α}
     {G G' : ThreadId → γ} {Pa : FAssn} {Qp Qh : α → FAssn}
     {t : ThreadId} {m : Mem} {d : Nat} {g' : Res → Res → γ}
