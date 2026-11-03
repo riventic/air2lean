@@ -41,7 +41,8 @@ content of each Zig compiler it names; python3, bash and git on PATH; the host; 
 environment (all of it but RUN_VARIABLES, RUN_PREFIXES); and its CI step (`run_inputs`, `unit_key`). So any edit
 anywhere runs every unit again, and an unchanged tree runs none (docs/ci.md#full-build). A pass
 is recorded (~/.cache/air2lean/fixture-checks/passes, AIR2LEAN_FIXTURE_PASSES) only when those
-inputs are the same at the end of the run as at its start. `--rerun` runs every unit;
+inputs are the same at the end of the run as at its start. CI (GITHUB_ACTIONS or CI set: pull
+requests, main, nightly, release) never reuses or records a pass. `--rerun` runs every unit;
 `--pending` exits 0 when no unit would run (scripts/fixture-checks.sh then takes no admission).
 
 The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
@@ -338,6 +339,9 @@ def changed_outputs(before, after):
 
 SCHEMA = 'air2lean-fixture-pass-v1'
 PASSES = Path(os.environ.get('AIR2LEAN_FIXTURE_PASSES') or Path.home() / '.cache/air2lean/fixture-checks/passes')
+# CI (every workflow run: pull requests, main, nightly, release) never reuses or records a pass:
+# its runs are the independent confirmation of the local ones.
+IN_CI = bool(os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'))
 # The Lake packages whose build outputs the units read (and the full build builds first).
 PACKAGES = ('.', 'tests/roadmap', 'tests/diff')
 # The environment a unit inherits is an input, every variable of it except these: the run's own
@@ -461,11 +465,11 @@ def main(argv=None):
                 print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
     failed, keys, inputs = [], {}, None
-    if units:
+    if units and not IN_CI:
         inputs = digest(run_inputs(tree))
         compilers = compiler_digests(units)
         keys = {u['name']: unit_key(u, inputs, compilers) for u in units}
-    reused = [u for u in units if not a.rerun and recorded(keys[u['name']])]
+    reused = [u for u in units if inputs and not a.rerun and recorded(keys[u['name']])]
     for u in reused:
         print('fixture-checks: %s: a pass of the same inputs is recorded (%s)' % (u['name'], keys[u['name']][:16]))
     units = [u for u in units if u not in reused]
@@ -499,8 +503,10 @@ def main(argv=None):
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
             # A pass is recorded only for the inputs the whole run saw: unchanged from its start
             # to its end (a unit that changed an input, or an edit during the run, records none).
+            elif inputs is None:  # CI: nothing is recorded
+                pass
             elif digest(run_inputs(Tree())) == inputs:
-                for u, status, s in zip(units, statuses, stats):
+                for u, status, s in zip(units, statuses, stats):  # stats: one per job, in order
                     if status == 0:
                         record(keys[u['name']], u, (s or {}).get('elapsed_s'))
             else:

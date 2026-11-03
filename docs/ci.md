@@ -857,7 +857,9 @@ That key missed every input reached by a path built in code, a false green:
 elapsed_counter` in `tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the
 unit "test: Callback contracts" kept its key and its stale pass while `callbacks/check.sh` failed;
 reuse was then off until a key over every input existed (maintainer decision on #443,
-2026-10-19). The phase takes 16 to 22 min on the dev Mac when its units run (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
+2026-10-19). The whole-tree key above is that key; the maintainer approved reuse under it on
+#570 (2026-11-03). CI never reuses or records a pass (`GITHUB_ACTIONS` or `CI` set: pull
+requests, `main`, the nightly and release runs): its runs stay the independent confirmation. The phase takes 16 to 22 min on the dev Mac when its units run (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
 own (`--only TEXT`: the units whose name or checks contain TEXT). It writes each unit's wall time,
 peak RSS (its process group, sampled) and wall time by process kind (lean, zig, the translator,
 lake, python) to `DIR/units.json` and prints the 20 longest units; these are measurements, used

@@ -55,6 +55,7 @@ class Passes(unittest.TestCase):
                       mock.patch.object(fc, "resolve", no_toolchain),
                       mock.patch.object(fc, "run_inputs", inputs),
                       mock.patch.object(fc, "PASSES", self.temp / "passes"),
+                      mock.patch.object(fc, "IN_CI", False),  # these tests also run in CI
                       mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas)})):
             patch.start()
             self.addCleanup(patch.stop)
@@ -98,6 +99,16 @@ class Passes(unittest.TestCase):
         self.unit["run"] += "true\n"  # another CI step: another key
         self.assertEqual(self.run_checks()[0], 0)
         self.assertEqual(self.runs_of_unit(), 3)
+
+    def test_ci_never_reuses_or_records_a_pass(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.assertEqual(self.run_checks()[0], 0)  # a local run records its pass
+        with mock.patch.object(fc, "IN_CI", True):
+            for _ in range(2):
+                self.assertEqual(self.run_checks()[0], 0)
+            self.assertEqual(self.run_checks("--pending")[0], 1)
+        self.assertEqual(self.runs_of_unit(), 3)
+        self.assertEqual(len(list((self.temp / "passes").iterdir())), 1)  # only the local one
 
     def test_no_pass_when_an_input_changes_during_the_run(self):
         (self.hidden / "input").write_text("ok\n")
