@@ -3922,36 +3922,19 @@ def sizeFact? (facts : Array Expr) (bs : Expr)
   return n?
 
 /-- A rule's region bytes and demanded sizes, as matching data only. The original equality
-premises remain independent rule side goals; no proposition or proof is added to the context.
-The bytes are those of the precondition's regions and the rule's unknown byte arrays that its
-precondition holds behind a definition (an allocator's `owned`/`granted`, whose region the planner
-opens later): their size is demanded the same way, so the planner takes them from the state's
-region, not from a token that only names their size. -/
+premises remain independent rule side goals; no proposition or proof is added to the context. -/
 def ruleRegionSizes (P : Expr) (args : Array Expr) : MetaM (Array (Expr × Expr)) := do
-  let mut eqs := #[]
-  let mut others := #[]
+  let bytes := (atoms P).filterMap fun a => (regionArgs? a).map (·[5]!)
+  if bytes.isEmpty then return #[]
+  let mut out := #[]
   for a in args do
     if ← a.mvarId!.isAssigned then continue
     let t ← instantiateMVars (← inferType a)
-    if let some (_, l, r) := t.eq? then eqs := eqs.push (l, r) else others := others.push (a, t)
-  if eqs.isEmpty then return #[]
-  let shown := (atoms P).filterMap fun a => (regionArgs? a).map (·[5]!)
-  let mut hidden ← others.filterMapM fun (a, t) => do
-    let t ← whnfR t
-    return if t.isAppOfArity ``Array 1 && t.appArg!.isConstOf ``Zig.Byte && !shown.contains a then
-      some a else none
-  unless hidden.isEmpty do
-    let inP := (P.collectMVars {}).result
-    hidden := hidden.filter (inP.contains ·.mvarId!)
-  -- one demand per premise, a shown region's first (`a.size = b.size` with `a` hidden demands
-  -- `b`'s size)
-  let sized (bytes : Array Expr) (lr : Expr × Expr) :=
-    lr.1.isAppOfArity ``Array.size 2 && bytes.contains lr.1.appArg!
-  let mut out := #[]
-  for (l, r) in eqs do
-    let both := [(l, r), (r, l)]
-    let some (l, r) := both.find? (sized shown) <|> both.find? (sized hidden) | continue
-    out := out.push (l.appArg!, r)
+    let some (_, l, r) := t.eq? | continue
+    for (l, r) in [(l, r), (r, l)] do
+      unless l.isAppOfArity ``Array.size 2 && bytes.contains l.appArg! do continue
+      out := out.push (l.appArg!, r)
+      break
   return out
 
 /-- Reject a determined candidate only when the bounded solver refutes its demanded size in
@@ -3970,22 +3953,28 @@ def regionSizesMeet (sizes : Array (Expr × Expr)) : TacticM Bool := do
     if wrong.isSome then return false
   return true
 
-/-- The unknowns of the bytes of the postcondition's regions that have a size fact. -/
-def sizedRegionBytes (qats : Array Expr) (sizes : Array (Expr × Expr) := #[]) : MetaM (Array MVarId) := do
-  let facts := qats.filter (·.isAppOfArity liftN 1)
-  let mut out := #[]
-  for a in qats do
-    let some q := regionArgs? (← instantiateMVars a) | continue
-    let bs ← instantiateMVars q[5]!
-    if bs.hasExprMVar && (← sizeFact? facts bs sizes).isSome then
-      out := out ++ (bs.collectMVars {}).result
-  return out
-
 /-- An atom of the postcondition (not a region, not a fact) with the size of the unknown bytes
 `bs` as an argument (a grant's token `tok p bs.size …`): its position. -/
 def sizeArg? (a bs : Expr) : Option Nat :=
   if a.isAppOfArity liftN 1 || (regionArgs? a).isSome then none
   else a.getAppArgs.findIdx? fun x => x.isAppOfArity ``Array.size 2 && x.appArg! == bs
+
+/-- The unknowns of the bytes of the postcondition's regions that the region planner carves:
+those with a size fact or demand, and those whose size another atom names (`sizeArg?`, a grant's
+token; the planner carves them at that size, `atomSize?`). The atom that names the size must not
+fix the bytes first: `Array.size` is not injective, so the token's `?bs.size` against the
+state's `old.size` would take the bytes the grant had, not those its region holds now. -/
+def sizedRegionBytes (qats : Array Expr) (sizes : Array (Expr × Expr) := #[]) : MetaM (Array MVarId) := do
+  let facts := qats.filter (·.isAppOfArity liftN 1)
+  let qats ← qats.mapM instantiateMVars
+  let mut out := #[]
+  for a in qats do
+    let some q := regionArgs? a | continue
+    let bs ← instantiateMVars q[5]!
+    unless bs.hasExprMVar do continue
+    if (← sizeFact? facts bs sizes).isSome || qats.any (sizeArg? · bs |>.isSome) then
+      out := out ++ (bs.collectMVars {}).result
+  return out
 
 /-- The size of the unknown bytes `bs` of a postcondition region from an atom of the
 postcondition that has `bs.size` as an argument (`sizeArg?`): the argument of the state atom of
