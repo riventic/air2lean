@@ -44,49 +44,6 @@ open FAssn Conc Proto
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-/-- **A plain load of bytes of a thread rest** `rO` (`FOwned`): the bytes `bs` at `p` of a part
-`r` of the rest decode to `v`, at an aligned address. The load reads `v` and records the read, the
-block exists, and `r` has every byte read. -/
-theorem _root_.Zig.Full.FOwned.loadRun {own : ThreadId → Res} {rO r : Res} {m : Mem}
-    (ho : FOwned own rO m) {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a A S : Nat}
-    {K' : BlockKind} {bs : Array Byte} {v : T} (hpb : p.block = some b) (hn : 0 < Enc.size T)
-    (hr : up (bytesAt p A S K' bs) r) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)
-    (hbs : bs.size = Enc.size T) (hdec : Enc.decode bs = pure v) (ha : (A + p.off.toNat) % a = 0)
-    (hK : K' ≠ .constGlobal) (hread : NoRace m b p.off.toNat (Enc.size T) .read) :
-    (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) ∧
-      b < m.blocks.size ∧
-      ∀ x, p.off.toNat ≤ x → x < p.off.toNat + Enc.size T → r.heap (b, x) ≠ none := by
-  have hpos : 0 < bs.size := by omega
-  obtain ⟨blk, hblk, hx⟩ := ho.rest_bytes hr hpb hsub hpos
-  obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hr hpb hpos
-  have hm := ho.rest_cell (hsub _ _ hfc)
-  rw [Nat.add_zero] at hm
-  obtain ⟨c, e⟩ : ∃ c, m.heap (b, p.off.toNat) = some c := by
-    cases e : m.heap (b, p.off.toNat) with
-    | none => rw [e] at hm; cases hm
-    | some c => exact ⟨c, rfl⟩
-  rw [e] at hm
-  obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo e
-  obtain ⟨blk', hblk', hl, _, hc'⟩ := Mem.heap_some e
-  rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
-  subst hc'
-  have hn' := congrArg Cell.norm (Option.some.inj hm)
-  rw [hcell] at hn'
-  simp only [Cell.norm, Cell.mk.injEq] at hn'
-  obtain ⟨_, hA, _, hk⟩ := hn'
-  have h0 : 0 ≤ p.off := by obtain ⟨_, _, h0, _⟩ := hr.1; exact h0
-  have hsz : p.off.toNat + bs.size ≤ blk.bytes.size := by
-    have := congrArg Array.size hx
-    simp only [Array.size_extract] at this; omega
-  have hacc : m.access p (Enc.size T) a = pure (b, blk, p.off.toNat) :=
-    access_of hpb hblk hl h0 (by omega) (by rw [hA]; exact ha) hlo
-  have hkind : blk.kind ≠ .constGlobal := fun e' => by
-    rw [e'] at hk; cases K' <;> simp_all [BlockKind.norm]
-  have hd : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
-    rw [← hbs, hx]; exact hdec
-  exact ⟨load_run hacc hd hkind hread, (Array.getElem?_eq_some_iff.mp hblk).1,
-    fun x h1 h2 => (up_bytesAt_some hr hpb (b, x)).mpr ⟨rfl, h1, by omega⟩⟩
-
 /-- **A plain load from invariant rest by a race-free reader.** The bytes occur once in `rX`;
 the caller's admission need only justify its own `NoRace` fact. In particular, no prior write
 has to precede an unrelated live thread. The exact load run and its read record preserve the
@@ -151,22 +108,30 @@ theorem _root_.Zig.Full.noRace_read_of_publication {m : Mem} {b o n : Nat}
   · exact .inl (VClock.le_trans hp ha)
   · exact .inl (hall _ ht)
 
-/-- A plain load whose run reads `v` and records the read, with the protocol's invariant after
-the record. -/
-theorem _root_.Zig.Conc.Proto.WP.loadRecord {T : Type} [Enc T] {p : Ptr} {b : BlockId} {o n a : Nat} {v : T}
-    {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
-    {Q : T → (ThreadId → γ) → Mem → Nat → Prop} (hc : m.current = t)
-    (hrun : (load T a p).run m = pure (v, m.recordAt b o n .read))
-    (hi : P.inv G' (m.recordAt b o n .read))
+/-- A plain load by a thread `t` that is not `gone`, whose run (`hload`) reads `v`, records the
+read and keeps the lock's invariant, and whose record keeps `U` (`hrec`): the read rules' common
+step. -/
+theorem Fits.wp_loadWith (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b : BlockId}
+    {o n a : Nat} {v : T} {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
+    {Q : T → (ThreadId → γ) → Mem → Nat → Prop}
+    (hload : ∀ rX, L.Inv G' rX m → U G' rX m → t < m.threads.size →
+      (load T a p).run m = pure (v, m.recordAt b o n .read) ∧
+        L.Inv G' rX (m.recordAt b o n .read))
+    (hrec : ∀ rX, U G' rX m → t < m.threads.size → joinedB m t = false →
+      m.clocks.size = m.threads.size → U G' rX (m.recordAt b o n .read))
+    (hi : P.inv G' m) (hc : m.current = t) (hg : L.ph (G' t) ≠ .gone)
     (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
+  obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
+  obtain ⟨ht, hjt⟩ := hiL.ht hg
+  obtain ⟨hrun, hiL'⟩ := hload rX hiL hU ht
   refine WP.liftMem (fun e he => (MemM.noErr_of_run hrun e he).elim) (fun v' m' hr' => ?_)
     fun hnone => by rw [hrun] at hnone; cases hnone
   rw [hrun] at hr'
   simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, Option.some.injEq, Except.ok.injEq,
     Prod.mk.injEq] at hr'
   obtain ⟨rfl, rfl⟩ := hr'
-  exact ⟨rfl, h _ hc rfl hi⟩
+  exact ⟨rfl, h _ hc rfl ((hF.inv G' _).mpr ⟨rX, hiL', hrec rX hU ht hjt hiL.w.csize⟩)⟩
 
 /-- The reader's admission justifies its projection, actual NoRace and preservation
 of U by this read record. It does not require an unrelated live reader's clock. -/
@@ -187,12 +152,8 @@ theorem Fits.wp_readRestOf (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {
     (ha : A t (G' t))
     (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
-  obtain ⟨ht, hjt⟩ := hiL.ht hg
-  obtain ⟨hrun, hiL'⟩ := hiL.loadRest hpb hn (hrest G' rX m t hU ha) hc hg
-    (hread G' rX m t hU ha hc ht)
-  exact WP.loadRecord hc hrun ((hF.inv G' _).mpr
-    ⟨rX, hiL', hrec G' rX m t hU ha hc ht hjt hiL.w.csize⟩) h
+  exact hF.wp_loadWith (fun rX hiL hU ht => hiL.loadRest hpb hn (hrest G' rX m t hU ha) hc hg
+    (hread G' rX m t hU ha hc ht)) (fun rX hU => hrec G' rX m t hU ha hc) hi hc hg h
 
 /-- **A read by the only thread that has not left the lock** (`Inv.loadAll`): the bytes are in the
 lock's complete rest, the protocol's rest with the word's cells and the free lock's resource, so
@@ -221,12 +182,9 @@ theorem Fits.wp_readAll (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b :
     (ha : A t (G' t))
     (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
-  obtain ⟨rX, hiL, hU⟩ := (hF.inv G' m).mp hi
-  obtain ⟨ht, hjt⟩ := hiL.ht hg
-  obtain ⟨hrun, hiL'⟩ := hiL.loadAll hpb hn (hrest G' rX m t · hiL hU ha) hc hg
-    (hsole G' rX m t hU ha) (hread G' rX m t hU ha hc ht)
-  exact WP.loadRecord hc hrun ((hF.inv G' _).mpr
-    ⟨rX, hiL', hrec G' rX m t hU ha hc ht hjt hiL.w.csize⟩) h
+  exact hF.wp_loadWith (fun rX hiL hU ht => hiL.loadAll hpb hn (hrest G' rX m t · hiL hU ha) hc
+    hg (hsole G' rX m t hU ha) (hread G' rX m t hU ha hc ht))
+    (fun rX hU => hrec G' rX m t hU ha hc) hi hc hg h
 
 /-- **A read of read-shared bytes of the protocol's rest** (module doc) by a live thread `t`:
 `T`'s `Enc.size T` bytes at `p` (block `b`) are bytes `bs` of the rest that decode to `v`, at an
