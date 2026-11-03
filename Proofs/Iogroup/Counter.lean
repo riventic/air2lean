@@ -566,7 +566,7 @@ theorem add_spec (t : ThreadId) (rp : Res) (hp : rp.Plain) (p₀ p₁ : Ph) (hin
   fsym [WP.liftMem_pure (projC (hb0 _) _) rfl,
     fits.wp_readRest rfl (by decide) io_rest (fun _ _ _ hu => hu.io) covers_io
       fun _ _ _ hu ht hjt hcs => U_read hu ht hjt hcs,
-    ioMutex.lock_wp fits rfl rfl rfl _ _ _ _ hp, ioMutex.unlock_wp fits rfl rfl rfl,
+    ioMutex.lock_wp fits rfl rfl rfl _ (gOut rp p₀) _ _ hp, ioMutex.unlock_wp fits rfl rfl rfl,
     fits.wp_hold (g' := gHold rp p₀), fits.wp_hold (g' := gHold rp p₁), U_hold, shape_inc hinc,
     sum_inc hinc, set_out, set_hold, ph_out, ph_hold]
 
@@ -650,9 +650,9 @@ theorem inv_copy_plain {G : ThreadId → Gh} {m : Mem} {rM : Res} {j k : Nat}
   have hL₀ : L.Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
     rw [upd_same]; exact hL.cur 0
   obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart proto rfl
-    (by rw [hg]; decide) (EUpd.plain_split (P := fun r => r = L.part (G 0))
+    (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = L.part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
-  have hrM : r₁ = rM := by simpa only [hg] using hr₁
+  have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
   subst r₁
   have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.io, hu.rest, hu.jle⟩
   refine ⟨rP, hpP, rX, ?_, ?_⟩
@@ -691,7 +691,7 @@ theorem inv_spawnParts {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadI
   have hne : (k + 1 : Nat) ≠ 0 := by omega
   have hl := hiL.fork (t := 0) (g₁ := gSpawn rM (j + 1) (k + 1)) (g₀ := gOut rP (.task false))
     (by rw [hg]; rfl) hfk (by rw [hg]; rfl)
-    (by rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
+    (by show rM.heap.Disjoint rP.heap; rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
       -- the counter does not change: the new task has not done its increment, and `main` made
       -- one more task
@@ -977,7 +977,7 @@ theorem loop13_body (rM : Res) (hp : rM.Plain) (io : Io) (s : groupCounterLocals
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   refine WP.bind ?_
   show proto.WP 0 (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
-  refine WP.bind (fits.wp_tick_plain hi hc (by decide) hp fun m' hc' hi' => WP.pure' ?_)
+  refine WP.bind (fits.wp_tick_plain hi hc (fun h => nomatch h) hp fun m' hc' hi' => WP.pure' ?_)
   simp only [StateT.run_get, pure_bind]
   split
   · rename_i hlt

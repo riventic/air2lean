@@ -1240,7 +1240,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
     (hs : (L Lo).PartTick t G rX m G' rX' m') (hu : U Lo G rX m) : U Lo G' rX' m' := by
   obtain ⟨_, _, hi, r, _, rfl, rfl, rfl, hi'⟩ := hs
   obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => Lo.ws_box) hu.rest
-  subst rX
+  subst hrX
   exact U_own_native (.inl rfl) hu hi hY (FStepIn.ticked _ _) hu.ws rfl hi' rfl rfl
 
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/

@@ -350,7 +350,7 @@ theorem update_spec (rp : Res) (hp : rp.Plain) {k : Nat} (hk : k < 2)
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
       proto.inv (upd G' 1 (gOut rp (.wk (k + 1) false))) m') G m d := by
   unfold update
-  fsym [mi.lock_wp fits rfl rfl hmc.symm _ _ _ _ hp, mi.unlock_wp fits rfl rfl hmc.symm,
+  fsym [mi.lock_wp fits rfl rfl hmc.symm _ (gOut rp (.wk k false)) _ _ hp, mi.unlock_wp fits rfl rfl hmc.symm,
     fits.wp_hold (g' := gH rp (.wk k false)), fits.wp_hold (g' := gH rp (.wk k true)),
     fits.wp_hold (g' := gH rp (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
     set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold, aVal, Ph.cnt, Ph.mid]
@@ -556,7 +556,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
     · split <;> rfl
   have hL' := hL.fork (t := 0) (g₁ := gRun rM) (g₀ := gOut rP (.wk 0 false)) (gt := false)
     (by rw [hg]; rfl) hf (by rw [hg]; rfl)
-    (by rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
+    (by show rM.heap.Disjoint rP.heap; rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
       show R (fun u => (upd (upd G m.threads.size (gOut rP (.wk 0 false))) 0 (gRun rM) u).2) r
       rw [hs1]
@@ -590,9 +590,9 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   have hL₀ : L.Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
     rw [upd_same]; exact hL.cur 0
   obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart proto rfl
-    (by rw [hg]; decide) (EUpd.plain_split (P := fun r => r = L.part (G 0))
+    (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = L.part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
-  have hrM : r₁ = rM := by simpa only [hg] using hr₁
+  have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
   subst r₁
   have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.rest, hu.mid⟩
   have hG' : upd G 0 (L.setPart (G 0) (rsum rM rP)) 0 = gPre (rsum rM rP) := by

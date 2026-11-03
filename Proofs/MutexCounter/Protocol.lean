@@ -538,7 +538,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
     · split <;> rfl
   have hL' := hL.fork (t := 0) (g₁ := gOut rM 0) (g₀ := gOut rP 0) (gt := false)
     (by rw [hg]; rfl) hf (by rw [hg]; rfl)
-    (by rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
+    (by show rM.heap.Disjoint rP.heap; rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
       have hR' : R Lo (fun u => (G u).2) r := hR
       show R Lo (fun u => (upd (upd G m.threads.size (gOut rP 0)) 0 (gOut rM 0) u).2) r
@@ -573,9 +573,9 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   have hL₀ : (L Lo).Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
     rw [upd_same]; exact hL.cur 0
   obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart (proto Lo workOf) rfl
-    (by rw [hg]; decide) (EUpd.plain_split (P := fun r => r = (L Lo).part (G 0))
+    (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = (L Lo).part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
-  have hrM : r₁ = rM := by simpa only [hg] using hr₁
+  have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
   subst r₁
   have hu₀ : U Lo G rX { m with current := 0 } := ⟨hu.shape, hu.io, hu.rest⟩
   have hG' : upd G 0 ((L Lo).setPart (G 0) (rsum rM rP)) 0 = gPre (rsum rM rP) := by
@@ -660,8 +660,8 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
   -- `main` takes the kid's entire actual caller part, including its copied plain fragments.
   let g := gJoin (rsum rp ((L Lo).own G₁ m₁ 1))
   have hX : (fun u => (upd G₁ 0 g u).2) = fun u => (G₁ u).2 := by
-    rw [upd_snd]
-    simpa only [hg] using (upd_same (fun u => (G₁ u).2) 0)
+    rw [upd_snd, show g.2 = (G₁ 0).2 by rw [hg]; rfl]
+    exact upd_same (fun u => (G₁ u).2) 0
   have hL' := hL.join (t := 0) (u := 1) (g := g) (by decide) (by decide) (by rw [hg]; rfl)
     hfin.1 hj (by rw [hg]; rfl) rfl rfl (fun r hR => by
       show R Lo (fun u => (upd G₁ 0 g u).2) r
