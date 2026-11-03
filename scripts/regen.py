@@ -27,6 +27,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -105,7 +106,8 @@ def guarded(name, argv, env=None, timeout=18000, tools=()):
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--measured', 'regen:' + name,
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--measured',
+         'regen:' + re.sub(r'[^A-Za-z0-9._:/-]', '_', name)[:120],
          '--log-bytes', 16 << 20,
          '--report', report, '--log', logfile,
          *[arg for tool in tools for arg in ('--tool', str(tool))], '--', *argv],

@@ -290,6 +290,31 @@ fixture_pause()
             self.assertEqual(guard.main(), 0)
         self.assertEqual(limits[1], 11000)
         self.assertFalse(guard.outgrown(args).exists())
+        # A failed or timed-out run is not run again, also with a mark, and its peak is not
+        # recorded: it says nothing of what the workload needs.
+        with guard.peaks(lock) as data:
+            before = list(data["full-build"])
+        for outcome, code in (("child_failed", 1), ("timeout", 124)):
+            limits.clear()
+
+            def failed(a):
+                limits.append(a.rss_mib)
+                if outcome == "timeout":
+                    guard.outgrown(a).touch()
+                result = {"outcome": outcome, "exit_code": code, "samples": 1,
+                          "peak_sampled_rss_kib": 5 * 1024, "elapsed_seconds": 1}
+                guard.atomic_report(a.report, result)
+                return result
+
+            with mock.patch.object(guard, "run", failed), mock.patch.object(sys, "argv", argv), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(guard.main(), code)
+            self.assertEqual(len(limits), 1)
+            with guard.peaks(lock) as data:
+                self.assertEqual(data["full-build"], before)
+        # An unreadable record asks for the most.
+        (Path(str(lock) + ".d") / "peaks.json").write_text('{"full-build": 5}')
+        self.assertEqual(guard.measured_request(args), 11000)
 
     def start_holder(self, *options, cwd=None):
         """A guarded workload that holds its admission until cancelled."""
@@ -436,14 +461,20 @@ fixture_pause()
 
     def test_a_nested_guard_stopped_at_a_measured_admission_marks_it_outgrown(self):
         mark = self.root / "outer.json.outgrown"
-        for admission, marked in ((1, True), (2, False)):  # a smaller limit of its own: its own failure
-            with self.subTest(admission=admission):
+        # A limit above the admission is lowered to it; a smaller one of its own is its own failure.
+        for admission, limit, marked in ((1, "32", True), (1, "1", True), (2, "1", False)):
+            with self.subTest(admission=admission, limit=limit):
                 os.environ[guard.INHERIT] = json.dumps({
                     "pid": os.getpid(), "lock": str(self.root / "shared.lock"), "workspace": str(self.root),
                     "rss_mib": admission, "exclusive": False, "shared_workspace": False, "outgrown": str(mark)})
-                result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
+                result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", limit)
                 self.assertIn("inherited_from", report["admission"], result.stderr)
-                self.assertEqual(report["outcome"], "rss_limit")
+                self.assertEqual((report["outcome"], report["budget"]["rss_mib"]), ("rss_limit", min(admission, 1)))
+                # It sizes itself by its own limit, and passes the measured admission on.
+                overrides = report["environment_overrides"]
+                self.assertEqual(overrides["AIR2LEAN_MEM_MIB"], limit)
+                self.assertEqual(json.loads(overrides[guard.INHERIT]).get("outgrown"),
+                                 str(mark) if limit == "32" else None)  # only a lowered one passes it on
                 self.assertEqual(mark.exists(), marked)
                 mark.unlink(missing_ok=True)
 

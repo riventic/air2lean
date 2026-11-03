@@ -358,6 +358,9 @@ def parse_args(argv):
         a.priority = os.environ.get("AIR2LEAN_GUARD_PRIORITY") or "normal"
         if a.priority not in PRIORITIES:
             p.error(f"AIR2LEAN_GUARD_PRIORITY must be one of {', '.join(PRIORITIES)}")
+    # What the workload sizes itself by (AIR2LEAN_MEM_MIB): --rss-mib, also when a measured or
+    # inherited admission makes the limit smaller (main, `inherited`).
+    a.sizing_mib = a.rss_mib
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report.resolve()
@@ -681,7 +684,9 @@ class Admission:
 # outer one, no stronger exclusivity, and the granting guard is its ancestor. The outer guard
 # keeps sampling the whole tree against its own limit; the nested one enforces its own limit and
 # writes its own report. A nested guard of the same workspace that cannot inherit would wait for
-# the workspace lock its ancestor holds: it fails instead (`inheritance_refused`, exit 75).
+# the workspace lock its ancestor holds: it fails instead (`inheritance_refused`, exit 75). Inside
+# a measured admission (--measured, smaller than the most the workload may use) a larger limit is
+# lowered to the admission's instead; stopped at it, the nested guard marks the admission outgrown.
 INHERIT = "AIR2LEAN_GUARD_ADMISSION"
 
 
@@ -709,8 +714,12 @@ def inherited(lock):
             return None, None  # a stale variable, not an enclosing guard
     except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
         return None, "the enclosing guard could not be confirmed (ps failed)"
-    if not isinstance(grant.get("rss_mib"), (int, float)) or lock.a.rss_mib > grant["rss_mib"]:
-        return None, f"--rss-mib {lock.a.rss_mib} exceeds the enclosing guard's {grant.get('rss_mib')}"
+    if not isinstance(grant.get("rss_mib"), (int, float)):
+        return None, "the enclosing guard's grant has no limit"
+    if lock.a.rss_mib > grant["rss_mib"]:
+        if not isinstance(grant.get("outgrown"), str):
+            return None, f"--rss-mib {lock.a.rss_mib} exceeds the enclosing guard's {grant['rss_mib']}"
+        lock.a.rss_mib = grant["rss_mib"]  # a measured admission: its limit, and outgrown (main)
     if lock.a.exclusive and not grant.get("exclusive"):
         return None, "--exclusive inside a shared admission"
     if not lock.a.shared_workspace and grant.get("shared_workspace"):
@@ -755,6 +764,12 @@ def run(a):
             return report
         if grant:
             report["admission"]["inherited_from"] = grant
+            report["budget"]["rss_mib"] = a.rss_mib  # lowered to a measured admission's
+        # A measured admission below the most, this guard's own or (lowered to it) its enclosing
+        # one's: a nested guard may be lowered to it and marks it outgrown when stopped at it.
+        mark = None
+        if a.rss_mib < a.sizing_mib:
+            mark = str(outgrown(a)) if a.measured else grant["outgrown"]
         refused = None if grant else lock.acquire(cancelled)
         if refused == "cancelled":
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
@@ -787,9 +802,9 @@ def run(a):
             # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
             # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
-                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
+                         "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.sizing_mib)),
                          "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared",
-                         INHERIT: json.dumps(lock.grant() | ({"outgrown": str(outgrown(a))} if a.measured else {}),
+                         INHERIT: json.dumps(lock.grant() | ({"outgrown": mark} if mark else {}),
                                              sort_keys=True), **lake_cache_env()}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
@@ -900,7 +915,10 @@ def run(a):
 # always: one that outgrows it is stopped (rss_limit), its peak is recorded, and it runs once more
 # with --rss-mib (the next run asks for more, from that peak). A nested guard that inherits the
 # admission with a limit as large and is stopped at it (a phase of scripts/full-build.sh) marks the
-# workload as outgrown too (`outgrown`, through its grant), so the workload also runs again.
+# workload as outgrown too (`outgrown`, through its grant), so the workload also runs again. Only
+# a successful or outgrown run's peak is recorded. The workload still sizes itself by --rss-mib
+# (AIR2LEAN_MEM_MIB, `sizing_mib`): sized by its request, a smaller pool would use less, and the
+# requests would shrink run by run. --timeout and --lock-wait hold per attempt.
 MEASURED_KEY = re.compile(r"[A-Za-z0-9._:/-]{1,128}")
 MEASURED_RUNS = 5
 MEASURED_MARGIN = 1.5
@@ -927,9 +945,15 @@ def peaks(lock):
 
 
 def measured_request(a):
-    """The request of KEY (`--measured`): see MEASURED_*."""
-    with peaks(a.lock) as data:
-        recent = [p for p in data.get(a.measured, []) if isinstance(p, (int, float)) and p > 0]
+    """The request of KEY (`--measured`): see MEASURED_*. Without a usable record: the most."""
+    try:
+        with peaks(a.lock) as data:
+            runs = data.get(a.measured)
+    except (OSError, RuntimeError) as error:
+        print(f"build-guard: no measured request ({error}): asking for {a.rss_mib:g} MiB",
+              file=sys.stderr, flush=True)
+        return a.rss_mib
+    recent = [p for p in runs if isinstance(p, (int, float)) and p > 0] if isinstance(runs, list) else []
     if not recent:
         return a.rss_mib
     return min(a.rss_mib, max(MEASURED_FLOOR_MIB, math.ceil(max(recent) * MEASURED_MARGIN)))
@@ -940,15 +964,20 @@ def outgrown(a):
 
 
 def record_peak(a, report):
-    if report.get("samples"):
+    if not report.get("samples"):
+        return
+    try:
         with peaks(a.lock) as data:
-            runs = [p for p in data.get(a.measured, []) if isinstance(p, (int, float))]
+            runs = data.get(a.measured)
+            runs = [p for p in runs if isinstance(p, (int, float))] if isinstance(runs, list) else []
             data[a.measured] = (runs + [math.ceil(report["peak_sampled_rss_kib"] / 1024)])[-MEASURED_RUNS:]
+    except (OSError, RuntimeError) as error:  # the next run asks for what it did before
+        print(f"build-guard: the peak was not recorded: {error}", file=sys.stderr, flush=True)
 
 
 def main():
     a = parse_args(sys.argv[1:])
-    ceiling, attempts = a.rss_mib, []
+    attempts = []
     if a.measured:
         a.rss_mib = measured_request(a)
     while True:
@@ -957,21 +986,28 @@ def main():
         report = run(a)
         if not a.measured:
             break
-        record_peak(a, report)
-        stopped = report["outcome"] == "rss_limit" or outgrown(a).exists()
+        # Stopped at the request: by this guard, or a nested guard lowered to it (`outgrown`) made
+        # the workload fail. A cancelled, timed-out or otherwise failed run is not run again.
+        stopped = report["outcome"] == "rss_limit" or (report["outcome"] == "child_failed"
+                                                         and outgrown(a).exists())
         outgrown(a).unlink(missing_ok=True)
-        report["measured"] = {"key": a.measured, "rss_mib": a.rss_mib, "most_mib": ceiling,
+        if stopped or report["outcome"] == "success":  # a failed run's peak says nothing of the need
+            record_peak(a, report)
+        report["measured"] = {"key": a.measured, "rss_mib": a.rss_mib, "most_mib": a.sizing_mib,
                               "stopped_attempts": attempts}
-        if not stopped or a.rss_mib >= ceiling:
+        if not stopped or a.rss_mib >= a.sizing_mib:
             atomic_report(a.report, report)
             break
         print(f"build-guard: the workload outgrew its measured request of {a.rss_mib:g} MiB "
-              f"(peak {report['peak_sampled_rss_kib'] // 1024} MiB): running it again with {ceiling:g} MiB",
+              f"(peak {report['peak_sampled_rss_kib'] // 1024} MiB): running it again with {a.sizing_mib:g} MiB",
               file=sys.stderr, flush=True)
-        attempts.append({key: report.get(key) for key in ("elapsed_seconds", "lock_wait_seconds",
+        kept = Path(f"{a.log}.attempt{len(attempts) + 1}")  # the stopped attempt's log stays
+        if a.log.is_file():
+            a.log.replace(kept)
+        attempts.append({key: report.get(key) for key in ("outcome", "elapsed_seconds", "lock_wait_seconds",
                                                           "peak_sampled_rss_kib", "log_sha256")}
-                        | {"rss_mib": a.rss_mib})
-        a.rss_mib = ceiling
+                        | {"rss_mib": a.rss_mib, "log": str(kept)})
+        a.rss_mib = a.sizing_mib
     print(json.dumps({key: report[key] for key in ("outcome", "exit_code", "elapsed_seconds", "peak_sampled_rss_kib")}))
     return report["exit_code"]
 

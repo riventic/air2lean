@@ -77,13 +77,13 @@ mkdir -p "$logs"
 # guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The admission
 # is what recent full builds of the same kind used (build-guard.py --measured, with a margin), at
 # most $rss; one that outgrows it runs again with $rss (Lake keeps what it built). The phases
-# keep their own limits and reports, each within the admission (AIR2LEAN_MEM_MIB in the guard;
-# the fixture checks' guard, scripts/fixture-checks.sh: at most 11000 MiB). A phase guard above
-# it fails (inheritance_refused).
+# keep their own limits and reports, each lowered to the admission when it is smaller; a phase
+# stopped at it makes the build run again too. The phases still size themselves by $rss (the same
+# Lean processes and fixture workers), so the measured peak is what the build needs.
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
-  kind=full-build
-  [ "$fixtures" = 1 ] || { inner+=(--no-fixtures); kind=full-build:no-fixtures; }
+  kind=full-build:$threads-threads  # the peak grows with the Lean processes
+  [ "$fixtures" = 1 ] || { inner+=(--no-fixtures); kind=$kind:no-fixtures; }
   echo "full-build: $threads Lean processes, one admission of at most $rss MiB (logs: $logs)"
   status=0
   AIR2LEAN_FULL_BUILD_INNER=1 python3 -B scripts/build-guard.py --cwd "$PWD" --lean-threads "$threads" \
@@ -91,13 +91,6 @@ if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
     --timeout 28800 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- bash "$0" "${inner[@]}" || status=$?
   grep -E '^(full-build|fixture-checks)' "$logs/full-build.log" || true
   exit "$status"
-fi
-# Inside the guard: its admission (a measured one may be smaller). The Lean processes stay as many:
-# the measured peak is what they used together, and a phase that outgrows the admission stops the
-# whole build, which then runs again with $rss.
-if [ "${AIR2LEAN_MEM_MIB:-$rss}" -lt "$rss" ]; then
-  rss=$AIR2LEAN_MEM_MIB
-  echo "full-build: measured admission of $rss MiB, $threads Lean processes"
 fi
 
 guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through the shared Lake cache

@@ -27,8 +27,9 @@ coordinates participating callers; unguarded builds are outside its control. Exi
 
 The machine's guarded workloads share one memory budget, `--mem-budget-mib` (default
 `AIR2LEAN_BUILD_MEM_MIB`, else 75% of physical memory), cut into slots of 1 GiB
-(`<lock>.d/slot-NNN`). A workload holds ceil(`--rss-mib` / 1 GiB) slots, at most all of them,
-and the guard stops it above `--rss-mib`, so the admitted workloads stay within the budget
+(`<lock>.d/slot-NNN`). A workload holds ceil(`--rss-mib` / 1 GiB) slots (of its measured
+request with `--measured`, below), at most all of them,
+and the guard stops it above that, so the admitted workloads stay within the budget
 (up to the sampling limits below). On the 64 GB development Mac that is 48 slots: four
 single-process builds (`--rss-mib 11000`) run at once instead of one. `scripts/full-build.sh`
 sizes itself from the slots free when it starts (`free_mib`): max(1, min(cores, budget / 2 /
@@ -76,6 +77,20 @@ does not hold the admission queue for slots that other running builds hold.
   line naming its lane (`normal`, `merge` or `exclusive` priority) and the tickets queued.
 - The report's `admission` records the budget, slots, weight, mode, priority and workspace;
   `lock_wait_seconds` the time to admission.
+- Measured requests: `--measured KEY` asks for 1.5 times the largest peak of KEY's last 5
+  successful (or outgrown) runs, at least 2048 MiB and at most `--rss-mib`, and for `--rss-mib`
+  while none is recorded (`<lock>.d/peaks.json`, under `peaks.lock`). The request is the limit:
+  a workload that outgrows it is stopped (`rss_limit`) and runs once more with `--rss-mib`, so a
+  measured request never turns a run red, it costs at most one restart (`--timeout` and
+  `--lock-wait` hold per attempt; the report's `measured` records the attempts). The workload
+  still sizes itself by `--rss-mib` (`AIR2LEAN_MEM_MIB`), else a smaller pool would use less and
+  the requests would shrink run by run. Inside a measured admission a nested guard's larger
+  limit is lowered to the admission's (instead of `inheritance_refused`); stopped at it, the
+  nested guard marks the admission outgrown (the grant's `outgrown` file), so the enclosing
+  workload runs again too; a nested guard is lowered only inside an admission below its most.
+  Only an outgrown run runs again; a cancelled, timed-out or failed one does not. The stopped
+  attempt's log is kept (`<log>.attemptN`). `regen.sh`'s steps (`regen:<step>`) and the full
+  build (`full-build:<N>-threads`, with `:no-fixtures`) are measured.
 
 A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the
 machine overcommits memory and thrashes, and every build gets slower. Do not use one; lower

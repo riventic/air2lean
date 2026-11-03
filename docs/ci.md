@@ -791,7 +791,8 @@ full-state logic (`ZigLean.Sep.Full.*`) nor `Proofs`, so a check that runs `lake
 it reads whatever oleans an earlier build left, possibly stale ones. The full build is every
 library and executable of `lakefile.toml` with every tracked module of `ZigLean/`, `Air2Lean/` and
 `Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads,
-11000 MiB by default) and through the shared artifact cache ([build-cache.md](build-cache.md)).
+11000 MiB each by default; the admission is what recent full builds used, with a margin:
+[build-budgets.md](build-budgets.md#admission)) and through the shared artifact cache ([build-cache.md](build-cache.md)).
 A third phase elaborates the **standalone Lean files** (`scripts/lean-deps.py --elaborate`): every
 tracked `.lean` file outside the libraries' directories that imports only Lean and modules of this
 package (the strength logs, the proof-client fixtures, the tutorials; `lean-deps.py --files` lists
