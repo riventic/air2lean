@@ -466,13 +466,13 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   protocol fits the lock if its invariant is `∃ rX, Inv G rX m ∧ U G rX m` with `U` stable under
   lock steps. The client contract is `MutexImpl` (`lock_wp`, `unlock_wp`); an implementation
   (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
-* **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
-  `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
-  `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated;
-  `Transfer.lean` and the legacy `WP.spawnFailureRetains` deleted).
-* **Spawn failure** (`SpawnLemmas.lean`): the frame of a failed spawn keeps `FOwned` unchanged.
-  Done in `Full/ThreadSpawn.lean` (`WP.spawnFailureRetains_fowned`). A struct store whose encoding
-  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/Local.lean`).
+* **Transfer** (C01 captures, `Full/ThreadSpawn.lean`): `FTransfer` and `FCapture.grant` over
+  `Res`; `FCapture.fork_grant` and `join_regain` are `FOwned.fork`/`join`
+  (`tests/roadmap/spawn-failure`, `tests/roadmap/thread-tuples`).
+* **Spawn failure** (`Full/ThreadSpawn.lean`; the resource-free rules are in `SpawnLemmas.lean`):
+  the frame of a failed spawn keeps `FOwned` unchanged (`WP.spawnFailureRetains_fowned`). A
+  struct store whose encoding is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'`
+  (`Full/Local.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
 * **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
