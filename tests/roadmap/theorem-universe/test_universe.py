@@ -256,6 +256,25 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Good': 'g', 'Other': 'changed'}, self.toolchain, '', cache, lake)
         self.assertEqual((record['reused'], self.checked()), ([], ['Good', 'Other']))
 
+    def test_root_receipts_check_the_lake_built_modules(self):
+        lake, digests = frozenset({'Bad', 'Good'}), {'Bad': 'b', 'Good': 'g', 'Local': 'l'}
+        receipts = {'Bad': {'status': 'fail', 'exit_code': 1, 'output': 'rejected'}, 'Good': {'status': 'pass'}}
+        with mock.patch.object(assumptions, 'lake_kernel_replay', return_value=receipts) as built:
+            record = assumptions.kernel_replay(digests, self.toolchain, '', None, lake, root_receipts=True)
+        modules, package, *_, path = built.call_args.args
+        self.assertEqual((modules, package), (['Bad', 'Good'], assumptions.ROOT))
+        self.assertEqual(path.split(os.pathsep), [str(assumptions.ROOT / '.lake/build/lib/lean'),
+                                                  str(self.toolchain / 'lib/lean')])
+        self.assertEqual(self.checked(), ['Local'])  # only the module that is not Lake-built
+        self.assertEqual({r['module']: r['output'] for r in record['rejected']}, {'Bad': 'leanchecker exited 1\nrejected'})
+        self.calls.unlink()
+        # Lake resolves another path: every module is checked afresh; no flag: no receipt at all.
+        for flag, value in ((True, None), (False, receipts)):
+            with mock.patch.object(assumptions, 'lake_kernel_replay', return_value=value) as built:
+                record = assumptions.kernel_replay(digests, self.toolchain, '', None, lake, root_receipts=flag)
+            self.assertEqual((built.called, self.checked(), record['status']), (flag, ['Bad', 'Good', 'Local'], 'fail'))
+            self.calls.unlink()
+
     def test_installed_input_changes_invalidate_cache_with_fixed_project_bytes(self):
         checker = (self.toolchain / 'bin/leanchecker').read_bytes()
         project = self.toolchain / 'project/Lib.olean'
@@ -695,9 +714,11 @@ class FreshnessTests(unittest.TestCase):
                 mock.patch.object(assumptions, 'kernel_replay', return_value={'status': 'pass'}) as replay, \
                 mock.patch.object(assumptions, 'library_compiled_inputs', return_value=[]) as inputs:
             freshness = assumptions.replay_and_freshness(raw)
-            self.assertEqual(set(replay.call_args.kwargs),
-                             {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs', 'lake_package'})
-            self.assertIsNone(replay.call_args.kwargs['lake_package'])  # no package: no receipts
+            self.assertEqual(set(replay.call_args.kwargs), {'expected_runtime', 'compiled_inputs_sha256',
+                                                            'validate_inputs', 'lake_package', 'root_receipts'})
+            # No package: receipts of the root package's Lake-built modules only.
+            self.assertIsNone(replay.call_args.kwargs['lake_package'])
+            self.assertTrue(replay.call_args.kwargs['root_receipts'])
             self.assertEqual(replay.call_args.kwargs['compiled_inputs_sha256'], universe.input_digest([]))
             validate = replay.call_args.kwargs['validate_inputs']
             validate()
