@@ -1072,6 +1072,7 @@ def fba_sum.again21 : fba_sumExit → Bool
   | _ => false
 
 def fba_sum.loop21 (i5 : Zig.Slice) (i19 : BitVec 64) : Zig.MM fba_sumLocals fba_sumExit := do
+  Zig.callM Zig.tick
   let i22 ← pure ((← get).local17)
   match ← ((do
     let i24 ← pure (i22)

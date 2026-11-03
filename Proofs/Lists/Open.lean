@@ -923,6 +923,7 @@ def evens.again8 : evensExit → Bool
   | _ => false
 
 def evens.loop8 [Ext] (p0 : mem_Allocator) (p1 : Zig.Slice) (i2 : Zig.Ptr) (i6 : BitVec 64) : Zig.CM Tgt evensLocals evensExit := do
+  Zig.callMC Zig.tick
   let i9 ← pure ((← get).local4)
   match ← ((do
     let i11 ← pure (i9)
@@ -1026,6 +1027,7 @@ def freeAll.again5 : freeAllExit → Bool
   | _ => false
 
 def freeAll.loop5 [Ext] (p0 : mem_Allocator) : Zig.CM Tgt freeAllLocals freeAllExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i7 ← pure ((← get).p)
     let i8 ← pure ((i7).isSome)
@@ -1191,6 +1193,7 @@ def reverse.again6 : reverseExit → Bool
   | _ => false
 
 def reverse.loop6  : Zig.MM reverseLocals reverseExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).cur)
     let i9 ← pure ((i8).isSome)
@@ -1241,6 +1244,7 @@ def sum.again6 : sumExit → Bool
   | _ => false
 
 def sum.loop6  : Zig.MM sumLocals sumExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).p)
     let i9 ← pure ((i8).isSome)

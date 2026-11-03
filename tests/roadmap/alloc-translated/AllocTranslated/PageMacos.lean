@@ -1196,6 +1196,7 @@ def page_sum.again17 : page_sumExit → Bool
   | _ => false
 
 def page_sum.loop17 (i1 : Zig.Slice) (i15 : BitVec 64) : Zig.CM Tgt page_sumLocals page_sumExit := do
+  Zig.callMC Zig.tick
   let i18 ← pure ((← get).local13)
   match ← ((do
     let i20 ← pure (i18)

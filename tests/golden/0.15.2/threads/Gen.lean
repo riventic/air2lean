@@ -157,6 +157,7 @@ def bump.again4 : bumpExit → Bool
   | _ => false
 
 def bump.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt bumpLocals bumpExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i6 ← pure ((← get).i)
     let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
@@ -431,6 +432,7 @@ def parallelCounter.again9 : parallelCounterExit → Bool
   | _ => false
 
 def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i89 ← pure ((← get).local85)
   match ← ((do
     let i91 ← pure (i89)
@@ -448,6 +450,7 @@ def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals pa
   | e => pure e
 
 def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i60 ← pure ((← get).local44)
   match ← ((do
     let i62 ← pure (i60)
@@ -466,6 +469,7 @@ def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt para
   | e => pure e
 
 def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i33 ← pure ((← get).local29)
   match ← ((do
     let i35 ← pure (i33)
@@ -515,6 +519,7 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
   | e => pure e
 
 def parallelCounter.loop9 (p0 : BitVec 32) (i1 : Zig.Ptr) (i4 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i10 ← pure ((← get).local6)
   match ← ((do
     let i12 ← pure (i10)

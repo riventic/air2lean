@@ -610,6 +610,7 @@ def dupeZLen.again11 : dupeZLenExit → Bool
   | _ => false
 
 def dupeZLen.loop11 (i3 : Zig.Slice) : Zig.MM dupeZLenLocals dupeZLenExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i13 ← pure ((← get).n)
     let i14 ← pure i3.len
@@ -675,6 +676,7 @@ def evens.again8 : evensExit → Bool
   | _ => false
 
 def evens.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i2 : Zig.Ptr) (i6 : BitVec 64) : Zig.MM evensLocals evensExit := do
+  Zig.callM Zig.tick
   let i9 ← pure ((← get).local4)
   match ← ((do
     let i11 ← pure (i9)
@@ -750,6 +752,7 @@ def freeAll.again5 : freeAllExit → Bool
   | _ => false
 
 def freeAll.loop5 (p0 : Zig.Allocator) : Zig.MM freeAllLocals freeAllExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).p)
     let i8 ← pure ((i7).isSome)
@@ -821,6 +824,7 @@ def reverse.again6 : reverseExit → Bool
   | _ => false
 
 def reverse.loop6  : Zig.MM reverseLocals reverseExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).cur)
     let i9 ← pure ((i8).isSome)
@@ -871,6 +875,7 @@ def sum.again6 : sumExit → Bool
   | _ => false
 
 def sum.loop6  : Zig.MM sumLocals sumExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).p)
     let i9 ← pure ((i8).isSome)
@@ -924,6 +929,7 @@ def listSum.again8 : listSumExit → Bool
   | _ => false
 
 def listSum.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i6 : BitVec 64) : Zig.MM listSumLocals listSumExit := do
+  Zig.callM Zig.tick
   let i9 ← pure ((← get).local4)
   match ← ((do
     let i11 ← pure (i9)
@@ -1016,6 +1022,7 @@ def sumRange.again12 : sumRangeExit → Bool
   | _ => false
 
 def sumRange.loop33 (i3 : Zig.Slice) (i31 : BitVec 64) : Zig.MM sumRangeLocals sumRangeExit := do
+  Zig.callM Zig.tick
   let i34 ← pure ((← get).local29)
   match ← ((do
     let i36 ← pure (i34)
@@ -1037,6 +1044,7 @@ def sumRange.loop33 (i3 : Zig.Slice) (i31 : BitVec 64) : Zig.MM sumRangeLocals s
   | e => pure e
 
 def sumRange.loop12 (i3 : Zig.Slice) (i10 : BitVec 64) : Zig.MM sumRangeLocals sumRangeExit := do
+  Zig.callM Zig.tick
   let i13 ← pure ((← get).local8)
   match ← ((do
     let i15 ← pure (i13)

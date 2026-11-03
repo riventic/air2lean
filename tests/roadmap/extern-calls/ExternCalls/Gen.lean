@@ -26,6 +26,7 @@ def libc_ref_memset.again8 : libc_ref_memsetExit → Bool
   | _ => false
 
 def libc_ref_memset.loop8 (p0 : Zig.Ptr) (p2 : BitVec 64) (i4 : BitVec 8) : Zig.MM libc_ref_memsetLocals libc_ref_memsetExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i10 ← pure ((← get).i)
     let i11 ← pure (i10)
@@ -77,6 +78,7 @@ def fillSum.again18 : fillSumExit → Bool
   | _ => false
 
 def fillSum.loop18 (i16 : Vector (BitVec 8) 16) : Zig.MM fillSumLocals fillSumExit := do
+  Zig.callM Zig.tick
   let i19 ← pure ((← get).local14)
   match ← ((do
     let i21 ← pure (i19)
@@ -141,6 +143,7 @@ def libc_ref_strlen.again4 : libc_ref_strlenExit → Bool
   | _ => false
 
 def libc_ref_strlen.loop4 (p0 : Zig.Ptr) : Zig.MM libc_ref_strlenLocals libc_ref_strlenExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i6 ← pure ((← get).i)
     let i7 ← Zig.callM (Zig.load (BitVec 8) 1 (p0.elem 1 i6))
