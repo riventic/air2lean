@@ -1,8 +1,8 @@
 import ZigLean.Sep.Full.Strength
-import Taxonomy
+import Outcomes.Taxonomy
 
 /-!
-Strength log of `tests/roadmap/outcome-taxonomy/Taxonomy.lean` (`ZigLean/Sep/Full/Strength.lean`;
+Strength log of `tests/roadmap/outcome-taxonomy/Outcomes/Taxonomy.lean` (`ZigLean/Sep/Full/Strength.lean`;
 deleted with the legacy logic): each migrated theorem gives back its legacy statement on every
 `Mem.FSeqPlain` memory (no stack budget, which the legacy logic does not have), for a size-free
 precondition. The legacy failure statements did not elaborate once a partial triple admits

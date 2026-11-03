@@ -317,7 +317,7 @@
    "progress": "open",
    "request": "fsym_arith: (a) disjunctive goals are not proved (`n < n ∨ 1 < 2`, `m ≤ n → m < n ∨ m = n ∧ 1 < 2`): `omega` handles them, the pipeline does not; (b) a user Nat function on a constructor (`rank Phase.count`, a `match` on a constructor) is not evaluated unless tagged `attribute [local fsym_arith] rank`; (c) `machExit.ret acc = machExit.ret N` with `acc = N` in context is not closed (constructor injectivity in the return entailment; same family as #13). Workarounds in PR #222: `loop_dispatch` takes the measure `B * data + rank` (no Prod.Lex disjunction), local fsym_arith tags, unfold the invariant before `cases`",
    "workaround_sites": [
-    "tests/roadmap/dispatch-templates/Template.lean",
+    "tests/roadmap/dispatch-templates/DispatchTemplate/Template.lean",
     "tests/roadmap/dispatch-templates/TokenizerProof.lean"
    ],
    "deletion_plan": "delete the local `attribute [local fsym_arith] rank` lines once fsym evaluates a user Nat function on a constructor (evalUserCtor covers non-Nat results only); run the two fixtures without them."

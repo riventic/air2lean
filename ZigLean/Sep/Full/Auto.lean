@@ -1365,8 +1365,9 @@ elab "fsym_arith" : tactic => do
   unless ok do throwError "fsym_arith: not proved"
   replaceMainGoal []
 
-/-- Prove `x = y` of assertions by AC of `⋆`. -/
-def acEq (x y : Expr) : TacticM Expr := do
+/-- Prove `x = y` of assertions by AC of `⋆`. A structural reorder: it runs at a new
+metavariable depth, so it never chooses an unknown of `x` or `y` (a rule's witness, a frame). -/
+def acEq (x y : Expr) : TacticM Expr := withNewMCtxDepth do
   let ty ← mkEq x y
   if x == y then return ← mkEqRefl x
   let tac ← `(tactic| first
