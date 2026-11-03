@@ -55,6 +55,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "tests" / "roadmap"
 NAME = "fixtures"
+# scripts/float-semantics.py label_theorems: the issues of a numerical theorem's label.
+FLOAT_LABEL_ISSUES = {"unlabeled-numerical-theorem", "stale-float-semantics-label", "float-semantics-mismatch"}
 
 
 def libraries(package: Path) -> list[dict]:
@@ -230,8 +232,11 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
             audited = [t for t in report["theorems"] if t["module"] in modules]
             problems += [f"{t['name']}: axioms {sorted(set(t['axioms']) - STANDARD_AXIOMS)}"
                          for t in audited if not set(t["axioms"]) <= STANDARD_AXIOMS]
-            problems += [f"{v['name']} ({v['module']}): {v['reason']}" for v in report["violations"]
-                         if v["trust_class"] == "sorry"]
+            # A sorry anywhere, and a float-semantics label issue (assurance/float-semantics.json,
+            # as the theorem-universe audit checks it) of an audited module.
+            problems += [f"{v['name']} ({v['module']}): {v['trust_class']}: {v['reason']}"
+                         for v in report["violations"] if v["trust_class"] == "sorry"
+                         or v["trust_class"] in FLOAT_LABEL_ISSUES and v["module"] in modules]
             nodes = {n["name"]: n for n in report["nodes"]}
             for name in declarations:
                 node = nodes.get(name)

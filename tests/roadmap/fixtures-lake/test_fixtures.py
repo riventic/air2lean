@@ -13,6 +13,7 @@ modules (seconds), without the shared artifact cache.
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import tempfile
@@ -146,6 +147,17 @@ class Audit(unittest.TestCase):
                          "def good_claim : Claim := ⟨rfl⟩\n")
         self.assertEqual(fx.audit(["AuditControl"], ["honest", "gone"], None, lib), 1)
         self.assertEqual(fx.audit(["AuditControl"], ["honest", "good_claim"], None, lib), 0)
+
+    def test_unlabeled_float_theorem_is_rejected(self):
+        """As the theorem-universe audit: a theorem over the float model needs its label
+        (assurance/float-semantics.json); this one has none."""
+        lib = self.build("import ZigLean.Float.Value\n"
+                         "theorem float_control (x : Zig.F32) : x.bits = x.bits := rfl\n")
+        self.assertEqual(fx.audit(["AuditControl"], [], None, lib), 1)
+
+    def test_float_label_issues_are_the_labelers(self):
+        source = (ROOT / "scripts/float-semantics.py").read_text()
+        self.assertEqual(set(re.findall(r"issue\(name, module, '([a-z-]+)'", source)), fx.FLOAT_LABEL_ISSUES)
 
 
 class LakeExtraction(unittest.TestCase):
