@@ -137,6 +137,21 @@ class Instance(unittest.TestCase):
         with self.assertRaises(SystemExit):
             fx.instance(self.primary, ["V0_16_0=V0_14_1"], False)
 
+    def test_primary_naming_a_new_version_is_refused(self):
+        # A 0.17.0 model importing the 0.16.0 translation would make every instance agree.
+        self.primary.write_text(self.primary.read_text() + "open Fix.V0_14_1\n")
+        with self.assertRaisesRegex(SystemExit, "already names V0_14_1"):
+            fx.instance(self.primary, ["V0_17_0=V0_14_1"], True)
+
+    def test_identity_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, "unchanged"):
+            fx.instance(self.primary, ["V0_17_0=V0_17_0"], False)
+
+    def test_chained_substitutions_are_refused(self):
+        # V0_17_0 -> Model -> Raw would rename both to Raw; Model is in the primary: refused.
+        with self.assertRaisesRegex(SystemExit, "already names Model"):
+            fx.instance(self.primary, ["V0_17_0=Model", "Model=Raw"], True)
+
 
 class Run(Repo):
     def test_runs_built_modules_only(self):
