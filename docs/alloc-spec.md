@@ -18,8 +18,8 @@ proved once from it.
 | `ZigLean/Sep/AllocSpec/Dispatch.lean` | legacy: the vtable dispatch of translated wrappers and `dispatch_allocSpec` |
 
 CI builds all of them (`Generic allocator specification`). The translated
-`FixedBufferAllocator` instance, the wrapper bridge and a proved client are in
-`tests/roadmap/alloc-fba` (`Translated FixedBufferAllocator against AllocSpec`).
+`FixedBufferAllocator` instance of `FAllocSpec`, the generated wrappers' contracts and a proved
+client are in `tests/roadmap/alloc-fba` (`Translated FixedBufferAllocator against FAllocSpec`).
 
 ## Statement
 
@@ -99,9 +99,10 @@ unfolded step semantics).
 
 `Wrap.*` are the step semantics of the `std.mem.Allocator` wrapper functions over a
 `RawVTable`, byte-level (an item type is its size and the log2 of its alignment). They follow
-the code that the compiler emits for `lib/std/mem/Allocator.zig`, which is the ground truth:
-`tests/roadmap/alloc-fba/AllocFba/Bridge.lean` proves each generated wrapper equal to its
-`Wrap.*`.
+the code that the compiler emits for `lib/std/mem/Allocator.zig`, which is the ground truth.
+(The legacy bridge that proved each generated wrapper equal to its `Wrap.*` is retired with the
+legacy FBA client, L6: the generated wrappers' contracts over `FAllocSpec` are proved directly by
+`fsym`, `tests/roadmap/alloc-fba/AllocFba/Wrappers.lean`.)
 
 * Zero-length requests return the constant `zeroPtr (2 ^ k) = ⟨none, 2^64 - 2^k⟩` without a call
   (the translator's integer pointer constant `⟨none, addr⟩` is exactly this).
@@ -145,28 +146,27 @@ one of the program's allocator functions (`.illegal` otherwise). `dispatch impl 
 `RawVTable`; `dispatch_allocSpec : AllocSpec L impl ctx I → AllocSpec L (dispatch impl fns vtp)
 ctx (I.withVTable vtp fns)` adds the read-only vtable (`vtR`) to the invariant.
 
-`tests/roadmap/alloc-fba` proves `FBA.allocSpec : AllocSpec Logic.total impl ctx (FBA.inv ctx B)`
+`tests/roadmap/alloc-fba` proves `FBA.fallocSpec : FAllocSpec FLogic.total impl ctx (FBA.finv ctx B γ e)`
 for the translated `std.heap.FixedBufferAllocator` (Zig 0.16.0), for every struct and buffer:
 alignment padding (`alignPointerOffset` on the 64-bit address read from the block), out of
 memory, the last allocation shrinking, growing and being given back, a non-last allocation
 shrinking in place and leaking on free. Findings that shaped the specification:
 
 * `alloc` computes `end_index + adjust_off + n` and `resize` computes `new_len - len + end_index`
-  with overflow checks: a large request panics. Hence `AllocInv.fits`
-  (`FBA.fits n k := cap + 2^k + n ≤ 2^64`).
+  with overflow checks: a large request panics. Hence `FAllocInv.fits`
+  (`FBA.ffits B n k := B.cap + 2^k + n ≤ 2^64`).
 * `alloc` with an alignment above 1 evaluates `@intFromPtr(buffer.ptr + end_index)` also when
-  every buffer byte is lent out. The model's `ptrAddr` needs the block to exist in the memory,
-  and an invariant that owns no byte of the block cannot say so; the invariant keeps one byte of
-  the buffer's block outside the buffer (`pin`). A total `ptrAddr` or persistent block metadata
-  (the core gap of obstruction O1) would remove it. The allocator has no atomics (O3) and reads
-  no dead block.
-* `reset` makes every buffer byte free again. Without ghost state, its specification
-  (`reset_spec`) asks that the caller's heap has every buffer byte (`Covers`); a caller that
-  still holds a grant would see its bytes reused.
+  every buffer byte is lent out. The legacy invariant kept one byte of the buffer's block
+  outside the buffer for it (`pin`); the full-state invariant holds a share of the block's
+  extent instead, so no byte is pinned.
+* `reset` makes every buffer byte free again: the reset ledger (`FBA.ledger`, `FBA.freset_spec`)
+  takes the whole epoch token, so a caller that still holds a grant of the epoch has no
+  precondition.
 
 `AllocFba/Client.lean` proves a client (alloc, write, realloc, an allocation that does not fit,
-free of the last allocation, reset, a fresh allocation) from these contracts only; `mutant.sh`
-shows that an `alloc` that does not advance `end_index` fails the proof.
+free of the last allocation, reset, a fresh allocation) from these contracts only, walked by
+`fsym` (`Client.client_spec`); `mutant.sh` shows that an `alloc` that does not advance
+`end_index` fails the `FBA.fallocSpec` proof.
 
 ## Sanity instances and negative checks
 
@@ -200,9 +200,8 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
 ## What the other phases provide
 
 * P1 (translator, `--allocator-model=translated`): the generated `mem.Allocator` wrappers and
-  vtable entries as `MemM` functions. The generated wrappers are equal to `Wrap.*` over
-  `dispatch impl fns vtp` with `impl := ⟨fun c len k ra => Gen.alloc c len ⟨BitVec.ofNat 6 k⟩ ra, …⟩`
-  (`tests/roadmap/alloc-fba/AllocFba/Bridge.lean`, normalized with `Norm.lean`).
+  vtable entries as `MemM` functions; their contracts over `FAllocSpec` are proved by `fsym`
+  (`tests/roadmap/alloc-fba/AllocFba/Wrappers.lean`).
   `@returnAddress()` is an oracle value: every contract here holds for every `ra`.
 * P2 (posix model): `mmap` returns a fresh `.mapped` block as `bytesAt ⟨some b, 0⟩ A S K bs`
   with `A` page-aligned; `regionIn_of_block`, `regionIn_split` and `region_join_of_heap`
@@ -227,8 +226,9 @@ shows that an `alloc` that does not advance `end_index` fails the proof.
   The full-state wrapper contracts (`FAllocSpec.toLegacy`, `LegacyTokens`,
   `ZigLean/Sep/Full/Wrappers.lean`) were removed with block extents (they went through
   `FLogic.legacy`, which is unsound there, `tests/roadmap/sep-full/BlockExtentsCX.lean`); the
-  wrapper contracts are to be restated over `FAllocSpec` directly (open item of the FBA client
-  port, [allocator-model.md](allocator-model.md) step 1).
+  wrapper contracts are restated over `FAllocSpec` directly
+  (`tests/roadmap/alloc-fba/AllocFba/Wrappers.lean`), and the FBA client is proved through them
+  (`Client.client_spec`).
 
 ## Relation to the legacy models it replaces
 
@@ -285,7 +285,7 @@ themselves are proved over the generated wrappers of `tests/roadmap/alloc-fba`.
 | `Bump.allocSpec` (a bump allocator satisfies the spec) | `AllocSpec/Toy` | retired (deleted) | a hand-written allocator; satisfiability is witnessed by translated allocators (`FBA.fallocSpec`, `PageAlloc.fallocSpec`, the arena) |
 | `Static.not_allocSpec` (no double issue), `trapFree_alloc_none` (free is not vacuous) | `AllocSpec/Toy` | replaced (deleted) | the same negative checks over `FAllocSpec`, in every logic (`tests/roadmap/sep-full/AllocNeg.lean`: `Static.not_fallocSpec`, `trapFree_alloc_none`) |
 | `alloc_no_triple_after_free`, `no_error_of_triple`, `run_of_errOf`, `alloc_args` (heap-only page-allocator obstruction and its proof helpers) | `alloc-translated/PageObstruction` | retired | the legacy statement and its argument are recorded in [alloc-page.md](alloc-page.md); its counterexample stays kernel-checked (`hinted_heap`, `alloc_hintedLost`, `alloc_hinted`), and the real-run executable guards are retained. The translated page allocator instead meets `PageAlloc.fallocSpec`, whose full-state invariant owns the hint's atomic word and the dead block's address knowledge |
-| `FBA.allocSpec` (legacy, with the pin byte), `Bridge` (`Wrap.*` = generated wrappers), `Client.client_spec` | `tests/roadmap/alloc-fba` | replaced | `FBA.fallocSpec` (`Full.lean`, no pin byte); the client proved over `FAllocSpec` through the generated wrappers |
+| `FBA.allocSpec` (legacy, with the pin byte), `Bridge` (`Wrap.*` = generated wrappers), `Client.client_spec` | `tests/roadmap/alloc-fba` | replaced (done, deleted in L6) | `FBA.fallocSpec` (`Full.lean`, no pin byte); `Client.client_spec`, an `FTotalTriple` walked by `fsym` through the generated wrappers' contracts over `FBA.fallocSpec`, the initialized invariant and the reset contract; the stack room is an owned resource (`sp`), not a premise |
 | `Triple.create`, `Triple.destroy` | `Sep/Alloc` | replaced (done, deleted in L5c) | `create_spec`, `destroy_spec` of the generated wrappers for every translated allocator (`tests/roadmap/alloc-fba/AllocFba/Wrappers.lean`); the `std` heap's rules are not restated (no rule for a hand-written allocator). The heap primitives under libc's `malloc`/`free` (OSM-02) get full-state rules, `FTotalTriple.rawAlloc`/`rawAllocZero`/`poisonFree` (`Full/Block`), used by `Full/Malloc` only |
 | `Triple.freeSentinel`, `create_run`, `rawAlloc_run`, `rawFree_run`, `poisonFree_run`, `heapBlock_access`, `newBlock` | `Sep/Alloc` | replaced (pending: legacy users) | as the row above, and `freeSentinel_spec`. Kept in `Sep/Alloc` (legacy-to-retire) only for their legacy users: `Sep/Cost` and `Proofs/Lists/Cost` (L8); `Sep/Alloc` is deleted with the last of them |
 | `rawAlloc_eq`, `Mem.allocDenied` | `Sep/Alloc` | moved | to `ZigLean/Mem/AllocLemmas.lean`: the failure decision of a libc `malloc` attempt (OSM-02, `Full/Malloc`) |
