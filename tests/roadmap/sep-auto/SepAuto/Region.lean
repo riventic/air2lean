@@ -200,7 +200,7 @@ theorem free_large_sized (r u : Ptr) (b : BlockId) (sz ei : BitVec 64) (nxt : Op
 def TokGrant (T : Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
   T bs.size ⋆ up (regionIn p A S K 1 bs)
 
-/-- **A token does not fix the bytes of the region whose size it names** (`sizedRegionBytes`):
+/-- **A token does not fix the bytes of the region whose size it names** (`abstractMeasures`):
 the state's token `T old.size` names an array of the grant's size, not the bytes its region holds
 (`cur`, as after a write). The rule's bytes behind `TokGrant` come from the region, carved at the
 token's size, and the token matches up to arithmetic. -/
@@ -227,13 +227,52 @@ def TupGrant (T : Ptr × Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (b
     FAssn :=
   T (p, bs.size) ⋆ up (regionIn p A S K 1 bs)
 
-/-- The same with the size in a field of the token's argument (`sizeField`). -/
-theorem hidden_bytes_in_field (T : Ptr × Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+/-- The same with the size in a tuple that the token takes. -/
+theorem hidden_bytes_in_tuple (T : Ptr × Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
     (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
     (rule : ∀ bs : Array Byte,
       FTotalTriple (TupGrant T p A S K bs) c (fun _ => TupGrant T p A S K bs)) :
     FTotalTriple (T (p, old.size) ⋆ up (regionIn p A S K 1 cur)) c
       (fun _ => TupGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- A grant's key, a structure with the size as a field. -/
+structure GrantKey where
+  ptr : Ptr
+  len : Nat
+
+/-- A grant whose token takes a structure with its size as a field. -/
+def KeyGrant (T : GrantKey → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) :
+    FAssn :=
+  T ⟨p, bs.size⟩ ⋆ up (regionIn p A S K 1 bs)
+
+/-- The same with the size in a field of a structure that the token takes. -/
+theorem hidden_bytes_in_field (T : GrantKey → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (KeyGrant T p A S K bs) c (fun _ => KeyGrant T p A S K bs)) :
+    FTotalTriple (T ⟨p, old.size⟩ ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => KeyGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- A grant whose token names its size under arithmetic (a header's length). -/
+def HdrGrant (T : Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
+  T (bs.size + 8) ⋆ up (regionIn p A S K 1 bs)
+
+/-- The same with the size under arithmetic, not a constructor. -/
+theorem hidden_bytes_in_sum (T : Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (HdrGrant T p A S K bs) c (fun _ => HdrGrant T p A S K bs)) :
+    FTotalTriple (T (old.size + 8) ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => HdrGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- A measure of an unknown that nothing else determines: the final match still takes the
+state's array (any array of that size is a witness). -/
+theorem measure_only (T : Nat → FAssn) (old : Array Byte) (c : MemM Unit)
+    (rule : ∀ bs : Array Byte, FTotalTriple (T bs.size) c (fun _ => T bs.size)) :
+    FTotalTriple (T old.size) c (fun _ => T old.size) := by
   fsym [rule]
 
 end SepAuto.Region
