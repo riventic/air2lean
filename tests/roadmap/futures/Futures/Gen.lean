@@ -21,7 +21,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .checked_future _ _ => [.value]
   | .fill_future _ (capture0, _) => [.ptr capture0, .value]
