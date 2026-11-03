@@ -242,7 +242,7 @@ theorem WP.liftMem_fowned_bind {x : MemM β} {f : β → MemM α} {Pa : FAssn} {
         | exact .inl (.inl (by assumption))) :
     P.WP t (ConcM.liftMem (x >>= f) : ConcM Tgt α) Q G m n := by
   rw [liftMem_bind]
-  exact WP.bind (WP.liftMem_fowned ht ho hc htl hp (fun a m' r' _ ho' hq hc' ht' =>
+  exact WP.bind (WP.liftMem_fowned ht ho hc htl hp (fun a m' r' _ _ ho' hq hc' ht' _ _ _ _ _ =>
     h a m' r' ho' hq hc' ht') hret)
 
 /-- A first step that, in the current memory, returns `v` and changes nothing. -/
@@ -273,7 +273,7 @@ theorem WP.liftMem_tlsEnter_fowned {inits : List (BlockId × Array Byte × Nat)}
   unfold tlsEnter
   rw [liftMem_bind]
   refine WP.bind (WP.liftMem_fowned ((FTTriple.tlsAllocs inits hinit).frameL (R := R)
-    |>.pre fun _ h => Full.sep_emp.mpr h) ho hc htl hp (fun ids m₁ r' _ ho₁ hq hc₁ ht₁ => ?_)
+    |>.pre fun _ h => Full.sep_emp.mpr h) ho hc htl hp (fun ids m₁ r' _ _ ho₁ hq hc₁ ht₁ _ _ _ _ _ => ?_)
     (.inl hpart))
   refine WP.liftMem_setTls ?_
   rw [hc₁]
@@ -290,7 +290,7 @@ theorem WP.liftMem_tlsExit_fowned {R : FAssn} {Q : Unit → (ThreadId → γ) �
     P.WP t (ConcM.liftMem tlsExit : ConcM Tgt Unit) Q G m n := by
   refine WP.liftMem_congr (y := Zig.freeBlocks ((m.tlsOf t).toList.map (·.2)))
     (by simp only [tlsExit, StateT.run_bind, StateT.run_get, pure_bind, hc]) ?_
-  exact WP.liftMem_fowned (FTTriple.freeBlocks _) ho hc htl hp (fun _ m' r' _ ho' hq hc' ht' =>
+  exact WP.liftMem_fowned (FTTriple.freeBlocks _) ho hc htl hp (fun _ m' r' _ _ ho' hq hc' ht' _ _ _ _ _ =>
     h m' r' ho' hq hc' ht') (.inl hpart)
 
 /-! ### Errors of the thread-local steps (audit soundness-2026-10-14 S4)
