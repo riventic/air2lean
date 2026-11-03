@@ -14,6 +14,10 @@ import ZigLean.Sep.Full.Init
    cannot be entered while a meter runs, so credits cannot be minted through it.
 5. `tick_credit_live` (T5, positive control): the start memory with one credit and the meter
    `●1` runs a step paid by the credit, with its receipt.
+6. `two_steps_exact` / `two_steps_tight` (T6, exact cost): two steps are paid by two credits and
+   return two receipts, so they count exactly two steps, and no proof pays them with one credit
+   from the credit-free start (`FTotalTriple.not_fewer_credits`). `two_steps_plain`: the same
+   proof gives the plain-mode statement (`FTotalTriple.of_credits_unmetered`).
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound`.
 -/
@@ -90,6 +94,36 @@ theorem tick_credit_live :
   obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj hr)
   exact ⟨r', hh, hq⟩
 
+/-- Two steps. -/
+def twoSteps : MemM Unit := do
+  Zig.tick
+  Zig.tick
+
+/-- **T6, positive**: two credits pay two steps, which return two receipts. -/
+theorem two_steps_exact : FTotalTriple (emp ⋆ credits 2) twoSteps (fun _ => emp ⋆ spent 2) := by
+  have h₁ : FTotalTriple (credits 1 ⋆ credits 1) Zig.tick (fun _ => spent 1 ⋆ credits 1) :=
+    FTotalTriple.tick_credit.frame
+  have h₂ : FTotalTriple (credits 1 ⋆ spent 1) Zig.tick (fun _ => spent 1 ⋆ spent 1) :=
+    FTotalTriple.tick_credit.frame
+  refine (h₁.bind fun _ => h₂.pre fun _ h => sep_comm h).conseq (fun _ h => ?_) fun _ _ h => ?_
+  · rw [show (2 : Nat) = 1 + 1 from rfl, credits_add] at h
+    exact sep_emp.mp (sep_comm h)
+  · rw [show (2 : Nat) = 1 + 1 from rfl, spent_add]
+    exact sep_comm (sep_emp.mpr h)
+
+/-- The empty start memory holds nothing with nothing in the frame: a credit-free start. -/
+theorem start_unit : Holds m0 ⟨FHeap.empty, Know.none, Ghost.unit⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ :=
+  (initRes_holds Placement.fresh [] (by simp)).1
+
+/-- **T6, negative**: one credit does not pay the two steps, whatever the postcondition. -/
+theorem two_steps_tight (Q : Unit → FAssn) : ¬ FTotalTriple (emp ⋆ credits 1) twoSteps Q :=
+  FTotalTriple.not_fewer_credits two_steps_exact (by decide) start_unit ⟨rfl, rfl, rfl⟩ m0_fseq
+    ⟨by simp, by simp, by simp, by simp⟩
+
+/-- **T6, plain mode**: the cost proof gives the plain-mode statement. -/
+theorem two_steps_plain : FTotalTriple (emp ⋆ unmetered) twoSteps (fun _ => (emp ⋆ spent 2) ⋆ unmetered) :=
+  two_steps_exact.of_credits_unmetered
+
 end Zig.Full.TicksCX
 
 #print axioms Zig.Full.TicksCX.meter_cx
@@ -97,3 +131,6 @@ end Zig.Full.TicksCX
 #print axioms Zig.Full.TicksCX.no_mint_spent
 #print axioms Zig.Full.TicksCX.no_plain_under_meter
 #print axioms Zig.Full.TicksCX.tick_credit_live
+#print axioms Zig.Full.TicksCX.two_steps_exact
+#print axioms Zig.Full.TicksCX.two_steps_tight
+#print axioms Zig.Full.TicksCX.two_steps_plain
