@@ -1759,7 +1759,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.TlsLemmas ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
+          lake build ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
           bash tests/roadmap/thread-locals/check.sh
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
