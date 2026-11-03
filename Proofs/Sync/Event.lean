@@ -39,9 +39,8 @@ variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
 /-- `Io.Event.set` by a thread out of the event's code, out of the lock's code or gone from it. -/
 theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) (hsx : E.sx g) (io : Io)
-    (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d := by
   subst hp
@@ -55,8 +54,7 @@ theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
   rcases hcase with ⟨rfl, hi₁⟩ | ⟨ho, hi₁⟩
   · obtain rfl := ioEvent_of1 hd
     simp only [StateT.run_bind, StateT.run_pure, pure_bind, bind_assoc]
-    refine WP.bind (FEvent.wp_wake hE (by decide) (E.ph_set _ _)
-      (by rw [hE.lph]; exact hgo.imp_right And.left)
+    refine WP.bind (FEvent.wp_wake hE (by decide) (E.ph_set _ _) (by rw [hE.lph]; exact hgo)
       hi₁ fun k₂ hk₂ G₂ m₂ hc₂ hs₂ hi₂ => ?_)
     rw [E.set_set, FEvent.set_of hgx] at hi₂
     exact WP.pure' (WP.pure' ⟨by omega, hc₂, hs₂, hi₂⟩)

@@ -30,8 +30,9 @@ the event's code changes the stepping thread's lock place only for a waiter's sl
 `away`), so the event's steps keep the places of the other components of a protocol.
 **Gone setters.** A setter may run the set path after it left the lock's protocol (lock place
 `gone`, e.g. a `WaitGroup`'s last `finish` after its `fetchSub`): the set ops take the setter's
-existence from the protocol (`FLock.Runs`), not from its lock place, and a setter at `sw` exists
-(`Inv.swex`), so the waiter's liveness (`Fits.liveSet`) still finds it.
+existence from its resumption (the scheduler resumes only a thread that exists), not from its lock
+place, and a setter at `sw` exists (`Inv.swex`), so the waiter's liveness (`Fits.liveSet`) still
+finds it.
 **Lock steps.** A thread in the event's code runs no lock code: a client's
 `FLock.Fits` `ok` excludes it, and then a lock step keeps the event's invariant
 (`Inv.lstep`).
@@ -124,7 +125,8 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   sx : ∀ u, E.ph (G u) = .sw → E.sx (G u)
   /-- Message ids at the word remain distinct and below the next fresh id. -/
   fresh : E.W.Fresh m
-  /-- A setter at `sw` exists (it has not ended: `Fits.liveSet`). -/
+  /-- A setter at `sw` is a thread of the memory (`Fits.liveSet` names it as the thread that can
+  go on; that it has not ended comes from the protocol's `fin`). -/
   swex : ∀ u, E.ph (G u) = .sw → u < m.threads.size
 
 /-- **The event at its start**: every thread out of its code, no thread in the futex queue, and
@@ -1056,12 +1058,6 @@ theorem _root_.Zig.Full.FLock.Fits.liveSet (hE : L.Fits (E.prim L) P U ok) {G : 
       rw [this] at h; cases h
     · rw [hE.kjoins _ h] at hu; cases hu
 
-/-- A setter at `sw` exists (`Inv.swex`), whatever its lock place. -/
-theorem _root_.Zig.Full.FLock.Fits.runsSw (hE : L.Fits (E.prim L) P U ok) {t : ThreadId} {g : γ}
-    (hg : E.ph g = .sw) : Runs P t g := fun G m hgt hi => by
-  obtain ⟨rX, -, hU⟩ := (hE.inv G m).mp hi
-  exact (hE.wInv _ _ _ hU).swex t (by rw [hgt]; exact hg)
-
 /-- After a step of the event's code by `t` at `out` of the lock or `gone` from it (`g`, new place
 `p`): the protocol's invariant, from the lock's invariant after the step, the rest before it, and
 the event's invariant after it. -/
@@ -1293,7 +1289,7 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
         (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 E.W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
-  refine FLock.wp_wordCasAs hE (hE.wRest rfl) (hE.wAp rfl) (hE.runs (by rw [hgo]; decide)) hi
+  refine FLock.wp_wordCasAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1326,7 +1322,7 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC (n := 32) succ fail 4 E.W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst he hn
-  refine FLock.wp_wordCas hE (hE.wRest rfl) (hE.wAp rfl) (hE.runs (by rw [hgo]; decide)) hi
+  refine FLock.wp_wordCas hE (hE.wRest rfl) (hE.wAp rfl) hi
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
@@ -1354,7 +1350,7 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
       (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) (hE.runs (by rw [hgo]; decide)) hi
+  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
 
@@ -1377,7 +1373,7 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
       (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α ord 4 E.W.ptr : CM Tgt σ α).run s) Q G m n :=
-  FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) (hE.runs (by rw [hgo]; decide)) hi
+  FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
     fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1389,20 +1385,20 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl)
 
 /-- A load at the word by a thread out of the event's code (`atomicLoadC`), out of the lock's code
-or gone from it (and known to exist). -/
+or gone from it. -/
 theorem wp_peek (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
-    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g))
+    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone)
     (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → P.inv (upd G₁ t g) m' →
       (b = 2 → E.IsSet m') → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) (hE.runsOr hgo) hi
+  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv _ _ hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
 
-      let ⟨h1, h2⟩ := hE.afterPeek hg₁ hg (hgo.imp_right And.left) hU hY (by
+      let ⟨h1, h2⟩ := hE.afterPeek hg₁ hg hgo hU hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv
@@ -1414,7 +1410,7 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     {ord : AtomicOrder} {v : α} (hv2 : Packed.toBits v = (2 : BitVec 32))
     (hdec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 2) →
       ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
-    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) (hsx : E.sx g)
+    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g)
     (hi : P.inv (upd G t g) m)
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o r, m'.current = t → (o = 0 ∨ o = 1 ∨ o = 2) →
@@ -1423,7 +1419,7 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
       (o ≠ 1 ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .xchg ord 4 E.W.ptr v : CM Tgt σ α).run s) Q G m n :=
-  FLock.wp_wordRmwAs hE (hE.wRest rfl) (hE.wAp rfl) (hE.runsOr hgo) hi
+  FLock.wp_wordRmwAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU b hv => hdec b ((hE.wInv _ _ _ hU).val3
       (by have := hist_pos ((hE.wRest rfl) _ _ _ hU).1; omega) hv))
     fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hY hd hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
@@ -1431,7 +1427,7 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
-      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg (hgo.imp_right And.left) hsx hct hU hY (by
+      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hct hU hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inr ⟨_, _, hh'⟩)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩))) hA hS hL hv hh'
@@ -1441,7 +1437,7 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
 /-- A setter's `xchg(2)` on bits (`atomicRmwC`, `Thread.ResetEvent`). -/
 theorem wp_xchg (hE : L.Fits (E.prim L) P U ok) {signed : Bool}
     {ord : AtomicOrder} {v : BitVec 32} (hv2 : v = 2)
-    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) (hsx : E.sx g)
+    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g)
     (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o, m'.current = t → E.IsSet m' →
@@ -1449,13 +1445,13 @@ theorem wp_xchg (hE : L.Fits (E.prim L) P U ok) {signed : Bool}
       (o ≠ 1 ∧ P.inv (upd G₁ t (E.set g .out)) m') → Q (o, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .xchg signed ord 4 E.W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordRmw hE (hE.wRest rfl) (hE.wAp rfl) (hE.runsOr hgo) hi
+  FLock.wp_wordRmw hE (hE.wRest rfl) (hE.wAp rfl) hi
     fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hY hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
-      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg (hgo.imp_right And.left) hsx hct hU hY (by
+      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hct hU hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inr ⟨_, _, hh'⟩)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩))) hA hS hL hv hh'
@@ -1664,7 +1660,7 @@ theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake E.W.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n :=
-  FLock.wp_wordOsWake hE (hE.wAp rfl) (hE.runsSw hg) hi fun k hk G₁ rX m₁ hg₁ hU =>
+  FLock.wp_wordOsWake hE (hE.wAp rfl) hi fun k hk G₁ rX m₁ hg₁ hU =>
     ⟨fun cs m' hr hL => by
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
       obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hr' hL
@@ -1748,8 +1744,7 @@ and counts no turns.
   (`FTriple.allocStackDrop`).
 - `set_wp`: a thread out of the event's code, with a ghost value that may set (`FEvent.sx`), that
   sets it returns with the event set. The setter is out of the lock's code, or it left the lock for
-  good (`gone`: a task after its last access to the lock's resource, a detached thread) and its
-  protocol shows that it exists (`Runs`). -/
+  good (`gone`: a task after its last access to the lock's resource, a detached thread). -/
 structure EventImpl (Tgt : Type) where
   wait : Ptr → Io → ConcM Tgt Unit
   set : Ptr → Io → ConcM Tgt Unit
@@ -1768,8 +1763,7 @@ structure EventImpl (Tgt : Type) where
   set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
-    (L.ph g = .out ∨ (L.ph g = .gone ∧ Runs P t g)) → E.sx g →
-    ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
+    (L.ph g = .out ∨ L.ph g = .gone) → E.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
     P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d
