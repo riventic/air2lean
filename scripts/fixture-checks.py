@@ -87,7 +87,6 @@ def _load(name, rel):
 CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
-GENERATED = _load('air2lean_generated', 'scripts/generated.py')
 import assumptions as AS  # noqa: E402
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
@@ -342,76 +341,145 @@ PASSES = Path(os.environ.get('AIR2LEAN_FIXTURE_PASSES') or Path.home() / '.cache
 # CI (every workflow run: pull requests, main, nightly, release) never reuses or records a pass:
 # its runs are the independent confirmation of the local ones.
 IN_CI = bool(os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'))
-# The Lake packages whose build outputs the units read (and the full build builds first).
-PACKAGES = ('.', 'tests/roadmap', 'tests/diff')
 # The environment a unit inherits is an input, every variable of it except these: the run's own
 # scratch paths, admission, worker counts and pass store, which differ per run and select no
-# result (the guard always sets ELAN_NO_OVERRIDE_NOTICE for the units); and the shell's and the
-# terminal's session state (RUN_PREFIXES), which no check reads. A variable not named here is an
+# result (the guard always sets ELAN_NO_OVERRIDE_NOTICE for the units; LEAN_NUM_THREADS and
+# AIR2LEAN_GUARD_MODE schedule, and differ between `--pending` and the guarded run); and the
+# shell's and the terminal's session state (RUN_PREFIXES). A variable not named here is an
 # input: a new one runs every unit again.
 RUN_VARIABLES = ('AIR2LEAN_FIXTURE_REPLAY_CACHE', 'AIR2LEAN_TOOLCHAIN_RUNTIME_RUN', 'AIR2LEAN_GUARD_ADMISSION',
                  'AIR2LEAN_GUARD_MODE', 'AIR2LEAN_GUARD_PRIORITY', 'AIR2LEAN_JOBS', 'AIR2LEAN_MEM_MIB',
-                 'AIR2LEAN_LOCK_WAIT', 'AIR2LEAN_BUILD_LOCK', 'AIR2LEAN_BUILD_MEM_MIB',
+                 'AIR2LEAN_LOCK_WAIT', 'AIR2LEAN_BUILD_MEM_MIB',
                  'AIR2LEAN_FIXTURE_PASSES', 'AIR2LEAN_FULL_BUILD_INNER', 'GITHUB_WORKSPACE',
                  'LEAN_NUM_THREADS', 'ELAN_NO_OVERRIDE_NOTICE', 'PWD', 'OLDPWD', 'SHLVL', '_')
 RUN_PREFIXES = ('CLAUDE', 'AI_AGENT', 'WARP_', 'TERM', 'COLORTERM', 'SSH_', 'XPC_', '__CF', 'HIST')
+RUN_PREFIX_EXCEPTIONS = ('TERMINFO',)  # read by curses-based tools: an input
 
 
-def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+class Unkeyable(Exception):
+    """An input the key cannot cover: nothing is reused or recorded."""
 
 
 def directory_records(path):
     """Every file below PATH (followed through aliases) with its content digest, and each alias's
-    target (scripts/assumptions.py input_tree_records)."""
+    target (scripts/assumptions.py input_tree_records); None when PATH does not exist."""
     if not path.exists():
         return None
     return [[str(p.relative_to(path)), link, content]
             for p, link, content in AS.input_tree_records(path, binaries=True)]
 
 
-def run_inputs(tree):
-    """Everything a unit can read that the run does not choose per unit: the content of every
-    file of the checkout (tracked and untracked, `Tree`) and of the whole-tree generated files,
-    every build output of the Lake packages the units read, the Lean toolchain, the interpreter,
-    the host and the inherited environment (ENV_*). A unit's own key adds its CI step and its
-    Zig compilers (`unit_key`)."""
-    files = sorted(set(tree.files) | {f for f in GENERATED.paths(ROOT) if (ROOT / f).is_file()})
-    return {
-        'schema': SCHEMA,
-        'checkout': [[f, AS.file_sha256(ROOT / f)] for f in files],
-        'builds': {p: directory_records(ROOT / p / '.lake/build') for p in PACKAGES},
-        'lean': AS.toolchain_runtime_sha256(Path(AS.lake_env('LEAN_SYSROOT')).resolve()),
-        'tools': {name: path and [path, AS.file_sha256(Path(path)), subprocess.run(
-                      [path, '--version'], capture_output=True, text=True).stdout.strip()]
-                  for name in ('python3', 'bash', 'git') for path in [shutil.which(name)]},
-        'host': [platform.platform(), platform.machine(), HOST],
-        'environment': {k: v for k, v in os.environ.items()
-                        if k not in RUN_VARIABLES and not k.startswith(RUN_PREFIXES)},
-    }
+def worktree_records(root):
+    """Every file of the worktree ROOT, ignored or not, by content: the checkout, its generated
+    files, every Lake package's `.lake` (build outputs, receipts, extraction drivers, tool traces,
+    mutants) and any other file a unit may read below ROOT. Left out: `.git` (its state: `git_state`)
+    and `__pycache__` (bytecode Python checks against its source). An alias records its target;
+    one that leaves ROOT also records what it reaches."""
+    records = []
+    for directory, dirs, files in os.walk(root):
+        here = Path(directory)
+        dirs[:] = sorted(d for d in dirs if d != '__pycache__' and not (here == root and d == '.git'))
+        for name in sorted([*dirs, *files]):
+            path = here / name
+            if here == root and name == '.git':
+                continue
+            rel = str(path.relative_to(root))
+            if path.is_symlink():
+                target, reached = os.readlink(path), path.resolve()
+                inside = reached == root or root in reached.parents
+                records.append([rel, '->', target, None if inside else
+                                directory_records(reached) if reached.is_dir() else
+                                AS.file_sha256(reached) if reached.is_file() else 'missing'])
+                if name in dirs:
+                    dirs.remove(name)  # not descended: an alias inside ROOT is covered by its target
+            elif name in files:
+                records.append([rel, AS.file_sha256(path)])
+    return records
 
 
-def unit_key(unit, run_digest, compilers):
-    """The key of UNIT's pass: the run's inputs (`run_inputs`, as RUN_DIGEST), the CI step it is
-    (its rendered script, environment and the native runs it leaves out on this host) and the
-    content of each Zig compiler it names (COMPILERS: (kind, version) -> digest)."""
-    return digest([SCHEMA, run_digest, unit['name'], unit['run'], unit['env'], unit['skipped'], unit['error'],
-                   [[kind, version, compilers[kind, version]]
-                    for kind, versions in sorted(unit['toolchains'].items()) for version in versions]])
+def git_state(root):
+    """What git reports beside the files: HEAD, the index and the main branch it is compared to."""
+    def git(*args):
+        result = subprocess.run(['git', *args], cwd=root, capture_output=True)
+        return [result.returncode, hashlib.sha256(result.stdout).hexdigest()]
+    return [git('rev-parse', 'HEAD'), git('ls-files', '-s', '-z'), git('rev-parse', '--verify', '-q', 'origin/main')]
+
+
+def tool_records(name):
+    """A tool on PATH: its real file, content and version."""
+    path = shutil.which(name)
+    if not path:
+        return None
+    real = Path(path).resolve()
+    return [path, str(real), AS.file_sha256(real),
+            subprocess.run([path, '--version'], capture_output=True, text=True).stdout.strip()]
+
+
+def python_records():
+    """The `python3` the units run: its interpreter and its standard and site libraries."""
+    out = subprocess.run(['python3', '-I', '-c', 'import json, sys, sysconfig; print(json.dumps('
+                          '[sys.executable, sysconfig.get_paths()["stdlib"], sysconfig.get_paths()["purelib"]]))'],
+                         capture_output=True, text=True, check=True).stdout
+    executable, stdlib, purelib = json.loads(out)
+    return [tool_records('python3'), AS.file_sha256(Path(executable).resolve()),
+            *(CAS.digest(directory_records(Path(p))) for p in (stdlib, purelib))]
+
+
+def compiler_root(kind, zig):
+    """The installation directory of a Zig binary: its `lib` beside it, or one level up (bin/)."""
+    if kind == 'patched':
+        return zig.parent.parent
+    return zig.parent.parent if zig.parent.name == 'bin' else zig.parent
 
 
 def compiler_digests(units):
-    """(kind, version) -> digest of the content of that Zig compiler's installation; None when this
-    host cannot provide it (its unit fails, and a failing unit records no pass)."""
+    """(kind, version) -> digest of the content of that Zig compiler's installation, for every
+    compiler a unit names and every unit's stock Zig (put first on its PATH, `_stage`); for a
+    stock Zig this host cannot provide, the `zig` on PATH the unit then runs (or None)."""
     found = {}
-    for kind, version in sorted({(k, v) for u in units for k, vs in u['toolchains'].items() for v in vs}):
+    wanted = {(k, v) for u in units for k, vs in u['toolchains'].items() for v in vs}
+    wanted |= {('stock', u['zig']) for u in units}
+    for kind, version in sorted(wanted):
         try:
             zig = resolve(kind, version)
         except Unavailable:
-            found[kind, version] = None
+            fallback = shutil.which('zig')
+            found[kind, version] = fallback and ['path', CAS.digest(directory_records(
+                compiler_root('stock', Path(fallback).resolve())))]
             continue
-        found[kind, version] = digest(directory_records(zig.parent.parent if kind == 'patched' else zig.parent))
-    return found
+        found[kind, version] = CAS.digest(directory_records(compiler_root(kind, zig)))
+    return sorted(found.items())
+
+
+def run_inputs(units):
+    """Everything a unit can read that the run does not choose per unit (`Unkeyable` when it
+    cannot be read): every file of the worktree, ignored or not (`worktree_records`), the
+    worktree's path and git state, the whole Lean toolchain, every Zig compiler the units run,
+    python3 with its libraries, bash and git, the host and the inherited environment (all of it
+    but RUN_VARIABLES and RUN_PREFIXES). A unit's own key adds its CI step (`unit_key`)."""
+    try:
+        sysroot = AS.lake_env('LEAN_SYSROOT')
+        if not sysroot:
+            raise Unkeyable('Lake reports no LEAN_SYSROOT')
+        return {
+            'schema': SCHEMA,
+            'worktree': [str(ROOT), worktree_records(ROOT), git_state(ROOT)],
+            'lean': [sysroot, directory_records(Path(sysroot).resolve())],
+            'zig': compiler_digests(units),
+            'tools': [python_records(), tool_records('bash'), tool_records('git')],
+            'host': [platform.platform(), platform.machine(), HOST],
+            'environment': {k: v for k, v in os.environ.items() if k not in RUN_VARIABLES
+                            and (not k.startswith(RUN_PREFIXES) or k.startswith(RUN_PREFIX_EXCEPTIONS))},
+        }
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        raise Unkeyable(str(error)) from error
+
+
+def unit_key(unit, run_digest):
+    """The key of UNIT's pass: the run's inputs (`run_inputs`, as RUN_DIGEST) and the CI step it
+    is (its rendered script, environment and the native runs it leaves out on this host)."""
+    return CAS.digest([SCHEMA, run_digest, unit['name'], unit['zig'], unit['toolchains'], unit['run'],
+                       unit['env'], unit['skipped'], unit['error']])
 
 
 def recorded(key):
@@ -421,11 +489,10 @@ def recorded(key):
         return False
 
 
-def record(key, unit, elapsed):
+def record(key, unit, elapsed, head):
     PASSES.mkdir(parents=True, exist_ok=True)
     AS.write_report(PASSES / (key + '.json'), {'key': key, 'unit': unit['name'], 'elapsed_s': elapsed,
-                                                'head': AS.git_revision(ROOT)['head'],
-                                                'recorded': time.strftime('%Y-%m-%dT%H:%M:%S%z')})
+                                                'head': head, 'recorded': time.strftime('%Y-%m-%dT%H:%M:%S%z')})
 
 
 def main(argv=None):
@@ -465,10 +532,16 @@ def main(argv=None):
                 print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
     failed, keys, inputs = [], {}, None
+    selected = units
     if units and not IN_CI:
-        inputs = digest(run_inputs(tree))
-        compilers = compiler_digests(units)
-        keys = {u['name']: unit_key(u, inputs, compilers) for u in units}
+        try:
+            if len({u['name'] for u in units}) != len(units):
+                raise Unkeyable('two units have one name')
+            inputs = CAS.digest(run_inputs(selected))
+            keys = {u['name']: unit_key(u, inputs) for u in units}
+        except Unkeyable as error:  # every unit runs, and no pass is recorded
+            print('fixture-checks: no pass is reused or recorded: %s' % error, file=sys.stderr)
+            inputs = None
     reused = [u for u in units if inputs and not a.rerun and recorded(keys[u['name']])]
     for u in reused:
         print('fixture-checks: %s: a pass of the same inputs is recorded (%s)' % (u['name'], keys[u['name']][:16]))
@@ -503,14 +576,18 @@ def main(argv=None):
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
             # A pass is recorded only for the inputs the whole run saw: unchanged from its start
             # to its end (a unit that changed an input, or an edit during the run, records none).
-            elif inputs is None:  # CI: nothing is recorded
-                pass
-            elif digest(run_inputs(Tree())) == inputs:
-                for u, status, s in zip(units, statuses, stats):  # stats: one per job, in order
-                    if status == 0:
-                        record(keys[u['name']], u, (s or {}).get('elapsed_s'))
-            else:
-                print('fixture-checks: the inputs changed during the run: no pass is recorded')
+            elif inputs is not None:  # CI records nothing
+                try:
+                    after = CAS.digest(run_inputs(selected))
+                except Unkeyable as error:
+                    after = 'unreadable: %s' % error
+                if after == inputs:
+                    head = AS.git_revision(ROOT)['head']
+                    for u, status, s in zip(units, statuses, stats):  # stats: one per job, in order
+                        if status == 0:
+                            record(keys[u['name']], u, (s or {}).get('elapsed_s'), head)
+                else:
+                    print('fixture-checks: the inputs changed during the run: no pass is recorded')
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses):

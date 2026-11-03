@@ -155,40 +155,61 @@ class Passes(unittest.TestCase):
 
 
 class RunInputs(unittest.TestCase):
-    """`run_inputs` covers every file of a scratch checkout, the Lake build outputs and the
-    environment, but not the run's own variables."""
+    """`run_inputs` covers every file of a scratch worktree (ignored ones and every `.lake` too),
+    its git state, the toolchain, the stock Zig every unit runs and the environment, but not the
+    run's own variables; what it cannot read makes the run unkeyable."""
 
-    def test_every_file_build_output_and_variable_is_an_input(self):
+    def test_every_file_git_state_compiler_and_variable_is_an_input(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root, sysroot, zig = Path(directory) / "wt", Path(directory) / "lean", Path(directory) / "zig"
+            for d in (root, sysroot / "bin", zig / "lib"):
+                d.mkdir(parents=True)
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             (root / "tracked").write_text("1")
-            (root / ".gitignore").write_text(".lake/\n")
+            (root / ".gitignore").write_text(".lake/\nignored\n")
             subprocess.run(["git", "-C", str(root), "add", "tracked", ".gitignore"], check=True)
             (root / "untracked").write_text("1")
+            (root / "ignored").write_text("1")
             build = root / "tests/roadmap/.lake/build/lib/lean"
             build.mkdir(parents=True)
             (build / "M.olean").write_text("1")
             (root / ".lake/assurance").mkdir(parents=True)
+            (root / "__pycache__").mkdir()
+            (sysroot / "bin/lean").write_text("lean")
+            (zig / "zig").write_text("zig")
+            (zig / "lib/std.zig").write_text("std")
+            outside = Path(directory) / "outside"
+            outside.write_text("1")
+            unit = {"name": "u", "zig": "0.16.0", "toolchains": {"patched": [], "stock": []}}
             with mock.patch.object(fc, "ROOT", root), \
-                    mock.patch.object(fc.GENERATED, "paths", lambda root: set()), \
-                    mock.patch.object(fc.AS, "lake_env", lambda name: directory), \
-                    mock.patch.object(fc.AS, "toolchain_runtime_sha256", lambda path: "lean"), \
+                    mock.patch.object(fc.AS, "lake_env", lambda name: str(sysroot)), \
+                    mock.patch.object(fc, "resolve", lambda kind, version: zig / "zig"), \
                     mock.patch.dict(os.environ, {"AIR2LEAN_JOBS": "1"}):
-                key = lambda: fc.digest(fc.run_inputs(fc.Tree()))
+                key = lambda: fc.CAS.digest(fc.run_inputs([unit]))
                 first = key()
-                (root / ".lake/assurance/cache.json").write_text("{}")  # a cache: no input
+                (root / "__pycache__/m.pyc").write_text("bytecode")  # bytecode: no input
                 for variable in ("AIR2LEAN_JOBS", "PWD", "CLAUDE_CODE_SESSION_ID", "WARP_X"):
                     os.environ[variable] = "changed"
                 self.assertEqual(key(), first)
+                git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True)
                 for change in (lambda: (root / "tracked").write_text("2"),
                                lambda: (root / "untracked").write_text("2"),
+                               lambda: (root / "ignored").write_text("2"),
                                lambda: (root / "new").write_text(""),
                                lambda: (build / "M.olean").write_text("2"),
-                               lambda: os.environ.__setitem__("SOME_NEW_VARIABLE", "1")):
+                               lambda: (root / ".lake/assurance/cache.json").write_text("{}"),
+                               lambda: git("add", "untracked"),
+                               lambda: (root / "link").symlink_to(outside),
+                               lambda: outside.write_text("2"),
+                               lambda: (sysroot / "bin/lean").write_text("lean2"),
+                               lambda: (zig / "lib/std.zig").write_text("std2"),
+                               lambda: os.environ.__setitem__("SOME_NEW_VARIABLE", "1"),
+                               lambda: os.environ.__setitem__("TERMINFO", "x")):
                     before = key()
                     change()
                     self.assertNotEqual(key(), before)
+                with mock.patch.object(fc.AS, "lake_env", lambda name: ""), self.assertRaises(fc.Unkeyable):
+                    key()
 
 
 if __name__ == "__main__":
