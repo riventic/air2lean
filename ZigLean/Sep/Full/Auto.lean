@@ -2705,6 +2705,17 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
     if isAnd then
       let f1 := fs[1]!.fvarId!
       g ← destruct g fs[0]!.fvarId!
+      -- (the left conjunct's substitution may have reintroduced the right one as a new local:
+      -- followed through the recorded substitutions, `caches.substs`)
+      let f1 ← g.withContext do
+        let lctx ← getLCtx
+        let substs ← (← caches).substs.get
+        let mut f := f1
+        for _ in [0:substs.size] do
+          if lctx.contains f then break
+          let some (.fvar f') := substs.get? f | break
+          f := f'
+        return f
       if (← g.withContext f1.findDecl?).isSome then g ← destruct g f1
       return g
     return ← destruct g fs[1]!.fvarId!
