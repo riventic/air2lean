@@ -428,6 +428,51 @@ theorem ptrAddr_run {m : Mem} {b : BlockId} {blk : Block} (hb : m.blocks[b]? = s
   simp [ptrAddr, hb, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get,
     pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
 
+/-- Address resolution returns the numeric address without changing memory or refuses an
+unknown block. A known block's address remains usable after it is freed. -/
+theorem ptrAddr_cases (p : Ptr) (m : Mem) :
+    (∃ a, (Zig.ptrAddr p).run m = pure (a, m)) ∨
+      (Zig.ptrAddr p).run m = (throw .illegal : Result (Int × Mem)) := by
+  rcases p with ⟨b, off⟩
+  cases b with
+  | none => exact .inl ⟨off, rfl⟩
+  | some b =>
+    cases hb : m.blocks[b]? with
+    | none => exact .inr (by simp [Zig.ptrAddr, hb, zig_unfold])
+    | some blk => exact .inl ⟨(blk.addr : Int) + off, ptrAddr_run hb off⟩
+
+/-- Actual block-address alignment gives the unchanged-memory address run; a footprint or
+the allocation's alignment field alone does not imply this fact. -/
+theorem ptrAddr_aligned {m : Mem} {b : BlockId} {blk : Block} {off align : Nat}
+    (hb : m.blocks[b]? = some blk) (ha : (blk.addr + off) % align = 0) :
+    ∃ a, (Zig.ptrAddr ⟨some b, (off : Int)⟩).run m = pure (a, m) ∧ a % (align : Int) = 0 := by
+  refine ⟨(blk.addr : Int) + off, ptrAddr_run hb off, ?_⟩
+  exact_mod_cast ha
+
+/-- Two successful address resolutions in the same memory have the same value. -/
+theorem ptrAddr_value_eq {p : Ptr} {m : Mem} {a a' : Int}
+    (ha : (Zig.ptrAddr p).run m = pure (a, m))
+    (ha' : (Zig.ptrAddr p).run m = pure (a', m)) : a = a' := by
+  rw [ha] at ha'
+  simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run ha'
+
+/-- A protocol's address resolution preserves memory and scheduling depth. A refused block
+must be permitted by its error policy. -/
+theorem _root_.Zig.Conc.Proto.WP.ptrAddr {Tgt γ : Type} {P : Proto Tgt γ} {p : Ptr}
+    {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {Q : Int → (ThreadId → γ) → Mem → Nat → Prop}
+    (herr : ∀ er, ((Zig.ptrAddr p).run m).run = some (.error er) → P.ErrOk er)
+    (h : ∀ a, (Zig.ptrAddr p).run m = pure (a, m) → Q a G m n) :
+    P.WP t (ConcM.liftMem (Zig.ptrAddr p) : ConcM Tgt Int) Q G m n := by
+  rcases ptrAddr_cases p m with ⟨a, ha⟩ | he
+  · refine Proto.WP.liftMem (fun er hr => (Proto.MemM.noErr_of_run ha er hr).elim) (fun a' m' hr => ?_)
+      (fun hn => by rw [ha] at hn; cases hn)
+    rw [ha] at hr
+    cases hr
+    exact ⟨rfl, h a ha⟩
+  · refine Proto.WP.liftMem herr (fun _ _ hr => by rw [he] at hr; cases hr)
+      (fun hn => by rw [he] at hn; cases hn)
+
 /-- **`@intFromPtr` of a pointer into block `b`, live or freed** (O1): only the knowledge of its
 address is needed. -/
 theorem FTriple.ptrAddr {b : BlockId} {A : Nat} (off : Int) :
