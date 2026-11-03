@@ -62,8 +62,8 @@ one result per value, never a panic or `.illegal`. Each result is `ok` or `OutOf
 final list `alist` is the original items followed by exactly the successfully appended
 values, and the fee of its buffer comes back. A failure leaves the list unchanged
 (`append_spec`), and any number of failures can occur in one run. It is a `CTriple`, as the
-allocator contract is. It replaces the `std` heap's `appendEach_run`/`appendEach_anyPolicy`
-over `append_run` (`Proofs/Lists/Cost.lean`), retired with the legacy logic (L8).
+allocator contract is ([alloc-spec.md](alloc-spec.md#retired-claims) records the `std` heap
+form it replaces).
 
 `tests/roadmap/allocation-policy/Oracle.lean` is a Lean-only runtime check. It covers
 index and size oracles, list-to-oracle agreement, a budget that is freed and reused, the
