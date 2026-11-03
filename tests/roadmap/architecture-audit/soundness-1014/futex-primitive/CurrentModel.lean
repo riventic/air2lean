@@ -3,17 +3,17 @@ import ZigLean.Os.Thread
 import ZigLean.Conc.Sched
 
 /-!
-# Audit S6: current futex primitive mismatches
+# Audit S6: Linux alignment regression and remaining primitive mismatches
 
-These four assertions check the existing primitive at fixed states. The first observes
+These four assertions check the primitive at fixed states. The first observes
 `Sched.runTrace`; the other three observe the actual call's `CoN` frontier and continuation,
 before the scheduler's separate child-handle completion check. They are not client proofs,
 native executions, valid std join ownership claims, or whole-program termination claims.
 
-Linux v6.16, commit038d61fd642278bab63ee8ef722c50d10ab01e8f, supplies the comparison:
+Linux v6.16, commit 038d61fd642278bab63ee8ef722c50d10ab01e8f, supplies the comparison:
 `kernel/futex/core.c` (`get_futex_key`) and `kernel/fork.c:1418–1428` (`mm_release`).
 See `docs/architecture-audit/soundness-2026-10-14.md` §S6. These are current-model
-counterexamples; elaborating them does not mean the primitive has been corrected.
+counterexamples except for the corrected alignment assertion; the other three remain open.
 -/
 
 open Zig Zig.Os
@@ -39,11 +39,11 @@ private def observeWake (call : ConcM Nat (BitVec 64)) (m : Mem) :
   (Sched.runTrace env noKids 20 (fun _ => 0) call m).1.map
     (·.map fun (v, m') => (v.toInt, m'.waiters, m'.woken))
 
-/-- Existing accepted row returns0 at unaligned address4097, with an empty queue.
-    Pinned Linux key validation instead returns-EINVAL before queue lookup. -/
-theorem unaligned_wake_zero :
+/-- Linux key validation rejects unaligned address 4097 before queue lookup. This positive
+    regression observes the corrected returned EINVAL; it does not close the other S6 cases. -/
+theorem unaligned_wake_einval :
     observeWake (Linux.futex_3arg (p.add 1) 0x81 1) base =
-      some (.ok (0, #[], #[])) := by
+      some (.ok (-22, #[], #[])) := by
   decide +kernel
 
 private def queued : Mem := {
@@ -75,7 +75,7 @@ private def adjacent : Mem := {
   waiters := #[(1, ⟨some 1, 0⟩)]
 }
 
-/-- Primitive-boundary evidence: equal numeric addresses4100, but the actual WAKE
+/-- Primitive-boundary evidence: equal numeric addresses 4100, but the actual WAKE
     continuation misses the other provenance pointer's waiter. No completion claim. -/
 theorem equal_address_ptr_miss :
     (ptrAddr ⟨some 0, 4⟩).run adjacent = (ptrAddr ⟨some 1, 0⟩).run adjacent ∧
@@ -100,7 +100,7 @@ private def twoRawWaiters : Mem := {
   waiters := #[(1, p), (2, p)]
 }
 
-/-- Primitive-boundary evidence: actual cloneExit clearsctid and wakes both queued
+/-- Primitive-boundary evidence: actual cloneExit clears ctid and wakes both queued
     raw waiters. No claim that two valid std join-handle owners coexist or complete. -/
 theorem cleartid_over_wake :
     ∃ (count : Mem → Nat) (k : Nat → Mem → CoN Nat (Unit × Mem) 1),

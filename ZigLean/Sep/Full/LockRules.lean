@@ -41,6 +41,14 @@ variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt �
 
 /-! ## A protocol with the lock -/
 
+/-- A protocol's lock invariant supplies actual numeric alignment to the generic futex
+rules. The WP walker can forward this fact without opening the invariant in a client. -/
+theorem Fits.ptrAddr_aligned (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem}
+    (hi : P.inv G m) :
+    ∃ a, (Zig.ptrAddr L.ptr).run m = pure (a, m) ∧ a % 4 = 0 := by
+  obtain ⟨rX, hL, -⟩ := (hP.inv _ _).mp hi
+  exact hL.w.blk.ptrAddr_aligned
+
 /-- If every thread has ended, sleeps at a futex or waits at a join, no thread waits at the
 word. -/
 theorem Fits.noWaits (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : Mem}
