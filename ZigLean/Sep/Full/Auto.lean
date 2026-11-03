@@ -4435,9 +4435,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       M := M ++ L
       L := #[]
     unless L.isEmpty || junkQ do throwError "fsym: atoms left over{indentExpr (sepOf L)}"
-    -- Planning chose the witnesses; final AC proofs cannot choose an unresolved frame by
-    -- unifying it with the first source atom (which may be a pure fact or a linear resource).
-    let reorder (x y : Expr) : TacticM Expr := withNewMCtxDepth (acEq x y)
+    -- (planning chose the witnesses; the final AC proofs, `acEq`, choose none)
     let (S, core) ← if junkQ then do
         let J := mkConst ``Zig.Full.Junk
         let rec toJunk (xs : List Expr) : MetaM Expr := do
@@ -4456,17 +4454,17 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         let pj ← toJunk L.toList
         let Lx := sepOf L
         if M.isEmpty then
-          pure (J, ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[← reorder P Lx], pj])
+          pure (J, ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[← acEq P Lx], pj])
         else
           let rec frame (ms : List Expr) : MetaM Expr := do
             match ms with
             | [] => pure pj
             | m :: rest => mkAppM ``imp_sep #[← mkAppOptM ``imp_refl #[m], ← frame rest]
-          pure (sepOf (M.push J), ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[← reorder P (sepOf (M.push Lx))],
+          pure (sepOf (M.push J), ← mkAppM ``imp_trans #[← mkAppM ``imp_eq #[← acEq P (sepOf (M.push Lx))],
             ← frame M.toList])
       else do
         let S := sepOf M
-        pure (S, ← mkAppM ``imp_eq #[← reorder P S])
+        pure (S, ← mkAppM ``imp_eq #[← acEq P S])
     trace[fsym] "plan: matched"
     let mut left := []
     let mut body := core
@@ -4479,7 +4477,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       T := mkSep f T
     let T' ← instantiateMVars T
     let Qf ← instantiateMVars Qi
-    let eT ← reorder T' Qf
+    let eT ← acEq T' Qf
     let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[body, ← mkAppM ``imp_eq #[eT]], pQ]
     let pf ← instantiateMVars pf
     if pf.hasExprMVar then
