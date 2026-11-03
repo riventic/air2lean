@@ -221,11 +221,9 @@ theorem rest_main {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m)
   obtain ⟨A, bs, -, -, -, rIO, rM, -, rfl, -, hM⟩ := hu.rest
   obtain ⟨rL, ho, -⟩ := hi.rest
   obtain ⟨rT, -, hh⟩ := ho.holds
-  have he := hh.swap.extTrue
-  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
-  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
-  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
-  exact ⟨rM, hM, he⟩
+  have he : ExtTrue m ((L.wordR m).gh.add (rL.gh.add (rIO.gh.add rM.gh))) := hh.swap.extTrue
+  rw [Ghost.add_comm (L.wordR m).gh, Ghost.add_comm rL.gh, Ghost.add_comm rIO.gh] at he
+  exact ⟨rM, hM, he.of_add.of_add.of_add⟩
 
 theorem main_lt {X : ThreadId → Ph} {m : Mem} (h : Shape X m) : 0 < m.threads.size := by
   obtain ⟨-, -, -, ⟨_, _, _, _, _, hs, _⟩ | ⟨_, _, _, _, _, hs, _⟩⟩ := h <;> omega
@@ -245,8 +243,8 @@ theorem io_cell {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {
   obtain ⟨blk, hblk, -, -, hA'⟩ := ho.rest_addr (b := 0) (x := x) (fc := fc) (by
     have hW : (L.wordR m).heap (0, x) = none := cellsAt_none fun ⟨_, h2, h3⟩ => by
       have := (LockWord.off_erase.mp hi.xoff (0, x) ⟨rfl, h2, h3⟩)
-      simp [hfcX] at this
-    simp [FHeap.union_apply, hW, hL, hfcX])
+      simp [hfc] at this
+    simp [FHeap.union_apply, hW, hL, hfc])
   exact ⟨blk, hblk, by rw [hA', hA]⟩
 
 /-- **The `Counter` is block 0**: live, 24 bytes on the stack, at an address that is a multiple of

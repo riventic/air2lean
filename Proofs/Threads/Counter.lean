@@ -967,6 +967,13 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
       if bump.again4 r.1 then bumpInv n u p r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : bumpLocals) => 0) s)
       else bumpPost n u p r G' m' d') G m d := by
+  unfold bump.loop4
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
+  -- the body's step tick: the invariant does not read the step count
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : bumpInv n u p s G { m with ticks := m.ticks + 1 } d := h
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
   obtain ⟨hcur, hle, hi, he⟩ := h
   have hg : (Conc.upd G u (.bump p s.i.toNat false)) u = .bump p s.i.toNat false :=
     Conc.upd_self _ _ _
@@ -975,8 +982,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
   have hlt₀ : m.current < m.threads.size := by rw [hcur]; exact (inv_kid n hi hg).2.1
   have hcs₀ : m.clocks.size = m.threads.size := by
     obtain ⟨_, _, _, _, h1, h2, _⟩ := hi; rw [h1, h2]
-  unfold bump.loop4
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
   refine WP.bind (WP.callMC_ptrProject (proj_ctx n hi he hg (k := 8) (by decide)) ?_)
   dsimp only
   refine WP.bind (WP.liftM (fun e h => (load_n_noErr n hi he hg hcur e h).elim)
@@ -1487,6 +1492,10 @@ structure PreA (m : Mem) : Prop where
   atm : m.atomics = #[]
   fp : ∀ e ∈ m.footprint, VClock.le e.clock (m.clocks[0]!) = true
 
+/-- A step tick keeps `PreA`: it reads no step count. -/
+theorem PreA.ticked {m : Mem} (h : PreA m) : PreA { m with ticks := m.ticks + 1 } :=
+  ⟨h.cur, h.th, h.cs, h.atm, h.fp⟩
+
 theorem preA_recordAt {m : Mem} {b o l : Nat} {k : AccessKind} (h : PreA m) :
     PreA (m.recordAt b o l k) := by
   obtain ⟨hc, ht, hs, ha, hf⟩ := h
@@ -1657,9 +1666,14 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
         (d' < d ∨ d' = d ∧ (fun (x : parallelCounterLocals) => 4 - x.local6.toNat) r.2 <
           (fun (x : parallelCounterLocals) => 4 - x.local6.toNat) s)
       else post9 n r G' m' d') G m d := by
-  obtain ⟨rfl, hle, hhd, hpa, hpb, hcnt, hsl⟩ := h
   unfold parallelCounter.loop9
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : inv9 n s G { m with ticks := m.ticks + 1 } d := by
+    obtain ⟨h1, h2, h3, hpa, h5⟩ := h; exact ⟨h1, h2, h3, hpa.ticked, h5⟩
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
+  obtain ⟨rfl, hle, hhd, hpa, hpb, hcnt, hsl⟩ := h
   split
   · rename_i hlt
     have hlt' : s.local6.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
@@ -1872,9 +1886,13 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
         (d' < d ∨ d' = d ∧ (fun (_ : parallelCounterLocals) => 0) r.2 <
           (fun (_ : parallelCounterLocals) => 0) s)
       else post32 n r G' m' d') G m d := by
-  obtain ⟨hstarted, hle, hcur, hi, he⟩ := h
   unfold parallelCounter.loop32
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : inv32 n s G { m with ticks := m.ticks + 1 } d := h
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
+  obtain ⟨hstarted, hle, hcur, hi, he⟩ := h
   split
   · rename_i hlt
     have hlt' : s.local29.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
@@ -1996,11 +2014,15 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
         (d' < d ∨ d' = d ∧ (fun (_ : parallelCounterLocals) => 0) r.2 <
           (fun (_ : parallelCounterLocals) => 0) s)
       else post88 n r G' m' d') G m d := by
+  unfold parallelCounter.loop88
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : inv88 n s G { m with ticks := m.ticks + 1 } d := h
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
   obtain ⟨hle, hcur, J, hJl, hJle, hi, he⟩ := h
   have hnd : ∀ q, (Conc.upd G 0 (.main 4 J)) m.current ≠ .bump q n.toNat true := by
     rw [hcur, Conc.upd_self]; intro q h; cases h
-  unfold parallelCounter.loop88
-  simp only [StateT.run_bind, StateT.run_get, pure_bind]
   split
   · rename_i hlt
     have hlt' : s.local85.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
