@@ -313,7 +313,9 @@ coordinator's tooling holds the host's name and the runner script. The mechanism
   without a guard, `bash -c` included, so the check fails closed. Without the guard there is no
   budget and no `LEAN_NUM_THREADS=1`: one unguarded cold kernel replay (`leanchecker ZigLean` on
   every core) passed 24 GB and drove a shared host into the OOM killer. A per-process watchdog of
-  12 GiB on `lean`, `lake` and `leanchecker` backs the guard up.
+  12 GiB on `lean`, `lake` and `leanchecker` backs the guard up. The caller's
+  `AIR2LEAN_GUARD_PRIORITY` reaches every guard of the job: a gate run while holding the merge
+  lock passes `merge`, so it takes a drain ticket on the host as it would locally.
 - **Identity.** Jobs set a neutral git author and committer, because full `regen.sh` commits.
   Those commits stay on the host; only their content comes back, in the patch.
 - **Results.** The job's output streams back over the ssh connection, which also carries its
