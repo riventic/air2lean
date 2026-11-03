@@ -518,6 +518,7 @@ class RuntimeRunTests(unittest.TestCase):
                 with audit.runtime_run():
                     with self.assertRaisesRegex(ValueError, 'changed during the run'):
                         with audit.runtime_run():  # an enclosing run's
+                            audit.toolchain_runtime_sha256(root)  # the shared digest is used
                             (root / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
 
 

@@ -622,6 +622,7 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
     check_runtime_layout(toolchain)
     record = shared_runtime().get(str(toolchain.resolve()))
     if record is not None and runtime_identity(toolchain) == record['identity']:
+        _USED.add(str(toolchain.resolve()))
         return record['sha256']
     return hash_runtime(toolchain)
 
@@ -679,6 +680,7 @@ def ancestors() -> set[int]:
 
 
 _SHARED: dict = {}
+_USED: set = set()  # the toolchains whose shared digest this process returned
 
 
 def shared_runtime() -> dict:
@@ -713,7 +715,7 @@ def runtime_run():
         if records:  # an enclosing run's: it hashes the bytes again when it ends
             yield
             for toolchain, record in records.items():
-                if runtime_identity(Path(toolchain)) != record['identity']:
+                if toolchain in _USED and runtime_identity(Path(toolchain)) != record['identity']:
                     raise ValueError('toolchain runtime changed during the run')
             return
     sysroot = lake_env('LEAN_SYSROOT')
@@ -721,6 +723,7 @@ def runtime_run():
         raise ValueError(f'Lake reports no absolute LEAN_SYSROOT: {sysroot!r}')
     toolchain = Path(sysroot).resolve()
     check_runtime_layout(toolchain)
+    # The identity before and after the hash: the published pair describes the same bytes.
     identity = runtime_identity(toolchain)
     sha = hash_runtime(toolchain)
     if runtime_identity(toolchain) != identity:
