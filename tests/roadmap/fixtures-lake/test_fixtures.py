@@ -172,13 +172,14 @@ class LakeExtraction(unittest.TestCase):
                 return fx.audit(["AuditControl"], ["honest"], None, package=package)
 
         def drivers():
-            return sorted(p.name for p in (workspace / "AssuranceExtraction").glob("*.lean"))
+            # One generated workspace per driver (scripts/assumptions.py lake_extraction).
+            return sorted(p.relative_to(workspace) for p in workspace.glob("M*/AssuranceExtraction/*.lean"))
 
         honest = "theorem honest : 1 + 1 = 2 := rfl\n"
         self.assertEqual(audit(honest), 0)
         first = drivers()
         self.assertEqual(len(first), 1)
-        olean = workspace / ".lake/build/lib/lean/AssuranceExtraction" / (Path(first[0]).stem + ".olean")
+        olean = workspace / first[0].parts[0] / ".lake/build/lib/lean/AssuranceExtraction" / (first[0].stem + ".olean")
         # The driver's outputs stay out of the package's build directory (the caller's LEAN_PATH).
         self.assertEqual(list((package / ".lake/build/lib/lean").rglob("M*.olean")), [])
         built = olean.stat().st_mtime_ns
