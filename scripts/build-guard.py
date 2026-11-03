@@ -35,6 +35,7 @@ is only a bound when every heavy workload of the machine goes through the same l
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
 
 import argparse
+import contextlib
 import datetime
 import fcntl
 import hashlib
@@ -44,6 +45,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import re
 import selectors
 import shutil
 import signal
@@ -324,6 +326,10 @@ def parse_args(argv):
     p.add_argument("--output", type=Path, action="append", default=[])
     p.add_argument("--tool", action="append", default=[])
     p.add_argument("--zig-name", action="append", default=[])
+    p.add_argument("--measured", metavar="KEY",
+                   help="request what KEY's recent workloads used (measured_request) instead of "
+                        "--rss-mib, which stays the most it may ask for; a workload stopped at that "
+                        "request runs once more with --rss-mib, so it must be one that may run again")
     p.add_argument("command", nargs=argparse.REMAINDER)
     a = p.parse_args(argv)
     if a.command[:1] == ["--"]:
@@ -338,6 +344,8 @@ def parse_args(argv):
         p.error("command/profile exceeds evidence limits")
     if len(a.input) > 32 or len(a.output) > 32 or len(a.tool) > 32 or len(a.zig_name) > 32:
         p.error("at most 32 inputs, outputs, tools or extra Zig names")
+    if a.measured is not None and not MEASURED_KEY.fullmatch(a.measured):
+        p.error("--measured KEY: letters, digits and . _ : / - (at most 128)")
     if len(json.dumps([str(path) for path in [a.cwd, a.lock, a.report, a.log, *a.input, *a.output]]
                       + a.tool + a.zig_name).encode()) > 16 * 1024:
         p.error("metadata paths exceed evidence limits")
@@ -881,9 +889,75 @@ def run(a):
     return report
 
 
+# Measured requests (--measured KEY): the peaks of KEY's recent workloads, per lock (machine), in
+# `<lock>.d/peaks.json`. A workload asks for MEASURED_MARGIN times the largest of the last
+# MEASURED_RUNS peaks (at least MEASURED_FLOOR_MIB, at most --rss-mib), so it waits only for the
+# memory it uses; with no peak recorded it asks for --rss-mib. Its request is its limit, as
+# always: one that outgrows it is stopped (rss_limit), its peak is recorded, and it runs once more
+# with --rss-mib (the next run asks for more, from that peak).
+MEASURED_KEY = re.compile(r"[A-Za-z0-9._:/-]{1,128}")
+MEASURED_RUNS = 5
+MEASURED_MARGIN = 1.5
+MEASURED_FLOOR_MIB = 2048
+
+
+@contextlib.contextmanager
+def peaks(lock):
+    """The recorded peaks (key -> [MiB, ...], newest last), held under `<lock>.d/peaks.lock`; what
+    the body leaves in the dict is written back."""
+    directory = Path(str(lock) + ".d")
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / "peaks.lock").open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            data = json.loads((directory / "peaks.json").read_text())
+            data = data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            data = {}
+        before = json.dumps(data, sort_keys=True)
+        yield data
+        if json.dumps(data, sort_keys=True) != before:
+            atomic_report(directory / "peaks.json", data)
+
+
+def measured_request(a):
+    """The request of KEY (`--measured`): see MEASURED_*."""
+    with peaks(a.lock) as data:
+        recent = [p for p in data.get(a.measured, []) if isinstance(p, (int, float)) and p > 0]
+    if not recent:
+        return a.rss_mib
+    return min(a.rss_mib, max(MEASURED_FLOOR_MIB, math.ceil(max(recent) * MEASURED_MARGIN)))
+
+
+def record_peak(a, report):
+    if report.get("samples"):
+        with peaks(a.lock) as data:
+            runs = [p for p in data.get(a.measured, []) if isinstance(p, (int, float))]
+            data[a.measured] = (runs + [math.ceil(report["peak_sampled_rss_kib"] / 1024)])[-MEASURED_RUNS:]
+
+
 def main():
     a = parse_args(sys.argv[1:])
-    report = run(a)
+    ceiling, attempts = a.rss_mib, []
+    if a.measured:
+        a.rss_mib = measured_request(a)
+    while True:
+        report = run(a)
+        if not a.measured:
+            break
+        record_peak(a, report)
+        report["measured"] = {"key": a.measured, "rss_mib": a.rss_mib, "most_mib": ceiling,
+                              "stopped_attempts": attempts}
+        if report["outcome"] != "rss_limit" or a.rss_mib >= ceiling:
+            atomic_report(a.report, report)
+            break
+        print(f"build-guard: the workload outgrew its measured request of {a.rss_mib:g} MiB "
+              f"(peak {report['peak_sampled_rss_kib'] // 1024} MiB): running it again with {ceiling:g} MiB",
+              file=sys.stderr, flush=True)
+        attempts.append({key: report.get(key) for key in ("elapsed_seconds", "lock_wait_seconds",
+                                                          "peak_sampled_rss_kib", "log_sha256")}
+                        | {"rss_mib": a.rss_mib})
+        a.rss_mib = ceiling
     print(json.dumps({key: report[key] for key in ("outcome", "exit_code", "elapsed_seconds", "peak_sampled_rss_kib")}))
     return report["exit_code"]
 

@@ -74,19 +74,29 @@ fi
 mkdir -p "$logs"
 
 # One admission for the whole build: this script runs again inside one guard, and each phase's
-# guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The phases
-# keep their own limits and reports, each within $rss (the fixture checks' guard,
-# scripts/fixture-checks.sh: 11000 MiB). A phase guard above it fails (inheritance_refused).
+# guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The admission
+# is what recent full builds of the same kind used (build-guard.py --measured, with a margin), at
+# most $rss; one that outgrows it runs again with $rss (Lake keeps what it built). The phases
+# keep their own limits and reports, each within the admission (AIR2LEAN_MEM_MIB in the guard;
+# the fixture checks' guard, scripts/fixture-checks.sh: at most 11000 MiB). A phase guard above
+# it fails (inheritance_refused).
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
-  [ "$fixtures" = 1 ] || inner+=(--no-fixtures)
-  echo "full-build: $threads Lean processes, one admission of $rss MiB (logs: $logs)"
+  kind=full-build
+  [ "$fixtures" = 1 ] || { inner+=(--no-fixtures); kind=full-build:no-fixtures; }
+  echo "full-build: $threads Lean processes, one admission of at most $rss MiB (logs: $logs)"
   status=0
   AIR2LEAN_FULL_BUILD_INNER=1 python3 -B scripts/build-guard.py --cwd "$PWD" --lean-threads "$threads" \
-    --jobs 8 --rss-mib "$rss" --report "$logs/full-build.json" --log "$logs/full-build.log" \
+    --jobs 8 --rss-mib "$rss" --measured "$kind" --report "$logs/full-build.json" --log "$logs/full-build.log" \
     --timeout 28800 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- bash "$0" "${inner[@]}" || status=$?
   grep -E '^(full-build|fixture-checks)' "$logs/full-build.log" || true
   exit "$status"
+fi
+# Inside the guard: its admission (a measured one may be smaller), one Lean process per 11000 MiB.
+if [ "${AIR2LEAN_MEM_MIB:-$rss}" -lt "$rss" ]; then
+  rss=$AIR2LEAN_MEM_MIB
+  threads=$(( rss / per_process > 0 ? (rss / per_process < threads ? rss / per_process : threads) : 1 ))
+  echo "full-build: measured admission of $rss MiB, $threads Lean processes"
 fi
 
 guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through the shared Lake cache

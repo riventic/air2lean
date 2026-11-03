@@ -659,6 +659,7 @@ class FixtureTests(unittest.TestCase):
         argv = run.call_args.args[0]
         self.assertEqual(str(argv[argv.index('--tool') + 1]), str(self.fx.lake))
         self.assertLess(argv.index('--tool'), argv.index('--'))
+        self.assertEqual(argv[argv.index('--measured') + 1], 'regen:nested')
 
     def test_selected_lake_entry_resolves_its_own_custom_named_target(self):
         physical = self.fx.root.parent / 'store/lake-4.34'

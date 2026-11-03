@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Offline guard tests: stdlib Python children only, no compiler probes/builds."""
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -223,6 +225,51 @@ fixture_pause()
         result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
         self.assertEqual((result.returncode, report["outcome"]), (125, "rss_limit"))
         self.assertGreater(report["peak_sampled_rss_kib"], 1024)
+
+    def test_a_measured_request_follows_recent_peaks_within_the_most(self):
+        args = guard.parse_args(["--lock", str(self.root / "shared.lock"), "--report", str(self.root / "r"),
+                                 "--log", str(self.root / "l"), "--rss-mib", "11000", "--measured", "regen:x",
+                                 "--", "true"])
+        self.assertEqual(guard.measured_request(args), 11000)  # nothing measured: the most
+        for peak_mib, request in ((300, 2048), (3000, 4500), (9000, 11000)):
+            guard.record_peak(args, {"samples": 1, "peak_sampled_rss_kib": peak_mib * 1024})
+            self.assertEqual(guard.measured_request(args), request)
+        for _ in range(guard.MEASURED_RUNS):  # only the recent runs count
+            guard.record_peak(args, {"samples": 1, "peak_sampled_rss_kib": 1000 * 1024})
+        self.assertEqual(guard.measured_request(args), 2048)
+        guard.record_peak(args, {"samples": 0, "peak_sampled_rss_kib": 0})  # nothing sampled: no peak
+        with guard.peaks(args.lock) as data:
+            self.assertEqual(data, {"regen:x": [1000] * guard.MEASURED_RUNS})
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            guard.parse_args(["--report", "r", "--log", "l", "--measured", "a b", "--", "true"])
+
+    def test_a_workload_that_outgrows_its_measured_request_runs_again_with_the_most(self):
+        lock, report = self.root / "shared.lock", self.root / "report.json"
+        argv = ["build-guard.py", "--lock", str(lock), "--report", str(report), "--log", str(self.root / "log"),
+                "--rss-mib", "11000", "--measured", "full-build", "--", "true"]
+        args = guard.parse_args(argv[1:])
+        guard.record_peak(args, {"samples": 1, "peak_sampled_rss_kib": 2000 * 1024})
+        limits = []
+
+        def run(a):
+            limits.append(a.rss_mib)
+            outcome = "rss_limit" if len(limits) == 1 else "success"
+            result = {"outcome": outcome, "exit_code": 125 if len(limits) == 1 else 0, "samples": 3,
+                      "peak_sampled_rss_kib": (a.rss_mib + 1) * 1024, "elapsed_seconds": 1}
+            guard.atomic_report(a.report, result)
+            return result
+
+        with mock.patch.object(guard, "run", run), mock.patch.object(sys, "argv", argv), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(guard.main(), 0)
+        self.assertEqual(limits, [3000, 11000])
+        self.assertIn("outgrew its measured request of 3000 MiB", err.getvalue())
+        written = json.loads(report.read_text())
+        self.assertEqual((written["outcome"], written["measured"]["rss_mib"], written["measured"]["most_mib"]),
+                         ("success", 11000, 11000))
+        self.assertEqual([a["rss_mib"] for a in written["measured"]["stopped_attempts"]], [3000])
+        with guard.peaks(lock) as data:
+            self.assertEqual(data["full-build"], [2000, 3001, 11001])
 
     def start_holder(self, *options, cwd=None):
         """A guarded workload that holds its admission until cancelled."""

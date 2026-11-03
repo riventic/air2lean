@@ -26,8 +26,13 @@ mkdir -p "$logs"
 
 python3 -B scripts/fixture-checks.py --prepare ${args[@]+"${args[@]}"}
 start=$SECONDS
+# Within the full build's admission (scripts/full-build.sh; a measured one may be smaller).
+rss=11000
+if [ -n "${AIR2LEAN_FULL_BUILD_INNER:-}" ] && [ "${AIR2LEAN_MEM_MIB:-$rss}" -lt "$rss" ]; then
+  rss=$AIR2LEAN_MEM_MIB
+fi
 if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" \
-    --lean-threads 2 --jobs 2 --rss-mib 11000 --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
+    --lean-threads 2 --jobs 2 --rss-mib "$rss" --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
     --timeout 7200 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- \
     python3 -B scripts/fixture-checks.py --logs "$logs/units" --report "$logs/units.json" \
     ${args[@]+"${args[@]}"}; then
