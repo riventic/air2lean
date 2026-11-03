@@ -58,8 +58,11 @@ class ExtractTests(unittest.TestCase):
             self.assertEqual(commands[0], (['lake', 'build', "Proofs.Dep'", 'Proofs.Check!'], root))
             self.assertEqual(commands[1][0][1:5], ['env', 'env', 'LEAN_PATH=selected:libs', 'lean'])
             self.assertTrue(all(cwd == root for _, cwd in commands))
-            for module in ("Proofs.Dep'", 'Proofs.Check!', 'Fixture.Witness?'):
-                self.assertIn('import ' + module + '\n', drivers[0])
+            # The driver imports only the extractor; the audit command names (and imports) the
+            # modules without running their initializers (E1).
+            self.assertEqual([l for l in drivers[0].splitlines() if l.startswith('import ')],
+                             ['import tools.Assurance'])
+            self.assertIn('#assurance_audit ["Fixture.Witness?", "Proofs.Check!", "Proofs.Dep\'"]\n', drivers[0])
             self.assertEqual(result['extractor'], {'prepared': True})
             verify.assert_called_once_with({'prepared': True}, root, 'extraction')
             self.assertEqual(list((root / '.lake/assurance').iterdir()), [])

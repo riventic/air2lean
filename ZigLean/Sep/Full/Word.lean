@@ -90,6 +90,13 @@ def ApartL (L : LockWord) : Prop := L.b ≠ W.b ∨ L.o + 4 ≤ W.o ∨ W.o + nb
 
 variable {W}
 
+/-- A typed shared word's invariant gives actual numeric alignment, for every supported
+word width rather than a particular event or condition implementation. -/
+theorem Ok.ptrAddr_aligned {m : Mem} (h : W.Ok m) :
+    ∃ a, (Zig.ptrAddr W.ptr).run m = pure (a, m) ∧ a % (nb : Int) = 0 := by
+  obtain ⟨blk, hb, -, -, ha, -, -⟩ := h.blk
+  exact Full.ptrAddr_aligned hb ha
+
 /-- The word's cells depend only on the blocks. -/
 theorem cellsR_congr {m m' : Mem} (h : m'.blocks = m.blocks) : W.cellsR m' = W.cellsR m := by
   have : m'.heap = m.heap := by funext ⟨b, x⟩; simp only [Mem.heap, h]
