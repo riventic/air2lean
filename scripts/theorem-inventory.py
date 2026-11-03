@@ -142,9 +142,22 @@ class BuildCommand:
             command += ['--swap', f'{example}={source}']
         return [*command, '--', *self.modules]
 
-    def renewal(self, lake: Path, python: str) -> list[str]:
-        """Fresh renewal permits rebuilding; historical recording keeps captured policy."""
-        command = self.invocation(lake, python)
+    def deleted(self, root: Path) -> list[str]:
+        """Explicit module targets (dotted names) whose source file is gone from `root`: a run
+        recorded before a module was deleted names it, and Lake cannot build it any more. A library
+        or executable target (an undotted name) is never dropped."""
+        return [m for m in self.modules if '.' in m and not (root / module_path(m)).is_file()]
+
+    def renewal(self, lake: Path, python: str, root: Path | None = None) -> list[str]:
+        """Fresh renewal permits rebuilding; historical recording keeps captured policy. With `root`,
+        modules deleted since the recording are not rebuilt (`deleted`); the new record then no
+        longer names them, and a theorem of a deleted module has no current run (fail closed)."""
+        gone = set(self.deleted(root)) if root is not None else set()
+        if gone and len(gone) == len(self.modules):
+            raise Error('every recorded module is deleted: ' + ', '.join(sorted(gone)))
+        build = BuildCommand(self.kind, self.lake, [m for m in self.modules if m not in gone], self.swaps,
+                             [a for a in self.lake_args if a not in gone], self.python)
+        command = build.invocation(lake, python)
         return [arg for arg in command if arg != '--no-build'] if self.kind == 'lake' else command
 
 

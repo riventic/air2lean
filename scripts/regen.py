@@ -345,7 +345,14 @@ def step_inventory(check):
         record = inventory['runs'][rid]
         log('re-recording theorem-inventory run %s' % rid)
         plan = plans[rid]
-        report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
+        gone = plan.deleted(ROOT)
+        if gone:
+            log('  not rebuilding deleted modules: ' + ', '.join(gone))
+        try:
+            command = plan.renewal(lake, python=PY, root=ROOT)
+        except inv_mod.Error as error:
+            raise Failed(f'theorem-inventory run {rid}: {error}') from error
+        report, logfile = guarded('inventory-' + rid, command, env=lake_env(),
                                   tools=[lake] if plan.kind == 'swap' else [])
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
