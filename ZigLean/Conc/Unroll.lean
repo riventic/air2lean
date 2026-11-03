@@ -1,3 +1,4 @@
+import Lean
 import ZigLean.Conc.Sched
 import ZigLean.Conc.Call
 import ZigLean.Conc.RunResult
