@@ -113,4 +113,21 @@ theorem block_of_value (b : BlockId) (A S : Nat) (K : BlockKind) (bs cs : Array 
       (up (regionIn ⟨some b, 0⟩ A S K 8 (bs ++ cs))) := by
   fsym_entail
 
+/-- A buffer record at a global pointer (`⟨some 0, 0⟩`), as a client names its allocator's
+buffer. -/
+structure Buf where
+  ptr : Ptr
+  cap : Nat
+
+abbrev gbuf (n : Nat) : Buf := ⟨⟨some 0, 0⟩, n⟩
+
+/-- A block variable of a pointer whose block is a value is that block: the invariant's share of
+`b` with `(gbuf n).ptr.block = some b` meets a rule at block `0` (an allocator's granted region,
+whose share the planner opens at the evaluated block). -/
+theorem value_block (n : Nat) (q : Frac) (c : MemM Unit)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (FAssn.ex fun b => ⟪(gbuf n).ptr.block = some b⟫ ⋆ bshare b q n) c
+      (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
 end SepAuto.Facts
