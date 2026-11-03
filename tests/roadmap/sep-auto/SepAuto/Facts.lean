@@ -139,4 +139,34 @@ theorem value_block_linked (p : Ptr) (n : Nat) (q : Frac) (c : MemM Unit)
       (fun _ => bshare 0 q n) := by
   fsym [rule]
 
+/-- The same from a fact `p.block = some 0` (no evaluation). -/
+theorem value_block_fact (p : Ptr) (n : Nat) (q : Frac) (c : MemM Unit) (hp : p.block = some 0)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q n) c
+      (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The same from `some 0 = some b` of a block variable `b` (`hp`: a number without a block fact
+stays a fact of the arithmetic solver). -/
+theorem value_block_eq (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = some b) (hb : some 0 = some b)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The same from `some b = some 0`. -/
+theorem value_block_eq_symm (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = some b) (hb : some b = some 0)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- A caller's term that names the substituted block variable takes its value (the
+substitution is recorded, `substRecorded`). -/
+theorem value_block_caller_term (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hb : (gbuf n).ptr.block = some b)
+    (rule : FTotalTriple (bshare b q n) c (fun _ => bshare b q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
 end SepAuto.Facts
