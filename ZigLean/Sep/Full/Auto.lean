@@ -4112,7 +4112,9 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
           let R := sepOf ((atoms Qi).erase a)
           let hbr ← mkAppOptM (if pos then ``imp_ite_pos else ``imp_ite_neg) #[t, e, c, inst]
           let h1 ← mkAppM ``imp_sep #[hbr, ← mkAppOptM ``imp_refl #[R]]
-          let h2 ← mkAppM ``imp_eq #[← acEq (mkSep a R) Qi]
+          -- A structural reorder must not choose the rule's witnesses or its outer frame.
+          let eQ ← withNewMCtxDepth (acEq (mkSep a R) Qi)
+          let h2 ← mkAppM ``imp_eq #[eQ]
           let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[h1, h2], pQ]
           let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep br R])
           g.assign (← mkAppM ``EUpd.trans #[g2, ← mkAppM ``EUpd.of_imp #[pf]])
