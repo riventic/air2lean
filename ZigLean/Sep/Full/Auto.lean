@@ -2773,17 +2773,48 @@ partial def ptrBase (p : Expr) : Expr :=
 
 /-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
 `x.block = y.block` (definitionally, also through `Ptr.add`/`Ptr.elem`, or by a fact), `b₂` is
-replaced by `b₁`. -/
+replaced by `b₁`. A block variable equal to a value is that value: from `some k = some b`, and
+from `x.block = some b` where `x`'s block, or `y.block` with a fact `x.block = y.block`, is
+`some k` by a fact or by reducible evaluation (a global's pointer `⟨some 0, 0⟩`, also behind an
+`abbrev`), `b` is replaced by `k`, as the pointer formation and the planner evaluate it. -/
 partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
   let hyps := (← getLCtx).foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
+  -- `some k` of a value `k`
+  let isVal (e : Expr) := e.isAppOfArity ``Option.some 2 && !e.appArg!.hasFVar && !e.appArg!.hasMVar
+  -- `b` replaced by `k` from `pf : v = some b`, `v` reducing to `some k`
+  let subVal (pf v b : Expr) : TacticM MVarId := do
+    let e ← mkExpectedTypeHint pf (← mkEq v (mkApp v.appFn! b))
+    let g ← g.assert `hblk (← mkEq v.appArg! b) (← mkAppM ``Option.some.inj #[e])
+    let (h, g) ← g.intro1
+    subst g h
   let mut someEqs := #[]
   let mut blkEqs := #[]
+  let mut valEqs := #[]
   for d in hyps do
     let ty ← instantiateMVars d.type
     let some (_, l, r) := ty.eq? | continue
+    let someVar := r.isAppOfArity ``Option.some 2 && r.appArg!.isFVar
+    if isVal l && someVar then return ← unifyBlocks (← subVal d.toExpr l r.appArg!)
+    if isVal r && l.isAppOfArity ``Option.some 2 && l.appArg!.isFVar then
+      return ← unifyBlocks (← subVal (← mkEqSymm d.toExpr) r l.appArg!)
     unless l.isAppOfArity ``Zig.Ptr.block 1 do continue
-    if r.isAppOfArity ``Option.some 2 && r.appArg!.isFVar then someEqs := someEqs.push (d, l, r.appArg!)
+    if someVar then someEqs := someEqs.push (d, l, r.appArg!)
     else if r.isAppOfArity ``Zig.Ptr.block 1 then blkEqs := blkEqs.push d
+    else if isVal r then valEqs := valEqs.push d
+  for (d, l, b) in someEqs do
+    -- `l`, or the other side of a fact `l = y.block` or `l = some k`, with a proof that it is
+    -- `some b`
+    let mut alts := #[(l, d.toExpr)]
+    for e in blkEqs ++ valEqs do
+      let some (_, x, y) := (← instantiateMVars e.type).eq? | continue
+      if ← withReducible (isDefEq x l) then
+        alts := alts.push (y, ← mkEqTrans (← mkEqSymm e.toExpr) d.toExpr)
+      else if ← withReducible (isDefEq y l) then
+        alts := alts.push (x, ← mkEqTrans e.toExpr d.toExpr)
+    for (x, pf) in alts do
+      let v ← if x.isAppOfArity ``Zig.Ptr.block 1 then
+          whnfR (mkApp (mkConst ``Zig.Ptr.block) (ptrBase x.appArg!)) else pure x
+      if isVal v then return ← unifyBlocks (← subVal pf v b)
   for i in [0:someEqs.size] do
     for j in [i+1:someEqs.size] do
       let (d1, l1, b1) := someEqs[i]!

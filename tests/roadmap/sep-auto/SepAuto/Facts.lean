@@ -130,4 +130,13 @@ theorem value_block (n : Nat) (q : Frac) (c : MemM Unit)
       (fun _ => bshare 0 q n) := by
   fsym [rule]
 
+/-- The same through a fact between two pointers' blocks: a grant at `p` in the buffer (its
+token's `p.block = (gbuf n).ptr.block`) has its share at block `0`. -/
+theorem value_block_linked (p : Ptr) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = (gbuf n).ptr.block)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q n) c
+      (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
 end SepAuto.Facts
