@@ -63,6 +63,25 @@ name = "AuditClaims"
 srcDir = "architecture-audit/claims"
 globs = ["AuditClaims.+"]
 
+# The outcome-taxonomy fixtures (Outcomes.Contracts, Outcomes.Taxonomy).
+[[lean_lib]]
+name = "Outcomes"
+srcDir = "outcome-taxonomy"
+globs = ["Outcomes.+"]
+
+# The strength logs that import a fixture library's module (the others import only ZigLean and
+# Proofs and are elaborated by CI's strength-log step).
+[[lean_lib]]
+name = "StrengthLog"
+srcDir = "strength-log"
+globs = ["OutcomeTaxonomy"]
+
+# The small dispatch machines of dispatch-templates/check.sh (DispatchTemplate.Template).
+[[lean_lib]]
+name = "DispatchTemplate"
+srcDir = "dispatch-templates"
+globs = ["DispatchTemplate.+"]
+
 # The claim-strength regression fixtures (tests/roadmap/claims/check.sh, docs/claim-strength.md).
 # Fixture declares spoofs of reserved claim-head names; no module imports it.
 [[lean_lib]]
