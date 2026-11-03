@@ -876,10 +876,6 @@
       "path": "ZigLean/Conc/Csl.lean"
     },
     {
-      "path": "ZigLean/Conc/Detach.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "ZigLean/Conc/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -889,10 +885,6 @@
     },
     {
       "path": "ZigLean/Conc/Own.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Share.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/TlsLemmas.lean"

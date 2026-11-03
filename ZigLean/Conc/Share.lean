@@ -1,4 +1,4 @@
-import ZigLean.Conc.LockRules
+import ZigLean.Conc.Base.Lock
 import ZigLean.Mem.Alloc
 import ZigLean.Simp
 
