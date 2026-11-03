@@ -7,8 +7,8 @@ each migrated triple gives back a legacy total triple on every `Mem.FSeqPlain` m
 budget, which the legacy logic does not have).
 
 The list is stated over the nodes' fields (`Lists.Linked.node`, with `X := fun _ => emp` here).
-Precondition delta to the legacy `Lists.list` (the deleted `Proofs/Lists/Sep.lean`; its `std`
-heap model nodes live on in `Proofs/Lists/Cost.lean`): its node owned the whole 16-byte block of
+Precondition delta to the legacy `Lists.list` (the deleted `Proofs/Lists/Sep.lean` and
+`Proofs/Lists/Cost.lean`): its node owned the whole 16-byte block of
 the `std` heap model and pinned the block's size and kind (`.heap`) in every byte. The full-state
 cells do not pin the block's size (size-free cells, block extents), and the `std` heap model is
 retired (`docs/alloc-spec.md`, §Retired claims); the rest of a node's allocation is the node's `X`
@@ -67,7 +67,8 @@ example (hd : Option Ptr) (xs : List (BitVec 32)) :
       fun r _ h => sep_mono_left (fun r' h => (up_plist r xs.reverse r').mpr h) h)
     fun r => plist_sizeFree r xs.reverse
 
-/-- `Lists.sum_total` (legacy, `Proofs/Lists/Bounded.lean`, over the fields). -/
+/-- `Lists.sum_total` (legacy, from the deleted legacy `Proofs/Lists/Bounded.lean`, over the
+fields). -/
 example (hd : Option Ptr) (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
     ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → plist hd xs hP → m.Seq → m.FSeqPlain →
       ∃ v m' hQ, (sum hd).run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧

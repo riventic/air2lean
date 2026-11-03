@@ -308,12 +308,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Mem.SameAllocs",
-      "module": "ZigLean.Sep.Cost",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Mem.SameThreads",
       "module": "ZigLean.Sep.Base.Block",
       "status": "target",
@@ -507,11 +501,6 @@
       "module": "ZigLean.Sep.Total",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "name": "TotalTripleWithin",
-      "module": "ZigLean.Sep.Bounded",
-      "status": "legacy-to-retire"
     },
     {
       "name": "Triple",
@@ -834,12 +823,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Lists/Bounded.lean"
-    },
-    {
-      "path": "Proofs/Lists/Cost.lean"
-    },
-    {
       "path": "Proofs/Sync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -913,12 +896,6 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "ZigLean/Sep.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Alloc.lean"
-    },
-    {
       "path": "ZigLean/Sep/AllocSpec.lean"
     },
     {
@@ -937,12 +914,6 @@
       "path": "ZigLean/Sep/Block.lean"
     },
     {
-      "path": "ZigLean/Sep/Bounded.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Cost.lean"
-    },
-    {
       "path": "ZigLean/Sep/Loop.lean"
     },
     {
@@ -950,9 +921,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/Sep.lean"
     },
     {
       "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"

@@ -65,8 +65,7 @@ stale pointer names the dead block, not the live one at its address.
 | Lemma | Address use | Status |
 | --- | --- | --- |
 | `alloc_run`, `rawAlloc_run`, `Lists.alloc_run` | "the new block's range is clear of every live block" (`Mem.newAddr_clear`) | true under every placement; no order |
-| `Lists.append_run` (`Proofs/Lists/Cost.lean`, legacy `std` heap model) | the `@memcpy` overlap check of `ensureTotalCapacityPrecise` | uses the clearance, not the order |
-| `Lists.Append.append_spec` (`Proofs/Lists/Append.lean`, every allocator) | the same check, on two grants of the allocator | the grants are disjoint; no order |
+| `Lists.Append.append_spec` (`Proofs/Lists/Append.lean`, every allocator) | the `@memcpy` overlap check of `ensureTotalCapacityPrecise`, on two grants of the allocator | the grants are disjoint; no order |
 | `alloc_ok` (`ZigLean/Conc/Lemmas.lean`) | the new block id and `Mem.afterAlloc` | every placement |
 
 The concurrent proofs (`Proofs/Atomics`, `Proofs/Sync`, `Proofs/Threadsync`, `Proofs/Iogroup`,
