@@ -331,13 +331,13 @@ def step_inventory(check):
     # Reject unsupported producers/commands before dispatching any stale run, even if its
     # hashes are stale for another reason. Never replay arbitrary historical argv. Modules deleted
     # since a run was recorded are left out of its renewal (refused if nothing is left).
-    plans, dropped = {}, {}
+    plans = {}
     for rid in stale:
         try:
             record = inventory['runs'][rid]
             plan = inv_mod.parse_build_command(ROOT, record.get('command'), lake=inv_mod.producer_path(record))
-            dropped[rid] = plan.deleted(ROOT)
-            plans[rid] = plan.without(dropped[rid]) if dropped[rid] else plan
+            gone = plan.deleted(ROOT)
+            plans[rid] = plan.without(gone), gone
         except inv_mod.Error as error:
             raise Failed(f'theorem-inventory run {rid}: refusing replay: {error}') from error
     try:
@@ -347,9 +347,9 @@ def step_inventory(check):
     for rid in stale:
         record = inventory['runs'][rid]
         log('re-recording theorem-inventory run %s' % rid)
-        plan = plans[rid]
-        if dropped[rid]:
-            log('  not rebuilding deleted modules: ' + ', '.join(dropped[rid]))
+        plan, gone = plans[rid]
+        if gone:
+            log('  not rebuilding deleted modules: ' + ', '.join(gone))
         report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
                                   tools=[lake] if plan.kind == 'swap' else [])
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],

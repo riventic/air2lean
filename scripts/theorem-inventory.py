@@ -153,6 +153,8 @@ class BuildCommand:
         """This command without the deleted modules `gone` (`deleted`). The renewed record no longer
         names them, and a theorem of a deleted module has no current run (fail closed). Refused when
         no module is left or a swapped translation's module is gone."""
+        if not gone:
+            return self
         modules = [m for m in self.modules if m not in gone]
         if not modules:
             raise Error('every recorded module is deleted: ' + ', '.join(gone))
