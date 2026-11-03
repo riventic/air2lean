@@ -55,7 +55,9 @@ test-local def of the executable checks below.
 `Lists.Append.appendEach` (`Proofs/Lists/Policy.lean`) calls the translated
 `ArrayListUnmanaged(u32).append` once per value and continues after `OutOfMemory`.
 `appendEach_spec` holds for every allocator that meets the allocator contract `CAllocSpec`,
-so for every failure decision of the allocator, with no success premise. The client returns
+so for every failure decision of the allocator, with no success premise; its one size premise
+is the contract's room (`fits`) for each capacity the list can grow to, as `append_spec` asks.
+A concrete allocator enters only through its proved contract. The client returns
 one result per value, never a panic or `.illegal`. Each result is `ok` or `OutOfMemory`. The
 final list `alist` is the original items followed by exactly the successfully appended
 values, and the fee of its buffer comes back. A failure leaves the list unchanged
