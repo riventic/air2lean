@@ -899,8 +899,9 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
 
 REPLAY_LIBRARY = "KernelReplay"
 REPLAY_MARKER = "AIR2LEAN_KERNEL_REPLAY:"
-# The memory one kernel replay may take (`replay_jobs`): a `leanchecker` and, for a Lake-built
-# receipt, the `lean` process that runs it. Measured on the dev Mac: `leanchecker ZigLean` peaks at
+# The memory one kernel replay may take (`replay_jobs`): a `leanchecker` on one worker thread
+# (LEAN_NUM_THREADS=1: it checks the module's `M.*` modules one after another, each with an
+# imported environment of its own) and, for a Lake-built receipt, the `lean` process that runs it. Measured on the dev Mac: `leanchecker ZigLean` peaks at
 # 1.86 GB (2026-10-21), and a receipt's process, which imports only `Init` (tools/KernelReplay.lean),
 # at 0.41 GB (2026-11-03; 1.31 GB when it imported `Lean`).
 REPLAY_MIB = 3072
@@ -1218,7 +1219,8 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     runtime_sha = toolchain_runtime_sha256(toolchain)
     if expected_runtime is not None and runtime_sha != expected_runtime:
         raise ValueError('toolchain runtime changed between extraction and replay')
-    environment = {**os.environ, "LEAN_PATH": lean_path}
+    # One worker per checker (tools/KernelReplay.lean `run`): the parallelism is `jobs`.
+    environment = {**os.environ, "LEAN_PATH": lean_path, "LEAN_NUM_THREADS": "1"}
     jobs = replay_jobs()
 
     def load() -> dict:

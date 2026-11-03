@@ -320,7 +320,11 @@ pressure, or its runtime panicked, `INTERNAL PANIC`, e.g. out of memory) decided
 receipt's build fails, so the audit fails and the next one checks the module again (the replay
 without Lake records any nonzero exit as a rejection of this audit and caches only passes). Like the driver's, the receipts' workspace does not use the
 artifact cache (a receipt is a build log; the packages it requires still may). Lake runs at most `replay_jobs` receipts at once, and no more than the
-caller's `LEAN_NUM_THREADS`. The receipts are used only while Lake resolves exactly the audit's
+caller's `LEAN_NUM_THREADS`. Every checker, with Lake or without, runs on one worker thread
+(`LEAN_NUM_THREADS=1`): `leanchecker M` also checks every module `M.*`, each in a task with an
+imported environment of its own, so its peak grows with its workers; a cold `leanchecker ZigLean`
+with the 16 workers of a 16-core host took 25 GB. The replay's memory is then about
+`replay_jobs × REPLAY_MIB` on every host, whatever its core count. The receipts are used only while Lake resolves exactly the audit's
 lookup path in that workspace; a missing, foreign or repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
 
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,

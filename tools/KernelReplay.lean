@@ -48,7 +48,12 @@ def checker : IO System.FilePath := do
 checker did not finish: a signal ended it, or the runtime panicked (`INTERNAL PANIC`, such as
 running out of memory, exits with code 1 but decides nothing about `module`). -/
 def run (module : String) : IO Unit := do
-  let out ← IO.Process.output { cmd := (← checker).toString, args := #[module] }
+  -- One worker: `leanchecker M` checks `M` and every module `M.*` below it, each in a task of its
+  -- own with its own imported environment, so its peak grows with its worker count (a cold
+  -- `leanchecker ZigLean` with 16 workers took 25 GB). The receipts' parallelism is Lake's
+  -- (scripts/assumptions.py `replay_jobs`), not the checker's.
+  let out ← IO.Process.output { cmd := (← checker).toString, args := #[module],
+                                env := #[("LEAN_NUM_THREADS", some "1")] }
   let text := out.stdout ++ out.stderr
   let pass := out.exitCode == 0
   let tail := if pass then "" else (text.takeEnd 2000).toString

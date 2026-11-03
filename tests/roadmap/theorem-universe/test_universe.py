@@ -224,8 +224,9 @@ class ReplayTests(unittest.TestCase):
         installed_inputs(self.toolchain)
         self.calls = self.toolchain / 'calls'
         checker = self.toolchain / 'bin/leanchecker'
-        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n'
-                           '[ "$1" != Killed ] || kill -9 $$\n')
+        self.threads = self.toolchain / 'threads'
+        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\necho "$LEAN_NUM_THREADS" >> {self.threads}\n'
+                           '[ "$1" != Bad ] || { echo rejected; exit 1; }\n[ "$1" != Killed ] || kill -9 $$\n')
         checker.chmod(0o755)
         (self.toolchain / 'bin/lean').write_text('lean')
 
@@ -236,6 +237,13 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g'}, self.toolchain, '')
         self.assertEqual((record['status'], [r['module'] for r in record['rejected']]), ('fail', ['Bad']))
         self.assertEqual(assumptions.replay_record(record), ({'Bad', 'Good'}, {'Bad'}))
+
+    def test_every_checker_runs_on_one_worker_whatever_the_caller_allows(self):
+        # `leanchecker M` checks every `M.*` module in a task of its own: its memory grows with its
+        # workers, so the replay's parallelism is only its pool (replay_jobs), on every host.
+        with mock.patch.dict(os.environ, {'LEAN_NUM_THREADS': '16', 'AIR2LEAN_REPLAY_JOBS': '2'}):
+            assumptions.kernel_replay({'A': 'a', 'B': 'b', 'C': 'c'}, self.toolchain, '')
+        self.assertEqual(self.threads.read_text().split(), ['1', '1', '1'])
 
     def test_rejection_records_the_checker_exit_status(self):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g', 'Killed': 'k'}, self.toolchain, '')
