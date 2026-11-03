@@ -679,10 +679,14 @@ private def copyName : Name → Name
   | .str p s => .str (copyName p) (String.ofList s.toList)
   | .num p k => .num (copyName p) k
 
-/-- The copied import names of `data`: an action of its own (not inlined), so the copies are made
-before `importClosure` frees the region `data` lives in. -/
-@[noinline] private def copyImports (data : ModuleData) : IO (Array Name) :=
-  return data.imports.map (copyName ·.module)
+/-- The imports of the module in `file`, copied out of its compacted region, and the region. An
+action of its own (not inlined): the module's data lives in the region, and every reference to
+it, the compiler's reference-count updates included, ends here, before `importClosure` frees the
+region (an access after that reads unmapped memory: the compiled extractor crashed on it). -/
+@[noinline] private unsafe def readImports (file : System.FilePath) :
+    IO (Array Name × CompactedRegion) := do
+  let (data, region) ← readModuleData file
+  return (data.imports.map (copyName ·.module), region)
 
 /-- The modules `roots` import transitively, read from their `.olean` headers. Each module's data
 is freed once its imports are copied out: building an environment here instead would hold a
@@ -700,8 +704,7 @@ private unsafe def importClosure (roots : Array Name) : IO (Array Name) := do
       if seen.contains m then continue
       seen := seen.insert m
       closure := closure.push m
-      let (data, region) ← readModuleData (← findOLean m)
-      let imports ← copyImports data
+      let (imports, region) ← readImports (← findOLean m)
       region.free
       todo := imports.toList ++ todo
   return closure
