@@ -143,6 +143,12 @@
       "status": "target"
     },
     {
+      "name": "FSem",
+      "module": "ZigLean.Sep.Full.Sem",
+      "status": "target",
+      "approved": "coordinator 2026-11-03 (maintainer: *Impl gate released; semaphore model next to FLock/FCond, L10-sync)"
+    },
+    {
       "name": "FStepIn",
       "module": "ZigLean.Conc.Clock",
       "status": "target",
@@ -428,6 +434,12 @@
       "module": "Proofs.Sync.Contracts",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "SemImpl",
+      "module": "ZigLean.Sep.Full.Sem",
+      "status": "target",
+      "approved": "coordinator 2026-11-03 (maintainer: *Impl gate released, as MutexImpl/CondImpl; L10-sync)"
     },
     {
       "name": "SeqImpl",

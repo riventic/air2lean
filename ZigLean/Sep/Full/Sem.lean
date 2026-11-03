@@ -998,14 +998,17 @@ theorem projI {K : FPrim γ} (hF : L.Fits K P U ok) {G : ThreadId → γ} {m : M
   exact ptrProject_block_run hblk S.p_block (by rw [S.p_off]; omega)
     (by rw [S.p_off]; omega)
 
-/-- **The end of `pst` at count 0** (no signal owed). -/
+/-- **The end of `pst` at count 0** (no signal owed): the holder with the resource `rh` back at
+`g`'s place in the semaphore. -/
 theorem Fits.unpst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
-    {g : γ} (hi : P.inv (upd G t (S.set g .pst)) m) (hc : m.current = t) (hh : L.ph g = .holds)
-    (hcx : C.ph g = .out) (hgs : S.ph g = .out) (h0 : S.cnt (upd G t g) = 0) :
-    P.inv (upd G t g) m := by
-  have := Fits.move hS .out hi hc (by rw [lph_s hS]; exact hh) (by rw [S.cph_set]; exact hcx)
-    fun _ _ _ _ _ _ _ _ _ => by rw [pv_supd]; exact h0
-  rwa [S.set_set, ← hgs, S.set_self] at this
+    {g : γ} {rh : Res} (hi : P.inv (upd G t (L.set (S.set g .pst) .holds rh)) m)
+    (hc : m.current = t) (hcx : C.ph g = .out) (hgs : S.ph g = .out)
+    (h0 : S.cnt (upd G t g) = 0) : P.inv (upd G t (L.set g .holds rh)) m := by
+  rw [← lset_s hS] at hi
+  have := Fits.move hS .out hi hc (by rw [lph_s hS, L.ph_set])
+    (by rw [S.cph_set, cph_l hS]; exact hcx)
+    fun _ _ _ _ _ _ _ _ _ => by rw [pv_supd, pv_lupd]; exact h0
+  rwa [S.set_set, ← hgs, ← sph_l hS g .holds rh, S.set_self] at this
 
 /-- **The holder's `unlock`** by the mutex's contract (`MutexImpl`), back to its ghost value `g`
 out of the mutex's code with no held resource. -/
@@ -1021,6 +1024,18 @@ theorem wp_unlock {K : FPrim γ} (mi : MutexImpl Tgt) (hF : L.Fits K P U ok)
   refine WP.mono (fun _ G' m' d' ⟨hd, hc', hi'⟩ => ⟨hd, hc', ?_⟩)
     (mi.unlock_wp hF hcost hp hLc t _ (L.ph_set _ _ _) ((hF.ok_set _ _ _).mpr hok) io G m d hi hc)
   rwa [hg] at hi'
+
+/-- **The holder's `unlock` at `pst` at count 0** (no signal owed): the end of `pst`
+(`Fits.unpst`), then the `unlock` by the mutex's contract (`wp_unlock`). -/
+theorem Fits.wp_unlockPst (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok)
+    (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr) (hLc : L.c = mi.c) (t : ThreadId) (g : γ)
+    (rh : Res) (hgo : L.ph g = .out) (hgh : L.held g = rnil) (hcx : C.ph g = .out)
+    (hgs : S.ph g = .out) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (L.set (S.set g .pst) .holds rh)) m) (hc : m.current = t)
+    (h0 : S.cnt (upd G t g) = 0) :
+    P.WP t (mi.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧ P.inv (upd G' t g) m')
+      G m d :=
+  wp_unlock mi hS hcost hp hLc t g rh hgo hgh hok io G m d (Fits.unpst hS hi hc hcx hgs h0) hc
 
 /-- **The holder's access to the count that keeps it** (a load): the holder `t`, out of the
 condition's code, keeps its places; the step's post has the same count and pool (`hR`). -/
@@ -1133,7 +1148,7 @@ theorem Fits.wp_take (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
     (hR : ∀ a r, Qa a r → up (pts S.p 8 (S.cnt (upd G t g) - 1)) r)
     (h : ∀ a m' r rh, m'.current = t → m'.threads = m.threads → (∃ rc, Qa a rc) → T r →
       FHeap.Disjoint (L.part g).heap r.heap → S.cnt (upd G t gx) = S.cnt (upd G t g) - 1 →
-      P.inv (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds rh) .pst)) m' →
+      P.inv (upd G t (L.set (S.set (L.setPart gx (rsum (L.part g) r)) .pst) .holds rh)) m' →
       Q a G m' d) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
   have hc₁ := hcnt G rL m hi hnz
@@ -1170,7 +1185,7 @@ theorem Fits.wp_take (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
     exact U_pst hS hgx hgs (by rw [S.cph_set, cph_l hS, cph_part hS]; exact hxx) (S.ph_set _ _)
       (by rw [lph_s hS, L.ph_set]) (hU G rX m' rL rh rp) hL hU' hc hfs hL'
   · rintro a m' rp rh hc' ht ⟨r, hT, hd, rfl⟩ hq hi'
-    rw [upd_upd] at hi'
+    rw [upd_upd, lset_s hS] at hi'
     obtain ⟨rc, -, -, -, hqa, -⟩ := hq
     exact h a m' r rh hc' ht ⟨rc, hqa⟩ hT hd hc₁ hi'
 
@@ -1198,7 +1213,7 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       up (pts S.p 8 (S.cnt (upd G t g)))) x Qa)
     (hR : ∀ a r, Qa a r → up (pts S.p 8 (S.cnt (upd G t g) + 1)) r)
     (h : ∀ a m' rh, m'.current = t → m'.threads = m.threads → (∃ rc, Qa a rc) →
-      P.inv (upd G t (S.set (L.set gx .holds rh) .pst)) m' → Q a G m' d) :
+      P.inv (upd G t (L.set (S.set gx .pst) .holds rh)) m' → Q a G m' d) :
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
   obtain ⟨hc₁, hb⟩ := hcnt G rL m hi
   have hpool := hpool G rL m hi
@@ -1233,7 +1248,7 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
     exact U_pst hS hgx hgs (by rw [S.cph_set, cph_l hS]; exact hxx) (S.ph_set _ _)
       (by rw [lph_s hS, L.ph_set]) (hU G rX m' rL rh) hL hU' hc hfs hL'
   · intro a m' rp rh hc' ht _ hq hi'
-    rw [upd_upd] at hi'
+    rw [upd_upd, lset_s hS] at hi'
     obtain ⟨rc, -, -, -, hqa, -⟩ := hq
     exact h a m' rh hc' ht ⟨rc, hqa⟩ hi'
 
@@ -1312,16 +1327,21 @@ theorem wp_cwait (ci : CondImpl Tgt) (hS : L.Fits S.prim P U ok) (hcost : P.cost
 registration happened before the thread at `pst` (`Inv.rp`), and after the signal every
 registered waiter is signalled, so none is owed a signal. -/
 theorem wp_csignal (ci : CondImpl Tgt) (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
-    (hok : ∀ g, ok g → S.ph g = .out) {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ)
-    (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hgs : S.ph g = .out) (io : Io)
-    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t (S.set g .pst)) m) :
+    (hok : ∀ g, ok g → S.ph g = .out) {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g₀ : γ)
+    (rh : Res) (hgx : C.ph g₀ = .out) (hgs : S.ph g₀ = .out) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hi : P.inv (upd G t (L.set (S.set g₀ .pst) .holds rh)) m) :
     P.WP t (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      P.inv (upd G' t g) m') G m d := by
-  have hgx' : C.ph (S.set g .pst) = .out := by rw [S.cph_set]; exact hgx
-  have hgh' : L.ph (S.set g .pst) = .holds := by rw [lph_s hS]; exact hgh
-  have hgo : S.set (S.set g .pst) .out = g := by rw [S.set_set, ← hgs, S.set_self]
+      P.inv (upd G' t (L.set g₀ .holds rh)) m') G m d := by
+  rw [← lset_s hS] at hi
+  have hgx' : C.ph (S.set (L.set g₀ .holds rh) .pst) = .out := by
+    rw [S.cph_set, cph_l hS]; exact hgx
+  have hgh' : L.ph (S.set (L.set g₀ .holds rh) .pst) = .holds := by rw [lph_s hS, L.ph_set]
+  have hgo : S.set (S.set (L.set g₀ .holds rh) .pst) .out = L.set g₀ .holds rh := by
+    rw [S.set_set, ← hgs, ← sph_l hS g₀ .holds rh, S.set_self]
   refine WP.mono (fun _ G' m' d' ⟨hd, hc, hi', hsig⟩ => ⟨hd, hc, ?_⟩)
-    (ci.signal_wp (Fits.toC hS hok) hcost hp t (S.set g .pst) hgx' (.inr hgh')
+    (ci.signal_wp (Fits.toC hS hok) hcost hp t (S.set (L.set g₀ .holds rh) .pst) hgx'
+      (.inr hgh')
       ((S.sx_iff _).mpr (S.ph_set _ _)) io G m d
       (fun G₁ rX m₁ hg hU u i jr sn e hr =>
         (hS.sub G₁ rX m₁ hU).2.rp u t i jr sn e hr (by rw [hg]; exact S.ph_set _ _)) hi)

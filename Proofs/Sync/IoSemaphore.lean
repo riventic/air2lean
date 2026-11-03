@@ -87,11 +87,12 @@ theorem ioSem_wait_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
     ioMutex.lock_wp hS hcost S.ptr_l.symm hLc t g hgo hokg,
     WP.loop _ _ (waitInv P L t g d) (fun _ => 0) (waitPost P L S t g d)
       (waitLoop_body hS hcost hok hLc t g hgx hgs hokg hpl hone hlive d io),
-    Fits.wp_take hS hcost hcnt hpool hU hgx hgs hxx,
-    wp_csignal ioCond hS hcost hok S.ptr_c.symm t, Fits.unpst hS,
+    Fits.wp_cnt hS hcost, Fits.wp_take hS hcost hcnt hpool hU hgx hgs hxx,
+    wp_csignal ioCond hS hcost hok S.ptr_c.symm t,
+    Fits.wp_unlockPst ioMutex hS hcost S.ptr_l.symm hLc t,
     wp_unlock ioMutex hS hcost S.ptr_l.symm hLc t, hokp,
-    cph_l hS, cph_part hS, sph_l hS, sph_part hS, pv_lupd, pv_pupd, L.ph_set, L.ph_setPart,
-    L.held_setPart, hxo, hxh, hxx, hxs, waitInv, waitPost]
+    S.cph_set, S.ph_set, cph_l hS, cph_part hS, sph_l hS, sph_part hS, pv_lupd, pv_pupd,
+    pv_supd, L.ph_set, L.ph_setPart, L.held_setPart, hxo, hxh, hxx, hxs, waitInv, waitPost]
 
 /-! ## `post` -/
 
@@ -118,12 +119,14 @@ theorem ioSem_post_wp (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
       P.inv (upd G' t gx) m') G m d := by
   subst hp
   unfold Io_Semaphore_post
+  have hbound : ∀ {G rL m}, P.inv (upd G t (L.set g .holds rL)) m →
+      (S.cnt (upd G t g)).toNat + 1 < 2 ^ 64 := fun hi => (hcnt _ _ _ hi).2
   fsym [WP.liftMem_pure (projI hS _ _ _) rfl,
     ioMutex.lock_wp hS hcost S.ptr_l.symm hLc t g hgo hokg,
-    Fits.wp_give hS hcost hcnt hpool hU hgx hgs hxx hsplit hdj,
+    Fits.wp_cnt hS hcost, hbound, Fits.wp_give hS hcost hcnt hpool hU hgx hgs hxx hsplit hdj,
     wp_csignal ioCond hS hcost hok S.ptr_c.symm t,
     wp_unlock ioMutex hS hcost S.ptr_l.symm hLc t, hokx,
-    cph_l hS, sph_l hS, L.ph_set, hxo, hxh, hxx, hxs]
+    S.cph_set, S.ph_set, cph_l hS, sph_l hS, L.ph_set, hxo, hxh, hxx, hxs]
 
 /-- **`Io.Semaphore` of this program is a semaphore** (`SemImpl`), with the program's
 `Io.Mutex` and `Io.Condition`. -/
