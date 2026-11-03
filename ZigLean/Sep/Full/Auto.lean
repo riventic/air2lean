@@ -6249,16 +6249,8 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
     let mut out : Array (Option (Expr × Expr)) := ys.map fun _ => none
     for a in xs do
       let a ← instantiateMVars a
-      if let some i ← rest.findIdxM? fun j => do
-          if a == ys[j]! then return true
-          let s ← saveState
-          let restoreArith ← (← caches).saveArith
-          let ok ← try
-              withNewMCtxDepth (withReducibleAndInstances (isDefEq a ys[j]!))
-            catch ex =>
-              s.restore; restoreArith; throw ex
-          unless ok do s.restore; restoreArith
-          return ok then
+      if let some i ← rest.findIdxM? fun j => return a == ys[j]! ||
+          (← withNewMCtxDepth (withReducibleAndInstances (isDefEq a ys[j]!))) then
         let j := rest[i]!
         let b := ys[j]!
         let pf ← mkExpectedTypeHint (← mkEqRefl b) (← mkEq b a)
@@ -6270,20 +6262,18 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
         let j := rest[i]!
         let b := ys[j]!
         unless b.getAppFn == a.getAppFn do continue
+        -- (an exception reaches the per-hypothesis restore below)
         let s ← saveState
         let restoreArith ← (← caches).saveArith
-        try
-          if a.hasExprMVar then
-            if ← isDefEq a b then
-              let a' ← instantiateMVars a
-              let pf ← mkExpectedTypeHint (← mkEqRefl b) (← mkEq b a')
-              out := out.set! j (some (a', pf))
-              rest := rest.eraseIdx! i; found := true; break
-          else if let some pf ← proveEq b a then
-            out := out.set! j (some (a, pf))
+        if a.hasExprMVar then
+          if ← isDefEq a b then
+            let a' ← instantiateMVars a
+            let pf ← mkExpectedTypeHint (← mkEqRefl b) (← mkEq b a')
+            out := out.set! j (some (a', pf))
             rest := rest.eraseIdx! i; found := true; break
-        catch ex =>
-          s.restore; restoreArith; throw ex
+        else if let some pf ← proveEq b a then
+          out := out.set! j (some (a, pf))
+          rest := rest.eraseIdx! i; found := true; break
         s.restore
         restoreArith
       if mixed && !found && a.hasExprMVar then
@@ -6293,14 +6283,11 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
           unless b.getAppFn == a.getAppFn do continue
           let s ← saveState
           let restoreArith ← (← caches).saveArith
-          try
-            if ← matchArgs a b then
-              let a' ← instantiateMVars a
-              if let some pf ← proveEq b a' then
-                out := out.set! j (some (a', pf))
-                rest := rest.eraseIdx! i; found := true; break
-          catch ex =>
-            s.restore; restoreArith; throw ex
+          if ← matchArgs a b then
+            let a' ← instantiateMVars a
+            if let some pf ← proveEq b a' then
+              out := out.set! j (some (a', pf))
+              rest := rest.eraseIdx! i; found := true; break
           s.restore
           restoreArith
       unless found do return none
