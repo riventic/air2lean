@@ -340,7 +340,17 @@ def main(argv: list[str]) -> int:
         modules = sorted(set(a.modules) | set(library_modules(a.library) if a.library else []))
         if not modules:
             parser.error("audit: name MODULEs or --library LIB")
-        return audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
+        if str(Path(__file__).resolve().parent) not in sys.path:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from assumptions import runtime_run
+        try:
+            # One toolchain-runtime digest for the audit's steps, hashed again at its end.
+            with runtime_run():
+                code = audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
+        except (OSError, ValueError, RuntimeError) as error:
+            print(f"fixtures audit: FAILED\n  {error}", file=sys.stderr)
+            return 1
+        return code
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
     print("\n".join(files()))

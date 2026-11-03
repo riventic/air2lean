@@ -440,6 +440,60 @@ class RuntimeDigestTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'missing toolchain library directory'):
                 audit.toolchain_runtime_sha256(root)
 
+class RuntimeRunTests(unittest.TestCase):
+    """One digest per run (`runtime_run`): hashed at the start and the end, shared in between
+    while the toolchain's metadata is unchanged."""
+
+    def run_on(self, root):
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(audit.RUNTIME_RUN, None)
+        return patch.object(audit, 'lake_env', {'LEAN_SYSROOT': str(root)}.__getitem__)
+
+    def test_shared_while_unchanged_and_rehashed_at_the_end(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            fresh = audit.hash_runtime(root)
+            with self.run_on(root), patch.object(audit, 'hash_runtime', wraps=audit.hash_runtime) as hashed:
+                with audit.runtime_run():
+                    self.assertIn(audit.RUNTIME_RUN, os.environ)
+                    with audit.runtime_run():  # an enclosing run's: nothing hashed again
+                        for _ in range(3):
+                            self.assertEqual(audit.toolchain_runtime_sha256(root), fresh)
+                    self.assertEqual(hashed.call_count, 1)
+                self.assertEqual(hashed.call_count, 2)  # the end of the run
+            self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_change_is_hashed_afresh_and_fails_the_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            other = toolchain(Path(directory) / 'other')
+            with self.run_on(root):
+                with self.assertRaisesRegex(ValueError, 'toolchain runtime changed during the run'):
+                    with audit.runtime_run():
+                        shared = audit.toolchain_runtime_sha256(root)
+                        (root / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+                        changed = audit.toolchain_runtime_sha256(root)
+                        self.assertNotEqual(shared, changed)
+                        self.assertEqual(changed, audit.hash_runtime(root))
+                        # Another toolchain is never the run's.
+                        with patch.object(audit, 'hash_runtime', wraps=audit.hash_runtime) as hashed:
+                            audit.toolchain_runtime_sha256(other)
+                            self.assertEqual(hashed.call_count, 1)
+                self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_failing_run_is_not_hashed_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            with self.run_on(root), patch.object(audit, 'hash_runtime', wraps=audit.hash_runtime) as hashed:
+                with self.assertRaisesRegex(RuntimeError, 'body'):
+                    with audit.runtime_run():
+                        raise RuntimeError('body')
+                self.assertEqual(hashed.call_count, 1)
+            self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+
 class SourceInputTests(unittest.TestCase):
     prepare = staticmethod(ToolCacheTests.prepare)
 
