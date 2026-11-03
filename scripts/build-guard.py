@@ -15,8 +15,16 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
 - `<lock>` itself: held shared by every workload, exclusively with `--exclusive` (timing
   measurements: nothing else guarded runs meanwhile). A guard of an older checkout takes it
   exclusively, so it still runs alone.
-- Fairness: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots while
-  later ones wait behind it, so a large workload is not starved by small ones.
+- Fairness: acquirers queue on `<lock>.d/queue`; the one holding it (the head) collects its slots
+  while later ones wait behind it, so a large workload is not starved by small ones.
+- Backfill: short of its slots, the head keeps only a reservation, ceil(weight x waited /
+  --backfill-ramp) slots (default 900 s; all of them from then on), and publishes the part of it
+  that it does not hold yet in `<lock>.d/heads/` (flock-held). A normal guard waiting behind it,
+  with no drain ticket queued, may run ahead in what is left: it takes all its slots at once, and
+  only when the head's published unmet reservation is free besides them (serialized by
+  `<lock>.d/register`). So the head's admission is never delayed by more than the ramp plus the
+  backfilled workloads already running, each bounded by its --timeout. A queue holder that
+  publishes nothing (a guard of an older checkout) gets no backfill.
 - Drain tickets: a merge guard (AIR2LEAN_GUARD_PRIORITY=merge or --priority merge, only for the
   coordinator's integration gate) and an `--exclusive` guard take a ticket
   `<lock>.d/merge/<ns>-<pid>-<lane>`, flock-held by its guard. While a ticket is queued no normal
@@ -51,6 +59,7 @@ is only a bound when every heavy workload of the machine goes through the same l
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
 
 import argparse
+import contextlib
 import datetime
 import fcntl
 import hashlib
@@ -329,6 +338,9 @@ def parse_args(argv):
                         "while it waits, no new workload is admitted")
     p.add_argument("--no-overcommit", action="store_true",
                    help="hold the slots of --rss-mib, whatever earlier runs of the command needed")
+    p.add_argument("--backfill-ramp", type=float, default=BACKFILL_RAMP,
+                   help="seconds over which a waiting queue head's reservation grows to all its slots "
+                        "(backfill: smaller workloads may run in the rest meanwhile; 0: reserve at once)")
     p.add_argument("--shared-workspace", action="store_true",
                    help="share the Lake workspace with other shared workloads (writes nothing Lake owns)")
     p.add_argument("--priority", choices=PRIORITIES, default=None,
@@ -527,6 +539,8 @@ HISTORY_RUNS = 5        # recent runs of a command kept and considered
 CHARGE_MARGIN = 1.3     # charge = margin x the largest recent peak
 DECLARED_BOUND = 1.5    # declared limits of the running workloads <= bound x budget
 PREEMPT_HOLDOFF = 5     # seconds between two preemptions under one lock
+BACKFILL_RAMP = 900     # seconds after which the queue head reserves all its slots (--backfill-ramp)
+BACKFILL_EVERY = 1.0    # seconds between two backfill attempts of one waiting guard
 UNSAFE_OUTCOMES = ("rss_limit", "preempted")
 KILLED = 128 + signal.SIGKILL  # exit code of a workload SIGKILLed from outside (the OOM killer)
 
@@ -638,6 +652,7 @@ def publish_entry(directory, name, content, handle_of):
     handle.write(json.dumps(content))
     handle.flush()
     os.rename(directory / ("." + name), directory / name)
+    return handle
 
 
 class Admission:
@@ -663,6 +678,10 @@ class Admission:
         self.priority = "exclusive" if a.exclusive else a.priority
         self.tickets = self.directory / "merge"
         self.ticket = None
+        self.heads = self.directory / "heads"
+        self.head = None  # (entry name, handle, unmet slots) while this guard is the waiting queue head
+        self.backfilled = False
+        self.next_backfill = 0.0
         self.waited = False
         self.handles = []
 
@@ -675,7 +694,8 @@ class Admission:
                 "shared_workspace": self.a.shared_workspace, "priority": self.priority,
                 "declared_slots": self.declared, "overcommit": self.overcommit,
                 "charge_mib": self.charge_mib, "history_runs": self.history_runs,
-                "why_declared": self.why_declared, "preempted_at_available_mib": self.preempted_at_mib}
+                "why_declared": self.why_declared, "preempted_at_available_mib": self.preempted_at_mib,
+                "backfilled": self.backfilled}
 
     def open(self, name):
         """A handle on `<lock>.d/name` (a path: that path; None: `<lock>`), held until release."""
@@ -733,8 +753,8 @@ class Admission:
     def within_bound(self):
         """Whether the declared limits of the running workloads stay within DECLARED_BOUND x the
         budget with this one overcommitted. Held slots never exceed the budget, so it suffices that
-        the excess of the overcommitted workloads (declared minus held slots, registered under the
-        queue lock) stays within (DECLARED_BOUND - 1) x the budget, whatever else is admitted
+        the excess of the overcommitted workloads (declared minus held slots, registered under
+        `registry`) stays within (DECLARED_BOUND - 1) x the budget, whatever else is admitted
         (guards at their declared charge, guards of older checkouts)."""
         excess = sum(entry.get("excess_slots", 0) for entry in held_entries(self.running).values())
         return excess + self.declared - self.weight <= (DECLARED_BOUND - 1) * self.capacity
@@ -807,6 +827,81 @@ class Admission:
         queued = self.queued_tickets()
         return not queued or queued[0] == self.ticket
 
+    @contextlib.contextmanager
+    def registry(self):
+        """The short lock under which an admission checks the declared bound and registers: the
+        queue head and backfilling guards admit outside each other's queue lock."""
+        with (self.directory / "register").open("a") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            yield
+
+    def reservation(self, waited):
+        """Slots the waiting queue head keeps after `waited` seconds: a share of its weight that
+        grows linearly to all of it over --backfill-ramp."""
+        if self.a.backfill_ramp <= 0 or waited >= self.a.backfill_ramp:
+            return self.weight
+        return min(self.weight, math.ceil(self.weight * waited / self.a.backfill_ramp))
+
+    def publish_head(self, unmet):
+        """As the waiting queue head, publish the slots it reserves but does not hold yet (a new
+        entry, then the old one goes: a reader may count both, never neither)."""
+        if self.head and self.head[2] == unmet:
+            return
+        name = "%020d-%d" % (time.time_ns(), os.getpid())
+        handle = publish_entry(self.heads, name, {"pid": os.getpid(), "unmet": unmet}, self.open)
+        self.clear_head()
+        self.head = (name, handle, unmet)
+
+    def clear_head(self):
+        if self.head:
+            name, handle, _ = self.head
+            (self.heads / name).unlink(missing_ok=True)
+            self.handles.remove(handle)
+            handle.close()
+            self.head = None
+
+    def admit_overcommitted(self):
+        """Under `registry`: register this workload's excess if it stays within the bound; else
+        fall back to the declared slots (False: collect them first)."""
+        if self.weight == self.declared:
+            return True
+        if self.within_bound():
+            self.register()
+            return True
+        self.weight = self.declared
+        self.why_declared = f"declared limits would exceed {DECLARED_BOUND} x budget"
+        return False
+
+    def backfill(self, main, slots, locked):
+        """Whether this normal guard, waiting behind the queue head, ran ahead of it: it takes
+        all its slots at once, and only if the head's unmet reservation stays free besides them,
+        so the head is never delayed beyond its reservation. A queue holder that publishes no
+        reservation (a guard of an older checkout) gets no backfill."""
+        if self.a.exclusive or self.priority != "normal" or time.monotonic() < self.next_backfill:
+            return False
+        self.next_backfill = time.monotonic() + BACKFILL_EVERY
+        with self.registry():
+            heads = held_entries(self.heads)
+            if not heads or not self.my_turn() or not locked(main, fcntl.LOCK_SH):
+                fcntl.flock(main, fcntl.LOCK_UN)  # (a no-op unless held)
+                return False
+            need = self.weight + sum(max(0, int(entry.get("unmet", 0))) for entry in heads.values())
+            taken = []
+            for handle in slots:
+                if len(taken) == need:
+                    break
+                if locked(handle, fcntl.LOCK_EX):
+                    taken.append(handle)
+            keep = taken[:self.weight] if len(taken) == need else []
+            for handle in taken[len(keep):]:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            if keep and self.admit_overcommitted():
+                self.backfilled = True
+                return True
+            for handle in (*keep, main):
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            return False
+
     def announce(self):
         queued = self.queued_tickets()
         exclusive = sum(name.endswith("-exclusive") for name in queued)
@@ -848,6 +943,7 @@ class Admission:
         self.a.lock.parent.mkdir(parents=True, exist_ok=True)
         self.directory.mkdir(exist_ok=True)
         self.plan()
+        started = time.monotonic()
         digest = hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
         # The workspace first: waiting for one's own checkout must not hold up the queue.
         if refused := take(self.open("ws-" + digest), fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX):
@@ -861,30 +957,42 @@ class Admission:
             while not self.my_turn():
                 if refused := wait():
                     return refused
-            if refused := take(queue, fcntl.LOCK_EX):
-                return refused
+            # The queue holder (the head) collects; a guard waiting behind it may backfill.
+            while not locked(queue, fcntl.LOCK_EX):
+                if self.backfill(main, slots, locked):
+                    return None
+                if refused := wait():
+                    return refused
             if not self.a.exclusive and (refused := take(main, fcntl.LOCK_SH)):
                 return refused
-            # Only the queue holder collects, so slots taken so far stay taken until the rest free up.
+            # Only the queue holder collects. Short of its weight it keeps its reservation (growing
+            # with its wait) and publishes the part it lacks, which backfilling guards leave free.
             # An exclusive head keeps the queue and its ticket until the running workloads end
             # (the drain): no other guard is admitted meanwhile.
-            free, held = list(slots), 0
+            free, held = list(slots), []
             while self.my_turn():
                 if self.a.exclusive:
                     admitted = locked(main, fcntl.LOCK_EX)
                 else:
                     for handle in list(free):
-                        if held < self.weight and locked(handle, fcntl.LOCK_EX):
+                        if len(held) < self.weight and locked(handle, fcntl.LOCK_EX):
                             free.remove(handle)
-                            held += 1
-                    admitted = held == self.weight
-                    if admitted and self.weight < self.declared and not self.within_bound():
-                        self.weight = self.declared  # the bound: collect the declared slots
-                        self.why_declared = f"declared limits would exceed {DECLARED_BOUND} x budget"
-                        continue
+                            held.append(handle)
+                    admitted = len(held) == self.weight
+                    if admitted:
+                        with self.registry():  # the bound, also against backfilling guards
+                            admitted = self.admit_overcommitted()
+                        if not admitted:
+                            continue  # collect the declared slots
+                    else:
+                        keep = self.reservation(time.monotonic() - started)
+                        while len(held) > keep:
+                            handle = held.pop()
+                            fcntl.flock(handle, fcntl.LOCK_UN)
+                            free.append(handle)
+                        self.publish_head(keep - len(held))
                 if admitted:
-                    if self.weight < self.declared:
-                        self.register()  # under the queue lock: the next acquirer's bound sees it
+                    self.clear_head()
                     fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
                     self.leave_queue()
                     return None
@@ -892,11 +1000,13 @@ class Admission:
                     return refused
             # A ticket older than this guard's is queued, and this guard runs nothing yet: it gives
             # back what it collected so far and goes behind it. Running workloads are not touched.
+            self.clear_head()
             for handle in (main, queue, *slots):
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
     def release(self):
         self.leave_queue()
+        self.clear_head()
         self.unregister()
         for handle in self.handles:
             handle.close()

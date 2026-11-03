@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline guard tests: stdlib Python children only, no compiler probes/builds."""
 
+import fcntl
 import importlib.util
 import json
 import os
@@ -477,6 +478,59 @@ fixture_pause()
         self.assertFalse(self.tickets.exists())  # no merge guard, no queue state
         code, evidence = self.attempt(cwd=self.worktree("later"))
         self.assertEqual((code, evidence["admission"]["priority"]), (0, "normal"))
+
+    def test_a_small_guard_backfills_beside_a_waiting_head(self):
+        # Budget 3 GiB: the holder takes one slot; the big head (weight 3) waits and, early in its
+        # ramp, keeps one slot. The small guard runs in the third; the head follows the holder.
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", order, *budget, "--rss-mib", "3000", "--backfill-ramp", "600")
+        code, evidence = self.attempt(*budget, "--lock-wait", "5", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (0, "success"))
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertIsNone(big.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+        self.assertEqual(order.read_text().split(), ["big"])
+        self.assertEqual(os.listdir(Path(str(self.root / "shared.lock") + ".d") / "heads"), [])
+
+    def test_a_head_past_its_ramp_keeps_every_free_slot(self):
+        budget = ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", self.root / "order", *budget, "--rss-mib", "3000",
+                                   "--backfill-ramp", "0")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        self.assertFalse(evidence["admission"]["backfilled"])
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+
+    def test_backfill_leaves_the_heads_unmet_reservation_free(self):
+        # A head (stand-in) holds the queue and publishes one unmet slot.
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        (directory / "heads").mkdir(parents=True)
+        with (directory / "queue").open("a") as queue, (directory / "heads" / "1-1").open("a") as head:
+            fcntl.flock(queue, fcntl.LOCK_EX)
+            fcntl.flock(head, fcntl.LOCK_EX)
+            head.write(json.dumps({"pid": os.getpid(), "unmet": 1}))
+            head.flush()
+            code, _ = self.attempt("--mem-budget-mib", "1024", "--lock-wait", "2", cwd=self.worktree("a"))
+            self.assertEqual(code, 75)  # one free slot: the head's
+            code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("b"))
+            self.assertEqual(code, 0)  # two: one for the head, one for the backfill
+            self.assertTrue(evidence["admission"]["backfilled"])
+
+    def test_no_backfill_behind_a_merge_ticket(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        merge, _ = self.start_waiter("merge", order, *budget, "--rss-mib", "3000", "--priority", "merge")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(merge)
 
     def test_normal_guards_wait_for_a_live_merge_ticket_and_ignore_a_dead_one(self):
         import fcntl
