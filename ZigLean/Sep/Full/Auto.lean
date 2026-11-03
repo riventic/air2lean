@@ -3922,9 +3922,17 @@ def sizeFact? (facts : Array Expr) (bs : Expr)
   return n?
 
 /-- A rule's region bytes and demanded sizes, as matching data only. The original equality
-premises remain independent rule side goals; no proposition or proof is added to the context. -/
+premises remain independent rule side goals; no proposition or proof is added to the context.
+The bytes are those of the precondition's regions and the rule's unknown arrays that its
+precondition holds behind a definition (an allocator's `owned`/`granted`, whose region the planner
+opens later): their size is demanded the same way, so the planner takes them from the state's
+region, not from a token that only names their size. -/
 def ruleRegionSizes (P : Expr) (args : Array Expr) : MetaM (Array (Expr × Expr)) := do
-  let bytes := (atoms P).filterMap fun a => (regionArgs? a).map (·[5]!)
+  let mut bytes := (atoms P).filterMap fun a => (regionArgs? a).map (·[5]!)
+  let inP := (P.collectMVars {}).result
+  for a in args do
+    if bytes.contains a || !inP.contains a.mvarId! then continue
+    if (← instantiateMVars (← inferType a)).isAppOfArity ``Array 1 then bytes := bytes.push a
   if bytes.isEmpty then return #[]
   let mut out := #[]
   for a in args do

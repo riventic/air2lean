@@ -196,4 +196,20 @@ theorem free_large_sized (r u : Ptr) (b : BlockId) (sz ei : BitVec 64) (nxt : Op
         up (regionIn (r.add 24) A S K 8 c5) ⋆ up (regionIn (u.add 24) A S K 8 c6)) := by
   fsym [giveBackN_spec]
 
+/-- A grant behind a definition: a token that names its size, and its bytes. -/
+def TokGrant (T : Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
+  T bs.size ⋆ up (regionIn p A S K 1 bs)
+
+/-- **A rule's bytes behind a definition are the state region's** (`ruleRegionSizes`): the rule
+demands `s.len.toNat = bs.size` of bytes that its precondition holds only inside `TokGrant`. The
+state's token `T old.size` names an array of that size, not the bytes the region holds (`cur`, as
+after a write), so the bytes come from the region and the token matches up to arithmetic. -/
+theorem hidden_bytes_from_region (T : Nat → FAssn) (s : Slice) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hn : s.len.toNat = n) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte, s.len.toNat = bs.size →
+      FTotalTriple (TokGrant T s.ptr A S K bs) c (fun _ => TokGrant T s.ptr A S K bs)) :
+    FTotalTriple (T old.size ⋆ up (regionIn s.ptr A S K 1 cur)) c
+      (fun _ => TokGrant T s.ptr A S K cur) := by
+  fsym [rule]
+
 end SepAuto.Region
