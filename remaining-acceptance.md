@@ -175,7 +175,7 @@ Classification: partial.
 
 zero-argument and multi-argument targets, with per-argument value copying and pointer ownership transfer. Acceptance: mixed value/pointer tuples dispatch correctly and their ownership obligations are generated.
 
-Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): `Tgt.captures` is generated for empty or multi-field captures and classifies every captured field from its AIR type as a copied value, pointer, slice or other; ZigLean.Conc.Capture (runtime) and ZigLean.Conc.Transfer (CSL fork/join and unowned-region lemmas); the thread-tuples proofs discharge the per-argument obligations for value+pointer+atomic and value+pointer workers and prove two negative cases. Remaining: slice and other captures beyond the proved fixtures; general ownership inference.
+Bounded progress ([PR122](https://github.com/riventic/air2lean/pull/122)): `Tgt.captures` is generated for empty or multi-field captures and classifies every captured field from its AIR type as a copied value, pointer, slice or other; ZigLean.Conc.Capture (runtime) and ZigLean.Sep.Full.ThreadSpawn (`FCapture`: CSL fork/join and unowned-region lemmas); the thread-tuples proofs discharge the per-argument obligations for value+pointer+atomic and value+pointer workers and prove two negative cases. Remaining: slice and other captures beyond the proved fixtures; general ownership inference.
 
 ## C02 — Thread-local storage
 
@@ -219,7 +219,7 @@ Classification: complete.
 
 thread-creation failure, supported resource constraints and real API fallback behavior. Acceptance: failure leaves ownership with the caller; synchronous fallback and asynchronous success satisfy the same declared result contract where required.
 
-Completed in [PR125](https://github.com/riventic/air2lean/pull/125): failure leaves ownership with the caller (`WP.spawnFailureRetains`: a refused spawn keeps the C01 `Capture.grant` of the generated captures, so the caller frees it); the synchronous fallback of `Group.async` and an assigned task establish the same declared post (`afterAsync_spec`, `await_spec`); a per-caller thread budget (`Mem.spawnLimit`) makes several failures in one run possible; `threadPair_spec`/`threadPair_safe` and `groupAsync_spec`/`groupAsync_safe` hold for every schedule, resource outcome and budget on the translated retained 0.16.0 export (`tests/roadmap/spawn-failure`). Scope: model proofs; no native adequacy, fairness, termination, `groupConcurrent` contract or process-wide quota.
+Completed in [PR125](https://github.com/riventic/air2lean/pull/125): failure leaves ownership with the caller (`WP.spawnFailureRetains_fowned`: a refused spawn keeps the C01 `FCapture.grant` of the generated captures, so the caller frees it); the synchronous fallback of `Group.async` and an assigned task establish the same declared post (`afterAsync_spec`, `await_spec`); a per-caller thread budget (`Mem.spawnLimit`) makes several failures in one run possible; `threadPair_spec`/`threadPair_safe` and `groupAsync_spec`/`groupAsync_safe` hold for every schedule, resource outcome and budget on the translated retained 0.16.0 export (`tests/roadmap/spawn-failure`). Scope: model proofs; no native adequacy, fairness, termination, `groupConcurrent` contract or process-wide quota.
 
 Maintain exact-source/profile regression and release audit; wider scopes remain separate.
 

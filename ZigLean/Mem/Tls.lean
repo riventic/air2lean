@@ -23,7 +23,8 @@ thread. Its **key** is the block of the main thread's instance in `mem0`; `Emit.
   through a pointer that escaped to another thread throws `.illegal` afterwards. The main
   thread's instances live until the run ends.
 - **Ownership.** An instance is a block of its thread. Passing its pointer to another thread
-  hands over nothing by itself: as for any pointer (`ZigLean/Conc/Transfer.lean`), a
+  hands over nothing by itself: as for any pointer (`FCapture.grant`,
+  `ZigLean/Sep/Full/ThreadSpawn.lean`), a
   concurrent access without a happens-before edge is a data race (`.illegal`), and a proof
   transfers the cells explicitly.
 

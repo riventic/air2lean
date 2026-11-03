@@ -468,7 +468,8 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
 * **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
   `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
-  `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
+  `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated;
+  `Transfer.lean` and the legacy `WP.spawnFailureRetains` deleted).
 * **Spawn failure** (`SpawnLemmas.lean`): the frame of a failed spawn keeps `FOwned` unchanged.
   Done in `Full/ThreadSpawn.lean` (`WP.spawnFailureRetains_fowned`). A struct store whose encoding
   is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/Local.lean`).
