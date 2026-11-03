@@ -58,6 +58,7 @@ Exit status: 0 when every unit passed, else 1 with each failure's log tail.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
 import json
@@ -351,9 +352,8 @@ RUN_VARIABLES = ('AIR2LEAN_FIXTURE_REPLAY_CACHE', 'AIR2LEAN_TOOLCHAIN_RUNTIME_RU
                  'AIR2LEAN_GUARD_MODE', 'AIR2LEAN_GUARD_PRIORITY', 'AIR2LEAN_JOBS', 'AIR2LEAN_MEM_MIB',
                  'AIR2LEAN_LOCK_WAIT', 'AIR2LEAN_BUILD_MEM_MIB',
                  'AIR2LEAN_FIXTURE_PASSES', 'AIR2LEAN_FULL_BUILD_INNER', 'GITHUB_WORKSPACE',
-                 'LEAN_NUM_THREADS', 'ELAN_NO_OVERRIDE_NOTICE', 'PWD', 'OLDPWD', 'SHLVL', '_')
-RUN_PREFIXES = ('CLAUDE', 'AI_AGENT', 'WARP_', 'TERM', 'COLORTERM', 'SSH_', 'XPC_', '__CF', 'HIST')
-RUN_PREFIX_EXCEPTIONS = ('TERMINFO',)  # read by curses-based tools: an input
+                 'LEAN_NUM_THREADS', 'ELAN_NO_OVERRIDE_NOTICE', 'PWD', 'OLDPWD', 'SHLVL', '_', 'TERM')
+RUN_PREFIXES = ('CLAUDE', 'AI_AGENT', 'WARP_', 'TERM_', 'COLORTERM', 'SSH_', 'XPC_', '__CF', 'HIST')
 
 
 class Unkeyable(Exception):
@@ -378,11 +378,10 @@ def worktree_records(root):
     records = []
     for directory, dirs, files in os.walk(root):
         here = Path(directory)
-        dirs[:] = sorted(d for d in dirs if d != '__pycache__' and not (here == root and d == '.git'))
-        for name in sorted([*dirs, *files]):
+        skip = {'__pycache__', '.git'} if here == root else {'__pycache__'}  # `.git`: a file in a worktree
+        dirs[:] = sorted(d for d in dirs if d not in skip)
+        for name in sorted({*dirs, *files} - skip):
             path = here / name
-            if here == root and name == '.git':
-                continue
             rel = str(path.relative_to(root))
             if path.is_symlink():
                 target, reached = os.readlink(path), path.resolve()
@@ -461,16 +460,23 @@ def run_inputs(units):
         sysroot = AS.lake_env('LEAN_SYSROOT')
         if not sysroot:
             raise Unkeyable('Lake reports no LEAN_SYSROOT')
-        return {
-            'schema': SCHEMA,
-            'worktree': [str(ROOT), worktree_records(ROOT), git_state(ROOT)],
-            'lean': [sysroot, directory_records(Path(sysroot).resolve())],
-            'zig': compiler_digests(units),
-            'tools': [python_records(), tool_records('bash'), tool_records('git')],
-            'host': [platform.platform(), platform.machine(), HOST],
-            'environment': {k: v for k, v in os.environ.items() if k not in RUN_VARIABLES
-                            and (not k.startswith(RUN_PREFIXES) or k.startswith(RUN_PREFIX_EXCEPTIONS))},
-        }
+        # The components are independent reads of separate trees: hash them at once (hashlib and
+        # file reads release the GIL), so the digest takes about as long as the worktree alone.
+        with ThreadPoolExecutor() as pool:
+            worktree = pool.submit(worktree_records, ROOT)
+            lean = pool.submit(directory_records, Path(sysroot).resolve())
+            zig = pool.submit(compiler_digests, units)
+            python = pool.submit(python_records)
+            return {
+                'schema': SCHEMA,
+                'worktree': [str(ROOT), worktree.result(), git_state(ROOT)],
+                'lean': [sysroot, lean.result()],
+                'zig': zig.result(),
+                'tools': [python.result(), tool_records('bash'), tool_records('git')],
+                'host': [platform.platform(), platform.machine(), HOST],
+                'environment': {k: v for k, v in os.environ.items()
+                                if k not in RUN_VARIABLES and not k.startswith(RUN_PREFIXES)},
+            }
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         raise Unkeyable(str(error)) from error
 
@@ -532,7 +538,7 @@ def main(argv=None):
                 print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
     failed, keys, inputs = [], {}, None
-    selected = units
+    selected = units  # the run's inputs are those of every selected unit, also a reused one
     if units and not IN_CI:
         try:
             if len({u['name'] for u in units}) != len(units):
@@ -542,10 +548,10 @@ def main(argv=None):
         except Unkeyable as error:  # every unit runs, and no pass is recorded
             print('fixture-checks: no pass is reused or recorded: %s' % error, file=sys.stderr)
             inputs = None
-    reused = [u for u in units if inputs and not a.rerun and recorded(keys[u['name']])]
-    for u in reused:
-        print('fixture-checks: %s: a pass of the same inputs is recorded (%s)' % (u['name'], keys[u['name']][:16]))
-    units = [u for u in units if u not in reused]
+    reused = {u['name'] for u in units if inputs and not a.rerun and recorded(keys[u['name']])}
+    for name in sorted(reused):
+        print('fixture-checks: %s: a pass of the same inputs is recorded (%s)' % (name, keys[name][:16]))
+    units = [u for u in units if u['name'] not in reused]
     if a.pending:
         print('fixture-checks: %d units to run, %d with a recorded pass' % (len(units), len(reused)))
         return 1 if units else 0
@@ -576,11 +582,11 @@ def main(argv=None):
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
             # A pass is recorded only for the inputs the whole run saw: unchanged from its start
             # to its end (a unit that changed an input, or an edit during the run, records none).
-            elif inputs is not None:  # CI records nothing
+            elif inputs is not None:  # None: in CI, or the inputs were unkeyable
                 try:
                     after = CAS.digest(run_inputs(selected))
-                except Unkeyable as error:
-                    after = 'unreadable: %s' % error
+                except Unkeyable:
+                    after = None
                 if after == inputs:
                     head = AS.git_revision(ROOT)['head']
                     for u, status, s in zip(units, statuses, stats):  # stats: one per job, in order

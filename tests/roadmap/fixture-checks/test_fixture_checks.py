@@ -188,7 +188,7 @@ class RunInputs(unittest.TestCase):
                 key = lambda: fc.CAS.digest(fc.run_inputs([unit]))
                 first = key()
                 (root / "__pycache__/m.pyc").write_text("bytecode")  # bytecode: no input
-                for variable in ("AIR2LEAN_JOBS", "PWD", "CLAUDE_CODE_SESSION_ID", "WARP_X"):
+                for variable in ("AIR2LEAN_JOBS", "PWD", "CLAUDE_CODE_SESSION_ID", "WARP_X", "TERM", "TERM_PROGRAM"):
                     os.environ[variable] = "changed"
                 self.assertEqual(key(), first)
                 git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True)
