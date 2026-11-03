@@ -844,4 +844,24 @@ theorem equation_fields_post {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     P.WP t (pure ()) (fun _ _ _ _ => ∃ x y : Nat, (x, y) = (a, b)) G m n := by
   fsym
 
+/-- A non-injective function. -/
+def parity (n : Nat) : Nat := n % 2
+
+/-- Unification fixes unknowns through constructors only: `parity ?v = parity a` does not commit
+`?v := a` (a later fact may fix another value), nor does a constructor field under it. -/
+theorem equation_fields_constructors_only (a b : Nat) : True := by
+  run_tac do
+    let a := (← getLocalDeclFromUserName `a).toExpr
+    let b := (← getLocalDeclFromUserName `b).toExpr
+    let v ← mkFreshExprMVar (mkConst ``Nat)
+    let pair (x y : Expr) := mkAppM ``Prod.mk #[x, y]
+    unless ← eqFixesUnknowns (← pair v b) (← pair a b) do
+      throwError "equation_fields_constructors_only: constructor fields refused"
+    let par (x : Expr) := mkApp (mkConst ``SepAuto.WP.parity) x
+    if ← eqFixesUnknowns (par v) (par a) then
+      throwError "equation_fields_constructors_only: a non-injective function accepted"
+    if ← eqFixesUnknowns (← pair (par v) b) (← pair (par a) b) then
+      throwError "equation_fields_constructors_only: a function under a constructor accepted"
+  trivial
+
 end SepAuto.WP
