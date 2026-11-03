@@ -29,6 +29,7 @@ def expected (v : BitVec 8) : BitVec 32 :=
 def Res (v : BitVec 8) (r : BitVec 32) : Prop :=
   r = 1 ∨ r = 2 ∨ r = 3 ∨ r = 4 ∨ r = expected v
 
+set_option maxHeartbeats 4000000 in
 /-- The full-state client contract: the old stack-room premise is an owned resource, and the
 buffer carries only the extent share and claim approved for the native invariant. -/
 theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)

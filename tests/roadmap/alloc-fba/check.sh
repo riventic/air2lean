@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The translated FixedBufferAllocator against the generic allocator specification (P4a):
-# the retained translation is the fresh one; the bridge (generated std.mem.Allocator wrappers =
-# Wrap.*), FBA.allocSpec and the client proof check; the client evaluates to the native results;
-# a mutated alloc fails the proof (mutant.sh); the entries satisfy the full-state FAllocSpec, proved
-# natively by the general tactic fsym (Full.lean). Every Lean file is a module of the fixture's
-# library AllocFba (tests/roadmap/lakefile.toml), built by Lake with what it imports
+# The translated FixedBufferAllocator against the full-state allocator specification (P4a):
+# the retained translation is the fresh one; the entries satisfy FAllocSpec (Full.lean), the
+# generated std.mem.Allocator wrappers meet their contracts over it (Wrappers.lean) and the client
+# is proved through them (Client.lean), all walked by the general tactic fsym; the client
+# evaluates to the native results; a mutated alloc fails the proof (mutant.sh). Every Lean file is
+# a module of the fixture's library AllocFba (tests/roadmap/lakefile.toml), built by Lake with what it imports
 # (scripts/fixtures.py; run it under scripts/build-guard.py). Needs a built translator; runs no
 # compiler. With AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and
 # compares it with expected.txt.
@@ -35,13 +35,13 @@ python3 -B scripts/fixtures.py build AllocFba
 # Axioms of every theorem of the proof modules, from the built environment: only the standard ones.
 # Named: the theorems, and `FBA.ledger`, a definition (a `ResetLedger` whose fields are proofs).
 named=()
-for name in FBA.allocSpec Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fallocSpec \
+for name in Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fallocSpec \
     FBA.fthread_alloc FBA.fthread_resize FBA.fthread_remap FBA.fthread_free FBA.freset_spec \
     FBA.fown_init FBA.fallocator_init FBA.fallocator_creation FBA.fallocSpec.creation \
-    FBA.ledger realloc_eq Client.client_spec; do
+    FBA.ledger Client.client_spec; do
   named+=(--declaration "AllocFba.$name")
 done
-python3 -B scripts/fixtures.py audit AllocFba.Bridge AllocFba.Fba AllocFba.Client AllocFba.Full \
+python3 -B scripts/fixtures.py audit AllocFba.Client AllocFba.Full \
   AllocFba.Wrappers AllocFba.Creation AllocFba.CreationDomain "${named[@]}"
 bash "$here/mutant.sh"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then

@@ -590,18 +590,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "bridge_close",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "bridge_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "conc_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Conc",
@@ -655,12 +643,6 @@
       "module": "ZigLean.Witness",
       "status": "target",
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
-    },
-    {
-      "tactic": "pure_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Fba",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "reachability_witness",
@@ -953,15 +935,6 @@
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Client.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
     },
     {
       "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
