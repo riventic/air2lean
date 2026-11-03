@@ -215,13 +215,15 @@ through `cas.py src`.
 ## Hung Lake
 
 `scripts/assumptions.py` builds two generated workspaces with Lake: the extractor's driver
-(`.lake/extraction`) and the kernel-replay receipts (`.lake/replay`). Such a `lake build` fails
-closed when it hangs. If its process tree shows neither new output nor new CPU time for
-`AIR2LEAN_LAKE_IDLE_MINUTES` minutes (default 15; 0 turns the check off), the tree is stopped.
-The audit then ends with `lake hung: no CPU time and no output ...`, so it never waits until
-the guard's `--timeout`. A working build always shows one of the two: Lean elaborating uses CPU,
-and Lake replaying its stored logs prints. CPU time is read with `ps`. If `ps` fails, the poll
-counts as progress, so a build is stopped only on evidence that it is idle.
+(`.lake/extraction`) and the kernel-replay receipts (`.lake/replay`). Each of these Lake runs
+(`lake env`, `lake build`) runs in its own process group and fails closed when it hangs. The
+group is stopped when, for `AIR2LEAN_LAKE_IDLE_MINUTES` minutes (default 15; 0 turns the check
+off), it prints nothing and gains less than max(1 s, 1% of that time) of CPU time. The audit then
+ends with `lake hung: ...`, so it never waits until the guard's `--timeout`. A working run always
+shows one of the two signals: Lean elaborating uses CPU, and Lake replaying its stored logs
+prints. CPU time is read with `ps`. If `ps` cannot observe the group for as long, the run is
+stopped too (`lake progress unobservable`). Nothing of the group outlives its run, or an auditor
+stopped by SIGINT, SIGTERM or SIGHUP.
 
 Some hosts hang Lake inside libuv's io_uring backend. On 2026-11-03 such builds sat at 0% CPU
 for 20 minutes or more, on a WSL2 6.6.87 kernel. The main thread waited in a futex, an io_uring
