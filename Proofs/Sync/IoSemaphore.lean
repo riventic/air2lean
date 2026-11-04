@@ -110,7 +110,7 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
     Fits.wp_cnt hF hcost, Fits.wp_take hF hcost hcnt hpool hU hgx hxx,
     wp_csignal ioCond hS hcost S.ptr_c.symm t,
     Fits.wp_unlockPst ioMutex hF hcost S.ptr_l.symm hLc t,
-    wp_unlock ioMutex hF hcost S.ptr_l.symm hLc t, hokp, hu',
+    ioMutex.unlock_wp_to hF hcost S.ptr_l.symm hLc t, hokp, hu',
     S.cph_set, S.ph_set, cph_l hF, cph_part hF, sph_l hF, sph_part hF, pv_lupd, pv_pupd,
     pv_supd, L.ph_set, L.ph_setPart, L.held_setPart, L.part_setPart, hxo, hxh, hxx, hxs,
     semWaitInv, semWaitPost]
@@ -193,7 +193,7 @@ theorem ioSem_post_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
     ioMutex.lock_wp hF hcost S.ptr_l.symm hLc t g hgo hokg hug,
     Fits.wp_cnt hF hcost, hbound, Fits.wp_give hF hcost hcnt hpool hU hgx hxx hsplit hdj,
     wp_csignal ioCond hS hcost S.ptr_c.symm t,
-    wp_unlock ioMutex hF hcost S.ptr_l.symm hLc t, hokx, hu,
+    ioMutex.unlock_wp_to hF hcost S.ptr_l.symm hLc t, hokx, hu,
     S.cph_set, S.ph_set, cph_l hF, sph_l hF, L.ph_set, hxo, hxh, hxx, hxs]
 
 /-- **`Io.Semaphore.post`** (`SemImpl.post_wp_resource`): the kept part is `L.part gx`

@@ -456,6 +456,16 @@ theorem nreg_congr {G G' : ThreadId → γ} (h : ∀ u, C.ph (G' u) = C.ph (G u)
     C.nreg G' T = C.nreg G T :=
   tsum_congr fun u _ => by rw [h u]
 
+/-- The two words of the condition apart or the same. -/
+theorem words_apart {V W : Word 32 4} (hV : V = C.S ∨ V = C.Ep) (hW : W = C.S ∨ W = C.Ep) :
+    V = W ∨ W.b ≠ V.b ∨ W.o + 4 ≤ V.o ∨ V.o + 4 ≤ W.o := by
+  have hb := C.ep_b; have ho := C.ep_o
+  rcases hV with rfl | rfl <;> rcases hW with rfl | rfl
+  · exact .inl rfl
+  · exact .inr (.inr (.inr (by omega)))
+  · exact .inr (.inr (.inl (by omega)))
+  · exact .inl rfl
+
 /-- **A step that keeps the stepping thread's registration** (registered before iff after; the
 others' ghost values the same) and pushes a state write: the write keeps `waiters` (the count)
 and does not lower `signals` (the kinds of consecutive writes, `SStep`). -/

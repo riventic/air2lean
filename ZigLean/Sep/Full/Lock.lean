@@ -1622,6 +1622,64 @@ theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} 
   exact hi.record hc ht hb (hi.w.readAll (by rw [hc]; exact ht) hs) hno
     fun _ _ h2 => h2.readAll (by rw [hi.w.csize, hc]; exact ht) hs
 
+/-! ## Happened before the lock's holder
+
+A clock that a client of the lock relates to the lock's holders (`HB`): a write made while
+holding the lock happened before every later holder (`HB.le`), and the fact stays over the steps
+that keep the holders, the word's releases and the threads (`HB.mono`). -/
+
+variable (L) in
+/-- The clock `c` happened before the lock's holder, before the release clock of the newest
+message of the lock's word, or before every thread that has not ended. -/
+def HB (G : ThreadId → γ) (m : Mem) (c : VClock) : Prop :=
+  (∃ u, L.ph (G u) = .holds ∧ VClock.le c (m.clocks[u]!) = true) ∨ L.Before m c ∨
+    LockWord.LiveLe (L.pl G) m c
+
+/-- A clock that happened before the lock's holder `t` (with the word's invariant). -/
+theorem HB.le {G : ThreadId → γ} {m : Mem} {c : VClock} (hw : L.WInv (L.pl G) m)
+    (h : L.HB G m c) {t : ThreadId} (ht : L.ph (G t) = .holds) :
+    VClock.le c (m.clocks[t]!) = true := by
+  rcases h with ⟨u, hu, hle⟩ | ⟨i, l, hl, hle⟩ | hlive
+  · obtain rfl := hw.one u t hu ht; exact hle
+  · exact VClock.le_trans hle ((hw.rel i l hl).2 t ht)
+  · exact hlive t (hw.live t (by show L.ph (G t) ≠ .gone; rw [ht]; decide)).1
+      (by show L.ph (G t) ≠ .gone; rw [ht]; decide)
+
+/-- The word's releases stay over a step that has the lock's word in its frame. -/
+theorem Inv.before_fstep {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
+    (hfs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') :
+    ∀ c, L.Before m c → L.Before m' c := by
+  rintro c ⟨i, l, hl, hle⟩
+  obtain ⟨i', hl'⟩ := (LockWord.loc_fstep (L := L.toLockWord) hfs
+    (fun x h1 h2 => by
+      have := LockWord.wordR_some hL.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
+      simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+        Option.or_eq_none_iff, not_and]
+      intro h; exact absurd h this)
+    (fun i l hl => (hL.w.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
+  exact ⟨i', l, hl', hle⟩
+
+/-- **`HB` stays** over a step that keeps the holders (or releases with the release fact), grows
+the clocks, keeps the word's newest release and the threads that have not ended. -/
+theorem HB.mono {G G' : ThreadId → γ} {m m' : Mem} {c : VClock} (h : L.HB G m c)
+    (hhold : ∀ u, L.ph (G u) = .holds → L.ph (G' u) = .holds ∨
+      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hbef : ∀ c, L.Before m c → L.Before m' c) (ht : m'.threads = m.threads)
+    (hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) : L.HB G' m' c := by
+  rcases h with ⟨u, hu, hle⟩ | hb | hlive
+  · rcases hhold u hu with h' | hrel
+    · exact .inl ⟨u, h', VClock.le_trans hle (hcl u)⟩
+    · exact .inr (.inl (hrel c hle))
+  · exact .inr (.inl (hbef c hb))
+  · exact .inr (.inr (fun u hu hg =>
+      VClock.le_trans (hlive u (ht ▸ hu) (hgone u hg)) (hcl u)))
+
+/-- A clock that happened before thread `t`, which holds the lock. -/
+theorem HB.of_holder {G : ThreadId → γ} {m : Mem} {c : VClock} {t : ThreadId}
+    (ht : L.ph (G t) = .holds) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=
+  .inl ⟨t, ht, hle⟩
+
 end FLock
 
 end Full

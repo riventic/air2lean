@@ -326,6 +326,22 @@ theorem Op.word {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h
     W'.Ok m' ∧ W'.hist m' = W'.hist m :=
   ⟨hok.keep (keep_op h hap), hist_keep hok (keep_op h hap)⟩
 
+/-- A cell of a word is not a cell of a word apart from it. -/
+theorem notIn_apart {V W : Word 32 4} (h : W.b ≠ V.b ∨ W.o + 4 ≤ V.o ∨ V.o + 4 ≤ W.o)
+    {l : Zig.Loc} (hl : V.In l) : ¬ W.In l := by
+  rintro ⟨h1, h2, h3⟩
+  obtain ⟨h1', h2', h3'⟩ := hl
+  rcases h with h | h | h
+  · exact h (h1.symm.trans h1')
+  · have : W.o + 4 ≤ V.o := h
+    have h3 : l.2 < W.o + 4 := h3
+    have h2' : V.o ≤ l.2 := h2'
+    omega
+  · have : V.o + 4 ≤ W.o := h
+    have h3' : l.2 < V.o + 4 := h3'
+    have h2 : W.o ≤ l.2 := h2
+    omega
+
 end Word
 end Conc
 
