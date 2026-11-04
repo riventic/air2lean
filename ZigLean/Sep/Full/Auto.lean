@@ -2888,15 +2888,20 @@ def liveFVar? (g : MVarId) (f : FVarId) : MetaM (Option FVarId) := g.withContext
     f := f'
   return none
 
-/-- The hypothesis `h` of `g` at type `ty'`, by `pf : ty = ty'` of its type `ty`
-(`replaceLocalDecl`): a new local, recorded with the locals it reintroduced as `h`'s
-substitution (`liveFVar?`, `refreshSubsts`). Also the substitution of the locals of `g`. -/
+/-- The hypothesis `h` of `g` at type `ty'`, by `pf : ty = ty'` of its type `ty` (or of one
+definitionally it): a new local of the same name at the end of the context (`Eq.mp`), `h`
+cleared where nothing depends on it, and recorded as `h`'s substitution (`liveFVar?`,
+`refreshSubsts`). The other locals stay (`replaceLocalDecl` would introduce the ones after `h`
+again, as new locals that the goal's unknowns, made in the context before, cannot mention).
+Also that substitution. -/
 def replaceHypEq (g : MVarId) (h : FVarId) (ty' pf : Expr) :
     MetaM (FVarId × MVarId × FVarSubst) := do
-  let res ← g.replaceLocalDecl h ty' pf
-  let subst := res.subst.insert h (mkFVar res.fvarId)
-  (← caches).substs.modify fun m => subst.map.foldl (fun m k v => m.insert k v) m
-  return (res.fvarId, res.mvarId, subst)
+  let val ← mpResult { expr := ty', proof? := some pf } (mkFVar h)
+  let (h', g') ← (← g.assert (← g.withContext h.getUserName) ty' val).intro1P
+  let g' ← g'.tryClear h
+  let subst : FVarSubst := ({} : FVarSubst).insert h (mkFVar h')
+  (← caches).substs.modify (·.insert h (mkFVar h'))
+  return (h', g', subst)
 
 /-- The hypothesis `h` of `g` at the type of the simp result `r` of its type: by
 `replaceHypEq` with its proof, else definitionally (the same local). -/
