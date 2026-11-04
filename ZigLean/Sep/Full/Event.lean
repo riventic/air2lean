@@ -27,11 +27,11 @@ of the event's code (`MStep`, with the place change of the stepping thread and w
 **Setters.** The event's steps write only the waiter's `waiting` (`w0` → `w1`, a thread that may
 wait) and a setter's release `is_set` (`out` → `sw`/`sd`, a thread that may set); a thread at
 `sw` or `sd` writes nothing and leaves them only to `sd` (`EPh.Next`), and `set` returns at `sd`
-(`EventImpl.set_wp`). So a set orders memory: each set writes `is_set` at most once, as a release
-write that carries the setter's clock; a waiter that read an `is_set` write with acquire
+(`EventImpl.set_wp`). So a set orders memory: each set writes `is_set` at most once (not at all
+when it finds the event set), as a release write that carries the setter's clock; a waiter that read an `is_set` write with acquire
 (`Synced`) has the writer's clock of the first `is_set` write below its own (`Inv.synced_first`).
 A protocol tells the setters apart by their ghost values: a thread that may not set (`sx`) does
-not write the word, and a thread at `sd` does not write it again until the protocol moves it
+not write `is_set`, and a thread at `sd` does not write it again until the protocol moves it
 out (its own ghost step). Several setters are allowed; a client with several setters that need
 their writes ordered before the waiter's reads shows which `is_set` write is the first.
 A relaxed set and a set that writes twice make a `WaitGroup` race, and the contract excludes
@@ -88,7 +88,8 @@ inductive EPh where
 def EPh.Waiting (p : EPh) : Prop := p = .w0 ∨ p = .w1
 
 /-- **A place change of a step of the event's code that writes nothing** (`s`: the event is
-set): a setter at `sw` only wakes (to `sd`), a setter at `sd` stays, and only a thread out of the
+set): a setter at `sw` stays or is done (`sd`; its wake, and the invariant's `q` keeps that no
+waiter is lost), a setter at `sd` stays, and only a thread out of the
 event's code that finds it set goes to `sd` without its own write; `sw` and the other ways into
 `sd` are a setter's `is_set` write (`FEvent.Next`). So a thread writes `is_set` at most once from
 `out` before the client moves it out of `sd` (module doc, **Setters**). -/
@@ -1107,8 +1108,8 @@ theorem Inv.frame {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.I
     (fun h => hsxt (hI.sdx t (by rw [← hph]; exact h))) hF
 
 /-- **A thread out of the event's code or done (`out`, `sd`) gets a ghost value out of it**
-(`g`, at `out`; a client's own ghost step, e.g. a setter's end after its `set`): the writes and
-the queue stay, and it may wait only as before. -/
+(`g`, at `out`; a client's own ghost step, e.g. a setter's end after its `set`, before it sets
+or waits again): the writes and the queue stay, and it keeps its roles (`hwx`, `hsx`). -/
 theorem Inv.toOut {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : E.Inv L G m)
     (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out)
     (hwx : E.wx (G t) → E.wx g) (hsx : E.sx (G t) → E.sx g) :
@@ -1714,7 +1715,7 @@ theorem wp_peek (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
       h k hk G₁ m' b (hop.current.trans hc₁) h1 h2
 
 /-- A setter's `xchg(is_set)` with a decode (`atomicRmwAsC`, `Io.Event`), by a thread out of the
-event's code: the event is set; the setter is at `sw` if it read `waiting`. -/
+event's code: the event is set; the setter is at `sw` if it read `waiting`, else done (`sd`). -/
 theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     {ord : AtomicOrder} {v : α} (hv2 : Packed.toBits v = (2 : BitVec 32))
     (hdec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 2) →
@@ -1968,7 +1969,8 @@ theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (waitBack hE hg hgo (hE.heldOut hgo hi)) h
 
 /-- **The setter's OS futex wake** (`Os.futexWake`, OSF-02; std's translated `Thread.Futex.wake`)
-of up to `w ≥ 1` waiters (or all) at the word, at `sw`: after a wake it leaves (the event is set);
+of up to `w ≥ 1` waiters (or all) at the word, at `sw`: after a wake it is done (`sd`; the event
+is set);
 after a spurious `EINTR` (macOS; nobody woken) it is still at `sw` (std wakes again). -/
 theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
     (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} (hg : E.ph g = .sw)
@@ -2118,13 +2120,16 @@ and counts no turns.
    deadline block. A Plain caller has a permanent exact-part specialization; unmetered alone
    neither supplies stack room nor bounds retries. The waiter returns synchronized with a set
    (`FEvent.Synced`: it read an `is_set` write with acquire), so what happened before the set
-   happened before the waiter's next step: an event orders memory, not only control.
+   happened before the waiter's next step: a set that writes orders memory, not only control.
 - `set_wp`: a thread out of the event's code, with a ghost value that may set (`FEvent.sx`), that
    sets it returns with the event set, done (`sd`), and its exact caller part, whatever that part
    holds. Its steps are the event's (`FEvent.prim`, `FEvent.Next`): at most one write, a release
    `is_set` from `out`, so a client that tracks a clock below the setter's sees it in that write
    (the write's `clock`, below its release clock: `Inv.rel`) and, with `Inv.synced_first`, below
-   the waiter's after its `wait`. The setter is out of the lock's code, or it left the lock for
+   the waiter's after its `wait`. A set that finds the event set already (0.15.2's peek,
+   `Fits.doneSet`) writes nothing: a client with several setters shows which write is the first.
+   To set or wait again, the client moves the thread from `sd` back to `out` by its own ghost
+   step (`Inv.toOut`). The setter is out of the lock's code, or it left the lock for
    good (`gone`: a task after its last access to the lock's resource, a detached thread). `set`
    ticks in no implementation (`Io.Event` and `Thread.ResetEvent`: a store and a futex wake), so
    the contract demands no caller resource, as `MutexImpl.unlock_wp`.

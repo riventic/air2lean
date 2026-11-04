@@ -65,7 +65,7 @@ theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
   subst hp
   fsym [FEvent.wp_xchgAs (g := g) hE (v := Io_Event.is_set) rfl ioEvent_dec,
     FEvent.wp_wake (g := E.set g .sw) hE,
-    hE.lph, E.ph_set, E.set_set, FEvent.set_of hgx, ioEvent_of0, ioEvent_of1, ioEvent_of2]
+    hE.lph, E.ph_set, E.set_set, ioEvent_of0, ioEvent_of1, ioEvent_of2]
 
 /-- `waitUncancelable`'s loop invariant: `t` is a waiter at `w1`. -/
 def waitInv (P : Proto Tgt γ) (E : FEvent γ) (t : ThreadId) (g : γ) (D : Nat)

@@ -11,20 +11,24 @@ whose bytes 8..12 are the event's word):
 
 * `futexSetR`: `Thread.ResetEvent.FutexImpl.set` with its `xchg(is_set)` relaxed instead of
   release. Nothing orders the tasks' counter stores before `main`'s read: `relaxedSet_races`.
-* `set2`: a set that writes `is_set` twice (two release `xchg`s, each with its wake). `main`
-  synchronizes with the first and reads the `Tally` while the second is pending:
-  `doubleSet_races`. One such write (`setX`) completes: `oneSet_completes`.
+  The same copies of `finish` and `task` with the generated set are the generated code
+  (`dispatchW_gen`), which completes (`Threadsync.WG.waitGroup_completes`), so the order is the
+  only difference.
+* `set2`: a set that writes `is_set` twice (two release `xchg`s, each followed by a wake if it
+  read `waiting`). `main` synchronizes with the first and reads the `Tally` while the second is
+  pending: `doubleSet_races`. One such write (`setX`) completes: `oneSet_completes`.
 
 Both met the earlier `EventImpl.set_wp` statement (kernel-checked against the event library of
 96e635910): its `FEvent.wp_xchg` took any order, and admitted a setter back at `out` after its
 write, so the proof of `ResetEvent.futexSet_wp` went through for `futexSetR` verbatim and two
-`setX` steps composed. The contract now excludes both (`FEvent.Next`): each `is_set` write of
-the event's code is a release write by a setter from `out`, so its release clock covers its
-writer's clock (`next_isSet`), and a setter at `sd` (where `set_wp` returns it) writes nothing
-(`next_sd`).
+`setX` steps composed. The contract now excludes both (`FEvent.Next`):
+* each `is_set` write of the event's code is a release RMW of the newest write by a setter from
+  `out` (`next_isSet`), so `futexSetR`'s relaxed write is no step of the event's code;
+* a setter at `sd`, where `set_wp` returns it after its write, writes nothing (`next_sd`). Only
+  the protocol's own ghost step moves it back to `out`, and `set_wp` is proved for every
+  protocol, so one `set` cannot write twice.
 
-The runs use the oracle that always picks option 0 (`Threadsync.WG.waitGroup_completes`, the
-generated set, returns 2 under it).
+The runs use the oracle that always picks option 0.
 -/
 
 open Zig
@@ -152,8 +156,14 @@ theorem doubleSet_races :
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some .illegal := by
   unroll_sched 10
 
-/-- Control: one release write and its wake completes with 2, as the generated set does; the
-race of `set2` is its second write. -/
+/-- Control for `futexSetR`: the copies of `finish` and `task` with the generated set are the
+generated `dispatch`, which completes with 2 under the same schedule
+(`Threadsync.WG.waitGroup_completes`). -/
+theorem dispatchW_gen : dispatchW Thread_ResetEvent_set = dispatch := by
+  funext x; cases x <;> rfl
+
+/-- Control for `set2`: one release write and its wake completes with 2; the race of `set2` is
+its second write. -/
 theorem oneSet_completes :
     Witness.okVal (Sched.run ⟨.any, .available⟩ (dispatchW setX) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some 2 := by
@@ -164,16 +174,19 @@ open Zig.Conc Zig.Full
 variable {γ : Type} (E : FEvent γ) {t : ThreadId} {g : γ} {p : EPh} {m m' : Mem}
 
 /-- **The contract excludes the relaxed set**: an `is_set` write of a step of the event's code
-is a write by a setter from `out` whose release clock covers its writer's clock. -/
+is a release RMW of the newest write by a setter from `out`, so its release clock covers its
+writer's clock. -/
 theorem next_isSet (h : E.Next t g p m m') (hsz : (E.W.hist m').size = (E.W.hist m).size + 1)
     (hv : (E.W.hist m')[(E.W.hist m).size]!.Val (2 : BitVec 32)) :
-    E.sx g ∧ E.ph g = .out ∧ VClock.le (E.W.hist m')[(E.W.hist m).size]!.clock
-      (E.W.hist m')[(E.W.hist m).size]!.relClock = true := by
+    E.sx g ∧ E.ph g = .out ∧ ∃ ord : AtomicOrder, ord.isRel = true ∧
+      (E.W.hist m')[(E.W.hist m).size]! = Word.rmwEnt m' t ord (E.newest m) (2 : BitVec 32) ∧
+      VClock.le (E.W.hist m')[(E.W.hist m).size]!.clock
+        (E.W.hist m')[(E.W.hist m).size]!.relClock = true := by
   rcases h with ⟨hh, -⟩ | ⟨ord, v, hh, ⟨rfl, -⟩ | ⟨rfl, hsx, hrel, hph, -⟩⟩
   · rw [hh] at hsz; omega
   · rw [hh, FEvent.get_push_eq] at hv
     exact absurd (FEvent.val_eq FEvent.rmwEnt_val hv) (by decide)
-  · rw [hh, FEvent.get_push_eq]; exact ⟨hsx, hph, FEvent.rmwEnt_rel hrel⟩
+  · rw [hh, FEvent.get_push_eq]; exact ⟨hsx, hph, ord, hrel, rfl, FEvent.rmwEnt_rel hrel⟩
 
 /-- **The contract excludes the double set**: a setter at `sd`, where `EventImpl.set_wp`
 returns it, writes nothing and stays at `sd`. -/
