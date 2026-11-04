@@ -21,9 +21,9 @@
 #     libraries that imports only Lean and this package (strength logs, proof-client fixtures,
 #     tutorials) is elaborated with `lake env lean`; the negative controls in
 #     assurance/lean-files.json must be rejected. Cached per input.
-#   - the proof-fixture package (tests/roadmap/lakefile.toml, `scripts/fixtures.py build`): every
-#     fixture library, so the parallel checks below find their modules built; then the
-#     proof-fixture checks (`scripts/fixture-checks.sh`): every CI step that runs the check.sh
+#   - the proof-fixture checks (`scripts/fixture-checks.sh`), after the proof-fixture package
+#     (tests/roadmap/lakefile.toml, `scripts/fixtures.py build`: every fixture library, built
+#     first so the parallel checks find their modules built): every CI step that runs the check.sh
 #     of a fixture with Lean files (they elaborate the files that import a fixture's own generated
 #     modules), derived from .github/workflows/ci.yml, with the patched and stock compilers from
 #     the shared cache. Every unit runs on every invocation; no result is reused. --no-fixtures
@@ -129,11 +129,10 @@ canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
 # Its per-case bindings run on AIR2LEAN_JOBS threads (scripts/canon_certification.py), light on
 # memory: one per Lean process of the budget.
 jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
-# The proof-fixture package (tests/roadmap/lakefile.toml), every library, then the proof-fixture
-# checks CI runs, in their own guard (scripts/fixture-checks.sh). Built first, once: the checks run
+# The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh). It builds the
+# proof-fixture package (tests/roadmap/lakefile.toml), every library, first, once: the checks run
 # in parallel, and two Lake builds of one workspace must not build the same module at once.
 if [ "$fixtures" = 1 ]; then
-  guarded fixtures-lean "$PWD" python3 -B scripts/fixtures.py build
   # Within this build's admission ($rss): the units share it, the longest first, each admitted by
   # its measured peak (scripts/fixture-checks.py `schedule`), each Lake with this build's Lean
   # processes ($threads: one 11000 MiB process each, so a unit fits its share).

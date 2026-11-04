@@ -12,6 +12,13 @@ Every fixture .olean, every assurance report and the exposure extraction (snapsh
 byte-identical between the two build.sh runs. The one exception is the Shadow audits' error
 reports, compared up to the name of the extractor's temporary driver file, which differs from
 run to run with or without the cache. Needs what check.sh needs.
+
+The runs delete and rebuild the library's outputs, so they run in a check tree
+(`.lake/check-tree/audit-cache`, scripts/check-tree.py), never in the checkout: there they would
+rebuild the shared fixture package under the parallel units of scripts/fixture-checks.py, whose
+audits bind every compiled module on their lookup path (a missing `AuditClaims/AsmTotal.olean`,
+"compiler-owned Unit imported inputs changed"). Run from the checkout, the test creates the tree
+and runs its own copy there.
 """
 import importlib.util
 import json
@@ -60,9 +67,9 @@ def outputs():
 
 def require_built_root():
     """The runs below toggle the cache for the fixtures only; the root package's modules must be
-    up to date for Lake with and without it. Otherwise the uncached run would rebuild them in
-    place in the shared checkout, racing every check that imports them (scripts/fixture-checks.py
-    runs in parallel), and compare outputs built from two different root builds."""
+    up to date for Lake with and without it (in the check tree, cloned from the checkout's
+    build). Otherwise the uncached run would rebuild them and compare outputs built from two
+    different root builds."""
     env = {k: v for k, v in os.environ.items() if k != 'AIR2LEAN_CAS_DIR' and not k.startswith('LAKE_')}
     targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
                              env=env, text=True, stdout=subprocess.PIPE, check=True).stdout.split()
@@ -76,6 +83,12 @@ def require_built_root():
 
 
 def main():
+    if not (ROOT / '.air2lean-check-tree.json').is_file():  # the checkout: run in a check tree
+        tree = ROOT / '.lake/check-tree/audit-cache'
+        subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/check-tree.py'), 'create', str(tree)],
+                       cwd=ROOT, check=True)
+        return subprocess.run([sys.executable, '-B', str(tree / Path(__file__).resolve().relative_to(ROOT))],
+                              cwd=tree).returncode
     build = ['bash', str(HERE / 'build.sh')]
     fill = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'run', '--', 'lake', 'build', 'AuditClaims']
     require_built_root()
