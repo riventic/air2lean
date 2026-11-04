@@ -44,7 +44,7 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
 | Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | WaitGroup |
 | ZigLean/Conc/Witness | imports Conc/Own | `TLive` | `CLive` (Full/Witness) | RwLockContract |
-| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `StepIn`, `Lock.Inv.wordOp`; defines `Word`, `Ok`, `hist`, `BlkStep`, `Op`, `Keep` | Full/Word, Full/WordRules, Full/WordNewest | RwLock, Semaphore, WaitGroup, WeakWord; and Full/Word's own import (below) |
+| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord |
 | ZigLean/Conc/LockRules | imports Conc/Lock | legacy `Lock` rules | Full/LockRules, Full/LockSteps | Sync/Lock, Threadsync/Lock, Conc/Word |
 | ZigLean/Conc/Lock | imports Conc/Csl | `Lock`, `Fits`, `FitsOn`, `Step` | `FLock` (Full/Lock, Full/LockWord) | LockRules |
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
@@ -60,16 +60,29 @@ replacement named below is on main, except where the row says it is not.
   `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
   full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
-- `ZigLean/Witnesses/Conc` imports Conc/Word. No module imports it.
-- **`ZigLean/Sep/Full/Word` imports Conc/Word.** Through that import, every full-state
-  concurrency module (Full/Mutex, Cond, Event, …) transitively imports Conc/LockRules → Conc/Lock →
-  Csl → Own → Sep/Block → Sep/Triple. Full/Word uses Conc/Word's `Word`/`Ok`/`hist`/`Entry`
-  vocabulary and op lemmas. It also uses the seven old roots of row `seen-floor-sync-retirement`:
-  `Word.BlkStep.eq_set`, `Word.Op.{block,fpAt,lockLoc,rest,word}` and `FLock.Inv.wordOp`.
-  Stage D-d therefore needs a split first. Conc/Word's vocabulary moves to a lock-free base module
-  (as `Conc/Base/*`). The `Lock`-typed part (`Apart (L : Lock γ)`, `keep_lockStep`,
-  `keep_stepIn*`, `Lock.Inv.wordOp`, `offWord`) leaves with Conc/Lock. That split belongs to
-  the Task06 row and has no owner yet.
+- `ZigLean/Witnesses/Conc` imports Conc/Word and Conc/Total. No module imports it. Stage D-d
+  deletes it as a whole. It also holds non-vacuity witnesses of surviving base lemmas (Proto,
+  TimedBody, `Word.enc_val`; premises THR-08, SEM-02 in `assurance/premises.json`); at D-d they
+  move to a base witness module.
+- **Conc/Word split (L8j).** Full/Word used to import Conc/Word, so every full-state concurrency
+  module transitively imported Conc/LockRules → Conc/Lock → Csl → Own → Sep/Block → Sep/Triple.
+  The split resolves this:
+  - `ZigLean/Conc/Base/Word` holds the legacy-independent vocabulary: `Word`, `Ok`, `hist`,
+    `Entry`, `Prefix`/`Extends`, `Ok.ticked`, the records and locations of the ops, the no-error
+    lemmas, …. The generic thread and clock facts (`fork_eq`, `fork_clocks`, `recordAt_le`,
+    `allLe_mono`, `someLe_mono`) moved from Conc/Lock and LockRules to `Conc/Base/Lock`, which
+    also replaces the copies that Full/LockWord had.
+  - Full/Word imports only the base module and reaches no legacy module.
+  - Conc/Word keeps what depends on the legacy layer:
+    - the `Lock`-typed part (`Apart (L : Lock γ)`, `keep_lockStep`, `Lock.Inv.wordOp`, `offWord`);
+    - the step records `BlkStep`, `AtomsStep`, `Keep` and `KeepK` with their lemmas, including
+      the `StepIn` consumers (`keep_stepIn`);
+    - the old Word-contract family: `Op`, whose `locs` field is the legacy `LocsKeep`, and its
+      producers;
+    - the seven old roots of row `seen-floor-sync-retirement` that were in Full/Word:
+      `Word.BlkStep.eq_set`, `Word.Op.{block,fpAt,lockLoc,rest,word}` and `FLock.Inv.wordOp`.
+
+    It leaves with Conc/Lock.
 
 **Retirement order** (each step needs only the steps before it):
 
@@ -79,7 +92,7 @@ replacement named below is on main, except where the row says it is not.
    and `Contracts.{RwContract,SemContract}`.
 3. Sync/Lock: after Semaphore and `Contracts.mutex`. Threadsync/Lock: after WaitGroup.
    Conc/Witness: after RwLockContract.
-4. Conc/Word: the split above. Then the legacy part, once RwLock, Semaphore, WaitGroup and
+4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore, WaitGroup and
    WeakWord are gone.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
 6. Sep/{Block,Triple,Loop,Total}: stage D-e.
@@ -460,8 +473,8 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
 Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec), Automation, Step; `sep_*`, `sep_from`, `tame_prim`, `sep_frame/normalize` tactic entries go.
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
-Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc
-(Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
+Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Word,WeakWord,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc
+(its witnesses of base lemmas move to a base witness module; Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
 Stage D-e = the **final PR** (needs the strength log):
 1. Run every `tests/roadmap/strength-log/*.lean` (the legacy statements, written out) and `Full/Strength.lean`; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
 2. Delete `tests/roadmap/strength-log/`, `Full/Strength.lean` (`toTriple_on`, `toTotal_on`), `Sep/{Triple,Total,Loop,Block}.lean`, `Sep.lean`; check `Full/Init` lost its dependency on `Sep.Total`.

@@ -1261,10 +1261,10 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   have hcs₅ : m₅.clocks.size = 1 := by rw [hl₅.own.csize, hs1]
   have hk : ∀ W : Word 32 4, W.Keep m₅ m₆ := fun _ =>
     Word.keep_fork (t := 0) (by rw [hs1]; decide) (by rw [hcs₅, hs1]) hf
-  obtain ⟨hch, hm₆⟩ := Lock.fork_eq hf
+  obtain ⟨hch, hm₆⟩ := fork_eq hf
   rw [hs1] at hch
   subst hch hm₆
-  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs₅]; decide)
+  obtain ⟨hcl, hcn, -⟩ := fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs₅]; decide)
   have hg1 : (G₁ 1).1.ph = .gone := by
     by_cases e : (G₁ 1).1.ph = .gone
     · exact e

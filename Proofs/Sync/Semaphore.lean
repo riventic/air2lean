@@ -16,7 +16,7 @@ permit and its resource) and `Sem.post_spec` (the thread gives one back).
 - **The mutex** is a lock (`ZigLean/Conc/Lock.lean`) that owns the permit count, whose value is
   `pv` of the protocol's ghost values, and the resource of the free permits (`Res`). `wait` takes a
   part of `Res` to the thread's part (`T`), `post` gives a part back.
-- **The condition** (`Sem.Inv`). Its state and epoch are shared words (`ZigLean/Conc/Word.lean`).
+- **The condition** (`Sem.Inv`). Its state and epoch are shared words (`ZigLean/Conc/Base/Word.lean`).
   At most one thread waits at the condition (`one`; the protocol shows it at each `wait` with no
   permit): its `waiters += 1` is state write `jr`, and it loaded epoch write `i` with the value `e` (`SPh.reg`). Only a thread with a ghost value
   that the protocol allows (`Sem.wx`) waits there. After

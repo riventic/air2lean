@@ -1314,7 +1314,7 @@ model argument, standards references and necessity/advancing-read controls.
   futex and atomic ops do not touch block addresses). So `known` facts are stable under the rely
   and can live in any thread's ghost value or in `Proto.inv`. This is the Iris notion of a
   persistent proposition.
-* **Shared atomic words** (`Conc/Word.lean`: `Word.Ok` requires "no other location overlaps").
+* **Shared atomic words** (`Conc/Base/Word.lean`: `Word.Ok` requires "no other location overlaps").
   This is the constraint `(o, n)` for a word that no thread owns. The full-state version keeps the word in the
   protocol invariant as `apts` contents with tag `some (o, n)`.
 * **A process-shared PageAllocator** then has `Proto.inv ⊇ ∃ v, hint ↦ₐ v ∗ addrOf v …`, and each

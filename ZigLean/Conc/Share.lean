@@ -78,8 +78,8 @@ theorem read (hs : ReadShared R m) (ht : m.current < m.threads.size)
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · rcases hs e he hr with ⟨hk, u, hu, hle⟩ | h
-    · exact .inl ⟨hk, u, hu, VClock.le_trans hle (Full.LockWord.recordAt_le m b o len .read u)⟩
-    · exact .inr fun u hu => VClock.le_trans (h u hu) (Full.LockWord.recordAt_le m b o len .read u)
+    · exact .inl ⟨hk, u, hu, VClock.le_trans hle (Conc.recordAt_le m b o len .read u)⟩
+    · exact .inr fun u hu => VClock.le_trans (h u hu) (Conc.recordAt_le m b o len .read u)
   · refine .inl ⟨rfl, m.current, ht, ?_⟩
     rw [recordAt_clock (hcs ▸ ht)]
     exact VClock.le_refl _
@@ -140,7 +140,7 @@ theorem recordAt {t : ThreadId} (ho : RegionOwned R m (m.clocks[t]!)) (hc : m.cu
   intro e he hr
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
-  · exact VClock.le_trans (ho e he hr) (Full.LockWord.recordAt_le m b o len k m.current)
+  · exact VClock.le_trans (ho e he hr) (Conc.recordAt_le m b o len k m.current)
   · rw [recordAt_clock ht]
     exact VClock.le_refl _
 

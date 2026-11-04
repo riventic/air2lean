@@ -445,9 +445,9 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · obtain ⟨-, hb, hk, ho, hl, hcl⟩ := hn
       rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
         by have := hr.2.2; omega⟩ with ⟨hk', h''⟩ | h''
-      · exact .inl ⟨hk.trans hk', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u)
+      · exact .inl ⟨hk.trans hk', Conc.someLe_mono hs.threads (fun u _ => hs.clock u)
           (LockWord.someLe_le hcl h'')⟩
-      · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u)
+      · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
           fun u hu => VClock.le_trans hcl (h'' u hu))
     · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
       have hr2 := hr.2.2
@@ -488,7 +488,7 @@ theorem U_read {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
   have hvc : v ≠ m.current := fun e => by rw [e, hjt] at hv'; cases hv'
   show VClock.le ((m.clocks.set! m.current _)[v]!) ((m.clocks.set! m.current _)[0]!) = true
   rw [Proto.getElem!_set!_ite, if_neg (fun h => hvc h.1)]
-  exact VClock.le_trans h2 (LockWord.recordAt_le m 0 0 16 .read 0)
+  exact VClock.le_trans h2 (Conc.recordAt_le m 0 0 16 .read 0)
 
 /-! ## The holder's increment -/
 
@@ -743,7 +743,7 @@ theorem inv_spawnParts {G₁ : ThreadId → Gh} {m₁ m' : Mem} {child : ThreadI
     by_cases hu : u = m₁.threads.size
     · simp [hu]
     · rw [if_neg hu]; have := hjb u; unfold joinedB at this; exact this
-  · obtain ⟨hcl, hcn, -⟩ := LockWord.fork_clocks (cs := m₁.clocks) (t := 0) (by
+  · obtain ⟨hcl, hcn, -⟩ := Conc.fork_clocks (cs := m₁.clocks) (t := 0) (by
       rw [hcs]; exact Nat.succ_pos _)
     exact hU.io.fork (t := 0) (by rw [← hiL.w.csize, hcs]; exact Nat.succ_pos _)
       (by show (m₁.threads.push _).size = _; simp)

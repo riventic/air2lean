@@ -1,16 +1,16 @@
-import ZigLean.Conc.Word
+import ZigLean.Conc.Base.Word
 import ZigLean.Sep.Full.LockRules
 
 /-!
 # A shared atomic word, over full-state resources
 
 A word of a sync object that no thread owns (the state and the epoch of a condition, the state
-of an event; `ZigLean/Conc/Word.lean`) is a part of the protocol's rest: its bytes are in the rest
-as the memory's cells (`Word.cellsR W m = cellsAt W.In m`, `ZigLean/Sep/Full/ThreadRest.lean`),
+of an event; `ZigLean/Conc/Base/Word.lean`) is a part of the protocol's rest: its bytes are in the
+rest as the memory's cells (`Word.cellsR W m = cellsAt W.In m`, `ZigLean/Sep/Full/ThreadRest.lean`),
 so no thread's part has them and no step of a thread on its own part touches them. The facts about
-the word's values and clocks (`Word.Ok`, `Word.hist`, the ops `Ok.load`, `Ok.rmw`, `Ok.cas`) are
-facts of the memory model and stay in `ZigLean/Conc/Word.lean`. This file connects them to the
-full-state lock (`FLock`, `ZigLean/Sep/Full/Lock.lean`):
+the word's values and clocks (`Word.Ok`, `Word.hist`) are facts of the memory model and stay in
+`ZigLean/Conc/Base/Word.lean`. This file connects them to the full-state lock (`FLock`,
+`ZigLean/Sep/Full/Lock.lean`):
 
 - **Actual primitive runs expose native state effects** (`RestStep`, `FStepIn`) and their
   validity, history and result facts. They preserve every part and the rest of the rest
@@ -25,10 +25,10 @@ full-state lock (`FLock`, `ZigLean/Sep/Full/Lock.lean`):
 A rest that has the word's cells of an older memory, the same up to `Cell.norm`, is the rest with
 the word's cells of the new memory (`FLock.Inv.congrX`).
 
-The native producers feed WordRules and both Event/Cond step families directly. Old exported
-`Op`/`Keep` helpers remain for their existing consumers; their types are visible retirement
-debt in the `seen-floor-sync-retirement` engine-ledger row. Native paths do not construct
-those packets or call their preservation wrappers.
+The native producers feed WordRules and both Event/Cond step families directly. The old
+`Word.Op` contract and its full-state roots (`Op.rest`, `Op.word`, `FLock.Inv.wordOp`, …) live in
+`ZigLean/Conc/Word.lean`, retirement debt in the `seen-floor-sync-retirement` engine-ledger row.
+Native paths do not construct those packets or call their preservation wrappers.
 -/
 
 namespace Zig
@@ -121,20 +121,6 @@ theorem cellKey_norm (c : Cell) : cellKey c.norm = cellKey c := by
   obtain ⟨b, a, s, k⟩ := c
   cases k <;> rfl
 
-/-- The blocks after an op at the word, from the block of the word. -/
-theorem BlkStep.eq_set {m m' : Mem} (h : W.BlkStep m m') {blk : Block}
-    (hb : m.blocks[W.b]? = some blk) : ∃ blk', m'.blocks[W.b]? = some blk' ∧
-      blk'.addr = blk.addr ∧ blk'.live = blk.live ∧ blk'.kind = blk.kind ∧
-      blk'.bytes.size = blk.bytes.size ∧ m'.blocks = m.blocks.set! W.b blk' := by
-  obtain ⟨blk', hb', ha, hl, hk, hs, -⟩ := h.word blk hb
-  refine ⟨blk', hb', ha, hl, hk, hs, ?_⟩
-  have hlt : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  apply Array.ext_getElem? fun i => ?_
-  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
-  by_cases e : W.b = i
-  · subst e; simp [hlt, hb']
-  · simp only [e, ↓reduceIte]; exact h.other i (Ne.symm e)
-
 theorem keys_toList (m : Mem) : (keys m).toList = shapes m := by
   simp [keys, shapes, ALoc.shape]
 
@@ -144,48 +130,6 @@ theorem Ok.cellIn {m : Mem} (hw : W.Ok m) {l : Zig.Loc} (hl : W.In l) : m.heap l
   obtain ⟨h1, h2, h3⟩ := hl
   simp only at h1 h2 h3; subst h1
   exact hw.cell h2 h3
-
-/-- **An op at the word is a step at its bytes** (`RestStep`). -/
-theorem Op.rest {t : ThreadId} {m m' : Mem} (hop : W.Op t m m') (hw : W.Ok m) (hw' : W.Ok m') :
-    RestStep W.In m m' := by
-  have hsz0 := W.sz_pos
-  obtain ⟨blk, hb, hl, hsz, -, hk, -⟩ := hw.blk
-  obtain ⟨blk', hb', ha', hl', hk', hs', hset⟩ := hop.blocks.eq_set hb
-  have hlt : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  refine ⟨hop.threads, hop.csize, hop.clocks, hop.bsize, fun l hl => hop.cells l hl,
-    fun l hl => hw'.cellIn hl, KMono.set hb ha' hk hset,
-    KeepsExt.set hb hl' hs' hk' hset,
-    fun hd => LDMono.set hb (fun h => by rw [← hl']; exact h) ha' (Nat.le_of_eq hs') hset
-      (Nat.le_of_eq (by rw [hk'])) hd,
-    fun b x hx => ?_, fun hwf => ?_, fun e he => ?_,
-    MemAuth.Keep.set (m' := { m' with current := m.current }) hb hset hl' ha' hs' hk' hop.aux.1
-      (by rw [hop.aux.2.1]) hop.aux.2.2, hop.cov⟩
-  · rcases hop.atoms with e | ⟨e, -⟩
-    · rw [← keys_toList, e, keys_toList]
-    · rw [← keys_toList, e, Array.toList_push, keys_toList, tagOf_append_single]
-      have : ¬ Full.Covers b x (W.b, W.o, nb) := fun ⟨h1, h2, h3⟩ => hx ⟨h1.symm, h2, h3⟩
-      simp [this]
-  · rcases hop.atoms with e | ⟨e, hno⟩
-    · rw [← keys_toList, e, keys_toList]; exact hwf
-    · rw [← keys_toList, e, Array.toList_push, keys_toList]
-      refine ⟨fun s hs => ?_, List.pairwise_append.mpr ⟨hwf.2, by simp, fun a ha b hb => ?_⟩⟩
-      · rcases List.mem_append.mp hs with h | h
-        · exact hwf.1 s h
-        · simp at h; subst h; exact hsz0
-      · simp at hb; subst hb
-        obtain ⟨l, hlm, rfl⟩ : ∃ l ∈ m.atomics, ALoc.shape l = a := by
-          simpa [shapes] using ha
-        intro hlb
-        simp only [ALoc.shape] at hlb ⊢
-        by_cases h1 : l.off < W.o + nb
-        · by_cases h2 : W.o < l.off + l.len
-          · exact absurd ⟨hlb, hw.only l hlm hlb h1 h2⟩ (hno l hlm)
-          · exact .inl (by omega)
-        · exact .inr (by omega)
-  · rcases hop.fp e he with h | ⟨h1, h2, h3, -, -⟩
-    · exact .inl h
-    · refine .inr ⟨fun x hx1 hx2 => ⟨h1, by omega, by omega⟩, by
-        rw [h1]; exact hlt⟩
 
 /-- The word's location stays under an atomic-location map whose frame has the word's bytes. -/
 theorem loc_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (ha : AMap hF m m' σ)
@@ -291,41 +235,6 @@ theorem hist_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
   obtain ⟨σ, ha⟩ := hs.atomics
   exact hist_amap hw ha hwF hcells
 
-/-! ### The memory facts of an op, for the steps of a sync object's code
-
-A step of a futex-based sync object's code (`FEvent.MStep`, `FCond.MStep`) is an op at one of
-its words, a futex wait's sleep (an op that keeps the word's writes, then a new waiter), or a
-change of the current thread, the futex queue or the woken threads only. The lemmas
-`FEvent.MStep.*` and `FCond.MStep.*` give what such a step does to the memory, from these facts of
-an op. -/
-
-/-- The block `b` after an op at the word: as live, as large and of the same kind. -/
-theorem Op.block {t : ThreadId} {m m' : Mem} (h : W.Op t m m') {b : BlockId} {blk : Block}
-    (hb : m.blocks[b]? = some blk) : ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
-      blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
-  by_cases e : b = W.b
-  · subst e
-    obtain ⟨blk', h1, -, h2, h3, h4, -⟩ := h.blocks.word blk hb
-    exact ⟨blk', h1, h2, h4, h3⟩
-  · exact ⟨blk, by rw [h.blocks.other b e]; exact hb, rfl, rfl, rfl⟩
-
-/-- An op at the word keeps the atomic location of a lock's word apart from it. -/
-theorem Op.lockLoc {t : ThreadId} {m m' : Mem} (h : W.Op t m m') {L : LockWord}
-    (hap : W.ApartL L) {i : Nat} {l : ALoc} (hl : L.Loc m i l) : L.Loc m' i l :=
-  (h.locs.same _ _ hap.ne i l).mpr hl
-
-/-- An op at the word: a new access is at the word. -/
-theorem Op.fpAt {t : ThreadId} {m m' : Mem} (h : W.Op t m m') :
-    ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := fun e he =>
-  (h.fp e he).imp id fun ⟨h1, h2, _⟩ => ⟨h1, h2⟩
-
-/-- An op at the word keeps a word `W'` apart from it that is valid before: valid after it,
-with the same writes. -/
-theorem Op.word {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h : W.Op t m m')
-    (hok : W'.Ok m) (hap : W.b ≠ W'.b ∨ W.o + nb ≤ W'.o ∨ W'.o + nb' ≤ W.o) :
-    W'.Ok m' ∧ W'.hist m' = W'.hist m :=
-  ⟨hok.keep (keep_op h hap), hist_keep hok (keep_op h hap)⟩
-
 /-- A cell of a word is not a cell of a word apart from it. -/
 theorem notIn_apart {n' nb' : Nat} {V : Word n' nb'}
     (h : W.b ≠ V.b ∨ W.o + nb ≤ V.o ∨ V.o + nb' ≤ W.o)
@@ -397,122 +306,6 @@ theorem Inv.cellsN {G : ThreadId → γ} {rY : Res} {m₀ m : Mem}
   | none => exact absurd e h0
   | some c =>
     rw [hi.restCell (fc := ⟨c, none⟩) (by simp [FHeap.union_apply, cellsAt_of hl, e])]; rfl
-
-/-- **An op at a shared word apart from the lock's keeps the lock's invariant**, whose rest has
-the word's cells: the rest gets the word's new cells. -/
-theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
-    (hi : L.Inv G (rsum (W.cellsR m) rY) m) (hWY : ∀ l, W.In l → rY.heap l = none) (hw : W.Ok m)
-    (hw' : W.Ok m') (hop : W.Op t m m') (hap : W.ApartL L.toLockWord) :
-    L.Inv G (rsum (W.cellsR m') rY) m' := by
-  have hsz0 := W.sz_pos
-  have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hop.threads
-  have hown : L.own G m' = L.own G m := by funext u; unfold FLock.own; rw [hjb]
-  have hnw : ∀ l, L.In l → ¬ W.In l := by
-    rintro ⟨b, x⟩ ⟨h1, h2, h3⟩ ⟨h4, h5, h6⟩; simp only at h1 h2 h3 h4 h5 h6
-    rcases hap with h | h | h
-    · exact h (h1.symm.trans h4)
-    · omega
-    · omega
-  have hLcells : ∀ x, L.o ≤ x → x < L.o + 4 → m'.heap (L.b, x) = m.heap (L.b, x) :=
-    fun x h1 h2 => hop.cells _ (hnw _ ⟨rfl, h1, h2⟩)
-  obtain ⟨hblk', hcur⟩ := LockWord.word_congr hLcells hi.w.blk
-  have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold LockWord.U32; rw [hcur]
-  have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => hop.locs.same L.b L.o hap.ne i l
-  have hWb : W.b < m.blocks.size := by
-    obtain ⟨blk, hb, -⟩ := hw.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
-  have hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true :=
-    fun u _ => hop.clocks u
-  -- a new access is at the word, so it does not touch the lock's word
-  have hnL : ∀ e ∈ m'.footprint, e ∉ m.footprint → ¬ L.Hits e := by
-    intro e he hn ⟨hb, x, h1, h2, h3, h4⟩
-    rcases hop.fp e he with h' | ⟨hb', ho, hl, -⟩
-    · exact hn h'
-    · rw [hb'] at hb; rw [ho] at h1; rw [ho, hl] at h2
-      rcases hap with h | h | h
-      · exact h hb.symm
-      · omega
-      · omega
-  have hwi : L.WInv (L.pl G) m' := by
-    refine ⟨by rw [hop.csize, hop.threads]; exact hi.w.csize, fun u hu => ?_, hblk', ?_, hi.w.one,
-      ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩, fun e he hh => ?_,
-      fun i l hl => ?_, by rw [hop.waiters]; exact hi.w.fq, fun hp => ?_,
-      fun u hu => let ⟨i, l, hl, hw⟩ := hi.w.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
-    · rw [hop.threads, hjb]; exact hi.w.live u hu
-    · obtain ⟨w, hw', hu, hz⟩ := hi.w.word; exact ⟨w, hw', (hU32 _).mpr hu, hz⟩
-    · rcases hop.locs.new l hl with h | ⟨hb', ho, hlen⟩
-      · exact hi.w.loc.only l h hb h1 h2
-      · rw [ho] at h1; rw [ho, hlen] at h2; rw [hb'] at hb
-        rcases hap with h | h | h
-        · exact absurd hb.symm h
-        · omega
-        · omega
-    · obtain ⟨h1, h2, h3, h4, h5⟩ := hi.w.loc.ok i l ((hloc i l).mp hl)
-      exact ⟨h1, h2, h3, h4, by rw [h5, hcur]⟩
-    · exact (hi.w.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
-        (hop.fp e he).imp id fun h => plainHit_atomic h.2.2.2.1
-    · by_cases hm : e ∈ m.footprint
-      · rcases hi.w.wfp e hm hh with ⟨ha, hs⟩ | ha
-        · exact .inl ⟨ha, LockWord.someLe_mono hop.threads hcl hs⟩
-        · exact .inr (LockWord.LiveLe.mono hop.threads hcl ha)
-      · exact absurd hh (hnL e he hm)
-    · obtain ⟨h1, h2⟩ := hi.w.rel i l ((hloc i l).mp hl)
-      exact ⟨LockWord.someLe_mono hop.threads hcl h1,
-        fun u hu => VClock.le_trans (h2 u hu) (hop.clocks u)⟩
-    · obtain ⟨v, hv, hq, h1, h2⟩ := hi.w.wit (hop.waiters ▸ hp)
-      exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  -- the rest as `cells W ⋆ (word ⋆ (rL ⋆ rY))`
-  have hWw : FHeap.Disjoint (W.cellsR m).heap (L.wordR m).heap := fun l => by
-    by_cases hl : W.In l
-    · exact .inr (cellsAt_none fun h => hnw l h hl)
-    · exact .inl (cellsAt_none hl)
-  have hXY := FHeap.disjoint_union_right.mp hLX
-  -- `rL` has no byte of the word
-  have hLW : ∀ l, W.In l → rL.heap l = none := fun l hl =>
-    (hXY.1 l).resolve_right (cellsAt_some hl (hw.cellIn hl))
-  have hLW' : FHeap.Disjoint rL.heap (W.cellsR m').heap := fun l => by
-    by_cases hl : W.In l
-    · exact .inl (hLW l hl)
-    · exact .inr (cellsAt_none hl)
-  have hWw' : FHeap.Disjoint (W.cellsR m').heap (L.wordR m).heap := fun l => by
-    by_cases hl : W.In l
-    · exact .inr (cellsAt_none fun h => hnw l h hl)
-    · exact .inl (cellsAt_none hl)
-  -- regroup `word ⋆ (rL ⋆ (C ⋆ rY))` as `C ⋆ (word ⋆ (rL ⋆ rY))`
-  have regroup : ∀ C : Res, FHeap.Disjoint C.heap (L.wordR m).heap → FHeap.Disjoint rL.heap C.heap →
-      rsum (L.wordR m) (rsum rL (rsum C rY)) = rsum C (rsum (L.wordR m) (rsum rL rY)) := by
-    intro C h1 h2
-    rw [← rsum_assoc (a := rL), rsum_comm h2, rsum_assoc, ← rsum_assoc (a := L.wordR m),
-      rsum_comm h1.symm, rsum_assoc]
-  have hwR : L.wordR m' = L.wordR m := by
-    simp only [LockWord.wordR, cellsAt]
-    congr 1; funext ⟨b, x⟩
-    split
-    · rename_i hl; obtain ⟨h1, h2, h3⟩ := hl; simp only at h1 h2 h3; subst h1
-      rw [hLcells x h2 h3]
-    · rfl
-  rw [regroup _ hWw hXY.1] at ho
-  have ho' := ho.restStep (hop.rest hw hw') (fun l hl => hw.cellIn hl) (fun l hl => by
-    simp only [FHeap.union_apply, cellsAt_none (fun h => hnw l h hl), hLW l hl, hWY l hl]; rfl)
-  rw [← regroup _ hWw' hLW', ← hwR, ← hown] at ho'
-  refine ⟨hwi, ⟨rL, ho', hLoff, FHeap.disjoint_union_right.mpr ⟨hLW', hXY.2⟩, fun hF' => ?_, hnF⟩,
-    LockWord.off_erase.mpr fun l hl => ?_, hi.pdisj, hi.idle, hi.res⟩
-  · obtain ⟨hR, hO⟩ := hF hF'
-    refine ⟨hR, fun e he htc => ?_⟩
-    by_cases hm : e ∈ m.footprint
-    · rcases hO e hm (htc.imp id fun h => by rw [← hop.bsize]; exact h) with h | ⟨i, l, hl, hle⟩
-      · exact .inl (LockWord.LiveLe.mono hop.threads hcl h)
-      · exact .inr ⟨i, l, (hloc i l).mpr hl, hle⟩
-    · rcases hop.fp e he with h | ⟨hb, heo, hlen, -⟩
-      · exact absurd h hm
-      · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
-        · rw [hb] at h3; rw [heo] at h1; rw [heo, hlen] at h2
-          exact absurd (by simp [FHeap.erase, hLW (W.b, x) ⟨rfl, h1, by omega⟩]) h3
-        · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
-  · have := LockWord.off_erase.mp hi.xoff l hl
-    simp only [FHeap.union_apply, Option.or_eq_none_iff]
-      at this ⊢
-    exact ⟨cellsAt_none fun h => hnw l hl h, this.2⟩
 
 /-- An actual native step at a shared word preserves an apart lock and the rest of its
 resources. The lock's framed location may move to its mapped index. -/
@@ -1045,88 +838,6 @@ theorem record_rest {m : Mem} {k : AccessKind} (hw : W.Ok m)
   rw [hb] at hb'; cases hb'
   exact hk hk'
 
-/-- Recording an atomic access preserves validity and history directly. No operation-summary
-type occurs in the statement or proof. -/
-theorem Ok.record_native {m : Mem} {t : ThreadId} {k : AccessKind} (hw : W.Ok m)
-    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (hk : k.isAtomic = true) :
-    W.Ok (m.recordAt W.b W.o nb k) ∧ W.hist (m.recordAt W.b W.o nb k) = W.hist m := by
-  subst hc
-  have hct : m.current < m.clocks.size := by rw [hcs]; exact ht
-  let mr := m.recordAt W.b W.o nb k
-  have hs : FStepIn (fun _ => none) m mr := record_fstep hw hct (fun _ _ _ => rfl)
-  have hrt : mr.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current :=
-    recordAt_clock hct
-  have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
-  refine ⟨⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val,
-    fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
-  · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l hl
-    exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
-  · simp only [mr, Mem.recordAt, Array.mem_push] at he
-    rcases he with he | rfl
-    · rcases hw.wfp e he hh with ⟨ha, hle⟩ | hle
-      · exact .inl ⟨ha, LockWord.someLe_mono (m := m) (m' := mr) rfl
-          (fun u _ => hs.clock u) hle⟩
-      · exact .inr (LockWord.allLe_mono (m := m) (m' := mr) rfl
-          (fun u _ => hs.clock u) hle)
-    · refine .inl ⟨hk, m.current, ht, ?_⟩
-      show VClock.le _ (mr.clocks[m.current]!) = true
-      rw [hrt]; exact VClock.le_refl _
-  · simp only [mr, Mem.recordAt, Array.mem_push] at he
-    rcases he with he | rfl
-    · exact .inl he
-    · exact .inr (plainHit_atomic hk)
-
-/-- Actual valid-word preparation preserves validity, history and the recorded access without
-passing through the old operation summary. -/
-theorem Ok.prep_native {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m)
-    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (hk : k.isAtomic = true)
-    (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
-    ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
-      m₁.seen = m.seen ∧ W.Rec m₁ t := by
-  subst hc
-  let mr := m.recordAt W.b W.o nb k
-  have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
-  obtain ⟨hwr, _⟩ := hw.record_native rfl ht hcs hk
-  have hrec : W.Rec mr m.current := rec_recordAt rfl (by rw [hcs]; exact ht)
-  cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
-  | some i =>
-    have hl := loc_of_find hf
-    obtain ⟨hlen, _, _, hlast, _⟩ := hwr.loc i _ hl
-    obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast (hwr.plain i _ hl) h
-    exact ⟨_, hl, hwr, hist_congr rfl rfl, rfl, rfl, hrec⟩
-  | none =>
-    obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hwr.only) h
-    have hno : ∀ i l, ¬ W.Loc mr i l := fun i l hl => by rw [hl.1] at hf; cases hf
-    let nl : ALoc := firstLoc mr W.b W.o nb
-    have hnl : W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }
-        mr.atomics.size nl := by
-      refine ⟨?_, by simp⟩
-      show (mr.atomics.push nl).findIdx? _ = _
-      rw [Array.findIdx?_push, hf]; simp [nl, firstLoc]
-    have honly : ∀ i l, W.Loc { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 }
-        i l → i = mr.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
-    refine ⟨nl, hnl, ⟨hw.blk, fun l hl hb h1 h2 => ?_, fun i l hl => ?_, hwr.wfp, hwr.val,
-      fun i l hl e he hh => by
-        obtain ⟨rfl, rfl⟩ := honly i l hl
-        simpa [ALoc.lastClock, nl, firstLoc, firstMsg] using
-          plainLe_plainClock mr W.b W.o nb e he hh⟩, ?_, rfl, rfl, hrec⟩
-    · rcases Array.mem_push.mp hl with hl | rfl
-      · exact hw.only l hl hb h1 h2
-      · rfl
-    · obtain ⟨rfl, rfl⟩ := honly i l hl
-      refine ⟨rfl, by simp [nl, firstLoc], fun j hj => by simp [nl, firstLoc] at hj,
-        by simp [ALoc.lastBytes, nl, firstLoc, firstMsg, curBytes], fun j hj => ?_⟩
-      simp only [nl, firstLoc, List.size_toArray, List.length_cons, List.length_nil] at hj
-      obtain rfl : j = 0 := by omega
-      obtain ⟨v, hv⟩ := hwr.val
-      exact ⟨v, hv⟩
-    · have hn : ∀ i l, ¬ W.Loc m i l := fun i l hl => hno i l hl
-      show W.hist { mr with atomics := mr.atomics.push nl, nextMsg := mr.nextMsg + 1 } = W.hist m
-      rw [hist_loc hnl, hist_none hn, ← hcur]
-      simp [nl, firstLoc, firstMsg, ent]
-
 /-- Actual preparation keeps the resource rest. A fresh location is appended only at the
 word; a previously existing location and its complete record stay unchanged. -/
 theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
@@ -1197,8 +908,8 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
     exact ⟨h1, h2, h3, by rw [h4, curBytes_congr hb], h5⟩
   · rw [hf] at he
     rcases hw.wfp e he hh with ⟨hk, hle⟩ | hle
-    · exact .inl ⟨hk, LockWord.someLe_mono ht (fun u _ => hcl u) hle⟩
-    · exact .inr (LockWord.allLe_mono ht (fun u _ => hcl u) hle)
+    · exact .inl ⟨hk, Conc.someLe_mono ht (fun u _ => hcl u) hle⟩
+    · exact .inr (Conc.allLe_mono ht (fun u _ => hcl u) hle)
   · obtain ⟨v, hv⟩ := hw.val
     refine ⟨v, ?_⟩
     unfold Holds at hv ⊢
@@ -1224,14 +935,14 @@ theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : 
       · exact hn hb
       · omega
       · omega
-  have hcl := LockWord.recordAt_le m b o len k
+  have hcl := Conc.recordAt_le m b o len k
   refine ⟨⟨hw.blk, hw.only, fun i l hl => hw.loc i l hl, fun e he hh => ?_, hw.val,
     fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
   · rcases hfp e he with he | hn
     · rcases hw.wfp e he hh with ⟨hk, hs⟩ | ha
-      · exact .inl ⟨hk, LockWord.someLe_mono (m := m) (m' := m.recordAt b o len k)
+      · exact .inl ⟨hk, Conc.someLe_mono (m := m) (m' := m.recordAt b o len k)
           rfl (fun u _ => hcl u) hs⟩
-      · exact .inr (LockWord.allLe_mono (m := m) (m' := m.recordAt b o len k)
+      · exact .inr (Conc.allLe_mono (m := m) (m' := m.recordAt b o len k)
           rfl (fun u _ => hcl u) ha)
     · exact absurd hh hn
   · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
@@ -1245,7 +956,7 @@ theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
   rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
-  obtain ⟨hcl, hcn, _⟩ := Full.LockWord.fork_clocks (cs := m.clocks) (t := t)
+  obtain ⟨hcl, hcn, _⟩ := Conc.fork_clocks (cs := m.clocks) (t := t)
     (by rw [hcs]; exact ht)
   refine ⟨⟨hw.blk, hw.only, hw.loc, ?_, hw.val, hw.plain⟩, hist_congr rfl rfl⟩
   intro e he hh
@@ -1771,8 +1482,8 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
       · exact ⟨new, W.enc_val new⟩
   · have he' : e ∈ m₁.footprint := hMf ▸ he
     rcases hw.wfp e he' hh with ⟨ha', hle⟩ | hle
-    · exact .inl ⟨ha', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
-    · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
+    · exact .inl ⟨ha', Conc.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
+    · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
   · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
     intro e he hh
     have he' : e ∈ m₁.footprint := hMf ▸ he
