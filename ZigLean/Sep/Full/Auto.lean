@@ -6493,6 +6493,17 @@ def wpNormFields (g : MVarId) (h : FVarId) (extra : Array Syntax) :
   let some g ← if changed then wpForward g h' else pure (some g) | return none
   return some (changed, ← g.withContext (wpCurrentHyp? h'), g)
 
+/-- `l = r` fixes its unknowns by unification alone: a side is an unknown, or both sides are the
+same constructor whose arguments again fix theirs (`(?x, ?y) = (a, b)`). Never through another
+function, which need not be injective: `f ?v = f a` would commit `?v := a` where a later fact
+(`?v = b` with `f a = f b`) fixes another value. -/
+partial def eqFixesUnknowns (l r : Expr) : MetaM Bool := do
+  if l.isMVar || r.isMVar || !(l.hasExprMVar || r.hasExprMVar) then return true
+  let .const c _ := l.getAppFn | return false
+  unless r.getAppFn.isConstOf c && l.getAppNumArgs == r.getAppNumArgs do return false
+  let some (.ctorInfo _) := (← getEnv).find? c | return false
+  l.getAppArgs.zip r.getAppArgs |>.allM fun (a, b) => eqFixesUnknowns a b
+
 mutual
 
 /-- Split a hypothesis of a stop: `∧`, `∃` (a product witness by its components), `∨` by cases;
@@ -6805,11 +6816,15 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   if ← wpAssumptionArgs g then return []
   if ← wpChain g user extra fuel noCases then return []
   let t ← instantiateMVars (← g.getType)
-  -- an equation that fixes an unknown (a ghost value `?g = (…)` of a protocol's `init`)
+  -- An equation can fix an unknown endpoint or constructor fields (`eqFixesUnknowns`).
   if let some (_, l, r) := t.eq? then
-    if l.isMVar || r.isMVar then
+    if (l.hasExprMVar || r.hasExprMVar) && (← eqFixesUnknowns l r) then
       let s ← saveState
-      if ← isDefEq l r then g.assign (← mkEqRefl l); return []
+      try
+        if ← isDefEq l r then
+          g.assign (← mkEqRefl l)
+          return []
+      catch _ => pure ()
       s.restore
   if t.isFalse then
     if ← closeWith g (← `(tactic| contradiction)) then return []
