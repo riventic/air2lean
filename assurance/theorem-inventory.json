@@ -1238,16 +1238,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "b5455400299621ee395f7b7c7223b8b63aaf84dc",
-        "tracked_dirty": true
+        "head": "bc2e053e998c6aab199cd45564eb02145c20a490",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-11-04T17:14:34.633527+00:00",
-      "elapsed_seconds": 0.228,
+      "started_utc": "2026-11-04T18:20:48.907565+00:00",
+      "elapsed_seconds": 0.338,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "841ae5537d54b81a8ba4d03ebb89e32751e82cee27b9c46e6a9c1be161a428e2",
+      "log_sha256": "b1380131ced5f189e9eaaa8ad02cc2ef26b94750403f5c78886bf6cf71f2e726",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1316,6 +1316,7 @@
         "Proofs.Sync.Event",
         "Proofs.Sync.Handoff",
         "Proofs.Sync.IoMutex",
+        "Proofs.Sync.IoSemaphore",
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mailbox",
         "Proofs.Sync.Mutex",
@@ -1543,6 +1544,7 @@
         "Proofs.Sync.Event": "96d27f77af5c9883164dff41dbbcdea82bf97b92f3606ac2940bab21bc1ae7aa",
         "Proofs.Sync.Handoff": "1933c7f543de4cb43f6708049e54adc5cfacaf6ceaef215264621c9ac7c2b8f6",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
+        "Proofs.Sync.IoSemaphore": "5723b1aafda16be6f7b393663cdcaf998c16e1301d9be2df23bcd085be153a8d",
         "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
         "Proofs.Sync.Mutex": "c45c7ae7e9c6ec0b9869e64c71ca3f69ff67ce9dbf738101ecbb32f3b0a81759",

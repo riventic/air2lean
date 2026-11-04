@@ -448,6 +448,31 @@ theorem ep_notS {l : Zig.Loc} (hl : C.Ep.In l) : ¬ C.S.In l := by
   have := C.ep_o
   omega
 
+/-- The condition's cells stay (up to `Cell.norm`) over a step with the lock's invariant after
+it, with the same rest (the cells are in the rest: `FCond.prim`'s `Sub`; `FLock.Inv.cellsN`). -/
+theorem cells_of_inv {G G' : ThreadId → γ} {rX : Res} {m m' : Mem}
+    (hsub : (C.prim L).Sub G rX m) (hL' : L.Inv G' rX m') :
+    ∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+  intro W hW l hl
+  obtain ⟨hw, rY, hrX, -⟩ := hsub.2 W hW
+  rw [hrX] at hL'
+  exact hL'.cellsN hl (hw.cellIn hl)
+
+/-- The words' writes stay over a holder's step with the condition's cells. -/
+theorem hist_hold {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hsub : (C.prim L).Sub G rX m)
+    (hfs : FStepIn (rsum (L.wordR m) rX).heap.erase m m')
+    (hcells : ∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
+    {W : Word 32 4} (hW : W = C.S ∨ W = C.Ep) : W.hist m' = W.hist m := by
+  obtain ⟨hw, rY, hrX, -⟩ := hsub.2 W hW
+  refine Word.hist_fstep hw hfs (fun l hl => ?_) (hcells W hW)
+  have := cellsAt_some (W := W.In) hl (hw.cellIn hl) (m := m)
+  rw [hrX]
+  simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+    Option.or_eq_none_iff, not_and, Word.cellsR] at this ⊢
+  intro _ h; exact absurd h this
+
 /-- The epoch's pointer is formed from the condition's (`&cond.epoch`, MM-3). -/
 theorem _root_.Zig.Full.FLock.Fits.projE (hC : L.Fits (C.prim L) P U ok) {G : ThreadId → γ}
     {m : Mem}
