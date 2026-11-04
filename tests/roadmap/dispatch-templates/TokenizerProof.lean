@@ -2,6 +2,7 @@ import DispatchTokenizer
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Arr
+import ZigLean.Sep.Full.Tick
 
 /-!
 # Total correctness of a generated tokenizer state machine
@@ -26,6 +27,9 @@ The proof is in the full-state logic (`ZigLean/Sep/Full/Loop.lean`, walked by `f
 * `loop_total`: the loop by `FTotalTriple.loop_dispatch`, as a rule for `fsym`.
 * `countTokens_total`: for a buffer `p` holding the bytes `xs`, `countTokens p xs.length` returns
   (no panic, no divergence) `tokens .start xs` modulo `2 ^ 32` and leaves the buffer unchanged.
+
+Every body run takes a step (`Zig.tick`), so the invariant carries the plain mode (`plain`,
+`docs/sep-full-state.md` §Step ticks) and `fsym` pays each step with it (`tick_plain`).
 
 Its strength log (the legacy total triple on every `Mem.FSeqPlain` memory) is
 `tests/roadmap/strength-log/DispatchTemplates.lean`.
@@ -104,15 +108,16 @@ def counted (xs : List (BitVec 8)) (k : State) (i : BitVec 64) (count : BitVec 3
   | k => i.toNat ≤ xs.length ∧
     (count.toNat + tokens k (xs.drop i.toNat)) % 2 ^ 32 = tokens .start xs % 2 ^ 32
 
-/-- The state-indexed invariant: the count of state `k`, and the buffer. -/
+/-- The state-indexed invariant: the count of state `k`, and the buffer; the steps run in the
+plain mode. -/
 def inv (sl : Slice) (xs : List (BitVec 8)) (k : State) (s : countTokensLocals) : FAssn :=
-  ⟪counted xs k s.i s.count⟫ ⋆ up (arr sl.ptr xs)
+  ⟪counted xs k s.i s.count⟫ ⋆ (up (arr sl.ptr xs) ⋆ plain)
 
 /-- The consumed data: the unread bytes. -/
 def unread (xs : List (BitVec 8)) (s : countTokensLocals) : Nat := xs.length - s.i.toNat
 
 def post (sl : Slice) (xs : List (BitVec 8)) (r : countTokensExit × countTokensLocals) : FAssn :=
-  ⟪r.1 = .br9 ∧ r.2.count.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ up (arr sl.ptr xs)
+  ⟪r.1 = .br9 ∧ r.2.count.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ (up (arr sl.ptr xs) ⋆ plain)
 
 -- The ranks of the states are arithmetic facts for `fsym`.
 attribute [local fsym_arith] rank
@@ -147,15 +152,15 @@ theorem step (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.lengt
           simp only [h0, tokens, Nat.add_zero] at *; omega
 
 /-- The generated loop-switch, as a rule for `fsym`: from the start state with nothing counted
-it exits with the token count. The loop's `MonoBind` proof is a parameter, so the rule's command
-unifies with any elaboration of it. -/
+it exits with the token count, its steps in the plain mode. The loop's `MonoBind` proof is a
+parameter, so the rule's command unifies with any elaboration of it. -/
 theorem loop_total {mb : Lean.Order.MonoBind (MM countTokensLocals)} (sl : Slice)
     (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.length) (s : countTokensLocals)
     (hi : s.i = 0) (hc : s.count = 0) (hk : s.dispatchValue10 = .start) :
-    FTotalTriple (up (arr sl.ptr xs))
+    FTotalTriple (up (arr sl.ptr xs) ⋆ plain)
       ((@Zig.loop (MM countTokensLocals) _ _ mb _ (countTokens.loop10 sl) countTokens.again10).run s)
       (fun r => FAssn.ex fun t : countTokensLocals =>
-        ⟪r = (.br9, t) ∧ t.count.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ up (arr sl.ptr xs)) :=
+        ⟪r = (.br9, t) ∧ t.count.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ (up (arr sl.ptr xs) ⋆ plain)) :=
   (FTotalTriple.loop_dispatch (·.dispatchValue10) (inv sl xs) (unread xs) rank 3 (post sl xs)
     (step sl xs hlen) s).eupd
     (by unfold inv counted; simp only [hi, hc, hk]; fsym_entail; simp)
@@ -164,10 +169,10 @@ theorem loop_total {mb : Lean.Order.MonoBind (MM countTokensLocals)} (sl : Slice
       exact ⟨t, sep_lift.mpr ⟨⟨by simp only at he; rw [he], ht⟩, h⟩⟩
 
 /-- `countTokens p n` over a buffer `p` of `n` bytes `xs` returns the number of tokens of `xs`
-(mod `2 ^ 32`) and leaves the buffer unchanged. -/
+(mod `2 ^ 32`) and leaves the buffer unchanged; its steps run in the plain mode. -/
 theorem countTokens_total (p : Ptr) (xs : List (BitVec 8)) (hlen : xs.length < 2 ^ 64) :
-    FTotalTriple (up (arr p xs)) (countTokens p (BitVec.ofNat 64 xs.length))
-      (fun r => ⟪r.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ up (arr p xs)) := by
+    FTotalTriple (up (arr p xs) ⋆ plain) (countTokens p (BitVec.ofNat 64 xs.length))
+      (fun r => ⟪r.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ (up (arr p xs) ⋆ plain)) := by
   unfold countTokens
   fsym [loop_total]
 
