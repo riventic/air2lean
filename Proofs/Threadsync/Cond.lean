@@ -306,7 +306,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
     refine WP.bind (WP.callRC_ok (v := b - 1 - 65536)
       (by dsimp only; rw [Auto.sub_ok (by bv_omega)]; rfl) ?_)
     refine WP.bind (FCond.wp_consume hC (exp := b) (new := b - 1 - 65536) (by omega) (by bv_omega)
-      (gRD_ph hC) (gRD_lph hC) hi
+      (gRD_ph hC) hi
       fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' hb' hi₁ => ?_⟩)
     · -- the signal taken: `lock`
       rw [gRD_out hC hgx] at hi₁
@@ -387,11 +387,11 @@ theorem loop29_body [Zig.Os.HasEnv] (hC : C.Fits L P U ok) (hcost : P.cost = non
   refine WP.bind (WP.callMC_ptrProject (hF.projE hi₁) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_loadEp hF (gRD_ph hF) (gRD_lph hF) hi₁
+  refine WP.bind (FCond.wp_loadEp hF (gRD_ph hF) hi₁
     fun k₂ hk₂ G₂ m₂ v i' hc₂ hi₂ => ?_)
   rw [gRD_set hF] at hi₂
   simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (FCond.wp_loadS hF (gRD_ph hF) (gRD_lph hF) hi₂
+  refine WP.bind (FCond.wp_loadS hF (gRD_ph hF) hi₂
     fun k₃ hk₃ G₃ m₃ b hc₃ hb hi₃ => ?_)
   rw [show FCond.afterRead i' jr v b = .reg i' jr (decide (b.toNat / 65536 ≠ 0)) v from rfl,
     gRD_set hF] at hi₃

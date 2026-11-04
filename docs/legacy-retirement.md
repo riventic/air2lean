@@ -396,6 +396,7 @@ The multi-waiter prerequisite remains open. Event still needs sufficient-count
 selected wakes; Condition needs general admission/accounting, finite support and
 liveness. The existing singleton implementation contracts are preserved, so this
 foundation alone does not release the L10/L11 implementation gate.
+
 **Gate released (maintainer decision 2026-11-03).** `SemImpl` (L10) and `RwLockImpl` (L11) are
 built like `MutexImpl`/`CondImpl`; `RwLockImpl` sits on `SemImpl`. WaitGroup's setter, which sets
 its event after leaving the lock's protocol, takes its existence from its resumption

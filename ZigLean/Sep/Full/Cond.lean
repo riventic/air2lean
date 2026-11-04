@@ -726,7 +726,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadS (hC : L.Fits (C.prim L) P U ok)
 /-- The waiter's relaxed load of the state at `reg i jr true e` (`atomicLoadC`,
 `Thread.Condition`). -/
 theorem wp_loadS (hC : L.Fits (C.prim L) P U ok) {i jr : Nat}
-    {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    {e : BitVec 32} (hg : C.ph g = .reg i jr true e)
     (hi : P.inv (upd G t g) m) {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → SOk b →
       P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (b, s) G₁ m' k)
@@ -751,7 +751,7 @@ theorem dec_of {α : Type} [Packed α 32]
 /-- The waiter's relaxed load of the state with a decode (`atomicLoadAsC`, `Io.Condition`). -/
 theorem wp_loadSAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
-    {i jr : Nat} {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    {i jr : Nat} {e : BitVec 32} (hg : C.ph g = .reg i jr true e)
     (hi : P.inv (upd G t g) m) {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b r, m'.current = t →
       (Packed.ofBits? (α := α) b).run = some (.ok r) → SOk b →
@@ -806,7 +806,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
 (`afterReadS`). -/
 theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     {exp new : BitVec 32} (hs : 0 < exp.toNat / 65536) (hnew : new = exp - 0x10001) {i jr : Nat}
-    {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    {e : BitVec 32} (hg : C.ph g = .reg i jr true e)
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (P.inv (upd G₁ t (C.set g .out)) m' → Q (none, s) G₁ m' k) ∧
@@ -834,7 +834,7 @@ theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     {succ fail : AtomicOrder} {exp new : α} {i jr : Nat} {e : BitVec 32}
     (hs : 0 < (Packed.toBits exp).toNat / 65536)
     (hnew : Packed.toBits new = Packed.toBits exp - 0x10001)
-    (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .reg i jr true e) (hi : P.inv (upd G t g) m)
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (P.inv (upd G₁ t (C.set g .out)) m' → Q (none, s) G₁ m' k) ∧
@@ -1049,7 +1049,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSl (hC : L.Fits (C.prim L) P U ok)
 
 /-- The signaller's relaxed load of the state at `sl h c` (`atomicLoadC`, `Thread.Condition`). -/
 theorem wp_sload (hC : L.Fits (C.prim L) P U ok) {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → SOk b →
       (b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost sh c all m') →
@@ -1067,7 +1067,7 @@ theorem wp_sload (hC : L.Fits (C.prim L) P U ok) {sh : Array Word.Entry} {c : VC
 theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b r, m'.current = t →
       (Packed.ofBits? (α := α) b).run = some (.ok r) → SOk b →
@@ -1144,7 +1144,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterPost (hC : L.Fits (C.prim L) P U ok)
 state, as `wp_sload`. -/
 theorem wp_post (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     {exp new : BitVec 32} (hpk : PostOk exp new) {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (∀ q, ((∀ all, (all = true → new.toNat % 65536 ≤ new.toNat / 65536) →
@@ -1172,7 +1172,7 @@ theorem wp_postAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {succ fail : AtomicOrder} {exp new : α}
     (hpk : PostOk (Packed.toBits exp) (Packed.toBits new)) {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (∀ q, ((∀ all, (all = true →
@@ -1200,7 +1200,7 @@ theorem wp_postAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
 
 /-- The signaller's `epoch += 1` (release) at `inc q nw h`: it is at `wk nw q h`. -/
 theorem wp_bump (hC : L.Fits (C.prim L) P U ok) {q nw : Nat} {sh : Array Word.Entry}
-    (hg : C.ph g = .inc q nw sh) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (hg : C.ph g = .inc q nw sh)
     (hi : P.inv (upd G t g) m) {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o, m'.current = t →
       P.inv (upd G₁ t (C.set g (.wk nw q sh))) m' → Q (o, s) G₁ m' k)
@@ -1257,7 +1257,7 @@ after a wake it is out; after a spurious `EINTR` (macOS; nobody woken) it is sti
 (std wakes again). -/
 theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} {q : Nat} {sh : Array Word.Entry}
-    (hg : C.ph g = .wk 1 q sh) (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .wk 1 q sh) (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j) ∧ C.S.Prefix sh m' ∧ P.inv (upd G₁ t (C.set g .out)) m' ∨
@@ -1530,7 +1530,7 @@ theorem wp_osWaitEp (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
 lock's code): it reads a write `i'` its view allows, at or after its saved one (`Inv.ep_floor`),
 and saves it (`Inv.reload`). -/
 theorem wp_loadEp (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
-    (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .reg i jr true e) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b i', m'.current = t →
       P.inv (upd G₁ t (C.set g (.reg i' jr true b))) m' → Q (b, s) G₁ m' k)
