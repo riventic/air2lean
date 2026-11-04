@@ -23979,7 +23979,7 @@
       "ZigLean/Sep/Full/AtomicPlain.lean": "74c73257fbfdabf011c93839f2d77fd9cba2edf77e5dc17e596b906108ffd476",
       "ZigLean/Sep/Full/AtomicPtr.lean": "15123f84791a4e2c9c99e800ab17dd481518389260e26c8106cfe7ab28b81ef3",
       "ZigLean/Sep/Full/AtomicRules.lean": "72c56f4c4192fd5cbee9b076a4178b86d72236e4df9effa790b4132a198d97be",
-      "ZigLean/Sep/Full/Auto.lean": "5aba7d024b45ffa4ee2de3a15f1c4b2b49fc1990e7ba1453a90f03f6eb8a7e98",
+      "ZigLean/Sep/Full/Auto.lean": "3fd99b71c67acd26a3b4918f203c2a9a06be2f797eda5cdd355a432137eaefc0",
       "ZigLean/Sep/Full/AutoAll.lean": "a0ef457546401de3a7aa1f9a576f69d49491f897a323194ccfcb697843390c22",
       "ZigLean/Sep/Full/AutoArith.lean": "cadc652ac9e0cb2c4e19a4e9e311336f1dfa765e18e020dd3d6b8ac0f2d51e9f",
       "ZigLean/Sep/Full/AutoAttr.lean": "ddca0bf6f111a7040aa0f237bbe83113d0b91f24dd964c1c90b885205da91ebe",
