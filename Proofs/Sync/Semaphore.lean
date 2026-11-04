@@ -2408,7 +2408,9 @@ theorem loop45_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (
   simp only at hps hep
   subst hps
   unfold Io_Condition_waitUncancelable.loop45
-  simp only [StateT.run_bind, StateT.run_get]
+  simp only [StateT.run_bind]
+  refine WP.bind (hP.wp_tick hi fun hi => ?_)
+  simp only [StateT.run_get]
   simp only [pure_bind]
   refine WP.bind ?_
   simp only [StateT.run_pure]
@@ -2512,6 +2514,8 @@ theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (
   simp only at he
   subst ep
   unfold Io_Condition_waitUncancelable.loop22
+  simp only [StateT.run_bind]
+  refine WP.bind (hP.wp_tick hi fun hi => ?_)
   simp only [StateT.run_bind, StateT.run_get, StateT.run_pure, pure_bind]
   first
   | rw [ptr_epoch]
