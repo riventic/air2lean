@@ -687,6 +687,35 @@ theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
         let r := hC.afterReadS hg₁ hg hU hY (hms (.inl hh)) hA hL hj hv hfl hh
         (h k hk G₁ m' (hop.current.trans hc₁)).2 b r.1 r.2⟩
 
+/-- The waiter's weak `cmpxchg((w, s) → (w - 1, s - 1))` with a decode (`cmpxchgWeakAsC`,
+`Io.Condition`), as `wp_consume`. -/
+theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
+    (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {succ fail : AtomicOrder} {exp new : α} {i jr : Nat} {e : BitVec 32}
+    (hs : 0 < (Packed.toBits exp).toNat / 65536)
+    (hnew : Packed.toBits new = Packed.toBits exp - 0x10001)
+    (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
+      (P.inv (upd G₁ t (C.set g .out)) m' → Q (none, s) G₁ m' k) ∧
+      (∀ b r, (Packed.ofBits? (α := α) b).run = some (.ok r) → SOk b →
+        P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (some r, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((cmpxchgWeakAsC succ fail 4 C.S.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n :=
+  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+    (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA _hS hL =>
+      let hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      let hms := mstep_op (C := C) hc₁ hw₀ hct
+        (by rcases hrun with ⟨c₀, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c₀, _, _, _, _, r, hr⟩)))) hw'
+      ⟨fun hv _ hh _ _hR =>
+        (h k hk G₁ m' (hop.current.trans hc₁)).1
+          (hC.afterConsume hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hL hs hv
+            (by rw [hh, hnew])),
+       fun j b r hd hj hv hfl _ hh _hR =>
+        let r' := hC.afterReadS hg₁ hg hU hY (hms (.inl hh)) hA hL hj hv hfl hh
+        (h k hk G₁ m' (hop.current.trans hc₁)).2 b r hd r'.1 r'.2⟩
+
 /-! ## The signaller
 
 `signal` (and `broadcast`) from its call: the entry `out → sl h c` takes the call snapshot
