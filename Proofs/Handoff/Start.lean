@@ -240,9 +240,9 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
       ⟨blk, hblk, hl, hS, hK⟩, hwsOk, hweOk, hwvOk,
       FCond.Inv.start hwsz hwsv hwez hwev hc hq, FEvent.Inv.start _ hwvz hwvv he hq hFresh,
       by show ((upd G0 0 _ 1).2.c).waits = false; rw [hc]; rfl, fun _ => hwez,
-      by rw [hwez]; decide, fun h => by rw [hwez] at h; cases h,
-      fun _ _ _ h => by rw [hc] at h; cases h, fun h => ?_, fun h => ?_, fun j hj => ?_,
-      fun h => by rw [hc] at h; cases h, fun n h => by rw [hXu 1 (by decide)] at h; cases h,
+      by rw [hwez]; decide, fun h => (by rw [hwez] at h; cases h),
+      fun _ _ _ h => (by rw [hc] at h; cases h), fun h => ?_, fun h => ?_, fun j hj => ?_,
+      fun h => (by rw [hc] at h; cases h), fun n h => (by rw [hXu 1 (by decide)] at h; cases h),
       fun h => ?_, fun h => ?_, fun w hw => by simp [hq] at hw, fun u h => absurd (hc u) h⟩
     · -- every access to `io` happened before `main`, which owned it
       obtain rfl : u = 0 := by rw [h1] at hu; omega

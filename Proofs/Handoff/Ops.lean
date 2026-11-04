@@ -278,9 +278,9 @@ theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh}
     {d : Nat} (hi : (proto Lo prodOf).inv (upd G 1 (gO rnil { ph := .sg })) m) :
     (proto Lo prodOf).WP 1 (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (gO rnil { ph := .st })) m') G m d := by
-  obtain ⟨-, -, hu⟩ := id hi
+  obtain ⟨_, -, hu⟩ := id hi
   exact WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun hr => by
-      obtain ⟨-, -, hu'⟩ := id hi'
+      obtain ⟨_, -, hu'⟩ := id hi'
       exact signal_sig hu (by rw [upd_self]; rfl) hu' (by rw [upd_self]; rfl) hs
         (by rw [upd1_0]; exact hr)⟩)
     (ci.signal_wp fitsC rfl hp 1 (gO rnil { ph := .sg, sz := some (Lo.WS.hist m).size }) rfl

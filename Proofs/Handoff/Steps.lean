@@ -294,7 +294,12 @@ theorem signal_sig {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem}
   obtain ⟨h0, -, h1, h2⟩ := hj
   have hjm : RegW Lo m j :=
     ⟨h0, hjn, by rw [← hpre.get (by omega)]; exact h1, by rw [← hpre.get hjn]; exact h2⟩
-  exact FCond.SigPost.one hp hu'.cinv hjn (U.reg_out hu (by rw [hg]; intro h; cases h) hjm) hw
+  have hseen : VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true :=
+    U.reg_out hu (by rw [hg]; intro h; cases h) hjm
+  have hw1 : ∀ p, j ≤ p → p < ((C Lo).S.hist m').size →
+      FCond.wOf ((C Lo).S.hist m')[p]! = 1 := hw
+  have h := FCond.SigPost.one (L := L Lo) hp hu'.cinv (jr := j) hjn hseen hw1
+  unfold Sig; exact h
 
 /-- **The producer, holding the mutex,** goes from `lk`, `hl` or `v7` to `hl`, `v7` or `rdy`
 (its lock's return and its two stores). `hL`: the lock's invariant with any resource and places
@@ -489,8 +494,8 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     hwS, hwE, hwV, hI', hJ', by rw [hX1]; rfl,
     fun _ => by rw [hhE]; exact hu.ep1 (by rw [hG1]; rfl),
     by rw [hhE]; exact hu.ep2, fun h => (SW_congr hhS).mpr (hu.epS (by rw [← hhE]; exact h)),
-    fun _ _ _ h => by rw [hX1] at h; cases h,
-    ?_, ?_, ?_, fun h => by rw [hX0] at h; cases h, fun _ h => by rw [hX1] at h; cases h,
+    fun _ _ _ h => (by rw [hX1] at h; cases h),
+    ?_, ?_, ?_, fun h => (by rw [hX0] at h; cases h), fun _ h => (by rw [hX1] at h; cases h),
     ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩
   · simp only [Array.getElem?_push]; rw [ite_eq_right (by omega)]; exact h00
   · simp only [Array.getElem?_push, hs1, ↓reduceIte]

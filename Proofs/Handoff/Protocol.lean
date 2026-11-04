@@ -25,12 +25,16 @@ generated code with the steps here.
   `io` for 0.16.0: read-shared); their invariants (`FCond.Inv`, `FEvent.Inv`) are part of `U`.
   Only the producer in its `signal` signals (`FCond.sx`); only `main` waits at the event
   (`FEvent.wx`).
-- **The rest `U`**: the threads (`Shape`), and what the contracts' client premises need: the
-  epoch has its first write only, which `main` made, until the producer signals (`ep1`, `ep0`:
-  `hhb`); while `main` is in the condition's critical code the producer is before its lock
-  (`ent`: `hent`, and from it `hone`); `main`'s registration happened before the producer
-  (`reg`: `hseen`, through the mutex's release and acquire); after the producer's signal a
-  registered `main` is signalled (`lvc`), and after its end the event is set (`fin`): `hlive`.
+- **The rest `U`**: the threads (`Shape`), and what the contracts need: the epoch has its first
+  write only until the producer signals (`ep1`) and moves at most once, with no post possible
+  after it (`ep2`, `epS`, `incE`: the window `Fits.win`); while `main` is in the condition's
+  critical code the producer is before its lock (`ent`: `hent`; only `main` registers, so
+  `hroom`); every registration (a state write with `waiters` from 0 to 1, `RegW`) happened
+  before the producer (`reg`, through the mutex's release and acquire), a registered `main` has
+  one waiter from its registration on (`w1`), and inside `signal` the producer's call snapshot
+  (`X.sz`) covers every registration (`snap`): with `FCond.SigPost.one` the signal's post says
+  `main` is signalled (`signal_sig`, `lvc`); after the producer's end the event is set (`fin`):
+  `hlive`.
 -/
 
 namespace Zig
@@ -625,10 +629,10 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
     · rw [upd_ne _ _ e]
   refine ⟨?_, fun e he hr => ?_, hrest, hbk, hwS, hwE, hwV,
     hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
-      (fun h => by show g.1.ph = _; rw [hph]; exact h)
+      (fun _ h => by show g.1.ph = _; rw [hph]; exact h)
       (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE (by rw [hs.waiters])
       (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
-      (fun _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock,
+      (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock,
     hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
@@ -987,7 +991,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     (h : Res) (W : Word 32 4) (hW : W = (C Lo).S ∨ W = (C Lo).Ep)
     (hn : CPh.Next ((C Lo).ph (G t)) p)
     (hq : (q = (L Lo).ph (G t) ∧ h = (L Lo).held (G t)) ∨
-      (((L Lo).ph (G t) = .out ∨ (L Lo).ph (G t) = .away) ∧
+      (((L Lo).ph (G t) = .out ∨ ((L Lo).ph (G t) = .away ∧ ((C Lo).ph (G t)).isReg = true)) ∧
         (q = .out ∨ (q = .away ∧ p.waits = true)) ∧ h = rnil))
     (hu : U Lo G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
     (hs : (C Lo).MStep W t m m')
@@ -1084,7 +1088,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         (q = .out ∨ (q = .away ∧ p.waits = true)) := fun hne => by
     rcases hq with ⟨rfl, -⟩ | ⟨h1, h2, -⟩
     · exact absurd hLt.symm hne
-    · exact ⟨h1, h2⟩
+    · exact ⟨h1.imp_right And.left, h2⟩
   have hV : Lo.WV.hist m' = Lo.WV.hist m := by
     rcases hhist _ (.inr (.inr rfl)) hu.wv with e | ⟨e, -⟩
     · exact e
@@ -1348,7 +1352,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 
 /-- **A step of the event's code keeps `U`** (`FLock.Fits.kstep` of `FEvent.prim`). -/
 theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : EPh) (q : LPh)
-    (hlo : (L Lo).ph (G t) = .out ∨ (L Lo).ph (G t) = .away)
+    (hlo : (L Lo).ph (G t) = .out ∨ ((L Lo).ph (G t) = .away ∧ (E Lo).ph (G t) = .w1))
     (hq : q = .out ∨ (q = .away ∧ p = .w1))
     (hu : U Lo G (rsum ((E Lo).W.cellsR m) rY) m) (hY : ∀ l, (E Lo).W.In l → rY.heap l = none)
     (hs : (E Lo).MStep t m m')
@@ -1384,7 +1388,14 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · rw [hG u e]
   -- `t` is not `holds`
   have hnh : (G t).1.ph ≠ .holds := fun h => by
-    rcases hlo with h' | h' <;> rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;> cases h'
+    rcases hlo with h' | ⟨h', -⟩ <;> rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;>
+      cases h'
+  -- `t` in the condition's code is out of the event's, so not in its futex wait
+  have hnaw : (G t).2.c ≠ .out → (L Lo).ph (G t) ≠ .away := fun hc ha => by
+    rcases hlo with h' | ⟨-, hw⟩
+    · rw [ha] at h'; cases h'
+    · have he : (G t).2.e = .out := hu.e_out hc
+      rw [show (E Lo).ph (G t) = (G t).2.e from rfl, he] at hw; cases hw
   -- a waiter of the event is `main` from its event wait on
   have hEt : (E Lo).ph (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t) = p := by
     rw [upd_self]; rfl
@@ -1465,8 +1476,25 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · exact .inr (LockWord.allLe_mono hth (fun u _ => hclk u) h'')
     · have := Lo.ok; have := hr.2.2; omega
   · -- the condition's invariant
-    refine hu.cinv.other (t := t) rfl (fun hb => ?_) sorry (fun h' => h') hS hE sorry
-      (fun w hw _ => ?_) sorry (Nat.le_of_eq (by rw [hth])) hclk
+    refine hu.cinv.other (t := t) rfl (fun hb => ?_)
+      (fun hr ha => absurd ha (hnaw fun hc => by
+        rw [show (C Lo).ph (G t) = (G t).2.c from rfl, hc] at hr; cases hr))
+      (fun h' => h') hS hE (hs.waiters_at ptr_EV fun w hw hw2 w' hw' he hw'2 => by
+        -- queued at the epoch: `main`, registered; at the event's word: at `w1`
+        obtain ⟨_, _, _, hr, -⟩ := hu.cinv.q w hw hw2
+        have h1 := (hu.einv.q w' hw' hw'2).1
+        rw [he] at h1
+        have hc : (G w.1).2.c ≠ .out := fun hc => by
+          rw [show (C Lo).ph (G w.1) = (G w.1).2.c from rfl, hc] at hr; cases hr
+        rw [show (E Lo).ph (G w.1) = (G w.1).2.e from rfl, hu.e_out hc] at h1; cases h1)
+      (fun w hw _ => ?_)
+      (fun u hr ha hw => by
+        by_cases hut : u = t
+        · rw [hut] at hr
+          exact absurd (ha hut) (hnaw fun hc => by
+            rw [show (C Lo).ph (G t) = (G t).2.c from rfl, hc] at hr; cases hr)
+        · exact hs.woken_ne hut hw)
+      (Nat.le_of_eq (by rw [hth])) hclk
     · -- `t` in the condition's busy code is a signaller out of the lock, not a waiter
       have hsig : ((G t).2.c).sig = true := by
         unfold CPh.busy at hb
