@@ -1512,6 +1512,7 @@ theorem waitEpFacts (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
     (∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁) ∧
     (∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (C.Ep.cellsR m₁) rY) m₁ →
       (∀ l, C.Ep.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      m₁.waiters.any (·.1 == t) = false →
       C.Ep.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt C.Ep.b C.Ep.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -1546,7 +1547,7 @@ theorem waitEpFacts (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
       (fun w hw' e'' => ⟨fun _ => hI.qw w hw' (by rw [e'', hg₁, h1]; exact hw), fun _ => by
         rw [h1, h2]⟩)
   refine ⟨fun G rX m hU => ?_, fun G₁ m₁ hg₁ hi₁ => ?_,
-    fun G₁ rY m₁ M hg₁ hU hY _ hw₀ hct hrecord hf hh hok₂ hbl hU32 => ?_,
+    fun G₁ rY m₁ M hg₁ hU hY _ _ hw₀ hct hrecord hf hh hok₂ hbl hU32 => ?_,
     fun G₁ rY m₁ M hg₁ hU hY _ hf hM => ?_⟩
   · -- `t` goes away
     obtain ⟨-, rY, rfl, hY⟩ := (hC.wRest (.inr rfl)) _ _ _ hU
@@ -1657,8 +1658,8 @@ theorem wp_waitEp (hC : L.Fits (C.prim L) P U ok) {ε : Type} {w : Nat}
     P.WP t ((futexWaitC io C.Ep.ptr e' : CM Tgt σ Unit).run s) Q G m n :=
   let ⟨ha, hl, hs, hb⟩ := waitEpFacts hC hg hgo (hC.heldOut hgo hi) hlive
   FLock.wp_wordWait hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hgo hi (ha G · m) hl
-    (fun G₁ rY m₁ M hg₁ hU hY hwk hw₀ hct hrecord hf hh hok₂ hbl hU32 =>
-      hs G₁ rY m₁ M hg₁ hU hY hwk hw₀ hct hrecord hf hh hok₂ hbl (he ▸ hU32)) hb h
+    (fun G₁ rY m₁ M hg₁ hU hY hwk hnq hw₀ hct hrecord hf hh hok₂ hbl hU32 =>
+      hs G₁ rY m₁ M hg₁ hU hY hwk hnq hw₀ hct hrecord hf hh hok₂ hbl (he ▸ hU32)) hb h
 
 /-- **The waiter's untimed OS futex wait at the epoch** (`Os.futexWait`, OSF-01; std's translated
 `Thread.Futex.wait`) with its value `e`, at `reg i jr false e` out of the lock's code, the current

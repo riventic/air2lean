@@ -528,6 +528,7 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -579,7 +580,7 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
     exact ⟨(hP.inv _ _).mpr ⟨_, hl,
-        hUs G₁ rY m₁ M hg₁ hU hY hwk hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
+        hUs G₁ rY m₁ M hg₁ hU hY hwk hq hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
       h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs,
         hUo G₁ rY m₁ _ hg₁ hU hY hq ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
@@ -592,7 +593,7 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
 code (`g`, at `out`): while it waits it is `away` (`L.set g .away rnil`). The client says that
 its `U` lets `t` go away (`hUa`), that `t` is not the last thread while it waits (`hlive`), that
 `U` holds when `t` sleeps (the kernel's recorded read `M`, which keeps the word's writes, read `e`;
-`t` had no pending wake; `hUs`), and that `U` holds with `t` back at `out` after the kernel's
+`t` had no pending wake and was not queued; `hUs`), and that `U` holds with `t` back at `out` after the kernel's
 read, a wake that was pending, or a spurious return (`t` was not queued; `hUo`). It goes on at
 `g`. -/
 theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
@@ -602,6 +603,7 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -654,6 +656,7 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
