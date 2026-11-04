@@ -103,19 +103,14 @@ does not hold the admission queue for slots that other running builds hold.
   no one waits on, such as the periodic main health run. As a normal guard, the health run's full
   build (11 of arc's 16 slots) waits as the queue head and, past its ramp, reserves every slot it
   lacks, so lane gates queued behind it wait until enough running workloads end. A background
-  guard never queues: it takes no
-  ticket, never becomes the head (so it publishes no reservation and nothing backfills around
-  it), never backfills and holds no workspace while it waits. Every other guard, from holding
-  its workspace until its admission, keeps a flock-held entry in `<lock>.d/waiting/`, also
-  between two queue heads, when nobody holds the queue. Once a second, while no ticket and no
-  waiting entry exist, a background guard tries to take its workspace, the queue, `<lock>` and
-  all its slots at once; short of any, it gives everything back. It is therefore admitted only
-  while no other guard waits, and it waits as long as others do; its `--lock-wait` bounds that
-  (then `lock_busy`). A guard of an older checkout publishes no waiting entry: a background
-  guard can be admitted ahead of it while it waits between two heads. Running
-  workloads are untouched, a running background workload included, and `--exclusive` keeps
-  the exclusive lane whatever the priority. A guard of a checkout older than this lane rejects
-  the value (`AIR2LEAN_GUARD_PRIORITY must be one of normal, merge`).
+  guard is admitted only while no other guard waits (no ticket, no head, no entry in
+  `<lock>.d/waiting/`, which every waiting guard keeps), with its workspace and all its slots at
+  once; it holds nothing while it waits, so it delays no one, and its `--lock-wait` bounds its
+  own wait (then `lock_busy`). The mechanism is in the module docstring of
+  `scripts/build-guard.py`. Caveats: a guard of an older checkout publishes no waiting entry, so
+  a background guard can be admitted ahead of it between two queue heads; a guard of a checkout
+  older than this lane rejects the value (`AIR2LEAN_GUARD_PRIORITY must be one of normal,
+  merge`).
 - Usage-aware charge (Linux): `--rss-mib` is a ceiling a workload seldom reaches (a regen step
   declared 11000 MiB and peaked below 4.2 GB), so declared slots alone kept a 23 GB build host
   idle while 20 guards queued. The guard therefore records each command's last 5 runs (outcome,

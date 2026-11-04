@@ -40,8 +40,9 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   the merge lane: guards of checkouts since then treat every ticket as a merge ticket, so they
   wait behind an exclusive one too.
 - Background lane (AIR2LEAN_GUARD_PRIORITY=background or --priority background: work no one
-  waits on, such as a periodic health run). Every other guard, from holding its workspace until
-  its admission, publishes a flock-held entry in `<lock>.d/waiting/`. A background guard never
+  waits on, such as a periodic health run). Every other guard that has to wait (for its
+  workspace, the queue or slots) publishes a flock-held entry in `<lock>.d/waiting/` until its
+  admission ends the wait, also between two queue heads. A background guard never
   queues: it holds no ticket and no workspace while it waits, never becomes the queue head and
   never backfills. Once a second, while no ticket and no waiting entry exist, it tries to take
   its workspace, the queue, `<lock>` and all its slots at once; short of any, it gives
@@ -956,9 +957,8 @@ class Admission:
         the free slots would not admit the head now, so the head is never delayed beyond its
         reservation. A queue holder that publishes no reservation (a guard of an older checkout)
         gets no backfill; nor does a head's entry of another shape."""
-        if self.priority != "normal" or time.monotonic() < self.next_attempt:
+        if self.priority != "normal" or not self.attempt_due():
             return False
-        self.next_attempt = time.monotonic() + ATTEMPT_EVERY
         reservations = head_reservations(self.heads)
         if not reservations or not self.my_turn():
             return False
@@ -987,11 +987,20 @@ class Admission:
         finally:
             fcntl.flock(register, fcntl.LOCK_UN)
 
+    def attempt_due(self):
+        """Whether a backfill or background attempt is due (at most one per ATTEMPT_EVERY)."""
+        if time.monotonic() < self.next_attempt:
+            return False
+        self.next_attempt = time.monotonic() + ATTEMPT_EVERY
+        return True
+
     def publish_waiting(self):
         """Mark this guard as waiting for admission (`<lock>.d/waiting/`), so no background guard
         is admitted ahead of it, also while no guard holds the queue (between two heads)."""
-        name = entry_name()
-        self.waiting = (name, publish_entry(self.waiters, name, {"pid": os.getpid()}, lambda path: path.open("a")))
+        if self.waiting is None:
+            name = entry_name()
+            self.waiting = (name, publish_entry(self.waiters, name, {"pid": os.getpid()},
+                                                lambda path: path.open("a")))
 
     def clear_waiting(self):
         if self.waiting:
@@ -1004,10 +1013,7 @@ class Admission:
         """Whether this background guard was admitted now (module docstring): only while no other
         guard waits (no ticket, no head, no waiting entry), and only with its workspace and all its
         slots at once; else it gives back everything it took."""
-        if time.monotonic() < self.next_attempt:
-            return False
-        self.next_attempt = time.monotonic() + ATTEMPT_EVERY
-        if not self.my_turn() or held_entries(self.waiters):
+        if not self.attempt_due() or not self.my_turn() or held_entries(self.waiters):
             return False
         mode = fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX
         taken = []
@@ -1018,9 +1024,7 @@ class Admission:
         else:
             held = []
             for handle in slots:
-                if len(held) == self.weight:
-                    break
-                if try_flock(handle, fcntl.LOCK_EX):
+                if len(held) < self.weight and try_flock(handle, fcntl.LOCK_EX):
                     held.append(handle)
             taken += held
             if len(held) == self.weight and try_flock(register, fcntl.LOCK_EX):
@@ -1053,6 +1057,8 @@ class Admission:
             if not self.waited:
                 self.waited = True
                 self.announce()
+            if self.priority != "background":
+                self.publish_waiting()  # until its admission ends the wait (`run`)
             time.sleep(min(0.05, self.a.lock_wait))
             return "cancelled" if cancelled[0] else None
 
@@ -1083,7 +1089,6 @@ class Admission:
         # The workspace first: waiting for one's own checkout must not hold up the queue.
         if refused := take(workspace, fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX):
             return refused
-        self.publish_waiting()
         if self.priority != "normal":
             self.join_queue()
         while True:
@@ -1095,7 +1100,6 @@ class Admission:
                 if cancelled[0]:
                     return "cancelled"
                 if self.backfill(main, slots, register):
-                    self.clear_waiting()
                     return None
                 if refused := wait():
                     return refused
@@ -1136,7 +1140,6 @@ class Admission:
                     self.clear_head()
                     fcntl.flock(queue, fcntl.LOCK_UN)  # admitted: the next acquirer may collect
                     self.leave_queue()
-                    self.clear_waiting()
                     return None
                 if refused := wait():
                     return refused
@@ -1246,6 +1249,7 @@ def run(a, preempted=None):
         if grant:
             report["admission"]["inherited_from"] = grant
         refused = None if grant else lock.acquire(cancelled)
+        lock.clear_waiting()  # admitted or refused, it waits no longer
         if refused == "cancelled":
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
             return report
