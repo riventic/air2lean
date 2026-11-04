@@ -165,16 +165,15 @@ def parallel_zig(rows, owned, names, jobs=1):
     observed_names = names | {name.encode()[:15].decode(errors="replace") for name in names}
     zig = {pid for pid in owned if rows[pid]["name"] in observed_names}
     # One invocation counts once: a Zig process whose parent is a Zig process is part of its
-    # parent's invocation (the `zig clang` children of a C or libc build).
+    # parent's invocation. Zig 0.14-0.17 start Zig children only for a compiler's own tools
+    # (`zig clang`, `zig ld.lld`, `zig rc`), never several compilers.
     invocations = {pid for pid in zig if rows[pid]["parent"] not in zig}
-    # A zig build driver supervising compilers (through its build runner) is not one: count the
-    # invocations below no other, not their ancestors.
+    # An invocation that supervises others through non-Zig processes is not counted, they are:
+    # the `zig build` driver of 0.14-0.16 above its build runner (0.17 execs into the runner).
     ancestors = set()
     for pid in invocations:
         parent = rows[pid]["parent"]
-        visited = set()
-        while parent in owned and parent not in visited:
-            visited.add(parent)
+        while parent in owned and parent not in ancestors:
             ancestors.add(parent)
             parent = rows[parent]["parent"]
     return len(invocations - ancestors) > jobs
