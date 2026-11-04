@@ -942,12 +942,13 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
                deps.package_sources(path)) for path in packages}
     needs = []
     for module in sorted(modules):
-        relative = module.replace(".", "/") + ".olean"
+        stem = module.replace(".", "/")
+        relative = stem + ".olean"
         owner = next((root for root in roots if (root / relative).is_file()), None)
         if owner not in owners:
             return None
         package, name, sources = owners[owner]
-        if not any((source / relative).with_suffix(".lean").is_file() for source in sources):
+        if not deps.has_source(sources, stem):
             raise ValueError(f"{owner / relative}: compiled module without a source in {package} (deleted "
                              "since it was built); scripts/full-build.sh removes such outputs "
                              "(python3 -B scripts/lean-deps.py --prune-orphans)")

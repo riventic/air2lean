@@ -132,6 +132,12 @@ def package_sources(package: pathlib.Path) -> list[pathlib.Path]:
                            for target in [*lake.get("lean_lib", []), *lake.get("lean_exe", [])])})
 
 
+def has_source(sources: list[pathlib.Path], module: str) -> bool:
+    """Whether the module at the relative path `module` (`A/B` for `A.B`) has a source in one of
+    `sources` (`package_sources`)."""
+    return any((source / (module + ".lean")).is_file() for source in sources)
+
+
 MODULE_OUTPUTS = {"olean", "ilean", "c", "setup"}  # M.olean, M.ilean, ir/M.c, ir/M.setup.json
 
 
@@ -153,8 +159,7 @@ def orphan_outputs(package: pathlib.Path) -> list[pathlib.Path]:
                 groups.setdefault(path.parent / path.name.split(".", 1)[0], []).append(path)
         for stem, files in groups.items():
             module = any(f.name.split(".")[1] in MODULE_OUTPUTS for f in files)
-            source_file = stem.relative_to(build).parent / (stem.name + ".lean")
-            if module and not any((source / source_file).is_file() for source in sources):
+            if module and not has_source(sources, stem.relative_to(build).as_posix()):
                 orphans += files
     return sorted(orphans)
 
