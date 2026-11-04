@@ -62,12 +62,14 @@ def At (fuel : Nat) (mp : MainAt) (wp : WorkerAt) (s : Sched.State Tgt Unit) : P
 
 /-! ## The runs at the stops -/
 
+/-- The loop's head: the body's step tick (no stop), then the load's pick. -/
 theorem wLoop_succ (d : Nat) (m : Mem) :
-    wLoop (d + 1) m = .sync (.pick loadCnt) m fun c m' => wAfter c d m' := by
+    wLoop (d + 1) m = .sync (.pick loadCnt) { m with ticks := m.ticks + 1 } fun c m' => wAfter c d m' := by
   rw [wLoop_eq]; rfl
 
 theorem worker_succ (d : Nat) (m : Mem) :
-    dispatch .worker (d + 1) m = .sync (.pick loadCnt) m fun c m' => wAfter c d m' := by
+    dispatch .worker (d + 1) m =
+      .sync (.pick loadCnt) { m with ticks := m.ticks + 1 } fun c m' => wAfter c d m' := by
   show worker (d + 1) m = _
   rw [worker_eq]; exact wLoop_succ d m
 
