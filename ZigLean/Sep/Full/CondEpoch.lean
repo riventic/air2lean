@@ -30,9 +30,9 @@ This is a liveness gap of the algorithm, not a safety one: no wrong value is ret
 registration is miscounted. It is why the condition contract (`CondImpl`, any number of
 waiters) bounds the epoch writes between a waiter's save and its enqueue below `2^32` (PR #397,
 ruling 6264821278; the window `FCond.Fits.win`, which the client's rest keeps), and why a
-contract may not demand that every implementation wake a sleeping waiter. A client with one
-waiter has at most one increment in that window (each `epoch += 1` follows its signaller's own
-post: `FCond.SigStep`). The schedule is a kernel-checked fact about the model's op runs in one chosen order,
+contract may not demand that every implementation wake a sleeping waiter. Each `epoch += 1`
+follows its signaller's own post (`FCond.SigStep`), so a client that bounds its posts bounds the
+increments in that window. The schedule is a kernel-checked fact about the model's op runs in one chosen order,
 not a run of the scheduler.
 -/
 

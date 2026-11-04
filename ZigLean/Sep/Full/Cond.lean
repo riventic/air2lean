@@ -19,9 +19,16 @@ its save-to-enqueue window. The contract asks the protocol for fewer: every regi
 client bounds it in its rest `U`, by its own ghost accounting (`CondImpl` has no cost resource,
 `P.cost = none`). The primitive helps: a signaller reaches `inc` only at its own post, the step
 that pushes its state write (`SigStep`, `SigStep.inc_fresh`), and each `epoch += 1` is its step
-`inc → wk` (`FCond.prim`); so each epoch write follows a post of its own, and a singleton client
-has at most one epoch write per registration. It is not a premise ID and
-not a global cap.
+`inc → wk` (`FCond.prim`); so each epoch write follows a post of its own, and a client that
+bounds its posts bounds the epoch writes (the Handoff client: one post, at most two epoch
+writes). The bound counts from the waiter's saved write, which may lag behind the newest (its
+load reads any write its view allows), so counting posts per registration is not enough for a
+waiter that waits again. It is not a premise ID and not a global cap.
+
+**Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.0) and
+`Thread.Condition.wait` (0.15.2). The cancelable `Io.Condition.wait` (and `waitTimeout` in
+0.17.0) leaves on cancel with a waiter's `waiters -= 1` (in 0.17.0 `deregister`, with an
+`epoch += 1`), which this primitive does not admit: a client calling them has no contract and is rejected (register C14).
 
 **The client's part.** Roles: `FCond.sx` are the ghost values that may signal (`Inv.sx`). A
 thread in the condition's critical code (`en`, `ld`) holds the mutex (`Inv.crit`); one in its
