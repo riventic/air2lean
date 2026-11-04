@@ -155,6 +155,78 @@ def reduceCtorProjs (e : Expr) : MetaM Expr :=
     | some x' => return .visit x'
     | none => return .continue)
 
+/-- A projection of a structure value that reduces to a constructor application at reducible
+transparency but is not one (`(a, r).2.f`) rewritten to its field, with an explicit proof: the
+value equals its constructor application `c` by `rfl`, then the projection of `c` is its field by
+`rfl`. These are the projections simp's own step (`reduceProjFn?`, `whnf` at simp's reducible
+transparency) reduces definitionally.
+
+As one definitional step (simp's `proj` step, or `eq_self` unified up to it) the kernel compares
+the two projections' arguments first and can run into its recursion limit on a literal field
+(`tests/roadmap/sep-auto/SepAuto/ProjCtorKernel.lean`, ledger `kernel-proj-ctor`); each step here
+is one the kernel reduces at once.
+
+`none`: not a projection, a class projection (an instance stays folded), its argument already a
+constructor application (one step, reduced at once), not reducing to one, or a field whose type
+depends on the value (`congrArg` does not apply; simp's definitional step remains, ledger
+`kernel-proj-ctor`). -/
+def projCtorStep? (e : Expr) : MetaM (Option Simp.Result) := do
+  let some (s, i, body, extra) ← view | return none
+  if (← isConstructorAppCore? s).isSome then return none
+  let c ← whnfR s
+  let some fld ← projectCore? c i | return none
+  let e' := (mkAppN fld extra).headBeta
+  try
+    -- `congrArg (fun x => …x…) (rfl : s = c) : e = π c`, stated as `e = e'` (`π c` is `e'` at once)
+    let pf ← mkCongrArg (.lam `x (← inferType s) body .default)
+      (← mkExpectedTypeHint (← mkEqRefl c) (← mkEq s c))
+    return some { expr := e', proof? := some (← mkExpectedTypeHint pf (← mkEq e e')) }
+  catch ex =>
+    trace[fsym] "projCtorStep? {e}: {ex.toMessageData}"
+    return none
+where
+  /-- The structure value, the field index, `e` with the value as `.bvar 0`, and the field's
+  arguments. -/
+  view : MetaM (Option (Expr × Nat × Expr × Array Expr)) := do
+    match e with
+    | .proj sn i s =>
+      if isClass (← getEnv) sn then return none
+      return some (s, i, .proj sn i (.bvar 0), #[])
+    | _ =>
+      let .const c _ := e.getAppFn | return none
+      let some info ← getProjectionFnInfo? c | return none
+      if info.fromClass then return none
+      let args := e.getAppArgs
+      let some s := args[info.numParams]? | return none
+      return some (s, info.i, mkAppN e.getAppFn (args.set! info.numParams (.bvar 0)),
+        args.extract (info.numParams + 1))
+
+/-- `m` with `projCtorStep?` at every node that `m.pre` leaves (`pre`): a projection of a value
+that reduces to a constructor application gets an explicit proof before simp's own definitional
+`proj` step (`reduceStep`) would reduce it. -/
+def withProjCtor (m : Simp.Methods) : Simp.Methods :=
+  { m with pre := fun e => do
+      match ← m.pre e with
+      | .continue none =>
+        if let some r ← projCtorStep? e then return .visit r
+        return .continue none
+      | s => return s }
+
+/-- The simp methods of every fsym simp run (`Lean.Meta.simpCore`'s, with `withProjCtor`); a run
+that customizes them starts from these (`lazyMethods`, `recConditionalView?`). The remaining
+definitional steps: ledger `kernel-proj-ctor`. -/
+def fsymMethods (simprocs : Simp.SimprocsArray) (discharge? : Option Simp.Discharge := none) :
+    Simp.Methods :=
+  withProjCtor <| match discharge? with
+    | none => Simp.mkDefaultMethodsCore simprocs
+    | some d => Simp.mkMethods simprocs d (wellBehavedDischarge := false)
+
+/-- `Lean.Meta.simp` (Simp/Main.lean) with `fsymMethods`. -/
+def fsimp (e : Expr) (ctx : Simp.Context) (simprocs : Simp.SimprocsArray := #[])
+    (discharge? : Option Simp.Discharge := none) : MetaM (Simp.Result × Simp.Stats) := do
+  profileitM Exception "simp" (← getOptions) do
+  Simp.main e ctx (methods := fsymMethods simprocs discharge?)
+
 /-- `List.map f` over a list literal (or a definition of one) expanded to the literal of the
 images, beta-reduced (a
 table's arms at a call's arguments, `Table.callOr`). Then `reduceProjs` turns an argument of the
@@ -1045,7 +1117,7 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
       | some pf => pure (some pf)
       | none =>
         let (ctx, procs) ← arithSimpCtx
-        let (r, _) ← simp e ctx procs
+        let (r, _) ← fsimp e ctx procs
         if r.expr.isTrue then
           match r.proof? with
           | some eq => pure (some (← mkOfEqTrue eq))
@@ -1107,7 +1179,7 @@ where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array E
   let ty ← numAliases ty0
   let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
-  let (r, _) ← simp ty ctx procs (discharge? := some (omegaDisch cases))
+  let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
   let mut out ← if r.expr == ty0 then pure none else
     match r.proof? with
     | some pf => pure (some (r.expr, ← mkEqMP pf h))
@@ -1160,7 +1232,7 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
       g.assign (← mkFalseElim tgt0 f); return true
     (← caches).facts.set facts
     let (ctx, procs) ← arithSimpCtx
-    let (r, _) ← simp tgt0 ctx procs (discharge? := some (omegaDisch cases))
+    let (r, _) ← fsimp tgt0 ctx procs (discharge? := some (omegaDisch cases))
     let close (pf : Expr) : MetaM Unit := do
       match r.proof? with
       | some eq => g.assign (← mkEqMPR eq pf)
@@ -2763,7 +2835,7 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
   if ty.isConstOf ``True then return ← g.clear h
   -- a Boolean test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`): as a proposition
   if isBoolTest ty then
-    let (r, _) ← simp ty (← boolFactCtx)
+    let (r, _) ← fsimp ty (← boolFactCtx)
     if r.expr != ty && !r.expr.isFalse then
       if let some (h', g') ← applySimpResultToLocalDecl g h r false then
         return ← destruct g' h'
@@ -3017,8 +3089,8 @@ normalized once it is the head: `pure_bind` makes it the head of the result, whi
 `callIndirect` (`callIndirect_fold_one`/`ext`/`cons`) at its `if`, before simp rewrites its tests. -/
 def lazyMethods (procs : Simp.SimprocsArray) (fold? : Option Simp.Context)
     (blockedMembers : Array Name := #[]) : Simp.Methods :=
-  let m := Simp.mkDefaultMethodsCore procs
-  let mFold := Simp.mkDefaultMethodsCore #[]
+  let m := fsymMethods procs
+  let mFold := fsymMethods #[]
   /- The node `r₀.expr` rewritten at its root (`post`), else done. -/
   let finish (r₀ : Simp.Result) : Simp.SimpM Simp.Step := do
     match ← m.post r₀.expr with
@@ -3290,7 +3362,7 @@ def recConditionalView? (x : Expr) : MetaM (Option Simp.Result) := do
     let ctx ← Simp.mkContext
       (config := { contextual := false, autoUnfold := false, arith := false })
       (simpTheorems := #[thms])
-    let m := Simp.mkDefaultMethodsCore #[]
+    let m := fsymMethods #[]
     let methods : Simp.Methods := { m with
       pre := fun e => do
         if (← recMember? e).isSome then return .done { expr := e }
@@ -6037,7 +6109,7 @@ def rebaseLitPtr? (P x : Expr) : TacticM (Option (Expr × Expr)) := do
         let e ← mkAppOptM ``Zig.Full.Auto.ptr_eq_add_off_sub #[q, p, hqp]
         -- the offset in the arithmetic's normal form (`3` for `⟨some 0, 15⟩.off - (bp.add 12).off`)
         let (ctx, procs) ← arithSimpCtx
-        let (rk, _) ← simp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
+        let (rk, _) ← fsimp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
         let e ← match rk.proof? with
           | some pk => mkEqTrans e (← mkCongrArg (mkApp (mkConst ``Zig.Ptr.add) p) pk)
           | none => pure e
@@ -6975,7 +7047,7 @@ def wpNorm (g : MVarId) (h : FVarId) (extra : Array Syntax) (fields := false)
   g.withContext do
   let ty ← instantiateMVars (← h.getType)
   let ctx ← if fields then wpFactCtx extra (some h) else wpHypCtx extra
-  let (r, _) ← simp ty ctx (simprocs := #[← Simp.getSimprocs])
+  let (r, _) ← fsimp ty ctx (simprocs := #[← Simp.getSimprocs])
   let (g, h) ← if r.expr == ty && !r.expr.isFalse then pure (g, h) else
     if keepOriginal && !r.expr.isFalse then
       let known := (← getLCtx).foldl (init := none) fun acc d =>
@@ -7458,7 +7530,7 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   let ctx ← wpFactCtx extra
   let s ← saveState
   try
-    let (r, _) ← simp t ctx (simprocs := #[← Simp.getSimprocs])
+    let (r, _) ← fsimp t ctx (simprocs := #[← Simp.getSimprocs])
     if r.expr != t then
       if r.expr.isTrue then
         g.assign (← mkOfEqTrue (← r.getProof)); return []
