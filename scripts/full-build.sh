@@ -9,6 +9,8 @@
 # root imports neither the full-state logic (ZigLean.Sep.Full.*) nor Proofs, so a check run with
 # `lake env lean` after it can read stale oleans. "Full build" (docs/ci.md#full-build) means this
 # script:
+#   - first, in every tracked Lake package, the compiled outputs of modules deleted since they
+#     were built (`lean-deps.py --prune-orphans`): Lake keeps them, and a kernel replay checks them;
 #   - root package (`--targets`, also what CI's `lake` job builds): `scripts/lean-deps.py --all`,
 #     every library and executable of lakefile.toml and every tracked module of each library
 #     without explicit roots, whether or not a library root imports it (the per-check builds,
@@ -54,7 +56,7 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -110,6 +112,9 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
 # The precompiled fsym libraries (docs/build-cache.md#precompiled-fsym): FsymDeps must be the import
 # closure of Fsym and Lake must build them as listed, else an importer of Auto fails to load them.
 python3 -B scripts/lean-deps.py --precompiled check || { echo 'full-build: precompiled libraries are stale' >&2; exit 1; }
+# Lake never removes what it compiled from a module deleted since, and the kernel-replay receipts
+# check every olean below a module's name (scripts/assumptions.py `module_needs` refuses those).
+python3 -B scripts/lean-deps.py --prune-orphans
 root=()
 # The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
