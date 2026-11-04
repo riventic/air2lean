@@ -244,6 +244,11 @@ theorem gR_lph (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn : Bool}
 theorem gR_set {g : γ} {i jr : Nat} {sn sn' : Bool} {e : BitVec 32} :
     C.set (gR L C g i jr sn e) (.reg i jr sn' e) = gR L C g i jr sn' e := C.set_set _ _ _
 
+/-- The waiter's `unlock`: registered, out of the lock's code. -/
+theorem gR_unlock (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn : Bool}
+    {e : BitVec 32} : L.set (C.set g (.reg i jr sn e)) .out rnil = gR L C g i jr sn e :=
+  (hC.set_l _ _ _ _).symm
+
 /-- After the waiter took the signal: `g` out of the lock's code. -/
 theorem gR_out (hC : L.Fits (C.prim L) P U ok) {g : γ} (hgx : C.ph g = .out) {i jr : Nat}
     {sn : Bool} {e : BitVec 32} : C.set (gR L C g i jr sn e) .out = L.set g .out rnil := by
@@ -436,7 +441,7 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
             exact debugAssert_true
           simp only [StateT.run_lift, hs, pure_bind]) rfl),
     condS_eq, gR_ph, gR_lph hC, gR,
-    hC.lpart, hC.lph, hC.ph_l, hC.set_l, hC.ok_calm, hC.ok_set,
+    hC.lpart, hC.lph, hC.ph_l, gR_unlock hC, hC.ok_calm, hC.ok_set,
     L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
     FCond.ptr_ep, inv23, post23]
 
@@ -455,7 +460,7 @@ theorem ioCond_wait_wp_v016 (hC : L.Fits (C.prim L) P U ok)
     P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp hq
-  fsym [waitInner_wp hC hcost hLc t g hgx hgh hok hu]
+  fsym [waitInner_wp hC hcost hLc t g hgx hgh hok hu io G m d hone hhb hent hlive hi]
 
 end
 
@@ -640,7 +645,7 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
             exact debugAssert_true
           simp only [StateT.run_lift, hs, pure_bind]) rfl),
     condS_eq, gR_ph, gR_lph hC, gR,
-    hC.lpart, hC.lph, hC.ph_l, hC.set_l, hC.ok_calm, hC.ok_set,
+    hC.lpart, hC.lph, hC.ph_l, gR_unlock hC, hC.ok_calm, hC.ok_set,
     L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
     FCond.ptr_ep, inv22, post22]
 

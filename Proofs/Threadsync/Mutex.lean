@@ -74,7 +74,7 @@ theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : workLocals)
   unfold work.loop4
   fsym [(fits (Lo := lo) (workOf := workOf)).wp_tick_plain,
     WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
-    ThreadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ hp ⟨⟩,
+    ThreadMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ (gOut rp k) _ _ hp ⟨⟩,
     ThreadMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
     (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp k),
     (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp (k + 1)),
