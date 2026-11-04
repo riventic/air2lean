@@ -28,9 +28,9 @@ value; it need not be the separate happens-before witness when several writes ha
 | `wp_wordCas`, `wp_wordCasAs` | strong `cmpxchg` (bits, or decoded) |
 | `wp_wordWeakCas`, `wp_wordWeakCasAs` | weak `cmpxchg` (bits, or decoded) |
 | `wp_wordWake` | futex wake at the word |
-| `wp_wordWait` | futex wait at the word, by a thread out of the lock's code (`away` while it waits) |
+| `wp_wordWait`, `wp_wordWaitTo` | futex wait at the word, by a thread out of the lock's code (`away` while it waits; `To`: it returns at a new place of the primitive) |
 | `wp_wordOsWake` | OS futex wake at the word (`Os.futexWake`, OSF-02) |
-| `wp_wordOsWait` | untimed OS futex wait at the word (`Os.futexWait`, OSF-01): the kernel's compare at `out`, the sleep `away` |
+| `wp_wordOsWait`, `wp_wordOsWaitTo` | untimed OS futex wait at the word (`Os.futexWait`, OSF-01): the kernel's compare at `out`, the sleep `away` |
 | `wp_liftPartW` | a step of a thread on its own part (a stack block of the sync object's code) |
 
 The primitive facts come from the existing memory model and the native producers in
@@ -520,10 +520,21 @@ theorem Fits.goAway (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd
   rw [upd_upd] at hl
   exact (hP.inv _ _).mpr ⟨rX₀, hl, hUa _ hU₀⟩
 
+/-- A change of `t`'s place in the primitive keeps the lock's invariant (`Inv.relabel`: the
+primitive's place and the lock's are independent, `Fits.lph`, …). -/
+theorem Fits.relabelK (hP : L.Fits K P U ok) {rX : Res} (p : K.Ph)
+    (hL : L.Inv (upd G t g) rX m) : L.Inv (upd G t (K.pl.set g p)) rX m := by
+  have := hL.relabel (t := t) (g := K.pl.set g p) (by rw [upd_self, hP.lph])
+    (by rw [upd_self, hP.lpart]) (by rw [upd_self, hP.lheld]) (fun r hr => by
+      have := hP.lR (upd G t g) t p r hr; rwa [upd_self] at this)
+  rwa [upd_upd] at this
+
 /-- **The scheduler's futex wait at the word** (`SyncOp.wait`, the bits `e`) by thread `t`, which
-is `away` from `g` at `out`, with the client's facts of `wp_wordWait`: it goes on at `g`. The
-stop of `futexWaitC` and the sleep of the OS wait (`wp_wordOsWait`). -/
-theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
+is `away` from `g` at `out`, with the client's facts of `wp_wordWait`: it goes on at `g` with the
+primitive's place `p` (the return of the wait is a step of the primitive's code: `hUo` shows the
+rest there). The stop of `futexWaitC` and the sleep of the OS wait (`wp_wordOsWaitTo`). -/
+theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U)
+    (hap : W.ApartL L.toLockWord) (p : K.Ph)
     {e : BitVec 32} (hg : L.ph g = .out) (hheld : L.held g = rnil)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
@@ -541,9 +552,9 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
           M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead ∧
           W.hist M = W.hist m₁ ∧ W.Ok M ∧ M.blocks = m₁.blocks)) →
-      U (upd G₁ t g) (rsum (W.cellsR m₁) rY) M)
+      U (upd G₁ t (K.pl.set g p)) (rsum (W.cellsR m₁) rY) M)
     {K' : Unit → (ThreadId → γ) → Mem → Prop}
-    (h : ∀ G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → K' () G₁ m')
+    (h : ∀ G₁ m', m'.current = t → P.inv (upd G₁ t (K.pl.set g p)) m' → K' () G₁ m')
     {G₁ : ThreadId → γ} {m₁ : Mem} (hg₁ : G₁ t = L.set g .away rnil) (hi₁ : P.inv G₁ m₁) :
     P.Step t (.wait W.ptr e) G₁ m₁ K' := by
   have hph : L.ph (L.set g .away rnil) = .away := L.ph_set _ _ _
@@ -576,18 +587,18 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo' _ hfields (.inl rfl)⟩)
+    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hP.relabelK p hl', hUo' _ hfields (.inl rfl)⟩)
   · simp only [↓reduceIte] at hl ⊢
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
     exact ⟨(hP.inv _ _).mpr ⟨_, hl,
         hUs G₁ rY m₁ M hg₁ hU hY hwk hq hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
-      h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs,
+      h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hP.relabelK p hs,
         hUo' _ ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨hc, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ hc ((hP.inv _ _).mpr ⟨_, hl', hUo' _ hfields
+    exact h G₁ _ hc ((hP.inv _ _).mpr ⟨_, hP.relabelK p hl', hUo' _ hfields
       (.inr (.inr ⟨hw₀, hc₁, hrecord, hh, hok₂, hbl⟩))⟩)
 
 /-- **A futex wait at the word** (`futexWaitC`, the bits `e`) by thread `t` out of the lock's
@@ -595,8 +606,43 @@ code (`g`, at `out`): while it waits it is `away` (`L.set g .away rnil`). The cl
 its `U` lets `t` go away (`hUa`), that `t` is not the last thread while it waits (`hlive`), that
 `U` holds when `t` sleeps (the kernel's recorded read `M`, which keeps the word's writes, read `e`;
 `t` had no pending wake and was not queued; `hUs`), and that `U` holds with `t` back at `out` after the kernel's
-read, a wake that was pending, or a spurious return (`t` was not queued; `hUo`). It goes on at
-`g`. -/
+read, a wake that was pending, or a spurious return (`t` was not queued; `hUo`), at the
+primitive's place `p` (the return is a step of the primitive's code). It goes on at `g` with the
+place `p` (`wp_wordWait`: at `g`). -/
+theorem wp_wordWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
+    (p : K.Ph)
+    {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hg : L.ph g = .out)
+    (hi : P.inv (upd G t g) m)
+    (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
+    (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
+    (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      m₁.waiters.any (·.1 == t) = false →
+      W.Ok { m₁ with current := t } → t < m₁.clocks.size →
+      M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks →
+      W.Holds m₁ ((Packed.toBits e).setWidth 32) →
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+    (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+        (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
+          M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead ∧
+          W.hist M = W.hist m₁ ∧ W.Ok M ∧ M.blocks = m₁.blocks)) →
+      U (upd G₁ t (K.pl.set g p)) (rsum (W.cellsR m₁) rY) M)
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t → P.inv (upd G₁ t (K.pl.set g p)) m' →
+      Q ((), s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((futexWaitC io W.ptr e : CM Tgt σ Unit).run s) Q G m n := by
+  refine WP.futexWaitC fun k hk =>
+    ⟨L.set g .away rnil, hP.goAway hg hi hUa, fun G₁ m₁ hg₁ hi₁ => ?_⟩
+  exact hP.wordWaitStepTo hW hap p hg (hP.heldOut hg hi) hlive hUs hUo
+    (K' := fun _ G' m' => Q ((), s) G' m' k) (fun G₁ m' hc hi' => h k hk G₁ m' hc hi') hg₁ hi₁
+
+/-- **A futex wait at the word** (`wp_wordWaitTo`) that goes on at `g`. -/
 theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
     {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hg : L.ph g = .out)
     (hi : P.inv (upd G t g) m)
@@ -622,11 +668,9 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t ((futexWaitC io W.ptr e : CM Tgt σ Unit).run s) Q G m n := by
-  refine WP.futexWaitC fun k hk =>
-    ⟨L.set g .away rnil, hP.goAway hg hi hUa, fun G₁ m₁ hg₁ hi₁ => ?_⟩
-  exact hP.wordWaitStep hW hap hg (hP.heldOut hg hi) hlive hUs hUo
-    (K' := fun _ G' m' => Q ((), s) G' m' k) (fun G₁ m' hc hi' => h k hk G₁ m' hc hi') hg₁ hi₁
+    P.WP t ((futexWaitC io W.ptr e : CM Tgt σ Unit).run s) Q G m n :=
+  wp_wordWaitTo hP hW hap (K.pl.ph g) hg hi hUa hlive hUs (by rw [K.pl.set_self]; exact hUo)
+    (by rw [K.pl.set_self]; exact h) hcost
 
 /-- `FStepIn` of a change of the OS state only (an interrupt's delivery, `Os.takeInterrupt`). -/
 theorem _root_.Zig.FStepIn.os (m : Mem) (hF : Heap) (o : OsState) : FStepIn hF m { m with os := o } :=
@@ -640,8 +684,84 @@ theorem _root_.Zig.FStepIn.os (m : Mem) (hF : Heap) (o : OsState) : FStepIn hF m
 oracle's pick at `g`, and in the same turn the kernel compares the word, an atomic relaxed read
 by `t` at `g` (`hrd`: the client's `U` after it, as after `wp_wordLoad`). If it sleeps, it goes
 `away` (`hUa`, for every ghost value, as `wp_wordWait`'s) and the sleep is the scheduler's wait
-with `wp_wordWait`'s facts (`hlive`, `hUs`, `hUo`; `Fits.wordWaitStep`). It goes on at `g` with a
-result other than `timedOut`. -/
+with `wp_wordWait`'s facts (`hlive`, `hUs`, `hUo`; `Fits.wordWaitStepTo`). It goes on at `g`
+with the primitive's place `p` and a result other than `timedOut`: a return without a sleep
+moves to `p` in the protocol's invariant (`hret`), the sleep's return through `hUo`; an
+interrupt's delivery is at `g` or at the place `p` (`hos`). `wp_wordOsWait`: at `g`. -/
+theorem wp_wordOsWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
+    (p : K.Ph)
+    {e : BitVec 32} (hg : L.ph g = .out) (hc : m.current = t) (hi : P.inv (upd G t g) m)
+    (hos : ∀ G₁ m₁ o, (G₁ t = g ∨ G₁ t = K.pl.set g p) → m₁.current = t → P.inv G₁ m₁ →
+      P.inv G₁ { m₁ with os := o })
+    (hret : ∀ G₁ m₁, G₁ t = g → m₁.current = t → P.inv G₁ m₁ →
+      P.inv (upd G₁ t (K.pl.set g p)) m₁)
+    (hrd : ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → W.hist m' = W.hist m₁ → W.Ok m' → W.Ok m₁ → t < m₁.clocks.size →
+      (∃ c, ∃ v : BitVec 32, ((atomicLoadAt c .relaxed 4 W.ptr).run m₁).run =
+        some (.ok (v, m'))) →
+      (∀ hF, (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+        FStepIn hF m₁ m') →
+      (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
+      L.Inv G₁ (rsum (W.cellsR m') rY) m' → P.inv G₁ m')
+    (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → U (upd G₁ t (L.set g .away rnil)) rX m₁)
+    (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
+    (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      m₁.waiters.any (·.1 == t) = false →
+      W.Ok { m₁ with current := t } → t < m₁.clocks.size →
+      M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+    (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
+      (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
+        (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
+          M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead ∧
+          W.hist M = W.hist m₁ ∧ W.Ok M ∧ M.blocks = m₁.blocks)) →
+      U (upd G₁ t (K.pl.set g p)) (rsum (W.cellsR m₁) rY) M)
+    {Q : Os.WaitResult → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ d, d < n → ∀ r G₁ m', m'.current = t → r ≠ .timedOut →
+      P.inv (upd G₁ t (K.pl.set g p)) m' → Q r G₁ m' d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.futexWait W.ptr e false : ConcM Tgt Os.WaitResult) Q G m n := by
+  have hng : L.ph g ≠ .gone := by rw [hg]; decide
+  have hheld := hP.heldOut hg hi
+  refine WP.osFutexWait fun b₀ m₀ h₀ k hk => ⟨g, ?_, fun G₁ m₁ hg₁ hi₁ => ?_⟩
+  · obtain ⟨o, rfl⟩ := Os.takeInterrupt_os h₀
+    exact hos _ m o (.inl (upd_self _ _ _)) hc hi
+  -- the kernel's compare at the pick: an atomic relaxed read of the newest message, by `t` at `g`
+  obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ := hP.stopW hW hi₁ (by rw [hg₁]; exact hng)
+  have hcr : 0 < loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } ∨
+      loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } = 0 ∧ 0 = 0 :=
+    (Nat.eq_zero_or_pos _).symm.imp_right (⟨·, rfl⟩)
+  refine ⟨fun er he => absurd he (hw.load_noErr_native ht hcs hcr er), fun _ => .inr hcost,
+    fun v m₂ hr => ?_⟩
+  obtain ⟨-, -, -, -, -, hh, hw'⟩ := hw.load_native rfl ht hcs hr
+  have hc₁ : t < m₁.clocks.size := by rw [hcs]; exact ht
+  have hrest := Word.atomicLoad_rest hw hc₁ hr
+  have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
+      FStepIn hF { m₁ with current := t } m₂ :=
+    fun hF hoff => Word.atomicLoad_fstep hw hc₁ hoff hr
+  have hc₂ : m₂.current = t :=
+    (hA (fun _ => none) (fun _ _ _ => rfl)).current
+  have hi₂ : P.inv (upd G₁ t g) m₂ := by
+    rw [← hg₁, upd_same]
+    exact hrd G₁ rY _ m₂ hg₁ rfl hU hY hh hw' hw hc₁ ⟨0, v, hr⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
+  have hr₂ : P.inv (upd G₁ t (K.pl.set g p)) m₂ := by
+    have := hret _ _ (upd_self _ _ _) hc₂ hi₂; rwa [upd_upd] at this
+  refine ⟨by rw [hrest.threads], fun _ => h k (by omega) _ G₁ m₂ hc₂ (by decide) hr₂,
+    fun _ => ⟨h k (by omega) _ G₁ m₂ hc₂ (by decide) hr₂, fun k' hk' => ?_⟩⟩
+  -- the sleep: `t` goes away, then the scheduler's wait; at the end an interrupt's delivery
+  refine ⟨L.set g .away rnil, hP.goAway hg hi₂ (hUa G₁ · m₂), fun G₂ m₃ hg₂ hi₃ =>
+    hP.wordWaitStepTo hW hap p hg hheld hlive hUs hUo (fun G₄ m₄ hc₄ hi₄ => ?_) hg₂ hi₃⟩
+  dsimp only
+  split
+  · exact h k' (by omega) _ G₄ _ hc₄ (by decide) (hos _ _ _ (.inr (upd_self _ _ _)) hc₄ hi₄)
+  · exact h k' (by omega) _ G₄ _ hc₄ (by decide) hi₄
+
+/-- **The untimed OS futex wait at the word** (`wp_wordOsWaitTo`) that goes on at `g`. -/
 theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
     {e : BitVec 32} (hg : L.ph g = .out) (hc : m.current = t) (hi : P.inv (upd G t g) m)
     (hos : ∀ G₁ m₁ o, G₁ t = g → m₁.current = t → P.inv G₁ m₁ → P.inv G₁ { m₁ with os := o })
@@ -675,39 +795,11 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (h : ∀ d, d < n → ∀ r G₁ m', m'.current = t → r ≠ .timedOut → P.inv (upd G₁ t g) m' →
       Q r G₁ m' d)
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWait W.ptr e false : ConcM Tgt Os.WaitResult) Q G m n := by
-  have hng : L.ph g ≠ .gone := by rw [hg]; decide
-  have hheld := hP.heldOut hg hi
-  refine WP.osFutexWait fun b₀ m₀ h₀ k hk => ⟨g, ?_, fun G₁ m₁ hg₁ hi₁ => ?_⟩
-  · obtain ⟨o, rfl⟩ := Os.takeInterrupt_os h₀
-    exact hos _ m o (upd_self _ _ _) hc hi
-  -- the kernel's compare at the pick: an atomic relaxed read of the newest message, by `t` at `g`
-  obtain ⟨rY, hiL, hU, hY, hw, ht, hcs⟩ := hP.stopW hW hi₁ (by rw [hg₁]; exact hng)
-  have hcr : 0 < loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } ∨
-      loadCount 32 .relaxed 4 W.ptr { m₁ with current := t } = 0 ∧ 0 = 0 :=
-    (Nat.eq_zero_or_pos _).symm.imp_right (⟨·, rfl⟩)
-  refine ⟨fun er he => absurd he (hw.load_noErr_native ht hcs hcr er), fun _ => .inr hcost,
-    fun v m₂ hr => ?_⟩
-  obtain ⟨-, -, -, -, -, hh, hw'⟩ := hw.load_native rfl ht hcs hr
-  have hc₁ : t < m₁.clocks.size := by rw [hcs]; exact ht
-  have hrest := Word.atomicLoad_rest hw hc₁ hr
-  have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
-      FStepIn hF { m₁ with current := t } m₂ :=
-    fun hF hoff => Word.atomicLoad_fstep hw hc₁ hoff hr
-  have hc₂ : m₂.current = t :=
-    (hA (fun _ => none) (fun _ _ _ => rfl)).current
-  have hi₂ : P.inv (upd G₁ t g) m₂ := by
-    rw [← hg₁, upd_same]
-    exact hrd G₁ rY _ m₂ hg₁ rfl hU hY hh hw' hw hc₁ ⟨0, v, hr⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
-  refine ⟨by rw [hrest.threads], fun _ => h k (by omega) _ G₁ m₂ hc₂ (by decide) hi₂,
-    fun _ => ⟨h k (by omega) _ G₁ m₂ hc₂ (by decide) hi₂, fun k' hk' => ?_⟩⟩
-  -- the sleep: `t` goes away, then the scheduler's wait; at the end an interrupt's delivery
-  refine ⟨L.set g .away rnil, hP.goAway hg hi₂ (hUa G₁ · m₂), fun G₂ m₃ hg₂ hi₃ =>
-    hP.wordWaitStep hW hap hg hheld hlive hUs hUo (fun G₄ m₄ hc₄ hi₄ => ?_) hg₂ hi₃⟩
-  dsimp only
-  split
-  · exact h k' (by omega) _ G₄ _ hc₄ (by decide) (hos _ _ _ (upd_self _ _ _) hc₄ hi₄)
-  · exact h k' (by omega) _ G₄ _ hc₄ (by decide) hi₄
+    P.WP t (Os.futexWait W.ptr e false : ConcM Tgt Os.WaitResult) Q G m n :=
+  wp_wordOsWaitTo hP hW hap (K.pl.ph g) hg hc hi
+    (fun G₁ m₁ o hg₁ => hos G₁ m₁ o (by rw [K.pl.set_self, or_self] at hg₁; exact hg₁))
+    (fun G₁ m₁ hg₁ _ hi₁ => by rw [K.pl.set_self, ← hg₁, upd_same]; exact hi₁) hrd hUa hlive hUs
+    (by rw [K.pl.set_self]; exact hUo) (by rw [K.pl.set_self]; exact h) hcost
 
 /-- **An OS futex wake at the word** (`Os.futexWake`, OSF-02) by thread `t` (`g`): a wake keeps
 the lock's invariant with the same rest, and the client shows its `U` after it; a spurious
@@ -825,6 +917,34 @@ theorem notQ_mem {ws : Array (ThreadId × Ptr)} {t : ThreadId} (h : ws.any (·.1
     ∀ w ∈ ws, w.1 ≠ t := fun w hw e => by
   have : ws.any (·.1 == t) = true := Array.any_eq_true'.mpr ⟨w, hw, by simp [e]⟩
   rw [h] at this; cases this
+
+/-- A pending wake of another thread stays when `t`'s goes. -/
+theorem woken_erase {ws : Array ThreadId} {t u : ThreadId} (hu : u ≠ t) :
+    (ws.erase t).contains u = ws.contains u := by
+  rw [Bool.eq_iff_iff, Array.contains_iff_mem, Array.contains_iff_mem, Array.mem_erase_of_ne hu]
+
+/-- **A futex wake at `p` keeps the queue at another futex `q` exactly**, when a thread queued at
+`q` is not queued at `p` (`hone`; the wake drops a woken thread's entries by its id). -/
+theorem futexWake_waitersAt {p q : Ptr} {n : Nat} {cs : List Nat} {m m' : Mem}
+    (hone : ∀ w ∈ m.waiters, w.2 = q → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 ≠ p)
+    (h : ((Thread.futexWake p n cs).run m).run = some (.ok ((), m'))) :
+    m'.waiters.filter (·.2 == q) = m.waiters.filter (·.2 == q) := by
+  rw [Proto.modify_ok h]
+  show (m.waiters.filter _).filter _ = _
+  rw [Array.filter_filter]
+  apply Array.toList_inj.mp
+  simp only [Array.toList_filter]
+  refine List.filter_congr fun w hw => ?_
+  cases hq : w.2 == q
+  · simp
+  · have hwq : w.2 = q := by simpa using hq
+    have hw' := Array.mem_toList_iff.mp hw
+    suffices hn : w.1 ∉ Thread.wakeSet m.waiters p n cs by simp [hn]
+    intro hc
+    have hmem := Thread.wakePick_mem (List.mem_toArray.mp hc)
+    obtain ⟨w', hw'm, he⟩ := List.mem_map.mp hmem
+    obtain ⟨hw'w, hw'p⟩ := Array.mem_filter.mp (Array.mem_toList_iff.mp hw'm)
+    exact hone w hw' hwq w' hw'w he (by simpa using hw'p)
 
 end FLock
 

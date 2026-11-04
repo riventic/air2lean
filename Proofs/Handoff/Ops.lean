@@ -50,21 +50,17 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (.inr (.inl (hnw _ (.inr (.inl rfl)))))
   obtain ⟨hwV, hhV⟩ := hu.wv.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
     (.inr (.inl (hnw _ (.inr (.inr rfl)))))
-  refine ⟨hu.shape, hu.io.read (hc ▸ ht) hcs 0 0 n, hu.rest.congr fun _ _ => rfl, hu.blk,
-    hwS, hwE, hwV,
-    hu.cinv.stay t hhS hhE apE.ptr_ne (fun _ _ h => h) hclk,
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
-      hu.einv.fresh, hu.places,
-    fun h => by rw [hhE]; exact hu.ep1 h, by rw [hhE]; exact VClock.le_trans hu.ep0 (hclk 0),
-    hu.ent, hu.hold, fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, hu.q, hu.xc⟩
-  · rw [hhS]
-    rcases hu.reg i jr sn e hr with h' | ⟨hlk, h'⟩
+  refine hu.congrHist (fun _ => ⟨rfl, rfl, rfl⟩) hhS hhE hu.shape
+    (hu.io.read (hc ▸ ht) hcs 0 0 n) (hu.rest.congr fun _ _ => rfl) hu.blk hwS hwE hwV
+    (hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk)
+    (hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id hu.einv.fresh)
+    hu.hold (fun j hj => ?_) (fun h1 => ?_) hu.q
+  · rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hclk 1))
     · refine .inr ⟨hlk, ?_⟩
       rcases h' with ⟨hh, hle⟩ | hb
       · exact .inl ⟨hh, VClock.le_trans hle (hclk 0)⟩
       · exact .inr (before_atomics rfl hb)
-  · show ((Lo.WS.hist _)[(Lo.WS.hist _).size - 1]!).Val _; rw [hhS]; exact hu.lvc h0 h1
   · show ((Lo.WV.hist _)[(Lo.WV.hist _).size - 1]!).Val _; rw [hhV]; exact hu.fin h1
 
 /-- **`io` is in the protocol's rest** (the obligation of `FLock.Fits.wp_readRest`, the read of
@@ -261,21 +257,24 @@ theorem wp_cwait (hLc : Lo.c = ci.c) {p q : Ptr} (hp : p = Lo.WS.ptr) (hq : q = 
     (hr : (G 1).2.ph.hasR = false) :
     (proto Lo prodOf).WP 0 (ci.wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       ∃ rL', (proto Lo prodOf).inv (upd G' 0 (gH rM rL' { ph := .run })) m') G m d := by
-  obtain ⟨hone, hhb, hent⟩ := cwait_ok hi hr
+  obtain ⟨hroom, hent⟩ := cwait_ok hi hr
   exact ci.wait_wp fitsC rfl hp hq hLc 0 (gH rM rL { ph := .run }) rfl rfl
-    ⟨rfl, rfl, nofun, nofun⟩ io G m d
-    hone hhb hent cwait_live hpl hi hc
+    ⟨rfl, rfl, nofun, nofun⟩ io G m d hroom hent cwait_live hpl hi hc
 
-/-- **The producer's `signal`** at `sg`: a registered `main` is signalled; to the event's `set`. -/
+/-- **The producer's `signal`** at `sg`, with its call snapshot (`inv_snap`): a registered `main`
+is signalled (`signal_sig`); to the event's `set`. -/
 theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem}
     {d : Nat} {rp : Res} (hpl : rp.Plain)
     (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .sg })) m) :
     (proto Lo prodOf).WP 1 (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
-      (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .st })) m') G m d :=
-  WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun i jr sn e h => hs 0 i jr sn e h⟩)
-    (ci.signal_wp fitsC rfl hp 1 (gO rp { ph := .sg }) rfl (.inl rfl) rfl io G m d
-      hpl.unmetered (fun G₁ rX m₁ hg hu u i jr sn e hr =>
-        signal_seen G₁ rX m₁ hg hu u i jr sn e hr) hi)
+      (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .st })) m') G m d := by
+  obtain ⟨_, -, hu⟩ := id hi
+  exact WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun hr => by
+      obtain ⟨_, -, hu'⟩ := id hi'
+      exact signal_sig hu (by rw [upd_self]; rfl) hu' (by rw [upd_self]; rfl) hs
+        (by rw [upd1_0]; exact hr)⟩)
+    (ci.signal_wp fitsC rfl hp 1 (gO rp { ph := .sg, sz := some (Lo.WS.hist m).size }) rfl
+      (.inl rfl) rfl io G m d hpl.unmetered (inv_snap hi))
 
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
 theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
