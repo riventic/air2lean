@@ -4976,6 +4976,15 @@ def emitProgramParts (program : Program) (prefix_ : String)
       -- Lowering only removes original call edges or extracts helpers within their owner.
       unless group.members.all (fun decl => sourceOwners[decl.id.sourceName]? == some owner) do
         throw "an executable declaration SCC crosses original source distribution groups"
+      -- Entry ticks and stack frames follow the source groups (`Program.entryTicked`): a function
+      -- that the declarations call recursively must be recursive in its source group too (a
+      -- generic function calling itself with a comptime function argument has only the
+      -- `comptime_fn` edge in the source graph).
+      if group.recursive && group.members.any (·.id matches .function _) then
+        let some (_, sourceRecursive, _) := groupParts[owner]?
+          | throw "an executable declaration has no original source distribution group"
+        unless sourceRecursive do
+          throw "a recursive executable declaration SCC in a non-recursive original source group"
       byOwner := byOwner.modify owner (·.push group)
       if group.recursive then
         for decl in group.members do recursiveIds := recursiveIds.insert decl.id
