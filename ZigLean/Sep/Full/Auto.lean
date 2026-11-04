@@ -4349,8 +4349,10 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         (← mkEq st2.ats[0]! a)])
       st := st2
     trace[fsym] "plan: authorities done"
-    -- a frame (an undetermined atom of the postcondition) takes what is left
-    let frame? := (← qats.mapM instantiateMVars).find? isAssnHole
+    -- The first frame takes what is left. Keep every occurrence and its original head:
+    -- another independent frame can be empty, but a shared head cannot duplicate the rest.
+    let frames := (← qats.mapM instantiateMVars).filterMap fun a =>
+      if isAssnHole a then some (a, a.getAppFn.mvarId!) else none
     -- final match
     let spat := (← qats.mapM instantiateMVars).filter fun a => !a.isAppOfArity liftN 1 && !isAssnHole a
     let junkQ := spat.any (·.isConstOf ``Zig.Full.Junk)
@@ -4381,7 +4383,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
         noteWanted a qats
         throwError "fsym: the state has no atom for{indentExpr a}"
     -- atoms left over that a drop lemma forgets (`@[fsym_drop]`: knowledge, claims)
-    if frame?.isNone then
+    if frames.isEmpty then
       let drops := fsymDropExt.getState (← getEnv)
       let mut i := 0
       while i < st.ats.size do
@@ -4405,14 +4407,35 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     let P := sepOf pats
     let mut L := ((List.range pats.size).filter (! used.contains ·)).toArray.map (pats[·]!)
     let mut M := used.map (pats[·]!)
-    if let some fr := frame? then
+    if !frames.isEmpty then
       let sFrame ← saveState
-      unless ← isDefEq fr (sepOf L) do
-        sFrame.restore
-        throwError "fsym: cannot assign the explicit frame{indentExpr fr}"
+      let restoreArith ← (← caches).saveArith
+      try
+        -- A source unknown is not a fresh frame. Compatibility with an already assigned or
+        -- shared head is read-only, so an alias cannot force the source remainder to empty.
+        let fixed := (P.collectMVars {}).result ++
+          ((← instantiateMVars P).collectMVars {}).result
+        let mut seen : Array MVarId := #[]
+        for i in [0:frames.size] do
+          let (fr, head) := frames[i]!
+          let wanted := if i == 0 then sepOf L else mkConst empN
+          let readOnly := seen.contains head || fixed.contains head || (← head.isAssigned)
+          let ok ← if readOnly then
+              withNewMCtxDepth (isDefEq (← instantiateMVars fr) wanted)
+            else do
+              let lam ← forallBoundedTelescope (← head.getType) (some fr.getAppNumArgs) fun xs _ =>
+                mkLambdaFVars xs wanted
+              -- (a rest that names an argument out of the head's scope, `?Q v` with `pts p 8 v`
+              -- at a return: the pattern abstracts the argument, as before)
+              if ← isDefEq (mkMVar head) lam then pure true else isDefEq fr wanted
+          unless ok do throwError "fsym: cannot assign the explicit frame{indentExpr fr}"
+          seen := seen.push head
+      catch ex =>
+        sFrame.restore; restoreArith; throw ex
       M := M ++ L
       L := #[]
     unless L.isEmpty || junkQ do throwError "fsym: atoms left over{indentExpr (sepOf L)}"
+    -- (planning chose the witnesses; the final AC proofs, `acEq`, choose none)
     let (S, core) ← if junkQ then do
         let J := mkConst ``Zig.Full.Junk
         let rec toJunk (xs : List Expr) : MetaM Expr := do
