@@ -616,11 +616,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
-        "tracked_dirty": true
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-11-04T14:59:51.596861+00:00",
-      "elapsed_seconds": 2.81,
+      "started_utc": "2026-11-04T15:40:40.216421+00:00",
+      "elapsed_seconds": 1.768,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -685,7 +685,7 @@
         "Proofs.Slices.Proofs": "2626be020120a31c877198f9b345820c48666fe22061a8744693851bcd0b0ebb",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33",
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491",
         "Proofs.Threads.Proofs": "d93dd4fff8a8fa3256a166675a6584399be81f4662146d198e472e9bdacd0ab2"
       }
     },
@@ -1226,16 +1226,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T14:59:56.293059+00:00",
-      "elapsed_seconds": 0.814,
+      "started_utc": "2026-11-04T15:40:43.531285+00:00",
+      "elapsed_seconds": 0.644,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "944ff2eeb9ea1b11a2d54aadc4ba77e071289360295c4b3404ef1841025c7e23",
+      "log_sha256": "1cc656a4ab24fe784e570805a45a5930ac47ca1d565ea2e0b1dee8ae41dd7afd",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1524,7 +1524,7 @@
         "Proofs.Provenance.Proofs": "d6a38ee33edda4ac56da01990788ef2b6da5d76a2deed2d3dbe2805f08e2aef5",
         "Proofs.ProvenanceGap.Proofs": "e477163adc3fdef52699f91047b6c3518ff874edf9edf8cfac6ab2d484161dc3",
         "Proofs.Recursion.AirCert": "2abd81ee5f61fd3294d59a77c732b70c453bbdb9b3c49f4fafc418c2aa8ecdcd",
-        "Proofs.Recursion.Proofs": "1dcd801b146cce03a5f56ae90271796a7ea55d687c3d44e23d18eaf35199354e",
+        "Proofs.Recursion.Proofs": "e17b204d03d716fc8354fdbc0071b95317bb2bb8ef05f22173373d5917f7ec39",
         "Proofs.Slices.Proofs": "2626be020120a31c877198f9b345820c48666fe22061a8744693851bcd0b0ebb",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Sync.Cases": "aea70dca286ca9f99183cf3fd260fb4c13e08e59b5c74ab309effb3667b47f3b",
@@ -1546,7 +1546,7 @@
         "Proofs.Sync.SnapshotCache": "e7fc9fdd54e8766c9eca4a4a3b0b764ca0b2acf5ba14bb050c7ad491744a2a7a",
         "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33",
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491",
         "Proofs.Threads.Proofs": "d93dd4fff8a8fa3256a166675a6584399be81f4662146d198e472e9bdacd0ab2",
         "Proofs.Threadsync.Cases": "288ae8f77d8eb80a7105bf0dc92f704810d4a54264dfe7273b48d62501a89633",
         "Proofs.Threadsync.Cond": "0a2f1f6024ed8c189bf4a665ee821ae99ba06e5e987d31ebb47d5a4a3e841be0",
@@ -2305,11 +2305,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:00:18.937011+00:00",
-      "elapsed_seconds": 0.32,
+      "started_utc": "2026-11-04T15:40:58.983777+00:00",
+      "elapsed_seconds": 0.232,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -2328,7 +2328,7 @@
       },
       "sources": {
         "Proofs.Detach.Worker": "99277f6047021ca083173ba7fb2108a26e3e94a81b7e36557e28da73d1f7fc16",
-        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-wrapper-fields-0.15.2-linux": {
@@ -2353,11 +2353,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:00:13.400175+00:00",
-      "elapsed_seconds": 4.981,
+      "started_utc": "2026-11-04T15:40:56.350267+00:00",
+      "elapsed_seconds": 2.36,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -2374,7 +2374,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-disjoint-fsym-worker-committed-linux": {
@@ -2393,11 +2393,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:00:12.275191+00:00",
-      "elapsed_seconds": 0.456,
+      "started_utc": "2026-11-04T15:40:55.802789+00:00",
+      "elapsed_seconds": 0.222,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -2414,7 +2414,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-disjoint-fsym-worker-0.15.2-linux": {
@@ -2439,11 +2439,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:00:02.414337+00:00",
-      "elapsed_seconds": 9.225,
+      "started_utc": "2026-11-04T15:40:53.273290+00:00",
+      "elapsed_seconds": 2.261,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -2460,7 +2460,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-disjoint-fsym-tail-committed-linux": {
@@ -2479,16 +2479,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "376ce7a92e37ff5ed43c5c09d043adf62b0b5c3d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:00:50.294242+00:00",
-      "elapsed_seconds": 9.786,
+      "started_utc": "2026-11-04T15:40:49.692083+00:00",
+      "elapsed_seconds": 0.23,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "87b73cb22dd87479830715512089874e507d8a576513f98e2f84dad4dfe0f258",
+      "log_sha256": "dec27ce2b60521cc7a0eb631a7ddccd34d82e22d25fb485021803fbafa38f2c1",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2500,15 +2500,14 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "5cd9435759ce0bdd9c62e5bfa65eaf3711b6ca10bf4cef0a35c3bc73e56c1694"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-disjoint-fsym-tail-0.15.2-linux": {
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
-        "-B",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--lake",
@@ -2526,16 +2525,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "376ce7a92e37ff5ed43c5c09d043adf62b0b5c3d",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:04:18.340505+00:00",
-      "elapsed_seconds": 2.914,
+      "started_utc": "2026-11-04T15:40:47.204962+00:00",
+      "elapsed_seconds": 2.217,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "c4fe92fdf642eaec9c3c2c43189d9d786993a464f1c0fe1bb05ec2c36f05b2c7",
+      "log_sha256": "c19b78c26fb12c60732527da0114eb7dd5b196585506b65b23f5a0e367b55f03",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2547,7 +2546,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "5cd9435759ce0bdd9c62e5bfa65eaf3711b6ca10bf4cef0a35c3bc73e56c1694"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-disjoint-fsym-tail-final-committed-linux": {
@@ -2566,16 +2565,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "682cfce995b2572347d05201835d03ab2f3d6183",
-        "tracked_dirty": false
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:19:40.973750+00:00",
-      "elapsed_seconds": 22.128,
+      "started_utc": "2026-11-04T15:40:52.739998+00:00",
+      "elapsed_seconds": 0.224,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "a8844f799ddb48e6c9f30333aa12cb504cd4c0adb781e71fafffded6a3d8385a",
+      "log_sha256": "dec27ce2b60521cc7a0eb631a7ddccd34d82e22d25fb485021803fbafa38f2c1",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2587,15 +2586,14 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "3fc1901dc77382a1d20ce1a4fe06d116b426509a515c31c0186cbab60fed5e3a"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     },
     "cx-disjoint-fsym-tail-final-0.15.2-linux": {
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
-        "-B",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--lake",
@@ -2613,11 +2611,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "682cfce995b2572347d05201835d03ab2f3d6183",
+        "head": "c47ef13817448134e9d97adba5b4c32260cbc5eb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T15:22:12.457922+00:00",
-      "elapsed_seconds": 14.186,
+      "started_utc": "2026-11-04T15:40:50.229904+00:00",
+      "elapsed_seconds": 2.235,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -2634,7 +2632,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "3fc1901dc77382a1d20ce1a4fe06d116b426509a515c31c0186cbab60fed5e3a"
+        "Proofs.Threads.Disjoint": "11495577d0f212c16b75fb76f6318302d8368db9d4b4b83049fbab6569ee6491"
       }
     }
   }
