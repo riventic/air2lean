@@ -142,10 +142,16 @@ class BuildCommand:
             command += ['--swap', f'{example}={source}']
         return [*command, '--', *self.modules]
 
-    def renewal(self, lake: Path, python: str) -> list[str]:
-        """Fresh renewal permits rebuilding; historical recording keeps captured policy."""
-        command = self.invocation(lake, python)
-        return [arg for arg in command if arg != '--no-build'] if self.kind == 'lake' else command
+    def renewal(self, root: Path, lake: Path, python: str) -> list[str]:
+        """Fresh renewal permits rebuilding; historical recording keeps captured policy.
+
+        It rebuilds the recorded targets that still exist: a module deleted since the recording
+        has no theorem left to check, and Lake refuses its missing source. Library and
+        executable targets carry no dot and always stay."""
+        gone = {m for m in self.modules if '.' in m and not (root / module_path(m)).is_file()}
+        return BuildCommand(self.kind, self.lake, [m for m in self.modules if m not in gone],
+                            self.swaps, [a for a in self.lake_args if a not in gone and a != '--no-build'],
+                            self.python).invocation(lake, python)
 
 
 def parse_build_command(root: Path, command: list[str], *, lake: str | None = None) -> BuildCommand:

@@ -349,7 +349,7 @@ def step_inventory(check):
         # A renewal rebuilds a run's proof set cold, up to the whole tree: the full build's
         # per-process limit (scripts/full-build.sh), since one-thread Proofs.Sync builds peak at 5.3 GB
         # and up to 6.9 GB within the accepted variance (assurance/perf-budgets.json, `sync`).
-        report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
+        report, logfile = guarded('inventory-' + rid, plan.renewal(ROOT, lake, python=PY), env=lake_env(),
                                   tools=[lake] if plan.kind == 'swap' else [], rss_mib=11000)
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
