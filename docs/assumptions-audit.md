@@ -294,7 +294,10 @@ own modules, compiled into the program, have run their initializers; they are th
 module is held once. The `#assurance_audit` command this replaces ran in a `lean` process whose
 header had already imported the extractor's closure (the whole of `Lean` and the
 `ZigLean.Sep.Full` claim heads), and a second import copies a module already mapped at its base
-address. AUDIT_PEAKS
+address. Measured on the remote build host (2026-11-04), auditing `ZigLean.Sep.Full.Triple`
+with `--all-declarations` (121 checked theorems, the same report either way): the largest process
+of the audit fell from 3783 MiB to 1661 MiB, and the run took 50.9 s instead of 44.3 s (one
+warm run each, on a loaded host).
 
 `--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) runs the extractor through a Lake
 build, so an unchanged audit is not run again. The driver is the module of a generated workspace
