@@ -234,8 +234,23 @@ theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
     · exact hok
     · exact (hP.ok_set _ _ _).mpr hok
   unfold osUnfairLockTry
-  fsym [wp_casD hP hc1 (g := g₀), wp_waitD hP, hset,
-    L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD]
+  simp only [StateT.run_bind, pure_bind, bind_assoc]
+  refine WP.bind (wp_casD hP hc1 hph hok₀ hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
+  rcases hcase with ⟨rfl, rL, hi₁⟩ | ⟨rfl, hi₁⟩
+  · simp only [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [id, Bool.false_eq_true, ↓reduceIte]
+    rw [hset] at hi₁
+    exact ⟨rfl, by omega, hc₁, rL, hi₁⟩
+  · simp only [StateT.run_bind, bind_assoc, pure_bind]
+    rw [hset] at hi₁
+    refine WP.bind (wp_waitD hP (g := L.set g .wait rnil) (L.ph_set _ _ _)
+      ((hP.ok_set _ _ _).mpr hok) hi₁ fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
+    simp only [StateT.run_pure, pure_bind]
+    refine WP.pure' ?_
+    simp only [id, ↓reduceIte]
+    rw [L.set_set] at hi₂
+    exact ⟨⟨by omega, _, .inr rfl, hi₂⟩, .inl (by omega)⟩
 
 /-- The unticked native macOS lock preserves every actual caller-part assertion as a
 spatial frame beside its returned protected resource. No mode/payment admission is needed. -/
