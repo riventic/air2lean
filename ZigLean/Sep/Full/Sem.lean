@@ -22,7 +22,8 @@ Any number of threads may wait and post: the condition is the multi-waiter one
   a permit (the thread is in the semaphore's wait loop, around the condition's wait), `pst h c`
   from the store of the count to the end of its signal, holding the mutex, with the state's writes
   `h` and its clock `c` at the store (its snapshot). The condition's signallers are exactly the
-  threads at `pst` (`sx_iff`): a semaphore signals while it holds the mutex.
+  threads at `pst` (`sx_iff`): a semaphore signals while it holds the mutex. The client names the
+  threads that may wait (`wx`, its waiting role): only they enter `wt`.
 - **The no-lost-wakeup argument.** A waiter that sleeps at the condition with no pending signal
   and no signaller in the condition's code (`CondImpl.wait_wp`'s `hlive`) is not deadlocked if
   the count is not 0: then a thread at `pst` (it holds the mutex and will signal) or a *taker*
@@ -100,7 +101,9 @@ structure FSem (γ X : Type) (L : FLock γ) (C : FCond γ) extends FPlace γ SPh
   /-- **The waiting role** (ledger row `sem-wait-role`): the client's choice of the ghost values
   whose thread may wait for a permit (`Go .wt`, `Move.enter`), as the condition's `sx` is its
   choice of signallers. Like `x`, it does not read the places in the mutex, the condition or the
-  semaphore, nor the thread's part and held resource. -/
+  semaphore, nor the thread's part and held resource. It is a property of the ghost value, not of
+  the op: a client whose waiter's sleep must be no deadlock keeps every thread it counts on to
+  post (a permit's holder, a thread whose next op is `post`) out of it, also in `post`'s tail. -/
   wx : γ → Prop
   wx_l : ∀ g q h, wx (L.set g q h) ↔ wx g
   wx_part : ∀ g r, wx (L.setPart g r) ↔ wx g
