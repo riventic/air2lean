@@ -26,9 +26,9 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
   judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
-  the lock's code (`LockWord.Step`) by a thread with `ok` keeps `U` with the same `rX`. The
-  primitive `K` (`FPrim`) is data: a thread's place in its code (`FPlace`), its roles, what the
-  rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
+  the lock's code (`LockWord.Step`) by a thread with `ok`, neither `gone` nor `away`, keeps `U`
+  with the same `rX`. The primitive `K` (`FPrim`) is data: a thread's place in its code
+  (`FPlace`), its roles, what the rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
   and every step, and the primitive's place is a part of the ghost value independent of the
   lock's (the compatibility laws `lph` … `role_part`). The lock alone is `FPrim.empty`
   (`Fits.ofLock`); a primitive over futex words (the event, the condition) is `FPrim.ofWords`
@@ -293,8 +293,10 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g
   ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g
   /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
-  before the newest message of the word. -/
-  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
+  before the newest message of the word. The thread runs the lock's code, so it has not ended
+  and is not inside another object's futex wait (`away`). -/
+  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away → U G rX m →
+    L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) rX m'
   /-- A stop of any thread (`current := t`) keeps `U`: a thread without `ok` (one inside another
@@ -334,8 +336,8 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     {ok : γ → Prop} (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g)
-    (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
-      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+    (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
+      U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }) :
     L.Fits (FPrim.empty γ) P U ok where
@@ -373,9 +375,9 @@ theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) �
       U (upd G t (L.set (G t) p h)) rX m') :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ => stable G rX m m' t p h) fun G rX m t hph hU => by
+    (fun G rX m m' t p h _ hg _ => stable G rX m m' t p h hg) fun G rX m t hph hU => by
       have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
-        (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
+        (LockWord.Step.same rfl rfl rfl rfl rfl rfl rfl) (fun h1 h2 => absurd h1 h2)
       rwa [upd_set_self] at this
 
 /-! ## Basic facts -/
@@ -1355,6 +1357,27 @@ theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi :
 
 /-! ## A recorded access to bytes of the protocol's rest -/
 
+/-- A recorded access of the current thread `t` to bytes that no thread's part has (`hno`), given
+the word's invariant after it (`hw`) and what the free lock owns after it (`hown`): the invariant
+holds after it. -/
+theorem Inv.record {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} {k : AccessKind} (hi : L.Inv G rX m) (hc : m.current = t)
+    (ht : t < m.threads.size) (hb : b < m.blocks.size)
+    (hw : L.WInv (L.pl G) (m.recordAt b o n k))
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none)
+    (hown : ∀ rL : Res, FHeap.Disjoint rL.heap rX.heap → L.Owns (L.pl G) m rL.heap.erase →
+      L.Owns (L.pl G) (m.recordAt b o n k) rL.heap.erase) :
+    L.Inv G rX (m.recordAt b o n k) := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj, hi.idle, hi.res⟩
+  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
+    rw [this]
+    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
+    rw [e]
+    exact ho.recordRest hc ht hb hno
+  · obtain ⟨h1, h2⟩ := hF hF'
+    exact ⟨h1, hown rL hLX h2⟩
+
 /-- A recorded access of the current thread `t` (not a write) to `n` bytes of the protocol's own
 rest `rX` (a read of a read-shared buffer): the invariant holds after it. -/
 theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
@@ -1362,7 +1385,7 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
     (ht : t < m.threads.size) (hb : b < m.blocks.size) (hn : 0 < n)
     (hX : ∀ x, o ≤ x → x < o + n → rX.heap (b, x) ≠ none) :
     L.Inv G rX (m.recordAt b o n k) := by
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  obtain ⟨rL, ho, -⟩ := hi.rest
   have hrest : ∀ x, o ≤ x → x < o + n → (rsum (L.wordR m) (rsum rL rX)).heap (b, x) ≠ none :=
     fun x h1 h2 => by
       have := hX x h1 h2
@@ -1384,19 +1407,24 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
           have h0 := LockWord.off_erase.mp hi.xoff (L.b, x) ⟨rfl, h3, h4⟩
           exact this h0
     · exact .inl hbb
-  have hLb : ∀ x, o ≤ x → x < o + n → rL.heap.erase (b, x) = none := fun x h1 h2 => by
-    have := (hLX (b, x)).resolve_right (hX x h1 h2)
-    simp [FHeap.erase, this]
-  have hjb : joinedB (m.recordAt b o n k) = joinedB m := rfl
-  refine ⟨hi.w.readK hk hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
-    hi.idle, hi.res⟩
-  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
-    rw [this]
-    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
-    rw [e]
-    exact ho.recordRest hc ht hb fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2)
-  · obtain ⟨h1, h2⟩ := hF hF'
-    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
+  exact hi.record hc ht hb (hi.w.readK hk hnw)
+    (fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2))
+    fun rL' hLX' h2 => h2.readK hb fun x h1 h2 => by
+      have := (hLX' (b, x)).resolve_right (hX x h1 h2)
+      simp [FHeap.erase, this]
+
+/-- A plain read by the current thread `t`, when every other thread has left the lock (`gone`), of
+bytes that no thread's part has (`hno`; e.g. bytes of the protocol's rest, the word's cells and the
+free lock's resource): the invariant holds after it. -/
+theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hb : b < m.blocks.size) (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none) :
+    L.Inv G rX (m.recordAt b o n .read) := by
+  have hs : ∀ u < m.threads.size, u ≠ m.current → L.pl G u = .gone := fun u hu h =>
+    hsole u hu (by rw [← hc]; exact h)
+  exact hi.record hc ht hb (hi.w.readAll (by rw [hc]; exact ht) hs) hno
+    fun _ _ h2 => h2.readAll (by rw [hi.w.csize, hc]; exact ht) hs
 
 end FLock
 

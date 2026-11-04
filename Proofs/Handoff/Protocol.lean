@@ -367,7 +367,8 @@ theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk Lo m) (hs : (L Lo).S
 
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
+    (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (_ : (L Lo).ph (G t) ≠ .away)
+    (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
     (hrel : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
     U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t ((L Lo).set (G t) p h) u).2 = (G u).2 := fun u => congrFun (FLock.snd_set G t p h) u
@@ -418,7 +419,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · by_cases hl : w.2 = (L Lo).ptr
     · exact .inl hl
-    · exact hu.q w ((hs.waiters w hl).mp hw)
+    · exact hu.q w ((hs.waiters_mem w hl).mp hw)
 
 /-- A stop keeps `U`: it reads no current thread. -/
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U Lo G rX m) :

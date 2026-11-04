@@ -75,7 +75,8 @@ theorem yield_all_schedules_safe (env : Env) (fuel : Nat) (o : Nat → Nat) (e :
     exact hintProtocol_joined h
   · rfl
   · intro n
-    refine Conc.Proto.WP.bind (Conc.Proto.WP.sync (fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi => ?_⟩) rfl)
+    refine Conc.Proto.WP.bind
+      (Conc.Proto.WP.sync (fun k hk => ⟨(), rfl, fun G₁ m₁ hg hi _ => ?_⟩) rfl)
     exact Conc.Proto.WP.pure' hi
 
 -- Mutants that make hints pure, force success, or force handoff fail these assertions.
