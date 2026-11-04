@@ -214,7 +214,7 @@ A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfol
 `examples/recursion/recursion.zig` with `FTotalTriple.rec_group` and one `fsym` walk per group:
 all-input `gcd`, mutual `isEven`/`isOdd`, and `fact` under its existing `n.toNat ≤ 12` bound.
 `tests/roadmap/loop-tactics/Recursion.lean` consumes their public adequacy projections and keeps
-its result equations and standard-axiom guard unchanged, with no per-program induction or
+its result equations unchanged, each under a standard-axiom guard, with no per-program induction or
 copied command walk. Pure recursion still retains STK-01 for its native interpretation.
 
 The scenarios of the retired template checks are `fsym` regressions in
