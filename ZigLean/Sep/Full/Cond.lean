@@ -89,15 +89,28 @@ inductive MStep (W : Word 32 4) (t : ThreadId) (m : Mem) : Mem → Prop
       ((Thread.futexWake C.Ep.ptr c cs).run { m with current := t }).run =
         some (.ok ((), m')) → MStep W t m m'
 
-/-- **A signaller's entry and post, as the code takes them** (thread `t` from the place `a` to
-`b`, the memory from `m` to `m'`): the entry `out → sl h c` takes the call snapshot, the state's
-writes and `t`'s clock at the entry (`Fits.enterSl`); the post `sl → inc q n h` is the step that
-pushes the state write `q`, `t`'s own RMW (`Fits.afterPost`). The other transitions are not
-constrained here. Without it a signaller could take `sl → inc q` again at an old post `q` by a
-ghost-only step and raise the epoch without bound, past every registered waiter's window
-(`Fits.win`); with it, and the epoch's writes only at `inc → wk` (`prim`), each `epoch += 1`
-follows a post of its own (`SigStep.inc_fresh`). -/
+/-- **The steps of the condition's code that record a write, as the code takes them** (thread
+`t` from the place `a` to `b`, the memory from `m` to `m'`):
+- the waiter's load `en → ld i e` reads epoch write `i` at or after its floor, every epoch write
+  that happened before `t` (`Word.Floor`; `wp_ldEp`, from `Word.Ok.load`);
+- the waiter's registration `ld → reg i jr sn e` is the step that pushes the state write `jr`,
+  `t`'s own RMW (`Fits.afterReg`);
+- a signaller's entry `out → sl h c` takes the call snapshot, the state's writes and `t`'s clock
+  at the entry (`Fits.enterSl`);
+- a signaller's post `sl → inc q n h` is the step that pushes the state write `q`, `t`'s own RMW
+  (`Fits.afterPost`).
+
+The other transitions are not constrained here. Without the post's case a signaller could take
+`sl → inc q` again at an old post `q` by a ghost-only step and raise the epoch without bound, past
+every registered waiter's window (`Fits.win`); with it, and the epoch's writes only at
+`inc → wk` (`prim`), each `epoch += 1` follows a post of its own (`SigStep.inc_fresh`). Without
+the load's case a waiter that waits again could save an old epoch write while the epoch grows
+(one write per wait); with it, a waiter that holds the mutex saves the newest write when every
+epoch write happened before the mutex's holder (`EpHB.last`). -/
 def SigStep (t : ThreadId) : CPh → CPh → Mem → Mem → Prop
+  | .en, .ld i _, m, _ => Word.Floor (C.Ep.hist m) (m.clocks[t]!) i
+  | .ld _ _, .reg _ jr _ _, m, m' =>
+      jr = (C.S.hist m).size ∧ ∃ x, C.S.hist m' = (C.S.hist m).push x
   | .out, .sl h c, m, _ => h = C.S.hist m ∧ c = m.clocks[t]!
   | .sl _ _, .inc q _ _, m, m' => q = (C.S.hist m).size ∧ ∃ x, C.S.hist m' = (C.S.hist m).push x
   | _, _, _, _ => True
@@ -173,6 +186,56 @@ theorem SigStep.inc_fresh {L : FLock γ} {G G' : ThreadId → γ} {t : ThreadId}
   refine ⟨hq, ⟨x, hx⟩, ?_, by omega, ?_⟩
   · have := (hI.snap t sh (by rw [ht]; rfl)).size_le; omega
   · unfold SStep at hst; omega
+
+/-! ## The epoch's writes and the mutex's holder
+
+A client whose signallers raise the epoch holding the mutex (a semaphore) carries in its rest that
+every epoch write happened before the mutex's holder (`EpHB`, `FLock.HB`). It stays over the
+lock's steps (`EpHB.lstep`) and over a step that pushes a write made holding the mutex
+(`EpHB.step`, `FLock.HB.of_holder`); with the lock's word invariant, a waiter's load at `en`
+(it holds the mutex, `Inv.crit`) then reads the newest epoch write (`EpHB.last`, the load's floor
+of `SigStep`). -/
+
+variable (C) in
+/-- Every epoch write happened before the mutex's holder, its newest release or every thread that
+has not ended (`FLock.HB`). -/
+def EpHB (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop :=
+  ∀ k < (C.Ep.hist m).size, L.HB G m (C.Ep.hist m)[k]!.clock
+
+/-- **A load of the epoch by the mutex's holder reads the newest write** when every epoch write
+happened before the holder: its floor (`SigStep`'s `en → ld i e`) is at the newest write. -/
+theorem EpHB.last {L : FLock γ} {G : ThreadId → γ} {m : Mem} (h : C.EpHB L G m)
+    (hw : L.WInv (L.pl G) m) {t : ThreadId} (ht : L.ph (G t) = .holds) {i : Nat}
+    (hi : i < (C.Ep.hist m).size) (hfl : Word.Floor (C.Ep.hist m) (m.clocks[t]!) i) :
+    i = (C.Ep.hist m).size - 1 := by
+  have hlast : (C.Ep.hist m).size - 1 < (C.Ep.hist m).size := by omega
+  have := hfl _ hlast (FLock.HB.le hw (h _ hlast) ht)
+  omega
+
+/-- `EpHB` stays over a step that carries `HB` (`FLock.HB.mono`) and keeps the epoch's writes or
+pushes one that happened before the mutex's holder after it. -/
+theorem EpHB.step {L : FLock γ} {G G' : ThreadId → γ} {m m' : Mem} (h : C.EpHB L G m)
+    (hmono : ∀ c, L.HB G m c → L.HB G' m' c)
+    (hh : C.Ep.hist m' = C.Ep.hist m ∨
+      ∃ x : Word.Entry, C.Ep.hist m' = (C.Ep.hist m).push x ∧ L.HB G' m' x.clock) :
+    C.EpHB L G' m' := by
+  intro k hk
+  rcases hh with hh | ⟨x, hh, hx⟩
+  · rw [hh] at hk ⊢; exact hmono _ (h k hk)
+  · rw [hh] at hk ⊢
+    rw [Array.size_push] at hk
+    by_cases hlt : k < (C.Ep.hist m).size
+    · rw [FEvent.get_push_lt hlt]; exact hmono _ (h k hlt)
+    · rw [show k = (C.Ep.hist m).size by omega, FEvent.get_push_eq]; exact hx
+
+/-- `EpHB` stays over a step of the lock's code (`FLock.Fits.stable`, `FLock.HB.lstep`): it keeps
+the epoch's writes (`Word.Ok.lockStep`). -/
+theorem EpHB.lstep {L : FLock γ} {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh}
+    {h : Res} (hE : C.EpHB L G m) (hwE : C.Ep.Ok m) (hapE : C.Ep.ApartL L.toLockWord)
+    (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
+    (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
+    C.EpHB L (upd G t (L.set (G t) q h)) m' :=
+  hE.step (fun _ hc => hc.lstep hg hs hrel) (.inl (hwE.lockStep hs hapE).2)
 
 /-! ## A step of the condition's code, as the memory sees it
 
@@ -587,13 +650,13 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .acquire 4 C.Ep.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   FLock.wp_wordLoad hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) (by rw [hgh]; decide) hi
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv _hfl hacq hh hw' hw₀ hct hrun hA _hS _hR hL => by
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl hacq hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)
       obtain ⟨hI, hnq⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide) hop.waiters hL
       have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
       refine h k hk G₁ m' b j (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
-        (by rw [hg]; exact True.intro) (by rw [hg]; trivial) hU hY hms (.inl hh) hL ?_)
+        (by rw [hg]; exact True.intro) (by rw [hg]; exact hfl) hU hY hms (.inl hh) hL ?_)
       have hI' := hI.quiet (t := t) (g' := C.set g (.ld j b)) (m' := m')
         (by rw [hg₁, hg]; trivial) (by rw [C.ph_set]; trivial)
         (hC.keepS hU hms) hh hop.waiters hop.woken hop.threads hop.clock hnq
@@ -633,7 +696,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok)
   unfold wOf at hroom hsw; unfold sOf at hsw
   rw [hold] at hroom hsw
   refine ⟨⟨hroom, hsw⟩, hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, rfl, rfl⟩)
-    (by rw [hg]; trivial) hU hY hms (.inl (hC.keepE hU hms)) hL ?_⟩
+    (by rw [hg]; exact ⟨rfl, _, hh⟩) hU hY hms (.inl (hC.keepE hU hms)) hL ?_⟩
   exact hI.register (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh
     (by rw [hold]; exact FEvent.rmwEnt_val) (VClock.le_refl _) (hC.keepE hU hms) hop.waiters
     hop.woken hop.threads hop.clock
