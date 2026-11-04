@@ -570,23 +570,24 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
     fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hw₀.futexWait_run ht0), fun b m' hr => ?_⟩⟩
   have hl := hiL.waitOff hph₁ hw hap hX hq hr
   have hfields := Word.futexWait_fields hr
+  have hUo' := fun M => hUo G₁ rY m₁ M hg₁ hU hY hq
   rcases hw₀.futexWait_native rfl ht0 hiL.w.csize hr with
     ⟨-, rfl, rfl⟩ | ⟨hwk, M, hok₂, hrecord, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hq hfields (.inl rfl)⟩)
+    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo' _ hfields (.inl rfl)⟩)
   · simp only [↓reduceIte] at hl ⊢
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
     exact ⟨(hP.inv _ _).mpr ⟨_, hl,
         hUs G₁ rY m₁ M hg₁ hU hY hwk hq hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
       h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs,
-        hUo G₁ rY m₁ _ hg₁ hU hY hq ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
+        hUo' _ ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨hc, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ hc ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hq hfields
+    exact h G₁ _ hc ((hP.inv _ _).mpr ⟨_, hl', hUo' _ hfields
       (.inr (.inr ⟨hw₀, hc₁, hrecord, hh, hok₂, hbl⟩))⟩)
 
 /-- **A futex wait at the word** (`futexWaitC`, the bits `e`) by thread `t` out of the lock's
