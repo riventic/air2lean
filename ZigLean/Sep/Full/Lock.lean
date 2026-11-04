@@ -1678,6 +1678,24 @@ theorem HB.of_holder {G : ThreadId → γ} {m : Mem} {c : VClock} {t : ThreadId}
     (ht : L.ph (G t) = .holds) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=
   .inl ⟨t, ht, hle⟩
 
+/-- **`HB` stays over a step of the lock's code** by `t` to any place `q` (`Fits.stable`): at a
+release (`t` held the lock and `q` does not), `t`'s clock happened before the newest message of
+the word (`hrel`). -/
+theorem HB.lstep {G : ThreadId → γ} {m m' : Mem} {c : VClock} {t : ThreadId} {q : LPh} {h : Res}
+    (hc : L.HB G m c) (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
+    (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
+    L.HB (upd G t (L.set (G t) q h)) m' c := by
+  refine hc.mono (fun u hu => ?_) hs.clocks hs.before hs.threads (fun u hu => ?_)
+  · by_cases e : u = t
+    · subst e
+      by_cases hq : q = .holds
+      · exact .inl (by rw [upd_self, L.ph_set, hq])
+      · exact .inr fun c hc => L.before_le (hrel hu hq) hc
+    · exact .inl (by rw [upd_ne _ _ e]; exact hu)
+  · by_cases e : u = t
+    · subst e; exact hg
+    · rwa [upd_ne _ _ e] at hu
+
 end FLock
 
 end Full
