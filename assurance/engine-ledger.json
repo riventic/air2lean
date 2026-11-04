@@ -1733,6 +1733,17 @@
    "workaround_sites": [],
    "deletion_plan": "Close when the reader-admission boundary is decided and the native generic instance and finite clients derive its actual room fact without an unapproved premise or weakened public theorem. Keep the standard-kernel value controls and validate both native admission paths; do not substitute a finite one-reader runtime model for the generic family.",
    "note": "The RwLockImpl gate itself was released by the November3 decision in l11-waitgroup-rwlock-impl. This is the distinct finite-count admission question; it does not reopen that gate or claim an executable overflow schedule. The full RwLock migration, writer-count correspondence, complete-resource transfer, clock coverage and client proofs remain open."
+  },
+  {
+   "id": "mutex-held-foreign-wait",
+   "title": "Keep mutex ownership across a wait at an independent sync object",
+   "status": "open",
+   "requester": "Original Task08 RwLockImpl migration (2026-11-04, PR #637)",
+   "progress": "Source-level interface obstruction isolated while composing the existing MutexImpl and SemImpl. No shared invariant, implementation contract, premise, tactic or generated-body walk has been changed. The RwLock implementation gate is already released; this is a distinct existing-library boundary.",
+   "request": "Full/LockWord.lean Queue requires every thread waiting at another futex to have lock phase away. WInv includes that Queue, while its word field equates a zero lock word with Free (no holds phase). The real Io.RwLock writer retains the outer mutex while SemImpl.wait blocks at its embedded mutex or condition epoch (0.17 Gen lockUncancelable: outer lock then semaphore wait). A queued (writer, foreignPtr) with foreignPtr != outer.ptr and outer phase holds contradicts Queue. Relabeling that sole owner away makes Free true while the outer word remains locked, so it cannot preserve WInv or the retained serialization resource. WInv.waitOff and FLock.Inv.waitOff admit away, not a retained holder. With an additional outer contender, WInv.wit also requires a busy thread absent from every futex queue; the real progress source can instead be the last reader outside this mutex's code. Needed: a permanent generic representation/rule for holding one mutex while waiting on another object, preserving actual owner/held resources and deriving progress through the existing protocol's Live. Decide the shared Queue/WInv/MutexImpl boundary before changing statements; a generic apart-Step preservation lemma without those conditions is false.",
+   "workaround_sites": [],
+   "deletion_plan": "Close after the generic existing mutex contract and its translated instance support the actual nested wait, and RwLock consumes that support with unchanged public clients. Do not add a local semaphore contract, omit the blocking branch, assume a waiter never sleeps, or hand-walk the outer mutex as a replacement for MutexImpl.",
+   "note": "This is a source-level incompatibility of the present invariant with the required native control flow, not a kernel-checked reachable execution or public soundness counterexample. Serialization S and protected payload R remain distinct; the complete outer held resource must stay framed during the inner wait. The shared Lock/Word/Cond/engine writer remains with the coordinator."
   }
  ],
  "mechanisms": [

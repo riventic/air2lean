@@ -104,6 +104,81 @@ theorem enter_writer (r w : Nat) :
   rw [he, BitVec.add_assoc]
   simp
 
+/-- The real low-word mask is the low-word remainder. -/
+theorem low_mask (s : BitVec 64) :
+    (s &&& 4294967295).toNat = s.toNat % readerUnit := by
+  rw [BitVec.toNat_and]
+  change s.toNat &&& (2 ^ 32 - 1) = s.toNat % (2 ^ 32)
+  exact Nat.and_two_pow_sub_one_eq_mod _ _
+
+/-- A represented low word consists of the pending writers and writing bit. -/
+theorem low_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
+    (a : Bool) :
+    (encode r w a &&& 4294967295).toNat = 2 * w + if a then 1 else 0 := by
+  rw [low_mask, encode_toNat hr hw]
+  cases a <;> simp only [Bool.false_eq_true, ↓reduceIte, readerUnit, countBound] at * <;>
+    omega
+
+/-- The native fast-path guard excludes both a queued writer and a writing holder. -/
+theorem read_guard {r w : Nat} (hr : r < countBound) (hw : w < countBound)
+    (a : Bool) :
+    (encode r w a &&& 4294967295 = 0) ↔ w = 0 ∧ a = false := by
+  rw [← BitVec.toNat_inj, low_encode hr hw]
+  cases a <;> simp <;> omega
+
+/-- The native reader mask selects exactly the decoder's count, in reader units. -/
+theorem reader_mask (s : BitVec 64) :
+    (s &&& 9223372032559808512).toNat = readers s * readerUnit := by
+  rw [BitVec.toNat_and]
+  change s.toNat &&& 9223372032559808512 = readers s * readerUnit
+  have hd : (s.toNat &&& 9223372032559808512) / readerUnit = readers s := by
+    change (s.toNat &&& 9223372032559808512) / 2 ^ 32 =
+      s.toNat / 2 ^ 32 % 2 ^ 31
+    rw [Nat.and_div_two_pow]
+    change s.toNat / 2 ^ 32 &&& (2 ^ 31 - 1) = _
+    exact Nat.and_two_pow_sub_one_eq_mod _ _
+  have hm : (s.toNat &&& 9223372032559808512) % readerUnit = 0 := by
+    change (s.toNat &&& 9223372032559808512) % 2 ^ 32 = 0
+    rw [Nat.and_mod_two_pow]
+    change s.toNat % 2 ^ 32 &&& 0 = 0
+    exact Nat.and_zero _
+  have he := Nat.mod_add_div (s.toNat &&& 9223372032559808512) readerUnit
+  rw [hd, hm, Nat.zero_add, Nat.mul_comm] at he
+  exact he.symm
+
+/-- The old-value reader guard identifies the last represented reader. -/
+theorem last_reader_guard {r w : Nat} (hr : r < countBound) (hw : w < countBound)
+    (a : Bool) :
+    (encode r w a &&& 9223372032559808512 = 4294967296) ↔ r = 1 := by
+  rw [← BitVec.toNat_inj, reader_mask, readers_encode hr hw]
+  change r * readerUnit = readerUnit ↔ r = 1
+  simp only [readerUnit]
+  omega
+
+/-- Clearing the writing bit leaves the represented counts unchanged. -/
+theorem clear_writer {r w : Nat} (hr : r < countBound) (hw : w < countBound) :
+    encode r w true &&& 18446744073709551614 = encode r w false := by
+  have hzero : encode r w false &&& 1 = 0 := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_and, encode_toNat hr hw]
+    simp [readerUnit, Nat.add_mod, Nat.mul_mod]
+  have hp : encode r w true = encode r w false ||| 1 := by
+    calc
+      encode r w true = encode r w false + 1 := by
+        change BitVec.ofNat 64 (r * readerUnit + 2 * w + 1) =
+          BitVec.ofNat 64 (r * readerUnit + 2 * w + 0) + BitVec.ofNat 64 1
+        rw [← BitVec.ofNat_add]
+      _ = encode r w false ||| 1 := BitVec.add_eq_or_of_and_eq_zero _ _ hzero
+  have hkeep : encode r w false &&& ~~~(1 : BitVec 64) = encode r w false := by
+    have hsplit : (encode r w false &&& 1) |||
+        (encode r w false &&& ~~~(1 : BitVec 64)) = encode r w false := by
+      rw [← BitVec.and_or_distrib_left, BitVec.or_not_self, BitVec.and_allOnes]
+    rw [hzero] at hsplit
+    simpa only [BitVec.ofNat_eq_ofNat, BitVec.zero_or] using hsplit
+  change encode r w true &&& ~~~(1 : BitVec 64) = encode r w false
+  rw [hp, BitVec.and_or_distrib_right, hkeep, BitVec.and_not_self]
+  simp
+
 end RwState
 
 end Zig.Full
