@@ -324,9 +324,9 @@ theorem waiters (hs : E.MStep t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.waite
   | _ => exact .inl hw
 
 /-- A step of the event's code keeps the queue at another futex `p` exactly, when a thread queued
-at `p` is queued only there (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
+at `p` is not queued at the event's word (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
 theorem waiters_at (hs : E.MStep t m m') {p : Ptr} (hp : p ≠ E.W.ptr)
-    (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 = p) :
+    (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 ≠ E.W.ptr) :
     m'.waiters.filter (·.2 == p) = m.waiters.filter (·.2 == p) := by
   cases hs with
   | @op M hv hc hop _ _ =>
@@ -340,8 +340,27 @@ theorem waiters_at (hs : E.MStep t m m') {p : Ptr} (hp : p ≠ E.W.ptr)
       List.filter_nil, beq_eq_false_iff_ne.mpr (Ne.symm hp), Bool.false_eq_true, ↓reduceIte,
       List.append_nil]
     rfl
-  | wake c cs h => exact FLock.futexWake_waitersAt (m := { m with current := t }) hp hone h
+  | wake c cs h => exact FLock.futexWake_waitersAt (m := { m with current := t }) hone h
   | _ => rfl
+
+/-- A pending wake of another thread stays: only `t`'s own goes (`woken`), and a wake adds. -/
+theorem woken_ne (hs : E.MStep t m m') {u : ThreadId} (hu : u ≠ t)
+    (h : m.woken.contains u = true) : m'.woken.contains u = true := by
+  cases hs with
+  | @op M hv hc hop _ _ =>
+    have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
+      exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
+    rw [hstep.woken]; exact h
+  | @sleep M _ _ hr _ _ =>
+    subst hr
+    exact h
+  | woken => show (m.woken.erase t).contains u = true; rw [FLock.woken_erase hu]; exact h
+  | wake c cs h' =>
+    rw [Proto.modify_ok h']
+    show (m.woken ++ _).contains u = true
+    rw [Array.contains_iff_mem] at h ⊢
+    exact Array.mem_append_left _ h
+  | _ => exact h
 
 theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
     (hap : W' = E.W ∨ E.W.b ≠ W'.b ∨ E.W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ E.W.o) :

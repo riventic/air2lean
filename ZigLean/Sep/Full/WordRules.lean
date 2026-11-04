@@ -881,10 +881,15 @@ theorem notQ_mem {ws : Array (ThreadId × Ptr)} {t : ThreadId} (h : ws.any (·.1
   have : ws.any (·.1 == t) = true := Array.any_eq_true'.mpr ⟨w, hw, by simp [e]⟩
   rw [h] at this; cases this
 
+/-- A pending wake of another thread stays when `t`'s goes. -/
+theorem woken_erase {ws : Array ThreadId} {t u : ThreadId} (hu : u ≠ t) :
+    (ws.erase t).contains u = ws.contains u := by
+  rw [Bool.eq_iff_iff, Array.contains_iff_mem, Array.contains_iff_mem, Array.mem_erase_of_ne hu]
+
 /-- **A futex wake at `p` keeps the queue at another futex `q` exactly**, when a thread queued at
-`q` is queued only there (`hone`; the wake drops a woken thread's entries by its id). -/
-theorem futexWake_waitersAt {p q : Ptr} {n : Nat} {cs : List Nat} {m m' : Mem} (hpq : q ≠ p)
-    (hone : ∀ w ∈ m.waiters, w.2 = q → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 = q)
+`q` is not queued at `p` (`hone`; the wake drops a woken thread's entries by its id). -/
+theorem futexWake_waitersAt {p q : Ptr} {n : Nat} {cs : List Nat} {m m' : Mem}
+    (hone : ∀ w ∈ m.waiters, w.2 = q → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 ≠ p)
     (h : ((Thread.futexWake p n cs).run m).run = some (.ok ((), m'))) :
     m'.waiters.filter (·.2 == q) = m.waiters.filter (·.2 == q) := by
   rw [Proto.modify_ok h]
@@ -902,9 +907,7 @@ theorem futexWake_waitersAt {p q : Ptr} {n : Nat} {cs : List Nat} {m m' : Mem} (
     have hmem := Thread.wakePick_mem (List.mem_toArray.mp hc)
     obtain ⟨w', hw'm, he⟩ := List.mem_map.mp hmem
     obtain ⟨hw'w, hw'p⟩ := Array.mem_filter.mp (Array.mem_toList_iff.mp hw'm)
-    have := hone w hw' hwq w' hw'w he
-    have hp : w'.2 = p := by simpa using hw'p
-    exact hpq (this.symm.trans hp)
+    exact hone w hw' hwq w' hw'w he (by simpa using hw'p)
 
 end FLock
 

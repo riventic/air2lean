@@ -300,9 +300,9 @@ theorem waiters (hs : C.MStep W t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.wai
   | _ => exact .inl hw
 
 /-- A step of the condition's code keeps the queue at another futex `p` exactly, when a thread
-queued at `p` is queued only there (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
+queued at `p` is not queued at the epoch (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
 theorem waiters_at (hs : C.MStep W t m m') {p : Ptr} (hp : p ≠ C.Ep.ptr)
-    (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 = p) :
+    (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 ≠ C.Ep.ptr) :
     m'.waiters.filter (·.2 == p) = m.waiters.filter (·.2 == p) := by
   cases hs with
   | @op M hv hc hop _ _ =>
@@ -316,7 +316,7 @@ theorem waiters_at (hs : C.MStep W t m m') {p : Ptr} (hp : p ≠ C.Ep.ptr)
       List.filter_nil, beq_eq_false_iff_ne.mpr (Ne.symm hp), Bool.false_eq_true, ↓reduceIte,
       List.append_nil]
     rfl
-  | wake c cs h => exact FLock.futexWake_waitersAt (m := { m with current := t }) hp hone h
+  | wake c cs h => exact FLock.futexWake_waitersAt (m := { m with current := t }) hone h
   | _ => rfl
 
 /-- A word stays valid; its writes stay, or the step's op at it adds the stepping thread's RMW
@@ -1286,11 +1286,6 @@ theorem _root_.Zig.Full.FLock.Fits.retEp (hC : L.Fits (C.prim L) P U ok) {i jr :
     ((hC.wInv _ _ _ hU).ret (by rw [hg₁, hg]) (C.ph_set _ _) rfl rfl rfl rfl (fun _ _ => rfl) hnq
       (fun _ => VClock.le_refl _))
 
-/-- A pending wake of another thread stays when `t`'s goes. -/
-theorem woken_erase {ws : Array ThreadId} {u : ThreadId} (hu : u ≠ t) :
-    (ws.erase t).contains u = ws.contains u := by
-  rw [Bool.eq_iff_iff, Array.contains_iff_mem, Array.contains_iff_mem, Array.mem_erase_of_ne hu]
-
 /-- **The waiter's futex wait at the epoch** with its value `e`, at `reg i jr false e` out of the
 lock's code: its facts for `FLock.wp_wordWaitTo` and `wp_wordOsWaitTo` (`hUa`, `hlive`, `hUs`,
 `hUo`). It returns at `afterWait` (`Inv.ret`); its sleep is `Inv.sleep`, with the window
@@ -1397,7 +1392,7 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
       · rw [hr]; rfl
     have hwk : ∀ u, u ≠ t → M.woken.contains u = m₁.woken.contains u := by
       rcases hM with rfl | rfl | ⟨_, _, hr, _, _, _⟩
-      · exact fun u hu => woken_erase hu
+      · exact fun u hu => FLock.woken_erase hu
       · exact fun _ _ => rfl
       · exact fun _ _ => by rw [hr]; rfl
     have hst := hF.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t)
