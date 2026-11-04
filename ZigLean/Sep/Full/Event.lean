@@ -563,6 +563,43 @@ theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
   | resume => exact hk rfl rfl rfl rfl rfl
   | wake c cs h => rw [Proto.modify_ok h]; exact hk rfl rfl rfl rfl rfl
 
+/-- `word` for a shared word of any width apart from the event's (a client's other word, e.g. a
+`WaitGroup`'s 64-bit state next to its event): it stays valid, with the same history. -/
+theorem wordApart {n' nb' : Nat} {V : Word n' nb'} (hs : E.MStep t m m') (hok : V.Ok m)
+    (hap : E.W.b ≠ V.b ∨ E.W.o + 4 ≤ V.o ∨ V.o + nb' ≤ E.W.o) :
+    V.Ok m' ∧ V.hist m' = V.hist m := by
+  have hmem : ∀ l, ¬ E.W.In l → m'.heap l = m.heap l := fun _ hl => hs.cells hl
+  have hk : ∀ {m₁ : Mem}, m₁.blocks = m.blocks → m₁.atomics = m.atomics →
+      m₁.footprint = m.footprint → m₁.threads = m.threads → m₁.clocks = m.clocks →
+      V.Ok m₁ ∧ V.hist m₁ = V.hist m :=
+    fun hb ha hf ht hc => hok.fields_native hb ha hf ht (fun u => by rw [hc]; exact VClock.le_refl _)
+  obtain ⟨hv, hvHist⟩ := hok.fields_native (m' := { m with current := t })
+    rfl rfl rfl rfl (fun _ => VClock.le_refl _)
+  cases hs with
+  | same => exact hk rfl rfl rfl rfl rfl
+  | @op M hw hc hop _ _ =>
+    have hsteps : ∀ hF : Heap,
+        (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
+        FStepIn hF { m with current := t } m' := fun hF hoff =>
+      Word.actualRun_fstep hw hc hoff hop
+    have hpres := Word.preserve_apart (W := E.W) hv hsteps hmem hap
+    exact ⟨hpres.1, hpres.2.trans hvHist⟩
+  | @sleep M hw hc hr _ _ =>
+    have hsteps : ∀ hF : Heap,
+        (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
+        FStepIn hF { m with current := t } M := fun hF hoff => by
+      rw [hr]; exact Word.record_fstep (k := .atomicRead) hw hc hoff
+    have hcells : ∀ l, ¬ E.W.In l → M.heap l = ({ m with current := t } : Mem).heap l :=
+      fun l _ => by rw [hr]; rfl
+    have hM := Word.preserve_apart (W := E.W) hv hsteps hcells hap
+    obtain ⟨hw'', hh'⟩ := hM.1.fields_native
+      (m' := { M with waiters := M.waiters.push (t, E.W.ptr) })
+      rfl rfl rfl rfl (fun _ => VClock.le_refl _)
+    exact ⟨hw'', hh'.trans (hM.2.trans hvHist)⟩
+  | woken => exact hk rfl rfl rfl rfl rfl
+  | resume => exact hk rfl rfl rfl rfl rfl
+  | wake c cs h => rw [Proto.modify_ok h]; exact hk rfl rfl rfl rfl rfl
+
 end MStep
 
 /-! ## Facts of the writes -/
