@@ -703,7 +703,7 @@ theorem consume_val {b : BitVec 32} (hs : 0 < b.toNat / 65536) (hok : SOk b) :
 theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
     {G₁ : ThreadId → γ} {rY : Res} {m₁ m' : Mem} {i jr : Nat} {e exp : BitVec 32}
     {ord : AtomicOrder}
-    (hg₁ : G₁ t = g) (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    (hg₁ : G₁ t = g) (hg : C.ph g = .reg i jr true e)
     (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
     (hms : C.MStep C.S t m₁ m')
     (hA : ∀ hF, (∀ x, C.S.o ≤ x → x < C.S.o + 4 → hF (C.S.b, x) = none) →
@@ -746,7 +746,7 @@ theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
         (by rcases hrun with ⟨c, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩)))) hw'
       ⟨fun hv _ hh _ _hR =>
         (h k hk G₁ m' (hop.current.trans hc₁)).1
-          (hC.afterConsume hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hL hs hv hh),
+          (hC.afterConsume hg₁ hg hU hY (hms (.inr ⟨_, _, hh⟩)) hA hL hs hv hh),
        fun j b hj hv hfl _ hh _hR =>
         let r := hC.afterReadS hg₁ hg hU hY (hms (.inl hh)) hA hL hj hv hfl hh
         (h k hk G₁ m' (hop.current.trans hc₁)).2 b r.1 r.2⟩
@@ -774,7 +774,7 @@ theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
         (by rcases hrun with ⟨c₀, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c₀, _, _, _, _, r, hr⟩)))) hw'
       ⟨fun hv _ hh _ _hR =>
         (h k hk G₁ m' (hop.current.trans hc₁)).1
-          (hC.afterConsume hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hL hs hv
+          (hC.afterConsume hg₁ hg hU hY (hms (.inr ⟨_, _, hh⟩)) hA hL hs hv
             (by rw [hh, hnew])),
        fun j b r hd hj hv hfl _ hh _hR =>
         let r' := hC.afterReadS hg₁ hg hU hY (hms (.inl hh)) hA hL hj hv hfl hh
@@ -1192,9 +1192,8 @@ theorem qd_false {m : Mem} (h : m.waiters.any (·.1 == t) = false) : C.qd m t = 
   apply Bool.eq_false_iff.mpr
   intro h'
   obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h'
-  have : m.waiters.any (·.1 == t) = true :=
-    Array.any_eq_true'.mpr ⟨w, hw, by simp only [Bool.and_eq_true] at he; exact he.1⟩
-  rw [h] at this; cases this
+  simp only [Bool.and_eq_true, beq_iff_eq] at he
+  exact FLock.notQ_mem h w hw he.1
 
 /-- **No deadlock with a pending signal** (`Inv.noDeadlock`): with a signal pending or a thread
 between a signaller's call and its wake (`sig`: `sl`, `inc`, `wk`), a sleeper is not in a
@@ -1257,11 +1256,8 @@ theorem _root_.Zig.Full.FLock.Fits.retEp (hC : L.Fits (C.prim L) P U ok) {i jr :
 
 /-- A pending wake of another thread stays when `t`'s goes. -/
 theorem woken_erase {ws : Array ThreadId} {u : ThreadId} (hu : u ≠ t) :
-    (ws.erase t).contains u = ws.contains u :=
-  Bool.eq_iff_iff.mpr ⟨fun h => Array.contains_iff_mem.mpr
-      ((Array.mem_erase_of_ne hu).mp (Array.contains_iff_mem.mp h)),
-    fun h => Array.contains_iff_mem.mpr
-      ((Array.mem_erase_of_ne hu).mpr (Array.contains_iff_mem.mp h))⟩
+    (ws.erase t).contains u = ws.contains u := by
+  rw [Bool.eq_iff_iff, Array.contains_iff_mem, Array.contains_iff_mem, Array.mem_erase_of_ne hu]
 
 /-- **The waiter's futex wait at the epoch** with its value `e`, at `reg i jr false e` out of the
 lock's code: its facts for `FLock.wp_wordWaitTo` and `wp_wordOsWaitTo` (`hUa`, `hlive`, `hUs`,

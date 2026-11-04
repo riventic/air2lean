@@ -425,11 +425,8 @@ theorem loopBack_bound {G : ThreadId → γ} {h : Array Word.Entry} {k T : Nat}
 
 /-! ## The epoch's values -/
 
-theorem ofNat_succ (d : Nat) : BitVec.ofNat 32 (d + 1) = BitVec.ofNat 32 d + 1 := by
-  rw [show (1 : BitVec 32) = BitVec.ofNat 32 1 from rfl]
-  apply BitVec.eq_of_toNat_eq
-  simp only [BitVec.toNat_ofNat, BitVec.toNat_add]
-  omega
+theorem ofNat_succ (d : Nat) : BitVec.ofNat 32 (d + 1) = BitVec.ofNat 32 d + 1 :=
+  BitVec.ofNat_add d 1
 
 /-- (H3) iterated: epoch write `i + d` is write `i` plus `d`. -/
 theorem Inv.ep_add {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {i : Nat} :
@@ -475,10 +472,8 @@ theorem Inv.fresh_of_val {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {u :
 
 /-- The support bound of the count, for a thread that is not out. -/
 theorem Inv.lt_bound {G : ThreadId → γ} {T : Nat} (hT : ∀ u, T ≤ u → C.ph (G u) = .out)
-    {t : ThreadId} (ht : C.ph (G t) ≠ .out) : t < T := by
-  by_cases h : t < T
-  · exact h
-  · exact absurd (hT t (by simp only [ThreadId] at *; omega)) ht
+    {t : ThreadId} (ht : C.ph (G t) ≠ .out) : t < T :=
+  Nat.lt_of_not_le fun h => ht (hT t h)
 
 /-- The newest `signals` is at most the newest `waiters` (H1). -/
 theorem Inv.s_le_w {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) :
@@ -707,8 +702,7 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q : Na
       exact Nat.add_le_add_left (regCl_le h (by omega) fun _ ha hw => ⟨ha, hwk' u hw⟩) _
     cases h1 : C.qd m u
     · have h2 : C.qd m' u = false := by cases h : C.qd m' u; rfl; exact absurd (hqd u h) (by simp [h1])
-      simp only [h1, h2, Bool.and_false, Bool.false_eq_true, ↓reduceIte, Nat.sub_self,
-        Nat.add_zero]
+      simp only [h2, Bool.and_false, Bool.false_eq_true, ↓reduceIte, Nat.sub_self, Nat.add_zero]
       exact hmono (by rw [h1, h2])
     · obtain ⟨i, jr, e, hp⟩ := hI.qd_reg h1
       have ha := hI.qd_away h1
@@ -718,7 +712,7 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q : Na
         unfold cl regCl; rw [hp, ha, h1, h2, hE]
         simp only [Array.contains_iff_mem] at h3
         simp [CPh.incN, CPh.isReg, h3]
-      · simp only [h1, h2, Bool.and_true, Nat.sub_self, Nat.add_zero]
+      · simp only [Bool.and_true, Nat.sub_self, Nat.add_zero]
         exact hmono (by rw [h1, h2])
   have hsum := tsum_le hcl
   rw [tsum_add] at hsum
@@ -730,7 +724,7 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q : Na
     · have : ((C.ph (G u)).isReg && C.qd m u) = true := by
         simp only [Bool.and_eq_true] at h ⊢; exact ⟨h.1, hqd u h.2⟩
       simp [h, this]
-    · simp only [h, if_false]; split <;> rfl
+    · simp only [h]; split <;> rfl
   have hmn := hmin T hT
   have hn : n ≤ tsum T fun u => (C.ph (G u)).wkN := by
     have := le_tsum (fun u => (C.ph (G u)).wkN) htT
