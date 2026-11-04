@@ -488,7 +488,8 @@ end Atomic
 variable {W : Word 32 4}
 
 /-- A futex wake at the word (`futexWakeC`), by thread `t` (`g`): the lock's invariant holds with
-the same rest; the client shows its `U` after the wake. -/
+the same rest; the client shows its `U` after the wake, given its `U` and the lock's word invariant
+at the stop. -/
 theorem wp_wordWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {io : Io}
     {c : BitVec 32} (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁ cs m', G₁ t = g → U G₁ rX m₁ → L.WInv (L.pl G₁) m₁ →
@@ -806,7 +807,8 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (by rw [K.pl.set_self]; exact hUo) (by rw [K.pl.set_self]; exact h) hcost
 
 /-- **An OS futex wake at the word** (`Os.futexWake`, OSF-02) by thread `t` (`g`): a wake keeps
-the lock's invariant with the same rest, and the client shows its `U` after it; a spurious
+the lock's invariant with the same rest, and the client shows its `U` after it (given its `U`
+and the lock's word invariant at the stop); a spurious
 `EINTR` (`spurious`, macOS) wakes nobody, and the protocol's invariant holds at the stop. -/
 theorem wp_wordOsWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {w : Option Nat}
     {spurious : Bool} (hi : P.inv (upd G t g) m)
@@ -957,11 +959,11 @@ end FLock
 the roles, its words `Ws`, its invariant `Inv`, the steps of its code at a word
 (`Move W t g p q h m m'`: thread `t` at `g` goes to the place `p`, the lock place `q` and the
 lock resource `h`) and the lock places `ownAt` at which a thread in its code steps on its own
-part. The rest has each word's cells (`Sub`, `Word.InRest`); a step is a step of its code at a
-word, with the lock's word invariant before it (`LockWord.WInv`: the step is taken from a state of
-the protocol, so a client's rest may use who holds the lock, e.g. `FLock.HB.le`), or a native
-framed step on the thread's own part that preserves word validity and exact history, with the
-word's new cells in the rest and the invariant after it. -/
+part. The rest has each word's cells (`Sub`, `Word.InRest`). A step, with the word's new cells in
+the rest and the invariant after it, is either a step of its code at a word, with the lock's word
+invariant before it (`LockWord.WInv`: the step is taken from a state of the protocol, so a client's
+rest may use who holds the lock, e.g. `FLock.HB.le`), or a native framed step on the thread's own
+part that preserves word validity and exact history. -/
 abbrev FPrim.ofWords {γ Ph Rl : Type} (L : FLock γ) (pl : FPlace γ Ph) (out : Ph)
     (calm : Ph → Prop) (role : Rl → γ → Prop) (Ws : Word 32 4 → Prop)
     (Inv : (ThreadId → γ) → Mem → Prop)

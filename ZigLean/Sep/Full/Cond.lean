@@ -25,10 +25,11 @@ writes). The bound counts from the waiter's saved write, which may lag behind th
 load reads a write at or after its floor, every epoch write that happened before it (`SigStep`).
 When every epoch write happened before the mutex's holder (`FLock.WordHB`), the waiter, which
 holds the mutex at its load, saves the newest write (`ld_newest`), so a client with at most one
-registered waiter at a time bounds the window by its posts per registration. A waiter's reload
-in its wait loop (`reg → reg`, outside the mutex) may keep an older write, so with two or more
-registered waiters that count is not enough (register C14). It is not a premise ID and not a
-global cap.
+registered waiter at a time bounds the window by its posts per registration. With two or more
+registered waiters, one that does not reach its futex wait (not scheduled, or reloading an older
+write in its wait loop), or that stays queued under an unfair wake, keeps its saved write while the
+others go on, so that count is not enough for a long-running client (register C14, ledger
+`cond-window-multi-waiter`). It is not a premise ID and not a global cap.
 
 **Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.0) and
 `Thread.Condition.wait` (0.15.2). The cancelable `Io.Condition.wait` (and `waitTimeout` in
