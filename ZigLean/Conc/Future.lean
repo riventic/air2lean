@@ -32,7 +32,7 @@ does not extend to futures, and the two are qualified separately.
   (`.illegal`).
 - **Ownership.** The task receives its by-value argument tuple as a spawn target and owns the
   result cells of the runtime record until the join returns them to the awaiter
-  (`Zig.Conc.Capture`, `Zig.Conc.Transfer`).
+  (`Zig.Conc.Capture`, `Zig.Full.FCapture`).
 
 The runtime record (`Io.AnyFuture`) has the layout of the future itself: the task's thread id
 where `any_future` is, the result at `Future.resultOff`.

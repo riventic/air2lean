@@ -29,10 +29,11 @@ The model rules of `Thread.detach` and of an explicit handle transfer
   access that a detached thread makes after the exit reads or writes stack data that is gone. A
   stack `free` records no access, so an access before the exit is not checked against it (as in
   `ZigLean/Conc/Share.lean`). The logic adds the static side: a region granted `owned` to another
-  thread (C01, `ZigLean/Conc/Transfer.lean`) is not in the parent's part, so the parent cannot
-  establish the precondition of its frame's `free` for it (`not_bytesAt_granted`), and a detached
-  thread is never joined, so no join returns the region. A detached worker may only capture
-  values, or heap/global regions that it owns and frees itself (`Proofs/Detach/Worker.lean`).
+  thread (C01, `FTransfer.owned`, `ZigLean/Sep/Full/ThreadSpawn.lean`) is not in the parent's
+  part, so the parent cannot establish the precondition of its frame's `free` for it
+  (`not_bytesAt_granted`), and a detached thread is never joined, so no join returns the region.
+  A detached worker may only capture values, or heap/global regions that it owns and frees itself
+  (`Proofs/Detach/Worker.lean`).
 - **Known limit.** A transfer to a thread that has already ended is not rejected: the handle then
   has an owner that never consumes it, and no end check reports it.
 -/
