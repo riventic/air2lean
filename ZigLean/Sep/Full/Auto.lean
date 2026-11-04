@@ -1058,6 +1058,10 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
           | some pf => match r.proof? with
             | some eq => pure (some (← mkEqMPR eq pf))
             | none => pure (some pf)
+    -- (stated as the side condition: a step by a `dsimproc`, `Enc.size (BitVec 16)` to `2`, leaves
+    -- no proof, and the proof's type is then the reduced form, which simp's reducible assignment
+    -- of the rewrite's hypothesis does not unify)
+    let out ← out.mapM (mkExpectedTypeHint · e)
     if let some pf := out then (← caches).disch.modify (·.insert e (some pf))
     return out
   r
