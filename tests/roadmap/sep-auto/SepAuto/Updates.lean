@@ -380,7 +380,7 @@ example {φ : Prop} (hφ : φ) (X R : FAssn) (a b : Nat) : True := by
       (← instantiateMVars (← determined.mvarId!.getType)))
   trivial
 
-/-- An applied hole whose argument is a local out of the head's scope (`?Q v` at a return,
+/- An applied hole whose argument is a local out of the head's scope (`?Q v` at a return,
 `v` introduced after `?Q`): a rest that names `v` is taken by abstracting it. -/
 open Lean Meta Elab Tactic Zig.Full.Auto in
 example (X : FAssn) (F : Nat → FAssn) : True := by
