@@ -1848,8 +1848,9 @@ and counts no turns.
 - `set_wp`: a thread out of the event's code, with a ghost value that may set (`FEvent.sx`), that
    sets it returns with the event set and its exact caller part, whatever that part holds. The
    setter is out of the lock's code, or it left the lock for good (`gone`: a task after its last
-   access to the lock's resource, a detached thread). `set` ticks in no implementation (`Io.Event` and `Thread.ResetEvent`: a
-   store and a futex wake), so the contract demands no caller resource, as `MutexImpl.unlock_wp`.
+   access to the lock's resource, a detached thread). `set` ticks in no implementation
+   (`Io.Event` and `Thread.ResetEvent`: a store and a futex wake), so the contract demands no
+   caller resource, as `MutexImpl.unlock_wp`.
 
 `wait_wp_resource` states caller parts the same way as the mutex and condition (`LockRules`,
 "Caller parts of composite operations"). Its post is about the actual caller part, not an

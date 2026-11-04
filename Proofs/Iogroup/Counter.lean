@@ -205,7 +205,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
 
 theorem fits : L.Fits (FPrim.empty Gh) proto U fun _ => True :=
   .ofLockAll (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) stable
-    (fun _ _ _ _ _ hu => ⟨hu.shape, hu.io, hu.parts, hu.main, hu.rest, hu.jle⟩) tickStable
+    (fun _ _ _ _ _ hu => ⟨hu.shape, hu.io, hu.rest, hu.jle⟩) tickStable
 
 /-- The protocol's invariant at a stop of `t`. -/
 theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : proto.inv G m)
