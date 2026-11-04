@@ -288,9 +288,8 @@ steps, through Lean's public API: `importModulesCore` reads every module of the 
 `.olean` and runs nothing; `finalizeImport` of that read without extensions (`loadExts := false`,
 which runs nothing either) names its modules in the environment header, and each of them is
 recorded as initialized in Lean's `interpretedModInits`; then `finalizeImport` of the same read
-loads the extensions and runs the `[init]` attributes of no recorded module. Both headers come
-from the one read, so the recorded set is exactly the imported one (the import also fails if the
-final header names another set). An audited module's `initialize` code therefore
+loads the extensions and runs the `[init]` attributes of no recorded module. Both headers are
+built from the one read alone, so the recorded set is exactly the imported one. An audited module's `initialize` code therefore
 never runs in the process that writes the report
 ([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Only the extractor's
 own modules, compiled into the program, have run their initializers; they are the tool. Each

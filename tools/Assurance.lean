@@ -682,9 +682,9 @@ the closure from its `.olean` and runs nothing; `finalizeImport` of that read wi
 (`loadExts := false`, which runs nothing either) names its modules in the environment header;
 each of them is marked as already initialized in `interpretedModInits`, so `finalizeImport` of
 the same read, which loads the extensions and runs the `[init]` attributes, runs none of theirs.
-Both headers are built from the one read, so the marked set is exactly the set imported (no
-second read of the closure can disagree with it); the import fails if the final header names
-another set all the same. Only the extractor's own modules keep their initializers: this
+`finalizeImport` builds the header from the import state alone, and both calls take the one
+read, so the marked set is exactly the set imported (no second read of the closure can disagree
+with it). Only the extractor's own modules keep their initializers: this
 process is the compiled extractor (`tools/AssuranceMain.lean`), which ran their native
 initializers when it started. It holds no imported module before this call, so each module is
 loaded once: a second import of a loaded module would copy it, the whole of `Lean` alone about
@@ -696,14 +696,12 @@ unsafe def importAudited (modules : Array Name) (opts : Options) : IO Environmen
   withImporting do
     let (_, s) ← (importModulesCore imports).run
     -- `ImportState`'s fields are private; the header of a finalization without extensions names
-    -- the modules of `s` (freed again: it is not leaked).
+    -- the modules of `s`. It is not leaked, so it is freed right after this projection; the
+    -- compacted regions both environments point into are freed only by `freeRegions`.
     let read := (← finalizeImport s imports opts (leakEnv := false) (loadExts := false)).header.moduleNames
     interpretedModInits.modify fun initialized => read.foldl (init := initialized) (·.insert ·)
     enableInitializersExecution
-    let env ← finalizeImport s imports opts (leakEnv := true) (loadExts := true)
-    unless env.header.moduleNames == read do
-      throw <| IO.userError "assurance import: the imported modules differ from the marked ones"
-    return env
+    finalizeImport s imports opts (leakEnv := true) (loadExts := true)
 
 /-- The report of the `selected` modules in the current environment (`importAudited`):
 `seedAll` makes every checked declaration of them a graph root (`--all-declarations`), and each
