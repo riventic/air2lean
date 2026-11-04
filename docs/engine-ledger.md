@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 153 rows, 63 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 154 rows, 64 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -84,6 +84,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 | [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 | [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
+| [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row. |
 
 ## Closed rows
 
@@ -1782,3 +1783,18 @@ Request: Row `literal-pointer-rebase` (#604) restates a command's literal pointe
 Workaround sites: `ZigLean/Sep/Full/Auto.lean`
 
 Deletion plan: Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.
+
+<a id="row-fsym-unknown-fvar-mutex-loop"></a>
+### #fsym-unknown-fvar-mutex-loop fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body
+
+Status: **open**. Requester: L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan).
+
+Note: Recorded with #562 (L8 ticks).
+
+Progress: open
+
+Request: `Proofs/Threadsync/ThreadMutex.lean` `loopD_body` (the macOS `osUnfairLockTry` repeat) walked by `fsym [wp_casD hP hc1 (g := g₀), wp_waitD hP, hset, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD]` fails with `unknown free variable _fvar.…` at the `fsym` call; `hset : ∀ q h, L.set g₀ q h = L.set g q h` is a local hypothesis about `g₀`, which the walk's case split of `hg₀ : g₀ = g ∨ g₀ = L.set g .spin rnil` (or a `subst` inside the engine) removes from the context while a rule instance still mentions it. Only the darwin translation elaborates this branch (Linux uses the futex path). Repro on #562 (before the hand walk): restore the `fsym` call above in `loopD_body`, then `python3 -B scripts/theorem-inventory.py swap-build --lake "$(elan which lake)" --swap threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean -- Proofs.Threadsync.ThreadMutex`. Reproduced with and without #562's `eqFixesUnknowns` change. Needed: every term fsym installs is re-abstracted over (or checked against) the local context it runs in after a case split or substitution, and a local hypothesis whose fvars leave the context is re-instantiated or dropped from the rule set, never kept dangling. Regression: a sep-auto test with a local equation hypothesis over a variable that a disjunction case split substitutes.
+
+Workaround sites: `Proofs/Threadsync/ThreadMutex.lean`
+
+Deletion plan: Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row.
