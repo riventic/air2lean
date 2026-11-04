@@ -4,10 +4,9 @@ import ZigLean.Sep.Full.TSum
 /-!
 # The futex-epoch condition with any number of waiters: places, invariant, counting
 
-WORK IN PROGRESS (lane L10d, PR description): the multi-waiter `FCond.Inv` of
-`ZigLean/Sep/Full/Cond.lean`, step 3 of the design on PR #575 (comments 6619561994 and
-6625654179). This module replaces the singleton places and invariant of `Cond.lean` in one swap;
-until then it is built on its own and nothing imports it.
+The multi-waiter `FCond.Inv` of `ZigLean/Sep/Full/Cond.lean` (which imports this module), step
+3 of the design on PR #575 (comments 6619561994 and 6625654179); it replaces the singleton places
+and invariant.
 
 The condition (`Io.Condition` of 0.16.0 and 0.17.0, `Thread.Condition.FutexImpl` of 0.15.2):
 a state word `S` (`waiters` in the low 16 bits, `signals` in the high 16) and an epoch word
