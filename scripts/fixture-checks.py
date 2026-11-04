@@ -28,8 +28,11 @@ invocations, a tests/ script called with `--native...` (scripts/target-matrix.py
 are no-ops: they run binaries of the runner's target (scripts/local-ci.sh part PART runs them in
 the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their count.
 
-Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budget/--mem-mib at
-once), in the checkout, after the full build's Lean phases. Every unit runs on every invocation:
+Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS), in the checkout, after the
+full build's Lean phases: the longest first, each admitted while the memory requests of the
+running units fit in the guard's budget (`schedule`; from the last runs' wall times and peaks,
+`hints_path`; --mem-mib for a unit not measured yet).
+Those measurements decide only order and admission. Every unit runs on every invocation:
 no result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19; docs/ci.md#full-build). A key over the files a unit's text names missed every input
 reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
@@ -78,11 +81,18 @@ def _load(name, rel):
 CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
+GUARD = _load('air2lean_build_guard', 'scripts/build-guard.py')
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
+# Scheduling (`schedule`): a request is the largest of a unit's last HINT_RUNS sampled peaks times
+# MEM_MARGIN (sampling every 2 s misses short spikes), at least MEM_FLOOR_MIB; the requests of
+# the running units stay within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the
+# guard enforces on their sum.
+HINT_RUNS, MEM_MARGIN, MEM_FLOOR_MIB, MEM_SHARE = 5, 1.5, 1024, 0.85
+GUARD_RSS_MIB = 24000  # the units' guard on its own (`guard_rss_mib`)
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -286,6 +296,93 @@ def _stage(unit, scratch):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
+def guard_rss_mib():
+    """The default limit of the units' guard (scripts/fixture-checks.sh): GUARD_RSS_MIB, at most
+    the machine's guard budget (AIR2LEAN_BUILD_MEM_MIB, build-guard.py `default_budget_mib`) and
+    the admission of an enclosing guard (build-guard.py INHERIT; scripts/full-build.sh), which
+    the units' guard inherits and which refuses a larger limit (inheritance_refused)."""
+    limits = [GUARD_RSS_MIB, GUARD.default_budget_mib()]  # the budget may be fractional
+    try:
+        grant = json.loads(os.environ.get(GUARD.INHERIT) or 'null')
+    except ValueError:
+        grant = None
+    limit = grant.get('rss_mib') if isinstance(grant, dict) else None
+    if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > 0:
+        limits.append(int(limit))
+    return int(min(limits))
+
+
+def hints_path():
+    """The last runs' per-unit measurements, one file per machine (every worktree runs the same
+    units, and a gate's worktree is fresh): $AIR2LEAN_FIXTURE_SCHEDULE, else beside the build
+    lock in ~/.cache/air2lean. It holds no result, so it is not in the artifact cache."""
+    path = os.environ.get('AIR2LEAN_FIXTURE_SCHEDULE')
+    return Path(path) if path else Path.home() / '.cache' / 'air2lean' / 'fixture-checks' / 'schedule.json'
+
+
+def lean_threads():
+    """The Lean processes each unit's Lake runs at once (LEAN_NUM_THREADS, set by the guard)."""
+    text = os.environ.get('LEAN_NUM_THREADS', '')
+    return int(text) if text.isdigit() and int(text) > 0 else 1
+
+
+def _hint(entry):
+    """A well-formed measurement, else None (the file is a cache: a bad entry is unmeasured)."""
+    number = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0
+    if (isinstance(entry, dict) and number(entry.get('elapsed_s'))
+            and isinstance(entry.get('peak_rss_kib'), list) and all(map(number, entry['peak_rss_kib']))
+            and isinstance(entry.get('lean_threads'), int) and entry['lean_threads'] > 0):
+        return entry
+    return None
+
+
+def read_hints():
+    try:
+        data = json.loads(hints_path().read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if _hint(v)} if isinstance(data, dict) else {}
+
+
+def write_hints(units, stats):
+    """Record each measured unit's wall time and its peaks of the last HINT_RUNS runs with this
+    run's Lean thread count (peaks measured with another count are dropped). A file that cannot
+    be written only loses the measurements: a warning, never a failed run."""
+    hints, threads = read_hints(), lean_threads()
+    for u, s in zip(units, stats):
+        if s:
+            old = hints.get(u['name'])
+            peaks = old['peak_rss_kib'] if old and old['lean_threads'] == threads else []
+            hints[u['name']] = {'elapsed_s': s['elapsed_s'], 'lean_threads': threads,
+                                'peak_rss_kib': ([s['peak_rss_kib']] + peaks)[:HINT_RUNS]}
+    path, written = hints_path(), None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile('w', dir=path.parent, delete=False) as handle:
+            written = handle.name
+            json.dump(hints, handle, indent=1, sort_keys=True)
+        os.replace(written, path)
+    except OSError as error:
+        print('fixture-checks: the schedule was not recorded: %s' % error, file=sys.stderr)
+        if written:
+            Path(written).unlink(missing_ok=True)
+
+
+def schedule(units, default_mib):
+    """(start order, memory requests in MiB): the longest units first by their last wall time, an
+    unmeasured one before all; a request is the largest recent peak with a margin (MEM_MARGIN,
+    at least MEM_FLOOR_MIB), scaled up by the ratio of Lean threads when this run has more than
+    the measured one, `default_mib` for an unmeasured unit. Only order and admission depend on
+    these measurements, never a unit's result."""
+    hints, threads = read_hints(), lean_threads()
+    known = [hints.get(u['name']) for u in units]
+    order = sorted(range(len(units)), key=lambda i: -(known[i]['elapsed_s'] if known[i] else float('inf')))
+    requests = [max(MEM_FLOOR_MIB, int(max(h['peak_rss_kib']) / 1024 * MEM_MARGIN
+                                       * max(1, threads / h['lean_threads'])))
+                if h and h['peak_rss_kib'] else default_mib for h in known]
+    return order, requests
+
+
 def report(units, statuses, stats, path, top=20):
     """Print the `top` longest units (wall time, peak RSS, time by process kind); write every
     unit's row to PATH (JSON) when given."""
@@ -335,7 +432,12 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
                         'wall time by process kind (scripts/par.py) to this JSON file')
+    parser.add_argument('--guard-rss-mib', action='store_true',
+                        help='print the default limit of scripts/fixture-checks.sh\'s guard (`guard_rss_mib`)')
     a = parser.parse_args(argv)
+    if a.guard_rss_mib:
+        print(guard_rss_mib())
+        return 0
     tree = Tree()
     units = [u for u in discover(tree)
              if not a.only or any(t in u['name'] or any(t in c for c in u['checks']) for t in a.only)]
@@ -370,8 +472,12 @@ def main(argv=None):
                 if env is not None:  # one build: the units' audits share their kernel replays
                     env['AIR2LEAN_FIXTURE_REPLAY_CACHE'] = str(scratch / 'kernel-replay.json')
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
-            workers = par.workers(a.jobs, a.mem_mib, len(jobs))
-            print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
+            order, requests = schedule(units, a.mem_mib)
+            for job, request in zip(jobs, requests):
+                job.mem_mib = request
+            workers, budget = par.workers(a.jobs, None, len(jobs)), int(par.memory_budget_mib() * MEM_SHARE)
+            print('fixture-checks: running %d units, up to %d at once within %d MiB'
+                  % (len(units), workers, budget), flush=True)
             stats, statuses = [], None
             before = shared_outputs()
             try:
@@ -381,11 +487,13 @@ def main(argv=None):
                     for job in jobs:
                         if job.env is not None:
                             job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
-                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
+                                       order=order, mem_budget_mib=budget)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
                 failed.append('the toolchain runtime: %s' % error)
             finally:  # also the finished units of a stopped run (a guard's timeout)
                 report(units, statuses or [None] * len(units), stats, a.report)
+                write_hints(units, stats)
             if changed := changed_outputs(before, shared_outputs()):
                 failed.append('the root package\'s build outputs changed while the units ran (a unit '
                               'built root modules, racing the units that read them): '

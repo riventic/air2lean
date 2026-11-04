@@ -230,7 +230,13 @@ again on the new state, whose facts and existentials open as usual. A view is ke
 walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
-the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+the granted region, whose size the grant's token names (`tok p bs.size …`). When the planner
+pre-assigns unknowns by unifying atoms with the state's, a measure of an unknown (`?bs.size`,
+`?l.length`: a token's argument, a field of a ledger fragment's tuple, under arithmetic) gives
+only its value, never the unknown (`abstractMeasures`: `Array.size` is not injective, so the
+token's `?bs.size` against the state's `old.size` must not take `?bs := old`, the bytes the
+grant had before a write). The region planner carves the bytes at the size the token names
+(`measuredSize?`), and the final match checks the token up to arithmetic.
 Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
@@ -300,7 +306,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  variables of pointers derived by `Ptr.add`/`elem` are identified, and a block variable equal to
+  a value (`some k = some b`, a fact `x.block = some k`, or a global's pointer `⟨some 0, 0⟩` by
+  reducible evaluation) is that value (`unifyBlocks`; the substitutions are recorded for the
+  caller's terms). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
@@ -520,6 +529,8 @@ backend):
   lemmas about `U` and its shape, no per-field rule.
   `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
   caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
+  `Fits.wp_readAll` (over `FLock.Inv.loadAll`) is the read by the only thread that has not left
+  the lock: its bytes may span the protocol's rest, the lock's word and the free lock's resource.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
