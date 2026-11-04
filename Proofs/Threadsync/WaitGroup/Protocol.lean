@@ -63,9 +63,7 @@ inductive Ph where
   | lk
   /-- A task that holds the mutex, before its store of the counter. -/
   | hl
-  /-- A task that holds the mutex, after its store. -/
-  | inc
-  /-- A task after `unlock`, before its finish. -/
+  /-- A task after its store (holding the mutex until its `unlock`), before its finish. -/
   | un
   /-- The setter: its finish read 3, before the end of its `set`. -/
   | st
@@ -78,14 +76,14 @@ namespace Ph
 def rank : Ph → Nat
   | .none => 0
   | .pre => 0 | .sm => 1 | .sp1 => 2 | .run => 3 | .ev => 4 | .rd => 6 | .rdd => 7 | .j1 => 8
-  | .lk => 0 | .hl => 1 | .inc => 2 | .un => 3 | .st => 4 | .fin => 5
+  | .lk => 0 | .hl => 1 | .un => 2 | .st => 3 | .fin => 4
 
 def isMain : Ph → Bool
   | .pre | .sm | .sp1 | .run | .ev | .rd | .rdd | .j1 => true
   | _ => false
 
 def isTask : Ph → Bool
-  | .lk | .hl | .inc | .un | .st | .fin => true
+  | .lk | .hl | .un | .st | .fin => true
   | _ => false
 
 /-- `main` did its `add(1)`. -/
@@ -95,7 +93,7 @@ def wa : Ph → Bool
 
 /-- A task stored the counter. -/
 def stored : Ph → Bool
-  | .inc | .un | .st | .fin => true
+  | .un | .st | .fin => true
   | _ => false
 
 /-- A task did its finish. -/
@@ -149,7 +147,7 @@ def E : FEvent Gh where
 
 /-- The threads that run the lock's code: out of the event's code, and not a task while it holds
 the mutex for its own steps. -/
-def ok (g : Gh) : Prop := g.2.e = .out ∧ g.2.ph ≠ .hl ∧ g.2.ph ≠ .inc
+def ok (g : Gh) : Prop := g.2.e = .out ∧ g.2.ph ≠ .hl
 
 /-- The group's state: 0 before `startMany`, then 4, `+ 1` after `main`'s `add`, `- 2` per
 finish. -/
@@ -163,8 +161,9 @@ def bnd (G : ThreadId → Gh) (m : Mem) (u : ThreadId) : VClock :=
 /-- The write `j` of the event is `is_set`. -/
 def IsSetW (m : Mem) (j : Nat) : Prop := (EV.hist m)[j]!.Val (2 : BitVec 32)
 
-/-- The bytes of the two shared words: the group's state and the event's. -/
-def BoxW (l : Zig.Loc) : Prop := l.1 = 0 ∧ l.2 < 12
+/-- The bytes of the two shared words (the group's state and the event's) and the group's
+padding: the `Tally` below the mutex. -/
+def BoxW (l : Zig.Loc) : Prop := l.1 = 0 ∧ l.2 < 16
 
 instance (l : Zig.Loc) : Decidable (BoxW l) := by unfold BoxW; infer_instance
 
@@ -208,14 +207,16 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
     (G 1).2.ph.fd = true ∧ (G 2).2.ph.fd = true ∧
     ((G u).2.e = .out → VClock.le (G 1).2.fc (m.clocks[u]!) = true ∧
       VClock.le (G 2).2.fc (m.clocks[u]!) = true)
-  /-- After `main`'s `add`, the last finish read 3. -/
-  last3 : (G 0).2.ph.wa = true → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
+  /-- If `main`'s `add` read a pending task (it waits at the event), the last finish read 3. -/
+  last3 : (G 0).2.ph = .ev → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
     ∃ u, (G u).2.sx = true
   /-- Each `is_set` write is the setter's (in or after its set), above both finish clocks. -/
   isw : ∀ j < (EV.hist m).size, IsSetW m j →
     (∃ u, (G u).2.sx = true ∧ ((G u).2.e.Setting ∨ (G u).2.ph = .fin)) ∧
     VClock.le (G 1).2.fc (EV.hist m)[j]!.clock = true ∧
     VClock.le (G 2).2.fc (EV.hist m)[j]!.clock = true
+  /-- At most one `is_set` write: the setter writes it once, from `out` at `st`. -/
+  one : ∀ i < (EV.hist m).size, ∀ j < (EV.hist m).size, IsSetW m i → IsSetW m j → i = j
   /-- The setter at its end: the event is set. -/
   sfin : ∀ u, (G u).2.sx = true → (G u).2.ph = .fin → E.IsSet m
   /-- A finished task is `gone` for the lock. -/
@@ -225,8 +226,9 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   /-- Only `main` has the waiter's role; only one task reads 3. -/
   wa0 : ∀ u, (G u).2.ph.wa = true → u = 0
   sx1 : ∀ u v, (G u).2.sx = true → (G v).2.sx = true → u = v
-  /-- Every write to the `Tally` is below `main`'s clock, a task's bound or an `is_set` write. -/
-  attr : ∀ e ∈ m.footprint, e.block = 0 → e.kind.isWrite = true →
+  /-- Every write to the `Tally`'s bytes is below `main`'s clock, a task's bound or an `is_set`
+  write (the accesses `NoRace` asks for: nonempty, in its 24 bytes). -/
+  attr : ∀ e ∈ m.footprint, e.block = 0 → e.kind.isWrite = true → 0 < e.len → e.off < 24 →
     VClock.le e.clock (m.clocks[0]!) = true ∨
     (∃ u, (u = 1 ∨ u = 2) ∧ VClock.le e.clock (bnd G m u) = true) ∨
     ∃ j < (EV.hist m).size, IsSetW m j ∧ VClock.le e.clock (EV.hist m)[j]!.clock = true
@@ -247,6 +249,12 @@ def proto : Proto Tgt Gh where
   fin g := g.1.ph = .gone ∧ g.2.ph = .fin ∧ g.2.e = .out
   strict := true
   joins g := g.1.ph = .out ∧ (g.2.ph = .rdd ∨ g.2.ph = .j1) ∧ g.2.e = .out
+
+/-- A thread out of the lock's code with the part `r` at the places `x`. -/
+def gO (r : Res) (x : X) : Gh := (⟨.out, r, rnil⟩, x)
+
+/-- A thread with the part `r` at the places `x` that holds the mutex and its resource `rL`. -/
+def gH (r rL : Res) (x : X) : Gh := (⟨.holds, r, rL⟩, x)
 
 /-- `main`'s post: the result. -/
 def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Prop :=
@@ -340,7 +348,7 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
   ⟨hu.shape, hu.rest, hu.blk, wordOk _ hu.wg, wordOk _ hu.ev,
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _)
       (Nat.le_refl _) id id hu.einv.fresh,
-    hu.gv, hu.gw, hu.sto, hu.last3, hu.isw, hu.sfin, hu.lg, hu.out3, hu.wa0, hu.sx1, hu.attr,
+    hu.gv, hu.gw, hu.sto, hu.last3, hu.isw, hu.one, hu.sfin, hu.lg, hu.out3, hu.wa0, hu.sx1, hu.attr,
     hu.done, hu.q⟩
 
 /-! ## Steps that keep the threads' places -/
@@ -348,6 +356,11 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
 /-- `omega` does not see through `ThreadId`: the two thread facts it is needed for, over `Nat`. -/
 theorem lt3 {u : Nat} (h : u < 3) : u = 0 ∨ u = 1 ∨ u = 2 := by omega
 theorem ne_of_lt3 {u t : Nat} (h : 3 ≤ u) (ht : t < 3) : u ≠ t := by omega
+
+/-- An access that narrows another: the other is nonempty and starts in the `Tally` too. -/
+theorem narrows_box {e e₀ : FootprintEntry} (hn : e.Narrows e₀) (hl : 0 < e.len)
+    (ho : e.off < 24) : 0 < e₀.len ∧ e₀.off < 24 := by
+  obtain ⟨-, -, -, h1, h2, -⟩ := hn; omega
 
 /-- The group's value reads only the places. -/
 theorem wgv_congr {a b c a' b' c' : X} (ha : a'.ph = a.ph) (hb : b'.ph = b.ph) (hc : c'.ph = c.ph) :
@@ -372,14 +385,15 @@ theorem attr_step {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hu : U G rX 
     (hnew : ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true →
       (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
       (∃ u, u < 3 ∧ (G u).2.ph.fd = false ∧ VClock.le e.clock (m'.clocks[u]!) = true)) :
-    ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true →
+    ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true → 0 < e.len → e.off < 24 →
       VClock.le e.clock (m'.clocks[0]!) = true ∨
       (∃ u, (u = 1 ∨ u = 2) ∧ VClock.le e.clock (bnd G' m' u) = true) ∨
       ∃ j < (EV.hist m').size, IsSetW m' j ∧ VClock.le e.clock (EV.hist m')[j]!.clock = true := by
-  intro e he hb hk
+  intro e he hb hk hl ho
   rcases hnew e he hb hk with ⟨e₀, he₀, hn⟩ | ⟨u, hu3, hfd, hle⟩
-  · obtain ⟨-, hb₀, hk₀, -, -, hc⟩ := hn
-    rcases hu.attr e₀ he₀ (hb₀ ▸ hb) (hk₀ ▸ hk) with h | ⟨u, hu12, h⟩ | ⟨j, hj, hs, h⟩
+  · have hp := narrows_box hn hl ho
+    obtain ⟨-, hb₀, hk₀, -, -, hc⟩ := hn
+    rcases hu.attr e₀ he₀ (hb₀ ▸ hb) (hk₀ ▸ hk) hp.1 hp.2 with h | ⟨u, hu12, h⟩ | ⟨j, hj, hs, h⟩
     · exact .inl (VClock.le_trans hc (VClock.le_trans h (hclk 0)))
     · exact .inr (.inl ⟨u, hu12, VClock.le_trans hc (VClock.le_trans h (bnd_mono hX hclk u))⟩)
     · refine .inr (.inr ⟨j, by rw [hhE]; exact hj, ?_, ?_⟩)
@@ -404,7 +418,7 @@ theorem U.congrX {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U G 
       (∃ u, u < 3 ∧ (G u).2.ph.fd = false ∧ VClock.le e.clock (m'.clocks[u]!) = true))
     (q : ∀ w ∈ m'.waiters, w.2 = L.ptr ∨ w.2 = EV.ptr) : U G' rX' m' := by
   have hY : (fun u => (G' u).2) = fun u => (G u).2 := funext hX
-  refine ⟨?_, rest, blk, wg, ev, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+  refine ⟨?_, rest, blk, wg, ev, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     attr_step hu hX hclk hhE hnew, ?_, q⟩
   · rw [hY]; unfold Shape at *; rw [hth]; exact hu.shape
   · show (newest WG m').Val _; unfold newest; rw [hhW, hX 0, hX 1, hX 2]; exact hu.gv
@@ -418,6 +432,8 @@ theorem U.congrX {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U G 
   · intro j hj hs; unfold IsSetW at hs; rw [hhE] at hj hs ⊢; rw [hX 1, hX 2]
     obtain ⟨⟨u, h1, h2⟩, h3, h4⟩ := hu.isw j hj hs
     exact ⟨⟨u, by rw [hX u]; exact h1, by rw [hX u]; exact h2⟩, h3, h4⟩
+  · intro i hi j hj h1 h2; unfold IsSetW at h1 h2; rw [hhE] at hi hj h1 h2
+    exact hu.one i hi j hj h1 h2
   · intro u h1 h2; rw [hX u] at h1 h2; exact E.IsSet_of_hist_eq hhE (hu.sfin u h1 h2)
   · intro u h; rw [hX u] at h; exact hlg u h
   · exact hout3
@@ -649,7 +665,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   refine ⟨Shape.congr hu.shape hs.threads (fun u => (hph u).1) fun u hu0 => ?_,
     Rest.step (fun _ => ev_box) hu.rest rfl hY (fun l _ hw => hs.cells hw),
     hu.blk.of_block fun _ _ hb => hs.block hb, hwG, hwE, hI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_, ?_⟩
   · -- shape: a thread without a role stays out of the event's code
     by_cases e : u = t
     · subst e
@@ -693,6 +709,34 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         refine ⟨⟨t, by rw [(hph t).2.2]; exact hx', .inl (by rw [hXt]; exact hS)⟩, ?_, ?_⟩
         · rw [hc]; exact VClock.le_trans a (hclk t)
         · rw [hc]; exact VClock.le_trans b (hclk t)
+  · -- one: a new `is_set` write is the setter's from `out` at `st`, which wrote none before
+    intro i hi j hj hsi hsj
+    have key : ∀ k < (EV.hist m').size, IsSetW m' k → k < (EV.hist m).size ∨
+        ((G t).2.sx = true ∧ (G t).2.ph = .st ∧ (G t).2.e = .out ∧ k = (EV.hist m).size) :=
+      fun k hk hsk => by
+        by_cases hlt : k < (EV.hist m).size
+        · exact .inl hlt
+        · obtain ⟨x, hx, rfl, hgx⟩ := hnewj k hk (by omega)
+          unfold IsSetW at hsk; rw [hgx] at hsk
+          rcases hpush x hx with ⟨-, hn⟩ | ⟨hx', hst, ho, -, -, -⟩
+          · exact absurd hsk hn
+          · exact .inr ⟨hx', hst, ho, rfl⟩
+    have oldS : ∀ k < (EV.hist m).size, IsSetW m' k → IsSetW m k := fun k hk hsk => by
+      unfold IsSetW at hsk ⊢; rw [(hold k hk).2] at hsk; exact hsk
+    have noOld : (G t).2.sx = true → (G t).2.ph = .st → (G t).2.e = .out →
+        ∀ k < (EV.hist m).size, ¬ IsSetW m k := fun hx hst ho k hk hsk => by
+      obtain ⟨⟨u, h1, h2⟩, -, -⟩ := hu.isw k hk hsk
+      obtain rfl := hu.sx1 u t h1 hx
+      rcases h2 with h2 | h2
+      · rw [ho] at h2; rcases h2 with h2 | h2 <;> cases h2
+      · rw [hst] at h2; cases h2
+    rcases key i hi hsi with hi' | ⟨hx, hst, ho, hi'⟩
+    · rcases key j hj hsj with hj' | ⟨hx, hst, ho, -⟩
+      · exact hu.one i hi' j hj' (oldS i hi' hsi) (oldS j hj' hsj)
+      · exact absurd (oldS i hi' hsi) (noOld hx hst ho i hi')
+    · rcases key j hj hsj with hj' | ⟨-, -, -, hj'⟩
+      · exact absurd (oldS j hj' hsj) (noOld hx hst ho j hj')
+      · rw [hi', hj']
   · -- sfin: the event stays set
     intro u h1 h2; rw [(hph u).2.2] at h1; rw [(hph u).1] at h2
     have hS := hu.sfin u h1 h2
@@ -732,10 +776,11 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       fun u => by unfold bnd; rw [(hph u).1, (hph u).2.1]; split
                   · exact VClock.le_refl _
                   · exact hclk u
-    intro e hfe hb hk
+    intro e hfe hb hk hl ho
     rcases hs.fpNew hcs hfe with ⟨e₀, he₀, hn⟩ | ⟨htid, hle, hw⟩
-    · obtain ⟨-, hb₀, hk₀, -, -, hc⟩ := hn
-      rcases hu.attr e₀ he₀ (hb₀ ▸ hb) (hk₀ ▸ hk) with h | ⟨u, hu12, h⟩ | ⟨j, hj, hsj, h⟩
+    · have hp := narrows_box hn hl ho
+      obtain ⟨-, hb₀, hk₀, -, -, hc⟩ := hn
+      rcases hu.attr e₀ he₀ (hb₀ ▸ hb) (hk₀ ▸ hk) hp.1 hp.2 with h | ⟨u, hu12, h⟩ | ⟨j, hj, hsj, h⟩
       · exact .inl (VClock.le_trans hc (VClock.le_trans h (hclk 0)))
       · exact .inr (.inl ⟨u, hu12, VClock.le_trans hc (VClock.le_trans h (hbnd u))⟩)
       · obtain ⟨hj', hgj⟩ := hold j hj
@@ -797,13 +842,19 @@ theorem frame_ev {G : ThreadId → Gh} {rY : Res} {m : Mem}
 theorem wg_ev {l : Zig.Loc} (h : WG.In l) : ¬ EV.In l := fun h' => by
   obtain ⟨-, -, h3⟩ := h; obtain ⟨-, h2, -⟩ := h'; simp [WG, EV] at h2 h3; omega
 
-/-- The two words' bytes are live. -/
+theorem heap_blk {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
+    (hk : blk.kind = .stack) {x : Nat} (hx : x < blk.bytes.size) :
+    m.heap (0, x) = some ⟨blk.bytes[x], blk.addr, blk.bytes.size, blk.kind⟩ := by
+  simp [Mem.heap, hb, hl, hx, hk, BlockKind.mappedLo]
+
+/-- The bytes of the `Tally` below the mutex are live. -/
 theorem box_live {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m) {l : Zig.Loc}
     (hl : BoxW l) : m.heap l ≠ none := by
+  obtain ⟨b, x⟩ := l
   obtain ⟨h1, h2⟩ := hl
-  by_cases h : l.2 < 8
-  · exact hu.wg.cellIn ⟨h1, Nat.zero_le _, h⟩
-  · exact hu.ev.cellIn ⟨h1, show 8 ≤ l.2 by omega, show l.2 < 8 + 4 by omega⟩
+  simp only at h1 h2; subst h1
+  obtain ⟨blk, hb, hlv, hs, hk⟩ := hu.blk
+  rw [heap_blk hb hlv hk (by omega)]; nofun
 
 /-- The frame of a step on a part with the mutex's word and the rest has the words' bytes. -/
 theorem frame_box {rX : Res} {m : Mem} (hr : Rest rX m) {l : Zig.Loc} (hl : BoxW l)
@@ -827,11 +878,6 @@ theorem blk_of {G : ThreadId → Gh} {c rY rB : Res} {m : Mem} (hi : L.Inv G (rs
   rw [hg, bauth_eq hB] at he
   obtain ⟨blk, h1, h2, h3, h4, -⟩ := (he 0).1 24 .stack (by simp [Ghost.atExt, ECell.auth1])
   exact ⟨blk, h1, h2, h3, h4⟩
-
-theorem heap_blk {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
-    (hk : blk.kind = .stack) {x : Nat} (hx : x < blk.bytes.size) :
-    m.heap (0, x) = some ⟨blk.bytes[x], blk.addr, blk.bytes.size, blk.kind⟩ := by
-  simp [Mem.heap, hb, hl, hx, hk, BlockKind.mappedLo]
 
 /-- A byte of the `Tally` that the rest after a step holds with its cell before it: the same
 cell (the block is pinned). -/
