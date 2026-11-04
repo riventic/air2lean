@@ -21,9 +21,11 @@ client bounds it in its rest `U`, by its own ghost accounting (`CondImpl` has no
 that pushes its state write (`SigStep`, `SigStep.inc_fresh`), and each `epoch += 1` is its step
 `inc → wk` (`FCond.prim`); so each epoch write follows a post of its own, and a client that
 bounds its posts bounds the epoch writes (the Handoff client: one post, at most two epoch
-writes). The bound counts from the waiter's saved write, which may lag behind the newest (its
-load reads any write its view allows), so counting posts per registration is not enough for a
-waiter that waits again. It is not a premise ID and not a global cap.
+writes). The bound counts from the waiter's saved write, which may lag behind the newest: its
+load reads a write at or after its floor, every epoch write that happened before it (`SigStep`),
+so counting posts per registration needs the newest write in that floor, as when every epoch
+write happened before the mutex's holder (`EpHB`, `EpHB.last`). It is not a premise ID and not a
+global cap.
 
 **Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.0) and
 `Thread.Condition.wait` (0.15.2). The cancelable `Io.Condition.wait` (and `waitTimeout` in
