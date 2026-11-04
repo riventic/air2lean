@@ -1678,6 +1678,17 @@
    "workaround_sites": ["Proofs/Threadsync/ThreadMutex.lean"],
    "deletion_plan": "Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row.",
    "note": "Recorded with #562 (L8 ticks)."
+  },
+  {
+   "id": "callocspec-partial-step-count",
+   "title": "The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return",
+   "status": "open",
+   "requester": "L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction)",
+   "progress": "open",
+   "request": "`CAllocSpec` (ZigLean/Sep/Full/Dispatch.lean) states each allocator call as a `CTriple`, a partial judgment: an implementation whose `free` never returns meets it. So `Lists.Alloc.freeAll_exact` (`CTriple`, `xs.length + 1` credits in, as many receipts out) gives `Lists.Alloc.freeAll_steps` only for a run that returns (the run's result `pure (v, m')` is a premise). The legacy `Proofs/Lists/Cost.lean` `freeAll_cost` counted unconditionally because it used the hand-written total `Allocator` model, which the trusted-base rule retires. Counterexample to the unconditional count under the present contract: an allocator whose `free` loops forever meets `CAllocSpec` (its triples hold vacuously) and makes `freeAll` diverge on a one-node list, so no run returns and there is no final memory whose `ticks` could be `m.ticks + 2`. Needed: a total allocator contract (each call, at least `free`, terminates), proved by every translated allocator; with it `freeAll_steps` drops the returning-run premise and also gives the run's existence, as `FTotalTriple.ticks_eq_post` does for sequential code.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a premise."
   }
  ],
  "mechanisms": [

@@ -580,7 +580,7 @@ allocator's state, the list and the vtable (`r`) and a frame `rF`, every run of 
 one thread (`soloRun`, `CTriple.toSolo`) that returns has run exactly `xs.length + 1` steps; the
 live bytes of its final memory are the frame's and a part that holds the allocator's state, every
 node's fee and the vtable, and nothing of the list. Whether it returns is the allocator's
-business: the contract `CAllocSpec` is partial. -/
+business: the contract `CAllocSpec` is partial (engine-ledger row `callocspec-partial-step-count`). -/
 theorem freeAll_steps (hd : Option Ptr) (xs : List (BitVec 32))
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (fuel : Nat) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) r) (hs : m.FSeq)

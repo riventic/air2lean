@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 154 rows, 64 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 155 rows, 65 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -85,6 +85,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 | [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
 | [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row. |
+| [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
 
 ## Closed rows
 
@@ -1802,3 +1803,14 @@ Request: `Proofs/Threadsync/ThreadMutex.lean` `loopD_body` (the macOS `osUnfairL
 Workaround sites: `Proofs/Threadsync/ThreadMutex.lean`
 
 Deletion plan: Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row.
+
+<a id="row-callocspec-partial-step-count"></a>
+### #callocspec-partial-step-count The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return
+
+Status: **open**. Requester: L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction).
+
+Note: Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a premise.
+
+Progress: open
+
+Request: `CAllocSpec` (ZigLean/Sep/Full/Dispatch.lean) states each allocator call as a `CTriple`, a partial judgment: an implementation whose `free` never returns meets it. So `Lists.Alloc.freeAll_exact` (`CTriple`, `xs.length + 1` credits in, as many receipts out) gives `Lists.Alloc.freeAll_steps` only for a run that returns (the run's result `pure (v, m')` is a premise). The legacy `Proofs/Lists/Cost.lean` `freeAll_cost` counted unconditionally because it used the hand-written total `Allocator` model, which the trusted-base rule retires. Counterexample to the unconditional count under the present contract: an allocator whose `free` loops forever meets `CAllocSpec` (its triples hold vacuously) and makes `freeAll` diverge on a one-node list, so no run returns and there is no final memory whose `ticks` could be `m.ticks + 2`. Needed: a total allocator contract (each call, at least `free`, terminates), proved by every translated allocator; with it `freeAll_steps` drops the returning-run premise and also gives the run's existence, as `FTotalTriple.ticks_eq_post` does for sequential code.
