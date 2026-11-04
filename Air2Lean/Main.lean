@@ -264,6 +264,12 @@ def parseArgs (args : List String) : Except String Args := do
     throw "--device-contract cannot be combined with --model-registry-template"
   if a.airCertificate.isSome != a.airCertificateImport.isSome then
     throw s!"--air-certificate and --air-certificate-import go together\n{usage}"
+  if let some genModule := a.airCertificateImport then
+    unless ModuleSplit.validRoot genModule do
+      throw s!"invalid --air-certificate-import '{genModule}': use a dot-separated module name\n{usage}"
+    if let some root := a.splitModules then
+      unless genModule == root do
+        throw "--air-certificate-import must name the --split-modules umbrella"
   if let some path := a.airCertificate then
     if path == a.outPath.toString || a.timingJson == some path || a.sourceMapJson == some path then
       throw s!"--air-certificate must not name another output\n{usage}"
@@ -319,6 +325,51 @@ private def writeTiming (path : String) (t : PhaseTimes) (files functions inputB
 def die (msg : String) : IO UInt32 := do
   IO.eprintln msg
   pure 1
+
+/-- Construction data from the current renderer's fresh compiled modules. It is never an
+assurance admission; the resulting certificate still goes through the kernel. -/
+private def certificateMetadata (genModule : String) (modules : Array Lean.Json) : IO Lean.Json := do
+  let app ← IO.appPath
+  let nativeRoot := (List.range 4).foldl (fun (p : System.FilePath) _ => p.parent.getD p) app
+  let cwd ← IO.currentDir
+  let root ← if ← (nativeRoot / "scripts/certificate-query.py").pathExists then pure nativeRoot
+    else pure cwd
+  let script := root / "scripts/certificate-query.py"
+  unless ← script.pathExists do
+    throw (IO.userError "AIR certificates require the air2lean Lean workspace and scripts/certificate-query.py")
+  let input := Lean.Json.mkObj [("module", .str genModule), ("modules", .arr modules),
+    ("translator", translatorJson), ("runtime", runtimeJson)]
+  let result ← IO.Process.output { cmd := "python3", args := #["-B", script.toString], cwd := some root }
+    (some input.compress)
+  unless result.exitCode == 0 do
+    throw (IO.userError result.stderr)
+  match Lean.Json.parse result.stdout with
+  | .ok metadata => pure metadata
+  | .error error => throw (IO.userError s!"invalid certificate compiler metadata: {error}")
+
+/-- Resolve existing aliases and missing output suffixes without creating directories. -/
+private partial def outputIdentity (path : System.FilePath) : IO System.FilePath := do
+  try
+    let identity ← IO.FS.realPath path
+    let metadata ← path.metadata
+    if metadata.type == .file && metadata.numLinks > 1 then
+      throw (IO.userError s!"cannot publish a hard-linked output {path}")
+    pure identity
+  catch error =>
+    match error with
+    | .noFileOrDirectory .. =>
+      -- A dangling alias may acquire a target when another planned output is written.
+      let metadata ← try pure (some (← path.symlinkMetadata)) catch e =>
+        match e with
+        | .noFileOrDirectory .. => pure none
+        | _ => throw e
+      if metadata.isSome then
+        throw (IO.userError s!"cannot resolve output alias {path}")
+      let some parent := path.parent | throw error
+      let some name := path.fileName | throw error
+      let parent ← outputIdentity parent
+      pure (if name == "." then parent else if name == ".." then parent.parent.getD parent else parent / name)
+    | _ => throw error
 
 private def run (args : List String) : IO UInt32 := do
   match parseArgs args with
@@ -440,6 +491,9 @@ private def run (args : List String) : IO UInt32 := do
             let emissionKeys := (if keyed then funcs.map (·.name) else originalNames).map (· ++ ".json")
             let emissionFuncs := ((emissionKeys.zip funcs).qsort
               (fun a b => decide (a.1 < b.1))).map (·.2)
+            -- One complete original program supplies emission and exact reference semantics;
+            -- helper extraction and certificate fragmentation cannot select another graph.
+            let program : Program := ⟨emissionFuncs, models⟩
             let semantics := match a.floatSemantics with | .ieee => "ieee" | .compilerRt => "compiler-rt"
             -- An admission opt-in is part of the claim scope: the header records it.
             let optIns := (if a.allowUnqualified then ["unqualified-build-mode"] else []) ++
@@ -461,7 +515,7 @@ private def run (args : List String) : IO UInt32 := do
                 | none => ""
                 | some c => "-- air2lean-device: " ++ c.report.compress ++ "\n")
             let ((src, parts), emitNs) ← timed fun _ =>
-              let parts := emitParts emissionFuncs a.prefix_ a.floatSemantics models a.spawnSemantics
+              let parts := emitProgramParts program a.prefix_ a.floatSemantics a.spawnSemantics
                 a.proofApi device
               (header ++ parts.render a.ns, parts)
             let declNames := parts.declNames
@@ -483,17 +537,53 @@ private def run (args : List String) : IO UInt32 := do
               | .ok source => IO.print source
               | .error error => throw (IO.userError error)
               return 0
+            -- The exact output plan is reused for private compilation and publication.
+            let stem := (a.outPath.fileName.getD "").dropEnd ".lean".length |>.toString
+            let split := a.splitModules.map fun root =>
+              ModuleSplit.modules parts a.ns root stem header
+            if let some path := a.airCertificate then
+              let base := a.outPath.parent.getD "."
+              let generated := match split with
+                  | none => #[a.outPath]
+                  | some mods => mods.map (fun m => base / m.file) ++ #[ModuleSplit.manifestPath a.outPath]
+              let outputs := generated ++
+                (a.timingJson.toArray ++ a.sourceMapJson.toArray ++ #[path]).map System.FilePath.mk
+              let cwd ← IO.currentDir
+              let mut identities : Array String := #[]
+              for output in outputs do
+                -- The split allocator already requires portable case-insensitive names.
+                -- Apply the same uniqueness discipline to every published sidecar.
+                let identity := (← outputIdentity (cwd / output)).toString.toLower
+                if identities.contains identity then
+                  throw (IO.userError "--air-certificate and sidecars must not name a generated module, manifest or another output")
+                identities := identities.push identity
+            -- Reify and validate the complete certificate before public output writes.
+            -- Compiler metadata is read only from a fresh private copy of these exact bytes.
+            let certificate ← match (a.airCertificate, a.airCertificateImport) with
+              | (some path, some genModule) => do
+                let metadata ← if parts.declGroups.any (·.recursive) then
+                    let modules := match split with
+                      | none => #[Lean.Json.mkObj [("name", .str genModule), ("source", .str src),
+                          ("imports", .arr ((parts.header.filterMap fun line =>
+                            (line.dropPrefix? "import ").map (·.toString)).toArray.map Lean.Json.str))]]
+                      | some mods => mods.map fun m => Lean.Json.mkObj [("name", .str m.name),
+                          ("source", .str m.text), ("imports", .arr (m.imports.map Lean.Json.str))]
+                    certificateMetadata genModule modules
+                  else pure (Lean.Json.mkObj [("fixpoint_groups", .arr #[])])
+                match Certificate.emit program a.ns parts genModule metadata with
+                | .ok cert => pure (some (path, cert))
+                | .error error => throw (IO.userError error)
+              | _ => pure none
             let writeStart ← IO.monoNanosNow
-            match a.splitModules with
+            match split with
             | none =>
               try IO.FS.writeFile a.outPath src catch e =>
                 throw (IO.userError s!"writing Lean output {a.outPath}: {e}")
-            | some root =>
+            | some mods =>
               -- The same parts as `src`, one module per call group (`Air2Lean/ModuleSplit.lean`).
-              let stem := (a.outPath.fileName.getD "").dropEnd ".lean".length |>.toString
               let base := a.outPath.parent.getD "."
-              let mods := ModuleSplit.modules parts a.ns root stem header
               ModuleSplit.write (base / stem) base mods
+              let root := a.splitModules.getD ""
               let manifest := ModuleSplit.manifest a.ns root metadata translatorJson runtimeJson mods
               let manifestPath := ModuleSplit.manifestPath a.outPath
               try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
@@ -501,9 +591,7 @@ private def run (args : List String) : IO UInt32 := do
             times := { times with write := (← IO.monoNanosNow) - writeStart }
             if let some path := a.timingJson then
               writeTiming path times jsonPaths.size funcs.size inputBytes src.utf8ByteSize
-            if let (some path, some genModule) := (a.airCertificate, a.airCertificateImport) then
-              let cert := Certificate.emit emissionFuncs a.ns declNames genModule parts.memFuncs
-                parts.concFuncs parts.shapes
+            if let some (path, cert) := certificate then
               try IO.FS.writeFile path cert catch e =>
                 throw (IO.userError s!"writing AIR certificate {path}: {e}")
             if let some path := a.sourceMapJson then

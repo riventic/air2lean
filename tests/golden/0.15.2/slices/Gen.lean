@@ -329,6 +329,7 @@ def indexOfScalar.again4 : indexOfScalarExit → Bool
   | _ => false
 
 def indexOfScalar.loop4 (p0 : BitVec 8) : Zig.MM indexOfScalarLocals indexOfScalarExit := do
+  Zig.callM Zig.tick
   let i5 ← pure ((← get).local1)
   match ← ((do
     let i7 ← pure (i5)
@@ -461,6 +462,7 @@ def reverse.again15 : reverseExit → Bool
   | _ => false
 
 def reverse.loop15 (p0 : Zig.Slice) : Zig.MM reverseLocals reverseExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i17 ← pure ((← get).i)
     let i18 ← pure ((← get).j)
@@ -768,6 +770,7 @@ def sumZ.again6 : sumZExit → Bool
   | _ => false
 
 def sumZ.loop6 (p0 : Zig.Ptr) : Zig.MM sumZLocals sumZExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).i)
     let i9 ← Zig.callM (Zig.load (BitVec 8) 1 (p0.elem 1 i8))

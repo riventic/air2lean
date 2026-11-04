@@ -17,11 +17,12 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L4 lists and dead-end modules | done (Controls: restated over the translated `PageAllocator` in `tests/roadmap/alloc-translated/ListsPage.lean`, the tutorial file deleted) | #365 (Lists/Sep, AddrReuse), #353 (Mmap, Try, TryAlias, Discard), #357, #449 |
 | L5a sentinel/realloc chain | done | #406 (in #412) |
 | L5b owned/arena | done | #338 |
-| L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
+| L5c alloc/policy | done; `Sep/Alloc` deleted with its last users (L8) | #404 (in #412) |
 | L6 wrappers and FBA client | done: client over `FAllocSpec` (Bridge, legacy Client, Fba deleted); stage D-b deleted Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation; `Sep/Step` deleted early | #384 (in #407), #567, D-b |
-| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11 (RwLockContract), `Witnesses/Sep` for L8 | #340, #435 |
+| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11 (RwLockContract); `Witnesses/Sep` deleted (L8) | #340, #435 |
+| L8 tick-cost model | done: emitted step ticks, `Full/Cost`, Lists/Bounded restated, Lists/Cost, Sep/{Cost,Bounded,Alloc}, `ZigLean/Sep.lean`, Witnesses/Sep deleted | #568, #580, #562 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
-| L8, L10, L11, L12, L13 | open | |
+| L10, L11, L12, L13 | open | |
 
 Stage D-a (section 4) is done.
 
@@ -312,20 +313,16 @@ and Sep/Automation are deleted, with the judgments `AllocSpec`, `AllocInv`, `Log
 Sep/AllocSpec/{Region,Ops,Norm} stays (L3: it imports only Sep/Base; `proof-framework.py` does not
 count it as legacy). L6 is done.
 
-### L8. Tick-cost model (L, design-blocked). Blocker TICK.
+### L8. Tick-cost model (done).
 | file | proves | legacy pieces | eff | class |
 | --- | --- | --- | --- | --- |
-| Proofs/Lists/Bounded.lean (56) | `sum_loop_within`: loop of `sum` exits in `xs.length+1` runs; tight | `TotalTripleWithin`, `LoopRuns` | L | proof |
-| Proofs/Lists/Cost.lean (284) | allocation counts (retire per alloc-spec.md) and exact loop-body counts | `Sep.Cost` | M (counts part) + L | proof |
-| ZigLean/Sep/Bounded.lean (163) | `TotalTripleWithin` | Total, Cost | delete after users | library |
-| ZigLean/Sep/Cost.lean (301) | `Mem.allocs/liveHeap`, `LoopRuns` | Alloc, Loop | delete after users | library |
-Blocker (kernel-checked in `codex__mig-lists.md`): credits are not spent by the semantics, so `FTotalTriple` with credits cannot bound loop runs
-(`credits 0 = emp`). Needed: a tick per `Zig.loop` body run/call in the model, a non-mintable tick authority in `GOk` (stack-region lane's
-generic authoritative cell, "ACell generalizing CCell: credits, sp, later ticks"), loop/call rules in `Full/Loop` that consume one credit per body run,
-then `sum_loop_within` restated as `FTotalTriple` + credits with the tightness as a kernel-checked negative. Allocation counts (`push_cost`, `liveHeap`)
-are retired by the `docs/alloc-spec.md` row. Design report from the stack-region lane first (`codex__stack-region.md`: step-tick design report).
-Also feeds Conc.Total (`EventuallyReturns`, `ReturnsWithin`): same mechanism with turn credits.
-Deletable after L8 + L7 + L5c: Sep/Bounded, Sep/Cost, Sep/Alloc, Witnesses/Sep.
+| Proofs/Lists/Bounded.lean | restated: `sum_not_within`, `sum_loop_not_within` (tight), `sum_steps` (exactly `xs.length+1` steps, the sum, the frame untouched and the list in the final memory: `sum_cost`'s value and memory conjuncts) | none | done | proof |
+| Proofs/Lists/Cost.lean | deleted: exact loop counts restated (`sum_cost`: `Lists.Linked.sum_exact`, `sum_steps`; `freeAll_cost`'s loop-step count: `Lists.Alloc.freeAll_exact`, `freeAll_steps`, for every allocator); `append_run` restated for every allocator (`Lists.Append.append_spec`, checked against the 0.15.2, 0.16.0 and 0.17.0 translations by `tests/roadmap/interfaces/check.sh`); allocation counts (`push_cost`, `pushAll_cost`, `append_capacity`, `freeAll_cost`'s freed blocks) retired (`docs/alloc-spec.md`) | — | done | proof |
+| ZigLean/Sep/Bounded.lean | deleted (`TotalTripleWithin` reserved in `assurance/claim-heads.json`) | — | done | library |
+| ZigLean/Sep/Cost.lean | deleted (`Mem.SameAllocs`, `LoopRuns`) | — | done | library |
+The translator puts a `Zig.tick` at every loop-body run and recursive entry (#562); the cost rules are `ZigLean/Sep/Full/Cost.lean`
+(#568). Sep/Bounded, Sep/Cost, Sep/Alloc, the umbrella `ZigLean/Sep.lean` and Witnesses/Sep are deleted.
+Conc.Total (`EventuallyReturns`, `ReturnsWithin`) still needs the same mechanism with turn credits (L12).
 
 ### L9-L11. Concurrent clients (CONC). Fixed ruling: no new `*Impl` until fsym WP mode (#290, merged) and seen-floor.
 

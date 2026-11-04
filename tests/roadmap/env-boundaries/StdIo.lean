@@ -70,6 +70,10 @@ theorem add_ofNat (i n : Nat) (h : i + n < 2 ^ 64) :
   apply BitVec.eq_of_toNat_eq
   simp
 
+/-- A loop body's step tick (`Zig.tick`) in the unfolded `StateT.run` form: it counts and does
+nothing else. -/
+theorem tick_apply (m : Mem) : Zig.tick m = some (.ok ((), { m with ticks := m.ticks + 1 })) := rfl
+
 /-- Every event is a write to `h`. -/
 def OnlyWrites (h : Handle) (evs : List Event) : Prop := ∀ ev ∈ evs, ∃ c, ev = .wrote h c
 
@@ -147,14 +151,18 @@ theorem write_loop_body {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {buf
     cases buf with
     | nil => exact hne rfl
     | cons _ _ => simp at hkdef; omega
-  obtain ⟨m1, hw, hb1, hh1, hs1⟩ := write_run ho (hb.take 2147479552) hne' (by omega) hst
+  -- The body's step tick changes only `ticks`: the write runs on the ticked memory.
+  obtain ⟨m1, hw, hb1, hh1, hs1⟩ :=
+    write_run (m := { m with ticks := m.ticks + 1 }) ho (hb.take 2147479552) hne' (by omega) hst
   refine ⟨m1, hb1, hh1, hs1, ?_⟩
   have hmin : Zig.min false 2147479552#64 s.len = BitVec.ofNat 64 k := by rw [min_cap, hl, hkdef]
   have hc31 := @intCast31 k hk31
   have hsw := setWidth31 k hk31
   have hc64 := @intCast64of31 k hk31
   rw [hk] at hw
-  have hwm : air2lean_model_2 fd s.ptr (BitVec.ofNat 64 k) m = _ := hw
+  have hwm : air2lean_model_2 fd s.ptr (BitVec.ofNat 64 k) { m with ticks := m.ticks + 1 } =
+      pure ((m.host.afterWrite h (buf.take 2147479552)).1,
+        { m1 with host := (m.host.afterWrite h (buf.take 2147479552)).2 }) := hw
   have hopen := ho.2
   unfold Host.afterWrite at hwm ⊢
   cases hwr : m.host.ops.write m.host.env h (buf.take 2147479552) with
@@ -165,13 +173,13 @@ theorem write_loop_body {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {buf
       rw [hk] at hn
       have he := errno_ok n (by omega)
       simp only [hwr] at hwm
-      simp [posix_write.loop9, zig_unfold, Zig.callM, Zig.callR, hmin, hc31, hsw, hc64, hwm, he,
+      simp [posix_write.loop9, zig_unfold, tick_apply, Zig.callM, Zig.callR, hmin, hc31, hsw, hc64, hwm, he,
         intCast64, writeResult]
     | error e =>
       simp only [hwr] at hwm
       have he := errno_err e
       cases e <;>
-        simp [posix_write.loop9, zig_unfold, Zig.callM, Zig.callR, hmin, hc31, hsw, hc64, hwm, he,
+        simp [posix_write.loop9, zig_unfold, tick_apply, Zig.callM, Zig.callR, hmin, hc31, hsw, hc64, hwm, he,
           writeResult, writeErrName, errno, os_linux_E__enum_1.SUCCESS, os_linux_E__enum_1.INTR,
           os_linux_E__enum_1.INVAL, os_linux_E__enum_1.FAULT, os_linux_E__enum_1.SRCH,
           os_linux_E__enum_1.AGAIN, os_linux_E__enum_1.BADF, os_linux_E__enum_1.DESTADDRREQ,
@@ -215,14 +223,19 @@ theorem fs_File_write_run {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {b
   simp only [StateT.run] at hw
   simp [fs_File_write, zig_unfold, Zig.callM, hw]
 
-/-! ## `fs.File.writeAll`'s loop -/
+/-! ## `fs.File.writeAll`'s loop
+
+Each iteration first pays one step tick (`Zig.tick`), so the body runs on
+`{ m with ticks := m.ticks + 1 }`. -/
 
 theorem writeAll_body_done {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLocals} {m : Mem}
     (hidx : st.index = s.len) :
-    ((fs_File_writeAll.loop5 ⟨fd⟩ s).run st).run m = pure ((.br4, st), m) := by
+    ((fs_File_writeAll.loop5 ⟨fd⟩ s).run st).run m =
+      pure ((.br4, st), { m with ticks := m.ticks + 1 }) := by
   have hlt : Zig.lt false st.index s.len = false := by
     simp only [Zig.lt, hidx, Bool.false_eq_true, ite_false, BitVec.ult]; simp
-  simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, hlt, Bool.false_eq_true, ↓reduceIte]
+  simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, tick_apply, Zig.callM, hlt, Bool.false_eq_true,
+    ↓reduceIte]
 
 /-- The facts the loop body checks before its call, at index `i < len`. -/
 structure BodyFacts (s : Slice) (i : Nat) : Prop where
@@ -256,23 +269,25 @@ theorem bodyFacts {s : Slice} {i : Nat} (hi : i < s.len.toNat) : BodyFacts s i :
 
 theorem writeAll_body_err {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLocals} {m m' : Mem}
     {n : ErrName} {i : Nat} (hidx : st.index = BitVec.ofNat 64 i) (hb : BodyFacts s i)
-    (hpp : (ptrProject s.ptr (·.elem 1 (BitVec.ofNat 64 i))).run m = pure (s.ptr.elem 1 (BitVec.ofNat 64 i), m))
+    (hpp : (ptrProject s.ptr (·.elem 1 (BitVec.ofNat 64 i))).run { m with ticks := m.ticks + 1 } =
+      pure (s.ptr.elem 1 (BitVec.ofNat 64 i), { m with ticks := m.ticks + 1 }))
     (hfw : (fs_File_write ⟨fd⟩ ⟨s.ptr.elem 1 (BitVec.ofNat 64 i),
-      BitVec.ofNat 64 (s.len.toNat - i)⟩).run m = pure (.error n, m')) :
+      BitVec.ofNat 64 (s.len.toNat - i)⟩).run { m with ticks := m.ticks + 1 } = pure (.error n, m')) :
     ((fs_File_writeAll.loop5 ⟨fd⟩ s).run st).run m = pure ((.ret (.error n), st), m') := by
   simp only [StateT.run] at hfw hpp
-  simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, Zig.callM, Zig.callR, hidx, hb.lt,
+  simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, tick_apply, Zig.callM, Zig.callR, hidx, hb.lt,
     hb.le1, hb.le2, hb.sub, hb.sliceEnd, hpp, hfw, ↓reduceIte, Zig.unwrapErr]
 
 theorem writeAll_body_ok {fd : BitVec 32} {s : Slice} {st : fs_File_writeAllLocals} {m m' : Mem}
     {v w : BitVec 64} {i : Nat} (hidx : st.index = BitVec.ofNat 64 i) (hb : BodyFacts s i)
-    (hpp : (ptrProject s.ptr (·.elem 1 (BitVec.ofNat 64 i))).run m = pure (s.ptr.elem 1 (BitVec.ofNat 64 i), m))
+    (hpp : (ptrProject s.ptr (·.elem 1 (BitVec.ofNat 64 i))).run { m with ticks := m.ticks + 1 } =
+      pure (s.ptr.elem 1 (BitVec.ofNat 64 i), { m with ticks := m.ticks + 1 }))
     (hfw : (fs_File_write ⟨fd⟩ ⟨s.ptr.elem 1 (BitVec.ofNat 64 i),
-      BitVec.ofNat 64 (s.len.toNat - i)⟩).run m = pure (.ok v, m'))
+      BitVec.ofNat 64 (s.len.toNat - i)⟩).run { m with ticks := m.ticks + 1 } = pure (.ok v, m'))
     (ha : Zig.add false (BitVec.ofNat 64 i) v = pure w) :
     ((fs_File_writeAll.loop5 ⟨fd⟩ s).run st).run m = pure ((.rep5, { st with index := w }), m') := by
   simp only [StateT.run] at hfw hpp
-  simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, Zig.callM, Zig.callR, hidx, hb.lt,
+  simp only [StateT.run, fs_File_writeAll.loop5, zig_unfold, tick_apply, Zig.callM, Zig.callR, hidx, hb.lt,
     hb.le1, hb.le2, hb.sub, hb.sliceEnd, hpp, hfw, ha, ↓reduceIte]
 
 /-- What a loop iteration keeps: memory blocks, single-threadedness, the operations and the
@@ -310,23 +325,27 @@ theorem writeAll_step {m0 : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {buf 
   · subst hi
     have hidx' : st.index = s.len := by
       rw [hidx]; apply BitVec.eq_of_toNat_eq; simp; omega
-    refine ⟨.br4, st, m, writeAll_body_done hidx', ?_⟩
+    refine ⟨.br4, st, _, writeAll_body_done hidx', ?_⟩
     simp only [fs_File_writeAll.again5, Bool.false_eq_true, ite_false]
     refine .inl ⟨rfl, evs, ⟨hbl, hst, hops, hopen⟩, hlog, honly, ?_⟩
     rw [hwr, List.take_length]
   · have hi' : i < buf.length := by omega
     have hc' : Contract m.host.ops errs := hops ▸ hc
     have ho' : OpenAt fd m h := ⟨ho.1, by rw [hopen]; exact ho.2⟩
-    have hb' : BytesAt m (s.ptr.elem 1 (BitVec.ofNat 64 i)) (buf.drop i) :=
-      (hb.blocks hbl).drop i hile (by omega)
+    -- The body runs on the ticked memory, which differs from `m` only in `ticks`.
+    have hbt : BytesAt { m with ticks := m.ticks + 1 } s.ptr buf := hb.blocks hbl
+    have hb' : BytesAt { m with ticks := m.ticks + 1 } (s.ptr.elem 1 (BitVec.ofNat 64 i))
+        (buf.drop i) :=
+      hbt.drop i hile (by omega)
     have hl' : (BitVec.ofNat 64 (s.len.toNat - i)).toNat = (buf.drop i).length := by
       simp; omega
     have hne : buf.drop i ≠ [] := by simp; omega
     obtain ⟨m1, hb1, hh1, hs1, hfw⟩ :=
-      fs_File_write_run (s := ⟨s.ptr.elem 1 (BitVec.ofNat 64 i), BitVec.ofNat 64 (s.len.toNat - i)⟩)
+      fs_File_write_run (m := { m with ticks := m.ticks + 1 })
+        (s := ⟨s.ptr.elem 1 (BitVec.ofNat 64 i), BitVec.ofNat 64 (s.len.toNat - i)⟩)
         hc' ho' hb' hl' hne hst
     have hbody := bodyFacts (s := s) (i := i) (by omega)
-    have hpp := (hb.blocks hbl).ptrProject_run i hile (by omega)
+    have hpp := hbt.ptrProject_run i hile (by omega)
     have hopen_h := ho'.2
     have hframe : ∀ s', (m.host.ops.write m.host.env h ((buf.drop i).take 2147479552)).2 = s' →
         ∀ h', m.host.ops.isOpen s' h' = m0.host.ops.isOpen m0.host.env h' := by
@@ -508,13 +527,16 @@ theorem read_loop_body {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {errs
   obtain ⟨k, hkdef⟩ : ∃ k, k = min 2147479552 s.len.toNat := ⟨_, rfl⟩
   rw [← hkdef] at hw ⊢
   have hk31 : k < 2 ^ 31 := by omega
-  obtain ⟨m', hrd, hh', hs', hbytes⟩ := read_run hc ho hw (by omega) (by omega) hst
+  -- The body's step tick changes only `ticks`: the read runs on the ticked memory.
+  obtain ⟨m', hrd, hh', hs', hbytes⟩ :=
+    read_run (m := { m with ticks := m.ticks + 1 }) hc ho hw (by omega) (by omega) hst
   refine ⟨m', ?_, hh', hs', hbytes⟩
   have hmin : Zig.min false 2147479552#64 s.len = BitVec.ofNat 64 k := by rw [min_cap, hkdef]
   have hc31 := @intCast31 k hk31
   have hsw := setWidth31 k hk31
   have hc64 := @intCast64of31 k hk31
-  have hrm : air2lean_model_1 fd s.ptr (BitVec.ofNat 64 k) m = _ := hrd
+  have hrm : air2lean_model_1 fd s.ptr (BitVec.ofNat 64 k) { m with ticks := m.ticks + 1 } =
+      pure (readRet (m.host.afterRead h k).1, m') := hrd
   unfold Host.afterRead at hrm ⊢
   cases hr : m.host.ops.read m.host.env h k with
   | mk r s' =>
@@ -523,13 +545,13 @@ theorem read_loop_body {m : Mem} {fd : BitVec 32} {h : Handle} {s : Slice} {errs
       have hb := hc.readBound m.host.env h k bytes s' ho.2 (by rw [hr])
       have he := errno_ok bytes.length (by omega)
       simp only [hr, readRet] at hrm
-      simp [posix_read.loop13, zig_unfold, Zig.callM, Zig.callR, hloc, hmin, hc31, hsw, hc64, hrm,
+      simp [posix_read.loop13, zig_unfold, tick_apply, Zig.callM, Zig.callR, hloc, hmin, hc31, hsw, hc64, hrm,
         he, intCast64, readResult]
     | error e =>
       simp only [hr, readRet] at hrm
       have he := errno_err e
       cases e <;>
-        simp [posix_read.loop13, zig_unfold, Zig.callM, Zig.callR, hloc, hmin, hc31, hsw, hc64, hrm,
+        simp [posix_read.loop13, zig_unfold, tick_apply, Zig.callM, Zig.callR, hloc, hmin, hc31, hsw, hc64, hrm,
           he, readResult, readErrName, errno, posix_unexpectedErrno, os_linux_E__enum_1.SUCCESS,
           os_linux_E__enum_1.INTR, os_linux_E__enum_1.INVAL, os_linux_E__enum_1.FAULT,
           os_linux_E__enum_1.AGAIN, os_linux_E__enum_1.CANCELED, os_linux_E__enum_1.BADF,

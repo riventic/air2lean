@@ -536,6 +536,34 @@ class RuntimeRunTests(unittest.TestCase):
                             audit.toolchain_runtime_sha256(root)  # the shared digest is used
                             (root / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
 
+    def test_a_metadata_change_alone_does_not_fail_the_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            with self.run_on(root):
+                with audit.runtime_run():
+                    with audit.runtime_run():  # an enclosing run's
+                        audit.toolchain_runtime_sha256(root)  # the shared digest is used
+                        before = audit.runtime_identity(root)
+                        os.utime(root / 'lib/libleanshared.so', ns=(1, 1))  # new times, the same bytes
+                        self.assertNotEqual(audit.runtime_identity(root), before)
+                self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_failed_process_listing_fails_the_audit(self):
+        error = subprocess.CalledProcessError(1, ['ps'])
+        for failure in (error, subprocess.TimeoutExpired(['ps'], 30), FileNotFoundError('ps')):
+            with patch.object(audit.subprocess, 'run', side_effect=failure):
+                with self.assertRaisesRegex(ValueError, 'cannot list the processes'):
+                    audit.ancestors()
+
+    def test_a_stale_successful_report_never_survives_a_crash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'assumptions.json'
+            output.write_text(json.dumps({'schema_version': 1, 'status': 'pass'}))
+            with patch.object(audit, 'runtime_run', side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    audit.main(['--output', str(output)])
+            self.assertEqual(json.loads(output.read_text())['status'], 'error')
+
 
 class SourceInputTests(unittest.TestCase):
     prepare = staticmethod(ToolCacheTests.prepare)

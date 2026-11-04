@@ -351,6 +351,18 @@ theorem FTotalTriple.run_init {α : Type} {c : MemM α} {Q : α → FAssn} (σ :
   obtain ⟨v, m', hr⟩ := ht.2 _ _ _ hi.1 hi.2 (Mem.init_fseq σ gs h)
   exact FTriple.run_init_ok σ gs h hK ht.1 ⟨.ok (v, m'), by rw [hr]; rfl, nofun⟩
 
+/-- A pure `Result` with an exact total full-state contract equals that result. Empty globals
+supply one admissible memory; the computation's result is independent of that memory. -/
+theorem FTotalTriple.result_eq {α : Type} {x : Result α} {v : α}
+    (ht : FTotalTriple emp (StateT.lift x : MemM α) (fun w => ⟪w = v⟫)) :
+    x = pure v := by
+  obtain ⟨a, m', r', hr, _, hq, _⟩ := ht.run_init default [] (by decide) (by simp)
+  change (x >>= fun a => pure (a, Mem.ofGlobals default [])) = pure (a, m') at hr
+  obtain ⟨w, hw, hpair⟩ := result_bind_eq_pure hr
+  have hwa : w = a := congrArg Prod.fst (Result.pure_inj hpair)
+  rw [hwa, hq.1] at hw
+  exact hw
+
 /-! ## Adequacy in the plain mode
 
 The memory at program start has no stack budget and no meter, so `main` also gets the plain mode

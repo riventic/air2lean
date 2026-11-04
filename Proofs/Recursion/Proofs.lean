@@ -3,6 +3,7 @@ import ZigLean.Witness
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Loop
+import ZigLean.Sep.Full.Slice
 
 /-!
 # Proofs about `examples/recursion/recursion.zig`
@@ -10,10 +11,10 @@ import ZigLean.Sep.Full.Loop
 Each theorem is about the generated code in `Gen.lean`, so it holds for the Zig function to the
 extent the translation is faithful (see the differential tests in `tests/diff/`).
 
-`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. The parity group has a full-state total
-contract, proved by `FTotalTriple.rec_group` and one `fsym` step for both members. The public
-parity equalities follow from total adequacy. The `fact` proof still inducts on `n.toNat`, and
-the `gcd` proof does strong induction on the second argument (`a % b < b`).
+`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. All three groups have full-state
+total contracts, proved by `FTotalTriple.rec_group` and one `fsym` step per group. Their public
+equalities follow from total adequacy. The factorial contract retains its checked-overflow
+bound `n.toNat ≤ 12`; the existing `13!` panic remains a separate boundary result.
 
 **Stack premise.** These functions are pure (`Zig.Result`), so the model charges no frames:
 each theorem holds for the native function only if the native stack holds the recursion it
@@ -83,23 +84,11 @@ theorem isOdd_total (n : BitVec 32) :
       (fun v => ⟪v = (n.toNat % 2 == 1)⟫) :=
   parity_total (.inr n)
 
-/-- Project the pure result from the existing total start-memory adequacy theorem. -/
-private theorem parity_eq (a : ParityInvocation) :
-    (match a with | .inl n => isEven n | .inr n => isOdd n) = pure (parityValue a) := by
-  obtain ⟨v, m', r', hr, _, hq, _⟩ :=
-    (parity_total a).run_init default [] (by decide) (by simp)
-  change ((match a with | .inl n => isEven n | .inr n => isOdd n) >>=
-    fun v => pure (v, Mem.ofGlobals default [])) = pure (v, m') at hr
-  obtain ⟨w, hw, hpair⟩ := result_bind_eq_pure hr
-  have hwv : w = v := congrArg Prod.fst (Zig.Full.Auto.result_pure_inj hpair)
-  rw [hwv, hq.1] at hw
-  exact hw
-
 theorem isEven_spec (n : BitVec 32) : isEven n = pure (n.toNat % 2 == 0) :=
-  parity_eq (.inl n)
+  (isEven_total n).result_eq
 
 theorem isOdd_spec (n : BitVec 32) : isOdd n = pure (n.toNat % 2 == 1) :=
-  parity_eq (.inr n)
+  (isOdd_total n).result_eq
 
 /-- Compatibility with the original simultaneous statement, now from the group contract. -/
 theorem isEven_isOdd_aux :
@@ -122,97 +111,142 @@ theorem natFact_mono {m n : Nat} (h : m ≤ n) : natFact m ≤ natFact n := by
     rename_i n' _
     exact Nat.le_trans ih (Nat.le_mul_of_pos_left (natFact n') (show 0 < n' + 1 by omega))
 
-/-- `fact`, proved by induction on the recursion depth `k = n.toNat`, for `k ≤ 12` (`12! < 2^32`,
-`13!` overflows — see `fact_13_panics`). -/
+private def factCode (n : BitVec 32) : MemM (BitVec 32) :=
+  StateT.lift (fact n)
+
+private def factValue (n : BitVec 32) : BitVec 32 :=
+  BitVec.ofNat 32 (natFact n.toNat)
+
+private theorem natFact_12 : natFact 12 = 479001600 := by decide
+
+private theorem natFact_lt {k : Nat} (h : k ≤ 12) : natFact k < 2 ^ 32 := by
+  have := natFact_mono h
+  have := natFact_12
+  omega
+
+private theorem fact_zero (n : BitVec 32) (h : n = 0#32) : 1#32 = factValue n := by
+  subst h
+  rfl
+
+private theorem fact_product (n p : BitVec 32) (hb : n.toNat ≤ 12)
+    (hp : p.toNat + 1 = n.toNat) : n.toNat * (factValue p).toNat = natFact n.toNat := by
+  have hpl : p.toNat ≤ 12 := by omega
+  rw [factValue, Zig.toNat_ofNat_of_lt (natFact_lt hpl), ← hp]
+  rfl
+
+private theorem fact_mul_bound (n p : BitVec 32) (hb : n.toNat ≤ 12)
+    (hp : p.toNat + 1 = n.toNat) : n.toNat * (factValue p).toNat < 2 ^ 32 := by
+  rw [fact_product n p hb hp]
+  exact natFact_lt hb
+
+private theorem fact_value_step (n p r : BitVec 32) (hb : n.toNat ≤ 12)
+    (hp : p.toNat + 1 = n.toNat)
+    (hr : r.toNat = n.toNat * (factValue p).toNat) : r = factValue n := by
+  apply BitVec.eq_of_toNat_eq
+  change r.toNat = (BitVec.ofNat 32 (natFact n.toNat)).toNat
+  rw [hr, fact_product n p hb hp, Zig.toNat_ofNat_of_lt (natFact_lt hb)]
+
+/-- The bounded factorial group uses the existing checked arithmetic rules. The native
+interpretation still requires STK-01; a decreasing rank alone does not provide native frames. -/
+private theorem fact_group_total (n : BitVec 32) :
+    FTotalTriple ⟪n.toNat ≤ 12⟫ (factCode n) (fun v => ⟪v = factValue n⟫) := by
+  refine FTotalTriple.rec_group factCode (fun n => ⟪n.toNat ≤ 12⟫)
+    (fun n v => ⟪v = factValue n⟫) BitVec.toNat ?_ n
+  intro n smaller
+  fsym
+  all_goals first
+    | apply fact_mul_bound <;> first | assumption | omega
+    | apply fact_value_step <;> first | assumption | omega
+    | apply fact_zero; assumption
+
+theorem fact_total (n : BitVec 32) (h : n.toNat ≤ 12) :
+    FTotalTriple emp (StateT.lift (fact n) : MemM (BitVec 32))
+      (fun v => ⟪v = BitVec.ofNat 32 (natFact n.toNat)⟫) :=
+  (fact_group_total n).pre (fun _ hr => ⟨h, hr⟩)
+
+/-- `12! < 2^32`; `13!` overflows — see `fact_13_panics`. -/
+theorem fact_ok (n : BitVec 32) (h : n.toNat ≤ 12) :
+    fact n = pure (BitVec.ofNat 32 (natFact n.toNat)) :=
+  (fact_total n h).result_eq
+
+/-- The original bounded auxiliary statement, as a consequence of the bounded group contract. -/
 theorem fact_ok_aux :
     ∀ k : Nat, ∀ n : BitVec 32, n.toNat = k → k ≤ 12 →
       fact n = pure (BitVec.ofNat 32 (natFact k)) := by
-  intro k
-  induction k with
-  | zero =>
-    intro n h _
-    have hn : n = 0#32 := by apply BitVec.eq_of_toNat_eq; simpa using h
-    subst hn
-    rw [fact.eq_1]
-    simp [zig_unfold, natFact]
-  | succ k ih =>
-    intro n h hb
-    have hn0 : n ≠ 0#32 := by intro h0; rw [h0] at h; simp at h
-    have hn1 : (n - 1#32).toNat = k := by rw [Zig.toNat_sub_one n hn0]; omega
-    have hk12 : k ≤ 12 := by omega
-    have hres := ih (n - 1#32) hn1 hk12
-    have h12 : natFact 12 = 479001600 := by decide
-    have hstep : natFact (k + 1) = (k + 1) * natFact k := rfl
-    -- `12! = 479001600 < 2^32`, so `natFact k % 2^32` does not actually wrap.
-    have hmod : natFact k % 4294967296 = natFact k := by
-      have := natFact_mono hk12
-      omega
-    -- the checked multiply `n * fact (n - 1)` does not overflow: `(k+1)! ≤ 12! < 2^32`.
-    have hnomul : ¬ (4294967296 ≤ (k + 1) * (natFact k % 4294967296)) := by
-      rw [hmod]
-      have := natFact_mono (show k + 1 ≤ 12 by omega)
-      omega
-    have hnf : (BitVec.ofNat 32 (natFact k)).toNat = natFact k := by
-      rw [BitVec.toNat_ofNat, hmod]
-    have hmuleq : n * (BitVec.ofNat 32 (natFact k)) = BitVec.ofNat 32 (natFact (k + 1)) := by
-      apply BitVec.eq_of_toNat_eq
-      rw [BitVec.toNat_mul, hnf, BitVec.toNat_ofNat, h, hstep]
-    rw [fact.eq_1]
-    simp [zig_unfold, hn0, hres, h, hnomul, hmuleq]
-
-theorem fact_ok (n : BitVec 32) (h : n.toNat ≤ 12) :
-    fact n = pure (BitVec.ofNat 32 (natFact n.toNat)) :=
-  fact_ok_aux n.toNat n rfl h
+  intro k n hn hb
+  subst hn
+  exact fact_ok n hb
 
 /-- `13! = 6227020800 ≥ 2^32`: the checked multiply `13 * fact 12` overflows. -/
 theorem fact_13_panics : fact (13 : BitVec 32) = throw .overflow := by
   have h12 : fact (12#32 : BitVec 32) = pure (BitVec.ofNat 32 (natFact 12)) :=
     fact_ok 12#32 (by decide)
-  have hval : natFact 12 = 479001600 := by decide
   rw [fact.eq_1]
-  simp [zig_unfold, h12, hval]
+  simp [zig_unfold, h12, natFact_12]
 
 /-! ## `gcd` -/
-
-theorem rem_unsigned (a b : BitVec 32) :
-    Zig.rem false a b = if b = 0 then throw .illegal else pure (a % b) := rfl
 
 /-- The Euclidean step, phrased via core's own `gcd` recursion (on the *first* argument) and
 `gcd`'s commutativity, to match `gcd`'s recursion here (on the *second* argument). -/
 theorem gcd_step (a b : Nat) : Nat.gcd a b = Nat.gcd b (a % b) := by
   rw [Nat.gcd_comm a b, Nat.gcd_rec b a, Nat.gcd_comm (a % b) b]
 
-/-- `gcd`, proved by strong induction on the recursion depth `b = bb.toNat` (the second argument
-decreases via `a % bb < bb`, not by one, so plain induction does not apply here). The generated
-code's `p1 != 0` (Sema's `divideByZero` check) / `Zig.rem`'s own `b = 0` guard (`.illegal`) are
-both discharged by `hb0`: the
-divisor is never zero on the recursive branch. -/
+private def gcdCode (a : BitVec 32 × BitVec 32) : MemM (BitVec 32) :=
+  StateT.lift (gcd a.1 a.2)
+
+private def gcdValue (a : BitVec 32 × BitVec 32) : BitVec 32 :=
+  BitVec.ofNat 32 (Nat.gcd a.1.toNat a.2.toNat)
+
+private theorem gcd_zero (a : BitVec 32 × BitVec 32) (h : a.2 = 0#32) :
+    a.1 = gcdValue a := by
+  simp [gcdValue, h]
+
+private theorem gcd_rank_step (a : BitVec 32 × BitVec 32) (r : BitVec 32)
+    (h : a.2 ≠ 0#32) (hr : r.toNat = a.1.toNat % a.2.toNat) :
+    (a.2, r).2.toNat < a.2.toNat := by
+  change r.toNat < a.2.toNat
+  rw [hr]
+  have hne : a.2.toNat ≠ 0 := by
+    intro h0
+    apply h
+    apply BitVec.eq_of_toNat_eq
+    simpa using h0
+  exact Nat.mod_lt _ (Nat.pos_of_ne_zero hne)
+
+private theorem gcd_value_step (a : BitVec 32 × BitVec 32) (r : BitVec 32)
+    (hr : r.toNat = a.1.toNat % a.2.toNat) :
+    gcdValue (a.2, r) = gcdValue a := by
+  simp only [gcdValue]
+  rw [hr, ← gcd_step]
+
+/-- The generated Euclidean algorithm terminates for every pair, including a zero divisor.
+Its own branch discharges both remainder guards; the smaller-call contract uses the second
+argument's natural value as its rank. Native stack use retains STK-01. -/
+private theorem gcd_pair_total (a : BitVec 32 × BitVec 32) :
+    FTotalTriple emp (gcdCode a) (fun v => ⟪v = gcdValue a⟫) := by
+  refine FTotalTriple.rec_group gcdCode (fun _ => emp)
+    (fun a v => ⟪v = gcdValue a⟫) (fun a => a.2.toNat) ?_ a
+  intro a smaller
+  fsym
+  all_goals first
+    | apply gcd_zero; assumption
+    | apply gcd_rank_step <;> assumption
+    | apply gcd_value_step; assumption
+
+theorem gcd_total (a b : BitVec 32) :
+    FTotalTriple emp (StateT.lift (gcd a b) : MemM (BitVec 32))
+      (fun v => ⟪v = BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)⟫) :=
+  gcd_pair_total (a, b)
+
+theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
+  (gcd_total a b).result_eq
+
+/-- The original auxiliary statement, as a consequence of the all-input group contract. -/
 theorem gcd_spec_aux :
     ∀ b : Nat, ∀ a bb : BitVec 32, bb.toNat = b →
       gcd a bb = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b)) := by
-  intro b
-  induction b using Nat.strongRecOn with
-  | ind b ih =>
-    intro a bb hbb
-    by_cases hb0 : bb = 0#32
-    · subst hb0
-      simp only [BitVec.toNat_ofNat] at hbb
-      subst hbb
-      rw [gcd.eq_1]
-      simp [zig_unfold, Nat.gcd_zero_right, BitVec.ofNat_toNat]
-    · have hbne : bb.toNat ≠ 0 := by
-        intro h0; apply hb0; apply BitVec.eq_of_toNat_eq; simpa using h0
-      have hmodlt : (a % bb).toNat < b := by
-        rw [BitVec.toNat_umod, ← hbb]; exact Nat.mod_lt _ (by omega)
-      have hres := ih (a % bb).toNat hmodlt bb (a % bb) rfl
-      have hgcdval : Nat.gcd bb.toNat (a % bb).toNat = Nat.gcd a.toNat b := by
-        rw [BitVec.toNat_umod, ← hbb, ← gcd_step]
-      rw [hgcdval] at hres
-      rw [gcd.eq_1]
-      simp [zig_unfold, hb0, rem_unsigned, hres]
-
-theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
-  gcd_spec_aux b.toNat a b rfl
+  intro b a bb hbb
+  simpa only [hbb] using gcd_spec a bb
 
 /-! ## Non-vacuity witnesses -/
 

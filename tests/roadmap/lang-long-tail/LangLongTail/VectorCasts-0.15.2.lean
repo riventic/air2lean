@@ -58,6 +58,7 @@ def mem_eqlBytes.again116 : mem_eqlBytesExit → Bool
   | _ => false
 
 def mem_eqlBytes.loop179 (p0 : Zig.Slice) (p1 : Zig.Slice) (i177 : BitVec 64) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit := do
+  Zig.callM Zig.tick
   let i180 ← pure ((← get).local172)
   match ← ((do
     let i182 ← pure (i180)
@@ -119,6 +120,7 @@ def mem_eqlBytes.loop179 (p0 : Zig.Slice) (p1 : Zig.Slice) (i177 : BitVec 64) : 
   | e => pure e
 
 def mem_eqlBytes.loop116 (p0 : Zig.Slice) (p1 : Zig.Slice) (i114 : Vector (BitVec 64) 4) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit := do
+  Zig.callM Zig.tick
   let i117 ← pure ((← get).local101)
   match ← ((do
     let i119 ← pure (i117)

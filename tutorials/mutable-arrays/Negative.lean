@@ -10,8 +10,8 @@ open Slices Zig Zig.Full FAssn
 
 theorem reverse_twice_wrong (sl : Slice) (vs : List (BitVec 32))
     (hlen : sl.len.toNat = vs.length) :
-    FTotalTriple (up (arr sl.ptr vs)) (do reverse sl; reverse sl)
-      (fun _ => up (arr sl.ptr vs.reverse)) := by
+    FTotalTriple (up (arr sl.ptr vs) ⋆ plain) (do reverse sl; reverse sl)
+      (fun _ => up (arr sl.ptr vs.reverse) ⋆ plain) := by
   have back := reverse_spec sl vs.reverse (by simp [hlen])
   rw [List.reverse_reverse] at back
   exact FTotalTriple.bind (reverse_spec sl vs hlen) (fun _ => back)

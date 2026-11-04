@@ -672,9 +672,13 @@ def runtime_identity(toolchain: Path) -> str:
 
 
 def ancestors() -> set[int]:
-    """This process and its ancestors (`ps`)."""
-    rows = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True,
-                          check=True, timeout=30).stdout.split()
+    """This process and its ancestors (`ps`, from procps; scripts/doctor.sh checks for it). A
+    failed or hung `ps` fails the audit (ValueError), never a report."""
+    try:
+        rows = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True,
+                              check=True, timeout=30).stdout.split()
+    except (OSError, subprocess.SubprocessError) as error:  # no ps, a failed or a hung ps
+        raise ValueError(f'cannot list the processes (ps): {error}') from error
     parent = dict(zip(map(int, rows[0::2]), map(int, rows[1::2])))
     pid, seen = os.getpid(), set()
     while pid not in seen and pid > 1:
@@ -710,7 +714,8 @@ def runtime_run():
     it while the toolchain's metadata is unchanged. When the run ends the toolchain is hashed
     afresh: a different digest raises, so a run during which the toolchain changed fails. A
     process of the run that uses the published digest checks the metadata again when it ends
-    (before its caller writes a report)."""
+    (before its caller writes a report); when the metadata differs it hashes afresh, so only a
+    change of the bytes fails."""
     if os.environ.get(RUNTIME_RUN):
         try:
             records = shared_runtime()
@@ -719,7 +724,10 @@ def runtime_run():
         if records:  # an enclosing run's: it hashes the bytes again when it ends
             yield
             for toolchain, record in records.items():
-                if toolchain in _USED and runtime_identity(Path(toolchain)) != record['identity']:
+                # A metadata change alone (chmod, touch, a hard link) is not a change of the
+                # bytes: only a different content digest fails.
+                if (toolchain in _USED and runtime_identity(Path(toolchain)) != record['identity']
+                        and hash_runtime(Path(toolchain)) != record['sha256']):
                     raise ValueError('toolchain runtime changed during the run')
             return
     sysroot = lake_env('LEAN_SYSROOT')
@@ -933,16 +941,26 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
     trace without importing it (`@pkg/+M:olean`, `@pkg/+M:depTrace`): an import would run the
     module's initializers. `:depTrace` covers everything below `M`; `:olean` alone misses a
     change below `M` that leaves `M`'s olean bytes equal. `pkg` is the package of `packages` whose
-    build directory holds the olean found first on `roots`; None when some module has none."""
+    build directory holds the olean found first on `roots`; None when some module has none. An
+    olean of `pkg` whose module has no source there (deleted since it was built) fails: Lake can
+    build it no more, and `leanchecker` would check it (lean-deps.py `orphan_outputs`)."""
+    deps = lean_deps()
     owners = {(path / ".lake/build/lib/lean").resolve():
-              tomllib.loads((path / "lakefile.toml").read_text(encoding="utf-8"))["name"] for path in packages}
+              (path, tomllib.loads((path / "lakefile.toml").read_text(encoding="utf-8"))["name"],
+               deps.package_sources(path)) for path in packages}
     needs = []
     for module in sorted(modules):
-        relative = module.replace(".", "/") + ".olean"
+        stem = module.replace(".", "/")
+        relative = stem + ".olean"
         owner = next((root for root in roots if (root / relative).is_file()), None)
         if owner not in owners:
             return None
-        needs += [f"@{owners[owner]}/+{module}:olean", f"@{owners[owner]}/+{module}:depTrace"]
+        package, name, sources = owners[owner]
+        if not deps.has_source(sources, stem):
+            raise ValueError(f"{owner / relative}: compiled module without a source in {package} (deleted "
+                             "since it was built); scripts/full-build.sh removes such outputs "
+                             "(python3 -B scripts/lean-deps.py --prune-orphans)")
+        needs += [f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
     return needs
 
 
@@ -1740,6 +1758,9 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
                              "running the extractor afresh under `lake env`")
     args = parser.parse_args(argv)
     try:
+        # Until the audit finishes the report is a failure, so a crash (even one no handler below
+        # catches) never leaves an old successful report behind.
+        write_report(args.output, {"schema_version": 1, "status": "error", "error": "the audit did not finish"})
         # One toolchain-runtime digest for the audit and the processes it starts, checked again
         # before the report is written (runtime_run).
         with runtime_run():

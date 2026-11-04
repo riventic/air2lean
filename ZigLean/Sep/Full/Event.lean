@@ -83,6 +83,11 @@ abbrev newest (m : Mem) : Word.Entry := (E.W.hist m)[(E.W.hist m).size - 1]!
 /-- The event is set: its newest write is `is_set`. -/
 def IsSet (m : Mem) : Prop := (E.newest m).Val (2 : BitVec 32)
 
+/-- A step preserving the event's history preserves its set state. -/
+theorem IsSet_of_hist_eq {m m' : Mem} (hh : E.W.hist m' = E.W.hist m)
+    (hs : E.IsSet m) : E.IsSet m' := by
+  simpa only [IsSet, newest, hh] using hs
+
 /-- The event's invariant, with the lock's places (module doc). -/
 structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- The writes are `unset`, `waiting` or `is_set`. -/
@@ -1659,6 +1664,40 @@ theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
+/-- The native event reconstruction shared by ordinary and cur-aware caller-part steps.
+The native producer retains the ACTUAL complete rest, word history and ownership. -/
+private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' : Mem}
+    (hgo : L.ph g = .out) (hc : m.current = t)
+    (hU : U (upd G t g) (rsum (E.W.cellsR m) rY) m)
+    (hL : L.Inv (upd G t g) (rsum (E.W.cellsR m) rY) m)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hs : FStepIn (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).heap.erase m m')
+    (hcW : ∀ l, E.W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
+    (hw' : E.W.Ok m') (hh : E.W.hist m' = E.W.hist m)
+    (hL' : L.Inv (upd G t (L.setPart g r')) (rsum (E.W.cellsR m') rY) m') :
+    P.inv (upd G t (L.setPart g r')) m' := by
+  have hw := ((hE.wRest rfl) _ _ _ hU).1
+  have hwF : ∀ x, E.W.o ≤ x → x < E.W.o + 4 →
+      (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).heap.erase (E.W.b, x) ≠ none := by
+    intro x h1 h2
+    have := cellsAt_some (W := E.W.In) (l := (E.W.b, x)) ⟨rfl, h1, h2⟩
+      (hw.cellIn ⟨rfl, h1, h2⟩) (m := m)
+    simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and]
+    intro _ h; exact absurd h this
+  have hI' : E.Inv L (upd G t (L.setPart g r')) m' :=
+    (hE.wInv _ _ _ hU).frame (t := t) (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
+      (by rw [upd_self, upd_self, hE.ph_part]) (by rw [upd_self, upd_self, L.ph_setPart])
+      hh hs.waiters hs.clock
+      (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part true _ _).mpr h)
+      (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part false _ _).mpr h)
+      ((hE.wInv _ _ _ hU).fresh.fstep hs hwF (fun i l hl => (hw.loc i l hl).1))
+  have hU' := hE.wOwn (G := upd G t g) (t := t) (r := r') rfl
+    (by rw [upd_self]; exact hgo) hU hL hY hc hs hcW hw' hh
+    (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
+  rw [upd_self, upd_upd] at hU'
+  exact (hE.inv _ _).mpr ⟨_, hL', hU'⟩
+
 /-- **A step of a thread on its own part** in the event's code (`g`, out of the lock's code; a
 stack block: `allocStack`, its stores and loads, `free`), with a thread triple: its part becomes
 the triple's post (`FLock.setPart`; `Fits.wOwn`). -/
@@ -1679,27 +1718,28 @@ theorem wp_liftPart (hE : L.Fits (E.prim L) P U ok) {α : Type} {x : MemM α}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   FLock.wp_liftPartW hE (hE.wRest rfl) (.inl hgo) hi hc htt hp
     (fun a m' r' rY hr hq hc' hU hL hY hs hcW hw' hh hL' => by
-      have hw := ((hE.wRest rfl) _ _ _ hU).1
-      have hwF : ∀ x, E.W.o ≤ x → x < E.W.o + 4 →
-          (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).heap.erase (E.W.b, x) ≠ none := by
-        intro x h1 h2
-        have := cellsAt_some (W := E.W.In) (l := (E.W.b, x)) ⟨rfl, h1, h2⟩
-          (hw.cellIn ⟨rfl, h1, h2⟩) (m := m)
-        simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-          Option.or_eq_none_iff, not_and]
-        intro _ h; exact absurd h this
-      have hI' : E.Inv L (upd G t (L.setPart g r')) m' :=
-        (hE.wInv _ _ _ hU).frame (t := t) (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
-          (by rw [upd_self, upd_self, hE.ph_part]) (by rw [upd_self, upd_self, L.ph_setPart])
-          hh hs.waiters hs.clock
-          (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part true _ _).mpr h)
-          (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part false _ _).mpr h)
-          ((hE.wInv _ _ _ hU).fresh.fstep hs hwF (fun i l hl => (hw.loc i l hl).1))
-      have hU' := hE.wOwn (G := upd G t g) (t := t) (r := r') rfl
-        (by rw [upd_self]; exact hgo) hU hL hY hc hs hcW hw' hh
-        (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
-      rw [upd_self, upd_upd] at hU'
-      exact h a m' r' hr hq hc' hh ((hE.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
+      exact h a m' r' hr hq hc' hh (liftPartPost hE hgo hc hU hL hY hs hcW hw' hh hL')) hret
+
+/-- A cur-aware local step on the event caller's actual part. The same native reconstruction
+handles ordinary and stack-budgeted steps; cur is removed before the invariant is returned. -/
+theorem wp_liftPartCur (hE : L.Fits (E.prim L) P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      E.W.hist m' = E.W.hist m → P.inv (upd G t (L.setPart g r')) m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  FLock.wp_liftPartWCur hE (hE.wRest rfl) (.inl hgo) hi hc htt hp
+    (fun a m' r' rY hr hq hc' hU hL hY hs hcW hw' hh hL' => by
+      exact h a m' r' hr hq hc' hh (liftPartPost hE hgo hc hU hL hY hs hcW hw' hh hL')) hret
 
 /-- `wp_liftPart` for a step of generated code (`liftM`). -/
 theorem wp_liftPartM (hE : L.Fits (E.prim L) P U ok) {α : Type} {x : MemM α}
@@ -1721,6 +1761,26 @@ theorem wp_liftPartM (hE : L.Fits (E.prim L) P U ok) {α : Type} {x : MemM α}
   exact WP.bind (wp_liftPart hE hgo hi hc htt hp (fun a m' r' hr hq hc' hh hi' =>
     WP.pure' (h a m' r' hr hq hc' hh hi')) hret)
 
+/-- The cur-aware caller-part rule for a generated `liftM` step. -/
+theorem wp_liftPartCurM (hE : L.Fits (E.prim L) P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      E.W.hist m' = E.W.hist m → P.inv (upd G t (L.setPart g r')) m' → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t ((liftM x : CM Tgt σ α).run s) Q G m n := by
+  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
+  exact WP.bind (wp_liftPartCur hE hgo hi hc htt hp (fun a m' r' hr hq hc' hh hi' =>
+    WP.pure' (h a m' r' hr hq hc' hh hi')) hret)
+
 end FEvent
 
 /-- **An event implementation** in generated code: its `wait` and `set`, with the rules that a
@@ -1730,16 +1790,26 @@ and counts no turns.
 - `wait_wp`: a thread out of the event's and the lock's code, with a ghost value that may wait
   (`FEvent.wx`), that waits returns when the event is set. It enters only as the only waiter,
   after every `waiting` write (`hone`, `hhb`; the scope of the module doc), and the client shows
-  that its sleep at an event that is not set is not a deadlock (`hlive`). The waiter's part holds
-  the plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode): an implementation may keep
-  state in a stack block (`Thread.ResetEvent` 0.15.2: its deadline), which needs it
-  (`FTriple.allocStackDrop`).
+   that its sleep at an event that is not set is not a deadlock (`hlive`). The implementation
+   proves its actual caller-resource admission, including owned stack room when it keeps a
+   deadline block. A Plain caller has a permanent exact-part specialization; unmetered alone
+   neither supplies stack room nor bounds retries.
 - `set_wp`: a thread out of the event's and the lock's code, with a ghost value that may set
-  (`FEvent.sx`), that sets it returns with the event set. -/
+   (`FEvent.sx`), that sets it returns with the event set and its exact caller part, whatever
+   that part holds. `set` ticks in no implementation (`Io.Event` and `Thread.ResetEvent`: a
+   store and a futex wake), so the contract demands no caller resource, as `MutexImpl.unlock_wp`.
+
+`wait_wp_resource` states caller parts the same way as the mutex and condition (`LockRules`,
+"Caller parts of composite operations"). Its post is about the actual caller part, not an
+assertion implicitly closed under adding or removing resources. -/
 structure EventImpl (Tgt : Type) where
   wait : Ptr → Io → ConcM Tgt Unit
   set : Ptr → Io → ConcM Tgt Unit
-  wait_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
+  wait_pre : ThreadId → FAssn
+  wait_post : ThreadId → Res → FAssn
+  wait_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → wait_pre t r
+  wait_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → wait_post t r r' → r' = r
+  wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
     L.ph g = .out → E.wx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
@@ -1748,9 +1818,9 @@ structure EventImpl (Tgt : Type) where
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true) →
     (∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) →
-    (L.part g).Plain → P.inv (upd G t g) m →
+    wait_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      P.inv (upd G' t g) m') G m d
+      ∃ r', wait_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
   set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
@@ -1758,6 +1828,32 @@ structure EventImpl (Tgt : Type) where
     P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d
+
+namespace EventImpl
+
+/-- The exact-part wait rule for a concrete Plain caller, derived from the implementation's
+actual endpoint entailments. Its intermediate deadline/stack resources remain genuine. -/
+theorem wait_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
+    (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = E.W.ptr)
+    (t : ThreadId) (g : γ) (hg : E.ph g = .out) (hgo : L.ph g = .out) (hwx : E.wx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hone : ∀ u, u ≠ t → E.ph (G u) = .out ∨ E.ph (G u) = .sw)
+    (hhb : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
+      VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
+    (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ →
+      ¬ E.IsSet m₁ → P.Live t G₁ m₁)
+    (hplain : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
+    P.WP t (I.wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
+      P.inv (upd G' t g) m') G m d := by
+  refine WP.mono ?_ (I.wait_wp_resource hE hcost hp t g hg hgo hwx io G m d
+    hone hhb hlive (I.wait_plain_pre t (L.part g) hplain) hi)
+  rintro _ G' m' d' ⟨hd, hc, hset, r', hr, hi'⟩
+  have he := I.wait_plain_post t (L.part g) r' hplain hr
+  subst r'
+  exact ⟨hd, hc, hset, by simpa only [L.setPart_self] using hi'⟩
+
+end EventImpl
 
 end Full
 end Zig

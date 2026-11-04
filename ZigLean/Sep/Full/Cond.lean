@@ -1528,6 +1528,54 @@ theorem wp_loadEp (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
         (hI.reload ht (C.ph_set _ _) hj hv (hacq rfl) (hC.keepS hU hms) hh hop.waiters
           (fun u _ hw => by rw [hop.woken]; exact hw) hop.threads hop.clock))
 
+/-- The invariant reconstruction shared by ordinary and cur-aware caller-part steps (`g` out
+of the lock's code or holding it): both words keep their writes (`Inv.other`: the places stay),
+and the rest is the producer's actual framed resource. -/
+private theorem liftPartPost (hC : L.Fits (C.prim L) P U ok) {rY r' : Res} {m' : Mem}
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hc : m.current = t)
+    (hU : U (upd G t g) (rsum (C.S.cellsR m) rY) m)
+    (hL : L.Inv (upd G t g) (rsum (C.S.cellsR m) rY) m)
+    (hY : ∀ l, C.S.In l → rY.heap l = none)
+    (hs : FStepIn (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).heap.erase m m')
+    (hcW : ∀ l, C.S.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
+    (hw' : C.S.Ok m') (hhS : C.S.hist m' = C.S.hist m)
+    (hL' : L.Inv (upd G t (L.setPart g r')) (rsum (C.S.cellsR m') rY) m') :
+    C.Ep.hist m' = C.Ep.hist m ∧ P.inv (upd G t (L.setPart g r')) m' := by
+  -- the epoch's cells are in `rY`; they stay
+  obtain ⟨hwE, rY', hrX, hY'⟩ := (hC.wRest (.inr rfl)) _ _ _ hU
+  have hcE : ∀ l, C.Ep.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+    intro l hl
+    have hS0 : ∀ m₀ : Mem, (C.S.cellsR m₀).heap l = none := fun _ => cellsAt_none (ep_notS hl)
+    cases e : m.heap l with
+    | none => exact absurd e (hwE.cellIn hl)
+    | some c =>
+      have hYl : rY.heap l = some ⟨c, none⟩ := by
+        have := congrArg (fun r : Res => r.heap l) hrX
+        simpa [FHeap.union_apply, hS0, Word.cellsR, cellsAt_of hl, e, hY' l hl] using this
+      rw [hL'.restCell (fc := ⟨c, none⟩) (by simp [FHeap.union_apply, hS0, hYl])]; rfl
+  have hwF : ∀ l, C.Ep.In l →
+      (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).heap.erase l ≠ none := fun l hl => by
+    have := cellsAt_some hl (hwE.cellIn hl) (m := m)
+    rw [hrX]
+    simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and]
+    intro _ h; exact absurd h this
+  have hhE := Word.hist_fstep hwE hs hwF hcE
+  have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
+    have := (hC.wInv _ _ _ hU).other (t := t) (g' := L.setPart g r')
+      (by rw [upd_self, hC.ph_part]) (fun _ => by rw [upd_self, L.ph_setPart])
+      (fun _ h => by rw [L.ph_setPart]; rwa [upd_self] at h)
+      (fun h => by rw [upd_self] at h; exact (hC.role_part () _ _).mpr h) hhS hhE
+      (by rw [hs.waiters]) (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
+      (fun _ _ _ hw => by rw [hs.woken]; exact hw) (by rw [hs.threads]; exact Nat.le_refl _)
+      hs.clock
+    rwa [upd_upd] at this
+  have hU' := hC.wOwn (G := upd G t g) (t := t) (r := r') (.inl rfl)
+    (by rw [upd_self]; exact hgo) hU hL hY hc hs hcW hw' hhS
+    (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
+  rw [upd_self, upd_upd] at hU'
+  exact ⟨hhE, (hC.inv _ _).mpr ⟨_, hL', hU'⟩⟩
+
 /-- **A step of a thread on its own part** in the condition's code (`g`, out of the lock's code
 or holding the lock; a stack block: `allocStack`, its stores and loads, `free`), with a thread
 triple: its part becomes the triple's post (`FLock.setPart`; `Fits.wOwn`), and both words keep
@@ -1550,40 +1598,31 @@ theorem wp_liftPart (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
   FLock.wp_liftPartW hC (hC.wRest (.inl rfl)) hgo hi hc htt hp
     (fun a m' r' rY hr hq hc' hU hL hY hs hcW hw' hhS hL' => by
-      -- the epoch's cells are in `rY`; they stay
-      obtain ⟨hwE, rY', hrX, hY'⟩ := (hC.wRest (.inr rfl)) _ _ _ hU
-      have hcE : ∀ l, C.Ep.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
-        intro l hl
-        have hS0 : ∀ m₀ : Mem, (C.S.cellsR m₀).heap l = none := fun _ => cellsAt_none (ep_notS hl)
-        cases e : m.heap l with
-        | none => exact absurd e (hwE.cellIn hl)
-        | some c =>
-          have hYl : rY.heap l = some ⟨c, none⟩ := by
-            have := congrArg (fun r : Res => r.heap l) hrX
-            simpa [FHeap.union_apply, hS0, Word.cellsR, cellsAt_of hl, e, hY' l hl] using this
-          rw [hL'.restCell (fc := ⟨c, none⟩) (by simp [FHeap.union_apply, hS0, hYl])]; rfl
-      have hwF : ∀ l, C.Ep.In l →
-          (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).heap.erase l ≠ none := fun l hl => by
-        have := cellsAt_some hl (hwE.cellIn hl) (m := m)
-        rw [hrX]
-        simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-          Option.or_eq_none_iff, not_and]
-        intro _ h; exact absurd h this
-      have hhE := Word.hist_fstep hwE hs hwF hcE
-      have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
-        have := (hC.wInv _ _ _ hU).other (t := t) (g' := L.setPart g r')
-          (by rw [upd_self, hC.ph_part]) (fun _ => by rw [upd_self, L.ph_setPart])
-          (fun _ h => by rw [L.ph_setPart]; rwa [upd_self] at h)
-          (fun h => by rw [upd_self] at h; exact (hC.role_part () _ _).mpr h) hhS hhE
-          (by rw [hs.waiters]) (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
-          (fun _ _ _ hw => by rw [hs.woken]; exact hw) (by rw [hs.threads]; exact Nat.le_refl _)
-          hs.clock
-        rwa [upd_upd] at this
-      have hU' := hC.wOwn (G := upd G t g) (t := t) (r := r') (.inl rfl)
-        (by rw [upd_self]; exact hgo) hU hL hY hc hs hcW hw' hhS
-        (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
-      rw [upd_self, upd_upd] at hU'
-      exact h a m' r' hr hq hc' hhS hhE ((hC.inv _ _).mpr ⟨_, hL', hU'⟩)) hret
+      obtain ⟨hhE, hi'⟩ := liftPartPost hC hgo hc hU hL hY hs hcW hw' hhS hL'
+      exact h a m' r' hr hq hc' hhS hhE hi') hret
+
+/-- A caller-part step that temporarily receives `cur t`, through the shared actual-rest
+word lift and the same condition invariant reconstruction. The complete held/rest frame stays. -/
+theorem wp_liftPartCur (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      C.S.hist m' = C.S.hist m → C.Ep.hist m' = C.Ep.hist m →
+      P.inv (upd G t (L.setPart g r')) m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n :=
+  FLock.wp_liftPartWCur hC (hC.wRest (.inl rfl)) hgo hi hc htt hp
+    (fun a m' r' rY hr hq hc' hU hL hY hs hcW hw' hhS hL' => by
+      obtain ⟨hhE, hi'⟩ := liftPartPost hC hgo hc hU hL hY hs hcW hw' hhS hL'
+      exact h a m' r' hr hq hc' hhS hhE hi') hret
 
 /-- `wp_liftPart` for a step of generated code (`liftM`). -/
 theorem wp_liftPartM (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α}
@@ -1606,6 +1645,27 @@ theorem wp_liftPartM (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α}
   exact WP.bind (wp_liftPart hC hgo hi hc htt hp (fun a m' r' hr hq hc' hS hE hi' =>
     WP.pure' (h a m' r' hr hq hc' hS hE hi')) hret)
 
+/-- The cur-aware caller-part rule for generated `liftM`, with cur removed before its post. -/
+theorem wp_liftPartCurM (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      C.S.hist m' = C.S.hist m → C.Ep.hist m' = C.Ep.hist m →
+      P.inv (upd G t (L.setPart g r')) m' → Q (a, s) G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t ((liftM x : CM Tgt σ α).run s) Q G m n := by
+  show P.WP t (ConcM.liftMem x >>= fun a => pure (a, s)) Q G m n
+  exact WP.bind (wp_liftPartCur hC hgo hi hc htt hp (fun a m' r' hr hq hc' hS hE hi' =>
+    WP.pure' (h a m' r' hr hq hc' hS hE hi')) hret)
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
@@ -1622,23 +1682,48 @@ counts no turns. Any number of threads may wait and signal.
   reason as `MutexImpl.unlock_wp`: the waiter holds the mutex, which only the running thread can
   (Zig's `Thread.mutexOwnerCheck`), and every client has the fact from its previous step (the
   lock's post). `Thread.Condition.wait` (0.15.2) needs it: it allocates its deadline block, a
-  memory step with no stop before it, first. For the same block the waiter's part holds the
-  plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode).
+  memory step with no stop before it, first. The implementation proves its actual
+  caller-resource admission (`wait_pre`/`wait_post`): deadline blocks may use owned stack
+  budgets and room, or a concrete Plain specialization (`wait_plain_pre`/`wait_plain_post`,
+  `docs/sep-full-state.md` §Plain mode). Unmetered tick resources alone do not supply stack
+  room.
 - `signal_wp`: a thread out of the condition's code, outside or holding the mutex, that may
-  signal, returns with its exact initial ghost value, including the complete caller part and
-  held resource, and the history post `FCond.SigPost` of the call's writes and clock: the call's
-  state writes are a prefix of the return's, and a write `k` at or after every state write that
-  happened before the call has no registered waiter without a signal (`waiters ≤ signals`), or
-  is a post (`signals` rose). A client with one waiter reads "the waiter is signalled" from it
-  and its own history fact (`FCond.SigPost.one`, maintainer decision 6625654179). The proof
-  carries the call's writes and clock in the signaller's place (decision B', PR #599 comment
-  6633467470). -/
+  signal, returns with its exact caller part (`signal_pre`/`signal_post`) and held resource,
+  and the history post `FCond.SigPost` of the call's writes and clock: the call's state writes
+  are a prefix of the return's, and a write `k` at or after every state write that happened
+  before the call has no registered waiter without a signal (`waiters ≤ signals`), or is a post
+  (`signals` rose). A client with one waiter reads "the waiter is signalled" from it and its own
+  history fact (`FCond.SigPost.one`, maintainer decision 6625654179). The proof carries the
+  call's writes and clock in the signaller's place (decision B', PR #599 comment 6633467470).
+  Its caller part needs a positive unmetered fragment (each implementation's wake loop ticks);
+  every implementation admits such a part and returns it exactly (`signal_unmetered_pre`,
+  `signal_unmetered_post`). Both operations frame the complete held resource; no profile is
+  assumed closed under adding or removing resources.
+
+The primary fields (`wait_wp_resource`, `signal_wp_resource`) state caller parts the same way
+as the mutex and event (`LockRules`, "Caller parts of composite operations"); `CondImpl.wait_wp`
+(a Plain caller) and `CondImpl.signal_wp` (a positive unmetered fragment) are derived. Actual
+code proves payment at each reachable tick/retry and its native/stack obligations through the
+existing Full rules. -/
 structure CondImpl (Tgt : Type) where
   wait : Ptr → Io → Ptr → ConcM Tgt Unit
   signal : Ptr → Io → ConcM Tgt Unit
   /-- The contended value of the mutex that `wait` unlocks and locks. -/
   c : Nat
-  wait_wp : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
+  wait_pre : ThreadId → FAssn
+  wait_post : ThreadId → Res → FAssn
+  wait_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → wait_pre t r
+  wait_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → wait_post t r r' → r' = r
+  signal_pre : ThreadId → FAssn
+  signal_post : ThreadId → Res → FAssn
+  /-- A caller part with a positive unmetered fragment admits `signal` (the minimal resource
+  of an emitted wake loop that ticks). -/
+  signal_unmetered_pre : ∀ (t : ThreadId) (r : Res), 0 < r.gh.ac.frag .unmetered →
+    signal_pre t r
+  /-- `signal` returns such a caller part exactly. -/
+  signal_unmetered_post : ∀ (t : ThreadId) (r r' : Res), 0 < r.gh.ac.frag .unmetered →
+    signal_post t r r' → r' = r
+  wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, C.Fits L P U ok →
     P.cost = none → ∀ {p q : Ptr}, p = C.S.ptr → q = L.ptr → L.c = c →
     ∀ (t : ThreadId) (g : γ), C.ph g = .out → L.ph g = .holds → ok g →
@@ -1649,17 +1734,64 @@ structure CondImpl (Tgt : Type) where
     (∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       P.Live t G₁ m₁) →
-    (L.part g).Plain → P.inv (upd G t g) m → m.current = t →
+    wait_pre t (L.part g) → P.inv (upd G t g) m → m.current = t →
     P.WP t (wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d
-  signal_wp : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
+      ∃ r' rL, wait_post t (L.part g) r' ∧
+        P.inv (upd G' t (L.set (L.setPart g r') .holds rL)) m') G m d
+  signal_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, C.Fits L P U ok →
     P.cost = none → ∀ {p : Ptr}, p = C.S.ptr → ∀ (t : ThreadId) (g : γ), C.ph g = .out →
     (L.ph g = .out ∨ L.ph g = .holds) → C.sx g →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
-    P.inv (upd G t g) m →
-    P.WP t (signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m' ∧
-      C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d
+    signal_pre t (L.part g) → P.inv (upd G t g) m →
+    P.WP t (signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', signal_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+        C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d
+
+namespace CondImpl
+
+/-- The exact-part wait rule for a concrete Plain caller. Stackful intermediate parts remain
+genuine; only the proved endpoint compatibility is used here. -/
+theorem wait_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
+    (hC : C.Fits L P U ok) (hcost : P.cost = none) {p q : Ptr}
+    (hp : p = C.S.ptr) (hq : q = L.ptr) (hmc : L.c = I.c)
+    (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .holds) (hok : ok g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hroom : ∀ T, (∀ u, T ≤ u → C.ph (upd G t g u) = .out) → C.nreg (upd G t g) T < 65535)
+    (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
+      U (upd G t (C.set g .en)) rX m)
+    (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
+      P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
+      P.Live t G₁ m₁)
+    (hplain : (L.part g).Plain) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    P.WP t (I.wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
+  refine WP.mono ?_ (I.wait_wp_resource hC hcost hp hq hmc t g hg hgo hok io G m d
+    hroom hent hlive (I.wait_plain_pre t (L.part g) hplain) hi hc)
+  rintro _ G' m' d' ⟨hd, hc', r', rL, hr, hi'⟩
+  have he := I.wait_plain_post t (L.part g) r' hplain hr
+  subst r'
+  exact ⟨hd, hc', rL, by simpa only [L.setPart_self] using hi'⟩
+
+/-- The exact-part signal rule for a caller part with a positive unmetered fragment: the
+implementation returns that part exactly (`signal_unmetered_post`). -/
+theorem signal_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
+    (hC : C.Fits L P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = C.S.ptr)
+    (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
+    P.WP t (I.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m' ∧
+      C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
+  refine WP.mono ?_ (I.signal_wp_resource hC hcost hp t g hg hgo hsx io G m d
+    (I.signal_unmetered_pre t (L.part g) hu) hi)
+  rintro _ G' m' d' ⟨hd, hc, r', hr, hi', hsig⟩
+  have he := I.signal_unmetered_post t (L.part g) r' hu hr
+  subst r'
+  exact ⟨hd, hc, by simpa only [L.setPart_self] using hi', hsig⟩
+
+end CondImpl
 
 end Full
 end Zig

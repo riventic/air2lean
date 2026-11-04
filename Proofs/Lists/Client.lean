@@ -143,7 +143,7 @@ theorem pushAll_spec (xs ys : List (BitVec 32)) (hd : Option Ptr) :
           (vtR vtp fns.toList ⋆ (I.fee φ ⋆ fees I φ vs.length)))) ⋆ plain))
         (CTriple.lift fun he => ?_) fun _ hr => ac_cast hr (by ac_rfl)
       refine CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd ys h).frame
-        (R := (I.fee φ ⋆ fees I φ vs.length) ⋆ plain) |>.pre fun _ hr => ac_cast hr (by ac_rfl))
+        (R := I.fee φ ⋆ fees I φ vs.length) |>.pre fun _ hr => ac_cast hr (by ac_rfl))
         fun _ => CTriple.ret' _ fun _ hr => ?_
       dsimp only [built]
       have e : ((v :: vs).reverse ++ ys).length = (vs.length + 1) + ys.length := by simp; omega
@@ -176,7 +176,7 @@ theorem build_spec (xs : List (BitVec 32)) :
       simpa only [built, List.append_nil, List.length_reverse] using hr
   | ok hd =>
     refine CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd
-      (xs.reverse ++ [])).toPartial.frame (R := (I.own ⋆ vtR vtp fns.toList) ⋆ plain)).pre
+      (xs.reverse ++ [])).toPartial.frame (R := I.own ⋆ vtR vtp fns.toList)).pre
         fun _ hr => ?_))
       fun r => CTriple.ret' _ fun _ hr => ?_
     · exact ac_cast hr (by dsimp only [built]; ac_rfl)
@@ -199,8 +199,8 @@ theorem buildThenFree_spec (xs : List (BitVec 32)) :
       (CTriple.lift fun he => CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inr (by rw [he]), hr⟩)
       fun _ hr => ac_cast hr (by dsimp only [built]; ac_rfl)
   | ok hd =>
-    exact CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd xs h).frame (R := plain) |>.pre
-      fun _ hr => ac_cast hr (by dsimp only [built]; ac_rfl)) fun _ =>
+    exact CTriple.bind ((freeAll_spec ctx vtp fns I e φ hd xs h).pre
+      fun _ hr => by simpa only [built] using hr) fun _ =>
       CTriple.ret' _ fun _ hr => Full.sep_lift.mpr ⟨Or.inl rfl, ac_cast hr (by ac_rfl)⟩
 
 end Client

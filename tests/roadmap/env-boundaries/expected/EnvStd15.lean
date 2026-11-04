@@ -312,6 +312,7 @@ def posix_read.again9 : posix_readExit → Bool
   | _ => false
 
 def posix_read.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_readLocals posix_readExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i11 ← pure p1.ptr
     let i12 ← pure p1.len
@@ -426,6 +427,7 @@ def fs_File_readAll.again5 : fs_File_readAllExit → Bool
   | _ => false
 
 def fs_File_readAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_readAllLocals fs_File_readAllExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).index)
     let i8 ← pure p1.len
@@ -514,6 +516,7 @@ def posix_write.again9 : posix_writeExit → Bool
   | _ => false
 
 def posix_write.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_writeLocals posix_writeExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i11 ← pure p1.ptr
     let i12 ← pure p1.len
@@ -638,6 +641,7 @@ def fs_File_writeAll.again5 : fs_File_writeAllExit → Bool
   | _ => false
 
 def fs_File_writeAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_writeAllLocals fs_File_writeAllExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).index)
     let i8 ← pure p1.len

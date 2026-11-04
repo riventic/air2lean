@@ -836,6 +836,23 @@ theorem Inv.restW {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     cases e : m.heap l <;> cases e' : m'.heap l <;> simp_all [Option.map]
   · simp [Word.cellsR, cellsAt_none hl]
 
+/-- The native word facts shared by ordinary and cur-aware caller-part steps. The actual
+protected rest contains the word, so its normalized cells and exact history are retained. -/
+private theorem Inv.partWordPost {G' : ThreadId → γ} {rY : Res} {m' : Mem}
+    (hi : L.Inv G' (rsum (W.cellsR m) rY) m') (hw : W.Ok m)
+    (hs : FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase m m') :
+    (∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) ∧
+    W.Ok m' ∧ W.hist m' = W.hist m ∧ L.Inv G' (rsum (W.cellsR m') rY) m' := by
+  have hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => hi.cellsN hl (hw.cellIn hl)
+  have hwF : ∀ l, W.In l → (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase l ≠ none :=
+    fun l hl => by
+      have := cellsAt_some hl (hw.cellIn hl) (m := m)
+      simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+        Option.or_eq_none_iff, not_and]
+      intro _ h; exact absurd h this
+  exact ⟨hcells, hw.fstep hs hwF hcells, Word.hist_fstep hw hs hwF hcells, hi.restW hcells⟩
+
 /-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock; a
 stack block of a sync object's code), with a thread triple: the client gets the rest with the
 word's cells and the lock's invariant before the step, the native framed step, the word's
@@ -864,16 +881,36 @@ theorem wp_liftPartW (hP : L.Fits K P U ok) (hW : W.InRest U) {α : Type} {x : M
   obtain ⟨rX, hL, hU⟩ := (hP.inv _ _).mp hi
   obtain ⟨hw, rY, rfl, hY⟩ := hW _ _ _ hU
   refine hL.wp_liftPart hc hgo htt hp (fun a m' r' hr hq hs hc' hL' => ?_) hret
-  have hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
-    fun l hl => hL'.cellsN hl (hw.cellIn hl)
-  have hwF : ∀ l, W.In l → (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase l ≠ none :=
-    fun l hl => by
-      have := cellsAt_some hl (hw.cellIn hl) (m := m)
-      simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-        Option.or_eq_none_iff, not_and]
-      intro _ h; exact absurd h this
-  exact h a m' r' rY hr hq hc' hU hL hY hs hcells
-    (hw.fstep hs hwF hcells) (Word.hist_fstep hw hs hwF hcells) (hL'.restW hcells)
+  obtain ⟨hcells, hw', hh, hL'⟩ := hL'.partWordPost hw hs
+  exact h a m' r' rY hr hq hc' hU hL hY hs hcells hw' hh hL'
+
+/-- A caller-part step requiring ephemeral `cur t`, with the same native word/rest facts as
+`wp_liftPartW`. The token is supplied for the local step and never stored across a stop. -/
+theorem wp_liftPartWCur (hP : L.Fits K P U ok) (hW : W.InRest U) {α : Type} {x : MemM α}
+    {Pa : FAssn} {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m) (hc : m.current = t)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r' rY, (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      U (upd G t g) (rsum (W.cellsR m) rY) m → L.Inv (upd G t g) (rsum (W.cellsR m) rY) m →
+      (∀ l, W.In l → rY.heap l = none) →
+      FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).heap.erase m m' →
+      (∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) →
+      W.Ok m' → W.hist m' = W.hist m →
+      L.Inv (upd G t (L.setPart g r')) (rsum (W.cellsR m') rY) m' → Q a G m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m n := by
+  obtain ⟨rX, hL, hU⟩ := (hP.inv _ _).mp hi
+  obtain ⟨hw, rY, rfl, hY⟩ := hW _ _ _ hU
+  refine hL.wp_liftPartCur hc hgo htt hp (fun a m' r' hr hq hs hc' hL' => ?_) hret
+  obtain ⟨hcells, hw', hh, hL'⟩ := hL'.partWordPost hw hs
+  exact h a m' r' rY hr hq hc' hU hL hY hs hcells hw' hh hL'
 
 /-- A thread not in the futex queue. -/
 theorem notQ_mem {ws : Array (ThreadId × Ptr)} {t : ThreadId} (h : ws.any (·.1 == t) = false) :
@@ -980,7 +1017,7 @@ theorem Fits.wStep (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move ow
     (hU : U G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
     (hI : Inv (upd G t (L.set (pl.set (G t) p) q h)) m') :
     U (upd G t (L.set (pl.set (G t) p) q h)) (rsum (W.cellsR m') rY) m' :=
-  hK.kstep t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI, .inl ⟨p, q, h, hmv, rfl⟩⟩ hU
+  hK.kstep t G _ m _ _ m' (.inl ⟨W, rY, hW, rfl, rfl, hY, hI, .inl ⟨p, q, h, hmv, rfl⟩⟩) hU
 
 /-- **A step of a thread on its own part** in the primitive's code (at a lock place `ownAt`; a
 stack block) keeps the rest, with the thread's new part `r`, given the lock's invariant before it
@@ -994,8 +1031,8 @@ theorem Fits.wOwn (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move own
     (hL' : L.Inv (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m')
     (hI : Inv (upd G t (L.setPart (G t) r)) m') :
     U (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m' :=
-  hK.kstep t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
-    .inr ⟨r, hat, hL, hc, hs, hcW, hw', hh, hL', rfl⟩⟩ hU
+  hK.kstep t G _ m _ _ m' (.inl ⟨W, rY, hW, rfl, rfl, hY, hI,
+    .inr ⟨r, hat, hL, hc, hs, hcW, hw', hh, hL', rfl⟩⟩) hU
 
 /-- **After a step of the primitive's code** by `t` (`g`, new place `p`) at the word `W` that
 keeps `t`'s lock place and resource: the protocol's invariant, from the lock's invariant after the
