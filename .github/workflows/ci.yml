@@ -1239,14 +1239,15 @@ jobs:
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # Step ticks: a step needs a credit or the plain mode (the meter, TickAuth); no update
-          # creates a receipt or enters the plain mode under a meter.
-          lake build ZigLean.Sep.Full.Tick
+          # creates a receipt or enters the plain mode under a meter; credits and receipts count
+          # steps exactly, so a bound is tight.
+          lake build ZigLean.Sep.Full.Cost
           lake env lean tests/roadmap/sep-full/TicksCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/ticks-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/ticks-cx.log" <<'EOF'
           import re, sys
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
-          assert ': error' not in text and text.count('depends on axioms') == 5, text
+          assert ': error' not in text and text.count('depends on axioms') == 8, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # Zero-length accesses race with nothing (raceAt, freeRaces).
