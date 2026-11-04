@@ -814,9 +814,14 @@ thread (2026-11-03), and the guard's whole-tree sample could not name the file.
 
 A fourth phase builds the **proof-fixture package** and runs the **proof-fixture checks**. The
 package (`tests/roadmap/lakefile.toml`, one library per converted fixture directory,
-[build-cache.md](build-cache.md#proof-fixtures)) is built first, every library in one guarded
-`scripts/fixtures.py build`: the checks run in parallel, and Lake has no build lock, so they must
-find their modules built rather than build the same module at once. A converted check builds its
+[build-cache.md](build-cache.md#proof-fixtures)) is built first by `scripts/fixture-checks.py`
+itself, before any unit and in its guard, every library in one `scripts/fixtures.py build`. The
+checks run in parallel, and Lake has no build lock, so they must find their modules built rather
+than build the same module at once. A run in which a unit changed a compiled module of the root
+or the fixture package fails, naming the modules: every audit binds the compiled modules on its
+lookup path, so such a unit fails the others' audits ("imported inputs changed"). A check that
+rebuilds a library on purpose does it in a check tree (`architecture-audit/claims/test_cache.py`).
+A converted check builds its
 library again (`fixtures.py build LIB`; Lake's trace makes that a no-op on an unchanged tree,
 seconds), reads the axioms from the built environment (`fixtures.py audit`, which runs
 `assumptions.py` with kernel replay) and builds its mutants with Lake (`fixtures.py mutant`), so
