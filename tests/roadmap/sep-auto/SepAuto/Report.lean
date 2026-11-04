@@ -89,8 +89,9 @@ private def inspect (ty : Expr) (reason condition : String) (rule : Option Name 
       (origin.getObjValAs? String "condition").toOption == some condition do
     throwError "wrong JSON residual: {line report}"
 
-/-- No rule describes this command. Its body is opaque to the walker. -/
-opaque unavailable : MemM Unit := pure ()
+/-- No rule describes this command. It is irreducible, so its body is opaque to the walker; as a
+definition it adds no opaque constant to the audited dependencies. -/
+@[irreducible] def unavailable : MemM Unit := pure ()
 
 /-- A deliberately impossible premise tests attribution of a selected rule's obligation. -/
 theorem needs_false (h : False) : FTotalTriple emp unavailable (fun _ => emp) := h.elim
