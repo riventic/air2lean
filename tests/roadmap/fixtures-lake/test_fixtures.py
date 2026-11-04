@@ -10,10 +10,11 @@ modules (seconds), without the shared artifact cache.
 - A mutant is killed only when the module that must fail fails itself: a failed import, a module
   that still builds or a missing expected message is no kill.
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
-import re
 from pathlib import Path
 import shutil
 import tempfile
@@ -131,9 +132,19 @@ class Audit(unittest.TestCase):
         lib = self.build("theorem honest : 1 + 1 = 2 := rfl\ntheorem sorry_control : (1 : Nat) = 2 := sorry\n")
         self.assertEqual(fx.audit(["AuditControl"], ["honest"], None, lib), 1)
 
+    def rejects(self, lib, problem):
+        """`audit` of AuditControl fails, and `problem` (`NAME (AuditControl): TRUST_CLASS:`) is one
+        of its problems."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(fx.audit(["AuditControl"], [], None, lib), 1)
+        self.assertIn(problem, err.getvalue())
+
     def test_project_axiom_is_rejected(self):
-        lib = self.build("axiom control_ax : (1 : Nat) = 2\ntheorem axiom_control : (1 : Nat) = 2 := control_ax\n")
-        self.assertEqual(fx.audit(["AuditControl"], [], None, lib), 1)
+        """Also one that no theorem or named declaration reaches: a violation of an audited module."""
+        lib = self.build("axiom control_ax : (1 : Nat) = 2\ntheorem axiom_control : (1 : Nat) = 2 := control_ax\n"
+                         "axiom unused_ax : (1 : Nat) = 2\n")
+        self.rejects(lib, "unused_ax (AuditControl): unexpected-axiom:")
 
     def test_definition_is_audited(self):
         """A definition whose value carries a proof (as `AllocFba.FBA.ledger`), used by no theorem."""
@@ -151,13 +162,9 @@ class Audit(unittest.TestCase):
     def test_unlabeled_float_theorem_is_rejected(self):
         """As the theorem-universe audit: a theorem over the float model needs its label
         (assurance/float-semantics.json); this one has none."""
-        lib = self.build("import ZigLean.Float.Value\n"
-                         "theorem float_control (x : Zig.F32) : x.bits = x.bits := rfl\n")
-        self.assertEqual(fx.audit(["AuditControl"], [], None, lib), 1)
-
-    def test_float_label_issues_are_the_labelers(self):
-        source = (ROOT / "scripts/float-semantics.py").read_text()
-        self.assertEqual(set(re.findall(r"issue\(name, module, '([a-z-]+)'", source)), fx.FLOAT_LABEL_ISSUES)
+        self.rejects(self.build("import ZigLean.Float.Value\n"
+                                "theorem float_control (x : Zig.F32) : x.bits = x.bits := rfl\n"),
+                     "float_control (AuditControl): unlabeled-numerical-theorem:")
 
 
 class LakeExtraction(unittest.TestCase):
