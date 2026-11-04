@@ -191,9 +191,10 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       (fun q => DPart DR q (Array.replicate 48 .undef) ⋆ cur t))
     (hfree : ∀ q bs, bs.size = 48 → FTTriple (DPart DR q bs ⋆ cur t)
       (free q) (fun _ => (· = L.part g) ⋆ cur t))
-    (hi : P.inv (upd G t (gD L E g p₀ (L.part g))) m) :
+    (hi : P.inv (upd G t (E.set g p₀)) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_waitUntilSet E.W.ptr none) (fun x G' m' d' =>
       x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+  rw [← gD_self hE] at hi
   fsym [WP.liftMem_pure (x := StateT.lift (debug_assert true)) (by rfl) rfl,
     FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t)
       (hgo := by simpa only [gD_lph hE] using hgo) (htt := halloc)
@@ -235,7 +236,7 @@ theorem resetEvent_wait_wp_resource [Zig.Os.HasEnv]
       (hg := .inl (E.ph_set _ _)) (hgo := by rw [hE.lph]; exact hgo) (hi := hi0),
     wus_wp hE hcost DR hu hgx hgo hlive,
     halloc, hfree, gD_self, E.set_set, FEvent.set_of, hE.lph, hE.lpart,
-    keepPart, L.setPart_self]
+    keepPart, L.setPart_self, EPh.Waiting]
 
 /-- Concrete Plain waits specialize the same resource proof and recover the original part. -/
 theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
