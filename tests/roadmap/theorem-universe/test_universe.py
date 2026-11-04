@@ -449,7 +449,7 @@ class LakeExtractionTests(unittest.TestCase):
         lib.mkdir(parents=True)
         (lib / 'M.olean').write_bytes(b'olean')  # the audited module, built by the fixtures package
         self.extraction = self.package / '.lake/extraction'
-        self.built, self.workspaces = [], []
+        self.built, self.workspaces, self.targets = [], [], []
         self.roots = [str(base / 'root/.lake/build/lib/lean'), str(lib)]
         # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
         self.own = 'OWN'
@@ -464,6 +464,7 @@ class LakeExtractionTests(unittest.TestCase):
                     own if e == 'OWN' else e for e in self.resolved]
                 return subprocess.CompletedProcess(command, 0, os.pathsep.join(entries) + '\n', '')
             module = command[-1]
+            self.targets.append(command[command.index('build') + 1:])
             self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
             self.workspaces.append(Path(cwd))
             path = module.replace('.', '/') + '.lean'
@@ -485,6 +486,9 @@ class LakeExtractionTests(unittest.TestCase):
         self.assertNotIn('import M', source.read_text())
         manifest = tomllib.loads((workspace / 'lakefile.toml').read_text())
         self.assertEqual(manifest['lean_lib'][0]['needs'], ['@fixtures/+M:olean', '@fixtures/+M:depTrace'])
+        # The needed olean comes first on the command line (Lake's build thread, ledger
+        # `lake-needs-race`), the driver last.
+        self.assertEqual(self.targets[0], ['@fixtures/+M:olean', self.built[0][0]])
         (self.package / '.lake/build/lib/lean/M.olean').unlink()  # no package builds it
         self.assertIsNone(self.extract())
 
@@ -552,12 +556,16 @@ class LakeKernelReplayTests(unittest.TestCase):
         self.workspace = self.package / '.lake/replay'
         self.lean_path = os.pathsep.join([str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')])
         self.resolved = [*self.lean_path.split(os.pathsep), str(self.workspace / '.lake/build/lib/lean')]
-        self.builds, self.status, self.drop, self.foreign = [], {}, set(), {}
+        self.builds, self.needed, self.status, self.drop, self.foreign = [], [], {}, set(), {}
 
         def lake(command, cwd, **kwargs):
             if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
                 return subprocess.CompletedProcess(command, 0, os.pathsep.join(self.resolved) + '\n', '')
             targets = command[command.index('build') + 1:]
+            needed = [t for t in targets if t.startswith('@')]
+            self.assertEqual(targets[:len(needed)], needed)  # the needed oleans first (`lake-needs-race`)
+            self.needed.append(needed)
+            targets = targets[len(needed):]
             self.builds.append(targets)
             lines = []
             for target in targets:
@@ -590,6 +598,7 @@ class LakeKernelReplayTests(unittest.TestCase):
         self.assertEqual(sorted(lib['needs'] for lib in manifest['lean_lib']),
                          [['@air2lean/+A:olean', '@air2lean/+A:depTrace'],
                           ['@fixtures/+B:olean', '@fixtures/+B:depTrace']])
+        self.assertEqual(self.needed[-1], ['@air2lean/+A:olean', '@fixtures/+B:olean'])
         self.replay()
         self.assertEqual(self.builds[-1], first)  # same inputs: the same receipt modules
         self.replay(checker='d' * 64)
