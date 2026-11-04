@@ -563,6 +563,23 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(calls[0].args[1], [str(self.fx.lake), '--rehash', 'build', module])
         self.assertEqual(self.fx.load()['runs']['no-build'], saved)
 
+    def test_renewal_skips_modules_deleted_since_the_recording(self):
+        gone = self.fx.root / ti.module_path('Proofs.Demo.Gone')
+        gone.write_text('theorem gone : True := trivial\n')
+        command = [str(self.fx.lake), 'build', 'Proofs', 'Proofs.Demo.Gone', 'Proofs.Demo.Proofs']
+        self.fx.record('all', '0.16.0', *self.fx.guard('all', command, 'built\n', prepare=False))
+        gone.unlink()
+        proof = self.fx.root / ti.module_path('Proofs.Demo.Proofs')
+        proof.write_text(proof.read_text() + '\n-- source changed\n')
+        self.assertRunCurrent('all', False)
+        calls = self.assertReplayRuns('all')
+        self.assertEqual(calls[0].args[1], [str(self.fx.lake), 'build', 'Proofs', 'Proofs.Demo.Proofs'])
+        # With every target gone the renewal would be a bare default-target build: refused.
+        inv = self.fx.load()
+        inv['runs']['all']['command'] = [str(self.fx.lake), 'build', 'Proofs.Demo.Gone']
+        self.fx.save(inv)
+        self.assertReplayRejected()
+
     def test_swapped_imports_are_recorded_and_checked_from_the_selected_source(self):
         helper_module = 'Proofs.Extra.Helper'
         helper = self.fx.root / ti.module_path(helper_module)
