@@ -410,7 +410,7 @@ theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : Thre
     VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
       (VClock.bump (cs[t]!) t))[u]!) = true := by
   by_cases hu : u < cs.size
-  · exact (LockWord.fork_clocks ht).1 u hu
+  · exact (Conc.fork_clocks ht).1 u hu
   · rw [getElem!_neg cs u hu]; exact le_nil _
 
 /-- A thread out of the event's code, with no role, gets another ghost value out of it. -/
@@ -498,7 +498,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
     ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩
   · simp only [Array.getElem?_push]; rw [ite_eq_right (by omega)]; exact h00
   · simp only [Array.getElem?_push, hs1, ↓reduceIte]
-  · obtain ⟨hcl, hcn, -⟩ := LockWord.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
+  · obtain ⟨hcl, hcn, -⟩ := Conc.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
     exact hu.io.fork (t := 0) (by rw [hs1]; decide) (by simp)
       (fun u hu => hcl u (by rw [hcs]; exact hu)) (by rw [← hcs]; exact hcn) fun _ he _ => he
   · intro h; rw [hX0] at h; cases h

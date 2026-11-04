@@ -144,12 +144,12 @@ The generic contracts that will replace the hand futex under this proof (`FutexS
 
 ### A shared atomic word
 
-A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition` or a `Thread.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic (`Word.Ok`), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant.
+A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition` or a `Thread.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Base/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic (`Word.Ok`), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant. The native steps over full-state resources are in `ZigLean/Sep/Full/Word.lean`; the legacy `Word.Op` producers and step records in the table are in `ZigLean/Conc/Word.lean`.
 
 | Part | What |
 |---|---|
-| Ops | `Ok.load` (reads write `j`, at least each write that happened before the thread: `Word.Floor`; an acquire adopts its release clock), `Ok.rmw` (reads the newest write and adds one: `rmwEnt`), `Ok.cas` (an RMW of the newest write, or a read of write `j` with another value). In strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`, `Ok.cas_noErr`). |
-| Other steps | A step that keeps the word (`Word.Keep`, same writes: `hist_keep`): a step of the lock's code (`keep_lockStep`), a step of a thread on its own part (`keep_stepIn`), a spawn, a join, a plain read, an op at another word (`keep_op`). An op at a word keeps the lock's invariant (`Lock.Inv.wordOp`). |
+| Ops | `Ok.load` (reads write `j`, at least each write that happened before the thread: `Word.Floor`; an acquire adopts its release clock), `Ok.rmw` (reads the newest write and adds one: `rmwEnt`), `Ok.cas` (an RMW of the newest write, or a read of write `j` with another value); legacy, `Conc/Word.lean`. In strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`, `Ok.cas_noErr`; `Conc/Base/Word.lean`). |
+| Other steps | A step that keeps the word (`Word.Keep`, same writes: `hist_keep`; legacy, `Conc/Word.lean`): a step of the lock's code (`keep_lockStep`), a step of a thread on its own part (`keep_stepIn`), a spawn, a join, a plain read, an op at another word (`keep_op`). An op at a word keeps the lock's invariant (`Lock.Inv.wordOp`). |
 
 ## Proving memory safety
 
