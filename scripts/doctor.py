@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -27,7 +28,8 @@ USAGE = '''Usage: scripts/doctor.sh [--zig-version VERSION] [--zig-air PATH] [--
 
 Check every prerequisite: host, compatibility metadata, elan and the pinned Lean toolchain
 (lean-toolchain), stock Zig, each patched Zig and its AIR-only lock, the translator build,
-bootstrap tools, Docker, disk and memory. No downloads or builds.
+bootstrap tools, the native-row runners (on x86_64-linux), Docker, disk and memory. No downloads
+or builds.
 Defaults: the Zig version of compatibility.json (zig.default), zig-air-VERSION/bin/zig,
 --require translate.
   --require proofs     exit 0 once committed proofs can be checked (no Zig needed)
@@ -296,6 +298,30 @@ class Doctor:
                      'zig-patch/build.sh needs: ' + ', '.join(missing),
                      'install them with the system package manager', missing=missing)
 
+    def native_runners(self):
+        """The commands of CI's native rows that scripts/fixture-checks.py runs on their runner
+        host (x86_64-linux; elsewhere it skips them): each runner a step names in an
+        AIR2LEAN_<ARCH>_RUN (qemu-user, from CI's "Install system packages"), and Node (the
+        runner image's; pointer-width runs its wasm32-wasi test under Node's WASI)."""
+        if self.host_id != 'x86_64-linux':
+            self.add('native-runners', 'skip', 'native CI rows run on x86_64-linux, not %s' % self.host_id)
+            return
+        try:
+            workflow = (self.root / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        except OSError as exc:
+            self.add('native-runners', 'warn', 'cannot read the CI workflow: %s' % exc)
+            return
+        # The command of each runner prefix (quoted or not, with or without arguments); "" is the host.
+        tools = sorted(set(re.findall(r'^\s*AIR2LEAN_\w+_RUN:\s*["\']?([^\s"\']+)', workflow, re.M)) | {'node'})
+        missing = [t for t in tools if not shutil.which(t, path=self.env.get('PATH'))]
+        if not missing:
+            self.add('native-runners', 'ok', 'native-row runners available: ' + ', '.join(tools))
+        else:
+            self.add('native-runners', 'warn', 'scripts/fixture-checks.sh native rows need: ' + ', '.join(missing),
+                     'install qemu-user-static and nodejs with the system package manager (Ubuntu 26.04 '
+                     'has no qemu-user-static: install qemu-user and link qemu-ARCH-static to qemu-ARCH)',
+                     missing=missing)
+
     def docker(self):
         if self.args.no_docker:
             self.add('docker', 'skip', 'Docker probe skipped (--no-docker)')
@@ -358,6 +384,7 @@ class Doctor:
                     self.patched(version, self.root / ('zig-air-%s/bin/zig' % version), False)
         self.translator()
         self.tools(needed=not translate)
+        self.native_runners()
         self.docker()
         self.resources(self.args.require)
         return {'proofs': proofs, 'translate': translate}

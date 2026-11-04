@@ -210,11 +210,12 @@ uses the inner loop's triple as a rule. The AIR is retained with its provenance 
 `toTotal_on` (`tests/roadmap/strength-log/LoopTactics.lean`).
 
 A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfold equations
-`<fn>.eq_1` and no induction principle. `tests/roadmap/loop-tactics/Recursion.lean` proves the
-pure `Zig.Result` functions of `examples/recursion/recursion.zig` by well-founded induction on a
-`Nat` measure and the unfold equations: `gcd` (the second argument decreases by `a % b < b`),
-the mutual `isEven`/`isOdd` group (one conjunction, one measure) and `fact` (a range premise
-carried through the induction hypothesis).
+`<fn>.eq_1`. `Proofs.Recursion.Proofs` proves the pure functions of
+`examples/recursion/recursion.zig` with `FTotalTriple.rec_group` and one `fsym` walk per group:
+all-input `gcd`, mutual `isEven`/`isOdd`, and `fact` under its existing `n.toNat ≤ 12` bound.
+`tests/roadmap/loop-tactics/Recursion.lean` consumes their public adequacy projections and keeps
+its result equations unchanged, each under a standard-axiom guard, with no per-program induction or
+copied command walk. Pure recursion still retains STK-01 for its native interpretation.
 
 The scenarios of the retired template checks are `fsym` regressions in
 `tests/roadmap/sep-auto/`: `Total.lean` proves a countdown with `loop_measure`, rejects a step
@@ -224,7 +225,7 @@ shows that no measure makes the step of a body that always repeats (`spin_no_mea
 premise is not proved.
 
 Build with `lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
-ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean`, then run
+ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Proofs air2lean`, then run
 `lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Queue` and `Recursion`, and
 `tests/roadmap/loop-tactics/nested/check.sh`.
 
