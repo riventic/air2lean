@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Offline guard tests: stdlib Python children only, no compiler probes/builds."""
 
+import contextlib
+import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -37,6 +40,7 @@ class GuardTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         os.environ.pop("AIR2LEAN_GUARD_PRIORITY", None)
+        os.environ.pop("AIR2LEAN_GUARD_IDLE_MINUTES", None)
 
     def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
         self.fixture_counter += 1
@@ -219,6 +223,52 @@ fixture_pause()
         self.assertTrue(all(not self.live(int(pid)) for pid in pids.read_text().split()))
         self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
 
+    def test_idle_limit_stops_a_workload_without_cpu_progress(self):
+        started = time.monotonic()
+        result, report, _ = self.run_guard("fixture_pause()", "--idle-minutes", "0.02")
+        self.assertEqual((result.returncode, report["outcome"]), (123, "hung"), result.stderr)
+        self.assertEqual(report["budget"]["idle_minutes"], 0.02)
+        self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
+
+    def test_idle_limit_spares_a_workload_that_computes(self):
+        # 6 s of silent computing against a 3 s limit and a 1 s step: each window needs a third
+        # of a core, and Linux ps counts whole seconds.
+        source = "import time\nend = time.monotonic() + 6\nwhile time.monotonic() < end: pass"
+        result, report, _ = self.run_guard(source, "--idle-minutes", "0.05", "--timeout", "10")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), result.stderr)
+
+    def test_idle_limit_comes_from_the_environment_or_is_off(self):
+        os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "0.02"
+        result, report, _ = self.run_guard("fixture_pause()")
+        self.assertEqual((result.returncode, report["outcome"]), (123, "hung"), result.stderr)
+        os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "soon"
+        result = subprocess.run(self.command("pass")[0], capture_output=True, text=True, timeout=12)
+        self.assertEqual(result.returncode, 2)
+        del os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"]
+        result, report, _ = self.run_guard("import time; time.sleep(1.5)")
+        self.assertEqual((result.returncode, report["budget"]["idle_minutes"]), (0, 0))
+
+    def test_progress_is_a_started_process_output_or_cpu_time(self):
+        rows = {1: {"start": "a", "cpu_s": 5.0}, 2: {"start": "a", "cpu_s": 0.0}}
+        progress = guard.Progress(60, 0)
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 1))  # both started: progress
+        self.assertEqual(progress.since, 1)
+        rows[1]["cpu_s"] = 5.5
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 30))  # 0.5 s of CPU: under the 1 s step
+        self.assertEqual(progress.since, 1)
+        del rows[1]  # an ended process takes nothing back
+        rows[2]["cpu_s"] = 0.6
+        self.assertFalse(progress.hung(rows, {2}, 0, 40))  # 0.5 + 0.6 s reach the step
+        self.assertEqual(progress.since, 40)
+        self.assertFalse(progress.hung(rows, {2}, 7, 90))  # output
+        self.assertEqual(progress.since, 90)
+        rows[2] = {"start": "b", "cpu_s": 0.0}  # PID reuse: a started process
+        self.assertFalse(progress.hung(rows, {2}, 7, 149))
+        self.assertEqual(progress.since, 149)
+        self.assertTrue(progress.hung(rows, {2}, 7, 209))
+        self.assertEqual([guard.cpu_seconds(text) for text in ("0:01.50", "01:02:03", "2-00:00:01")],
+                         [1.5, 3723.0, 172801.0])
+
     def test_sampled_memory_limit_without_large_allocations(self):
         result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
         self.assertEqual((result.returncode, report["outcome"]), (125, "rss_limit"))
@@ -376,7 +426,6 @@ fixture_pause()
         self.assertNotIn("inherited_from", report["admission"])
 
     def test_an_older_guard_holding_the_lock_still_runs_alone(self):
-        import fcntl
         with (self.root / "shared.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)  # what a guard of an older checkout takes
             code, _ = self.attempt(cwd=self.worktree("new"))
@@ -385,7 +434,6 @@ fixture_pause()
         self.assertEqual(code, 0)
 
     def test_a_waiting_queue_holder_is_admitted_before_later_acquirers(self):
-        import fcntl
         directory = Path(str(self.root / "shared.lock") + ".d")
         directory.mkdir()
         with (directory / "queue").open("a") as queue:
@@ -478,8 +526,93 @@ fixture_pause()
         code, evidence = self.attempt(cwd=self.worktree("later"))
         self.assertEqual((code, evidence["admission"]["priority"]), (0, "normal"))
 
+    def test_a_small_guard_backfills_beside_a_waiting_head(self):
+        # Budget 3 GiB: the holder takes one slot; the big head (weight 3) waits and, early in its
+        # ramp, keeps one slot. The small guard runs in the third; the head follows the holder.
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", order, *budget, "--rss-mib", "3000", "--backfill-ramp", "600")
+        code, evidence = self.attempt(*budget, "--lock-wait", "5", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (0, "success"))
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertIsNone(big.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+        self.assertEqual(order.read_text().split(), ["big"])
+        self.assertEqual(os.listdir(Path(str(self.root / "shared.lock") + ".d") / "heads"), [])
+
+    def test_a_head_past_its_ramp_keeps_every_free_slot(self):
+        budget = ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", self.root / "order", *budget, "--rss-mib", "3000",
+                                   "--backfill-ramp", "0")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        self.assertFalse(evidence["admission"]["backfilled"])
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+
+    def stand_in_head(self, content, enter=None):
+        """A queue head (stand-in): it holds the queue and publishes `content` in `heads/`, until
+        the test ends (or what `enter` belongs to closes)."""
+        enter = enter or self.enterContext
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        directory.mkdir(parents=True, exist_ok=True)
+        queue = enter((directory / "queue").open("a"))
+        fcntl.flock(queue, fcntl.LOCK_EX)
+        enter(guard.publish_entry(directory / "heads", "1-1", content, lambda path: path.open("a")))
+
+    def test_backfill_leaves_the_heads_unmet_reservation_free(self):
+        self.stand_in_head({"pid": os.getpid(), "unmet": 1, "need": 3})
+        code, _ = self.attempt("--mem-budget-mib", "1024", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual(code, 75)  # one free slot: the head's
+        code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("b"))
+        self.assertEqual(code, 0)  # two: one for the head, one for the backfill
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertEqual(guard.free_mib(self.root / "shared.lock", 2048), 1024)  # the head's reserved slot
+
+    def test_free_slots_that_admit_the_head_go_to_it(self):
+        self.stand_in_head({"pid": os.getpid(), "unmet": 0, "need": 2})
+        code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual(code, 75)
+        self.assertFalse(evidence["admission"]["backfilled"])
+        code, _ = self.attempt("--mem-budget-mib", "3072", "--lock-wait", "2", cwd=self.worktree("b"))
+        self.assertEqual(code, 75)  # three free still admit the head (2) first
+
+    def test_a_head_entry_of_another_shape_gets_no_backfill(self):
+        for content in ({"unmet": "x", "need": 3}, {"unmet": 1}, {"unmet": 2, "need": 1}, {"unmet": None, "need": 3}):
+            with self.subTest(content=content), contextlib.ExitStack() as stack:
+                self.stand_in_head(content, stack.enter_context)
+                code, evidence = self.attempt("--mem-budget-mib", "4096", "--lock-wait", "1.5",
+                                              cwd=self.worktree("a"))
+                self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+
+    def test_the_backfill_ramp(self):
+        for value in ("-1", "inf", "nan"):
+            with self.subTest(value=value), self.assertRaises(SystemExit), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                guard.parse_args(["--report", "r", "--log", "l", "--backfill-ramp", value, "--", "true"])
+        a = guard.parse_args(["--report", "r", "--log", "l", "--rss-mib", "4096", "--backfill-ramp", "100",
+                              "--mem-budget-mib", "8192", "--lock", str(self.root / "shared.lock"), "--", "true"])
+        self.assertEqual(a.backfill_ramp, 100)
+        admission = guard.Admission(a)
+        self.assertEqual([admission.reservation(w) for w in (0, 1, 25, 50, 99, 100, 1000)], [0, 1, 1, 2, 4, 4, 4])
+        a.backfill_ramp = 0
+        self.assertEqual(admission.reservation(0), 4)
+
+    def test_no_backfill_behind_a_merge_ticket(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        merge, _ = self.start_waiter("merge", order, *budget, "--rss-mib", "3000", "--priority", "merge")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(merge)
+
     def test_normal_guards_wait_for_a_live_merge_ticket_and_ignore_a_dead_one(self):
-        import fcntl
         self.tickets.mkdir(parents=True)
         ticket = self.tickets / "00000000000000000001-1"
         with ticket.open("a") as owner:
@@ -701,7 +834,6 @@ fixture_pause()
             self.assertTrue(preempt(older))
 
     def test_waiting_for_lock_can_be_cancelled_without_spawning(self):
-        import fcntl
         with (self.root / "shared.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             marker = self.root / "must-not-run"
@@ -912,7 +1044,6 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
                                   "--report", str(self.root / "report"), "--", "mock"])
 
     def test_fingerprints_are_collected_after_the_waiting_lock_is_acquired(self):
-        import fcntl
         fixture = self.root / "input"
         fixture.write_text("before")
         args, _, _ = self.command("pass", "--input", "input", "--lock-wait", "2")
