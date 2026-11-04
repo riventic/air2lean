@@ -267,7 +267,7 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         if os.environ.get("AIR2LEAN_CAS_DIR") else ROOT / ".lake" / "lean-files"
     toolchain = (ROOT / "lean-toolchain").read_bytes() + (ROOT / "lakefile.toml").read_bytes()
     memo: dict[str, bytes] = {}
-    todo, keys = [], {}
+    todo, keys, stats = [], {}, []
     for f in files:
         keys[f] = input_key(f, toolchain, memo) + ("-reject" if f in reject else "")
         if not (store / keys[f]).exists():
@@ -277,7 +277,8 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         names = {f: f"{i}-{par.safe_name(f)[-100:]}" for i, f in enumerate(todo)}
         with open(os.devnull, "wb") as null:
             statuses = par.run([par.Job(names[f], ["lake", "env", "lean", f], cwd=str(ROOT)) for f in todo],
-                               par.workers(jobs, mem_mib, len(todo)), out=null, err=null, log_dir=logs)
+                               par.workers(jobs, mem_mib, len(todo)), out=null, err=null, log_dir=logs,
+                               stats=stats)
         store.mkdir(parents=True, exist_ok=True)
         for f, status in zip(todo, statuses):
             if (status != 0) == (f in reject):
@@ -290,6 +291,11 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         shutil.rmtree(logs, ignore_errors=True)
     print(f"lean-deps: {len(files)} standalone Lean files, {len(todo)} elaborated, "
           f"{len(files) - len(todo)} unchanged since their last pass")
+    # The files that size this phase's guard (sampled peak RSS of each file's process group).
+    peaks = sorted(((s["peak_rss_kib"], s["elapsed_s"], f) for f, s in zip(todo, stats) if s), reverse=True)
+    if peaks:
+        print("lean-deps: largest peaks (MiB, wall s): "
+              + ", ".join(f"{kib // 1024} {wall:g} {f}" for kib, wall, f in peaks[:5]))
     for e in errors:
         print("lean-deps: " + e, file=sys.stderr)
     return 1 if errors else 0

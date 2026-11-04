@@ -15,7 +15,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
+import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -196,40 +200,46 @@ class LakeKernelReplay(unittest.TestCase):
     Unit audit uses it: an unchanged module's receipt is replayed, a changed module is checked
     again, and a module the kernel rejects keeps a failing receipt, built and replayed alike."""
 
-    def test_receipts_are_lakes_trace(self):
+    def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-replay-test.")
         self.addCleanup(tmp.cleanup)
-        package = Path(tmp.name)
-        shutil.copy(ROOT / "lean-toolchain", package / "lean-toolchain")
-        (package / "lakefile.toml").write_text(
+        self.package = Path(tmp.name).resolve()
+        shutil.copy(ROOT / "lean-toolchain", self.package / "lean-toolchain")
+        (self.package / "lakefile.toml").write_text(
             f'name = "fixtures"\n[[require]]\nname = "air2lean"\npath = "{ROOT}"\n'
             '[[lean_lib]]\nname = "AuditControl"\n')
-        source = package / "AuditControl.lean"
-        workspace = package / ".lake/replay"
-        receipts = workspace / ".lake/build/lib/lean/KernelReplay"
-
+        self.workspace = self.package / ".lake/replay"
         spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
-        assumptions = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(assumptions)
-        sysroot = Path(assumptions.lake_env("LEAN_SYSROOT")).resolve()
-        checker = assumptions.file_sha256(sysroot / "bin/leanchecker")
-        runtime = assumptions.toolchain_runtime_sha256(sysroot)
+        self.assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.assumptions)
+        self.sysroot = Path(self.assumptions.lake_env("LEAN_SYSROOT")).resolve()
+        self.checker = self.assumptions.file_sha256(self.sysroot / "bin/leanchecker")
+        self.runtime = self.assumptions.toolchain_runtime_sha256(self.sysroot)
+
+    def replay(self, text, environment=without_cache):
+        """AuditControl's receipt, with `text` as its source, built under `environment`."""
+        (self.package / "AuditControl.lean").write_text(text)
+        with environment():
+            done = fx.lake(self.package, ["build", "AuditControl"], capture=True)
+            self.assertEqual(done.returncode, 0, done.stdout)
+            lean_path = fx.lake(self.package, ["env", "printenv", "LEAN_PATH"], capture=True).stdout.strip()
+            found = self.assumptions.lake_kernel_replay(["AuditControl"], self.package, self.checker,
+                                                        self.runtime, lean_path)
+        self.assertIsNotNone(found)  # the package's own lookup path: receipts are used
+        return found["AuditControl"]
+
+    def test_receipts_are_lakes_trace(self):
+        workspace = self.workspace
+        receipts = workspace / ".lake/build/lib/lean/KernelReplay"
 
         def audit(text):
             """0 when the receipt passes, 1 when it records a rejection."""
-            source.write_text(text)
-            with without_cache():
-                done = fx.lake(package, ["build", "AuditControl"], capture=True)
-                self.assertEqual(done.returncode, 0, done.stdout)
-                lean_path = fx.lake(package, ["env", "printenv", "LEAN_PATH"], capture=True).stdout.strip()
-                found = assumptions.lake_kernel_replay(["AuditControl"], package, checker, runtime, lean_path)
-            self.assertIsNotNone(found)  # the package's own lookup path: receipts are used
-            return 0 if found["AuditControl"]["status"] == "pass" else 1
+            return 0 if self.replay(text)["status"] == "pass" else 1
 
         def built():
             # The receipt of AuditControl: the one whose source names it.
             sources = [p for p in workspace.glob("KernelReplay/*.lean")
-                       if "run `AuditControl\n" in p.read_text()]
+                       if 'run "AuditControl"\n' in p.read_text()]
             self.assertEqual(len(sources), 1, sources)
             return sources[0].name, (receipts / (sources[0].stem + ".olean")).stat().st_mtime_ns
 
@@ -252,12 +262,70 @@ class LakeKernelReplay(unittest.TestCase):
         self.assertEqual(built(), rejected)  # the failing receipt is replayed and still fails
         # An `initialize` that forges a passing receipt line (and marks that it ran) next to the
         # kernel-unchecked theorem: no receipt process runs it, and the verdict stays a rejection.
-        marker = package / "initialize-ran"
+        marker = self.package / "initialize-ran"
         fake = json.dumps({"module": "AuditControl", "status": "pass", "exit_code": 0, "output": ""})
         forged = (f"initialize do\n  IO.FS.writeFile {json.dumps(str(marker))} \"ran\"\n"
                   f"  IO.println {json.dumps('info: KernelReplay/R0.lean:3:0: AIR2LEAN_KERNEL_REPLAY:' + fake)}\n")
         self.assertEqual(audit(unchecked + forged), 1)
         self.assertFalse(marker.exists())
+
+    def test_receipts_never_come_from_the_artifact_cache(self):
+        # The artifact cache keeps no build log, and a receipt is one: a checkout made again at the
+        # same path (the receipt's text names it) under the same cache still gets every receipt.
+        cache = self.package.parent / (self.package.name + "-cache")
+        self.addCleanup(shutil.rmtree, cache, True)
+
+        def cached():  # scripts/cas.py lake_env, with a cache of this test's own
+            env = {k: v for k, v in os.environ.items() if k != "AIR2LEAN_CAS_DIR" and not k.startswith("LAKE_")}
+            return mock.patch.dict(os.environ, {**env, "LAKE_ARTIFACT_CACHE": "true", "LAKE_CACHE_DIR": str(cache),
+                                                "LAKE_RESTORE_ARTIFACTS": "true"}, clear=True)
+
+        honest = "theorem honest : 1 + 1 = 2 := rfl\n"
+        self.assertEqual(self.replay(honest, cached)["status"], "pass")
+        shutil.rmtree(self.package / ".lake")
+        self.assertEqual(self.replay(honest, cached)["status"], "pass")
+
+    def test_a_killed_checker_fails_the_audit_and_leaves_no_receipt(self):
+        # A checker ended by a signal (137: SIGKILL, e.g. under memory pressure) decided nothing: the
+        # receipt's build fails, and the next audit checks the module again instead of replaying a
+        # failure. The module imports Lean, so its checker runs long enough to be stopped.
+        text = "import Lean\ntheorem honest : 1 + 1 = 2 := rfl\n"
+        killed, errors, stop = [], [], threading.Event()
+
+        def kill_own_checker():
+            try:
+                find_and_kill()
+            except Exception as error:  # reported by the test, not lost with the thread
+                errors.append(error)
+
+        def find_and_kill():
+            command = f"{self.sysroot / 'bin/leanchecker'} AuditControl"
+            while not stop.is_set() and not killed:
+                rows = {}
+                for row in subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True,
+                                          text=True).stdout.splitlines():
+                    pid, parent, rest = (row.split(None, 2) + [""])[:3]
+                    rows[int(pid)] = (int(parent), rest)
+                for pid, (parent, rest) in rows.items():
+                    ancestor = parent
+                    while ancestor not in (0, 1, os.getpid()) and ancestor in rows:
+                        ancestor = rows[ancestor][0]
+                    if rest == command and ancestor == os.getpid():  # a descendant of this test only
+                        os.kill(pid, signal.SIGKILL)
+                        killed.append(pid)
+                time.sleep(0.05)
+
+        killer = threading.Thread(target=kill_own_checker)
+        killer.start()
+        try:
+            with mock.patch("sys.stderr"), self.assertRaisesRegex(RuntimeError, "receipt build failed"):
+                self.replay(text)
+        finally:
+            stop.set()
+            killer.join()
+        self.assertEqual(errors, [])
+        self.assertTrue(killed)
+        self.assertEqual(self.replay(text)["status"], "pass")
 
 
 if __name__ == "__main__":

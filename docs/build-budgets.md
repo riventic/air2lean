@@ -46,9 +46,33 @@ does not hold the admission queue for slots that other running builds hold.
   build: it drains the machine (below). The guard exports `AIR2LEAN_GUARD_MODE` (`shared` or
   `exclusive`). A guard from a checkout older than this scheme holds `<lock>` exclusively and so
   still runs alone.
-- Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots
-  while later ones wait, so a large workload is not starved by small ones. The workspace lock is
-  taken before the queue, so waiting for one's own checkout holds up nobody.
+- Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it (the head) collects its
+  slots while later ones wait, so a large workload is not starved by small ones. The workspace
+  lock is taken before the queue, so waiting for one's own checkout holds up nobody.
+- Backfill: a head that holds all the free slots and waits for running workloads to free the
+  rest leaves the machine partly idle. On the remote build host (2026-11-03), 11-slot heads
+  waited up to 20 minutes while 18 GB were unused. So a head short of its slots holds only a
+  reservation: ceil(weight x waited / `--backfill-ramp`) slots, where `waited` counts from when
+  it became the head. The ramp is 900 s by default, and after it the head holds every slot it
+  needs. The head publishes in `<lock>.d/heads/`, flock-held, the part of its reservation that
+  it does not hold yet (`unmet`) and the slots it still lacks (`need`). A normal guard waiting
+  behind the head, with no drain ticket queued, may run ahead in what is left.
+  - It must take all its slots at once.
+  - The head's unmet reservation must stay free beside them.
+  - The free slots must not cover the head's `need`: free slots that would admit the head now
+    go to the head.
+  - Backfilling guards and the head's bound check are serialized by `<lock>.d/register`. A
+    backfill attempt skips when the lock is busy, and the head waits for it within
+    `--lock-wait`, so a stalled holder cannot block admission past that.
+  - Bound on the head's wait: the ramp, plus the backfilled workloads already running, each
+    bounded by its `--timeout`. After the ramp, a backfill only uses slots the head does not
+    need. `--backfill-ramp 0` reserves everything at once, which is the earlier behavior.
+  - A queue holder that publishes nothing gets no backfill. That covers a guard of an older
+    checkout, and a stand-in in a test. An entry of another shape also gets none.
+  - `free_mib` (the sizing hint of `scripts/full-build.sh`) does not count the head's unmet
+    reservation as free.
+  - Memory safety is unchanged: a backfilled workload holds its slots like any admitted one, and
+    the report records `backfilled`.
 - Drain tickets: a merge guard and an `--exclusive` guard take a ticket in `<lock>.d/merge/`
   (`<ns>-<pid>-<lane>`, flock-held by its guard). While a ticket is queued no normal guard is
   admitted, and one that is still collecting slots gives them back; running workloads are never
@@ -74,8 +98,39 @@ does not hold the admission queue for slots that other running builds hold.
   and a guard of a checkout older than #424 does not know the tickets. The lane is only for the
   coordinator's integration gate, never for agent or Codex builds; a waiting guard prints one
   line naming its lane (`normal`, `merge` or `exclusive` priority) and the tickets queued.
-- The report's `admission` records the budget, slots, weight, mode, priority and workspace;
-  `lock_wait_seconds` the time to admission.
+- Usage-aware charge (Linux): `--rss-mib` is a ceiling a workload seldom reaches (a regen step
+  declared 11000 MiB and peaked below 4.2 GB), so declared slots alone kept a 23 GB build host
+  idle while 20 guards queued. The guard therefore records each command's last 5 runs (outcome,
+  exit code, sampled peak) in `<lock>.d/history/<key>.json`; the key is the command with its
+  workspace path abstracted, its directory in the workspace, the phase, profile, jobs and Lean
+  threads. After 2 successes among them, with no run stopped at its limit (`rss_limit`),
+  preempted or SIGKILLed (exit 137, the OOM killer), it holds the slots of ceil(1.3 x the largest
+  sampled peak of those successes) MiB, at least one, instead of those of `--rss-mib`, which
+  stays the hard limit. Only successes measure the need, and only by sampled peaks (every
+  `--interval`). A command whose runs differ widely (a no-op `lake build` and a rebuild after a
+  core change) is charged by its recent successes; the two bounds below carry that risk:
+  - The declared limits of the running workloads add up to at most 1.5 x the budget. Held slots
+    never exceed the budget, and an overcommitted workload registers its excess (declared minus
+    held slots) in `<lock>.d/running/`, flock-held, under `<lock>.d/register`; the registered excess
+    stays within 0.5 x the budget, and a workload that would break that collects its declared
+    slots instead. Guards at their declared charge and guards of older checkouts need no check.
+  - Backstop: when MemAvailable falls below max(2 GiB, 10% of RAM), the youngest overcommitted
+    workload (the least work lost) is stopped, outcome `preempted`, at most one per 5 s per lock
+    (chosen under the flock of `<lock>.d/preempted`, which holds the last preemption's time;
+    MemAvailable is read once a second); it leaves the registry at once, so the next can be chosen while it is torn down. The guard
+    runs it again holding its declared slots, within what is left of `--lock-wait` and
+    `--timeout`; the log keeps both runs' output, the report the stopped run in
+    `preempted_run`, and the command stays at its declared charge while the preemption is among
+    its last 5 runs.
+
+  Never overcommitted: the Mac (macOS reports no MemAvailable), a cgroup-limited process (a
+  container's `--memory`, whose pressure MemAvailable does not show), `--lock-wait 0` (a stopped
+  run could not wait to run again), `--exclusive` and `--no-overcommit`. A nested guard inherits
+  its admission and records nothing.
+- The report's `admission` records the budget, slots, weight (the slots held), mode, priority
+  and workspace, and the charge: `declared_slots`, `overcommit`, `charge_mib`, `history_runs`,
+  `why_declared` (why it holds its declared slots), `preempted_at_available_mib` and
+  `backfilled`; `lock_wait_seconds` the time to admission.
 
 A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the
 machine overcommits memory and thrashes, and every build gets slower. Do not use one; lower
@@ -98,8 +153,21 @@ Response-like `@...` tokens before that boundary are refused conservatively,
 including literal filename values. Version-specific operands can also cause a
 conservative refusal (for example, `--debug-libc -j2`, absent in 0.14.1). A value
 named `-j1` does not replace the injected build option. It also stops a
-workload when a sample contains more leaf Zig processes than `--jobs` (default 1). A build driver
-supervising one compiler is counted once. `zig`, `zig-air`, and `zig-unlocked`
+workload when a sample contains more Zig compiler invocations than `--jobs` (default 1):
+
+- One invocation counts once, together with the Zig children it starts for its own tools: a Zig
+  process whose parent is a Zig process. Those are `zig clang` for C sources and libc,
+  `zig ld.lld`, and `zig rc`. A cold global cache makes one `zig build-exe … -lc` start several
+  `zig clang` processes at once. `--jobs` bounds invocations, not these children; `--rss-mib`
+  bounds their memory.
+- An invocation that supervises others through non-Zig processes is not counted; the ones below
+  it are. That is the `zig build` driver of 0.14–0.16 above its build runner (0.17 execs into
+  its runner, `maker`). So `zig build`'s parallel compilers count one each.
+- This relies on Zig never starting several compilers as its own direct children, which holds
+  for 0.14–0.17. A wrapper named like a compiler must exec it, not spawn it; zig-patch/lock.sh
+  execs.
+
+`zig`, `zig-air`, and `zig-unlocked`
 are recognized; use `--zig-name NAME` for a renamed executable. Linux `comm`
 truncation is matched conservatively at 15 bytes, so aliases sharing that prefix
 can cause a refusal even when the longer names differ. Scripts must
@@ -132,6 +200,21 @@ count is `failed_samples` in the report. The memory cap is never left unenforced
 sample succeeded for `--sample-stale` seconds (default 60, four full attempts), the guard
 aborts with `guard_error` (exit 70) and stops the workload. After the workload exits, the
 guard waits for a successful sample (same bound) before judging orphaned children.
+
+**Idle limit (opt-in).** `--idle-minutes N` (default `AIR2LEAN_GUARD_IDLE_MINUTES`, else 0: no
+limit) stops a workload that makes no progress for N minutes, with outcome `hung` (exit 123),
+well before `--timeout`. Progress is any of: a process started in the workload's tree (a
+process is its PID and start time), output, or max(1 s, 1% of N minutes) of CPU time gained by
+the processes already seen. All three come from what the guard observes anyway: its `ps`
+samples (the `time` column) and the workload's output pipe. `ps` shows a process's own CPU time
+only, so the time of a child that ended between samples is lost; a stream of short tools still
+counts, by their starts. A working build always shows one of the three. A deadlocked one shows
+none: Lake 4.34 can wait on itself at 0% CPU forever ([upstream/lake-concurrent-needs.md](upstream/lake-concurrent-needs.md)).
+A workload that legitimately sits idle that long (waiting for a lock or a network peer) is
+stopped too, so the limit fails closed; choose N above the longest such wait. A nested guard's
+`ps` sampling is CPU time in the tree of the guard above it, but not in its own workload's tree.
+So set the variable once for a whole job (nested guards inherit it): the innermost guard sees
+the idle workload.
 
 `--rss-mib` is a **reactive sampled RSS threshold**, not a hard allocation limit.
 The default interval is 0.25 seconds. Summing process RSS can double-count shared
@@ -181,6 +264,7 @@ signal exits become `128 + signal`. Guard outcomes disambiguate reserved codes:
 | 70 | guard/observer failure or unconfirmed cleanup |
 | 71 | leader exited with live children |
 | 75 | lock busy or lock-wait expired |
+| 123 | no progress for `--idle-minutes` (`hung`) |
 | 124 | workload timeout |
 | 125 | sampled RSS threshold exceeded |
 | 126 | observed more parallel Zig compilers than `--jobs` |

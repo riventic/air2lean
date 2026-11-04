@@ -230,7 +230,13 @@ again on the new state, whose facts and existentials open as usual. A view is ke
 walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
-the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+the granted region, whose size the grant's token names (`tok p bs.size …`). When the planner
+pre-assigns unknowns by unifying atoms with the state's, a measure of an unknown (`?bs.size`,
+`?l.length`: a token's argument, a field of a ledger fragment's tuple, under arithmetic) gives
+only its value, never the unknown (`abstractMeasures`: `Array.size` is not injective, so the
+token's `?bs.size` against the state's `old.size` must not take `?bs := old`, the bytes the
+grant had before a write). The region planner carves the bytes at the size the token names
+(`measuredSize?`), and the final match checks the token up to arithmetic.
 Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
@@ -300,7 +306,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  variables of pointers derived by `Ptr.add`/`elem` are identified, and a block variable equal to
+  a value (`some k = some b`, a fact `x.block = some k`, or a global's pointer `⟨some 0, 0⟩` by
+  reducible evaluation) is that value (`unifyBlocks`; the substitutions are recorded for the
+  caller's terms). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
@@ -735,7 +744,9 @@ The supplied invocation type is a tagged union of the members' arguments and the
 contract parameters; each invocation has its own precondition, postcondition and result type.
 The measure maps invocations into any well-founded order. Its natural-number specialization,
 `FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
-the latter is itself an instance of this rule.
+the latter is itself an instance of this rule. `FTTotalTriple.rec_group_wf` and `rec_group`
+(`Full/ThreadLoop`) retain the stronger thread-total contract, including locality and frame
+safety, for every smaller invocation.
 
 The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
 unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
@@ -743,6 +754,25 @@ smaller measures. The induction is in the library once for the whole group. Logi
 may change at a recursive call without changing the program arguments: a memory-backed
 contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
 depth after `enterFrame`.
+
+After applying the group rule and introducing the current invocation and smaller-call
+contract, one `fsym` walks the step. It recognizes the compiler's complete recursive group
+through proof-carrying aliases and constructor-known dispatch. The full current contract must
+determine the invocation, including logical data supplied only by its pre/postcondition; the
+measure cannot supply missing data. Exactly one positional own-member equation is exposed.
+Every later occurrence of any member, including an identical call or a sibling lacking a
+contract, must use the ordinary contract selector and frame planner. Complete explicit, local
+or registered contracts have priority over a smaller-call contract. A failed decrease remains
+its actual side goal; it does not permit another body unfolding.
+
+An unknown initial conditional is still a refusal boundary. Constructor-decided condition
+views do not authorize a branch search or entry after an ordinary caller prefix. Without a
+recognized local smaller-call family, the existing bounded unfolding behavior is unchanged,
+except two changes shared by every run: an `if` is rewritten in its condition only
+(`ite_cond_congr`; its branches are normalized once the walk reaches them), and the arithmetic
+simp set unfolds `frameBase` and `InvImage id WellFoundedRelation.rel`.
+These engine rules do not complete the remaining concrete recursive clients or protocol/P03
+integration; the `recursive-group-total` engine-ledger row remains open.
 
 The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
 consume and restore the stack-depth token `sp t S D`, with the room requirement proved from

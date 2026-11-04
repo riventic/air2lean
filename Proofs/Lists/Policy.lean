@@ -1,28 +1,33 @@
-import Proofs.Lists.Cost
+import Proofs.Lists.Append
 
 /-!
-# An `append` loop under every allocation policy (M03)
+# An `append` loop for every allocator (M03)
 
-`appendEach` calls the translated `ArrayListUnmanaged(u32).append` once per value and keeps
-going after `error.OutOfMemory`, as a caller that reports each failure would. `appendEach_run`
-holds for every memory, so for every `Mem.allocPolicy`: request cap, finite failure list,
-arbitrary failure oracle and live-heap budget, together with the legacy `Mem.failAt`. It has
-no success, resource or default-policy premise and allows any number of failures in one run.
+`appendEach` calls the translated `ArrayListUnmanaged(u32).append` of the open translation
+(`Proofs/Lists/Open.lean`) once per value and keeps going after `error.OutOfMemory`, as a caller
+that reports each failure would. `appendEach_spec` holds for every allocator that meets the
+allocator contract `CAllocSpec` (`Proofs/Lists/Append.lean`), so for every failure decision the
+allocator makes: any number of failures in one run, at any attempts. The allocator's failures
+include the OS primitives' failures under every `Mem.allocPolicy` (`docs/allocation-policy.md`),
+and a full-state triple holds from every memory, whatever its policy.
 
 Each attempt's result is `ok` or `OutOfMemory`, never a panic or `.illegal`. Each failed
-attempt leaves the list exactly as it was (`append_run`'s `.error` case), so the final list is
-the original one followed by exactly the values whose `append` succeeded.
+attempt leaves the list exactly as it was (`append_spec`'s `.error` case), so the final list is
+the original one followed by exactly the values whose `append` succeeded (`succeeded`). The fee
+of the list's buffer comes back after every attempt.
 
-This is the legacy logic over the `std` heap model (`append_run`, `Proofs/Lists/Cost.lean`); the
-full-state `append` for every allocator is `Proofs/Lists/Append.lean`.
+Like `append_spec` this is a `CTriple` (partial correctness, no panic): the allocator contract
+is one, so a client of an arbitrary allocator gets no more.
 -/
 
-namespace Lists
-open Zig Assn
+namespace Lists.Append
+
+open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
 
 /-- Append each value with the translated `append`; an `OutOfMemory` is a reported result and
 the loop goes on with the next value. -/
-def appendEach (p : Ptr) (a : Allocator) : List (BitVec 32) → MemM (List (Except ErrName Unit))
+def appendEach [Ext] (p : Ptr) (a : mem_Allocator) :
+    List (BitVec 32) → ConcM Tgt (List (Except ErrName Unit))
   | [] => pure []
   | v :: vs => do
     let r ← array_list_Aligned_u32_null_append p a v
@@ -30,64 +35,55 @@ def appendEach (p : Ptr) (a : Allocator) : List (BitVec 32) → MemM (List (Exce
     pure (r :: rs)
 
 /-- The values whose `append` succeeded, in order. -/
-def appended : List (BitVec 32) → List (Except ErrName Unit) → List (BitVec 32)
-  | v :: vs, .ok _ :: rs => v :: appended vs rs
-  | _ :: vs, .error _ :: rs => appended vs rs
+def succeeded : List (BitVec 32) → List (Except ErrName Unit) → List (BitVec 32)
+  | v :: vs, .ok _ :: rs => v :: succeeded vs rs
+  | _ :: vs, .error _ :: rs => succeeded vs rs
   | _, _ => []
 
-/-- Resource-independent safety of the loop: an actual result, one per value, each `ok` or
-`OutOfMemory`; a well-formed list holding the original items and the appended values; the
-frame and the sequential memory invariant kept. -/
-theorem appendEach_run (a : Allocator) (vs : List (BitVec 32)) {m : Mem} {hF hL : Heap}
-    {p ptr : Ptr} {cap : BitVec 64} {xs : List (BitVec 32)}
-    (hl : alist p ptr cap xs hL) (hm : m.heap = hL ∪ hF) (hd : Heap.Disjoint hL hF)
-    (hst : m.Seq) (hok : ptrOk m ptr) :
-    ∃ rs m', (appendEach p a vs).run m = pure (rs, m') ∧ m'.Seq ∧ rs.length = vs.length ∧
-      (∀ r ∈ rs, r = .ok () ∨ r = .error "OutOfMemory") ∧
-      ∃ hL' ptr' cap', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧
-        alist p ptr' cap' (xs ++ appended vs rs) hL' ∧ ptrOk m' ptr' := by
-  induction vs generalizing m hL ptr cap xs with
-  | nil =>
-    exact ⟨[], m, rfl, hst, rfl, by simp, hL, ptr, cap, hd, hm, by simpa [appended] using hl, hok⟩
-  | cons v vs ih =>
-    obtain ⟨r, m₁, hr, hst₁, hL₁, hd₁, hm₁, happ⟩ := append_run a v hl hm hd hst hok
-    have step : ∀ {ys : List (BitVec 32)} {ptr₁ : Ptr} {cap₁ : BitVec 64},
-        (r = .ok () ∨ r = .error "OutOfMemory") → alist p ptr₁ cap₁ ys hL₁ → ptrOk m₁ ptr₁ →
-        (∀ rs, xs ++ appended (v :: vs) (r :: rs) = ys ++ appended vs rs) →
-        ∃ rs m', (appendEach p a (v :: vs)).run m = pure (rs, m') ∧ m'.Seq ∧
-          rs.length = (v :: vs).length ∧ (∀ r ∈ rs, r = .ok () ∨ r = .error "OutOfMemory") ∧
-          ∃ hL' ptr' cap', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧
-            alist p ptr' cap' (xs ++ appended (v :: vs) rs) hL' ∧ ptrOk m' ptr' := by
-      intro ys ptr₁ cap₁ hr₁ hl₁ hok₁ hys
-      obtain ⟨rs, m₂, hrs, hst₂, hlen, hall, hL₂, ptr₂, cap₂, hd₂, hm₂, hl₂, hok₂⟩ :=
-        ih hl₁ hm₁ hd₁ hst₁ hok₁
-      refine ⟨r :: rs, m₂, ?_, hst₂, by simp [hlen], ?_, hL₂, ptr₂, cap₂, hd₂, hm₂, ?_, hok₂⟩
-      · simp only [StateT.run] at hr hrs
-        simp [appendEach, zig_unfold, hr, hrs, ExceptT.bindCont]
-      · intro r' hr'
-        rcases List.mem_cons.mp hr' with rfl | h
-        · exact hr₁
-        · exact hall r' h
-      · rw [hys rs]; exact hl₂
+/-- One result per value, each `ok` or `OutOfMemory`. -/
+def Reported (vs : List (BitVec 32)) (rs : List (Except ErrName Unit)) : Prop :=
+  rs.length = vs.length ∧ ∀ r ∈ rs, r = .ok () ∨ r = .error "OutOfMemory"
+
+theorem Reported.cons {v : BitVec 32} {vs : List (BitVec 32)} {r : Except ErrName Unit}
+    {rs : List (Except ErrName Unit)} (hr : r = .ok () ∨ r = .error "OutOfMemory")
+    (h : Reported vs rs) : Reported (v :: vs) (r :: rs) :=
+  ⟨by simp [h.1], fun r' hr' => (List.mem_cons.mp hr').elim (· ▸ hr) (h.2 r')⟩
+
+variable [Ext] (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
+
+/-- **The `append` loop** reports one result per value, each `ok` or `OutOfMemory`, and leaves
+the list holding the original items followed by the values whose `append` succeeded, with the
+fee back, for every allocator that meets the contract. `hfit`: the allocator's room for every
+capacity the list can grow to on the way (`growTo`, as in `append_spec`). -/
+theorem appendEach_spec (p : Ptr) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
+    ∀ (vs xs : List (BitVec 32)),
+      (∀ n, xs.length ≤ n → n < xs.length + vs.length → I.fits (4 * growTo (n + 1)) 2) →
+      CTriple (I.own ⋆ (I.fee φ ⋆ (alist I φ p xs ⋆ vtR vtp fns.toList)))
+        (appendEach p ⟨ctx, vtp⟩ vs)
+        (fun rs => ⟪Reported vs rs⟫ ⋆
+          (I.own ⋆ (I.fee φ ⋆ (alist I φ p (xs ++ succeeded vs rs) ⋆ vtR vtp fns.toList))))
+  | [], xs, _ => CTriple.ret' _ fun _ hr =>
+      sep_lift.mpr ⟨⟨rfl, by simp⟩, by simpa [succeeded] using hr⟩
+  | v :: vs, xs, hfit => by
+    rw [appendEach]
+    refine CTriple.bind (append_spec ctx vtp fns I e φ p xs v
+      (hfit _ (Nat.le_refl _) (by simp)) h) fun r => ?_
     cases r with
     | ok u =>
-      obtain ⟨ptr₁, cap₁, hl₁, hok₁⟩ := happ
-      exact step (.inl rfl) hl₁ hok₁ (fun _ => by simp [appended])
-    | error e =>
-      obtain ⟨rfl, hl₁, hok₁⟩ := happ
-      exact step (.inr rfl) hl₁ hok₁ (fun _ => by simp [appended])
+      refine CTriple.bind (appendEach_spec p h vs (xs ++ [v]) fun n h1 h2 =>
+        hfit n (by simp at h1; omega) (by simp at h2 ⊢; omega)) fun rs =>
+        CTriple.ret' _ fun _ hr => ?_
+      obtain ⟨hrep, hr⟩ := sep_lift.mp hr
+      exact sep_lift.mpr ⟨hrep.cons (.inl rfl), by simpa [succeeded] using hr⟩
+    | error e' =>
+      show CTriple (I.own ⋆ (I.fee φ ⋆ ((⟪e' = "OutOfMemory"⟫ ⋆ alist I φ p xs) ⋆
+        vtR vtp fns.toList))) _ _
+      rw [show (I.own ⋆ (I.fee φ ⋆ ((⟪e' = "OutOfMemory"⟫ ⋆ alist I φ p xs) ⋆
+          vtR vtp fns.toList))) = (⟪e' = "OutOfMemory"⟫ ⋆
+          (I.own ⋆ (I.fee φ ⋆ (alist I φ p xs ⋆ vtR vtp fns.toList)))) by ac_rfl]
+      refine CTriple.lift fun he => CTriple.bind (appendEach_spec p h vs xs fun n h1 h2 =>
+        hfit n h1 (by simp; omega)) fun rs => CTriple.ret' _ fun _ hr => ?_
+      obtain ⟨hrep, hr⟩ := sep_lift.mp hr
+      exact sep_lift.mpr ⟨hrep.cons (.inr (by rw [he])), by simpa [succeeded] using hr⟩
 
-/-- The same statement with the allocator environment made explicit: for every policy `P`
-(cap, failure list, failure oracle, budget) and legacy failure index `f`. -/
-theorem appendEach_anyPolicy (P : AllocPolicy) (f : Option Nat) (a : Allocator)
-    (vs : List (BitVec 32)) {m : Mem} {hF hL : Heap} {p ptr : Ptr} {cap : BitVec 64}
-    {xs : List (BitVec 32)}
-    (hl : alist p ptr cap xs hL) (hm : m.heap = hL ∪ hF) (hd : Heap.Disjoint hL hF)
-    (hst : m.Seq) (hok : ptrOk m ptr) :
-    ∃ rs m', (appendEach p a vs).run { m with allocPolicy := P, failAt := f } = pure (rs, m') ∧
-      m'.Seq ∧ rs.length = vs.length ∧ (∀ r ∈ rs, r = .ok () ∨ r = .error "OutOfMemory") ∧
-      ∃ hL' ptr' cap', Heap.Disjoint hL' hF ∧ m'.heap = hL' ∪ hF ∧
-        alist p ptr' cap' (xs ++ appended vs rs) hL' ∧ ptrOk m' ptr' :=
-  appendEach_run a vs hl hm hd ⟨hst.single⟩ hok
-
-end Lists
+end Lists.Append
