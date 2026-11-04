@@ -527,14 +527,14 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
     {e : BitVec 32} (hg : L.ph g = .out) (hheld : L.held g = rnil)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) →
+      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) →
+      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -570,36 +570,38 @@ theorem Fits.wordWaitStep (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.Apar
   have hl := hiL.waitOff hph₁ hw hap hX hq hr
   have hfields := Word.futexWait_fields hr
   rcases hw₀.futexWait_native rfl ht0 hiL.w.csize hr with
-    ⟨-, rfl, rfl⟩ | ⟨-, M, hok₂, hrecord, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
+    ⟨-, rfl, rfl⟩ | ⟨hwk, M, hok₂, hrecord, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨-, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hfields (.inl rfl)⟩)
+    exact h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hq hfields (.inl rfl)⟩)
   · simp only [↓reduceIte] at hl ⊢
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
-    exact ⟨(hP.inv _ _).mpr ⟨_, hl, hUs G₁ rY m₁ M hg₁ hU hY hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
+    exact ⟨(hP.inv _ _).mpr ⟨_, hl,
+        hUs G₁ rY m₁ M hg₁ hU hY hwk hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
       h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hs,
-        hUo G₁ rY m₁ _ hg₁ hU hY ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
+        hUo G₁ rY m₁ _ hg₁ hU hY hq ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
     obtain ⟨hc, hl'⟩ := hl
     rw [hback] at hl'
-    exact h G₁ _ hc
-      ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hfields (.inr (.inr ⟨hw₀, hc₁, hrecord, hh, hok₂, hbl⟩))⟩)
+    exact h G₁ _ hc ((hP.inv _ _).mpr ⟨_, hl', hUo G₁ rY m₁ _ hg₁ hU hY hq hfields
+      (.inr (.inr ⟨hw₀, hc₁, hrecord, hh, hok₂, hbl⟩))⟩)
 
 /-- **A futex wait at the word** (`futexWaitC`, the bits `e`) by thread `t` out of the lock's
 code (`g`, at `out`): while it waits it is `away` (`L.set g .away rnil`). The client says that
 its `U` lets `t` go away (`hUa`), that `t` is not the last thread while it waits (`hlive`), that
 `U` holds when `t` sleeps (the kernel's recorded read `M`, which keeps the word's writes, read `e`;
-`hUs`), and that `U` holds with `t` back at `out` after the kernel's read, a wake that was
-pending, or a spurious return (`hUo`). It goes on at `g`. -/
+`t` had no pending wake; `hUs`), and that `U` holds with `t` back at `out` after the kernel's
+read, a wake that was pending, or a spurious return (`t` was not queued; `hUo`). It goes on at
+`g`. -/
 theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
     {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hg : L.ph g = .out)
     (hi : P.inv (upd G t g) m)
     (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) →
+      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -607,7 +609,7 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) →
+      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -651,14 +653,14 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → U (upd G₁ t (L.set g .away rnil)) rX m₁)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) →
+      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) →
+      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
