@@ -148,15 +148,19 @@ abbrev prim (L : FLock γ) : FPrim γ :=
       C.SigStep t (C.ph g) p m m')
     (fun q => q = .out ∨ q = .holds)
 
+/-- **The window** (module doc): every registered waiter on its way to its futex wait
+(`reg i jr false e`, neither queued at the epoch nor woken) has fewer than `2^32` epoch writes
+after its saved one, in every state the rest `U` allows. -/
+def Win (U : (ThreadId → γ) → Res → Mem → Prop) : Prop :=
+  ∀ G rX m, U G rX m → ∀ u i jr e, C.ph (G u) = .reg i jr false e → C.qd m u = false →
+    m.woken.contains u = false → (C.Ep.hist m).size ≤ i + 4294967296
+
 /-- **A protocol that keeps the condition** next to its mutex `L`: `FLock.Fits` with the
-condition as its primitive, and the window (module doc): every registered waiter on its way to
-its futex wait (`reg i jr false e`, neither queued at the epoch nor woken) has fewer than `2^32`
-epoch writes after its saved one, in every state the rest allows. -/
+condition as its primitive, and the window (`Win`). -/
 structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     (U : (ThreadId → γ) → Res → Mem → Prop) (ok : γ → Prop) : Prop
     extends FLock.Fits L (C.prim L) P U ok where
-  win : ∀ G rX m, U G rX m → ∀ u i jr e, C.ph (G u) = .reg i jr false e → C.qd m u = false →
-    m.woken.contains u = false → (C.Ep.hist m).size ≤ i + 4294967296
+  win : C.Win U
 
 variable {C}
 
