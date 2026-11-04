@@ -289,7 +289,13 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   both branches of each `if` before it). A call of a generated function is inlined; a vtable
   projection is reduced. Every rewrite carries its proof, a `rfl` lemma too (`StateT.run_bind`):
   as a definitional step it would leave the kernel to unfold `StateT.run`/`bind` against the
-  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there).
+  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there). So is
+  each of the engine's own reductions of a projection of a structure value (`unfold1Eq?`,
+  `reduceProjsEq`: a vtable projection, a hypothesis, the atoms of a precondition or a
+  postcondition, a goal's field): one proof step per projection, as two definitional steps
+  (`(a, c).2` to `c`, `c.f` to `s.f`) reach the kernel as the one comparison
+  `((a, c).2).f =?= s.f`, which can exhaust its recursion on a literal field (ledger
+  `kernel-proj-ctor`).
 * **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
   implies the pointer's block, a nonnegative offset and, for a region, its alignment
   (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs
