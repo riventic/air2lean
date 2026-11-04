@@ -623,6 +623,68 @@ theorem wp_loadSAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
       obtain ⟨hok, hi'⟩ := hC.afterReadS hg₁ hg hU hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)) hA hL hj hv hfl hh
       exact h k hk G₁ m' b r (hop.current.trans hc₁) hd hok hi'
 
+/-- A consume's value: `(w, s) - (1, 1)` with `0 < s ≤ w`. -/
+theorem consume_val {b : BitVec 32} (hs : 0 < b.toNat / 65536) (hok : SOk b) :
+    (b - 0x10001).toNat % 65536 + 1 = b.toNat % 65536 ∧
+      (b - 0x10001).toNat / 65536 + 1 = b.toNat / 65536 := by
+  unfold SOk at hok
+  have h1 : 65537 ≤ b.toNat := by omega
+  have h2 : (b - 0x10001).toNat = b.toNat - 65537 := by bv_omega
+  rw [h2]; omega
+
+/-- **The waiter takes a signal**: its successful `cmpxchg((w, s) → (w - 1, s - 1))` at
+`reg i jr true e` with `0 < s` (the loop's guard): it is out of the condition's code. -/
+theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ} {rY : Res} {m₁ m' : Mem} {i jr : Nat} {e exp : BitVec 32}
+    {ord : AtomicOrder}
+    (hg₁ : G₁ t = g) (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
+    (hms : C.MStep C.S t m₁ m')
+    (hA : ∀ hF, (∀ x, C.S.o ≤ x → x < C.S.o + 4 → hF (C.S.b, x) = none) →
+      FStepIn hF m₁ m')
+    (hL : L.Inv G₁ (rsum (C.S.cellsR m') rY) m')
+    (hs : 0 < exp.toNat / 65536) (hv : (C.lastS m₁).Val exp)
+    (hh : C.S.hist m' = (C.S.hist m₁).push (Word.rmwEnt m' t ord (C.lastS m₁) (exp - 0x10001))) :
+    P.inv (upd G₁ t (C.set g .out)) m' := by
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  have hI := hC.wInv _ _ _ hU
+  have hok : SOk exp := by
+    have := hI.s_le_w; unfold sOf wOf at this; rw [val_of hv] at this; exact this
+  obtain ⟨hw1, hs1⟩ := consume_val hs hok
+  have hxv : (Word.rmwEnt m' t ord (C.lastS m₁) (exp - 0x10001)).Val (exp - 0x10001) :=
+    FEvent.rmwEnt_val
+  exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) hU hY hms (.inl (hC.keepE hU hms)) hL
+    (hI.consume (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh (by rw [val_of hxv]; exact hxv)
+      (by unfold wOf; rw [val_of hxv, val_of hv]; exact hw1)
+      (by unfold sOf; rw [val_of hxv, val_of hv]; exact hs1)
+      (hC.keepE hU hms) hop.waiters hop.woken hop.threads hop.clock)
+
+/-- The waiter's weak `cmpxchg((w, s) → (w - 1, s - 1))` (acquire) at `reg i jr true e` with
+`0 < s`, on bits (`Thread.Condition`): on success it is out; on failure it read a state value
+(`afterReadS`). -/
+theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
+    {exp new : BitVec 32} (hs : 0 < exp.toNat / 65536) (hnew : new = exp - 0x10001) {i jr : Nat}
+    {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
+      (P.inv (upd G₁ t (C.set g .out)) m' → Q (none, s) G₁ m' k) ∧
+      (∀ b, SOk b → P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' →
+        Q (some b, s) G₁ m' k))
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((cmpxchgWeakC (n := 32) succ fail 4 C.S.ptr exp new : CM Tgt σ _).run s) Q G m n := by
+  subst hnew
+  exact FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA _hS hL =>
+      let hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      let hms := mstep_op (C := C) hc₁ hw₀ hct
+        (by rcases hrun with ⟨c, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩)))) hw'
+      ⟨fun hv _ hh _ _hR =>
+        (h k hk G₁ m' (hop.current.trans hc₁)).1
+          (hC.afterConsume hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hL hs hv hh),
+       fun j b hj hv hfl _ hh _hR =>
+        let r := hC.afterReadS hg₁ hg hU hY (hms (.inl hh)) hA hL hj hv hfl hh
+        (h k hk G₁ m' (hop.current.trans hc₁)).2 b r.1 r.2⟩
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
