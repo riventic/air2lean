@@ -230,8 +230,8 @@ ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean`, then run
 
 This is a bounded P03 contribution. The loop rules are sequential: concurrent loops (and
 termination under a scheduler) are out of scope. Invariants and measures are not inferred. The
-memory-backed recursive `Pointers.addDown` is not covered, and no ring-buffer example exists in
-`examples/`.
+memory-backed recursive `Pointers.addDown` is proved total in the generated model (explicit
+stack budget; see docs/proof-automation.md; native interpretation retains premise STK-01), and no ring-buffer example exists in `examples/`.
 
 ### Dispatch loops (L03)
 
@@ -279,11 +279,14 @@ counts off such triples:
 - `FTotalTriple.ticks_le` (a run paid with `N` credits makes at most `N` steps), `ticks_ge` (a
   run that returns `N` receipts makes at least `N`) and `ticks_eq` (both: exactly `N`), from a
   start whose resources hold no credit, meter, receipt or `unmetered` fragment (`CreditFree`).
+  `ticks_eq_post` also gives the final memory: its live bytes are the untouched frame and a part
+  that holds the postcondition. `FTriple.ticks_le`, `ticks_ge` and `ticks_eq_post` are the
+  partial forms, for a run that returns (a concurrent call through `CTriple.toSolo`).
 - `FTotalTriple.not_fewer_credits`: no proof pays the same run with fewer credits, so a bound
   is tight.
 - `FTotalTriple.loop_exact`: a loop whose measure drops by exactly one per body run and is zero
   at the exit runs its body `n + 1` times from the measure `n`; the client proves one body run
-  with `fsym`.
+  with `fsym`. `CTriple.loop_exact` is its partial form for a loop of a concurrent function.
 - `FTotalTriple.of_credits_plain`: a proof that pays its steps with credits gives the plain-mode
   statement of the same program.
 
@@ -291,17 +294,23 @@ counts off such triples:
 `examples/lists/lists.zig`: over `xs.length` items it pays `xs.length + 1` credits (one per node
 and the final null test) and returns as many receipts. `Proofs/Lists/Bounded.lean` shows that the
 bound is tight (`sum_not_within`, `sum_loop_not_within`: `xs.length` credits pay neither the
-function nor its loop, whatever the postcondition) and that `sum` returns after exactly
-`xs.length + 1` steps (`sum_steps`).
+function nor its loop, whatever the postcondition) and that `sum` returns the sum after exactly
+`xs.length + 1` steps, with the frame untouched and the same list in the final memory
+(`sum_steps`). `Lists.Alloc.freeAll_exact` (`Proofs/Lists/Alloc.lean`) states the loop-step count
+of `freeAll` for every allocator that meets the contract `CAllocSpec`: `xs.length + 1` credits
+(one per node and the final null test) and as many receipts; the allocator's calls take none.
+`freeAll_steps` reads it: every run of `freeAll` in one thread that returns has run exactly
+`xs.length + 1` steps (the contract is partial, so whether it returns is the allocator's).
 
 These counts are model counts, premise SEM-05 (`docs/premises.md`). A step has no time weight:
 straight-line code outside a loop body or a recursive entry takes none, and nothing here relates
 a count to CPU time, cache behavior or instruction counts. Such a claim needs a separate
 calibration argument. The counts are read off sequential runs; a thread's steps pay with the same
 rules, and their counts are not read off yet. The allocation counts of the retired hand-written
-heap (`push_cost`, `freeAll_cost`, `append_capacity`) are not restated: with a translated
-allocator, "no leak" is a postcondition that owns no grant (`docs/alloc-spec.md`). Build with
-`lake build ZigLean.Sep.Full.Cost Proofs.Lists.Bounded`.
+heap (`push_cost`, `pushAll_cost`, `append_capacity`, and the freed-block count of `freeAll_cost`)
+are not restated: with a translated allocator, "no leak" is a postcondition that owns no grant
+(`docs/alloc-spec.md`); `freeAll_cost`'s loop-step count is `freeAll_exact`. Build with
+`lake build ZigLean.Sep.Full.Cost Proofs.Lists.Bounded Proofs.Lists.Alloc`.
 
 ## Concrete runs of programs with loops (`unroll_sched`)
 

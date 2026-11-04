@@ -84,22 +84,6 @@ theorem Fits.wp_tick (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} 
     P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d :=
   hF.wp_tick_exact hi hc hg htt (h m.ticked)
 
-/-- One actual tick edge between caller-resource assertions. Payment is required only for
-this edge; the continuation receives its actual part. A retry needs a new proof at its own
-reachable loop entry, not a universal payment assumption on every implementation. -/
-theorem Fits.wp_tick_assert (hF : L.Fits K P U ok) {A B : FAssn}
-    {G G₀ : ThreadId → γ} {g : γ} {t : ThreadId} {m : Mem} {d : Nat}
-    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
-    (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
-    (ha : A (L.part g))
-    (pay : ∀ r, A r → ∃ r',
-      FTTotalTriple (fun rp => rp = r) Zig.tick (fun _ rp => rp = r') ∧ B r')
-    (h : ∀ r', B r' → ∀ m', m'.current = t →
-      P.inv (upd G t (L.setPart g r')) m' → Q () G₀ m' d) :
-    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
-  obtain ⟨r', ht, hb⟩ := pay (L.part g) ha
-  exact hF.wp_tick hi hc hg ht (h r' hb)
-
 /-- An unmetered tick exposes the exact memory and exact caller part. All actual stack
 resources remain framed; no noStack fragment or `P.cost = none` inference is used. -/
 theorem Fits.wp_tick_unmetered_exact (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}

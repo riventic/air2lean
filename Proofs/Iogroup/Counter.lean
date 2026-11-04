@@ -567,7 +567,7 @@ theorem add_spec (t : ThreadId) (rp : Res) (hp : rp.Plain) (p₀ p₁ : Ph) (hin
   fsym [WP.liftMem_pure (projC (hb0 _) _) rfl,
     fits.wp_readRest rfl (by decide) io_rest (fun _ _ _ hu => hu.io) covers_io
       fun _ _ _ hu ht hjt hcs => U_read hu ht hjt hcs,
-    ioMutex.lock_wp fits rfl rfl rfl _ (gOut rp p₀) _ _ hp, ioMutex.unlock_wp fits rfl rfl rfl,
+    ioMutex.lock_wp fits rfl rfl rfl _ (gOut rp p₀) _ _ hp.unmetered, ioMutex.unlock_wp fits rfl rfl rfl,
     fits.wp_hold (g' := gHold rp p₀), fits.wp_hold (g' := gHold rp p₁), U_hold, shape_inc hinc,
     sum_inc hinc, set_out, set_hold, ph_out, ph_hold]
 

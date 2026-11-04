@@ -326,7 +326,7 @@ theorem loop56_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
       else post56 P L C t g i jr e D r G' m' d') G m d := by
   fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr _ e),
-    ioMutexCode.lock_wp_unmetered hC hcost (g := L.set g .out rnil)
+    ioMutexCode.lock_wp hC hcost (g := L.set g .out rnil)
       (hg := L.ph_set g .out rnil)
       (hok := (hC.ok_set g .out rnil).mpr hok),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
@@ -529,7 +529,7 @@ theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
           (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitUncancelableLocals) => 0) s)
       else post45 P L C t g i jr e D r G' m' d') G m d := by
   fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr _ e),
-    ioMutexCode.lock_wp_unmetered hC hcost (g := L.set g .out rnil)
+    ioMutexCode.lock_wp hC hcost (g := L.set g .out rnil)
       (hg := L.ph_set g .out rnil)
       (hok := (hC.ok_set g .out rnil).mpr hok),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
@@ -727,8 +727,9 @@ def ioCond : CondImpl Tgt where
   signal_pre := payUnmetered
   signal_during := keepPart
   signal_post := keepPart
-  signal_plain_pre _ _ := payUnmetered_plain
-  signal_plain_post _ _ _ _ hr := hr
+  signal_unmetered_pre _ _ hu := hu
+  signal_unmetered_during _ _ _ _ hr := hr
+  signal_unmetered_post _ _ _ _ hr := hr
   wait_wp_resource := ioCond_wait_wp_resource
   signal_wp_resource := ioCond_signal_wp_resource
 

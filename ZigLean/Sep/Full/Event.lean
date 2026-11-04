@@ -1753,12 +1753,12 @@ and counts no turns.
    deadline block. A Plain caller has a permanent exact-part specialization; unmetered alone
    neither supplies stack room nor bounds retries.
 - `set_wp`: a thread out of the event's and the lock's code, with a ghost value that may set
-   (`FEvent.sx`), that sets it returns with the event set and its actual resource post. An
-   unticked implementation can prove pre=True and exact arbitrary-part preservation; the
-   generic interface does not invent a payment requirement for that native path.
+   (`FEvent.sx`), that sets it returns with the event set and its exact caller part, whatever
+   that part holds. `set` ticks in no implementation (`Io.Event` and `Thread.ResetEvent`: a
+   store and a futex wake), so the contract demands no caller resource, as `MutexImpl.unlock_wp`.
 
-Both primary fields state caller parts the same way as the mutex and condition (`LockRules`,
-"Caller parts of composite operations"). Their post is about the actual caller part, not an
+`wait_wp_resource` states caller parts the same way as the mutex and condition (`LockRules`,
+"Caller parts of composite operations"). Its post is about the actual caller part, not an
 assertion implicitly closed under adding or removing resources. -/
 structure EventImpl (Tgt : Type) where
   wait : Ptr → Io → ConcM Tgt Unit
@@ -1767,10 +1767,6 @@ structure EventImpl (Tgt : Type) where
   wait_post : ThreadId → Res → FAssn
   wait_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → wait_pre t r
   wait_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → wait_post t r r' → r' = r
-  set_pre : ThreadId → FAssn
-  set_post : ThreadId → Res → FAssn
-  set_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → set_pre t r
-  set_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → set_post t r r' → r' = r
   wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
@@ -1783,13 +1779,13 @@ structure EventImpl (Tgt : Type) where
     wait_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       ∃ r', wait_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
-  set_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
+  set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
     L.ph g = .out → E.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
-    set_pre t (L.part g) → P.inv (upd G t g) m →
+    P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      ∃ r', set_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
+      P.inv (upd G' t g) m') G m d
 
 namespace EventImpl
 
@@ -1812,25 +1808,6 @@ theorem wait_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {
     hone hhb hlive (I.wait_plain_pre t (L.part g) hplain) hi)
   rintro _ G' m' d' ⟨hd, hc, hset, r', hr, hi'⟩
   have he := I.wait_plain_post t (L.part g) r' hplain hr
-  subst r'
-  exact ⟨hd, hc, hset, by simpa only [L.setPart_self] using hi'⟩
-
-/-- An exact-profile setter preserves the old exact-g result without a new Plain/payment
-guard. Actual unticked implementations discharge pre and exactness with True/exact profiles;
-an abstract client can instead use its genuine Plain endpoint entailments. -/
-theorem set_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
-    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
-    (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = E.W.ptr)
-    (t : ThreadId) (g : γ) (hg : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g)
-    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hpre : I.set_pre t (L.part g))
-    (set_post_exact : ∀ r', I.set_post t (L.part g) r' → r' = L.part g)
-    (hi : P.inv (upd G t g) m) :
-    P.WP t (I.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      P.inv (upd G' t g) m') G m d := by
-  refine WP.mono ?_ (I.set_wp_resource hE hcost hp t g hg hgo hsx io G m d hpre hi)
-  rintro _ G' m' d' ⟨hd, hc, hset, r', hr, hi'⟩
-  have he := set_post_exact r' hr
   subst r'
   exact ⟨hd, hc, hset, by simpa only [L.setPart_self] using hi'⟩
 

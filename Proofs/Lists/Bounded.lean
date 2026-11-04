@@ -12,8 +12,9 @@ This file shows that the bound is tight:
 * `sum_loop_not_within`, `sum_not_within`: from any credit-free start (`CreditFree`) that holds
   the list, `xs.length` credits do not pay the loop or the function, whatever the postcondition
   (`FTotalTriple.not_fewer_credits`).
-* `sum_steps`: the same start runs `sum` to its result in exactly `xs.length + 1` steps
-  (`FTotalTriple.ticks_eq`).
+* `sum_steps`: the same start runs `sum` to the sum of the items in exactly `xs.length + 1`
+  steps, and the final memory's live bytes are the untouched frame and a part that holds the same
+  list (`FTotalTriple.ticks_eq_post`).
 
 The bound counts steps of the model, not CPU time. The plain-mode statements of `sum` and its loop
 follow from the cost statements (`FTotalTriple.of_credits_plain`).
@@ -43,12 +44,18 @@ theorem sum_not_within (hd : Option Ptr) (xs : List (BitVec 32))
     ¬ FTotalTriple (list X hd xs ⋆ credits xs.length) (sum hd) Q :=
   FTotalTriple.not_fewer_credits (sum_exact hd xs htot) (Nat.lt_succ_self _) hh hl hseq hc
 
-/-- **`sum` runs exactly `xs.length + 1` steps**: from any credit-free start that holds the list,
-it returns after exactly that many steps (its value is `sum_exact`'s). -/
+/-- **`sum` runs exactly `xs.length + 1` steps**: from any credit-free start `m` that holds the
+list (`r`) and a frame `rF`, `sum` returns the sum of the items after exactly that many steps, and
+the live bytes of its final memory are the frame's and a part `r'` that holds the same list
+(`FMatch`: the frame's bytes are untouched). -/
 theorem sum_steps (hd : Option Ptr) (xs : List (BitVec 32))
     (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) {m : Mem} {r rF : Res} (hh : Holds m r rF)
     (hl : list X hd xs r) (hseq : m.FSeq) (hc : CreditFree r rF) :
-    ∃ v m', (sum hd).run m = pure (v, m') ∧ m'.ticks = m.ticks + (xs.length + 1) :=
-  (sum_exact hd xs htot).ticks_eq hh hl hseq hc
+    ∃ m', (sum hd).run m = pure (BitVec.ofNat 64 (xs.map BitVec.toNat).sum, m') ∧
+      m'.ticks = m.ticks + (xs.length + 1) ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
+        FMatch m' (r'.heap ∪ rF.heap) ∧ list X hd xs r' ∧ m'.FSeq := by
+  obtain ⟨v, m', hr, ht, r', hd', hm, hq, hs'⟩ := (sum_exact hd xs htot).ticks_eq_post hh hl hseq hc
+  obtain ⟨rfl, hl'⟩ := sep_lift.mp hq
+  exact ⟨m', hr, ht, r', hd', hm, hl', hs'⟩
 
 end Lists.Linked

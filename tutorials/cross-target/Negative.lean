@@ -16,9 +16,11 @@ variable {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
 theorem lock_keeps_current_macos_constant (hP : L.Fits K P U ok) (hc : L.c = 1) {p : Ptr}
-    (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io)
+    (hp : p = L.ptr) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_lock p) (fun _ _ m' _ => m'.current = t) G m d :=
-  WP.mono (fun _ _ _ _ h => h.2.1) (threadMutex.lock_wp hP hcost hp hc t g hg hok io G m d hi)
+  WP.mono (fun _ _ _ _ h => h.2.1)
+    (threadMutex.lock_wp hP hcost hp hc t g hg hok hu io G m d hi)
 
 end CrossTarget

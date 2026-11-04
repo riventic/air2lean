@@ -26,7 +26,9 @@ constant global, whose address is known (`docs/sep-full-state.md`).
   are disjoint, for every placement (`docs/address-placement.md`). An empty list's buffer is
   allocated for the list's unspent fee; nothing is copied or freed.
 * `I.fits (4 * growTo (xs.length + 1)) 2`: the room the allocator's contract asks of a request
-  of the grown capacity (`growCapacity`), at the items' alignment `2 ^ 2`.
+  of the grown capacity (`growCapacity`), at the items' alignment `2 ^ 2`. `growTo` is the
+  translation's: Zig 0.15.2 grows a full list from its capacity, later versions from the new
+  length (`growCapacity_step` gives 0.15.2's value to `fsym`).
 
 These are `CTriple`s (partial correctness, no panic): the contract `CAllocSpec` is one, so a
 client of an arbitrary allocator gets no more. The generated code is walked by `fsym` with the
@@ -136,16 +138,27 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : 4 * s.len.toNat = bs.siz
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_10fd68fdc68d
   simp only [fromByteUnits_4]
-  fsym [fun (s : Slice) ra (h' : 0 < s.len.toNat) =>
-    CAllocSpec.free' h s 2 ra φ (Array.replicate s.len.toNat .undef) (by decide) (by simp) (by simpa using h')]
+  -- the freed bytes: `@memset` to `undefined` of the bytes of the items (`sliceAsBytes` before 0.16.0)
+  fsym [fun (s : Slice) ra (bs : Array Byte) (h2 : s.len.toNat = bs.size) (h3 : 0 < bs.size) =>
+    CAllocSpec.free' h s 2 ra φ bs (by decide) h2 h3]
 
 /-! ## The list -/
 
+-- Zig 0.17.0's header has a third field, `pointer_stability` (a `debug.SafetyLock`, which only
+-- that translation has); before 0.17.0 (`allocBytesWithAlignment`, renamed in 0.17.0) it has
+-- `items` and `capacity` only.
+when_defined debug_SafetyLock_assertUnlocked
 /-- The list header's value: `items = ⟨ptr, len⟩`, `capacity = cap`, `pointer_stability`
 unlocked. -/
 abbrev hdrVal (ptr : Ptr) (len cap : BitVec 64) : array_list_Aligned_u32_null :=
   { items := ⟨ptr, len⟩, capacity := cap,
     pointer_stability := { state := debug_SafetyLock_State__enum_1.unlocked } }
+end_when
+when_defined mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279
+/-- The list header's value: `items = ⟨ptr, len⟩`, `capacity = cap`. -/
+abbrev hdrVal (ptr : Ptr) (len cap : BitVec 64) : array_list_Aligned_u32_null :=
+  { items := ⟨ptr, len⟩, capacity := cap }
+end_when
 
 omit [Ext] in
 /-- The address of `ptr`'s block is known (the items pointer of a list without a buffer). -/
@@ -217,8 +230,107 @@ def appended (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32) : Except ErrName 
   | .ok _ => alist I φ p (xs ++ [v])
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ alist I φ p xs
 
-/-- The capacity `growCapacity` asks for when the list grows to `n` items. -/
+/-- Zig 0.15.2's `growCapacity(current, minimum)`: from `current`, `new +|= new / 2 + 32` until
+`new ≥ minimum` (32: `init_capacity` of `u32` items). -/
+def growFrom (c n : Nat) : Nat :=
+  if n ≤ Min.min (c + (c / 2 + 32)) (2 ^ 64 - 1) ∨ 2 ^ 64 - 1 ≤ c + (c / 2 + 32) then
+    Min.min (c + (c / 2 + 32)) (2 ^ 64 - 1)
+  else growFrom (c + (c / 2 + 32)) n
+termination_by 2 ^ 64 - c
+decreasing_by omega
+
+omit [Ext] in
+/-- One round of `growFrom` reaches `n`. -/
+theorem growFrom_one {c n : Nat} (h : n ≤ c + (c / 2 + 32)) :
+    growFrom c n = Min.min (c + (c / 2 + 32)) (2 ^ 64 - 1) := by
+  rw [growFrom, ite_eq_left (by omega)]
+
+-- A list grows only when it is full: from `n - 1` items (and capacity) to `n`. `growTo n`: the
+-- capacity `ensureTotalCapacity` then asks for, in the translation at hand. Zig 0.15.2 grows from
+-- the capacity (`growFrom (n - 1) n`, one round), Zig 0.16.0 and later from the new length alone.
+when_defined array_list_Aligned_u32_null_growCapacity.loop4
+/-- The capacity a full list asks for when it grows to `n` items (Zig 0.15.2: `growFrom (n - 1) n`,
+one round). -/
+def growTo (n : Nat) : Nat := Min.min ((n - 1) + ((n - 1) / 2 + 32)) (2 ^ 64 - 1)
+end_when
+when_defined mem_absorbSentinel__anon_6f5b4b6f7cb0
+/-- The capacity a full list asks for when it grows to `n` items (Zig 0.16.0 and later). -/
 def growTo (n : Nat) : Nat := Min.min (n + (n / 2 + 32)) (2 ^ 64 - 1)
+end_when
+
+when_defined array_list_Aligned_u32_null_growCapacity.loop4
+omit [Ext] in
+theorem growStep_run (n new : BitVec 64) :
+    (array_list_Aligned_u32_null_growCapacity.loop4 n).run ⟨new⟩ =
+      pure (if n.toNat ≤ (Zig.addSat false new (new / 2#64 + 32#64)).toNat then
+        .ret (Zig.addSat false new (new / 2#64 + 32#64)) else .rep4,
+        ⟨Zig.addSat false new (new / 2#64 + 32#64)⟩) := by
+  have hd : (new / 2#64).toNat = new.toNat / 2 := by simp [BitVec.toNat_udiv]
+  have hno : ¬ (new / 2#64).uaddOverflow 32#64 = true := by
+    simp only [BitVec.uaddOverflow, hd]; have := new.isLt; simp; omega
+  simp [array_list_Aligned_u32_null_growCapacity.loop4, Zig.divTrunc, Zig.add, hno, Zig.ge, Zig.le]
+  by_cases hle : n.toNat ≤ (Zig.addSat false new (new / 2#64 + 32#64)).toNat
+  · have : n.ule (Zig.addSat false new (new / 2#64 + 32#64)) = true := by simpa [BitVec.ule] using hle
+    simp [this, hle]
+  · have : n.ule (Zig.addSat false new (new / 2#64 + 32#64)) = false := by simpa [BitVec.ule] using hle
+    simp [this, hle]
+
+omit [Ext] in
+/-- Zig 0.15.2's `growCapacity` (a loop in pure code: no steps) returns `growFrom`. -/
+theorem growCapacity_run (c n : BitVec 64) :
+    array_list_Aligned_u32_null_growCapacity c n =
+      pure (BitVec.ofNat 64 (growFrom c.toNat n.toNat)) := by
+  have hn := n.isLt
+  obtain ⟨⟨e, s⟩, hr, hpost⟩ := Zig.loop_spec (array_list_Aligned_u32_null_growCapacity.loop4 n)
+    array_list_Aligned_u32_null_growCapacity.again4
+    (fun s => growFrom s.new.toNat n.toNat = growFrom c.toNat n.toNat)
+    (fun s => 2 ^ 64 - s.new.toNat)
+    (fun r => r.1 = .ret (BitVec.ofNat 64 (growFrom c.toNat n.toNat)))
+    (fun ⟨new⟩ hg => by
+      have hs := new.isLt
+      have hv : (Zig.addSat false new (new / 2#64 + 32#64)).toNat =
+          Min.min (new.toNat + (new.toNat / 2 + 32)) (2 ^ 64 - 1) := by
+        rw [addSat_false, BitVec.toNat_add, BitVec.toNat_udiv]; simp; omega
+      refine ⟨_, _, growStep_run n new, ?_⟩
+      simp only at hg
+      rw [growFrom] at hg
+      by_cases hle : n.toNat ≤ (Zig.addSat false new (new / 2#64 + 32#64)).toNat
+      · simp only [hle, ↓reduceIte, array_list_Aligned_u32_null_growCapacity.again4,
+          Bool.false_eq_true]
+        rw [hv] at hle
+        rw [ite_eq_left (Or.inl hle)] at hg
+        rw [← hg]
+        congr 1
+        apply BitVec.eq_of_toNat_eq
+        rw [hv, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+      · simp only [hle, ↓reduceIte, array_list_Aligned_u32_null_growCapacity.again4]
+        rw [hv] at hle ⊢
+        rw [ite_eq_right (by omega)] at hg
+        refine ⟨?_, by omega⟩
+        rw [← hg, show Min.min (new.toNat + (new.toNat / 2 + 32)) (2 ^ 64 - 1) =
+          new.toNat + (new.toNat / 2 + 32) by omega])
+    ({ (default : array_list_Aligned_u32_null_growCapacityLocals) with new := c }) rfl
+  unfold array_list_Aligned_u32_null_growCapacity
+  simp only [StateT.run'] at hr ⊢
+  simp only at hpost
+  subst hpost
+  have e1 : ((modify fun _ => ({ new := c } : array_list_Aligned_u32_null_growCapacityLocals)) >>=
+      fun _ => Zig.loop (array_list_Aligned_u32_null_growCapacity.loop4 n)
+        array_list_Aligned_u32_null_growCapacity.again4) default = pure (_, s) := hr
+  rw [e1]
+  rfl
+
+omit [Ext] in
+/-- **Zig 0.15.2's `growCapacity` to a `minimum` that one round reaches** (every growth by up to
+`current / 2 + 32` items, so every `append`): its value, a word `omega` reads. Where the facts do
+not decide the premise, `fsym` splits on it. -/
+@[fsym] theorem growCapacity_step {P : FAssn} (c n : BitVec 64)
+    (h : n.toNat ≤ c.toNat + (c.toNat / 2 + 32)) :
+    FTotalTriple P (StateT.lift (array_list_Aligned_u32_null_growCapacity c n) : MemM (BitVec 64))
+      (fun g => ⟪g.toNat = Min.min (c.toNat + (c.toNat / 2 + 32)) (2 ^ 64 - 1)⟫ ⋆ P) := by
+  rw [growCapacity_run, growFrom_one h]
+  exact Auto.read_val (by rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)])
+end_when
 
 attribute [local fsym_arith] List.length_append List.length_singleton List.length_cons List.length_nil
 
@@ -258,7 +370,8 @@ theorem append_zero (p ptr : Ptr) (len cap : BitVec 64) (xs : List (BitVec 32)) 
     | exact ItemsOk.of_length (by fsym_arith)
 
 /-- **`append`** takes a fee and gives `xs ++ [v]`, or `error.OutOfMemory` and the same list,
-and the fee back, for every allocator that meets the contract. -/
+and the fee back, for every allocator that meets the contract and takes the request of the grown
+capacity (`growTo`, in every translation). -/
 theorem append_spec (p : Ptr) (xs : List (BitVec 32)) (v : BitVec 32)
     (hfit : I.fits (4 * growTo (xs.length + 1)) 2)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :

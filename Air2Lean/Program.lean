@@ -63,11 +63,6 @@ private def reachableCore {κ : Type} [BEq κ] (keys : Array κ) (nextOf : κ �
     todo := rest ++ next
   return seen
 
-/-- DFS post-order, preserving node order and first-occurrence successor order. -/
-def topoVisitBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
-    (successors : α → Array κ) (vo : Array κ × Array α) (name : κ) : Array κ × Array α :=
-  topoVisitCore nodes key (successorsBy nodes key successors) vo name
-
 def topoOrderBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (successors : α → Array κ) : Array α :=
   topoOrderCore nodes key (successorsBy nodes key successors)

@@ -764,10 +764,7 @@ def EmittedCode.withRefs (code : String) (refs : Array DeclId) : EmittedCode :=
   ⟨code, some refs.toList⟩
 
 def EmittedCode.combine (code : String) (parts : Array EmittedCode) : EmittedCode :=
-  ⟨code, parts.foldr (fun part refs => do
-    let front ← part.refs
-    let tail ← refs
-    pure (if tail.isEmpty then front else front ++ tail)) (some [])⟩
+  ⟨code, (parts.toList.mapM EmittedCode.refs).map List.flatten⟩
 
 def EmittedCode.mapCode (f : String → String) (body : EmittedCode) : EmittedCode :=
   { body with code := f body.code }
@@ -2016,8 +2013,8 @@ def emitExitInductive (structNames : Array (String × String)) (types : Array Ty
 Every `loop` body becomes its own top-level def (`docs/generated-code.md` §Loops), so it needs
 an explicit parameter for every SSA value it reads that is bound outside it. -/
 
-/-- Every `Val` `op` resolves through `rv` at emission time (`emitSimple` / `emitTerminator` /
-`emitSwitchChain` below) — i.e. every value referenced by name in the generated text. Does not
+/-- Every `Val` `op` resolves through `rv` at emission time (`emitSimple` / `lowerTerminator` /
+`lowerSwitchChain` below) — i.e. every value referenced by name in the generated text. Does not
 look inside a nested `block`/`loop`/`condBr`/`switchBr`'s own body: those instructions are
 visited separately (`Func.allInsts` already flattens them in, see `FCtx.freeVarIds`). A
 `load`/`store`'s pointer is excluded: it resolves to a `Locals` field name via `allocFields`,
@@ -3366,7 +3363,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
                 s!"Zig.store (α := {fc.pointeeTy ptr}) {fc.ptrAlign ptr} {rv ptr} {value}"])
             else (env, ls ++ [fc.storePlace ptr value])
       (env, some ("\n".intercalate lines))
-  -- `emitStmts` and `emitTerminator` emit these (`Op.emitRoute`).
+  -- `lowerStmts` and `lowerTerminator` emit these (`Op.emitRoute`).
   | .block .. | .loop .. | .br .. | .«repeat» .. | .condBr .. | .switchBr .. | .loopSwitchBr ..
   | .switchDispatch .. | .«try» .. | .tryPtr .. | .ret .. | .retLoad .. | .unreach | .trap =>
     (env, some (placeholder s!"unexpected op in straight-line position (inst {inst.id})"))
@@ -3667,20 +3664,9 @@ partial def lowerSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : V
 
 end
 
-/-- Code-only rendering APIs project the same active lowering used by full-program emission. -/
+/-- Code-only rendering of a statement list: the same lowering full-program emission uses. -/
 def emitStmts (fc : FCtx) (env : Array (InstId × String)) (insts : List Inst) : String :=
   (lowerStmts fc env insts).code
-
-def emitTerminator (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) : String :=
-  (lowerTerminator fc env inst).code
-
-def emitSwitch (fc : FCtx) (env : Array (InstId × String)) (v : Val)
-    (selector : String) (cases : Array SwitchCase) (elseBody : Array Inst) : String :=
-  (lowerSwitch fc env v selector cases elseBody).code
-
-def emitSwitchChain (fc : FCtx) (env : Array (InstId × String)) (v : Val)
-    (selector : String) (cases : List SwitchCase) (elseBody : Array Inst) : String :=
-  (lowerSwitchChain fc env v selector cases elseBody).code
 
 /-- The captured parameters `(id, name, type)` of a loop's extracted body def. -/
 def FCtx.loopParams (fc : FCtx) (loopInst : Inst) : Array (InstId × String × String) :=
@@ -3971,14 +3957,11 @@ private def emitOneFunctionWithFallbackMap (f : Func)
   let loopParts := loops.map fun inst =>
     let (name, params, header) := fc.loopSignature inst
     let body := lowerLoopBody fc inst
-    let decl := body.declaration (.loop f.name inst.id) name params header
-    let code := match decl with | .ok d => d.code | .error _ => header ++ body.code
-    (code, decl)
+    -- `declaration`'s code is `header ++ body.code` whether or not it has a reference graph.
+    (header ++ body.code, body.declaration (.loop f.name inst.id) name params header)
   let params := f.params.mapIdx fun i ty => (s!"p{i}", fc.emitTyOf ty)
   let entry := functionBody.declaration (.function f.name) leanName params functionHeader
-  let functionCode := match entry with
-    | .ok d => d.code
-    | .error _ => functionHeader ++ functionBody.code
+  let functionCode := functionHeader ++ functionBody.code
   let decls := do
     let loopDecls ← loopParts.mapM (·.2)
     let entry ← entry
@@ -4446,10 +4429,6 @@ def emitCapturedFallbackWithStorage (name : String) (args : Array (String × Opt
 
 /-- The caller's eager execution of an `Io.async` task (fallible policy): the complete
 capture, the worker's result. -/
-def emitFutureEager (name : String) (args : Array (String × Option (String × Nat × Option String)))
-    (kind : Nat) : String :=
-  futureEagerBody args.size (emitCapturedCallWithStorage name args kind)
-
 private def lowerFutureEager (source name : String)
     (args : Array (String × Option (String × Nat × Option String))) (kind : Nat) : EmittedCode :=
   (lowerCapturedCallWithStorage source name args kind).mapCode (futureEagerBody args.size)

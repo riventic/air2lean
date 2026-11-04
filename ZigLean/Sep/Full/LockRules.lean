@@ -39,9 +39,16 @@ open FAssn Conc Proto LockWord
 A composite contract (`MutexImpl`, `CondImpl`, `EventImpl`) states, for each operation `op`, the
 caller-part assertions its actual code proves, as fields of the contract itself: `op_pre t r` (the
 part `r` that admits the call), `op_post t r r'` (the part `r'` it returns), and the two
-entailments that admit a concrete Plain caller with its exact part (`op_plain_pre`,
-`op_plain_post`). They assert no tick count or repeated-payment obligation. The assertions
-below are the ones the translated code families share. -/
+entailments that admit a caller with the minimal resource the operation family needs, with its
+exact part: a positive unmetered fragment for an operation that may tick (`lock_unmetered_pre`,
+`signal_unmetered_pre`, …), the plain mode for one that may also keep a stack block
+(`wait_plain_pre`, …). An operation that ticks in no implementation states no caller part
+(`MutexImpl.unlock_wp`, `EventImpl.set_wp`). They assert no tick count or repeated-payment
+obligation. The assertions below are the ones the translated code families share. -/
+
+/-- A Plain part has a positive unmetered fragment: a Plain caller meets every
+`…_unmetered_pre` admission. -/
+theorem Res.Plain.unmetered {r : Res} (h : r.Plain) : 0 < r.gh.ac.frag .unmetered := h.2
 
 /-- An unticked operation admits every caller part. -/
 def anyPart : ThreadId → FAssn := fun _ _ => True
@@ -49,7 +56,8 @@ def anyPart : ThreadId → FAssn := fun _ _ => True
 /-- The caller pays each reachable tick from a positive unmetered fragment. -/
 def payUnmetered : ThreadId → FAssn := fun _ r => 0 < r.gh.ac.frag .unmetered
 
-theorem payUnmetered_plain {t : ThreadId} {r : Res} (h : r.Plain) : payUnmetered t r := h.2
+theorem payUnmetered_plain {t : ThreadId} {r : Res} (h : r.Plain) : payUnmetered t r :=
+  h.unmetered
 
 /-- The operation returns (or holds meanwhile) the caller's exact part. -/
 def keepPart : ThreadId → Res → FAssn := fun _ r r' => r' = r

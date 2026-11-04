@@ -1031,23 +1031,6 @@ theorem execBody_mono (prog : Prog) (f : Func) (args : List Value)
              | monotonicity
              | (apply_assumption <;> rfl)); done))
 
-/-- A prefixed iteration is monotone in the same call oracle as its body. Its canonical
-program and tick prefix stay fixed while the oracle becomes more defined. -/
-theorem execIteration_mono (prog : Prog) (f : Func) (args : List Value)
-    (view : InstId → Option (Array Value)) (body : List Inst) (env : Env) :
-    monotone (fun o : Oracle => execIteration ⟨prog, f, args, o, view⟩ body env) := by
-  unfold execIteration iteration
-  change monotone (fun o : Oracle =>
-    if prog.ticked f.name = true then
-      liftMem Zig.tick >>= fun _ => execBody ⟨prog, f, args, o, view⟩ body env
-    else execBody ⟨prog, f, args, o, view⟩ body env)
-  apply monotone_ite
-  · apply monotone_bind
-    · exact monotone_const _
-    · apply monotone_of_monotone_apply; intro
-      exact execBody_mono prog f args view body env
-  · exact execBody_mono prog f args view body env
-
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (prog : Prog) (g : γ → Oracle) (hg : monotone g)
     (f : Func) (args : List Value) : monotone (fun x => execFunc prog (g x) f args) := by
@@ -1190,14 +1173,6 @@ theorem adm_app4 {A B C D β γ : Type} (f : β → γ) (a : A) (b : B) (d : C) 
 theorem execFunc_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (prog : Prog) (f : Func) (args : List Value) :
     execFunc prog o₁ f args ⊑ execFunc prog o₂ f args :=
   execFunc_mono prog (fun o : Oracle => o) monotone_id f args _ _ h
-
-/-- Oracle approximation for a single prefixed iteration, retaining the whole returned
-frame, memory, error and nontermination behavior. -/
-theorem execIteration_le {o₁ o₂ : Oracle} (h : o₁ ⊑ o₂) (prog : Prog) (f : Func)
-    (args : List Value) (view : InstId → Option (Array Value)) (body : List Inst) (env : Env) :
-    execIteration ⟨prog, f, args, o₁, view⟩ body env ⊑
-      execIteration ⟨prog, f, args, o₂, view⟩ body env :=
-  execIteration_mono prog f args view body env _ _ h
 
 end Complete
 

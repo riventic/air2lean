@@ -3,10 +3,11 @@ import ZigLean.Simp
 import ZigLean.Conc.RunResult
 import ZigLean.Conc.Base.Lock
 import ZigLean.Sep.Full.ThreadOwned
+import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Witness
-import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # `disjoint` over all schedules: concurrent separation logic
@@ -73,27 +74,14 @@ theorem writeFlag_spec {c x : Ptr} {bc bx : BlockId} {Ac Ax : Nat} {cb xb : Arra
     (hcx : Enc.decode (cb.extract 0 8) = pure x) (hcv : Enc.decode (cb.extract 8 12) = pure v) :
     FTTriple (blk c Ac 16 cb bc ⋆ blk x Ax 4 xb bx) (writeFlag c)
       (fun _ => blk c Ac 16 cb bc ⋆ blk x Ax 4 (Enc.encode v) bx) := by
+  have hwrite : writeBytes xb 0 (Enc.encode v) = Enc.encode v :=
+    writeBytes_all (by rw [hxs, LawfulEnc.size_encode]; rfl)
   rw [writeFlag_eq]
-  have hlx : FTTriple (blk c Ac 16 cb bc) (Zig.load Ptr 8 c)
-      (fun r => ⟪r = x⟫ ⋆ blk c Ac 16 cb bc) := by
-    fsym [FTotalTriple.loadBlock (T := Ptr) (A := Ac) (S := 16) (K := .stack) (al := 8) hcb
-      (by decide) (by rw [hcs]; decide) hcx (by simp [hc0, hAc])]
-  have hlv : FTTriple (blk c Ac 16 cb bc) (Zig.load (BitVec 32) 4 (c.add 8))
-      (fun r => ⟪r = v⟫ ⋆ blk c Ac 16 cb bc) := by
-    fsym [FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (A := Ac) (S := 16) (K := .stack)
-      (bs := cb) (T := BitVec 32) (by decide) (by rw [hcs]; decide) (by simp [hc0]; omega) hcv]
-  refine FTTriple.bind (hlx.frame.post fun _ _ h => sep_assoc h)
-    fun xp => FTTriple.lift fun hxp => ?_
-  subst xp
-  refine FTTriple.bind ((FTTriple.ptrProjectAt (k := 8) hcb (by rw [hcs]; decide)
-    (by rw [hcs]; decide)).frame.post fun _ _ h => sep_assoc h) fun q => FTTriple.lift fun hq => ?_
-  subst q
-  refine FTTriple.bind (hlv.frame.post fun _ _ h => sep_assoc h)
-    fun w => FTTriple.lift fun hw => ?_
-  subst w
-  refine (FTTriple.storeAt (k := 0) (a := 4) v hxb (by simp [Ptr.add]) (by decide)
-    (by rw [hxs]; decide) (by simp [hx0, hAx]) (by decide)).frameL.post fun _ _ h => ?_
-  rwa [writeBytes_all (by rw [hxs, LawfulEnc.size_encode]; rfl)] at h
+  fsym [FTotalTriple.loadBlock (T := Ptr) (A := Ac) (S := 16) (K := .stack) (al := 8) hcb
+      (by decide) (by rw [hcs]; decide) hcx (by simp [hc0, hAc]),
+    FTotalTriple.load_bytesAt (q := c) (k := 8) (al := 4) (A := Ac) (S := 16) (K := .stack)
+      (bs := cb) (T := BitVec 32) (by decide) (by rw [hcs]; decide) (by simp [hc0]; omega) hcv,
+    FTTriple.ptrProjectAt, hwrite]
 
 /-! ## Blocks and resources -/
 
@@ -330,76 +318,90 @@ theorem spawner0 {G : ThreadId → Gh} {m : Mem} (hi : Inv a b G m) :
     · exact hk 1 true r1 _
     · exact hk 2 false r2 _
 
+/-- Finishing a kid changes its owned blocks and ghost data, preserving the invariant's shape. -/
+theorem inv_kid_done {G : ThreadId → Gh} {m m' : Mem} {u : ThreadId} {r r' rO : Res}
+    {c x : Ptr} {ac ax : Nat} {v : BitVec 32} {bc bx : BlockId}
+    (hi : Inv a b G m) (hu : 0 < u) (hgu : G u = .kid r c ac x ax v false)
+    (hcb : c.block = some bc) (hxb : x.block = some bx) (hc0 : c.off = 0) (hac : ac % 8 = 0)
+    (hx0 : x.off = 0) (hax : ax % 4 = 0)
+    (ho : FOwned (upd (ownOf G m) u r') rO m')
+    (hq : (ctxF c bc ac x v ⋆ flagF x bx ax v) r') (hth : m'.threads = m.threads) :
+    Inv a b (upd G u (.kid r' c ac x ax v true)) m' := by
+  have hj := (kid_live hi hu hgu).1
+  refine ⟨⟨rO, ?_⟩, fun w r₁ c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
+  · rw [ownOf_upd hth hj]; exact ho
+  · by_cases hwu : w = u
+    · subst hwu; rw [upd_self] at hw; cases hw
+      exact ⟨bc, bx, sep_lift.mpr ⟨⟨hcb, hxb, hc0, hac, hx0, hax⟩, hq⟩⟩
+    · rw [upd_ne _ _ hwu] at hw; exact hi.kids w _ _ _ _ _ _ _ hw
+  · obtain ⟨ph, hm, B, h0, hB, hma, hsh⟩ := hi.main
+    refine ⟨ph, hm, B, by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact h0, hB, hma, ?_⟩
+    have hkid : ∀ w dn, IsKid a b B G w dn → w ≠ u ∨ dn = none →
+        IsKid a b B (upd G u (.kid r' c ac x ax v true)) w dn := by
+      intro w dn ⟨h', d', hd', hk⟩ hw
+      by_cases hwu : w = u
+      · subst hwu
+        rcases hw with hw | rfl
+        · exact absurd rfl hw
+        · refine ⟨r', true, .inl rfl, ?_⟩
+          rw [upd_self]
+          rw [hgu] at hk
+          by_cases h1 : w = 1
+          · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
+          · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
+      · exact ⟨h', d', hd', by rw [upd_ne _ _ hwu]; exact hk⟩
+    have hnone : ∀ k, (∀ w, k ≤ w → G w = .none) →
+        ∀ w, k ≤ w → upd G u (.kid r' c ac x ax v true) w = .none := by
+      intro k hk w hw
+      by_cases hwu : w = u
+      · subst hwu; have := hk w hw; rw [hgu] at this; cases this
+      · rw [upd_ne _ _ hwu]; exact hk w hw
+    have hrec : ∀ w jn, KidRec m w jn → KidRec m' w jn := by
+      intro w jn hr; unfold KidRec; rw [hth]; exact hr
+    cases ph with
+    | pre => exact ⟨by rw [hth]; exact hsh.1, hnone 1 hsh.2⟩
+    | one =>
+      obtain ⟨hsz, r1, k1, hn⟩ := hsh
+      exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hkid 1 _ k1 (.inr rfl), hnone 2 hn⟩
+    | j1 =>
+      obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
+      exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2, hkid 1 _ k1 (.inr rfl),
+        hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
+    | j2 =>
+      obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
+      have hu1 : u ≠ 1 := by
+        intro h1; subst h1
+        obtain ⟨h', d', hd', hk⟩ := k1
+        rw [hgu] at hk; simp only [↓reduceIte] at hk; cases hk
+        simp at hd'
+      exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2,
+        hkid 1 _ k1 (.inl (Ne.symm hu1)), hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
+  · rw [hth]; exact hi.t0
+
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : ThreadId)
     (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : Inv a b G m) :
     (proto a b).WP u (dispatch tgt) ((proto a b).QKid u) G { m with current := u } d := by
   cases tgt with
   | writeFlag c =>
     obtain ⟨r, ac, x, ax, v, rfl⟩ := hg
-    obtain ⟨hj, hut, h12⟩ := kid_live hi hu hgu
+    obtain ⟨hj, hut, _⟩ := kid_live hi hu hgu
     obtain ⟨bc, bx, hka⟩ := hi.kids u _ _ _ _ _ _ _ hgu
     obtain ⟨⟨hcb, hxb, hc0, hac, hx0, hax⟩, hcx⟩ := sep_lift.mp hka
     have hown : ownOf G m u = r := by unfold ownOf; rw [hj, hgu]; rfl
     obtain ⟨rO, ho⟩ := hi.own
+    have hc := ho.current u
+    have hp : (ctxF c bc ac x v ⋆ flagF x bx ax 0) (ownOf G m u) := by
+      rw [hown]; exact hcx
+    have hjall : joinedAll u m := joinedAll_of_main (spawner0 hi) hu
     show (proto a b).WP u ((fun _ => ()) <$> ConcM.liftMem (writeFlag c)) _ G _ d
-    refine WP.map (WP.liftMem_fowned (own := ownOf G m)
-      (writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
-        (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)) (ho.current u) rfl hut
-      (by rw [hown]; exact hcx) fun _ m' r' _ _ ho' hq _ hth _ _ _ _ _ => ?_)
-    refine ⟨.kid r' c ac x ax v true, ?_, ⟨_, _, _, _, _, _, rfl⟩, fun _ => ?_⟩
-    · refine ⟨⟨rO, ?_⟩, fun w r₁ c' ac' x' ax' v' d' hw => ?_, ?_, ?_⟩
-      · rw [ownOf_upd hth hj]; exact ho'
-      · by_cases hwu : w = u
-        · subst hwu; rw [upd_self] at hw; cases hw
-          exact ⟨bc, bx, sep_lift.mpr ⟨⟨hcb, hxb, hc0, hac, hx0, hax⟩, hq⟩⟩
-        · rw [upd_ne _ _ hwu] at hw; exact hi.kids w _ _ _ _ _ _ _ hw
-      · obtain ⟨ph, hm, B, h0, hB, hma, hsh⟩ := hi.main
-        refine ⟨ph, hm, B, by rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact h0, hB, hma, ?_⟩
-        have hkid : ∀ w dn, IsKid a b B G w dn → w ≠ u ∨ dn = none →
-            IsKid a b B (upd G u (.kid r' c ac x ax v true)) w dn := by
-          intro w dn ⟨h', d', hd', hk⟩ hw
-          by_cases hwu : w = u
-          · subst hwu
-            rcases hw with hw | rfl
-            · exact absurd rfl hw
-            · refine ⟨r', true, .inl rfl, ?_⟩
-              rw [upd_self]
-              rw [hgu] at hk
-              by_cases h1 : w = 1
-              · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
-              · simp only [h1, ↓reduceIte] at hk ⊢; cases hk; rfl
-          · exact ⟨h', d', hd', by rw [upd_ne _ _ hwu]; exact hk⟩
-        have hnone : ∀ k, (∀ w, k ≤ w → G w = .none) →
-            ∀ w, k ≤ w → upd G u (.kid r' c ac x ax v true) w = .none := by
-          intro k hk w hw
-          by_cases hwu : w = u
-          · subst hwu; have := hk w hw; rw [hgu] at this; cases this
-          · rw [upd_ne _ _ hwu]; exact hk w hw
-        have hrec : ∀ w jn, KidRec m w jn → KidRec m' w jn := by
-          intro w jn hr; unfold KidRec; rw [hth]; exact hr
-        cases ph with
-        | pre => exact ⟨by rw [hth]; exact hsh.1, hnone 1 hsh.2⟩
-        | one =>
-          obtain ⟨hsz, r1, k1, hn⟩ := hsh
-          exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hkid 1 _ k1 (.inr rfl), hnone 2 hn⟩
-        | j1 =>
-          obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
-          exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2, hkid 1 _ k1 (.inr rfl),
-            hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
-        | j2 =>
-          obtain ⟨hsz, r1, r2, k1, k2, hn⟩ := hsh
-          have hu1 : u ≠ 1 := by
-            intro h1; subst h1
-            obtain ⟨h', d', hd', hk⟩ := k1
-            rw [hgu] at hk; simp only [↓reduceIte] at hk; cases hk
-            simp at hd'
-          exact ⟨by rw [hth]; exact hsz, hrec _ _ r1, hrec _ _ r2,
-            hkid 1 _ k1 (.inl (Ne.symm hu1)), hkid 2 _ k2 (.inr rfl), hnone 3 hn⟩
-      · rw [hth]; exact hi.t0
-    · intro r hr hsp
-      rw [hth] at hr
-      rw [spawner0 hi r hr] at hsp
-      unfold ThreadId at *; omega
+    fsym [writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
+      (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)]
+    all_goals
+      rename_i ret m' r' hF hrun ho' hq hcurrent hthreads hwaiters hwoken hgroups hclocks hstep
+      refine ⟨.kid r' c ac x ax v true, ?_, ⟨r', c, ac, x, ax, v, rfl⟩, fun _ => ?_⟩
+      · exact inv_kid_done hi hu hgu hcb hxb hc0 hac hx0 hax
+          ho' hq hthreads
+      · exact joinedAll_of_threads hjall hthreads
   | _ => exact hg.elim
 
 /-! ## `main` -/

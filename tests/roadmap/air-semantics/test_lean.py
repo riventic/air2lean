@@ -51,6 +51,56 @@ MUTATIONS = [
     ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step', 'def'),
 ]
 
+# The certificate embeds each function's AIR once, as a `source_<i>` term printed with explicit
+# names (`@_root_.Air2Lean.Op.arith …`); loop lemmas restate a body in the short form above.
+# `explicit` renders a short-form mutation text in the embedded term's syntax.
+CTOR_TYPES = {
+    'Op': ('arith', 'cmp', 'div', 'ret', 'fieldPtr', 'store', 'isNonErr', 'isErr'),
+    'ArithOp': ('mul', 'add', 'sub'), 'Mode': ('checked', 'wrap', 'sat'),
+    'CmpOp': ('gt', 'lt', 'eq', 'ne'), 'DivOp': ('rem', 'divTrunc'),
+    'Val': ('inst', 'bool', 'int', 'errUnionErr'),
+}
+CTOR_TYPE = {ctor: ty for ty, ctors in CTOR_TYPES.items() for ctor in ctors}
+
+
+def explicit(short):
+    tokens = re.findall(r'"[^"]*"|\(\d+ : Int\)|[()]|[^\s()]+', short)
+    pos = 0
+
+    def term():
+        nonlocal pos
+        tok = tokens[pos]
+        pos += 1
+        if tok == '(':
+            head = term()
+            args = []
+            while tokens[pos] != ')':
+                args.append(term())
+            pos += 1
+            return '(' + ' '.join([head] + args) + ')'
+        if tok.startswith('.'):
+            return f'@_root_.Air2Lean.{CTOR_TYPE[tok[1:]]}.{tok[1:]}'
+        if tok in ('true', 'false'):
+            return f'@_root_.Bool.{tok}'
+        if tok.startswith('"'):
+            return tok
+        if tok.endswith(': Int)'):
+            n = tok[1:].split()[0]
+            return f'(@_root_.OfNat.ofNat @_root_.Int (nat_lit {n}) (@_root_.instOfNat (nat_lit {n})))'
+        assert tok.isdigit(), (short, tok)
+        return f'(@_root_.OfNat.ofNat @_root_.Nat (nat_lit {tok}) (@_root_.instOfNatNat (nat_lit {tok})))'
+
+    rendered = term()
+    assert pos == len(tokens), short
+    return rendered
+
+
+def source_block(source, fn):
+    """The span of the `source_<i>` definition that `air_<fn>` names."""
+    name = re.search(rf'^def air_{re.escape(fn)} : _root_\.Air2Lean\.Func := (source_\d+)$', source, re.M)[1]
+    start = source.index(f'def {name} : _root_.Air2Lean.Func :=\n')
+    return start, source.index('\n\n', start)
+
 
 def lean(path):
     return subprocess.run(['lake', 'env', 'lean', str(path)], cwd=ROOT, capture_output=True,
@@ -243,7 +293,7 @@ def main():
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
     tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')
-    # RoundTrip's line per table (#562: the complete original program binds the certified names).
+    # RoundTrip's line per table: the complete original program binds the certified names.
     assert len(re.findall(r'original AIR terms and \d+ certified names bound', result.stdout)) == tables, \
         result.stdout
     print(result.stdout, end='')
@@ -255,18 +305,19 @@ def main():
                 # A text that occurs once in the certificate (a view's key).
                 assert source.count(old) == 1, (ex, theorem, old)
                 mutated = source.replace(old, new)
-            elif scope == 'all':
-                # A function with loops restates its AIR in its loop lemmas: mutate every copy.
-                assert source.count(old) >= 2, (ex, theorem, old)
-                mutated = source.replace(old, new)
             else:
-                # Mutate the theorem's own function: the AIR def it names.
-                fn = theorem.rsplit('_', 1)[0]
-                start_def = source.index(f'def air_{fn} : Func :=')
-                end_def = source.index('\n\n', start_def)
+                # Mutate the theorem's own function where the certificate embeds its AIR: the
+                # `source_<i>` term that `air_<fn>` names.
+                fn = re.sub(r'_(step|loop\d+_body)$', '', theorem)
+                start_def, end_def = source_block(source, fn)
                 block = source[start_def:end_def]
-                assert block.count(old) == 1, (ex, fn, old)
-                mutated = source[:start_def] + block.replace(old, new) + source[end_def:]
+                assert block.count(explicit(old)) == 1, (ex, fn, old)
+                mutated = source[:start_def] + block.replace(explicit(old), explicit(new)) + source[end_def:]
+                if scope == 'all':
+                    # A function with loops restates its AIR in its body and loop lemmas: mutate
+                    # every copy too, so only the generated code disagrees with the AIR.
+                    assert mutated.count(old) >= 2, (ex, theorem, old)
+                    mutated = mutated.replace(old, new)
             mutant = Path(tmp) / f'Mutant{index}.lean'
             mutant.write_text(mutated)
             result = lean(mutant)

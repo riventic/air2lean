@@ -328,7 +328,7 @@ theorem Op.controlBody_size_lt (op : Op) {body : Array Inst}
 
 /-- How `Emit.lean`'s `emitStmts` emits an op: the op table's emitter column. -/
 inductive EmitRoute where
-  /-- Ends its body (`emitTerminator`): a jump, a branch or an exit. -/
+  /-- Ends its body (`lowerTerminator`): a jump, a branch or an exit. -/
   | terminator
   /-- A nested body that `emitStmts` emits: `block`, `loop`, `loop_switch_br`, `try`. -/
   | structured

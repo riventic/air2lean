@@ -2265,16 +2265,17 @@ turns.
    caller-resource admission: deadline blocks may use owned stack budgets and room, or a
    concrete Plain specialization. Unmetered tick resources alone do not supply stack room.
 - `signal_wp`: a thread out of the condition's code, outside or holding the mutex, that may
-   signal, whose actual intermediate caller parts satisfy the registration floor (`hseen`),
-   returns its proved caller-resource post and leaves registered waiters signalled. The exact
-   specialization requires actual intermediate/post identity evidence. Both operations frame
-   the complete held resource; no profile is assumed closed under adding or removing resources.
+   signal, after every registration (`hseen`, at its own ghost value), returns with its exact
+   caller part and leaves registered waiters signalled. Its caller part needs a positive
+   unmetered fragment (each implementation's wake loop ticks); every implementation admits such
+   a part and holds and returns it exactly (`signal_unmetered_pre`, `signal_unmetered_during`,
+   `signal_unmetered_post`). Both operations frame the complete held resource; no profile is
+   assumed closed under adding or removing resources.
 
 The primary fields state caller parts the same way as the mutex and event (`LockRules`, "Caller
 parts of composite operations"); `signal_during` is the part `signal` holds at each intermediate
 step. Actual code proves payment at each reachable tick/retry and its native/stack obligations
-through the existing Full rules. Plain is a derived concrete admission, not the interface's
-domain. -/
+through the existing Full rules. -/
 structure CondImpl (Tgt : Type) where
   wait : Ptr → Io → Ptr → ConcM Tgt Unit
   signal : Ptr → Io → ConcM Tgt Unit
@@ -2287,8 +2288,16 @@ structure CondImpl (Tgt : Type) where
   signal_pre : ThreadId → FAssn
   signal_during : ThreadId → Res → FAssn
   signal_post : ThreadId → Res → FAssn
-  signal_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → signal_pre t r
-  signal_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → signal_post t r r' → r' = r
+  /-- A caller part with a positive unmetered fragment admits `signal` (the minimal resource
+  of an emitted wake loop that ticks). -/
+  signal_unmetered_pre : ∀ (t : ThreadId) (r : Res), 0 < r.gh.ac.frag .unmetered →
+    signal_pre t r
+  /-- `signal` holds such a caller part exactly at each intermediate step. -/
+  signal_unmetered_during : ∀ (t : ThreadId) (r rᵢ : Res), 0 < r.gh.ac.frag .unmetered →
+    signal_during t r rᵢ → rᵢ = r
+  /-- `signal` returns such a caller part exactly. -/
+  signal_unmetered_post : ∀ (t : ThreadId) (r r' : Res), 0 < r.gh.ac.frag .unmetered →
+    signal_post t r r' → r' = r
   wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (C.prim L) P U ok →
     P.cost = none → ∀ {p q : Ptr}, p = C.S.ptr → q = L.ptr → L.c = c →
@@ -2344,54 +2353,29 @@ theorem wait_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {P 
   subst r'
   exact ⟨hd, hc', rL, by simpa only [L.setPart_self] using hi'⟩
 
-/-- A Plain signal returns its exact part, with the floor proved at every ACTUAL intermediate
-part. Endpoint compatibility alone never replaces that floor by a stale exact-g hypothesis.
-The Plain guard is an explicit admission added to the former arbitrary-part signal rule. -/
+/-- The exact-part signal rule for a caller part with a positive unmetered fragment: the
+implementation holds that part exactly at each intermediate step (`signal_unmetered_during`),
+so the registration floor is needed only at the caller's own ghost value `g`. -/
 theorem signal_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
     (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = C.S.ptr)
     (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hplain : (L.part g).Plain)
-    (hseen : ∀ rᵢ, I.signal_during t (L.part g) rᵢ → ∀ G₁ rX m₁,
-      G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e,
-      C.ph (G₁ u) = .reg i jr sn e →
-      VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
-    (hi : P.inv (upd G t g) m) :
-    P.WP t (I.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m' ∧
-      ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
-  refine WP.mono ?_ (I.signal_wp_resource hC hcost hp t g hg hgo hsx io G m d
-    (I.signal_plain_pre t (L.part g) hplain) hseen hi)
-  rintro _ G' m' d' ⟨hd, hc, r', hr, hi', hsig⟩
-  have he := I.signal_plain_post t (L.part g) r' hplain hr
-  subst r'
-  exact ⟨hd, hc, by simpa only [L.setPart_self] using hi', hsig⟩
-
-/-- A signal implementation with VERIFIED singleton intermediate/post assertions admits the
-old exact-g floor. The caller supplies the actual profile admission and identity proofs;
-current unmetered implementations discharge them from their real singleton profiles. No such
-law is imposed on stackful waits or on all signal implementations. -/
-theorem signal_wp_exact (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ}
-    {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
-    (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = C.S.ptr)
-    (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds)
-    (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hpre : I.signal_pre t (L.part g))
-    (signal_during_exact : ∀ rᵢ, I.signal_during t (L.part g) rᵢ → rᵢ = L.part g)
-    (signal_post_exact : ∀ r', I.signal_post t (L.part g) r' → r' = L.part g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) :
     P.WP t (I.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m' ∧
       ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
-  refine WP.mono ?_ (I.signal_wp_resource hC hcost hp t g hg hgo hsx io G m d hpre ?_ hi)
+  refine WP.mono ?_ (I.signal_wp_resource hC hcost hp t g hg hgo hsx io G m d
+    (I.signal_unmetered_pre t (L.part g) hu) ?_ hi)
   · rintro _ G' m' d' ⟨hd, hc, r', hr, hi', hsig⟩
-    have he := signal_post_exact r' hr
+    have he := I.signal_unmetered_post t (L.part g) r' hu hr
     subst r'
     exact ⟨hd, hc, by simpa only [L.setPart_self] using hi', hsig⟩
   · intro rᵢ hr G₁ rX m₁ ht hU
-    have he := signal_during_exact rᵢ hr
+    have he := I.signal_unmetered_during t (L.part g) rᵢ hu hr
     subst rᵢ
     rw [L.setPart_self] at ht
     exact hseen G₁ rX m₁ ht hU
