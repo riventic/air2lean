@@ -1310,9 +1310,13 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     let g' ← g.replaceTargetDefEq t''
     if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
-    -- a disjunction (a result predicate `r = 1 ∨ r = 2 ∨ …`): the solver on the unfolding, which
-    -- the arithmetic normalization does not unfold
-    if t''.isAppOfArity ``Or 2 then
+    -- an unfolding of library form (a result predicate `r = 1 ∨ r = 2 ∨ …`, a negation, an
+    -- implication): the solver on it, as the arithmetic normalization does not unfold the user
+    -- definition (once: a library head is not unfolded again)
+    let libHead ← match t''.getAppFn with
+      | .const c _ => isLibrary c
+      | _ => pure t''.isArrow
+    if libHead then
       if (← arithGoals g' quick cases).isEmpty then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
