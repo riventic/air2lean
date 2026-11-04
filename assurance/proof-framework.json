@@ -1,5 +1,5 @@
 {
-  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics, attribute and simp-set registries and legacy-logic users that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
+  "description": "One proof framework (docs/proof-framework.md): the program judgments, tactics, attribute and simp-set registries, legacy-logic users and uses of tactics to retire that exist. Only shrinks; additions need the coordinator (scripts/proof-framework.py).",
   "judgments": [
     {
       "name": "AMap",
@@ -836,6 +836,218 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
+    }
+  ],
+  "tactic_uses": [
+    {
+      "path": "Air2Lean/Check.lean",
+      "tactic": "within",
+      "count": 12,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Atomics/MessagePassing.lean",
+      "tactic": "blkat_alloc",
+      "count": 3,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Atomics/Relaxed.lean",
+      "tactic": "blkat_alloc",
+      "count": 3,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Atomics/Stack.lean",
+      "tactic": "blkat_alloc",
+      "count": 3,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Atomics/Stack.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Iogroup/Counter.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/ProvenanceGap/Gen.lean",
+      "tactic": "within",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/ProvenanceGap/Proofs.lean",
+      "tactic": "within",
+      "count": 2,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Sync/Handoff.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Sync/Mailbox.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Sync/Mutex.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Sync/RwLock.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Sync/RwLockSnapshotPair.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Sync/SemCounter.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Threads/Counter.lean",
+      "tactic": "blkat_alloc",
+      "count": 3,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Threads/Counter.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Threadsync/Handoff.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Threadsync/Mutex.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "Proofs/Threadsync/WaitGroup.lean",
+      "tactic": "unroll_sched",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "ZigLean/Conc/Lemmas.lean",
+      "tactic": "blkat_alloc",
+      "count": 2,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "ZigLean/Conc/Spec/Cond.lean",
+      "tactic": "tomega",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "ZigLean/Conc/Spec/WaitGroup.lean",
+      "tactic": "tomega",
+      "count": 2,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "ZigLean/Conc/TimedBudget.lean",
+      "tactic": "within",
+      "count": 7,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Auto.lean",
+      "tactic": "within",
+      "count": 3,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "ZigLean/Sep/Full/Extent.lean",
+      "tactic": "within",
+      "count": 3,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
+      "tactic": "within",
+      "count": 6,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/alloc-arena/AllocArena/Reset.lean",
+      "tactic": "within",
+      "count": 2,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/alloc-arena/ArenaObstruction.lean",
+      "tactic": "unroll_solo",
+      "count": 2,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/alloc-fba/AllocFba/Full.lean",
+      "tactic": "within",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/alloc-translated/PageAlloc.lean",
+      "tactic": "conc_norm",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/deadline-cases/Runtime.lean",
+      "tactic": "within",
+      "count": 1,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/proof-tools/Unroll.lean",
+      "tactic": "unroll_sched",
+      "count": 9,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/proof-tools/Unroll.lean",
+      "tactic": "unroll_solo",
+      "count": 2,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/vcs/Extract.lean",
+      "tactic": "vc_gen",
+      "count": 7,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
+    },
+    {
+      "path": "tests/roadmap/vcs/Memory.lean",
+      "tactic": "vc_gen",
+      "count": 9,
+      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     }
   ]
 }
