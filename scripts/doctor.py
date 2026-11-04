@@ -312,10 +312,10 @@ class Doctor:
             self.add('native-runners', 'warn', 'cannot read the CI workflow: %s' % exc)
             return
         # The command of each runner prefix (quoted or not, with or without arguments); "" is the host.
-        tools = set(re.findall(r'^\s*AIR2LEAN_\w+_RUN:\s*["\']?([^\s"\']+)', workflow, re.M)) | {'node'}
-        missing = sorted(t for t in tools if not shutil.which(t, path=self.env.get('PATH')))
+        tools = sorted(set(re.findall(r'^\s*AIR2LEAN_\w+_RUN:\s*["\']?([^\s"\']+)', workflow, re.M)) | {'node'})
+        missing = [t for t in tools if not shutil.which(t, path=self.env.get('PATH'))]
         if not missing:
-            self.add('native-runners', 'ok', 'native-row runners available: ' + ', '.join(sorted(tools)))
+            self.add('native-runners', 'ok', 'native-row runners available: ' + ', '.join(tools))
         else:
             self.add('native-runners', 'warn', 'scripts/fixture-checks.sh native rows need: ' + ', '.join(missing),
                      'install qemu-user-static and nodejs with the system package manager (Ubuntu 26.04 '
