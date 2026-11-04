@@ -50,23 +50,12 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (.inr (.inl (hnw _ (.inr (.inl rfl)))))
   obtain ⟨hwV, hhV⟩ := hu.wv.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
     (.inr (.inl (hnw _ (.inr (.inr rfl)))))
-  refine ⟨hu.shape, hu.io.read (hc ▸ ht) hcs 0 0 n, hu.rest.congr fun _ _ => rfl, hu.blk,
-    hwS, hwE, hwV,
-    hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk,
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
-      hu.einv.fresh, hu.places,
-    fun h => by rw [hhE]; exact hu.ep1 h, by rw [hhE]; exact hu.ep2,
-    fun h => (SW_congr hhS).mpr (hu.epS (by rw [← hhE]; exact h)),
-    fun q n h' hq => by
-      rw [hhE]; exact ⟨(hu.incE q n h' hq).1, (SW_congr hhS).mpr (hu.incE q n h' hq).2⟩,
-    hu.ent, hu.hold, fun j hj => ?_,
-    fun h => by
-      obtain ⟨j, hj, hp⟩ := hu.w1 h
-      exact ⟨j, (RegW_congr hhS).mpr hj, by rw [hhS]; exact hp⟩,
-    fun n h => ⟨(hu.snap n h).1, fun j hj => (hu.snap n h).2 j ((RegW_congr hhS).mp hj)⟩,
-    fun h0 h1 => (Sig_congr hhS).mpr (hu.lvc h0 h1), fun h1 => ?_, hu.q, hu.xc⟩
-  · rw [hhS]
-    rcases hu.reg j ((RegW_congr hhS).mp hj) with h' | ⟨hlk, h'⟩
+  refine hu.congrHist (fun _ => ⟨rfl, rfl, rfl⟩) hhS hhE hu.shape
+    (hu.io.read (hc ▸ ht) hcs 0 0 n) (hu.rest.congr fun _ _ => rfl) hu.blk hwS hwE hwV
+    (hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk)
+    (hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id hu.einv.fresh)
+    hu.hold (fun j hj => ?_) (fun h1 => ?_) hu.q
+  · rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hclk 1))
     · refine .inr ⟨hlk, ?_⟩
       rcases h' with ⟨hh, hle⟩ | hb

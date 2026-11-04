@@ -163,6 +163,32 @@ theorem Next.crit {a b : CPh} (h : Next a b) (hb : b.crit = true) : a.crit = tru
 theorem snap_sig {p : CPh} {h : Array Word.Entry} (hp : p.snap = some h) : p.sig = true := by
   cases p <;> simp_all [snap, sig]
 
+/-- A step of the code out of `out` stays there or enters a signaller's place. -/
+theorem Next.of_out {p : CPh} (h : Next .out p) : p = .out ∨ p.sig = true := by
+  cases p <;> simp_all [Next, sig]
+
+/-- A step of the code into a post comes from the signaller's entry or stays at the post. -/
+theorem Next.to_inc {a : CPh} {q n : Nat} {h : Array Word.Entry} (hn : Next a (.inc q n h)) :
+    (∃ sh c, a = .sl sh c) ∨ a = .inc q n h := by
+  cases a <;> simp_all [Next]
+
+/-- A step of the code into a registration from elsewhere starts in the critical code. -/
+theorem Next.crit_of_reg {a b : CPh} (h : Next a b) (hb : b.isReg = true) (ha : a.isReg = false) :
+    a.crit = true := by
+  cases a <;> cases b <;> simp_all [Next, CPh.isReg, CPh.crit]
+
+/-- A signaller's place is not a waiter's. -/
+theorem sig_waits {p : CPh} (h : p.sig = true) : p.waits = false := by
+  cases p <;> simp_all [sig, waits]
+
+/-- A registered waiter's place is a waiter's. -/
+theorem isReg_waits {c : CPh} (h : c.isReg = true) : c.waits = true := by
+  cases c <;> simp_all [isReg, waits]
+
+/-- A waiter's place out of the critical code is a registration. -/
+theorem isReg_of_waits {c : CPh} (hw : c.waits = true) (hc : c.crit = false) : c.isReg = true := by
+  cases c <;> simp_all [waits, crit, isReg]
+
 end CPh
 
 /-- A futex-epoch condition (module doc): its state and epoch words, and a thread's place in
@@ -238,6 +264,14 @@ def claims (L : FLock γ) (G : ThreadId → γ) (m : Mem) (T : Nat) : Nat :=
 def SStep (a b : Word.Entry) : Prop :=
   (wOf b = wOf a + 1 ∧ sOf b = sOf a) ∨ (wOf b = wOf a ∧ sOf a < sOf b ∧ sOf b ≤ wOf a) ∨
     (wOf b + 1 = wOf a ∧ sOf b + 1 = sOf a)
+
+/-- The newest state write has `signals = waiters`: every registered waiter has its signal, and
+no post can follow it (`SStep`). -/
+def Sated (m : Mem) : Prop := sOf (C.lastS m) = wOf (C.lastS m)
+
+/-- State write `j` registers the first waiter: `waiters` goes from 0 to 1. -/
+def RegW (m : Mem) (j : Nat) : Prop :=
+  0 < j ∧ j < (C.S.hist m).size ∧ wOf (C.S.hist m)[j - 1]! = 0 ∧ wOf (C.S.hist m)[j]! = 1
 
 /-! ## The invariant -/
 
@@ -1545,6 +1579,59 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h
 theorem last_push {h : Array Word.Entry} {x : Word.Entry} :
     (h.push x)[(h.push x).size - 1]! = x := by
   simp only [Array.size_push, Nat.add_sub_cancel]; exact FEvent.get_push_eq
+
+/-! ## The state's writes, for a client's history facts -/
+
+/-- The newest state write with the same writes. -/
+theorem lastS_congr {m m' : Mem} (h : C.S.hist m' = C.S.hist m) : C.lastS m' = C.lastS m := by
+  unfold lastS; rw [h]
+
+/-- The newest state write after a new write `x` is `x`. -/
+theorem lastS_push {m m' : Mem} {x : Word.Entry} (h : C.S.hist m' = (C.S.hist m).push x) :
+    C.lastS m' = x := by
+  unfold lastS; rw [h]; exact last_push
+
+theorem Sated.congr {m m' : Mem} (h : C.S.hist m' = C.S.hist m) : C.Sated m' ↔ C.Sated m := by
+  unfold Sated; rw [lastS_congr h]
+
+theorem RegW.congr {m m' : Mem} (h : C.S.hist m' = C.S.hist m) {j : Nat} :
+    C.RegW m' j ↔ C.RegW m j := by
+  unfold RegW; rw [h]
+
+/-- A first registration after a new state write `x`: one before it, or the new write itself. -/
+theorem RegW.push {m m' : Mem} {x : Word.Entry} (h : C.S.hist m' = (C.S.hist m).push x)
+    {j : Nat} (hj : C.RegW m' j) :
+    C.RegW m j ∨ (j = (C.S.hist m).size ∧ wOf (C.lastS m) = 0 ∧ wOf x = 1) := by
+  obtain ⟨h0, hjs, hw0, hw1⟩ := hj
+  rw [h, Array.size_push] at hjs
+  rw [h] at hw0 hw1
+  by_cases e : j < (C.S.hist m).size
+  · rw [FEvent.get_push_lt e] at hw1
+    rw [FEvent.get_push_lt (by omega)] at hw0
+    exact .inl ⟨h0, e, hw0, hw1⟩
+  · obtain rfl : j = (C.S.hist m).size := by omega
+    rw [FEvent.get_push_eq] at hw1
+    rw [FEvent.get_push_lt (by omega)] at hw0
+    exact .inr ⟨rfl, hw0, hw1⟩
+
+/-- A new state write is one of the kinds of `SStep` from the newest one before it. -/
+theorem Inv.step_push {G : ThreadId → γ} {m m' : Mem} {x : Word.Entry} (hI : C.Inv L G m')
+    (hpos : 0 < (C.S.hist m).size) (h : C.S.hist m' = (C.S.hist m).push x) :
+    SStep (C.lastS m) x := by
+  have hst := hI.steps ((C.S.hist m).size - 1) (by rw [h, Array.size_push]; omega)
+  rwa [h, FEvent.get_push_lt (by omega),
+    show (C.S.hist m).size - 1 + 1 = (C.S.hist m).size by omega, FEvent.get_push_eq] at hst
+
+/-- After a new state write that registers no thread (`waiters` does not rise), `Sated` stays:
+no post follows a sated write. -/
+theorem Inv.sated_push {G : ThreadId → γ} {m m' : Mem} {x : Word.Entry} (hI : C.Inv L G m')
+    (hpos : 0 < (C.S.hist m).size) (h : C.S.hist m' = (C.S.hist m).push x) (hs : C.Sated m)
+    (hw : wOf x ≤ wOf (C.lastS m)) : C.Sated m' := by
+  have hst := hI.step_push hpos h
+  unfold Sated at hs ⊢
+  rw [lastS_push h]
+  unfold SStep at hst
+  omega
 
 /-- **A post** (`signal`'s or `broadcast`'s release `cmpxchg`) by `t`, out of the condition's
 code, outside or holding the mutex, that may signal: the state's new write `x` keeps `waiters`

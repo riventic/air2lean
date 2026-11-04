@@ -299,6 +299,25 @@ theorem waiters (hs : C.MStep W t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.wai
   | wake c cs h => rw [Proto.modify_ok h] at hw; exact .inl (Array.mem_filter.mp hw).1
   | _ => exact .inl hw
 
+/-- A step of the condition's code keeps another thread's pending wake. -/
+theorem woken_ne (hs : C.MStep W t m m') {u : ThreadId} (hu : u ≠ t)
+    (h : m.woken.contains u = true) : m'.woken.contains u = true := by
+  cases hs with
+  | @op M hv hc hop _ _ =>
+    have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
+      exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
+    rw [hstep.woken]; exact h
+  | @sleep M _ _ hr _ _ =>
+    subst hr
+    exact h
+  | woken => show (m.woken.erase t).contains u = true; rw [FLock.woken_erase hu]; exact h
+  | wake c cs h' =>
+    rw [Proto.modify_ok h']
+    show (m.woken ++ _).contains u = true
+    rw [Array.contains_iff_mem] at h ⊢
+    exact Array.mem_append_left _ h
+  | _ => exact h
+
 /-- A step of the condition's code keeps the queue at another futex `p` exactly, when a thread
 queued at `p` is not queued at the epoch (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
 theorem waiters_at (hs : C.MStep W t m m') {p : Ptr} (hp : p ≠ C.Ep.ptr)
@@ -852,6 +871,36 @@ theorem SigPost.mono {h : Array Word.Entry} {c : VClock} {all : Bool} {m : Mem}
   obtain ⟨hpre, k, hk, hfl, hs⟩ := hp
   exact ⟨hpre, k, hk, hfl, hs.elim .inl fun h => absurd h.1 Bool.noConfusion⟩
 
+variable (C) in
+/-- **One waiter, signalled**: the newest state write is `(1, 1)` (`SigPost.one`). -/
+def Signalled (m : Mem) : Prop := (C.lastS m).Val (0x10001 : BitVec 32)
+
+theorem Signalled.congr {m m' : Mem} (h : C.S.hist m' = C.S.hist m) :
+    C.Signalled m' ↔ C.Signalled m := by
+  unfold Signalled; rw [lastS_congr h]
+
+/-- Signalled: one waiter and one signal. -/
+theorem Signalled.ws {m : Mem} (h : C.Signalled m) :
+    wOf (C.lastS m) = 1 ∧ sOf (C.lastS m) = 1 := by
+  unfold Signalled at h
+  unfold wOf sOf; rw [val_of h]; decide
+
+theorem Signalled.sated {m : Mem} (h : C.Signalled m) : C.Sated m := by
+  have := h.ws; unfold Sated; omega
+
+/-- Under the invariant (every state write is a `u32`), signalled is `waiters = signals = 1`. -/
+theorem Inv.signalled_iff {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) :
+    C.Signalled m ↔ wOf (C.lastS m) = 1 ∧ sOf (C.lastS m) = 1 := by
+  refine ⟨Signalled.ws, fun ⟨hw, hs⟩ => ?_⟩
+  have hv := (hI.sv ((C.S.hist m).size - 1) (by have := hI.spos; omega)).1
+  have hval : val (C.lastS m) = (0x10001 : BitVec 32) := by
+    unfold sOf at hs; unfold wOf at hw
+    apply BitVec.eq_of_toNat_eq
+    have := (val (C.lastS m)).isLt
+    show _ = 65537
+    omega
+  unfold Signalled; rw [← hval]; exact hv
+
 /-- **A signal with one waiter** (maintainer decision 6625654179): if a waiter's
 registration `jr` happened before the call (`hseen`) and the client's invariant has one waiter
 from it on (`hw1`: every state write from `jr` has `waiters = 1`; the singleton fact the client
@@ -861,7 +910,7 @@ theorem SigPost.one {G : ThreadId → γ} {h : Array Word.Entry} {c : VClock} {m
     (hp : C.SigPost h c false m) (hI : C.Inv L G m) (hjr : jr < h.size)
     (hseen : VClock.le h[jr]!.clock c = true)
     (hw1 : ∀ p, jr ≤ p → p < (C.S.hist m).size → wOf (C.S.hist m)[p]! = 1) :
-    (C.lastS m).Val (0x10001 : BitVec 32) := by
+    C.Signalled m := by
   obtain ⟨-, k, hk, hfl, hs⟩ := hp
   have hjk : jr ≤ k := hfl jr hjr hseen
   have hk1 : 1 ≤ sOf (C.S.hist m)[k]! := by
@@ -885,14 +934,8 @@ theorem SigPost.one {G : ThreadId → γ} {h : Array Word.Entry} {c : VClock} {m
   have hlast := hup ((C.S.hist m).size - 1 - k) (by omega)
   rw [show k + ((C.S.hist m).size - 1 - k) = (C.S.hist m).size - 1 by omega] at hlast
   have hw := hw1 ((C.S.hist m).size - 1) (by omega) (by omega)
-  obtain ⟨hv, hsw⟩ := hI.sv ((C.S.hist m).size - 1) (by omega)
-  have hval : val (C.lastS m) = (0x10001 : BitVec 32) := by
-    unfold sOf at hlast hsw; unfold wOf at hw hsw
-    apply BitVec.eq_of_toNat_eq
-    show (val (C.S.hist m)[(C.S.hist m).size - 1]!).toNat = 65537
-    have := (val (C.S.hist m)[(C.S.hist m).size - 1]!).isLt
-    omega
-  rw [← hval]; exact hv
+  have hsw := (hI.sv ((C.S.hist m).size - 1) (by omega)).2
+  exact hI.signalled_iff.mpr ⟨hw, by show sOf (C.S.hist m)[(C.S.hist m).size - 1]! = 1; omega⟩
 
 /-- A read's floor at the reader's clock covers a snapshot of the writes taken at a clock below
 it. -/

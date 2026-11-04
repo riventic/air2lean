@@ -256,7 +256,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
     · rw [hc] at h; exact absurd h (by decide)
     · rw [hp1] at h; rcases h with h | h <;> cases h
     · -- the state has one write: no registration
-      have h1 := hj.1; have h2 := hj.2.1; rw [hwsz] at h2; omega
+      have h1 := hj.1; have h2 : j < (Lo.WS.hist m).size := hj.2.1; rw [hwsz] at h2; omega
     · rw [hc] at h; exact absurd h (by decide)
     · rw [hp1] at h; cases h
 

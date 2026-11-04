@@ -105,15 +105,15 @@ theorem U_relabel {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g�
     (hep1 : (upd G t g₁ 1).2.ph.sigd = false → (Lo.WE.hist m).size = 1)
     (hent : ((upd G t g₁ 0).2.c).crit → (upd G t g₁ 1).2.ph = .lk)
     (hhold : (upd G t g₁ 1).2.ph = .hl ∨ (upd G t g₁ 1).2.ph = .v7 → (upd G t g₁ 1).1.ph = .holds)
-    (hreg : ∀ j, RegW Lo m j →
-      VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[1]!) = true ∨
+    (hreg : ∀ j, (C Lo).RegW m j →
+      VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true ∨
       ((upd G t g₁ 1).2.ph = .lk ∧ (((upd G t g₁ 0).1.ph = .holds ∧
-        VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[0]!) = true) ∨
-        (L Lo).Before m (Lo.WS.hist m)[j]!.clock)))
+        VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[0]!) = true) ∨
+        (L Lo).Before m ((C Lo).S.hist m)[j]!.clock)))
     (hsnap : ∀ n, (upd G t g₁ 1).2.sz = some n →
-      (upd G t g₁ 1).2.ph = .sg ∧ ∀ j, RegW Lo m j → j < n)
+      (upd G t g₁ 1).2.ph = .sg ∧ ∀ j, (C Lo).RegW m j → j < n)
     (hlvc : ((upd G t g₁ 0).2.c).waits → (upd G t g₁ 1).2.ph = .st ∨ (upd G t g₁ 1).2.ph = .fin →
-      Sig Lo m)
+      (C Lo).Signalled m)
     (hfin : (upd G t g₁ 1).2.ph = .fin → (E Lo).IsSet m) :
     U Lo (upd G t g₁) rX m := by
   have hI := cinv_out (t := t) (g := g₁) hu.cinv (by rw [upd_self]; exact hc₀) hc₁
@@ -226,9 +226,9 @@ theorem U_prod {G : ThreadId → Gh} {rX : Res} {m : Mem} {a₀ a₁ : FLG} {x�
     (hep1 : x₁.ph.sigd = false → x₀.ph.sigd = false)
     (hent : ((G 0).2.c).crit → x₁.ph = .lk)
     (hhold : x₁.ph = .hl ∨ x₁.ph = .v7 → a₁.ph = .holds)
-    (hreg : ∀ j, RegW Lo m j → VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[1]!) = true)
-    (hsnap : ∀ n, x₁.sz = some n → x₁.ph = .sg ∧ ∀ j, RegW Lo m j → j < n)
-    (hlvc : ((G 0).2.c).waits → x₁.ph = .st ∨ x₁.ph = .fin → Sig Lo m)
+    (hreg : ∀ j, (C Lo).RegW m j → VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true)
+    (hsnap : ∀ n, x₁.sz = some n → x₁.ph = .sg ∧ ∀ j, (C Lo).RegW m j → j < n)
+    (hlvc : ((G 0).2.c).waits → x₁.ph = .st ∨ x₁.ph = .fin → (C Lo).Signalled m)
     (hfin : x₁.ph = .fin → (E Lo).IsSet m) :
     U Lo (upd G 1 (a₁, x₁)) rX m := by
   obtain ⟨h00, ⟨-, -, hy⟩ | ⟨hs, h1, hmn, hnp, -, hrest⟩⟩ := hu.shape
@@ -268,7 +268,7 @@ not hold the mutex, and its release happened before the producer's lock). `hL` i
 invariant with `G'`, at the same lock places as `G` but for the producer, which holds. -/
 theorem U.reg_lk {G G' : ThreadId → Gh} {rX rX' : Res} {m : Mem} (hL : (L Lo).Inv G' rX' m)
     (hu : U Lo G rX m) (h0 : (G' 0).1.ph = (G 0).1.ph) (hh : (G' 1).1.ph = .holds) {j : Nat}
-    (hj : RegW Lo m j) : VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[1]!) = true := by
+    (hj : (C Lo).RegW m j) : VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true := by
   rcases hu.reg j hj with h | ⟨-, ⟨h0', -⟩ | ⟨k, l, hl, hle⟩⟩
   · exact h
   · exact (one_holder hL (h0.trans h0') hh).elim
@@ -276,8 +276,8 @@ theorem U.reg_lk {G G' : ThreadId → Gh} {rX rX' : Res} {m : Mem} (hL : (L Lo).
 
 /-- Past its lock, the producer saw every registration (`reg`). -/
 theorem U.reg_out {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m)
-    (hp : (G 1).2.ph ≠ .lk) {j : Nat} (hj : RegW Lo m j) :
-    VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[1]!) = true :=
+    (hp : (G 1).2.ph ≠ .lk) {j : Nat} (hj : (C Lo).RegW m j) :
+    VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true :=
   (hu.reg j hj).resolve_right fun h => hp h.1
 
 /-- **The producer's signal signals a registered `main`** (`FCond.SigPost.one`): `main`'s
@@ -287,19 +287,14 @@ theorem signal_sig {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem}
     (hu : U Lo G rX m) (hg : (G 1).2.ph = .sg) (hu' : U Lo G' rX' m')
     (hz : (G' 1).2.sz = some (Lo.WS.hist m).size)
     (hp : (C Lo).SigPost ((C Lo).S.hist m) (m.clocks[1]!) false m')
-    (hr : ((G' 0).2.c).isReg = true) : Sig Lo m' := by
+    (hr : ((G' 0).2.c).isReg = true) : (C Lo).Signalled m' := by
   obtain ⟨j, hj, hw⟩ := hu'.w1 hr
-  have hjn : j < (Lo.WS.hist m).size := (hu'.snap _ hz).2 j hj
-  have hpre : Lo.WS.Prefix (Lo.WS.hist m) m' := hp.1
+  have hjn : j < ((C Lo).S.hist m).size := (hu'.snap _ hz).2 j hj
   obtain ⟨h0, -, h1, h2⟩ := hj
-  have hjm : RegW Lo m j :=
-    ⟨h0, hjn, by rw [← hpre.get (by omega)]; exact h1, by rw [← hpre.get hjn]; exact h2⟩
-  have hseen : VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true :=
-    U.reg_out hu (by rw [hg]; intro h; cases h) hjm
-  have hw1 : ∀ p, j ≤ p → p < ((C Lo).S.hist m').size →
-      FCond.wOf ((C Lo).S.hist m')[p]! = 1 := hw
-  have h := FCond.SigPost.one (L := L Lo) hp hu'.cinv (jr := j) hjn hseen hw1
-  unfold Sig; exact h
+  have hjm : (C Lo).RegW m j :=
+    ⟨h0, hjn, by rw [← hp.1.get (by omega)]; exact h1, by rw [← hp.1.get hjn]; exact h2⟩
+  exact FCond.SigPost.one (L := L Lo) hp hu'.cinv hjn
+    (U.reg_out hu (by rw [hg]; intro h; cases h) hjm) hw
 
 /-- **The producer, holding the mutex,** goes from `lk`, `hl` or `v7` to `hl`, `v7` or `rdy`
 (its lock's return and its two stores). `hL`: the lock's invariant with any resource and places
@@ -365,7 +360,7 @@ theorem inv_snap {G : ThreadId → Gh} {m : Mem} {rp : Res}
 (`signal_sig`); to the event's `set`. -/
 theorem inv_st {G : ThreadId → Gh} {m : Mem} {rp : Res} {z : Option Nat}
     (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .sg, sz := z })) m)
-    (hs : ((G 0).2.c).isReg = true → Sig Lo m) :
+    (hs : ((G 0).2.c).isReg = true → (C Lo).Signalled m) :
     (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .st })) m :=
   inv_relabel hi rfl (by rw [upd_self, upd_self]; rfl) (by rw [upd_self, upd_self]; rfl)
     fun _ _ hu => by
@@ -376,7 +371,7 @@ theorem inv_st {G : ThreadId → Gh} {m : Mem} {rp : Res} {z : Option Nat}
       exact U_prod hu rfl rfl rfl rfl rfl rfl (fun _ => .inl rfl) (fun h => by cases h)
         (fun h => by rw [hent] at h; cases h) (fun h => by rcases h with h | h <;> cases h)
         (fun j hj => U.reg_out hu (by rw [upd_self]; intro h; cases h) hj) (fun _ h => by cases h)
-        (fun hw _ => hs (isReg_of hw hent))
+        (fun hw _ => hs (CPh.isReg_of_waits hw hent))
         (fun h => by cases h)
 
 /-- **The producer's end**, after the event's `set`: it is `gone` at `fin`. -/
@@ -493,7 +488,8 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
       hu.rest.congr fun _ _ => rfl, hu.blk,
     hwS, hwE, hwV, hI', hJ', by rw [hX1]; rfl,
     fun _ => by rw [hhE]; exact hu.ep1 (by rw [hG1]; rfl),
-    by rw [hhE]; exact hu.ep2, fun h => (SW_congr hhS).mpr (hu.epS (by rw [← hhE]; exact h)),
+    by rw [hhE]; exact hu.ep2,
+    fun h => (FCond.Sated.congr (C := C Lo) hhS).mpr (hu.epS (by rw [← hhE]; exact h)),
     fun _ _ _ h => (by rw [hX1] at h; cases h),
     ?_, ?_, ?_, fun h => (by rw [hX0] at h; cases h), fun _ h => (by rw [hX1] at h; cases h),
     ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩
@@ -506,7 +502,8 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   · intro h; rw [hX1] at h; rcases h with h | h <;> cases h
   · -- a registration before the spawn happened before the producer's clock, an empty one
     intro j hj
-    rw [RegW_congr hhS] at hj; rw [hhS]
+    have hS : (C Lo).S.hist _ = (C Lo).S.hist m := hhS
+    rw [FCond.RegW.congr hS] at hj; rw [hS]
     have h1 : m.clocks[1]! = #[] := getElem!_neg m.clocks 1 (by rw [hcs, hs1]; decide)
     rcases hu.reg j hj with h' | ⟨h', -⟩
     · rw [h1] at h'; exact .inl (VClock.le_trans h' (le_nil _))
@@ -576,7 +573,7 @@ theorem cwait_ok {G : ThreadId → Gh} {m : Mem} {rM rL : Res}
   · have : (C Lo).nreg (upd G 0 (gH rM rL { ph := .run })) T = 0 := tsum_eq_zero fun u _ => by
       cases h : ((C Lo).ph (upd G 0 (gH rM rL { ph := .run }) u)).isReg
       · rfl
-      · have h0 := hu.wait0 (reg_waits h)
+      · have h0 := hu.wait0 (CPh.isReg_waits h)
         subst h0; rw [upd_self] at h; cases h
     rw [this]; decide
   · have hX : ∀ u, u ≠ 0 → (upd G 0 ((C Lo).set (gH rM rL { ph := .run }) .en) u).2 =
@@ -631,8 +628,7 @@ theorem cwait_live (G₁ : ThreadId → Gh) (m₁ : Mem)
   have hw : ((G₁ 0).2.c).waits = true := by rw [hr']; rfl
   have hrun : (G₁ 0).2.ph ≠ .pre := by
     rcases hu.xc 0 (by rw [hr']; nofun) with h | h <;> rw [h] <;> decide
-  have hs' : FCond.sOf (Lo.WS.hist m₁)[(Lo.WS.hist m₁).size - 1]! = 0 := hs
-  exact live_of hi (fun h => by have := (Sig.ws (hu.lvc hw (.inr h))).2; omega)
+  exact live_of hi (fun h => by have := (hu.lvc hw (.inr h)).ws.2; omega)
     (hu.shape.size hrun)
 
 /-- **`main`'s event wait** at `ev`: the premises `hone` and `hhb` of `EventImpl.wait_wp`. -/

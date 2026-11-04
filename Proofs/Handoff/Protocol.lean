@@ -29,7 +29,7 @@ generated code with the steps here.
   write only until the producer signals (`ep1`) and moves at most once, with no post possible
   after it (`ep2`, `epS`, `incE`: the window `Fits.win`); while `main` is in the condition's
   critical code the producer is before its lock (`ent`: `hent`; only `main` registers, so
-  `hroom`); every registration (a state write with `waiters` from 0 to 1, `RegW`) happened
+  `hroom`); every registration (a state write with `waiters` from 0 to 1, `FCond.RegW`) happened
   before the producer (`reg`, through the mutex's release and acquire), a registered `main` has
   one waiter from its registration on (`w1`), and inside `signal` the producer's call snapshot
   (`X.sz`) covers every registration (`snap`): with `FCond.SigPost.one` the signal's post says
@@ -182,19 +182,6 @@ def Shape (Y : ThreadId → X) (m : Mem) : Prop :=
    (m.threads.size = 2 ∧ m.threads[1]? = some { spawner := 0, joined := false } ∧
     (Y 0).ph.isMain ∧ (Y 0).ph ≠ .pre ∧ (Y 1).ph.isProd ∧ ∀ u, 2 ≤ u → Y u = {}))
 
-/-- `main` is signalled: the newest state write is `(1, 1)`. -/
-def Sig (m : Mem) : Prop := ((Lo.WS.hist m)[(Lo.WS.hist m).size - 1]!).Val (0x10001 : BitVec 32)
-
-/-- The newest state write has `signals = waiters`: no post is possible (`FCond.SStep`). -/
-def SW (m : Mem) : Prop :=
-  FCond.sOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! =
-    FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]!
-
-/-- State write `j` is a registration: `waiters` goes from 0 to 1. -/
-def RegW (m : Mem) (j : Nat) : Prop :=
-  0 < j ∧ j < (Lo.WS.hist m).size ∧ FCond.wOf (Lo.WS.hist m)[j - 1]! = 0 ∧
-    FCond.wOf (Lo.WS.hist m)[j]! = 1
-
 /-- The rest of the invariant (module doc). -/
 structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   shape : Shape (fun u => (G u).2) m
@@ -213,28 +200,28 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   /-- The epoch moves at most once: the producer's one `epoch += 1`, after its post, which
   leaves no room for another post (`incE`, `epS`). This gives the window (`fitsC`). -/
   ep2 : (Lo.WE.hist m).size ≤ 2
-  epS : (Lo.WE.hist m).size = 2 → SW Lo m
-  incE : ∀ q n h, (G 1).2.c = .inc q n h → (Lo.WE.hist m).size = 1 ∧ SW Lo m
+  epS : (Lo.WE.hist m).size = 2 → (C Lo).Sated m
+  incE : ∀ q n h, (G 1).2.c = .inc q n h → (Lo.WE.hist m).size = 1 ∧ (C Lo).Sated m
   /-- `main` in the condition's critical code: the producer is before its lock. -/
   ent : ((G 0).2.c).crit → (G 1).2.ph = .lk
   /-- The producer holds the mutex between its lock and its store of `ready`. -/
   hold : (G 1).2.ph = .hl ∨ (G 1).2.ph = .v7 → (G 1).1.ph = .holds
   /-- A registration happened before the producer, or before the mutex's release while the
   producer is before its lock (`main` registers holding the mutex). -/
-  reg : ∀ j, RegW Lo m j →
-    VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[1]!) = true ∨
+  reg : ∀ j, (C Lo).RegW m j →
+    VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[1]!) = true ∨
     ((G 1).2.ph = .lk ∧ (((G 0).1.ph = .holds ∧
-      VClock.le (Lo.WS.hist m)[j]!.clock (m.clocks[0]!) = true) ∨
-      (L Lo).Before m (Lo.WS.hist m)[j]!.clock))
+      VClock.le ((C Lo).S.hist m)[j]!.clock (m.clocks[0]!) = true) ∨
+      (L Lo).Before m ((C Lo).S.hist m)[j]!.clock))
   /-- A registered `main` has its registration, and one waiter from it on (the client's history
   fact of `FCond.SigPost.one`). -/
-  w1 : ((G 0).2.c).isReg → ∃ j, RegW Lo m j ∧
-    ∀ p, j ≤ p → p < (Lo.WS.hist m).size → FCond.wOf (Lo.WS.hist m)[p]! = 1
+  w1 : ((G 0).2.c).isReg → ∃ j, (C Lo).RegW m j ∧
+    ∀ p, j ≤ p → p < ((C Lo).S.hist m).size → FCond.wOf ((C Lo).S.hist m)[p]! = 1
   /-- Inside its `signal`, the producer's call snapshot `n` covers every registration (no
   registration while the producer is past its lock). -/
-  snap : ∀ n, (G 1).2.sz = some n → (G 1).2.ph = .sg ∧ ∀ j, RegW Lo m j → j < n
+  snap : ∀ n, (G 1).2.sz = some n → (G 1).2.ph = .sg ∧ ∀ j, (C Lo).RegW m j → j < n
   /-- After the producer's signal, a registered `main` is signalled. -/
-  lvc : ((G 0).2.c).waits → (G 1).2.ph = .st ∨ (G 1).2.ph = .fin → Sig Lo m
+  lvc : ((G 0).2.c).waits → (G 1).2.ph = .st ∨ (G 1).2.ph = .fin → (C Lo).Signalled m
   /-- After the producer's end, the event is set. -/
   fin : (G 1).2.ph = .fin → (E Lo).IsSet m
   /-- A thread waits only at the mutex, the epoch or the event. -/
@@ -266,39 +253,13 @@ variable {Lo}
 
 /-! ## The state's writes -/
 
-theorem RegW_congr {m m' : Mem} (h : Lo.WS.hist m' = Lo.WS.hist m) {j : Nat} :
-    RegW Lo m' j ↔ RegW Lo m j := by unfold RegW; rw [h]
-
-theorem SW_congr {m m' : Mem} (h : Lo.WS.hist m' = Lo.WS.hist m) : SW Lo m' ↔ SW Lo m := by
-  unfold SW; rw [h]
-
-theorem Sig_congr {m m' : Mem} (h : Lo.WS.hist m' = Lo.WS.hist m) : Sig Lo m' ↔ Sig Lo m := by
-  unfold Sig; rw [h]
-
-/-- A registration after a new state write `x`: one before it, or the new write itself. -/
-theorem RegW_push {m m' : Mem} {x : Word.Entry} (h : Lo.WS.hist m' = (Lo.WS.hist m).push x)
-    {j : Nat} (hj : RegW Lo m' j) : RegW Lo m j ∨ (j = (Lo.WS.hist m).size ∧
-      FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = 0 ∧ FCond.wOf x = 1) := by
-  obtain ⟨h0, hjs, hw0, hw1⟩ := hj
-  rw [h, Array.size_push] at hjs
-  rw [h] at hw0 hw1
-  by_cases e : j < (Lo.WS.hist m).size
-  · rw [FEvent.get_push_lt e] at hw1
-    rw [FEvent.get_push_lt (by omega)] at hw0
-    exact .inl ⟨h0, e, hw0, hw1⟩
-  · obtain rfl : j = (Lo.WS.hist m).size := by omega
-    rw [FEvent.get_push_eq] at hw1
-    rw [FEvent.get_push_lt (by omega)] at hw0
-    exact .inr ⟨rfl, hw0, hw1⟩
-
 /-- The newest `waiters` when only `main` registers: 1 if it is registered, else 0
 (`FCond.Inv.cnt`). -/
 theorem wlast {G : ThreadId → Gh} {m : Mem} (hI : (C Lo).Inv (L Lo) G m)
     (h0 : ∀ u, ((G u).2.c).isReg = true → u = 0) :
-    FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = if ((G 0).2.c).isReg then 1 else 0 := by
+    FCond.wOf ((C Lo).lastS m) = if ((G 0).2.c).isReg then 1 else 0 := by
   obtain ⟨T, hT, hw, -⟩ := hI.cnt
-  have hw' : FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = FCond.nreg (C Lo) G T := hw
-  rw [hw']
+  rw [hw]
   unfold FCond.nreg
   rw [tsum_congr (h := fun u => if u = 0 then (if ((G 0).2.c).isReg then 1 else 0) else 0)
     (fun u _ => ?_)]
@@ -312,60 +273,6 @@ theorem wlast {G : ThreadId → Gh} {m : Mem} (hI : (C Lo).Inv (L Lo) G m)
       cases hr : ((G u).2.c).isReg
       · show (if ((G u).2.c).isReg = true then 1 else 0) = 0; rw [hr]; rfl
       · exact absurd (h0 u hr) e
-
-/-- The newest state write after a new write `x` is `x`. -/
-theorem last_push {m m' : Mem} {x : Word.Entry} (h : Lo.WS.hist m' = (Lo.WS.hist m).push x) :
-    (Lo.WS.hist m')[(Lo.WS.hist m').size - 1]! = x := by
-  rw [h, Array.size_push, Nat.add_sub_cancel, FEvent.get_push_eq]
-
-/-- A new state write is one of the kinds of `FCond.SStep` from the newest one before it. -/
-theorem step_push {m m' : Mem} {x : Word.Entry} {G : ThreadId → Gh}
-    (hI : (C Lo).Inv (L Lo) G m') (hpos : 0 < (Lo.WS.hist m).size)
-    (h : Lo.WS.hist m' = (Lo.WS.hist m).push x) :
-    FCond.SStep (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! x := by
-  have hst := hI.steps ((Lo.WS.hist m).size - 1) (by
-    show _ < (Lo.WS.hist m').size; rw [h, Array.size_push]; omega)
-  have e1 : (Lo.WS.hist m')[(Lo.WS.hist m).size - 1]! = (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! := by
-    rw [h, FEvent.get_push_lt (by omega)]
-  have e2 : (Lo.WS.hist m')[(Lo.WS.hist m).size - 1 + 1]! = x := by
-    rw [h, show (Lo.WS.hist m).size - 1 + 1 = (Lo.WS.hist m).size by omega, FEvent.get_push_eq]
-  have : FCond.SStep (Lo.WS.hist m')[(Lo.WS.hist m).size - 1]!
-      (Lo.WS.hist m')[(Lo.WS.hist m).size - 1 + 1]! := hst
-  rwa [e1, e2] at this
-
-/-- After a new state write that registers no thread (`waiters` does not rise), `signals = waiters`
-stays (no post from it). -/
-theorem SW_push {m m' : Mem} {x : Word.Entry} {G : ThreadId → Gh}
-    (hI : (C Lo).Inv (L Lo) G m') (hpos : 0 < (Lo.WS.hist m).size)
-    (h : Lo.WS.hist m' = (Lo.WS.hist m).push x) (hs : SW Lo m)
-    (hw : FCond.wOf x ≤ FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]!) : SW Lo m' := by
-  have hst := step_push hI hpos h
-  unfold SW at hs ⊢
-  rw [last_push h]
-  unfold FCond.SStep at hst
-  omega
-
-/-- `main` signalled: one waiter and one signal. -/
-theorem Sig.ws {m : Mem} (h : Sig Lo m) :
-    FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = 1 ∧
-      FCond.sOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = 1 := by
-  unfold Sig at h
-  unfold FCond.wOf FCond.sOf; rw [FCond.val_of h]; decide
-
-theorem sig_of {G : ThreadId → Gh} {m : Mem} (hI : (C Lo).Inv (L Lo) G m)
-    (hw : FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = 1)
-    (hs : FCond.sOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = 1) : Sig Lo m := by
-  have hpos : 0 < (Lo.WS.hist m).size := hI.spos
-  have hv : (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]!.Val
-      (FCond.val (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]!) :=
-    (hI.sv ((Lo.WS.hist m).size - 1) (by show _ < (Lo.WS.hist m).size; omega)).1
-  have hval : FCond.val (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! = (0x10001 : BitVec 32) := by
-    unfold FCond.sOf at hs; unfold FCond.wOf at hw
-    apply BitVec.eq_of_toNat_eq
-    have := (FCond.val (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]!).isLt
-    show _ = 65537
-    omega
-  unfold Sig; rw [← hval]; exact hv
 
 /-- A word of the three in the rest: its cells and the others. -/
 theorem Rest.split {rX : Res} {m : Mem} {W : Word 32 4} (hW : ∀ l, W.In l → Lo.BoxW l)
@@ -498,6 +405,47 @@ theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk Lo m) (hs : (L Lo).S
     · show (writeBytes blk.bytes Lo.mo bs).size = Lo.size
       rw [writeBytes_size _ _ _ (by rw [h3]; exact h4), hsz]
 
+/-- **`U` after a step that keeps the threads' places (`ph`, `c`, `sz`) and the state's and the
+epoch's writes**: the fields that read only these carry over (`places`, `ep1`, `ep2`, `epS`,
+`incE`, `ent`, `w1`, `snap`, `lvc`, `xc`). The step gives the others, with `hold`, `reg` and `fin`
+at the old places and `reg` for the old registrations. -/
+theorem U.congrHist {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U Lo G rX m)
+    (hX : ∀ u, (G' u).2.ph = (G u).2.ph ∧ (G' u).2.c = (G u).2.c ∧ (G' u).2.sz = (G u).2.sz)
+    (hhS : Lo.WS.hist m' = Lo.WS.hist m) (hhE : Lo.WE.hist m' = Lo.WE.hist m)
+    (shape : Shape (fun u => (G' u).2) m') (io : ReadShared (IoR Lo) m') (rest : Rest Lo rX' m')
+    (blk : BlkOk Lo m') (ws : Lo.WS.Ok m') (we : Lo.WE.Ok m') (wv : Lo.WV.Ok m')
+    (cinv : (C Lo).Inv (L Lo) G' m') (einv : (E Lo).Inv (L Lo) G' m')
+    (hold : (G 1).2.ph = .hl ∨ (G 1).2.ph = .v7 → (G' 1).1.ph = .holds)
+    (reg : ∀ j, (C Lo).RegW m j →
+      VClock.le ((C Lo).S.hist m)[j]!.clock (m'.clocks[1]!) = true ∨
+      ((G 1).2.ph = .lk ∧ (((G' 0).1.ph = .holds ∧
+        VClock.le ((C Lo).S.hist m)[j]!.clock (m'.clocks[0]!) = true) ∨
+        (L Lo).Before m' ((C Lo).S.hist m)[j]!.clock)))
+    (fin : (G 1).2.ph = .fin → (E Lo).IsSet m')
+    (q : ∀ w ∈ m'.waiters, w.2 = (L Lo).ptr ∨ w.2 = Lo.WE.ptr ∨ w.2 = Lo.WV.ptr) :
+    U Lo G' rX' m' := by
+  have hS : (C Lo).S.hist m' = (C Lo).S.hist m := hhS
+  refine ⟨shape, io, rest, blk, ws, we, wv, cinv, einv, by rw [(hX 1).2.1]; exact hu.places,
+    fun h => by rw [(hX 1).1] at h; rw [hhE]; exact hu.ep1 h, by rw [hhE]; exact hu.ep2,
+    fun h => (FCond.Sated.congr hS).mpr (hu.epS (by rw [← hhE]; exact h)),
+    fun q' n h hq => by
+      rw [(hX 1).2.1] at hq; rw [hhE]
+      exact ⟨(hu.incE q' n h hq).1, (FCond.Sated.congr hS).mpr (hu.incE q' n h hq).2⟩,
+    fun h => by rw [(hX 0).2.1] at h; rw [(hX 1).1]; exact hu.ent h,
+    fun h => by rw [(hX 1).1] at h; exact hold h,
+    fun j hj => by rw [hS, (hX 1).1]; exact reg j ((FCond.RegW.congr hS).mp hj),
+    fun h => by
+      rw [(hX 0).2.1] at h; obtain ⟨j, hj, hp⟩ := hu.w1 h
+      exact ⟨j, (FCond.RegW.congr hS).mpr hj, by rw [hS]; exact hp⟩,
+    fun n h => by
+      rw [(hX 1).2.2] at h; rw [(hX 1).1]
+      exact ⟨(hu.snap n h).1, fun j hj => (hu.snap n h).2 j ((FCond.RegW.congr hS).mp hj)⟩,
+    fun h0 h1 => by
+      rw [(hX 0).2.1] at h0; rw [(hX 1).1] at h1
+      exact (FCond.Signalled.congr hS).mpr (hu.lvc h0 h1),
+    fun h => by rw [(hX 1).1] at h; exact fin h, q,
+    fun u h => by rw [(hX u).2.1] at h; rw [(hX u).1]; exact hu.xc u h⟩
+
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (hna : (L Lo).ph (G t) ≠ .away)
@@ -508,26 +456,12 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   obtain ⟨hwS, hhS⟩ := hu.ws.lockStep hs apS
   obtain ⟨hwE, hhE⟩ := hu.we.lockStep hs apE
   obtain ⟨hwV, hhV⟩ := hu.wv.lockStep hs apV
-  refine ⟨?_, fun e he hr => ?_, hu.rest.congr fun l hl => hs.heap (box_notL hl),
-    hu.blk.lstep hs,
-    hwS, hwE, hwV,
-    hu.cinv.lstep hu.ws hu.we apS apE hok.1 hna (fun _ _ _ => rfl) hs,
-    hu.einv.lstep hu.wv apV hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
-      (fun _ _ _ => Iff.rfl) hs,
-    by rw [hX]; exact hu.places, fun h1 => ?_, by rw [hhE]; exact hu.ep2,
-    fun h => (SW_congr hhS).mpr (hu.epS (by rw [← hhE]; exact h)),
-    fun q n h' hq => by
-      rw [hX] at hq; rw [hhE]
-      exact ⟨(hu.incE q n h' hq).1, (SW_congr hhS).mpr (hu.incE q n h' hq).2⟩,
-    fun h0 => ?_, fun h1 => ?_, fun j hj => ?_,
-    fun h => by
-      rw [hX] at h; obtain ⟨j, hj, hp⟩ := hu.w1 h
-      exact ⟨j, (RegW_congr hhS).mpr hj, by rw [hhS]; exact hp⟩,
-    fun n h => by
-      rw [hX] at h ⊢
-      exact ⟨(hu.snap n h).1, fun j hj => (hu.snap n h).2 j ((RegW_congr hhS).mp hj)⟩,
-    fun h0 h1 => by rw [hX] at h0 h1; exact (Sig_congr hhS).mpr (hu.lvc h0 h1), fun h1 => ?_,
-    fun w hw => ?_, fun u hu' => by rw [hX] at hu' ⊢; exact hu.xc u hu'⟩
+  refine hu.congrHist (fun u => by rw [hX u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE ?_
+    (fun e he hr => ?_) (hu.rest.congr fun l hl => hs.heap (box_notL hl)) (hu.blk.lstep hs)
+    hwS hwE hwV (hu.cinv.lstep hu.ws hu.we apS apE hok.1 hna (fun _ _ _ => rfl) hs)
+    (hu.einv.lstep hu.wv apV hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
+      (fun _ _ _ => Iff.rfl) hs)
+    (fun h1 => ?_) (fun j hj => ?_) (fun h1 => ?_) (fun w hw => ?_)
   · have : (fun u => (upd G t ((L Lo).set (G t) p h) u).2) = fun u => (G u).2 := funext hX
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
   · rcases hs.fp e he with h' | ⟨-, ho', -⟩
@@ -535,16 +469,12 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
       · exact .inl ⟨hk, hs.someLe h''⟩
       · exact .inr (hs.allLe h'')
     · exact absurd hr (io_notL ho')
-  · rw [hX] at h1; rw [hhE]; exact hu.ep1 h1
-  · rw [hX] at h0; rw [hX]; exact hu.ent h0
-  · rw [hX] at h1
-    by_cases ht : t = 1
+  · by_cases ht : t = 1
     · subst ht; rcases h1 with h1 | h1
       · exact absurd h1 hok.2.2.1
       · exact absurd h1 hok.2.2.2
     · rw [upd_ne _ _ (Ne.symm ht)]; exact hu.hold h1
-  · rw [hX, hhS]
-    rcases hu.reg j ((RegW_congr hhS).mp hj) with h' | ⟨hlk, h'⟩
+  · rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hs.clocks 1))
     · refine .inr ⟨hlk, ?_⟩
       rcases h' with ⟨hh, hle⟩ | hb
@@ -556,8 +486,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
           · exact .inr (LockWord.before_le (hrel hh hp) hle)
         · exact .inl ⟨by rw [upd_ne _ _ (Ne.symm ht0)]; exact hh, VClock.le_trans hle (hs.clocks 0)⟩
       · exact .inr (hs.before _ hb)
-  · rw [hX] at h1
-    show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
+  · show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · by_cases hl : w.2 = (L Lo).ptr
     · exact .inl hl
     · exact hu.q w ((hs.waiters_mem w hl).mp hw)
@@ -627,32 +556,21 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
     by_cases e : u = t
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
-  refine ⟨?_, fun e he hr => ?_, hrest, hbk, hwS, hwE, hwV,
-    hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
+  refine hu.congrHist (fun u => by rw [hX' u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE ?_
+    (fun e he hr => ?_) hrest hbk hwS hwE hwV
+    (hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
       (fun _ h => by show g.1.ph = _; rw [hph]; exact h)
       (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE (by rw [hs.waiters])
       (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
-      (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock,
-    hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
+      (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock)
+    (hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
       (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h)
       (hu.einv.fresh.fstep hs (fun x h1 h2 => hwB _ (Lo.wv_box ⟨rfl, h1, h2⟩))
-        (fun i l hl => (hu.wv.loc i l hl).1)),
-    by rw [hX']; exact hu.places, fun h1 => ?_, by rw [hhE]; exact hu.ep2,
-    fun h => (SW_congr hhS).mpr (hu.epS (by rw [← hhE]; exact h)),
-    fun q n h' hq => by
-      rw [hX'] at hq; rw [hhE]
-      exact ⟨(hu.incE q n h' hq).1, (SW_congr hhS).mpr (hu.incE q n h' hq).2⟩,
-    fun h0 => ?_, fun h1 => ?_, fun j hj => ?_,
-    fun h => by
-      rw [hX'] at h; obtain ⟨j, hj, hp⟩ := hu.w1 h
-      exact ⟨j, (RegW_congr hhS).mpr hj, by rw [hhS]; exact hp⟩,
-    fun n h => by
-      rw [hX'] at h ⊢
-      exact ⟨(hu.snap n h).1, fun j hj => (hu.snap n h).2 j ((RegW_congr hhS).mp hj)⟩,
-    fun h0 h1 => by rw [hX'] at h0 h1; exact (Sig_congr hhS).mpr (hu.lvc h0 h1), fun h1 => ?_,
-    fun w hw => ?_, fun u hu' => by rw [hX'] at hu' ⊢; exact hu.xc u hu'⟩
+        (fun i l hl => (hu.wv.loc i l hl).1)))
+    (fun h1 => by rw [hP']; exact hu.hold h1) (fun j hj => ?_) (fun h1 => ?_)
+    (fun w hw => by rw [hs.waiters] at hw; exact hu.q w hw)
   · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
   · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
@@ -665,11 +583,8 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
           fun u hu => VClock.le_trans hc (h'' u hu))
     · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
       rw [hr.1]; exact hio _ hr.2.2
-  · rw [hX'] at h1; rw [hhE]; exact hu.ep1 h1
-  · rw [hX'] at h0; rw [hX']; exact hu.ent h0
-  · rw [hX'] at h1; rw [hP']; exact hu.hold h1
-  · rw [hX', hhS, hP']
-    rcases hu.reg j ((RegW_congr hhS).mp hj) with h' | ⟨hlk, h'⟩
+  · rw [hP']
+    rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hs.clock 1))
     · refine .inr ⟨hlk, ?_⟩
       rcases h' with ⟨hh, hle⟩ | hb
@@ -677,9 +592,7 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
       · obtain ⟨i, l, hl, hle⟩ := hb
         obtain ⟨j, hl'⟩ := (LockWord.loc_fstep (L := (L Lo).toLockWord) hs hwL hok l).mpr ⟨i, hl⟩
         exact .inr ⟨j, l, hl', hle⟩
-  · rw [hX'] at h1
-    show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
-  · rw [hs.waiters] at hw; exact hu.q w hw
+  · show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
 
 /-- `blk_of` for a rest whose ghost state is `io`'s. -/
 theorem blk_ofG {G : ThreadId → Gh} {rX rIO : Res} {m : Mem} (hi : (L Lo).Inv G rX m)
@@ -960,32 +873,6 @@ theorem U.sig1 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) {u 
   have h2 : (G u).2.ph = .sg := hu.cinv.sx u h
   exact ⟨hu.shape.one (u := u) (by rw [h2]; rfl), h2⟩
 
-theorem next_out {p : CPh} (h : CPh.Next .out p) : p = .out ∨ p.sig = true := by
-  cases p <;> simp_all [CPh.Next, CPh.sig]
-
-theorem next_inc {a : CPh} {q n : Nat} {h : Array Word.Entry} (hn : CPh.Next a (.inc q n h)) :
-    (∃ sh c, a = .sl sh c) ∨ a = .inc q n h := by
-  cases a <;> simp_all [CPh.Next]
-
-theorem sig_waits {p : CPh} (h : p.sig = true) : p.waits = false := by
-  cases p <;> simp_all [CPh.sig, CPh.waits]
-
-/-- A step of the code into a registration from elsewhere starts in the critical code. -/
-theorem next_crit {a b : CPh} (h : CPh.Next a b) (hb : b.isReg = true) (ha : a.isReg = false) :
-    a.crit = true := by
-  cases a <;> cases b <;> simp_all [CPh.Next, CPh.isReg, CPh.crit]
-
-theorem reg_waits {c : CPh} (h : c.isReg = true) : c.waits = true := by
-  cases c <;> simp_all [CPh.isReg, CPh.waits]
-
-/-- A waiter's place out of the critical code is a registration. -/
-theorem reg_of {c : CPh} (hw : c.waits = true) (hc : c.crit = false) :
-    ∃ i jr sn e, c = .reg i jr sn e := by
-  cases c <;> simp_all [CPh.waits, CPh.crit]
-
-theorem isReg_of {c : CPh} (hw : c.waits = true) (hc : c.crit = false) : c.isReg = true := by
-  cases c <;> simp_all [CPh.waits, CPh.crit, CPh.isReg]
-
 /-- **A step of the condition's code keeps `U`** (`FLock.Fits.kstep` of `FCond.prim`). -/
 theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : CPh) (q : LPh)
     (h : Res) (W : Word 32 4) (hW : W = (C Lo).S ∨ W = (C Lo).Ep)
@@ -1042,13 +929,13 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     rw [(hph t).1] at h2; exact h2
   -- only `main` registers, from its critical code (the producer is then before its lock)
   have hr0' : ∀ u, ((G' u).2.c).isReg = true → u = 0 := fun u hr =>
-    hu.wait0 (hcw u (reg_waits hr))
-  have hwl := wlast hu.cinv fun u hr => hu.wait0 (reg_waits hr)
+    hu.wait0 (hcw u (CPh.isReg_waits hr))
+  have hwl := wlast hu.cinv fun u hr => hu.wait0 (CPh.isReg_waits hr)
   have hwl' := wlast hI hr0'
   have henter : ((G' 0).2.c).isReg = true → ((G 0).2.c).isReg = false →
       t = 0 ∧ ((G 0).2.c).crit = true := fun h1 h2 => by
     by_cases et : t = 0
-    · subst et; rw [hXt] at h1; exact ⟨rfl, next_crit hn' h1 h2⟩
+    · subst et; rw [hXt] at h1; exact ⟨rfl, hn'.crit_of_reg h1 h2⟩
     · rw [hG 0 (Ne.symm et)] at h1; rw [h1] at h2; cases h2
   have hnoreg : (G 1).2.ph ≠ .lk → ((G' 0).2.c).isReg = true → ((G 0).2.c).isReg = true :=
     fun hl h1 => by
@@ -1056,27 +943,28 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · exact absurd (hu.ent (henter h1 h2).2) hl
       · rfl
   -- the state's writes: the same, or the stepping thread's new write
-  have hpos : 0 < (Lo.WS.hist m).size := hu.cinv.spos
-  have hSh : Lo.WS.hist m' = Lo.WS.hist m ∨
-      ∃ x : Word.Entry, x.clock = m'.clocks[t]! ∧ Lo.WS.hist m' = (Lo.WS.hist m).push x := by
+  have hpos : 0 < ((C Lo).S.hist m).size := hu.cinv.spos
+  have hSh : (C Lo).S.hist m' = (C Lo).S.hist m ∨
+      ∃ x : Word.Entry, x.clock = m'.clocks[t]! ∧
+        (C Lo).S.hist m' = ((C Lo).S.hist m).push x := by
     rcases (hs.word_rmw hu.ws (three_word hW3 (.inl rfl))
       (three_word (W := Lo.WE) (.inr (.inl rfl)) (.inl rfl))).2 with e | ⟨-, ord, v, e⟩
     · exact .inl e
     · exact .inr ⟨_, rfl, e⟩
-  have hwx : ∀ x, Lo.WS.hist m' = (Lo.WS.hist m).push x →
+  have hwx : ∀ x, (C Lo).S.hist m' = ((C Lo).S.hist m).push x →
       FCond.wOf x = if ((G' 0).2.c).isReg then 1 else 0 := fun x e => by
-    rw [← last_push e]; exact hwl'
-  have hwle : (G 1).2.ph ≠ .lk → ∀ x, Lo.WS.hist m' = (Lo.WS.hist m).push x →
-      FCond.wOf x ≤ FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! := fun hl x e => by
+    rw [← FCond.lastS_push e]; exact hwl'
+  have hwle : (G 1).2.ph ≠ .lk → ∀ x, (C Lo).S.hist m' = ((C Lo).S.hist m).push x →
+      FCond.wOf x ≤ FCond.wOf ((C Lo).lastS m) := fun hl x e => by
     rw [hwx x e, hwl]
     cases h1 : ((G' 0).2.c).isReg
     · simp
     · simp [hnoreg hl h1]
   -- `signals = waiters` stays while the producer is past its lock
-  have hSW : (G 1).2.ph ≠ .lk → SW Lo m → SW Lo m' := fun hl hsw => by
+  have hSW : (G 1).2.ph ≠ .lk → (C Lo).Sated m → (C Lo).Sated m' := fun hl hsw => by
     rcases hSh with e | ⟨x, -, e⟩
-    · exact (SW_congr e).mpr hsw
-    · exact SW_push hI hpos e hsw (hwle hl x e)
+    · exact (FCond.Sated.congr e).mpr hsw
+    · exact hI.sated_push hpos e hsw (hwle hl x e)
   -- the epoch's writes: the same, or the `epoch += 1` of a signaller at `inc`
   have hEp' : Lo.WE.hist m' = Lo.WE.hist m ∨
       ∃ q n h', (G t).2.c = .inc q n h' ∧ p = .wk n q h' := hEp
@@ -1134,7 +1022,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · subst e
       have hc : (G u).2.c = .out := by rcases hfr with h' | h' <;> rw [h']
       have hp : p = .out := by
-        rcases next_out (hc ▸ hn') with h' | h'
+        rcases CPh.Next.of_out (hc ▸ hn') with h' | h'
         · exact h'
         · have := hinc h'
           rcases hfr with h'' | h'' <;> rw [h''] at this <;> cases this
@@ -1156,9 +1044,9 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         rcases hq' with hq' | ⟨-, hw⟩
         · exact .inr (hLt.trans hq')
         · exact absurd (hu.e_out (fun hc => by
-            rcases next_out (hc ▸ hn') with h' | h'
+            rcases CPh.Next.of_out (hc ▸ hn') with h' | h'
             · rw [h'] at hw; cases hw
-            · rw [sig_waits h'] at hw; cases hw)) hne
+            · rw [CPh.sig_waits h'] at hw; cases hw)) hne
     · rcases hnw w hw with h' | ⟨rfl, hw'⟩
       · exact .inl h'
       · refine .inr ⟨rfl, ptr_EV, fun he => ?_⟩
@@ -1194,14 +1082,12 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · subst et
       have hp : p = .inc q' n h' := by rw [hXt] at hq'; exact hq'
       subst hp
-      rcases next_inc hn' with ⟨sh, c, hc⟩ | hc
+      rcases hn'.to_inc with ⟨sh, c, hc⟩ | hc
       · -- `sl → inc`: the producer's post, the only one (`signals` reaches `waiters ≤ 1`)
         have hsz := hpost sh c q' n h' hc rfl
-        obtain ⟨x, -, e⟩ := hSh.resolve_left fun e => by
-          have : (Lo.WS.hist m').size = (Lo.WS.hist m).size + 1 := hsz
-          rw [e] at this; omega
-        have hst := step_push hI hpos e
-        have hw0 : FCond.wOf x = FCond.wOf (Lo.WS.hist m)[(Lo.WS.hist m).size - 1]! := by
+        obtain ⟨x, -, e⟩ := hSh.resolve_left fun e => by rw [e] at hsz; omega
+        have hst := hI.step_push hpos e
+        have hw0 : FCond.wOf x = FCond.wOf ((C Lo).lastS m) := by
           rw [hwx x e, hwl, hG 0 (by decide)]
         have hw1 : FCond.wOf x ≤ 1 := by rw [hwx x e]; split <;> omega
         have hE : Lo.WE.hist m' = Lo.WE.hist m := by
@@ -1214,8 +1100,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
           have h2 := hu.ep2
           refine Classical.byContradiction fun hne => ?_
           have hsw := hu.epS (by omega)
-          unfold SW at hsw; unfold FCond.SStep at hst; omega
-        · unfold SW; rw [last_push e]; unfold FCond.SStep at hst; omega
+          unfold FCond.Sated at hsw; unfold FCond.SStep at hst; omega
+        · unfold FCond.Sated; rw [FCond.lastS_push e]; unfold FCond.SStep at hst; omega
       · -- `inc → inc`
         have hinc1 := hu.incE q' n h' hc
         have hE : Lo.WE.hist m' = Lo.WE.hist m := by
@@ -1258,12 +1144,12 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
             cases h2
       · rw [hG 0 (Ne.symm e)]; exact h0
     -- a registration before the step, or `main`'s in this step (the new write)
-    have hcase : (RegW Lo m j ∧ (Lo.WS.hist m')[j]! = (Lo.WS.hist m)[j]!) ∨
-        ∃ x : Word.Entry, x.clock = m'.clocks[t]! ∧ (Lo.WS.hist m')[j]! = x ∧ t = 0 ∧
+    have hcase : ((C Lo).RegW m j ∧ ((C Lo).S.hist m')[j]! = ((C Lo).S.hist m)[j]!) ∨
+        ∃ x : Word.Entry, x.clock = m'.clocks[t]! ∧ ((C Lo).S.hist m')[j]! = x ∧ t = 0 ∧
           ((G 0).2.c).crit = true := by
       rcases hSh with e | ⟨x, hx, e⟩
-      · exact .inl ⟨(RegW_congr e).mp hj, by rw [e]⟩
-      · rcases RegW_push e hj with hj' | ⟨rfl, hw0, hw1⟩
+      · exact .inl ⟨(FCond.RegW.congr e).mp hj, by rw [e]⟩
+      · rcases FCond.RegW.push e hj with hj' | ⟨rfl, hw0, hw1⟩
         · exact .inl ⟨hj', by rw [e, FEvent.get_push_lt hj'.2.1]⟩
         · have hr1 : ((G' 0).2.c).isReg = true := by
             rw [hwx x e] at hw1; revert hw1; cases ((G' 0).2.c).isReg <;> simp
@@ -1284,33 +1170,33 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     cases hr : ((G 0).2.c).isReg
     · -- `main` registers in this step: the new state write is its registration
       rcases hSh with e | ⟨x, -, e⟩
-      · have h1 := hwl'; rw [e, hwl, hr, h0] at h1; simp at h1
-      · refine ⟨(Lo.WS.hist m).size, ⟨by omega, by rw [e, Array.size_push]; omega, ?_, ?_⟩,
-          fun p hp1 hp2 => ?_⟩
+      · have h1 := hwl'; rw [FCond.lastS_congr e, hwl, hr, h0] at h1; simp at h1
+      · refine ⟨((C Lo).S.hist m).size,
+          ⟨by omega, by rw [e, Array.size_push]; omega, ?_, ?_⟩, fun p hp1 hp2 => ?_⟩
         · rw [e, FEvent.get_push_lt (by omega), hwl, hr]; rfl
         · rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
         · rw [e, Array.size_push] at hp2
-          obtain rfl : p = (Lo.WS.hist m).size := by omega
+          obtain rfl : p = ((C Lo).S.hist m).size := by omega
           rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
     · obtain ⟨j, hj, hp⟩ := hu.w1 hr
-      have hjs : j < (Lo.WS.hist m).size := hj.2.1
+      have hjs : j < ((C Lo).S.hist m).size := hj.2.1
       rcases hSh with e | ⟨x, -, e⟩
-      · exact ⟨j, (RegW_congr e).mpr hj, by rw [e]; exact hp⟩
+      · exact ⟨j, (FCond.RegW.congr e).mpr hj, by rw [e]; exact hp⟩
       · refine ⟨j, ⟨hj.1, by rw [e, Array.size_push]; omega, ?_, ?_⟩, fun p hp1 hp2 => ?_⟩
         · rw [e, FEvent.get_push_lt (by omega)]; exact hj.2.2.1
         · rw [e, FEvent.get_push_lt hj.2.1]; exact hj.2.2.2
         · rw [e, Array.size_push] at hp2
-          by_cases hp3 : p < (Lo.WS.hist m).size
+          by_cases hp3 : p < ((C Lo).S.hist m).size
           · rw [e, FEvent.get_push_lt hp3]; exact hp p hp1 hp3
-          · obtain rfl : p = (Lo.WS.hist m).size := by omega
+          · obtain rfl : p = ((C Lo).S.hist m).size := by omega
             rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
   · -- snap: no registration while the producer is past its lock
     rw [(hph 1).2.2] at hn
     obtain ⟨hsg, hlt⟩ := hu.snap n hn
     refine ⟨by rw [(hph 1).1]; exact hsg, fun j hj => ?_⟩
     rcases hSh with e | ⟨x, -, e⟩
-    · exact hlt j ((RegW_congr e).mp hj)
-    · rcases RegW_push e hj with hj' | ⟨rfl, hw0, hw1⟩
+    · exact hlt j ((FCond.RegW.congr e).mp hj)
+    · rcases FCond.RegW.push e hj with hj' | ⟨rfl, hw0, hw1⟩
       · exact hlt j hj'
       · have hr1 : ((G' 0).2.c).isReg = true := by
           rw [hwx x e] at hw1; revert hw1; cases ((G' 0).2.c).isReg <;> simp
@@ -1327,10 +1213,10 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       cases hc : ((G' 0).2.c).crit
       · rfl
       · exact absurd (hu.ent (hcc 0 hc)) hl
-    have hr1 := isReg_of h0 hnc
-    have hsw := hSW hl (by unfold SW; rw [hsig.ws.1, hsig.ws.2])
-    have hw1 : FCond.wOf (Lo.WS.hist m')[(Lo.WS.hist m').size - 1]! = 1 := by rw [hwl', hr1]; rfl
-    exact sig_of hI hw1 (by unfold SW at hsw; omega)
+    have hsw := hSW hl hsig.sated
+    have hw1 : FCond.wOf ((C Lo).lastS m') = 1 := by rw [hwl', CPh.isReg_of_waits h0 hnc]; rfl
+    unfold FCond.Sated at hsw
+    exact hI.signalled_iff.mpr ⟨hw1, by omega⟩
   · -- fin
     rw [(hph 1).1] at h1
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hV]; exact hu.fin h1
@@ -1344,7 +1230,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       have hp' : p ≠ .out := by rw [hXt] at hu'; exact hu'
       rw [(hph u).1]
       by_cases hc : (G u).2.c = .out
-      · rcases next_out (hc ▸ hn') with h' | h'
+      · rcases CPh.Next.of_out (hc ▸ hn') with h' | h'
         · exact absurd h' hp'
         · exact .inr (hinc h')
       · exact hu.xc u hc
@@ -1429,27 +1315,11 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · exact .inl h'
     · have h1 := (hI.q _ hw rfl).1
       rw [hEt] at h1; exact .inr ⟨rfl, h1⟩
-  refine ⟨?_, fun e he hr => ?_, Rest.step (fun _ => Lo.wv_box) hu.rest rfl hY
-      fun l _ hw => hcells l hw,
-    hblk hu.blk, hok3 _ (.inl rfl) hu.ws, hok3 _ (.inr (.inl rfl)) hu.we,
-    hok3 _ (.inr (.inr rfl)) hu.wv, ?_, hI, by rw [(hph 1).2]; exact hu.places,
-    fun h1 => by rw [(hph 1).1] at h1; rw [hE]; exact hu.ep1 h1, by rw [hE]; exact hu.ep2,
-    fun h => (SW_congr hS).mpr (hu.epS (by rw [← hE]; exact h)),
-    fun q' n h' hq' => by
-      rw [(hph 1).2] at hq'; rw [hE]
-      exact ⟨(hu.incE q' n h' hq').1, (SW_congr hS).mpr (hu.incE q' n h' hq').2⟩,
-    fun h0 => by rw [(hph 0).2] at h0; rw [(hph 1).1]; exact hu.ent h0, fun h1 => ?_,
-    fun j hj => ?_,
-    fun h => by
-      rw [(hph 0).2] at h; obtain ⟨j, hj, hp⟩ := hu.w1 h
-      exact ⟨j, (RegW_congr hS).mpr hj, by rw [hS]; exact hp⟩,
-    fun n h => by
-      rw [hsz] at h; rw [(hph 1).1]
-      exact ⟨(hu.snap n h).1, fun j hj => (hu.snap n h).2 j ((RegW_congr hS).mp hj)⟩,
-    fun h0 h1 => by
-      rw [(hph 0).2] at h0; rw [(hph 1).1] at h1; exact (Sig_congr hS).mpr (hu.lvc h0 h1),
-    fun h1 => ?_, fun w hw => ?_,
-    fun u hu' => by rw [(hph u).2] at hu'; rw [(hph u).1]; exact hu.xc u hu'⟩
+  refine hu.congrHist (fun u => ⟨(hph u).1, (hph u).2, hsz u⟩) hS hE ?_ (fun e he hr => ?_)
+    (Rest.step (fun _ => Lo.wv_box) hu.rest rfl hY fun l _ hw => hcells l hw)
+    (hblk hu.blk) (hok3 _ (.inl rfl) hu.ws) (hok3 _ (.inr (.inl rfl)) hu.we)
+    (hok3 _ (.inr (.inr rfl)) hu.wv) ?_ hI (fun h1 => ?_) (fun j hj => ?_) (fun h1 => ?_)
+    (fun w hw => ?_)
   · -- shape
     refine Shape.congr hu.shape hth (fun u => (hph u).1) fun u hfr => ?_
     by_cases e : u = t
@@ -1512,14 +1382,12 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         show ((G t).2.c).waits = false
         rw [hco (.inr hp)]; rfl
   · -- hold
-    rw [(hph 1).1] at h1
     have hh := hu.hold h1
     by_cases e : t = 1
     · subst e; exact absurd hh hnh
     · rw [hG 1 (Ne.symm e)]; exact hh
   · -- reg
-    rw [hS, (hph 1).1]
-    rcases hu.reg j ((RegW_congr hS).mp hj) with h' | ⟨hlk, h' | h'⟩
+    rcases hu.reg j hj with h' | ⟨hlk, h' | h'⟩
     · exact .inl (VClock.le_trans h' (hclk 1))
     · refine .inr ⟨hlk, .inl ⟨?_, VClock.le_trans h'.2 (hclk 0)⟩⟩
       by_cases et : t = 0
@@ -1527,7 +1395,6 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · rw [hG 0 (Ne.symm et)]; exact h'.1
     · exact .inr ⟨hlk, .inr (hbef _ h')⟩
   · -- fin: the event stays set
-    rw [(hph 1).1] at h1
     have hset := hu.fin h1
     have hpos := FEvent.hist_pos hu.wv
     rcases hhist _ (.inr (.inr rfl)) hu.wv with e | ⟨-, x, e⟩
