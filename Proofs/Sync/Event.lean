@@ -75,7 +75,7 @@ def waitInv (P : Proto Tgt γ) (E : FEvent γ) (t : ThreadId) (g : γ) (D : Nat)
 def waitPost (P : Proto Tgt γ) (E : FEvent γ) (t : ThreadId) (g : γ) (D : Nat)
     (r : Io_Event_waitUncancelableExit × Io_Event_waitUncancelableLocals) (G : ThreadId → γ)
     (m : Mem) (d : Nat) : Prop :=
-  r.1 = .ret ∧ d < D ∧ m.current = t ∧ E.IsSet m ∧ P.inv (upd G t g) m
+  r.1 = .ret ∧ d < D ∧ m.current = t ∧ E.IsSet m ∧ E.Synced t m ∧ P.inv (upd G t g) m
 
 /-- One repeat of `waitUncancelable`'s loop: the futex wait, then an acquire load. -/
 theorem wait_body (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
@@ -108,7 +108,7 @@ theorem ioEvent_wait_wp_unmetered (hE : L.Fits (E.prim L) P U ok) (hcost : P.cos
       P.Live t G₁ m₁)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+      E.IsSet m' ∧ E.Synced t m' ∧ P.inv (upd G' t g) m') G m d := by
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
   fsym [FEvent.wp_casAs (g := E.set g .w0) hE
@@ -129,7 +129,7 @@ theorem ioEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
       P.Live t G₁ m₁)
     (hplain : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ P.inv (upd G' t g) m') G m d :=
+      E.IsSet m' ∧ E.Synced t m' ∧ P.inv (upd G' t g) m') G m d :=
   ioEvent_wait_wp_unmetered hE hcost hp t g hgx hgo hwx io G m d hone hhb hlive hplain.2 hi
 
 /-- The wait's resource contract: the unbounded wait loop pays from the caller's positive
@@ -144,12 +144,12 @@ theorem ioEvent_wait_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
       P.Live t G₁ m₁)
     (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
+      E.IsSet m' ∧ E.Synced t m' ∧ ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m') G m d := by
   refine WP.mono ?_ (ioEvent_wait_wp_unmetered hE hcost hp t g hgx hgo hwx io G m d
     hone hhb hlive hu hi)
-  rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
-  exact ⟨hd, hc, hs, L.part g, rfl, by simpa only [L.setPart_self] using hi'⟩
+  rintro _ G' m' d' ⟨hd, hc, hs, hy, hi'⟩
+  exact ⟨hd, hc, hs, hy, L.part g, rfl, by simpa only [L.setPart_self] using hi'⟩
 
 end
 

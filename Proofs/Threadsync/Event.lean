@@ -143,7 +143,7 @@ def wusPost (DR : BlockId → FAssn) (P : Proto Tgt γ) (L : FLock γ) (E : FEve
     (D : Nat) (x : Thread_ResetEvent_FutexImpl_waitUntilSetExit ×
       Thread_ResetEvent_FutexImpl_waitUntilSetLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) :
     Prop :=
-  x.1 = .br36 ∧ x.2.state = 2 ∧ d ≤ D ∧ m.current = t ∧ E.IsSet m ∧
+  x.1 = .br36 ∧ x.2.state = 2 ∧ d ≤ D ∧ m.current = t ∧ E.IsSet m ∧ E.Synced t m ∧
     ∃ r, DPart DR q bsD r ∧ P.inv (upd G t (gD L E g .out r)) m
 
 /-- One repeat of `waitUntilSet`'s loop: `Deadline.wait`, then an acquire load. -/
@@ -182,7 +182,8 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       (free q) (fun _ => (· = L.part g) ⋆ cur t))
     (hi : P.inv (upd G t (E.set g p₀)) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_waitUntilSet E.W.ptr none) (fun x G' m' d' =>
-      x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+      x = .ok () ∧ d' ≤ d ∧ m'.current = t ∧ E.IsSet m' ∧ E.Synced t m' ∧
+        P.inv (upd G' t g) m') G m d := by
   rw [← gD_self hE] at hi
   fsym [WP.liftMem_pure (x := StateT.lift (debug_assert true)) (by rfl) rfl,
     FEvent.wp_liftPartCur hE (g := gD L E g p₀ (L.part g)) (t := t)
@@ -201,7 +202,8 @@ theorem wus_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost =
       WP.loop _ _ (wusInv DR P L E t g q d) (fun _ => 0) (wusPost DR P L E t g q d)
         (wus_body hE hcost DR hu hgo hlive q d)),
     dinit_eq, debugAssert_true, bsD_size, gD_ph hE, gD_lph hE, gD_set hE, gD_part, gD_setPart,
-    gD_self hE, hE.lph, hE.lpart, FEvent.set_of, E.IsSet_of_hist_eq, wusInv, wusPost]
+    gD_self hE, hE.lph, hE.lpart, FEvent.set_of, E.IsSet_of_hist_eq, FEvent.Synced.of_clocks,
+    free_clocks, lift_clocks, wusInv, wusPost]
 
 /-- **`ResetEvent.wait`** by a thread out of the event's and the lock's code, as the only waiter
 (`hone`, `hhb`): it returns when the event is set. -/
@@ -216,7 +218,7 @@ theorem resetEvent_wait_wp_resource [Zig.Os.HasEnv]
       P.Live t G₁ m₁)
     (hpre : deadlinePre t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_wait p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
+      E.IsSet m' ∧ E.Synced t m' ∧ ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m') G m d := by
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
@@ -238,13 +240,13 @@ theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcos
       P.Live t G₁ m₁)
     (hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_wait p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ P.inv (upd G' t g) m') G m d := by
+      E.IsSet m' ∧ E.Synced t m' ∧ P.inv (upd G' t g) m') G m d := by
   refine WP.mono ?_ (resetEvent_wait_wp_resource hE hcost hp t g hgx hgo hwx io G m d
     hone hhb hlive (.inl hpl) hi)
-  rintro _ G' m' d' ⟨hd, hc, hs, r', hr, hi'⟩
+  rintro _ G' m' d' ⟨hd, hc, hs, hy, r', hr, hi'⟩
   change r' = L.part g at hr
   subst r'
-  exact ⟨hd, hc, hs, by simpa only [L.setPart_self] using hi'⟩
+  exact ⟨hd, hc, hs, hy, by simpa only [L.setPart_self] using hi'⟩
 
 end ResetEvent
 

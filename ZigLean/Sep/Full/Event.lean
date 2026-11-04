@@ -78,6 +78,19 @@ structure FEvent (γ : Type) extends FPlace γ EPh where
   sx : γ → Prop
   sx_set : ∀ g p, sx (set g p) ↔ sx g
 
+/-- `free` keeps the clocks (a run fact: what happened before a step still happened before the
+next after a waiter frees its stack block, `FEvent.Synced.of_clocks`). -/
+theorem free_clocks {m m' : Mem} {q : Ptr} {x : Unit}
+    (h : ((free q).run m).run = some (.ok (x, m'))) : m'.clocks = m.clocks := by
+  obtain ⟨_, _, _, _, rfl⟩ := free_ok h
+  rfl
+
+/-- A pure step (`StateT.lift` of a `Result`, a `debug_assert`) keeps the clocks (a run fact, as
+`free_clocks`). -/
+theorem lift_clocks {α : Type} {x : Result α} {a : α} {m m' : Mem}
+    (h : ((StateT.lift x : MemM α).run m).run = some (.ok (a, m'))) : m'.clocks = m.clocks := by
+  rw [(MemM.lift_ok h).2]
+
 namespace FEvent
 
 variable {γ : Type} (E : FEvent γ)
@@ -110,6 +123,13 @@ theorem Synced.mono {E : FEvent γ} {t : ThreadId} {m m' : Mem} (hs : E.Synced t
     E.Synced t m' :=
   let ⟨j, hj, hv, hle⟩ := hs
   ⟨j, by rw [hh]; exact hj, by rw [hh]; exact hv, by rw [hh]; exact VClock.le_trans hle hc⟩
+
+/-- `Synced` after a step that keeps the word's history and the clocks (a waiter's `free` of
+its own stack block, `free_clocks`; a pure step, `lift_clocks`). -/
+theorem Synced.of_clocks {E : FEvent γ} {t : ThreadId} {m m' : Mem}
+    (hh : E.W.hist m' = E.W.hist m) (hc : m'.clocks = m.clocks) (hs : E.Synced t m) :
+    E.Synced t m' :=
+  hs.mono hh (by rw [hc]; exact VClock.le_refl _)
 
 /-- A step preserving the event's history preserves its set state. -/
 theorem IsSet_of_hist_eq {m m' : Mem} (hh : E.W.hist m' = E.W.hist m)
