@@ -97,7 +97,20 @@ does not hold the admission queue for slots that other running builds hold.
   still holds, a merge priority adds nothing to an `--exclusive` guard (its lane is `exclusive`),
   and a guard of a checkout older than #424 does not know the tickets. The lane is only for the
   coordinator's integration gate, never for agent or Codex builds; a waiting guard prints one
-  line naming its lane (`normal`, `merge` or `exclusive` priority) and the tickets queued.
+  line naming its lane (`normal`, `merge`, `background` or `exclusive` priority) and the tickets
+  queued.
+- Background lane: `AIR2LEAN_GUARD_PRIORITY=background` (or `--priority background`) is for work
+  no one waits on, such as the periodic main health run. As a normal guard, the health run's full
+  build (11 of arc's 16 slots) waits as the queue head and, past its ramp, reserves every slot it
+  lacks, so lane gates queued behind it wait until enough running workloads end. A background
+  guard is admitted only while no other guard waits (no ticket, no head, no entry in
+  `<lock>.d/waiting/`, which every waiting guard keeps), with its workspace and all its slots at
+  once; it holds nothing while it waits, so it delays no one, and its `--lock-wait` bounds its
+  own wait (then `lock_busy`). The mechanism is in the module docstring of
+  `scripts/build-guard.py`. Caveats: a guard of an older checkout publishes no waiting entry, so
+  a background guard can be admitted ahead of it between two queue heads; a guard of a checkout
+  older than this lane rejects the value (`AIR2LEAN_GUARD_PRIORITY must be one of normal,
+  merge`).
 - Usage-aware charge (Linux): `--rss-mib` is a ceiling a workload seldom reaches (a regen step
   declared 11000 MiB and peaked below 4.2 GB), so declared slots alone kept a 23 GB build host
   idle while 20 guards queued. The guard therefore records each command's last 5 runs (outcome,
