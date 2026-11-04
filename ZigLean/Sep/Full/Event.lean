@@ -185,13 +185,14 @@ inductive MStep (t : ThreadId) (m : Mem) : Mem → Prop
 /-- **The event as a primitive next to the lock `L`** (`FPrim.ofWords`; a protocol keeps it:
 `L.Fits (E.prim L) P U ok`). Its word is `W`; the roles are `wx` (`true`) and `sx` (`false`); no
 place is calm (`ok` may read every place). A step of its code is an `MStep` with the new place `p`
-of the stepping thread, out of the lock's code or `away`, and its lock place `q`: only a waiter at
-`w1` goes `away`, while it sleeps; it holds no lock resource. A thread steps on its own part (the
-stack blocks of the event's code: `wp_liftPart`) out of the lock's code. -/
+of the stepping thread, out of the lock's code or `away` in its own futex wait (at `w1`: a thread
+in another primitive's futex wait does not step in the event's code), and its lock place `q`:
+only a waiter at `w1` goes `away`, while it sleeps; it holds no lock resource. A thread steps on
+its own part (the stack blocks of the event's code: `wp_liftPart`) out of the lock's code. -/
 abbrev prim (L : FLock γ) : FPrim γ :=
   FPrim.ofWords L E.toFPlace .out (fun _ => False) (fun b g => cond b (E.wx g) (E.sx g))
     (· = E.W) (E.Inv L)
-    (fun _ t g p q h m m' => (L.ph g = .out ∨ L.ph g = .away) ∧
+    (fun _ t g p q h m m' => (L.ph g = .out ∨ (L.ph g = .away ∧ E.ph g = .w1)) ∧
       (q = .out ∨ (q = .away ∧ p = .w1)) ∧ h = rnil ∧ E.MStep t m m')
     (· = .out)
 
@@ -321,6 +322,26 @@ theorem waiters (hs : E.MStep t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.waite
     · exact .inr hw
   | wake c cs h => rw [Proto.modify_ok h] at hw; exact .inl (Array.mem_filter.mp hw).1
   | _ => exact .inl hw
+
+/-- A step of the event's code keeps the queue at another futex `p` exactly, when a thread queued
+at `p` is queued only there (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
+theorem waiters_at (hs : E.MStep t m m') {p : Ptr} (hp : p ≠ E.W.ptr)
+    (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 = p) :
+    m'.waiters.filter (·.2 == p) = m.waiters.filter (·.2 == p) := by
+  cases hs with
+  | @op M hv hc hop _ _ =>
+    have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
+      exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
+    rw [hstep.waiters]
+  | @sleep M _ _ hr _ _ =>
+    subst hr
+    apply Array.toList_inj.mp
+    simp only [Array.toList_filter, Array.toList_push, List.filter_append, List.filter_cons,
+      List.filter_nil, beq_eq_false_iff_ne.mpr (Ne.symm hp), Bool.false_eq_true, ↓reduceIte,
+      List.append_nil]
+    rfl
+  | wake c cs h => exact FLock.futexWake_waitersAt (m := { m with current := t }) hp hone h
+  | _ => rfl
 
 theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
     (hap : W' = E.W ∨ E.W.b ≠ W'.b ∨ E.W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ E.W.o) :
@@ -1473,7 +1494,8 @@ theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
   have hw₁ := ((hE.wRest rfl) _ _ _ hU).1
   have hv : (E.newest m₁).Val (1 : BitVec 32) := by rw [he] at hU32; exact hw₁.holds_last.mp hU32
   have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := .w1) (q := .away)
-    (h := rnil) rfl ⟨.inr (by rw [hg₁, L.ph_set]), .inr ⟨rfl, rfl⟩, rfl, .sleep hw₀ hct hrecord hh hok₂⟩
+    (h := rnil) rfl ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [hg₁]; exact hga⟩, .inr ⟨rfl, rfl⟩, rfl,
+      .sleep hw₀ hct hrecord hh hok₂⟩
     hU hY
   rw [hg₁, hgq, ← hg₁, upd_same, Word.cellsR_congr (W := E.W) (show
     ({ M with waiters := M.waiters.push (t, E.W.ptr) } : Mem).blocks = m₁.blocks from hbl)] at hst
@@ -1537,7 +1559,8 @@ theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph
     have := L.set_self g; rwa [hgo, hheld] at this
   · have hI := hE.wInv _ _ _ hU
     have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t) (p := .w1)
-      (q := .out) (h := rnil) rfl ⟨.inr (by rw [hg₁, L.ph_set]), .inl rfl, rfl, ?_⟩ hU hY
+      (q := .out) (h := rnil) rfl ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [hg₁]; exact hga⟩, .inl rfl,
+        rfl, ?_⟩ hU hY
     · rw [hg₁, hgq, hgo'] at hst
       have hbl : M.blocks = m₁.blocks := by
         rcases hM with rfl | rfl | ⟨-, -, -, -, -, hb⟩
