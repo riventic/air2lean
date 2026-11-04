@@ -68,6 +68,40 @@ theorem memset_word_reads (bs : Array Byte) (h : bs.size = 6) (v : BitVec 16) :
       (fun r => ⟪r = (v, v)⟫ ⋆ up (regionIn p A S K 2 (memsetBytes 3 (some v)))) := by
   fsym
 
+/-- A read of a memset's byte past a store to another byte (`extract_writeBytes_other`). -/
+theorem read_unwritten (v w : BitVec 8) :
+    FTotalTriple
+      (up (regionIn p A S K 1 (writeBytes (memsetBytes 8 (some v)) 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆
+        up (regionIn p A S K 1 (writeBytes (memsetBytes 8 (some v)) 7 (Enc.encode w)))) := by
+  fsym
+
+/-- A word item of a memset past a store to another item (`extract_memsetBytes_item`). -/
+theorem read_unwritten_word (v w : BitVec 16) :
+    FTotalTriple
+      (up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w))))
+      (Zig.load (BitVec 16) 2 (p.add 2))
+      (fun r => ⟪r = v⟫ ⋆
+        up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w)))) := by
+  fsym
+
+/-- A kept prefix of one byte (`replicate 1`, not a singleton, until it is decoded). -/
+theorem read_kept_one (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 1 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
+/-- A read of a reallocation's kept prefix, past a store to a byte after it (`keptExtract`). -/
+theorem read_kept (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 4 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 3#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
 /-- A whole region copied onto a separate one of the same size. -/
 theorem memcpy_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
     (h2 : n.toNat = bs.size) :

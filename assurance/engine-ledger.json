@@ -1613,6 +1613,17 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "One mechanism for every command and rule: a closed pointer of the command that no atom names is restated as `p.add k` from the one state region of its block whose extent holds it (block by `blockOf`, bounds by the arithmetic solver, `k` in the arithmetic's normal form). The rules and providers about derived pointers then apply unchanged (`regionStoreAdd`, `ReadsAt.regionIn`). Disjoint regions mean at most one region holds it. Rejected alternative: literal-pointer variants of the region rules, one per rule."
+  },
+  {
+   "id": "read-through-bytes",
+   "title": "Read region bytes through stores to other bytes, memset items and a kept prefix",
+   "status": "closed",
+   "requester": "L6 FBA client over FAllocSpec (PR #567, blocker 2: reads of t[0] and t[3] after `t[7] = v +% 1` on reallocated bytes)",
+   "progress": "Branch claude/fsym-read-through. Region.lean `@[fsym_arith]`: `extract_writeBytes_other`, `extract_memsetBytes_item`, `extract_replicate_le`, `decode_byte`, `LawfulEnc.decode_encode`, `Array.replicate_one`, `Array.size_replicate`, and the simproc `keptExtract` (with `extract_of_keepsPrefix`). Auto.lean: `arithCore` closes an equation with an unknown side by reducible unification of the normalized sides; `omegaDisch` states a discharged side condition as itself. Tests: SepAuto.Region `read_unwritten`, `read_unwritten_word`, `read_kept`.",
+   "request": "The provider `ReadsAt.regionIn` asks `Enc.decode (bs.extract lo hi) = pure ?v` of a region whose bytes are `writeBytes (memsetBytes n (some v)) o (Enc.encode w)`, or bytes `bs` with a fact `keepsPrefix old bs` (a reallocation's). The arithmetic normalization did not read through a disjoint write, an item of a memset or a kept prefix, and did not assign `?v`.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Engine fix found on the way: every conditional `@[fsym_arith]` rewrite whose side condition contains a `dsimproc`-reduced term (`Enc.size (BitVec 16)`) failed with simp's \"failed to assign proof\": the discharger's proof had the reduced statement, which reducible unification does not match. Rejected alternatives: one load rule per byte source (store, memset, reallocation), which the provider already decomposes; reading a kept prefix by a user-supplied update, which every client would repeat."
   }
  ],
  "mechanisms": [
