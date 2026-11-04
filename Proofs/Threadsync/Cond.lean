@@ -232,8 +232,8 @@ theorem mutex_pre_unmetered (t : ThreadId) (r : Res)
     (hu : 0 < r.gh.ac.frag .unmetered) : threadMutex.lock_pre t r := by
   first | exact hu | trivial
 
-theorem mutex_post_exact (t : ThreadId) (r r' : Res)
-    (h : threadMutex.lock_post t r r') : r' = r := h
+theorem mutex_post_iff {t : ThreadId} {r r' : Res} :
+    threadMutex.lock_post t r r' ↔ r' = r := Iff.rfl
 
 theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (DR : BlockId → FAssn) (hu : ∀ b r, DR b r → 0 < r.gh.ac.frag .unmetered)
@@ -251,7 +251,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
     threadMutex.lock_wp_resource (io := {}) hC hcost rfl hLc t (L.setPart (L.set g .out rnil) _)
       (by simp only [L.ph_setPart, L.ph_set])
       ((hC.ok_setPart _ _).mpr ((hC.ok_set g .out rnil).mpr hok)),
-    mutex_pre_unmetered, ThreadMutex.lockPre, keepPart,
+    mutex_pre_unmetered, mutex_post_iff,
     gRD_ph hC, gRD_lph hC, gRD_out hC hgx, gD_lock, hC.ok_setPart, hC.ok_set,
     L.part_setPart, L.setPart_setPart, inv107, post107,
     Thread_Condition_FutexImpl_wait.again107]
