@@ -1163,10 +1163,11 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
       | none => g.assign (← mkExpectedTypeHint pf tgt0)
     if r.expr.isTrue then close (mkConst ``True.intro); return true
     -- an equation with an unknown side (a provider's `Enc.decode (bs.extract lo hi) = pure ?v`):
-    -- the unknown is the other side's normal form
+    -- the unknown is the other side's normal form (reducibly: no evaluation of a decoding that
+    -- did not normalize)
     if let some (_, x, y) := r.expr.eq? then
       if r.expr.hasExprMVar && (!x.hasExprMVar || !y.hasExprMVar) then
-        if ← isDefEq x y then close (← mkEqRefl x); return true
+        if ← withReducible (isDefEq x y) then close (← mkEqRefl x); return true
     -- a fact in normal form that is the target (`x0 = none` from `none = none → x0 = none`: no
     -- arithmetic for `omega`)
     unless r.expr.hasExprMVar do
