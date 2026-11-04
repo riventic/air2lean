@@ -23,7 +23,9 @@ DIR/<item>.log.
 Statistics (`run(..., stats=[])`, scripts/fixture-checks.py's report): each job's wall time, the
 peak RSS of its process group (summed, sampled with `ps` every SAMPLE_SECONDS) and its wall time
 by the kind of process running in it (KINDS: the first kind present in a sample, in that order,
-takes the sample's interval). They are measurements only: nothing is scheduled or reused by them.
+takes the sample's interval). Scheduling (`run(..., order=, mem_budget_mib=)`): the start order
+and per-job memory requests (`Job.mem_mib`) admitted within a budget; scripts/fixture-checks.py
+takes both from a previous run's statistics. Statistics never decide a job's result.
 
 Exit status: 0 when every job succeeded; otherwise the status of the first failed job in job
 order (a job killed by a signal: 128 + signal), after a list of every failed job on stderr. Every
@@ -115,6 +117,7 @@ class Job:
     argv: list[str]
     cwd: str | None = None
     env: dict | None = None
+    mem_mib: int | None = None  # the memory request of `run(..., mem_budget_mib=...)`
 
 
 @dataclass
@@ -187,10 +190,15 @@ class _Sampler(threading.Thread):
 
 
 def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | None = None,
-        stats: list | None = None) -> list[int]:
+        stats: list | None = None, order: list[int] | None = None,
+        mem_budget_mib: int | None = None) -> list[int]:
     """Run `jobs`, at most `max_workers` at once; return their exit statuses in job order. With
     `stats` (a list), set each finished job's {'status', 'elapsed_s', 'peak_rss_kib', 'busy_s'} in
-    job order (None for a job that did not finish)."""
+    job order (None for a job that did not finish).
+    `order`: the job indices in the order to start them (default: job order). `mem_budget_mib`:
+    a job starts only while the `mem_mib` requests of the running jobs and its own fit in it (one
+    job always runs). The first job in `order` that fits starts; jobs pass the first waiting one
+    at most `max_workers` times, then it is next (a large job is delayed, never starved)."""
     sampler = None
     if stats is not None:
         sampler = _Sampler()
@@ -204,7 +212,11 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
     finished: dict[int, _Running] = {}
     selector = selectors.DefaultSelector()
     head = 0  # the first job whose output is not yet fully written
-    started = 0
+    pending = list(range(len(jobs))) if order is None else list(order)
+    if sorted(pending) != list(range(len(jobs))):
+        raise ValueError('order must be a permutation of the job indices')
+    reserved = 0  # MiB: the requests of the running jobs
+    bypassed = 0  # jobs started past the first pending one since it became first
     received = []
 
     def on_signal(sig, _frame):
@@ -283,9 +295,20 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
                     entry = finished.get(index) or running[index]
                     replay(entry)
                 raise Interrupted(received[0])
-            while started < len(jobs) and len(running) < max_workers:
-                start(started)
-                started += 1
+            while pending and len(running) < max_workers:
+                # The first pending job that fits; a later one passes the first at most
+                # max_workers times, then the first waits for room (it is not starved).
+                fits = [i for i in (pending if bypassed < max_workers else pending[:1])
+                        if mem_budget_mib is None or not running
+                        or reserved + (jobs[i].mem_mib or 0) <= mem_budget_mib]
+                if not fits:
+                    break
+                index = fits[0]
+                bypassed = 0 if index == pending[0] else bypassed + 1
+                pending.remove(index)
+                start(index)
+                if index in running:
+                    reserved += jobs[index].mem_mib or 0
             advance()
             if not running:
                 continue
@@ -312,6 +335,7 @@ def run(jobs: list[Job], max_workers: int, out=None, err=None, log_dir: Path | N
                 entry = running.pop(index)
                 entry.status = _status(entry.process.wait())
                 finished[index] = entry
+                reserved -= entry.job.mem_mib or 0
                 if sampler:
                     stats[index] = {'status': entry.status, 'elapsed_s': round(time.monotonic() - entry.started, 1),
                                     **sampler.remove(entry.process.pid)}
