@@ -535,7 +535,7 @@ theorem step_node {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m) (hg : G 1 = 
   have hMb : M.blocks = (allocM m).blocks := by rw [← hM]; rfl
   have hb1 : M.blocks[1]? = some (nodeBlk m) := by rw [hMb]; exact allocM_node hs1
   have hcl : ∀ u, VClock.le (m.clocks[u]!) (M.clocks[u]!) = true := fun u => by
-    rw [← hM]; exact Conc.recordAt_le (allocM m) 1 0 _ .write u
+    rw [← hM]; exact recordAt_le (allocM m) 1 0 _ .write u
   have hMc : M.clocks[1]! = VClock.bump (m.clocks[1]!) 1 := by
     rw [← hM, ← hc]
     simp only [Mem.recordAt]; rw [getElem!_set!_ite]
@@ -1230,7 +1230,7 @@ theorem step_last {G : ThreadId → Gh} {m m' : Mem} {c : Nat} {v : Option Ptr} 
   have hir := hi.record (b := 0) (o := 0) (len := intSize 64) (k := .atomicRead) ht
     (fun h => by cases h) (fun _ h => by cases h) (.inr (.inr (.inr ⟨rfl, rfl⟩)))
   have hcl0 : VClock.le (m.clocks[0]!) ((m.recordAt 0 0 (intSize 64) .atomicRead).clocks[0]!) = true :=
-    Conc.recordAt_le _ _ _ _ _ _
+    recordAt_le _ _ _ _ _ _
   have hcur : (m.recordAt 0 0 (intSize 64) .atomicRead).current = 0 := hc
   have hthr : (m.recordAt 0 0 (intSize 64) .atomicRead).threads = m.threads := rfl
   have hblk : (m.recordAt 0 0 (intSize 64) .atomicRead).blocks = m.blocks := rfl

@@ -1,5 +1,6 @@
 import ZigLean.Conc.Unroll
 import Proofs.Threads.Gen
+import ZigLean.Conc.Base.Lock
 import ZigLean.Conc.Lemmas
 import ZigLean.Mem.Witness
 
@@ -1038,18 +1039,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     exact ⟨rfl, hcur, heq ▸ hi₁, heq ▸ he₁⟩
 
 /-! ## `main`'s steps -/
-
-theorem fork_eq {m m' : Mem} {c : ThreadId}
-    (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m' = { m with
-      clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
-        (VClock.bump (m.clocks[m.current]!) m.current),
-      threads := m.threads.push { spawner := m.current, joined := false } } := by
-  simp [Thread.fork, Thread.forkWith, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-    StateT.get, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
-    ExceptT.bind, ExceptT.bindCont, Option.bind] at h
-  obtain ⟨rfl, rfl⟩ := h
-  exact ⟨rfl, rfl⟩
 
 theorem total_succ (G : ThreadId → Gh) (s : Nat) :
     total G (s + 1) = total G s + (G (s + 1)).count := by
