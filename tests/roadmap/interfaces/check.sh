@@ -5,7 +5,8 @@
 # ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region`;
 # runs no compiler. Every Zig version's exports translate under the registries and elaborate; the
 # 0.17.0 translations are the retained ones byte for byte, and the proofs over them
-# (Interfaces/*Spec.lean) check; test_cli.py covers the rejections and the closed default.
+# (Interfaces/*Spec.lean) check; the list proofs (Proofs/Lists) build over the 0.17.0, 0.16.0 and
+# 0.15.2 lists translations; test_cli.py covers the rejections and the closed default.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -69,6 +70,7 @@ for version in 0.16.0 0.15.2 0.14.1 0.17.0; do
     module=$(cut -d'|' -f2 <<< "$entry")
     translate "$version" "$entry" "$work/Interfaces/$module.lean"
     "${lean_cmd[@]}" -R "$work" -o "$work/Interfaces/$module.olean" "$work/Interfaces/$module.lean"
+    if [ "$module" = Lists ]; then cp "$work/Interfaces/Lists.lean" "$work/lists-$version.lean"; fi
   done
   # The sentinel proofs hold for this version's translation too (0.17.0: the axioms loop below).
   if [ "$version" != 0.17.0 ]; then
@@ -80,6 +82,18 @@ done
 for entry in "${programs[@]}"; do
   module=$(cut -d'|' -f2 <<< "$entry")
   cmp "$work/Interfaces/$module.lean" "$(cut -d'|' -f4 <<< "$entry")"
+done
+# The full-state list proofs hold for every version's lists translation: over the retained 0.17.0
+# one in the checkout, over the 0.16.0 and 0.15.2 ones in a check tree (scripts/check-tree.py)
+# with that translation in place of Proofs/Lists/Open.lean (the trees clone the checkout's
+# build, so only Open and the proofs rebuild there). Lake's own search path only: not this
+# check's LEAN_PATH, whose checkout build holds the 0.17.0 Proofs.Lists.Open.
+lists_proofs=(Proofs.Lists.Linked Proofs.Lists.Alloc Proofs.Lists.Append Proofs.Lists.Bounded)
+env -u LEAN_PATH lake build "${lists_proofs[@]}"
+for version in 0.16.0 0.15.2; do
+  tree=$repo_root/.lake/check-tree/interfaces-lists-$version
+  python3 scripts/check-tree.py create "$tree" --replace "Proofs/Lists/Open.lean=$work/lists-$version.lean"
+  (cd "$tree" && env -u LEAN_PATH lake build "${lists_proofs[@]}")
 done
 # The proofs over the 0.17.0 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to

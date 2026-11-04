@@ -34,6 +34,34 @@ namespace Full
 
 open FAssn Conc Proto LockWord
 
+/-! ## Caller parts of composite operations
+
+A composite contract (`MutexImpl`, `CondImpl`, `EventImpl`) states, for each operation `op`, the
+caller-part assertions its actual code proves, as fields of the contract itself: `op_pre t r` (the
+part `r` that admits the call), `op_post t r r'` (the part `r'` it returns), and the two
+entailments that admit a caller with the minimal resource the operation family needs, with its
+exact part: a positive unmetered fragment for an operation that may tick (`lock_unmetered_pre`,
+`signal_unmetered_pre`, …), the plain mode for one that may also keep a stack block
+(`wait_plain_pre`, …). An operation that ticks in no implementation states no caller part
+(`MutexImpl.unlock_wp`, `EventImpl.set_wp`). They assert no tick count or repeated-payment
+obligation. The assertions below are the ones the translated code families share. -/
+
+/-- A Plain part has a positive unmetered fragment: a Plain caller meets every
+`…_unmetered_pre` admission. -/
+theorem Res.Plain.unmetered {r : Res} (h : r.Plain) : 0 < r.gh.ac.frag .unmetered := h.2
+
+/-- An unticked operation admits every caller part. -/
+def anyPart : ThreadId → FAssn := fun _ _ => True
+
+/-- The caller pays each reachable tick from a positive unmetered fragment. -/
+def payUnmetered : ThreadId → FAssn := fun _ r => 0 < r.gh.ac.frag .unmetered
+
+theorem payUnmetered_plain {t : ThreadId} {r : Res} (h : r.Plain) : payUnmetered t r :=
+  h.unmetered
+
+/-- The operation returns (or holds meanwhile) the caller's exact part. -/
+def keepPart : ThreadId → Res → FAssn := fun _ r r' => r' = r
+
 namespace FLock
 
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt γ}
@@ -107,6 +135,53 @@ theorem Fits.curU (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : M
   hP.atStop G rX m t hph hU
 
 /-! ## The ops in generated code (`WP`) -/
+
+/-- A composite operation's actual caller-resource post is a spatial frame beside its
+complete held resource. The actual post invariant supplies ownership and disjointness. -/
+theorem Fits.wp_preservePartPost (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p : LPh}
+    {g : γ} {t : ThreadId} {c : ConcM Tgt α} {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {B : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hp : p ≠ .gone)
+    (hbody : P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ r rH,
+      A r ∧ P.inv (upd G' t (L.set (L.setPart g r) p rH)) m') G m d) :
+    P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ r rH, A r ∧
+      P.inv (upd G' t (L.set (L.setPart g r) p rH)) m' ∧
+      (A ⋆ fun r => r = rH)
+        (L.own (upd G' t (L.set (L.setPart g r) p rH)) m' t)) G m d := by
+  refine WP.mono ?_ hbody
+  rintro a G' m' d' ⟨hB, r, rH, hA, hi⟩
+  obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi
+  have hlive : L.ph (upd G' t (L.set (L.setPart g r) p rH) t) ≠ .gone := by
+    rw [upd_self, L.ph_set]; exact hp
+  refine ⟨hB, r, rH, hA, hi, ?_⟩
+  rw [own_live (L := L) (hiL.ht hlive).2]
+  refine ⟨r, rH, ?_, ?_, hA, rfl⟩
+  · simpa only [upd_self, L.part_set, L.part_setPart, L.held_set] using hiL.pdisj t
+  · rw [upd_self, L.part_set, L.part_setPart, L.held_set]
+
+/-- An operation whose post keeps the caller part through `set` preserves every assertion on
+that complete part as a spatial frame beside its held resource. The post invariant supplies
+actual ownership, liveness and disjointness; no tick or mode assumption is introduced. -/
+theorem Fits.wp_preservePart (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p : LPh}
+    {g : γ} {t : ThreadId} {c : ConcM Tgt α} {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {B : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hp : p ≠ .gone) (hA : A (L.part g))
+    (hbody : P.WP t c (fun a G' m' d' => B a G' m' d' ∧
+      ∃ rH, P.inv (upd G' t (L.set g p rH)) m') G m d) :
+    P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ rH,
+      P.inv (upd G' t (L.set g p rH)) m' ∧
+      (A ⋆ fun r => r = rH) (L.own (upd G' t (L.set g p rH)) m' t)) G m d := by
+  refine WP.mono ?_ (hP.wp_preservePartPost (g := g) (p := p) (B := B)
+    (A := fun r => r = L.part g ∧ A r) hp (WP.mono ?_ hbody))
+  · rintro a G' m' d' ⟨hB, r, rH, ⟨rfl, _⟩, hi, hs⟩
+    have hs' : (A ⋆ fun r => r = rH)
+        (L.own (upd G' t (L.set (L.setPart g (L.part g)) p rH)) m' t) :=
+      sep_mono_left (fun _ h => h.2) hs
+    refine ⟨hB, rH, ?_, ?_⟩
+    · simpa only [L.setPart_self] using hi
+    · simpa only [L.setPart_self] using hs'
+  · rintro a G' m' d' ⟨hB, rH, hi⟩
+    exact ⟨hB, L.part g, rH, ⟨rfl, hA⟩, by rwa [L.setPart_self]⟩
 
 variable {σ α : Type} [Packed α 32]
 

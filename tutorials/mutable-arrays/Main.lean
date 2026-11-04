@@ -16,7 +16,8 @@ open Slices Zig Zig.Full FAssn
 
 /-- Reversing a slice twice gives back its items: two `reverse_spec` triples, chained. -/
 theorem reverse_twice (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
-    FTotalTriple (up (arr sl.ptr vs)) (do reverse sl; reverse sl) (fun _ => up (arr sl.ptr vs)) := by
+    FTotalTriple (up (arr sl.ptr vs) ⋆ plain) (do reverse sl; reverse sl)
+      (fun _ => up (arr sl.ptr vs) ⋆ plain) := by
   have back := reverse_spec sl vs.reverse (by simp [hlen])
   rw [List.reverse_reverse] at back
   exact FTotalTriple.bind (reverse_spec sl vs hlen) (fun _ => back)

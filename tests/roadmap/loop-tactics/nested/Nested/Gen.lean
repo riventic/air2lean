@@ -31,6 +31,7 @@ def pairs.again5 : pairsExit → Bool
   | _ => false
 
 def pairs.loop14 (p0 : Zig.Ptr) : Zig.MM pairsLocals pairsExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i16 ← pure ((← get).j)
     let i17 ← pure ((← get).i)
@@ -50,6 +51,7 @@ def pairs.loop14 (p0 : Zig.Ptr) : Zig.MM pairsLocals pairsExit := do
   | e => pure e
 
 def pairs.loop5 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MM pairsLocals pairsExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).i)
     let i8 ← pure (Zig.lt false i7 p1)

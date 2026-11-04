@@ -84,6 +84,16 @@ theorem WP.callMC_ptrProject {p : Ptr} {f : Ptr → Ptr} {s : σ}
     exact ⟨rfl, h⟩
   · rw [hin] at hn; cases hn
 
+/-- A step tick (`Zig.tick`, at the start of each loop-body run and recursive entry): no stop,
+no error; only the memory's step count moves. -/
+theorem WP.callMC_tick {s : σ} {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : Q ((), s) G { m with ticks := m.ticks + 1 } n) :
+    P.WP t ((Zig.callMC Zig.tick : CM Tgt σ Unit).run s) Q G m n := by
+  refine WP.callMC (fun e he => ?_) (fun a m' hr => ?_) fun hn => ?_
+  · rw [tick_run] at he; cases he
+  · rw [tick_run] at hr; cases hr; exact ⟨rfl, h⟩
+  · rw [tick_run] at hn; cases hn
+
 /-- Pointer formation in partial correctness (`P.strict = false`): an error satisfies every
 post, and a result is the projection with the memory unchanged. -/
 theorem WP.callMC_ptrProject_partial {p : Ptr} {f : Ptr → Ptr} {s : σ}

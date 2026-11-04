@@ -28,12 +28,15 @@ variable {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
 /-- After `Thread.Mutex.lock`, the locking thread is the running one. The hypothesis `hc` is
 stated with `mutexC`, so the same proof holds for the Linux and the macOS translation. The
 protocol counts no turns (`hcost`): a futex wait has no turn charge. `ok` marks the threads that
-may run the lock's code (`FLock.Fits`), and `io` is
+may run the lock's code (`FLock.Fits`), `hu` gives the thread's part the unmetered fragment
+that pays a retry loop's ticks (the contract's caller resource), and `io` is
 the `Io` argument of the contract's `lock`, which `Thread.Mutex.lock` ignores. -/
 theorem lock_keeps_current (hP : L.Fits K P U ok) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
-    (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (io : Io) (G : ThreadId → γ)
+    (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_lock p) (fun _ _ m' _ => m'.current = t) G m d :=
-  WP.mono (fun _ _ _ _ h => h.2.1) (threadMutex.lock_wp hP hcost hp hc t g hg hok io G m d hi)
+  WP.mono (fun _ _ _ _ h => h.2.1)
+    (threadMutex.lock_wp hP hcost hp hc t g hg hok hu io G m d hi)
 
 end CrossTarget

@@ -73,9 +73,13 @@ theorem ready_done {s : Sched.State Tgt Unit} {d dw : Nat}
 abbrev atT (S : Sched.State Tgt Unit) (t : ThreadId) : Sched.State Tgt Unit :=
   { S with mem := { S.mem with current := t } }
 
+/-- `atT` after the loop body's step tick (`Zig.tick`): only the step count moves. -/
+abbrev atTick (S : Sched.State Tgt Unit) (t : ThreadId) : Sched.State Tgt Unit :=
+  { S with mem := { S.mem with current := t, ticks := S.mem.ticks + 1 } }
+
 theorem tt_start (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
     (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .yield, fun _ m => dispatch .worker (d + 1) m⟩).1 =
-      .ok (workerTS .load d, none, atT S 1) := by
+      .ok (workerTS .load d, none, atTick S 1) := by
   show Sched.settle 1 (atT S 1) (dispatch .worker (d + 1) (atT S 1).mem) = _
   rw [worker_succ]; rfl
 
@@ -85,7 +89,7 @@ theorem tt_spin (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
 
 theorem tt_yld (o : Nat → Nat) (f d : Nat) (S : Sched.State Tgt Unit) :
     (Sched.turnTrace ⟨.any, .available⟩ dispatch f o 1 S ⟨d + 1, .yield, fun _ m => wLoop (d + 1) m⟩).1 =
-      .ok (workerTS .load d, none, atT S 1) := by
+      .ok (workerTS .load d, none, atTick S 1) := by
   show Sched.settle 1 (atT S 1) (wLoop (d + 1) (atT S 1).mem) = _
   rw [wLoop_succ]; rfl
 

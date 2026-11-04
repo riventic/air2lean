@@ -255,16 +255,17 @@ nonvacuity_witness Lists.Alloc.push_spec := by
 -- `freeAll` of the empty list (`list I φ none []` is `⟪none = none⟫`): the allocator's
 -- invariant and the vtable; the fee, the header and `plain` join the frame.
 /-- `freeAll`'s precondition for the empty list (`list I φ none []` is `⟪none = none⟫`): the
-allocator's invariant and the vtable; the fee, the header and `plain` join the frame. -/
+allocator's invariant, the vtable and `plain` (its loop's steps); the fee and the header join the
+frame. -/
 theorem freeAll_admissible {A1 A0 γ : Nat} (h : FAdmit.Start (startPre A1 A0 γ ⋆ plain)) :
     CAdmit ((I0 A1 A0 γ).own ⋆ (Lists.Alloc.list (I0 A1 A0 γ) Frac.one.half none [] ⋆
-      vtR vtp fns.toList)) :=
-  (FAdmit.Start.frame (R := ((I0 A1 A0 γ).fee Frac.one.half ⋆
-      Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain)
+      vtR vtp fns.toList) ⋆ plain) :=
+  (FAdmit.Start.frame (R := (I0 A1 A0 γ).fee Frac.one.half ⋆
+      Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
     (h.mono fun _ h => sep_mono_left (fun _ h => sep_mono_right (fun _ h =>
-      Full.sep_lift.mpr ⟨rfl, h⟩) h)
-      (ac_cast h (Q := ((I0 A1 A0 γ).own ⋆ vtR vtp fns.toList) ⋆ (((I0 A1 A0 γ).fee Frac.one.half ⋆
-        Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) ⋆ plain))
+      sep_mono_left (fun _ h => Full.sep_lift.mpr ⟨rfl, h⟩) h) h)
+      (ac_cast h (Q := ((I0 A1 A0 γ).own ⋆ (vtR vtp fns.toList ⋆ plain)) ⋆
+        ((I0 A1 A0 γ).fee Frac.one.half ⋆ Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []))
         (by simp only [startPre]; ac_rfl)))).cadmit
 
 nonvacuity_witness Lists.Alloc.freeAll_spec := by

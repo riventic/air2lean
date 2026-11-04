@@ -135,6 +135,11 @@ structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
   fp : ∀ e ∈ m.footprint, FpOk G m e
   own : ∀ e ∈ m.footprint, e.tid < m.threads.size ∧ VClock.le e.clock (m.clocks[e.tid]!) = true
 
+/-- A step tick keeps the invariant: it reads no step count. -/
+theorem Inv.ticked {G : ThreadId → Gh} {m : Mem} (h : Inv G m) :
+    Inv G { m with ticks := m.ticks + 1 } :=
+  ⟨h.thr, h.b0, h.b1, h.b2, h.ctx, h.head, h.casn, h.n0, h.join, h.fp, h.own⟩
+
 /-- A pointer into one of the three 16-byte blocks is formed (`ptrProject`, MM-3). -/
 theorem Inv.proj {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) {b : Nat} (hb : b = 0 ∨ b = 1 ∨ b = 2)
     {p : Ptr} {f : Ptr → Ptr} (hp : p.block = some b) (h0 : 0 ≤ p.off) (hfb : (f p).block = p.block)
@@ -1007,6 +1012,14 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
       if push.again12 r.1 then loopInv u r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : pushLocals) => 0) s)
       else loopPost u r G' m' d') G m d := by
+  unfold push.loop12
+  simp only [StateT.run_bind, pure_bind]
+  -- the body's step tick: the invariant does not read the step count
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : loopInv u s G { m with ticks := m.ticks + 1 } d := by
+    obtain ⟨hc, g, hg, hi⟩ := h; exact ⟨hc, g, hg, hi.ticked⟩
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
   obtain ⟨hc, g, hg, hi⟩ := h
   have hk0 : Kid u (upd G u g u) := by
     rw [upd_self]; rcases hg with rfl | ⟨x, rfl⟩
@@ -1015,8 +1028,6 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have hnd : upd G u g u ≠ .done := by rw [upd_self]; rcases hg with rfl | ⟨x, rfl⟩ <;> intro h <;> cases h
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hact : Act (upd G u g) m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
-  unfold push.loop12
-  simp only [StateT.run_bind, pure_bind]
   rw [show cPtr u = ⟨some u, ((0 : Nat) : Int)⟩ from rfl]
   have hu3 : u = 0 ∨ u = 1 ∨ u = 2 := by omega
   -- `s.s`

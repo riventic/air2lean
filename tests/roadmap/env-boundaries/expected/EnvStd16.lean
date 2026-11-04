@@ -297,6 +297,7 @@ def posix_read.again13 : posix_readExit → Bool
   | _ => false
 
 def posix_read.loop13 (p0 : BitVec 32) : Zig.MM posix_readLocals posix_readExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i16 ← pure (((← get).local2).ptr)
     let i18 ← pure (((← get).local2).len)

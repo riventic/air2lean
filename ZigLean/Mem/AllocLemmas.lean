@@ -10,8 +10,7 @@ M03: the same decision for every `usize` request, `allocDenied_asOracle`, `rawAl
 `mapDenied_asOracle` in `ZigLean/Os/MmapRun.lean` for the page mappings of the translated
 allocators); the byte remap's runs branch by branch
 (`remapByteBuffer_default_run`, `_inPlace_throw`, `_inPlace_illegal`, `_inPlace_none`,
-`_inPlace_run`). Both logics use them: the legacy rules (`ZigLean/Sep/Alloc.lean`)
-and the full-state rules (`ZigLean/Sep/Full/Block.lean`). Proof-only: this module imports
+`_inPlace_run`). The full-state rules (`ZigLean/Sep/Full/Block.lean`) use them. Proof-only: this module imports
 `ZigLean.Mem.Lemmas`, so it stays out of the runtime umbrella.
 -/
 
