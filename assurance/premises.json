@@ -286,6 +286,7 @@
     "ZigLean.Sep.Full.CondEpoch": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.WordNewest": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Sem": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
+    "ZigLean.Sep.Full.RwLock": [],
     "ZigLean.VC.Rules": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Extract": ["SEM-02", "SEM-03"],
     "ZigLean.VC.Result": ["SEM-03"],
