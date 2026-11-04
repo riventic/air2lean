@@ -419,6 +419,71 @@ theorem hist_keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.hist m' = 
 theorem hist_keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.hist m' = W.hist m :=
   hist_keepK hw hk.toK
 
+/-! ## The writes only grow
+
+A protocol relates the memories at two stops of a thread only through one-state facts (`Proto.WP`
+resumes a stop in every state its invariant allows). So a proof that compares the word's writes
+at a call with those at a later stop keeps a snapshot `h` of the writes in its ghost value and
+an invariant that `h` stays a prefix of the writes (`Prefix`). Every step keeps or extends the
+writes (`Extends`): it keeps them (`Extends.of_eq`: a step that keeps the word, a lock step, a
+framed step, a fork, a load, a failed `cmpxchg`, a futex op) or adds one (`Extends.of_push`: an
+RMW, a successful `cmpxchg`), so a prefix stays one (`Prefix.extend`). The instances for the
+native steps are in `ZigLean/Sep/Full/Word.lean`. -/
+
+variable (W) in
+/-- `h` is a prefix of the word's writes at `m`. -/
+def Prefix (h : Array Entry) (m : Mem) : Prop := ∃ r, W.hist m = h ++ r
+
+variable (W) in
+/-- The word's writes at `m'` extend those at `m`. -/
+def Extends (m m' : Mem) : Prop := W.Prefix (W.hist m) m'
+
+theorem Prefix.self (m : Mem) : W.Prefix (W.hist m) m := ⟨#[], Array.append_empty.symm⟩
+
+theorem Prefix.extend {h : Array Entry} {m m' : Mem} (hp : W.Prefix h m) (hg : W.Extends m m') :
+    W.Prefix h m' := by
+  obtain ⟨r, hr⟩ := hp
+  obtain ⟨r', hr'⟩ := hg
+  exact ⟨r ++ r', by rw [hr', hr, Array.append_assoc]⟩
+
+theorem Prefix.size_le {h : Array Entry} {m : Mem} (hp : W.Prefix h m) :
+    h.size ≤ (W.hist m).size := by
+  obtain ⟨r, hr⟩ := hp
+  rw [hr, Array.size_append]; omega
+
+/-- A write of the snapshot is the word's write at the same index. -/
+theorem Prefix.get {h : Array Entry} {m : Mem} (hp : W.Prefix h m) {j : Nat} (hj : j < h.size) :
+    (W.hist m)[j]! = h[j]! := by
+  obtain ⟨r, hr⟩ := hp
+  rw [hr, getElem!_pos (h ++ r) j (by rw [Array.size_append]; omega), getElem!_pos h j hj,
+    Array.getElem_append_left hj]
+
+theorem Extends.refl (m : Mem) : W.Extends m m := Prefix.self m
+
+theorem Extends.trans {m m' m'' : Mem} (h₁ : W.Extends m m') (h₂ : W.Extends m' m'') :
+    W.Extends m m'' :=
+  h₁.extend h₂
+
+/-- A step that keeps the writes. -/
+theorem Extends.of_eq {m m' : Mem} (he : W.hist m' = W.hist m) : W.Extends m m' :=
+  ⟨#[], by rw [he, Array.append_empty]⟩
+
+/-- A step that adds a write. -/
+theorem Extends.of_push {m m' : Mem} {e : Entry} (he : W.hist m' = (W.hist m).push e) :
+    W.Extends m m' :=
+  ⟨#[e], by rw [he, Array.push_eq_append]⟩
+
+/-- A step that keeps the atomic locations and the blocks (a futex wake, a change of the futex
+queue or of the clocks). -/
+theorem Extends.congr {m m' : Mem} (ha : m'.atomics = m.atomics) (hb : m'.blocks = m.blocks) :
+    W.Extends m m' :=
+  .of_eq (hist_congr ha hb)
+
+/-- A step that keeps the word (`Keep`, `KeepK`: a lock step, a step on a thread's own part, a
+spawn, a join, a plain read, an op at another word). -/
+theorem Extends.keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.Extends m m' :=
+  .of_eq (hist_keepK hw hk)
+
 /-- A step that keeps the word keeps its invariant. -/
 theorem Ok.keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.Ok m' := by
   obtain ⟨hb', hcur⟩ := congr hk.cells hw.blk
