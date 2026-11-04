@@ -103,7 +103,7 @@
       "example": "lists",
       "gen": "Proofs/Lists/Open.lean",
       "scope": "sequential",
-      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: `sum` returns some value after exactly `xs.length + 1` steps (`Mem.ticks`)"
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: `sum` returns the sum of the items after exactly `xs.length + 1` steps (`Mem.ticks`), and the final memory's live bytes are the untouched frame and a part holding the same list (`FMatch`)"
     },
     {
       "name": "Lists.Alloc.push_spec",
