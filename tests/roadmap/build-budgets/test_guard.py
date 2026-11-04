@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Offline guard tests: stdlib Python children only, no compiler probes/builds."""
 
+import contextlib
+import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -376,7 +379,6 @@ fixture_pause()
         self.assertNotIn("inherited_from", report["admission"])
 
     def test_an_older_guard_holding_the_lock_still_runs_alone(self):
-        import fcntl
         with (self.root / "shared.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)  # what a guard of an older checkout takes
             code, _ = self.attempt(cwd=self.worktree("new"))
@@ -385,7 +387,6 @@ fixture_pause()
         self.assertEqual(code, 0)
 
     def test_a_waiting_queue_holder_is_admitted_before_later_acquirers(self):
-        import fcntl
         directory = Path(str(self.root / "shared.lock") + ".d")
         directory.mkdir()
         with (directory / "queue").open("a") as queue:
@@ -478,8 +479,93 @@ fixture_pause()
         code, evidence = self.attempt(cwd=self.worktree("later"))
         self.assertEqual((code, evidence["admission"]["priority"]), (0, "normal"))
 
+    def test_a_small_guard_backfills_beside_a_waiting_head(self):
+        # Budget 3 GiB: the holder takes one slot; the big head (weight 3) waits and, early in its
+        # ramp, keeps one slot. The small guard runs in the third; the head follows the holder.
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", order, *budget, "--rss-mib", "3000", "--backfill-ramp", "600")
+        code, evidence = self.attempt(*budget, "--lock-wait", "5", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (0, "success"))
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertIsNone(big.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+        self.assertEqual(order.read_text().split(), ["big"])
+        self.assertEqual(os.listdir(Path(str(self.root / "shared.lock") + ".d") / "heads"), [])
+
+    def test_a_head_past_its_ramp_keeps_every_free_slot(self):
+        budget = ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", self.root / "order", *budget, "--rss-mib", "3000",
+                                   "--backfill-ramp", "0")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        self.assertFalse(evidence["admission"]["backfilled"])
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+
+    def stand_in_head(self, content, enter=None):
+        """A queue head (stand-in): it holds the queue and publishes `content` in `heads/`, until
+        the test ends (or what `enter` belongs to closes)."""
+        enter = enter or self.enterContext
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        directory.mkdir(parents=True, exist_ok=True)
+        queue = enter((directory / "queue").open("a"))
+        fcntl.flock(queue, fcntl.LOCK_EX)
+        enter(guard.publish_entry(directory / "heads", "1-1", content, lambda path: path.open("a")))
+
+    def test_backfill_leaves_the_heads_unmet_reservation_free(self):
+        self.stand_in_head({"pid": os.getpid(), "unmet": 1, "need": 3})
+        code, _ = self.attempt("--mem-budget-mib", "1024", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual(code, 75)  # one free slot: the head's
+        code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("b"))
+        self.assertEqual(code, 0)  # two: one for the head, one for the backfill
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertEqual(guard.free_mib(self.root / "shared.lock", 2048), 1024)  # the head's reserved slot
+
+    def test_free_slots_that_admit_the_head_go_to_it(self):
+        self.stand_in_head({"pid": os.getpid(), "unmet": 0, "need": 2})
+        code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual(code, 75)
+        self.assertFalse(evidence["admission"]["backfilled"])
+        code, _ = self.attempt("--mem-budget-mib", "3072", "--lock-wait", "2", cwd=self.worktree("b"))
+        self.assertEqual(code, 75)  # three free still admit the head (2) first
+
+    def test_a_head_entry_of_another_shape_gets_no_backfill(self):
+        for content in ({"unmet": "x", "need": 3}, {"unmet": 1}, {"unmet": 2, "need": 1}, {"unmet": None, "need": 3}):
+            with self.subTest(content=content), contextlib.ExitStack() as stack:
+                self.stand_in_head(content, stack.enter_context)
+                code, evidence = self.attempt("--mem-budget-mib", "4096", "--lock-wait", "1.5",
+                                              cwd=self.worktree("a"))
+                self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+
+    def test_the_backfill_ramp(self):
+        for value in ("-1", "inf", "nan"):
+            with self.subTest(value=value), self.assertRaises(SystemExit), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                guard.parse_args(["--report", "r", "--log", "l", "--backfill-ramp", value, "--", "true"])
+        a = guard.parse_args(["--report", "r", "--log", "l", "--rss-mib", "4096", "--backfill-ramp", "100",
+                              "--mem-budget-mib", "8192", "--lock", str(self.root / "shared.lock"), "--", "true"])
+        self.assertEqual(a.backfill_ramp, 100)
+        admission = guard.Admission(a)
+        self.assertEqual([admission.reservation(w) for w in (0, 1, 25, 50, 99, 100, 1000)], [0, 1, 1, 2, 4, 4, 4])
+        a.backfill_ramp = 0
+        self.assertEqual(admission.reservation(0), 4)
+
+    def test_no_backfill_behind_a_merge_ticket(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        merge, _ = self.start_waiter("merge", order, *budget, "--rss-mib", "3000", "--priority", "merge")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(merge)
+
     def test_normal_guards_wait_for_a_live_merge_ticket_and_ignore_a_dead_one(self):
-        import fcntl
         self.tickets.mkdir(parents=True)
         ticket = self.tickets / "00000000000000000001-1"
         with ticket.open("a") as owner:
@@ -701,7 +787,6 @@ fixture_pause()
             self.assertTrue(preempt(older))
 
     def test_waiting_for_lock_can_be_cancelled_without_spawning(self):
-        import fcntl
         with (self.root / "shared.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             marker = self.root / "must-not-run"
@@ -912,7 +997,6 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
                                   "--report", str(self.root / "report"), "--", "mock"])
 
     def test_fingerprints_are_collected_after_the_waiting_lock_is_acquired(self):
-        import fcntl
         fixture = self.root / "input"
         fixture.write_text("before")
         args, _, _ = self.command("pass", "--input", "input", "--lock-wait", "2")
