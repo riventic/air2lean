@@ -3,6 +3,7 @@ import ZigLean.Witness
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Loop
+import ZigLean.Sep.Full.Slice
 
 /-!
 # Proofs about `examples/recursion/recursion.zig`
@@ -10,9 +11,10 @@ import ZigLean.Sep.Full.Loop
 Each theorem is about the generated code in `Gen.lean`, so it holds for the Zig function to the
 extent the translation is faithful (see the differential tests in `tests/diff/`).
 
-`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. The parity and gcd groups have full-state
+`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. All three groups have full-state
 total contracts, proved by `FTotalTriple.rec_group` and one `fsym` step per group. Their public
-equalities follow from total adequacy. The `fact` proof still inducts on `n.toNat`.
+equalities follow from total adequacy. The factorial contract retains its checked-overflow
+bound `n.toNat ≤ 12`; the existing `13!` panic remains a separate boundary result.
 
 **Stack premise.** These functions are pure (`Zig.Result`), so the model charges no frames:
 each theorem holds for the native function only if the native stack holds the recursion it
@@ -109,55 +111,78 @@ theorem natFact_mono {m n : Nat} (h : m ≤ n) : natFact m ≤ natFact n := by
     rename_i n' _
     exact Nat.le_trans ih (Nat.le_mul_of_pos_left (natFact n') (show 0 < n' + 1 by omega))
 
-/-- `fact`, proved by induction on the recursion depth `k = n.toNat`, for `k ≤ 12` (`12! < 2^32`,
-`13!` overflows — see `fact_13_panics`). -/
+private def factCode (n : BitVec 32) : MemM (BitVec 32) :=
+  StateT.lift (fact n)
+
+private def factValue (n : BitVec 32) : BitVec 32 :=
+  BitVec.ofNat 32 (natFact n.toNat)
+
+private theorem natFact_12 : natFact 12 = 479001600 := by decide
+
+private theorem natFact_lt {k : Nat} (h : k ≤ 12) : natFact k < 2 ^ 32 := by
+  have := natFact_mono h
+  have := natFact_12
+  omega
+
+private theorem fact_zero (n : BitVec 32) (h : n = 0#32) : 1#32 = factValue n := by
+  subst h
+  rfl
+
+private theorem fact_product (n p : BitVec 32) (hb : n.toNat ≤ 12)
+    (hp : p.toNat + 1 = n.toNat) : n.toNat * (factValue p).toNat = natFact n.toNat := by
+  have hpl : p.toNat ≤ 12 := by omega
+  rw [factValue, Zig.toNat_ofNat_of_lt (natFact_lt hpl), ← hp]
+  rfl
+
+private theorem fact_mul_bound (n p : BitVec 32) (hb : n.toNat ≤ 12)
+    (hp : p.toNat + 1 = n.toNat) : n.toNat * (factValue p).toNat < 2 ^ 32 := by
+  rw [fact_product n p hb hp]
+  exact natFact_lt hb
+
+private theorem fact_value_step (n p r : BitVec 32) (hb : n.toNat ≤ 12)
+    (hp : p.toNat + 1 = n.toNat)
+    (hr : r.toNat = n.toNat * (factValue p).toNat) : r = factValue n := by
+  apply BitVec.eq_of_toNat_eq
+  change r.toNat = (BitVec.ofNat 32 (natFact n.toNat)).toNat
+  rw [hr, fact_product n p hb hp, Zig.toNat_ofNat_of_lt (natFact_lt hb)]
+
+/-- The bounded factorial group uses the existing checked arithmetic rules. The native
+interpretation still requires STK-01; a decreasing rank alone does not provide native frames. -/
+private theorem fact_group_total (n : BitVec 32) :
+    FTotalTriple ⟪n.toNat ≤ 12⟫ (factCode n) (fun v => ⟪v = factValue n⟫) := by
+  refine FTotalTriple.rec_group factCode (fun n => ⟪n.toNat ≤ 12⟫)
+    (fun n v => ⟪v = factValue n⟫) BitVec.toNat ?_ n
+  intro n smaller
+  fsym
+  all_goals first
+    | apply fact_mul_bound <;> first | assumption | omega
+    | apply fact_value_step <;> first | assumption | omega
+    | apply fact_zero; assumption
+
+theorem fact_total (n : BitVec 32) (h : n.toNat ≤ 12) :
+    FTotalTriple emp (StateT.lift (fact n) : MemM (BitVec 32))
+      (fun v => ⟪v = BitVec.ofNat 32 (natFact n.toNat)⟫) :=
+  (fact_group_total n).pre (fun _ hr => ⟨h, hr⟩)
+
+/-- `12! < 2^32`; `13!` overflows — see `fact_13_panics`. -/
+theorem fact_ok (n : BitVec 32) (h : n.toNat ≤ 12) :
+    fact n = pure (BitVec.ofNat 32 (natFact n.toNat)) :=
+  (fact_total n h).result_eq
+
+/-- The original bounded auxiliary statement, as a consequence of the bounded group contract. -/
 theorem fact_ok_aux :
     ∀ k : Nat, ∀ n : BitVec 32, n.toNat = k → k ≤ 12 →
       fact n = pure (BitVec.ofNat 32 (natFact k)) := by
-  intro k
-  induction k with
-  | zero =>
-    intro n h _
-    have hn : n = 0#32 := by apply BitVec.eq_of_toNat_eq; simpa using h
-    subst hn
-    rw [fact.eq_1]
-    simp [zig_unfold, natFact]
-  | succ k ih =>
-    intro n h hb
-    have hn0 : n ≠ 0#32 := by intro h0; rw [h0] at h; simp at h
-    have hn1 : (n - 1#32).toNat = k := by rw [Zig.toNat_sub_one n hn0]; omega
-    have hk12 : k ≤ 12 := by omega
-    have hres := ih (n - 1#32) hn1 hk12
-    have h12 : natFact 12 = 479001600 := by decide
-    have hstep : natFact (k + 1) = (k + 1) * natFact k := rfl
-    -- `12! = 479001600 < 2^32`, so `natFact k % 2^32` does not actually wrap.
-    have hmod : natFact k % 4294967296 = natFact k := by
-      have := natFact_mono hk12
-      omega
-    -- the checked multiply `n * fact (n - 1)` does not overflow: `(k+1)! ≤ 12! < 2^32`.
-    have hnomul : ¬ (4294967296 ≤ (k + 1) * (natFact k % 4294967296)) := by
-      rw [hmod]
-      have := natFact_mono (show k + 1 ≤ 12 by omega)
-      omega
-    have hnf : (BitVec.ofNat 32 (natFact k)).toNat = natFact k := by
-      rw [BitVec.toNat_ofNat, hmod]
-    have hmuleq : n * (BitVec.ofNat 32 (natFact k)) = BitVec.ofNat 32 (natFact (k + 1)) := by
-      apply BitVec.eq_of_toNat_eq
-      rw [BitVec.toNat_mul, hnf, BitVec.toNat_ofNat, h, hstep]
-    rw [fact.eq_1]
-    simp [zig_unfold, hn0, hres, h, hnomul, hmuleq]
-
-theorem fact_ok (n : BitVec 32) (h : n.toNat ≤ 12) :
-    fact n = pure (BitVec.ofNat 32 (natFact n.toNat)) :=
-  fact_ok_aux n.toNat n rfl h
+  intro k n hn hb
+  subst hn
+  exact fact_ok n hb
 
 /-- `13! = 6227020800 ≥ 2^32`: the checked multiply `13 * fact 12` overflows. -/
 theorem fact_13_panics : fact (13 : BitVec 32) = throw .overflow := by
   have h12 : fact (12#32 : BitVec 32) = pure (BitVec.ofNat 32 (natFact 12)) :=
     fact_ok 12#32 (by decide)
-  have hval : natFact 12 = 479001600 := by decide
   rw [fact.eq_1]
-  simp [zig_unfold, h12, hval]
+  simp [zig_unfold, h12, natFact_12]
 
 /-! ## `gcd` -/
 
