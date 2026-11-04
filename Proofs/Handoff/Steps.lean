@@ -98,11 +98,11 @@ theorem cinv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
 /-- **A change of thread `t`'s program place** at the same memory, out of the condition's and
 the event's code: `U` holds with the new ghost value `g₁` given its fields that read the
 program places (the threads' shape, `ep1`, `ent`, `hold`, `reg`, `snap`, `lvc`, `fin`) and the
-event's roles; `t` may leave the event's `sd` (after its `set`: `FEvent.Inv.toOut`). -/
+event's waiter role; `t` may leave the event's `sd` (after its `set`: `FEvent.Inv.toOut`). -/
 theorem U_relabel {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g₀ g₁ : Gh}
     (hu : U Lo (upd G t g₀) rX m) (hc₀ : g₀.2.c = .out) (hc₁ : g₁.2.c = .out)
     (he₀ : g₀.2.e = .out ∨ g₀.2.e = .sd) (he₁ : g₁.2.e = .out)
-    (hwx : (E Lo).wx g₀ → (E Lo).wx g₁) (hsx : (E Lo).sx g₀ → (E Lo).sx g₁)
+    (hwx : (E Lo).wx g₀ → (E Lo).wx g₁)
     (hsh : Shape (fun u => (upd G t g₁ u).2) m)
     (hep1 : (upd G t g₁ 1).2.ph.sigd = false → (Lo.WE.hist m).size = 1)
     (hent : ((upd G t g₁ 0).2.c).crit → (upd G t g₁ 1).2.ph = .lk)
@@ -125,7 +125,7 @@ theorem U_relabel {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g�
     · subst e; rw [upd_self, upd_self, hc₀, hc₁]
     · rw [upd_ne _ _ e, upd_ne _ _ e]
   have hJ := hu.einv.toOut (t := t) (g := g₁) (by rw [upd_self]; exact he₀) he₁
-    (fun h => by rw [upd_self] at h; exact hwx h) (fun h => by rw [upd_self] at h; exact hsx h)
+    (fun h => by rw [upd_self] at h; exact hwx h)
   rw [upd_upd] at hJ
   refine ⟨hsh, hu.io, hu.rest, hu.blk, hu.ws, hu.we, hu.wv, hI, hJ, by rw [hcu]; exact hu.places,
     hep1, hu.ep2, hu.epS, fun q n h hq => hu.incE q n h (by rw [← hcu]; exact hq), hent, hhold,
@@ -169,13 +169,11 @@ theorem U_main {G : ThreadId → Gh} {rX : Res} {m : Mem} {a : FLG} {x₀ x₁ :
     (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hp₀ : x₀.ph ≠ .pre) (hm : x₁.ph.isMain = true)
     (hp₁ : x₁.ph ≠ .pre) (hwx : x₀.ph = .ev ∨ x₀.ph = .joins → x₁.ph = .ev ∨ x₁.ph = .joins) :
     U Lo (upd G 0 (a, x₁)) rX m := by
-  obtain ⟨h00, ⟨-, hy, -⟩ | ⟨hs, h1, hmn, -, hpr, hrest⟩⟩ := hu.shape
+  obtain ⟨h00, ⟨-, hy, -⟩ | ⟨hs, h1, -, -, hpr, hrest⟩⟩ := hu.shape
   · have h : (upd G 0 (a, x₀) 0).2 = { ph := .pre } := hy
     rw [upd_self] at h
     exact absurd (by rw [show x₀ = { ph := .pre } from h]) hp₀
-  have hm₀ : x₀.ph.isMain = true := by
-    have : (upd G 0 (a, x₀) 0).2.ph.isMain = true := hmn; rwa [upd_self] at this
-  refine U_relabel hu hc₀ hc₁ (.inl he₀) he₁ hwx (fun h => ?_) ⟨h00, .inr ⟨hs, h1,
+  exact U_relabel hu hc₀ hc₁ (.inl he₀) he₁ hwx ⟨h00, .inr ⟨hs, h1,
       by show (upd G 0 (a, x₁) 0).2.ph.isMain = true; rw [upd_self]; exact hm,
       by show (upd G 0 (a, x₁) 0).2.ph ≠ .pre; rw [upd_self]; exact hp₁,
       by show (upd G 0 (a, x₁) 1).2.ph.isProd = true; rw [upd0_1]
@@ -192,8 +190,6 @@ theorem U_main {G : ThreadId → Gh} {rX : Res} {m : Mem} {a : FLG} {x₀ x₁ :
     (fun n h => by simpa only [upd0_1] using hu.snap n (by simpa only [upd0_1] using h))
     (fun h => by rw [upd_self] at h; rw [hc₁] at h; cases h)
     (fun h => by rw [upd0_1] at h; have := hu.fin; rw [upd0_1] at this; exact this h)
-  have h' : x₀.ph = .st ∨ x₀.ph = .fin := h
-  rcases h' with h' | h' <;> rw [h'] at hm₀ <;> cases hm₀
 
 /-- **`main`'s program place** moves: the protocol's invariant. -/
 theorem inv_main {G : ThreadId → Gh} {m : Mem} {a : FLG} {x₀ x₁ : X}
@@ -222,7 +218,6 @@ theorem U_prod {G : ThreadId → Gh} {rX : Res} {m : Mem} {a₀ a₁ : FLG} {x�
     (hu : U Lo (upd G 1 (a₀, x₀)) rX m) (hc₀ : x₀.c = .out) (hc₁ : x₁.c = .out)
     (he₀ : x₀.e = .out ∨ x₀.e = .sd) (he₁ : x₁.e = .out) (hp₀ : x₀.ph.isProd = true)
     (hp₁ : x₁.ph.isProd = true)
-    (hsx : x₀.ph = .st ∨ x₀.ph = .fin → x₁.ph = .st ∨ x₁.ph = .fin)
     (hep1 : x₁.ph.sigd = false → x₀.ph.sigd = false)
     (hent : ((G 0).2.c).crit → x₁.ph = .lk)
     (hhold : x₁.ph = .hl ∨ x₁.ph = .v7 → a₁.ph = .holds)
@@ -235,7 +230,7 @@ theorem U_prod {G : ThreadId → Gh} {rX : Res} {m : Mem} {a₀ a₁ : FLG} {x�
   · have h : (upd G 1 (a₀, x₀) 1).2 = {} := hy 1 (Nat.le_refl _)
     rw [upd_self] at h
     rw [show x₀ = {} from h] at hp₀; cases hp₀
-  refine U_relabel hu hc₀ hc₁ he₀ he₁ (fun h => ?_) hsx ⟨h00, .inr ⟨hs, h1,
+  refine U_relabel hu hc₀ hc₁ he₀ he₁ (fun h => ?_) ⟨h00, .inr ⟨hs, h1,
       by show (upd G 1 (a₁, x₁) 0).2.ph.isMain = true; rw [upd1_0]
          have : (upd G 1 (a₀, x₀) 0).2.ph.isMain = true := hmn; rwa [upd1_0] at this,
       by show (upd G 1 (a₁, x₁) 0).2.ph ≠ .pre; rw [upd1_0]
@@ -311,12 +306,11 @@ theorem U_held {G : ThreadId → Gh} {rX rX' : Res} {m : Mem} {rp rL rL' : Res} 
     have h'' : (upd G 1 (gH rp rL x₀) 0).1.ph = .holds := h'
     rw [upd1_0] at h''
     exact one_holder hL (by rw [upd1_0]; exact h'') hh
-  refine U_prod hu hc₀ hc₁ (.inl he₀) he₁ ?_ ?_ ?_ ?_ (fun h => (hnc h).elim) (fun _ => rfl)
+  refine U_prod hu hc₀ hc₁ (.inl he₀) he₁ ?_ ?_ ?_ (fun h => (hnc h).elim) (fun _ => rfl)
     (fun j hj => U.reg_lk hL hu (by rw [upd1_0, upd1_0]) hh hj)
     (fun n h => by rw [hz₁] at h; cases h) ?_ ?_
   · rcases hp₀ with h | h | h <;> rw [h] <;> rfl
   · rcases hp₁ with h | h | h <;> rw [h] <;> rfl
-  · intro h; rcases hp₀ with h' | h' | h' <;> rcases h with h | h <;> rw [h'] at h <;> cases h
   · intro _; rcases hp₀ with h | h | h <;> rw [h] <;> rfl
   · intro _ h; rcases hp₁ with h' | h' | h' <;> rcases h with h | h <;> rw [h'] at h <;> cases h
   · intro h; rcases hp₁ with h' | h' | h' <;> rw [h'] at h <;> cases h
@@ -336,7 +330,7 @@ theorem inv_sg {G : ThreadId → Gh} {m : Mem} {rp : Res}
     fun _ _ hu => by
       have hent : ((G 0).2.c).crit → False := fun h => by
         have := hu.ent (by rw [upd1_0]; exact h); rw [upd_self] at this; cases this
-      exact U_prod hu rfl rfl (.inl rfl) rfl rfl rfl (fun h => by rcases h with h | h <;> cases h)
+      exact U_prod hu rfl rfl (.inl rfl) rfl rfl rfl
         (fun h => by cases h) (fun h => (hent h).elim) (fun h => by rcases h with h | h <;> cases h)
         (fun j hj => U.reg_out hu (by rw [upd_self]; intro h; cases h) hj) (fun _ h => by cases h)
         (fun _ h => by rcases h with h | h <;> cases h) (fun h => by cases h)
@@ -350,7 +344,7 @@ theorem inv_snap {G : ThreadId → Gh} {m : Mem} {rp : Res}
     fun _ _ hu => by
       have hent : ((G 0).2.c).crit → False := fun h => by
         have := hu.ent (by rw [upd1_0]; exact h); rw [upd_self] at this; cases this
-      exact U_prod hu rfl rfl (.inl rfl) rfl rfl rfl (fun h => by rcases h with h | h <;> cases h)
+      exact U_prod hu rfl rfl (.inl rfl) rfl rfl rfl
         (fun h => by cases h) (fun h => (hent h).elim) (fun h => by rcases h with h | h <;> cases h)
         (fun j hj => U.reg_out hu (by rw [upd_self]; intro h; cases h) hj)
         (fun n h => ⟨rfl, fun j hj => by obtain rfl := Option.some.inj h; exact hj.2.1⟩)
@@ -368,7 +362,7 @@ theorem inv_st {G : ThreadId → Gh} {m : Mem} {rp : Res} {z : Option Nat}
         cases h : ((G 0).2.c).crit
         · rfl
         · have := hu.ent (by rw [upd1_0]; exact h); rw [upd_self] at this; cases this
-      exact U_prod hu rfl rfl (.inl rfl) rfl rfl rfl (fun _ => .inl rfl) (fun h => by cases h)
+      exact U_prod hu rfl rfl (.inl rfl) rfl rfl rfl (fun h => by cases h)
         (fun h => by rw [hent] at h; cases h) (fun h => by rcases h with h | h <;> cases h)
         (fun j hj => U.reg_out hu (by rw [upd_self]; intro h; cases h) hj) (fun _ h => by cases h)
         (fun hw _ => hs (CPh.isReg_of_waits hw hent))
@@ -391,7 +385,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {rp : Res}
   have hL' := hL.ghost (t := 1) (g := (⟨.gone, rp, rnil⟩, { ph := .fin })) (by rw [upd_self]; rfl)
     (.inr (.inl rfl)) (by rw [upd_self]; rfl) rfl (fun h => absurd rfl h) hRk
   rw [upd_upd] at hL'
-  refine ⟨rX, hL', U_prod hu rfl rfl (.inr rfl) rfl rfl rfl (fun _ => .inr rfl) (fun h => by cases h)
+  refine ⟨rX, hL', U_prod hu rfl rfl (.inr rfl) rfl rfl rfl (fun h => by cases h)
     (fun h => ?_) (fun h => by rcases h with h | h <;> cases h)
     (fun j hj => U.reg_out hu (by rw [upd_self]; intro h; cases h) hj) (fun _ h => by cases h)
     (fun hw _ => ?_) (fun _ => hset)⟩
