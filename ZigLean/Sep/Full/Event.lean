@@ -395,6 +395,45 @@ theorem fp (hs : E.MStep t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) 
   | wake c cs h => rw [Proto.modify_ok h] at he; exact .inl he
   | _ => exact .inl he
 
+/-- **A new access of a step of the event's code** is by the stepping thread, before its new
+clock; a new write access comes with a write of the word (`Word.actualRun_fpWrite`), so a step that
+keeps the word's history (`FEvent.Next`: a setter at `sw` or `sd`, a thread that may not write)
+adds only reads. A client that bounds the writes to a block (a whole read of it later) needs this. -/
+theorem fpNew (hs : E.MStep t m m') (hcs : m.clocks.size = m.threads.size) {e : FootprintEntry}
+    (he : e ∈ m'.footprint) :
+    (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨ (e.tid = t ∧ VClock.le e.clock (m'.clocks[t]!) = true ∧
+      (e.kind.isWrite = true → ∃ x, E.W.hist m' = (E.W.hist m).push x)) := by
+  by_cases hm : e ∈ m.footprint
+  · exact .inl ⟨e, hm, .refl e⟩
+  cases hs with
+  | @op M hw hc hop _ _ =>
+    have hst : FStepIn (fun _ => none) { m with current := t } m' :=
+      Word.actualRun_fstep hw hc (fun _ _ _ => rfl) hop
+    rcases hst.fp e he with h | ⟨htid, -⟩
+    · exact .inl h
+    rcases hst.fpc e he with h | hcl
+    · exact .inl h
+    refine .inr ⟨htid, hcl, fun hk => ?_⟩
+    rcases Word.actualRun_fpWrite hw (hcs ▸ hc : t < m.threads.size) hcs hop he hk with h | h
+    · exact absurd h hm
+    · exact h
+  | @sleep M hw hc hr _ _ =>
+    have hst : FStepIn (fun _ => none) { m with current := t } M := by
+      rw [hr]; exact Word.record_fstep (k := .atomicRead) hw hc (fun _ _ _ => rfl)
+    have he' : e ∈ M.footprint := he
+    rcases hst.fp e he' with h | ⟨htid, -⟩
+    · exact .inl h
+    rcases hst.fpc e he' with h | hcl
+    · exact .inl h
+    refine .inr ⟨htid, hcl, fun hk => ?_⟩
+    rw [hr] at he'
+    simp only [Mem.recordAt, Array.mem_push] at he'
+    rcases he' with he' | rfl
+    · exact absurd he' hm
+    · cases hk
+  | wake c cs h => rw [Proto.modify_ok h] at he; exact absurd he hm
+  | _ => exact absurd he hm
+
 theorem block (hs : E.MStep t m m') {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
     ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
       blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by

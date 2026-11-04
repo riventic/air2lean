@@ -3044,6 +3044,83 @@ theorem actualRun_fpAt {m m' : Mem} (hw : W.Ok m)
   · rw [hr] at he
     exact record_fpAt (W := W) he
 
+/-- The footprint after a location preparation of a recorded atomic read has only reads as new
+entries. -/
+theorem prepRead_fp {m m₁ : Mem} {li : Nat} {e : FootprintEntry}
+    (hp : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb .atomicRead)).run = some (.ok (li, m₁)))
+    (he : e ∈ m₁.footprint) : e ∈ m.footprint ∨ e.kind = .atomicRead := by
+  obtain ⟨a, s, next, rfl⟩ := locIdx_updates hp
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · exact .inr rfl
+
+/-- **A new write access of an actual primitive run at a valid word is a write of the word**: the
+word's history gets a new write (an RMW, a successful compare-exchange). A load, a failed
+compare-exchange and the futex compare's record add only reads. -/
+theorem actualRun_fpWrite {m m' : Mem} (hw : W.Ok m) (ht : m.current < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (hop :
+      (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
+        ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
+      (∃ (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOrder)
+          (v old : BitVec n),
+        ((atomicRmwAt c op signed ord nb W.ptr v).run m).run =
+          some (.ok (old, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      m' = m.recordAt W.b W.o nb .atomicRead)
+    {e : FootprintEntry} (he : e ∈ m'.footprint) (hk : e.kind.isWrite = true) :
+    e ∈ m.footprint ∨ ∃ x, W.hist m' = (W.hist m).push x := by
+  have hread : e ∈ m.footprint ∨ e.kind = .atomicRead → e ∈ m.footprint := fun h =>
+    h.resolve_right fun h' => by rw [h'] at hk; cases hk
+  rcases hop with ⟨c, ord, v, hr⟩ | ⟨c, op, signed, ord, v, old, hr⟩ |
+    ⟨c, succ, fail, expected, new, r, hr⟩ |
+    ⟨c, succ, fail, expected, new, r, hr⟩ | hr
+  · obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok hr
+    obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
+    rw [W.sz_eq, ha] at hacc
+    rw [W.sz_eq] at hp
+    cases hacc
+    rw [loadM_footprint] at he
+    exact .inl (hread (prepRead_fp hp he))
+  · obtain ⟨-, -, -, hh, -⟩ := hw.rmw_native rfl ht hcs hr
+    exact .inr ⟨_, hh⟩
+  · obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, _, _, hcase⟩ := cmpxchgAt_ok hr
+    obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+    rw [W.sz_eq, ha] at hacc
+    rw [W.sz_eq] at hp
+    cases hacc
+    rcases hcase with ⟨_, rfl, _, _⟩ | ⟨_, _, hm⟩
+    · rcases (hw.cas_native rfl ht hcs hr).2 with ⟨-, -, -, hh, -⟩ | ⟨_, _, h, -⟩
+      · exact .inr ⟨_, hh⟩
+      · cases h
+    · rw [hm, loadM_footprint] at he
+      exact .inl (hread (prepRead_fp hp he))
+  · obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, _, _, hcase⟩ :=
+      cmpxchgWeakAt_ok hr
+    obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+    rw [W.sz_eq, ha] at hacc
+    rw [W.sz_eq] at hp
+    cases hacc
+    rcases hcase with ⟨_, _, rfl, _, _⟩ | ⟨_, _, hm⟩
+    · rcases (hw.weakCas_native rfl ht hcs hr).2 with ⟨-, -, -, hh, -⟩ | ⟨_, _, h, -⟩
+      · exact .inr ⟨_, hh⟩
+      · cases h
+    · rw [hm, loadM_footprint] at he
+      exact .inl (hread (prepRead_fp hp he))
+  · rw [hr] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · cases hk
+
 /-- Every actual primitive run preserves each old block's live flag, byte-array
 size and kind. The queried block need not be live. -/
 theorem actualRun_block {m m' : Mem} (hw : W.Ok m)
