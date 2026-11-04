@@ -2865,20 +2865,18 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
   for (d, l, b) in someEqs do
     -- `l`, or the other side `x` of a link, with its proof of `x = l`
-    let mut alts : Array (Expr × Option Expr) := #[(l, none)]
+    let mut alts : Array (Expr × Expr) := #[(l, ← mkEqRefl l)]
     for (e, x, y) in links do
-      if ← sameBlock x l then alts := alts.push (y, some (← mkEqSymm e))
-      else if ← sameBlock y l then alts := alts.push (x, some e)
+      if ← sameBlock x l then alts := alts.push (y, ← mkEqSymm e)
+      else if ← sameBlock y l then alts := alts.push (x, e)
     for (x, link) in alts do
       let v ← if x.isAppOfArity ``Zig.Ptr.block 1 then
           whnfR (mkApp (mkConst ``Zig.Ptr.block) (ptrBase x.appArg!)) else pure x
       unless isVal v do continue
       -- (`pf : x = some b` read as `v = some b`: checked, the kernel would reject it late)
       unless ← withNewMCtxDepth (isDefEq x v) do continue
-      let pf ← match link with
-        | none => pure d.toExpr
-        | some e => mkEqTrans e d.toExpr
-      let e ← mkExpectedTypeHint pf (← mkEq v (mkApp v.appFn! b))
+      let e ← mkExpectedTypeHint (← mkEqTrans link d.toExpr)
+        (← mkEq v (← mkAppM ``Option.some #[b]))
       if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
   return g
 
