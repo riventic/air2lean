@@ -463,6 +463,7 @@ class LakeExtractionTests(unittest.TestCase):
         lib = self.package / '.lake/build/lib/lean'
         lib.mkdir(parents=True)
         (lib / 'M.olean').write_bytes(b'olean')  # the audited module, built by the fixtures package
+        (self.package / 'M.lean').write_text('')
         self.extraction = self.package / '.lake/extraction'
         self.built, self.workspaces, self.targets = [], [], []
         self.roots = [str(base / 'root/.lake/build/lib/lean'), str(lib)]
@@ -580,6 +581,7 @@ class LakeKernelReplayTests(unittest.TestCase):
         for owner, module in ((self.root, 'A'), (self.package, 'B')):  # A in the root package, B in the fixtures'
             (owner / '.lake/build/lib/lean').mkdir(parents=True, exist_ok=True)
             (owner / '.lake/build/lib/lean' / (module + '.olean')).write_bytes(b'olean')
+            (owner / (module + '.lean')).write_text('')
         self.workspace = self.package / '.lake/replay'
         self.lean_path = os.pathsep.join([str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')])
         self.resolved = [*self.lean_path.split(os.pathsep), str(self.workspace / '.lake/build/lib/lean')]
@@ -617,12 +619,17 @@ class LakeKernelReplayTests(unittest.TestCase):
         # receipt needs them all, so Lake refreshes a stale one before the checker reads it.
         built = self.root / '.lake/build/lib/lean'
         for module in ('A/Sub', 'A/Deep/Leaf', 'AB'):  # AB is not below A
-            (built / module).parent.mkdir(parents=True, exist_ok=True)
-            (built / (module + '.olean')).write_bytes(b'olean')
+            for path in (built / (module + '.olean'), self.root / (module + '.lean')):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'')
         self.replay(('A',))
         manifest = tomllib.loads((self.workspace / 'lakefile.toml').read_text())
         self.assertEqual([lib['needs'] for lib in manifest['lean_lib']],
                          [[f'@air2lean/+{m}:{t}' for m in ('A', 'A.Deep.Leaf', 'A.Sub') for t in ('olean', 'depTrace')]])
+        # An olean whose source was deleted since: Lake cannot build it, so the receipt refuses it.
+        (self.root / 'A/Sub.lean').unlink()
+        with self.assertRaisesRegex(ValueError, 'A/Sub.olean: compiled module without a source'):
+            self.replay(('A',))
 
     def test_one_receipt_per_module_named_by_checker_and_runtime(self):
         self.status['B'] = 'fail'
