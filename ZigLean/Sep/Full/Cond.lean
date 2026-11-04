@@ -729,6 +729,48 @@ theorem SigPost.mono {h : Array Word.Entry} {c : VClock} {all : Bool} {m : Mem}
   obtain ⟨hpre, k, hk, hfl, hs⟩ := hp
   exact ⟨hpre, k, hk, hfl, hs.elim .inl fun h => absurd h.1 Bool.noConfusion⟩
 
+/-- **A signal with one waiter** (`signal_wp_one`, maintainer decision 6625654179): if a waiter's
+registration `jr` happened before the call (`hseen`) and the client's invariant has one waiter
+from it on (`hw1`: every state write from `jr` has `waiters = 1`; the singleton fact the client
+keeps in its rest `U`), the newest state is `(1, 1)`: the waiter is signalled. From `jr` on only
+posts are possible (`steps`), so `signals` only rises from the write `k` of the history post. -/
+theorem SigPost.one {G : ThreadId → γ} {h : Array Word.Entry} {c : VClock} {m : Mem} {jr : Nat}
+    (hp : C.SigPost h c false m) (hI : C.Inv L G m) (hjr : jr < h.size)
+    (hseen : VClock.le h[jr]!.clock c = true)
+    (hw1 : ∀ p, jr ≤ p → p < (C.S.hist m).size → wOf (C.S.hist m)[p]! = 1) :
+    (C.lastS m).Val (0x10001 : BitVec 32) := by
+  obtain ⟨-, k, hk, hfl, hs⟩ := hp
+  have hjk : jr ≤ k := hfl jr hjr hseen
+  have hk1 : 1 ≤ sOf (C.S.hist m)[k]! := by
+    rcases hs with hs | ⟨-, -, hlt⟩
+    · unfold Served at hs; have := hw1 k hjk hk; omega
+    · omega
+  have hup : ∀ d, k + d < (C.S.hist m).size → 1 ≤ sOf (C.S.hist m)[k + d]! := by
+    intro d
+    induction d with
+    | zero => intro _; exact hk1
+    | succ d ih =>
+      intro hd
+      have hst := hI.steps (k + d) (by omega)
+      have e1 := hw1 (k + d) (by omega) (by omega)
+      have e2 := hw1 (k + d + 1) (by omega) hd
+      have := ih (by omega)
+      unfold SStep at hst
+      rw [show k + (d + 1) = k + d + 1 by omega]
+      omega
+  have hpos := hI.spos
+  have hlast := hup ((C.S.hist m).size - 1 - k) (by omega)
+  rw [show k + ((C.S.hist m).size - 1 - k) = (C.S.hist m).size - 1 by omega] at hlast
+  have hw := hw1 ((C.S.hist m).size - 1) (by omega) (by omega)
+  obtain ⟨hv, hsw⟩ := hI.sv ((C.S.hist m).size - 1) (by omega)
+  have hval : val (C.lastS m) = (0x10001 : BitVec 32) := by
+    unfold sOf at hlast hsw; unfold wOf at hw hsw
+    apply BitVec.eq_of_toNat_eq
+    show (val (C.S.hist m)[(C.S.hist m).size - 1]!).toNat = 65537
+    have := (val (C.S.hist m)[(C.S.hist m).size - 1]!).isLt
+    omega
+  rw [← hval]; exact hv
+
 /-- A read's floor at the reader's clock covers a snapshot of the writes taken at a clock below
 it. -/
 theorem floor_snap {W : Word 32 4} {h : Array Word.Entry} {c c' : VClock} {m : Mem} {j : Nat}
@@ -1059,10 +1101,13 @@ counts no turns. Any number of threads may wait and signal.
   plain mode (`Res.Plain`, `docs/sep-full-state.md` §Plain mode).
 - `signal_wp`: a thread out of the condition's code, outside or holding the mutex, that may
   signal, returns with its exact initial ghost value, including the complete caller part and
-  held resource, and the state has a write `k` at or after every state write that happened
-  before the call at which no registered waiter lacks a signal (`waiters ≤ signals`), or which
+  held resource, and the history post `FCond.SigPost` of the call's writes and clock: the call's
+  state writes are a prefix of the return's, and a write `k` at or after every state write that
+  happened before the call has no registered waiter without a signal (`waiters ≤ signals`), or
   is a post (`signals` rose). A client with one waiter reads "the waiter is signalled" from it
-  and its own history fact (the derived `_one` lemma, maintainer decision 6625654179). -/
+  and its own history fact (`FCond.SigPost.one`, maintainer decision 6625654179). The proof
+  carries the call's writes and clock in the signaller's place (decision B', PR #599 comment
+  6633467470). -/
 structure CondImpl (Tgt : Type) where
   wait : Ptr → Io → Ptr → ConcM Tgt Unit
   signal : Ptr → Io → ConcM Tgt Unit
@@ -1088,11 +1133,7 @@ structure CondImpl (Tgt : Type) where
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
     P.inv (upd G t g) m →
     P.WP t (signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m' ∧
-      ∃ k, k < (C.S.hist m').size ∧
-        (∀ j, j < (C.S.hist m).size →
-          VClock.le (C.S.hist m)[j]!.clock (m.clocks[t]!) = true → j ≤ k) ∧
-        (FCond.wOf (C.S.hist m')[k]! ≤ FCond.sOf (C.S.hist m')[k]! ∨
-          (0 < k ∧ FCond.sOf (C.S.hist m')[k - 1]! < FCond.sOf (C.S.hist m')[k]!))) G m d
+      C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d
 
 end Full
 end Zig
