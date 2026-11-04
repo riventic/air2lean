@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 158 rows, 66 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 159 rows, 67 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -87,6 +87,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
 | [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row. |
 | [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
+| [rwlock-reader-admission-room](#row-rwlock-reader-admission-room) | Derive reader admission room from the actual RwLock handle model | Original Task08 RwLockImpl migration (2026-11-04) | - | Close when the reader-admission boundary is decided and the native generic instance and finite clients derive its actual room fact without an unapproved premise or weakened public theorem. Keep the standard-kernel value controls and validate both native admission paths; do not substitute a finite one-reader runtime model for the generic family. |
 
 ## Closed rows
 
@@ -1860,3 +1861,16 @@ Note: Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a 
 Progress: open
 
 Request: `CAllocSpec` (ZigLean/Sep/Full/Dispatch.lean) states each allocator call as a `CTriple`, a partial judgment: an implementation whose `free` never returns meets it. So `Lists.Alloc.freeAll_exact` (`CTriple`, `xs.length + 1` credits in, as many receipts out) gives `Lists.Alloc.freeAll_steps` only for a run that returns (the run's result `pure (v, m')` is a premise). The legacy `Proofs/Lists/Cost.lean` `freeAll_cost` counted unconditionally because it used the hand-written total `Allocator` model, which the trusted-base rule retires. Counterexample to the unconditional count under the present contract: an allocator whose `free` loops forever meets `CAllocSpec` (its triples hold vacuously) and makes `freeAll` diverge on a one-node list, so no run returns and there is no final memory whose `ticks` could be `m.ticks + 2`. Needed: a total allocator contract (each call, at least `free`, terminates), proved by every translated allocator; with it `freeAll_steps` drops the returning-run premise and also gives the run's existence, as `FTotalTriple.ticks_eq_post` does for sequential code.
+
+<a id="row-rwlock-reader-admission-room"></a>
+### #rwlock-reader-admission-room Derive reader admission room from the actual RwLock handle model
+
+Status: **open**. Requester: Original Task08 RwLockImpl migration (2026-11-04).
+
+Note: The RwLockImpl gate itself was released by the November3 decision in l11-waitgroup-rwlock-impl. This is the distinct finite-count admission question; it does not reopen that gate or claim an executable overflow schedule. The full RwLock migration, writer-count correspondence, complete-resource transfer, clock coverage and client proofs remain open.
+
+Progress: The generic RwState encoding and decoder facts are implemented. RwLockState.lean checks the native masks and RmwOp value function with the kernel; these are value-level facts, not a reachable-state or scheduler counterexample. No RwLockImpl field, capacity premise or framework entry is added pending the contract-boundary decision.
+
+Request: The real 64-bit state stores readers in bits 32..62: readerUnit=4294967296, readerMask=9223372032559808512 and readerCount<2147483648. Fast shared admission tests the low 32 bits for zero, then checked-adds readerUnit and weak-CASes; slow admission adds it while holding the outer mutex. At readerCount=2147483647 with no writer, the native admission guard holds and the 64-bit addition does not overflow, but the result is 2^63 and readerMask/decode is zero. Thus a valid represented pre-count plus caller-out does not imply nextReaders<2^31. Needed before the generic shared-acquire contract is fixed: derive PRE-state readerCount+1<2^31 from actual admitted handles/resources at each successful CAS and at the slow-path RMW. Failed CAS acquires no handle and retries. The original finite clients have at most one reader, which must be proved from their real protocol rather than added to their final statements. Recommended boundary: an explicit proved per-protocol admission/resource obligation at shared acquire, not a blanket OS/thread-capacity premise, a hidden Fits condition, or the false implication from 64-bit checked-add safety to 31-bit room. If the existing handle model cannot derive that obligation generically, record the maintainer's contract decision before adding a new public condition.
+
+Deletion plan: Close when the reader-admission boundary is decided and the native generic instance and finite clients derive its actual room fact without an unapproved premise or weakened public theorem. Keep the standard-kernel value controls and validate both native admission paths; do not substitute a finite one-reader runtime model for the generic family.
