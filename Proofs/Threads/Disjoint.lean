@@ -395,8 +395,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
     have hjall : joinedAll u m := joinedAll_of_main (spawner0 hi) hu
     show (proto a b).WP u ((fun _ => ()) <$> ConcM.liftMem (writeFlag c)) _ G _ d
     fsym [writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
-      (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v),
-      inv_kid_done, joinedAll_of_threads]
+      (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)]
     all_goals
       rename_i ret m' r' hF hrun ho' hq hcurrent hthreads hwaiters hwoken hgroups hclocks hstep
       refine ⟨.kid r' c ac x ax v true, ?_, ⟨r', c, ac, x, ax, v, rfl⟩, fun _ => ?_⟩

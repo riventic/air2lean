@@ -616,16 +616,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "226fd3c9c3939aed630cadfbe81e72f550fdbe33",
+        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T14:39:06.083725+00:00",
-      "elapsed_seconds": 28.215,
+      "started_utc": "2026-11-04T14:59:51.596861+00:00",
+      "elapsed_seconds": 2.81,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "de23a354c24accf14079f824d2a0022bdb78cf62d4d2ff6ca4a3f01d273459d3",
+      "log_sha256": "556a3e4033f8f449c77f23773980a2b137593f7355e6170ad5998c34d4b7927b",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Atomics.MessagePassing",
@@ -685,7 +685,7 @@
         "Proofs.Slices.Proofs": "2626be020120a31c877198f9b345820c48666fe22061a8744693851bcd0b0ebb",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "07a0a9cefcfef753fda4ee1e0de4029f6d8abc125b999d6ef1d798206966dff5",
+        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33",
         "Proofs.Threads.Proofs": "d93dd4fff8a8fa3256a166675a6584399be81f4662146d198e472e9bdacd0ab2"
       }
     },
@@ -1226,16 +1226,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "376ce7a92e37ff5ed43c5c09d043adf62b0b5c3d",
+        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T14:53:47.349465+00:00",
-      "elapsed_seconds": 1.958,
+      "started_utc": "2026-11-04T14:59:56.293059+00:00",
+      "elapsed_seconds": 0.814,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3a2b28316c73603834ebc3af3dd2470ad06ccfc6fb2dab0891be81d146a9bf71",
+      "log_sha256": "944ff2eeb9ea1b11a2d54aadc4ba77e071289360295c4b3404ef1841025c7e23",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1546,7 +1546,7 @@
         "Proofs.Sync.SnapshotCache": "e7fc9fdd54e8766c9eca4a4a3b0b764ca0b2acf5ba14bb050c7ad491744a2a7a",
         "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
         "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
-        "Proofs.Threads.Disjoint": "07a0a9cefcfef753fda4ee1e0de4029f6d8abc125b999d6ef1d798206966dff5",
+        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33",
         "Proofs.Threads.Proofs": "d93dd4fff8a8fa3256a166675a6584399be81f4662146d198e472e9bdacd0ab2",
         "Proofs.Threadsync.Cases": "288ae8f77d8eb80a7105bf0dc92f704810d4a54264dfe7273b48d62501a89633",
         "Proofs.Threadsync.Cond": "0a2f1f6024ed8c189bf4a665ee821ae99ba06e5e987d31ebb47d5a4a3e841be0",
@@ -2305,16 +2305,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "226fd3c9c3939aed630cadfbe81e72f550fdbe33",
+        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T14:41:49.914210+00:00",
-      "elapsed_seconds": 0.236,
+      "started_utc": "2026-11-04T15:00:18.937011+00:00",
+      "elapsed_seconds": 0.32,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3c2f94b36cc4a6db2536e0ec3606e92bc001ed28f7514800983f82b30aafc39d",
+      "log_sha256": "780cbb9319b40640e408f4535daf613bdbdb2ea644482926b40136b0e29bd3c4",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Detach.Worker",
@@ -2328,7 +2328,7 @@
       },
       "sources": {
         "Proofs.Detach.Worker": "99277f6047021ca083173ba7fb2108a26e3e94a81b7e36557e28da73d1f7fc16",
-        "Proofs.Threads.Disjoint": "07a0a9cefcfef753fda4ee1e0de4029f6d8abc125b999d6ef1d798206966dff5"
+        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
       }
     },
     "cx-wrapper-fields-0.15.2-linux": {
@@ -2353,16 +2353,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "226fd3c9c3939aed630cadfbe81e72f550fdbe33",
+        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T14:41:46.707049+00:00",
-      "elapsed_seconds": 2.929,
+      "started_utc": "2026-11-04T15:00:13.400175+00:00",
+      "elapsed_seconds": 4.981,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "127eff231a3b781743eb2badb3c295de3cad4c2cc15c4ae6f9cce0e20574ce2f",
+      "log_sha256": "c19b78c26fb12c60732527da0114eb7dd5b196585506b65b23f5a0e367b55f03",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2374,7 +2374,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "07a0a9cefcfef753fda4ee1e0de4029f6d8abc125b999d6ef1d798206966dff5"
+        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
       }
     },
     "cx-disjoint-fsym-worker-committed-linux": {
@@ -2393,16 +2393,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "31c4328b41fa7341ceadc28a14cf67990521aeec",
+        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T13:25:46.506588+00:00",
-      "elapsed_seconds": 0.274,
+      "started_utc": "2026-11-04T15:00:12.275191+00:00",
+      "elapsed_seconds": 0.456,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "aed2f93063db03e89ec334da3ea14a3f41297ce8fa647a462917f0e2b9cf455c",
+      "log_sha256": "dec27ce2b60521cc7a0eb631a7ddccd34d82e22d25fb485021803fbafa38f2c1",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2414,15 +2414,14 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "07a0a9cefcfef753fda4ee1e0de4029f6d8abc125b999d6ef1d798206966dff5"
+        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
       }
     },
     "cx-disjoint-fsym-worker-0.15.2-linux": {
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "python3",
-        "-B",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--lake",
@@ -2440,16 +2439,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "31c4328b41fa7341ceadc28a14cf67990521aeec",
+        "head": "8de2e528d60049f7c8d6fe81494efefd26878f1d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T13:26:30.463022+00:00",
-      "elapsed_seconds": 2.268,
+      "started_utc": "2026-11-04T15:00:02.414337+00:00",
+      "elapsed_seconds": 9.225,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "c4fe92fdf642eaec9c3c2c43189d9d786993a464f1c0fe1bb05ec2c36f05b2c7",
+      "log_sha256": "c19b78c26fb12c60732527da0114eb7dd5b196585506b65b23f5a0e367b55f03",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2461,7 +2460,7 @@
         }
       },
       "sources": {
-        "Proofs.Threads.Disjoint": "07a0a9cefcfef753fda4ee1e0de4029f6d8abc125b999d6ef1d798206966dff5"
+        "Proofs.Threads.Disjoint": "9824bf3c9b90293e8e5ab0ef6cfbea48a17a4698efead4482a08fa077dcc8b33"
       }
     },
     "cx-disjoint-fsym-tail-committed-linux": {
