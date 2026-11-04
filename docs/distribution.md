@@ -66,6 +66,7 @@ with the command to run. Checks, in order:
 | `patched-zig-<v>` | each supported version's `zig-air-<v>/bin/zig`: present, reports `<v>`, and its AIR-only lock state |
 | `translator` | `.lake/build/bin/air2lean` exists (translate.sh rebuilds it anyway) |
 | `bootstrap-tools` | `curl`, `tar`, `xz`, `patch` and `sha256sum`/`shasum` for `zig-patch/build.sh` |
+| `native-runners` | on x86_64-linux, the runners of CI's native rows that `fixture-checks.sh` runs there: each `AIR2LEAN_<ARCH>_RUN` of `ci.yml` (qemu-user) and `node` (warn when missing; skipped on other hosts) |
 | `docker` | Docker daemon reachable (only `local-ci.sh`/`clean-env.sh` need it; `--no-docker` skips) |
 | `disk`, `memory` | free disk at the repository and physical memory against `resources` |
 
