@@ -1,6 +1,6 @@
 import Proofs.Threadsync.Deadline
 import ZigLean.Sep.Full.Event
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 
 /-!
 # Why `EventImpl.set` must order memory (`ZigLean/Sep/Full/Event.lean`, **Setters**)
@@ -28,7 +28,11 @@ write, so the proof of `ResetEvent.futexSet_wp` went through for `futexSetR` ver
   the protocol's own ghost step moves it back to `out`, and `set_wp` is proved for every
   protocol, so one `set` cannot write twice.
 
-The runs use the oracle that always picks option 0.
+The runs use the oracle that always picks option 0, and the kernel computes them
+(`decide +kernel`). A loop (`Zig.loop`, a `partial_fixpoint`) is not computed by the kernel: each
+proof unfolds the functions on the run's path that hold one (`delta`) and then every loop four
+times by its defining equation (`Zig.loop.eq_1`, one `simp` pass each), more than any loop of
+these runs takes, so the kernel never reaches a loop.
 -/
 
 open Zig
@@ -148,13 +152,21 @@ the tasks' counter stores. -/
 theorem relaxedSet_races :
     Witness.errOf (Sched.run ⟨.any, .available⟩ (dispatchW futexSetR) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some .illegal := by
-  unroll_sched 10
+  delta dispatchW taskW waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
+    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet
+    Thread_Mutex_lock Thread_Mutex_FutexImpl_lock Thread_Mutex_FutexImpl_lockSlow
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 /-- **The double set races**: `main` reads the `Tally` while the second write is pending. -/
 theorem doubleSet_races :
     Witness.errOf (Sched.run ⟨.any, .available⟩ (dispatchW set2) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some .illegal := by
-  unroll_sched 10
+  delta dispatchW taskW waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
+    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet
+    Thread_Mutex_lock Thread_Mutex_FutexImpl_lock Thread_Mutex_FutexImpl_lockSlow
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 /-- Control for `futexSetR`: the copies of `finish` and `task` with the generated set are the
 generated `dispatch`, which completes with 2 under the same schedule
@@ -167,7 +179,11 @@ its second write. -/
 theorem oneSet_completes :
     Witness.okVal (Sched.run ⟨.any, .available⟩ (dispatchW setX) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some 2 := by
-  unroll_sched 10
+  delta dispatchW taskW waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
+    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet
+    Thread_Mutex_lock Thread_Mutex_FutexImpl_lock Thread_Mutex_FutexImpl_lockSlow
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 open Zig.Conc Zig.Full
 
