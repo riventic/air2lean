@@ -284,10 +284,13 @@ The extractor is a compiled program, `.lake/build/bin/assurance` (`lake build as
 
 It imports `tools.Assurance` and the audited modules once and runs none of the audited modules'
 initializers (`Air2Lean.Assurance.importAudited`). The import is Lean's `importModules` in its
-two steps: `importModulesCore` reads every module of the closure from its `.olean` and runs
-nothing; every module it read is recorded as initialized in Lean's `interpretedModInits`; then
-`finalizeImport` loads the extensions and runs the `[init]` attributes of no recorded module. The
-recorded set is exactly the imported one. An audited module's `initialize` code therefore
+steps, through Lean's public API: `importModulesCore` reads every module of the closure from its
+`.olean` and runs nothing; `finalizeImport` of that read without extensions (`loadExts := false`,
+which runs nothing either) names its modules in the environment header, and each of them is
+recorded as initialized in Lean's `interpretedModInits`; then `finalizeImport` of the same read
+loads the extensions and runs the `[init]` attributes of no recorded module. Both headers come
+from the one read, so the recorded set is exactly the imported one (the import also fails if the
+final header names another set). An audited module's `initialize` code therefore
 never runs in the process that writes the report
 ([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Only the extractor's
 own modules, compiled into the program, have run their initializers; they are the tool. Each
