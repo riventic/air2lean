@@ -40,7 +40,8 @@ def semWaitPost (P : Proto Tgt γ) (L : FLock γ) (S : FSem γ X L C) (t : Threa
     ∃ rL, P.inv (upd G t (L.set (S.set g .wt) .holds rL)) m ∧ S.cnt (upd G t g) ≠ 0
 
 theorem semWaitLoop_body (hS : S.Fits P U ok) (hcost : P.cost = none)
-    (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hokg : ok g)
+    (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hwx : S.wx g)
+    (hokg : ok g)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
       S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
@@ -59,8 +60,8 @@ theorem semWaitLoop_body (hS : S.Fits P U ok) (hcost : P.cost = none)
   obtain ⟨hd, hc, rL, hi⟩ := h
   unfold Io_Semaphore_waitUncancelable.loop5
   fsym [hF.wp_tick_unmetered, Fits.wp_cnt hF hcost, WP.liftMem_pure (projI hF _ _ _) rfl,
-    wp_cwait ioCond hS hcost hLc S.ptr_c.symm S.ptr_l.symm t g hgx hokg hu (fun _ h => h) hroom
-      hlive,
+    wp_cwait ioCond hS hcost hLc S.ptr_c.symm S.ptr_l.symm t g hgx hwx hokg hu (fun _ h => h)
+      hroom hlive,
     L.part_set, lpart_s hF, L.ph_set, S.cph_set, cph_l hF, pv_supd, pv_lupd,
     semWaitInv, semWaitPost, Io_Semaphore_waitUncancelable.again5]
 
@@ -68,7 +69,7 @@ theorem semWaitLoop_body (hS : S.Fits P U ok) (hcost : P.cost = none)
 (`SemImpl.wait_wp_resource` at the kept part). -/
 theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = ioMutex.c)
     {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (T : FAssn)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hwx : S.wx g) (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hcnt : ∀ G rL m, P.inv (upd G t (L.set (S.set g .wt) .holds rL)) m →
@@ -104,9 +105,9 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
     fun _ => Res.unmetered_rsum_left hu
   unfold Io_Semaphore_waitUncancelable
   fsym [WP.liftMem_pure (projI hF _ _ _) rfl,
-    wp_lockWt ioMutex hF hcost S.ptr_l.symm hLc t g hgo hgx hgs hokg hu,
+    wp_lockWt ioMutex hF hcost S.ptr_l.symm hLc t g hgo hgx hgs hwx hokg hu,
     WP.loop _ _ (semWaitInv P L S t g d) (fun _ => 0) (semWaitPost P L S t g d)
-      (semWaitLoop_body hS hcost hLc t g hgx hokg hu hroom hlive d io),
+      (semWaitLoop_body hS hcost hLc t g hgx hwx hokg hu hroom hlive d io),
     Fits.wp_cnt hF hcost, Fits.wp_take hF hcost hcnt hpool hU hgx hxx,
     wp_csignal ioCond hS hcost S.ptr_c.symm t,
     Fits.wp_unlockPst ioMutex hF hcost S.ptr_l.symm hLc t,
@@ -119,7 +120,7 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
 caller's (`keepPart`), so the premises at it are at the caller's ghost value. -/
 theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (T : FAssn)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hwx : S.wx g) (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hcnt : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G rL m,
@@ -153,8 +154,8 @@ theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
   have hU := hU _ rfl
   have hroom := hroom _ rfl
   simp only [L.setPart_self] at hcnt hpool hU hroom
-  refine WP.mono ?_ (ioSem_wait_wp hS hcost hLc hp t g gx T hgo hgx hgs hokg hxo hxh hxx hxs hokx
-    hcnt hpool hU hroom hlive io G m d hu hi hc)
+  refine WP.mono ?_ (ioSem_wait_wp hS hcost hLc hp t g gx T hgo hgx hgs hwx hokg hxo hxh hxx hxs
+    hokx hcnt hpool hU hroom hlive io G m d hu hi hc)
   rintro _ G' m' d' ⟨hd, hc', r, hT, hdj, hi'⟩
   exact ⟨hd, hc', L.part g, r, rfl, hT, hdj, hi'⟩
 

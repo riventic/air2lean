@@ -48,12 +48,13 @@ Any number of threads may wait and post: the condition is the multi-waiter one
   (`Inv.afterSig`): the thread leaves `pst` keeping the invariant (`Go`).
 - **The primitive** (`FSem.prim`): the condition's places with the semaphore's, the condition's
   steps (`FCond.prim`) and the semaphore's own steps (`Move`: the waiter's entry into the
-  condition at count 0; the holder's step on the mutex's resource, a load or store of the count,
-  with its move in the semaphore's code, `Go`), each with both invariants after it. A protocol
-  with the semaphore is `S.Fits P U ok`: `FLock.Fits` with the semaphore as its primitive, its
-  `ok` out of `pst`, and the condition's window (`Fits.win`, PR397 ruling 6264821278, maintainer
-  decision 6625654179: the protocol's obligation). It has the condition (`Fits.toC`), so the
-  condition's contract applies to it.
+  condition at count 0, only in the client's waiting role `wx`, so that a thread the client
+  counts on to post, such as a permit's holder, never sleeps there; the holder's step on the
+  mutex's resource, a load or store of the count, with its move in the semaphore's code, `Go`),
+  each with both invariants after it. A protocol with the semaphore is `S.Fits P U ok`:
+  `FLock.Fits` with the semaphore as its primitive, its `ok` out of `pst`, and the condition's
+  window (`Fits.win`, PR397 ruling 6264821278, maintainer decision 6625654179: the protocol's
+  obligation). It has the condition (`Fits.toC`), so the condition's contract applies to it.
 -/
 
 namespace Zig
@@ -96,6 +97,15 @@ structure FSem (γ X : Type) (L : FLock γ) (C : FCond γ) extends FPlace γ SPh
   x_part : ∀ g r, x (L.setPart g r) = x g
   x_c : ∀ g c, x (C.set g c) = x g
   x_s : ∀ g s, x (set g s) = x g
+  /-- **The waiting role** (ledger row `sem-wait-role`): the client's choice of the ghost values
+  whose thread may wait for a permit (`Go .wt`, `Move.enter`), as the condition's `sx` is its
+  choice of signallers. Like `x`, it does not read the places in the mutex, the condition or the
+  semaphore, nor the thread's part and held resource. -/
+  wx : γ → Prop
+  wx_l : ∀ g q h, wx (L.set g q h) ↔ wx g
+  wx_part : ∀ g r, wx (L.setPart g r) ↔ wx g
+  wx_c : ∀ g c, wx (C.set g c) ↔ wx g
+  wx_s : ∀ g s, wx (set g s) ↔ wx g
   /-- The semaphore's place and the condition's are independent parts of a ghost value. -/
   cph_set : ∀ g s, C.ph (set g s) = C.ph g
   ph_cset : ∀ g c, ph (C.set g c) = ph g
@@ -188,23 +198,25 @@ def PstFrom (G : ThreadId → γ) (t : ThreadId) : Prop :=
 
 /-- **The holder's moves in the semaphore's own code** (module doc), between the places the code
 moves between (ledger row `sem-go-code-moves`): thread `t` stays; enters the wait (`wt`) from `out`
-(`wait`'s lock); enters `pst` with the state's writes and its clock (its snapshot) from `PstFrom`;
-or leaves `pst` when, with permits and a registered waiter, a signal is pending or there is a
-taker. It constrains the places, not the step (the count is the client's ghost). -/
+in the waiting role (`wait`'s lock; `wx`, ledger row `sem-wait-role`); enters `pst` with the
+state's writes and its clock (its snapshot) from `PstFrom`; or leaves `pst` when, with permits and
+a registered waiter, a signal is pending or there is a taker. It constrains the places, not the
+step (the count is the client's ghost). -/
 def Go (G : ThreadId → γ) (m : Mem) (t : ThreadId) (s : SPh) : Prop :=
-  s = S.ph (G t) ∨ (s = .wt ∧ S.ph (G t) = .out) ∨
+  s = S.ph (G t) ∨ (s = .wt ∧ S.ph (G t) = .out ∧ S.wx (G t)) ∨
     (s = .pst (C.S.hist m) (m.clocks[t]!) ∧ S.PstFrom G t) ∨
     (s = .out ∧ (S.ph (G t)).isPst = true ∧ (S.cnt G ≠ 0 → 0 < FCond.wOf (C.lastS m) →
       0 < FCond.sOf (C.lastS m) ∨ ∃ v, S.Tk G v))
 
 /-- The steps of the semaphore's own code by thread `t` (module doc): the entry of the waiter
-into the condition's wait at count 0, and a step of the holder on the mutex's resource (a load or
-a store of the count; `FStepIn` with the mutex's word and the rest in its frame, which keeps the
-condition's cells) with a move in the semaphore's code (`Go`; the same memory for a move alone). -/
+(in the waiting role, `wx`) into the condition's wait at count 0, and a step of the holder on the
+mutex's resource (a load or a store of the count; `FStepIn` with the mutex's word and the rest in
+its frame, which keeps the condition's cells) with a move in the semaphore's code (`Go`; the same
+memory for a move alone). -/
 inductive Move (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) :
     (ThreadId → γ) → Res → Mem → Prop
-  | enter : L.ph (G t) = .holds → C.ph (G t) = .out → S.ph (G t) = .wt → S.cnt G = 0 →
-      Move t G rX m (upd G t (C.set (G t) .en)) rX m
+  | enter : L.ph (G t) = .holds → C.ph (G t) = .out → S.ph (G t) = .wt → S.wx (G t) →
+      S.cnt G = 0 → Move t G rX m (upd G t (C.set (G t) .en)) rX m
   | hold {m' : Mem} (s : SPh) (h : Res) : L.ph (G t) = .holds → C.ph (G t) = .out →
       L.Inv G rX m → m.current = t → FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
       (∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
@@ -1182,10 +1194,11 @@ theorem Fits.wp_unlockPst (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok)
   mi.unlock_wp_to hS hcost hp hLc t g rh hgo hgh hok io G m d (Fits.unpst hS hi hc hcx hgs h0) hc
 
 /-- **`wait`'s lock** by the mutex's contract (`MutexImpl`), into the semaphore's wait (`wt`): the
-waiter, out of the semaphore's code, holds the mutex at `wt` (a ghost move, `Go`). -/
+waiter, out of the semaphore's code and in the waiting role (`wx`), holds the mutex at `wt` (a
+ghost move, `Go`). -/
 theorem wp_lockWt (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = L.ptr) (hLc : L.c = mi.c) (t : ThreadId) (g : γ) (hgo : L.ph g = .out)
-    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hok : ok g)
+    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hwx : S.wx g) (hok : ok g)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
@@ -1193,7 +1206,8 @@ theorem wp_lockWt (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok) (hcost : P.co
   refine WP.mono (fun _ G' m' d' ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, ?_⟩)
     (mi.lock_wp hS hcost hp hLc t g hgo hok hu io G m d hi)
   have := Fits.move hS .wt hi' hc (L.ph_set _ _ _) (by rw [cph_l hS]; exact hgx)
-    (.inr (.inl ⟨rfl, by rw [upd_self, sph_l hS]; exact hgs⟩))
+    (.inr (.inl ⟨rfl, by rw [upd_self, sph_l hS]; exact hgs,
+      by rw [upd_self, S.wx_l]; exact hwx⟩))
   rwa [lset_s hS] at this
 
 /-- **The holder's access to the count that keeps it** (a load): the holder `t`, out of the
@@ -1430,14 +1444,14 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
     exact h a m' rh hc' ht ⟨rc, hqa⟩ hi'
 
 /-- **The waiter's wait at the condition at count 0** by the condition's contract (`CondImpl`):
-the holder `t` at the semaphore's wait (`wt`), out of the condition's code, at count 0, returns
-holding the mutex at the same places. The condition's call keeps its part (`hpre`, `hpost`), fewer
-than `65535` waiters are registered at its entry (`hroom`), and its sleep is no deadlock: with
-permits a thread at `pst` or a taker runs (`Fits.live`); at count 0 the client shows it
-(`hlive`). -/
+the holder `t` at the semaphore's wait (`wt`) in the waiting role (`wx`), out of the condition's
+code, at count 0, returns holding the mutex at the same places. The condition's call keeps its
+part (`hpre`, `hpost`), fewer than `65535` waiters are registered at its entry (`hroom`), and its
+sleep is no deadlock: with permits a thread at `pst` or a taker runs (`Fits.live`); at count 0
+the client shows it (`hlive`). -/
 theorem wp_cwait (ci : CondImpl Tgt) (hS : S.Fits P U ok) (hcost : P.cost = none)
     (hLc : L.c = ci.c) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (t : ThreadId) (g : γ)
-    (hgx : C.ph g = .out) (hokg : ok g) (hpre : ci.wait_pre t (L.part g))
+    (hgx : C.ph g = .out) (hwx : S.wx g) (hokg : ok g) (hpre : ci.wait_pre t (L.part g))
     (hpost : ∀ r', ci.wait_post t (L.part g) r' → r' = L.part g)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
       S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
@@ -1480,11 +1494,13 @@ theorem wp_cwait (ci : CondImpl Tgt) (hS : S.Fits P U ok) (hcost : P.cost = none
       rw [upd_self]; exact hcw
     have hwt : S.ph (upd G t (L.set (S.set g .wt) .holds rL) t) = .wt := by
       rw [upd_self, sph_l hF, S.ph_set]
+    have hwxt : S.wx (upd G t (L.set (S.set g .wt) .holds rL) t) := by
+      rw [upd_self, S.wx_l, S.wx_s]; exact hwx
     have hst : S.prim.Step t (upd G t (L.set (S.set g .wt) .holds rL)) rX m
         (upd (upd G t (L.set (S.set g .wt) .holds rL)) t
           (C.set (upd G t (L.set (S.set g .wt) .holds rL) t) .en)) rX m :=
       ⟨Inv.enter hF hsub.2 hht hcxt hwt h0' hnp,
-        .inr ⟨by rw [upd_upd, upd_self]; exact hC', .enter hht hcxt hwt h0'⟩⟩
+        .inr ⟨by rw [upd_upd, upd_self]; exact hC', .enter hht hcxt hwt hwxt h0'⟩⟩
     have := hS.kstep _ _ _ _ _ _ _ (.inl hst) hU
     rw [upd_upd, upd_self] at this; exact this
   have hlv : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
@@ -1553,14 +1569,15 @@ condition's window; the mutex's contended value `c`; the mutex at `S.p + 8`, the
 `S.p + 12`) and that counts no turns. Any number of threads may wait and post. A thread runs
 either op out of the mutex's, the condition's and the semaphore's code, and returns out of them.
 
-- `wait_wp_resource`: the thread takes a permit. Its client part goes from `x g` to `x gx` while
-  the count goes down by one (`hcnt`), and a resource `r` with `T` moves from the pool into its
-  part (`hpool`: the pool's split); the client's rest allows the move at the store of the count,
-  with the moved resource `r` and the count before it not 0 (`hU`, with both invariants after it;
-  the thread goes to `pst` with a snapshot). At count 0 it waits at the condition: fewer than
-  `65535` waiters are registered at its entry (`hroom`, the condition's `u16` count, as
-  `CondImpl.wait_wp`), and its sleep at count 0 with no pending signal and no signaller in the
-  condition's code is no deadlock (`hlive`); with permits the semaphore shows it (module doc).
+- `wait_wp_resource`: the thread, in the waiting role (`wx g`), takes a permit. Its client part
+  goes from `x g` to `x gx` while the count goes down by one (`hcnt`), and a resource `r` with
+  `T` moves from the pool into its part (`hpool`: the pool's split); the client's rest allows the
+  move at the store of the count, with the moved resource `r` and the count before it not 0
+  (`hU`, with both invariants after it; the thread goes to `pst` with a snapshot). At count 0 it
+  waits at the condition: fewer than `65535` waiters are registered at its entry (`hroom`, the
+  condition's `u16` count, as `CondImpl.wait_wp`), and its sleep at count 0 with no pending
+  signal and no signaller in the condition's code is no deadlock (`hlive`); with permits the
+  semaphore shows it (module doc).
 - `post_wp_resource`: the thread gives a permit back. Its part loses `rT` to the pool (`hpool`),
   the count goes up by one without overflow (`hcnt`), and the client's rest allows the move
   (`hU`).
@@ -1597,7 +1614,7 @@ structure SemImpl (Tgt : Type) where
     {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, S.Fits P U ok →
     P.cost = none → L.c = c → ∀ {p : Ptr}, p = S.p →
     ∀ (t : ThreadId) (g gx : γ) (T : FAssn),
-    L.ph g = .out → C.ph g = .out → S.ph g = .out → ok g →
+    L.ph g = .out → C.ph g = .out → S.ph g = .out → S.wx g → ok g →
     L.ph gx = .out → L.held gx = rnil → C.ph gx = .out → S.ph gx = .out → ok gx →
     (∀ rᵢ, wait_during t (L.part g) rᵢ → ∀ G rL m,
       P.inv (upd G t (L.set (S.set (L.setPart g rᵢ) .wt) .holds rL)) m →
@@ -1659,7 +1676,8 @@ theorem wait_wp (I : SemImpl Tgt) {γ X : Type} {L : FLock γ} {C : FCond γ} {S
     {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
     (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p)
     (t : ThreadId) (g gx : γ) (T : FAssn)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hwx : S.wx g)
+    (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hcnt : ∀ G rL m, P.inv (upd G t (L.set (S.set g .wt) .holds rL)) m →
@@ -1689,7 +1707,7 @@ theorem wait_wp (I : SemImpl Tgt) {γ X : Type} {L : FLock γ} {C : FCond γ} {S
       P.inv (upd G' t (L.setPart gx (rsum (L.part g) r))) m') G m d := by
   have hd : ∀ rᵢ, I.wait_during t (L.part g) rᵢ → rᵢ = L.part g :=
     fun rᵢ h => I.wait_plain_during t _ rᵢ hpl h
-  refine WP.mono ?_ (I.wait_wp_resource hS hcost hLc hp t g gx T hgo hgx hgs hokg hxo hxh hxx
+  refine WP.mono ?_ (I.wait_wp_resource hS hcost hLc hp t g gx T hgo hgx hgs hwx hokg hxo hxh hxx
     hxs hokx
     (fun rᵢ h => by rw [hd rᵢ h, L.setPart_self]; exact hcnt)
     (fun rᵢ h => by rw [hd rᵢ h, L.setPart_self]; exact hpool)
