@@ -619,7 +619,7 @@ theorem incoming_unknown_stays (R : Prop) (flag : Bool) (h : flag = true) : True
   run_tac withRunCaches do
     let g ← mkFreshExprSyntheticOpaqueMVar (← getLocalDeclFromUserName `R).toExpr
     let h := (← getLocalDeclFromUserName `h).fvarId
-    let some (h', g') ← wpNorm g.mvarId! h #[] (fields := true)
+    let some (h', g', _) ← wpNorm g.mvarId! h #[] (fields := true)
       | throwError "incoming_unknown_stays: an unknown Boolean closed the goal"
     if ← g'.isAssigned then
       throwError "incoming_unknown_stays: an unknown Boolean assigned the goal"
