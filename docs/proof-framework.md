@@ -74,8 +74,8 @@ postcondition, which neither an implication nor the model's own result alone sta
 | legacy tactic | where | target |
 | --- | --- | --- |
 | `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
-| `sep_normalize`, `sep_frame` | `Sep/Automation` | `fsym` (frame inference is the planner) |
-| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers`, `Full/Tame` | native `@[fsym]` rules (no lifting) |
+| `sep_normalize`, `sep_frame` | `Sep/Automation` (deleted, L6 D-b) | `fsym` (frame inference is the planner) |
+| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` | native `@[fsym]` rules (no lifting) |
 | `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
 | `vc_gen(?)` | `VC/Extract` | retargeted onto `FTriple` (Plan A, D3) |
