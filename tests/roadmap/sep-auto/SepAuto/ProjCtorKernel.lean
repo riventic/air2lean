@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.Auto
 
 `(a, r).2.f = s.f` holds by unfolding, but the kernel compares the two projections' arguments
 first: `(a, r).2 =?= s`, by structure eta down to `r`'s fields against `s`'s. A literal field
-(`Pk.ofBits 65537#32 =?= s.prev`) then unfolds until the recursion limit: an error, not a failed
+(`Packed.ofBits 65537#32 =?= s.prev`) then unfolds until the recursion limit: an error, not a failed
 comparison, so the kernel never reaches the reduction that would succeed. Plain
 `simp only [eq_self]` on this goal elaborates and is rejected by the kernel ("deep recursion
 detected"). fsym's simp runs (`fsimp`, `withProjCtor`) rewrite such a projection with an explicit
@@ -20,22 +20,14 @@ namespace SepAuto.ProjCtorKernel
 
 open Lean Meta Elab Tactic Zig.Full.Auto
 
-class Pk (α : Type) (n : outParam Nat) where
-  ofBits : BitVec n → α
-
-instance {n : Nat} : Pk (BitVec n) n where
-  ofBits v := v
-
-def Pk.get {α : Type} {n w : Nat} [Pk α n] (host : BitVec w) (o : Nat) : α :=
-  Pk.ofBits (host.extractLsb' o n)
-
-/-- A packed state of two counters (`Io.Condition.State`). -/
+/-- A packed state of two counters (`Io.Condition.State`, as the translator emits it). -/
 structure St where
   waiters : BitVec 16
   signals : BitVec 16
 
-instance : Pk St 32 where
-  ofBits b := { waiters := Pk.get b 0, signals := Pk.get b 16 }
+instance : Zig.Packed St 32 where
+  toBits v := (v.waiters.setWidth 32 <<< 0) ||| (v.signals.setWidth 32 <<< 16)
+  ofBits b := { waiters := Zig.Packed.get b 0, signals := Zig.Packed.get b 16 }
 
 /-- A loop's locals. -/
 structure Loc where
@@ -48,7 +40,7 @@ inductive Ex where
 
 /-- `fsimp` with `eq_self` closes the goal, and the kernel accepts the proof. -/
 theorem fsimp_epoch (s : Loc) :
-    (Ex.again, ({ epoch := s.epoch, prev := Pk.ofBits (65537 : BitVec 32) } : Loc)).2.epoch
+    (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch
       = s.epoch := by
   run_tac do
     let g ← getMainGoal
