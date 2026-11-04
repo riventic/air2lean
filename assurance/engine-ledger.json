@@ -2,6 +2,16 @@
  "description": "fsym engine ledger (docs/engine-ledger.md; scripts/engine-ledger.py)",
  "rows": [
   {
+   "id": "lake-needs-race",
+   "title": "Lake 4.34 creates the jobs of concurrent `needs` facet keys twice and can deadlock",
+   "status": "open",
+   "requester": "lake-hang lane (arc hangs of the assurance extraction and kernel-replay builds, 2026-11-04)",
+   "progress": "Workaround: scripts/assumptions.py needs_first names each needed module's `:olean` on the command line before the generated modules, so Lake creates every job on its build thread before a library's `needs` tasks run. Upstream draft docs/upstream/lake-concurrent-needs.md (issue #131 row 17).",
+   "request": "A Lake whose facet keys in `needs` share one job per key (an atomic fetchOrCreate, or `needs` fetched on the calling thread), or whose Module.computeExportInfo does not await inside a sync continuation.",
+   "workaround_sites": ["scripts/assumptions.py", "tests/roadmap/fixtures-lake/test_needs_race.py"],
+   "deletion_plan": "When a toolchain update fixes the race, the control assertion of tests/roadmap/fixtures-lake/test_needs_race.py fails. Then delete assumptions.needs_first (its callers build only the generated modules again), delete the test, and close this row."
+  },
+  {
    "id": "case-family-enrollment",
    "title": "Remove transitional golden case-family enrollment markers",
    "status": "open",
