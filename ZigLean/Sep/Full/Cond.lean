@@ -1718,6 +1718,20 @@ theorem wp_loadEp (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
           (fun i' jr' sn e' h' => by rw [hg] at h'; cases h'; exact ⟨true, by rw [C.ph_set]⟩)
           (fun w hw e' => absurd e' (hnq w hw))
 
+/-- `wp_loadEp` with the signal bit as a variable: the waiter is at `reg i jr sn e` afterwards,
+and without the signal (`sn = false`) it read its own epoch value. -/
+theorem wp_loadEpSn (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
+    (hg : C.ph g = .reg i jr false e) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → ∀ sn : Bool, (sn = false → b = e) →
+      P.inv (upd G₁ t (C.set g (.reg i jr sn e))) m' → Q (b, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicLoadC (n := 32) .acquire 4 C.Ep.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
+  wp_loadEp hC hg hgo hi (hcost := hcost) fun k hk G₁ m' b hc hcase => by
+    rcases hcase with ⟨rfl, hi'⟩ | ⟨rfl, hi'⟩
+    · exact h k hk G₁ m' _ hc false (fun _ => rfl) (by rw [← hg, C.set_self]; exact hi')
+    · exact h k hk G₁ m' _ hc true nofun hi'
+
 /-- The waiter's relaxed load of the state at `reg i jr sn e` (`atomicLoadC`, `Thread.Condition`):
 its `(1, 0)` (only without `sn`) or the signal. -/
 theorem wp_loadS (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {sn : Bool}

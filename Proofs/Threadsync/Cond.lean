@@ -289,7 +289,7 @@ theorem loop29_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.c
   fsym [hC.wp_tick_unmetered, DPart.unmetered hu, hC.wp_projE (t := t),
     dwait_wp hC hcost (DR := DR) (t := t) (g := g) (i := i) (jr := jr) (e := e)
       hlive (q := q),
-    FCond.wp_loadEp hC (g := gRD L C g i jr false e _) (t := t)
+    FCond.wp_loadEpSn hC (g := gRD L C g i jr false e _) (t := t)
       (i := i) (jr := jr) (e := e) (hg := gRD_ph hC) (hgo := gRD_lph hC),
     FCond.wp_loadS hC (g := gRD L C g i jr _ e _) (t := t)
       (i := i) (jr := jr) (e := e) (hg := gRD_ph hC) (hgo := gRD_lph hC),
@@ -326,7 +326,8 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
       (hgo := .inr (by simpa only [hC.lph] using hgh)) (hi := hi0) (hc := hc)
       (htt := halloc) (hp := by simp only [hC.lpart]) (hret := .inl (.inr hcost)),
     FCond.wp_liftPartCur hC (hret := .inl (.inr hcost)), hfree,
-    FCond.wp_liftPart hC (hret := .inl (.inr hcost)), dstore,
+    FCond.wp_liftPart hC (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp))
+      (hret := .inl (.inr hcost)), dstore,
     hC.wp_projE (t := t),
     FCond.wp_ldEp hC (g := gD L C g .en _) (t := t) (hg := gD_ph hC)
       (hgh := by simpa only [gD_lph hC] using hgh),
