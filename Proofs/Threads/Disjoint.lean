@@ -1,6 +1,6 @@
 import Proofs.Threads.Gen
 import ZigLean.Simp
-import ZigLean.Conc.Witness
+import ZigLean.Conc.RunResult
 import ZigLean.Conc.Base.Lock
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Sep.Full.Local
