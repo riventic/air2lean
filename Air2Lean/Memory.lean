@@ -371,7 +371,9 @@ def deadUndefStores (f : Func) : Array InstId :=
         let overwrites (j : Inst) : Bool := match j.op with
           | .store (.inst p) v => p == a && !(v matches .undef _) && !v.hasNestedUndef
           | .asm _ _ _ outputs inputs =>
-            outputs.any (fun o => o.ref == some (.inst a) && o.constraint.startsWith "=") &&
+            outputs.any (fun o => (match o.ref with
+                | some (.inst id) => id == a
+                | _ => false) && o.constraint.startsWith "=") &&
               !inputs.any fun o => match o.ref with
                 | some (.inst id) => ps.contains id
                 | _ => false
