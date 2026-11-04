@@ -43,7 +43,8 @@ The units of one run audit one build, so their `fixtures.py audit`s share one ke
 Lake-built module that one audit replayed is not replayed again in this run
 (scripts/assumptions.py `kernel_replay`). They also share one digest of the Lean toolchain's
 runtime, hashed when the run starts and again when it ends (a change fails the run;
-assumptions.py `runtime_run`). Nothing outlives the run.
+assumptions.py `runtime_run`), and the compiled assurance extractor, prepared before the units
+start (assumptions.py `prepared_tool`): no unit rebuilds a root module. Nothing outlives the run.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
@@ -469,6 +470,15 @@ def main(argv=None):
         return 0
     failed = []
     if units:
+        # The units' audits share the root package's compiled extractor (assumptions.py
+        # `prepared_tool`). Preparing it may rebuild it, so it is prepared here, before the units:
+        # no unit may rebuild a root module under the units that read it (`shared_outputs`).
+        try:
+            with assumptions.prepared_tool():
+                pass
+        except (OSError, ValueError, RuntimeError) as error:
+            print('fixture-checks: FAILED the assurance extractor: %s' % error, file=sys.stderr)
+            return 1
         scratch = Path(tempfile.mkdtemp(prefix='air2lean-fixture-checks.'))
         logs = a.logs or Path(tempfile.mkdtemp(prefix='air2lean-fixture-logs.'))
         logs.mkdir(parents=True, exist_ok=True)
