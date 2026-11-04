@@ -28,7 +28,7 @@ a missing initial value, error storage, a wrong pointee type, over-alignment,
 `volatile`, and a constant pointer into a `threadlocal` global (0.14.1's form).
 
 ```sh
-lake build air2lean ZigLean.Conc.TlsLemmas
+lake build air2lean ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
 bash tests/roadmap/thread-locals/check.sh
 ```
 

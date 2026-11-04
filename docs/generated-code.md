@@ -315,7 +315,7 @@ def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [
   the thread with the global's initial bytes. Instances are never shared: the same name in two
   threads is two blocks (`TlsWF.no_alias`), and a new thread's instances hold exactly the initial
   bytes whatever other threads did to theirs (`tlsEnter_init`,
-  `ZigLean/Conc/TlsLemmas.lean`).
+  `ZigLean/Conc/Base/Tls.lean`).
 - **Address identity.** `tlsPtr` reads only the thread's record; it is not a memory access.
   The pointer it returns is an ordinary pointer to the instance's block: it can be stored,
   compared and passed to another thread. Every access through it is an ordinary access with

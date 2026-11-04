@@ -563,32 +563,22 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(calls[0].args[1], [str(self.fx.lake), '--rehash', 'build', module])
         self.assertEqual(self.fx.load()['runs']['no-build'], saved)
 
-    def test_renewal_drops_only_deleted_dotted_modules(self):
-        module = 'Proofs.Demo.Proofs'
-        self.assertTrue((self.fx.root / ti.module_path(module)).is_file())
-        build = ti.parse_build_command(
-            self.fx.root, [str(self.fx.lake), 'build', 'Proofs', module, 'Proofs.Gone.Deleted'],
-            lake=str(self.fx.lake))
-        self.assertEqual(build.deleted(self.fx.root), ['Proofs.Gone.Deleted'])
-        self.assertEqual(build.renewal(self.fx.lake, 'python3', root=self.fx.root),
-                         [str(self.fx.lake), 'build', 'Proofs', module])
-        # without a root the historical command is replayed unchanged
-        self.assertIn('Proofs.Gone.Deleted', build.renewal(self.fx.lake, 'python3'))
-        swap = ti.parse_build_command(
-            self.fx.root, ['python3', 'scripts/theorem-inventory.py', 'swap-build', '--lake',
-                           str(self.fx.lake), '--', module, 'Proofs.Gone.Deleted'])
-        self.assertEqual(swap.renewal(self.fx.lake, 'python3', root=self.fx.root)[-2:], ['--', module])
-        # a swapped Gen module is resolved to its swap source, even without its own file
-        (self.fx.root / 'Proofs/Demo/Gen.lean').unlink()
-        swapped = ti.parse_build_command(
-            self.fx.root, ['python3', 'scripts/theorem-inventory.py', 'swap-build', '--lake',
-                           str(self.fx.lake), '--swap', 'demo=tests/golden/0.15.2/demo/Gen.lean',
-                           '--', 'Proofs.Demo.Gen', module])
-        self.assertEqual(swapped.deleted(self.fx.root), [])
-        gone = ti.parse_build_command(self.fx.root, [str(self.fx.lake), 'build', 'Proofs.Gone.Deleted'],
-                                      lake=str(self.fx.lake))
-        with self.assertRaisesRegex(ti.Error, 'every recorded module is deleted'):
-            gone.renewal(self.fx.lake, 'python3', root=self.fx.root)
+    def test_renewal_skips_modules_deleted_since_the_recording(self):
+        gone = self.fx.root / ti.module_path('Proofs.Demo.Gone')
+        gone.write_text('theorem gone : True := trivial\n')
+        command = [str(self.fx.lake), 'build', 'Proofs', 'Proofs.Demo.Gone', 'Proofs.Demo.Proofs']
+        self.fx.record('all', '0.16.0', *self.fx.guard('all', command, 'built\n', prepare=False))
+        gone.unlink()
+        proof = self.fx.root / ti.module_path('Proofs.Demo.Proofs')
+        proof.write_text(proof.read_text() + '\n-- source changed\n')
+        self.assertRunCurrent('all', False)
+        calls = self.assertReplayRuns('all')
+        self.assertEqual(calls[0].args[1], [str(self.fx.lake), 'build', 'Proofs', 'Proofs.Demo.Proofs'])
+        # With every target gone the renewal would be a bare default-target build: refused.
+        inv = self.fx.load()
+        inv['runs']['all']['command'] = [str(self.fx.lake), 'build', 'Proofs.Demo.Gone']
+        self.fx.save(inv)
+        self.assertReplayRejected()
 
     def test_swapped_imports_are_recorded_and_checked_from_the_selected_source(self):
         helper_module = 'Proofs.Extra.Helper'

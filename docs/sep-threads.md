@@ -14,8 +14,8 @@ The concurrent proofs have two layers.
   thread `t` that holds at every stop. `run_safe` / `run_sound` turn it into statements about
   `Sched.run`. This layer has no heap assertions and stays as it is.
 * **Concurrent separation logic** over the legacy `Heap` (`ZigLean/Conc/Own.lean`, `Csl.lean`,
-  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Transfer.lean`, `TlsLemmas.lean`,
-  `SpawnLemmas.lean`, `Witness.lean`, `Unroll.lean`; about 7.5k lines):
+  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Transfer.lean`,
+  `SpawnLemmas.lean`, `Witness.lean`, `Unroll.lean`; about 7.3k lines):
   * `Mem.Owns m t h`: every recorded access to a byte of `h` happened before `t`'s clock;
   * `TTriple P c Q`: `Triple` with ownership in place of `SingleThread`, plus `StepIn hF m m'`
     (the step touches no frame byte and changes no other thread's clock);
@@ -104,7 +104,8 @@ provable. Now no `CTriple` with an admissible precondition holds across such a s
 relied on the old answers: none of the clients spawns, joins or waits.
 
 **Why not `∀ n, FTTriple P (soloRun n x) Q`** (the first plan, withdrawn): `Proto.WP` resumes a
-thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran) and for a pick with
+thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran; it knows only the
+invariant, its ghost value and that it exists, `t < m₁.threads.size`) and for a pick with
 *any* `c < count m₁` (`Conc/Logic.lean`, `Safe`/`Step`). A thread triple of the uninterrupted
 `soloRun` from `m` says nothing about the continuation `k c m₁`, so no rule for a thread follows;
 its only consumer would stay the sequential caller, which the current definition already serves.
@@ -475,11 +476,11 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   (`Full/Local.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
-* **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
-  shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an instance is a
-  `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`); the thread
-  start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with the record
-  update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
+* **TLS** (`TlsLemmas.lean`, deleted): a thread-local block is a part of its thread; its knowledge
+  may be shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an
+  instance is a `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`);
+  the thread start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with
+  the record update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
   `tlsPtr` reads only the thread records, which are protocol facts, not resources: it is resolved
   against the current memory inside a `MemM` step (`WP.liftMem_tlsPtr_bind`), so no thread triple
   needs the records (the legacy `TTripleIn` has no counterpart). `main`'s instances are start
