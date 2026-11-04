@@ -1,5 +1,8 @@
 import Proofs.Recursion.Gen
 import ZigLean.Witness
+import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Init
+import ZigLean.Sep.Full.Loop
 
 /-!
 # Proofs about `examples/recursion/recursion.zig`
@@ -7,9 +10,10 @@ import ZigLean.Witness
 Each theorem is about the generated code in `Gen.lean`, so it holds for the Zig function to the
 extent the translation is faithful (see the differential tests in `tests/diff/`).
 
-`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`; their unfold equation is `<fn>.eq_1`. The
-`isEven`/`isOdd`/`fact` proofs do induction on `n.toNat` (one less each call); the `gcd` proof
-does strong induction on the second argument (`a % b < b`).
+`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. The parity group has a full-state total
+contract, proved by `FTotalTriple.rec_group` and one `fsym` step for both members. The public
+parity equalities follow from total adequacy. The `fact` proof still inducts on `n.toNat`, and
+the `gcd` proof does strong induction on the second argument (`a % b < b`).
 
 **Stack premise.** These functions are pure (`Zig.Result`), so the model charges no frames:
 each theorem holds for the native function only if the native stack holds the recursion it
@@ -29,36 +33,80 @@ theorem succ_parity0 (k : Nat) : ((k + 1) % 2 == 0) = (k % 2 == 1) := by
 theorem succ_parity1 (k : Nat) : ((k + 1) % 2 == 1) = (k % 2 == 0) := by
   rcases Nat.mod_two_eq_zero_or_one k with h | h <;> simp [h, Nat.add_mod]
 
-/-- `isEven`/`isOdd`, proved together by induction on the recursion depth `k = n.toNat`. -/
+private theorem parity_step0 (a b : Nat) (h : a + 1 = b) :
+    (a % 2 == 1) = (b % 2 == 0) := by
+  subst b
+  exact (succ_parity0 a).symm
+
+private theorem parity_step1 (a b : Nat) (h : a + 1 = b) :
+    (a % 2 == 0) = (b % 2 == 1) := by
+  subst b
+  exact (succ_parity1 a).symm
+
+open Zig Zig.Full Zig.Full.FAssn
+
+/-- A tag selects the generated member; both members take every 32-bit unsigned input. -/
+private abbrev ParityInvocation := Sum (BitVec 32) (BitVec 32)
+
+private def parityCode (a : ParityInvocation) : MemM Bool :=
+  StateT.lift (match a with | .inl n => isEven n | .inr n => isOdd n)
+
+private def parityValue : ParityInvocation → Bool
+  | .inl n => n.toNat % 2 == 0
+  | .inr n => n.toNat % 2 == 1
+
+private def parityRank : ParityInvocation → Nat
+  | .inl n | .inr n => n.toNat
+
+/-- The generated mutual group terminates with its parity result and preserves every frame.
+The rank is a termination measure, not a model of the native stack (STK-01). -/
+private theorem parity_total (a : ParityInvocation) :
+    FTotalTriple emp (parityCode a) (fun v => ⟪v = parityValue a⟫) := by
+  refine FTotalTriple.rec_group parityCode (fun _ => emp)
+    (fun a v => ⟪v = parityValue a⟫) parityRank ?_ a
+  intro a smaller
+  fsym
+  all_goals
+    have hone : (1#32).toNat = 1 := rfl
+    simp only [parityValue]
+    first
+    | apply parity_step0; omega
+    | apply parity_step1; omega
+
+theorem isEven_total (n : BitVec 32) :
+    FTotalTriple emp (StateT.lift (isEven n) : MemM Bool)
+      (fun v => ⟪v = (n.toNat % 2 == 0)⟫) :=
+  parity_total (.inl n)
+
+theorem isOdd_total (n : BitVec 32) :
+    FTotalTriple emp (StateT.lift (isOdd n) : MemM Bool)
+      (fun v => ⟪v = (n.toNat % 2 == 1)⟫) :=
+  parity_total (.inr n)
+
+/-- Project the pure result from the existing total start-memory adequacy theorem. -/
+private theorem parity_eq (a : ParityInvocation) :
+    (match a with | .inl n => isEven n | .inr n => isOdd n) = pure (parityValue a) := by
+  obtain ⟨v, m', r', hr, _, hq, _⟩ :=
+    (parity_total a).run_init default [] (by decide) (by simp)
+  change ((match a with | .inl n => isEven n | .inr n => isOdd n) >>=
+    fun v => pure (v, Mem.ofGlobals default [])) = pure (v, m') at hr
+  obtain ⟨w, hw, hpair⟩ := result_bind_eq_pure hr
+  have hwv : w = v := congrArg Prod.fst (Zig.Full.Auto.result_pure_inj hpair)
+  rw [hwv, hq.1] at hw
+  exact hw
+
+theorem isEven_spec (n : BitVec 32) : isEven n = pure (n.toNat % 2 == 0) :=
+  parity_eq (.inl n)
+
+theorem isOdd_spec (n : BitVec 32) : isOdd n = pure (n.toNat % 2 == 1) :=
+  parity_eq (.inr n)
+
+/-- Compatibility with the original simultaneous statement, now from the group contract. -/
 theorem isEven_isOdd_aux :
     ∀ k : Nat, ∀ n : BitVec 32, n.toNat = k →
       isEven n = pure (k % 2 == 0) ∧ isOdd n = pure (k % 2 == 1) := by
-  intro k
-  induction k with
-  | zero =>
-    intro n h
-    have hn : n = 0#32 := by apply BitVec.eq_of_toNat_eq; simpa using h
-    subst hn
-    refine ⟨?_, ?_⟩
-    · rw [isEven.eq_1]; simp [zig_unfold]
-    · rw [isOdd.eq_1]; simp [zig_unfold]
-  | succ k ih =>
-    intro n h
-    have hn0 : n ≠ 0#32 := by intro h0; rw [h0] at h; simp at h
-    -- `n - 1` (a checked sub) does not overflow: `n.toNat = k + 1 ≥ 1`.
-    have hn1 : (n - 1#32).toNat = k := by rw [Zig.toNat_sub_one n hn0]; omega
-    have hres := ih (n - 1#32) hn1
-    refine ⟨?_, ?_⟩
-    · rw [isEven.eq_1]
-      simp [zig_unfold, hn0, hres.2, h, succ_parity0]
-    · rw [isOdd.eq_1]
-      simp [zig_unfold, hn0, hres.1, h, succ_parity1]
-
-theorem isEven_spec (n : BitVec 32) : isEven n = pure (n.toNat % 2 == 0) :=
-  (isEven_isOdd_aux n.toNat n rfl).1
-
-theorem isOdd_spec (n : BitVec 32) : isOdd n = pure (n.toNat % 2 == 1) :=
-  (isEven_isOdd_aux n.toNat n rfl).2
+  intro k n h
+  simpa only [h] using And.intro (isEven_spec n) (isOdd_spec n)
 
 /-! ## `fact` -/
 
