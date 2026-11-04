@@ -97,6 +97,25 @@ theorem tsum_upd {N : Nat} {g g' : Nat → Nat} {t : Nat} (ht : t < N)
       rw [h N (Ne.symm e)]
       omega
 
+/-- The sum of one point. -/
+theorem tsum_point {N t : Nat} (ht : t < N) (a : Nat) :
+    tsum N (fun u => if u = t then a else 0) = a := by
+  have := tsum_upd (g := fun _ => 0) (g' := fun u => if u = t then a else 0) ht
+    (fun u hu => by simp [hu])
+  rw [tsum_eq_zero (fun _ _ => rfl)] at this
+  simpa using this
+
+/-- A sum is at most another plus the excess at one point. -/
+theorem tsum_le_add_point {N t : Nat} {g h : Nat → Nat} (ht : t < N)
+    (e : ∀ u, u < N → u ≠ t → g u ≤ h u) : tsum N g ≤ tsum N h + g t := by
+  have : tsum N g ≤ tsum N (fun u => h u + if u = t then g t else 0) :=
+    tsum_le fun u hu => by
+      by_cases hut : u = t
+      · subst hut; simp
+      · simp [hut]; exact e u hu hut
+  rw [tsum_add, tsum_point ht] at this
+  exact this
+
 /-- **Writes with their own threads.** If every point `q < Q` with a positive weight `f q` has a
 thread `v < N` tagged `q` whose `g v` is at least `f q`, then the weights sum to at most the
 sum of `g`. -/
