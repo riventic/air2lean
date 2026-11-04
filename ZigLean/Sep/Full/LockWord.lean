@@ -24,8 +24,9 @@ with the resource moved between a thread's part and the protocol's rest.
   waits at the word, a thread that is not asleep is in the lock's code (`wit`), so there is no
   deadlock at the word. The holder made the newest acquire of the word (`owner`).
 - **A step of the lock's code** (`Step t m m'`): the threads, the groups and the other threads'
-  clocks stay, only the word's bytes change, each new access is an atomic access to the word, and
-  the atomic layout changes at most by a new location at the word.
+  clocks stay, only the word's bytes change, each new access is an atomic access to the word, the
+  atomic layout changes at most by a new location at the word, and the other threads' pending
+  wakes stay.
 - **The free resource's clocks** (`Owns P m h`): each access to `h` happened before every thread
   that has not ended, or before the release clock of the word's newest message. An acquire gives
   them to the acquiring thread's clock (`Acq`), a release takes them from the releasing thread's
@@ -164,8 +165,8 @@ from every other one. -/
 def ShapesStep (m m' : Mem) : Prop :=
   shapes m' = shapes m ∨ (shapes m' = shapes m ++ [L.shape] ∧ ∀ s ∈ shapes m, Apart s L.shape)
 
-/-- A step of thread `t` in the lock's code: the threads, the groups and the other threads'
-clocks stay, `t`'s clock does not get smaller, and only the word's bytes can change. -/
+/-- A step of thread `t` in the lock's code: the threads, the groups, the other threads' clocks
+and pending wakes stay, `t`'s clock does not get smaller, and only the word's bytes can change. -/
 structure Step (t : ThreadId) (m m' : Mem) : Prop where
   threads : m'.threads = m.threads
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
@@ -357,7 +358,8 @@ theorem ShapesStep.trans {m₁ m₂ m₃ : Mem} (h₁ : L.ShapesStep m₁ m₂) 
     rcases this rfl with h | h <;> simp [LockWord.shape] at h <;> omega
 
 /-- A step that keeps the threads, the groups, the blocks, the clocks, the footprint, the atomic
-locations and the threads at another futex. -/
+locations, the threads at another futex and (`hk`, by default unchanged) the other threads'
+pending wakes. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
@@ -925,7 +927,8 @@ theorem Step.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : L.Step t m₁ m
     h₂.csize.trans h₁.csize,
     fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
     h₂.bsize.trans h₁.bsize, ?_, fun w hw => (h₂.waiters w hw).trans (h₁.waiters w hw),
-    fun u hu h => h₂.woken u hu (h₁.woken u hu h), fun c h => h₂.before c (h₁.before c h), hlocs, fun e he => ?_,
+    fun u hu h => h₂.woken u hu (h₁.woken u hu h), fun c h => h₂.before c (h₁.before c h), hlocs,
+    fun e he => ?_,
     h₁.shapes.trans h₂.shapes, h₁.aux.trans h₂.aux, (fun h => h₂.cov (h₁.cov h)),
     Nat.le_trans h₁.nextMsg h₂.nextMsg, fun hF hoff => ?_⟩
   rotate_right
@@ -1268,8 +1271,7 @@ theorem WInv.locIdx {P : ThreadId → LPh} {m m₁ : Mem} {li : Nat} (hi : L.WIn
     (h : ((locIdx L.b L.o 4).run m).run = some (.ok (li, m₁))) :
     ∃ l, L.Loc m₁ li l ∧ L.WInv P m₁ ∧ m₁.blocks = m.blocks ∧ m₁.clocks = m.clocks ∧
       m₁.threads = m.threads ∧ m₁.footprint = m.footprint ∧ m₁.waiters = m.waiters ∧
-      m₁.woken = m.woken ∧ m₁.current = m.current ∧ m₁.groups = m.groups ∧
-      (∀ i l, L.Loc m i l → L.Loc m₁ i l) ∧
+      m₁.current = m.current ∧ m₁.groups = m.groups ∧ (∀ i l, L.Loc m i l → L.Loc m₁ i l) ∧
       (m₁.atomics = m.atomics ∨ ∃ l : ALoc, ALoc.shape l = L.shape ∧
         m₁.atomics = match m.atomics.findIdx? (fun l => l.block == L.b && l.off == L.o) with
           | some i => m.atomics.set! i l
@@ -1282,7 +1284,7 @@ theorem WInv.locIdx {P : ThreadId → LPh} {m m₁ : Mem} {li : Nat} (hi : L.WIn
     have hg : m.atomics[i]! = m.atomics[i] := getElem!_pos m.atomics i hi'
     obtain ⟨rfl, rfl⟩ := locIdx_found hf (by rw [hg]; exact hlen) (by rw [hg]; exact hlast)
       (by rw [hg]; exact hi.loc.plain i _ hl) h
-    exact ⟨_, hl, hi, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ h => h, .inl rfl, .refl _,
+    exact ⟨_, hl, hi, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ h => h, .inl rfl, .refl _,
       ⟨rfl, rfl, rfl⟩⟩
   | none =>
     have hno := noOverlap_of_only hf hi.loc.only
@@ -1296,7 +1298,7 @@ theorem WInv.locIdx {P : ThreadId → LPh} {m m₁ : Mem} {li : Nat} (hi : L.WIn
       rw [Array.findIdx?_push, hf]; simp [nl, firstLoc]
     have honly : ∀ i l, L.Loc { m with atomics := m.atomics.push nl, nextMsg := m.nextMsg + 1 }
         i l → i = m.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
-    refine ⟨nl, hnl, ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun i l h => absurd h (hno' i l),
+    refine ⟨nl, hnl, ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun i l h => absurd h (hno' i l),
       .inr ⟨nl, rfl, rfl⟩, .inr ⟨?_, fun s hs => ?_⟩, ⟨rfl, rfl, rfl⟩⟩
     · obtain ⟨w, hw, hu, -⟩ := hi.word
       exact ⟨hi.csize, hi.live, hi.blk, hi.word, hi.one,
@@ -1338,17 +1340,17 @@ theorem rmw_eff {m₁ m₂ M : Mem} {li : Nat} {l : ALoc} {ord : AtomicOrder} {r
     (hb : m₁.blocks[L.b]? = some blk) (hm₂ : m₂ = if ord.isAcq then acqM m₁ rd.relClock else m₁)
     (hM : M = rmwM m₁ li (l.msgs.size - 1) ord rd new) :
     M.threads = m₁.threads ∧ M.footprint = m₁.footprint ∧ M.waiters = m₁.waiters ∧
-      M.woken = m₁.woken ∧ M.groups = m₁.groups ∧ M.current = m₁.current ∧ M.clocks = m₂.clocks ∧
+      M.groups = m₁.groups ∧ M.current = m₁.current ∧ M.clocks = m₂.clocks ∧
       M.blocks = (m₁.write L.b blk L.o (padTo (intSize 32) (intBytes new))).blocks ∧
       M.atomics = m₁.atomics.set! li { l with msgs := l.msgs.push (rmwMsg m₂ ord rd new) } ∧
       m₁.Aux M := by
   obtain ⟨h, -, hl0⟩ := loc_get hl
   obtain ⟨hlb, hlo⟩ := loc_at hl
   have h2 : m₂.atomics = m₁.atomics ∧ m₂.blocks = m₁.blocks ∧ m₂.threads = m₁.threads ∧
-      m₂.footprint = m₁.footprint ∧ m₂.waiters = m₁.waiters ∧ m₂.woken = m₁.woken ∧
-      m₂.current = m₁.current ∧ m₂.groups = m₁.groups ∧ m₁.Aux m₂ := by
-    subst hm₂; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  obtain ⟨ha₂, hb₂, ht₂, hf₂, hw₂, hk₂, hc₂, hg₂, hx₂⟩ := h2
+      m₂.footprint = m₁.footprint ∧ m₂.waiters = m₁.waiters ∧ m₂.current = m₁.current ∧
+      m₂.groups = m₁.groups ∧ m₁.Aux m₂ := by
+    subst hm₂; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  obtain ⟨ha₂, hb₂, ht₂, hf₂, hw₂, hc₂, hg₂, hx₂⟩ := h2
   have hl₂ : m₂.atomics[li]! = l := by rw [ha₂]; exact hl0
   have hblk₂ : m₂.blocks[(m₂.atomics[li]!).block]? = some blk := by rw [hl₂, hlb, hb₂]; exact hb
   have hins := insertM_last (msg := rmwMsg m₂ ord rd new) hblk₂
@@ -1359,7 +1361,7 @@ theorem rmw_eff {m₁ m₂ M : Mem} {li : Nat} {l : ALoc} {ord : AtomicOrder} {r
   rw [← hm₂, hp]
   dsimp only
   rw [hins]
-  refine ⟨ht₂, hf₂, hw₂, hk₂, hg₂, hc₂, rfl, ?_, ?_, hx₂.trans ⟨rfl, rfl, rfl⟩⟩
+  refine ⟨ht₂, hf₂, hw₂, hg₂, hc₂, rfl, ?_, ?_, hx₂.trans ⟨rfl, rfl, rfl⟩⟩
   · simp only [observeM, Mem.write, hlb, hlo, hb₂]; rfl
   · simp only [observeM, ha₂]
 
@@ -1565,7 +1567,7 @@ theorem WInv.rmwStep {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
         { l with msgs := l.msgs.push (rmwMsg m₂ ord (l.msgs[l.msgs.size - 1]!) new) } := by
   obtain ⟨blk, hb, hlv, hsz, -, -⟩ := hi.blk
   obtain ⟨-, h0, -⟩ := hi.loc.ok li l hl
-  obtain ⟨hth, hfp, hwq, hwk, hg, hcur, hcl, hbl, hat, hax⟩ := rmw_eff (new := new) hl h0 hb rfl hM
+  obtain ⟨hth, hfp, hwq, hg, hcur, hcl, hbl, hat, hax⟩ := rmw_eff (new := new) hl h0 hb rfl hM
   have hcs : m₁.current < m₁.clocks.size := by rw [hi.csize, hc]; exact ht
   have hm₂ : ∀ m₂ : Mem, m₂ = (if ord.isAcq then acqM m₁ (l.msgs[l.msgs.size - 1]!).relClock
       else m₁) → m₂.clocks.size = m₁.clocks.size ∧ (∀ u, u ≠ t → m₂.clocks[u]! = m₁.clocks[u]!) ∧
@@ -1598,7 +1600,8 @@ theorem WInv.rmwStep {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
     ord l.msgs[l.msgs.size - 1]! new) }
   refine ⟨blk, _, hb, rfl, ⟨hth, fun e he => .inl (hfp ▸ he), hg, by rw [hcl, hs1],
     fun u hu => by rw [hcl, hs2 u hu], by rw [hcl]; exact hs3, by rw [hbl]; simp [Mem.write],
-    .inr ⟨blk, _, hb, hlv, bs4 new, hsz, hbl⟩, fun _ _ => by rw [hwq], fun _ _ h => by rw [hwk]; exact h,
+    .inr ⟨blk, _, hb, hlv, bs4 new, hsz, hbl⟩, fun _ _ => by rw [hwq],
+    fun _ _ h => (htransport (fun _ => none) (fun _ _ _ => rfl)).woken ▸ h,
     fun c ⟨i, l₀, hl₀, hle⟩ => ?_, .inr ⟨next, by
       obtain ⟨hlb, hlo⟩ := loc_at hl
       simp only [next, ALoc.shape, LockWord.shape, hlb, hlo, (hi.loc.ok li l hl).1],
@@ -2193,14 +2196,15 @@ theorem WInv.prepK {P : ThreadId → LPh} {m m₁ : Mem} {t li : Nat} {k : Acces
     exact FStepIn.locIdx (by decide) hoff ⟨blk, hb, hsz⟩ hl
   have hcov : m.MsgCov → m₁.MsgCov := fun h =>
     (htransport (fun _ => none) (fun _ _ _ => rfl)).msgCov h.recordAt
-  obtain ⟨l, hl', hi₁, hb₁, hc₁, ht₁, hf₁, hw₁, hk₁, hcu₁, hg₁, hlk, hks, hsh, hax⟩ :=
+  obtain ⟨l, hl', hi₁, hb₁, hc₁, ht₁, hf₁, hw₁, hcu₁, hg₁, hlk, hks, hsh, hax⟩ :=
     hir.locIdx (hc ▸ ht) hl
   have hrec : L.Rec m₁ t := by
     have := rec_recordAt (L := L) (k := k) hc (hc ▸ hcs)
     unfold Rec at this ⊢; rw [hf₁, hc₁]; exact this
   refine ⟨l, hl', hi₁, ⟨by rw [ht₁]; rfl, fun e he => ?_, by rw [hg₁]; rfl,
     by rw [hc₁]; simp [Mem.recordAt], fun u hu => ?_, ?_, by rw [hb₁]; rfl, .inl (by rw [hb₁]; rfl),
-    fun _ _ => by rw [hw₁]; rfl, fun _ _ h => by rw [hk₁]; exact h,
+    fun _ _ => by rw [hw₁]; rfl,
+    fun _ _ h => (htransport (fun _ => none) (fun _ _ _ => rfl)).woken ▸ h,
     fun _ ⟨i, l₀, h₀, hle⟩ => ⟨i, l₀, hlk i l₀ h₀, hle⟩,
     (by simpa only [Mem.recordAt] using hks), fun e he => ?_,
     (ShapesStep.of_atomics (m := m) (m' := m.recordAt L.b L.o 4 k) rfl).trans hsh,
