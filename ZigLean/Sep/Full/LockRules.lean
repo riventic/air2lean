@@ -17,7 +17,7 @@ with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the r
 | `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), `spin` (read `1`), `wait` (read `c`) |
 | `wp_orLock` | `or(1)`, acquire (`c = 3`) | `out` | `holds` (read `0`), or `spin` (read `1` or `3`) |
 | `wp_casWeakLock` | weak `cmpxchg(0 → 1)`, acquire (off x86) | `out` | `holds`, or `spin` (any failure) |
-| `wp_loadLock` | load, relaxed | any but `gone` | the same |
+| `wp_loadLock` | load, relaxed | any but `gone` and `away` | the same |
 | `Fits.toWait` | (no op) | `spin` | `wait` |
 | `wp_xchgLock` | `xchg(c)`, acquire | `spin` | `holds` (read `0`), or `wait` |
 | `wp_wait`, `wp_waitD` | futex wait for `c` | `wait` | `spin` |
@@ -167,10 +167,12 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
     have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _) hl
     rwa [hg₁] at this
   · refine .inr (.inl ⟨rfl, ?_⟩)
-    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _) (hiL.lstepAt hst hnh hng (by decide) hw)
+    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _)
+      (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
   · refine .inr (.inr ⟨rfl, ?_⟩)
-    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _) (hiL.lstepAt hst hnh hng (by decide) hw)
+    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _)
+      (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
 
 /-- A lock step of `t` (not the holder) to a place `p ≠ holds`, as the protocol's invariant. -/
@@ -224,8 +226,10 @@ theorem wp_xchgLockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.xchgLock S hS hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
 
 /-- `unlock`'s `xchg(unlocked)`, by the holder `t` (`g`). -/
 theorem wp_xchgUnlockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ}
@@ -304,7 +308,8 @@ theorem wp_wakeOn (hP : L.Fits K P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
   have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph (by decide) hw
   exact h k hk G₁ m' hcu
-    (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst hl)
+    (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide) hiL hU hst hl)
 
 /-! ### `ok = True`: every thread runs the lock's code -/
 
@@ -409,9 +414,11 @@ theorem wp_orLock (hP : L.Fits K P U ok) (hc3 : L.c = 3) {s : σ} {t : ThreadId}
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.orLock hc3 hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) hiL hU hst
       hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide) (by decide)
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide)
       hiL hU hst hw⟩
 
 /-- `tryLock` off x86, a weak acquire `cmpxchg` `0 → 1` (`WInv.casWeakLock`), by thread `t` at

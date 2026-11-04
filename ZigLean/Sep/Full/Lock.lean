@@ -26,9 +26,9 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
   judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
-  the lock's code (`LockWord.Step`) by a thread with `ok` keeps `U` with the same `rX`. The
-  primitive `K` (`FPrim`) is data: a thread's place in its code (`FPlace`), its roles, what the
-  rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
+  the lock's code (`LockWord.Step`) by a thread with `ok`, neither `gone` nor `away`, keeps `U`
+  with the same `rX`. The primitive `K` (`FPrim`) is data: a thread's place in its code
+  (`FPlace`), its roles, what the rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
   and every step, and the primitive's place is a part of the ghost value independent of the
   lock's (the compatibility laws `lph` … `role_part`). The lock alone is `FPrim.empty`
   (`Fits.ofLock`); a primitive over futex words (the event, the condition) is `FPrim.ofWords`
