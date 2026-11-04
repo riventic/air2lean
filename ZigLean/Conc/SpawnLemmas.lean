@@ -85,7 +85,7 @@ theorem WP.groupAsyncWithPolicyC {policy : SpawnPolicy} {group : Ptr} {io : Io} 
   simp only [StateT.run_bind, StateT.run_lift]
   refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hb⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
 theorem WP.groupConcurrentFallibleC {group : Ptr} {io : Io} {target : Tgt} {s : σ}
     {Q : Except ErrName Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
