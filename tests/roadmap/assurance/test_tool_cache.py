@@ -550,7 +550,7 @@ class RuntimeRunTests(unittest.TestCase):
 
     def test_a_failed_process_listing_fails_the_audit(self):
         error = subprocess.CalledProcessError(1, ['ps'])
-        for failure in (error, subprocess.TimeoutExpired(['ps'], 30)):
+        for failure in (error, subprocess.TimeoutExpired(['ps'], 30), FileNotFoundError('ps')):
             with patch.object(audit.subprocess, 'run', side_effect=failure):
                 with self.assertRaisesRegex(ValueError, 'cannot list the processes'):
                     audit.ancestors()

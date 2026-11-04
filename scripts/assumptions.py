@@ -677,7 +677,7 @@ def ancestors() -> set[int]:
     try:
         rows = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True,
                               check=True, timeout=30).stdout.split()
-    except subprocess.SubprocessError as error:
+    except (OSError, subprocess.SubprocessError) as error:  # no ps, a failed or a hung ps
         raise ValueError(f'cannot list the processes (ps): {error}') from error
     parent = dict(zip(map(int, rows[0::2]), map(int, rows[1::2])))
     pid, seen = os.getpid(), set()
