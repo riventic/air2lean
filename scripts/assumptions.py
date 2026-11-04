@@ -23,6 +23,7 @@ import premise_markers  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = "AIR2LEAN_ASSURANCE_JSON:"
+EXTRACTOR = ".lake/build/bin/assurance"  # the compiled extractor (tools/AssuranceMain.lean), relative to the root
 STANDARD_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
 POLICY_FIELDS = {"schema_version", "standard_logical_axioms", "project_axioms",
                  "project_opaques", "project_compiler_redirections", "project_externs",
@@ -530,6 +531,15 @@ def input_tree_records(root: Path, binaries: bool = False, *,
                        suffixes: tuple[str, ...] | None = None,
                        content_exclusions=()) -> list[tuple[Path, str, str]]:
     """Selected input bytes and alias identities, using one traversal for all input sets."""
+    paths, links = input_tree(root, binaries, suffixes=suffixes)
+    return [(path, links.get(path, ''), file_sha256(path)
+             if path in paths and path not in content_exclusions else '')
+            for path in sorted(paths | links.keys())]
+
+
+def input_tree(root: Path, binaries: bool = False, *,
+               suffixes: tuple[str, ...] | None = None) -> tuple[set[Path], dict[Path, str]]:
+    """The traversal of `input_tree_records`: the selected files and every alias's target text."""
     paths, links = set(), {}
 
     def visit(path: Path, ancestors: frozenset):
@@ -554,9 +564,7 @@ def input_tree_records(root: Path, binaries: bool = False, *,
                 paths.add(path)
 
     visit(root, frozenset())
-    return [(path, links.get(path, ''), file_sha256(path)
-             if path in paths and path not in content_exclusions else '')
-            for path in sorted(paths | links.keys())]
+    return paths, links
 
 
 def library_roots(root: Path) -> set[str]:
@@ -605,8 +613,25 @@ def library_compiled_inputs(root: Path) -> list:
     return records
 
 
+RUNTIME_RUN = "AIR2LEAN_TOOLCHAIN_RUNTIME_RUN"
+
+
 def toolchain_runtime_sha256(toolchain: Path) -> str:
-    """Hash executable stubs, shared runtime and installed logical/IR inputs freshly."""
+    """The digest of the executable stubs, shared runtime and installed logical/IR inputs.
+
+    Inside a run (`runtime_run`) the run's toolchain has one digest, hashed when the run starts
+    and hashed again when it ends (a change fails the run); a call in between returns it while
+    the metadata of every hashed file (`runtime_identity`) is unchanged, else hashes afresh. Any
+    other toolchain, and every call outside a run, is hashed afresh."""
+    check_runtime_layout(toolchain)
+    record = shared_runtime().get(str(toolchain.resolve()))
+    if record is not None and runtime_identity(toolchain) == record['identity']:
+        _USED.add(str(toolchain.resolve()))
+        return record['sha256']
+    return hash_runtime(toolchain)
+
+
+def check_runtime_layout(toolchain: Path) -> None:
     overlays = sorted(name for name, value in os.environ.items()
                       if value and name.startswith(('LD_', 'DYLD_')))
     if overlays:
@@ -616,6 +641,10 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
             raise ValueError(f'missing toolchain executable: {name}')
     if not (toolchain / 'lib').is_dir():
         raise ValueError('missing toolchain library directory')
+
+
+def hash_runtime(toolchain: Path) -> str:
+    """`toolchain_runtime_sha256`, hashed afresh."""
     digest = hashlib.sha256(b'air2lean-toolchain-runtime-v1\0')
     records = [*input_tree_records(toolchain / 'bin', True),
                *input_tree_records(toolchain / 'lib')]
@@ -625,6 +654,100 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
         if content:
             digest.update(content.encode() + b'\0')
     return digest.hexdigest()
+
+
+def runtime_identity(toolchain: Path) -> str:
+    """The metadata of every file `hash_runtime` reads, as found through its aliases: name, alias
+    target, device, inode, size, and modification and change times (the kernel sets the change
+    time on every write; no caller can set it back)."""
+    digest = hashlib.sha256(b'air2lean-toolchain-runtime-identity-v1\0')
+    for directory, binaries in ((toolchain / 'bin', True), (toolchain / 'lib', False)):
+        paths, links = input_tree(directory, binaries)
+        for path in sorted(paths | links.keys()):
+            info = path.stat()
+            digest.update(json.dumps([path.relative_to(toolchain).as_posix(), links.get(path, ''),
+                                      path in paths, info.st_dev, info.st_ino, info.st_size,
+                                      info.st_mtime_ns, info.st_ctime_ns]).encode() + b'\0')
+    return digest.hexdigest()
+
+
+def ancestors() -> set[int]:
+    """This process and its ancestors (`ps`)."""
+    rows = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True,
+                          check=True, timeout=30).stdout.split()
+    parent = dict(zip(map(int, rows[0::2]), map(int, rows[1::2])))
+    pid, seen = os.getpid(), set()
+    while pid not in seen and pid > 1:
+        seen.add(pid)
+        pid = parent.get(pid, 1)
+    return seen
+
+
+_SHARED: dict = {}
+_USED: set = set()  # the toolchains whose shared digest this process returned
+
+
+def shared_runtime() -> dict:
+    """The enclosing run's toolchain digests (`runtime_run`): resolved sysroot -> record. Only a
+    record that an ancestor of this process published counts (a leftover or foreign variable is
+    ignored, and every digest is hashed afresh); a published record that cannot be read fails."""
+    path = os.environ.get(RUNTIME_RUN)
+    if not path:
+        return {}
+    if path not in _SHARED:
+        record = json.loads(Path(path).read_text())
+        _SHARED[path] = record['runtimes'] if record.get('pid') in ancestors() else {}
+    return _SHARED[path]
+
+
+@contextlib.contextmanager
+def runtime_run():
+    """One toolchain-runtime digest for the processes of one run (an audit, a fixture-checks run).
+
+    The run's toolchain (Lake's LEAN_SYSROOT) is hashed once when the run starts and its
+    digest is published to the run's processes (`RUNTIME_RUN`, a file in a private temporary
+    directory, with the publishing process; `shared_runtime`); `toolchain_runtime_sha256` returns
+    it while the toolchain's metadata is unchanged. When the run ends the toolchain is hashed
+    afresh: a different digest raises, so a run during which the toolchain changed fails. A
+    process of the run that uses the published digest checks the metadata again when it ends
+    (before its caller writes a report)."""
+    if os.environ.get(RUNTIME_RUN):
+        try:
+            records = shared_runtime()
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            raise ValueError(f'unreadable toolchain-runtime record {os.environ[RUNTIME_RUN]}: {error}') from error
+        if records:  # an enclosing run's: it hashes the bytes again when it ends
+            yield
+            for toolchain, record in records.items():
+                if toolchain in _USED and runtime_identity(Path(toolchain)) != record['identity']:
+                    raise ValueError('toolchain runtime changed during the run')
+            return
+    sysroot = lake_env('LEAN_SYSROOT')
+    if not sysroot or not Path(sysroot).is_absolute():
+        raise ValueError(f'Lake reports no absolute LEAN_SYSROOT: {sysroot!r}')
+    toolchain = Path(sysroot).resolve()
+    check_runtime_layout(toolchain)
+    # The identity before and after the hash: the published pair describes the same bytes.
+    identity = runtime_identity(toolchain)
+    sha = hash_runtime(toolchain)
+    if runtime_identity(toolchain) != identity:
+        raise ValueError('toolchain runtime changed while it was hashed')
+    previous = os.environ.get(RUNTIME_RUN)
+    with tempfile.TemporaryDirectory(prefix='air2lean-runtime.') as directory:
+        record = Path(directory) / 'runtime.json'
+        record.write_text(json.dumps({'pid': os.getpid(),
+                                      'runtimes': {str(toolchain): {'sha256': sha, 'identity': identity}}}))
+        os.environ[RUNTIME_RUN] = str(record)
+        try:
+            yield
+        finally:
+            _SHARED.pop(str(record), None)
+            if previous is None:
+                del os.environ[RUNTIME_RUN]
+            else:
+                os.environ[RUNTIME_RUN] = previous
+    if hash_runtime(toolchain) != sha:
+        raise ValueError('toolchain runtime changed during the run')
 
 
 def lean_path_binding(root: Path, value: str, *, mutable_outputs=()) -> dict:
@@ -671,6 +794,13 @@ def verify_extractor_inputs(trace: dict, root: Path, stage: str) -> None:
         raise ValueError(f'toolchain runtime changed during extractor {stage}')
     if library_source_inputs(root) != trace['library_source_inputs']:
         raise ValueError(f'project library sources changed during extractor {stage}')
+    # The program and the library it imports at run time: a `lake build assurance` outside the
+    # extractor lock (another tool) must not swap them under the run.
+    for key, path in (("executable_sha256", root / EXTRACTOR),
+                      ("olean_sha256", root / ".lake/build/lib/lean/tools/Assurance.olean"),
+                      ("lake_trace_sha256", root / ".lake/build/lib/lean/tools/Assurance.trace")):
+        if key in trace and (not path.is_file() or file_sha256(path) != trace[key]):
+            raise ValueError(f'extractor {key.removesuffix("_sha256")} changed during extractor {stage}')
 
 
 @contextlib.contextmanager
@@ -697,6 +827,7 @@ def prepare_tool(root: Path, runner) -> dict:
     Only `prepared_tool` calls this, under the extractor lock."""
     artifact = root / ".lake/build/lib/lean/tools/Assurance.olean"
     lake_trace = artifact.with_suffix(".trace")
+    executable = root / EXTRACTOR
     caller_path = caller_lean_path_binding(root)
     sysroot = runner(["lake", "env", "printenv", "LEAN_SYSROOT"]).strip()
     if not sysroot:
@@ -710,6 +841,7 @@ def prepare_tool(root: Path, runner) -> dict:
         "schema_version": 1,
         "module": "tools.Assurance",
         "source_sha256": file_sha256(root / "tools/Assurance.lean"),
+        "executable": EXTRACTOR,  # its source (tools/) is in `library_source_inputs`
         "lean_toolchain_sha256": file_sha256(root / "lean-toolchain"),
         "lake_config_sha256": file_sha256(root / "lakefile.toml"),
         "lake_manifest_sha256": file_sha256(manifest_path) if manifest_path.is_file() else None,
@@ -726,22 +858,24 @@ def prepare_tool(root: Path, runner) -> dict:
     except (FileNotFoundError, ValueError):
         cached = {}  # No or a corrupt record for this context: Lake rebuilds below.
     artifact_valid = (isinstance(cached, dict) and all(k in cached and cached[k] == v for k, v in context.items())
-             and artifact.is_file() and lake_trace.is_file()
+             and artifact.is_file() and lake_trace.is_file() and executable.is_file()
              and cached.get("olean_sha256") == file_sha256(artifact)
-             and cached.get("lake_trace_sha256") == file_sha256(lake_trace))
+             and cached.get("lake_trace_sha256") == file_sha256(lake_trace)
+             and cached.get("executable_sha256") == file_sha256(executable))
     valid = artifact_valid and cached.get('library_source_inputs') == sources
     if not artifact_valid:
         # Lake must rebuild when output or its independently recorded identity is missing,
         # corrupt, or from a different extractor source, release pin, or configuration.
         artifact.unlink(missing_ok=True)
+        executable.unlink(missing_ok=True)
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
-    runner(["lake", "--rehash", "build", "AssuranceTools"])
+    runner(["lake", "--rehash", "build", "AssuranceTools", "assurance"])
     verify_extractor_inputs({**context, 'library_source_inputs': sources}, root, 'preparation')
     trace = {**context, "library_source_inputs": sources, "olean_sha256": file_sha256(artifact),
-             "lake_trace_sha256": file_sha256(lake_trace)}
-    trace["cache_reused"] = bool(valid and cached.get("olean_sha256") == trace["olean_sha256"]
-                                 and cached.get("lake_trace_sha256") == trace["lake_trace_sha256"])
+             "lake_trace_sha256": file_sha256(lake_trace), "executable_sha256": file_sha256(executable)}
+    trace["cache_reused"] = bool(valid and all(cached.get(key) == trace[key] for key in
+                                               ("olean_sha256", "lake_trace_sha256", "executable_sha256")))
     write_report(manifest, trace)
     return trace
 
@@ -851,20 +985,21 @@ def resolved_roots(lake: list[str], workspace: Path, env: dict,
     return [str(entry) for entry in entries if entry != own]
 
 
-def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = ROOT,
+def lake_extraction(arguments: list[str], package: Path, tool: dict, root: Path = ROOT,
                     binding: dict | None = None, modules: list[str] = ()) -> list[str] | None:
-    """The extractor's report lines from `driver` built by Lake as the module of a generated
-    workspace (`package/.lake/extraction/M<digest>`) that requires the Lake package `package` of
-    the audited `modules`. The driver imports only tools.Assurance, which imports `modules`
-    without running their initializers; their oleans and dependency traces are the driver
-    library's `needs` (`module_needs`). Lake elaborates the driver again exactly when its trace
-    changes (the driver's text: the modules, options and families; tools.Assurance; the needs,
-    which cover every audited module and everything below it; the toolchain) and otherwise
+    """The extractor's report lines for `arguments`, from a driver built by Lake as the module of
+    a generated workspace (`package/.lake/extraction/M<digest>`) that requires the Lake package
+    `package` of the audited `modules`. The driver imports only tools.AssuranceRun (`Init`) and
+    runs the compiled extractor of the prepared tool's trace `tool` on Lake's lookup path; the
+    extractor imports `modules` without running their initializers. Their oleans and dependency
+    traces are the driver library's `needs` (`module_needs`). Lake elaborates the driver again
+    exactly when its trace changes (the driver's text: the arguments, the extractor's digest; the
+    needs, which cover every audited module and everything below it; the toolchain) and otherwise
     replays the build's stored log, which holds the report: reuse is Lake's trace, nothing else.
-    A module no package of the workspace builds returns None (elaborated afresh). The driver's text also names the installed
-    toolchain runtime (`runtime_sha`, toolchain_runtime_sha256 of the prepared tool's trace),
-    which Lake's trace need not cover: a changed runtime input is a different driver, so it is
-    extracted again. The workspace's toolchain pin is `root`'s, written on every call before Lake
+    A module no package of the workspace builds returns None (extracted afresh). The driver's text
+    also names the installed toolchain runtime (toolchain_runtime_sha256 of `tool`), which Lake's
+    trace need not cover: a changed runtime input is a different driver, so it is extracted
+    again. The workspace's toolchain pin is `root`'s, written on every call before Lake
     starts. The workspace does not use Lake's artifact cache (`NO_ARTIFACT_CACHE`): the cache keeps
     no log, and a driver restored from it (another checkout's build, or an earlier checkout at the
     same path) would replay none, so the audit would fail for want of a report. A driver builds
@@ -876,10 +1011,15 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
     resolves exactly those roots in the workspace, after the workspace's own driver library
     (which holds nothing else). The driver's text names the roots and the binding's digest, so a
     changed root or bound input is another driver, elaborated again. A path Lake resolves
-    otherwise, or cannot resolve, returns None before anything is built: the caller elaborates
-    the driver afresh on its lookup path, and nothing is reused."""
-    if not re.fullmatch(r"[0-9a-f]{64}", runtime_sha or ""):
-        raise ValueError("extraction requires the prepared tool's toolchain runtime binding")
+    otherwise, or cannot resolve, returns None before anything is built: the caller runs the
+    extractor afresh on its lookup path, and nothing is reused."""
+    # The program imports tools.Assurance's closure at run time, so the driver also names that
+    # library's Lake trace (which covers its imports): a changed claim head or contract module is
+    # another driver even when the program's bytes are unchanged.
+    runtime_sha, extractor_sha, library_sha = (tool.get(key) for key in (
+        "toolchain_runtime_sha256", "executable_sha256", "lake_trace_sha256"))
+    if not all(re.fullmatch(r"[0-9a-f]{64}", sha or "") for sha in (runtime_sha, extractor_sha, library_sha)):
+        raise ValueError("extraction requires the prepared tool's toolchain runtime and extractor binding")
     name = tomllib.loads((package / "lakefile.toml").read_text(encoding="utf-8"))["name"]
     bound = "" if binding is None else (f"-- lookup roots {json.dumps(binding['roots'])}\n"
                                         f"-- lookup binding {binding['sha256']}\n")
@@ -896,10 +1036,13 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
         roots = [(package / entry).resolve() for entry in done.stdout.strip().split(os.pathsep) if entry]
     needs = module_needs(modules, roots, [root, package])
     if needs is None:
-        return None  # a module no Lake package of the workspace builds: elaborate afresh
+        return None  # a module no Lake package of the workspace builds: run afresh
+    command = [*extractor_command(root, tool), *arguments]
     text = (f"-- The assurance extractor's driver for {json.dumps(sorted(modules))} of {package} "
-            f"(scripts/assumptions.py).\n-- toolchain runtime {runtime_sha}\n" + NO_ARTIFACT_CACHE
-            + bound + driver)
+            f"(scripts/assumptions.py).\n-- toolchain runtime {runtime_sha}\n-- extractor {extractor_sha}\n"
+            f"-- extractor library trace {library_sha}\n" + NO_ARTIFACT_CACHE + bound
+            + "import tools.AssuranceRun\n#eval Air2Lean.AssuranceRun.run "
+            + json.dumps(command[0]) + " #[" + ", ".join(map(json.dumps, command[1:])) + "]\n")
     digest = hashlib.sha256(text.encode()).hexdigest()[:32]
     module = f"{EXTRACTION_LIBRARY}.M{digest}"
     workspace = package / ".lake/extraction" / f"M{digest}"
@@ -1050,15 +1193,22 @@ def lean_command(arguments: list[str], lean_path: str) -> list[str]:
     return ['lake', 'env', 'env', 'LEAN_PATH=' + lean_path, 'lean', *arguments]
 
 
+def extractor_command(root: Path, tool: dict) -> list[str]:
+    """The compiled extractor of the prepared tool's trace `tool`, on the toolchain the trace
+    records (its library ends the extractor's lookup path, after LEAN_PATH)."""
+    return [str(root / tool["executable"]), "--sysroot", tool["lean_sysroot"]]
+
+
 def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
             all_declarations: bool = False, root: Path | None = None,
             lean_path: str | None = None, extract_in: Path | None = None) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion. `extract_in`: a
-    Lake package that builds the extractor's driver (`lake_extraction`) instead of `lake env
-    lean` elaborating it afresh. Lake then chooses the import paths: with a compiler-owned
-    `lean_path` the Lake-built driver is used only when Lake resolves exactly that path
-    (`lake_extraction`), else the driver is elaborated afresh on `lean_path`."""
+    Lake package that builds the extractor's driver (`lake_extraction`), so an unchanged audit
+    replays its stored report, instead of running the compiled extractor afresh under `lake env`.
+    Lake then chooses the import paths: with a compiler-owned `lean_path` the Lake-built driver
+    is used only when Lake resolves exactly that path (`lake_extraction`), else the extractor
+    runs afresh on `lean_path`."""
     root = (ROOT if root is None else root).resolve()
     runner = lambda command: run(command, root=root)
     module_name = lean_deps().MODULE_NAME
@@ -1067,46 +1217,31 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
     if build:
         # Build each selected module, including newly added modules absent from old manifests.
         runner(["lake", "build", *modules])
-    directory = root / ".lake/assurance"
-    directory.mkdir(parents=True, exist_ok=True)
     audited = sorted({*modules, *witnesses})
-    # The driver imports only the extractor. `#assurance_audit` imports the audited modules
-    # itself, running none of their initializers (tools/Assurance.lean importWithoutInitializers;
-    # docs/architecture-audit/soundness-2026-10-20.md E1).
-    driver = "import tools.Assurance\n"
-    # The extractor reads every statement the elaborator accepted, also under a raised
-    # `maxRecDepth` (fsym proofs set 20000): resource limits are not audit checks, a failure stays one.
-    driver += "set_option maxHeartbeats 0\nset_option maxRecDepth 100000\n"
-    if all_declarations:
-        driver += "set_option air2lean.assurance.allDeclarations true\n"
-    driver += ("#assurance_audit ["
-               + ", ".join(json.dumps(m) for m in audited) + "]\n")
-    if all_declarations:
-        # Resolve every canonical family in the SAME protected environment (the audit's, which
-        # the command leaves in place). A renamed family must fail, even when no selected
-        # declaration happens to reference its old name.
-        driver += "".join(f"#check _root_.{name}\n" for name in framework_runtime_types())
+    # The compiled extractor imports the audited modules once, running none of their
+    # initializers (tools/Assurance.lean importAudited; docs/architecture-audit/
+    # soundness-2026-10-20.md E1). With --all-declarations every canonical family must resolve in
+    # the audit's environment: a renamed family fails, even when no selected declaration happens
+    # to reference its old name.
+    arguments = [*(["--all-declarations"] if all_declarations else []),
+                 *[option for name in (framework_runtime_types() if all_declarations else ())
+                   for option in ("--family", name)], *audited]
     lines = None
     if extract_in is not None:
-        with prepared_tool(root, runner) as tool_trace:  # The build imports the olean the trace records.
+        with prepared_tool(root, runner) as tool_trace:  # The build runs the extractor the trace records.
             binding = lean_path_binding(root, lean_path) if lean_path is not None else None
-            lines = lake_extraction(driver, extract_in.resolve(), tool_trace.get("toolchain_runtime_sha256"),
-                                    root, binding, audited)
+            lines = lake_extraction(arguments, extract_in.resolve(), tool_trace, root, binding, audited)
             if lines is not None and binding is not None and lean_path_binding(root, lean_path) != binding:
                 raise ValueError('compiled Unit lookup inputs changed during extraction')
     if lines is None:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".lean", dir=directory, delete=False) as handle:
-            handle.write(driver)
-            path = Path(handle.name)
-        try:
-            with prepared_tool(root, runner) as tool_trace:  # The run imports the olean the trace records.
-                binding = lean_path_binding(root, lean_path) if lean_path is not None else None
-                output = runner(lean_command([str(path)], lean_path) if lean_path is not None else
-                                ["lake", "env", "lean", str(path)])
-                if binding is not None and lean_path_binding(root, lean_path) != binding:
-                    raise ValueError('compiled Unit lookup inputs changed during extraction')
-        finally:
-            path.unlink(missing_ok=True)
+        with prepared_tool(root, runner) as tool_trace:  # The run is of the extractor the trace records.
+            binding = lean_path_binding(root, lean_path) if lean_path is not None else None
+            # Lake's lookup path, or the already resolved one applied after Lake installs it.
+            command = [*extractor_command(root, tool_trace), *arguments]
+            output = runner(['lake', 'env', *(['env', 'LEAN_PATH=' + lean_path] if lean_path is not None else []),
+                             *command])
+            if binding is not None and lean_path_binding(root, lean_path) != binding:
+                raise ValueError('compiled Unit lookup inputs changed during extraction')
         lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
     verify_extractor_inputs(tool_trace, root, 'extraction')
     if len(lines) != 1:
@@ -1525,6 +1660,60 @@ def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> N
     report["theorem_count"] = len(report["theorems"])
 
 
+def audit_report(args, compiled_units: dict | None) -> dict:
+    """The report of `main`'s arguments `args`."""
+    policy = load_policy(args.policy)
+    sources = json.loads(args.sources.read_text()) if args.sources else {}
+    if not isinstance(sources, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                                for k, v in sources.items()):
+        raise ValueError("--sources must map module names to source paths")
+    labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
+    modules = sorted(set(args.module)) if args.module else shipped_modules()
+    fixtures = {}
+    if not args.module:
+        if compiled_units is not None:
+            raise ValueError('default shipped audit requires its own registered witness compilation')
+        if not args.no_build:
+            # Complete the SAME selected-module prerequisite before freezing witness inputs.
+            # extract() must not change those Lake artifacts after the compiler snapshot.
+            run(['lake', 'build', *modules])
+        fixtures, compiled_units = compile_witness_fixtures(not args.no_build)
+    witnesses = sorted(m for m in fixtures if m not in modules)
+    if compiled_units is not None:
+        import theorem_universe
+        theorem_universe.verify_compilation(compiled_units)
+        if args.module:
+            if (modules != compiled_units['selected_modules'] or witnesses
+                    or 'witness_registry' in compiled_units):
+                raise ValueError('compiled Unit context differs from the requested audit scope')
+        elif ('witness_registry' not in compiled_units
+              or witnesses != compiled_units['selected_modules']):
+            raise ValueError('compiled witness context differs from the requested audit scope')
+    raw = extract(modules, bool(args.module) and not args.no_build, witnesses,
+                  all_declarations=args.all_declarations, extract_in=args.extract_in,
+                  **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
+    if raw["modules"] != sorted({*modules, *witnesses}):
+        raise ValueError("extractor scope differs from requested module inventory")
+    freshness = replay_and_freshness(raw, args.replay_cache, fixtures,
+                                    **({'compiled_units': compiled_units}
+                                       if compiled_units is not None else {}),
+                                    **({'lake_package': args.extract_in.resolve()}
+                                       if args.extract_in is not None else {}))
+    report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
+    split_witnesses(report, modules, witnesses)
+    report["freshness"] = freshness
+    report["extractor"] = raw["extractor"]
+    if args.all_declarations:
+        report["selected_declaration_roots"] = raw["selected_declaration_roots"]
+        report["framework_candidates"] = framework_candidates(raw)
+    del raw
+    report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
+    report["build_checked"] = not args.no_build
+    report["policy_sha256"] = hashlib.sha256(args.policy.read_bytes()).hexdigest()
+    report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
+    return report
+
+
 def main(argv=None, *, compiled_units: dict | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".lake/assurance/assumptions.json")
@@ -1548,58 +1737,13 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
                         help="build the extractor's driver with Lake in a workspace that requires this "
                              "Lake package of the modules (PACKAGE/.lake/extraction; Lake's trace decides "
                              "when it runs again, the report comes from its build log) instead of "
-                             "elaborating it with `lake env lean`")
+                             "running the extractor afresh under `lake env`")
     args = parser.parse_args(argv)
     try:
-        policy = load_policy(args.policy)
-        sources = json.loads(args.sources.read_text()) if args.sources else {}
-        if not isinstance(sources, dict) or not all(isinstance(k, str) and isinstance(v, str)
-                                                    for k, v in sources.items()):
-            raise ValueError("--sources must map module names to source paths")
-        labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
-        modules = sorted(set(args.module)) if args.module else shipped_modules()
-        fixtures = {}
-        if not args.module:
-            if compiled_units is not None:
-                raise ValueError('default shipped audit requires its own registered witness compilation')
-            if not args.no_build:
-                # Complete the SAME selected-module prerequisite before freezing witness inputs.
-                # extract() must not change those Lake artifacts after the compiler snapshot.
-                run(['lake', 'build', *modules])
-            fixtures, compiled_units = compile_witness_fixtures(not args.no_build)
-        witnesses = sorted(m for m in fixtures if m not in modules)
-        if compiled_units is not None:
-            import theorem_universe
-            theorem_universe.verify_compilation(compiled_units)
-            if args.module:
-                if (modules != compiled_units['selected_modules'] or witnesses
-                        or 'witness_registry' in compiled_units):
-                    raise ValueError('compiled Unit context differs from the requested audit scope')
-            elif ('witness_registry' not in compiled_units
-                  or witnesses != compiled_units['selected_modules']):
-                raise ValueError('compiled witness context differs from the requested audit scope')
-        raw = extract(modules, bool(args.module) and not args.no_build, witnesses,
-                      all_declarations=args.all_declarations, extract_in=args.extract_in,
-                      **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
-        if raw["modules"] != sorted({*modules, *witnesses}):
-            raise ValueError("extractor scope differs from requested module inventory")
-        freshness = replay_and_freshness(raw, args.replay_cache, fixtures,
-                                        **({'compiled_units': compiled_units}
-                                           if compiled_units is not None else {}),
-                                        **({'lake_package': args.extract_in.resolve()}
-                                           if args.extract_in is not None else {}))
-        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
-        split_witnesses(report, modules, witnesses)
-        report["freshness"] = freshness
-        report["extractor"] = raw["extractor"]
-        if args.all_declarations:
-            report["selected_declaration_roots"] = raw["selected_declaration_roots"]
-            report["framework_candidates"] = framework_candidates(raw)
-        del raw
-        report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
-        report["build_checked"] = not args.no_build
-        report["policy_sha256"] = hashlib.sha256(args.policy.read_bytes()).hexdigest()
-        report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
+        # One toolchain-runtime digest for the audit and the processes it starts, checked again
+        # before the report is written (runtime_run).
+        with runtime_run():
+            report = audit_report(args, compiled_units)
         write_report(args.output, report)
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
         # Overwrite any old successful report; a failed build is never stale assurance evidence.

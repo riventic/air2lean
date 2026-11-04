@@ -544,13 +544,6 @@
   ],
   "tactics": [
     {
-      "tactic": "#assurance_audit",
-      "kind": "command",
-      "module": "tools.Assurance",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
       "tactic": "#audit_unchecked_theorem",
       "kind": "command",
       "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
@@ -582,18 +575,6 @@
       "tactic": "blkat_alloc",
       "kind": "syntax",
       "module": "ZigLean.Conc.Lemmas",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "bridge_close",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "bridge_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
       "status": "legacy-to-retire"
     },
     {
@@ -650,12 +631,6 @@
       "module": "ZigLean.Witness",
       "status": "target",
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
-    },
-    {
-      "tactic": "pure_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Fba",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "reachability_witness",
@@ -945,15 +920,6 @@
     },
     {
       "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Client.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
     }
   ]
 }

@@ -120,7 +120,16 @@ globs = ["Proofs.+"]
 
 [[lean_lib]]
 name = "AssuranceTools"
-roots = ["tools.Assurance", "tools.AllocatorAdmission", "tools.OutcomeContracts", "tools.KernelReplay"]
+roots = ["tools.Assurance", "tools.AllocatorAdmission", "tools.OutcomeContracts", "tools.KernelReplay",
+         "tools.AssuranceRun"]
+
+# The assurance extractor (tools/AssuranceMain.lean, scripts/assumptions.py): compiled, so that it
+# holds each module it audits or imports once. It elaborates nothing, but importing an environment
+# runs the imported modules' attribute handlers, which may call the interpreter.
+[[lean_exe]]
+name = "assurance"
+root = "tools.AssuranceMain"
+supportInterpreter = true
 
 [[lean_exe]]
 name = "air2lean"

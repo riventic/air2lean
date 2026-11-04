@@ -1591,9 +1591,9 @@ jobs:
         env:
           AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
         run: bash tests/roadmap/alloc-arena/check.sh
-      # P4a: the translated FixedBufferAllocator satisfies AllocSpec, the generated
-      # std.mem.Allocator wrappers equal Wrap.*, a client proved from the contracts, a mutant.
-      - name: Translated FixedBufferAllocator against AllocSpec
+      # P4a: the translated FixedBufferAllocator satisfies FAllocSpec, the generated
+      # std.mem.Allocator wrappers' contracts, a client proved from the contracts, a mutant.
+      - name: Translated FixedBufferAllocator against FAllocSpec
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: bash tests/roadmap/alloc-fba/check.sh
       # The list theorems over an open Allocator are not vacuous: their premises met by the
