@@ -2820,32 +2820,55 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
     let some g' ← substRecorded g' h k b
       | trace[fsym] "unifyBlocks: cannot substitute {b} by {k}"; s.restore; return none
     return some g'
+  -- `x.block` and `y.block` of one block: reducibly equal, or of one base (`Ptr.add`, …: the
+  -- kernel unfolds them, `block_add`)
+  let sameBlock (x y : Expr) : MetaM Bool := do
+    if ← withNewMCtxDepth (withReducible (isDefEq x y)) then return true
+    return x.isAppOfArity ``Zig.Ptr.block 1 && y.isAppOfArity ``Zig.Ptr.block 1 &&
+      ptrBase x.appArg! == ptrBase y.appArg!
   let mut someEqs := #[]
-  let mut blkEqs := #[]
   -- the facts `x.block = y.block` and `x.block = some k`: proof, `x.block`, other side
   let mut links : Array (Expr × Expr × Expr) := #[]
-  -- `some k = some b` (or `some b = some k`, `symm`) of a value `k`: proof, `some k`, `b`, `symm`
-  let mut optEqs : Array (Expr × Expr × Expr × Bool) := #[]
+  -- `some k = some b` of a value `k` (either orientation, the proof turned): proof, `some k`, `b`
+  let mut optEqs : Array (Expr × Expr × Expr) := #[]
   for d in hyps do
     let ty ← instantiateMVars d.type
     let some (_, l, r) := ty.eq? | continue
-    if isVal l then if let some b := someVar? r then optEqs := optEqs.push (d.toExpr, l, b, false)
-    if isVal r then if let some b := someVar? l then optEqs := optEqs.push (d.toExpr, r, b, true)
+    if isVal l then if let some b := someVar? r then optEqs := optEqs.push (d.toExpr, l, b)
+    if isVal r then
+      if let some b := someVar? l then optEqs := optEqs.push (← mkEqSymm d.toExpr, r, b)
     unless l.isAppOfArity ``Zig.Ptr.block 1 do continue
     if let some b := someVar? r then someEqs := someEqs.push (d, l, b)
-    else if r.isAppOfArity ``Zig.Ptr.block 1 then
-      blkEqs := blkEqs.push d; links := links.push (d.toExpr, l, r)
-    else if isVal r then links := links.push (d.toExpr, l, r)
-  for (e, v, b, symm) in optEqs do
+    else if r.isAppOfArity ``Zig.Ptr.block 1 || isVal r then links := links.push (d.toExpr, l, r)
+  -- first one variable per block (its value then substitutes them all)
+  for i in [0:someEqs.size] do
+    for j in [i+1:someEqs.size] do
+      let (d1, l1, b1) := someEqs[i]!
+      let (d2, l2, b2) := someEqs[j]!
+      if b1 == b2 then continue
+      -- `l1 = l2`
+      let link? : Option Expr ← do
+        if ← sameBlock l1 l2 then
+          pure (some (← mkExpectedTypeHint (← mkEqRefl l1) (← mkEq l1 l2)))
+        else
+          let mut found := none
+          for (e, a, b) in links do
+            if (← sameBlock a l1) && (← sameBlock b l2) then found := some e; break
+            if (← sameBlock a l2) && (← sameBlock b l1) then found := some (← mkEqSymm e); break
+          pure found
+      let some link := link? | continue
+      -- `some b1 = some b2`
+      let e ← mkEqTrans (← mkEqTrans (← mkEqSymm d1.toExpr) link) d2.toExpr
+      if let some g ← substSome e b1 b2 then return ← unifyBlocks g
+  for (e, v, b) in optEqs do
     if someEqs.any (·.2.2 == b) || (← isBlockVar b) then
-      let e ← if symm then mkEqSymm e else pure e
       if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
   for (d, l, b) in someEqs do
-    -- `l`, or the other side of a link `l = y` (`y = l` if `symm`)
-    let mut alts : Array (Expr × Option (Expr × Bool)) := #[(l, none)]
+    -- `l`, or the other side `x` of a link, with its proof of `x = l`
+    let mut alts : Array (Expr × Option Expr) := #[(l, none)]
     for (e, x, y) in links do
-      if ← withNewMCtxDepth (withReducible (isDefEq x l)) then alts := alts.push (y, some (e, true))
-      else if ← withNewMCtxDepth (withReducible (isDefEq y l)) then alts := alts.push (x, some (e, false))
+      if ← sameBlock x l then alts := alts.push (y, some (← mkEqSymm e))
+      else if ← sameBlock y l then alts := alts.push (x, some e)
     for (x, link) in alts do
       let v ← if x.isAppOfArity ``Zig.Ptr.block 1 then
           whnfR (mkApp (mkConst ``Zig.Ptr.block) (ptrBase x.appArg!)) else pure x
@@ -2854,33 +2877,9 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       unless ← withNewMCtxDepth (isDefEq x v) do continue
       let pf ← match link with
         | none => pure d.toExpr
-        | some (e, symm) => mkEqTrans (← if symm then mkEqSymm e else pure e) d.toExpr
+        | some e => mkEqTrans e d.toExpr
       let e ← mkExpectedTypeHint pf (← mkEq v (mkApp v.appFn! b))
       if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
-  for i in [0:someEqs.size] do
-    for j in [i+1:someEqs.size] do
-      let (d1, l1, b1) := someEqs[i]!
-      let (d2, l2, b2) := someEqs[j]!
-      if b1 == b2 then continue
-      -- `l1 = l2`
-      let link? : Option Expr ← do
-        if ← withReducible (isDefEq l1 l2) then pure (some (← mkEqRefl l1))
-        else if ptrBase l1.appArg! == ptrBase l2.appArg! then
-          pure (some (← mkExpectedTypeHint (← mkEqRefl l1) (← mkEq l1 l2)))
-        else
-          let mut found := none
-          for d in blkEqs do
-            let ty ← instantiateMVars d.type
-            let some (_, a, b) := ty.eq? | continue
-            if (← withReducible (isDefEq a l1)) && (← withReducible (isDefEq b l2)) then
-              found := some d.toExpr; break
-            if (← withReducible (isDefEq a l2)) && (← withReducible (isDefEq b l1)) then
-              found := some (← mkEqSymm d.toExpr); break
-          pure found
-      let some link := link? | continue
-      -- `some b1 = some b2`
-      let e ← mkEqTrans (← mkEqTrans (← mkEqSymm d1.toExpr) link) d2.toExpr
-      if let some g ← substSome e b1 b2 then return ← unifyBlocks g
   return g
 
 /-- The continuation of opening an existential `FAssn.ex F` of a precondition: a fresh goal

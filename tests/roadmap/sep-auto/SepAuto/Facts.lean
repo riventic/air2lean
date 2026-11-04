@@ -146,10 +146,9 @@ theorem value_block_fact (p : Ptr) (n : Nat) (q : Frac) (c : MemM Unit) (hp : p.
       (fun _ => bshare 0 q n) := by
   fsym [rule]
 
-/-- The same from `some 0 = some b` of a block variable `b` (`hp`: a number without a block fact
-stays a fact of the arithmetic solver). -/
-theorem value_block_eq (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
-    (hp : p.block = some b) (hb : some 0 = some b)
+/-- The same from `some 0 = some b` of a block variable `b` (one declared at `BlockId`, no block
+fact needed: `isBlockVar`). -/
+theorem value_block_eq (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit) (hb : some 0 = some b)
     (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
     FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
   fsym [rule]
@@ -166,6 +165,22 @@ substitution is recorded, `substRecorded`). -/
 theorem value_block_caller_term (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
     (hb : (gbuf n).ptr.block = some b)
     (rule : FTotalTriple (bshare b q n) c (fun _ => bshare b q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- Two block variables of one block (`hxy`), one of them equal to a value: both are that value
+(one variable per block first, then its value). -/
+theorem value_block_chain (x y : Ptr) (b1 b2 : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (h1 : x.block = some b1) (h2 : y.block = some b2) (hxy : x.block = y.block)
+    (hb : some 0 = some b1)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b2 q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The block of a pointer formed from a base whose block is a fact (`Ptr.add`: of one base). -/
+theorem value_block_add (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = some 0) (h : (p.add 4).block = some b)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
     FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
   fsym [rule]
 
