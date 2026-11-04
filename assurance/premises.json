@@ -139,7 +139,6 @@
     "ZigLean.Conc.Base.Threads": ["THR-08"],
     "ZigLean.Conc.Base.Tls": ["THR-08"],
     "ZigLean.Conc.Capture": ["THR-01"],
-    "ZigLean.Conc.Transfer": ["THR-08"],
     "ZigLean.Mem.Tls": ["THR-01"],
     "ZigLean.Conc.Tls": ["THR-01"],
     "ZigLean.Conc.Lemmas": ["THR-08"],
