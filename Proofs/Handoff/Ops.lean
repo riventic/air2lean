@@ -223,7 +223,7 @@ theorem wp_lockP (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
       ∃ rL, (proto Lo prodOf).inv (upd G' 1 (gH rp rL { ph := .hl })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, inv_hl hi'⟩)
     (mi.lock_wp fitsL rfl hp hLc 1 (gO rp { ph := .lk }) rfl ⟨rfl, rfl, nofun, nofun⟩
-      hpP io G m d hi)
+      hpP.unmetered io G m d hi)
 
 /-- **The producer's `unlock`** at `rdy`: it is out of the mutex, to its `signal`. -/
 theorem wp_unlockP (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
@@ -241,7 +241,7 @@ theorem wp_lockM (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
     (hi : (proto Lo prodOf).inv (upd G 0 (gO rM { ph := .run })) m) :
     (proto Lo prodOf).WP 0 (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       ∃ rL, (proto Lo prodOf).inv (upd G' 0 (gH rM rL { ph := .run })) m') G m d :=
-  mi.lock_wp fitsL rfl hp hLc 0 (gO rM { ph := .run }) rfl ⟨rfl, rfl, nofun, nofun⟩ hpM io G
+  mi.lock_wp fitsL rfl hp hLc 0 (gO rM { ph := .run }) rfl ⟨rfl, rfl, nofun, nofun⟩ hpM.unmetered io G
     m d hi
 
 /-- **`main`'s `unlock`** at `run`: out of the mutex, to the event's wait. -/
@@ -274,20 +274,16 @@ theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh}
       (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .st })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun i jr sn e h => hs 0 i jr sn e h⟩)
     (ci.signal_wp fitsC rfl hp 1 (gO rp { ph := .sg }) rfl (.inl rfl) rfl io G m d
-      hpl (fun rᵢ _ G₁ rX m₁ hg hu u i jr sn e hr =>
-        signal_seen (rp := rᵢ) G₁ rX m₁
-          (by change G₁ 1 = gO rᵢ { ph := .sg } at hg; exact hg) hu u i jr sn e hr) hi)
+      hpl.unmetered (fun G₁ rX m₁ hg hu u i jr sn e hr =>
+        signal_seen G₁ rX m₁ hg hu u i jr sn e hr) hi)
 
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
 theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    {rp : Res} (hpl : rp.Plain)
-    (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .st })) m) :
+    {rp : Res} (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .st })) m) :
     (proto Lo prodOf).WP 1 (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl rfl (.inl rfl) io G m d
-      (ei.set_plain_pre 1 rp hpl)
-      (fun r' hr => ei.set_plain_post 1 rp r' hpl hr) hi)
+    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl rfl (.inl rfl) io G m d hi)
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}

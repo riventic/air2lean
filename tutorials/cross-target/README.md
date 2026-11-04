@@ -52,7 +52,9 @@ lake env lean tutorials/cross-target/Main.lean
 the running thread is still `t`. It weakens the postcondition of `threadMutex.lock_wp` and never
 names the contended value, so the same file is the proof for both targets. Besides the lock's
 hypotheses it takes `hok : ok g` (`ok` marks the threads that may run the lock's code,
-`FLock.Fits`) and the contract's `Io` argument `io`, which `Thread.Mutex.lock` ignores.
+`FLock.Fits`), `hu` (the thread's part holds the unmetered fragment that pays a retry loop's
+ticks: the contract's caller resource) and the contract's `Io` argument `io`, which
+`Thread.Mutex.lock` ignores.
 
 To run it against macOS, copy the golden over the generated module and rebuild, then restore
 the file. The CI step "Build threadsync proofs (macOS translation)" does exactly this on the
