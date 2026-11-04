@@ -209,12 +209,15 @@ def pushResult (next : Option Ptr) (v : BitVec 32) : Except ErrName Ptr → FAss
 -- the store of `next` at the start of the node's region (not a default rule, `Full/Region.lean`)
 attribute [local fsym] FTotalTriple.regionStore0
 
+-- the 0.15.2 and 0.16.0 translations of `create` take longer to walk (`Proofs/Lists/Append.lean`)
+set_option maxHeartbeats 800000 in
 theorem push_grant (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (push ⟨ctx, vtp⟩ next v)
       (fun r => I.own ⋆ (pushResult I φ next v r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [create_spec ctx vtp fns I e φ hfit h]
 
+set_option maxHeartbeats 800000 in
 /-- **`push`** takes a fee and returns a new node in front of `next`, or `error.OutOfMemory` and
 the fee back, for every allocator that meets the contract. -/
 theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVec 64).toNat 3)

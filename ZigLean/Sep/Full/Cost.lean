@@ -19,12 +19,16 @@ function of a recursive call group (L8b). A step needs a credit or the plain mod
   (`FTotalTriple.ticks_ge`), from a start whose resources hold no credit, meter, receipt or
   `unmetered` fragment (`CreditFree`; the adequacy steps `Holds.addCredits` and `Holds.addSpent` put the meter and
   the receipts of the steps run so far in the frame). A statement with both counts its steps
-  exactly (`FTotalTriple.ticks_eq`), and no proof pays the same run with fewer credits:
-  `FTotalTriple.not_fewer_credits` makes a bound tight.
+  exactly (`FTotalTriple.ticks_eq`; `ticks_eq_post` also gives the final memory: its live bytes
+  are the frame's and a part that holds the postcondition), and no proof pays the same run with
+  fewer credits: `FTotalTriple.not_fewer_credits` makes a bound tight. The partial forms
+  (`FTriple.ticks_le`, `ticks_ge`, `ticks_eq_post`) count the steps of a run that returns; a
+  call of a concurrent function is read through `CTriple.toSolo`.
 * **Counted loops.** `FTotalTriple.loop_exact`: a loop whose measure drops by exactly one per body
   run and is zero at the exit runs its body `n + 1` times from the measure `n`; it spends `n + 1`
   credits and returns `n + 1` receipts. The client proves one body run with `fsym`
-  (`tick_credit` pays the step).
+  (`tick_credit` pays the step). `CTriple.loop_exact` is the same for a loop of a concurrent
+  function (partial correctness: a run that exits has run its body `n + 1` times).
 * **Admissible inputs** with the plain mode or with credits (`FAdmit.of_mem_plain`,
   `FAdmit.up_plain`, `FAdmit.of_mem_credits`).
 
