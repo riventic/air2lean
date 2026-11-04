@@ -50,6 +50,16 @@ obligation. The assertions below are the ones the translated code families share
 `…_unmetered_pre` admission. -/
 theorem Res.Plain.unmetered {r : Res} (h : r.Plain) : 0 < r.gh.ac.frag .unmetered := h.2
 
+/-- A part with a positive unmetered fragment keeps it next to more resource (a composite
+operation that adds resource to the caller's part still pays its later ticks). -/
+theorem Res.unmetered_rsum_left {a b : Res} (h : 0 < a.gh.ac.frag .unmetered) :
+    0 < (rsum a b).gh.ac.frag .unmetered := by
+  simp only [Ghost.add_ac, ACell.add_frag]; omega
+
+theorem Res.unmetered_rsum_right {a b : Res} (h : 0 < b.gh.ac.frag .unmetered) :
+    0 < (rsum a b).gh.ac.frag .unmetered := by
+  simp only [Ghost.add_ac, ACell.add_frag]; omega
+
 /-- An unticked operation admits every caller part. -/
 def anyPart : ThreadId → FAssn := fun _ _ => True
 

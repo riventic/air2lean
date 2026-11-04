@@ -189,6 +189,16 @@ theorem isReg_waits {c : CPh} (h : c.isReg = true) : c.waits = true := by
 theorem isReg_of_waits {c : CPh} (hw : c.waits = true) (hc : c.crit = false) : c.isReg = true := by
   cases c <;> simp_all [waits, crit, isReg]
 
+/-- A step of the code out of a registration that is not one goes out of the condition. -/
+theorem Next.out_of_reg {a b : CPh} (h : Next a b) (ha : a.isReg = true) (hb : b.isReg = false) :
+    b = .out := by
+  cases a <;> simp [isReg] at ha
+  cases b <;> simp_all [Next, isReg]
+
+/-- A step of the code into `out` comes from `out`, a registration or the signal code. -/
+theorem Next.to_out {a : CPh} (h : Next a .out) : a = .out ∨ a.isReg = true ∨ a.sig = true := by
+  cases a <;> simp_all [Next, isReg, sig]
+
 end CPh
 
 /-- A futex-epoch condition (module doc): its state and epoch words, and a thread's place in
@@ -264,6 +274,35 @@ def claims (L : FLock γ) (G : ThreadId → γ) (m : Mem) (T : Nat) : Nat :=
 def SStep (a b : Word.Entry) : Prop :=
   (wOf b = wOf a + 1 ∧ sOf b = sOf a) ∨ (wOf b = wOf a ∧ sOf a < sOf b ∧ sOf b ≤ wOf a) ∨
     (wOf b + 1 = wOf a ∧ sOf b + 1 = sOf a)
+
+/-- State write `p` of the writes `h` keeps `waiters` and does not lower `signals` (a post, or a
+write that changes neither). A client that counts the state's writes (the semaphore) reads runs
+of them (`SUp.chain`). -/
+def SUp (h : Array Word.Entry) (p : Nat) : Prop :=
+  wOf h[p]! = wOf h[p - 1]! ∧ sOf h[p - 1]! ≤ sOf h[p]!
+
+/-- **A run of such writes** after write `k`: the same `waiters`, and `signals` not lower. -/
+theorem SUp.chain {h : Array Word.Entry} {k : Nat} : ∀ n, k < n →
+    (∀ p, k < p → p < n → SUp h p) → wOf h[n - 1]! = wOf h[k]! ∧ sOf h[k]! ≤ sOf h[n - 1]!
+  | 0, hk, _ => absurd hk (Nat.not_lt_zero _)
+  | n + 1, hk, hs => by
+    rw [Nat.add_sub_cancel]
+    rcases Nat.lt_succ_iff_lt_or_eq.mp hk with hk | rfl
+    · obtain ⟨hw, hsl⟩ := SUp.chain n hk (fun p h1 h2 => hs p h1 (by omega))
+      obtain ⟨hw', hs'⟩ := hs n hk (by omega)
+      exact ⟨hw'.trans hw, Nat.le_trans hsl hs'⟩
+    · exact ⟨rfl, Nat.le_refl _⟩
+
+/-- `SUp` of an old write after a push. -/
+theorem SUp.push {h : Array Word.Entry} {x : Word.Entry} {p : Nat} (hp : p < h.size) :
+    SUp (h.push x) p ↔ SUp h p := by
+  unfold SUp; rw [FEvent.get_push_lt hp, FEvent.get_push_lt (by omega : p - 1 < h.size)]
+
+/-- `SUp` of a write of a prefix. -/
+theorem SUp.prefix {W : Word 32 4} {h : Array Word.Entry} {m : Mem} {p : Nat}
+    (hp : W.Prefix h m) (hph : p < h.size) (hs : SUp h p) : SUp (W.hist m) p := by
+  unfold SUp at hs ⊢
+  rw [Word.Prefix.get hp hph, Word.Prefix.get hp (by omega : p - 1 < h.size)]; exact hs
 
 /-- The newest state write has `signals = waiters`: every registered waiter has its signal, and
 no post can follow it (`SStep`). -/
@@ -411,6 +450,39 @@ theorem cl_upd_ne {G : ThreadId → γ} {m : Mem} {t u : ThreadId} {g' : γ} (hu
 theorem nreg_ext {G : ThreadId → γ} {T T' : Nat} (hT : ∀ u, T ≤ u → C.ph (G u) = .out)
     (h : T ≤ T') : C.nreg G T' = C.nreg G T :=
   tsum_ext h fun u hu => by rw [hT u hu]; rfl
+
+/-- The registered threads read only the places. -/
+theorem nreg_congr {G G' : ThreadId → γ} (h : ∀ u, C.ph (G' u) = C.ph (G u)) (T : Nat) :
+    C.nreg G' T = C.nreg G T :=
+  tsum_congr fun u _ => by rw [h u]
+
+/-- **A step that keeps the stepping thread's registration** (registered before iff after; the
+others' ghost values the same) and pushes a state write: the write keeps `waiters` (the count)
+and does not lower `signals` (the kinds of consecutive writes, `SStep`). -/
+theorem Inv.push_sup {G G' : ThreadId → γ} {t : ThreadId} {m m' : Mem}
+    {x : Word.Entry} (hI : C.Inv L G m) (hI' : C.Inv L G' m') (hG : ∀ u, u ≠ t → G' u = G u)
+    (hr : (C.ph (G' t)).isReg = (C.ph (G t)).isReg) (hx : C.S.hist m' = (C.S.hist m).push x) :
+    SUp (C.S.hist m') (C.S.hist m).size := by
+  have hpos := hI.spos
+  have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hx]; simp
+  have hprev : (C.S.hist m')[(C.S.hist m).size - 1]! = C.lastS m := by
+    rw [hx]; exact FEvent.get_push_lt (by omega)
+  have hlast : C.lastS m' = (C.S.hist m')[(C.S.hist m).size]! := by
+    unfold FCond.lastS; rw [hsz, Nat.add_sub_cancel]
+  have hnr : ∀ T, C.nreg G' T = C.nreg G T := fun T => tsum_congr fun u _ => by
+    by_cases hu : u = t
+    · subst hu; rw [hr]
+    · rw [hG u hu]
+  obtain ⟨T, hT, hw, -⟩ := hI.cnt
+  obtain ⟨T', hT', hw', -⟩ := hI'.cnt
+  have hww : wOf (C.S.hist m')[(C.S.hist m).size]! =
+      wOf (C.S.hist m')[(C.S.hist m).size - 1]! := by
+    rw [← hlast, hprev, hw, hw', ← nreg_ext hT (Nat.le_max_left T T'),
+      ← nreg_ext hT' (Nat.le_max_right T T'), hnr]
+  have hst := hI'.steps ((C.S.hist m).size - 1) (by omega)
+  rw [show (C.S.hist m).size - 1 + 1 = (C.S.hist m).size by omega] at hst
+  unfold SStep at hst
+  exact ⟨hww, by omega⟩
 
 theorem claims_ext {G : ThreadId → γ} {m : Mem} {T T' : Nat}
     (hT : ∀ u, T ≤ u → C.ph (G u) = .out) (h : T ≤ T') : C.claims L G m T' = C.claims L G m T := by
