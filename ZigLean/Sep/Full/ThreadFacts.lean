@@ -218,5 +218,79 @@ theorem FOwned.start0_facts {σ : Placement} {m : Mem} (hm : m = Mem.ofGlobals �
   subst hm
   exact ⟨FOwned.start0_plain σ, by rw [Conc.upd_self]; exact plain_intro, rfl, rfl, rfl, rfl⟩
 
+/-- **Bytes of a thread rest are the memory's**: a part `r` of the rest `rO` (`FOwned`) with the
+bytes `bs` at `p` (`0 < bs.size`): `p`'s block holds `bs` there. -/
+theorem FOwned.rest_bytes {own : ThreadId → Res} {rO r : Res} {m : Mem}
+    (ho : FOwned own rO m) {p : Ptr}
+    {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId} (hp : up (bytesAt p A S K bs) r)
+    (hpb : p.block = some b) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)
+    (hpos : 0 < bs.size) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
+  have cell : ∀ j (hj : j < bs.size), ∃ blk, m.blocks[b]? = some blk ∧
+      blk.bytes[p.off.toNat + j]? = some bs[j] := by
+    intro j hj
+    obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hp hpb hj
+    have hn := ho.rest_cell (hsub _ _ hfc)
+    cases e : m.heap (b, p.off.toNat + j) with
+    | none => rw [e] at hn; cases hn
+    | some c =>
+      rw [e] at hn
+      obtain ⟨blk, hb, -, hx, rfl⟩ := Mem.heap_some e
+      have hbyte := congrArg Cell.byte (Option.some.inj hn)
+      simp only [Cell.norm, hc] at hbyte
+      exact ⟨blk, hb, by rw [Array.getElem?_eq_getElem hx, hbyte, getElem!_pos bs j hj]⟩
+  obtain ⟨blk, hb, -⟩ := cell 0 hpos
+  obtain ⟨blk', hb', hlast⟩ := cell (bs.size - 1) (by omega)
+  rw [hb] at hb'; cases hb'
+  have hlt := (Array.getElem?_eq_some_iff.mp hlast).1
+  refine ⟨blk, hb, Array.ext (by simp only [Array.size_extract]; omega) fun j h1 h2 => ?_⟩
+  obtain ⟨blk', hb', hx⟩ := cell j h2
+  rw [hb] at hb'; cases hb'
+  simp only [Array.getElem_extract]
+  exact (Array.getElem?_eq_some_iff.mp hx).2
+
+/-- **A plain load of bytes of a thread rest** `rO` (`FOwned`): the bytes `bs` at `p` of a part
+`r` of the rest decode to `v`, at an aligned address. The load reads `v` and records the read, the
+block exists, and `r` has every byte read. -/
+theorem FOwned.loadRun {own : ThreadId → Res} {rO r : Res} {m : Mem}
+    (ho : FOwned own rO m) {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a A S : Nat}
+    {K' : BlockKind} {bs : Array Byte} {v : T} (hpb : p.block = some b) (hn : 0 < Enc.size T)
+    (hr : up (bytesAt p A S K' bs) r) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)
+    (hbs : bs.size = Enc.size T) (hdec : Enc.decode bs = pure v) (ha : (A + p.off.toNat) % a = 0)
+    (hK : K' ≠ .constGlobal) (hread : NoRace m b p.off.toNat (Enc.size T) .read) :
+    (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) ∧
+      b < m.blocks.size ∧
+      ∀ x, p.off.toNat ≤ x → x < p.off.toNat + Enc.size T → r.heap (b, x) ≠ none := by
+  have hpos : 0 < bs.size := by omega
+  obtain ⟨blk, hblk, hx⟩ := ho.rest_bytes hr hpb hsub hpos
+  obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hr hpb hpos
+  have hm := ho.rest_cell (hsub _ _ hfc)
+  rw [Nat.add_zero] at hm
+  obtain ⟨c, e⟩ : ∃ c, m.heap (b, p.off.toNat) = some c := by
+    cases e : m.heap (b, p.off.toNat) with
+    | none => rw [e] at hm; cases hm
+    | some c => exact ⟨c, rfl⟩
+  rw [e] at hm
+  obtain ⟨blk'', hblk'', hlo⟩ := Mem.heap_some_lo e
+  obtain ⟨blk', hblk', hl, _, hc'⟩ := Mem.heap_some e
+  rw [hblk] at hblk' hblk''; cases hblk'; cases hblk''
+  subst hc'
+  have hn' := congrArg Cell.norm (Option.some.inj hm)
+  rw [hcell] at hn'
+  simp only [Cell.norm, Cell.mk.injEq] at hn'
+  obtain ⟨_, hA, _, hk⟩ := hn'
+  have h0 : 0 ≤ p.off := by obtain ⟨_, _, h0, _⟩ := hr.1; exact h0
+  have hsz : p.off.toNat + bs.size ≤ blk.bytes.size := by
+    have := congrArg Array.size hx
+    simp only [Array.size_extract] at this; omega
+  have hacc : m.access p (Enc.size T) a = pure (b, blk, p.off.toNat) :=
+    access_of hpb hblk hl h0 (by omega) (by rw [hA]; exact ha) hlo
+  have hkind : blk.kind ≠ .constGlobal := fun e' => by
+    rw [e'] at hk; cases K' <;> simp_all [BlockKind.norm]
+  have hd : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v := by
+    rw [← hbs, hx]; exact hdec
+  exact ⟨load_run hacc hd hkind hread, (Array.getElem?_eq_some_iff.mp hblk).1,
+    fun x h1 h2 => (up_bytesAt_some hr hpb (b, x)).mpr ⟨rfl, h1, by omega⟩⟩
+
 end Full
 end Zig

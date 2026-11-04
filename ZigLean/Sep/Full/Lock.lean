@@ -1357,6 +1357,27 @@ theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi :
 
 /-! ## A recorded access to bytes of the protocol's rest -/
 
+/-- A recorded access of the current thread `t` to bytes that no thread's part has (`hno`), given
+the word's invariant after it (`hw`) and what the free lock owns after it (`hown`): the invariant
+holds after it. -/
+theorem Inv.record {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} {k : AccessKind} (hi : L.Inv G rX m) (hc : m.current = t)
+    (ht : t < m.threads.size) (hb : b < m.blocks.size)
+    (hw : L.WInv (L.pl G) (m.recordAt b o n k))
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none)
+    (hown : ∀ rL : Res, FHeap.Disjoint rL.heap rX.heap → L.Owns (L.pl G) m rL.heap.erase →
+      L.Owns (L.pl G) (m.recordAt b o n k) rL.heap.erase) :
+    L.Inv G rX (m.recordAt b o n k) := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj, hi.idle, hi.res⟩
+  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
+    rw [this]
+    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
+    rw [e]
+    exact ho.recordRest hc ht hb hno
+  · obtain ⟨h1, h2⟩ := hF hF'
+    exact ⟨h1, hown rL hLX h2⟩
+
 /-- A recorded access of the current thread `t` (not a write) to `n` bytes of the protocol's own
 rest `rX` (a read of a read-shared buffer): the invariant holds after it. -/
 theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
@@ -1364,7 +1385,7 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
     (ht : t < m.threads.size) (hb : b < m.blocks.size) (hn : 0 < n)
     (hX : ∀ x, o ≤ x → x < o + n → rX.heap (b, x) ≠ none) :
     L.Inv G rX (m.recordAt b o n k) := by
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  obtain ⟨rL, ho, -⟩ := hi.rest
   have hrest : ∀ x, o ≤ x → x < o + n → (rsum (L.wordR m) (rsum rL rX)).heap (b, x) ≠ none :=
     fun x h1 h2 => by
       have := hX x h1 h2
@@ -1386,19 +1407,24 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
           have h0 := LockWord.off_erase.mp hi.xoff (L.b, x) ⟨rfl, h3, h4⟩
           exact this h0
     · exact .inl hbb
-  have hLb : ∀ x, o ≤ x → x < o + n → rL.heap.erase (b, x) = none := fun x h1 h2 => by
-    have := (hLX (b, x)).resolve_right (hX x h1 h2)
-    simp [FHeap.erase, this]
-  have hjb : joinedB (m.recordAt b o n k) = joinedB m := rfl
-  refine ⟨hi.w.readK hk hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
-    hi.idle, hi.res⟩
-  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
-    rw [this]
-    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
-    rw [e]
-    exact ho.recordRest hc ht hb fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2)
-  · obtain ⟨h1, h2⟩ := hF hF'
-    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
+  exact hi.record hc ht hb (hi.w.readK hk hnw)
+    (fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2))
+    fun rL' hLX' h2 => h2.readK hb fun x h1 h2 => by
+      have := (hLX' (b, x)).resolve_right (hX x h1 h2)
+      simp [FHeap.erase, this]
+
+/-- A plain read by the current thread `t`, when every other thread has left the lock (`gone`), of
+bytes that no thread's part has (`hno`; e.g. bytes of the protocol's rest, the word's cells and the
+free lock's resource): the invariant holds after it. -/
+theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hb : b < m.blocks.size) (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none) :
+    L.Inv G rX (m.recordAt b o n .read) := by
+  have hs : ∀ u < m.threads.size, u ≠ m.current → L.pl G u = .gone := fun u hu h =>
+    hsole u hu (by rw [← hc]; exact h)
+  exact hi.record hc ht hb (hi.w.readAll (by rw [hc]; exact ht) hs) hno
+    fun _ _ h2 => h2.readAll (by rw [hi.w.csize, hc]; exact ht) hs
 
 end FLock
 
