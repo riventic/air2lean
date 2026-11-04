@@ -731,6 +731,13 @@ end Imp
 
 /-! ## Regions and shares (the planner's local steps) -/
 
+/-- A pointer restated from another pointer of its block (the walk's rebase of a literal pointer
+onto the region that holds it, `rebaseLitPtr?`). -/
+theorem ptr_eq_add_off_sub {q p : Ptr} (h : q.block = p.block) : q = p.add (q.off - p.off) := by
+  cases q; cases p
+  simp only [Ptr.add, Ptr.mk.injEq] at h ⊢
+  exact ⟨h, by omega⟩
+
 section Plan
 
 variable {p : Ptr} {A S : Nat} {K : BlockKind} {a a' : Nat} {bs bs' : Array Byte}
