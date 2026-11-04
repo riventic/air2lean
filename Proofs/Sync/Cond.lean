@@ -1,5 +1,6 @@
 import Proofs.Sync.IoMutex
 import ZigLean.Sep.Full.Cond
+import ZigLean.Sep.Full.LockSteps
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.VersionGate
 
@@ -113,6 +114,7 @@ theorem condS_lt0 {b : BitVec 32} (h : b = 0) :
 
 theorem debugAssert_true : (debug_assert true).run = some (.ok ()) := rfl
 
+
 section
 variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
@@ -161,7 +163,8 @@ def sigPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
 
 theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g) (D : Nat)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (D : Nat)
     (io : Io)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
@@ -171,16 +174,20 @@ theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       if Io_Condition_signal.again11 r.1 then sigInv P C t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
       else sigPost P C t g D r G' m' d') G m d := by
-  fsym [FCond.wp_signalAs hC condS_dec, FCond.wp_bump hC, FCond.wp_wakeEp hC,
+  fsym [hC.wp_tick_unmetered_exact (t := t) (g := g), hC.lpart,
+    FCond.wp_signalAs hC condS_dec, FCond.wp_bump hC, FCond.wp_wakeEp hC,
     hC.wp_projE (t := t), condS_eq, condS_bits, condS_sig, condS_signal_value, condS_add1, condS_gtWS,
     C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+    FCond.Signalled, FCond.lastS,
+    (fun (m : Mem) => Word.hist_congr (W := C.S) (m := m) (m' := m.ticked) rfl rfl),
     sigInv, sigPost, Io_Condition_signal.again11]
 
 /-- **`Io.Condition.signal`** outside or holding the mutex, preserving its complete resource,
 after every registration (`hseen`). -/
-theorem ioCond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+theorem ioCond_signal_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
@@ -190,8 +197,34 @@ theorem ioCond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       G m d := by
   fsym [FCond.wp_sloadAs hC condS_dec, condS_eq,
     WP.loop _ _ (sigInv P C t g d) (fun _ => 0) (sigPost P C t g d)
-      (sig_body hC hcost t g hgx hgo hsx d io hseen),
+      (sig_body hC hcost t g hgx hgo hsx hu d io hseen),
     sigInv, sigPost]
+
+/-- The signal contract checks its registration floor at the actual intermediate part.
+This implementation's proved singleton profile identifies that part with the original one. -/
+theorem ioCond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : payUnmetered t (L.part g))
+    (hseen : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G₁ rX m₁,
+      G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e,
+      C.ph (G₁ u) = .reg i jr sn e →
+        VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
+    (hi : P.inv (upd G t g) m) :
+    P.WP t (Io_Condition_signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', keepPart t (L.part g) r' ∧
+        P.inv (upd G' t (L.setPart g r')) m' ∧
+        ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
+  have hseenExact : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
+      C.ph (G₁ u) = .reg i jr sn e →
+        VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true := by
+    intro G₁ rX m₁ ht hU
+    exact hseen (L.part g) rfl G₁ rX m₁ (by simpa only [L.setPart_self] using ht) hU
+  refine WP.mono ?_ (ioCond_signal_wp_unmetered hC hcost hp t g hgx hgo hsx hu
+    io G m d hseenExact hi)
+  rintro _ G' m' d' ⟨hd, hc, hi', hsig⟩
+  exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hsig⟩
 
 /-! ## `wait`
 
@@ -210,6 +243,11 @@ theorem gR_lph (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn : Bool}
 
 theorem gR_set {g : γ} {i jr : Nat} {sn sn' : Bool} {e : BitVec 32} :
     C.set (gR L C g i jr sn e) (.reg i jr sn' e) = gR L C g i jr sn' e := C.set_set _ _ _
+
+/-- The waiter's `unlock`: registered, out of the lock's code. -/
+theorem gR_unlock (hC : L.Fits (C.prim L) P U ok) {g : γ} {i jr : Nat} {sn : Bool}
+    {e : BitVec 32} : L.set (C.set g (.reg i jr sn e)) .out rnil = gR L C g i jr sn e :=
+  (hC.set_l _ _ _ _).symm
 
 /-- After the waiter took the signal: `g` out of the lock's code. -/
 theorem gR_out (hC : L.Fits (C.prim L) P U ok) {g : γ} (hgx : C.ph g = .out) {i jr : Nat}
@@ -239,9 +277,36 @@ value it read, and its epoch value `e` while it has not seen the signal. -/
 def inv56 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
     (e : BitVec 32) (D : Nat) (s : Io_Condition_waitInnerLocals) (G : ThreadId → γ) (m : Mem)
     (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
-    ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
-    P.inv (upd G t (gR L C g i jr sn e)) m
+  d < D ∧ m.current = t ∧
+    ((s.prev_state = Packed.ofBits (1 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧
+        P.inv (upd G t (gR L C g i jr true e)) m))
+
+/-- The alternatives are exactly the original existential invariant. -/
+theorem inv56_iff_exists (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId)
+    (g : γ) (i jr : Nat) (e : BitVec 32) (D : Nat) (s : Io_Condition_waitInnerLocals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) :
+    inv56 P L C t g i jr e D s G m d ↔
+      d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
+        ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
+        P.inv (upd G t (gR L C g i jr sn e)) m := by
+  constructor
+  · rintro ⟨hd, hc, hs⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hs with ⟨hp, he, hi⟩ | ⟨hp, he, hi⟩ | ⟨hp, hi⟩
+    · exact ⟨false, 1, hp, .inl ⟨rfl, rfl⟩, fun _ => he, hi⟩
+    · exact ⟨false, 0x10001, hp, .inr rfl, fun _ => he, hi⟩
+    · exact ⟨true, 0x10001, hp, .inr rfl, (by intro h; cases h), hi⟩
+  · rintro ⟨hd, hc, sn, b, hp, hb, he, hi⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hb with ⟨rfl, rfl⟩ | rfl
+    · exact .inl ⟨hp, he rfl, hi⟩
+    · cases sn with
+      | false => exact .inr (.inl ⟨hp, he rfl, hi⟩)
+      | true => exact .inr (.inr ⟨hp, hi⟩)
 
 /-- The inner loop ends with no signal to take (`br55`), or with `t` holding the mutex again. -/
 def post56 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
@@ -253,64 +318,43 @@ def post56 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : 
 
 theorem loop56_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (i jr : Nat) (e : BitVec 32) (D : Nat) (io : Io) (s : Io_Condition_waitInnerLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : inv56 P L C t g i jr e D s G m d) :
     P.WP t ((Io_Condition_waitInner.loop56 C.S.ptr io L.ptr).run s) (fun r G' m' d' =>
       if Io_Condition_waitInner.again56 r.1 then inv56 P L C t g i jr e D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
       else post56 P L C t g i jr e D r G' m' d') G m d := by
-  obtain ⟨hD, hc, sn, b, hps, hb, hep, hi⟩ := h
-  unfold Io_Condition_waitInner.loop56
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
-  refine WP.bind ?_
-  by_cases hb2 : b = 0x10001
-  · have hg : gt false s.prev_state.signals 0 = true := by
-      rw [hps, condS_gtS (by rcases hb with ⟨h, -⟩ | h <;> simp [h])]; simp [hb2]
-    simp only [hg, ↓reduceIte]
-    simp only [StateT.run_bind, StateT.run_get]
-    simp only [pure_bind]
-    refine WP.bind (WP.callRC_ok (by rw [hps]; exact condS_subW hb2) ?_)
-    refine WP.bind (WP.callRC_ok (by rw [hps]; exact condS_subS hb2) ?_)
-    dsimp only
-    refine WP.bind (FCond.wp_consumeAs hC condS_dec (condS_take hb2) gR_ph
-      (gR_lph hC) hi fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' r hd hb' hi₁ => ?_⟩)
-    · -- the signal taken: `lock`
-      rw [gR_out hC hgx] at hi₁
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (ioMutex.lock_wp hC hcost rfl hLc t _
-        (L.ph_set _ _ _) ((hC.ok_set _ _ _).mpr hok) io G₁ m₁ k hi₁))))
-      rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
-      rw [L.set_set] at hi₂
-      repeat (first
-        | exact ⟨by omega, hc₂, .inr ⟨rfl, rL, hi₂⟩⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, pure_bind, Io_Condition_waitInner.again56,
-            Bool.false_eq_true, ↓reduceIte])
-      done
-    · -- the `cmpxchg` failed: the read value
-      obtain rfl := condS_eq hd
-      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callRC_ok (x := optPayload (some (Packed.ofBits b'))) rfl ?_))
-      repeat (first
-        | exact ⟨⟨by omega, hc₁, sn, b', rfl, hb', hep, hi₁⟩, .inl (by omega)⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
-            Io_Condition_waitInner.again56, ↓reduceIte])
-      done
-  · -- no signal: `(1, 0)`, before `t` saw the next epoch write
-    obtain ⟨rfl, rfl⟩ : b = 1 ∧ sn = false := by
-      rcases hb with h | h
-      · exact h
-      · exact absurd h hb2
-    have hg : gt false s.prev_state.signals 0 = false := by
-      rw [hps, condS_gtS (.inl rfl)]; decide
-    simp only [hg, Bool.false_eq_true, ↓reduceIte]
-    repeat (first
-      | exact ⟨hD, hc, .inl ⟨rfl, hep rfl, hi⟩⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, Io_Condition_waitInner.again56, Bool.false_eq_true,
-          ↓reduceIte])
-    done
+  fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr _ e),
+    ioMutexCode.lock_wp hC hcost (g := L.set g .out rnil)
+      (hg := L.ph_set g .out rnil)
+      (hok := (hC.ok_set g .out rnil).mpr hok),
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : BitVec 16 → (ThreadId → γ) → Mem → Nat → Prop}
+        (v : Io_Condition_State) (hv : v = Packed.ofBits (0x10001 : BitVec 32)) =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (sub false v.waiters (1 : BitVec 16)))
+        (v := v.waiters - 1) (by
+          have hs : sub false v.waiters (1 : BitVec 16) = pure (v.waiters - 1) := by
+            rw [hv]; exact condS_subW rfl
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : BitVec 16 → (ThreadId → γ) → Mem → Nat → Prop}
+        (v : Io_Condition_State) (hv : v = Packed.ofBits (0x10001 : BitVec 32)) =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (sub false v.signals (1 : BitVec 16)))
+        (v := v.signals - 1) (by
+          have hs : sub false v.signals (1 : BitVec 16) = pure (v.signals - 1) := by
+            rw [hv]; exact condS_subS rfl
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    FCond.wp_consumeAs (α := Io_Condition_State) hC condS_dec
+      (t := t) (i := i) (jr := jr) (e := e)
+      (g := gR L C g i jr _ e) (hg := gR_ph) (hgo := gR_lph hC) (exp := s.prev_state)
+      (new := { waiters := s.prev_state.waiters - 1, signals := s.prev_state.signals - 1 }),
+    condS_eq, condS_bits, condS_take,
+    condS_subW, condS_subS, condS_gtS, gR_ph, gR_lph hC, gR_set, gR_out hC hgx,
+    gR_ok hC hgx hok, gR, hC.lpart, hC.lph, L.part_set, L.ph_set, L.set_set,
+    C.ph_set, C.set_set, FCond.set_of hgx, inv56, post56, Io_Condition_waitInner.again56]
 
 /-- The outer loop's invariant: `t` registered, before the signal, with its epoch value `e`. -/
 def inv23 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
@@ -326,6 +370,7 @@ def post23 (P : Proto Tgt γ) (L : FLock γ) (g : γ) (t : ThreadId) (D : Nat)
 
 theorem loop23_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (i jr : Nat) (e : BitVec 32) (D : Nat) (io : Io)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
@@ -335,53 +380,31 @@ theorem loop23_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       if Io_Condition_waitInner.again23 r.1 then inv23 P L C t g i jr e D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitInnerLocals) => 0) s)
       else post23 P L g t D r G' m' d') G m d := by
-  obtain ⟨hD, hc, hep, hi⟩ := h
-  unfold Io_Condition_waitInner.loop23
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc, ↓reduceIte]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hi) ?_)
-  dsimp only
-  rw [FCond.ptr_ep, hep]
-  refine WP.bind (FCond.wp_waitEp hC (bits32 e) gR_ph (gR_lph hC) hi
-    (fun G₁ m₁ h1 h2 h3 h4 => hlive G₁ m₁ ⟨i, jr, e, by rw [h1, gR_ph]⟩ h2 h3 h4)
-    fun k hk G₁ m₁ hc₁ hi₁ => ?_)
-  dsimp only
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_)
-  dsimp only
-  rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_loadEp hC gR_ph (gR_lph hC) hi₁
-    fun k₂ hk₂ G₂ m₂ v hc₂ hcase => ?_)
-  -- the epoch read: `t`'s own value, or the next write
-  obtain ⟨sn, hsn, hi₂⟩ : ∃ sn : Bool, (sn = false → v = e) ∧
-      P.inv (upd G₂ t (gR L C g i jr sn e)) m₂ := by
-    rcases hcase with ⟨rfl, h⟩ | ⟨rfl, h⟩
-    · exact ⟨false, fun _ => rfl, h⟩
-    · exact ⟨true, nofun, by rw [gR_set] at h; exact h⟩
-  simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (FCond.wp_loadSAs hC condS_dec gR_ph (gR_lph hC) hi₂
-    fun k₃ hk₃ G₃ m₃ b r hc₃ hd hb hi₃ => ?_)
-  obtain rfl := condS_eq hd
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv56 P L C t g i jr e d) (fun _ => 0)
-    (post56 P L C t g i jr e d) (loop56_body hC hcost hLc t g hgx hok i jr e d io) _ G₃ m₃ k₃
-    ⟨by omega, hc₃, sn, b, rfl, hb, fun h' => hsn h', hi₃⟩))
-  rintro ⟨x, s'⟩ G₄ m₄ d₄ ⟨hd₄, hc₄, ⟨rfl, hep₄, hi₄⟩ | ⟨rfl, rL, hi₄⟩⟩
-  · repeat (first
-      | exact ⟨⟨by omega, hc₄, hep₄, hi₄⟩, .inl (by omega)⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, StateT.run_bind, isNonErr, ↓reduceIte,
-          Io_Condition_waitInner.again23])
-    done
-  · repeat (first
-      | exact ⟨by omega, rfl, hc₄, rL, hi₄⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, StateT.run_bind, Io_Condition_waitInner.again23,
-          Bool.false_eq_true, ↓reduceIte])
-    done
+  have hwaitLive : ∀ G₁ m₁, C.ph (G₁ t) = C.ph (gR L C g i jr false e) →
+      L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁ := by
+    intro G₁ m₁ hph haway hi hnot
+    exact hlive G₁ m₁ ⟨i, jr, e, by simpa only [gR_ph] using hph⟩ haway hi hnot
+  fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr false e),
+    hC.wp_projE (t := t) (G₀ := upd _ t (gR L C g i jr false e)),
+    FCond.wp_waitEp (ε := BitVec 32) (w := 32) hC (t := t) (io := io)
+      (e' := e) (i := i) (jr := jr) (e := e) (g := gR L C g i jr false e)
+      (bits32 e) (hlive := hwaitLive),
+    FCond.wp_loadEp hC (t := t) (i := i) (jr := jr) (e := e)
+      (g := gR L C g i jr false e),
+    FCond.wp_loadSAs (α := Io_Condition_State) hC condS_dec
+      (t := t) (i := i) (jr := jr) (e := e) (g := gR L C g i jr _ e)
+      (hg := gR_ph) (hgo := gR_lph hC),
+    WP.loop _ _ (inv56 P L C t g i jr e d) (fun _ => 0) (post56 P L C t g i jr e d)
+      (loop56_body hC hcost hLc t g hgx hok hu i jr e d io),
+    condS_eq, gR_ph, gR_lph hC, gR_set, gR, hC.lpart, hC.lph, L.part_set, L.ph_set,
+    C.ph_set, C.set_set, FCond.ptr_ep, inv23, post23, Io_Condition_waitInner.again23]
 
 /-- `waitInner(…, true)` (uncancelable) by the mutex's holder, out of the condition's code: it
 returns `ok`, holding the mutex again. -/
 theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgh : L.ph g = .holds) (hok : ok g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hgh : L.ph g = .holds) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
     (hhb : ∀ j < (C.Ep.hist m).size, VClock.le (C.Ep.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
@@ -392,48 +415,41 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     P.WP t (Io_Condition_waitInner C.S.ptr io L.ptr true) (fun r G' m' d' => d' < d ∧
       r = .ok () ∧ m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   have hi0 := hC.enterEn hgx hgh hone hhb hent hi
-  have hgh0 : L.ph (C.set g .en) = .holds := by rw [hC.lph]; exact hgh
-  unfold Io_Condition_waitInner
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hi0) ?_)
-  dsimp only
-  rw [FCond.ptr_ep]
-  refine WP.bind (WP.bind (FCond.wp_ldEp hC (C.ph_set _ _) hgh0 hi0
-    fun k₁ hk₁ G₁ m₁ v i hc₁ hi₁ => ?_))
-  refine WP.pure' ?_
-  dsimp only
-  simp only [StateT.run_bind, StateT.run_modify, pure_bind]
-  refine WP.bind (WP.bind (WP.bind (FCond.wp_regAs hC condS_bits1 ⟨_, condS_of 0⟩
-    (C.ph_set _ _) (by rw [hC.lph]; exact hgh0) hi₁ fun k₂ hk₂ G₂ m₂ jr r hc₂ hd hi₂ => ?_)))
-  obtain rfl := condS_eq hd
-  rw [C.set_set, C.set_set] at hi₂
-  refine WP.pure' ?_
-  dsimp only
-  simp only [StateT.run_bind]
-  rw [condS_lt0 rfl]
-  refine WP.bind (WP.callRC_ok debugAssert_true ?_)
-  simp only [StateT.run_pure]
-  refine WP.pure' ?_
-  dsimp only
-  simp only [StateT.run_bind]
-  -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (ioMutex.unlock_wp hC hcost rfl hLc t _
-    (by rw [hC.lph]; exact hgh) (by rw [hC.ok_calm _ _ .out rfl rfl, FCond.set_of hgx]; exact hok)
-    io G₂ m₂ k₂ hi₂ hc₂)))
-  rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₃⟩
-  rw [← hC.set_l] at hi₃
-  refine WP.mono ?_ (WP.loop _ _ (inv23 P L C t g i jr v d) (fun _ => 0) (post23 P L g t d)
-    (loop23_body hC hcost hLc t g hgx hok i jr v d io hlive) _ G₃ m₃ d₃ ⟨by omega, hc₃, rfl, hi₃⟩)
-  rintro ⟨x, s'⟩ G₄ m₄ d₄ ⟨hd₄, rfl, hc₄, rL, hi₄⟩
-  exact WP.pure' ⟨by omega, rfl, hc₄, rL, hi₄⟩
+  fsym [FCond.wp_ldEp hC (t := t) (g := C.set g .en),
+    FCond.wp_regAs (α := Io_Condition_State) hC (t := t)
+      (v := Packed.ofBits (1 : BitVec 32)) (g := C.set g (.ld _ _))
+      (hg := C.ph_set g _) (hgh := by rw [hC.lph]; exact hgh)
+      condS_bits1 ⟨_, condS_of 0⟩,
+    hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)),
+    ioMutex.unlock_wp hC hcost rfl hLc t (C.set g (.reg _ _ false _))
+      (by rw [hC.lph]; exact hgh)
+      ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
+        (by simpa only [FCond.set_of hgx] using hok)),
+    (fun (i jr : Nat) (e : BitVec 32) =>
+      WP.loop _ _ (inv23 P L C t g i jr e d) (fun _ => 0) (post23 P L g t d)
+        (loop23_body hC hcost hLc t g hgx hok hu i jr e d io hlive)),
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (debug_assert
+          (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+            (65535 : BitVec 16)))) (v := ()) (by
+          have hs : debug_assert
+              (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+                (65535 : BitVec 16)) = pure () := by
+            rw [condS_lt0 (b := (0 : BitVec 32)) rfl]
+            exact debugAssert_true
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    condS_eq, gR_ph, gR_lph hC, gR,
+    hC.lpart, hC.lph, hC.ph_l, gR_unlock hC, hC.ok_calm, hC.ok_set,
+    L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
+    FCond.ptr_ep, inv23, post23]
 
 /-- **`Io.Condition.waitUncancelable`** of Zig 0.16.0 (`waitInner(…, true)`). -/
 theorem ioCond_wait_wp_v016 (hC : L.Fits (C.prim L) P U ok)
     (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
-    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (io : Io)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
     (hhb : ∀ j < (C.Ep.hist m).size, VClock.le (C.Ep.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
@@ -444,16 +460,7 @@ theorem ioCond_wait_wp_v016 (hC : L.Fits (C.prim L) P U ok)
     P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp hq
-  unfold Io_Condition_waitUncancelable
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind]
-  refine WP.bind (WP.callC (WP.mono ?_ (waitInner_wp hC hcost hLc t g hgx hgh hok io G m d
-    hone hhb hent hlive hi)))
-  rintro r G₁ m₁ d₁ ⟨hd₁, rfl, hc₁, rL, hi₁⟩
-  simp only [StateT.run_pure, pure_bind, isNonErr]
-  exact WP.pure' (WP.pure' ⟨hd₁, hc₁, rL, hi₁⟩)
+  fsym [waitInner_wp hC hcost hLc t g hgx hgh hok hu io G m d hone hhb hent hlive hi]
 
 end
 
@@ -471,9 +478,36 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
 def inv45 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
     (e : BitVec 32) (D : Nat) (s : Io_Condition_waitUncancelableLocals) (G : ThreadId → γ)
     (m : Mem) (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
-    ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
-    P.inv (upd G t (gR L C g i jr sn e)) m
+  d < D ∧ m.current = t ∧
+    ((s.prev_state = Packed.ofBits (1 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧ s.epoch = e ∧
+        P.inv (upd G t (gR L C g i jr false e)) m) ∨
+      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧
+        P.inv (upd G t (gR L C g i jr true e)) m))
+
+/-- The alternatives are exactly the original existential invariant. -/
+theorem inv45_iff_exists (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId)
+    (g : γ) (i jr : Nat) (e : BitVec 32) (D : Nat) (s : Io_Condition_waitUncancelableLocals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) :
+    inv45 P L C t g i jr e D s G m d ↔
+      d < D ∧ m.current = t ∧ ∃ (sn : Bool) (b : BitVec 32), s.prev_state = Packed.ofBits b ∧
+        ((b = 1 ∧ sn = false) ∨ b = 0x10001) ∧ (sn = false → s.epoch = e) ∧
+        P.inv (upd G t (gR L C g i jr sn e)) m := by
+  constructor
+  · rintro ⟨hd, hc, hs⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hs with ⟨hp, he, hi⟩ | ⟨hp, he, hi⟩ | ⟨hp, hi⟩
+    · exact ⟨false, 1, hp, .inl ⟨rfl, rfl⟩, fun _ => he, hi⟩
+    · exact ⟨false, 0x10001, hp, .inr rfl, fun _ => he, hi⟩
+    · exact ⟨true, 0x10001, hp, .inr rfl, (by intro h; cases h), hi⟩
+  · rintro ⟨hd, hc, sn, b, hp, hb, he, hi⟩
+    refine ⟨hd, hc, ?_⟩
+    rcases hb with ⟨rfl, rfl⟩ | rfl
+    · exact .inl ⟨hp, he rfl, hi⟩
+    · cases sn with
+      | false => exact .inr (.inl ⟨hp, he rfl, hi⟩)
+      | true => exact .inr (.inr ⟨hp, hi⟩)
 
 /-- The inner loop ends with no signal to take (`br44`), or with `t` holding the mutex again. -/
 def post45 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
@@ -486,6 +520,7 @@ def post45 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : 
 
 theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (i jr : Nat) (e : BitVec 32) (D : Nat) (io : Io) (s : Io_Condition_waitUncancelableLocals)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (h : inv45 P L C t g i jr e D s G m d) :
     P.WP t ((Io_Condition_waitUncancelable.loop45 C.S.ptr io L.ptr).run s) (fun r G' m' d' =>
@@ -493,58 +528,36 @@ theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         (d' < d ∨ d' = d ∧
           (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitUncancelableLocals) => 0) s)
       else post45 P L C t g i jr e D r G' m' d') G m d := by
-  obtain ⟨hD, hc, sn, b, hps, hb, hep, hi⟩ := h
-  unfold Io_Condition_waitUncancelable.loop45
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
-  refine WP.bind ?_
-  by_cases hb2 : b = 0x10001
-  · have hg : gt false s.prev_state.signals 0 = true := by
-      rw [hps, condS_gtS (by rcases hb with ⟨h, -⟩ | h <;> simp [h])]; simp [hb2]
-    simp only [hg, ↓reduceIte]
-    simp only [StateT.run_bind, StateT.run_get]
-    simp only [pure_bind]
-    refine WP.bind (WP.callRC_ok (by rw [hps]; exact condS_subW hb2) ?_)
-    refine WP.bind (WP.callRC_ok (by rw [hps]; exact condS_subS hb2) ?_)
-    dsimp only
-    refine WP.bind (FCond.wp_consumeAs hC condS_dec (condS_take hb2) gR_ph
-      (gR_lph hC) hi fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' r hd hb' hi₁ => ?_⟩)
-    · -- the signal taken: `lock`
-      rw [gR_out hC hgx] at hi₁
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (ioMutex.lock_wp hC hcost rfl hLc t _
-        (L.ph_set _ _ _) ((hC.ok_set _ _ _).mpr hok) io G₁ m₁ k hi₁))))
-      rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
-      rw [L.set_set] at hi₂
-      repeat (first
-        | exact ⟨by omega, hc₂, .inr ⟨rfl, rL, hi₂⟩⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, pure_bind, Io_Condition_waitUncancelable.again45,
-            Bool.false_eq_true, ↓reduceIte])
-      done
-    · -- the `cmpxchg` failed: the read value
-      obtain rfl := condS_eq hd
-      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.bind (WP.callRC_ok (x := optPayload (some (Packed.ofBits b'))) rfl ?_))
-      repeat (first
-        | exact ⟨⟨by omega, hc₁, sn, b', rfl, hb', hep, hi₁⟩, .inl (by omega)⟩
-        | refine WP.pure' ?_
-        | simp only [StateT.run_pure, StateT.run_modify, StateT.run_bind, pure_bind,
-            Io_Condition_waitUncancelable.again45, ↓reduceIte])
-      done
-  · -- no signal: `(1, 0)`, before `t` saw the next epoch write
-    obtain ⟨rfl, rfl⟩ : b = 1 ∧ sn = false := by
-      rcases hb with h | h
-      · exact h
-      · exact absurd h hb2
-    have hg : gt false s.prev_state.signals 0 = false := by
-      rw [hps, condS_gtS (.inl rfl)]; decide
-    simp only [hg, Bool.false_eq_true, ↓reduceIte]
-    repeat (first
-      | exact ⟨hD, hc, .inl ⟨rfl, hep rfl, hi⟩⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, Io_Condition_waitUncancelable.again45,
-          Bool.false_eq_true, ↓reduceIte])
-    done
+  fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr _ e),
+    ioMutexCode.lock_wp hC hcost (g := L.set g .out rnil)
+      (hg := L.ph_set g .out rnil)
+      (hok := (hC.ok_set g .out rnil).mpr hok),
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : BitVec 16 → (ThreadId → γ) → Mem → Nat → Prop}
+        (v : Io_Condition_State) (hv : v = Packed.ofBits (0x10001 : BitVec 32)) =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (sub false v.waiters (1 : BitVec 16)))
+        (v := v.waiters - 1) (by
+          have hs : sub false v.waiters (1 : BitVec 16) = pure (v.waiters - 1) := by
+            rw [hv]; exact condS_subW rfl
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : BitVec 16 → (ThreadId → γ) → Mem → Nat → Prop}
+        (v : Io_Condition_State) (hv : v = Packed.ofBits (0x10001 : BitVec 32)) =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (sub false v.signals (1 : BitVec 16)))
+        (v := v.signals - 1) (by
+          have hs : sub false v.signals (1 : BitVec 16) = pure (v.signals - 1) := by
+            rw [hv]; exact condS_subS rfl
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    FCond.wp_consumeAs (α := Io_Condition_State) hC condS_dec
+      (t := t) (i := i) (jr := jr) (e := e)
+      (g := gR L C g i jr _ e) (hg := gR_ph) (hgo := gR_lph hC) (exp := s.prev_state)
+      (new := { waiters := s.prev_state.waiters - 1, signals := s.prev_state.signals - 1 }),
+    condS_eq, condS_bits, condS_take,
+    condS_subW, condS_subS, condS_gtS, gR_ph, gR_lph hC, gR_set, gR_out hC hgx,
+    gR_ok hC hgx hok, gR, hC.lpart, hC.lph, L.part_set, L.ph_set, L.set_set,
+    C.ph_set, C.set_set, FCond.set_of hgx, inv45, post45, Io_Condition_waitUncancelable.again45]
 
 /-- The outer loop's invariant (as `inv23`). -/
 def inv22 (P : Proto Tgt γ) (L : FLock γ) (C : FCond γ) (t : ThreadId) (g : γ) (i jr : Nat)
@@ -560,6 +573,7 @@ def post22 (P : Proto Tgt γ) (L : FLock γ) (g : γ) (t : ThreadId) (D : Nat)
 
 theorem loop22_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (i jr : Nat) (e : BitVec 32) (D : Nat) (io : Io)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
@@ -570,52 +584,30 @@ theorem loop22_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
         (d' < d ∨ d' = d ∧
           (fun _ => 0) r.2 < (fun (_ : Io_Condition_waitUncancelableLocals) => 0) s)
       else post22 P L g t D r G' m' d') G m d := by
-  obtain ⟨hD, hc, hep, hi⟩ := h
-  unfold Io_Condition_waitUncancelable.loop22
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hi) ?_)
-  dsimp only
-  rw [FCond.ptr_ep, hep]
-  refine WP.bind (FCond.wp_waitEp hC (bits32 e) gR_ph (gR_lph hC) hi
-    (fun G₁ m₁ h1 h2 h3 h4 => hlive G₁ m₁ ⟨i, jr, e, by rw [h1, gR_ph]⟩ h2 h3 h4)
-    fun k hk G₁ m₁ hc₁ hi₁ => ?_)
-  dsimp only
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_)
-  dsimp only
-  rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_loadEp hC gR_ph (gR_lph hC) hi₁
-    fun k₂ hk₂ G₂ m₂ v hc₂ hcase => ?_)
-  -- the epoch read: `t`'s own value, or the next write
-  obtain ⟨sn, hsn, hi₂⟩ : ∃ sn : Bool, (sn = false → v = e) ∧
-      P.inv (upd G₂ t (gR L C g i jr sn e)) m₂ := by
-    rcases hcase with ⟨rfl, h⟩ | ⟨rfl, h⟩
-    · exact ⟨false, fun _ => rfl, h⟩
-    · exact ⟨true, nofun, by rw [gR_set] at h; exact h⟩
-  simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (FCond.wp_loadSAs hC condS_dec gR_ph (gR_lph hC) hi₂
-    fun k₃ hk₃ G₃ m₃ b r hc₃ hd hb hi₃ => ?_)
-  obtain rfl := condS_eq hd
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (inv45 P L C t g i jr e d) (fun _ => 0)
-    (post45 P L C t g i jr e d) (loop45_body hC hcost hLc t g hgx hok i jr e d io) _ G₃ m₃ k₃
-    ⟨by omega, hc₃, sn, b, rfl, hb, fun h' => hsn h', hi₃⟩))
-  rintro ⟨x, s'⟩ G₄ m₄ d₄ ⟨hd₄, hc₄, ⟨rfl, hep₄, hi₄⟩ | ⟨rfl, rL, hi₄⟩⟩
-  · repeat (first
-      | exact ⟨⟨by omega, hc₄, hep₄, hi₄⟩, .inl (by omega)⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, StateT.run_bind, ↓reduceIte,
-          Io_Condition_waitUncancelable.again22])
-    done
-  · repeat (first
-      | exact ⟨by omega, rfl, hc₄, rL, hi₄⟩
-      | refine WP.pure' ?_
-      | simp only [StateT.run_pure, pure_bind, StateT.run_bind,
-          Io_Condition_waitUncancelable.again22, Bool.false_eq_true, ↓reduceIte])
-    done
+  have hwaitLive : ∀ G₁ m₁, C.ph (G₁ t) = C.ph (gR L C g i jr false e) →
+      L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁ := by
+    intro G₁ m₁ hph haway hi hnot
+    exact hlive G₁ m₁ ⟨i, jr, e, by simpa only [gR_ph] using hph⟩ haway hi hnot
+  fsym [hC.wp_tick_unmetered (t := t) (g := gR L C g i jr false e),
+    hC.wp_projE (t := t) (G₀ := upd _ t (gR L C g i jr false e)),
+    FCond.wp_waitEp (ε := BitVec 32) (w := 32) hC (t := t) (io := io)
+      (e' := e) (i := i) (jr := jr) (e := e) (g := gR L C g i jr false e)
+      (bits32 e) (hlive := hwaitLive),
+    FCond.wp_loadEp hC (t := t) (i := i) (jr := jr) (e := e)
+      (g := gR L C g i jr false e),
+    FCond.wp_loadSAs (α := Io_Condition_State) hC condS_dec
+      (t := t) (i := i) (jr := jr) (e := e) (g := gR L C g i jr _ e)
+      (hg := gR_ph) (hgo := gR_lph hC),
+    WP.loop _ _ (inv45 P L C t g i jr e d) (fun _ => 0) (post45 P L C t g i jr e d)
+      (loop45_body hC hcost hLc t g hgx hok hu i jr e d io),
+    condS_eq, gR_ph, gR_lph hC, gR_set, gR, hC.lpart, hC.lph, L.part_set, L.ph_set,
+    C.ph_set, C.set_set, FCond.ptr_ep, inv22, post22, Io_Condition_waitUncancelable.again22]
 
 /-- **`Io.Condition.waitUncancelable`** of Zig 0.17.0 (the loops inlined). -/
 theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
     (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
-    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (io : Io)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
     (hhb : ∀ j < (C.Ep.hist m).size, VClock.le (C.Ep.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
@@ -627,43 +619,35 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   subst hp hq
   have hi0 := hC.enterEn hgx hgh hone hhb hent hi
-  have hgh0 : L.ph (C.set g .en) = .holds := by rw [hC.lph]; exact hgh
-  unfold Io_Condition_waitUncancelable
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  refine WP.bind (WP.callMC_ptrProject (hC.projE hi0) ?_)
-  dsimp only
-  rw [FCond.ptr_ep]
-  refine WP.bind (WP.bind (FCond.wp_ldEp hC (C.ph_set _ _) hgh0 hi0
-    fun k₁ hk₁ G₁ m₁ v i hc₁ hi₁ => ?_))
-  refine WP.pure' ?_
-  dsimp only
-  simp only [StateT.run_bind, StateT.run_modify, pure_bind]
-  refine WP.bind (WP.bind (WP.bind (FCond.wp_regAs hC condS_bits1 ⟨_, condS_of 0⟩
-    (C.ph_set _ _) (by rw [hC.lph]; exact hgh0) hi₁ fun k₂ hk₂ G₂ m₂ jr r hc₂ hd hi₂ => ?_)))
-  obtain rfl := condS_eq hd
-  rw [C.set_set, C.set_set] at hi₂
-  refine WP.pure' ?_
-  dsimp only
-  simp only [StateT.run_bind]
-  rw [condS_lt0 rfl]
-  refine WP.bind (WP.callRC_ok debugAssert_true ?_)
-  simp only [StateT.run_pure]
-  refine WP.pure' ?_
-  dsimp only
-  simp only [StateT.run_bind]
-  -- `unlock`
-  refine WP.bind (WP.callC (WP.mono ?_ (ioMutex.unlock_wp hC hcost rfl hLc t _
-    (by rw [hC.lph]; exact hgh) (by rw [hC.ok_calm _ _ .out rfl rfl, FCond.set_of hgx]; exact hok)
-    io G₂ m₂ k₂ hi₂ hc₂)))
-  rintro _ G₃ m₃ d₃ ⟨hd₃, hc₃, hi₃⟩
-  rw [← hC.set_l] at hi₃
-  refine WP.mono ?_ (WP.loop _ _ (inv22 P L C t g i jr v d) (fun _ => 0) (post22 P L g t d)
-    (loop22_body hC hcost hLc t g hgx hok i jr v d io hlive) _ G₃ m₃ d₃ ⟨by omega, hc₃, rfl, hi₃⟩)
-  rintro ⟨x, s'⟩ G₄ m₄ d₄ ⟨hd₄, rfl, hc₄, rL, hi₄⟩
-  exact WP.pure' ⟨by omega, hc₄, rL, hi₄⟩
+  fsym [FCond.wp_ldEp hC (t := t) (g := C.set g .en),
+    FCond.wp_regAs (α := Io_Condition_State) hC (t := t)
+      (v := Packed.ofBits (1 : BitVec 32)) (g := C.set g (.ld _ _))
+      (hg := C.ph_set g _) (hgh := by rw [hC.lph]; exact hgh)
+      condS_bits1 ⟨_, condS_of 0⟩,
+    hC.wp_projE (t := t) (G₀ := upd _ t (C.set g .en)),
+    ioMutex.unlock_wp hC hcost rfl hLc t (C.set g (.reg _ _ false _))
+      (by rw [hC.lph]; exact hgh)
+      ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
+        (by simpa only [FCond.set_of hgx] using hok)),
+    (fun (i jr : Nat) (e : BitVec 32) =>
+      WP.loop _ _ (inv22 P L C t g i jr e d) (fun _ => 0) (post22 P L g t d)
+        (loop22_body hC hcost hLc t g hgx hok hu i jr e d io hlive)),
+    (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
+        {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} =>
+      WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
+        (x := StateT.lift (debug_assert
+          (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+            (65535 : BitVec 16)))) (v := ()) (by
+          have hs : debug_assert
+              (lt false (Packed.ofBits (0 : BitVec 32) : Io_Condition_State).waiters
+                (65535 : BitVec 16)) = pure () := by
+            rw [condS_lt0 (b := (0 : BitVec 32)) rfl]
+            exact debugAssert_true
+          simp only [StateT.run_lift, hs, pure_bind]) rfl),
+    condS_eq, gR_ph, gR_lph hC, gR,
+    hC.lpart, hC.lph, hC.ph_l, gR_unlock hC, hC.ok_calm, hC.ok_set,
+    L.part_set, L.ph_set, L.set_set, C.ph_set, C.set_set, FCond.set_of hgx,
+    FCond.ptr_ep, inv22, post22]
 
 end
 
@@ -674,6 +658,26 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
 /-- **`Io.Condition.waitUncancelable`** of this translation. -/
+theorem ioCond_wait_wp_unmetered (hC : L.Fits (C.prim L) P U ok)
+    (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
+    (hhb : ∀ j < (C.Ep.hist m).size, VClock.le (C.Ep.hist m)[j]!.clock (m.clocks[t]!) = true)
+    (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
+      U (upd G t (C.set g .en)) rX m)
+    (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
+      P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) (_hc : m.current = t) :
+    P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
+  first
+    | exact ioCond_wait_wp_v016 hC hcost hp hq hLc t g hgx hgh hok hu io G m d hone hhb hent
+        hlive hi
+    | exact ioCond_wait_wp_v017 hC hcost hp hq hLc t g hgx hgh hok hu io G m d hone hhb hent
+        hlive hi
+
+/-- The existing Plain wait follows from its unmetered fragment; it supplies no extra
+assumption about stack budgets to the actual condition or mutex code. -/
 theorem ioCond_wait_wp (hC : L.Fits (C.prim L) P U ok)
     (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (io : Io)
@@ -683,14 +687,31 @@ theorem ioCond_wait_wp (hC : L.Fits (C.prim L) P U ok)
       U (upd G t (C.set g .en)) rX m)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
-    (_hpl : (L.part g).Plain) (hi : P.inv (upd G t g) m) (_hc : m.current = t) :
+    (hplain : (L.part g).Plain) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
-  first
-    | exact ioCond_wait_wp_v016 hC hcost hp hq hLc t g hgx hgh hok io G m d hone hhb hent
-        hlive hi
-    | exact ioCond_wait_wp_v017 hC hcost hp hq hLc t g hgx hgh hok io G m d hone hhb hent
-        hlive hi
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d :=
+  ioCond_wait_wp_unmetered hC hcost hp hq hLc t g hgx hgh hok io G m d hone hhb hent
+    hlive hplain.2 hi hc
+
+/-- The actual unmetered wait preserves its exact caller part, with the protected resource
+returned separately after the re-lock. -/
+theorem ioCond_wait_wp_resource (hC : L.Fits (C.prim L) P U ok)
+    (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hone : ∀ u, u ≠ t → C.ph (G u) = .out)
+    (hhb : ∀ j < (C.Ep.hist m).size, VClock.le (C.Ep.hist m)[j]!.clock (m.clocks[t]!) = true)
+    (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
+      U (upd G t (C.set g .en)) rX m)
+    (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
+      P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r' rL, keepPart t (L.part g) r' ∧
+        P.inv (upd G' t (L.set (L.setPart g r') .holds rL)) m') G m d := by
+  refine WP.mono ?_ (ioCond_wait_wp_unmetered hC hcost hp hq hLc t g hgx hgh hok
+    io G m d hone hhb hent hlive hu hi hc)
+  rintro _ G' m' d' ⟨hd, hcur, rL, hi'⟩
+  exact ⟨hd, hcur, L.part g, rL, rfl, by simpa only [L.setPart_self] using hi'⟩
 
 end
 
@@ -699,7 +720,17 @@ def ioCond : CondImpl Tgt where
   wait := Io_Condition_waitUncancelable
   signal := Io_Condition_signal
   c := ioMutex.c
-  wait_wp := ioCond_wait_wp
-  signal_wp := ioCond_signal_wp
+  wait_pre := payUnmetered
+  wait_post := keepPart
+  wait_plain_pre _ _ := payUnmetered_plain
+  wait_plain_post _ _ _ _ hr := hr
+  signal_pre := payUnmetered
+  signal_during := keepPart
+  signal_post := keepPart
+  signal_unmetered_pre _ _ hu := hu
+  signal_unmetered_during _ _ _ _ hr := hr
+  signal_unmetered_post _ _ _ _ hr := hr
+  wait_wp_resource := ioCond_wait_wp_resource
+  signal_wp_resource := ioCond_signal_wp_resource
 
 end Sync

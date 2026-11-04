@@ -127,6 +127,10 @@ theorem Inv.grow {s : Bool} {m m' : Mem} (hi : Inv s m) (hg : Grows m m') : Inv 
 theorem Inv.cur {s : Bool} {m : Mem} (hi : Inv s m) (t : ThreadId) : Inv s { m with current := t } :=
   hi.grow (grows_current m t)
 
+/-- A step tick (`Zig.tick`) moves only the memory's step count. -/
+theorem Inv.ticked {s : Bool} {m : Mem} (hi : Inv s m) : Inv s { m with ticks := m.ticks + 1 } :=
+  hi.grow ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => VClock.le_refl _⟩
+
 /-- A race-free access by the current thread, which is not a write of `data`. -/
 theorem Inv.record {s : Bool} {m : Mem} {b o len : Nat} {k : AccessKind} (hi : Inv s m)
     (ht : m.current < 2) (hnw : ¬ (b = 0 ∧ k = .write))

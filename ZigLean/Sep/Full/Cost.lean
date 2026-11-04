@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.Tick
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Witness
+import ZigLean.Sep.Full.Conc
 
 /-!
 # Step counts: cost bounds over step ticks (`docs/sep-full-state.md` §Step ticks)
@@ -18,12 +19,16 @@ function of a recursive call group (L8b). A step needs a credit or the plain mod
   (`FTotalTriple.ticks_ge`), from a start whose resources hold no credit, meter, receipt or
   `unmetered` fragment (`CreditFree`; the adequacy steps `Holds.addCredits` and `Holds.addSpent` put the meter and
   the receipts of the steps run so far in the frame). A statement with both counts its steps
-  exactly (`FTotalTriple.ticks_eq`), and no proof pays the same run with fewer credits:
-  `FTotalTriple.not_fewer_credits` makes a bound tight.
+  exactly (`FTotalTriple.ticks_eq`; `ticks_eq_post` also gives the final memory: its live bytes
+  are the frame's and a part that holds the postcondition), and no proof pays the same run with
+  fewer credits: `FTotalTriple.not_fewer_credits` makes a bound tight. The partial forms
+  (`FTriple.ticks_le`, `ticks_ge`, `ticks_eq_post`) count the steps of a run that returns; a
+  call of a concurrent function is read through `CTriple.toSolo`.
 * **Counted loops.** `FTotalTriple.loop_exact`: a loop whose measure drops by exactly one per body
   run and is zero at the exit runs its body `n + 1` times from the measure `n`; it spends `n + 1`
   credits and returns `n + 1` receipts. The client proves one body run with `fsym`
-  (`tick_credit` pays the step).
+  (`tick_credit` pays the step). `CTriple.loop_exact` is the same for a loop of a concurrent
+  function (partial correctness: a run that exits has run its body `n + 1` times).
 * **Admissible inputs** with the plain mode or with credits (`FAdmit.of_mem_plain`,
   `FAdmit.up_plain`, `FAdmit.of_mem_credits`).
 
@@ -153,17 +158,63 @@ can be added (`Holds.addSpent`). -/
 structure CreditFree (r rF : Res) : Prop extends MeterFree r rF where
   spent : (r.gh.add rF.gh).ac.frag .spent = 0
 
+/-- **At most `N` steps, for a run that returns**: from a meter-free start, a run proved with `N`
+credits (partial correctness) that returns raises the step count by at most `N`. -/
+theorem FTriple.ticks_le {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
+    (h : FTriple (P ⋆ credits N) c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r)
+    (hs : m.FSeq) (hc : MeterFree r rF) {v : α} {m' : Mem} (hr : c.run m = pure (v, m')) :
+    m'.ticks ≤ m.ticks + N := by
+  have h' := h m _ _ (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
+  rw [hr] at h'
+  obtain ⟨r', hh', -, -⟩ := h'
+  have := hh'.ghost.2.2.2.tick.meter (m.ticks + N) (by simp [Ghost.credAuth]; omega)
+  omega
+
+/-- **At least `N` steps, for a run that returns**: from a start without receipts, a run that
+returns `N` receipts (partial correctness) raises the step count by at least `N`. -/
+theorem FTriple.ticks_ge {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
+    (h : FTriple P c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hp : P r) (hs : m.FSeq) (hsp : (r.gh.add rF.gh).ac.frag .spent = 0) {v : α} {m' : Mem}
+    (hr : c.run m = pure (v, m')) : m.ticks + N ≤ m'.ticks := by
+  have h' := h m _ _ (hh.addSpent hsp) hp hs
+  rw [hr] at h'
+  obtain ⟨r', hh', hq, -⟩ := h'
+  obtain ⟨r₁, r₂, -, rfl, -, -, -, g₂⟩ := hq
+  have := hh'.ghost.2.2.2.tick.spent
+  simp [g₂] at this
+  omega
+
+/-- **Exactly `N` steps, and the memory, for a run that returns**: from a credit-free start, a run
+proved with `N` credits and `N` receipts (partial correctness) that returns raises the step count by
+exactly `N`, and its memory's live bytes are a part `r'` that holds the postcondition and the
+frame's bytes (`FMatch`: the frame is untouched). -/
+theorem FTriple.ticks_eq_post {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
+    (h : FTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) {v : α} {m' : Mem}
+    (hr : c.run m = pure (v, m')) :
+    m'.ticks = m.ticks + N ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
+      FMatch m' (r'.heap ∪ rF.heap) ∧ Q v r' ∧ m'.FSeq := by
+  have hle := h.ticks_le hh hp hs hc.toMeterFree hr
+  have hge := h.ticks_ge (Holds.addCredits N hh hc.cred hc.auth hc.unmetered)
+    (sep_credits_intro hp N) hs (by simpa [Ghost.cred, Ghost.credAuth] using hc.spent) hr
+  have h' := h m _ _ (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
+  rw [hr] at h'
+  obtain ⟨r', hh', hq, hs'⟩ := h'
+  obtain ⟨r₁, r₂, -, rfl, hq, h0, -, -⟩ := hq
+  have hd := hh'.disj
+  have hm := hh'.heap
+  simp only [h0, FHeap.union_empty] at hd hm
+  exact ⟨by omega, r₁, hd, hm, hq, hs'⟩
+
 /-- **At most `N` steps**: from a meter-free start, a run proved with `N` credits raises the step
 count by at most `N`. -/
 theorem FTotalTriple.ticks_le {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
     (h : FTotalTriple (P ⋆ credits N) c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r)
     (hs : m.FSeq) (hc : MeterFree r rF) :
     ∃ v m', c.run m = pure (v, m') ∧ m'.ticks ≤ m.ticks + N := by
-  obtain ⟨v, m', r', hr, hh', -, -⟩ :=
+  obtain ⟨v, m', -, hr, -⟩ :=
     h.runs (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
-  refine ⟨v, m', hr, ?_⟩
-  have := hh'.ghost.2.2.2.tick.meter (m.ticks + N) (by simp [Ghost.credAuth]; omega)
-  omega
+  exact ⟨v, m', hr, h.toPartial.ticks_le hh hp hs hc hr⟩
 
 /-- **At least `N` steps**: from a start without receipts, a run that returns `N` receipts raises
 the step count by at least `N`. -/
@@ -171,12 +222,20 @@ theorem FTotalTriple.ticks_ge {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
     (h : FTotalTriple P c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res} (hh : Holds m r rF)
     (hp : P r) (hs : m.FSeq) (hsp : (r.gh.add rF.gh).ac.frag .spent = 0) :
     ∃ v m', c.run m = pure (v, m') ∧ m.ticks + N ≤ m'.ticks := by
-  obtain ⟨v, m', r', hr, hh', hq, -⟩ := h.runs (hh.addSpent hsp) hp hs
-  refine ⟨v, m', hr, ?_⟩
-  obtain ⟨r₁, r₂, -, rfl, -, -, -, g₂⟩ := hq
-  have := hh'.ghost.2.2.2.tick.spent
-  simp [g₂] at this
-  omega
+  obtain ⟨v, m', -, hr, -⟩ := h.runs hh hp hs
+  exact ⟨v, m', hr, h.toPartial.ticks_ge hh hp hs hsp hr⟩
+
+/-- **Exactly `N` steps, and the memory**: from a credit-free start, a run proved with `N` credits
+and `N` receipts returns, raises the step count by exactly `N`, and its memory's live bytes are a
+part that holds the postcondition and the frame's bytes (`FTriple.ticks_eq_post`). -/
+theorem FTotalTriple.ticks_eq_post {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {N : Nat}
+    (h : FTotalTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res}
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
+    ∃ v m', c.run m = pure (v, m') ∧ m'.ticks = m.ticks + N ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
+      FMatch m' (r'.heap ∪ rF.heap) ∧ Q v r' ∧ m'.FSeq := by
+  obtain ⟨v, m', -, hr, -⟩ :=
+    h.runs (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
+  exact ⟨v, m', hr, h.toPartial.ticks_eq_post hh hp hs hc hr⟩
 
 /-- **Exactly `N` steps**: from a credit-free start, a run proved with `N` credits and `N` receipts
 raises the step count by exactly `N`. -/
@@ -184,12 +243,8 @@ theorem FTotalTriple.ticks_eq {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
     (h : FTotalTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
     ∃ v m', c.run m = pure (v, m') ∧ m'.ticks = m.ticks + N := by
-  obtain ⟨v, m', hr, hle⟩ := h.ticks_le hh hp hs hc.toMeterFree
-  obtain ⟨v₂, m₂, hr₂, hge⟩ := h.ticks_ge (Holds.addCredits N hh hc.cred hc.auth hc.unmetered)
-    (sep_credits_intro hp N) hs (by simpa [Ghost.cred, Ghost.credAuth] using hc.spent)
-  rw [hr] at hr₂
-  obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj hr₂)
-  exact ⟨v, m', hr, by omega⟩
+  obtain ⟨v, m', hr, ht, -⟩ := h.ticks_eq_post hh hp hs hc
+  exact ⟨v, m', hr, ht⟩
 
 /-- **The step count is tight**: a run proved with `N` credits and `N` receipts cannot be paid
 with fewer credits: a credit-free start that holds the precondition refutes it. -/
@@ -277,6 +332,44 @@ theorem FTotalTriple.loop_exact
     refine loop_exact_run step s (n + 1) fun n' h => ?_
     obtain rfl : n = n' := by omega
     exact ih
+
+/-- **A loop that counts its body runs, for a call of a concurrent function** (`CTriple`, partial
+correctness): as `FTotalTriple.loop_exact`, one run of the body pays one credit and returns its
+receipt, and either repeats with the measure lowered by exactly one or exits at zero. From the
+measure `n` and `n + 1` credits, a run of the loop that exits has run its body `n + 1` times and
+returns `n + 1` receipts. The invariant of `CTriple.loop` carries the credits of the runs left and
+the receipts of the runs so far. -/
+theorem CTriple.loop_exact {Tgt : Type} {cbody : CM Tgt σ ε}
+    (step : ∀ s n, CTriple (inv s n ⋆ credits 1) (cbody.run s)
+      (fun r => floopExact again inv post n r ⋆ spent 1)) (s : σ) (N : Nat) :
+    CTriple (inv s N ⋆ credits (N + 1)) ((Zig.loop cbody again).run s)
+      (fun r => post r ⋆ spent (N + 1)) := by
+  refine (CTriple.loop (fun s => FAssn.ex fun n => ⟪n ≤ N⟫ ⋆
+      (inv s n ⋆ (credits (n + 1) ⋆ spent (N - n))))
+    (fun r => post r ⋆ spent (N + 1)) (fun s => ?_) s).pre fun _ h =>
+      ⟨N, sep_lift.mpr ⟨Nat.le_refl _, ?_⟩⟩
+  · refine CTriple.ex fun n => CTriple.lift fun hn => ?_
+    refine ((step s n).frame (R := credits n ⋆ spent (N - n))).conseq (fun _ h => ?_)
+      fun ⟨e, s'⟩ _ h => ?_
+    · rw [credits_add n 1] at h
+      exact (show (inv s n ⋆ ((credits n ⋆ credits 1) ⋆ spent (N - n))) =
+        ((inv s n ⋆ credits 1) ⋆ (credits n ⋆ spent (N - n))) by ac_rfl) ▸ h
+    · cases ha : again e
+      · simp only [floopExact, ha, Bool.false_eq_true, ↓reduceIte] at h ⊢
+        have h := (show (((⟪n = 0⟫ ⋆ post (e, s')) ⋆ spent 1) ⋆ (credits n ⋆ spent (N - n))) =
+          (⟪n = 0⟫ ⋆ ((post (e, s') ⋆ credits n) ⋆ (spent (N - n) ⋆ spent 1))) by ac_rfl) ▸ h
+        obtain ⟨rfl, h⟩ := sep_lift.mp h
+        rw [credits_zero, ← spent_add, Nat.sub_zero] at h
+        exact sep_mono_left (fun _ h => sep_emp.mp h) h
+      · simp only [floopExact, ha, ↓reduceIte] at h ⊢
+        obtain ⟨n', h⟩ := sep_ex.mp (sep_assoc h)
+        have h := (show ((⟪n = n' + 1⟫ ⋆ inv s' n') ⋆ (spent 1 ⋆ (credits n ⋆ spent (N - n)))) =
+          (⟪n = n' + 1⟫ ⋆ (inv s' n' ⋆ (credits n ⋆ (spent (N - n) ⋆ spent 1)))) by ac_rfl) ▸ h
+        obtain ⟨rfl, h⟩ := sep_lift.mp h
+        refine ⟨n', sep_lift.mpr ⟨by omega, ?_⟩⟩
+        rwa [← spent_add, show N - (n' + 1) + 1 = N - n' by omega] at h
+  · rw [Nat.sub_self, spent_zero]
+    exact sep_mono_right (fun _ h => sep_emp.mpr h) h
 
 end LoopExact
 

@@ -6,7 +6,10 @@ import ZigLean.Sep.Full.Cond
 
 The same condition contract applies in either phase. The post retains the exact initial
 ghost value and arbitrary assertions about both complete resource components, including
-knowledge and ghosts. The regression supplies only the contract of the implementation.
+knowledge and ghosts. The regression supplies only the contract of the implementation, a
+caller part with a positive unmetered fragment (which every implementation's `signal` admits
+and holds exactly: `CondImpl.signal_unmetered_pre`, `…_during`, `…_post`), and the floor
+`hseen` at the caller's own ghost value `g`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full
@@ -23,6 +26,7 @@ theorem signal_preserves {Tgt γ : Type} (ci : CondImpl Tgt)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (A B : FAssn) (ha : A (L.part g)) (hb : B (L.held g))
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →

@@ -1,6 +1,7 @@
 import Nested.Gen
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Auto
+import ZigLean.Sep.Full.Tick
 
 /-!
 # A translated nested loop in the full-state logic
@@ -18,6 +19,9 @@ import ZigLean.Sep.Full.Auto
 * `pairs_total`: `pairs` returns and adds `0 + 1 + … + (n - 1)` to `*acc`, under the explicit
   premise that the total fits in `u64`.
 
+Every body run takes a step (`Zig.tick`), so the invariants carry the plain mode (`plain`,
+`docs/sep-full-state.md` §Step ticks) and `fsym` pays each step with it (`tick_plain`).
+
 Its strength log (the legacy total triple on every `Mem.FSeqPlain` memory, the strength check of
 `docs/proof-framework.md`) is `tests/roadmap/strength-log/LoopTactics.lean`.
 -/
@@ -33,26 +37,29 @@ def cnt : Nat → Nat
 /-- `*p` holds `x`. -/
 def acc (p : Ptr) (x : Nat) : FAssn := FAssn.ex fun v : BitVec 64 => ⟪v.toNat = x⟫ ⋆ up (pts p 8 v)
 
-/-- Inner loop from `j0` with `*p = w` at entry: `*p = w + (j - j0)`. -/
+/-- Inner loop from `j0` with `*p = w` at entry: `*p = w + (j - j0)`; the steps run in the plain
+mode. -/
 def innerI (p : Ptr) (w : BitVec 64) (j0 : Nat) (s : pairsLocals) : FAssn :=
   ⟪j0 ≤ s.j.toNat ∧ s.j.toNat ≤ s.i.toNat ∧ w.toNat + (s.i.toNat - j0) < 2 ^ 64⟫ ⋆
-    acc p (w.toNat + (s.j.toNat - j0))
+    (acc p (w.toNat + (s.j.toNat - j0)) ⋆ plain)
 
 theorem inner_step (p : Ptr) (w : BitVec 64) (j0 : Nat) (i0 : BitVec 32) (s : pairsLocals) :
     FTotalTriple (⟪s.i = i0⟫ ⋆ innerI p w j0 s) ((pairs.loop14 p).run s)
       (fun r => if pairs.again14 r.1 then ⟪i0.toNat - r.2.j.toNat < i0.toNat - s.j.toNat⟫ ⋆ (⟪r.2.i = i0⟫ ⋆ innerI p w j0 r.2)
-        else ⟪r.1 = .br13 ∧ r.2.i = i0⟫ ⋆ acc p (w.toNat + (i0.toNat - j0))) := by
+        else ⟪r.1 = .br13 ∧ r.2.i = i0⟫ ⋆ (acc p (w.toNat + (i0.toNat - j0)) ⋆ plain)) := by
   unfold pairs.loop14 innerI acc
   fsym
 
-/-- The inner loop, as a rule for `fsym`: from `*p = w` it adds `i - j`. The loop's `MonoBind`
-proof is a parameter, so the rule's command unifies with any elaboration of it. -/
+/-- The inner loop, as a rule for `fsym`: from `*p = w` it adds `i - j`, its steps in the plain
+mode. The loop's `MonoBind` proof is a parameter, so the rule's command unifies with any
+elaboration of it. -/
 theorem inner_loop {mb : Lean.Order.MonoBind (MM pairsLocals)} (p : Ptr) (w : BitVec 64)
     (s : pairsLocals) (hj : s.j.toNat ≤ s.i.toNat) (hfit : w.toNat + (s.i.toNat - s.j.toNat) < 2 ^ 64) :
-    FTotalTriple (up (pts p 8 w))
+    FTotalTriple (up (pts p 8 w) ⋆ plain)
       ((@Zig.loop (MM pairsLocals) _ _ mb _ (pairs.loop14 p) pairs.again14).run s)
       (fun r => FAssn.ex fun t : pairsLocals => ⟪r = (.br13, t) ∧ t.i = s.i⟫ ⋆
-        FAssn.ex fun v : BitVec 64 => ⟪v.toNat = w.toNat + (s.i.toNat - s.j.toNat)⟫ ⋆ up (pts p 8 v)) :=
+        ((FAssn.ex fun v : BitVec 64 => ⟪v.toNat = w.toNat + (s.i.toNat - s.j.toNat)⟫ ⋆
+          up (pts p 8 v)) ⋆ plain)) :=
   (FTotalTriple.loop_measure (fun t => ⟪t.i = s.i⟫ ⋆ innerI p w s.j.toNat t) (fun t => s.i.toNat - t.j.toNat) _
     (inner_step p w s.j.toNat s.i) s).eupd (by unfold innerI acc; fsym_entail)
     |>.eupd_post fun ⟨e, t⟩ => EUpd.of_imp fun _ h => by
@@ -64,12 +71,12 @@ theorem cnt_mono {a b : Nat} (h : a ≤ b) : cnt a ≤ cnt b := by
   | refl => exact Nat.le_refl _
   | step _ ih => exact Nat.le_trans ih (Nat.le_add_left _ _)
 
-/-- Outer loop: `i` counts up to `n`; `*p = v + cnt i`. -/
+/-- Outer loop: `i` counts up to `n`; `*p = v + cnt i`; the steps run in the plain mode. -/
 def outerI (p : Ptr) (n : BitVec 32) (v : Nat) (s : pairsLocals) : FAssn :=
-  ⟪s.i.toNat ≤ n.toNat ∧ v + cnt n.toNat < 2 ^ 64⟫ ⋆ acc p (v + cnt s.i.toNat)
+  ⟪s.i.toNat ≤ n.toNat ∧ v + cnt n.toNat < 2 ^ 64⟫ ⋆ (acc p (v + cnt s.i.toNat) ⋆ plain)
 
 def outerPost (p : Ptr) (n : BitVec 32) (v : Nat) (r : pairsExit × pairsLocals) : FAssn :=
-  ⟪r.1 = .br4⟫ ⋆ acc p (v + cnt n.toNat)
+  ⟪r.1 = .br4⟫ ⋆ (acc p (v + cnt n.toNat) ⋆ plain)
 
 theorem outer_step (p : Ptr) (n : BitVec 32) (v : Nat) (s : pairsLocals) :
     FTotalTriple (outerI p n v s) ((pairs.loop5 p n).run s)
@@ -90,20 +97,22 @@ theorem outer_step (p : Ptr) (n : BitVec 32) (v : Nat) (s : pairsLocals) :
 
 theorem outer_loop {mb : Lean.Order.MonoBind (MM pairsLocals)} (p : Ptr) (n : BitVec 32) (w : BitVec 64)
     (s : pairsLocals) (hi : s.i = 0) (hfit : w.toNat + cnt n.toNat < 2 ^ 64) :
-    FTotalTriple (up (pts p 8 w))
+    FTotalTriple (up (pts p 8 w) ⋆ plain)
       ((@Zig.loop (MM pairsLocals) _ _ mb _ (pairs.loop5 p n) pairs.again5).run s)
       (fun r => FAssn.ex fun t : pairsLocals => ⟪r = (.br4, t)⟫ ⋆
-        FAssn.ex fun v : BitVec 64 => ⟪v.toNat = w.toNat + cnt n.toNat⟫ ⋆ up (pts p 8 v)) :=
+        ((FAssn.ex fun v : BitVec 64 => ⟪v.toNat = w.toNat + cnt n.toNat⟫ ⋆ up (pts p 8 v)) ⋆
+          plain)) :=
   (FTotalTriple.loop_measure (outerI p n w.toNat) (fun t => n.toNat - t.i.toNat) _
     (outer_step p n w.toNat) s).eupd (by unfold outerI acc; simp only [hi]; fsym_entail)
     |>.eupd_post fun ⟨e, t⟩ => EUpd.of_imp fun _ h => by
       obtain ⟨he, h⟩ := sep_lift.mp h
       exact ⟨t, sep_lift.mpr ⟨by simp only at he; rw [he], h⟩⟩
 
-/-- `pairs` adds `0 + 1 + … + (n - 1)` to `*acc`, under the premise that the sum fits. -/
+/-- `pairs` adds `0 + 1 + … + (n - 1)` to `*acc`, under the premise that the sum fits; its steps
+run in the plain mode. -/
 theorem pairs_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + cnt n.toNat < 2 ^ 64) :
-    FTotalTriple (up (pts p 8 v)) (pairs p n)
-      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat)))) := by
+    FTotalTriple (up (pts p 8 v) ⋆ plain) (pairs p n)
+      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat))) ⋆ plain) := by
   unfold pairs
   fsym [outer_loop]
 

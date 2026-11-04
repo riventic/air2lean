@@ -69,6 +69,7 @@ def nameLen.again3 : nameLenExit → Bool
   | _ => false
 
 def nameLen.loop3  : Zig.MM nameLenLocals nameLenExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i5 ← pure ((← get).i)
     let i6 ← Zig.intCast false false 64 i5 (safe := false)
@@ -115,6 +116,7 @@ def sumList.again6 : sumListExit → Bool
   | _ => false
 
 def sumList.loop6  : Zig.MM sumListLocals sumListExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).n)
     let i9 ← pure ((i8).isSome)

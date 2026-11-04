@@ -76,6 +76,7 @@ def adder.again5 : adderExit → Bool
   | _ => false
 
 def adder.loop5 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.CM Tgt adderLocals adderExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i7 ← pure ((← get).i)
     let i8 ← pure (Zig.lt false i7 p1)

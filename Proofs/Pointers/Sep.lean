@@ -94,14 +94,16 @@ private theorem addDown_group (p : Ptr) (t S : Nat) (a : AddDownInvocation) :
   fsym
   all_goals first
     | apply addDown_bound_step <;> assumption
-    | apply EUpd.of_imp
-      intro r hr
-      apply of_eq ?_ hr
+    | -- The entry tick is paid by `unmetered`; its receipt is dropped (`EUpd.spent_drop`).
+      refine EUpd.trans (EUpd.of_imp fun r hr => ?_) (EUpd.spent_drop (n := 1))
       dsimp [addDownPost]
-      rw [sep_left_comm_eq (sp t S a.depth) (up (pts p 8 (_ : BitVec 64))) unmetered,
-        sep_left_comm_eq (cur t) (up (pts p 8 (_ : BitVec 64))) (sp t S a.depth ⋆ unmetered)]
-      apply congrArg (fun v : BitVec 64 => up (pts p 8 v) ⋆
-        (cur t ⋆ (sp t S a.depth ⋆ unmetered)))
+      rw [show ∀ v : BitVec 64,
+          (cur t ⋆ (sp t S a.depth ⋆ (up (pts p 8 v) ⋆ (unmetered ⋆ spent 1)))) =
+            (spent 1 ⋆ (up (pts p 8 v) ⋆ (cur t ⋆ (sp t S a.depth ⋆ unmetered))))
+          from fun _ => by ac_rfl] at hr
+      apply of_eq ?_ hr
+      apply congrArg (fun v : BitVec 64 => spent 1 ⋆ (up (pts p 8 v) ⋆
+        (cur t ⋆ (sp t S a.depth ⋆ unmetered))))
       apply congrArg (BitVec.ofNat 64)
       apply addDown_sum_step <;> assumption
 

@@ -60,6 +60,7 @@ def mem_eqlBytes.again143 : mem_eqlBytesExit → Bool
   | _ => false
 
 def mem_eqlBytes.loop208 (i206 : BitVec 64) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit := do
+  Zig.callM Zig.tick
   let i209 ← pure ((← get).local201)
   match ← ((do
     let i211 ← pure (i209)
@@ -123,6 +124,7 @@ def mem_eqlBytes.loop208 (i206 : BitVec 64) : Zig.MM mem_eqlBytesLocals mem_eqlB
   | e => pure e
 
 def mem_eqlBytes.loop143 (i141 : Vector (BitVec 64) 4) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit := do
+  Zig.callM Zig.tick
   let i144 ← pure ((← get).local124)
   match ← ((do
     let i146 ← pure (i144)

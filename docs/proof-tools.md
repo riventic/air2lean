@@ -269,75 +269,49 @@ Zig 0.16.0's `translate-c` demotes a C function that uses `goto` to an `extern` 
 ("TODO goto"), so C goto state machines do not reach this form. The tokenizer proof names
 the 0.16.0 translation's loop identifiers and is qualified only there.
 
-## Model cost: allocation counts and counted loops (P06)
+## Model cost: step counts (P06)
 
-Import `ZigLean.Sep.Cost` for a qualified cost layer. It adds no field to `Mem` and
-changes no generated code. Each count is read off a run that the existing semantics
-already defines:
+The translator puts a step (`Zig.tick`) at every run of a loop body and at the entry of every
+function of a recursive call group; `Mem.ticks` counts them. A step needs a credit or the plain
+mode (`docs/sep-full-state.md` §Step ticks), so a cost bound is a resource of `FTotalTriple`: a
+precondition that holds `credits B` pays at most `B` steps. `ZigLean/Sep/Full/Cost.lean` reads
+counts off such triples:
 
-- Allocation requests: `Mem.allocs`, the allocator model's own count of `rawAlloc`
-  calls. A failed request counts too.
-- Retained allocations: `Mem.liveHeap`, the number of live `.heap` blocks.
-  `Mem.SameAllocs m m'` says that both counts are unchanged.
-- Loop steps: `LoopRuns body again s m k e s' m'`, a run of `loop body again` with
-  exactly `k` body runs. That is every repeat plus the final exit test.
-  `LoopRuns.run` gives the loop's ordinary run equation. `LoopRuns.unique` shows `k`
-  depends only on the start, so a proved count is exact.
+- `FTotalTriple.ticks_le` (a run paid with `N` credits makes at most `N` steps), `ticks_ge` (a
+  run that returns `N` receipts makes at least `N`) and `ticks_eq` (both: exactly `N`), from a
+  start whose resources hold no credit, meter, receipt or `unmetered` fragment (`CreditFree`).
+  `ticks_eq_post` also gives the final memory: its live bytes are the untouched frame and a part
+  that holds the postcondition. `FTriple.ticks_le`, `ticks_ge` and `ticks_eq_post` are the
+  partial forms, for a run that returns (a concurrent call through `CTriple.toSolo`).
+- `FTotalTriple.not_fewer_credits`: no proof pays the same run with fewer credits, so a bound
+  is tight.
+- `FTotalTriple.loop_exact`: a loop whose measure drops by exactly one per body run and is zero
+  at the exit runs its body `n + 1` times from the measure `n`; the client proves one body run
+  with `fsym`. `CTriple.loop_exact` is its partial form for a loop of a concurrent function.
+- `FTotalTriple.of_credits_plain`: a proof that pays its steps with credits gives the plain-mode
+  statement of the same program.
 
-The instrumentation lemmas hold for every successful run of a primitive from any
-memory. `store_cost` and `load_cost` give `SameAllocs`. `create_cost` gives one request,
-plus one retained block on success and none on `OutOfMemory`. `destroy_cost` gives one
-fewer retained block and no request. `loopRuns_exact` turns a ghost count that each
-repeat lowers by exactly one into an exact count. `loopRuns_bound` turns
-`loopMM_ghost`'s decreasing measure `n` into the bound `k ≤ n + 1`.
+`Lists.Linked.sum_exact` (`Proofs/Lists/Linked.lean`) states the cost of the generated `sum` of
+`examples/lists/lists.zig`: over `xs.length` items it pays `xs.length + 1` credits (one per node
+and the final null test) and returns as many receipts. `Proofs/Lists/Bounded.lean` shows that the
+bound is tight (`sum_not_within`, `sum_loop_not_within`: `xs.length` credits pay neither the
+function nor its loop, whatever the postcondition) and that `sum` returns the sum after exactly
+`xs.length + 1` steps, with the frame untouched and the same list in the final memory
+(`sum_steps`). `Lists.Alloc.freeAll_exact` (`Proofs/Lists/Alloc.lean`) states the loop-step count
+of `freeAll` for every allocator that meets the contract `CAllocSpec`: `xs.length + 1` credits
+(one per node and the final null test) and as many receipts; the allocator's calls take none.
+`freeAll_steps` reads it: every run of `freeAll` in one thread that returns has run exactly
+`xs.length + 1` steps (the contract is partial, so whether it returns is the allocator's).
 
-`Proofs/Lists/Cost.lean` applies the layer to the generated code of
-`examples/lists/lists.zig`:
-
-- `push_cost`: one allocation request, with one new retained block on success and
-  none on `OutOfMemory`.
-- `pushAll_cost`: a client of the generated `push`. After `n` successful pushes there
-  are exactly `n` more requests and `n` more retained blocks.
-- `freeAll_cost`: frees exactly `n` retained blocks in exactly `n + 1` body runs.
-- `sum_cost` and `sum_count_unique`: `sum` over `n` items runs its loop body exactly
-  `n + 1` times, allocates nothing, and returns the sum. The sum must fit in `u64`;
-  otherwise the checked add panics.
-- Capacity premises: `sum_count_capacity` (`n ≤ C` gives at most `C + 1` body runs) and
-  `pushAll_capacity` (at most `C` items gives at most `C` requests and at most `C` new
-  retained blocks).
-- `append_capacity`: `ArrayListUnmanaged(u32).append` with spare capacity
-  (`xs.length < cap`) makes no allocation request and retains no new block, for every
-  allocator policy. `Proofs/Lists/Append.lean`'s `append_cost_run` carries this
-  through the generated `ensureTotalCapacity` and `addOneAssumeCapacity`.
-
-These counts are model counts, premise SEM-05 (`docs/premises.md`). A body run, a load
-and an allocation request have no time or byte weight. Nothing here relates a count
-to CPU time, cache behavior, instruction counts, or a native allocator's memory use.
-Such a claim needs a separate calibration argument, which this layer does not
-provide. The counts cover only successful runs: a panic or divergence has no
-`LoopRuns` witness. Build with `lake build ZigLean.Sep.Cost Proofs.Lists.Cost`.
-
-### Resource-bounded total triples (P05)
-
-`ZigLean.Sep.Bounded` defines `TotalTripleWithin B P body again s Q`: from every framed
-precondition, the loop `loop body again` exits with `Q` after at most `B` body runs (a
-`LoopRuns` witness). `toTotal` gives the total triple; the bound is extra information.
-`count_le` applies the bound to the loop's single run, because the body is deterministic.
-The rules are `mono` (a larger bound is weaker), `conseq` and `frame`. `step` composes one
-body run (a `TotalTriple` of the body) with a bounded rest and adds one to the bound. `exit`
-is the one-run case. `then_total` composes a bounded loop with a total continuation.
-`of_ghost` is `TotalTriple.loop_ghost` with the bound `n + 1`. `not_within_of_count` and
-`not_within_of_stuck` refute a bound from an admissible input. A run with more body runs
-refutes it, and so does a loop with no counted run. So divergence cannot satisfy it
-vacuously.
-
-`Proofs/Lists/Bounded.lean` proves `sum_loop_within`: the generated `sum` loop over
-`xs.length` items exits within `xs.length + 1` body runs with the sum. `sum_loop_total` is
-the total triple it implies; the function-level total triple for `sum` is
-`Lists.Linked.sum_total` (`Proofs/Lists/Linked.lean`, full-state logic).
-`sum_loop_not_within` shows that the bound is tight. Only body runs of the counted loop
-count, and straight-line code outside it does not. Build with `lake build ZigLean.Sep.Bounded
-Proofs.Lists.Bounded`.
+These counts are model counts, premise SEM-05 (`docs/premises.md`). A step has no time weight:
+straight-line code outside a loop body or a recursive entry takes none, and nothing here relates
+a count to CPU time, cache behavior or instruction counts. Such a claim needs a separate
+calibration argument. The counts are read off sequential runs; a thread's steps pay with the same
+rules, and their counts are not read off yet. The allocation counts of the retired hand-written
+heap (`push_cost`, `pushAll_cost`, `append_capacity`, and the freed-block count of `freeAll_cost`)
+are not restated: with a translated allocator, "no leak" is a postcondition that owns no grant
+(`docs/alloc-spec.md`); `freeAll_cost`'s loop-step count is `freeAll_exact`. Build with
+`lake build ZigLean.Sep.Full.Cost Proofs.Lists.Bounded Proofs.Lists.Alloc`.
 
 ## Concrete runs of programs with loops (`unroll_sched`)
 

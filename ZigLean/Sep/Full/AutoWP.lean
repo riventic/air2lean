@@ -193,6 +193,30 @@ retain the zero-divisor error, and signed overflow uses the runtime's existing p
   · simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at h; exact h.2.symm
   · simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, ExceptT.run] at h
 
+/-- `WP.spawnC` with the new thread's ghost value chosen after the fork: the fork's result is a
+function of the memory, so a ghost value per result is one ghost value for the step (a start
+value exists for the case of no result). A protocol whose start values carry what the parent
+splits off at the fork (`Proto.init` with a part) states the split per fork result. -/
+theorem WP.spawnC_after {tgt : Tgt} {s : σ}
+    {Q : Except ErrName ThreadId × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      (∃ g₀, P.init tgt g₀) ∧ ∀ child m',
+        (Thread.fork.run { m₁ with current := t }).run = some (.ok (child, m')) →
+        ∃ g₀, P.init tgt g₀ ∧ Q (.ok child, s) (upd G₁ child g₀) m' k)
+    (hsf : P.spawnFails = false := by rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((Zig.spawnC tgt : CM Tgt σ (Except ErrName ThreadId)).run s) Q G m n := by
+  refine WP.spawnC (fun k hk => ?_) hsf hcost
+  obtain ⟨g, hi, hc⟩ := h k hk
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ?_⟩
+  obtain ⟨⟨g₁, hg₁⟩, hk'⟩ := hc G₁ m₁ hg hi₁
+  match hf : (Thread.fork.run { m₁ with current := t }).run with
+  | some (.ok (child, m')) =>
+    obtain ⟨g₀, hg₀, hq⟩ := hk' child m' hf
+    exact ⟨g₀, hg₀, fun c m'' hf' => by cases hf'; exact hq⟩
+  | some (.error _) => exact ⟨g₁, hg₁, fun _ _ hf' => by cases hf'⟩
+  | none => exact ⟨g₁, hg₁, fun _ _ hf' => by cases hf'⟩
+
 -- (after the general pure step: tried first, they leave facts instead of a run's equation)
 attribute [fsym] WP.liftMem_liftR
 attribute [fsym] WP.liftMem_add WP.liftMem_sub
@@ -201,7 +225,9 @@ attribute [fsym] WP.liftMem_add WP.liftMem_sub
 -- takes the partial triple (no termination needed) and a turn-counting one the total triple
 attribute [fsym] WP.liftMem_fownedT
 attribute [fsym] WP.liftMem_fowned
-attribute [fsym] WP.spawnC WP.joinC
+-- the spawn with the new thread's start value per fork result (`WP.spawnC_after`): a start value
+-- that the parent's split at the fork determines comes from the facts of that fork
+attribute [fsym] WP.spawnC_after WP.joinC
 
 end Proto
 end Conc

@@ -7184,14 +7184,32 @@ def wpNormFields (g : MVarId) (h : FVarId) (extra : Array Syntax) :
   return some (changed, ← g.withContext (wpCurrentHyp? h'), g)
 
 /-- `l = r` fixes its unknowns by unification alone: a side is an unknown, or both sides are the
-same constructor whose arguments again fix theirs (`(?x, ?y) = (a, b)`). Never through another
-function, which need not be injective: `f ?v = f a` would commit `?v := a` where a later fact
-(`?v = b` with `f a = f b`) fixes another value. -/
+same constructor whose arguments again fix theirs (`(?x, ?y) = (a, b)`). A side that is a
+definition whose value is a constructor's application (a ghost value `gJoin ?rp`, defined as
+`(⟨.out, rp, rnil⟩, .joins)`) is compared by that value: the constructor's arguments are then what
+fix the unknowns. Never through another function, which need not be injective: `f ?v = f a` would
+commit `?v := a` where a later fact (`?v = b` with `f a = f b`) fixes another value. -/
 partial def eqFixesUnknowns (l r : Expr) : MetaM Bool := do
   if l.isMVar || r.isMVar || !(l.hasExprMVar || r.hasExprMVar) then return true
+  let isCtor (e : Expr) : MetaM Bool := do
+    let .const c _ := e.getAppFn | return false
+    return (← getEnv).find? c matches some (.ctorInfo _)
+  -- (a definition's value, once: definitions without recursion unfold to a term without them).
+  -- Only a value that keeps every unknown of the application: an argument the value drops
+  -- (`def gK (r q) := (⟨.out, r, rnil⟩, .joins)`, `gK ?r ?q`) is not fixed by the equation,
+  -- though unifying the applications would commit it.
+  let byValue (e : Expr) : MetaM Expr := do
+    if ← isCtor e then return e
+    let some e' ← delta? e | return e
+    let e' := e'.headBeta
+    unless ← isCtor e' do return e
+    let kept ← getMVars e'
+    return if (← getMVars e).all kept.contains then e' else e
+  let l ← byValue l
+  let r ← byValue r
   let .const c _ := l.getAppFn | return false
   unless r.getAppFn.isConstOf c && l.getAppNumArgs == r.getAppNumArgs do return false
-  let some (.ctorInfo _) := (← getEnv).find? c | return false
+  unless ← isCtor l do return false
   l.getAppArgs.zip r.getAppArgs |>.allM fun (a, b) => eqFixesUnknowns a b
 
 mutual

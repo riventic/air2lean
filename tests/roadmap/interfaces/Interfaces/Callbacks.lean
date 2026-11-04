@@ -113,6 +113,7 @@ def forEach.again7 : forEachExit → Bool
   | _ => false
 
 def forEach.loop7 [Ext] (p0 : Zig.Slice) (p1 : Zig.Ptr) (p2 : Zig.Ptr) (i5 : BitVec 64) : Zig.CM Tgt forEachLocals forEachExit := do
+  Zig.callMC Zig.tick
   let i8 ← pure ((← get).local3)
   match ← ((do
     let i10 ← pure (i8)

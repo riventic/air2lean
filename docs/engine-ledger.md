@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 151 rows, 61 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 155 rows, 65 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -21,6 +21,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
+| [canonical-tick-certification](#row-canonical-tick-certification) | Match emitted ticks with canonical full-memory AIR certificates | Task09 L8b-2 emitter draft; PR393 comments 6270932171 and 6278792907 | - | - |
+| [protocol-tick-transport](#row-protocol-tick-transport) | Transport protocol observations and caller resources across composite ticks | Task09 L8b-2; Task07 challenges; PR393 comments 6271005146 and 6278792907 | - | - |
 | [kernel-proj-ctor](#row-kernel-proj-ctor) | Projections of values that reduce to constructors are left to the kernel as definitional steps | L8e (Proofs.Sync.Cond loop56_body: kernel deep recursion, coordinator decision 2026-11-04: fix at the root, candidate (b)) | - | - |
 | [lake-needs-race](#row-lake-needs-race) | Lake 4.34 creates the jobs of concurrent `needs` facet keys twice and can deadlock | lake-hang lane (arc hangs of the assurance extraction and kernel-replay builds, 2026-11-04) | `scripts/assumptions.py`, `tests/roadmap/fixtures-lake/test_needs_race.py` | When a toolchain update fixes the race, the control assertion of tests/roadmap/fixtures-lake/test_needs_race.py fails. Then delete assumptions.needs_first (its callers build only the generated modules again), delete the test, and close this row. |
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
@@ -82,6 +84,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 | [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 | [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
+| [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row. |
+| [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
 
 ## Closed rows
 
@@ -195,6 +199,28 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
+
+<a id="row-canonical-tick-certification"></a>
+### #canonical-tick-certification Match emitted ticks with canonical full-memory AIR certificates
+
+Status: **open**. Requester: Task09 L8b-2 emitter draft; PR393 comments 6270932171 and 6278792907.
+
+Note: The approval excludes the separate STK factual schema, authenticated producer/case boundary and carrier reductions; drops remain off. Checks retain their actual source bindings. The original modeled-panic mangling placeholder and predicted induction-completeness boundary (PR510/6285634841) were subsequently resolved by exact source-identity lowering and the existing compiler factual query, qualified in the actual15d workflow. Native SCC/effects/cost policy stays canonical; derived executable function/helper references serve proof partition only.
+
+Progress: Maintainer approved A/1a on PR510/6284852746. Actual15d172292 passes the producer, fresh complete two-call certificate, recursive executable clique using actual compiler order, wrong-order rejection and modeled-panic certificate/native policy controls (report983f38d4; PR510/6294412539). Program/importers pass at9ca3; the full arbitrary-record/default-limit RenumberOracle leaf passes atbd2f (reporta3c40cea). Earlier failures remain attributed to their original sources. The existing-Assurance factual query preserves exact rendered bytes, compiler EqnInfo order/permutations/induction binders and fail-closed lookup; it adds no proof interface or audit admission. After ordinary main8bb/#529 integration, the incremental producer and official selected14-case/12-output Sync/Threadsync/IoGroup Gen preparation pass at7a934, with exactly116 tick insertions committedec0cba647. Remaining sumTo/cost controls, affected actual clients and alternate/native rows, full required output freshness, genuine inventory receipts and supported prepush are unqualified. The draft remains open, not READY.
+
+Request: Derive one canonical instrumentation policy from existing whole-program memory/concurrency and original call-group classification, and use it consistently in Emit, Sem and Certificate for every supported version/backend and translate-c input. Preserve pure M/Result and viewed-slice behavior, exact full-Mem equality in loop/function certificates, and fail-closed excluded fragments. Exact boundary: a memory loop body that exits immediately now emits Zig.tick and returns ticks+1, while current Sem.execLoop/Certificate.loopCert return the old ticks. Unconditionally ticking Sem also changes pure/viewed certificates. Do not erase counters, add an unchecked caller Boolean/premise, duplicate graph analysis, reject previously supported memory loops, or claim support for the existing recursive-memory stack-frame certificate gap. Add matched positive and fail-closed controls before qualifying generated artifacts.
+
+<a id="row-protocol-tick-transport"></a>
+### #protocol-tick-transport Transport protocol observations and caller resources across composite ticks
+
+Status: **open**. Requester: Task09 L8b-2; Task07 challenges; PR393 comments 6271005146 and 6278792907.
+
+Note: A/1a/1b are approved, not pending. Darwin uses genuine spatial caller framing under the existing primitive contract (PR510/6287119784), without a wrapper tick; STD-06/OSL-01 debt is unchanged. The ignored-Plain adapter remains unapplied; neither nil parts nor cost=None imply resource admission. Every pass retains its original source/artifact identity. The unresolved orphan is kernel-rejected automation, not an accepted unsound theorem; no completed whole-client or cost-bound claim is made.
+
+Progress: Maintainer approved composite ticks1b on PR510/6284852746 and the resource-polymorphic interface on6290377096; native atomic/futex Step/Aux stay exact. Generic caller-resource/Fits/Mutex/Word/IoMutex passes90 jobs at553e (#562 folds the caller-resource record into the `op_pre`/`op_post`/`op_unmetered_*` fields of MutexImpl/CondImpl; EventImpl.set keeps main's caller-part-free `set_wp`); actual Cond/Event caller-post/during-floor generics pass at0f64 after #529/main8bb integration. The single strengthened tick proof exposes exact m.ticked and derives old callback headers unchanged; that rule and real Deadline pass at079f. Real Sync.IoMutex and IoGroup.Lock constructor passes retain their original bindings. Existing affected program results and resource guards are explicit in D3; named Plain/unmetered specializations do not claim old unrestricted admission. Remaining native-Lake constructors fail at2361437d: actual signal tick observation is resolved, but applied simp-term generalization, nested decoder normalization and a rejected orphan Nat-to-Inv(wait) obligation need closure. The raw printer's outer-context warning does not prove variable escape. Separate generic engine proposals are source-only under the active engine writer, with no manual walk, new premise or limit increase. Actual retained families, alternate variants, current receipts and readiness remain pending.
+
+Request: Use existing Full triples and fsym to pay each composite tick from the current caller part and re-establish arbitrary observation U and the protocol invariant at exact m.ticked and the actual resulting setPart ghost state. Frame the complete held/protected resource, phase/role, rest and other threads. Preserve native LockWord.Step and Mem.Aux. Exact boundary: U(m):m.ticks=0 is stable under current native Step, whose Aux fixes ticks, but not after a tick from zero. Plain availability alone does not prove U transport; cost=None does not imply unmetered/Plain. A metered operation must expose its actual setPart post, not the original exact ghost state, and admission must cover internal busy phases rather than require lock-code ok. Resolve the common construction obligation without a new judgment, tactic, hidden premise or module-specific automation. Every approved public statement correction must list old/new contracts and carry D5 no-cost-bound reporting in the same correcting PR.
 
 <a id="row-kernel-proj-ctor"></a>
 ### #kernel-proj-ctor Projections of values that reduce to constructors are left to the kernel as definitional steps
@@ -1762,3 +1788,29 @@ Request: Row `literal-pointer-rebase` (#604) restates a command's literal pointe
 Workaround sites: `ZigLean/Sep/Full/Auto.lean`
 
 Deletion plan: Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.
+
+<a id="row-fsym-unknown-fvar-mutex-loop"></a>
+### #fsym-unknown-fvar-mutex-loop fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body
+
+Status: **open**. Requester: L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan).
+
+Note: Recorded with #562 (L8 ticks).
+
+Progress: open
+
+Request: `Proofs/Threadsync/ThreadMutex.lean` `loopD_body` (the macOS `osUnfairLockTry` repeat) walked by `fsym [wp_casD hP hc1 (g := g₀), wp_waitD hP, hset, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD]` fails with `unknown free variable _fvar.…` at the `fsym` call; `hset : ∀ q h, L.set g₀ q h = L.set g q h` is a local hypothesis about `g₀`, which the walk's case split of `hg₀ : g₀ = g ∨ g₀ = L.set g .spin rnil` (or a `subst` inside the engine) removes from the context while a rule instance still mentions it. Only the darwin translation elaborates this branch (Linux uses the futex path). Repro on #562 (before the hand walk): restore the `fsym` call above in `loopD_body`, then `python3 -B scripts/theorem-inventory.py swap-build --lake "$(elan which lake)" --swap threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean -- Proofs.Threadsync.ThreadMutex`. Reproduced with and without #562's `eqFixesUnknowns` change. Needed: every term fsym installs is re-abstracted over (or checked against) the local context it runs in after a case split or substitution, and a local hypothesis whose fvars leave the context is re-instantiated or dropped from the rule set, never kept dangling. Regression: a sep-auto test with a local equation hypothesis over a variable that a disjunction case split substitutes.
+
+Workaround sites: `Proofs/Threadsync/ThreadMutex.lean`
+
+Deletion plan: Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row.
+
+<a id="row-callocspec-partial-step-count"></a>
+### #callocspec-partial-step-count The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return
+
+Status: **open**. Requester: L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction).
+
+Note: Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a premise.
+
+Progress: open
+
+Request: `CAllocSpec` (ZigLean/Sep/Full/Dispatch.lean) states each allocator call as a `CTriple`, a partial judgment: an implementation whose `free` never returns meets it. So `Lists.Alloc.freeAll_exact` (`CTriple`, `xs.length + 1` credits in, as many receipts out) gives `Lists.Alloc.freeAll_steps` only for a run that returns (the run's result `pure (v, m')` is a premise). The legacy `Proofs/Lists/Cost.lean` `freeAll_cost` counted unconditionally because it used the hand-written total `Allocator` model, which the trusted-base rule retires. Counterexample to the unconditional count under the present contract: an allocator whose `free` loops forever meets `CAllocSpec` (its triples hold vacuously) and makes `freeAll` diverge on a one-node list, so no run returns and there is no final memory whose `ticks` could be `m.ticks + 2`. Needed: a total allocator contract (each call, at least `free`, terminates), proved by every translated allocator; with it `freeAll_steps` drops the returning-run premise and also gives the run's existence, as `FTotalTriple.ticks_eq_post` does for sequential code.

@@ -2,6 +2,8 @@ import Proofs.Threadsync.Gen
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Tick
+import ZigLean.Sep.Full.Stack
+import ZigLean.Sep.Full.LockRules
 import ZigLean.Witness
 
 /-!
@@ -114,29 +116,32 @@ nonvacuity_witness none_of_isNone := ⟨pure none, rfl, trivial⟩
 
 /-! ## The deadline block in a thread's part (full-state)
 
-The waiter's part while it runs `Condition.wait` or `ResetEvent.waitUntilSet`: the part `r₀` it
-had before, and the deadline block `q` with the bytes `bs` (`DPart`). Its `alloc`, the store of
-`dl0`, the read of `timeout` and the `free` are thread triples (`FTTriple`), for the event's and
-the condition's `wp_liftPart`. -/
+The waiter's part while it runs `Condition.wait` or `ResetEvent.waitUntilSet`: the deadline
+block `q` with bytes `bs`, and its actual residual assertion `P b` (`DPart`). Plain allocation
+keeps an exact original part; budgeted allocation keeps the updated stack depth, the new
+block's entry token and the complete residual resource. The existing cur-aware caller-part
+lift supplies `cur t` only for the local allocation/free step. -/
 
 open Zig.Full Zig.Full.FAssn in
-/-- The part `r₀` and the deadline block `q` with the bytes `bs`. -/
-def DPart (r₀ : Res) (q : Ptr) (bs : Array Byte) : FAssn :=
+/-- The deadline block and its actual block-indexed residual resource. An `fsym` atom: its
+rules below (`dalloc`, `dstore`, `dload`, `dfree`) are its interface, so a fact `DPart … r`
+stays folded and meets the next rule's precondition as it is. -/
+@[fsym_atom] def DPart (P : BlockId → FAssn) (q : Ptr) (bs : Array Byte) : FAssn :=
   FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
     ⟪q.block = some b ∧ q.off = 0 ∧ A % 8 = 0⟫ ⋆
-      ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ (· = r₀))
+      ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ P b)
 
 section DPart
 open Zig.Full Zig.Full.FAssn
 
-theorem dpart_of {r₀ r : Res} {q : Ptr} {bs : Array Byte} {A : Nat} {b : BlockId}
+theorem dpart_of {P : BlockId → FAssn} {r : Res} {q : Ptr} {bs : Array Byte} {A : Nat} {b : BlockId}
     (hq : q.block = some b) (h0 : q.off = 0) (hA : A % 8 = 0)
-    (h : ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ (· = r₀)) r) : DPart r₀ q bs r :=
+    (h : ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ P b) r) : DPart P q bs r :=
   ⟨A, b, sep_lift.mpr ⟨⟨hq, h0, hA⟩, h⟩⟩
 
-theorem DPart.get {r₀ r : Res} {q : Ptr} {bs : Array Byte} (h : DPart r₀ q bs r) :
+theorem DPart.get {P : BlockId → FAssn} {r : Res} {q : Ptr} {bs : Array Byte} (h : DPart P q bs r) :
     ∃ A b, q.block = some b ∧ q.off = 0 ∧ A % 8 = 0 ∧
-      ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ (· = r₀)) r := by
+      ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ P b) r := by
   obtain ⟨A, b, h⟩ := h
   obtain ⟨⟨h1, h2, h3⟩, h⟩ := sep_lift.mp h
   exact ⟨A, b, h1, h2, h3, h⟩
@@ -145,7 +150,8 @@ theorem DPart.get {r₀ r : Res} {q : Ptr} {bs : Array Byte} (h : DPart r₀ q b
 (`FTriple.allocStackDrop`), which the part holds (`Res.Plain`) and splits off
 (`EUpd.plain_split`). -/
 theorem dalloc (r₀ : Res) (hpl : r₀.Plain) :
-    FTTriple (· = r₀) (allocStack 48 8) (fun q => DPart r₀ q (Array.replicate 48 .undef)) :=
+    FTTriple (· = r₀) (allocStack 48 8)
+      (fun q => DPart (fun _ => (· = r₀)) q (Array.replicate 48 .undef)) :=
   FTTriple.eupd (EUpd.plain_split fun _ h => h ▸ hpl)
     (((by fsym [FTriple.allocStackDrop] : FTTriple plain _ _).frame (R := (· = r₀))).conseq
       (fun _ h => sep_comm h)
@@ -156,8 +162,8 @@ theorem dalloc (r₀ : Res) (hpl : r₀.Plain) :
         exact dpart_of h1 h2 h3 h)
 
 /-- The store of `dl0` (`Deadline.init(null)`) in the deadline block. -/
-theorem dstore {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
-    FTTriple (DPart r₀ q bs) (storeBytes q 8 dl0) (fun _ => DPart r₀ q bsD) := by
+theorem dstore {P : BlockId → FAssn} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
+    FTTriple (DPart P q bs) (storeBytes q 8 dl0) (fun _ => DPart P q bsD) := by
   intro m r rF hh hp hc ho
   obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
   have hw : writeBytes bs 0 dl0 = bsD := by
@@ -166,14 +172,14 @@ theorem dstore {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
   have ht := ((FTTriple.storeBytesAt (p := q) (q := q) (k := 0) (a := 8) (A := A) (S := 48)
     (K := .stack) (bs := bs) (b := b) dl0 hq (by cases q; simp [Ptr.add]) (by rw [dl0_size]; decide)
     (by simp [hbs, dl0_size]) (by rw [h0]; simpa using hA) (by decide)).frame
-    (R := (· = r₀))).post (Q' := fun _ => DPart r₀ q bsD) fun _ r h =>
+    (R := P b)).post (Q' := fun _ => DPart P q bsD) fun _ r h =>
       dpart_of hq h0 hA (by rw [hw] at h; exact h)
   exact ht m r rF hh hp hc ho
 
 /-- The read of `timeout` (`none`) in the deadline block. -/
-theorem dload {r₀ : Res} {q : Ptr} :
-    FTTriple (DPart r₀ q bsD) (Zig.load (Option (BitVec 64)) 8 q)
-      (fun x => ⟪x = none⟫ ⋆ DPart r₀ q bsD) := by
+theorem dload {P : BlockId → FAssn} {q : Ptr} :
+    FTTriple (DPart P q bsD) (Zig.load (Option (BitVec 64)) 8 q)
+      (fun x => ⟪x = none⟫ ⋆ DPart P q bsD) := by
   intro m r rF hh hp hc ho
   obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
   have hl : FTTriple (up (bytesAt q A 48 .stack bsD) ⋆ bext b 48 .stack)
@@ -182,15 +188,15 @@ theorem dload {r₀ : Res} {q : Ptr} :
     have hs := bsD_size
     fsym [FTotalTriple.loadBlock (T := Option (BitVec 64)) (A := A) (S := 48) (K := .stack)
       (al := 8) hq (by decide) (by rw [bsD_size]; decide) dl_none (by simp [h0, hA])]
-  have ht := (hl.frame (R := (· = r₀))).post
-    (Q' := fun x => ⟪x = none⟫ ⋆ DPart r₀ q bsD) fun _ r h => by
+  have ht := (hl.frame (R := P b)).post
+    (Q' := fun x => ⟪x = none⟫ ⋆ DPart P q bsD) fun _ r h => by
       obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)
       exact sep_lift.mpr ⟨h1, dpart_of hq h0 hA h⟩
   exact ht m r rF hh hp hc ho
 
 /-- The `free` of the deadline block: the part is `r₀` again. -/
 theorem dfree {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
-    FTTriple (DPart r₀ q bs) (free q) (fun _ => (· = r₀)) := by
+    FTTriple (DPart (fun _ => (· = r₀)) q bs) (free q) (fun _ => (· = r₀)) := by
   intro m r rF hh hp hc ho
   obtain ⟨A, b, hq, h0, hA, hp⟩ := hp.get
   have hf : FTTriple (up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) (free q) (fun _ => emp) := by
@@ -198,6 +204,144 @@ theorem dfree {r₀ : Res} {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
   have ht := (hf.frame (R := (· = r₀))).post (Q' := fun _ => (· = r₀)) fun _ r h =>
       (sep_emp (P := (· = r₀)) (r := r)).mp (sep_comm h)
   exact ht m r rF hh hp hc ho
+
+/-- The actual budgeted deadline allocation. The stack token changes in the caller part;
+only the residual `R` is framed. `cur t` is returned for the local-step lift to remove. -/
+theorem dalloc_sp {t S D : Nat} (R : FAssn) (hfit : D + 56 ≤ S) :
+    FTTotalTriple ((sp t S D ⋆ R) ⋆ cur t) (allocStack 48 8)
+      (fun q => DPart (fun b => sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ R))
+        q (Array.replicate 48 .undef) ⋆ cur t) := by
+  have hcharge : stackCharge 48 8 = 56 := by rw [stackCharge_eq]; rfl
+  have ht := FTTotalTriple.ofSeq
+    (FTotalTriple.allocStack_sp (t := t) (S := S) (D := D) 48 8 (by decide) (by decide)
+      (by rw [hcharge]; exact hfit))
+    (ThreadLocal.allocStack 48 8)
+  simp only [hcharge] at ht
+  refine (ht.frame (R := R)).conseq ?_ ?_
+  · intro r h
+    have he : ((sp t S D ⋆ R) ⋆ cur t) = ((cur t ⋆ sp t S D) ⋆ R) := by ac_rfl
+    rw [he] at h
+    exact h
+  · intro q r h
+    obtain ⟨A, h⟩ := sep_ex.mp h
+    obtain ⟨b, h⟩ := sep_ex.mp h
+    obtain ⟨⟨hq, h0, hA⟩, h⟩ := sep_lift.mp (sep_assoc h)
+    have he :
+        (((up (bytesAt q A 48 .stack (Array.replicate 48 .undef)) ⋆ bext b 48 .stack) ⋆
+          (cur t ⋆ (sp t S (D + 56) ⋆ ent t (some b) D 56))) ⋆ R) =
+        (((up (bytesAt q A 48 .stack (Array.replicate 48 .undef)) ⋆ bext b 48 .stack) ⋆
+          (sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ R))) ⋆ cur t) := by ac_rfl
+    rw [he] at h
+    obtain ⟨rD, rC, hd, rfl, hD, hcur⟩ := h
+    exact ⟨rD, rC, hd, rfl, dpart_of hq h0 hA hD, hcur⟩
+
+/-- Free the actual top deadline block and its entry token. The caller's stack depth and
+the complete residual resource are restored; no framed stack token is updated. -/
+theorem dfree_sp {t S D : Nat} (R : FAssn) {q : Ptr} {bs : Array Byte} (hbs : bs.size = 48) :
+    FTTotalTriple
+      (DPart (fun b => sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ R)) q bs ⋆ cur t)
+      (free q) (fun _ => (sp t S D ⋆ R) ⋆ cur t) := by
+  have hstep (A : Nat) (b : BlockId) (hq : q.block = some b) (h0 : q.off = 0) :
+      FTTotalTriple
+        (((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆
+          (sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ R))) ⋆ cur t)
+        (free q) (fun _ => (sp t S D ⋆ R) ⋆ cur t) := by
+    have ht := FTTotalTriple.ofSeq
+      (FTotalTriple.free_sp (p := q) (A := A) (Sz := 48) (K := .stack) (bs := bs) (b := b)
+        (t := t) (S := S) (D := D + 56) (ℓ := D) (c := 56)
+        hq hbs h0 (by decide) (by decide) rfl)
+      (ThreadLocal.free_of (Within.refl _).sepL.sepL (Within.refl _).sepR.sepL hq hbs h0)
+    refine (ht.frame (R := R ⋆ cur t)).conseq ?_ ?_
+    · intro r h
+      have he :
+          (((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆
+            (sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ R))) ⋆ cur t) =
+          (((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆
+            (ent t (some b) D 56 ⋆ sp t S (D + 56))) ⋆ (R ⋆ cur t)) := by ac_rfl
+      rw [he] at h
+      exact h
+    · intro _ _ h
+      exact sep_assoc' h
+  have ht : FTTotalTriple
+      (FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
+        ⟪q.block = some b ∧ q.off = 0 ∧ A % 8 = 0⟫ ⋆
+          (((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆
+            (sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ R))) ⋆ cur t))
+      (free q) (fun _ => (sp t S D ⋆ R) ⋆ cur t) := by
+    refine FTTotalTriple.ex fun A => FTTotalTriple.ex fun b => FTTotalTriple.lift fun hq => ?_
+    exact hstep A b hq.1 hq.2.1
+  refine ht.conseq ?_ (fun _ _ h => h)
+  intro r h
+  obtain ⟨rD, rC, hd, rfl, hD, hcur⟩ := h
+  obtain ⟨A, b, hq, h0, hA, hD⟩ := hD.get
+  exact ⟨A, b, sep_lift.mpr ⟨⟨hq, h0, hA⟩, ⟨rD, rC, hd, rfl, hD, hcur⟩⟩⟩
+
+/-- The actual deadline-bearing wait family: concrete Plain parts, or an owned stack token
+with room for this block and a real unmetered residual. No other part supplies stack room. -/
+def deadlinePre : ThreadId → FAssn := fun t r => r.Plain ∨ ∃ (S D : Nat) (rRest : Res),
+  D + 56 ≤ S ∧ 0 < rRest.gh.ac.frag .unmetered ∧ (sp t S D ⋆ (· = rRest)) r
+
+theorem deadlinePre.unmetered {t : ThreadId} {r : Res}
+    (h : deadlinePre t r) : 0 < r.gh.ac.frag .unmetered := by
+  rcases h with hp | ⟨S, D, rRest, _, hu, hpart⟩
+  · exact hp.2
+  · obtain ⟨rs, rr, _, he, _, hr⟩ := hpart
+    subst rr
+    rw [he]
+    change 0 < rs.gh.ac.frag .unmetered + rRest.gh.ac.frag .unmetered
+    omega
+
+/-- The deadline's bytes and extent add no obligation to the residual's real tick resource. -/
+theorem DPart.unmetered {DR : BlockId → FAssn}
+    (hu : ∀ b r, DR b r → 0 < r.gh.ac.frag .unmetered)
+    {q : Ptr} {bs : Array Byte} {r : Res} (h : DPart DR q bs r) :
+    0 < r.gh.ac.frag .unmetered := by
+  obtain ⟨_, b, _, _, _, rD, rP, _, rfl, _, hp⟩ := h.get
+  have := hu b rP hp
+  change 0 < rD.gh.ac.frag .unmetered + rP.gh.ac.frag .unmetered
+  omega
+
+/-- Select one actual deadline residual for the shared wait proof. Both admissions use the
+same allocation, byte and free rules; the budgeted branch changes its owned stack token. -/
+theorem deadlinePre.elim {t : ThreadId} {r₀ : Res}
+    (hp : deadlinePre t r₀) :
+    ∃ DR : BlockId → FAssn,
+      (∀ b r, DR b r → 0 < r.gh.ac.frag .unmetered) ∧
+      FTTriple ((· = r₀) ⋆ cur t) (allocStack 48 8)
+        (fun q => DPart DR q (Array.replicate 48 .undef) ⋆ cur t) ∧
+      (∀ q bs, bs.size = 48 → FTTriple (DPart DR q bs ⋆ cur t)
+        (free q) (fun _ => (· = r₀) ⋆ cur t)) := by
+  rcases hp with hp | ⟨S, D, rRest, hfit, hu, hpart⟩
+  · refine ⟨fun _ => (· = r₀), ?_, (dalloc r₀ hp).frame, ?_⟩
+    · intro _ r hr
+      subst r
+      exact hp.2
+    · intro q bs hbs
+      exact (dfree hbs).frame
+  · obtain ⟨rs, rr, hd, he, hs, hr⟩ := hpart
+    subst rr
+    subst r₀
+    have hrestore : ∀ r, (sp t S D ⋆ (· = rRest)) r → r = rsum rs rRest := by
+      intro r hr
+      obtain ⟨rs', rr', _, he', hs', hr'⟩ := hr
+      subst rr'
+      rw [he', sp_gres hs', sp_gres hs]
+    refine ⟨fun b => sp t S (D + 56) ⋆ (ent t (some b) D 56 ⋆ (· = rRest)), ?_, ?_, ?_⟩
+    · intro b r hr
+      obtain ⟨rsp, rt, _, hsum, _, htail⟩ := hr
+      obtain ⟨re, rr, _, htailEq, _, hr⟩ := htail
+      subst rr
+      rw [hsum, htailEq]
+      change 0 < rsp.gh.ac.frag .unmetered +
+        (re.gh.ac.frag .unmetered + rRest.gh.ac.frag .unmetered)
+      omega
+    · exact (dalloc_sp (t := t) (S := S) (D := D) (· = rRest) hfit).toPartial.pre
+        fun r h => sep_mono_left (fun _ he => by
+          rw [he]
+          exact ⟨rs, rRest, hd, rfl, hs, rfl⟩) h
+    · intro q bs hbs
+      exact (dfree_sp (t := t) (S := S) (D := D) (· = rRest) hbs).toPartial.post
+        fun _ _ h => sep_mono_left hrestore h
 
 end DPart
 
