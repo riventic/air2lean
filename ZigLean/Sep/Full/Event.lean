@@ -34,6 +34,8 @@ A protocol tells the setters apart by their ghost values: a thread that may not 
 not write the word, and a thread at `sd` does not write it again until the protocol moves it
 out (its own ghost step). Several setters are allowed; a client with several setters that need
 their writes ordered before the waiter's reads shows which `is_set` write is the first.
+A relaxed set and a set that writes twice make a `WaitGroup` race, and the contract excludes
+both (`tests/roadmap/sync-contracts/EventSet.lean`).
 
 **Roles.** `FEvent.wx` are the ghost values of the threads that may wait (the protocol says which
 threads those are); the invariant keeps that each waiter and the writer of each `waiting` write
