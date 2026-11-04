@@ -1182,17 +1182,26 @@ def tagged (n : Nat) : Nat × Nat := (n, 0)
 /-- A ghost value whose field goes through a non-injective function. -/
 def taggedPar (n : Nat) : Nat × Nat := (parity n, 0)
 
+/-- A ghost value whose value drops a parameter (`q`). -/
+def taggedDrop (n _q : Nat) : Nat × Nat := (n, 0)
+
 /-- A definition whose value is a constructor's application is compared by that value:
 `tagged ?v = tagged a` fixes `?v := a` (`wpAtom` closes it), but not through a function inside
-the value (`taggedPar ?v = taggedPar a`). -/
-theorem equation_fields_definition (a : Nat) : True := by
+the value (`taggedPar ?v = taggedPar a`), nor an argument the value drops
+(`taggedDrop a ?q = taggedDrop a b` leaves `?q` open). -/
+theorem equation_fields_definition (a b : Nat) : True := by
   run_tac withRunCaches do
     let a := (← getLocalDeclFromUserName `a).toExpr
+    let b := (← getLocalDeclFromUserName `b).toExpr
     let v ← mkFreshExprMVar (mkConst ``Nat)
     let tag (x : Expr) := mkApp (mkConst ``SepAuto.WP.tagged) x
     let tagPar (x : Expr) := mkApp (mkConst ``SepAuto.WP.taggedPar) x
     if ← eqFixesUnknowns (tagPar v) (tagPar a) then
       throwError "equation_fields_definition: a function inside a definition's value accepted"
+    let drop (x y : Expr) := mkApp2 (mkConst ``SepAuto.WP.taggedDrop) x y
+    let q ← mkFreshExprMVar (mkConst ``Nat)
+    if ← eqFixesUnknowns (drop a q) (drop a b) then
+      throwError "equation_fields_definition: an argument the value drops accepted"
     let target ← mkEq (tag v) (tag a)
     let proof ← mkFreshExprSyntheticOpaqueMVar target
     unless (← wpAtom proof.mvarId! #[] #[] 4 (noCases := true)).isEmpty do

@@ -98,13 +98,6 @@
       "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` and every list `list I φ hd xs` of its grants: `freeAll_spec`'s postcondition and what the allocator's `free` told of each node (`freedSeg I hd none xs.length`, `FAllocInv.freed`)"
     },
     {
-      "name": "Lists.append_run",
-      "module": "Proofs.Lists.Cost",
-      "example": "lists",
-      "scope": "sequential",
-      "domain": "`*_run` lemma (not a `Triple`) for `ArrayListUnmanaged(u32).append` over the legacy `std` heap model: for every model allocator, value and list `alist p ptr cap xs` in a memory with `Mem.Seq` (one thread, new blocks above every live block) and `ptrOk` of the items pointer, the run returns `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and keeps `Mem.Seq`; the frame is unchanged"
-    },
-    {
       "name": "Lists.Append.append_spec",
       "module": "Proofs.Lists.Append",
       "example": "lists",

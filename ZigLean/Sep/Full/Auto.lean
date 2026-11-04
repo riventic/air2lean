@@ -7194,12 +7194,17 @@ partial def eqFixesUnknowns (l r : Expr) : MetaM Bool := do
   let isCtor (e : Expr) : MetaM Bool := do
     let .const c _ := e.getAppFn | return false
     return (← getEnv).find? c matches some (.ctorInfo _)
-  -- (a definition's value, once: definitions without recursion unfold to a term without them)
+  -- (a definition's value, once: definitions without recursion unfold to a term without them).
+  -- Only a value that keeps every unknown of the application: an argument the value drops
+  -- (`def gK (r q) := (⟨.out, r, rnil⟩, .joins)`, `gK ?r ?q`) is not fixed by the equation,
+  -- though unifying the applications would commit it.
   let byValue (e : Expr) : MetaM Expr := do
     if ← isCtor e then return e
     let some e' ← delta? e | return e
     let e' := e'.headBeta
-    return if ← isCtor e' then e' else e
+    unless ← isCtor e' do return e
+    let kept ← getMVars e'
+    return if (← getMVars e).all kept.contains then e' else e
   let l ← byValue l
   let r ← byValue r
   let .const c _ := l.getAppFn | return false
