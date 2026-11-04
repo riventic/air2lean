@@ -4822,6 +4822,10 @@ structure EmitParts where
   /-- Each function's certificate shape (`CertShape`). -/
   shapes : Array (String × CertShape) := #[]
 
+/-- The modules the header imports. -/
+def EmitParts.headerImports (parts : EmitParts) : List String :=
+  parts.header.filterMap fun line => (line.dropPrefix? "import ").map (·.toString)
+
 /-- Emit a complete original program, using its canonical effect and call-group analysis.
 `prefix_` is stripped from every Zig name (function or struct) before mangling.
 `floatSemantics` selects `--float-semantics` (default `ieee`). -/

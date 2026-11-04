@@ -100,7 +100,7 @@ def modules (parts : EmitParts) (ns root stem header : String) : Array Module :=
   let typesName := s!"{root}.Types"
   let importsOf (callees : Array String) : Array String :=
     #[typesName] ++ ((callees.filterMap (groupOf[·]?)).qsort (· < ·) |> dedupNames)
-  let headerImports := parts.header.filterMap fun line => (line.dropPrefix? "import ").map (·.toString)
+  let headerImports := parts.headerImports
   let comments := parts.header.filter (!·.startsWith "import ")
   let mut out := #[{
     name := typesName, file := s!"{stem}/Types.lean", kind := "types"

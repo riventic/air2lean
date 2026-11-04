@@ -573,8 +573,7 @@ private def run (args : List String) : IO UInt32 := do
                 let metadata ← if parts.declGroups.any (·.recursive) then
                     let modules := match split with
                       | none => #[Lean.Json.mkObj [("name", .str genModule), ("source", .str src),
-                          ("imports", .arr ((parts.header.filterMap fun line =>
-                            (line.dropPrefix? "import ").map (·.toString)).toArray.map Lean.Json.str))]]
+                          ("imports", .arr (parts.headerImports.toArray.map Lean.Json.str))]]
                       | some mods => mods.map fun m => Lean.Json.mkObj [("name", .str m.name),
                           ("source", .str m.text), ("imports", .arr (m.imports.map Lean.Json.str))]
                     try certificateMetadata genModule modules catch error =>
