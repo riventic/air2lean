@@ -107,9 +107,7 @@ def EPh.Next : EPh → EPh → Prop → Prop
 /-- A place change away from the setter's places and to none of them. -/
 theorem EPh.Next.of_ne {a p : EPh} {s : Prop} (ha : a ≠ .sw) (ha' : a ≠ .sd) (hp : p ≠ .sw)
     (hp' : p ≠ .sd) : EPh.Next a p s := by
-  cases a <;> cases p <;>
-    first | trivial | exact absurd rfl ha | exact absurd rfl ha' | exact absurd rfl hp |
-      exact absurd rfl hp'
+  cases a <;> cases p <;> first | trivial | contradiction
 
 /-- A futex event (module doc): its word, and a thread's place in its code. -/
 structure FEvent (γ : Type) extends FPlace γ EPh where
@@ -147,19 +145,12 @@ theorem Synced.of_read {E : FEvent γ} {t : ThreadId} {m₁ m' : Mem} {j : Nat} 
     (hh : E.W.hist m' = E.W.hist m₁) : E.Synced t m' :=
   ⟨j, by rw [hh]; exact hj, by rw [hh]; exact hv, by rw [hh]; exact hacq⟩
 
-/-- `Synced` after a step that keeps the word's history and does not lower `t`'s clock. -/
-theorem Synced.mono {E : FEvent γ} {t : ThreadId} {m m' : Mem} (hs : E.Synced t m)
-    (hh : E.W.hist m' = E.W.hist m) (hc : VClock.le (m.clocks[t]!) (m'.clocks[t]!) = true) :
-    E.Synced t m' :=
-  let ⟨j, hj, hv, hle⟩ := hs
-  ⟨j, by rw [hh]; exact hj, by rw [hh]; exact hv, by rw [hh]; exact VClock.le_trans hle hc⟩
-
 /-- `Synced` after a step that keeps the word's history and the clocks (a waiter's `free` of
 its own stack block, `Proto.free_clocks`; a pure step, `Proto.lift_clocks`: `@[fsym_run]` facts). -/
 theorem Synced.of_clocks {E : FEvent γ} {t : ThreadId} {m m' : Mem}
     (hh : E.W.hist m' = E.W.hist m) (hc : m'.clocks = m.clocks) (hs : E.Synced t m) :
-    E.Synced t m' :=
-  hs.mono hh (by rw [hc]; exact VClock.le_refl _)
+    E.Synced t m' := by
+  unfold Synced; rw [hh, hc]; exact hs
 
 /-- **What a step of the event's code by `t` (at `g`, to the place `p`) writes** (module doc,
 **Setters**): no write, with a place change of `EPh.Next`; or one RMW of the newest write that is
@@ -1866,15 +1857,15 @@ theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph
   have hgo' : L.set g .out rnil = g := by
     have := L.set_self g; rwa [hgo, hheld] at this
   · have hI := hE.wInv _ _ _ hU
+    have hbl : M.blocks = m₁.blocks := by
+      rcases hM with rfl | rfl | ⟨-, -, -, -, -, hb⟩
+      · rfl
+      · rfl
+      · exact hb
     have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t) (p := .w1)
       (q := .out) (h := rnil) rfl
         ⟨.inl ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [hg₁]; exact hga⟩, .inl rfl⟩, rfl, ?_, ?_⟩ hU hY
     · rw [hg₁, hgq, hgo'] at hst
-      have hbl : M.blocks = m₁.blocks := by
-        rcases hM with rfl | rfl | ⟨-, -, -, -, -, hb⟩
-        · rfl
-        · rfl
-        · exact hb
       rw [Word.cellsR_congr (W := E.W) hbl] at hst
       refine hst (hI.move (G' := upd G₁ t g) (fun u hu => upd_ne _ _ hu) ?_ ?_ ?_
         (Nat.le_of_eq (by rw [hms.threads])) (by rw [upd_self, hg₁, hga, hg]; exact id) (by rw [upd_self, hg]; intro h; cases h)
@@ -1892,11 +1883,7 @@ theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph
         refine ⟨i, hi, hv, VClock.le_trans hc ?_⟩
         exact hclk t
     · exact hms
-    · refine .inl ⟨?_, by rw [hg₁, hga]; trivial⟩
-      rcases hM with rfl | rfl | ⟨-, -, -, hh, -, -⟩
-      · rfl
-      · rfl
-      · exact hh
+    · exact .inl ⟨Word.hist_congr hf.1 hbl, by rw [hg₁, hga]; trivial⟩
 
 /-- **The waiter's futex wait** at the word with the value `waiting` (`futexWaitC`), at `w1`: it
 goes on at `w1`. A set event's sleeper is not in a deadlock (`Fits.liveSet`); for an event that is
