@@ -2776,10 +2776,18 @@ partial def ptrBase (p : Expr) : Expr :=
       p.isAppOfArity `Zig.Ptr.elemOf 4 || p.isAppOfArity `Zig.Ptr.elemSubOf 4 then
     ptrBase (p.getArg! 0) else p
 
+/-- A local declared at `BlockId` (`Nat` behind an `abbrev`: the declared type tells a block
+from a number). -/
+def isBlockVar (b : Expr) : MetaM Bool := do
+  let some d := (← getLCtx).find? b.fvarId! | return false
+  return d.type.consumeMData.isConstOf ``Zig.BlockId
+
 /-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
 `x.block = y.block` (definitionally, also through `Ptr.add`/`Ptr.elem`, or by a fact), `b₂` is
-replaced by `b₁`. A block variable `b` (one with a fact `_.block = some b`; a number stays a fact
-of the arithmetic solver, `isSubstValue`) equal to a value is that value, `b` replaced by `k`:
+replaced by `b₁`. A block variable `b` (one with a fact `_.block = some b`, or declared at
+`BlockId`: the walk's start reduces a fact `(gbuf n).ptr.block = some b` of a global's pointer to
+`some 0 = some b`; a number stays a fact of the arithmetic solver, `isSubstValue`) equal to a
+value is that value, `b` replaced by `k`:
 * from `some k = some b`, in either orientation;
 * from `x.block = some b` where `x.block`, or the other side of a fact `x.block = y.block` or
   `x.block = some k`, is `some k` by reducible evaluation (a global's pointer `⟨some 0, 0⟩`, also
@@ -2819,7 +2827,7 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       blkEqs := blkEqs.push d; links := links.push (d.toExpr, l, r)
     else if isVal r then links := links.push (d.toExpr, l, r)
   for (e, v, b, symm) in optEqs do
-    if someEqs.any (·.2.2 == b) then
+    if someEqs.any (·.2.2 == b) || (← isBlockVar b) then
       let e ← if symm then mkEqSymm e else pure e
       if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
   for (d, l, b) in someEqs do
