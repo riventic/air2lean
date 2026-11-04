@@ -700,11 +700,12 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the cache (block 0, a stack block) and its stores in the plain mode; the protocol's start at
   -- the spawn; `lock`; the snapshot (`a`, then `b`, in one hold: the lock holder's step; the
   -- writer is not mid-update, `snapshot_ok`), `unlock`, the join of the writer and the free of
-  -- the cache
+  -- the cache. The holder's step names `main`'s caller part `?rp` in both `G'` and `g'`, so the
+  -- invariant's hypothesis fixes it before the post's obligations (`hR`) mention it.
   fsym [FTriple.allocStack', inv_start, inv_spawn,
     (fun {w : Res} (hw : w.Plain) => mi.lock_wp fits rfl rfl hmc.symm 0 (gRun w) rfl rfl hw io),
     snapshot_ok,
-    fits.wp_hold (g' := gH _ .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
+    fits.wp_hold (G' := upd _ 0 (gH ?rp .run _)) (g' := gH ?rp .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
     main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, part_gOut, gRun, gJoin,
     aVal]
 
