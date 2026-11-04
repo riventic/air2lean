@@ -131,20 +131,29 @@ def processes(timeout=PS_TIMEOUT):
     # Both macOS and Linux ps provide these columns. lstart distinguishes reused
     # PIDs when following observed descendants; it has one-second resolution.
     env = os.environ | {"LC_ALL": "C"}
-    result = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,rss=,lstart=,stat=,comm="],
+    result = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,rss=,time=,lstart=,stat=,comm="],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             timeout=timeout, check=True, text=True, env=env)
     rows = {}
     for line in result.stdout.splitlines():
-        fields = line.split(None, 10)
-        if len(fields) != 11:
+        fields = line.split(None, 11)
+        if len(fields) != 12:
             raise RuntimeError("unrecognized ps process row")
         pid, parent, group, rss = map(int, fields[:4])
-        if fields[9].startswith("Z"):
+        if fields[10].startswith("Z"):
             continue  # an orphaned zombie is already stopped and cannot be killed
-        rows[pid] = {"parent": parent, "group": group, "rss_kib": rss,
-                     "start": " ".join(fields[4:9]), "name": Path(fields[10]).name}
+        rows[pid] = {"parent": parent, "group": group, "rss_kib": rss, "cpu_s": cpu_seconds(fields[4]),
+                     "start": " ".join(fields[5:10]), "name": Path(fields[11]).name}
     return rows
+
+
+def cpu_seconds(text):
+    """A ps `time` value in seconds: `[[dd-]hh:]mm:ss[.cc]` (Linux: whole seconds; macOS: cc)."""
+    days, _, clock = text.rpartition("-")
+    seconds = 0.0
+    for field in clock.split(":"):
+        seconds = seconds * 60 + float(field)
+    return (int(days) if days else 0) * 86400 + seconds
 
 
 class Tree:
@@ -248,6 +257,29 @@ def stop_tree(child, tree, grace, ps_timeout=PS_TIMEOUT):
     return False
 
 
+class Progress:
+    """The idle limit (--idle-minutes): CPU time the workload's tree gained, summed over its
+    processes (a process is its PID and start time; one first seen counts with all of its time).
+    The workload is hung once the tree gained less than max(1 s, 1% of the limit) for `idle`
+    seconds. A working build always uses CPU; a deadlocked one (Lake waiting on itself at 0%)
+    does not."""
+
+    def __init__(self, idle, now):
+        self.idle = idle
+        self.step = max(1.0, idle / 100)
+        self.cpu = {}
+        self.gained = 0.0
+        self.since = now
+
+    def hung(self, rows, owned, now):
+        cpu = {(pid, rows[pid]["start"]): rows[pid]["cpu_s"] for pid in owned}
+        self.gained += sum(max(0.0, seconds - self.cpu.get(key, 0.0)) for key, seconds in cpu.items())
+        self.cpu = cpu
+        if self.gained >= self.step:
+            self.gained, self.since = 0.0, now
+        return now - self.since >= self.idle
+
+
 class Sampler:
     """Process tables for the monitoring loop. A failed or slow ps is retried at the next
     sample and the last good table is not reused; only when no sample succeeded for `stale`
@@ -311,6 +343,10 @@ def parse_args(argv):
     p.add_argument("--report", type=Path, required=True)
     p.add_argument("--log", type=Path, required=True)
     p.add_argument("--timeout", type=positive, default=900)
+    p.add_argument("--idle-minutes", type=float, default=None,
+                   help="stop the workload as hung when its process tree gains less than max(1 s, 1%% "
+                        "of this) of CPU time for this many minutes (AIR2LEAN_GUARD_IDLE_MINUTES, "
+                        "else 0: no limit)")
     p.add_argument("--rss-mib", type=positive, default=8192)
     p.add_argument("--interval", type=positive, default=0.25)
     p.add_argument("--grace", type=positive, default=2)
@@ -368,6 +404,13 @@ def parse_args(argv):
         a.priority = os.environ.get("AIR2LEAN_GUARD_PRIORITY") or "normal"
         if a.priority not in PRIORITIES:
             p.error(f"AIR2LEAN_GUARD_PRIORITY must be one of {', '.join(PRIORITIES)}")
+    if a.idle_minutes is None:
+        try:
+            a.idle_minutes = float(os.environ.get("AIR2LEAN_GUARD_IDLE_MINUTES") or 0)
+        except ValueError:
+            a.idle_minutes = -1.0
+    if not 0 <= a.idle_minutes < float("inf"):
+        p.error("--idle-minutes (AIR2LEAN_GUARD_IDLE_MINUTES) must be a finite number of minutes, 0 or more")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report.resolve()
@@ -968,7 +1011,7 @@ def run(a, preempted=None):
               "cwd": str(a.cwd), "requested_command": a.command, "profile": a.profile,
               "phase": a.phase, "cache_label": a.cache,
               "host": {"system": platform.system(), "machine": platform.machine()},
-              "budget": {"timeout_seconds": a.timeout, "rss_mib": a.rss_mib,
+              "budget": {"timeout_seconds": a.timeout, "idle_minutes": a.idle_minutes, "rss_mib": a.rss_mib,
                          "sample_interval_seconds": a.interval, "term_grace_seconds": a.grace,
                          "ps_timeout_seconds": a.ps_timeout, "sample_stale_seconds": a.sample_stale,
                          "jobs": a.jobs, "lean_threads": a.lean_threads},
@@ -1043,6 +1086,7 @@ def run(a, preempted=None):
             selector.register(child.stdout, selectors.EVENT_READ)
             build_start = time.monotonic()
             next_sample = build_start
+            progress = Progress(60 * a.idle_minutes, build_start) if a.idle_minutes else None
             reason = None
             code = None
             while True:
@@ -1063,6 +1107,8 @@ def run(a, preempted=None):
                             reason, code = "rss_limit", 125
                         if not reason and parallel_zig(rows, owned, names, a.jobs):
                             reason, code = "parallel_zig", 126
+                        if not reason and progress and progress.hung(rows, owned, time.monotonic()):
+                            reason, code = "hung", 123
                     if not reason and lock.preempt():  # also when ps stalls under memory pressure
                         reason, code = "preempted", 75
                     report["failed_samples"] = sampler.failures
