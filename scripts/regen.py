@@ -335,7 +335,8 @@ def step_inventory(check):
     for rid in stale:
         try:
             record = inventory['runs'][rid]
-            plans[rid] = inv_mod.parse_build_command(ROOT, record.get('command'), lake=inv_mod.producer_path(record))
+            plans[rid] = inv_mod.parse_build_command(
+                ROOT, record.get('command'), lake=inv_mod.producer_path(record)).existing(ROOT)
         except inv_mod.Error as error:
             raise Failed(f'theorem-inventory run {rid}: refusing replay: {error}') from error
     try:
