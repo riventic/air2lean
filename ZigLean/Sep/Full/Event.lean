@@ -1312,7 +1312,8 @@ theorem _root_.Zig.Full.FLock.Fits.atWord (hE : L.Fits (E.prim L) P U ok)
   ⟨hI, hnq, ((hE.wRest rfl) _ _ _ hU).1⟩
 
 /-- A waiter's read at the word (`w0` or `w1`) of write `j` with the value `b`: `unset` (only
-at `w0`: it stays), `waiting` (it goes to `w1`), or `is_set` (it leaves; the event is set). -/
+at `w0`: it stays), `waiting` (it goes to `w1`), or `is_set` (it leaves; the event is set, and
+an acquire read (`hacq`, the word rules' acquire fact) synchronized with a set: `Synced`). -/
 theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} (hg₁ : G₁ t = g) (hgw : (E.ph g).Waiting)
@@ -1324,10 +1325,13 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
     (hS : E.W.Fresh m₁ → E.W.Fresh m' ∧ ∀ u, E.W.ownPos m₁ u ≤ E.W.ownPos m' u)
     (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m')
     (hh : E.W.hist m' = E.W.hist m₁) {j : Nat} {b : BitVec 32} (hj : j < (E.W.hist m₁).size)
-    (hv : (E.W.hist m₁)[j]!.Val b) (hfl : Word.Floor (E.W.hist m₁) (m₁.clocks[t]!) j) :
+    (hv : (E.W.hist m₁)[j]!.Val b) (hfl : Word.Floor (E.W.hist m₁) (m₁.clocks[t]!) j)
+    {ord : AtomicOrder}
+    (hacq : ord.isAcq = true → VClock.le (E.W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) :
     (b = 0 ∧ E.ph g = .w0 ∧ P.inv (upd G₁ t (E.set g .w0)) m') ∨
     (b = 1 ∧ P.inv (upd G₁ t (E.set g .w1)) m') ∨
-    (b = 2 ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m') := by
+    (b = 2 ∧ E.IsSet m' ∧ (ord.isAcq = true → E.Synced t m') ∧
+      P.inv (upd G₁ t (E.set g .out)) m') := by
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   obtain ⟨hI, hnq, -⟩ := hE.atWord (.inl (by rw [hg₁]; exact hgo)) hU hop.waiters hL
   have hclk := hop.clock
@@ -1371,7 +1375,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
   · have hset : E.IsSet m' := by
       have := hI.isSet_of hj hv
       unfold FEvent.IsSet FEvent.newest at this ⊢; rw [hh]; exact this
-    refine .inr (.inr ⟨rfl, hset, hE.backOut hg₁ (.inl hgo) hU hY hms (hn _ nofun nofun) hL
+    refine .inr (.inr ⟨rfl, hset, fun ha => Synced.of_read hj hv (hacq ha) hh,
+      hE.backOut hg₁ (.inl hgo) hU hY hms (hn _ nofun nofun) hL
       (hmv .out nofun nofun (by rw [E.ph_set]; intro h; rcases h with h | h <;> cases h)
         (fun h => by cases h) (fun h => by cases h))⟩)
 
@@ -1574,12 +1579,11 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
   · rw [he] at hv; rw [hn] at hh
     exact (h k hk G₁ m' (hop.current.trans hc₁)).1
       (hE.afterCasOk hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
-  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
-      ⟨rfl, -⟩ | h1 | ⟨rfl, hs, hi'⟩
+  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl hacq with
+      ⟨rfl, -⟩ | h1 | h1
     · exact absurd he.symm hne
     · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b r hd (.inl h1)
-    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 _ r hd
-        (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩)
+    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b r hd (.inr h1)
 
 /-- The waiter's `cmpxchg(unset → waiting)` at `w0` on bits (`cmpxchgC`,
 `Thread.ResetEvent`). -/
@@ -1607,12 +1611,11 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
       fun j b hne hj hv hfl hacq hh _hR => ?_⟩
   · exact (h k hk G₁ m' (hop.current.trans hc₁)).1
       (hE.afterCasOk hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
-  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
-      ⟨rfl, -⟩ | h1 | ⟨rfl, hs, hi'⟩
+  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl hacq with
+      ⟨rfl, -⟩ | h1 | h1
     · exact absurd rfl hne
     · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b (.inl h1)
-    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 _
-        (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩)
+    · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b (.inr h1)
 
 /-- A waiter's load at the word (`w0` or `w1`; `atomicLoadC`). -/
 theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
@@ -1628,15 +1631,10 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
   FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl hacq hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
-      h k hk G₁ m' b (hop.current.trans hc₁) (by
-        rcases hE.afterRead hg₁ hg hgo hU hY (by
-          refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
-          rw [FEvent.cur_eq hc₁]
-          exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl
-          with h0 | h1 | ⟨rfl, hs, hi'⟩
-        · exact .inl h0
-        · exact .inr (.inl h1)
-        · exact .inr (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩))
+      h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hY (by
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+        rw [FEvent.cur_eq hc₁]
+        exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl hacq)
 
 /-- A waiter's load at the word with a decode (`atomicLoadAsC`). -/
 theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
@@ -1657,15 +1655,11 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
     fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl hacq hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
-      h k hk G₁ m' b r (hop.current.trans hc₁) hd (by
-        rcases hE.afterRead hg₁ hg hgo hU hY (by
-          refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
-          rw [FEvent.cur_eq hc₁]
-          exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl
-          with h0 | h1 | ⟨rfl, hs, hi'⟩
-        · exact .inl h0
-        · exact .inr (.inl h1)
-        · exact .inr (.inr ⟨rfl, hs, fun ha => Synced.of_read hj hv (hacq ha) hh, hi'⟩))
+      h k hk G₁ m' b r (hop.current.trans hc₁) hd
+        (hE.afterRead hg₁ hg hgo hU hY (by
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+        rw [FEvent.cur_eq hc₁]
+        exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl hacq)
 
 /-- A load at the word by a thread out of the event's code (`atomicLoadC`), out of the lock's code
 or gone from it. -/
