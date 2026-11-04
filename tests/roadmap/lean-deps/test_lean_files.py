@@ -103,6 +103,7 @@ class Classify(unittest.TestCase):
         ir = self.repo / '.lake/build/ir'
         kept = [build / f'{m}{s}' for m in ('Lib/A', 'Lib/B', 'Fix/C') for s in ('.olean', '.trace')]
         kept += [ir / 'Lib.setup.json', ir / 'Lib/A.c.o.export']
+        kept += [build / f'air2lean_Lib_A.dylib{s}' for s in ('', '.hash', '.trace')]  # a precompiled module
         gone = [build / f'Lib/Gone{s}' for s in ('.olean', '.olean.hash', '.ilean', '.trace')]
         gone += [ir / 'Lib/Gone.c', ir / 'Lib/Gone.c.o.export.hash']
         own = sorted(gone)

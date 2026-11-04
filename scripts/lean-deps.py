@@ -132,23 +132,31 @@ def package_sources(package: pathlib.Path) -> list[pathlib.Path]:
                            for target in [*lake.get("lean_lib", []), *lake.get("lean_exe", [])])})
 
 
+MODULE_OUTPUTS = {"olean", "ilean", "c", "setup"}  # M.olean, M.ilean, ir/M.c, ir/M.setup.json
+
+
 def orphan_outputs(package: pathlib.Path) -> list[pathlib.Path]:
     """The files of `package/.lake/build/lib/lean` (oleans, ileans, traces, hashes) and
     `.lake/build/ir` (C code, objects) of modules with no source in `package` (`package_sources`):
     what an older build compiled from a module deleted or renamed since. Lake never removes them,
     nor can it build them again, while `leanchecker` takes its argument as a prefix and checks
     every olean below it (scripts/assumptions.py `checked_modules`), a plain `lean` on LEAN_PATH
-    imports them, and a proof receipt refuses them (scripts/proof-receipt.py `compiled`)."""
+    imports them, and a proof receipt refuses them (scripts/proof-receipt.py `compiled`). A
+    module's outputs are the files `M.*` beside one of `MODULE_OUTPUTS`; others (a precompiled
+    module's `<pkg>_<M>.dylib`, named after no file) are left alone."""
     sources = package_sources(package)
     orphans = []
     for build in (package / ".lake/build/lib/lean", package / ".lake/build/ir"):
-        for path in sorted(build.rglob("*")) if build.is_dir() else []:
-            if path.is_file():
-                relative = path.relative_to(build)
-                source_file = relative.parent / (relative.name.split(".", 1)[0] + ".lean")
-                if not any((source / source_file).is_file() for source in sources):
-                    orphans.append(path)
-    return orphans
+        groups: dict[pathlib.Path, list[pathlib.Path]] = {}
+        for path in build.rglob("*") if build.is_dir() else []:
+            if path.is_file() and "." in path.name:
+                groups.setdefault(path.parent / path.name.split(".", 1)[0], []).append(path)
+        for stem, files in groups.items():
+            module = any(f.name.split(".")[1] in MODULE_OUTPUTS for f in files)
+            source_file = stem.relative_to(build).parent / (stem.name + ".lean")
+            if module and not any((source / source_file).is_file() for source in sources):
+                orphans += files
+    return sorted(orphans)
 
 
 def library_files() -> list[str]:
@@ -352,7 +360,7 @@ def main(argv: list[str]) -> int:
         for lakefile in filter(None, tracked.split("\0")):
             for path in orphan_outputs((ROOT / lakefile).parent):
                 print(f"lean-deps: removing {path} (its module has no source)")
-                path.unlink()
+                path.unlink(missing_ok=True)  # another prune of this tree may have removed it
         return 0
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
