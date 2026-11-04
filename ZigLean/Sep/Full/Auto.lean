@@ -357,23 +357,30 @@ def normNatLits (e : Expr) : MetaM Expr :=
     if let .lit (.natVal n) := x then return .done (mkNatLit n)
     return .continue)
 
+/-- `a ⋆ b` of the simp results of `a` and `b`. -/
+def sepResult (a b : Simp.Result) : MetaM Simp.Result := do
+  Simp.mkCongr (← Simp.mkCongrArg (mkConst sepN) a) b
+
 /-- Unfold an assertion atom while it unfolds to a combination of assertions (not to a raw
-predicate `fun r => …`). -/
-partial def unfoldAtom (e : Expr) : MetaM Expr := do
+predicate `fun r => …`), as a simp result: each step `unfold1Eq?`'s (a projection with a proof),
+a `match` reduced definitionally. -/
+partial def unfoldAtom (e : Expr) : MetaM Simp.Result := do
   let e := e.consumeMData.headBeta
   if e.isAppOfArity sepN 2 then
-    return mkSep (← unfoldAtom e.appFn!.appArg!) (← unfoldAtom e.appArg!)
-  if e.isAppOf liftN || e.isAppOf exN || e.isConstOf empN then return e
+    return ← sepResult (← unfoldAtom e.appFn!.appArg!) (← unfoldAtom e.appArg!)
+  if e.isAppOf liftN || e.isAppOf exN || e.isConstOf empN then return { expr := e }
   -- a `match` on a constructor (an error union after the case split)
   if let .reduced e' ← reduceMatcher? e then return ← unfoldAtom e'.headBeta
-  match ← unfold1 e with
-  | some e' => if e'.consumeMData.isLambda then return e else unfoldAtom e'
-  | none => return e
+  match ← unfold1Eq? e with
+  | some r => if r.expr.consumeMData.isLambda then return { expr := e } else
+      r.mkEqTrans (← unfoldAtom r.expr)
+  | none => return { expr := e }
 
 /-- `unfoldAtom` on each leaf of a separating conjunction. -/
-partial def unfoldLeaves (e : Expr) : MetaM Expr := do
+partial def unfoldLeaves (e : Expr) : MetaM Simp.Result := do
   let e := e.consumeMData.headBeta
-  if e.isAppOfArity sepN 2 then return mkSep (← unfoldLeaves e.appFn!.appArg!) (← unfoldLeaves e.appArg!)
+  if e.isAppOfArity sepN 2 then
+    return ← sepResult (← unfoldLeaves e.appFn!.appArg!) (← unfoldLeaves e.appArg!)
   unfoldAtom e
 
 /-- The logic of a goal (the backend): `L.T` of an `FLogic` `L` (sequential programs), the
@@ -1684,11 +1691,19 @@ partial def withinParts (P : Expr) (unfold := false) : MetaM (Array (Expr × (Ex
   if P.isConstOf empN then return #[]
   let mut out := #[(P, pure)]
   if unfold then
-    let P' ← match ← reduceMatcher? P with
-      | .reduced e => pure (some e.headBeta)
-      | _ => unfold1 P
-    if let some P' := P' then
-      unless P'.consumeMData.isLambda do out := out ++ (← withinParts P' unfold)
+    let r? : Option Simp.Result ← match ← reduceMatcher? P with
+      | .reduced e => pure (some { expr := e.headBeta })
+      | _ => unfold1Eq? P
+    if let some r := r? then
+      unless r.expr.consumeMData.isLambda do
+        let parts ← withinParts r.expr unfold
+        -- (a part of the unfolding is one of `P`: by `unfold1Eq?`'s proof, `Within X P = …`)
+        out := out ++ match r.proof? with
+          | none => parts
+          | some pf => parts.map fun (x, k) => (x, fun h => do
+              let w ← k h
+              let X := (← whnfR (← inferType w)).appFn!.appArg!
+              mkEqMPR (← mkCongrArg (mkApp (mkConst ``Within) X) pf) w)
   return out
 
 /-- Proofs of `Within X P`, one for each part of `P` that unifies with `X` (`unifyAtom`). -/
@@ -2535,10 +2550,17 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
         let body := (← getConstInfo n).type.getForallBody
         return body.getAppArgs[ip + 1]?.bind (·.getAppFn.constName?) == hd
       if hd.isSome && !own then
-        if let some c' ← unfold1 c then
+        if let some r ← unfold1Eq? c then
           out := out.push do
-            let g ← mkFreshExprSyntheticOpaqueMVar (mkAppN t.getAppFn (targs.set! (ip + 1) c'))
-            return (← mkExpectedTypeHint g t, [g.mvarId!])
+            let at_ (z : Expr) := mkAppN t.getAppFn (targs.set! (ip + 1) z)
+            let g ← mkFreshExprSyntheticOpaqueMVar (at_ r.expr)
+            -- (`unfold1Eq?`'s proof at the command's position)
+            let rt : Simp.Result ← match r.proof? with
+              | some pf => do
+                let mot ← withLocalDeclD `z (← inferType c) fun z => mkLambdaFVars #[z] (at_ z)
+                pure { expr := at_ r.expr, proof? := some (← mkCongrArg mot pf) }
+              | none => pure { expr := at_ r.expr }
+            return (← mprResult t rt g, [g.mvarId!])
   return out
 
 -- `readsStruct`'s steps name their hypotheses across tactics
@@ -3176,12 +3198,9 @@ def decideIte (a : Expr) (quick := true) : TacticM (Option (Expr × Expr)) := do
 partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withContext do
   if fuel == 0 then return g
   let (g, L, α, P, c, Q) ← view g
-  let rec leaves (e : Expr) : MetaM Expr := do
-    let e := e.consumeMData.headBeta
-    if e.isAppOfArity sepN 2 then return mkSep (← leaves e.appFn!.appArg!) (← leaves e.appArg!)
-    unfoldAtom e
-  -- (`P` unfolded definitionally, its projections with proofs: `reduceProjsEq`)
-  let rP ← reduceProjsEq (← leaves P)
+  -- (`P` unfolded, its projections reduced: with proofs, `unfoldLeaves`, `reduceProjsEq`)
+  let rL ← unfoldLeaves P
+  let rP ← rL.mkEqTrans (← reduceProjsEq rL.expr)
   let Pu := rP.expr
   let ats := atoms Pu
   -- an assertion-level `if` whose condition the facts decide: take its branch
@@ -3479,17 +3498,17 @@ def simpCont (g : MVarId) (extra : Array Syntax) : TacticM (Option MVarId) := g.
       mkLambdaFVars #[h] (mkT L α P (mkAppN c.getAppFn (c.getAppArgs.set! 5 h)) Q)
     some <$> g.replaceTargetEq newT (← mkCongrArg mot e)
 
-/-- Inline a command: a vtable projection, a generated function, a pure generated helper. -/
-partial def unfoldCmd (x : Expr) : MetaM (Option Expr) := do
+/-- Inline a command: a vtable projection, a generated function, a pure generated helper; the
+step `unfold1Eq?`'s (a projection with a proof). -/
+partial def unfoldCmd (x : Expr) : MetaM (Option Simp.Result) := do
   let x := x.consumeMData.headBeta
   if x.isAppOfArity ``StateT.lift 5 || x.isAppOfArity ``ConcM.liftMem 3 then
-    let y := x.appArg!
-    let some y' ← unfoldCmd y | return none
-    return some (mkApp x.appFn! y')
+    let some r ← unfoldCmd x.appArg! | return none
+    return some (← Simp.mkCongrArg x.appFn! r)
   let .const c _ := x.getAppFn | return none
-  if (← getProjectionFnInfo? c).isSome then return ← unfold1 x
+  if (← getProjectionFnInfo? c).isSome then return ← unfold1Eq? x
   if ← isLibrary c then return none
-  unfold1 x
+  unfold1Eq? x
 
 /-- Compiler membership of the command at this position, through the same lift wrappers as
 ordinary inlining. Never search a bind, branch body, or a command argument for a member. -/
@@ -3554,9 +3573,9 @@ partial def recCommandView (x : Expr) : MetaM Simp.Result := do
     return ← recCommandView y
   if let some r ← recConditionalView? x then
     return ← r.mkEqTrans (← recCommandView r.expr)
-  let some y ← unfoldCmd x | return { expr := x }
-  if y == x then return { expr := x }
-  recCommandView y
+  let some ry ← unfoldCmd x | return { expr := x }
+  if ry.expr == x then return { expr := x }
+  ry.mkEqTrans (← recCommandView ry.expr)
 
 /-- Inspection only. Every actual goal/contract rewrite uses recCommandView's retained proof. -/
 def recCommandHead (x : Expr) : MetaM Expr := do
@@ -3599,6 +3618,24 @@ def isThrow (c : Expr) : Bool :=
 
 /-! ## Returns -/
 
+/-- `∀ r, X' r → X r` for the simp result `X'` of `X` (`imp_eq` of its proof; without one,
+of `rfl`: definitionally). -/
+def impOfResult (X : Expr) (r : Simp.Result) : MetaM Expr := do
+  let pf ← match r.proof? with
+    | some pf => pure pf
+    | none => mkExpectedTypeHint (← mkEqRefl X) (← mkEq X r.expr)
+  mkAppM ``imp_eq #[← mkEqSymm pf]
+
+/-- `p : ∀ r, A r → X' r` as `∀ r, A r → X r`, for the simp result `X'` of `X`. -/
+def impToOrig (p X : Expr) (r : Simp.Result) : MetaM Expr := do
+  if r.expr == X then return p
+  mkAppM ``imp_trans #[p, ← impOfResult X r]
+
+/-- `p : ∀ r, X r → B r` as `∀ r, X' r → B r`, for the simp result `X'` of `X`. -/
+def impFromResult (X : Expr) (r : Simp.Result) (p : Expr) : MetaM Expr := do
+  if r.expr == X then return p
+  mkAppM ``imp_trans #[← impOfResult X r, p]
+
 /-- `Q` with its existentials opened by fresh witnesses: `(Qi, pf : ∀ r, Qi r → Q r)`. -/
 partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
   let e := e.consumeMData.headBeta
@@ -3622,10 +3659,12 @@ partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
   if let .const c _ := e.getAppFn then
     let cs ← caches
     if !(← cs.updUnfold.get) && (← cs.updHeads.get).contains c then return (e, ← refl e)
-  let e' ← unfoldAtom e
-  if e' == e then return (e, ← refl e)
-  let (b, pb) ← instQ e' (fuel - 1)
-  -- `e'` is `e` unfolded: the proof's type is definitionally the expected one
+  let r ← unfoldAtom e
+  if r.expr == e then return (e, ← refl e)
+  let (b, pb) ← instQ r.expr (fuel - 1)
+  -- `r.expr` is `e` unfolded: by `unfoldAtom`'s proof, else the proof's type is definitionally
+  -- the expected one
+  if r.proof?.isSome then return (b, ← impToOrig pb e r)
   return (b, ← mkExpectedTypeHint pb (← mkArrow' b e))
 where
   mkArrow' (x y : Expr) : MetaM Expr := do
@@ -3638,24 +3677,6 @@ where
 def mkImp' (x y : Expr) : MetaM Expr :=
   withLocalDeclD `r (mkConst ``Zig.Full.Res) fun r => do
     mkForallFVars #[r] (← mkArrow (mkApp x r) (mkApp y r))
-
-/-- `∀ r, X' r → X r` for the simp result `X'` of `X` (`imp_eq` of its proof; without one,
-of `rfl`: definitionally). -/
-def impOfResult (X : Expr) (r : Simp.Result) : MetaM Expr := do
-  let pf ← match r.proof? with
-    | some pf => pure pf
-    | none => mkExpectedTypeHint (← mkEqRefl X) (← mkEq X r.expr)
-  mkAppM ``imp_eq #[← mkEqSymm pf]
-
-/-- `p : ∀ r, A r → X' r` as `∀ r, A r → X r`, for the simp result `X'` of `X`. -/
-def impToOrig (p X : Expr) (r : Simp.Result) : MetaM Expr := do
-  if r.expr == X then return p
-  mkAppM ``imp_trans #[p, ← impOfResult X r]
-
-/-- `p : ∀ r, X r → B r` as `∀ r, X' r → B r`, for the simp result `X'` of `X`. -/
-def impFromResult (X : Expr) (r : Simp.Result) (p : Expr) : MetaM Expr := do
-  if r.expr == X then return p
-  mkAppM ``imp_trans #[← impOfResult X r, p]
 
 /-- Prove `x = y`: pointers by block and offset, numbers by arithmetic, applications of one
 function by congruence (one level at a time). -/
@@ -4544,7 +4565,11 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
       let f ← withLocalDeclD `x (mkConst ``Zig.Full.FAssn) fun x => do
         mkLambdaFVars #[x] (P.replace fun y => if y == a then some x else none)
       -- the branch's atoms unfolded (definitionally), so that its facts and existentials open
-      let P' := (mkApp f (← unfoldLeaves br)).headBeta
+      let rb ← unfoldLeaves br
+      let P' := (mkApp f rb.expr).headBeta
+      let pf ← match rb.proof? with
+        | some e => mkEqTrans pf e
+        | none => pure pf
       let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
       let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P', Q])
       g.assign (← mkAppM ``EUpd.trans #[← mkAppM ``atom_eq #[e], g2])
@@ -5812,8 +5837,9 @@ def tryUpd (g : MVarId) (c u P Qv : Expr) : TacticM (Option (Expr × List MVarId
     etaStructArgs args
     -- the precondition unfolded, so that the plan's proof does not mention unknowns that only
     -- the update's hypotheses determine (fields of an expanded structure)
-    -- (unfolded definitionally, its projections with proofs: `reduceProjsEq`)
-    let rP₀ ← reduceProjsEq (← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!))
+    -- (unfolded, its projections reduced: with proofs, `unfoldLeaves`, `reduceProjsEq`)
+    let rU ← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!)
+    let rP₀ ← rU.mkEqTrans (← reduceProjsEq rU.expr)
     let P₀ := rP₀.expr
     let fr ← mkFreshExprMVar (mkConst ``Zig.Full.FAssn)
     let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep P₀ fr])
@@ -6923,9 +6949,10 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- an indirect call that no rule covers: the arm that the function pointer selects
   if L.conc && x.isAppOfArity ``Full.callIndirect 5 then
     return ← indirectWalk g L α P c Q x user extra fuel
-  if let some x' := unfolded? then
-    let c' ← mkAppM ``Bind.bind #[x', f]
-    let g' ← g.replaceTargetDefEq (mkT L α P c' Q)
+  if let some r := unfolded? then
+    let g' ← match r.proof? with
+      | some eq => rewriteCmd g L α P Q c x r.expr eq
+      | none => g.replaceTargetDefEq (mkT L α P (← mkAppM ``Bind.bind #[r.expr, f]) Q)
     return ← walk g' user extra (fuel - 1)
   Report.stopMessage m!"fsym: no rule for the command{indentExpr x}\nwith the precondition{indentExpr P}"
   return ← Report.leave g [g] "no_rule" "program" (some x)
@@ -7204,7 +7231,8 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
       let restoreArith ← (← caches).saveArith
       try
         unless r' == r || (r.hasExprMVar && (← isDefEq r r')) do throwError "resource"
-        let U ← if X.hasExprMVar then unfoldLeaves Y0 else pure Y0
+        let rU : Simp.Result ← if X.hasExprMVar then unfoldLeaves Y0 else pure { expr := Y0 }
+        let U := rU.expr
         let Y ← if X.hasExprMVar then reduceProjs U else pure Y0
         let ys := atoms Y
         let some paired ← pair mixed (atoms X) ys | throwError "atoms"
@@ -7218,8 +7246,9 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
           pure e
         let e ← mkEqTrans (← acEq Y (sepOf ys)) byAtoms
         let e ← mkEqTrans e (← acEq (sepOf targets) X)
-        -- (`Y0` unfolded definitionally, its projections with proofs: `reduceProjsEq`)
-        let rY ← if Y == U then pure { expr := Y } else reduceProjsEq U
+        -- (`Y0` unfolded, its projections reduced: with proofs, `unfoldLeaves`,
+        -- `reduceProjsEq`)
+        let rY ← rU.mkEqTrans (← if Y == U then pure { expr := Y } else reduceProjsEq U)
         g.assign (← mkEqMP (← mkCongrFun e r') (← mpResult (← Simp.mkCongrFun rY r') d.toExpr))
         return true
       catch _ => s.restore; restoreArith
@@ -7399,14 +7428,15 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
   if keep then
     -- (a protocol's invariant `proto.inv G m`: the projection of its structure value, as the
     -- hypotheses at entry, `evalFsym`)
-    let ty' ← if ty.isAppOfArity ``And 2 || ty.isAppOfArity ``Exists 2 then pure (some ty)
+    let r? : Option Simp.Result ←
+      if ty.isAppOfArity ``And 2 || ty.isAppOfArity ``Exists 2 then pure (some { expr := ty })
       else if let .const c _ := ty0.getAppFn then
-        (if (← isLibrary c) && (← getProjectionFnInfo? c).isNone then pure none else unfold1 ty0)
+        (if (← isLibrary c) && (← getProjectionFnInfo? c).isNone then pure none else unfold1Eq? ty0)
       else pure none
-    if let some ty' := ty' then
-      let w ← whnfR ty'
+    if let some r := r? then
+      let w ← whnfR r.expr
       if w.isAppOfArity ``And 2 || w.isAppOfArity ``Exists 2 then
-        let (h', g') ← (← g.assert `hu ty' (mkFVar h)).intro1
+        let (h', g') ← (← g.assert `hu r.expr (← mpResult r (mkFVar h))).intro1
         return ← g'.withContext (wpSplit g' h')
   if ty.isAppOfArity ``Or 2 then
     let gs ← g.cases h
@@ -7713,9 +7743,9 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   -- hypothesis with the same atoms (a segment's post); the simp terms below normalize the
   -- ghost values in its atoms (`upd_snd`)
   if let some (X, r) ← assnAt? t then
-    -- (unfolded definitionally, its projections with proofs: `reduceProjsEq`)
-    let U ← unfoldLeaves X
-    let rX ← reduceProjsEq U
+    -- (unfolded, its projections reduced: with proofs, `unfoldLeaves`, `reduceProjsEq`)
+    let rU ← unfoldLeaves X
+    let rX ← rU.mkEqTrans (← reduceProjsEq rU.expr)
     if rX.expr != X then
       return ← wpGoal (← replaceTarget g (← Simp.mkCongrFun rX r)) user extra fuel noCases
     if ← assnByHyp g X r then return []
@@ -8046,10 +8076,15 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   -- a generated function: inlined
   if let .const c _ := inner.getAppFn then
     unless ← isLibrary c do
-      if let some inner' ← unfold1 inner then
-        let x' := if x.isAppOfArity ``StateT.run 5 then mkAppN x.getAppFn (x.getAppArgs.set! 3 inner')
-          else inner'
-        return ← wpWalk (← g.replaceTargetDefEq (mkAppN (mkConst wpN) (a.set! 5 x'))) user extra (fuel - 1)
+      if let some r ← unfold1Eq? inner then
+        let at_ (z : Expr) : Expr := mkAppN (mkConst wpN) (a.set! 5
+          (if x.isAppOfArity ``StateT.run 5 then mkAppN x.getAppFn (x.getAppArgs.set! 3 z) else z))
+        let g' ← match r.proof? with
+          | some pf => do
+            let mot ← withLocalDeclD `z (← inferType inner) fun z => mkLambdaFVars #[z] (at_ z)
+            g.replaceTargetEq (at_ r.expr) (← mkCongrArg mot pf)
+          | none => g.replaceTargetDefEq (at_ r.expr)
+        return ← wpWalk g' user extra (fuel - 1)
   Report.stopMessage m!"fsym: no WP rule for the command{indentExpr x}"
   return ← Report.leave g [g] "no_rule" "program" (some x)
 
@@ -8089,10 +8124,10 @@ elab "fsym_entail" : tactic => do
     throwError "fsym_entail: {t.appFn!.appArg!} is not a part of{indentExpr t.appArg!}"
   -- the state's user definitions unfolded (as a walk's precondition, `normPre`; ledger #43)
   let (g, t) ← if t.isAppOfArity ``EUpd 2 then g.withContext do
-      let P' ← unfoldLeaves t.appFn!.appArg!
-      if P' == t.appFn!.appArg! then pure (g, t) else
-        let t' := mkApp2 t.appFn!.appFn! P' t.appArg!
-        pure (← g.replaceTargetDefEq t', t')
+      let rP ← unfoldLeaves t.appFn!.appArg!
+      if rP.expr == t.appFn!.appArg! then pure (g, t) else
+        let rt ← Simp.mkCongrFun (← Simp.mkCongrArg t.appFn!.appFn! rP) t.appArg!
+        pure (← replaceTarget g rt, rt.expr)
     else pure (g, t)
   withRunCaches do
     discard <| arithSimpCtx
