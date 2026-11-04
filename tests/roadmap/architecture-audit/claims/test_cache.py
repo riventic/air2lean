@@ -43,6 +43,9 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 spec = importlib.util.spec_from_file_location('snapshot', HERE / 'snapshot.py')
 snapshot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshot)
+spec = importlib.util.spec_from_file_location('check_tree', ROOT / 'scripts/check-tree.py')
+check_tree = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(check_tree)
 
 
 def run(argv, store, cwd=ROOT):
@@ -81,14 +84,15 @@ def require_built_root(targets):
 
 
 def main(argv):
-    if not (ROOT / '.air2lean-check-tree.json').is_file():  # the checkout: run in a check tree
+    if not (ROOT / check_tree.MARKER).is_file():  # the checkout: run in a check tree
         # The root's targets come from git (scripts/lean-deps.py), which a check tree is not.
         targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
                                  text=True, stdout=subprocess.PIPE, check=True).stdout.split()
         require_built_root(targets)
-        tree = ROOT / '.lake/check-tree/audit-cache'
-        subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/check-tree.py'), 'create', str(tree)],
-                       cwd=ROOT, check=True)
+        try:
+            tree = check_tree.create(ROOT / '.lake/check-tree/audit-cache', [], ROOT)
+        except (ValueError, OSError, subprocess.CalledProcessError) as error:
+            raise SystemExit(f'check tree: {error}')
         return subprocess.run([sys.executable, '-B', str(tree / Path(__file__).resolve().relative_to(ROOT)),
                                *targets], cwd=tree).returncode
     build = ['bash', str(HERE / 'build.sh')]

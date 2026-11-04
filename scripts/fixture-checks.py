@@ -415,6 +415,13 @@ SHARED = (ROOT / '.lake/build/lib/lean', ROOT / 'tests/roadmap/.lake/build/lib/l
 FIXTURE_BUILD = [sys.executable, '-B', str(ROOT / 'scripts/fixtures.py'), 'build']
 
 
+def log_tail(log: Path, lines=15):
+    """The last lines of a failure's log, indented, for the failure message (the log may not
+    outlive the run)."""
+    tail = log.read_text(errors='replace').strip().splitlines()[-lines:] if log.is_file() else []
+    return ''.join('\n    ' + line for line in tail)
+
+
 def prepare_shared(log: Path):
     """Build what the units share before any of them starts, so no unit builds it under the
     others: every library of the proof-fixture package (a unit's own `fixtures.py build` is then
@@ -425,10 +432,8 @@ def prepare_shared(log: Path):
             status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
     except OSError as error:
         return 'the proof-fixture package: %s' % error
-    if status:  # its errors, as a failed unit shows its log's tail (the log may not outlive the run)
-        tail = log.read_text(errors='replace').strip().splitlines()[-15:]
-        return 'the proof-fixture package: %s exited %d (log %s)%s' % (
-            ' '.join(FIXTURE_BUILD[2:]), status, log, ''.join('\n    ' + line for line in tail))
+    if status:
+        return 'the proof-fixture package: fixtures.py build exited %d (log %s)%s' % (status, log, log_tail(log))
     try:
         with assumptions.prepared_tool():
             pass
@@ -446,9 +451,7 @@ def shared_outputs():
     Lake's trace and hash files are not compared: an up-to-date check may rewrite them."""
     found = {}
     for shared in SHARED:
-        for path in shared.rglob('*'):
-            if not path.name.endswith(assumptions.COMPILED_SUFFIXES):
-                continue
+        for path in (p for suffix in assumptions.COMPILED_SUFFIXES for p in shared.rglob('*' + suffix)):
             try:
                 info = path.lstat()
             except FileNotFoundError:
@@ -552,9 +555,7 @@ def main(argv=None):
         for u, status in zip(units, statuses or []):  # none: the run did not start
             if status != 0:
                 log = logs / (names[u['name']] + '.log')
-                tail = log.read_text(errors='replace').strip().splitlines()[-15:] if log.is_file() else []
-                failed.append('%s (exit %d, log %s)%s' % (u['name'], status, log,
-                                                          ''.join('\n    ' + l for l in tail)))
+                failed.append('%s (exit %d, log %s)%s' % (u['name'], status, log, log_tail(log)))
         if not failed and not a.logs:
             shutil.rmtree(logs, ignore_errors=True)
     skipped = sum(len(u['skipped']) for u in units)
