@@ -258,25 +258,27 @@ def stop_tree(child, tree, grace, ps_timeout=PS_TIMEOUT):
 
 
 class Progress:
-    """The idle limit (--idle-minutes): CPU time the workload's tree gained, summed over its
-    processes (a process is its PID and start time; one first seen counts with all of its time).
-    The workload is hung once the tree gained less than max(1 s, 1% of the limit) for `idle`
-    seconds. A working build always uses CPU; a deadlocked one (Lake waiting on itself at 0%)
-    does not."""
+    """The idle limit (--idle-minutes). The workload progresses when its tree starts a process (a
+    process is its PID and start time), writes output, or gains max(1 s, 1% of the limit) of CPU
+    time in the processes seen before (`ps` shows a process's own time only: the time of an ended
+    child is lost, so a stream of short tools counts by their starts). It is hung after `idle`
+    seconds without progress. A working build always shows one of the three; a deadlocked one
+    (Lake waiting on itself at 0% CPU) shows none."""
 
     def __init__(self, idle, now):
         self.idle = idle
         self.step = max(1.0, idle / 100)
         self.cpu = {}
+        self.output = 0
         self.gained = 0.0
         self.since = now
 
-    def hung(self, rows, owned, now):
+    def hung(self, rows, owned, output_bytes, now):
         cpu = {(pid, rows[pid]["start"]): rows[pid]["cpu_s"] for pid in owned}
-        self.gained += sum(max(0.0, seconds - self.cpu.get(key, 0.0)) for key, seconds in cpu.items())
-        self.cpu = cpu
-        if self.gained >= self.step:
+        self.gained += sum(max(0.0, seconds - self.cpu.get(key, seconds)) for key, seconds in cpu.items())
+        if self.gained >= self.step or cpu.keys() - self.cpu.keys() or output_bytes != self.output:
             self.gained, self.since = 0.0, now
+        self.cpu, self.output = cpu, output_bytes
         return now - self.since >= self.idle
 
 
@@ -335,6 +337,13 @@ def positive(value):
     return value
 
 
+def nonnegative(value):
+    value = float(value)
+    if not 0 <= value < float("inf"):
+        raise argparse.ArgumentTypeError("must be a finite number, 0 or more")
+    return value
+
+
 def parse_args(argv):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--cwd", type=Path, default=Path.cwd())
@@ -343,10 +352,10 @@ def parse_args(argv):
     p.add_argument("--report", type=Path, required=True)
     p.add_argument("--log", type=Path, required=True)
     p.add_argument("--timeout", type=positive, default=900)
-    p.add_argument("--idle-minutes", type=float, default=None,
-                   help="stop the workload as hung when its process tree gains less than max(1 s, 1%% "
-                        "of this) of CPU time for this many minutes (AIR2LEAN_GUARD_IDLE_MINUTES, "
-                        "else 0: no limit)")
+    p.add_argument("--idle-minutes", type=nonnegative, default=None,
+                   help="stop the workload as hung after this many minutes without progress: no "
+                        "process started, no output, under max(1 s, 1%% of the limit) of CPU time "
+                        "(AIR2LEAN_GUARD_IDLE_MINUTES, else 0: no limit)")
     p.add_argument("--rss-mib", type=positive, default=8192)
     p.add_argument("--interval", type=positive, default=0.25)
     p.add_argument("--grace", type=positive, default=2)
@@ -406,11 +415,9 @@ def parse_args(argv):
             p.error(f"AIR2LEAN_GUARD_PRIORITY must be one of {', '.join(PRIORITIES)}")
     if a.idle_minutes is None:
         try:
-            a.idle_minutes = float(os.environ.get("AIR2LEAN_GUARD_IDLE_MINUTES") or 0)
-        except ValueError:
-            a.idle_minutes = -1.0
-    if not 0 <= a.idle_minutes < float("inf"):
-        p.error("--idle-minutes (AIR2LEAN_GUARD_IDLE_MINUTES) must be a finite number of minutes, 0 or more")
+            a.idle_minutes = nonnegative(os.environ.get("AIR2LEAN_GUARD_IDLE_MINUTES") or 0)
+        except (argparse.ArgumentTypeError, ValueError) as error:
+            p.error(f"AIR2LEAN_GUARD_IDLE_MINUTES {error}")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report.resolve()
@@ -1107,7 +1114,8 @@ def run(a, preempted=None):
                             reason, code = "rss_limit", 125
                         if not reason and parallel_zig(rows, owned, names, a.jobs):
                             reason, code = "parallel_zig", 126
-                        if not reason and progress and progress.hung(rows, owned, time.monotonic()):
+                        if not reason and progress and progress.hung(rows, owned, report["output_bytes"],
+                                                                     time.monotonic()):
                             reason, code = "hung", 123
                     if not reason and lock.preempt():  # also when ps stalls under memory pressure
                         reason, code = "preempted", 75

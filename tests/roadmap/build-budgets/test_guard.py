@@ -228,9 +228,10 @@ fixture_pause()
         self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
 
     def test_idle_limit_spares_a_workload_that_computes(self):
-        # 3 s of CPU against a 1.2 s limit and a 1 s step: each window sees progress.
-        source = "import time\nend = time.monotonic() + 3\nwhile time.monotonic() < end: pass"
-        result, report, _ = self.run_guard(source, "--idle-minutes", "0.02", "--timeout", "10")
+        # 6 s of silent computing against a 3 s limit and a 1 s step: each window needs a third
+        # of a core, and Linux ps counts whole seconds.
+        source = "import time\nend = time.monotonic() + 6\nwhile time.monotonic() < end: pass"
+        result, report, _ = self.run_guard(source, "--idle-minutes", "0.05", "--timeout", "10")
         self.assertEqual((result.returncode, report["outcome"]), (0, "success"), result.stderr)
 
     def test_idle_limit_comes_from_the_environment_or_is_off(self):
@@ -244,18 +245,24 @@ fixture_pause()
         result, report, _ = self.run_guard("import time; time.sleep(1.5)")
         self.assertEqual((result.returncode, report["budget"]["idle_minutes"]), (0, 0))
 
-    def test_progress_counts_cpu_per_process_and_new_processes_in_full(self):
+    def test_progress_is_a_started_process_output_or_cpu_time(self):
         rows = {1: {"start": "a", "cpu_s": 5.0}, 2: {"start": "a", "cpu_s": 0.0}}
         progress = guard.Progress(60, 0)
-        self.assertFalse(progress.hung(rows, {1, 2}, 1))  # pid 1 is new: 5 s gained
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 1))  # both started: progress
         self.assertEqual(progress.since, 1)
-        rows[3] = {"start": "b", "cpu_s": 0.5}
+        rows[1]["cpu_s"] = 5.5
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 30))  # 0.5 s of CPU: under the 1 s step
+        self.assertEqual(progress.since, 1)
         del rows[1]  # an ended process takes nothing back
-        self.assertFalse(progress.hung(rows, {2, 3}, 30))
-        rows[3] = {"start": "c", "cpu_s": 0.6}  # PID reuse: the new process counts from zero
-        self.assertFalse(progress.hung(rows, {2, 3}, 40))
-        self.assertEqual(progress.since, 40)  # 0.5 + 0.6 s reach the 1 s step
-        self.assertTrue(progress.hung(rows, {2, 3}, 100))
+        rows[2]["cpu_s"] = 0.6
+        self.assertFalse(progress.hung(rows, {2}, 0, 40))  # 0.5 + 0.6 s reach the step
+        self.assertEqual(progress.since, 40)
+        self.assertFalse(progress.hung(rows, {2}, 7, 90))  # output
+        self.assertEqual(progress.since, 90)
+        rows[2] = {"start": "b", "cpu_s": 0.0}  # PID reuse: a started process
+        self.assertFalse(progress.hung(rows, {2}, 7, 149))
+        self.assertEqual(progress.since, 149)
+        self.assertTrue(progress.hung(rows, {2}, 7, 209))
         self.assertEqual([guard.cpu_seconds(text) for text in ("0:01.50", "01:02:03", "2-00:00:01")],
                          [1.5, 3723.0, 172801.0])
 

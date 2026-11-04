@@ -165,12 +165,14 @@ aborts with `guard_error` (exit 70) and stops the workload. After the workload e
 guard waits for a successful sample (same bound) before judging orphaned children.
 
 **Idle limit (opt-in).** `--idle-minutes N` (default `AIR2LEAN_GUARD_IDLE_MINUTES`, else 0: no
-limit) stops a workload that makes no progress: when its process tree gains less than
-max(1 s, 1% of N minutes) of CPU time in N minutes, the guard stops it with outcome `hung`
-(exit 123), well before `--timeout`. CPU time comes from the same `ps` samples (the `time`
-column, per process and PID start, so a process that ends takes nothing back and one first seen
-counts with all of its time). A working build always uses CPU. A deadlocked one does not:
-Lake 4.34 can wait on itself at 0% CPU forever ([upstream/lake-concurrent-needs.md](upstream/lake-concurrent-needs.md)).
+limit) stops a workload that makes no progress for N minutes, with outcome `hung` (exit 123),
+well before `--timeout`. Progress is any of: a process started in the workload's tree (a
+process is its PID and start time), output, or max(1 s, 1% of N minutes) of CPU time gained by
+the processes already seen. All three come from what the guard observes anyway: its `ps`
+samples (the `time` column) and the workload's output pipe. `ps` shows a process's own CPU time
+only, so the time of a child that ended between samples is lost; a stream of short tools still
+counts, by their starts. A working build always shows one of the three. A deadlocked one shows
+none: Lake 4.34 can wait on itself at 0% CPU forever ([upstream/lake-concurrent-needs.md](upstream/lake-concurrent-needs.md)).
 A workload that legitimately sits idle that long (waiting for a lock or a network peer) is
 stopped too, so the limit fails closed; choose N above the longest such wait. A nested guard's
 `ps` sampling is CPU time in the tree of the guard above it, but not in its own workload's tree.
@@ -225,7 +227,7 @@ signal exits become `128 + signal`. Guard outcomes disambiguate reserved codes:
 | 70 | guard/observer failure or unconfirmed cleanup |
 | 71 | leader exited with live children |
 | 75 | lock busy or lock-wait expired |
-| 123 | no CPU progress for `--idle-minutes` (`hung`) |
+| 123 | no progress for `--idle-minutes` (`hung`) |
 | 124 | workload timeout |
 | 125 | sampled RSS threshold exceeded |
 | 126 | observed more parallel Zig compilers than `--jobs` |
