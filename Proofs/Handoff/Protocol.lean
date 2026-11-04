@@ -367,7 +367,8 @@ theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk Lo m) (hs : (L Lo).S
 
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
+    (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (_ : (L Lo).ph (G t) ≠ .away)
+    (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
     (hrel : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
     U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t ((L Lo).set (G t) p h) u).2 = (G u).2 := fun u => congrFun (FLock.snd_set G t p h) u

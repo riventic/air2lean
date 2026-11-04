@@ -24,6 +24,16 @@
    "note": "A/1a/1b are approved, not pending. Darwin uses genuine spatial caller framing under the existing primitive contract (PR510/6287119784), without a wrapper tick; STD-06/OSL-01 debt is unchanged. The ignored-Plain adapter remains unapplied; neither nil parts nor cost=None imply resource admission. Every pass retains its original source/artifact identity. The unresolved orphan is kernel-rejected automation, not an accepted unsound theorem; no completed whole-client or cost-bound claim is made."
   },
   {
+   "id": "kernel-proj-ctor",
+   "title": "Projections of values that reduce to constructors are left to the kernel as definitional steps",
+   "status": "open",
+   "requester": "L8e (Proofs.Sync.Cond loop56_body: kernel deep recursion, coordinator decision 2026-11-04: fix at the root, candidate (b))",
+   "progress": "The kernel checks `((a, r).2).f =?= s.f` by comparing the projections' arguments first (`(a, r).2 =?= s`), by structure eta down to `r`'s fields; a literal field (`Packed.ofBits 65537#32 =?= s.prev_state`) then evaluates its arithmetic against an open term (no literal acceleration with free variables) until the recursion limit, an error rather than a failed comparison. Any definitional form of the step traps: `eq_self` unified up to reduction, simp's own `proj` step, and a `change`/`replaceTargetDefEq` to the reduced type (kernel experiment: `show s.f = s.f from rfl` at `(a, r).2.f = s.f`). Two explicit steps pass: the value against its constructor application, then the projection of the constructor application. Landed (claude/fsym-proj-ctor): `projCtorStep?` rewrites such a projection with those two `rfl` steps, and every fsym simp run takes it first (`fsimp`, `withProjCtor`, `lazyMethods`). Regression: sep-auto ProjCtorKernel (plain `simp only [eq_self]` on the goal is rejected by the kernel).",
+   "request": "The other definitional projection steps of the engine: `reduceProjs`/`unfold1` results installed by `replaceTargetDefEq`/`replaceLocalDeclDefEq` (normFacts' arithmetic goals, wpGoal's assertion and field steps, wpNorm, destruct, the update step) and the entailment planner's `reduceProjs` of the postcondition (closeEntail', with `mkExpectedTypeHint … (mkImp' Qi2 Qi1)` after instantiating witnesses). Counterexample: `FTotalTriple emp (pure (Ex.again, ({ epoch := s.epoch, prev := Pk.ofBits 65537#32 } : Loc))) (fun r => ⟪r.2.epoch = s.epoch⟫)` by `fsym` (the structures of sep-auto ProjCtorKernel) elaborates and is rejected by the kernel (deep recursion): closeEntail' reduces `Q v` by `reduceProjs` and builds the entailment for the reduced form. Fix: one `reduceProjsEq` (simp's congruence over `projCtorStep?` with `unfold1`'s reduction and `data` filter, the result checked against `reduceProjs`), used at each of these sites. Also still definitional: the tactic-syntax simp runs (`closeWith` with `simp only [fsym_arith] at *; simp only [*]`, `piecesEq`'s and the `Array.extract` `simp only`), which a simproc in the `fsym_arith`/`fsym_norm` sets would reach; simp's internal `dsimp` (implicit and instance arguments, binder domains, dependent `let`s); and a field whose type depends on the value (`congrArg` does not apply).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "lake-needs-race",
    "title": "Lake 4.34 creates the jobs of concurrent `needs` facet keys twice and can deadlock",
    "status": "open",
@@ -1635,6 +1645,17 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "One mechanism for every command and rule: a closed pointer of the command that no atom names is restated as `p.add k` from the one state region of its block whose extent holds it (block by `blockOf`, bounds by the arithmetic solver, `k` in the arithmetic's normal form). The rules and providers about derived pointers then apply unchanged (`regionStoreAdd`, `ReadsAt.regionIn`). Disjoint regions mean at most one region holds it. Rejected alternative: literal-pointer variants of the region rules, one per rule."
+  },
+  {
+   "id": "read-through-bytes",
+   "title": "Read region bytes through stores to other bytes, memset items and a kept prefix",
+   "status": "closed",
+   "requester": "L6 FBA client over FAllocSpec (PR #567, blocker 2: reads of t[0] and t[3] after `t[7] = v +% 1` on reallocated bytes)",
+   "progress": "Branch claude/fsym-read-through. Region.lean `@[fsym_arith]`: `extract_writeBytes_other`, `extract_memsetBytes_item`, `extract_replicate_le`, `decode_byte`, `LawfulEnc.decode_encode`, `Array.replicate_one`, `Array.size_replicate`, and the simproc `keptExtract` (with `extract_of_keepsPrefix`). Auto.lean: `arithCore` closes an equation with an unknown side by reducible unification of the normalized sides; `omegaDisch` states a discharged side condition as itself. Tests: SepAuto.Region `read_unwritten`, `read_unwritten_word`, `read_kept`.",
+   "request": "The provider `ReadsAt.regionIn` asks `Enc.decode (bs.extract lo hi) = pure ?v` of a region whose bytes are `writeBytes (memsetBytes n (some v)) o (Enc.encode w)`, or bytes `bs` with a fact `keepsPrefix old bs` (a reallocation's). The arithmetic normalization did not read through a disjoint write, an item of a memset or a kept prefix, and did not assign `?v`.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Engine fix found on the way: every conditional `@[fsym_arith]` rewrite whose side condition contains a `dsimproc`-reduced term (`Enc.size (BitVec 16)`) failed with simp's \"failed to assign proof\": the discharger's proof had the reduced statement, which reducible unification does not match. Rejected alternatives: one load rule per byte source (store, memset, reallocation), which the provider already decomposes; reading a kept prefix by a user-supplied update, which every client would repeat."
   }
  ],
  "mechanisms": [
