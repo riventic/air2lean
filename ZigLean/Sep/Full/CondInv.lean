@@ -1173,6 +1173,88 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
     · subst hut; rw [upd_self]; exact hsx
     · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
 
+/-- **A consume** (the waiter's acquire `cmpxchg` `(w, s) → (w - 1, s - 1)`) by `t` at
+`reg i jr true e`, which leaves the condition's code: the state's new write `x`. -/
+theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Nat} {e : BitVec 32}
+    {g' : γ} {x : Word.Entry} (hI : C.Inv L G m) (ht : C.ph (G t) = .reg i jr true e)
+    (hg' : C.ph g' = .out) (hS : C.S.hist m' = (C.S.hist m).push x) (hx : x.Val (val x))
+    (hxw : wOf x + 1 = wOf (C.lastS m)) (hxs : sOf x + 1 = sOf (C.lastS m))
+    (hE : C.Ep.hist m' = C.Ep.hist m) (hwt : m'.waiters = m.waiters) (hwk : m'.woken = m.woken)
+    (hth : m'.threads = m.threads)
+    (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    C.Inv L (upd G t g') m' := by
+  have hph : ∀ u, u ≠ t → C.ph (upd G t g' u) = C.ph (G u) := fun u hu => by rw [upd_ne _ _ hu]
+  have hout : ∀ u p, C.ph (upd G t g' u) = p → p ≠ .out → u ≠ t := fun u p h hp hu => by
+    subst hu; rw [upd_self, hg'] at h; exact hp h.symm
+  have hqd : ∀ u, C.qd m' u = C.qd m u := fun u => by unfold qd; rw [hwt]
+  have hpos := hI.spos
+  have hsw := hI.s_le_w
+  have hlast : C.lastS m' = x := by unfold FCond.lastS; rw [hS]; exact last_push
+  have hlt : ∀ k, k < (C.S.hist m).size → (C.S.hist m')[k]! = (C.S.hist m)[k]! := fun k hk => by
+    rw [hS]; exact FEvent.get_push_lt hk
+  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact FEvent.get_push_eq
+  have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hS]; simp
+  have hold : C.lastS m = (C.S.hist m)[(C.S.hist m).size - 1]! := rfl
+  refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
+    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i' e' h => ?_,
+    fun u i' jr' sn' e' h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
+    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_⟩
+  · by_cases hk' : k < (C.S.hist m).size
+    · rw [hlt k hk']; exact hI.sv k hk'
+    · obtain rfl : k = (C.S.hist m).size := by omega
+      rw [hnew]; exact ⟨hx, by omega⟩
+  · by_cases hk' : k + 1 < (C.S.hist m).size
+    · rw [hlt k (by omega), hlt (k + 1) hk']; exact hI.steps k hk'
+    · obtain rfl : k = (C.S.hist m).size - 1 := by omega
+      rw [hlt _ (by omega), show (C.S.hist m).size - 1 + 1 = (C.S.hist m).size by omega, hnew,
+        ← hold]
+      exact .inr (.inr ⟨hxw, hxs⟩)
+  · rw [hsz] at hq; rw [hE]
+    by_cases hq' : q < (C.S.hist m).size
+    · rw [hlt q hq', hlt (q - 1) (by omega)] at hlt' ⊢
+      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', hv, hn⟩ | ⟨b, hb, hc⟩
+      · refine .inl ⟨v, n'', ?_, hn⟩
+        have hvt : v ≠ t := fun e' => by rw [e', ht] at hv; cases hv
+        rw [hph v hvt]; exact hv
+      · exact .inr ⟨b, hb, hc⟩
+    · obtain rfl : q = (C.S.hist m).size := by omega
+      rw [hnew, hlt _ (by omega), ← hold] at hlt'
+      omega
+  · have hvt := hout v _ h nofun
+    rw [hph v hvt] at h
+    obtain ⟨h1, h2, h3⟩ := hI.inc v q n' h
+    rw [hsz, hlt q h2]; exact ⟨h1, by omega, VClock.le_trans h3 (hclk v)⟩
+  · have hut := hout u _ h nofun
+    rw [hph u hut] at h
+    obtain ⟨h1, h2, h3⟩ := hI.ld u i' e' h
+    rw [hE]; exact ⟨h1, h2, VClock.le_trans h3 (hclk u)⟩
+  · have hut := hout u _ h nofun
+    rw [hph u hut] at h
+    obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hI.reg u i' jr' sn' e' h
+    rw [hE, hsz, hlt jr' h4]
+    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), by omega, VClock.le_trans h5 (hclk u), h6⟩
+  · rw [hwt] at hw
+    obtain ⟨i', jr', e', h⟩ := hI.q w hw hp
+    have hwt' : w.1 ≠ t := fun e'' => by rw [e'', ht] at h; cases h
+    rw [hph _ hwt']; exact ⟨i', jr', e', h⟩
+  · rw [hwt] at hw
+    have hwt' : w.1 ≠ t := fun e'' => by rw [e'', upd_self, hg'] at hp; cases hp
+    rw [hph _ hwt'] at hp; exact hI.qw w hw hp
+  · exact hI.cnt_consume ht hg' (by rw [hlast]; exact hxw) (by rw [hlast]; exact hxs)
+      (by rw [hE]) hqd (by rw [hwk])
+  · rw [hth]; have hut := hout u _ rfl h; rw [hph u hut] at h; exact hI.ex u h
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
+    rw [hph u hut] at h; have := hI.room u h; rw [hlast]; omega
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at hu; cases hu)
+    have hvt := hout v _ rfl (fun e' => by rw [e'] at hv; cases hv)
+    rw [hph u hut] at hu; rw [hph v hvt] at hv; exact hI.crit1 u v hu hv
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
+    rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.crit u h
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
+    rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
+    rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+
 end FCond
 
 end Full
