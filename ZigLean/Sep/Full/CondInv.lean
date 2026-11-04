@@ -2069,12 +2069,10 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
     rw [hE]; exact Word.get_push_eq
   have hold : C.lastE m = (C.Ep.hist m)[(C.Ep.hist m).size - 1]! := rfl
   have hyv : (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).Val (o + 1) := FEvent.rmwEnt_val
-  have hyc : VClock.le (m.clocks[t]!) (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).relClock = true := by
-    simp only [Word.rmwEnt, hrel, ↓reduceIte]
-    exact VClock.le_trans (hclk t) (VClock.le_merge_right _ _)
+  have hyc : VClock.le (m.clocks[t]!) (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).relClock = true :=
+    VClock.le_trans (hclk t) (Word.rmwEnt_rel hrel)
   have hyl : VClock.le (C.lastE m).relClock
-      (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).relClock = true := by
-    simp only [Word.rmwEnt, hrel, ↓reduceIte]; exact VClock.le_merge_left _ _
+      (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).relClock = true := Word.rmwEnt_relLe
   have hts : (C.ph (G t)).sig := by rw [ht]; rfl
   have hnt : ∀ u, C.ph (upd G t g' u) ≠ .wk n q sh → u ≠ t := fun u h hu => by
     rw [hu, upd_self] at h; exact h hg'
@@ -2096,8 +2094,7 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
       rw [hlt ((C.Ep.hist m).size - 1) (by omega),
         show (C.Ep.hist m).size - 1 + 1 = (C.Ep.hist m).size by omega, hnew, ← hold, val_of hyv,
         val_of ho]
-      refine ⟨rfl, hyl, ?_⟩
-      simp only [Word.rmwEnt, hrel, ↓reduceIte]; exact VClock.le_merge_right _ _
+      exact ⟨rfl, hyl, Word.rmwEnt_rel hrel⟩
   · -- (H2) `t`'s post is published by the new write
     rw [hS] at hq hlt' ⊢; rw [hsz]
     rcases hI.pub q' h0 hq hlt' with ⟨v, n'', sh'', hv, hn⟩ | ⟨b, hb, hc⟩
