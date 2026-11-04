@@ -1,4 +1,4 @@
-import Proofs.Lists.Policy
+import Proofs.Lists.Gen
 import ZigLean.Mem.AllocLemmas
 
 /-! Lean-only M03 checks of the general policy: failure oracles, the live-heap budget, the
@@ -9,6 +9,17 @@ open Zig
 
 private def require (ok : Bool) (msg : String) : IO Unit :=
   unless ok do throw (IO.userError msg)
+
+/-- The `append` loop of `Proofs/Lists/Policy.lean` over the `std` heap model's translation:
+each value appended with the translated `append`, an `OutOfMemory` reported and the loop going
+on. -/
+private def appendEach (p : Ptr) (a : Allocator) :
+    List (BitVec 32) → MemM (List (Except ErrName Unit))
+  | [] => pure []
+  | v :: vs => do
+    let r ← Lists.array_list_Aligned_u32_null_append p a v
+    let rs ← appendEach p a vs
+    pure (r :: rs)
 
 /-- As in `Check.lean`: one request per size, each success freed at once. -/
 private def releaseAttempts (sizes : List Nat) : MemM (List Bool) :=
@@ -45,7 +56,7 @@ and the final items. -/
 private def appendRun (vs : List (BitVec 32)) : MemM (List Bool × List (BitVec 32)) := do
   let p ← alloc .stack 24 8
   store 8 p ({ items := ⟨zeroAllocPtr 4, 0⟩, capacity := 0 } : Lists.array_list_Aligned_u32_null)
-  let rs ← Lists.appendEach p {} vs
+  let rs ← appendEach p {} vs
   let l ← load Lists.array_list_Aligned_u32_null 8 p
   let items ← (List.range l.items.len.toNat).mapM fun i => load (BitVec 32) 4 (l.items.ptr.elem 4 (BitVec.ofNat 64 i))
   pure (rs.map (·.isOk), items)
