@@ -55,10 +55,9 @@ theorem le_tsum {N : Nat} (g : Nat → Nat) {u : Nat} (hu : u < N) : g u ≤ tsu
     · have := ih (by omega); omega
 
 theorem tsum_eq_zero {N : Nat} {g : Nat → Nat} (h : ∀ u, u < N → g u = 0) : tsum N g = 0 := by
-  rw [tsum_congr h]
   induction N with
   | zero => rfl
-  | succ N ih => rw [tsum_succ, ih (fun _ _ => rfl)]
+  | succ N ih => rw [tsum_succ, ih (fun u hu => h u (by omega)), h N (by omega)]
 
 theorem exists_of_tsum_pos {N : Nat} {g : Nat → Nat} (h : 0 < tsum N g) :
     ∃ u, u < N ∧ 0 < g u := by
@@ -148,7 +147,7 @@ theorem tsum_tag {Q N : Nat} {f g : Nat → Nat} (tag : Nat → Option Nat)
       by_cases hf : 0 < f Q'
       · obtain ⟨v, hv, htag, hle⟩ := h Q' (by omega) hf
         have := le_tsum (fun v => if tag v = some Q' then g v else 0) hv
-        simp only [htag, if_true] at this
+        simp only [htag, ite_true] at this
         omega
       · omega
   refine Nat.le_trans (key Q (Nat.le_refl _)) (tsum_le fun v _ => ?_)
@@ -168,7 +167,7 @@ theorem le_add_tsum_up (a : Nat → Nat) {k n : Nat} (hk : k ≤ n) :
     · subst e; exact Nat.le_add_right _ _
     · have := ih (by omega)
       rw [tsum_succ]
-      simp only [show k < n + 1 by omega, if_true, Nat.add_sub_cancel]
+      simp only [show k < n + 1 by omega, ite_true, Nat.add_sub_cancel]
       omega
 
 end Full

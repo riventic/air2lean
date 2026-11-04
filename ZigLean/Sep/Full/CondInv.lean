@@ -203,7 +203,7 @@ def nq (G : ThreadId → γ) (m : Mem) (T : Nat) : Nat :=
 /-- The claims of the threads below `T` (module doc): their own claims, and of the wakes owed
 at `wk` as many as there are queued waiters. -/
 def claims (G : ThreadId → γ) (m : Mem) (T : Nat) : Nat :=
-  tsum T (C.cl G m) + min (tsum T fun u => (C.ph (G u)).wkN) (C.nq G m T)
+  tsum T (C.cl G m) + Min.min (tsum T fun u => (C.ph (G u)).wkN) (C.nq G m T)
 
 /-- The kinds of consecutive state writes (H1): a registration `(w + 1, s)`, a post or broadcast
 `(w, s')` with `s < s' ≤ w`, or a consume `(w - 1, s - 1)`. -/
@@ -255,6 +255,8 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- (C) The count (module doc), for a bound past which every thread is out. -/
   cnt : ∃ T, (∀ u, T ≤ u → C.ph (G u) = .out) ∧ wOf (C.lastS m) = C.nreg G T ∧
     sOf (C.lastS m) ≤ C.claims G m T
+  /-- A thread in the condition's code exists. -/
+  ex : ∀ u, C.ph (G u) ≠ .out → u < m.threads.size
   /-- Room for one more waiter while one is in the critical code (`waiters < 65535`). -/
   room : ∀ u, (C.ph (G u)).crit → wOf (C.lastS m) < 65535
   /-- One thread in the critical code (it holds the mutex). -/
@@ -291,6 +293,7 @@ theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hS : (C.S.hist
     rw [hS]; simp [wOf, val_of hS0], by
     show sOf (C.S.hist m)[(C.S.hist m).size - 1]! ≤ _
     rw [hS]; simp [sOf, val_of hS0]⟩
+  ex u h := absurd (hout u) h
   room u h := by rw [hout u] at h; exact absurd h (by decide)
   crit1 u _ h := by rw [hout u] at h; exact absurd h (by decide)
   crit u h := by rw [hout u] at h; exact absurd h (by decide)
@@ -320,7 +323,6 @@ theorem nreg_le_claims {G : ThreadId → γ} {m : Mem} {T : Nat}
   unfold nreg nq
   rw [← tsum_add]
   refine tsum_le fun u hu => ?_
-  dsimp only
   by_cases hr : (C.ph (G u)).isReg = true
   · by_cases hq : C.qd m u = true
     · rw [if_pos hr, if_pos (by rw [hr, hq]; rfl)]; omega
@@ -338,7 +340,6 @@ theorem loopBack_bound {G : ThreadId → γ} {h : Array Word.Entry} {k T : Nat}
       ∃ v n, C.ph (G v) = .inc q n ∧ sOf h[q]! - sOf h[q - 1]! ≤ n) :
     sOf h[h.size - 1]! ≤ sOf h[k]! + tsum T fun v => (C.ph (G v)).incN := by
   have hle := le_add_tsum_up (fun q => sOf h[q]!) (k := k) (n := h.size - 1) (by omega)
-  beta_reduce at hle
   simp only [show h.size - 1 + 1 = h.size by omega] at hle
   refine Nat.le_trans hle (Nat.add_le_add_left (tsum_tag (fun v => (C.ph (G v)).incQ) ?_) _)
   intro q hq hpos
@@ -348,7 +349,7 @@ theorem loopBack_bound {G : ThreadId → γ} {h : Array Word.Entry} {k T : Nat}
     refine ⟨v, ?_, by rw [hv]; rfl, by rw [hv]; exact hn⟩
     by_cases hvT : v < T
     · exact hvT
-    · have := hT v (by omega); rw [this] at hv; cases hv
+    · have := hT v (Nat.le_of_not_lt hvT); rw [this] at hv; cases hv
   · simp [hkq] at hpos
 
 variable {L : FLock γ}
@@ -356,6 +357,7 @@ variable {L : FLock γ}
 /-! ## The epoch's values -/
 
 theorem ofNat_succ (d : Nat) : BitVec.ofNat 32 (d + 1) = BitVec.ofNat 32 d + 1 := by
+  rw [show (1 : BitVec 32) = BitVec.ofNat 32 1 from rfl]
   apply BitVec.eq_of_toNat_eq
   simp only [BitVec.toNat_ofNat, BitVec.toNat_add]
   omega
@@ -405,7 +407,7 @@ theorem Inv.lt_bound {G : ThreadId → γ} {T : Nat} (hT : ∀ u, T ≤ u → C.
     {t : ThreadId} (ht : C.ph (G t) ≠ .out) : t < T := by
   by_cases h : t < T
   · exact h
-  · exact absurd (hT t (by omega)) ht
+  · exact absurd (hT t (by simp only [ThreadId] at *; omega)) ht
 
 /-- The newest `signals` is at most the newest `waiters` (H1). -/
 theorem Inv.s_le_w {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) :
@@ -437,7 +439,8 @@ theorem Inv.cnt_bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Na
       (tsum T fun u => (C.ph (G u)).wkN) + n := by
     have := tsum_upd (g := fun u => (C.ph (G u)).wkN) (g' := fun u => (C.ph (upd G t g' u)).wkN)
       htT (fun u hu => by rw [hph u hu])
-    simp only [upd_self, hg', ht, CPh.wkN] at this
+    have e1 : (C.ph (upd G t g' t)).wkN = n := by rw [upd_self, hg']; rfl
+    have e2 : (C.ph (G t)).wkN = 0 := by rw [ht]; rfl
     omega
   -- a claim of a registered waiter only grows (its save gets older)
   have hcl : ∀ u, u ≠ t → C.cl G m u ≤ C.cl (upd G t g') m' u := fun u hu => by
@@ -452,7 +455,7 @@ theorem Inv.cnt_bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Na
     cases sn <;> cases C.qd m u <;> cases m.woken.contains u <;> simp <;> omega
   refine ⟨T, fun u hu => ?_, by rw [hlast, hreg]; exact hw, ?_⟩
   · by_cases e : u = t
-    · subst e; omega
+    · subst e; simp only [ThreadId] at *; omega
     · rw [hph u e]; exact hT u hu
   rw [hlast]
   unfold claims
@@ -520,7 +523,7 @@ theorem Inv.cnt_loopBack {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr
     · obtain ⟨_, _, _, h'⟩ := hI.qd_reg h; rw [ht] at h'; cases h'
   have hT' : ∀ u, T ≤ u → C.ph (upd G t g' u) = .out := fun u hu => by
     by_cases e' : u = t
-    · subst e'; omega
+    · subst e'; simp only [ThreadId] at *; omega
     · rw [hph u e']; exact hT u hu
   have hreg : C.nreg (upd G t g') T = C.nreg G T := tsum_congr fun u _ => by
     by_cases hu : u = t
@@ -544,7 +547,9 @@ theorem Inv.cnt_loopBack {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr
   · -- still a claim: nothing changes
     have hct : C.cl (upd G t g') m' t = C.cl G m t := by
       unfold cl regCl; rw [upd_self, hg', ht, hq, hwk, hE, htq]
-      rcases hkeep with h | h <;> simp [h, CPh.incN]
+      rcases hkeep with h | h
+      · simp [h, CPh.incN]
+      · simp only [Array.contains_iff_mem] at h; simp [h, CPh.incN]
     rw [tsum_congr fun u _ => show C.cl (upd G t g') m' u = C.cl G m u by
       by_cases hu : u = t
       · subst hu; exact hct
@@ -578,7 +583,7 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat}
     (hwk : ∀ u, C.qd m u = true → C.qd m' u = false → m'.woken.contains u = true)
     (hwk' : ∀ u, m.woken.contains u = true → m'.woken.contains u = true)
     (hmin : ∀ T, (∀ u, T ≤ u → C.ph (G u) = .out) →
-      min n (C.nq G m T) + C.nq G m' T ≤ C.nq G m T) :
+      Min.min n (C.nq G m T) + C.nq G m' T ≤ C.nq G m T) :
     ∃ T, (∀ u, T ≤ u → C.ph (upd G t g' u) = .out) ∧
       wOf (C.lastS m') = C.nreg (upd G t g') T ∧ sOf (C.lastS m') ≤ C.claims (upd G t g') m' T := by
   obtain ⟨T, hT, hw, hs⟩ := hI.cnt
@@ -587,7 +592,7 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat}
   have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
   have hT' : ∀ u, T ≤ u → C.ph (upd G t g' u) = .out := fun u hu => by
     by_cases e' : u = t
-    · subst e'; omega
+    · subst e'; simp only [ThreadId] at *; omega
     · rw [hph u e']; exact hT u hu
   have hreg : C.nreg (upd G t g') T = C.nreg G T := tsum_congr fun u _ => by
     by_cases hu : u = t
@@ -601,7 +606,8 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat}
       tsum T fun u => (C.ph (G u)).wkN := by
     have := tsum_upd (g := fun u => (C.ph (G u)).wkN) (g' := fun u => (C.ph (upd G t g' u)).wkN)
       htT (fun u hu => by rw [hph u hu])
-    simp only [upd_self, hg', ht, CPh.wkN] at this
+    have e1 : (C.ph (upd G t g' t)).wkN = 0 := by rw [upd_self, hg']; rfl
+    have e2 : (C.ph (G t)).wkN = n := by rw [ht]; rfl
     omega
   -- a claim grows by one for each waiter taken off the queue
   have hcl : ∀ u, u < T → C.cl G m u +
@@ -609,7 +615,7 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat}
         (if (C.ph (G u)).isReg && C.qd m' u then 1 else 0)) ≤ C.cl (upd G t g') m' u := by
     intro u _
     by_cases hu : u = t
-    · subst hu; rw [upd_self, hg', ht]; simp [cl, CPh.incN, regCl, CPh.isReg]
+    · subst hu; unfold cl; rw [upd_self, hg', ht]; simp [CPh.incN, regCl, CPh.isReg]
     rw [show C.cl (upd G t g') m' u = C.cl G m' u by unfold cl; rw [hph u hu]]
     unfold cl
     rcases hp : C.ph (G u) with _ | _ | _ | ⟨i, jr, sn, e⟩ | _ | _
@@ -623,7 +629,9 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat}
     · obtain ⟨_, _, _, h'⟩ := hI.qd_reg h1
       rw [hp] at h'; cases h'
       cases h2 : C.qd m' u
-      · simp [hwk u h1 h2]
+      · have h3 := hwk u h1 h2
+        simp only [Array.contains_iff_mem] at h3
+        simp [h3]
       · simp
   have hsum := tsum_le hcl
   rw [tsum_add] at hsum
@@ -639,7 +647,8 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat}
   have hmn := hmin T hT
   have hn : n ≤ tsum T fun u => (C.ph (G u)).wkN := by
     have := le_tsum (fun u => (C.ph (G u)).wkN) htT
-    simp only [ht, CPh.wkN] at this; exact this
+    have e2 : (C.ph (G t)).wkN = n := by rw [ht]; rfl
+    omega
   refine ⟨T, hT', by rw [hlast, hreg]; exact hw, ?_⟩
   rw [hlast]
   unfold claims at hs ⊢
@@ -675,6 +684,39 @@ theorem Inv.claim_of {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m)
       revert hu; cases C.ph (G u) <;> simp [CPh.wkN, CPh.sig]
   · exact ⟨v, .inl hv⟩
 
+/-- **No deadlock with a pending signal** (no lost wakeup, the memory's part of `P.Live`): with a
+signal pending or a signaller between its post and its wake, not every thread has ended, sleeps
+at a futex or waits at a join. `hfin`, `hjoins`: such a thread is out of the condition's code;
+`hL`: nobody waits at the mutex (all blocked); `hnq`: a thread outside or holding the mutex is
+not in the futex queue (the lock's invariant). -/
+theorem Inv.noDeadlock {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {fin joins : γ → Prop}
+    (hfin : ∀ g, fin g → C.ph g = .out) (hjoins : ∀ g, joins g → C.ph g = .out)
+    (hL : ∀ w ∈ m.waiters, w.2 ≠ L.ptr)
+    (hnq : ∀ u, (L.ph (G u) = .out ∨ L.ph (G u) = .holds) → m.waiters.any (·.1 == u) = false)
+    (hall : ∀ u < m.threads.size, fin (G u) ∨ m.waiters.any (·.1 == u) = true ∨ joins (G u))
+    (h : 0 < sOf (C.lastS m) ∨ ∃ v, (C.ph (G v)).sig) : False := by
+  obtain ⟨u, hu⟩ := hI.claim_of h
+  have hne : C.ph (G u) ≠ .out := by
+    rcases hu with hu | ⟨i, jr, sn, e, hp, -⟩
+    · intro h'; rw [h'] at hu; cases hu
+    · rw [hp]; exact nofun
+  have hnotq : m.waiters.any (·.1 == u) = false := by
+    rcases hu with hu | ⟨i, jr, sn, e, hp, hq⟩
+    · exact hnq u (hI.lp u hu)
+    · cases hany : m.waiters.any (·.1 == u)
+      · rfl
+      · obtain ⟨w, hw, hwe⟩ := Array.any_eq_true'.mp hany
+        have e' : w.1 = u := by simpa using hwe
+        rcases hI.qw w hw (by rw [e', hp]; rfl) with h1 | h1
+        · have : C.qd m u = true := by
+            unfold qd; exact Array.any_eq_true'.mpr ⟨w, hw, by simp [e', h1]⟩
+          rw [hq] at this; cases this
+        · exact absurd h1 (hL w hw)
+  rcases hall u (hI.ex u hne) with h1 | h1 | h1
+  · exact hne (hfin _ h1)
+  · rw [hnotq] at h1; cases h1
+  · exact hne (hjoins _ h1)
+
 /-- **The count after a post** by `t` (out, now at `inc q n`): the newest `signals` grows by at
 most `n`, the claim of `t`. -/
 theorem Inv.cnt_post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {g' : γ}
@@ -685,26 +727,26 @@ theorem Inv.cnt_post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Na
     ∃ T, (∀ u, T ≤ u → C.ph (upd G t g' u) = .out) ∧
       wOf (C.lastS m') = C.nreg (upd G t g') T ∧ sOf (C.lastS m') ≤ C.claims (upd G t g') m' T := by
   obtain ⟨T₀, hT₀, hw₀, hs₀⟩ := hI.cnt
-  have hT : ∀ u, max T₀ (t + 1) ≤ u → C.ph (G u) = .out := fun u hu => hT₀ u (by omega)
+  have hT : ∀ u, Max.max T₀ (t + 1) ≤ u → C.ph (G u) = .out := fun u hu => hT₀ u (by simp only [ThreadId] at *; omega)
   have hph : ∀ u, u ≠ t → C.ph (upd G t g' u) = C.ph (G u) := fun u hu => by rw [upd_ne _ _ hu]
-  refine ⟨max T₀ (t + 1), fun u hu => ?_, ?_, ?_⟩
+  refine ⟨Max.max T₀ (t + 1), fun u hu => ?_, ?_, ?_⟩
   · by_cases e' : u = t
-    · subst e'; omega
+    · subst e'; simp only [ThreadId] at *; omega
     · rw [hph u e']; exact hT u hu
-  · rw [hw, hw₀, ← nreg_ext hT₀ (Nat.le_max_left _ _)]
+  · rw [hw, hw₀, ← nreg_ext hT₀ (Nat.le_max_left T₀ (t + 1))]
     refine tsum_congr fun u _ => ?_
     by_cases hu : u = t
     · subst hu; rw [upd_self, hg', ht]; rfl
     · rw [hph u hu]
   · rw [← claims_ext hT₀ (Nat.le_max_left T₀ (t + 1))] at hs₀
-    have htT : t < max T₀ (t + 1) := by omega
+    have htT : t < Max.max T₀ (t + 1) := by simp only [ThreadId] at *; omega
     unfold claims at hs₀ ⊢
-    have hwkS : (tsum (max T₀ (t + 1)) fun u => (C.ph (upd G t g' u)).wkN) =
-        tsum (max T₀ (t + 1)) fun u => (C.ph (G u)).wkN := tsum_congr fun u _ => by
+    have hwkS : (tsum (Max.max T₀ (t + 1)) fun u => (C.ph (upd G t g' u)).wkN) =
+        tsum (Max.max T₀ (t + 1)) fun u => (C.ph (G u)).wkN := tsum_congr fun u _ => by
       by_cases hu : u = t
       · subst hu; rw [upd_self, hg', ht]; rfl
       · rw [hph u hu]
-    have hnq : C.nq (upd G t g') m' (max T₀ (t + 1)) = C.nq G m (max T₀ (t + 1)) :=
+    have hnq : C.nq (upd G t g') m' (Max.max T₀ (t + 1)) = C.nq G m (Max.max T₀ (t + 1)) :=
       tsum_congr fun u _ => by
         by_cases hu : u = t
         · subst hu; rw [upd_self, hg', ht]; rfl
@@ -740,8 +782,9 @@ theorem Inv.cnt_consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr 
   · have := tsum_upd (g := fun u => if (C.ph (G u)).isReg then 1 else 0)
       (g' := fun u => if (C.ph (upd G t g' u)).isReg then 1 else 0) htT fun u hu => by
         rw [hph u hu]
-    simp only [upd_self, hg', ht, CPh.isReg] at this
-    unfold nreg; omega
+    have e1 : (if (C.ph (upd G t g' t)).isReg then 1 else 0) = 0 := by rw [upd_self, hg']; rfl
+    have e2 : (if (C.ph (G t)).isReg then 1 else 0) = 1 := by rw [ht]; rfl
+    unfold nreg at hw₀ ⊢; omega
   · unfold claims at hs₀ ⊢
     have hwkS : (tsum T fun u => (C.ph (upd G t g' u)).wkN) = tsum T fun u => (C.ph (G u)).wkN :=
       tsum_congr fun u _ => by
