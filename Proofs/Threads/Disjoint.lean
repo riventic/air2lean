@@ -719,10 +719,9 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
     · rw [Array.getElem?_setIfInBounds_ne (by decide), hi₁₇.t0] at hget; cases hget; rfl
     · rw [Array.getElem?_setIfInBounds_ne (by decide), r1₁₇] at hget; cases hget; rfl
     · rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₇]; decide)] at hget; cases hget; rfl
-  have htl : 0 < m₁₈.threads.size := by rw [hth₁₈, Array.size_setIfInBounds, hsz₁₇]; decide
   -- `x +% y`, then the reverse-order frees (MM-18): `c2`, `c1`, `y`, `x`.
   fsym [blk_load (w := a) hxb hx0 hAx, blk_load (w := b) hyb hy0 hAy,
-    ctxBytes_size, enc_u32, Array.size_setIfInBounds, joinedAll_of_threads]
+    Array.size_setIfInBounds, joinedAll_of_threads]
 
 /-! ## The results -/
 
