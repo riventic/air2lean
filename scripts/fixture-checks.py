@@ -420,9 +420,15 @@ def prepare_shared(log: Path):
     others: every library of the proof-fixture package (a unit's own `fixtures.py build` is then
     an up-to-date check), and the compiled assurance extractor (assumptions.py `prepared_tool`).
     Returns the failure, or None."""
-    with open(log, 'wb') as out:
-        if subprocess.run(FIXTURE_BUILD, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode:
-            return 'the proof-fixture package: %s failed (log %s)' % (' '.join(FIXTURE_BUILD[2:]), log)
+    try:
+        with open(log, 'wb') as out:
+            status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
+    except OSError as error:
+        return 'the proof-fixture package: %s' % error
+    if status:  # its errors, as a failed unit shows its log's tail (the log may not outlive the run)
+        tail = log.read_text(errors='replace').strip().splitlines()[-15:]
+        return 'the proof-fixture package: %s exited %d (log %s)%s' % (
+            ' '.join(FIXTURE_BUILD[2:]), status, log, ''.join('\n    ' + line for line in tail))
     try:
         with assumptions.prepared_tool():
             pass
@@ -432,15 +438,17 @@ def prepare_shared(log: Path):
 
 
 def shared_outputs():
-    """Identity (inode, size, mtime) of every module the units import from the shared packages
-    (`SHARED`), its .olean. They are built before the units (`prepare_shared`); Lake has no build
-    lock, and an audit binds every compiled module on its lookup path (assumptions.py
-    `lean_path_binding`), so a unit that rebuilds or deletes one in place races every unit that
+    """Identity (inode, size, mtime) of every compiled file of the shared packages (`SHARED`):
+    each module's .olean and its companions, the files an audit binds (assumptions.py
+    `COMPILED_SUFFIXES`, `lean_path_binding`). They are built before the units (`prepare_shared`);
+    Lake has no build lock, so a unit that rebuilds or deletes one in place races every unit that
     reads the package (a missing .olean mid-walk, "compiler-owned Unit imported inputs changed").
     Lake's trace and hash files are not compared: an up-to-date check may rewrite them."""
     found = {}
     for shared in SHARED:
-        for path in shared.rglob('*.olean'):
+        for path in shared.rglob('*'):
+            if not path.name.endswith(assumptions.COMPILED_SUFFIXES):
+                continue
             try:
                 info = path.lstat()
             except FileNotFoundError:

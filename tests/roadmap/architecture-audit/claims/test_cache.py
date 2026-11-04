@@ -65,14 +65,12 @@ def outputs():
     return {p.name: DRIVER.sub(b'<driver>.lean', p.read_bytes()) for p in sorted(files)}
 
 
-def require_built_root():
-    """The runs below toggle the cache for the fixtures only; the root package's modules must be
-    up to date for Lake with and without it (in the check tree, cloned from the checkout's
-    build). Otherwise the uncached run would rebuild them and compare outputs built from two
-    different root builds."""
+def require_built_root(targets):
+    """The runs below toggle the cache for the fixtures only; the root package's modules
+    (`targets`, scripts/lean-deps.py --all) must be up to date for Lake with and without it, in
+    the checkout and in the check tree that clones its build. Otherwise the uncached run would
+    rebuild them and compare outputs built from two different root builds."""
     env = {k: v for k, v in os.environ.items() if k != 'AIR2LEAN_CAS_DIR' and not k.startswith('LAKE_')}
-    targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
-                             env=env, text=True, stdout=subprocess.PIPE, check=True).stdout.split()
     done = subprocess.run(['lake', 'build', '--no-build', *targets], cwd=ROOT, env=env, text=True,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if done.returncode:
@@ -82,16 +80,20 @@ def require_built_root():
                          % (', '.join(stale[:10]) or done.stdout[-2000:]))
 
 
-def main():
+def main(argv):
     if not (ROOT / '.air2lean-check-tree.json').is_file():  # the checkout: run in a check tree
+        # The root's targets come from git (scripts/lean-deps.py), which a check tree is not.
+        targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
+                                 text=True, stdout=subprocess.PIPE, check=True).stdout.split()
+        require_built_root(targets)
         tree = ROOT / '.lake/check-tree/audit-cache'
         subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/check-tree.py'), 'create', str(tree)],
                        cwd=ROOT, check=True)
-        return subprocess.run([sys.executable, '-B', str(tree / Path(__file__).resolve().relative_to(ROOT))],
-                              cwd=tree).returncode
+        return subprocess.run([sys.executable, '-B', str(tree / Path(__file__).resolve().relative_to(ROOT)),
+                               *targets], cwd=tree).returncode
     build = ['bash', str(HERE / 'build.sh')]
     fill = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'run', '--', 'lake', 'build', 'AuditClaims']
-    require_built_root()
+    require_built_root(argv)  # the clone of the checkout's build, as up to date as the checkout's
     # The extractor records whether its tool olean was reused; a first audit in a new checkout
     # has no record yet. Make both build.sh runs see the same state.
     import assumptions
@@ -119,4 +121,4 @@ def main():
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
