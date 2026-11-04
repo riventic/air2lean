@@ -807,7 +807,7 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
             with self.assertRaises(RuntimeError):
                 sampler.sample()
 
-    def test_sequential_zig_flags_and_leaf_count(self):
+    def test_sequential_zig_flags_and_invocation_count(self):
         names = {"zig"}
         self.assertEqual(guard.sequential_command(["zig", "build", "test"], names),
                          ["zig", "build", "-j1", "test"])
@@ -815,17 +815,45 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
                         ["zig", "build", "-j"], ["zig", "build", "@options"]):
             with self.assertRaises(ValueError):
                 guard.sequential_command(command, names)
-        rows = {1: {"parent": 0, "name": "zig"}, 2: {"parent": 1, "name": "zig"}}
-        self.assertFalse(guard.parallel_zig(rows, {1, 2}, names))
-        rows[3] = {"parent": 1, "name": "zig"}
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, names))
-        self.assertFalse(guard.parallel_zig(rows, {1, 2, 3}, names, jobs=2))
-        rows[4] = {"parent": 1, "name": "zig"}
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3, 4}, names, jobs=2))
-        del rows[4]
+        # `zig build` (1) runs its compilers (2, 3, 4) below its build runner (10).
+        rows = {1: {"parent": 0, "name": "zig"}, 10: {"parent": 1, "name": "build"},
+                2: {"parent": 10, "name": "zig"}}
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2}, names))
+        rows[3] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3}, names))
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2, 3}, names, jobs=2))
+        rows[4] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3, 4}, names, jobs=2))
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2, 3, 4}, names, jobs=3))
+        # A cold libc build under it: compiler 2's `zig clang` children are part of compiler 2.
+        for pid in (20, 21, 22, 23):
+            rows[pid] = {"parent": 2, "name": "zig"}
+        tree = {1, 10, 2, 3, 4, 20, 21, 22, 23}
+        self.assertFalse(guard.parallel_zig(rows, tree, names, jobs=3))
+        self.assertTrue(guard.parallel_zig(rows, tree, names, jobs=2))
+        # A non-Zig process below a clang child that runs a compiler (40): compiler 2 supervises
+        # it, so 40 counts instead of 2.
+        rows[41] = {"parent": 20, "name": "sh"}
+        rows[40] = {"parent": 41, "name": "zig"}
+        self.assertFalse(guard.parallel_zig(rows, tree | {40, 41}, names, jobs=3))  # 3, 4 and 40
+        rows[5] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, tree | {40, 41, 5}, names, jobs=3))
+
+        def tree_of(edges, name="zig"):  # {pid: parent pid} of Zig processes, others as given
+            return {pid: {"parent": parent, "name": name} for pid, parent in edges.items()}
+
+        # One `zig build-exe ... -lc` (30) with its clang children: one invocation. So is a Zig
+        # process with direct Zig children (Zig starts several compilers only through a runner).
+        single = tree_of({30: 0, 31: 30, 32: 30, 33: 30})
+        self.assertFalse(guard.parallel_zig(single, set(single), names))
+        # 0.17: `zig build` execs into its runner `maker`; its compilers (with clang children) each count.
+        maker = {50: {"parent": 0, "name": "maker"}, **tree_of({51: 50, 52: 50, 53: 51, 54: 51})}
+        self.assertTrue(guard.parallel_zig(maker, set(maker), names))
+        self.assertFalse(guard.parallel_zig(maker, set(maker), names, jobs=2))
+        # Truncated comm: aliases sharing the 15-byte prefix count as the configured name.
         alias = "zig-very-long-configured-alias"
-        rows[2]["name"] = rows[3]["name"] = alias[:15]
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, {alias}))
+        aliased = {60: {"parent": 0, "name": "driver"}, **tree_of({61: 60, 62: 60}, alias[:15])}
+        self.assertTrue(guard.parallel_zig(aliased, set(aliased), {alias}))
         self.assertEqual(guard.sequential_command(["zig", "build", "--prefix", "-j1"], names),
                          ["zig", "build", "-j1", "--prefix", "-j1"])
         self.assertEqual(guard.sequential_command(["zig", "build", "run", "--", "-j1", "-j2"], names),
@@ -984,11 +1012,11 @@ os._exit(0)
             self.assertEqual(stops.call_count, 2)
             self.assertEqual(results, [True, True])
 
-    def test_truncated_alias_leaves_trigger_workload_termination(self):
+    def test_truncated_alias_compilers_trigger_workload_termination(self):
         alias = "zig-long-configured-compiler"
         args, _, _ = self.command("fixture_pause()", "--zig-name", alias)
         original_processes = guard.processes
-        def sampled_leaves(*args):
+        def sampled_compilers(*args):
             rows = original_processes(*args)
             leaders = [pid for pid, row in rows.items()
                        if row["parent"] == os.getpid() and row["group"] == pid]
@@ -999,7 +1027,7 @@ os._exit(0)
                     rows[pid] = {"parent": leader, "group": leader, "start": "mock",
                                  "name": alias[:15], "rss_kib": 0}
             return rows
-        with mock.patch.object(guard, "processes", side_effect=sampled_leaves):
+        with mock.patch.object(guard, "processes", side_effect=sampled_compilers):
             report = guard.run(guard.parse_args(args[2:]))
         self.assertEqual((report["exit_code"], report["outcome"]), (126, "parallel_zig"))
         self.assertLess(report["child_status"], 0)

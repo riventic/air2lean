@@ -129,8 +129,21 @@ Response-like `@...` tokens before that boundary are refused conservatively,
 including literal filename values. Version-specific operands can also cause a
 conservative refusal (for example, `--debug-libc -j2`, absent in 0.14.1). A value
 named `-j1` does not replace the injected build option. It also stops a
-workload when a sample contains more leaf Zig processes than `--jobs` (default 1). A build driver
-supervising one compiler is counted once. `zig`, `zig-air`, and `zig-unlocked`
+workload when a sample contains more Zig compiler invocations than `--jobs` (default 1):
+
+- One invocation counts once, together with the Zig children it starts for its own tools: a Zig
+  process whose parent is a Zig process. Those are `zig clang` for C sources and libc,
+  `zig ld.lld`, and `zig rc`. A cold global cache makes one `zig build-exe … -lc` start several
+  `zig clang` processes at once. `--jobs` bounds invocations, not these children; `--rss-mib`
+  bounds their memory.
+- An invocation that supervises others through non-Zig processes is not counted; the ones below
+  it are. That is the `zig build` driver of 0.14–0.16 above its build runner (0.17 execs into
+  its runner, `maker`). So `zig build`'s parallel compilers count one each.
+- This relies on Zig never starting several compilers as its own direct children, which holds
+  for 0.14–0.17. A wrapper named like a compiler must exec it, not spawn it; zig-patch/lock.sh
+  execs.
+
+`zig`, `zig-air`, and `zig-unlocked`
 are recognized; use `--zig-name NAME` for a renamed executable. Linux `comm`
 truncation is matched conservatively at 15 bytes, so aliases sharing that prefix
 can cause a refusal even when the longer names differ. Scripts must

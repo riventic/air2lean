@@ -175,22 +175,24 @@ class Tree:
 
 
 def parallel_zig(rows, owned, names, jobs=1):
-    # More than `jobs` leaf Zig compilers. Linux comm truncates to 15 bytes. Prefix
-    # collisions are intentionally conservative: refusing ambiguous parallel work is
-    # safer than missing it.
+    """More than `jobs` Zig compiler invocations (docs/build-budgets.md). Linux comm truncates to
+    15 bytes. Prefix collisions are intentionally conservative: refusing ambiguous parallel work
+    is safer than missing it."""
     observed_names = names | {name.encode()[:15].decode(errors="replace") for name in names}
     zig = {pid for pid in owned if rows[pid]["name"] in observed_names}
-    # A zig build driver supervising one compiler is sequential. Count leaf Zig
-    # processes, not their build-driver ancestors.
+    # One invocation counts once: a Zig process whose parent is a Zig process is part of its
+    # parent's invocation. Zig 0.14-0.17 start Zig children only for a compiler's own tools
+    # (`zig clang`, `zig ld.lld`, `zig rc`), never several compilers.
+    invocations = {pid for pid in zig if rows[pid]["parent"] not in zig}
+    # An invocation that supervises others through non-Zig processes is not counted, they are:
+    # the `zig build` driver of 0.14-0.16 above its build runner (0.17 execs into the runner).
     ancestors = set()
-    for pid in zig:
+    for pid in invocations:
         parent = rows[pid]["parent"]
-        visited = set()
-        while parent in owned and parent not in visited:
-            visited.add(parent)
+        while parent in owned and parent not in ancestors:
             ancestors.add(parent)
             parent = rows[parent]["parent"]
-    return len(zig - ancestors) > jobs
+    return len(invocations - ancestors) > jobs
 
 
 def signal_groups(groups, sig):
