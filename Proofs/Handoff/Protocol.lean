@@ -1152,12 +1152,12 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       rcases hSh with e | ⟨x, hx, e⟩
       · exact .inl ⟨(FCond.RegW.congr e).mp hj, by rw [e]⟩
       · rcases FCond.RegW.push e hj with hj' | ⟨rfl, hw0, hw1⟩
-        · exact .inl ⟨hj', by rw [e, FEvent.get_push_lt hj'.2.1]⟩
+        · exact .inl ⟨hj', by rw [e, Word.get_push_lt hj'.2.1]⟩
         · have hr1 : ((G' 0).2.c).isReg = true := by
             rw [hwx x e] at hw1; revert hw1; cases ((G' 0).2.c).isReg <;> simp
           have hr0 : ((G 0).2.c).isReg = false := by
             rw [hwl] at hw0; revert hw0; cases ((G 0).2.c).isReg <;> simp
-          exact .inr ⟨x, hx, by rw [e, FEvent.get_push_eq], henter hr1 hr0⟩
+          exact .inr ⟨x, hx, by rw [e, Word.get_push_eq], henter hr1 hr0⟩
     rcases hcase with ⟨hj', e⟩ | ⟨x, hx, e, rfl, hcr⟩
     · rw [e, (hph 1).1]
       rcases hu.reg j hj' with h' | ⟨hlk, h' | h'⟩
@@ -1175,23 +1175,23 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · have h1 := hwl'; rw [FCond.lastS_congr e, hwl, hr, h0] at h1; simp at h1
       · refine ⟨((C Lo).S.hist m).size,
           ⟨by omega, by rw [e, Array.size_push]; omega, ?_, ?_⟩, fun p hp1 hp2 => ?_⟩
-        · rw [e, FEvent.get_push_lt (by omega), hwl, hr]; rfl
-        · rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
+        · rw [e, Word.get_push_lt (by omega), hwl, hr]; rfl
+        · rw [e, Word.get_push_eq, hwx x e, h0]; rfl
         · rw [e, Array.size_push] at hp2
           obtain rfl : p = ((C Lo).S.hist m).size := by omega
-          rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
+          rw [e, Word.get_push_eq, hwx x e, h0]; rfl
     · obtain ⟨j, hj, hp⟩ := hu.w1 hr
       have hjs : j < ((C Lo).S.hist m).size := hj.2.1
       rcases hSh with e | ⟨x, -, e⟩
       · exact ⟨j, (FCond.RegW.congr e).mpr hj, by rw [e]; exact hp⟩
       · refine ⟨j, ⟨hj.1, by rw [e, Array.size_push]; omega, ?_, ?_⟩, fun p hp1 hp2 => ?_⟩
-        · rw [e, FEvent.get_push_lt (by omega)]; exact hj.2.2.1
-        · rw [e, FEvent.get_push_lt hj.2.1]; exact hj.2.2.2
+        · rw [e, Word.get_push_lt (by omega)]; exact hj.2.2.1
+        · rw [e, Word.get_push_lt hj.2.1]; exact hj.2.2.2
         · rw [e, Array.size_push] at hp2
           by_cases hp3 : p < ((C Lo).S.hist m).size
-          · rw [e, FEvent.get_push_lt hp3]; exact hp p hp1 hp3
+          · rw [e, Word.get_push_lt hp3]; exact hp p hp1 hp3
           · obtain rfl : p = ((C Lo).S.hist m).size := by omega
-            rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
+            rw [e, Word.get_push_eq, hwx x e, h0]; rfl
   · -- snap: no registration while the producer is past its lock
     rw [(hph 1).2.2] at hn
     obtain ⟨hsg, hlt⟩ := hu.snap n hn
@@ -1406,7 +1406,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · refine hI.isSet_of (j := (Lo.WV.hist m).size - 1) ?_ ?_
       · show _ < (Lo.WV.hist m').size; rw [e, Array.size_push]; omega
       · show ((Lo.WV.hist m')[(Lo.WV.hist m).size - 1]!).Val _
-        rw [e, FEvent.get_push_lt (by omega)]; exact hset
+        rw [e, Word.get_push_lt (by omega)]; exact hset
   · -- q
     rcases hwt w hw with h' | rfl
     · exact hu.q w h'
@@ -1480,7 +1480,7 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, hW, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
       · refine cstep G rY m m' t p q h W hW hn hq hu hY hs hEp (fun sh c q n h' e1 e2 => ?_) hI
         rw [e1, e2] at hsg
         obtain ⟨-, x, e⟩ := hsg
@@ -1516,7 +1516,7 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hlq, rfl, hs, -⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hlq, rfl, hs, -⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hlq hu hY hs hI
       · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }

@@ -32,8 +32,10 @@ waiters) bounds the epoch writes between a waiter's save and its enqueue below `
 ruling 6264821278; the window `FCond.Fits.win`, which the client's rest keeps), and why a
 contract may not demand that every implementation wake a sleeping waiter. Each `epoch += 1`
 follows its signaller's own post (`FCond.SigStep`), so a client that bounds its posts bounds the
-increments in that window. The schedule is a kernel-checked fact about the model's op runs in one chosen order,
-not a run of the scheduler.
+increments in that window; the window counts from the waiter's saved write, which may lag behind
+the newest (`FCond.ld_newest` gives the newest at the load, `ZigLean/Sep/Full/Cond.lean`). The
+schedule is a kernel-checked fact about the model's op runs in one chosen order, not a run of
+the scheduler.
 -/
 
 namespace Zig
