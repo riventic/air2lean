@@ -40,8 +40,9 @@ both (`tests/roadmap/sync-contracts/EventSet.lean`).
 **Roles.** `FEvent.wx` are the ghost values of the threads that may wait (the protocol says which
 threads those are); the invariant keeps that each waiter and the writer of each `waiting` write
 may wait (`Inv.wx`, `Inv.wby`), so a client with one such thread discharges `hone` and `hhb`
-from the invariant. `FEvent.sx` are the ghost values of the threads that may set it: a setter at
-`sw` has one (`Inv.sx`), so a client can tell which threads are in the setter's code. A step of
+from the invariant. `FEvent.sx` are the ghost values of the threads that may set it: a setter (at
+`sw` or `sd`, `EPh.Setting`) has one (`Inv.sx`), so a client can tell which threads are in the
+setter's code. A step of
 the event's code changes the stepping thread's lock place only for a waiter's sleep (`w1`,
 `away`), so the event's steps keep the places of the other components of a protocol.
 **Gone setters.** A setter may run the set path after it left the lock's protocol (lock place
