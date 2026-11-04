@@ -5993,6 +5993,7 @@ providers about a pointer derived from a region's apply to it (`regionStoreAdd`,
 `ReadsAt.regionIn`). The command so restated and `x = x'`, or none. -/
 def rebaseLitPtr? (P x : Expr) : TacticM (Option (Expr × Expr)) := do
   let ptr := mkConst ``Zig.Ptr
+  unless x.getAppArgs.any (·.isAppOfArity ``Zig.Ptr.mk 2) do return none
   let ats := atoms P
   -- (the regions with a known block, once)
   let regions ← (ats.filterMap regionArgs?).filterMapM fun r => do
