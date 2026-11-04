@@ -147,19 +147,16 @@ theorem lock_wp_unmetered (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Pt
 
 /-- The actual Linux emitted loop pays each reachable tick from an unmetered caller part;
 all remaining caller fragments, including stack resources, keep their exact values. -/
-def lockResources : CallerResources where
-  pre _ r := 0 < r.gh.ac.frag .unmetered
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ hp := hp.2
-  plain_post _ _ _ _ hr := hr
+def lockPre : ThreadId → FAssn := payUnmetered
+
+theorem lockPre_plain {t : ThreadId} {r : Res} (h : r.Plain) : lockPre t r := h.2
 
 theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hu : lockResources.pre t (L.part g)) (io : Io)
+    (hu : lockPre t (L.part g)) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r rL, lockResources.post t (L.part g) r ∧
+      ∃ r rL, keepPart t (L.part g) r ∧
         P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
   refine WP.mono ?_ (lock_wp_unmetered hP hcost hp hc t g hg hok hu io G m d hi)
   rintro _ G' m' d' ⟨hd, hcur, rL, hi'⟩
@@ -259,19 +256,16 @@ theorem lock_wp_part (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (h
 
 /-- This native wrapper performs no emitted tick and preserves the exact arbitrary caller
 part. Its profile imposes no payment closure or unmetered guard. -/
-def lockResources : CallerResources where
-  pre _ _ := True
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ _ := True.intro
-  plain_post _ _ _ _ hr := hr
+def lockPre : ThreadId → FAssn := anyPart
+
+theorem lockPre_plain {t : ThreadId} {r : Res} (_ : r.Plain) : lockPre t r := True.intro
 
 theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hc : L.c = mutexC) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (_hpre : lockResources.pre t (L.part g)) (io : Io)
+    (_hpre : lockPre t (L.part g)) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Mutex_lock p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r rL, lockResources.post t (L.part g) r ∧
+      ∃ r rL, keepPart t (L.part g) r ∧
         P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
   refine WP.mono ?_ (lock_wp_part hP hcost hp hc t g hg hok (fun r => r = L.part g)
     rfl io G m d hi)
@@ -314,7 +308,10 @@ def threadMutex : MutexImpl Tgt where
   lock p _ := Thread_Mutex_lock p
   unlock p _ := Thread_Mutex_unlock p
   c := mutexC
-  lock_resources := ThreadMutex.lockResources
+  lock_pre := ThreadMutex.lockPre
+  lock_post := keepPart
+  lock_plain_pre _ _ := ThreadMutex.lockPre_plain
+  lock_plain_post _ _ _ _ hr := hr
   lock_wp_resource hP hcost := ThreadMutex.lock_wp_resource hP hcost
   unlock_wp hP hcost := ThreadMutex.unlock_wp hP hcost
 

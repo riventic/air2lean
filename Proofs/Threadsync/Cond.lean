@@ -29,14 +29,6 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
 
 /-! ## `signal`: `wake(1)` -/
 
-/-- The real retry loop pays from the caller's unmetered fragment and preserves its part. -/
-def signalResources : CallerResources where
-  pre _ r := 0 < r.gh.ac.frag .unmetered
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ hp := hp.2
-  plain_post _ _ _ _ hr := hr
-
 /-- `wake`'s loop invariant: `t` read the state value `b`; a value other than `(1, 0)` means a
 registered waiter was signalled. -/
 def wakeInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
@@ -102,14 +94,14 @@ theorem cond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost 
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hu : signalResources.pre t (L.part g))
-    (hseen : ∀ rᵢ, signalResources.during t (L.part g) rᵢ → ∀ G₁ rX m₁,
+    (hu : payUnmetered t (L.part g))
+    (hseen : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G₁ rX m₁,
       G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Condition_signal p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r', signalResources.post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+      ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
   refine WP.mono ?_ (cond_signal_wp_unmetered hC hcost hp t g hgx hgo hsx io G m d hu ?_ hi)
   · rintro _ G' m' d' ⟨hd, hc, hi', hs⟩
@@ -237,11 +229,11 @@ def post107 (DR : BlockId → FAssn) (P : Proto Tgt γ) (L : FLock γ) (C : FCon
       P.inv (upd G t (L.setPart (L.set g .holds rL) r)) m))
 
 theorem mutex_pre_unmetered (t : ThreadId) (r : Res)
-    (hu : 0 < r.gh.ac.frag .unmetered) : threadMutex.lock_resources.pre t r := by
+    (hu : 0 < r.gh.ac.frag .unmetered) : threadMutex.lock_pre t r := by
   first | exact hu | trivial
 
 theorem mutex_post_exact (t : ThreadId) (r r' : Res)
-    (h : threadMutex.lock_resources.post t r r') : r' = r := h
+    (h : threadMutex.lock_post t r r') : r' = r := h
 
 theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (DR : BlockId → FAssn) (hu : ∀ b r, DR b r → 0 < r.gh.ac.frag .unmetered)
@@ -259,7 +251,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
     threadMutex.lock_wp_resource (io := {}) hC hcost rfl hLc t (L.setPart (L.set g .out rnil) _)
       (by simp only [L.ph_setPart, L.ph_set])
       ((hC.ok_setPart _ _).mpr ((hC.ok_set g .out rnil).mpr hok)),
-    mutex_pre_unmetered, ThreadMutex.lockResources,
+    mutex_pre_unmetered, ThreadMutex.lockPre, keepPart,
     gRD_ph hC, gRD_lph hC, gRD_out hC hgx, gD_lock, hC.ok_setPart, hC.ok_set,
     L.part_setPart, L.setPart_setPart, inv107, post107,
     Thread_Condition_FutexImpl_wait.again107]
@@ -365,14 +357,14 @@ theorem cond_wait_wp_resource [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (h
       U (upd G t (C.set g .en)) rX m)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
-    (hpre : deadlineResources.pre t (L.part g)) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    (hpre : deadlinePre t (L.part g)) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Thread_Condition_wait p q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r' rL, deadlineResources.post t (L.part g) r' ∧
+      ∃ r' rL, keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.set (L.setPart g r') .holds rL)) m') G m d := by
   subst hp hq
-  obtain ⟨DR, hu, halloc, hfree⟩ := deadlineResources.elim hpre
+  obtain ⟨DR, hu, halloc, hfree⟩ := deadlinePre.elim hpre
   fsym [fwait_wp hC hcost DR hu hLc t g hgx hgh hok G m d hone hhb hent hlive halloc hfree hi hc,
-    deadlineResources, L.setPart_self]
+    keepPart, L.setPart_self]
 
 /-- The concrete Plain convenience is an endpoint specialization of the same resource proof. -/
 theorem cond_wait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
@@ -402,8 +394,15 @@ def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   wait p _ q := Thread_Condition_wait p q
   signal p _ := Thread_Condition_signal p
   c := mutexC
-  wait_resources := deadlineResources
-  signal_resources := signalResources
+  wait_pre := deadlinePre
+  wait_post := keepPart
+  wait_plain_pre _ _ := .inl
+  wait_plain_post _ _ _ _ hr := hr
+  signal_pre := payUnmetered
+  signal_during := keepPart
+  signal_post := keepPart
+  signal_plain_pre _ _ := payUnmetered_plain
+  signal_plain_post _ _ _ _ hr := hr
   wait_wp_resource := cond_wait_wp_resource
   signal_wp_resource := cond_signal_wp_resource
 

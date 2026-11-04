@@ -276,17 +276,11 @@ theorem dfree_sp {t S D : Nat} (R : FAssn) {q : Ptr} {bs : Array Byte} (hbs : bs
 
 /-- The actual deadline-bearing wait family: concrete Plain parts, or an owned stack token
 with room for this block and a real unmetered residual. No other part supplies stack room. -/
-def deadlineResources : CallerResources where
-  pre t r := r.Plain ∨ ∃ (S D : Nat) (rRest : Res), D + 56 ≤ S ∧
-    0 < rRest.gh.ac.frag .unmetered ∧ (sp t S D ⋆ (· = rRest)) r
-  during _ r₀ r := r = r₀ ∨
-    ∃ (DR : BlockId → FAssn) (q : Ptr) (bs : Array Byte), DPart DR q bs r
-  post _ r₀ r := r = r₀
-  plain_pre _ _ hp := .inl hp
-  plain_post _ _ _ _ hr := hr
+def deadlinePre : ThreadId → FAssn := fun t r => r.Plain ∨ ∃ (S D : Nat) (rRest : Res),
+  D + 56 ≤ S ∧ 0 < rRest.gh.ac.frag .unmetered ∧ (sp t S D ⋆ (· = rRest)) r
 
-theorem deadlineResources.unmetered {t : ThreadId} {r : Res}
-    (h : deadlineResources.pre t r) : 0 < r.gh.ac.frag .unmetered := by
+theorem deadlinePre.unmetered {t : ThreadId} {r : Res}
+    (h : deadlinePre t r) : 0 < r.gh.ac.frag .unmetered := by
   rcases h with hp | ⟨S, D, rRest, _, hu, hpart⟩
   · exact hp.2
   · obtain ⟨rs, rr, _, he, _, hr⟩ := hpart
@@ -307,8 +301,8 @@ theorem DPart.unmetered {DR : BlockId → FAssn}
 
 /-- Select one actual deadline residual for the shared wait proof. Both admissions use the
 same allocation, byte and free rules; the budgeted branch changes its owned stack token. -/
-theorem deadlineResources.elim {t : ThreadId} {r₀ : Res}
-    (hp : deadlineResources.pre t r₀) :
+theorem deadlinePre.elim {t : ThreadId} {r₀ : Res}
+    (hp : deadlinePre t r₀) :
     ∃ DR : BlockId → FAssn,
       (∀ b r, DR b r → 0 < r.gh.ac.frag .unmetered) ∧
       FTTriple ((· = r₀) ⋆ cur t) (allocStack 48 8)

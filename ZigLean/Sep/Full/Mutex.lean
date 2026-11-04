@@ -48,15 +48,20 @@ structure MutexImpl (Tgt : Type) where
   unlock : Ptr → Io → ConcM Tgt Unit
   /-- The word's value while a thread can wait (`LockWord.c`). -/
   c : Nat
-  /-- Actual caller-resource assertions for this implementation's lock. -/
-  lock_resources : CallerResources
+  /-- The caller part that admits `lock` in this implementation's actual code
+  (`LockRules`, "Caller parts of composite operations"). -/
+  lock_pre : ThreadId → FAssn
+  /-- The caller part `lock` returns, from the one it was called with. -/
+  lock_post : ThreadId → Res → FAssn
+  lock_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → lock_pre t r
+  lock_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → lock_post t r r' → r' = r
   lock_wp_resource : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
-    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → lock_resources.pre t (L.part g) →
+    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → lock_pre t (L.part g) →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m →
     P.WP t (lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r rL, lock_resources.post t (L.part g) r ∧
+      ∃ r rL, lock_post t (L.part g) r ∧
         P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d
   unlock_wp : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
@@ -78,9 +83,9 @@ theorem lock_wp (C : MutexImpl Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   refine WP.mono ?_ (C.lock_wp_resource hP hcost hp hS t g hg hok
-    (C.lock_resources.plain_pre t (L.part g) hplain) io G m d hi)
+    (C.lock_plain_pre t (L.part g) hplain) io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, r, rL, hr, hi'⟩
-  have he := C.lock_resources.plain_post t (L.part g) r hplain hr
+  have he := C.lock_plain_post t (L.part g) r hplain hr
   subst r
   exact ⟨hd, hc, rL, by simpa only [L.setPart_self] using hi'⟩
 

@@ -114,14 +114,6 @@ theorem condS_lt0 {b : BitVec 32} (h : b = 0) :
 
 theorem debugAssert_true : (debug_assert true).run = some (.ok ()) := rfl
 
-/-- The emitted condition operations retain the caller's exact part using a positive unmetered
-fragment. This admission permits arbitrary compatible stack resources. -/
-def ioCondResources : CallerResources where
-  pre _ r := 0 < r.gh.ac.frag .unmetered
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ hp := hp.2
-  plain_post _ _ _ _ hr := hr
 
 section
 variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
@@ -214,14 +206,14 @@ theorem ioCond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cos
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hu : ioCondResources.pre t (L.part g))
-    (hseen : ∀ rᵢ, ioCondResources.during t (L.part g) rᵢ → ∀ G₁ rX m₁,
+    (hu : payUnmetered t (L.part g))
+    (hseen : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G₁ rX m₁,
       G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →
         VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Condition_signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r', ioCondResources.post t (L.part g) r' ∧
+      ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m' ∧
         ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
   have hseenExact : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
@@ -705,9 +697,9 @@ theorem ioCond_wait_wp_resource (hC : L.Fits (C.prim L) P U ok)
       U (upd G t (C.set g .en)) rX m)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁)
-    (hu : ioCondResources.pre t (L.part g)) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r' rL, ioCondResources.post t (L.part g) r' ∧
+      ∃ r' rL, keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.set (L.setPart g r') .holds rL)) m') G m d := by
   refine WP.mono ?_ (ioCond_wait_wp_unmetered hC hcost hp hq hLc t g hgx hgh hok
     io G m d hone hhb hent hlive hu hi hc)
@@ -721,8 +713,15 @@ def ioCond : CondImpl Tgt where
   wait := Io_Condition_waitUncancelable
   signal := Io_Condition_signal
   c := ioMutex.c
-  wait_resources := ioCondResources
-  signal_resources := ioCondResources
+  wait_pre := payUnmetered
+  wait_post := keepPart
+  wait_plain_pre _ _ := payUnmetered_plain
+  wait_plain_post _ _ _ _ hr := hr
+  signal_pre := payUnmetered
+  signal_during := keepPart
+  signal_post := keepPart
+  signal_plain_pre _ _ := payUnmetered_plain
+  signal_plain_post _ _ _ _ hr := hr
   wait_wp_resource := ioCond_wait_wp_resource
   signal_wp_resource := ioCond_signal_wp_resource
 

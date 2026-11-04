@@ -218,23 +218,15 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d :=
   C.lock_wp_unmetered hP hcost hp hS t g hg hok hplain.2 io G m d hi
 
-/-- The emitted unbounded Io.Mutex retry loop uses unmetered caller resources. Its
-singleton intermediate/post assertions preserve all other caller fragments, including
-stack budgets. This is this code family's proved profile, not a generic default. -/
-def lockResources : CallerResources where
-  pre _ r := 0 < r.gh.ac.frag .unmetered
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ hp := hp.2
-  plain_post _ _ _ _ hr := hr
-
-/-- The resource-polymorphic lock contract for the actual emitted Io.Mutex code. -/
+/-- The resource-polymorphic lock contract for the actual emitted Io.Mutex code: the
+unbounded retry loop pays from the caller's unmetered fragment and returns its exact part,
+including stack budgets. This is this code family's proved profile, not a generic default. -/
 theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hu : lockResources.pre t (L.part g)) (io : Io)
+    (hu : payUnmetered t (L.part g)) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r rL, lockResources.post t (L.part g) r ∧
+      ∃ r rL, keepPart t (L.part g) r ∧
         P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
   refine WP.mono ?_ (C.lock_wp_unmetered hP hcost hp hS t g hg hok hu io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, rL, hi'⟩
@@ -270,7 +262,10 @@ def impl : MutexImpl Tgt where
   lock := C.lock
   unlock := C.unlock
   c := C.st.c
-  lock_resources := lockResources
+  lock_pre := payUnmetered
+  lock_post := keepPart
+  lock_plain_pre _ _ := payUnmetered_plain
+  lock_plain_post _ _ _ _ hr := hr
   lock_wp_resource := C.lock_wp_resource
   unlock_wp := C.unlock_wp
 

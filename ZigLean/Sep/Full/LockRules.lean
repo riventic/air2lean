@@ -34,15 +34,25 @@ namespace Full
 
 open FAssn Conc Proto LockWord
 
-/-- Caller-resource assertions of a composite operation, with verified compatibility for
-concrete Plain clients. The implementation's existing WP theorem proves these assertions
-for its actual code. This data asserts no tick count or repeated-payment obligation. -/
-structure CallerResources where
-  pre : ThreadId → FAssn
-  during : ThreadId → Res → FAssn
-  post : ThreadId → Res → FAssn
-  plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → pre t r
-  plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → post t r r' → r' = r
+/-! ## Caller parts of composite operations
+
+A composite contract (`MutexImpl`, `CondImpl`, `EventImpl`) states, for each operation `op`, the
+caller-part assertions its actual code proves, as fields of the contract itself: `op_pre t r` (the
+part `r` that admits the call), `op_post t r r'` (the part `r'` it returns), and the two
+entailments that admit a concrete Plain caller with its exact part (`op_plain_pre`,
+`op_plain_post`). They assert no tick count or repeated-payment obligation. The assertions
+below are the ones the translated code families share. -/
+
+/-- An unticked operation admits every caller part. -/
+def anyPart : ThreadId → FAssn := fun _ _ => True
+
+/-- The caller pays each reachable tick from a positive unmetered fragment. -/
+def payUnmetered : ThreadId → FAssn := fun _ r => 0 < r.gh.ac.frag .unmetered
+
+theorem payUnmetered_plain {t : ThreadId} {r : Res} (h : r.Plain) : payUnmetered t r := h.2
+
+/-- The operation returns (or holds meanwhile) the caller's exact part. -/
+def keepPart : ThreadId → Res → FAssn := fun _ r r' => r' = r
 
 namespace FLock
 

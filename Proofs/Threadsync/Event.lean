@@ -87,19 +87,12 @@ theorem resetEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none
   exact WP.pure' (WP.pure' h)
 
 /-- This actual unticked setter needs no payment admission and preserves every caller part. -/
-def setResources : CallerResources where
-  pre _ _ := True
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ _ := True.intro
-  plain_post _ _ _ _ hr := hr
-
 theorem resetEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (_hpre : setResources.pre t (L.part g)) (hi : P.inv (upd G t g) m) :
+    (_hpre : anyPart t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_set p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ ∃ r', setResources.post t (L.part g) r' ∧
+      E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m') G m d := by
   refine WP.mono ?_ (resetEvent_set_wp hE hcost hp t g hgx hgo hsx io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
@@ -231,18 +224,18 @@ theorem resetEvent_wait_wp_resource [Zig.Os.HasEnv]
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁)
-    (hpre : deadlineResources.pre t (L.part g)) (hi : P.inv (upd G t g) m) :
+    (hpre : deadlinePre t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_wait p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ ∃ r', deadlineResources.post t (L.part g) r' ∧
+      E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m') G m d := by
   subst hp
   have hi0 := hE.enterWait hgx hgo hwx hone hhb hi
-  obtain ⟨DR, hu, halloc, hfree⟩ := deadlineResources.elim hpre
+  obtain ⟨DR, hu, halloc, hfree⟩ := deadlinePre.elim hpre
   fsym [FEvent.wp_load hE (g := E.set g .w0) (t := t)
       (hg := .inl (E.ph_set _ _)) (hgo := by rw [hE.lph]; exact hgo) (hi := hi0),
     wus_wp hE hcost DR hu hgx hgo hlive,
     halloc, hfree, gD_self, E.set_set, FEvent.set_of, hE.lph, hE.lpart,
-    deadlineResources, L.setPart_self]
+    keepPart, L.setPart_self]
 
 /-- Concrete Plain waits specialize the same resource proof and recover the original part. -/
 theorem resetEvent_wait_wp [Zig.Os.HasEnv] (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
@@ -269,8 +262,14 @@ end ResetEvent
 def resetEvent [Zig.Os.HasEnv] : EventImpl Tgt where
   wait p _ := Thread_ResetEvent_wait p
   set p _ := Thread_ResetEvent_set p
-  wait_resources := deadlineResources
-  set_resources := ResetEvent.setResources
+  wait_pre := deadlinePre
+  wait_post := keepPart
+  wait_plain_pre _ _ := .inl
+  wait_plain_post _ _ _ _ hr := hr
+  set_pre := anyPart
+  set_post := keepPart
+  set_plain_pre _ _ _ := True.intro
+  set_plain_post _ _ _ _ hr := hr
   wait_wp_resource := ResetEvent.resetEvent_wait_wp_resource
   set_wp_resource := ResetEvent.resetEvent_set_wp_resource
 

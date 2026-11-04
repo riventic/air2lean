@@ -132,24 +132,8 @@ theorem ioEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
       E.IsSet m' ∧ P.inv (upd G' t g) m') G m d :=
   ioEvent_wait_wp_unmetered hE hcost hp t g hgx hgo hwx io G m d hone hhb hlive hplain.2 hi
 
-/-- The unbounded wait loop preserves the whole caller part, including stack resources,
-using its actual positive unmetered fragment at each entry. -/
-def ioEvent_waitResources : CallerResources where
-  pre _ r := 0 < r.gh.ac.frag .unmetered
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ hp := hp.2
-  plain_post _ _ _ _ hr := hr
-
-/-- `set` contains no tick and preserves every caller part without a payment guard. -/
-def ioEvent_setResources : CallerResources where
-  pre _ _ := True
-  during _ r r' := r' = r
-  post _ r r' := r' = r
-  plain_pre _ _ _ := True.intro
-  plain_post _ _ _ _ hr := hr
-
-/-- The wait's resource contract uses the exact part retained by its unmetered proof. -/
+/-- The wait's resource contract: the unbounded wait loop pays from the caller's positive
+unmetered fragment at each entry and preserves its whole part, including stack resources. -/
 theorem ioEvent_wait_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hwx : E.wx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
@@ -158,22 +142,23 @@ theorem ioEvent_wait_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁)
-    (hu : ioEvent_waitResources.pre t (L.part g)) (hi : P.inv (upd G t g) m) :
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      E.IsSet m' ∧ ∃ r', ioEvent_waitResources.post t (L.part g) r' ∧
+      E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m') G m d := by
   refine WP.mono ?_ (ioEvent_wait_wp_unmetered hE hcost hp t g hgx hgo hwx io G m d
     hone hhb hlive hu hi)
   rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
   exact ⟨hd, hc, hs, L.part g, rfl, by simpa only [L.setPart_self] using hi'⟩
 
-/-- The resource contract exposes the unchanged unticked setter proof. -/
+/-- The setter's resource contract: `set` contains no tick and preserves every caller part
+without a payment guard. -/
 theorem ioEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (_hpre : ioEvent_setResources.pre t (L.part g)) (hi : P.inv (upd G t g) m) :
+    (_hpre : anyPart t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      ∃ r', ioEvent_setResources.post t (L.part g) r' ∧
+      ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart g r')) m') G m d := by
   refine WP.mono ?_ (ioEvent_set_wp hE hcost hp t g hgx hgo hsx io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
@@ -185,8 +170,14 @@ end
 def ioEvent : EventImpl Tgt where
   wait := Io_Event_waitUncancelable
   set := Io_Event_set
-  wait_resources := ioEvent_waitResources
-  set_resources := ioEvent_setResources
+  wait_pre := payUnmetered
+  wait_post := keepPart
+  wait_plain_pre _ _ := payUnmetered_plain
+  wait_plain_post _ _ _ _ hr := hr
+  set_pre := anyPart
+  set_post := keepPart
+  set_plain_pre _ _ _ := True.intro
+  set_plain_post _ _ _ _ hr := hr
   wait_wp_resource := ioEvent_wait_wp_resource
   set_wp_resource := ioEvent_set_wp_resource
 

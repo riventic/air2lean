@@ -2253,16 +2253,25 @@ turns.
    specialization requires actual intermediate/post identity evidence. Both operations frame
    the complete held resource; no profile is assumed closed under adding or removing resources.
 
-The primary fields use the SAME `CallerResources` assertions as the mutex and event. Actual
-code proves payment at each reachable tick/retry and its native/stack obligations through the
-existing Full rules. Plain is a derived concrete admission, not the interface's domain. -/
+The primary fields state caller parts the same way as the mutex and event (`LockRules`, "Caller
+parts of composite operations"); `signal_during` is the part `signal` holds at each intermediate
+step. Actual code proves payment at each reachable tick/retry and its native/stack obligations
+through the existing Full rules. Plain is a derived concrete admission, not the interface's
+domain. -/
 structure CondImpl (Tgt : Type) where
   wait : Ptr → Io → Ptr → ConcM Tgt Unit
   signal : Ptr → Io → ConcM Tgt Unit
   /-- The contended value of the mutex that `wait` unlocks and locks. -/
   c : Nat
-  wait_resources : CallerResources
-  signal_resources : CallerResources
+  wait_pre : ThreadId → FAssn
+  wait_post : ThreadId → Res → FAssn
+  wait_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → wait_pre t r
+  wait_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → wait_post t r r' → r' = r
+  signal_pre : ThreadId → FAssn
+  signal_during : ThreadId → Res → FAssn
+  signal_post : ThreadId → Res → FAssn
+  signal_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → signal_pre t r
+  signal_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → signal_post t r r' → r' = r
   wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (C.prim L) P U ok →
     P.cost = none → ∀ {p q : Ptr}, p = C.S.ptr → q = L.ptr → L.c = c →
@@ -2274,22 +2283,22 @@ structure CondImpl (Tgt : Type) where
       U (upd G t (C.set g .en)) rX m) →
     (∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → ¬ C.Signalled m₁ → P.Live t G₁ m₁) →
-    wait_resources.pre t (L.part g) → P.inv (upd G t g) m → m.current = t →
+    wait_pre t (L.part g) → P.inv (upd G t g) m → m.current = t →
     P.WP t (wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r' rL, wait_resources.post t (L.part g) r' ∧
+      ∃ r' rL, wait_post t (L.part g) r' ∧
         P.inv (upd G' t (L.set (L.setPart g r') .holds rL)) m') G m d
   signal_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (C.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = C.S.ptr → ∀ (t : ThreadId) (g : γ), C.ph g = .out →
     (L.ph g = .out ∨ L.ph g = .holds) → C.sx g →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
-    signal_resources.pre t (L.part g) →
-    (∀ rᵢ, signal_resources.during t (L.part g) rᵢ → ∀ G₁ rX m₁,
+    signal_pre t (L.part g) →
+    (∀ rᵢ, signal_during t (L.part g) rᵢ → ∀ G₁ rX m₁,
       G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true) →
     P.inv (upd G t g) m →
     P.WP t (signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r', signal_resources.post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+      ∃ r', signal_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d
 
 namespace CondImpl
@@ -2312,9 +2321,9 @@ theorem wait_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {P 
     P.WP t (I.wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   refine WP.mono ?_ (I.wait_wp_resource hC hcost hp hq hmc t g hg hgo hok io G m d
-    hone hhb hent hlive (I.wait_resources.plain_pre t (L.part g) hplain) hi hc)
+    hone hhb hent hlive (I.wait_plain_pre t (L.part g) hplain) hi hc)
   rintro _ G' m' d' ⟨hd, hc', r', rL, hr, hi'⟩
-  have he := I.wait_resources.plain_post t (L.part g) r' hplain hr
+  have he := I.wait_plain_post t (L.part g) r' hplain hr
   subst r'
   exact ⟨hd, hc', rL, by simpa only [L.setPart_self] using hi'⟩
 
@@ -2327,7 +2336,7 @@ theorem signal_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {
     (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hplain : (L.part g).Plain)
-    (hseen : ∀ rᵢ, I.signal_resources.during t (L.part g) rᵢ → ∀ G₁ rX m₁,
+    (hseen : ∀ rᵢ, I.signal_during t (L.part g) rᵢ → ∀ G₁ rX m₁,
       G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
@@ -2335,9 +2344,9 @@ theorem signal_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {
     P.WP t (I.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m' ∧
       ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
   refine WP.mono ?_ (I.signal_wp_resource hC hcost hp t g hg hgo hsx io G m d
-    (I.signal_resources.plain_pre t (L.part g) hplain) hseen hi)
+    (I.signal_plain_pre t (L.part g) hplain) hseen hi)
   rintro _ G' m' d' ⟨hd, hc, r', hr, hi', hsig⟩
-  have he := I.signal_resources.plain_post t (L.part g) r' hplain hr
+  have he := I.signal_plain_post t (L.part g) r' hplain hr
   subst r'
   exact ⟨hd, hc, by simpa only [L.setPart_self] using hi', hsig⟩
 
@@ -2350,9 +2359,9 @@ theorem signal_wp_exact (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond
     (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = C.S.ptr)
     (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hpre : I.signal_resources.pre t (L.part g))
-    (signal_during_exact : ∀ rᵢ, I.signal_resources.during t (L.part g) rᵢ → rᵢ = L.part g)
-    (signal_post_exact : ∀ r', I.signal_resources.post t (L.part g) r' → r' = L.part g)
+    (hpre : I.signal_pre t (L.part g))
+    (signal_during_exact : ∀ rᵢ, I.signal_during t (L.part g) rᵢ → rᵢ = L.part g)
+    (signal_post_exact : ∀ r', I.signal_post t (L.part g) r' → r' = L.part g)
     (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)

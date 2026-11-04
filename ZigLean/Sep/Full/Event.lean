@@ -1755,13 +1755,20 @@ and counts no turns.
    unticked implementation can prove pre=True and exact arbitrary-part preservation; the
    generic interface does not invent a payment requirement for that native path.
 
-Both primary fields use the shared `CallerResources` assertions. Their post is about the
-actual caller part, not an assertion implicitly closed under adding or removing resources. -/
+Both primary fields state caller parts the same way as the mutex and condition (`LockRules`,
+"Caller parts of composite operations"). Their post is about the actual caller part, not an
+assertion implicitly closed under adding or removing resources. -/
 structure EventImpl (Tgt : Type) where
   wait : Ptr → Io → ConcM Tgt Unit
   set : Ptr → Io → ConcM Tgt Unit
-  wait_resources : CallerResources
-  set_resources : CallerResources
+  wait_pre : ThreadId → FAssn
+  wait_post : ThreadId → Res → FAssn
+  wait_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → wait_pre t r
+  wait_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → wait_post t r r' → r' = r
+  set_pre : ThreadId → FAssn
+  set_post : ThreadId → Res → FAssn
+  set_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → set_pre t r
+  set_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → set_post t r r' → r' = r
   wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
@@ -1771,16 +1778,16 @@ structure EventImpl (Tgt : Type) where
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true) →
     (∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
       P.Live t G₁ m₁) →
-    wait_resources.pre t (L.part g) → P.inv (upd G t g) m →
+    wait_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      ∃ r', wait_resources.post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
+      ∃ r', wait_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
   set_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
     L.ph g = .out → E.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
-    set_resources.pre t (L.part g) → P.inv (upd G t g) m →
+    set_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      ∃ r', set_resources.post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
+      ∃ r', set_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m') G m d
 
 namespace EventImpl
 
@@ -1800,9 +1807,9 @@ theorem wait_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {
     P.WP t (I.wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d := by
   refine WP.mono ?_ (I.wait_wp_resource hE hcost hp t g hg hgo hwx io G m d
-    hone hhb hlive (I.wait_resources.plain_pre t (L.part g) hplain) hi)
+    hone hhb hlive (I.wait_plain_pre t (L.part g) hplain) hi)
   rintro _ G' m' d' ⟨hd, hc, hset, r', hr, hi'⟩
-  have he := I.wait_resources.plain_post t (L.part g) r' hplain hr
+  have he := I.wait_plain_post t (L.part g) r' hplain hr
   subst r'
   exact ⟨hd, hc, hset, by simpa only [L.setPart_self] using hi'⟩
 
@@ -1814,8 +1821,8 @@ theorem set_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {P
     (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = E.W.ptr)
     (t : ThreadId) (g : γ) (hg : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hpre : I.set_resources.pre t (L.part g))
-    (set_post_exact : ∀ r', I.set_resources.post t (L.part g) r' → r' = L.part g)
+    (hpre : I.set_pre t (L.part g))
+    (set_post_exact : ∀ r', I.set_post t (L.part g) r' → r' = L.part g)
     (hi : P.inv (upd G t g) m) :
     P.WP t (I.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t g) m') G m d := by
