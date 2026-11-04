@@ -684,6 +684,48 @@ fixture_pause()
         self.assertEqual(os.listdir(self.tickets), [])
         self.assertIsNone(holder.poll())
 
+    def test_a_normal_guard_arriving_later_is_admitted_before_a_background_one(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        background, err = self.start_waiter("background", order, *budget, "--priority", "background")
+        self.assertIn("background priority", err.read_text())
+        normal, _ = self.start_waiter("normal", order, *budget)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(normal, background)
+        self.assertEqual(order.read_text().split(), ["normal", "background"])
+        self.assertFalse(self.tickets.exists() and os.listdir(self.tickets))
+
+    def test_a_waiting_background_guard_holds_no_slot(self):
+        # Budget 2 GiB: the holder takes one slot, the background guard (weight 2) waits for both.
+        # A normal guard of weight 1 is admitted at once, as the queue head (no backfill): the
+        # background guard keeps neither the queue nor a slot while it waits.
+        order, budget = self.root / "order", ("--mem-budget-mib", "2048")
+        holder, _ = self.start_holder(*budget)
+        background, _ = self.start_waiter("background", order, *budget, "--rss-mib", "2000",
+                                          "--priority", "background")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("normal"))
+        self.assertEqual((code, evidence["admission"]["backfilled"]), (0, False))
+        self.assertIsNone(background.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(background)
+        self.assertEqual(order.read_text().split(), ["background"])
+
+    def test_a_background_guard_waits_for_a_head_and_for_a_ticket(self):
+        budget = ("--mem-budget-mib", "4096", "--priority", "background", "--lock-wait", "2")
+        with contextlib.ExitStack() as stack:
+            self.stand_in_head({"pid": os.getpid(), "unmet": 0, "need": 1}, stack.enter_context)
+            code, evidence = self.attempt(*budget, cwd=self.worktree("behind-head"))
+            self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # free slots, but a head
+        self.tickets.mkdir(parents=True)
+        with (self.tickets / "00000000000000000001-1").open("a") as ticket:
+            fcntl.flock(ticket, fcntl.LOCK_EX)  # a merge guard waiting for admission
+            code, _ = self.attempt(*budget, cwd=self.worktree("behind-ticket"))
+            self.assertEqual(code, 75)
+        code, evidence = self.attempt(*budget, cwd=self.worktree("alone"))
+        self.assertEqual((code, evidence["admission"]["priority"]), (0, "background"))
+
     def test_priority_comes_from_the_environment_or_the_option(self):
         def priority(*options):
             return guard.parse_args(["--report", "r.json", "--log", "l.log", *options, "--", "true"]).priority

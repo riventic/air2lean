@@ -39,6 +39,14 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   ticket is not held, so the next guard to look removes it. The directory keeps its name from
   the merge lane: guards of checkouts since then treat every ticket as a merge ticket, so they
   wait behind an exclusive one too.
+- Background lane (AIR2LEAN_GUARD_PRIORITY=background or --priority background: work no one
+  waits on, such as a periodic health run). A background guard never queues: it holds no ticket,
+  never becomes the queue head and never backfills. Once a second it tries to take the queue
+  (only when no head waits and no ticket is queued) and, holding it, all its slots at once; short
+  of any, it gives everything back. So it delays no other guard's admission, and it waits as long
+  as other guards keep the queue busy or its slots taken, bounded by --lock-wait. Running
+  workloads are never touched, and a running background workload is not either. --exclusive
+  takes the exclusive lane whatever the priority.
 - Usage-aware charge (Linux only). --rss-mib stays the hard limit, but a workload whose command
   ran before is charged its measured need instead: the guard keeps the last 5 runs of each
   command (`<lock>.d/history/<key>.json`; the key is the command with its workspace path
@@ -338,7 +346,7 @@ def atomic_report(path, report):
         Path(temporary).unlink(missing_ok=True)
 
 
-PRIORITIES = ("normal", "merge")
+PRIORITIES = ("normal", "merge", "background")
 
 
 def positive(value):
@@ -392,7 +400,7 @@ def parse_args(argv):
                    help="share the Lake workspace with other shared workloads (writes nothing Lake owns)")
     p.add_argument("--priority", choices=PRIORITIES, default=None,
                    help="admission lane (AIR2LEAN_GUARD_PRIORITY, else normal); merge is only for the "
-                        "coordinator's integration gate")
+                        "coordinator's integration gate; background waits until nothing else does")
     p.add_argument("--log-bytes", type=int, default=1024 * 1024)
     p.add_argument("--profile", default="manual")
     p.add_argument("--phase", choices=("build", "parse", "normalize", "check", "emit", "proof"), default="build")
@@ -592,7 +600,7 @@ CHARGE_MARGIN = 1.3     # charge = margin x the largest recent peak
 DECLARED_BOUND = 1.5    # declared limits of the running workloads <= bound x budget
 PREEMPT_HOLDOFF = 5     # seconds between two preemptions under one lock
 BACKFILL_RAMP = 900     # seconds after which the queue head reserves all its slots (--backfill-ramp)
-BACKFILL_EVERY = 1.0    # seconds between two backfill attempts of one waiting guard
+BACKFILL_EVERY = 1.0    # seconds between two backfill (or background) attempts of one waiting guard
 UNSAFE_OUTCOMES = ("rss_limit", "preempted")
 KILLED = 128 + signal.SIGKILL  # exit code of a workload SIGKILLed from outside (the OOM killer)
 
@@ -976,6 +984,35 @@ class Admission:
         finally:
             fcntl.flock(register, fcntl.LOCK_UN)
 
+    def try_background(self, queue, main, slots, register):
+        """Whether this background guard was admitted now (module docstring): only while no
+        ticket is queued and no head holds the queue, and only with all its slots at once; else
+        it gives back everything it took."""
+        if time.monotonic() < self.next_backfill or not self.my_turn():
+            return False
+        self.next_backfill = time.monotonic() + BACKFILL_EVERY
+        if not try_flock(queue, fcntl.LOCK_EX):
+            return False  # a head waits: it goes first
+        held, admitted = [], False
+        try:
+            if try_flock(main, fcntl.LOCK_SH):
+                held.append(main)
+                for handle in slots:
+                    if len(held) > self.weight:
+                        break
+                    if try_flock(handle, fcntl.LOCK_EX):
+                        held.append(handle)
+                if len(held) > self.weight and try_flock(register, fcntl.LOCK_EX):
+                    try:
+                        admitted = self.admit_overcommitted()
+                    finally:
+                        fcntl.flock(register, fcntl.LOCK_UN)
+            return admitted
+        finally:
+            for handle in [] if admitted else held:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            fcntl.flock(queue, fcntl.LOCK_UN)
+
     def announce(self):
         queued = self.queued_tickets()
         exclusive = sum(name.endswith("-exclusive") for name in queued)
@@ -1019,6 +1056,11 @@ class Admission:
         queue, main, register = self.open("queue"), self.open(None), self.open("register")
         # An exclusive guard collects `<lock>` itself instead of slots: nothing else runs then.
         slots = [] if self.a.exclusive else [self.open("slot-%03d" % i) for i in range(self.capacity)]
+        if self.priority == "background":
+            while not self.try_background(queue, main, slots, register):
+                if refused := wait():
+                    return refused
+            return None
         if self.priority != "normal":
             self.join_queue()
         while True:
