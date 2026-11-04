@@ -82,7 +82,7 @@ class ReceiptTests(unittest.TestCase):
         self.names = []
         for name in ('scripts/assumptions.py', 'scripts/normalize-generated.py', 'scripts/build-guard.py',
                      'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh', 'assurance/policy.json',
-                     'tools/Assurance.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain',
+                     'tools/Assurance.lean', 'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain',
                      'zig-patch/versions.toml', 'assurance/float-semantics.json', 'scripts/float-semantics.py',
                      'scripts/gen-integrity.py', 'scripts/premise_markers.py', 'assurance/witness-fixtures.json',
                      'scripts/theorem_universe.py', 'scripts/premises.py', 'scripts/lean-deps.py'):

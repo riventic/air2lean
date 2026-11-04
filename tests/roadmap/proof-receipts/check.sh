@@ -36,7 +36,7 @@ esac
 # Preparation has no compiler commands. Guarded worker snapshots again after locking.
 # Absolute physical paths are required by prepare; reuse exactly its recorded values.
 inputs=(--input "$attempt/plan.json")
-for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean tools/AssuranceMain.lean \
+for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean tools/AssuranceMain.lean tools/AssuranceRun.lean \
             scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh \
             assurance/float-semantics.json scripts/float-semantics.py scripts/gen-integrity.py \
             scripts/premise_markers.py assurance/witness-fixtures.json scripts/theorem_universe.py \

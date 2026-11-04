@@ -669,6 +669,13 @@ def verify_extractor_inputs(trace: dict, root: Path, stage: str) -> None:
         raise ValueError(f'toolchain runtime changed during extractor {stage}')
     if library_source_inputs(root) != trace['library_source_inputs']:
         raise ValueError(f'project library sources changed during extractor {stage}')
+    # The program and the library it imports at run time: a `lake build assurance` outside the
+    # extractor lock (another tool) must not swap them under the run.
+    for key, path in (("executable_sha256", root / EXTRACTOR),
+                      ("olean_sha256", root / ".lake/build/lib/lean/tools/Assurance.olean"),
+                      ("lake_trace_sha256", root / ".lake/build/lib/lean/tools/Assurance.trace")):
+        if key in trace and (not path.is_file() or file_sha256(path) != trace[key]):
+            raise ValueError(f'extractor {key.removesuffix("_sha256")} changed during extractor {stage}')
 
 
 @contextlib.contextmanager
@@ -839,10 +846,14 @@ def lake_extraction(arguments: list[str], package: Path, tool: dict, root: Path 
     resolves exactly those roots in the workspace, after the workspace's own driver library
     (which holds nothing else). The driver's text names the roots and the binding's digest, so a
     changed root or bound input is another driver, elaborated again. A path Lake resolves
-    otherwise, or cannot resolve, returns None before anything is built: the caller elaborates
-    the driver afresh on its lookup path, and nothing is reused."""
-    runtime_sha, extractor_sha = tool.get("toolchain_runtime_sha256"), tool.get("executable_sha256")
-    if not re.fullmatch(r"[0-9a-f]{64}", runtime_sha or "") or not re.fullmatch(r"[0-9a-f]{64}", extractor_sha or ""):
+    otherwise, or cannot resolve, returns None before anything is built: the caller runs the
+    extractor afresh on its lookup path, and nothing is reused."""
+    # The program imports tools.Assurance's closure at run time, so the driver also names that
+    # library's Lake trace (which covers its imports): a changed claim head or contract module is
+    # another driver even when the program's bytes are unchanged.
+    runtime_sha, extractor_sha, library_sha = (tool.get(key) for key in (
+        "toolchain_runtime_sha256", "executable_sha256", "lake_trace_sha256"))
+    if not all(re.fullmatch(r"[0-9a-f]{64}", sha or "") for sha in (runtime_sha, extractor_sha, library_sha)):
         raise ValueError("extraction requires the prepared tool's toolchain runtime and extractor binding")
     name = tomllib.loads((package / "lakefile.toml").read_text(encoding="utf-8"))["name"]
     bound = "" if binding is None else (f"-- lookup roots {json.dumps(binding['roots'])}\n"
@@ -860,11 +871,11 @@ def lake_extraction(arguments: list[str], package: Path, tool: dict, root: Path 
         roots = [(package / entry).resolve() for entry in done.stdout.strip().split(os.pathsep) if entry]
     needs = module_needs(modules, roots, [root, package])
     if needs is None:
-        return None  # a module no Lake package of the workspace builds: elaborate afresh
+        return None  # a module no Lake package of the workspace builds: run afresh
     command = [*extractor_command(root, tool), *arguments]
     text = (f"-- The assurance extractor's driver for {json.dumps(sorted(modules))} of {package} "
             f"(scripts/assumptions.py).\n-- toolchain runtime {runtime_sha}\n-- extractor {extractor_sha}\n"
-            + bound + "import tools.AssuranceRun\n#eval Air2Lean.AssuranceRun.run "
+            f"-- extractor library trace {library_sha}\n" + bound + "import tools.AssuranceRun\n#eval Air2Lean.AssuranceRun.run "
             + json.dumps(command[0]) + " #[" + ", ".join(map(json.dumps, command[1:])) + "]\n")
     digest = hashlib.sha256(text.encode()).hexdigest()[:32]
     module = f"{EXTRACTION_LIBRARY}.M{digest}"
@@ -1012,10 +1023,11 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
             lean_path: str | None = None, extract_in: Path | None = None) -> dict:
     """Audit `modules` and the witness-fixture modules `witnesses` (compiled already, on
     LEAN_PATH) in one environment, so that a shipped claim sees its companion. `extract_in`: a
-    Lake package that builds the extractor's driver (`lake_extraction`) instead of `lake env
-    lean` elaborating it afresh. Lake then chooses the import paths: with a compiler-owned
-    `lean_path` the Lake-built driver is used only when Lake resolves exactly that path
-    (`lake_extraction`), else the driver is elaborated afresh on `lean_path`."""
+    Lake package that builds the extractor's driver (`lake_extraction`), so an unchanged audit
+    replays its stored report, instead of running the compiled extractor afresh under `lake env`.
+    Lake then chooses the import paths: with a compiler-owned `lean_path` the Lake-built driver
+    is used only when Lake resolves exactly that path (`lake_extraction`), else the extractor
+    runs afresh on `lean_path`."""
     root = (ROOT if root is None else root).resolve()
     runner = lambda command: run(command, root=root)
     module_name = lean_deps().MODULE_NAME
@@ -1482,7 +1494,7 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
                         help="build the extractor's driver with Lake in a workspace that requires this "
                              "Lake package of the modules (PACKAGE/.lake/extraction; Lake's trace decides "
                              "when it runs again, the report comes from its build log) instead of "
-                             "elaborating it with `lake env lean`")
+                             "running the extractor afresh under `lake env`")
     args = parser.parse_args(argv)
     try:
         policy = load_policy(args.policy)

@@ -28,7 +28,7 @@ MAX_TOTAL = 16 * 1024 * 1024 * 1024
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
             'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
-          'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
+          'tools/Assurance.lean', 'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
           'scripts/premise_markers.py', 'assurance/witness-fixtures.json', 'scripts/theorem_universe.py',
           'scripts/premises.py', 'scripts/lean-deps.py')
@@ -493,7 +493,7 @@ def audit_ok(plan, audit):
                       ('lake_trace_sha256', ROOT / '.lake/build/lib/lean/tools/Assurance.trace'),
                       ('executable_sha256', ROOT / '.lake/build/bin/assurance'),
                       ('lean_toolchain_sha256', ROOT / 'lean-toolchain'), ('lake_config_sha256', ROOT / 'lakefile.toml')]:
-        demand(extractor[key] == fingerprint(path)['sha256'], 'extractor identity mismatch: ' + key)
+        demand(extractor.get(key) == fingerprint(path)['sha256'], 'extractor identity mismatch: ' + key)
 
 
 def worker(attempt):

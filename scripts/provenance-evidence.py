@@ -48,7 +48,7 @@ VERSION = '0.16.0'
 GLOBAL_LINKS = ('compiler_patch', 'translator', 'runtime', 'toolchain')
 # Files outside the Lean import closure that the receipt's audit also depends on (check.sh inputs).
 ENVIRONMENT = ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json', 'assurance/policy.json', 'tools/Assurance.lean',
-               'tools/AssuranceMain.lean')
+               'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean')
 FIXTURES = {
     'provenance': dict(
         dir='assurance/provenance', example='provenance', namespace='Provenance', prefix='provenance.',
