@@ -178,9 +178,12 @@ theorem WP.callRC_ok {x : Result α} {v : α} {s : σ} {Q : α × σ → (Thread
   WP.callRC (fun e he => by rw [hx] at he; cases he) (fun a ha => by
     rw [hx] at ha; cases ha; exact h) fun hn => by rw [hx] at hn; cases hn
 
-/-- A stop where the oracle picks one of `count m` options: the post holds for every pick. -/
-theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId → γ) → Mem → Nat → Prop}
+/-- A stop where the oracle picks one of `count m` options: the post holds for every pick, and
+the thread goes on as a thread that exists (`t < m₁.threads.size`, `Safe`'s resumption). -/
+theorem WP.pickC_exists {count : Mem → Nat} {s : σ}
+    {Q : Nat × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      t < m₁.threads.size →
       ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
         Q (c, s) G₁ { m₁ with current := t } k)
     (hcost : P.cost = none := by first | rfl | assumption) :
@@ -188,7 +191,17 @@ theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId →
   show P.WP t (ConcM.sync (.pick count) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hcr => WP.pure' (hc G₁ m₁ hg hi₁ c hcr)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hcr => WP.pure' (hc G₁ m₁ hg hi₁ ht c hcr)⟩
+
+/-- A stop where the oracle picks one of `count m` options: the post holds for every pick. -/
+theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
+        Q (c, s) G₁ { m₁ with current := t } k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((pickC count : CM Tgt σ Nat).run s) Q G m n :=
+  WP.pickC_exists (fun k hk => let ⟨g, hi, hc⟩ := h k hk
+    ⟨g, hi, fun G₁ m₁ hg hi₁ _ => hc G₁ m₁ hg hi₁⟩) hcost
 
 /-- A call to another concurrent function: its post, with the locals of the caller. -/
 theorem WP.callC {r : ConcM Tgt α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
