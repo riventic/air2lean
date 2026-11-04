@@ -182,4 +182,15 @@ theorem match_rule (f : Nat → MemM Nat) (x : Option Nat) (s : Nat)
   unfold sel at hm ⊢
   fsym [hm]
 
+/-- A result predicate: one of the error codes, or the computed value. -/
+def Ret (v : BitVec 8) (r : BitVec 32) : Prop :=
+  r = 1 ∨ r = 2 ∨ r = BitVec.ofNat 32 (v.toNat + 1)
+
+/-- **A result predicate that is a disjunction** behind a definition: the solver proves its
+unfolding (here the second disjunct, and the computed value). -/
+theorem result_disjunction (v : BitVec 8) (b : Bool) :
+    FTotalTriple emp (if b then pure 2 else pure (BitVec.ofNat 32 (v.toNat + 1)))
+      (fun r => ⟪Ret v r⟫) := by
+  fsym
+
 end SepAuto.Walk

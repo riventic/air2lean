@@ -948,7 +948,7 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h
     · subst e; exact hs.mine
     · rw [hs.others u e]; exact VClock.le_refl _
   have hwq : ∀ w ∈ m'.waiters, w.2 ≠ L.ptr → w ∈ m.waiters := fun w hw' hl =>
-    (hs.waiters w hl).mp hw'
+    (hs.waiters_mem w hl).mp hw'
   refine ⟨by rw [hh]; exact hI.vals, by rw [hh]; exact hI.mono,
     fun u v hu hv => hI.one u v (by rw [← hp]; exact hu) (by rw [← hp]; exact hv),
     fun u hu j hj hv => ?_, fun u hu => ?_, fun u hu => ?_, fun w hw' hq => ?_,
@@ -1455,7 +1455,9 @@ theorem waitLive (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1)
 theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (hg : E.ph g = .w1) (G₁ : ThreadId → γ) (rY : Res) (m₁ M : Mem)
     (hg₁ : G₁ t = L.set g .away rnil) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
-    (hY : ∀ l, E.W.In l → rY.heap l = none) (hw₀ : E.W.Ok { m₁ with current := t }) (hct : t < m₁.clocks.size)
+    (hY : ∀ l, E.W.In l → rY.heap l = none) (_ : m₁.woken.contains t = false)
+    (_ : m₁.waiters.any (·.1 == t) = false)
+    (hw₀ : E.W.Ok { m₁ with current := t }) (hct : t < m₁.clocks.size)
     (hrecord : M = ({ m₁ with current := t } : Mem).recordAt E.W.b E.W.o 4 .atomicRead)
     (hf : M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg)
     (hh : E.W.hist M = E.W.hist m₁) (hok₂ : E.W.Ok M) (hbl : M.blocks = m₁.blocks)
@@ -1510,7 +1512,7 @@ pending, or a spurious return. -/
 theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
     (hheld : L.held g = rnil) (G₁ : ThreadId → γ) (rY : Res) (m₁ M : Mem)
     (hg₁ : G₁ t = L.set g .away rnil) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
-    (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hY : ∀ l, E.W.In l → rY.heap l = none) (_ : m₁.waiters.any (·.1 == t) = false)
     (hf : M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg)
     (hM : M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
       (E.W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
