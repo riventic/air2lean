@@ -502,6 +502,62 @@ end FLock
 end Full
 end Zig
 
+/-! ## Release clocks of RMWs
+
+An RMW of the newest write continues the release sequence: its release clock covers the one of
+the write it read, and a release RMW's covers its writer's clock. A protocol that keeps these
+facts for a word's history (`FEvent.Inv.rel`, `FEvent.Inv.relMono`) keeps them after each push. -/
+
+namespace Zig.Conc.Word
+
+variable {n : Nat}
+
+/-- An RMW's release clock covers the release clock of the write it read. -/
+theorem rmwEnt_relLe {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Entry}
+    {v : BitVec n} : VClock.le last.relClock (rmwEnt M t ord last v).relClock = true := by
+  unfold rmwEnt
+  dsimp only
+  split
+  · exact VClock.le_merge_left _ _
+  · exact VClock.le_refl _
+
+/-- A release RMW's release clock covers its writer's clock. -/
+theorem rmwEnt_rel {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Entry}
+    {v : BitVec n} (h : ord.isRel = true) :
+    VClock.le (rmwEnt M t ord last v).clock (rmwEnt M t ord last v).relClock = true := by
+  simp only [rmwEnt, h, ↓reduceIte]; exact VClock.le_merge_right _ _
+
+/-- The release sequence (each write's release clock covers every earlier one's) after a push of
+an entry whose release clock covers the newest one's (an RMW of the newest write: `rmwEnt_relLe`). -/
+theorem relMono_push {h : Array Entry} {x : Entry}
+    (hm : ∀ i j, i ≤ j → j < h.size → VClock.le h[i]!.relClock h[j]!.relClock = true)
+    (hx : VClock.le h[h.size - 1]!.relClock x.relClock = true) :
+    ∀ i j, i ≤ j → j < (h.push x).size →
+      VClock.le (h.push x)[i]!.relClock (h.push x)[j]!.relClock = true := fun i j hij hj => by
+  rw [Array.size_push] at hj
+  rw [Proto.getElem!_push, Proto.getElem!_push]
+  rcases (by omega : j < h.size ∨ j = h.size) with hj' | rfl
+  · simp only [hj', Nat.lt_of_le_of_lt hij hj', ↓reduceIte]; exact hm i j hij hj'
+  · rcases (by omega : i < h.size ∨ i = h.size) with hi | rfl
+    · simp only [hi, Nat.lt_irrefl, ↓reduceIte]
+      exact VClock.le_trans (hm i (h.size - 1) (by omega) (by omega)) hx
+    · simp only [Nat.lt_irrefl, ↓reduceIte]; exact VClock.le_refl _
+
+/-- Every write of value `a` is a release write (its release clock covers its writer's clock)
+after a push of `x`, which is one if it has the value `a`. -/
+theorem rel_push {h : Array Entry} {x : Entry} {a : BitVec n}
+    (hm : ∀ j < h.size, h[j]!.Val a → VClock.le h[j]!.clock h[j]!.relClock = true)
+    (hx : x.Val a → VClock.le x.clock x.relClock = true) :
+    ∀ j < (h.push x).size, (h.push x)[j]!.Val a →
+      VClock.le (h.push x)[j]!.clock (h.push x)[j]!.relClock = true := fun j hj hv => by
+  rw [Array.size_push] at hj
+  rw [Proto.getElem!_push] at hv ⊢
+  rcases (by omega : j < h.size ∨ j = h.size) with hj' | rfl
+  · simp only [hj', ↓reduceIte] at hv ⊢; exact hm j hj' hv
+  · simp only [Nat.lt_irrefl, ↓reduceIte] at hv ⊢; exact hx hv
+
+end Zig.Conc.Word
+
 /-! ## Per-thread observed-message floors
 
 The floor is a position in the word's history, derived from `Mem.seen` and distinct
@@ -514,6 +570,16 @@ namespace Conc
 namespace Word
 
 open Proto Full
+
+/-- A write of a word's history below a push. -/
+theorem get_push_lt {h : Array Entry} {x : Entry} {k : Nat} (hk : k < h.size) :
+    (h.push x)[k]! = h[k]! := by
+  have h1 : k < (h.push x).size := by simp; omega
+  rw [getElem!_pos (h.push x) k h1, getElem!_pos h k hk, Array.getElem_push_lt hk]
+
+/-- The pushed write of a word's history. -/
+theorem get_push_eq {h : Array Entry} {x : Entry} : (h.push x)[h.size]! = x := by
+  rw [getElem!_pos _ _ (by simp)]; simp
 
 variable {n nb : Nat} {W : Word n nb}
 
@@ -3148,4 +3214,65 @@ end futex_native
 
 end Word
 end Conc
+
+namespace Full
+
+open Conc Proto
+
+namespace FLock
+
+/-! ## A word's writes and the lock's holder
+
+A client whose word is written only holding the lock (a condition's epoch under a semaphore,
+`FCond.ld_newest`) carries in its rest that every write of the word happened before the lock's
+holder (`WordHB`, `HB`). It stays over the lock's steps (`WordHB.lstep`) and over a step that keeps the
+word's writes or pushes one that happened before the holder (`WordHB.step`, `HB.of_holder`); with
+the lock's word invariant, a load by the holder then reads the newest write (`WordHB.last`, the
+load's floor `Word.Floor`). -/
+
+variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb}
+
+variable (L W) in
+/-- Every write of the word `W` happened before the lock's holder, its newest release or every
+thread that has not ended (`HB`). -/
+def WordHB (G : ThreadId → γ) (m : Mem) : Prop :=
+  ∀ k < (W.hist m).size, L.HB G m (W.hist m)[k]!.clock
+
+/-- **A load by the lock's holder reads the newest write** of the word when every write happened
+before the holder: its floor (`Word.Floor`) is at the newest write. -/
+theorem WordHB.last {G : ThreadId → γ} {m : Mem} (h : L.WordHB W G m)
+    (hw : L.WInv (L.pl G) m) {t : ThreadId} (ht : L.ph (G t) = .holds) {i : Nat}
+    (hi : i < (W.hist m).size) (hfl : Word.Floor (W.hist m) (m.clocks[t]!) i) :
+    i = (W.hist m).size - 1 := by
+  have hlast : (W.hist m).size - 1 < (W.hist m).size := by omega
+  have := hfl _ hlast (HB.le hw (h _ hlast) ht)
+  omega
+
+/-- `WordHB` stays over a step that carries `HB` (`HB.mono`) and keeps the word's writes or pushes
+one that happened before the lock's holder after it. -/
+theorem WordHB.step {G G' : ThreadId → γ} {m m' : Mem} (h : L.WordHB W G m)
+    (hmono : ∀ c, L.HB G m c → L.HB G' m' c)
+    (hh : W.hist m' = W.hist m ∨
+      ∃ x : Word.Entry, W.hist m' = (W.hist m).push x ∧ L.HB G' m' x.clock) :
+    L.WordHB W G' m' := by
+  intro k hk
+  rcases hh with hh | ⟨x, hh, hx⟩
+  · rw [hh] at hk ⊢; exact hmono _ (h k hk)
+  · rw [hh] at hk ⊢
+    rw [Array.size_push] at hk
+    by_cases hlt : k < (W.hist m).size
+    · rw [Word.get_push_lt hlt]; exact hmono _ (h k hlt)
+    · rw [show k = (W.hist m).size by omega, Word.get_push_eq]; exact hx
+
+/-- `WordHB` stays over a step of the lock's code (`Fits.stable`, `HB.lstep`) at a word apart from
+the lock's: it keeps the word's writes (`Word.Ok.lockStep`). -/
+theorem WordHB.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {h : Res}
+    (hE : L.WordHB W G m) (hwE : W.Ok m) (hapE : W.ApartL L.toLockWord)
+    (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
+    (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
+    L.WordHB W (upd G t (L.set (G t) q h)) m' :=
+  hE.step (fun _ hc => hc.lstep hg hs hrel) (.inl (hwE.lockStep hs hapE).2)
+
+end FLock
+end Full
 end Zig

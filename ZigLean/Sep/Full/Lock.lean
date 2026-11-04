@@ -1678,23 +1678,36 @@ theorem HB.of_holder {G : ThreadId → γ} {m : Mem} {c : VClock} {t : ThreadId}
     (ht : L.ph (G t) = .holds) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=
   .inl ⟨t, ht, hle⟩
 
-/-- **`HB` stays over a step of the lock's code** by `t` to any place `q` (`Fits.stable`): at a
-release (`t` held the lock and `q` does not), `t`'s clock happened before the newest message of
-the word (`hrel`). -/
+/-- **A holder over a step of the lock's code** by `t` to any place `q` (`Fits.stable`): it still
+holds, or (at a release: `t` held the lock and `q` does not) its clock happened before the newest
+message of the word (`hrel`). The `hhold` of `HB.mono`. -/
+theorem lstep_hold {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {h : Res}
+    (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) (u : ThreadId)
+    (hu : L.ph (G u) = .holds) : L.ph (upd G t (L.set (G t) q h) u) = .holds ∨
+      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c := by
+  by_cases e : u = t
+  · subst e
+    by_cases hq : q = .holds
+    · exact .inl (by rw [upd_self, L.ph_set, hq])
+    · exact .inr fun c hc => L.before_le (hrel hu hq) hc
+  · exact .inl (by rw [upd_ne _ _ e]; exact hu)
+
+/-- **A thread that has not ended over a step of the lock's code** by `t` (not `gone`) to any
+place: it had not ended before it. The `hgone` of `HB.mono`. -/
+theorem lstep_live {G : ThreadId → γ} {t : ThreadId} {q : LPh} {h : Res}
+    (hg : L.ph (G t) ≠ .gone) (u : ThreadId) (hu : L.ph (upd G t (L.set (G t) q h) u) ≠ .gone) :
+    L.ph (G u) ≠ .gone := by
+  by_cases e : u = t
+  · subst e; exact hg
+  · rwa [upd_ne _ _ e] at hu
+
+/-- **`HB` stays over a step of the lock's code** by `t` to any place `q` (`Fits.stable`):
+`lstep_hold`, `lstep_live`. -/
 theorem HB.lstep {G : ThreadId → γ} {m m' : Mem} {c : VClock} {t : ThreadId} {q : LPh} {h : Res}
     (hc : L.HB G m c) (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
-    L.HB (upd G t (L.set (G t) q h)) m' c := by
-  refine hc.mono (fun u hu => ?_) hs.clocks hs.before hs.threads (fun u hu => ?_)
-  · by_cases e : u = t
-    · subst e
-      by_cases hq : q = .holds
-      · exact .inl (by rw [upd_self, L.ph_set, hq])
-      · exact .inr fun c hc => L.before_le (hrel hu hq) hc
-    · exact .inl (by rw [upd_ne _ _ e]; exact hu)
-  · by_cases e : u = t
-    · subst e; exact hg
-    · rwa [upd_ne _ _ e] at hu
+    L.HB (upd G t (L.set (G t) q h)) m' c :=
+  hc.mono (lstep_hold hrel) hs.clocks hs.before hs.threads (lstep_live hg)
 
 end FLock
 

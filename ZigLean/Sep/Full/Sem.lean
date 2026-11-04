@@ -181,11 +181,19 @@ theorem place_c (g : γ) (p : CPh) : S.place.set g (p, S.ph g) = C.set g p := by
 theorem place_s (g : γ) (s : SPh) : S.place.set g (C.ph g, s) = S.set g s := by
   rw [place_set]; simp only; rw [C.set_self]
 
-/-- **The holder's moves in the semaphore's own code** (module doc): thread `t` stays, enters the
-wait (`wt`), enters `pst` with the state's writes and its clock (its snapshot), or leaves `pst`
-when, with permits and a registered waiter, a signal is pending or there is a taker. -/
+/-- The places thread `t` enters `pst` from: `out` (`post`'s store of the count), or `wt` at a
+count not 0 (`wait`'s take). -/
+def PstFrom (G : ThreadId → γ) (t : ThreadId) : Prop :=
+  S.ph (G t) = .out ∨ (S.ph (G t) = .wt ∧ S.cnt G ≠ 0)
+
+/-- **The holder's moves in the semaphore's own code** (module doc), between the places the code
+moves between (ledger row `sem-go-code-moves`): thread `t` stays; enters the wait (`wt`) from `out`
+(`wait`'s lock); enters `pst` with the state's writes and its clock (its snapshot) from `PstFrom`;
+or leaves `pst` when, with permits and a registered waiter, a signal is pending or there is a
+taker. It constrains the places, not the step (the count is the client's ghost). -/
 def Go (G : ThreadId → γ) (m : Mem) (t : ThreadId) (s : SPh) : Prop :=
-  s = S.ph (G t) ∨ s = .wt ∨ s = .pst (C.S.hist m) (m.clocks[t]!) ∨
+  s = S.ph (G t) ∨ (s = .wt ∧ S.ph (G t) = .out) ∨
+    (s = .pst (C.S.hist m) (m.clocks[t]!) ∧ S.PstFrom G t) ∨
     (s = .out ∧ (S.ph (G t)).isPst = true ∧ (S.cnt G ≠ 0 → 0 < FCond.wOf (C.lastS m) →
       0 < FCond.sOf (C.lastS m) ∨ ∃ v, S.Tk G v))
 
@@ -441,7 +449,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
     S.Inv G' m' := by
   have hap : ∀ W, (W = C.S ∨ W = C.Ep) → W.ApartL L.toLockWord := hS.apart
   obtain ⟨W, rY, hW, rfl, rfl, hY, hC', hmv | hown⟩ := hst
-  · obtain ⟨p, q, h, ⟨hn, hq, hms, -, -⟩, rfl⟩ := hmv
+  · obtain ⟨p, q, h, ⟨hn, hq, hms, -, -⟩, -, rfl⟩ := hmv
     have hqh : L.ph (G t) = .holds → q = .holds := fun hh => by
       rcases hq with ⟨rfl, -⟩ | ⟨ho, -, -⟩
       · exact hh
@@ -527,7 +535,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
         · rw [h] at h2; omega
         · rw [h, Array.size_push] at h2; exact ⟨x, h, hc, by omega⟩
     have hgetx : ∀ x : Word.Entry, C.S.hist m' = (C.S.hist m).push x →
-        (C.S.hist m')[(C.S.hist m).size]! = x := fun x h => by rw [h]; exact FEvent.get_push_eq
+        (C.S.hist m')[(C.S.hist m).size]! = x := fun x h => by rw [h]; exact Word.get_push_eq
     refine ⟨fun u hu => ?_, fun u hu => hhold u (hI.pst u (by rw [← hsph u]; exact hu)),
       fun u hu => ?_, fun u hu => ?_, fun u v hu hv => ?_, fun w hw hk => ?_,
       fun j h0 hj => ?_, fun u sh c hu => ?_, fun u sh c hu j h0 hj => ?_,
@@ -693,20 +701,9 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem}
     by_cases e : u = t
     · subst e; rw [upd_self, hcl]
     · rw [upd_ne _ _ e]
-  have hhold : ∀ u, L.ph (G u) = .holds → L.ph (upd G t (L.set (G t) q h) u) = .holds ∨
-      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c := fun u hu => by
-    by_cases e : u = t
-    · subst e
-      by_cases hq : q = .holds
-      · exact .inl (by rw [upd_self, L.ph_set, hq])
-      · exact .inr fun c hc => L.before_le (hrel hu hq) hc
-    · exact .inl (by rw [upd_ne _ _ e]; exact hu)
   refine hI.mono hsph hcph (by rw [pv_lupd, upd_same])
-    (fun u hu => ?_) hhold hs.clocks hs.before hs.threads
-    (fun u _ => by
-      by_cases e : u = t
-      · subst e; exact hg
-      · rwa [upd_ne _ _ e] at *)
+    (fun u hu => ?_) (FLock.lstep_hold hrel) hs.clocks hs.before hs.threads
+    (FLock.lstep_live hg)
     (fun w hw => by
       by_cases hl : w.2 = L.ptr
       · exact .inr hl
@@ -768,7 +765,7 @@ theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
     · subst e
       rw [hspt] at hu; subst hu
       refine ⟨rfl, ?_⟩
-      rcases hgo with h' | h' | h' | ⟨h', -⟩
+      rcases hgo with h' | ⟨h', -⟩ | ⟨h', -⟩ | ⟨h', -⟩
       · exact .inl h'.symm
       · cases h'
       · cases h'; exact .inr ⟨rfl, rfl⟩
@@ -846,7 +843,7 @@ theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
     · rw [hhS] at hp; omega
   · -- live
     rw [hpv] at hc; rw [hlast] at hpw ⊢
-    rcases hgo with h' | h' | h' | ⟨-, hp, hJ⟩
+    rcases hgo with h' | ⟨h', -⟩ | ⟨h', -⟩ | ⟨-, hp, hJ⟩
     · rcases hI.live hc hpw with h'' | ⟨u, hu⟩ | ⟨v, hv⟩
       · exact .inl h''
       · by_cases e : u = t
@@ -1185,16 +1182,18 @@ theorem Fits.wp_unlockPst (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok)
   mi.unlock_wp_to hS hcost hp hLc t g rh hgo hgh hok io G m d (Fits.unpst hS hi hc hcx hgs h0) hc
 
 /-- **`wait`'s lock** by the mutex's contract (`MutexImpl`), into the semaphore's wait (`wt`): the
-waiter holds the mutex at `wt` (a ghost move, `Go`). -/
+waiter, out of the semaphore's code, holds the mutex at `wt` (a ghost move, `Go`). -/
 theorem wp_lockWt (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = L.ptr) (hLc : L.c = mi.c) (t : ThreadId) (g : γ) (hgo : L.ph g = .out)
-    (hgx : C.ph g = .out) (hok : ok g) (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
+    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hok : ok g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set (S.set g .wt) .holds rL)) m') G m d := by
   refine WP.mono (fun _ G' m' d' ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, ?_⟩)
     (mi.lock_wp hS hcost hp hLc t g hgo hok hu io G m d hi)
-  have := Fits.move hS .wt hi' hc (L.ph_set _ _ _) (by rw [cph_l hS]; exact hgx) (.inr (.inl rfl))
+  have := Fits.move hS .wt hi' hc (L.ph_set _ _ _) (by rw [cph_l hS]; exact hgx)
+    (.inr (.inl ⟨rfl, by rw [upd_self, sph_l hS]; exact hgs⟩))
   rwa [lset_s hS] at this
 
 /-- **The holder's access to the count that keeps it** (a load): the holder `t`, out of the
@@ -1244,9 +1243,10 @@ theorem Fits.wp_cnt (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : Ty
 
 /-- **The holder's step to `pst` with a new ghost value `gf`** (the take and the give, at the
 store of the count): a step of the semaphore's own code to `pst` with its snapshot (`Move.hold`,
-`Go`), then the client's move (`hUc`) with both invariants at `gf`. -/
+`Go`: from `PstFrom`, `hsrc`), then the client's move (`hUc`) with both invariants at `gf`. -/
 theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {g gf : γ}
-    {rL rX : Res} {m m' : Mem} (hgx : C.ph g = .out) (hfx : C.ph gf = .out)
+    {rL rX : Res} {m m' : Mem} (hgx : C.ph g = .out) (hsrc : S.PstFrom (upd G t g) t)
+    (hfx : C.ph gf = .out)
     (hfs : S.ph gf = .pst (C.S.hist m) (m.clocks[t]!)) (hfh : L.ph gf = .holds)
     (hUc : U (upd G t (S.set (L.set g .holds rL) (.pst (C.S.hist m) (m.clocks[t]!)))) rX m' →
       L.Inv (upd G t gf) rX m' → S.Inv (upd G t gf) m' → C.Inv L (upd G t gf) m' →
@@ -1260,7 +1260,8 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
     rw [upd_self, cph_l hS]; exact hgx
   have hcells := FCond.cells_of_inv hsub.1 hL'
   have hgo : S.Go (upd G t (L.set g .holds rL)) m t (.pst (C.S.hist m) (m.clocks[t]!)) :=
-    .inr (.inr (.inl rfl))
+    .inr (.inr (.inl ⟨rfl, by
+      unfold PstFrom at hsrc ⊢; rw [upd_self] at hsrc; rw [upd_self, sph_l hS, pv_lupd]; exact hsrc⟩))
   have hgi : upd (upd G t (L.set g .holds rL)) t
       (S.set (L.set (upd G t (L.set g .holds rL) t) .holds rL) (.pst (C.S.hist m) (m.clocks[t]!))) =
       upd G t (S.set (L.set g .holds rL) (.pst (C.S.hist m) (m.clocks[t]!))) := by
@@ -1355,7 +1356,8 @@ theorem Fits.wp_take (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
     have hsrc : S.set (L.set (S.set g .wt) .holds rL) (.pst (C.S.hist m) (m.clocks[t]!)) =
         S.set (L.set g .holds rL) (.pst (C.S.hist m) (m.clocks[t]!)) := by
       rw [lset_s hS, S.set_set, ← lset_s hS]
-    exact U_pst hS hcw (by rw [S.cph_set, cph_l hS, cph_part hS]; exact hxx) (S.ph_set _ _)
+    exact U_pst hS hcw (.inr ⟨by rw [upd_self, S.ph_set], by rw [pv_supd]; exact hnz⟩)
+      (by rw [S.cph_set, cph_l hS, cph_part hS]; exact hxx) (S.ph_set _ _)
       (by rw [lph_s hS, L.ph_set])
       (fun hU₁ => by rw [hsrc] at hU₁; exact hU G rX m' rL rh r _ _ hnz hT hd hU₁) hL hU' hc hfs hL'
   · rintro a m' rp rh hc' ht ⟨r, hT, hd, rfl⟩ hq hi'
@@ -1380,7 +1382,7 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       S.Inv (upd G t (S.set (L.set gx .holds h₂) (.pst sh sc))) m →
       C.Inv L (upd G t (S.set (L.set gx .holds h₂) (.pst sh sc))) m →
       U (upd G t (S.set (L.set gx .holds h₂) (.pst sh sc))) rX m)
-    (hgx : C.ph g = .out) (hxx : C.ph gx = .out)
+    (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hxx : C.ph gx = .out)
     (hsplit : L.part g = rsum (L.part gx) rT) (hdj : FHeap.Disjoint (L.part gx).heap rT.heap)
     (hi : P.inv (upd G t (L.set g .holds rL)) m) (hc : m.current = t)
     (htt : FTTriple (⟪(S.cnt (upd G t g)).toNat + 1 < 2 ^ 64⟫ ⋆
@@ -1420,7 +1422,7 @@ theorem Fits.wp_give (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : T
       by rw [lheld_s hS, L.held_set]⟩
   · intro _ rX m' rp rh _ _ hL hU' _ hfs _ hL'
     rw [upd_upd] at hL' ⊢
-    exact U_pst hS hgx (by rw [S.cph_set, cph_l hS]; exact hxx) (S.ph_set _ _)
+    exact U_pst hS hgx (.inl (by rw [upd_self]; exact hgs)) (by rw [S.cph_set, cph_l hS]; exact hxx) (S.ph_set _ _)
       (by rw [lph_s hS, L.ph_set]) (hU G rX m' rL rh _ _) hL hU' hc hfs hL'
   · intro a m' rp rh hc' ht _ hq hi'
     rw [upd_upd, lset_s hS] at hi'
