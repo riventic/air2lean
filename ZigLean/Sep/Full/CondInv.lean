@@ -254,10 +254,12 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- Every epoch write is a `u32`. -/
   e32 : ∀ k < (C.Ep.hist m).size, (C.Ep.hist m)[k]!.Val (val (C.Ep.hist m)[k]!)
   /-- (H3) Each epoch write is the one before plus one, and its release clock covers the one
-  before (one release sequence). -/
+  before (one release sequence) and its own clock (a release RMW: a waiter that acquired it has
+  its write in its floor, `Inv.ep_floor`). -/
   ep : ∀ k, k + 1 < (C.Ep.hist m).size →
     val (C.Ep.hist m)[k + 1]! = val (C.Ep.hist m)[k]! + 1 ∧
-    VClock.le (C.Ep.hist m)[k]!.relClock (C.Ep.hist m)[k + 1]!.relClock = true
+    VClock.le (C.Ep.hist m)[k]!.relClock (C.Ep.hist m)[k + 1]!.relClock = true ∧
+    VClock.le (C.Ep.hist m)[k + 1]!.clock (C.Ep.hist m)[k + 1]!.relClock = true
   /-- (H2) A post is its signaller's, or an epoch write's release clock covers it. -/
   pub : ∀ q, 0 < q → q < (C.S.hist m).size →
     sOf (C.S.hist m)[q - 1]! < sOf (C.S.hist m)[q]! →
@@ -551,7 +553,17 @@ theorem Inv.rel_mono {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {b : Nat
     ∀ d, b + d < (C.Ep.hist m).size →
       VClock.le (C.Ep.hist m)[b]!.relClock (C.Ep.hist m)[b + d]!.relClock = true
   | 0, _ => VClock.le_refl _
-  | d + 1, h => VClock.le_trans (hI.rel_mono d (by omega)) (hI.ep (b + d) (by omega)).2
+  | d + 1, h => VClock.le_trans (hI.rel_mono d (by omega)) (hI.ep (b + d) (by omega)).2.1
+
+/-- (H3, clocks) A registered waiter's saved epoch write is in its floor: a read of the epoch
+whose floor is at the waiter's clock (`Word.Floor`) reads that write or a newer one. -/
+theorem Inv.ep_floor {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {u : ThreadId}
+    {i jr : Nat} {sn : Bool} {e : BitVec 32} (h : C.ph (G u) = .reg i jr sn e) {j : Nat}
+    (hfl : Word.Floor (C.Ep.hist m) (m.clocks[u]!) j) : i ≤ j := by
+  obtain ⟨hi, -, hrel, -⟩ := hI.reg u i jr sn e h
+  match i, hi, hrel with
+  | 0, _, _ => exact Nat.zero_le _
+  | d + 1, hi, hrel => exact hfl (d + 1) hi (VClock.le_trans (hI.ep d hi).2.2 hrel)
 
 /-- A thread queued at the epoch is a registered waiter about to wait. -/
 theorem Inv.qd_reg {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {u : ThreadId}
@@ -1913,7 +1925,8 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
       rw [hlt ((C.Ep.hist m).size - 1) (by omega),
         show (C.Ep.hist m).size - 1 + 1 = (C.Ep.hist m).size by omega, hnew, ← hold, val_of hyv,
         val_of ho]
-      exact ⟨rfl, hyl⟩
+      refine ⟨rfl, hyl, ?_⟩
+      simp only [Word.rmwEnt, hrel, ↓reduceIte]; exact VClock.le_merge_right _ _
   · -- (H2) `t`'s post is published by the new write
     rw [hS] at hq hlt' ⊢; rw [hsz]
     rcases hI.pub q' h0 hq hlt' with ⟨v, n'', sh'', hv, hn⟩ | ⟨b, hb, hc⟩
