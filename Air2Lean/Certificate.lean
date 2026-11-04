@@ -149,6 +149,13 @@ partial def printBody (body : Array Inst) : Option String := do
 
 end
 
+/-- The printed body, or the error that fails the certificate closed: a body the printer does
+not print is never replaced by another (empty) body. -/
+def printBodyOrThrow (what : String) (body : Array Inst) : Except String String :=
+  match printBody body with
+  | some s => pure s
+  | none => throw s!"{what}: an instruction the certificate printer does not print"
+
 def printLayout (l : Layout) : String :=
   s!"\{ size := {opt toString l.size}, align := {opt toString l.align}, " ++
   s!"offsets := {arr toString l.offsets}, ptrAlign := {opt toString l.ptrAlign}, " ++
@@ -169,10 +176,10 @@ def printDialect (d : Dialect) : String :=
   s!"buildMode := {str d.buildMode}, noLibc := {bool d.noLibc} }"
 
 /-- Constructor quotation of the whole decoded `Func`, including every source field and
-operations outside the proof fragment. `none` denotes an unexpected quotation expression,
-never an unsupported body replaced by `default`. -/
+operations outside the proof fragment (the round trip compares it with the decoded golden AIR).
+`none` denotes an unexpected quotation expression, never an unsupported body replaced by
+`default`. -/
 def printFunc (f : Func) : Option String := (Reify.func f).toOption
-
 
 /-! ## The certificate fragment -/
 
@@ -462,7 +469,8 @@ def localReason (f : Func) (mem : Bool) : Except String (Array String) := do
   let tyOfInst (x : InstId) := tys[x]?
   let regs := registers f
   for i in insts do instReason f tyOfInst regs i
-  unless (printFunc f).isSome do throw "an instruction the certificate printer does not print"
+  -- The body printer that the certificate's statements use (`Reify` quotes every operation).
+  unless (printBody f.body).isSome do throw "an instruction the certificate printer does not print"
   pure ((callsIn f).filter fun n => (panicCallee? n).isNone)
 
 /-! ## Locals and loops -/
@@ -793,16 +801,20 @@ structure LoopCertData where
   parents : List InstId
   caps : Array (InstId × String)
   cells : Array InstId
+  /-- `body` as the certificate prints it (`printBodyOrThrow`). -/
+  printed : String
 
 private def loopCertDatum (sh : CertShape) (regs : Array InstId)
-    (ctx : Inst × Array Inst × List InstId × List InstId) : LoopCertData :=
+    (ctx : Inst × Array Inst × List InstId × List InstId) : Except String LoopCertData :=
   let (inst, body, blocks, parents) := ctx
-  { inst, body, blocks, parents,
-    caps := ((sh.loops.find? (·.1 == inst.id)).map (·.2)).getD #[],
-    cells := cellsIn regs body }
+  (printBodyOrThrow s!"loop {inst.id}" body).map fun printed =>
+    { inst, body, blocks, parents,
+      caps := ((sh.loops.find? (·.1 == inst.id)).map (·.2)).getD #[],
+      cells := cellsIn regs body, printed }
 
-def loopCertData (f : Func) (sh : CertShape) (regs : Array InstId) : Array LoopCertData :=
-  ((loopCtx [] [] f.body).reverse).map (loopCertDatum sh regs)
+def loopCertData (f : Func) (sh : CertShape) (regs : Array InstId) :
+    Except String (Array LoopCertData) :=
+  ((loopCtx [] [] f.body).reverse).mapM (loopCertDatum sh regs)
 
 def loopTypes (f : Func) : Std.HashMap InstId TyId :=
   (allInsts f.body).foldl (fun m i => m.insert i.id i.ty) {}
@@ -835,7 +847,7 @@ def loopState (sh : CertShape) (regs : Array InstId) (cellScalar : InstId → Sc
 lemmas, the exit encoding, and per loop (innermost first) the one-iteration lemma, the loop
 commutation, the loop's exits and the rewrite used at the loop; then the step proof. -/
 def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
-    (calleeLemmas : List String) (rm : RunMode) : Array String × Array String := Id.run do
+    (calleeLemmas : List String) (rm : RunMode) : Except String (Array String × Array String) := do
   let L := s!"{ns}.{sh.localsName}"
   let E := s!"{ns}.{sh.exitName}"
   let enc := s!"enc_{d}"
@@ -870,7 +882,7 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
     s!"{air}_params"]
   let mut out : Array String := #[
     s!"theorem {air}_name : {air}.name = {str f.name} := rfl",
-    s!"theorem {air}_body : {air}.body =\n  {(printBody f.body).getD "#[]"} := rfl",
+    s!"theorem {air}_body : {air}.body =\n  {← printBodyOrThrow f.name f.body} := rfl",
     s!"theorem {air}_types : {air}.types = {arr printTy f.types} := rfl",
     s!"theorem {air}_layouts : {air}.layouts = {arr printLayout f.layouts} := rfl",
     s!"theorem {air}_params : {air}.params = {arr toString f.params} := rfl", "",
@@ -901,7 +913,7 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
         s!"       rintro {pat} ⟨h1, h2⟩\n" ++
         "       cases e <;> simp (config := { failIfUnchanged := false }) only [" ++ set ++ "] at h1 h2 ⊢)") ++
       #["    | (refine bind_congr fun _ => ?_))"]
-  let ctxs := loopCertData f sh regs
+  let ctxs ← loopCertData f sh regs
   let mut done : Array (InstId × Nat × String) := #[]
   for info in ctxs do
     let n := info.inst.id
@@ -915,7 +927,7 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
     let vb := binders cvs
     let va := argsOf cvs
     let cells := info.cells
-    let B := (printBody body).getD "#[]"
+    let B := info.printed
     let xs := caps.map fun (k, _) => match viewOf k with | some v => s!"a{v.idx}" | none => s!"x{k}"
     let xBinders := " ".intercalate (ownCaps.toList.map fun (k, _) => s!"(x{k} : {(scalarOf k).lean})")
     let capVal (val : InstId → String) (k : InstId) : String := match viewOf k with
@@ -1034,7 +1046,7 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
   let stepSet := ", ".intercalate (baseSet ++ viewSet rm.views ++ top.toList.map (fun (k, _) => s!"{d}_loop{k}") ++
     ["Env.val", "Frame.cell"])
   let proof := #[s!"  simp only [{stepSet}]"] ++ close top.toList (baseSet ++ viewSet rm.views ++ ["Env.val", "Frame.cell"])
-  (out, proof)
+  pure (out, proof)
 
 /-- One actual executable declaration, with its original AIR and the existing loop capture
 and frame metadata. A loop helper is a member in its own right, rather than a source function
@@ -1063,7 +1075,7 @@ private def completeDecl (frag : Array Func) (shapes : Array (String × CertShap
     | .loop _ id => do
       let some ctx := ((loopCtx [] [] source.body).reverse).find? (fun (inst, _, _, _) => inst.id == id)
         | throw s!"actual helper has no existing loop metadata: {compiler.name}"
-      let info := loopCertDatum shape (registers source) ctx
+      let info ← loopCertDatum shape (registers source) ctx
       unless info.caps.map (·.2) == emitted.params.map (·.1) do
         throw s!"actual helper capture order disagrees with its emitted signature: {compiler.name}"
       pure (some info)
@@ -1174,7 +1186,7 @@ private def CompleteDecl.right (decl : CompleteDecl) (air : String) : String :=
     let scalar := loopCellScalar decl.source (loopTypes decl.source) (sig decl.source).ret
     let frame := loopFrame decl.shape regs scalar "st" "s"
     s!"(((execIteration ⟨program, {air}, args, runOn program table, fun _ => none⟩ " ++
-      s!"(Array.toList {(printBody info.body).getD "#[]"}) env).run {frame}).run m)"
+      s!"(Array.toList {info.printed}) env).run {frame}).run m)"
 
 private def CompleteDecl.motive (decl : CompleteDecl) (fixed : Array String)
     (ns air d : String) : Except String String := do
@@ -1284,7 +1296,7 @@ private def CompleteDecl.loopClosure (decl : CompleteDecl) (head hyp ns gen air 
   let cellScalar := loopCellScalar decl.source tys (sig decl.source).ret
   let frame := loopFrame decl.shape regs cellScalar
   let state := loopState decl.shape regs cellScalar L
-  let B := (printBody info.body).getD "#[]"
+  let B := info.printed
   let ctx := s!"⟨program, {air}, args, runOn program table, fun _ => none⟩"
   let native := s!"Zig.loop ({head} {" ".intercalate decl.values.toList}) {again}"
   let loopLeft := decl.encodeResult s!"({native}).run s" d
@@ -1342,8 +1354,8 @@ the view is the generated definition, by normalization) and `<d>_step` (from a m
 caller read the items, the AIR semantics agrees with it up to read entries, `execFunc_view` and
 `holds_of_readSlice`). -/
 def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas : List String) :
-    Array String := Id.run do
-  let views := (viewParams f).toOption.getD #[]
+    Except String (Array String) := do
+  let views ← viewParams f
   let viewOf (i : Nat) := views.find? (·.idx == i)
   let s := sig f
   let items := " ".intercalate (views.toList.map fun v => s!"a{v.idx}")
@@ -1373,7 +1385,7 @@ def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas :
   let viewLemmas := ["execFuncV", s!"view_{d}", s!"policy_{d}", s!"entry_{d}"] ++
     views.toList.flatMap fun v => [s!"len_of_size hs{v.idx}", s!"hs{v.idx}"]
   if (allInsts f.body).any (·.op matches .loop _) then
-    let (loopLines, stepProof) := loopCert f sh ns gen air d false (calleeLemmas ++ ["execFuncV"])
+    let (loopLines, stepProof) ← loopCert f sh ns gen air d false (calleeLemmas ++ ["execFuncV"])
       { mem := false, views, view := viewTerm }
     out := out ++ loopLines ++ stmt ++ stepProof ++ #[""]
   else
@@ -1422,7 +1434,7 @@ def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas :
       "    cases ha",
       s!"    exact ⟨p{v.idx}, {v.ptrAlign}, rfl, rfl, v{v.idx}, by simp [Value.noPtr]⟩"]
   out := out ++ #["  all_goals cases hk", ""]
-  out
+  pure out
 
 /-- The certificate file for the complete original `program` and the actual emitted
 declaration plan. Native effects/costs remain derived from `program`; declaration names,
@@ -1481,16 +1493,29 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
   let models ← Reify.models program.models
   let sources := (Array.range funcs.size).map fun index => s!"source_{index}"
   lines := lines.push s!"/-- The complete original translation input, before certificate selection. -/\ndef program : _root_.Air2Lean.Program := ⟨{arr id sources}, {models}⟩\n"
+  -- The step policy table (`Program.tickPolicies`: the call groups and classifications computed
+  -- once) in ONE kernel evaluation; each certified function's lemmas read its entry
+  -- (`Program.tickPolicy_of_tickPolicies`). The table is `funcs.map`: a function's index in it is
+  -- its index in `funcs`.
+  let table := program.tickPolicies
+  let entry (p : String × TickPolicy) : String :=
+    s!"({str p.1}, \{ loop := {bool p.2.loop}, entry := {bool p.2.entry} })"
+  lines := lines.push (s!"theorem policies : program.tickPolicies =\n    #[" ++
+    ",\n      ".intercalate (table.toList.map entry) ++ "] := by\n  decide +kernel\n")
   let mut sourceLemmas : Array (String × String) := #[]
   for f in frag do
     let some index := funcs.findIdx? (·.name == f.name)
       | throw s!"certificate function {f.name} is absent from its original program"
     sourceLemmas := sourceLemmas.push (f.name, s!"source_{index}")
-    lines := lines.push s!"/-- The decoded canonical AIR of `{f.name}` in the original program. -/"
-    lines := lines.push s!"def {airName f} : _root_.Air2Lean.Func := source_{index}\n"
-    lines := lines.push s!"theorem lookup_{declOf f.name} : program.lookup {str f.name} = some {airName f} := rfl"
-    lines := lines.push s!"theorem policy_{declOf f.name} : program.ticked {str f.name} = {bool (program.ticked f.name)} := by decide +kernel"
-    lines := lines.push s!"theorem entry_{declOf f.name} : program.entryTicked {str f.name} = {bool (program.entryTicked f.name)} := by decide +kernel\n"
+    let d := declOf f.name
+    let policy := table[index]!.2
+    let read := s!"(_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies {index} (by decide))"
+    lines := lines ++ #[
+      s!"/-- The decoded canonical AIR of `{f.name}` in the original program. -/",
+      s!"def {airName f} : _root_.Air2Lean.Func := source_{index}\n",
+      s!"theorem lookup_{d} : program.lookup {str f.name} = some {airName f} := rfl",
+      s!"theorem policy_{d} : program.ticked {str f.name} = {bool policy.loop} :=\n  congrArg _root_.Air2Lean.TickPolicy.loop {read}",
+      s!"theorem entry_{d} : program.entryTicked {str f.name} = {bool policy.entry} :=\n  congrArg _root_.Air2Lean.TickPolicy.entry {read}\n"]
   -- Functions with a viewed slice parameter, and the program of the others.
   let views := frag.filter (isView · memFuncs)
   let frag := frag.filter (!isView · memFuncs)
@@ -1505,8 +1530,8 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
     (sourceLemmas.filter fun (n, _) => n == f.name).toList.map (·.2) ++
       (panicLemmas.filter fun (n, _) => (callsIn f).contains n).toList.map (·.2)
   for f in views do
-    lines := lines ++ viewCert f ((shapes.find? (·.1 == f.name)).map (·.2) |>.getD default) ns (genName f)
-      (airName f) (declOf f.name) (reductionLemmasOf f)
+    lines := lines ++ (← viewCert f ((shapes.find? (·.1 == f.name)).map (·.2) |>.getD default) ns
+      (genName f) (airName f) (declOf f.name) (reductionLemmasOf f))
   unless views.isEmpty do
     lines := lines.push "/-- The functions certified through a view of their slices, by fully qualified name. -/"
     lines := lines.push ("def views : Table := [\n" ++
@@ -1546,7 +1571,7 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
       s!"  conv => rhs; rw [{genName f}]"]
     let sh := (shapes.find? (·.1 == f.name)).map (·.2) |>.getD default
     if (allInsts f.body).any (·.op matches .loop _) then
-      let (loopLines, stepProof) := loopCert f sh ns (genName f) (airName f) d calls calleeLemmas
+      let (loopLines, stepProof) ← loopCert f sh ns (genName f) (airName f) d calls calleeLemmas
         { mem := isMem f }
       lines := lines ++ loopLines ++ stmt ++ stepProof ++ #[""]
     else

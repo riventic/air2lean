@@ -63,7 +63,8 @@ private theorem caller_edges (base : Nat) (records : Array Identity.Record) :
   simp only [calleesOf, Func.indirectCallees, caller_allInsts]
   apply Array.ext'
   simp only [dedupNames, Graph.dedupKeys, ← Array.foldl_toList,
-    Array.toList_append, Array.toList_filterMap, Array.toList_flatMap, Array.toList_filter,
+    Array.toList_append, Array.toList_flatMap, Array.toList_filter,
+    Option.toArray_none, Option.toArray_some,
     caller, Func.calleeValFnTy?, Array.toList_push, Array.toList_empty,
     List.append_nil, List.nil_append, List.filterMap_cons, List.filterMap_nil,
     List.flatMap_cons, List.flatMap_nil, List.filter_cons, List.filter_nil,
@@ -110,7 +111,7 @@ private theorem recursive_false_of_rows (records : Array Identity.Record)
     (Graph.callGroupsBy_map nodes project Prod.fst Prod.snd)
   have hrecursive : (program records).recursive "canon.caller" =
       observe (Graph.callGroupsBy (nodes.map project) Prod.fst Prod.snd) := by
-    simpa only [observe, nodes, project, Program.recursive, Program.groups, callGroups,
+    simpa only [observe, nodes, project, Program.recursive, recursiveIn, Program.groups, callGroups,
       Array.any_map, Function.comp_def] using hmapped.symm
   rw [hrecursive]
   change observe (Graph.callGroupsBy ((program records).funcs.map (fun f =>
