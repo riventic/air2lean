@@ -359,8 +359,8 @@ theorem ShapesStep.trans {m₁ m₂ m₃ : Mem} (h₁ : L.ShapesStep m₁ m₂) 
     rcases this rfl with h | h <;> simp [LockWord.shape] at h <;> omega
 
 /-- A step that keeps the threads, the groups, the blocks, the clocks, the footprint, the atomic
-locations, the threads at another futex and (`hk`, by default unchanged) the other threads'
-pending wakes. -/
+locations, the queue entries at other futexes exactly, and (`hk`, by default unchanged) the other
+threads' pending wakes. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
@@ -377,16 +377,15 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (fun h => h.keep (fun _ hl _ => ha ▸ hl) (fun _ _ _ hin => hin.of_blocks hb) fun _ he => hf ▸ he),
     hn, fun _ _ => ⟨some, AMap.of_eq ha hs⟩⟩
 
-/-- A queue entry at another futex is in the queue after a lock step iff it was before. -/
+/-- A queue entry at another futex is in the queue after a lock step iff it was before (from the
+exact `waiters` equality, which also keeps their order and multiplicity). -/
 theorem Step.waiters_mem {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (w : ThreadId × Ptr)
     (hw : w.2 ≠ L.ptr) : w ∈ m'.waiters ↔ w ∈ m.waiters := by
-  have hp : (w.2 != L.ptr) = true := bne_iff_ne.mpr hw
-  have := congrArg (w ∈ ·) hs.waiters
-  simp only [Array.mem_filter, hp, and_true, eq_iff_iff] at this
-  exact this
+  simpa only [Array.mem_filter, bne_iff_ne.mpr hw, and_true, eq_iff_iff]
+    using congrArg (w ∈ ·) hs.waiters
 
 /-- Filtering by `p && q` is filtering by `p` when `p` implies `q` on the members. -/
-theorem filter_and_of_imp {α : Type} {xs : Array α} {p q : α → Bool}
+theorem _root_.Array.filter_and_of_imp {α : Type _} {xs : Array α} {p q : α → Bool}
     (h : ∀ a ∈ xs, p a = true → q a = true) :
     xs.filter (fun a => p a && q a) = xs.filter p := by
   apply Array.toList_inj.mp
@@ -2003,7 +2002,8 @@ theorem WInv.wait {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {b : Bool} 
     rw [this, ha₀] at ha
     cases ha
     refine ⟨hsM.trans (Step.same rfl rfl rfl rfl rfl rfl
-      (by simp; rfl)) (.inr rfl), ?_⟩
+      (by simp only [Array.size_push, bne_self_eq_false, Bool.false_eq_true, not_false_eq_true,
+            Nat.add_left_cancel_iff, Array.filter_push_of_neg]; rfl)) (.inr rfl), ?_⟩
     simp only [↓reduceIte]
     have h2 : L.U32 M (BitVec.ofNat 32 L.c) := (u32_bytes (m := M) hb₀).mpr hv
     obtain ⟨u0, hu0⟩ := not_free_iff.mp fun hF =>
@@ -2063,7 +2063,7 @@ theorem WInv.wake {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {n : Nat} {
         -- an entry at another futex is a thread `away`, not a woken one (at `wait`)
         dsimp only
         rw [Array.filter_filter]
-        refine filter_and_of_imp fun w hwm hw => ?_
+        refine Array.filter_and_of_imp fun w hwm hw => ?_
         rw [Bool.not_eq_true']
         apply Bool.eq_false_iff.mpr
         intro hc
