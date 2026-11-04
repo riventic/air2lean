@@ -94,6 +94,7 @@ def view_sum (a0 : Array (BitVec 32)) : InstId → Option (Array Value) :=
 def viewTy_sum : InstId → TyId :=
   fun k => if k = 0 then 8 else 0
 
+theorem air_sum_name : air_sum.name = "basic.sum" := rfl
 theorem air_sum_body : air_sum.body =
   #[⟨0, 0, (.arg 0)⟩,
     ⟨26, 2, (.line 2)⟩,
@@ -159,7 +160,7 @@ theorem sum_loop7_body (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice)
     ⟨23, 6, (.repeat 7)⟩]) env).run (Frame.setCell (Frame.setCell st 1 (some (Value.int false 64 s.total))) 3 (some (Value.int false 64 s.local3)))).run m =
       (fun r => ((enc_sum r.1, (Frame.setCell (Frame.setCell st 1 (some (Value.int false 64 r.2.total))) 3 (some (Value.int false 64 r.2.local3)))), m)) <$> (Basic.sum.loop7 a0 x5).run s := by
   conv => rhs; rw [Basic.sum.loop7]
-  simp only [air_sum_body, air_sum_types, air_sum_layouts, air_sum_params, air_sem, enc_sum, policy_sum, entry_sum, source_4, execFuncV, view_sum, len_of_size hs0, hs0, h0, h5, h1, h3, Env.val, Frame.cell]
+  simp only [air_sum_name, air_sum_body, air_sum_types, air_sum_layouts, air_sum_params, air_sem, enc_sum, policy_sum, entry_sum, source_4, execFuncV, view_sum, len_of_size hs0, hs0, h0, h5, h1, h3, Env.val, Frame.cell]
   all_goals repeat (first
     | rfl
     | (refine bind_congr fun _ => ?_))
@@ -236,12 +237,12 @@ theorem sum_view (call : Oracle) (p0 : Zig.Slice) (a0 : Array (BitVec 32)) (hs0 
     (execFuncV program call (view_sum a0) air_sum [Value.slice p0]).run m =
       (fun v => ((Value.int false 64 v), m)) <$> Basic.sum a0 := by
   conv => rhs; rw [Basic.sum]
-  simp only [air_sum_body, air_sum_types, air_sum_layouts, air_sum_params, air_sem, enc_sum, policy_sum, entry_sum, source_4, execFuncV, view_sum, len_of_size hs0, hs0, sum_loop7, Env.val, Frame.cell]
+  simp only [air_sum_name, air_sum_body, air_sum_types, air_sum_layouts, air_sum_params, air_sem, enc_sum, policy_sum, entry_sum, source_4, execFuncV, view_sum, len_of_size hs0, hs0, sum_loop7, Env.val, Frame.cell]
   all_goals repeat (first
     | rfl
     | (refine bind_congr_ok _ _ (fun r hr => sum_loop7_exits a0 p0 hs0 _ _ r hr) ?_
        rintro ⟨e, s⟩ ⟨h1, h2⟩
-       cases e <;> simp (config := { failIfUnchanged := false }) only [air_sum_body, air_sum_types, air_sum_layouts, air_sum_params, air_sem, enc_sum, policy_sum, entry_sum, source_4, execFuncV, view_sum, len_of_size hs0, hs0, Env.val, Frame.cell, Exit.again, exitOk] at h1 h2 ⊢)
+       cases e <;> simp (config := { failIfUnchanged := false }) only [air_sum_name, air_sum_body, air_sum_types, air_sum_layouts, air_sum_params, air_sem, enc_sum, policy_sum, entry_sum, source_4, execFuncV, view_sum, len_of_size hs0, hs0, Env.val, Frame.cell, Exit.again, exitOk] at h1 h2 ⊢)
     | (refine bind_congr fun _ => ?_))
 
 /-- `basic.sum`, called with the items its caller read (`Zig.readSlice`, from `m`): the AIR

@@ -44,6 +44,7 @@ def view_find (a0 : Array (BitVec 32)) : InstId → Option (Array Value) :=
 def viewTy_find : InstId → TyId :=
   fun k => if k = 0 then 1 else 0
 
+theorem air_find_name : air_find.name = "options.find" := rfl
 theorem air_find_body : air_find.body =
   #[⟨0, 0, (.arg 0)⟩,
     ⟨1, 1, (.arg 1)⟩,
@@ -105,7 +106,7 @@ theorem find_loop6_body (call : Oracle) (a0 : Array (BitVec 32)) (p0 : Zig.Slice
     ⟨24, 6, (.repeat 6)⟩]) env).run (Frame.setCell st 2 (some (Value.int false 64 s.local2)))).run m =
       (fun r => ((enc_find r.1, (Frame.setCell st 2 (some (Value.int false 64 r.2.local2)))), m)) <$> (Options.find.loop6 a0 x1 x4).run s := by
   conv => rhs; rw [Options.find.loop6]
-  simp only [air_find_body, air_find_types, air_find_layouts, air_find_params, air_sem, enc_find, policy_find, entry_find, source_0, execFuncV, view_find, len_of_size hs0, hs0, h0, h1, h4, h2, Env.val, Frame.cell]
+  simp only [air_find_name, air_find_body, air_find_types, air_find_layouts, air_find_params, air_sem, enc_find, policy_find, entry_find, source_0, execFuncV, view_find, len_of_size hs0, hs0, h0, h1, h4, h2, Env.val, Frame.cell]
   all_goals repeat (first
     | rfl
     | (refine bind_congr fun _ => ?_))
@@ -182,12 +183,12 @@ theorem find_view (call : Oracle) (p0 : Zig.Slice) (a0 : Array (BitVec 32)) (hs0
     (execFuncV program call (view_find a0) air_find [Value.slice p0, (Value.int false 32 p1)]).run m =
       (fun v => ((Value.ofOpt (fun x => (Value.int false 64 x)) v), m)) <$> Options.find a0 p1 := by
   conv => rhs; rw [Options.find]
-  simp only [air_find_body, air_find_types, air_find_layouts, air_find_params, air_sem, enc_find, policy_find, entry_find, source_0, execFuncV, view_find, len_of_size hs0, hs0, find_loop6, Env.val, Frame.cell]
+  simp only [air_find_name, air_find_body, air_find_types, air_find_layouts, air_find_params, air_sem, enc_find, policy_find, entry_find, source_0, execFuncV, view_find, len_of_size hs0, hs0, find_loop6, Env.val, Frame.cell]
   all_goals repeat (first
     | rfl
     | (refine bind_congr_ok _ _ (fun r hr => find_loop6_exits a0 p0 hs0 _ _ _ r hr) ?_
        rintro ⟨e, s⟩ ⟨h1, h2⟩
-       cases e <;> simp (config := { failIfUnchanged := false }) only [air_find_body, air_find_types, air_find_layouts, air_find_params, air_sem, enc_find, policy_find, entry_find, source_0, execFuncV, view_find, len_of_size hs0, hs0, Env.val, Frame.cell, Exit.again, exitOk] at h1 h2 ⊢)
+       cases e <;> simp (config := { failIfUnchanged := false }) only [air_find_name, air_find_body, air_find_types, air_find_layouts, air_find_params, air_sem, enc_find, policy_find, entry_find, source_0, execFuncV, view_find, len_of_size hs0, hs0, Env.val, Frame.cell, Exit.again, exitOk] at h1 h2 ⊢)
     | (refine bind_congr fun _ => ?_))
 
 /-- `options.find`, called with the items its caller read (`Zig.readSlice`, from `m`): the AIR

@@ -864,8 +864,12 @@ def loopCert (f : Func) (sh : CertShape) (ns gen air d : String) (calls : Bool)
   let frameOf := loopFrame sh regs cellScalar
   -- The generated state of a frame and an environment.
   let stateOf := loopState sh regs cellScalar L
-  let fieldLemmas := [s!"{air}_body", s!"{air}_types", s!"{air}_layouts", s!"{air}_params"]
+  -- `{air}_name`: the loop's step policy (`program.ticked {air}.name`) reads the name, which the
+  -- `policy_`/`entry_` lemmas state for the name's literal
+  let fieldLemmas := [s!"{air}_name", s!"{air}_body", s!"{air}_types", s!"{air}_layouts",
+    s!"{air}_params"]
   let mut out : Array String := #[
+    s!"theorem {air}_name : {air}.name = {str f.name} := rfl",
     s!"theorem {air}_body : {air}.body =\n  {(printBody f.body).getD "#[]"} := rfl",
     s!"theorem {air}_types : {air}.types = {arr printTy f.types} := rfl",
     s!"theorem {air}_layouts : {air}.layouts = {arr printLayout f.layouts} := rfl",

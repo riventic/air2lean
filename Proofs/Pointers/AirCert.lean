@@ -217,6 +217,7 @@ theorem same_fix (args : List Value)
   rw [same_step gen v0.toPtr v1.toPtr]
   simp only [gen, air_sem]
 
+theorem air_sumTo_name : air_sumTo.name = "pointers.sumTo" := rfl
 theorem air_sumTo_body : air_sumTo.body =
   #[⟨0, 0, (.arg 0)⟩,
     ⟨21, 2, (.line 2)⟩,
@@ -278,7 +279,7 @@ theorem sumTo_loop6_body (args : List Value) (env : Env) (st : Frame) (x0 : BitV
     ⟨18, 5, (.repeat 6)⟩]) env).run (Frame.setCell st 3 (some (Value.int false 32 s.i)))).run m =
       ((fun r => (enc_sumTo r.1, (Frame.setCell st 3 (some (Value.int false 32 r.2.i))))) <$> (Pointers.sumTo.loop6 x0 x1).run s).run m := by
   conv => rhs; rw [Pointers.sumTo.loop6]
-  simp only [air_sumTo_body, air_sumTo_types, air_sumTo_layouts, air_sumTo_params, air_sem, enc_sumTo, policy_sumTo, entry_sumTo, source_10, callee_0, gen, h0, h1, h3, Env.val, Frame.cell]
+  simp only [air_sumTo_name, air_sumTo_body, air_sumTo_types, air_sumTo_layouts, air_sumTo_params, air_sem, enc_sumTo, policy_sumTo, entry_sumTo, source_10, callee_0, gen, h0, h1, h3, Env.val, Frame.cell]
   all_goals repeat (first
     | rfl
     | (refine bind_congr fun _ => ?_))
@@ -349,12 +350,12 @@ theorem sumTo_step (p0 : BitVec 32) (m : Zig.Mem) :
     (execFunc program gen air_sumTo [(Value.int false 32 p0)]).run m =
       (fun r => ((Value.int false 64 r.1), r.2)) <$> (Pointers.sumTo p0).run m := by
   conv => rhs; rw [Pointers.sumTo]
-  simp only [air_sumTo_body, air_sumTo_types, air_sumTo_layouts, air_sumTo_params, air_sem, enc_sumTo, policy_sumTo, entry_sumTo, source_10, callee_0, gen, sumTo_loop6, Env.val, Frame.cell]
+  simp only [air_sumTo_name, air_sumTo_body, air_sumTo_types, air_sumTo_layouts, air_sumTo_params, air_sem, enc_sumTo, policy_sumTo, entry_sumTo, source_10, callee_0, gen, sumTo_loop6, Env.val, Frame.cell]
   all_goals repeat (first
     | rfl
     | (refine bind_congr_ok _ _ (fun r hr => sumTo_loop6_exits _ _ _ _ r hr) ?_
        rintro ⟨⟨e, s⟩, m⟩ ⟨h1, h2⟩
-       cases e <;> simp (config := { failIfUnchanged := false }) only [air_sumTo_body, air_sumTo_types, air_sumTo_layouts, air_sumTo_params, air_sem, enc_sumTo, policy_sumTo, entry_sumTo, source_10, callee_0, gen, Env.val, Frame.cell, Exit.again, exitOk] at h1 h2 ⊢)
+       cases e <;> simp (config := { failIfUnchanged := false }) only [air_sumTo_name, air_sumTo_body, air_sumTo_types, air_sumTo_layouts, air_sumTo_params, air_sem, enc_sumTo, policy_sumTo, entry_sumTo, source_10, callee_0, gen, Env.val, Frame.cell, Exit.again, exitOk] at h1 h2 ⊢)
     | (refine bind_congr fun _ => ?_))
 
 theorem sumTo_fix (args : List Value)
