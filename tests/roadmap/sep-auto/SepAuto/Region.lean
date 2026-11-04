@@ -324,4 +324,23 @@ theorem measure_only (T : Nat → FAssn) (old : Array Byte) (c : MemM Unit)
     FTotalTriple (T old.size) c (fun _ => T old.size) := by
   fsym [rule]
 
+/-- A store and a load through a literal pointer (generated code's address of a global's item,
+evaluated) into a region of the state: the walk restates the pointer from the region's
+(`rebaseLitPtr?`). -/
+theorem literal_store_load (bs : Array Byte) (hs : bs.size = 4) (x : BitVec 8) :
+    FTotalTriple (up (regionIn ((⟨some 0, 0⟩ : Ptr).add 12) A 16 .global 1 bs))
+      (do Zig.store 1 (⟨some 0, 15⟩ : Ptr) x; Zig.load (BitVec 8) 1 (⟨some 0, 15⟩ : Ptr))
+      (fun r => ⟪r = x⟫ ⋆ FAssn.ex fun t : Array Byte =>
+        up (regionIn ((⟨some 0, 0⟩ : Ptr).add 12) A 16 .global 1 t)) := by
+  fsym
+
+/-- The same into a region that starts at an offset of a pointer the facts place. -/
+theorem literal_store_offset (p : Ptr) (hb : p.block = some 0) (ho : p.off = 0)
+    (bs cs : Array Byte) (hs : bs.size = 16) (hc : cs.size = 4) (x : BitVec 8) :
+    FTotalTriple (up (regionIn (p.add (bs.extract 0 12).size) A 16 .global 1 cs))
+      (Zig.store 1 (⟨some 0, 15⟩ : Ptr) x)
+      (fun _ => up (regionIn (p.add (bs.extract 0 12).size) A 16 .global 1
+        (writeBytes cs 3 (Enc.encode x)))) := by
+  fsym
+
 end SepAuto.Region
