@@ -230,8 +230,8 @@ ZigLean.Simp Proofs.Lists.Gen Proofs.Recursion.Gen air2lean`, then run
 
 This is a bounded P03 contribution. The loop rules are sequential: concurrent loops (and
 termination under a scheduler) are out of scope. Invariants and measures are not inferred. The
-memory-backed recursive `Pointers.addDown` is not covered, and no ring-buffer example exists in
-`examples/`.
+memory-backed recursive `Pointers.addDown` is proved total in the generated model (explicit
+stack budget; see docs/proof-automation.md; native interpretation retains premise STK-01), and no ring-buffer example exists in `examples/`.
 
 ### Dispatch loops (L03)
 

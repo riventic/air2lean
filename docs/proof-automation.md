@@ -784,6 +784,16 @@ the caller's precondition. A decreasing argument does not establish stack room. 
 `Result` recursion has no modeled frame operations; its native interpretation retains premise
 STK-01 even when its lifted program has a total triple.
 
+`addDown_total` in `Proofs/Pointers/Sep.lean` is a generated memory-backed instance. Its flat
+invocation record holds the input, accumulator and logical stack depth; one `fsym` step uses
+the callee's contract with the decreased input and increased depth. Per-item sum identities
+supply the remaining overflow and result equalities. The contract preserves the exact owned
+accumulator, current thread, original stack depth and explicit `unmetered` mode. Its room
+condition includes all `n + 1` frames, and a budgeted start-memory witness supplies a real
+32-byte reserve. Unmetered mode makes no cost claim. This is a proof of the current generated
+`MemM` code, not an AIR/native certificate: `Certificate.fragment` still refuses recursive
+memory functions, and P03/native stack and producer integration remain open.
+
 ## Extending it
 
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with
