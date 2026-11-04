@@ -55,13 +55,13 @@ PY
 fi
 # The allocator audits find their modules built, as the units of a fixture-checks run do, and
 # share the replay cache (each module is replayed once). scripts/par.py runs them at once as far
-# as the guard's AIR2LEAN_JOBS and memory allow: a cold audit peaks at 4.1 GB (its extraction
-# driver; arc, 2026-11-04), so --mem-mib 4600 and regen's 6144 MiB step runs one at a time,
-# beside the unit tests.
-python3 -B scripts/par.py --mem-mib 4600 -- bash -c 'python3 -B scripts/fixtures.py audit $0' ::: \
-  "AllocatorApplications --theorem-roots --output $out/allocator-applications.json" \
-  "AllocatorImported --theorem-roots --output $out/allocator-imported.json" \
-  "AllocatorImported --output $out/allocator-imported-all.json"
+# as AIR2LEAN_JOBS and the memory allow (a cold audit peaks at 4.1 GB, its extraction driver; arc,
+# 2026-11-04). Under a guard of --jobs 1 (regen.sh, a fixture-checks unit) they run one at a
+# time, beside the unit tests; a direct run uses the machine's CPUs and memory.
+python3 -B scripts/par.py --mem-mib 4600 -- bash -c {} ::: \
+  "python3 -B scripts/fixtures.py audit AllocatorApplications --theorem-roots --output '$out/allocator-applications.json'" \
+  "python3 -B scripts/fixtures.py audit AllocatorImported --theorem-roots --output '$out/allocator-imported.json'" \
+  "python3 -B scripts/fixtures.py audit AllocatorImported --output '$out/allocator-imported-all.json'"
 python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
 python3 -B tests/roadmap/claims/test_allocator_imported.py "$out/allocator-imported.json" "$out/allocator-imported-all.json"
 python3 - "$out" <<'PY'
