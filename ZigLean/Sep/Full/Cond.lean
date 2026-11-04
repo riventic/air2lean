@@ -1082,6 +1082,14 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
+/-- **`signal`'s history post at its return after a post**: the post's (`wp_post`, `all =
+false`) at the post state `m`, carried to the return by the wake's prefix of the writes right
+after the post (`wp_wakeEp`, `wp_osWakeEp`). -/
+theorem SigPost.ofPost {h : Array Word.Entry} {c : VClock} {X : Prop} {m m' : Mem}
+    (hp : ∀ all, (all = true → X) → C.SigPost h c all m) (hx : C.S.Prefix (C.S.hist m) m') :
+    C.SigPost h c false m' :=
+  (hp false (fun h => Bool.noConfusion h)).extend hx
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and

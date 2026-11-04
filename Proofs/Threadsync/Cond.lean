@@ -29,57 +29,71 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
 
 /-! ## `signal`: `wake(1)` -/
 
-/-- `wake`'s loop invariant: `t` read the state value `b`; a value other than `(1, 0)` means a
-registered waiter was signalled. -/
-def wakeInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
-    (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧ (s.state = 0 ∨ s.state = 1 ∨ s.state = 0x10001) ∧
-    (s.state ≠ 1 → ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m)
+/-- `wake`'s loop invariant, for the call snapshot `h c` (`FCond.Fits.enterSl`): `t` last read
+the state `(waiters, signals)` in the low and the high 16 bits (`waiters ≥ signals`); a served
+value (`waiters ≤ signals`) gave the history post and `t` is out, else `t` is still at
+`sl h c`. -/
+def wakeInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ FCond.SOk s.state ∧
+    (s.state.toNat % 65536 ≤ s.state.toNat / 65536 → ∀ all, C.SigPost h c all m) ∧
+    P.inv (upd G t (C.set g (FCond.afterSRead h c s.state))) m
 
-/-- `wake`'s loop ends with `t` out and a registered waiter signalled. -/
-def wakePost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
+/-- `wake`'s loop ends with `t` out and the history post. -/
+def wakePost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat)
     (r : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit ×
       Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → γ) (m : Mem)
     (d : Nat) : Prop :=
-  r.1 = .ret ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
-    ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m
+  r.1 = .ret ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧ C.SigPost h c false m
 
 theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g) (D : Nat)
-    (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
-      VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (h : Array Word.Entry) (c : VClock) (D : Nat)
     (s : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) (h : wakeInv P C t g D s G m d) :
+    (d : Nat) (hs : wakeInv P C t g h c D s G m d) :
     P.WP t ((Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 C.S.ptr).run s)
       (fun r G' m' d' =>
         if Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9 r.1 then
-          wakeInv P C t g D r.2 G' m' d' ∧ (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
+          wakeInv P C t g h c D r.2 G' m' d' ∧ (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
             (fun (_ : Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals) => 0) s)
-        else wakePost P C t g D r G' m' d') G m d := by
-  fsym [FCond.wp_signal hC, FCond.wp_bump hC, FCond.wp_wakeEp hC, hC.wp_projE (t := t),
-    (WP.liftMem_liftR (P := P) (t := t)
-      (hnone := fun _ => (show P.Partial from Or.inr hcost))),
-    C.ph_set, hC.lph, C.set_set, FCond.set_of, FCond.ptr_ep,
-    threadFutexWakeC_eq, wakeInv, wakePost,
-    Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9]
+        else wakePost P C t g h c D r G' m' d') G m d := by
+  obtain ⟨hd, hcur, hok, hsp, hi⟩ := hs
+  obtain ⟨b⟩ := s
+  simp only at hok hsp hi
+  by_cases hsv : b.toNat % 65536 ≤ b.toNat / 65536
+  · have hp := hsp hsv false
+    rw [show FCond.afterSRead h c b = .out from if_pos hsv, FCond.set_of hgx] at hi
+    clear hsp
+    fsym [(WP.liftMem_liftR (P := P) (t := t)
+        (hnone := fun _ => (show P.Partial from Or.inr hcost))),
+      BitVec.udiv_eq, FCond.SOk, wakePost, Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9]
+  · rw [show FCond.afterSRead h c b = .sl h c from if_neg hsv] at hi
+    clear hsp
+    fsym [FCond.wp_post hC (sh := h) (c := c), FCond.wp_bump hC, FCond.wp_wakeEp hC,
+      hC.wp_projE (t := t), FCond.SigPost.ofPost,
+      (WP.liftMem_liftR (P := P) (t := t)
+        (hnone := fun _ => (show P.Partial from Or.inr hcost))),
+      C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+      threadFutexWakeC_eq, BitVec.udiv_eq, FCond.SOk, FCond.PostOk, wakeInv, wakePost,
+      Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9]
 
 /-- **`Condition.signal`** (`wake(1)`) outside or holding the mutex, preserving its complete
-resource, after every registration (`hseen`). -/
+resource, with the history post of its call (`FCond.SigPost`). -/
 theorem cond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
-    (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
-      VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
-    (hi : P.inv (upd G t g) m) :
+    (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_Condition_signal p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      P.inv (upd G' t g) m' ∧ ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m')
-      G m d := by
-  fsym [FCond.wp_sload hC,
-    WP.loop _ _ (wakeInv P C t g d) (fun _ => 0) (wakePost P C t g d)
-      (wake_body hC hcost t g hgx hgo hsx d hseen),
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
+  have hi' := hC.enterSl hgx hgo hsx hi
+  generalize C.S.hist m = h at hi' ⊢
+  generalize m.clocks[t]! = c at hi' ⊢
+  clear hi
+  fsym [FCond.wp_sload hC, C.ph_set, hC.lph, C.set_set,
+    WP.loop _ _ (wakeInv P C t g h c d) (fun _ => 0) (wakePost P C t g h c d)
+      (wake_body hC hcost t g hgx hgo h c d),
     wakeInv, wakePost]
 
 /-! ## `wait`

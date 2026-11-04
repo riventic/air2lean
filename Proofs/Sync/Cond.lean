@@ -23,13 +23,15 @@ attribute [local irreducible] Proto.WP
 
 /-! ## The state's values
 
-Stated for a value `b` of the state with a hypothesis, so that the walks keep `b` abstract (a
-literal state would let the kernel evaluate the packed fields). -/
+`Io.Condition.State` is the packed `(waiters, signals)`: the low and the high 16 bits of the
+condition's state word (`FCond`), every bit pattern a value. Stated for an abstract value `b`, so
+that the walks keep `b` abstract (a literal state would let the kernel evaluate the packed
+fields). -/
 
 theorem condS_of (b : BitVec 32) :
     (Packed.ofBits? (α := Io_Condition_State) b).run = some (.ok (Packed.ofBits b)) := rfl
 
-theorem condS_dec : ∀ b : BitVec 32, (b = 0 ∨ b = 1 ∨ b = 0x10001) →
+theorem condS_dec : ∀ b : BitVec 32, FCond.SOk b →
     ∃ r, (Packed.ofBits? (α := Io_Condition_State) b).run = some (.ok r) :=
   fun b _ => ⟨_, condS_of b⟩
 
@@ -37,56 +39,58 @@ theorem condS_eq {b : BitVec 32} {r : Io_Condition_State}
     (h : (Packed.ofBits? (α := Io_Condition_State) b).run = some (.ok r)) : r = Packed.ofBits b := by
   rw [condS_of] at h; cases h; rfl
 
-theorem condS_bits {b : BitVec 32} (hb : b = 0 ∨ b = 1 ∨ b = 0x10001) :
+/-- `waiters` is the low half of the state word. -/
+theorem condS_w (b : BitVec 32) :
+    (Packed.ofBits b : Io_Condition_State).waiters.toNat = b.toNat % 65536 := by
+  show (b.extractLsb' 0 16).toNat = _
+  simp
+
+/-- `signals` is the high half of the state word. -/
+theorem condS_s (b : BitVec 32) :
+    (Packed.ofBits b : Io_Condition_State).signals.toNat = b.toNat / 65536 := by
+  show (b.extractLsb' 16 16).toNat = _
+  have := b.isLt
+  simp only [BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
+  omega
+
+/-- The state word of `(waiters, signals)`. -/
+theorem condS_mk (w s : BitVec 16) :
+    (Packed.toBits (Io_Condition_State.mk w s)).toNat = w.toNat + 65536 * s.toNat := by
+  show ((w.setWidth 32 <<< 0) ||| (s.setWidth 32 <<< 16)).toNat = _
+  have hw := w.isLt
+  have hs := s.isLt
+  rw [BitVec.shiftLeft_zero, ← BitVec.add_eq_or_of_and_eq_zero _ _ (by bv_decide),
+    BitVec.toNat_add, BitVec.toNat_shiftLeft, BitVec.toNat_setWidth, BitVec.toNat_setWidth,
+    Nat.shiftLeft_eq]
+  omega
+
+/-- Every state word is the word of its value. -/
+theorem condS_bits (b : BitVec 32) :
     Packed.toBits (Packed.ofBits b : Io_Condition_State) = b := by
-  rcases hb with rfl | rfl | rfl <;> decide +kernel
+  apply BitVec.eq_of_toNat_eq
+  show (Packed.toBits (Io_Condition_State.mk (Packed.ofBits b : Io_Condition_State).waiters
+    (Packed.ofBits b : Io_Condition_State).signals)).toNat = _
+  rw [condS_mk, condS_w, condS_s]
+  omega
+
+/-- `signal`'s post: one more signal to a state with a waiter lacking one. -/
+theorem condS_post {b : BitVec 32} {r : BitVec 16}
+    (hlt : ¬b.toNat % 65536 ≤ b.toNat / 65536)
+    (hr : r.toNat = b.toNat / 65536 + 1) :
+    FCond.PostOk (Packed.toBits (Packed.ofBits b : Io_Condition_State))
+      (Packed.toBits (Io_Condition_State.mk (Packed.ofBits b : Io_Condition_State).waiters r)) := by
+  unfold FCond.PostOk
+  rw [condS_bits, condS_mk, condS_w, hr]
+  omega
 
 theorem condS_bits1 : Packed.toBits (Packed.ofBits (1 : BitVec 32) : Io_Condition_State) = 1 :=
-  condS_bits (.inr (.inl rfl))
-
-/-- A signaller's new state after `(1, 0)`: `(1, 1)`. -/
-theorem condS_sig {b : BitVec 32} (h : b = 1) :
-    Packed.toBits (Io_Condition_State.mk (Packed.ofBits b : Io_Condition_State).waiters 1) =
-      0x10001 := by
-  subst h; decide +kernel
-
-/-- The existing one-waiter state has no signal before the signaller's addition. -/
-theorem condS_signals_zero {v : Io_Condition_State}
-    (hv : v = Packed.ofBits (1 : BitVec 32)) : v.signals.toNat = 0 := by
-  rw [hv]
-  rfl
-
-/-- The checked addition in the one-waiter branch produces exactly one signal. -/
-theorem condS_signal_value {v : Io_Condition_State} {r : BitVec 16}
-    (hr : r.toNat = v.signals.toNat + 1)
-    (hv : v = Packed.ofBits (1 : BitVec 32)) : r = 1 := by
-  apply BitVec.eq_of_toNat_eq
-  calc
-    r.toNat = v.signals.toNat + 1 := hr
-    _ = (1 : BitVec 16).toNat := by rw [condS_signals_zero hv]; rfl
+  condS_bits 1
 
 /-- The waiter's new state after `(1, 1)`: `(0, 0)`. -/
 theorem condS_take {b : BitVec 32} (h : b = 0x10001) :
     Packed.toBits (Io_Condition_State.mk ((Packed.ofBits b : Io_Condition_State).waiters - 1)
       ((Packed.ofBits b : Io_Condition_State).signals - 1)) = 0 := by
   subst h; decide +kernel
-
-theorem condS_add1 {b : BitVec 32} (h : b = 1) :
-    (add false (Packed.ofBits b : Io_Condition_State).signals (1 : BitVec 16)).run =
-      some (.ok 1) := by
-  subst h
-  cases h : (add false (Packed.ofBits (1 : BitVec 32) : Io_Condition_State).signals
-    (1 : BitVec 16)).run with
-  | none =>
-    exact absurd h (by
-      simp [add]; split <;> simp [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure,
-        ExceptT.pure, ExceptT.run])
-  | some r =>
-    cases r with
-    | error e => exact absurd h (add_one_noErr (by decide) e)
-    | ok v =>
-      have := add_one_ok h (by decide)
-      rw [show v = 1 from BitVec.eq_of_toNat_eq (by rw [this]; decide)]
 
 theorem condS_subW {b : BitVec 32} (h : b = 0x10001) :
     (sub false (Packed.ofBits b : Io_Condition_State).waiters (1 : BitVec 16)).run =
@@ -97,11 +101,6 @@ theorem condS_subS {b : BitVec 32} (h : b = 0x10001) :
     (sub false (Packed.ofBits b : Io_Condition_State).signals (1 : BitVec 16)).run =
     some (.ok ((Packed.ofBits b : Io_Condition_State).signals - 1)) := by
   subst h; rfl
-
-theorem condS_gtWS {b : BitVec 32} (hb : b = 0 ∨ b = 1 ∨ b = 0x10001) :
-    gt false (Packed.ofBits b : Io_Condition_State).waiters
-      (Packed.ofBits b : Io_Condition_State).signals = decide (b = 1) := by
-  rcases hb with rfl | rfl | rfl <;> decide +kernel
 
 theorem condS_gtS {b : BitVec 32} (hb : b = 1 ∨ b = 0x10001) :
     gt false (Packed.ofBits b : Io_Condition_State).signals 0 = decide (b = 0x10001) := by
@@ -119,78 +118,63 @@ variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
 
 /-! ## `signal` -/
 
-/-- `signal`'s loop invariant: `t` read the state value `b`; a value other than `(1, 0)` means a
-registered waiter was signalled. -/
-def sigInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
-    (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
-    ((s.prev_state = Packed.ofBits (0 : BitVec 32) ∧
-        ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m) ∨
-      s.prev_state = Packed.ofBits (1 : BitVec 32) ∨
-      (s.prev_state = Packed.ofBits (0x10001 : BitVec 32) ∧
-        ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m))
-
-/-- The explicit alternatives are exactly the original finite existential invariant. -/
-theorem sigInv_iff_exists (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
-    (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) :
-    sigInv P C t g D s G m d ↔
-      d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
-        ∃ b : BitVec 32, s.prev_state = Packed.ofBits b ∧
-          (b = 0 ∨ b = 1 ∨ b = 0x10001) ∧
-          (b ≠ 1 → ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m) := by
-  constructor
-  · rintro ⟨hd, hc, hi, hs⟩
-    refine ⟨hd, hc, hi, ?_⟩
-    rcases hs with ⟨hp, hs⟩ | hp | ⟨hp, hs⟩
-    · exact ⟨0, hp, .inl rfl, fun _ => hs⟩
-    · exact ⟨1, hp, .inr (.inl rfl), fun h => (h rfl).elim⟩
-    · exact ⟨0x10001, hp, .inr (.inr rfl), fun _ => hs⟩
-  · rintro ⟨hd, hc, hi, b, hp, hb, hs⟩
-    refine ⟨hd, hc, hi, ?_⟩
-    rcases hb with rfl | rfl | rfl
-    · exact .inl ⟨hp, hs (by decide)⟩
-    · exact .inr (.inl hp)
-    · exact .inr (.inr ⟨hp, hs (by decide)⟩)
-
-/-- `signal`'s loop ends with `t` out and a registered waiter signalled. -/
-def sigPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (D : Nat)
-    (r : Io_Condition_signalExit × Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem)
+/-- `signal`'s loop invariant, for the call snapshot `h c` (`FCond.Fits.enterSl`): `t` last read
+the state value `b` (`waiters ≥ signals`); a served value (`waiters ≤ signals`) gave the history
+post and `t` is out, else `t` is still at `sl h c`. -/
+def sigInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem)
     (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ ∃ b : BitVec 32, s.prev_state = Packed.ofBits b ∧ FCond.SOk b ∧
+    (b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost h c all m) ∧
+    P.inv (upd G t (C.set g (FCond.afterSRead h c b))) m
+
+/-- `signal`'s loop ends with `t` out and the history post. -/
+def sigPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (r : Io_Condition_signalExit × Io_Condition_signalLocals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
   (r.1 = .ret ∨ r.1 = .br10) ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
-    ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → C.Signalled m
+    C.SigPost h c false m
 
 theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g) (D : Nat)
-    (io : Io)
-    (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
-      VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
-    (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (h : sigInv P C t g D s G m d) :
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (h : Array Word.Entry) (c : VClock) (D : Nat)
+    (io : Io) (s : Io_Condition_signalLocals) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hs : sigInv P C t g h c D s G m d) :
     P.WP t ((Io_Condition_signal.loop11 C.S.ptr io).run s) (fun r G' m' d' =>
-      if Io_Condition_signal.again11 r.1 then sigInv P C t g D r.2 G' m' d' ∧
+      if Io_Condition_signal.again11 r.1 then sigInv P C t g h c D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_signalLocals) => 0) s)
-      else sigPost P C t g D r G' m' d') G m d := by
-  fsym [FCond.wp_signalAs hC condS_dec, FCond.wp_bump hC, FCond.wp_wakeEp hC,
-    hC.wp_projE (t := t), condS_eq, condS_bits, condS_sig, condS_signal_value, condS_add1, condS_gtWS,
-    C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
-    sigInv, sigPost, Io_Condition_signal.again11]
+      else sigPost P C t g h c D r G' m' d') G m d := by
+  obtain ⟨hd, hcur, b, hb, hok, hsp, hi⟩ := hs
+  obtain ⟨ps⟩ := s
+  simp only at hb
+  subst hb
+  by_cases hsv : b.toNat % 65536 ≤ b.toNat / 65536
+  · have hp := hsp hsv false
+    rw [show FCond.afterSRead h c b = .out from if_pos hsv, FCond.set_of hgx] at hi
+    clear hsp
+    fsym [condS_w, condS_s, FCond.SOk, sigPost, Io_Condition_signal.again11]
+  · rw [show FCond.afterSRead h c b = .sl h c from if_neg hsv] at hi
+    clear hsp
+    fsym [FCond.wp_postAs hC condS_dec (sh := h) (c := c), FCond.wp_bump hC, FCond.wp_wakeEp hC,
+      hC.wp_projE (t := t), FCond.SigPost.ofPost, condS_post hsv, condS_eq, condS_w, condS_s, condS_mk,
+      C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+      FCond.SOk, sigInv, sigPost, Io_Condition_signal.again11]
 
 /-- **`Io.Condition.signal`** outside or holding the mutex, preserving its complete resource,
-after every registration (`hseen`). -/
+with the history post of its call (`FCond.SigPost`). -/
 theorem ioCond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
-    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e, C.ph (G₁ u) = .reg i jr sn e →
-      VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
-    (hi : P.inv (upd G t g) m) :
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Condition_signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      P.inv (upd G' t g) m' ∧ ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m')
-      G m d := by
-  fsym [FCond.wp_sloadAs hC condS_dec, condS_eq,
-    WP.loop _ _ (sigInv P C t g d) (fun _ => 0) (sigPost P C t g d)
-      (sig_body hC hcost t g hgx hgo hsx d io hseen),
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
+  have hi' := hC.enterSl hgx hgo hsx hi
+  generalize C.S.hist m = h at hi' ⊢
+  generalize m.clocks[t]! = c at hi' ⊢
+  clear hi
+  fsym [FCond.wp_sloadAs hC condS_dec, condS_eq, C.ph_set, hC.lph, C.set_set,
+    WP.loop _ _ (sigInv P C t g h c d) (fun _ => 0) (sigPost P C t g h c d)
+      (sig_body hC hcost t g hgx hgo h c d io),
     sigInv, sigPost]
 
 /-! ## `wait`
