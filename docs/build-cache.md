@@ -323,10 +323,15 @@ coordinator's tooling holds the host's name and the runner script. The mechanism
   diff of the host worktree against the pushed commit, which the lane applies with `git apply`.
   The job writes the diff while it still holds the worktree's lock, because the next job of that
   worktree resets it.
-- **Lifetime.** A job lives exactly as long as the connection that started it: its stdin is that
-  connection, and end of file stops its process group. WSL ends every process a session started
-  when the session ends, `setsid` and `nohup` included, so a detached job is not an option there
-  anyway.
+- **Lifetime.** A job is detached from the connection that started it. It runs in its own
+  session (`setsid`, `nohup`), appends to a log on the host and writes its exit status there
+  when it ends. The client only follows the log, so a dropped connection loses nothing. Clients
+  can attach to the job again (replaying the log from the start), cancel it (its process group
+  gets SIGTERM, then SIGKILL), and starting an identical unfinished job attaches to it instead of
+  queueing a twin. A WSL host must keep the distro running without a session
+  (`instanceIdleTimeout=-1` in `.wslconfig`); otherwise WSL ends every process when the last
+  session closes. Set `AIR2LEAN_GUARD_IDLE_MINUTES` in the host's job environment: a job no one
+  watches then still ends when it hangs ([build-budgets.md](build-budgets.md)).
 - **Docker.** The few steps that call `docker run` themselves need Docker inside the host's
   Linux. Examples are `scripts/local-ci.sh` parts, `scripts/build-mode-docker.sh` and the
   `--docker-linux` modes. A job that needs Docker checks `docker info` first and fails at once
