@@ -52,8 +52,13 @@ def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, sour
 def air_debug_assert : _root_.Air2Lean.Func := source_4
 
 theorem lookup_debug_assert : program.lookup "debug.assert" = some air_debug_assert := rfl
-theorem policy_debug_assert : program.ticked "debug.assert" = false := by decide +kernel
-theorem entry_debug_assert : program.entryTicked "debug.assert" = false := by decide +kernel
+
+theorem policies :
+    program.ticked "debug.assert" = false ∧
+    program.entryTicked "debug.assert" = false := by
+  decide +kernel
+theorem policy_debug_assert : program.ticked "debug.assert" = false := policies.1
+theorem entry_debug_assert : program.entryTicked "debug.assert" = false := policies.2
 
 theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).reachedUnreachable" = some .unreachable := rfl
 

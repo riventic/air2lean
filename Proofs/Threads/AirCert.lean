@@ -64,8 +64,13 @@ def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, sour
 def air_writeFlag : _root_.Air2Lean.Func := source_9
 
 theorem lookup_writeFlag : program.lookup "threads.writeFlag" = some air_writeFlag := rfl
-theorem policy_writeFlag : program.ticked "threads.writeFlag" = true := by decide +kernel
-theorem entry_writeFlag : program.entryTicked "threads.writeFlag" = false := by decide +kernel
+
+theorem policies :
+    program.ticked "threads.writeFlag" = true ∧
+    program.entryTicked "threads.writeFlag" = false := by
+  decide +kernel
+theorem policy_writeFlag : program.ticked "threads.writeFlag" = true := policies.1
+theorem entry_writeFlag : program.entryTicked "threads.writeFlag" = false := policies.2
 
 
 /-- The certified functions, by fully qualified name. -/

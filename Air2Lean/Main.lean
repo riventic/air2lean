@@ -90,6 +90,7 @@ def help : String :=
   "  --split-modules <Module>     Write one module per call group; -o is the umbrella <Module>.\n" ++
   "                               See docs/modular-output.md.\n" ++
   "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
+  "                               If the certificate cannot be built, nothing is written.\n" ++
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
   "  --canon-certificate          Check native debug-ID binding; print JSON evidence, no files.\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
@@ -325,6 +326,13 @@ private def writeTiming (path : String) (t : PhaseTimes) (files functions inputB
 def die (msg : String) : IO UInt32 := do
   IO.eprintln msg
   pure 1
+
+/-- A requested certificate that cannot be built fails the whole translation closed: neither
+the Lean output nor any sidecar is written, so no output exists without the certificate the
+caller asked for. Functions outside the certificate fragment are not failures (the certificate
+lists them with their reasons); this is for a certificate that cannot be built at all. -/
+private def certificateFailure (reason : String) : String :=
+  s!"--air-certificate: cannot build the AIR certificate, nothing written: {reason}"
 
 /-- Construction data from the current renderer's fresh compiled modules. It is never an
 assurance admission; the resulting certificate still goes through the kernel. -/
@@ -568,11 +576,12 @@ private def run (args : List String) : IO UInt32 := do
                             (line.dropPrefix? "import ").map (·.toString)).toArray.map Lean.Json.str))]]
                       | some mods => mods.map fun m => Lean.Json.mkObj [("name", .str m.name),
                           ("source", .str m.text), ("imports", .arr (m.imports.map Lean.Json.str))]
-                    certificateMetadata genModule modules
+                    try certificateMetadata genModule modules catch error =>
+                      throw (IO.userError (certificateFailure s!"compiler metadata: {error}"))
                   else pure (Lean.Json.mkObj [("fixpoint_groups", .arr #[])])
                 match Certificate.emit program a.ns parts genModule metadata with
                 | .ok cert => pure (some (path, cert))
-                | .error error => throw (IO.userError error)
+                | .error error => throw (IO.userError (certificateFailure error))
               | _ => pure none
             let writeStart ← IO.monoNanosNow
             match split with

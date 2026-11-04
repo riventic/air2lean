@@ -44,7 +44,7 @@ CERTIFIED = {
 }
 
 
-def run(binary, ex, out, *flags):
+def run(binary, ex, out, *flags, env=None):
     # The shared goldens are schema-11 AIR: translating them needs the explicit legacy profile.
     # The example's own admissions (examples/<ex>/translate.args, as scripts/check.sh) apply too.
     args = ROOT / 'examples' / ex / 'translate.args'
@@ -52,7 +52,7 @@ def run(binary, ex, out, *flags):
     command = [str(binary), str(ROOT / 'tests/golden' / ex / 'air'), '-o', str(out),
                '--namespace', ex.capitalize(), '--prefix', ex + '.', '--profile', 'legacy-abi64-le',
                *admissions, *flags]
-    return subprocess.run(command, capture_output=True, text=True, timeout=300)
+    return subprocess.run(command, capture_output=True, text=True, timeout=300, env=env)
 
 
 def certificate_sets(text):
@@ -104,6 +104,11 @@ def check_example(binary, ex, work):
     if any(not re.search(rf'^theorem {re.sub(r"\W", "_", n.removeprefix(ex + "."))}_view ', text, re.M)
            for n in certified):
         assert re.search(r'^theorem run_le_gen ', text, re.M)
+    if certified:
+        # The step policies are one kernel evaluation (the call graph computed once); each
+        # function's `policy_`/`entry_` lemma is a projection of it.
+        assert len(re.findall(r'^theorem policies :', text, re.M)) == 1, ex
+        assert not re.search(r'^theorem (policy|entry)_\w+ .*decide', text, re.M), ex
 
 
 def check_flags(binary, work):
@@ -141,6 +146,15 @@ def check_flags(binary, work):
                 '--air-certificate', str(linked_cert), '--air-certificate-import', 'Linked.Gen')
     assert clash.returncode == 1 and 'hard-linked output' in clash.stderr, clash
     assert linked.read_bytes() == linked_cert.read_bytes() == b'preserve linked output\n'
+    # A requested certificate that cannot be built (here: recursion's compiler metadata, without
+    # python3 on PATH) fails the whole translation closed with one diagnostic; nothing is written.
+    no_meta_out, no_meta_cert = work / 'NoMeta.lean', work / 'NoMetaCert.lean'
+    failed = run(binary, 'recursion', no_meta_out, '--air-certificate', str(no_meta_cert),
+                 '--air-certificate-import', 'Proofs.Recursion.Gen', env={'PATH': ''})
+    assert failed.returncode == 1 and \
+        '--air-certificate: cannot build the AIR certificate, nothing written: compiler metadata' \
+        in failed.stderr, failed
+    assert not no_meta_out.exists() and not no_meta_cert.exists(), 'a failed certificate wrote output'
     twice = run(binary, 'basic', out, '--air-certificate', 'a.lean', '--air-certificate', 'b.lean',
                 '--air-certificate-import', 'M')
     assert twice.returncode == 1 and 'duplicate --air-certificate' in twice.stderr, twice

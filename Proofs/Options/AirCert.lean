@@ -32,8 +32,13 @@ def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2], (@_
 def air_find : _root_.Air2Lean.Func := source_0
 
 theorem lookup_find : program.lookup "options.find" = some air_find := rfl
-theorem policy_find : program.ticked "options.find" = false := by decide +kernel
-theorem entry_find : program.entryTicked "options.find" = false := by decide +kernel
+
+theorem policies :
+    program.ticked "options.find" = false ∧
+    program.entryTicked "options.find" = false := by
+  decide +kernel
+theorem policy_find : program.ticked "options.find" = false := policies.1
+theorem entry_find : program.entryTicked "options.find" = false := policies.2
 
 
 /-- The items of `options.find`'s slice parameters, by their `arg` instruction. -/

@@ -143,15 +143,22 @@ def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, sour
 def air_sMod : _root_.Air2Lean.Func := source_12
 
 theorem lookup_sMod : program.lookup "vectors.sMod" = some air_sMod := rfl
-theorem policy_sMod : program.ticked "vectors.sMod" = false := by decide +kernel
-theorem entry_sMod : program.entryTicked "vectors.sMod" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `vectors.sRem` in the original program. -/
 def air_sRem : _root_.Air2Lean.Func := source_13
 
 theorem lookup_sRem : program.lookup "vectors.sRem" = some air_sRem := rfl
-theorem policy_sRem : program.ticked "vectors.sRem" = false := by decide +kernel
-theorem entry_sRem : program.entryTicked "vectors.sRem" = false := by decide +kernel
+
+theorem policies :
+    program.ticked "vectors.sMod" = false ∧
+    program.entryTicked "vectors.sMod" = false ∧
+    program.ticked "vectors.sRem" = false ∧
+    program.entryTicked "vectors.sRem" = false := by
+  decide +kernel
+theorem policy_sMod : program.ticked "vectors.sMod" = false := policies.1
+theorem entry_sMod : program.entryTicked "vectors.sMod" = false := policies.2.1
+theorem policy_sRem : program.ticked "vectors.sRem" = false := policies.2.2.1
+theorem entry_sRem : program.entryTicked "vectors.sRem" = false := policies.2.2.2
 
 theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
 

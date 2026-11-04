@@ -891,8 +891,10 @@ structure FCtx where
   sentinelChecked : Array InstId := #[]
   /-- This function is in a recursive call group (`callGroups`): its call depth is not bounded
   by the call graph, so a function that uses memory charges its frame to the stack budget
-  (`Zig.enterFrame`, MM-5). Every MM/CM member also ticks once at its function entry. -/
+  (`Zig.enterFrame`, MM-5). -/
   recursive : Bool := false
+  /-- The step ticks of this function, as `Sem` charges them (`Program.tickPolicy`). -/
+  ticks : TickPolicy := {}
   /-- `some`: the function has `noalias` parameters, or one that has them may call it; the roots
   of the reads and writes of each instruction that can touch memory (`Air2Lean/Noalias.lean`),
   or why the function is rejected. Each such instruction is followed by its `Zig.naMark`. -/
@@ -3691,7 +3693,7 @@ def lowerLoopBody (fc : FCtx) (loopInst : Inst) : EmittedCode :=
   let initEnv := (fc.loopParams loopInst).map fun (id, name, _) => (id, name)
   -- One tick per body run, including its final exit. Both ordinary and dispatch loops use
   -- this same prefix; pure M bodies have no memory counter (D5).
-  let step := if fc.mem || fc.conc then [s!"  {fc.callMName} Zig.tick"] else []
+  let step := if fc.ticks.loop then [s!"  {fc.callMName} Zig.tick"] else []
   match loopInst.op with
   | .loop body =>
     (lowerStmts fc initEnv body.toList).mapCode fun code =>
@@ -3789,10 +3791,9 @@ def lowerFunctionBody (fc : FCtx) (localsName exitName : String)
     else ([], [])
   -- Original call-group members pay once per entry, independently of their extracted loop
   -- definitions (which already pay per body run). A lifted CM tick is not a scheduler stop.
-  let tickLines := if !fc.recursive then []
+  let tickLines := if !fc.ticks.entry then []
     else if fc.conc then ["  Zig.ConcM.liftMem Zig.tick"]
-    else if fc.mem then ["  Zig.tick"]
-    else []
+    else ["  Zig.tick"]
   -- A function with `noalias` parameters checks the accesses of each call in a scope
   -- (`ZigLean/Mem/Noalias.lean`).
   let (enterLines, leaveLines) := if fc.naScope then
@@ -3924,13 +3925,13 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × EmittedCode) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) (device : Option DeviceContract := none) (naCallee : Bool := false)
-    (envFuncs : Array String := #[]) :
+    (recursive : Bool := false) (ticks : TickPolicy := {}) (device : Option DeviceContract := none)
+    (naCallee : Bool := false) (envFuncs : Array String := #[]) :
     FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
     rawFuncs
   let fc := { fc with osEnv := envFuncs.contains f.name }
-  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive,
+  let fc := { fc with fnBlocks := fnBlocks, spawnSemantics := spawnSemantics, spawnFallbacks := spawnFallbacks, spawnFallbackMap := some spawnFallbackMap, recursive, ticks,
                       deviceContract := device.isSome, deviceAsms := device }.prepareInstUses
   -- Only a function that uses memory can access memory during the call: a pure one has none,
   -- and its slice parameters are read by the caller. A function that one with `noalias`
@@ -4081,15 +4082,18 @@ def emitProofApi (f : Func) (p : FuncParts) (recursive : DeclId → Bool) : Stri
   | .error reason => placeholder reason
 
 /-- Standalone function emission prepares its own first-match fallback lookup. Program
-emission shares one prepared map across all functions. -/
+emission shares one prepared map across all functions. Alone, `f` is recursive when it calls
+itself, and its ticks follow `TickPolicy.of` on the given classification. -/
 def emitOneFunction (f : Func) (structNames : Array (String × String))
     (funcNames : Array (String × String)) (floatSemantics : FloatSemantics)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × EmittedCode) := #[]) (rawFuncs : Array String := #[]) :
     FuncParts :=
+  let recursive := (calleesOf #[f.name] (fnRefs #[f]) f).contains f.name
   emitOneFunctionWithFallbackMap f (prepareSpawnFallbackMap spawnFallbacks) structNames funcNames
     floatSemantics memFuncs globalIds fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
+    recursive (TickPolicy.of recursive (memFuncs.contains f.name) (concFuncs.contains f.name))
 
 /-- The functions that return `Zig.Bytes T`: those with a `ret` of a raw instruction
 (`FCtx.computeRawInsts`), up to a fixpoint (a call of one is raw too). A function whose address
@@ -4953,7 +4957,10 @@ def emitProgramParts (program : Program) (prefix_ : String)
   let groupParts := program.groups.map fun (members, recursive) =>
     (members, recursive, members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
-        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive device
+        (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive
+        -- `program.tickPolicy f.name` (`Program.tickPolicy_eq`) from the groups and
+        -- classifications computed once above.
+        (TickPolicy.of recursive (memFuncs.contains f.name) (concFuncs.contains f.name)) device
         (naCallees.contains f.name) envFuncs)
   let shapes := groupParts.flatMap fun (members, _, parts) =>
     (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)
@@ -4977,9 +4984,8 @@ def emitProgramParts (program : Program) (prefix_ : String)
       unless group.members.all (fun decl => sourceOwners[decl.id.sourceName]? == some owner) do
         throw "an executable declaration SCC crosses original source distribution groups"
       -- Entry ticks and stack frames follow the source groups (`Program.entryTicked`): a function
-      -- that the declarations call recursively must be recursive in its source group too (a
-      -- generic function calling itself with a comptime function argument has only the
-      -- `comptime_fn` edge in the source graph).
+      -- that the declarations call recursively must be recursive in its source group too. The
+      -- source graph has every call edge (`calleesOf`), so this only fails on a graph mismatch.
       if group.recursive && group.members.any (·.id matches .function _) then
         let some (_, sourceRecursive, _) := groupParts[owner]?
           | throw "an executable declaration has no original source distribution group"

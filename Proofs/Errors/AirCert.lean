@@ -31,15 +31,22 @@ def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2], (@_
 def air_digitOrZero : _root_.Air2Lean.Func := source_0
 
 theorem lookup_digitOrZero : program.lookup "errors.digitOrZero" = some air_digitOrZero := rfl
-theorem policy_digitOrZero : program.ticked "errors.digitOrZero" = false := by decide +kernel
-theorem entry_digitOrZero : program.entryTicked "errors.digitOrZero" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `errors.parseDigit` in the original program. -/
 def air_parseDigit : _root_.Air2Lean.Func := source_1
 
 theorem lookup_parseDigit : program.lookup "errors.parseDigit" = some air_parseDigit := rfl
-theorem policy_parseDigit : program.ticked "errors.parseDigit" = false := by decide +kernel
-theorem entry_parseDigit : program.entryTicked "errors.parseDigit" = false := by decide +kernel
+
+theorem policies :
+    program.ticked "errors.digitOrZero" = false ∧
+    program.entryTicked "errors.digitOrZero" = false ∧
+    program.ticked "errors.parseDigit" = false ∧
+    program.entryTicked "errors.parseDigit" = false := by
+  decide +kernel
+theorem policy_digitOrZero : program.ticked "errors.digitOrZero" = false := policies.1
+theorem entry_digitOrZero : program.entryTicked "errors.digitOrZero" = false := policies.2.1
+theorem policy_parseDigit : program.ticked "errors.parseDigit" = false := policies.2.2.1
+theorem entry_parseDigit : program.entryTicked "errors.parseDigit" = false := policies.2.2.2
 
 theorem callee_0 : panicOf? "errors.parseDigit" = none := rfl
 

@@ -63,43 +63,58 @@ def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, sour
 def air_addTo : _root_.Air2Lean.Func := source_1
 
 theorem lookup_addTo : program.lookup "pointers.addTo" = some air_addTo := rfl
-theorem policy_addTo : program.ticked "pointers.addTo" = true := by decide +kernel
-theorem entry_addTo : program.entryTicked "pointers.addTo" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `pointers.delay` in the original program. -/
 def air_delay : _root_.Air2Lean.Func := source_4
 
 theorem lookup_delay : program.lookup "pointers.delay" = some air_delay := rfl
-theorem policy_delay : program.ticked "pointers.delay" = true := by decide +kernel
-theorem entry_delay : program.entryTicked "pointers.delay" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `pointers.dueOf` in the original program. -/
 def air_dueOf : _root_.Air2Lean.Func := source_5
 
 theorem lookup_dueOf : program.lookup "pointers.dueOf" = some air_dueOf := rfl
-theorem policy_dueOf : program.ticked "pointers.dueOf" = true := by decide +kernel
-theorem entry_dueOf : program.entryTicked "pointers.dueOf" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `pointers.same` in the original program. -/
 def air_same : _root_.Air2Lean.Func := source_7
 
 theorem lookup_same : program.lookup "pointers.same" = some air_same := rfl
-theorem policy_same : program.ticked "pointers.same" = true := by decide +kernel
-theorem entry_same : program.entryTicked "pointers.same" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `pointers.sumTo` in the original program. -/
 def air_sumTo : _root_.Air2Lean.Func := source_10
 
 theorem lookup_sumTo : program.lookup "pointers.sumTo" = some air_sumTo := rfl
-theorem policy_sumTo : program.ticked "pointers.sumTo" = true := by decide +kernel
-theorem entry_sumTo : program.entryTicked "pointers.sumTo" = false := by decide +kernel
 
 /-- The decoded canonical AIR of `pointers.swap` in the original program. -/
 def air_swap : _root_.Air2Lean.Func := source_11
 
 theorem lookup_swap : program.lookup "pointers.swap" = some air_swap := rfl
-theorem policy_swap : program.ticked "pointers.swap" = true := by decide +kernel
-theorem entry_swap : program.entryTicked "pointers.swap" = false := by decide +kernel
+
+theorem policies :
+    program.ticked "pointers.addTo" = true ∧
+    program.entryTicked "pointers.addTo" = false ∧
+    program.ticked "pointers.delay" = true ∧
+    program.entryTicked "pointers.delay" = false ∧
+    program.ticked "pointers.dueOf" = true ∧
+    program.entryTicked "pointers.dueOf" = false ∧
+    program.ticked "pointers.same" = true ∧
+    program.entryTicked "pointers.same" = false ∧
+    program.ticked "pointers.sumTo" = true ∧
+    program.entryTicked "pointers.sumTo" = false ∧
+    program.ticked "pointers.swap" = true ∧
+    program.entryTicked "pointers.swap" = false := by
+  decide +kernel
+theorem policy_addTo : program.ticked "pointers.addTo" = true := policies.1
+theorem entry_addTo : program.entryTicked "pointers.addTo" = false := policies.2.1
+theorem policy_delay : program.ticked "pointers.delay" = true := policies.2.2.1
+theorem entry_delay : program.entryTicked "pointers.delay" = false := policies.2.2.2.1
+theorem policy_dueOf : program.ticked "pointers.dueOf" = true := policies.2.2.2.2.1
+theorem entry_dueOf : program.entryTicked "pointers.dueOf" = false := policies.2.2.2.2.2.1
+theorem policy_same : program.ticked "pointers.same" = true := policies.2.2.2.2.2.2.1
+theorem entry_same : program.entryTicked "pointers.same" = false := policies.2.2.2.2.2.2.2.1
+theorem policy_sumTo : program.ticked "pointers.sumTo" = true := policies.2.2.2.2.2.2.2.2.1
+theorem entry_sumTo : program.entryTicked "pointers.sumTo" = false := policies.2.2.2.2.2.2.2.2.2.1
+theorem policy_swap : program.ticked "pointers.swap" = true := policies.2.2.2.2.2.2.2.2.2.2.1
+theorem entry_swap : program.entryTicked "pointers.swap" = false := policies.2.2.2.2.2.2.2.2.2.2.2
 
 theorem callee_0 : panicOf? "pointers.addTo" = none := rfl
 

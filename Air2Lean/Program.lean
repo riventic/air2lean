@@ -235,13 +235,13 @@ def dedupNames (a : Array String) : Array String := Graph.dedupKeys a
 
 def calleesOf (allNames : Array String) (refs : Array (String × String)) (f : Func) :
     Array String :=
-  let direct := f.allInsts.filterMap fun i => match i.op with
-    -- The original source edge is the spawned worker, not the absent std wrapper.
-    | .call (.func nm _ (some spawnFn)) _ =>
-      if allNames.contains spawnFn then some spawnFn
-      else if allNames.contains nm then some nm else none
-    | .call (.func nm ..) _ => if allNames.contains nm then some nm else none
-    | _ => none
+  -- A call with a comptime function argument (`comptime_fn`: a spawned worker, an `Io.async`
+  -- task, or any generic instance's function argument) has two edges: the callee itself, when it
+  -- is a source function (a generic instance calling itself is recursive), and the function
+  -- argument, which runs under the call (the std spawn wrappers are not source functions).
+  let direct := f.allInsts.flatMap fun i => match i.op with
+    | .call (.func nm _ spawnFn) _ => (#[nm] ++ spawnFn.toArray).filter allNames.contains
+    | _ => #[]
   dedupNames (direct ++ (f.indirectCallees refs).filter allNames.contains)
 
 /-- DFS post-order over the original call graph. The explicit-name API retains absent keys in
@@ -302,5 +302,24 @@ def Program.ticked (p : Program) (name : String) : Bool :=
 helpers use the original function's classification and do not introduce another entry. -/
 def Program.entryTicked (p : Program) (name : String) : Bool :=
   p.recursive name && p.ticked name
+
+/-- A function's step-tick policy: one tick per loop-body run (`loop`) and one per entry
+(`entry`). The emitter reads it from the same `Program` as the semantics (`tickPolicy`). -/
+structure TickPolicy where
+  loop : Bool := false
+  entry : Bool := false
+  deriving Inhabited, DecidableEq, Repr
+
+/-- The policy of a function from its classification: the formula of `Program.ticked` and
+`Program.entryTicked` (`Program.tickPolicy_eq`), also used by standalone emission. -/
+def TickPolicy.of (recursive mem conc : Bool) : TickPolicy :=
+  { loop := mem || conc, entry := recursive && (mem || conc) }
+
+def Program.tickPolicy (p : Program) (name : String) : TickPolicy :=
+  { loop := p.ticked name, entry := p.entryTicked name }
+
+theorem Program.tickPolicy_eq (p : Program) (name : String) :
+    p.tickPolicy name = TickPolicy.of (p.recursive name) (p.usesMemory name) (p.concurrent name) :=
+  rfl
 
 end Air2Lean
