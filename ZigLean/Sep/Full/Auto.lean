@@ -154,15 +154,20 @@ such as an update's bundle `v` that `etaStructArgs` expanded), not of a definiti
 is a structure (`(inv CI γ e ctx).own` stays as the caller wrote it). -/
 def reduceCtorProjs (e : Expr) : MetaM Expr :=
   Meta.transform e (post := fun x => do
-    let .const c _ := x.getAppFn | return .continue
-    let some info ← getProjectionFnInfo? c | return .continue
-    if info.fromClass then return .continue
-    let some s := x.getAppArgs[info.numParams]? | return .continue
-    let .const sc _ := s.getAppFn | return .continue
-    unless (← getEnv).isConstructor sc do return .continue
+    unless ← reducesCtorProj x do return .continue
     match ← unfold1 x with
     | some x' => return .visit x'
     | none => return .continue)
+where
+  /-- The projections that `reduceCtorProjs` reduces (with `unfold1`), and
+  `reduceCtorProjsEq`. -/
+  reducesCtorProj (x : Expr) : MetaM Bool := do
+    let .const c _ := x.getAppFn | return false
+    let some info ← getProjectionFnInfo? c | return false
+    if info.fromClass then return false
+    let some s := x.getAppArgs[info.numParams]? | return false
+    let .const sc _ := s.getAppFn | return false
+    return (← getEnv).isConstructor sc
 
 /-- A projection of a structure value that reduces to a constructor application at reducible
 transparency but is not one (`(a, r).2.f`) rewritten to its field, with an explicit proof: the
@@ -255,29 +260,25 @@ def unfold1Eq? (e : Expr) : MetaM (Option Simp.Result) := do
   unless proj do return some { expr := e' }
   return some { expr := e', proof? := some (← mkExpectedTypeHint (← mkEqRefl e) (← mkEq e e')) }
 
-/-- `reduceProjs e data` (then `etaAll` when `eta`) as a simp result: a proof of `e = r` for
-its result `r`, `none` when no projection step has one (definitional, as simp's). The
-projections are those `reduceProjs` reduces, each step `unfold1Eq?`'s, joined by simp's
-congruence (no lemmas, no reduction of its own). Where simp does not reach (an implicit or
-instance argument, a binder's domain, a dependent `let`, a proof, a raw `.proj`) or an
-`unfold1Eq?` step is definitional, the rest is a definitional step from simp's result to `r`
-(ledger `kernel-proj-ctor`); so is the eta-reduction. -/
-def reduceProjsEq (e : Expr) (data := false) (eta := false) : MetaM Simp.Result := do
-  let r0 ← reduceProjs e data
-  let r ← if eta then etaAll r0 else pure r0
-  if r0 == e then return { expr := r }
+/-- `e = r` for the reduction `r` of `e` at the projections `sel` selects (`reduceProjs`,
+`reduceCtorProjs`) as a simp result: each step `unfold1Eq?`'s, joined by simp's congruence (no
+lemmas, no reduction of its own); `none` when no step has a proof (definitional, as simp's).
+Where simp does not reach (an implicit or instance argument, a binder's domain, a dependent
+`let`, a proof, a raw `.proj`), the rest is a definitional step from simp's result to `r`
+(ledger `kernel-proj-ctor`). -/
+def projsEq (e r : Expr) (sel : Expr → MetaM Bool) : MetaM Simp.Result := do
+  if r == e then return { expr := e }
   let tr ← getTransparency
   let post : Simp.Simproc := fun x => withTransparency tr do
-    unless ← reduceProjs.reducesProj x data do return .continue
+    unless ← sel x do return .continue
     match ← unfold1Eq? x with
     | some s => return .visit s
     | none => return .continue
   let (res, _) ← Simp.main e (← Simp.mkContext projEqConfig) (methods := { post })
-  if res.expr != r0 then
-    trace[fsym] "reduceProjsEq: simp's {res.expr} is not {r0}: the rest definitional"
+  if res.expr != r then
+    trace[fsym] "reduceProjsEq: simp's {res.expr} is not {r}: the rest definitional"
   let some pf := res.proof? | return { expr := r }
-  let pf ← if res.expr == r0 then pure pf else mkExpectedTypeHint pf (← mkEq e r0)
-  return { expr := r, proof? := some (← if r == r0 then pure pf else mkExpectedTypeHint pf (← mkEq e r)) }
+  return { expr := r, proof? := some (← if res.expr == r then pure pf else mkExpectedTypeHint pf (← mkEq e r)) }
 where
   /-- simp with no reduction of its own (`reduceStep`, `dsimp`): the only steps are `post`'s. -/
   projEqConfig : Simp.Config :=
@@ -285,12 +286,52 @@ where
       zetaHave := false, letToHave := false, dsimp := false, failIfUnchanged := false,
       autoUnfold := false }
 
+/-- `reduceProjs e data` (then `etaAll` when `eta`, definitionally) as a simp result
+(`projsEq`): the engine's reductions of projections, each with a proof of its own, as the
+kernel needs them (ledger `kernel-proj-ctor`). -/
+def reduceProjsEq (e : Expr) (data := false) (eta := false) : MetaM Simp.Result := do
+  let r0 ← reduceProjs e data
+  let r ← if eta then etaAll r0 else pure r0
+  let res ← projsEq e r0 (reduceProjs.reducesProj · data)
+  if r == r0 then return res
+  let some pf := res.proof? | return { expr := r }
+  return { expr := r, proof? := some (← mkExpectedTypeHint pf (← mkEq e r)) }
+
+/-- `reduceCtorProjs` as a simp result (`projsEq`). -/
+def reduceCtorProjsEq (e : Expr) : MetaM Simp.Result := do
+  projsEq e (← reduceCtorProjs e) reduceCtorProjs.reducesCtorProj
+
 /-- The target of `g` replaced by the simp result `r` of it (or of a term definitionally the
 target: an unfolding): by its proof, else definitionally. -/
 def replaceTarget (g : MVarId) (r : Simp.Result) : MetaM MVarId :=
   match r.proof? with
   | some pf => g.replaceTargetEq r.expr pf
   | none => g.replaceTargetDefEq r.expr
+
+/-- A proof `h` of a term (or of one definitionally it: an unfolding) as a proof of its simp
+result `r`: by its proof, else definitionally. -/
+def mpResult (r : Simp.Result) (h : Expr) : MetaM Expr := do
+  match r.proof? with
+  | some pf =>
+    -- (`Eq.mp` built as it is: `h`'s type is the proof's side up to that unfolding, which the
+    -- kernel checks; `mkEqMP` would unify them first)
+    let some (_, a, b) := (← instantiateMVars (← inferType pf)).eq? | mkEqMP pf h
+    return mkApp4 (mkConst ``Eq.mp [← getLevel a]) a b pf h
+  | none => mkExpectedTypeHint h r.expr
+
+/-- `e : r.expr = b` as a proof of `x = b`, for the simp result `r` of `x` (or of a term
+definitionally `x`): by its proof, else as it is (definitionally). -/
+def eqTransResult (r : Simp.Result) (e : Expr) : MetaM Expr :=
+  match r.proof? with
+  | some pf => mkEqTrans pf e
+  | none => pure e
+
+/-- A proof `h` of the simp result `r` of `t` as a proof of `t`: by its proof, else
+definitionally. -/
+def mprResult (t : Expr) (r : Simp.Result) (h : Expr) : MetaM Expr :=
+  match r.proof? with
+  | some pf => mkEqMPR pf h
+  | none => mkExpectedTypeHint h t
 
 /-- `List.map f` over a list literal (or a definition of one) expanded to the literal of the
 images, beta-reduced (a
@@ -1380,7 +1421,9 @@ def assumptionEq (g : MVarId) (cases := true) : TacticM Bool := g.withContext do
     let dt' ← reduceProjs dt
     let s ← saveState
     if let some e ← congrEq dt' t' (cases := cases) then
-      g.assign (← mkExpectedTypeHint (← mkEqMP e (← mkExpectedTypeHint d.toExpr dt')) t)
+      -- (the reductions' proofs once they are used: `reduceProjsEq`)
+      let hd ← mpResult (← reduceProjsEq dt) d.toExpr
+      g.assign (← mprResult t (← reduceProjsEq t) (← mkEqMP e hd))
       return true
     s.restore
     -- unfolding: one function, one differing argument that is a Boolean test (data terms such
@@ -2841,25 +2884,30 @@ def replaceHyp (g : MVarId) (h : FVarId) (r : Simp.Result) :
   | some pf => replaceHypEq g h r.expr pf
   | none => return (h, ← g.replaceLocalDeclDefEq h r.expr, {})
 
-/-- `reduceProjsEq` on the propositions `hs` of `g`, each changed one replaced (`replaceHypEq`):
-the goal, and the new locals of the changed ones. -/
-def reduceProjsHyps (g : MVarId) (hs : Array FVarId) : MetaM (MVarId × Array FVarId) := do
+/-- `reduceProjsEq` on the propositions `hs` of `g`, each changed one replaced (`replaceHyp`):
+the goal, the new locals of the reduced ones, and the substitution of the locals of `g`. -/
+def reduceProjsHyps (g : MVarId) (hs : Array FVarId) :
+    MetaM (MVarId × Array FVarId × FVarSubst) := do
   let mut g := g
   let mut subst : FVarSubst := {}
   let mut changed := #[]
   for h0 in hs do
     let .fvar h := subst.get h0 | continue
-    let some r ← g.withContext do
-        let ty ← instantiateMVars (← h.getType)
+    -- (an unchanged type is still stored instantiated: a caller's rule `hl'` of `have hl' := hl`
+    -- has a metavariable as its type, whose `∀` its matching needs)
+    let some (r, reduced) ← g.withContext do
+        let ty0 ← h.getType
+        let ty ← instantiateMVars ty0
         unless ← isProp ty do return none
         let r ← reduceProjsEq ty
-        return if r.expr == ty then none else some r
+        return if r.expr == ty0 then none else some (r, r.expr != ty)
       | continue
     let (h', g', s) ← replaceHyp g h r
     g := g'
     subst := subst.append s
-    changed := (changed.map fun c => (s.get c).fvarId!).push h'
-  return (g, changed)
+    changed := changed.map fun c => (s.get c).fvarId!
+    if reduced then changed := changed.push h'
+  return (g, changed, subst)
 
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
@@ -2919,7 +2967,7 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
     (← caches).substs.modify fun m => sg.subst.map.foldl (fun m k v => m.insert k v) m
     let hs := (← sg.mvarId.withContext getLCtx).foldl (init := #[]) fun hs d =>
       if d.isImplementationDetail then hs else hs.push d.fvarId
-    let (g, changed) ← reduceProjsHyps sg.mvarId hs
+    let (g, changed, _) ← reduceProjsHyps sg.mvarId hs
     return some (← destructAll g changed)
   catch ex =>
     trace[fsym] "etaProj: {ex.toMessageData}"
@@ -3132,7 +3180,9 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let e := e.consumeMData.headBeta
     if e.isAppOfArity sepN 2 then return mkSep (← leaves e.appFn!.appArg!) (← leaves e.appArg!)
     unfoldAtom e
-  let Pu ← reduceProjs (← leaves P)
+  -- (`P` unfolded definitionally, its projections with proofs: `reduceProjsEq`)
+  let rP ← reduceProjsEq (← leaves P)
+  let Pu := rP.expr
   let ats := atoms Pu
   -- an assertion-level `if` whose condition the facts decide: take its branch
   for a in ats do
@@ -3141,7 +3191,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     let f ← withLocalDeclD `x (mkConst ``Zig.Full.FAssn) fun x => do
       mkLambdaFVars #[x] (Pu.replace fun y => if y == a then some x else none)
     let P' := (mkApp f br).headBeta
-    let e ← mkExpectedTypeHint (← mkCongrArg f pf) (← mkEq P P')
+    let e ← mkExpectedTypeHint (← eqTransResult rP (← mkCongrArg f pf)) (← mkEq P P')
     let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P' c Q)
     g.assign (← mkAppOptM (L.nm ``pre_eq) #[L.L, α, P, P', Q, c, e, g2])
     return ← normPre g2.mvarId! (fuel - 1)
@@ -3153,7 +3203,7 @@ partial def normPre (g : MVarId) (fuel : Nat := 64) : TacticM MVarId := g.withCo
     if facts.isEmpty then return ← unifyBlocks g
   -- `P` to `Pu` by unfolding (definitional), `Pu` to `P2` by AC
   let g ← if P2 == P then pure g else do
-    let e ← acEq Pu P2
+    let e ← eqTransResult rP (← acEq Pu P2)
     let g2 ← mkFreshExprSyntheticOpaqueMVar (mkT L α P2 c Q)
     let pf ← mkAppOptM (L.nm ``pre_eq) #[L.L, none, P, P2, Q, c, ← mkExpectedTypeHint e (← mkEq P P2), g2]
     g.assign pf
@@ -3680,9 +3730,13 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
     for (z, z₂, left) in [(x, y, true), (y, x, false)] do
       let .const c _ := z.getAppFn | continue
       if ← isLibrary c then continue
-      let some z' ← unfold1 z | continue
+      let some rz ← unfold1Eq? z | continue
       let s ← saveState
-      let g' ← g.replaceTargetDefEq (← if left then mkEq z' z₂ else mkEq z₂ z')
+      -- (`x = y` with `z` unfolded: `Eq` applied to the result, `unfold1Eq?`'s proof carried)
+      let eqF ← mkAppOptM ``Eq #[← inferType z]
+      let r ← if left then Simp.mkCongrFun (← Simp.mkCongrArg eqF rz) z₂
+        else Simp.mkCongrArg (mkApp eqF z₂) rz
+      let g' ← replaceTarget g r
       if ← proveEqGoal g' depth (fuel - 1) then return true
       s.restore
     return false
@@ -5758,7 +5812,9 @@ def tryUpd (g : MVarId) (c u P Qv : Expr) : TacticM (Option (Expr × List MVarId
     etaStructArgs args
     -- the precondition unfolded, so that the plan's proof does not mention unknowns that only
     -- the update's hypotheses determine (fields of an expanded structure)
-    let P₀ ← reduceProjs (← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!))
+    -- (unfolded definitionally, its projections with proofs: `reduceProjsEq`)
+    let rP₀ ← reduceProjsEq (← unfoldLeaves (← instantiateMVars concl.appFn!.appArg!))
+    let P₀ := rP₀.expr
     let fr ← mkFreshExprMVar (mkConst ``Zig.Full.FAssn)
     let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep P₀ fr])
     unless ← closePre hE.mvarId! do
@@ -5788,8 +5844,13 @@ def tryUpd (g : MVarId) (c u P Qv : Expr) : TacticM (Option (Expr × List MVarId
     let R ← instantiateMVars fr
     -- (the postcondition with the projections of expanded structures reduced: an update whose
     -- postcondition names a field `v.A'` of its bundle `v` meets the return's)
-    let Q₀R := mkSep (← reduceCtorProjs (← instantiateMVars concl.appArg!)) R
-    let h ← mkExpectedTypeHint (← mkAppOptM ``EUpd.frame #[none, none, R, ← instantiateMVars (mkAppN u args)])
+    let rQ₀ ← reduceCtorProjsEq (← instantiateMVars concl.appArg!)
+    let Q₀R := mkSep rQ₀.expr R
+    -- (`EUpd (P₀ ⋆ R) (Q₀ ⋆ R)` of the update's framed: its sides by the reductions' proofs)
+    let frameR (r : Simp.Result) := do Simp.mkCongrFun (← Simp.mkCongrArg (mkConst sepN) r) R
+    let rE ← Simp.mkCongr (← Simp.mkCongrArg (mkConst ``EUpd) (← frameR rP₀)) (← frameR rQ₀)
+    let h ← mkExpectedTypeHint (← mpResult rE (← mkAppOptM ``EUpd.frame
+        #[none, none, R, ← instantiateMVars (mkAppN u args)]))
       (← mkAppM ``EUpd #[mkSep (← instantiateMVars P₀) R, Q₀R])
     -- the update's postcondition is the return's (up to the order and `emp`), else the planner
     let (h2, left2) ← try pure (← mkAppM ``atom_eq #[← acEq Q₀R Qv], [])
@@ -7143,7 +7204,8 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
       let restoreArith ← (← caches).saveArith
       try
         unless r' == r || (r.hasExprMVar && (← isDefEq r r')) do throwError "resource"
-        let Y ← if X.hasExprMVar then reduceProjs (← unfoldLeaves Y0) else pure Y0
+        let U ← if X.hasExprMVar then unfoldLeaves Y0 else pure Y0
+        let Y ← if X.hasExprMVar then reduceProjs U else pure Y0
         let ys := atoms Y
         let some paired ← pair mixed (atoms X) ys | throwError "atoms"
         let X ← instantiateMVars X
@@ -7156,7 +7218,9 @@ def assnByHyp (g : MVarId) (X r : Expr) : TacticM Bool := g.withContext do
           pure e
         let e ← mkEqTrans (← acEq Y (sepOf ys)) byAtoms
         let e ← mkEqTrans e (← acEq (sepOf targets) X)
-        g.assign (← mkEqMP (← mkCongrFun e r') (← mkExpectedTypeHint d.toExpr (mkApp Y r')))
+        -- (`Y0` unfolded definitionally, its projections with proofs: `reduceProjsEq`)
+        let rY ← if Y == U then pure { expr := Y } else reduceProjsEq U
+        g.assign (← mkEqMP (← mkCongrFun e r') (← mpResult (← Simp.mkCongrFun rY r') d.toExpr))
         return true
       catch _ => s.restore; restoreArith
   return false
@@ -7653,8 +7717,7 @@ partial def wpAtom (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let U ← unfoldLeaves X
     let rX ← reduceProjsEq U
     if rX.expr != X then
-      let rt : Simp.Result := { expr := mkApp rX.expr r, proof? := ← rX.proof?.mapM (mkCongrFun · r) }
-      return ← wpGoal (← replaceTarget g rt) user extra fuel noCases
+      return ← wpGoal (← replaceTarget g (← Simp.mkCongrFun rX r)) user extra fuel noCases
     if ← assnByHyp g X r then return []
   let ctx ← wpFactCtx extra
   let s ← saveState
@@ -8063,9 +8126,10 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
   -- a goal `∀ s, CTriple …` (a loop body for `CTriple.loop`): its binders are introduced
   let (_, g) ← g.intros
   -- hypotheses about projections of structure values (`(finv ctx B).fits n k`) are reduced
+  -- (new locals: the caller's terms follow them through the run's substitutions)
   let hs := (← g.withContext getLCtx).foldl (init := #[]) fun hs d =>
     if d.isImplementationDetail then hs else hs.push d.fvarId
-  let (g, _) ← reduceProjsHyps g hs
+  let (g, _, reduced) ← reduceProjsHyps g hs
   -- facts of user structures (`NodeFacts N A sz`): their fields next to them (`destruct`)
   let g ← g.withContext do
     let mut g := g
@@ -8079,6 +8143,7 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
     pure g
   withRunCaches do
     discard <| arithSimpCtx
+    (← caches).substs.set (reduced.map.foldl (fun m k v => m.insert k v) {})
     (← caches).userCtx.set userCtx
     (← caches).chain.set chain
     (← caches).forward.set forward
