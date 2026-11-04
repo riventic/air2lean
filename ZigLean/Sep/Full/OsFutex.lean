@@ -48,6 +48,20 @@ theorem wakePick_length : ∀ (n : Nat) (l : List ThreadId) (cs : List Nat),
     simp only [List.length_cons, Nat.add_sub_cancel, Nat.min_def]
     split <;> split <;> omega
 
+/-- A wake picks each waiter at most once: from a queue without duplicates, the picked threads
+have none either. -/
+theorem wakePick_nodup : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat},
+    l.Nodup → (wakePick n l cs).Nodup
+  | 0, _, _, _ => by simp [wakePick]
+  | _ + 1, [], _, _ => by simp [wakePick]
+  | n + 1, w :: ws, cs, h => by
+    let i := cs.headD 0 % (ws.length + 1)
+    have hi : i < (w :: ws).length := Nat.mod_lt _ (Nat.succ_pos _)
+    change ((w :: ws)[i] :: wakePick n ((w :: ws).eraseIdx i) cs.tail).Nodup
+    refine List.nodup_cons.mpr ⟨fun hm => ?_, wakePick_nodup (h.sublist (List.eraseIdx_sublist _ _))⟩
+    obtain ⟨j, hj, hji, hje⟩ := List.mem_eraseIdx_iff_getElem.mp (wakePick_mem hm)
+    exact hji ((h.getElem_inj (hi := hj) (hj := hi)).mp hje)
+
 /-- A wake at `p` with nobody queued there wakes nobody, whatever its count. -/
 theorem futexWake_none {p : Ptr} {m : Mem} (h0 : m.waitersAt p = []) (n n' : Nat)
     (cs : List Nat) : (futexWake p n cs).run m = (futexWake p n' cs).run m := by
