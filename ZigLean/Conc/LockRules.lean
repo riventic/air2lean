@@ -229,13 +229,6 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ hp)
     exact ⟨v, ht ▸ hv, hw ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
-theorem recordAt_le (m : Mem) (b o n : Nat) (k : AccessKind) (u : Nat) :
-    VClock.le (m.clocks[u]!) ((m.recordAt b o n k).clocks[u]!) = true := by
-  simp only [Mem.recordAt]; rw [getElem!_set!_ite]
-  split
-  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
-  · exact VClock.le_refl _
-
 /-- The record of an atomic access to the word by the current thread. -/
 theorem Inv.record {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) {k : AccessKind}
     (hk : k.isAtomic = true) (ht : m.current < m.threads.size) :
