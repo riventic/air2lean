@@ -161,9 +161,6 @@ theorem fact_13_panics : fact (13 : BitVec 32) = throw .overflow := by
 
 /-! ## `gcd` -/
 
-theorem rem_unsigned (a b : BitVec 32) :
-    Zig.rem false a b = if b = 0 then throw .illegal else pure (a % b) := rfl
-
 /-- The Euclidean step, phrased via core's own `gcd` recursion (on the *first* argument) and
 `gcd`'s commutativity, to match `gcd`'s recursion here (on the *second* argument). -/
 theorem gcd_step (a b : Nat) : Nat.gcd a b = Nat.gcd b (a % b) := by
