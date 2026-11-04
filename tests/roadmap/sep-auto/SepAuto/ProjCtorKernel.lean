@@ -40,8 +40,10 @@ structure Loc where
 inductive Ex where
   | again | done
 
+set_option quotPrecheck false in
 /-- The loop's exit paired with its locals after the compare-and-swap: `s`'s epoch, a packed
-literal. A notation, not a definition: each use elaborates to the term written out. -/
+literal. A notation, not a definition: each use elaborates to the term written out (no
+precheck: the structure instance is elaborated at each use). -/
 local notation "again% " s:max =>
   (Ex.again, ({ epoch := Loc.epoch s, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc))
 
