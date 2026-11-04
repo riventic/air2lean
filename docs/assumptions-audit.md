@@ -280,10 +280,14 @@ The extractor is a compiled program, `.lake/build/bin/assurance` (`lake build as
     assurance --sysroot DIR [--all-declarations] [--family NAME]... MODULE...
 
 It imports `tools.Assurance` and the audited modules in one `importModules` call and runs none
-of the audited modules' initializers (`Air2Lean.Assurance.importAudited`): the closure is read
-from the `.olean` headers (`importClosure`, each module's data freed after its imports are read),
-every module of it is recorded as initialized in Lean's `interpretedModInits`, and then the
-closure is imported with extensions loaded. An audited module's `initialize` code therefore
+of the audited modules' initializers (`Air2Lean.Assurance.importAudited`): the program first
+runs itself as `assurance --sysroot DIR --closure MODULE...`, which reads the import closure from
+the `.olean` headers (`importClosure`) and prints it. Reading a header maps the module's data,
+which can be freed only once nothing read from it is referenced; in a process of its own it stays
+mapped until that process ends. Every module of the closure is then recorded as initialized in
+Lean's `interpretedModInits`, and the closure is imported with extensions loaded. The import
+fails if it reaches a module outside the closure read before it, or if the closure lacks an
+imported module. An audited module's `initialize` code therefore
 never runs in the process that writes the report
 ([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Only the extractor's
 own modules, compiled into the program, have run their initializers; they are the tool. Each

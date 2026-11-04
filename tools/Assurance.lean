@@ -673,26 +673,13 @@ private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Js
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
 
-/-- A copy of `n` outside the compacted region its components live in. -/
-private def copyName : Name → Name
-  | .anonymous => .anonymous
-  | .str p s => .str (copyName p) (String.ofList s.toList)
-  | .num p k => .num (copyName p) k
-
-/-- The imports of the module in `file`, copied out of its compacted region, and the region. An
-action of its own (not inlined): the module's data lives in the region, and every reference to
-it, the compiler's reference-count updates included, ends here, before `importClosure` frees the
-region (an access after that reads unmapped memory: the compiled extractor crashed on it). -/
-@[noinline] private unsafe def readImports (file : System.FilePath) :
-    IO (Array Name × CompactedRegion) := do
-  let (data, region) ← readModuleData file
-  return (data.imports.map (copyName ·.module), region)
-
-/-- The modules `roots` import transitively, read from their `.olean` headers. Each module's data
-is freed once its imports are copied out: building an environment here instead would hold a
-second copy of every module in memory, since a region mapped at its base address once is copied,
-not mapped, by every later import of it. -/
-private unsafe def importClosure (roots : Array Name) : IO (Array Name) := do
+/-- The modules `roots` import transitively, read from their `.olean` files. The extractor runs
+this in a process of its own (`assurance --closure`, tools/AssuranceMain.lean) and reads the
+names from its output: the data stays in the regions it was read into, which only that
+process's exit releases. Freeing them here instead would leave every name read out of them
+dangling, and keeping them would make the audit's import copy each module (a region already
+mapped at its base address is copied, not mapped, by a later import). -/
+unsafe def importClosure (roots : Array Name) : IO (Array Name) := do
   let mut seen : NameSet := {}
   let mut closure := #[]
   let mut todo := roots.toList
@@ -704,29 +691,35 @@ private unsafe def importClosure (roots : Array Name) : IO (Array Name) := do
       if seen.contains m then continue
       seen := seen.insert m
       closure := closure.push m
-      let (imports, region) ← readImports (← findOLean m)
-      region.free
-      todo := imports.toList ++ todo
+      let (data, _) ← readModuleData (← findOLean m)
+      todo := (data.imports.map (·.module)).toList ++ todo
   return closure
 
 /-- The extractor's own modules (this file) and `modules`, in one environment, imported the way
 `leanchecker` loads them: no interpreted initializer runs (docs/architecture-audit/
 soundness-2026-10-20.md E1). Importing an audited module the way `lean` imports a file's header
-would run its `initialize` code in this process, which writes the report. The closure
-(`importClosure`) is read first and every module of it marked as already initialized, so the
-extension-loading import runs no `[init]` of it. Only the extractor's own modules keep theirs:
-this process is the compiled extractor (`tools/AssuranceMain.lean`), which ran their native
+would run its `initialize` code in this process, which writes the report. Every module of the
+import closure `closure` of `tools.Assurance` and `modules` (`importClosure`, in a process of
+its own) is marked as already initialized, so the extension-loading import runs no `[init]` of
+it. A module the import reaches outside `closure` (an `.olean` replaced between the two reads)
+fails the audit, with a nonzero exit status that discards whatever the process printed. Only the
+extractor's own modules keep their initializers: this process is the compiled extractor (`tools/AssuranceMain.lean`), which ran their native
 initializers when it started. It holds no imported module before this call, so each module is
-loaded once: a second import of a loaded module would copy it (`importClosure`), the whole of
-`Lean` alone about 2.1 GB. The extractor's own modules are imported too: the claim heads they
+loaded once: a second import of a loaded module would copy it, the whole of `Lean` alone about
+2.1 GB. The extractor's own modules are imported too: the claim heads they
 import make an audited module's declaration of the same name fail, and the report's terms name
 their constants (tools/OutcomeContracts.lean). -/
-unsafe def importAudited (modules : Array Name) (opts : Options) : IO Environment := do
+unsafe def importAudited (modules closure : Array Name) (opts : Options) : IO Environment := do
   let imports := #[`tools.Assurance] ++ modules
-  let closure ← importClosure imports
+  let marked := closure.foldl (init := ({} : NameSet)) (·.insert ·)
+  unless imports.all marked.contains do
+    throw <| IO.userError "the import closure does not contain the audited modules"
   interpretedModInits.modify fun initialized => closure.foldl (init := initialized) (·.insert ·)
   enableInitializersExecution
-  importModules (imports.map ({ module := · })) opts (loadExts := true) (leakEnv := true)
+  let env ← importModules (imports.map ({ module := · })) opts (loadExts := true) (leakEnv := true)
+  if let some m := env.header.moduleNames.find? (!marked.contains ·) then
+    throw <| IO.userError s!"the import reached {m}, outside the closure read before it"
+  return env
 
 /-- The report of the `selected` modules in the current environment (`importAudited`):
 `seedAll` makes every checked declaration of them a graph root (`--all-declarations`), and each
