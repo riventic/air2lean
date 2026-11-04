@@ -44,8 +44,10 @@ def extracts(command) -> bool:
 
 
 def record_of(root: Path, trace: dict) -> Path:
-    """The per-context record `prepared_tool` wrote for `trace`."""
-    found = [r for r in (root / ".lake/assurance/tool-traces").glob("*.json") if json.loads(r.read_text()) == trace]
+    """The per-context record `prepared_tool` wrote for `trace`: the trace without the caller's
+    LEAN_PATH, which binds the run, not the tool."""
+    record = {key: value for key, value in trace.items() if key != "caller_lean_path"}
+    found = [r for r in (root / ".lake/assurance/tool-traces").glob("*.json") if json.loads(r.read_text()) == record]
     assert len(found) == 1, found
     return found[0]
 
@@ -182,13 +184,11 @@ class ToolCacheTests(unittest.TestCase):
                 # Back to the runtime without the companion: that context's record still matches.
                 trace = prepare()
                 self.assertTrue(trace['cache_reused'])
-            for field in ('toolchain_runtime_sha256', 'caller_lean_path'):
-                record = record_of(root, trace)
-                unbound = json.loads(record.read_text())
-                del unbound[field]
-                record.write_text(json.dumps(unbound))
-                trace = prepare()
-                self.assertFalse(trace['cache_reused'])
+            record = record_of(root, trace)
+            unbound = json.loads(record.read_text())
+            del unbound['toolchain_runtime_sha256']
+            record.write_text(json.dumps(unbound))
+            self.assertFalse(prepare()['cache_reused'])
 
     def test_contexts_keep_their_own_records(self):
         # Two invocations in one worktree with different contexts (here the Lake configuration)
@@ -298,54 +298,55 @@ class ToolCacheTests(unittest.TestCase):
                 self.assertEqual(calls, [['lake', 'env', 'printenv', 'LEAN_SYSROOT']])
             self.assertTrue(no_record(root))
 
-    def test_private_caller_paths_remain_supported_but_changes_invalidate(self):
+    def test_private_caller_paths_bind_the_run_not_the_tool(self):
+        # Lake compiles the extractor on the workspace's own path, so a caller's LEAN_PATH neither
+        # invalidates nor rebuilds the tool; every change of it changes the trace that binds the run.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             build = self.project(root)
             private = root / 'private'
             private.mkdir()
+
+            def bound():
+                trace = self.prepare(root, build)
+                self.assertTrue(trace['cache_reused'])
+                self.assertNotIn('caller_lean_path', json.loads(record_of(root, trace).read_text()))
+                return trace['caller_lean_path']
+
+            self.assertFalse(self.prepare(root, build)['cache_reused'])  # no record yet
             with patch.dict(os.environ, {'LEAN_PATH': 'private'}):
-                first = self.prepare(root, build)
-                self.assertEqual(first['caller_lean_path']['roots'], [str(private.resolve())])
-                self.assertTrue(self.prepare(root, build)['cache_reused'])
+                self.assertEqual(bound()['roots'], [str(private.resolve())])
+                unchanged = bound()
                 # Keep every extractor/trace byte fixed; only a private input changes.
                 for name in ('Witness.olean', 'Witness.olean.private', 'Witness.olean.server',
                              'Witness.ir', 'Witness.ir.sig'):
                     companion = private / name
                     companion.write_bytes(b'original')
-                    self.assertFalse(self.prepare(root, build)['cache_reused'])
+                    original = bound()
                     saved = companion.stat()
                     companion.write_bytes(b'modified')
                     os.utime(companion, ns=(saved.st_atime_ns, saved.st_mtime_ns))
-                    self.assertFalse(self.prepare(root, build)['cache_reused'])
+                    self.assertNotIn(bound(), (unchanged, original))
                     companion.unlink()
-                    # Back to the caller tree without the companion: its record still matches.
-                    self.assertTrue(self.prepare(root, build)['cache_reused'])
+                    # Back to the caller tree without the companion: the same binding.
+                    self.assertEqual(bound(), unchanged)
                 (private / 'EmptyTop').mkdir()
-                self.assertFalse(self.prepare(root, build)['cache_reused'])
+                self.assertNotEqual(bound(), unchanged)
                 second = root / 'second'
                 second.mkdir()
                 os.environ['LEAN_PATH'] = os.pathsep.join(map(str, [private, second]))
-                forward = self.prepare(root, build)
+                forward = bound()
                 os.environ['LEAN_PATH'] = os.pathsep.join(map(str, [second, private]))
-                backward = self.prepare(root, build)
-                self.assertNotEqual(forward['caller_lean_path'], backward['caller_lean_path'])
-                self.assertFalse(backward['cache_reused'])
+                self.assertNotEqual(forward, bound())
                 (second / 'EmptyTop').mkdir()
                 alias = root / 'alias'
                 alias.symlink_to(private, target_is_directory=True)
                 os.environ['LEAN_PATH'] = str(alias)
-                linked = self.prepare(root, build)
+                linked = bound()
                 alias.unlink()
                 alias.symlink_to(second, target_is_directory=True)
-                retargeted = self.prepare(root, build)
-                self.assertNotEqual(linked['caller_lean_path'], retargeted['caller_lean_path'])
-                self.assertFalse(retargeted['cache_reused'])
-                record = record_of(root, retargeted)
-                unbound = json.loads(record.read_text())
-                del unbound['caller_lean_path']
-                record.write_text(json.dumps(unbound))
-                self.assertFalse(self.prepare(root, build)['cache_reused'])
+                self.assertNotEqual(linked, bound())
+            self.assertEqual(len(list((root / '.lake/assurance/tool-traces').glob('*.json'))), 1)
 
     def test_caller_mutation_during_preparation_or_extraction_fails_closed(self):
         for stage in ('unchanged', 'preparation', 'extraction'):
@@ -379,6 +380,37 @@ class ToolCacheTests(unittest.TestCase):
                 self.assertEqual(list((root / '.lake/assurance').glob('*.lean')), [])
                 if stage == 'preparation':
                     self.assertTrue(no_record(root))
+
+    def test_the_extraction_check_runs_under_the_lock(self):
+        # Once the lock is released another audit's preparation may rebuild the extractor, so a
+        # check after it could fail a sound run (the fixture checks' race of 2026-11-04).
+        report = json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+        for driver in ('lake env', 'Lake-built driver'):
+            with self.subTest(driver=driver), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build = self.project(root)
+                checked, verify = [], audit.verify_extractor_inputs
+
+                def held(trace, root, stage):
+                    descriptor = os.open(root / '.lake/assurance/tool.lock', os.O_RDWR)
+                    try:
+                        with self.assertRaises(BlockingIOError, msg=stage + ' check outside the lock'):
+                            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    finally:
+                        os.close(descriptor)
+                    checked.append(stage)
+                    return verify(trace, root, stage)
+
+                def runner(command, *, root=root):
+                    return audit.MARKER + report if extracts(command) else build(command)
+
+                with patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner), \
+                        patch.object(audit, 'verify_extractor_inputs', held), \
+                        patch.object(audit, 'lake_extraction', lambda *args: [report]):
+                    raw = audit.extract(['Proofs.Fixture'], False,
+                                        **({'extract_in': root} if driver != 'lake env' else {}))
+                self.assertEqual(raw['modules'], ['Proofs.Fixture'])
+                self.assertEqual(checked, ['preparation', 'extraction'])
 
     def test_sysroot_overlay_and_invalid_caller_roots_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

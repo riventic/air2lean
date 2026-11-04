@@ -43,7 +43,8 @@ The units of one run audit one build, so their `fixtures.py audit`s share one ke
 Lake-built module that one audit replayed is not replayed again in this run
 (scripts/assumptions.py `kernel_replay`). They also share one digest of the Lean toolchain's
 runtime, hashed when the run starts and again when it ends (a change fails the run;
-assumptions.py `runtime_run`). Nothing outlives the run.
+assumptions.py `runtime_run`), and the compiled assurance extractor, prepared before the units
+start (assumptions.py `prepared_tool`): no unit rebuilds a root module. Nothing outlives the run.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
@@ -486,26 +487,35 @@ def main(argv=None):
             workers, budget = par.workers(a.jobs, None, len(jobs)), int(par.memory_budget_mib() * MEM_SHARE)
             print('fixture-checks: running %d units, up to %d at once within %d MiB'
                   % (len(units), workers, budget), flush=True)
-            stats, statuses = [], None
-            before = shared_outputs()
+            stats, statuses, before = [], None, None
             try:
                 # The units' audits share one toolchain-runtime digest, hashed again when they end
                 # (assumptions.runtime_run): a toolchain changed during the run fails it.
                 with assumptions.runtime_run(), open(os.devnull, 'wb') as null:
-                    for job in jobs:
-                        if job.env is not None:
-                            job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
+                    # They also share the root package's compiled extractor (assumptions.py
+                    # `prepared_tool`), which preparing may rebuild: it is prepared here, before
+                    # the units, so no unit rebuilds a root module under the units that read it.
                     try:
-                        statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
-                                           order=order, mem_budget_mib=budget)
-                    except (OSError, ValueError) as error:  # a bad order, a job that cannot spawn
-                        failed.append('the run: %s' % error)
+                        with assumptions.prepared_tool():
+                            pass
+                    except (OSError, ValueError, RuntimeError) as error:
+                        failed.append('the assurance extractor: %s' % error)
+                    else:
+                        before = shared_outputs()
+                        for job in jobs:
+                            if job.env is not None:
+                                job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
+                        try:
+                            statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
+                                               order=order, mem_budget_mib=budget)
+                        except (OSError, ValueError) as error:  # a bad order, a job that cannot spawn
+                            failed.append('the run: %s' % error)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
                 failed.append('the toolchain runtime: %s' % error)
             finally:  # also the finished units of a stopped run (a guard's timeout)
                 report(units, statuses or [None] * len(units), stats, a.report)
                 write_hints(units, stats)
-            if changed := changed_outputs(before, shared_outputs()):
+            if before is not None and (changed := changed_outputs(before, shared_outputs())):
                 failed.append('the root package\'s build outputs changed while the units ran (a unit '
                               'built root modules, racing the units that read them): '
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
