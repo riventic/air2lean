@@ -375,7 +375,7 @@ theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) �
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
     (fun G rX m m' t p h _ => stable G rX m m' t p h) fun G rX m t hph hU => by
       have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
-        (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
+        (LockWord.Step.same rfl rfl rfl rfl rfl rfl rfl) (fun h1 h2 => absurd h1 h2)
       rwa [upd_set_self] at this
 
 /-! ## Basic facts -/

@@ -910,7 +910,7 @@ theorem Fits.wOs (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move ownA
   obtain ⟨rX, hL, hU⟩ := (hK.inv _ _).mp hi
   obtain ⟨hw, rY, rfl, hY⟩ := (hK.wRest hW) _ _ _ hU
   have hst : L.Step t m { m with os := o } :=
-    LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)
+    LockWord.Step.same rfl rfl rfl rfl rfl rfl rfl
   have hL' := hL.lstay hst (hL.w.osState o)
   have hset : upd G t (L.setPart (G t) (L.part (G t))) = G := by rw [L.setPart_self, upd_same]
   have hcl : W.cellsR { m with os := o } = W.cellsR m := Word.cellsR_congr rfl

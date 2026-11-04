@@ -90,7 +90,7 @@ theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
 /-- The lock's invariant at a stop of `t` (`current := t`). -/
 theorem Inv.cur {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (t : ThreadId) :
     L.Inv G rX { m with current := t } :=
-  hi.lstay (t := t) (Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (hi.w.current t)
+  hi.lstay (t := t) (Step.same rfl rfl rfl rfl rfl rfl rfl) (hi.w.current t)
 
 /-- The protocol's invariant at a stop of `t`: the same, with `current := t`. -/
 theorem Fits.cur (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
@@ -378,7 +378,7 @@ theorem Fits.toWait (hP : L.Fits K P U ok) {t : ThreadId} {G : ThreadId → γ} 
     cases m; rfl
   rw [hm] at hl
   have := hP.stepAt (G₁ := upd G t g) (upd_self _ _ _) hok (by rw [hg]; decide)
-    (by rw [hg]; decide) (by decide) hiL hU (Step.same rfl rfl rfl rfl rfl rfl fun _ _ => Iff.rfl) hl
+    (by rw [hg]; decide) (by decide) hiL hU (Step.same rfl rfl rfl rfl rfl rfl rfl) hl
   rwa [upd_upd] at this
 
 /-- `tryLock`, `or(1)` with an acquire, by thread `t` at `out` (`g`). -/
@@ -532,7 +532,7 @@ theorem Fits.osState (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {t :
     P.inv G { m with os := o } := by
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi
   have hst : L.Step t m { m with os := o } :=
-    Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)
+    Step.same rfl rfl rfl rfl rfl rfl rfl
   exact hP.stay hU hok hng hst (hiL.lstay hst (hiL.w.osState o))
 
 /-- `takeInterrupt` keeps the protocol's invariant. -/

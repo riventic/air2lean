@@ -1159,7 +1159,7 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h
   refine hI.move (fun u hu => upd_ne _ _ hu)
     (hhist C.S hwS hapS)
     (hhist C.Ep hwE hapE) hapE.ptr_ne
-    (fun w hl hw => (hs.waiters w hl).mp hw) (fun u => ?_) (by rw [hpt]; exact id)
+    (fun w hl hw => (hs.waiters_mem w hl).mp hw) (fun u => ?_) (by rw [hpt]; exact id)
     (fun h' => by rw [hpt, hnc] at h'; cases h') (fun h' => by
       rw [hpt] at h'; rcases h' with h' | h' <;> rw [hns] at h' <;> cases h')
     (fun h' => by rw [hpt] at h'; rw [h'] at hnc; cases hnc)

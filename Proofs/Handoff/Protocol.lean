@@ -418,7 +418,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
   · by_cases hl : w.2 = (L Lo).ptr
     · exact .inl hl
-    · exact hu.q w ((hs.waiters w hl).mp hw)
+    · exact hu.q w ((hs.waiters_mem w hl).mp hw)
 
 /-- A stop keeps `U`: it reads no current thread. -/
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U Lo G rX m) :
