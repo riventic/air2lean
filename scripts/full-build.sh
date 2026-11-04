@@ -97,6 +97,11 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
       --report "$logs/$name.json" --log "$logs/$name.log" --timeout 7200 \
       --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- "$@"; then
     echo "full-build: $name failed (log: $logs/$name.log)" >&2
+    # The cause in this script's own output: the log may live in a temporary directory its caller
+    # removes (scripts/preflight.sh). Its error lines, else its last lines; the prefix keeps them
+    # in the outer summary (above).
+    { grep -m 40 'error:' "$logs/$name.log" || tail -n 20 "$logs/$name.log"; } \
+      | sed "s/^/full-build: $name | /" >&2 || true
     exit 1
   fi
   echo "full-build: $name $((SECONDS - start)) s"
