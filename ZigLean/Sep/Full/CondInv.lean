@@ -38,9 +38,13 @@ loop resaves: `CPh.Next`'s `reg` case is `jr' = jr ∧ i ≤ i'`.
   (stale), or woken), and of the signallers at `wk` as many as are queued at the epoch.
 
 The window (`< 2^32` epoch writes after a registered waiter's save, PR397 ruling 6264821278)
-is the field `reg`'s `(C.Ep.hist m).size ≤ i + 2^32`; a protocol supplies it at each
-`epoch += 1` (the admission field of `C.Fits`). With it and (H3), a saved value that is not
-the newest write's differs from the epoch's value, so a stale waiter does not sleep.
+is not a field of the invariant: the protocol's rest supplies it (the window field of `C.Fits`:
+every registered waiter `reg i …` has `(C.Ep.hist m).size ≤ i + 2^32`), and the one step that
+needs it, the sleep, takes it (`hwin` of `Inv.stale_ne`, `Inv.fresh_of_val`, `Inv.sleep`).
+It cannot be an inductive field: a waiter's epoch load may read an old write (any its view
+allows), so its window at the load, and so at its registration, is the protocol's fact, not the
+condition's. With it and (H3), a saved value that is not the newest write's differs from the
+epoch's value, so a stale waiter does not sleep.
 
 **Why the count is inductive** (design comment 6619561994, completed here):
 - a post adds `n` signals and a claim `n`; a consume takes one signal and its taker's claim;
@@ -242,12 +246,11 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- The waiter at `ld i e` acquired epoch write `i`. -/
   ld : ∀ u i e, C.ph (G u) = .ld i e → i < (C.Ep.hist m).size ∧ (C.Ep.hist m)[i]!.Val e ∧
     VClock.le (C.Ep.hist m)[i]!.relClock (m.clocks[u]!) = true
-  /-- A registered waiter acquired its saved epoch write `i`, its registration happened before
-  it, and fewer than `2^32` epoch writes follow its save (the window). -/
+  /-- A registered waiter acquired its saved epoch write `i`, and its registration happened
+  before it. -/
   reg : ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e → i < (C.Ep.hist m).size ∧
     (C.Ep.hist m)[i]!.Val e ∧ VClock.le (C.Ep.hist m)[i]!.relClock (m.clocks[u]!) = true ∧
-    jr < (C.S.hist m).size ∧ VClock.le (C.S.hist m)[jr]!.clock (m.clocks[u]!) = true ∧
-    (C.Ep.hist m).size ≤ i + 4294967296
+    jr < (C.S.hist m).size ∧ VClock.le (C.S.hist m)[jr]!.clock (m.clocks[u]!) = true
   /-- A thread in the futex queue at the epoch is a registered waiter about to read nothing. -/
   q : ∀ w ∈ m.waiters, w.2 = C.Ep.ptr → ∃ i jr e, C.ph (G w.1) = .reg i jr false e
   /-- A waiter in the futex queue is at the epoch or at the mutex. -/
@@ -386,8 +389,9 @@ theorem add_ofNat_ne (e : BitVec 32) {d : Nat} (h0 : 0 < d) (h1 : d < 4294967296
 saved write is not the newest finds another value at the futex, so it does not sleep. -/
 theorem Inv.stale_ne {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {u : ThreadId}
     {i jr : Nat} {sn : Bool} {e : BitVec 32} (hu : C.ph (G u) = .reg i jr sn e)
-    (hst : i + 1 < (C.Ep.hist m).size) : ¬ (C.lastE m).Val e := by
-  obtain ⟨hi, he, -, -, -, hw⟩ := hI.reg u i jr sn e hu
+    (hst : i + 1 < (C.Ep.hist m).size) (hw : (C.Ep.hist m).size ≤ i + 4294967296) :
+    ¬ (C.lastE m).Val e := by
+  obtain ⟨hi, he, -, -, -⟩ := hI.reg u i jr sn e hu
   intro hv
   have hval := hI.ep_add (i := i) ((C.Ep.hist m).size - 1 - i) (by omega)
   have hv' : val (C.Ep.hist m)[(C.Ep.hist m).size - 1]! = e := val_of hv
@@ -398,10 +402,11 @@ theorem Inv.stale_ne {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {u : Thr
 /-- A registered waiter whose save is the epoch's value saved the newest write. -/
 theorem Inv.fresh_of_val {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {u : ThreadId}
     {i jr : Nat} {sn : Bool} {e : BitVec 32} (hu : C.ph (G u) = .reg i jr sn e)
-    (hv : (C.lastE m).Val e) : (C.Ep.hist m).size = i + 1 := by
+    (hv : (C.lastE m).Val e) (hwin : (C.Ep.hist m).size ≤ i + 4294967296) :
+    (C.Ep.hist m).size = i + 1 := by
   have hi := (hI.reg u i jr sn e hu).1
   by_cases hst : i + 1 < (C.Ep.hist m).size
-  · exact absurd hv (hI.stale_ne hu hst)
+  · exact absurd hv (hI.stale_ne hu hst hwin)
   · omega
 
 /-! ## The count after a step -/
@@ -827,12 +832,14 @@ theorem qd_push {M : Mem} {t u : ThreadId} :
 
 /-- **The waiter's sleep at the epoch** (`reg i jr false e`, the futex compare read its saved
 value `e`): it joins the queue. `hwk`: it had no pending wake (`Proto.futexWait_ok`: it sleeps
-only then; library prerequisite 3 of the PR); `hnq`: it was not queued. -/
+only then, `FLock.wp_wordWait`'s `hUs`); `hnq`: it was not queued; `hwin`: the window (the
+protocol's, module doc). -/
 theorem Inv.sleep {G : ThreadId → γ} {M : Mem} {t : ThreadId} {i jr : Nat} {e : BitVec 32}
     (hI : C.Inv L G M) (ht : C.ph (G t) = .reg i jr false e) (hv : (C.lastE M).Val e)
-    (hwk : M.woken.contains t = false) (hnq : C.qd M t = false) :
+    (hwk : M.woken.contains t = false) (hnq : C.qd M t = false)
+    (hwin : (C.Ep.hist M).size ≤ i + 4294967296) :
     C.Inv L G { M with waiters := M.waiters.push (t, C.Ep.ptr) } := by
-  have hfresh := hI.fresh_of_val ht hv
+  have hfresh := hI.fresh_of_val ht hv hwin
   refine { hI with
     q := fun w hw hp => ?_, qw := fun w hw hp => ?_, cnt := ?_, qnd := ?_ }
   · rcases Array.mem_push.mp hw with hw | rfl
@@ -929,9 +936,9 @@ theorem Inv.ret {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Nat} {
       · exact ⟨false, h⟩
       · exact ⟨sn', h⟩
     obtain ⟨sn₀, h'⟩ := h'
-    obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hI.reg u i' jr' sn₀ e' h'
+    obtain ⟨h1, h2, h3, h4, h5⟩ :=hI.reg u i' jr' sn₀ e' h'
     rw [hS, hE]
-    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), h4, VClock.le_trans h5 (hclk u), h6⟩
+    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), h4, VClock.le_trans h5 (hclk u)⟩
   · rw [hwt] at hw
     have hwt' : w.1 ≠ t := fun e' => by
       have : C.qd m t = true := by
@@ -1037,9 +1044,9 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
       exact ⟨h1, h2, VClock.le_trans h3 (hclk u)⟩
   · have hut := hnreg u _ h rfl
     rw [hph u hut] at h
-    obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hI.reg u i jr sn e h
+    obtain ⟨h1, h2, h3, h4, h5⟩ :=hI.reg u i jr sn e h
     rw [hS, hE]
-    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), h4, VClock.le_trans h5 (hclk u), h6⟩
+    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), h4, VClock.le_trans h5 (hclk u)⟩
   · rw [hwt] at hw
     rw [hph _ (htq w hw)]; exact hI.q w hw hp
   · rw [hwt] at hw
@@ -1171,9 +1178,9 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
     rw [hE]; exact ⟨h1, h2, VClock.le_trans h3 (hclk u)⟩
   · have hut := hnr u _ h rfl
     rw [hph u hut] at h
-    obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hI.reg u i jr sn e h
+    obtain ⟨h1, h2, h3, h4, h5⟩ :=hI.reg u i jr sn e h
     rw [hE, hsz, hlt jr h4]
-    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), by omega, VClock.le_trans h5 (hclk u), h6⟩
+    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), by omega, VClock.le_trans h5 (hclk u)⟩
   · rw [hwt] at hw
     obtain ⟨i, jr, e, h⟩ := hI.q w hw hp
     have hwt' : w.1 ≠ t := fun e' => by rw [e', ht] at h; cases h
@@ -1254,9 +1261,9 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
     rw [hE]; exact ⟨h1, h2, VClock.le_trans h3 (hclk u)⟩
   · have hut := hout u _ h nofun
     rw [hph u hut] at h
-    obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hI.reg u i' jr' sn' e' h
+    obtain ⟨h1, h2, h3, h4, h5⟩ :=hI.reg u i' jr' sn' e' h
     rw [hE, hsz, hlt jr' h4]
-    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), by omega, VClock.le_trans h5 (hclk u), h6⟩
+    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), by omega, VClock.le_trans h5 (hclk u)⟩
   · rw [hwt] at hw
     obtain ⟨i', jr', e', h⟩ := hI.q w hw hp
     have hwt' : w.1 ≠ t := fun e'' => by rw [e'', ht] at h; cases h
