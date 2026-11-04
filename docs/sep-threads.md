@@ -14,8 +14,8 @@ The concurrent proofs have two layers.
   thread `t` that holds at every stop. `run_safe` / `run_sound` turn it into statements about
   `Sched.run`. This layer has no heap assertions and stays as it is.
 * **Concurrent separation logic** over the legacy `Heap` (`ZigLean/Conc/Own.lean`, `Csl.lean`,
-  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Transfer.lean`, `TlsLemmas.lean`,
-  `SpawnLemmas.lean`, `Witness.lean`, `Unroll.lean`; about 7.5k lines):
+  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Transfer.lean`,
+  `SpawnLemmas.lean`, `Witness.lean`, `Unroll.lean`; about 7.3k lines):
   * `Mem.Owns m t h`: every recorded access to a byte of `h` happened before `t`'s clock;
   * `TTriple P c Q`: `Triple` with ownership in place of `SingleThread`, plus `StepIn hF m m'`
     (the step touches no frame byte and changes no other thread's clock);
@@ -475,11 +475,11 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/Local.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
-* **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
-  shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an instance is a
-  `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`); the thread
-  start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with the record
-  update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
+* **TLS** (`TlsLemmas.lean`, deleted): a thread-local block is a part of its thread; its knowledge
+  may be shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an
+  instance is a `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`);
+  the thread start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with
+  the record update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
   `tlsPtr` reads only the thread records, which are protocol facts, not resources: it is resolved
   against the current memory inside a `MemM` step (`WP.liftMem_tlsPtr_bind`), so no thread triple
   needs the records (the legacy `TTripleIn` has no counterpart). `main`'s instances are start
