@@ -38,7 +38,9 @@ owned; pure snapshot facts never justify a transfer.
   which `handoff` uses (`Proofs/Handoff/`); its scope is one waiter at a time.
 - *WaitGroup*: Zig 0.16.0's `examples/sync` has no translated `WaitGroup`; the 0.15.2
   `Thread.WaitGroup` proof (`Proofs/Threadsync/WaitGroup.lean`) is a fixed two-task client.
-- *Multiple condition waiters, broadcast, timeouts and cancellation* are not covered.
+- *Multiple condition waiters*: `CondContract` here admits one waiter; the full-state condition
+  contract (`CondImpl`, `ZigLean/Sep/Full/Cond.lean`) admits any number.
+- *Condition broadcast, timeouts and cancellation* are not covered.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Conc.Lock Sync Assn
