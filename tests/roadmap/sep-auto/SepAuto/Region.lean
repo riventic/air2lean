@@ -68,6 +68,40 @@ theorem memset_word_reads (bs : Array Byte) (h : bs.size = 6) (v : BitVec 16) :
       (fun r => ⟪r = (v, v)⟫ ⋆ up (regionIn p A S K 2 (memsetBytes 3 (some v)))) := by
   fsym
 
+/-- A read of a memset's byte past a store to another byte (`extract_writeBytes_other`). -/
+theorem read_unwritten (v w : BitVec 8) :
+    FTotalTriple
+      (up (regionIn p A S K 1 (writeBytes (memsetBytes 8 (some v)) 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆
+        up (regionIn p A S K 1 (writeBytes (memsetBytes 8 (some v)) 7 (Enc.encode w)))) := by
+  fsym
+
+/-- A word item of a memset past a store to another item (`extract_memsetBytes_item`). -/
+theorem read_unwritten_word (v w : BitVec 16) :
+    FTotalTriple
+      (up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w))))
+      (Zig.load (BitVec 16) 2 (p.add 2))
+      (fun r => ⟪r = v⟫ ⋆
+        up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w)))) := by
+  fsym
+
+/-- A kept prefix of one byte (`replicate 1`, not a singleton, until it is decoded). -/
+theorem read_kept_one (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 1 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
+/-- A read of a reallocation's kept prefix, past a store to a byte after it (`keptExtract`). -/
+theorem read_kept (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 4 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 3#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
 /-- A whole region copied onto a separate one of the same size. -/
 theorem memcpy_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
     (h2 : n.toNat = bs.size) :
@@ -195,5 +229,118 @@ theorem free_large_sized (r u : Ptr) (b : BlockId) (sz ei : BitVec 64) (nxt : Op
         up (regionIn r A S K 8 c2) ⋆ up (regionIn u A S K 8 c3) ⋆ up (regionIn (q.add 24) A S K 8 c4) ⋆
         up (regionIn (r.add 24) A S K 8 c5) ⋆ up (regionIn (u.add 24) A S K 8 c6)) := by
   fsym [giveBackN_spec]
+
+/-- A grant behind a definition: a token that names its size, and its bytes. -/
+def TokGrant (T : Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
+  T bs.size ⋆ up (regionIn p A S K 1 bs)
+
+/-- **A token does not fix the bytes of the region whose size it names** (`abstractMeasures`):
+the state's token `T old.size` names an array of the grant's size, not the bytes its region holds
+(`cur`, as after a write). The rule's bytes behind `TokGrant` come from the region, carved at the
+token's size, and the token matches up to arithmetic. -/
+theorem hidden_bytes_from_region (T : Nat → FAssn) (s : Slice) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hn : s.len.toNat = n) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte, s.len.toNat = bs.size →
+      FTotalTriple (TokGrant T s.ptr A S K bs) c (fun _ => TokGrant T s.ptr A S K bs)) :
+    FTotalTriple (T old.size ⋆ up (regionIn s.ptr A S K 1 cur)) c
+      (fun _ => TokGrant T s.ptr A S K cur) := by
+  fsym [rule]
+
+/-- The same without a size premise of the rule: the token alone defers the bytes. -/
+theorem hidden_bytes_no_premise (T : Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (TokGrant T p A S K bs) c (fun _ => TokGrant T p A S K bs)) :
+    FTotalTriple (T old.size ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => TokGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- A grant whose token names its size in a field of an argument, as a ledger fragment keys a
+grant by `(p, bs.size, …)`. -/
+def TupGrant (T : Ptr × Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) :
+    FAssn :=
+  T (p, bs.size) ⋆ up (regionIn p A S K 1 bs)
+
+/-- The same with the size in a tuple that the token takes. -/
+theorem hidden_bytes_in_tuple (T : Ptr × Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (TupGrant T p A S K bs) c (fun _ => TupGrant T p A S K bs)) :
+    FTotalTriple (T (p, old.size) ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => TupGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- A grant's key, a structure with the size as a field. -/
+structure GrantKey where
+  ptr : Ptr
+  len : Nat
+
+/-- A grant whose token takes a structure with its size as a field. -/
+def KeyGrant (T : GrantKey → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) :
+    FAssn :=
+  T ⟨p, bs.size⟩ ⋆ up (regionIn p A S K 1 bs)
+
+/-- The same with the size in a field of a structure that the token takes. -/
+theorem hidden_bytes_in_field (T : GrantKey → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (KeyGrant T p A S K bs) c (fun _ => KeyGrant T p A S K bs)) :
+    FTotalTriple (T ⟨p, old.size⟩ ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => KeyGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- A grant whose token names its size under arithmetic (a header's length). -/
+def HdrGrant (T : Nat → FAssn) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : FAssn :=
+  T (bs.size + 8) ⋆ up (regionIn p A S K 1 bs)
+
+/-- The same with the size under arithmetic, not a constructor. -/
+theorem hidden_bytes_in_sum (T : Nat → FAssn) (p : Ptr) (old cur : Array Byte) (n : Nat)
+    (c : MemM Unit) (hold : old.size = n) (hcur : cur.size = n)
+    (rule : ∀ bs : Array Byte,
+      FTotalTriple (HdrGrant T p A S K bs) c (fun _ => HdrGrant T p A S K bs)) :
+    FTotalTriple (T (old.size + 8) ⋆ up (regionIn p A S K 1 cur)) c
+      (fun _ => HdrGrant T p A S K cur) := by
+  fsym [rule]
+
+/-- Two grants under one token: the first one's bytes a size the rule demands (the token waits
+for them), the second one's named by the token alone. -/
+def TwoGrant (T : Nat → Nat → FAssn) (p q : Ptr) (A S : Nat) (K : BlockKind) (bs cs : Array Byte) :
+    FAssn :=
+  T bs.size cs.size ⋆ (up (regionIn p A S K 1 bs) ⋆ up (regionIn q A S K 1 cs))
+
+/-- The token that waits for demanded bytes does not fix the other grant's bytes either. -/
+theorem hidden_bytes_waiting (T : Nat → Nat → FAssn) (p q : Ptr) (b0 old cur : Array Byte)
+    (n m : Nat) (c : MemM Unit) (hb0 : b0.size = n) (hold : old.size = m) (hcur : cur.size = m)
+    (rule : ∀ bs cs : Array Byte, bs.size = n →
+      FTotalTriple (TwoGrant T p q A S K bs cs) c (fun _ => TwoGrant T p q A S K bs cs)) :
+    FTotalTriple (T b0.size old.size ⋆ (up (regionIn p A S K 1 b0) ⋆ up (regionIn q A S K 1 cur))) c
+      (fun _ => TwoGrant T p q A S K b0 cur) := by
+  fsym [rule]
+
+/-- A measure of an unknown that nothing else determines: the final match still takes the
+state's array (any array of that size is a witness). -/
+theorem measure_only (T : Nat → FAssn) (old : Array Byte) (c : MemM Unit)
+    (rule : ∀ bs : Array Byte, FTotalTriple (T bs.size) c (fun _ => T bs.size)) :
+    FTotalTriple (T old.size) c (fun _ => T old.size) := by
+  fsym [rule]
+
+/-- A store and a load through a literal pointer (generated code's address of a global's item,
+evaluated) into a region of the state: the walk restates the pointer from the region's
+(`rebaseLitPtr?`). -/
+theorem literal_store_load (bs : Array Byte) (hs : bs.size = 4) (x : BitVec 8) :
+    FTotalTriple (up (regionIn ((⟨some 0, 0⟩ : Ptr).add 12) A 16 .global 1 bs))
+      (do Zig.store 1 (⟨some 0, 15⟩ : Ptr) x; Zig.load (BitVec 8) 1 (⟨some 0, 15⟩ : Ptr))
+      (fun r => ⟪r = x⟫ ⋆ FAssn.ex fun t : Array Byte =>
+        up (regionIn ((⟨some 0, 0⟩ : Ptr).add 12) A 16 .global 1 t)) := by
+  fsym
+
+/-- The same into a region that starts at an offset of a pointer the facts place. -/
+theorem literal_store_offset (p : Ptr) (hb : p.block = some 0) (ho : p.off = 0)
+    (bs cs : Array Byte) (hs : bs.size = 16) (hc : cs.size = 4) (x : BitVec 8) :
+    FTotalTriple (up (regionIn (p.add (bs.extract 0 12).size) A 16 .global 1 cs))
+      (Zig.store 1 (⟨some 0, 15⟩ : Ptr) x)
+      (fun _ => up (regionIn (p.add (bs.extract 0 12).size) A 16 .global 1
+        (writeBytes cs 3 (Enc.encode x)))) := by
+  fsym
 
 end SepAuto.Region
