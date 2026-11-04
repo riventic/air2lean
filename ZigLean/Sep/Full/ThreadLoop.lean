@@ -66,6 +66,25 @@ theorem FTTriple.loop {body : MM σ ε} {again : ε → Bool} (inv : σ → FAss
 
 /-! ## Total correctness -/
 
+/-- A recursive group of thread steps. Each smaller invocation supplies the existing stronger
+thread-total contract; sequential totality alone cannot establish thread locality/frame safety. -/
+theorem FTTotalTriple.rec_group_wf {A M : Type} {B : A → Type}
+    (f : (a : A) → MemM (B a)) (P : A → FAssn) (Q : (a : A) → B a → FAssn)
+    (μ : A → M) {r : M → M → Prop} (wf : WellFounded r)
+    (step : ∀ a, (∀ b, r (μ b) (μ a) → FTTotalTriple (P b) (f b) (Q b)) →
+      FTTotalTriple (P a) (f a) (Q a)) :
+    ∀ a, FTTotalTriple (P a) (f a) (Q a) :=
+  fun a => (InvImage.wf μ wf).induction a step
+
+/-- The same group rule for a natural measure, retaining all thread-total obligations. -/
+theorem FTTotalTriple.rec_group {A : Type} {B : A → Type}
+    (f : (a : A) → MemM (B a)) (P : A → FAssn) (Q : (a : A) → B a → FAssn)
+    (μ : A → Nat)
+    (step : ∀ a, (∀ b, μ b < μ a → FTTotalTriple (P b) (f b) (Q b)) →
+      FTTotalTriple (P a) (f a) (Q a)) :
+    ∀ a, FTTotalTriple (P a) (f a) (Q a) :=
+  FTTotalTriple.rec_group_wf f P Q μ Nat.lt_wfRel.wf step
+
 /-- **A thread's loop with an invariant and a ghost measure** (`FTotalTriple.loop_ghost`). -/
 theorem FTTotalTriple.loop_ghost {body : MM σ ε} {again : ε → Bool} (inv : σ → Nat → FAssn)
     (post : ε × σ → FAssn)
