@@ -235,7 +235,7 @@
       "name": "Fits",
       "module": "ZigLean.Sep.Full.Sem",
       "status": "target",
-      "approved": "coordinator 2026-11-04 (L10i brief: FSem.Fits extends L.Fits S.prim with the window field, mirroring FCond.Fits; maintainer decision PR #575 comment 6625654179)"
+      "approved": "coordinator 2026-11-04 (PR #575 comment 6638437976: FSem.Fits is L.Fits S.prim with ok_s and the window field; precedent FCond.Fits, PR #575 decision 6625654179)"
     },
     {
       "name": "FitsOn",
