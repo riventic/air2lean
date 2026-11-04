@@ -576,7 +576,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = (L Lo).part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
   have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
-  subst r₁
+  subst hrM
   have hu₀ : U Lo G rX { m with current := 0 } := ⟨hu.shape, hu.io, hu.rest⟩
   have hG' : upd G 0 ((L Lo).setPart (G 0) (rsum rM rP)) 0 = gPre (rsum rM rP) := by
     rw [upd_self, hg]; rfl

@@ -455,6 +455,10 @@ theorem keep_of {m m' : Mem} (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.at
     fun _ h u hu => VClock.le_trans (h u (ht ▸ hu)) (hcl u),
     fun _ ⟨u, hu, hle⟩ => ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u)⟩⟩
 
+/-- A step tick (`Zig.tick`, `Mem.ticked`) keeps the word: it changes only the step count. -/
+theorem Ok.ticked {m : Mem} (hw : W.Ok m) : W.Ok { m with ticks := m.ticks + 1 } :=
+  hw.keep (keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _)
+
 /-- The same memory, but `current`, `seen`, `nextMsg`, the futex queue, the woken threads and
 the groups. -/
 theorem keep_same (m : Mem) (c : ThreadId) (s : Array (ThreadId × Nat × Nat)) (k : Nat)

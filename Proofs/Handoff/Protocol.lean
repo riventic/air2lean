@@ -1241,7 +1241,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
   obtain ⟨_, _, hi, r, _, rfl, rfl, rfl, hi'⟩ := hs
   obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => Lo.ws_box) hu.rest
   subst hrX
-  exact U_own_native (.inl rfl) hu hi hY (FStepIn.ticked _ _) hu.ws rfl hi' rfl rfl
+  exact U_own_native (.inl rfl) hu hi hY (FStepIn.ticked _ _) hu.ws.ticked rfl hi' rfl rfl
 
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
 theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=

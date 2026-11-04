@@ -264,8 +264,9 @@ theorem blk0 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hu 
 theorem blk1 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hu : U G rX m) :
     m.BlkOk 1 16 1 .stack := by
   obtain ⟨rM, ⟨r0, _, -, rfl, -, r1, rG, -, rfl, h1, -⟩, he⟩ := rest_main hi hu
-  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
-  replace he := ExtTrue.of_add he
+  have he1 : ExtTrue m (rsum r1 rG).gh :=
+    ExtTrue.of_add (b := r0.gh) (by rw [Ghost.add_comm]; exact he)
+  replace he := ExtTrue.of_add he1
   rw [bauth_eq h1] at he
   obtain ⟨blk, hblk, hl, hs, hk, -⟩ := (he 1).1 16 .stack (by simp [Ghost.atExt, ECell.auth1])
   exact ⟨blk, hblk, hl, hs, Nat.mod_one _, hk⟩
@@ -653,7 +654,7 @@ theorem inv_copy_plain {G : ThreadId → Gh} {m : Mem} {rM : Res} {j k : Nat}
     (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = L.part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
   have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
-  subst r₁
+  subst hrM
   have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.io, hu.rest, hu.jle⟩
   refine ⟨rP, hpP, rX, ?_, ?_⟩
   · simpa only [upd_same, hg] using hL'
@@ -940,7 +941,7 @@ theorem async_spec {σ : Type} {s : σ} {rM : Res} {j k : Nat}
         exact inv_cur 0 hi₂ (by rw [hg₂]; exact (by decide : LPh.out ≠ LPh.gone))
       exact WP.mono (fun r G' m' d' ⟨h1, h2, h3, h4⟩ => ⟨h1, by omega, h3, h4⟩)
         (eager_spec (s := s) (d := k₂) hp hj hk hi₂')
-    · obtain ⟨rfl, hc', hi'⟩ := inv_spawnParts hpP hj hiP (by rw [upd_self]; rfl) hf
+    · obtain ⟨rfl, hc', hi'⟩ := inv_spawnParts hpP hj hiP (by rw [upd_self]) hf
       rw [upd_comm G₂ _ _ (by omega : (0 : ThreadId) ≠ k + 1), upd_upd] at hi'
       exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
   · -- `main` runs the task itself
@@ -952,7 +953,7 @@ theorem async_spec {σ : Type} {s : σ} {rM : Res} {j k : Nat}
     obtain ⟨rP, hpP, hiP⟩ := inv_copy_plain hp hi₂ hg₂
     refine ⟨gOut rP (.task false), ⟨rfl, rP, hpP, rfl⟩,
       fun _ => ⟨rfl, .inr rfl⟩, fun child m' hf => ?_⟩
-    obtain ⟨rfl, hc', hi'⟩ := inv_spawnParts hpP hj hiP (by rw [upd_self]; rfl) hf
+    obtain ⟨rfl, hc', hi'⟩ := inv_spawnParts hpP hj hiP (by rw [upd_self]) hf
     rw [upd_comm G₂ _ _ (by omega : (0 : ThreadId) ≠ k + 1), upd_upd] at hi'
     exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
 
