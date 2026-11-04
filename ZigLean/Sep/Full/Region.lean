@@ -352,7 +352,7 @@ simproc [fsym_arith] keptExtract (Array.extract _ _ _) := fun e => do
   unless x.isFVar do return .continue
   let (lo, hi) := (e.getArg! 2, e.getArg! 3)
   for d in ← getLCtx do
-    if d.isImplementationDetail then continue
+    if d.isImplementationDetail || !d.type.isAppOfArity ``Zig.keepsPrefix 2 then continue
     let ty ← instantiateMVars d.type
     unless ty.isAppOfArity ``Zig.keepsPrefix 2 && ty.appArg! == x do continue
     let old := ty.appFn!.appArg!
