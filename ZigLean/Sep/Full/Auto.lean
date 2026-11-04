@@ -1013,9 +1013,9 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
       ``Int.toNat_add_nat, ``Nat.add_zero, ``Nat.zero_add, ``Int.add_zero, ``Int.zero_add, ``Int.one_mul,
       ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
       ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
-      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_and,
-      ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies, ``false_implies,
-      ``implies_true] do
+      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_or,
+      ``or_true, ``true_and, ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies,
+      ``false_implies, ``implies_true] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
@@ -1307,9 +1307,18 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
     let s ← saveState
-    let g' ← g.replaceTargetDefEq (← reduceProjs t')
+    let t'' ← reduceProjs t'
+    let g' ← g.replaceTargetDefEq t''
     if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
+    -- an unfolding of library form (a result predicate `r = 1 ∨ r = 2 ∨ …`, a negation, an
+    -- implication): the solver on it, as the arithmetic normalization does not unfold the user
+    -- definition (once: a library head is not unfolded again)
+    let libHead ← match t''.getAppFn with
+      | .const c _ => isLibrary c
+      | _ => pure t''.isArrow
+    if libHead then
+      if (← arithGoals g' quick cases).isEmpty then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
