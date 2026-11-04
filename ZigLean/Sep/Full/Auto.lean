@@ -442,8 +442,9 @@ structure RunCaches where
   /-- The `WP` backend's simp contexts: concurrent bodies, and hypotheses after a stop. -/
   wpProg : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
   wpHyp : IO.Ref (Option Simp.Context)
-  /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value
-  (`refreshUser` relates a caller's term to the context after them). -/
+  /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value,
+  and a local that a substitution reverted and introduced again, by the new local
+  (`refreshUser` relates a caller's term to the context after them, `liveFVar?` a fact). -/
   substs : IO.Ref (Std.HashMap FVarId Expr)
   /-- The heads of the assertions that the caller's updates produce (`fsym [u]`, `u : EUpd X Y`):
   a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`), except
@@ -1012,9 +1013,9 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
       ``Int.toNat_add_nat, ``Nat.add_zero, ``Nat.zero_add, ``Int.add_zero, ``Int.zero_add, ``Int.one_mul,
       ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
       ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
-      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_and,
-      ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies, ``false_implies,
-      ``implies_true] do
+      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_or,
+      ``or_true, ``true_and, ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies,
+      ``false_implies, ``implies_true] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
@@ -1306,9 +1307,18 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
     let s ← saveState
-    let g' ← g.replaceTargetDefEq (← reduceProjs t')
+    let t'' ← reduceProjs t'
+    let g' ← g.replaceTargetDefEq t''
     if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
+    -- an unfolding of library form (a result predicate `r = 1 ∨ r = 2 ∨ …`, a negation, an
+    -- implication): the solver on it, as the arithmetic normalization does not unfold the user
+    -- definition (once: a library head is not unfolded again)
+    let libHead ← match t''.getAppFn with
+      | .const c _ => isLibrary c
+      | _ => pure t''.isArrow
+    if libHead then
+      if (← arithGoals g' quick cases).isEmpty then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
@@ -2627,6 +2637,37 @@ def boolFactCtx : MetaM Simp.Context := do
   (← caches).boolCtx.set (some c)
   return c
 
+/-- Substitute the local of the equation `h : l = r` (`substEq`) and record the substitution
+(`caches.substs`): a caller's term that names an eliminated local takes its value
+(`refreshUser`). `none` if `h` substitutes nothing (no local side, a `let`, a dependency). -/
+def substRecorded (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarId) := do
+  let some (fs, g') ← observing? (substEq g h) | return none
+  let fs ← g'.withContext do
+    let lhs := fs.apply l
+    let rhs := fs.apply r
+    let lctx ← getLCtx
+    if lhs.hasAnyFVar (fun f => !lctx.contains f) ||
+        rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
+    -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
+    pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
+  (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
+  return some g'
+
+/-- The local `f` of an earlier context in `g`'s: itself, or the local a substitution
+reintroduced it as (a fact reverted by `subst` and introduced again, followed through
+`caches.substs`, as `refreshSubsts` follows a term); `none` if it is gone. A loop that splits
+facts one after another uses it (`destructAll`), as splitting one fact may substitute a local
+that a later one mentions. -/
+def liveFVar? (g : MVarId) (f : FVarId) : MetaM (Option FVarId) := g.withContext do
+  let lctx ← getLCtx
+  let substs ← (← caches).substs.get
+  let mut f := f
+  for _ in [0:substs.size + 1] do
+    if lctx.contains f then return some f
+    let some (.fvar f') := substs.get? f | return none
+    f := f'
+  return none
+
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
 and a constructor application: `t` is replaced by `C …` in the goal and in the other facts,
@@ -2651,10 +2692,7 @@ partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option M
     let res ← g1.rewrite (← g1.getType) (mkFVar h) symm
     let g2 ← g1.replaceTargetEq res.eNew res.eqProof
     let (xs, g3) ← g2.introNP rev.size
-    let mut g := g3
-    for x in xs do
-      if (← g.withContext x.findDecl?).isSome then g ← destruct g x
-    return some g
+    return some (← destructAll g3 xs)
   catch ex =>
     trace[fsym] "substCtor {t}: {ex.toMessageData}"
     s.restore; return none
@@ -2696,9 +2734,7 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
       if ty' != ty then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
         changed := changed.push d.fvarId
-    for f in changed do
-      if (← g.withContext f.findDecl?).isSome then g ← destruct g f
-    return some g
+    return some (← destructAll g changed)
   catch ex =>
     trace[fsym] "etaProj: {ex.toMessageData}"
     s.restore; return none
@@ -2711,13 +2747,9 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
     let gs ← g.cases h
     let some sg := gs[0]? | return g
     let fs := sg.fields
-    let mut g := sg.mvarId
-    if isAnd then
-      let f1 := fs[1]!.fvarId!
-      g ← destruct g fs[0]!.fvarId!
-      if (← g.withContext f1.findDecl?).isSome then g ← destruct g f1
-      return g
-    return ← destruct g fs[1]!.fvarId!
+    -- (the left conjunct's substitution may reintroduce the right one: `destructAll`)
+    if isAnd then return ← destructAll sg.mvarId #[fs[0]!.fvarId!, fs[1]!.fvarId!]
+    return ← destruct sg.mvarId fs[1]!.fvarId!
   if ty.isConstOf ``True then return ← g.clear h
   -- a Boolean test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`): as a proposition
   if isBoolTest ty then
@@ -2730,22 +2762,14 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
   if let some (lem, o) := optTest? ty then
     unless ← isCaseCtorApp o do
       let pf ← mkAppM lem #[mkFVar h]
-      let (h', g') ← (← g.assert `hopt (← inferType pf) pf).intro1
-      return ← destruct g' h'
+      let pty ← inferType pf
+      -- (once: a reintroduced fact is split again, `destructAll`; a known one falls through)
+      unless ← (← getLCtx).anyM fun d => return d.type == pty do
+        let (h', g') ← (← g.assert `hopt pty pf).intro1
+        return ← destruct g' h'
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
-      if let some (fs, g') ← observing? (substEq g h) then
-        let fs ← g'.withContext do
-          let lhs := fs.apply l
-          let rhs := fs.apply r
-          let lctx ← getLCtx
-          if lhs.hasAnyFVar (fun f => !lctx.contains f) ||
-              rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
-          -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
-          pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
-        -- (recorded: a caller's term that names an eliminated local takes its value)
-        (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
-        return g'
+      if let some g' ← substRecorded g h l r then return g'
     if let some g' ← substCtor g h l r then return g'
     if let some g' ← etaProj g l r then return g'
     return g
@@ -2771,6 +2795,15 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         if ty''.isAppOfArity ``And 2 || ty''.isAppOfArity ``Exists 2 then return ← destruct g' h
         return g'
   return g
+
+/-- `destruct` the facts `hs` one after another: a fact that splitting an earlier one
+reintroduced (a substitution reverts the facts that mention its local) is split as the new
+local (`liveFVar?`). -/
+partial def destructAll (g : MVarId) (hs : Array FVarId) : TacticM MVarId := do
+  let mut g := g
+  for h in hs do
+    if let some h ← liveFVar? g h then g ← destruct g h
+  return g
 end
 
 /-- The pointer that `p` is derived from by `Ptr.add`/`elem`/`elemSub`/`elemOf`/`elemSubOf`
@@ -2781,19 +2814,61 @@ partial def ptrBase (p : Expr) : Expr :=
       p.isAppOfArity `Zig.Ptr.elemOf 4 || p.isAppOfArity `Zig.Ptr.elemSubOf 4 then
     ptrBase (p.getArg! 0) else p
 
+/-- A local declared at `BlockId` (`Nat` behind an `abbrev`: the declared type tells a block
+from a number). -/
+def isBlockVar (b : Expr) : MetaM Bool := do
+  let some d := (← getLCtx).find? b.fvarId! | return false
+  return d.type.consumeMData.isConstOf ``Zig.BlockId
+
 /-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
 `x.block = y.block` (definitionally, also through `Ptr.add`/`Ptr.elem`, or by a fact), `b₂` is
-replaced by `b₁`. -/
+replaced by `b₁`. A block variable `b` (one with a fact `_.block = some b`, or declared at
+`BlockId`: the walk's start reduces a fact `(gbuf n).ptr.block = some b` of a global's pointer to
+`some 0 = some b`; a number stays a fact of the arithmetic solver, `isSubstValue`) equal to a
+value is that value, `b` replaced by `k`:
+* from `some k = some b`, in either orientation;
+* from `x.block = some b` where `x.block`, or the other side of a fact `x.block = y.block` or
+  `x.block = some k`, is `some k` by reducible evaluation (a global's pointer `⟨some 0, 0⟩`, also
+  behind an `abbrev`; not default transparency, which would evaluate the facts, ledger #55).
+
+Every substitution is recorded for caller terms (`substRecorded`); an equation whose variable
+cannot be substituted is skipped. -/
 partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
   let hyps := (← getLCtx).foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
+  -- `some k` of a value `k`
+  let isVal (e : Expr) := e.isAppOfArity ``Option.some 2 && !e.appArg!.hasFVar && !e.appArg!.hasMVar
+  -- `b` of `some b`, a local
+  let someVar? (e : Expr) : Option Expr :=
+    if e.isAppOfArity ``Option.some 2 && e.appArg!.isFVar then some e.appArg! else none
+  -- `b` replaced by `k` from `e : some k = some b`, recorded; `none` (the state kept) if `b`
+  -- cannot be substituted
+  let substSome (e k b : Expr) : TacticM (Option MVarId) := do
+    let s ← saveState
+    let (h, g') ← (← g.assert `hblk (← mkEq k b) (← mkAppM ``Option.some.inj #[e])).intro1
+    let some g' ← substRecorded g' h k b
+      | trace[fsym] "unifyBlocks: cannot substitute {b} by {k}"; s.restore; return none
+    return some g'
+  -- `x.block` and `y.block` of one block: reducibly equal, or of one base (`Ptr.add`, …: the
+  -- kernel unfolds them, `block_add`)
+  let sameBlock (x y : Expr) : MetaM Bool := do
+    if ← withNewMCtxDepth (withReducible (isDefEq x y)) then return true
+    return x.isAppOfArity ``Zig.Ptr.block 1 && y.isAppOfArity ``Zig.Ptr.block 1 &&
+      ptrBase x.appArg! == ptrBase y.appArg!
   let mut someEqs := #[]
-  let mut blkEqs := #[]
+  -- the facts `x.block = y.block` and `x.block = some k`: proof, `x.block`, other side
+  let mut links : Array (Expr × Expr × Expr) := #[]
+  -- `some k = some b` of a value `k` (either orientation, the proof turned): proof, `some k`, `b`
+  let mut optEqs : Array (Expr × Expr × Expr) := #[]
   for d in hyps do
     let ty ← instantiateMVars d.type
     let some (_, l, r) := ty.eq? | continue
+    if isVal l then if let some b := someVar? r then optEqs := optEqs.push (d.toExpr, l, b)
+    if isVal r then
+      if let some b := someVar? l then optEqs := optEqs.push (← mkEqSymm d.toExpr, r, b)
     unless l.isAppOfArity ``Zig.Ptr.block 1 do continue
-    if r.isAppOfArity ``Option.some 2 && r.appArg!.isFVar then someEqs := someEqs.push (d, l, r.appArg!)
-    else if r.isAppOfArity ``Zig.Ptr.block 1 then blkEqs := blkEqs.push d
+    if let some b := someVar? r then someEqs := someEqs.push (d, l, b)
+    else if r.isAppOfArity ``Zig.Ptr.block 1 || isVal r then links := links.push (d.toExpr, l, r)
+  -- first one variable per block (its value then substitutes them all)
   for i in [0:someEqs.size] do
     for j in [i+1:someEqs.size] do
       let (d1, l1, b1) := someEqs[i]!
@@ -2801,27 +2876,36 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       if b1 == b2 then continue
       -- `l1 = l2`
       let link? : Option Expr ← do
-        if ← withReducible (isDefEq l1 l2) then pure (some (← mkEqRefl l1))
-        else if ptrBase l1.appArg! == ptrBase l2.appArg! then
+        if ← sameBlock l1 l2 then
           pure (some (← mkExpectedTypeHint (← mkEqRefl l1) (← mkEq l1 l2)))
         else
           let mut found := none
-          for d in blkEqs do
-            let ty ← instantiateMVars d.type
-            let some (_, a, b) := ty.eq? | continue
-            if (← withReducible (isDefEq a l1)) && (← withReducible (isDefEq b l2)) then
-              found := some d.toExpr; break
-            if (← withReducible (isDefEq a l2)) && (← withReducible (isDefEq b l1)) then
-              found := some (← mkEqSymm d.toExpr); break
+          for (e, a, b) in links do
+            if (← sameBlock a l1) && (← sameBlock b l2) then found := some e; break
+            if (← sameBlock a l2) && (← sameBlock b l1) then found := some (← mkEqSymm e); break
           pure found
       let some link := link? | continue
       -- `some b1 = some b2`
       let e ← mkEqTrans (← mkEqTrans (← mkEqSymm d1.toExpr) link) d2.toExpr
-      let pf ← mkAppM ``Option.some.inj #[e]
-      let g ← g.assert `hblk (← mkEq b1 b2) pf
-      let (h, g) ← g.intro1
-      let g ← subst g h
-      return ← unifyBlocks g
+      if let some g ← substSome e b1 b2 then return ← unifyBlocks g
+  for (e, v, b) in optEqs do
+    if someEqs.any (·.2.2 == b) || (← isBlockVar b) then
+      if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
+  for (d, l, b) in someEqs do
+    -- `l`, or the other side `x` of a link, with its proof of `x = l`
+    let mut alts : Array (Expr × Expr) := #[(l, ← mkEqRefl l)]
+    for (e, x, y) in links do
+      if ← sameBlock x l then alts := alts.push (y, ← mkEqSymm e)
+      else if ← sameBlock y l then alts := alts.push (x, e)
+    for (x, link) in alts do
+      let v ← if x.isAppOfArity ``Zig.Ptr.block 1 then
+          whnfR (mkApp (mkConst ``Zig.Ptr.block) (ptrBase x.appArg!)) else pure x
+      unless isVal v do continue
+      -- (`pf : x = some b` read as `v = some b`: checked, the kernel would reject it late)
+      unless ← withNewMCtxDepth (isDefEq x v) do continue
+      let e ← mkExpectedTypeHint (← mkEqTrans link d.toExpr)
+        (← mkEq v (← mkAppM ``Option.some #[b]))
+      if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
   return g
 
 /-- The continuation of opening an existential `FAssn.ex F` of a precondition: a fresh goal
@@ -3601,6 +3685,12 @@ def authArgs? (e : Expr) : Option (Array Expr) :=
   else if e.isAppOfArity ``Zig.Full.bext 3 then some (e.getAppArgs.push (mkConst ``Zig.Full.Frac.one))
   else none
 
+/-- An atom that the planner's own passes place, not unification: a fact, a region, a share, an
+authority, a frame. -/
+def isPlannedKind (e : Expr) : Bool :=
+  e.isAppOfArity liftN 1 || (regionArgs? e).isSome || (shareArgs? e).isSome ||
+    (authArgs? e).isSome || isAssnHole e
+
 def mkAuth (b S K q : Expr) : Expr := mkAppN (mkConst ``Zig.Full.bauth) #[b, S, K, q]
 
 /-- The state's authority over block `b`, as a `bauth` atom (a `bext` is restated). -/
@@ -4082,29 +4172,55 @@ def sizedRegionBytes (qats : Array Expr) (sizes : Array (Expr × Expr) := #[]) :
       out := out ++ (bs.collectMVars {}).result
   return out
 
-/-- An atom of the postcondition (not a region, not a fact) with the size of the unknown bytes
-`bs` as an argument (a grant's token `tok p bs.size …`): its position. -/
-def sizeArg? (a bs : Expr) : Option Nat :=
-  if a.isAppOfArity liftN 1 || (regionArgs? a).isSome then none
-  else a.getAppArgs.findIdx? fun x => x.isAppOfArity ``Array.size 2 && x.appArg! == bs
+/-- A measure: `xs.size`, `l.length`. -/
+def isMeasure (e : Expr) : Bool :=
+  e.isAppOfArity ``Array.size 2 || e.isAppOfArity ``List.length 2
 
-/-- The size of the unknown bytes `bs` of a postcondition region from an atom of the
-postcondition that has `bs.size` as an argument (`sizeArg?`): the argument of the state atom of
-that head whose other arguments unify with it (they are assigned). -/
-def atomSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
+/-- `e` with each measure of an unknown (`?bs.size`, `?l.length`, `(?bs ++ t).size`) replaced by
+a fresh variable, and the pairs (measure, variable). Unification takes an application argument
+by argument, so `?bs.size =?= old.size` would assign `?bs := old`; but a measure is not
+injective, and a grant's token `tok p ?bs.size` (or its ledger fragment
+`gfrag γ e i (p, ?bs.size, …)`) names only the size of the bytes its region holds now. The
+planner unifies abstracted atoms: a measure takes its value from the state, never its unknown
+(`measuredSize?` reads the size the region planner carves the unknown bytes at), and the final
+match checks the measure up to arithmetic. The measures are `isMeasure`'s; another head still
+unifies argument by argument (only a solver could tell which heads are injective). -/
+def abstractMeasures (e : Expr) : MetaM (Expr × Array (Expr × Expr)) := do
+  let e ← instantiateMVars e
+  unless e.hasExprMVar && (e.find? fun x => isMeasure x && x.appArg!.hasExprMVar).isSome do
+    return (e, #[])
+  let lctx ← getLCtx
+  let insts ← getLocalInstances
+  let ms ← IO.mkRef (#[] : Array (Expr × Expr))
+  let e' ← Meta.transform e (pre := fun x => do
+    unless isMeasure x && x.appArg!.hasExprMVar do return .continue
+    -- (not a measure of a bound variable)
+    if x.hasAnyFVar (!lctx.contains ·) then return .continue
+    -- (in the outer context: under a binder, a variable of the inner one would depend on it)
+    let n ← mkFreshExprMVarAt lctx insts (← inferType x)
+    ms.modify (·.push (x, n))
+    return .done n)
+  return (e', ← ms.get)
+
+/-- The size of the unknown bytes `bs` of a postcondition region that another atom names: an
+atom (not a fact, a region, a share, an authority or a frame) with the measure `bs.size`
+somewhere in it (an argument, a field of one, under arithmetic) that unifies with a state atom
+of its head with its measures abstracted (`abstractMeasures`): the value the measure takes.
+Assignments are not kept. -/
+def measuredSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
+  let sizeOf (x : Expr) := x.isAppOfArity ``Array.size 2 && x.appArg! == bs
   for a in qats do
     let a ← instantiateMVars a
-    let some k := sizeArg? a bs | continue
-    let args := a.getAppArgs
+    if isPlannedKind a || (a.find? sizeOf).isNone then continue
+    let (a', ms) ← abstractMeasures a
+    let some (_, n) := ms.find? (sizeOf ·.1) | continue
     for x in sats do
-      unless headKey x == headKey a && x.getAppNumArgs == args.size do continue
-      let s ← saveState
-      let xs := x.getAppArgs
-      if ← (List.range args.size).allM fun j => do
-          if j == k then return true
-          withReducible (isDefEq args[j]! xs[j]!) then
-        return some xs[k]!
-      s.restore
+      unless headKey x == headKey a && x.getAppNumArgs == a.getAppNumArgs do continue
+      let size? ← withoutModifyingState do
+        unless ← withReducible (isDefEq a' x) do return none
+        let n ← instantiateMVars n
+        return if n.hasExprMVar then none else some n
+      if size?.isSome then return size?
   return none
 
 /-- `r` added to the atoms the planner did not find, unless it is one of them. -/
@@ -4276,14 +4392,13 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     -- assigned (a `match` on an existential) is opened again. The unknown bytes of a region with
     -- a size fact are the region planner's (`carve`, from the state's current bytes): an atom that
     -- mentions them (a token `I.tok p bs.size …` of the allocation) waits for the final match,
-    -- where it matches up to arithmetic.
+    -- where it matches up to arithmetic. A measure of an unknown (`?bs.size`) does not fix the
+    -- unknown (`abstractMeasures`): the region planner carves the bytes at that size.
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
       let deferred ← sizedRegionBytes qats sizes
       let skip (a : Expr) : MetaM Bool := do
         let a ← instantiateMVars a
-        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || isAssnHole a || a.isAppOfArity ``Zig.Full.known 2 || planned a then
-          return true
+        if isPlannedKind a || a.isAppOfArity ``Zig.Full.known 2 || planned a then return true
         return (a.collectMVars {}).result.any (deferred.contains ·)
       -- each state atom pre-assigns one atom of the postcondition (two atoms of one head with
       -- unknown arguments, `fee ?u ⋆ fee ?v`, take two atoms of the state)
@@ -4293,6 +4408,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       let ranked ← qats.mapM fun a => return (a, ((← instantiateMVars a).collectMVars {}).result.size)
       for (a, _) in ranked.insertionSort (·.2 < ·.2) do
         if ← skip a then continue
+        let (a, _) ← abstractMeasures a
         for i in [0:st.ats.size] do
           if taken.contains i then continue
           let s' ← saveState
@@ -4301,6 +4417,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       for a in qats do
         if ← skip a then continue
         if (← instantiateMVars a).hasExprMVar then
+          let (a, _) ← abstractMeasures a
           for i in [0:st.ats.size] do
             let x := st.ats[i]!
             if taken.contains i || headKey a != headKey x then continue
@@ -4313,11 +4430,11 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       for a in qats do
         let a ← instantiateMVars a
         unless a.hasExprMVar && (a.collectMVars {}).result.any (deferred.contains ·) do continue
-        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || isAssnHole a || planned a then continue
+        if isPlannedKind a || planned a then continue
         let xs := st.ats.filter (headKey · == headKey a)
         let #[x] := xs | continue
         unless a.getAppFn == x.getAppFn && a.getAppNumArgs == x.getAppNumArgs do continue
+        let (a, _) ← abstractMeasures a
         let s' ← saveState
         let ok ← (a.getAppArgs.zip x.getAppArgs).allM fun (u, v) => do
           if (u.collectMVars {}).result.any (deferred.contains ·) then return true
@@ -4388,14 +4505,17 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     -- unknown size, which extends as far as the state's bytes go, or when no region holds it)
     let mut exact : Array Nat := #[]
     let mut claimed : Array Expr := #[]
+    -- the sizes other atoms name (`measuredSize?`), by the unknown bytes
+    let mut measured : Array (Expr × Expr) := #[]
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
-      -- a region with a size fact, or whose size another atom names, is carved (its bytes may
-      -- change)
+      -- a region with a size fact, or whose size another atom names (`measuredSize?`), is
+      -- carved (its bytes may change)
       let qbs ← instantiateMVars q[5]!
       if qbs.hasExprMVar then
         if (← sizeFact? facts qbs sizes).isSome then continue
-        if ← qats.anyM fun b => return (sizeArg? (← instantiateMVars b) qbs).isSome then continue
+        if let some n ← measuredSize? qats st.ats qbs then
+          measured := measured.push (qbs, n); continue
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
         let s' ← saveState
@@ -4413,7 +4533,10 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       let whole := demand?.isSome
       let n? ← match fact? <|> demand? with
         | some n => pure (some n)
-        | none => if qbs.hasExprMVar then atomSize? qats st.ats qbs else pure none
+        | none =>
+          if !qbs.hasExprMVar then pure none
+          else if let some (_, n) := measured.find? (·.1 == qbs) then pure (some n)
+          else measuredSize? qats st.ats qbs
       let mut done := false
       if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
         repeat
@@ -6081,7 +6204,8 @@ partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List M
       let mut g' := g0
       for decl in (← g'.withContext getLCtx) do
         unless decl.isImplementationDetail do
-          g' ← destruct g' decl.fvarId <|> pure g'
+          if let some f ← liveFVar? g' decl.fvarId then
+            g' ← destruct g' f <|> pure g'
       out := out ++ (← next g')
     finally
       ref.set previous
@@ -6972,13 +7096,9 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
     let some sg := gs[0]? | return []
     let f1 := sg.fields[1]!.fvarId!
     return ← (← wpSplit sg.mvarId sg.fields[0]!.fvarId!).flatMapM fun g' => do
-      -- (a substitution of the first part renames the second: followed by `substs`)
-      let mut f := f1
-      for _ in [0:16] do
-        if (← g'.withContext f.findDecl?).isSome then return ← wpSplit g' f
-        let some (.fvar f') := (← (← caches).substs.get).get? f | break
-        f := f'
-      pure [g']
+      -- (a substitution of the first part renames the second: `liveFVar?`)
+      let some f ← liveFVar? g' f1 | pure [g']
+      wpSplit g' f
   if ty.isAppOfArity ``Exists 2 then
     let gs ← g.cases h
     let some sg := gs[0]? | return []
@@ -7014,12 +7134,7 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         g := g'
         fs := fs.push f
       for f0 in fs do
-        let mut f := f0
-        for _ in [0:16] do
-          if (← g.withContext f.findDecl?).isSome then break
-          let some (.fvar f') := (← (← caches).substs.get).get? f | break
-          f := f'
-        unless (← g.withContext f.findDecl?).isSome do continue
+        let some f ← liveFVar? g f0 | continue
         let some (fn, g') ← wpNorm g f #[] | return []
         let some g' ← wpForward g' fn | return []
         match ← g'.withContext (wpCurrentHyp? fn) with
@@ -7689,7 +7804,8 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
       let .const c _ := (← whnfR (← instantiateMVars d.type)).getAppFn | continue
       unless isStructure (← getEnv) c && (← isProp d.type) && !(← isLibrary c) do continue
       if (← isClass? d.type).isSome then continue
-      g ← destruct g d.fvarId
+      let some f ← liveFVar? g d.fvarId | continue
+      g ← destruct g f
     pure g
   withRunCaches do
     discard <| arithSimpCtx
