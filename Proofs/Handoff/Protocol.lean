@@ -858,6 +858,9 @@ theorem U.e_out {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) {u
   | sw =>
     have h : (G u).2.ph = .st ∨ (G u).2.ph = .fin := hu.einv.sx u he
     rcases h with h | h <;> rcases hx with h' | h' <;> rw [h'] at h <;> cases h
+  | sd =>
+    have h : (G u).2.ph = .st ∨ (G u).2.ph = .fin := hu.einv.sdx u he
+    rcases h with h | h <;> rcases hx with h' | h' <;> rw [h'] at h <;> cases h
 
 /-- Only `main` waits at the condition (`xc`, `places`). -/
 theorem U.wait0 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) {u : ThreadId}
@@ -1297,6 +1300,11 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .st ∨
       (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .fin := this
     rwa [(hph t).1] at h2
+  have hsd : p = .sd → (G t).2.ph = .st ∨ (G t).2.ph = .fin := fun hp => by
+    have := hI.sdx t (by rw [hEt]; exact hp)
+    have h2 : (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .st ∨
+      (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t).2.ph = .fin := this
+    rwa [(hph t).1] at h2
   -- a thread at the event's waiter places is out of the condition's code
   have hco : (p = .w0 ∨ p = .w1) → (G t).2.c = .out := fun hp => by
     by_cases hc : (G t).2.c = .out
@@ -1337,6 +1345,8 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         | w1 => rcases hwx (.inr rfl) with h' | h' <;> rcases hfr' with h'' | h'' <;>
             rw [h''] at h' <;> cases h'
         | sw => rcases hsw rfl with h' | h' <;> rcases hfr' with h'' | h'' <;> rw [h''] at h' <;>
+            cases h'
+        | sd => rcases hsd rfl with h' | h' <;> rcases hfr' with h'' | h'' <;> rw [h''] at h' <;>
             cases h'
       show (upd G u _ u).2 = (G u).2
       rw [hXt, hp, ← he]
@@ -1515,7 +1525,7 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hlq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hlq, rfl, hs, -⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hlq hu hY hs hI
       · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }

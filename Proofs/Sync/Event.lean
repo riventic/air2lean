@@ -54,13 +54,14 @@ variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
 
 attribute [local irreducible] Proto.WP
 
-/-- `Io.Event.set` by a thread out of the event's code, out of the lock's code or gone from it. -/
+/-- `Io.Event.set` by a thread out of the event's code, out of the lock's code or gone from it: a
+release `xchg(is_set)` (`wp_xchgAs`), then a wake if it read `waiting`; it is done (`sd`). -/
 theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      P.inv (upd G' t g) m') G m d := by
+      P.inv (upd G' t (E.set g .sd)) m') G m d := by
   subst hp
   fsym [FEvent.wp_xchgAs (g := g) hE (v := Io_Event.is_set) rfl ioEvent_dec,
     FEvent.wp_wake (g := E.set g .sw) hE,
@@ -101,7 +102,7 @@ only waiter (`hone`, `hhb`): it returns when the event is set. -/
 theorem ioEvent_wait_wp_unmetered (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hwx : E.wx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hone : ∀ u, u ≠ t → E.ph (G u) = .out ∨ E.ph (G u) = .sw)
+    (hone : ∀ u, u ≠ t → ¬ (E.ph (G u)).Waiting)
     (hhb : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
@@ -122,7 +123,7 @@ theorem ioEvent_wait_wp_unmetered (hE : L.Fits (E.prim L) P U ok) (hcost : P.cos
 theorem ioEvent_wait_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hwx : E.wx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hone : ∀ u, u ≠ t → E.ph (G u) = .out ∨ E.ph (G u) = .sw)
+    (hone : ∀ u, u ≠ t → ¬ (E.ph (G u)).Waiting)
     (hhb : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
@@ -137,7 +138,7 @@ unmetered fragment at each entry and preserves its whole part, including stack r
 theorem ioEvent_wait_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out) (hwx : E.wx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hone : ∀ u, u ≠ t → E.ph (G u) = .out ∨ E.ph (G u) = .sw)
+    (hone : ∀ u, u ≠ t → ¬ (E.ph (G u)).Waiting)
     (hhb : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
       VClock.le (E.W.hist m)[j]!.clock (m.clocks[t]!) = true)
     (hlive : ∀ G₁ m₁, E.ph (G₁ t) = .w1 → L.ph (G₁ t) = .away → P.inv G₁ m₁ → ¬ E.IsSet m₁ →
