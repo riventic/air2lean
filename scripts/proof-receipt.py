@@ -33,7 +33,7 @@ INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/a
           'tools/Assurance.lean', 'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
           'scripts/premise_markers.py', 'assurance/witness-fixtures.json', 'scripts/theorem_universe.py',
-          'scripts/premises.py', 'scripts/lean-deps.py')
+          'scripts/premises.py', 'scripts/lean-deps.py', 'scripts/par.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 REPLAY_JOBS = 2  # concurrent kernel replays that fit the guard RSS budget (worker)
 
@@ -658,6 +658,9 @@ def verify(attempt, release=False):
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in ('manifest', 'check-manifest'):
         return helper('artifact-manifest').manifest_main(sys.argv[1:])  # Loaded only when used.
+    if sys.argv[1:] == ['inputs']:  # The guard's --input paths, one source (proof-receipts/check.sh).
+        print('\n'.join(INPUTS))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'worker', 'seal', 'verify'))
     parser.add_argument('attempt', type=Path)

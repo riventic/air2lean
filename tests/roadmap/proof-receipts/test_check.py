@@ -31,6 +31,9 @@ class CheckFailureTests(unittest.TestCase):
 import json, sys
 from pathlib import Path
 root = Path(__file__).parent.parent
+if sys.argv[1:] == ['inputs']:  # the guard's --input list: a query, not a receipt step
+    print('lean-toolchain')
+    raise SystemExit(0)
 with (root / 'calls').open('a') as out: print(sys.argv[1], file=out)
 if sys.argv[1] == 'prepare':
     Path(sys.argv[2]).mkdir()
