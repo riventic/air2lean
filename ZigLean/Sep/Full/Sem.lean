@@ -249,13 +249,11 @@ abbrev prim : FPrim γ where
 
 /-- **A protocol that keeps the semaphore** next to its mutex `L` (module doc): `FLock.Fits` with
 the semaphore as its primitive, its `ok` out of `pst` (a thread in `ok` runs the mutex's code),
-and the condition's window (`FCond.Fits.win`): every registered waiter has fewer than `2^32`
-epoch writes after its saved one, in every state the rest allows. -/
+and the condition's window (`FCond.Win`). -/
 structure Fits {Tgt : Type} (P : Proto Tgt γ) (U : (ThreadId → γ) → Res → Mem → Prop)
     (ok : γ → Prop) : Prop extends L.Fits S.prim P U ok where
   ok_s : ∀ g, ok g → S.ph g = .out ∨ S.ph g = .wt
-  win : ∀ G rX m, U G rX m → ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e →
-    (C.Ep.hist m).size ≤ i + 4294967296
+  win : C.Win U
 
 /-! ## A protocol with the semaphore
 

@@ -731,16 +731,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "50ac66819bd853cebbc4e7ff832ad26c1ab7764f",
+        "head": "b4720a838714476cc9710f15deae17467c372566",
         "tracked_dirty": false
       },
-      "started_utc": "2026-11-04T20:46:38.689038+00:00",
-      "elapsed_seconds": 2.328,
+      "started_utc": "2026-11-04T22:46:01.726811+00:00",
+      "elapsed_seconds": 11.121,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d2702071e38ab55e1af42cae36cb546fe6c0e9b157619ea0fbd5834a0c25b1fe",
+      "log_sha256": "81167f5c01840bbc1a87576e49e9a6253f5c9bb6fe4a0f57b1fae3698d668e61",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -768,7 +768,7 @@
       "sources": {
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
         "Proofs.Handoff.Ops": "6e46ae3fb594fd4a5d9c474e725caa1ef225ae619f80a12d0b15b4ff5ea123a8",
-        "Proofs.Handoff.Protocol": "d760e42ea405eecfc7e8ce7d33683e89676c8d10c50c1b61de4d36ecb89e27dd",
+        "Proofs.Handoff.Protocol": "84e806908338c8655ea3b3962b6af81b9abb4087d7906b6482b90ae9e4e789d1",
         "Proofs.Handoff.Start": "749257053c3ab465b054ffc8a28622e65093d47a3444c8baca0a429fea2b168e",
         "Proofs.Handoff.Steps": "e14bda755555181cda8de5da1e5cac12023dc886b2df5ac5f142a5d2fc582fce",
         "Proofs.MutexCounter.Protocol": "d9a42689f23cf521b6d9b812ac4c87d964f8aad7043a1c2d8f3c340e7d7bc911",
@@ -1238,16 +1238,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "6b2e61ad802557292f66370a5d920ab5f4cd1180",
-        "tracked_dirty": false
+        "head": "b4720a838714476cc9710f15deae17467c372566",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T22:35:52.450598+00:00",
-      "elapsed_seconds": 0.353,
+      "started_utc": "2026-11-04T22:46:40.166451+00:00",
+      "elapsed_seconds": 0.363,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "7d698ed841532e88029224ea50741d3daf75225b6a1caab72ffd5b3e437feaa4",
+      "log_sha256": "652549924966bfb6b981bbdf404c146c28b14a74e528ccd6b8ae8ff7aeb05fea",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1511,7 +1511,7 @@
         "Proofs.Floats.Proofs": "37acbc5c06dc0f00bcfaf422e17c73b78245c860d8b109b9aade2ec33fd473e0",
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
         "Proofs.Handoff.Ops": "6e46ae3fb594fd4a5d9c474e725caa1ef225ae619f80a12d0b15b4ff5ea123a8",
-        "Proofs.Handoff.Protocol": "d760e42ea405eecfc7e8ce7d33683e89676c8d10c50c1b61de4d36ecb89e27dd",
+        "Proofs.Handoff.Protocol": "84e806908338c8655ea3b3962b6af81b9abb4087d7906b6482b90ae9e4e789d1",
         "Proofs.Handoff.Start": "749257053c3ab465b054ffc8a28622e65093d47a3444c8baca0a429fea2b168e",
         "Proofs.Handoff.Steps": "e14bda755555181cda8de5da1e5cac12023dc886b2df5ac5f142a5d2fc582fce",
         "Proofs.Iogroup.AirCert": "01fd8808c10fe49168f1a64d65c4d309984e2b303d3646abac62201c7fda25ff",
@@ -1763,16 +1763,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "50ac66819bd853cebbc4e7ff832ad26c1ab7764f",
+        "head": "b4720a838714476cc9710f15deae17467c372566",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T20:46:45.050333+00:00",
-      "elapsed_seconds": 2.417,
+      "started_utc": "2026-11-04T22:46:25.890050+00:00",
+      "elapsed_seconds": 13.483,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "97498ddd719eda5bdb89f3d0f4eb8e6452feacf8f9a4ad0e9eb389f6e7cd7a65",
+      "log_sha256": "84cdf9a60c1e8ea3c94a99a288c3dbdb68d45bd4f1d6780813b0d573f959a099",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1822,7 +1822,7 @@
         "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628",
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
         "Proofs.Handoff.Ops": "6e46ae3fb594fd4a5d9c474e725caa1ef225ae619f80a12d0b15b4ff5ea123a8",
-        "Proofs.Handoff.Protocol": "d760e42ea405eecfc7e8ce7d33683e89676c8d10c50c1b61de4d36ecb89e27dd",
+        "Proofs.Handoff.Protocol": "84e806908338c8655ea3b3962b6af81b9abb4087d7906b6482b90ae9e4e789d1",
         "Proofs.Handoff.Start": "749257053c3ab465b054ffc8a28622e65093d47a3444c8baca0a429fea2b168e",
         "Proofs.Handoff.Steps": "e14bda755555181cda8de5da1e5cac12023dc886b2df5ac5f142a5d2fc582fce",
         "Proofs.Lists.Alloc": "3f898f691f589b9dfca9bb24c322ba6d8b1355ae708065b353947b5c6a2aad50",
@@ -2010,16 +2010,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "50ac66819bd853cebbc4e7ff832ad26c1ab7764f",
+        "head": "b4720a838714476cc9710f15deae17467c372566",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T20:46:42.138048+00:00",
-      "elapsed_seconds": 2.234,
+      "started_utc": "2026-11-04T22:46:13.991463+00:00",
+      "elapsed_seconds": 11.177,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "fb54a9702378324cdc4bf13e8cac346f4fc419f85eeecc15332c622a17de784b",
+      "log_sha256": "2a70f855f689cc398564c4fbf116b36ae4aa5d9a34fc5a4a9643853da4e00742",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Handoff.Layout",
@@ -2047,7 +2047,7 @@
       "sources": {
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
         "Proofs.Handoff.Ops": "6e46ae3fb594fd4a5d9c474e725caa1ef225ae619f80a12d0b15b4ff5ea123a8",
-        "Proofs.Handoff.Protocol": "d760e42ea405eecfc7e8ce7d33683e89676c8d10c50c1b61de4d36ecb89e27dd",
+        "Proofs.Handoff.Protocol": "84e806908338c8655ea3b3962b6af81b9abb4087d7906b6482b90ae9e4e789d1",
         "Proofs.Handoff.Start": "749257053c3ab465b054ffc8a28622e65093d47a3444c8baca0a429fea2b168e",
         "Proofs.Handoff.Steps": "e14bda755555181cda8de5da1e5cac12023dc886b2df5ac5f142a5d2fc582fce",
         "Proofs.MutexCounter.Protocol": "d9a42689f23cf521b6d9b812ac4c87d964f8aad7043a1c2d8f3c340e7d7bc911",
