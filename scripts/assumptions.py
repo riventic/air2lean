@@ -531,6 +531,15 @@ def input_tree_records(root: Path, binaries: bool = False, *,
                        suffixes: tuple[str, ...] | None = None,
                        content_exclusions=()) -> list[tuple[Path, str, str]]:
     """Selected input bytes and alias identities, using one traversal for all input sets."""
+    paths, links = input_tree(root, binaries, suffixes=suffixes)
+    return [(path, links.get(path, ''), file_sha256(path)
+             if path in paths and path not in content_exclusions else '')
+            for path in sorted(paths | links.keys())]
+
+
+def input_tree(root: Path, binaries: bool = False, *,
+               suffixes: tuple[str, ...] | None = None) -> tuple[set[Path], dict[Path, str]]:
+    """The traversal of `input_tree_records`: the selected files and every alias's target text."""
     paths, links = set(), {}
 
     def visit(path: Path, ancestors: frozenset):
@@ -555,9 +564,7 @@ def input_tree_records(root: Path, binaries: bool = False, *,
                 paths.add(path)
 
     visit(root, frozenset())
-    return [(path, links.get(path, ''), file_sha256(path)
-             if path in paths and path not in content_exclusions else '')
-            for path in sorted(paths | links.keys())]
+    return paths, links
 
 
 def library_roots(root: Path) -> set[str]:
@@ -606,8 +613,25 @@ def library_compiled_inputs(root: Path) -> list:
     return records
 
 
+RUNTIME_RUN = "AIR2LEAN_TOOLCHAIN_RUNTIME_RUN"
+
+
 def toolchain_runtime_sha256(toolchain: Path) -> str:
-    """Hash executable stubs, shared runtime and installed logical/IR inputs freshly."""
+    """The digest of the executable stubs, shared runtime and installed logical/IR inputs.
+
+    Inside a run (`runtime_run`) the run's toolchain has one digest, hashed when the run starts
+    and hashed again when it ends (a change fails the run); a call in between returns it while
+    the metadata of every hashed file (`runtime_identity`) is unchanged, else hashes afresh. Any
+    other toolchain, and every call outside a run, is hashed afresh."""
+    check_runtime_layout(toolchain)
+    record = shared_runtime().get(str(toolchain.resolve()))
+    if record is not None and runtime_identity(toolchain) == record['identity']:
+        _USED.add(str(toolchain.resolve()))
+        return record['sha256']
+    return hash_runtime(toolchain)
+
+
+def check_runtime_layout(toolchain: Path) -> None:
     overlays = sorted(name for name, value in os.environ.items()
                       if value and name.startswith(('LD_', 'DYLD_')))
     if overlays:
@@ -617,6 +641,10 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
             raise ValueError(f'missing toolchain executable: {name}')
     if not (toolchain / 'lib').is_dir():
         raise ValueError('missing toolchain library directory')
+
+
+def hash_runtime(toolchain: Path) -> str:
+    """`toolchain_runtime_sha256`, hashed afresh."""
     digest = hashlib.sha256(b'air2lean-toolchain-runtime-v1\0')
     records = [*input_tree_records(toolchain / 'bin', True),
                *input_tree_records(toolchain / 'lib')]
@@ -626,6 +654,100 @@ def toolchain_runtime_sha256(toolchain: Path) -> str:
         if content:
             digest.update(content.encode() + b'\0')
     return digest.hexdigest()
+
+
+def runtime_identity(toolchain: Path) -> str:
+    """The metadata of every file `hash_runtime` reads, as found through its aliases: name, alias
+    target, device, inode, size, and modification and change times (the kernel sets the change
+    time on every write; no caller can set it back)."""
+    digest = hashlib.sha256(b'air2lean-toolchain-runtime-identity-v1\0')
+    for directory, binaries in ((toolchain / 'bin', True), (toolchain / 'lib', False)):
+        paths, links = input_tree(directory, binaries)
+        for path in sorted(paths | links.keys()):
+            info = path.stat()
+            digest.update(json.dumps([path.relative_to(toolchain).as_posix(), links.get(path, ''),
+                                      path in paths, info.st_dev, info.st_ino, info.st_size,
+                                      info.st_mtime_ns, info.st_ctime_ns]).encode() + b'\0')
+    return digest.hexdigest()
+
+
+def ancestors() -> set[int]:
+    """This process and its ancestors (`ps`)."""
+    rows = subprocess.run(['ps', '-A', '-o', 'pid=,ppid='], capture_output=True, text=True,
+                          check=True, timeout=30).stdout.split()
+    parent = dict(zip(map(int, rows[0::2]), map(int, rows[1::2])))
+    pid, seen = os.getpid(), set()
+    while pid not in seen and pid > 1:
+        seen.add(pid)
+        pid = parent.get(pid, 1)
+    return seen
+
+
+_SHARED: dict = {}
+_USED: set = set()  # the toolchains whose shared digest this process returned
+
+
+def shared_runtime() -> dict:
+    """The enclosing run's toolchain digests (`runtime_run`): resolved sysroot -> record. Only a
+    record that an ancestor of this process published counts (a leftover or foreign variable is
+    ignored, and every digest is hashed afresh); a published record that cannot be read fails."""
+    path = os.environ.get(RUNTIME_RUN)
+    if not path:
+        return {}
+    if path not in _SHARED:
+        record = json.loads(Path(path).read_text())
+        _SHARED[path] = record['runtimes'] if record.get('pid') in ancestors() else {}
+    return _SHARED[path]
+
+
+@contextlib.contextmanager
+def runtime_run():
+    """One toolchain-runtime digest for the processes of one run (an audit, a fixture-checks run).
+
+    The run's toolchain (Lake's LEAN_SYSROOT) is hashed once when the run starts and its
+    digest is published to the run's processes (`RUNTIME_RUN`, a file in a private temporary
+    directory, with the publishing process; `shared_runtime`); `toolchain_runtime_sha256` returns
+    it while the toolchain's metadata is unchanged. When the run ends the toolchain is hashed
+    afresh: a different digest raises, so a run during which the toolchain changed fails. A
+    process of the run that uses the published digest checks the metadata again when it ends
+    (before its caller writes a report)."""
+    if os.environ.get(RUNTIME_RUN):
+        try:
+            records = shared_runtime()
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+            raise ValueError(f'unreadable toolchain-runtime record {os.environ[RUNTIME_RUN]}: {error}') from error
+        if records:  # an enclosing run's: it hashes the bytes again when it ends
+            yield
+            for toolchain, record in records.items():
+                if toolchain in _USED and runtime_identity(Path(toolchain)) != record['identity']:
+                    raise ValueError('toolchain runtime changed during the run')
+            return
+    sysroot = lake_env('LEAN_SYSROOT')
+    if not sysroot or not Path(sysroot).is_absolute():
+        raise ValueError(f'Lake reports no absolute LEAN_SYSROOT: {sysroot!r}')
+    toolchain = Path(sysroot).resolve()
+    check_runtime_layout(toolchain)
+    # The identity before and after the hash: the published pair describes the same bytes.
+    identity = runtime_identity(toolchain)
+    sha = hash_runtime(toolchain)
+    if runtime_identity(toolchain) != identity:
+        raise ValueError('toolchain runtime changed while it was hashed')
+    previous = os.environ.get(RUNTIME_RUN)
+    with tempfile.TemporaryDirectory(prefix='air2lean-runtime.') as directory:
+        record = Path(directory) / 'runtime.json'
+        record.write_text(json.dumps({'pid': os.getpid(),
+                                      'runtimes': {str(toolchain): {'sha256': sha, 'identity': identity}}}))
+        os.environ[RUNTIME_RUN] = str(record)
+        try:
+            yield
+        finally:
+            _SHARED.pop(str(record), None)
+            if previous is None:
+                del os.environ[RUNTIME_RUN]
+            else:
+                os.environ[RUNTIME_RUN] = previous
+    if hash_runtime(toolchain) != sha:
+        raise ValueError('toolchain runtime changed during the run')
 
 
 def lean_path_binding(root: Path, value: str, *, mutable_outputs=()) -> dict:
@@ -1538,6 +1660,60 @@ def split_witnesses(report: dict, modules: list[str], witnesses: list[str]) -> N
     report["theorem_count"] = len(report["theorems"])
 
 
+def audit_report(args, compiled_units: dict | None) -> dict:
+    """The report of `main`'s arguments `args`."""
+    policy = load_policy(args.policy)
+    sources = json.loads(args.sources.read_text()) if args.sources else {}
+    if not isinstance(sources, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                                for k, v in sources.items()):
+        raise ValueError("--sources must map module names to source paths")
+    labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
+    modules = sorted(set(args.module)) if args.module else shipped_modules()
+    fixtures = {}
+    if not args.module:
+        if compiled_units is not None:
+            raise ValueError('default shipped audit requires its own registered witness compilation')
+        if not args.no_build:
+            # Complete the SAME selected-module prerequisite before freezing witness inputs.
+            # extract() must not change those Lake artifacts after the compiler snapshot.
+            run(['lake', 'build', *modules])
+        fixtures, compiled_units = compile_witness_fixtures(not args.no_build)
+    witnesses = sorted(m for m in fixtures if m not in modules)
+    if compiled_units is not None:
+        import theorem_universe
+        theorem_universe.verify_compilation(compiled_units)
+        if args.module:
+            if (modules != compiled_units['selected_modules'] or witnesses
+                    or 'witness_registry' in compiled_units):
+                raise ValueError('compiled Unit context differs from the requested audit scope')
+        elif ('witness_registry' not in compiled_units
+              or witnesses != compiled_units['selected_modules']):
+            raise ValueError('compiled witness context differs from the requested audit scope')
+    raw = extract(modules, bool(args.module) and not args.no_build, witnesses,
+                  all_declarations=args.all_declarations, extract_in=args.extract_in,
+                  **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
+    if raw["modules"] != sorted({*modules, *witnesses}):
+        raise ValueError("extractor scope differs from requested module inventory")
+    freshness = replay_and_freshness(raw, args.replay_cache, fixtures,
+                                    **({'compiled_units': compiled_units}
+                                       if compiled_units is not None else {}),
+                                    **({'lake_package': args.extract_in.resolve()}
+                                       if args.extract_in is not None else {}))
+    report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
+    split_witnesses(report, modules, witnesses)
+    report["freshness"] = freshness
+    report["extractor"] = raw["extractor"]
+    if args.all_declarations:
+        report["selected_declaration_roots"] = raw["selected_declaration_roots"]
+        report["framework_candidates"] = framework_candidates(raw)
+    del raw
+    report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
+    report["build_checked"] = not args.no_build
+    report["policy_sha256"] = hashlib.sha256(args.policy.read_bytes()).hexdigest()
+    report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
+    return report
+
+
 def main(argv=None, *, compiled_units: dict | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".lake/assurance/assumptions.json")
@@ -1564,55 +1740,10 @@ def main(argv=None, *, compiled_units: dict | None = None) -> int:
                              "running the extractor afresh under `lake env`")
     args = parser.parse_args(argv)
     try:
-        policy = load_policy(args.policy)
-        sources = json.loads(args.sources.read_text()) if args.sources else {}
-        if not isinstance(sources, dict) or not all(isinstance(k, str) and isinstance(v, str)
-                                                    for k, v in sources.items()):
-            raise ValueError("--sources must map module names to source paths")
-        labels = float_semantics().load_registry(args.float_semantics, root=ROOT)
-        modules = sorted(set(args.module)) if args.module else shipped_modules()
-        fixtures = {}
-        if not args.module:
-            if compiled_units is not None:
-                raise ValueError('default shipped audit requires its own registered witness compilation')
-            if not args.no_build:
-                # Complete the SAME selected-module prerequisite before freezing witness inputs.
-                # extract() must not change those Lake artifacts after the compiler snapshot.
-                run(['lake', 'build', *modules])
-            fixtures, compiled_units = compile_witness_fixtures(not args.no_build)
-        witnesses = sorted(m for m in fixtures if m not in modules)
-        if compiled_units is not None:
-            import theorem_universe
-            theorem_universe.verify_compilation(compiled_units)
-            if args.module:
-                if (modules != compiled_units['selected_modules'] or witnesses
-                        or 'witness_registry' in compiled_units):
-                    raise ValueError('compiled Unit context differs from the requested audit scope')
-            elif ('witness_registry' not in compiled_units
-                  or witnesses != compiled_units['selected_modules']):
-                raise ValueError('compiled witness context differs from the requested audit scope')
-        raw = extract(modules, bool(args.module) and not args.no_build, witnesses,
-                      all_declarations=args.all_declarations, extract_in=args.extract_in,
-                      **({'lean_path': compiled_units['lean_path']} if compiled_units is not None else {}))
-        if raw["modules"] != sorted({*modules, *witnesses}):
-            raise ValueError("extractor scope differs from requested module inventory")
-        freshness = replay_and_freshness(raw, args.replay_cache, fixtures,
-                                        **({'compiled_units': compiled_units}
-                                           if compiled_units is not None else {}),
-                                        **({'lake_package': args.extract_in.resolve()}
-                                           if args.extract_in is not None else {}))
-        report = apply_policy(raw, policy, labels, not args.allow_no_theorems, {**fixtures, **sources})
-        split_witnesses(report, modules, witnesses)
-        report["freshness"] = freshness
-        report["extractor"] = raw["extractor"]
-        if args.all_declarations:
-            report["selected_declaration_roots"] = raw["selected_declaration_roots"]
-            report["framework_candidates"] = framework_candidates(raw)
-        del raw
-        report["scope"] = "explicit-modules" if args.module else "all-shipped-modules"
-        report["build_checked"] = not args.no_build
-        report["policy_sha256"] = hashlib.sha256(args.policy.read_bytes()).hexdigest()
-        report["lean_toolchain"] = (ROOT / "lean-toolchain").read_text().strip()
+        # One toolchain-runtime digest for the audit and the processes it starts, checked again
+        # before the report is written (runtime_run).
+        with runtime_run():
+            report = audit_report(args, compiled_units)
         write_report(args.output, report)
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
         # Overwrite any old successful report; a failed build is never stale assurance evidence.

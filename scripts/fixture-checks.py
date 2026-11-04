@@ -41,7 +41,9 @@ tests/roadmap/asm-effects).
 The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
 (AIR2LEAN_FIXTURE_REPLAY_CACHE, a file in the run's scratch directory, removed with it): a
 Lake-built module that one audit replayed is not replayed again in this run
-(scripts/assumptions.py `kernel_replay`). Nothing outlives the run.
+(scripts/assumptions.py `kernel_replay`). They also share one digest of the Lean toolchain's
+runtime, hashed when the run starts and again when it ends (a change fails the run;
+assumptions.py `runtime_run`). Nothing outlives the run.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
@@ -66,6 +68,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 import par  # noqa: E402
+import assumptions  # noqa: E402
 
 
 def _load(name, rel):
@@ -478,9 +481,16 @@ def main(argv=None):
             stats, statuses = [], None
             before = shared_outputs()
             try:
-                with open(os.devnull, 'wb') as null:
+                # The units' audits share one toolchain-runtime digest, hashed again when they end
+                # (assumptions.runtime_run): a toolchain changed during the run fails it.
+                with assumptions.runtime_run(), open(os.devnull, 'wb') as null:
+                    for job in jobs:
+                        if job.env is not None:
+                            job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
                     statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
                                        order=order, mem_budget_mib=budget)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+                failed.append('the toolchain runtime: %s' % error)
             finally:  # also the finished units of a stopped run (a guard's timeout)
                 report(units, statuses or [None] * len(units), stats, a.report)
                 write_hints(units, stats)
@@ -490,7 +500,7 @@ def main(argv=None):
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
-        for u, status in zip(units, statuses):
+        for u, status in zip(units, statuses or []):  # none: the run did not start
             if status != 0:
                 log = logs / (names[u['name']] + '.log')
                 tail = log.read_text(errors='replace').strip().splitlines()[-15:] if log.is_file() else []

@@ -68,6 +68,40 @@ theorem memset_word_reads (bs : Array Byte) (h : bs.size = 6) (v : BitVec 16) :
       (fun r => ⟪r = (v, v)⟫ ⋆ up (regionIn p A S K 2 (memsetBytes 3 (some v)))) := by
   fsym
 
+/-- A read of a memset's byte past a store to another byte (`extract_writeBytes_other`). -/
+theorem read_unwritten (v w : BitVec 8) :
+    FTotalTriple
+      (up (regionIn p A S K 1 (writeBytes (memsetBytes 8 (some v)) 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆
+        up (regionIn p A S K 1 (writeBytes (memsetBytes 8 (some v)) 7 (Enc.encode w)))) := by
+  fsym
+
+/-- A word item of a memset past a store to another item (`extract_memsetBytes_item`). -/
+theorem read_unwritten_word (v w : BitVec 16) :
+    FTotalTriple
+      (up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w))))
+      (Zig.load (BitVec 16) 2 (p.add 2))
+      (fun r => ⟪r = v⟫ ⋆
+        up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w)))) := by
+  fsym
+
+/-- A kept prefix of one byte (`replicate 1`, not a singleton, until it is decoded). -/
+theorem read_kept_one (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 1 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
+/-- A read of a reallocation's kept prefix, past a store to a byte after it (`keptExtract`). -/
+theorem read_kept (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 4 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 3#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
 /-- A whole region copied onto a separate one of the same size. -/
 theorem memcpy_total (n : BitVec 64) (bd bs : Array Byte) (h1 : n.toNat = bd.size)
     (h2 : n.toNat = bs.size) :
@@ -289,5 +323,24 @@ theorem measure_only (T : Nat → FAssn) (old : Array Byte) (c : MemM Unit)
     (rule : ∀ bs : Array Byte, FTotalTriple (T bs.size) c (fun _ => T bs.size)) :
     FTotalTriple (T old.size) c (fun _ => T old.size) := by
   fsym [rule]
+
+/-- A store and a load through a literal pointer (generated code's address of a global's item,
+evaluated) into a region of the state: the walk restates the pointer from the region's
+(`rebaseLitPtr?`). -/
+theorem literal_store_load (bs : Array Byte) (hs : bs.size = 4) (x : BitVec 8) :
+    FTotalTriple (up (regionIn ((⟨some 0, 0⟩ : Ptr).add 12) A 16 .global 1 bs))
+      (do Zig.store 1 (⟨some 0, 15⟩ : Ptr) x; Zig.load (BitVec 8) 1 (⟨some 0, 15⟩ : Ptr))
+      (fun r => ⟪r = x⟫ ⋆ FAssn.ex fun t : Array Byte =>
+        up (regionIn ((⟨some 0, 0⟩ : Ptr).add 12) A 16 .global 1 t)) := by
+  fsym
+
+/-- The same into a region that starts at an offset of a pointer the facts place. -/
+theorem literal_store_offset (p : Ptr) (hb : p.block = some 0) (ho : p.off = 0)
+    (bs cs : Array Byte) (hs : bs.size = 16) (hc : cs.size = 4) (x : BitVec 8) :
+    FTotalTriple (up (regionIn (p.add (bs.extract 0 12).size) A 16 .global 1 cs))
+      (Zig.store 1 (⟨some 0, 15⟩ : Ptr) x)
+      (fun _ => up (regionIn (p.add (bs.extract 0 12).size) A 16 .global 1
+        (writeBytes cs 3 (Enc.encode x)))) := by
+  fsym
 
 end SepAuto.Region

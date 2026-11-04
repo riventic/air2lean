@@ -1602,6 +1602,28 @@
    "workaround_sites": [],
    "deletion_plan": "Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged.",
    "note": "Rejected alternatives: a new lock place `.done` that keeps `WInv.live` (existence and unjoined) for a thread past the lock: it cannot hold for a detached thread (joined while running), so such a thread could never use an FEvent or FCond. A per-protocol premise `Runs P t g` (existence from each protocol's invariant): every protocol with a gone or detached thread would restate what the scheduler already knows. No new judgment, tactic or premise."
+  },
+  {
+   "id": "literal-pointer-rebase",
+   "title": "Store or load through a literal pointer into a region of the state",
+   "status": "closed",
+   "requester": "L6 FBA client over FAllocSpec (PR #567, blocker 3: `buffer[15] = u[11]`)",
+   "progress": "Branch claude/fsym-literal-pointer: `rebaseLitPtr?` (Auto.lean) in the walk's no-rule fallback, before views and unfolding, with `ptr_eq_add_off_sub` (AutoRules.lean). Tests: SepAuto.Region `literal_store_load` (a region at a literal base) and `literal_store_offset` (a region at `p.add (bs.extract 0 12).size`, its block and offset from facts).",
+   "request": "Generated code evaluates the address of a global's item to a literal pointer (`⟨some 0, 15⟩`). The state holds the global's bytes as a region at a pointer derived from the global's (`regionIn (bufp.add 12) …`). The planner matches pointers syntactically, so no rule's precondition found the literal: \"the state has no atom for up (region ⟨some 0, 15⟩ …)\".",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "One mechanism for every command and rule: a closed pointer of the command that no atom names is restated as `p.add k` from the one state region of its block whose extent holds it (block by `blockOf`, bounds by the arithmetic solver, `k` in the arithmetic's normal form). The rules and providers about derived pointers then apply unchanged (`regionStoreAdd`, `ReadsAt.regionIn`). Disjoint regions mean at most one region holds it. Rejected alternative: literal-pointer variants of the region rules, one per rule."
+  },
+  {
+   "id": "read-through-bytes",
+   "title": "Read region bytes through stores to other bytes, memset items and a kept prefix",
+   "status": "closed",
+   "requester": "L6 FBA client over FAllocSpec (PR #567, blocker 2: reads of t[0] and t[3] after `t[7] = v +% 1` on reallocated bytes)",
+   "progress": "Branch claude/fsym-read-through. Region.lean `@[fsym_arith]`: `extract_writeBytes_other`, `extract_memsetBytes_item`, `extract_replicate_le`, `decode_byte`, `LawfulEnc.decode_encode`, `Array.replicate_one`, `Array.size_replicate`, and the simproc `keptExtract` (with `extract_of_keepsPrefix`). Auto.lean: `arithCore` closes an equation with an unknown side by reducible unification of the normalized sides; `omegaDisch` states a discharged side condition as itself. Tests: SepAuto.Region `read_unwritten`, `read_unwritten_word`, `read_kept`.",
+   "request": "The provider `ReadsAt.regionIn` asks `Enc.decode (bs.extract lo hi) = pure ?v` of a region whose bytes are `writeBytes (memsetBytes n (some v)) o (Enc.encode w)`, or bytes `bs` with a fact `keepsPrefix old bs` (a reallocation's). The arithmetic normalization did not read through a disjoint write, an item of a memset or a kept prefix, and did not assign `?v`.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Engine fix found on the way: every conditional `@[fsym_arith]` rewrite whose side condition contains a `dsimproc`-reduced term (`Enc.size (BitVec 16)`) failed with simp's \"failed to assign proof\": the discharger's proof had the reduced statement, which reducible unification does not match. Rejected alternatives: one load rule per byte source (store, memset, reallocation), which the provider already decomposes; reading a kept prefix by a user-supplied update, which every client would repeat."
   }
  ],
  "mechanisms": [
