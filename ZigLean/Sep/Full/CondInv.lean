@@ -20,9 +20,18 @@ waiter; `broadcast` posts `waiters - signals` and wakes as many.
 **Places** (`CPh`). `en` a waiter before its epoch load; `ld i e` it loaded epoch write `i`
 (any write its view allows, not only the newest) with the value `e`; `reg i jr sn e` it
 registered at state write `jr` and saved epoch write `i` (value `e`), and `sn` says it returned
-from a futex wait and will read the state before it waits again; `inc q n` a signaller after
-its post (state write `q`, `n` signals); `wk n` after its `epoch += 1`, to wake `n`. A waiter's
-loop resaves: `CPh.Next`'s `reg` case is `jr' = jr ∧ i ≤ i'`.
+from a futex wait and will read the state before it waits again; `sl h c` a signaller before
+its post, with the state's writes `h` and its clock `c` at its call (the call snapshot, below);
+`inc q n h` after its post (state write `q`, `n` signals; `h` the state's writes right after the
+post); `wk n q h` after its `epoch += 1`, to wake `n`. A waiter's loop resaves: `CPh.Next`'s
+`reg` case is `jr' = jr ∧ i ≤ i'`.
+
+**The signaller's snapshot** (PR #599, decision B', comment 6633467470). `Proto.WP` resumes a
+thread at a stop in every state its invariant allows, so the only link between a signaller's call
+and its later stops is its own ghost value. Its places carry a snapshot of the state's writes, and
+the invariant (`snap`, `snapC`) keeps it a prefix of the writes (`Word.Prefix`, kept by every step:
+`Prefix.extend`) and the call's clock below the signaller's. So `signal` can relate the write it
+reads, or its post, to the writes that happened before its call.
 
 **The invariant** (`FCond.Inv`) has the history fields of the design next to the count:
 
@@ -70,9 +79,9 @@ inductive CPh where
   | en
   | ld (i : Nat) (e : BitVec 32)
   | reg (i jr : Nat) (sn : Bool) (e : BitVec 32)
-  | inc (q n : Nat)
-  | wk (n : Nat)
-  deriving DecidableEq
+  | sl (h : Array Word.Entry) (c : VClock)
+  | inc (q n : Nat) (h : Array Word.Entry)
+  | wk (n q : Nat) (h : Array Word.Entry)
 
 namespace CPh
 
@@ -86,9 +95,9 @@ def crit : CPh → Bool
   | .en | .ld _ _ => true
   | _ => false
 
-/-- A signaller between its post and its wake. -/
+/-- A signaller in its code: before its post (`sl`), or between its post and its wake. -/
 def sig : CPh → Bool
-  | .inc _ _ | .wk _ => true
+  | .sl _ _ | .inc _ _ _ | .wk _ _ _ => true
   | _ => false
 
 /-- A place where the thread runs no lock code. -/
@@ -101,18 +110,23 @@ def isReg : CPh → Bool
 
 /-- The signals a signaller at `inc` posted. -/
 def incN : CPh → Nat
-  | .inc _ n => n
+  | .inc _ n _ => n
   | _ => 0
 
 /-- The post of a signaller at `inc` (its state write). -/
 def incQ : CPh → Option Nat
-  | .inc q _ => some q
+  | .inc q _ _ => some q
   | _ => none
 
 /-- The wakes a signaller at `wk` still owes. -/
 def wkN : CPh → Nat
-  | .wk n => n
+  | .wk n _ _ => n
   | _ => 0
+
+/-- A signaller's snapshot of the state's writes (module doc). -/
+def snap : CPh → Option (Array Word.Entry)
+  | .sl h _ | .inc _ _ h | .wk _ _ h => some h
+  | _ => none
 
 /-- The transitions of the condition's code, without the entry `out → en` (module doc). A
 waiter keeps its registration and resaves a later epoch write; a signaller posts at most the
@@ -122,9 +136,11 @@ def Next : CPh → CPh → Prop
   | .ld i e, .reg i' _ sn e' => i' = i ∧ sn = false ∧ e' = e
   | .reg i jr _ _, .reg i' jr' _ _ => jr' = jr ∧ i ≤ i'
   | .reg _ _ _ _, .out => True
-  | .out, .inc _ _ => True
-  | .inc _ n, .wk n' => n' = n
-  | .wk _, .out => True
+  | .out, .sl _ _ => True
+  | .sl _ _, .inc _ _ _ => True
+  | .sl _ _, .out => True
+  | .inc q n h, .wk n' q' h' => n' = n ∧ q' = q ∧ h' = h
+  | .wk _ _ _, .out => True
   | a, b => a = b
 
 theorem isReg_eq {p : CPh} (h : p.isReg = true) : ∃ i jr sn e, p = .reg i jr sn e := by
@@ -142,6 +158,10 @@ theorem Next.waits {a b : CPh} (h : Next a b) (hb : b.waits = true) : a.waits = 
 /-- A step of the code into the critical code comes from it. -/
 theorem Next.crit {a b : CPh} (h : Next a b) (hb : b.crit = true) : a.crit = true := by
   cases a <;> cases b <;> first | rfl | exact hb | (simp [Next] at h; done) | (simp [CPh.crit] at hb; done)
+
+/-- A place with a snapshot is a signaller's. -/
+theorem snap_sig {p : CPh} {h : Array Word.Entry} (hp : p.snap = some h) : p.sig = true := by
+  cases p <;> simp_all [snap, sig]
 
 end CPh
 
@@ -241,11 +261,11 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- (H2) A post is its signaller's, or an epoch write's release clock covers it. -/
   pub : ∀ q, 0 < q → q < (C.S.hist m).size →
     sOf (C.S.hist m)[q - 1]! < sOf (C.S.hist m)[q]! →
-    (∃ v n, C.ph (G v) = .inc q n ∧ sOf (C.S.hist m)[q]! - sOf (C.S.hist m)[q - 1]! ≤ n) ∨
+    (∃ v n h, C.ph (G v) = .inc q n h ∧ sOf (C.S.hist m)[q]! - sOf (C.S.hist m)[q - 1]! ≤ n) ∨
     ∃ b < (C.Ep.hist m).size,
       VClock.le (C.S.hist m)[q]!.clock (C.Ep.hist m)[b]!.relClock = true
   /-- A signaller at `inc` made its post, which happened before it. -/
-  inc : ∀ v q n, C.ph (G v) = .inc q n → 0 < q ∧ q < (C.S.hist m).size ∧
+  inc : ∀ v q n h, C.ph (G v) = .inc q n h → 0 < q ∧ q < (C.S.hist m).size ∧
     VClock.le (C.S.hist m)[q]!.clock (m.clocks[v]!) = true
   /-- The waiter at `ld i e` acquired epoch write `i`. -/
   ld : ∀ u i e, C.ph (G u) = .ld i e → i < (C.Ep.hist m).size ∧ (C.Ep.hist m)[i]!.Val e ∧
@@ -276,6 +296,10 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   /-- The futex queue at the epoch holds each thread once (a sleeper was not queued: the sleep's
   `hnq`); a wake of `n` then wakes `min n q` of the `q` queued waiters (`cnt_wake`'s `hmin`). -/
   qnd : ((m.waiters.filter (·.2 == C.Ep.ptr)).toList.map (·.1)).Nodup
+  /-- A signaller's snapshot is a prefix of the state's writes (module doc). -/
+  snap : ∀ u h, (C.ph (G u)).snap = some h → C.S.Prefix h m
+  /-- A signaller's clock at its call is below its clock. -/
+  snapC : ∀ u h c, C.ph (G u) = .sl h c → VClock.le c (m.clocks[u]!) = true
 
 variable {C}
 
@@ -295,7 +319,7 @@ theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hS : (C.S.hist
     rw [val_of hE0]; exact hE0
   ep k hk := by omega
   pub q h0 hq' _ := by omega
-  inc v _ _ h := by rw [hout v] at h; cases h
+  inc v _ _ _ h := by rw [hout v] at h; cases h
   ld u _ _ h := by rw [hout u] at h; cases h
   reg u _ _ _ _ h := by rw [hout u] at h; cases h
   q w hw := by simp [hq] at hw
@@ -312,6 +336,8 @@ theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hS : (C.S.hist
   lp u h := by rw [hout u] at h; exact absurd h (by decide)
   sx u h := by rw [hout u] at h; exact absurd h (by decide)
   qnd := by simp [hq]
+  snap u _ h := by rw [hout u] at h; cases h
+  snapC u _ _ h := by rw [hout u] at h; cases h
 
 /-! ## Counting lemmas -/
 
@@ -378,7 +404,7 @@ theorem loopBack_bound {G : ThreadId → γ} {h : Array Word.Entry} {k T : Nat}
     (hk : k < h.size)
     (hT : ∀ u, T ≤ u → C.ph (G u) = .out)
     (hpub : ∀ q, k < q → q < h.size → sOf h[q - 1]! < sOf h[q]! →
-      ∃ v n, C.ph (G v) = .inc q n ∧ sOf h[q]! - sOf h[q - 1]! ≤ n) :
+      ∃ v n h', C.ph (G v) = .inc q n h' ∧ sOf h[q]! - sOf h[q - 1]! ≤ n) :
     sOf h[h.size - 1]! ≤ sOf h[k]! + tsum T fun v => (C.ph (G v)).incN := by
   have hle := le_add_tsum_up (fun q => sOf h[q]!) (k := k) (n := h.size - 1) (by omega)
   simp only [show h.size - 1 + 1 = h.size by omega] at hle
@@ -386,7 +412,7 @@ theorem loopBack_bound {G : ThreadId → γ} {h : Array Word.Entry} {k T : Nat}
   intro q hq hpos
   by_cases hkq : k < q
   · simp only [hkq, if_true] at hpos ⊢
-    obtain ⟨v, n, hv, hn⟩ := hpub q hkq hq (by omega)
+    obtain ⟨v, n, _, hv, hn⟩ := hpub q hkq hq (by omega)
     refine ⟨v, ?_, by rw [hv]; rfl, by rw [hv]; exact hn⟩
     by_cases hvT : v < T
     · exact hvT
@@ -458,8 +484,9 @@ theorem Inv.s_le_w {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) :
 /-- **The count after `epoch += 1`** by the signaller `t` at `inc q n` (now `wk n`): the claim
 moves from `inc` to the wakes owed, and every registered waiter out of the queue is stale (module
 doc). -/
-theorem Inv.cnt_bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {g' : γ}
-    (hI : C.Inv L G m) (ht : C.ph (G t) = .inc q n) (hg' : C.ph g' = .wk n)
+theorem Inv.cnt_bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n q' : Nat} {g' : γ}
+    {sh sh' : Array Word.Entry}
+    (hI : C.Inv L G m) (ht : C.ph (G t) = .inc q n sh) (hg' : C.ph g' = .wk n q' sh')
     (hS : C.S.hist m' = C.S.hist m) (hE : (C.Ep.hist m').size = (C.Ep.hist m).size + 1)
     (hq : ∀ u, C.qd m' u = C.qd m u) (hwk : m'.woken = m.woken) :
     ∃ T, (∀ u, T ≤ u → C.ph (upd G t g' u) = .out) ∧
@@ -619,8 +646,9 @@ theorem Inv.cnt_loopBack {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr
 /-- **The count after a wake** by the signaller `t` at `wk n` (now out): the waiters it took off
 the epoch's queue are woken, so claims, and they are at least `min n` of the queued ones
 (`hmin`; module doc). -/
-theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g' : γ}
-    (hI : C.Inv L G m) (ht : C.ph (G t) = .wk n) (hg' : C.ph g' = .out)
+theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q : Nat} {g' : γ}
+    {sh : Array Word.Entry}
+    (hI : C.Inv L G m) (ht : C.ph (G t) = .wk n q sh) (hg' : C.ph g' = .out)
     (hS : C.S.hist m' = C.S.hist m) (hE : (C.Ep.hist m').size = (C.Ep.hist m).size)
     (hqd : ∀ u, C.qd m' u = true → C.qd m u = true)
     (hwk : ∀ u, C.qd m u = true → C.qd m' u = false → m'.woken.contains u = true)
@@ -713,7 +741,7 @@ theorem Inv.claim_of {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m)
     · obtain ⟨u, -, hu⟩ := exists_of_tsum_pos hc
       refine ⟨u, ?_⟩
       unfold cl at hu
-      rcases hp : C.ph (G u) with _ | _ | _ | ⟨i, jr, sn, e⟩ | ⟨q, n⟩ | n <;>
+      rcases hp : C.ph (G u) with _ | _ | _ | ⟨i, jr, sn, e⟩ | ⟨h, c⟩ | ⟨q, n, h⟩ | ⟨n, q, h⟩ <;>
         rw [hp] at hu <;> simp [CPh.incN, regCl] at hu
       · right
         refine ⟨i, jr, sn, e, rfl, ?_⟩
@@ -762,10 +790,11 @@ theorem Inv.noDeadlock {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {fin j
   · rw [hnotq] at h1; cases h1
   · exact hne (hjoins _ h1)
 
-/-- **The count after a post** by `t` (out, now at `inc q n`): the newest `signals` grows by at
+/-- **The count after a post** by `t` (at `sl`, now at `inc q n`): the newest `signals` grows by at
 most `n`, the claim of `t`. -/
 theorem Inv.cnt_post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {g' : γ}
-    (hI : C.Inv L G m) (ht : C.ph (G t) = .out) (hg' : C.ph g' = .inc q n)
+    {sh sh' : Array Word.Entry} {c : VClock}
+    (hI : C.Inv L G m) (ht : C.ph (G t) = .sl sh c) (hg' : C.ph g' = .inc q n sh')
     (hw : wOf (C.lastS m') = wOf (C.lastS m)) (hs : sOf (C.lastS m') ≤ sOf (C.lastS m) + n)
     (hE : (C.Ep.hist m').size = (C.Ep.hist m).size)
     (hq : ∀ u, C.qd m' u = C.qd m u) (hwk : m'.woken = m.woken) :
@@ -921,12 +950,24 @@ theorem Inv.sleep {G : ThreadId → γ} {M : Mem} {t : ThreadId} {i jr : Nat} {e
                       rw [← this]; exact hw1)⟩
 
 /-- A place that the count does not see (`out`, `en`, `ld`). -/
-def quiet (p : CPh) : Prop := p.isReg = false ∧ p.sig = false
+def quiet : CPh → Prop
+  | .out | .en | .ld _ _ | .sl _ _ => True
+  | _ => False
 
 theorem quiet_cl {p : CPh} (h : quiet p) (m : Mem) (u : ThreadId) (aw : Bool) :
     p.incN = 0 ∧ p.wkN = 0 ∧ C.regCl m u aw p = 0 := by
-  obtain ⟨h1, h2⟩ := h
-  cases p <;> simp_all [CPh.isReg, CPh.sig, CPh.incN, CPh.wkN, regCl]
+  cases p <;> simp_all [quiet, CPh.incN, CPh.wkN, regCl]
+
+theorem quiet_reg {p : CPh} (h : quiet p) : p.isReg = false := by
+  cases p <;> simp_all [quiet, CPh.isReg]
+
+theorem quiet_inc {p : CPh} (h : quiet p) {q n : Nat} {sh : Array Word.Entry} :
+    p ≠ .inc q n sh := by
+  rintro rfl; exact h
+
+/-- A quiet signaller's place is `sl`. -/
+theorem quiet_sl {p : CPh} (h : quiet p) (hs : p.sig = true) : ∃ sh c, p = .sl sh c := by
+  cases p <;> simp_all [quiet, CPh.sig]
 
 /-- **A step of `t` among the places the count does not see** (the wait's entry `out → en`, its
 epoch load `en → ld i e`), with no write and the same futex queue: `hld`, the new `ld`'s acquired
@@ -942,30 +983,33 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
       VClock.le (C.Ep.hist m)[i]!.relClock (m'.clocks[t]!) = true)
     (hcr : (C.ph g').crit → L.ph g' = .holds ∧ wOf (C.lastS m) < 65535 ∧
       ∀ u, u ≠ t → (C.ph (G u)).crit = false)
-    (htn : C.ph g' ≠ .out → t < m.threads.size) :
+    (htn : C.ph g' ≠ .out → t < m.threads.size)
+    (hsl : ∀ sh c, C.ph g' = .sl sh c → (L.ph g' = .out ∨ L.ph g' = .holds) ∧ C.sx g' ∧
+      C.S.Prefix sh m' ∧ VClock.le c (m'.clocks[t]!) = true) :
     C.Inv L (upd G t g') m' := by
   have hph : ∀ u, u ≠ t → C.ph (upd G t g' u) = C.ph (G u) := fun u hu => by rw [upd_ne _ _ hu]
   have hqd : ∀ u, C.qd m' u = C.qd m u := fun u => by unfold qd; rw [hwt]
   have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
   have hnreg : ∀ u p, C.ph (upd G t g' u) = p → p.isReg = true → u ≠ t := fun u p h hp hu => by
-    subst hu; rw [upd_self] at h; rw [← h, hg'.1] at hp; cases hp
-  have hnsig : ∀ u, (C.ph (upd G t g' u)).sig → u ≠ t := fun u h hu => by
-    subst hu; rw [upd_self, hg'.2] at h; cases h
-  have hnsig₀ : ∀ v, (C.ph (G v)).sig → v ≠ t := fun v h hv => by
-    subst hv; rw [ht.2] at h; cases h
+    subst hu; rw [upd_self] at h; rw [← h, quiet_reg hg'] at hp; cases hp
+  have hninc : ∀ u q n sh, C.ph (upd G t g' u) = .inc q n sh → u ≠ t := fun u q n sh h hu => by
+    subst hu; rw [upd_self] at h; exact quiet_inc hg' h
+  have hninc₀ : ∀ v q n sh, C.ph (G v) = .inc q n sh → v ≠ t := fun v q n sh h hv => by
+    subst hv; exact quiet_inc ht h
   refine ⟨by rw [hS]; exact hI.spos, by rw [hS]; exact hI.sv, by rw [hS]; exact hI.steps,
     by rw [hE]; exact hI.e32, by rw [hE]; exact hI.ep, fun q h0 hq hlt => ?_,
-    fun v q n h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
+    fun v q n sh h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
     fun w hw hp => ?_, ?_, fun u h => ?_, fun u h => ?_, fun u v hu hv => ?_,
-    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd,
+    fun u sh h => ?_, fun u sh c h => ?_⟩
   · rw [hS] at hq hlt ⊢; rw [hE]
-    rcases hI.pub q h0 hq hlt with ⟨v, n, hv, hn⟩ | h
-    · refine .inl ⟨v, n, ?_, hn⟩
-      rw [hph v (hnsig₀ v (by rw [hv]; rfl))]; exact hv
+    rcases hI.pub q h0 hq hlt with ⟨v, n, sh, hv, hn⟩ | h
+    · refine .inl ⟨v, n, sh, ?_, hn⟩
+      rw [hph v (hninc₀ v _ _ _ hv)]; exact hv
     · exact .inr h
-  · have hvt := hnsig v (by rw [h]; rfl)
+  · have hvt := hninc v q n sh h
     rw [hph v hvt] at h
-    obtain ⟨h1, h2, h3⟩ := hI.inc v q n h
+    obtain ⟨h1, h2, h3⟩ := hI.inc v q n sh h
     rw [hS]; exact ⟨h1, h2, VClock.le_trans h3 (hclk v)⟩
   · rw [hE]
     by_cases hut : u = t
@@ -993,7 +1037,7 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
     · rw [hlast, hw₀, ← nreg_ext hT₀ (Nat.le_max_left T₀ (t + 1))]
       refine tsum_congr fun u _ => ?_
       by_cases hu : u = t
-      · subst hu; rw [upd_self, hg'.1, ht.1]
+      · subst hu; rw [upd_self, quiet_reg hg', quiet_reg ht]
       · rw [hph u hu]
     · rw [hlast]
       have hs := hs₀
@@ -1012,7 +1056,7 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
       · unfold nq
         refine tsum_le fun u _ => ?_
         by_cases hu : u = t
-        · subst hu; rw [upd_self, hg'.1, ht.1]; exact Nat.le_refl _
+        · subst hu; rw [upd_self, quiet_reg hg', quiet_reg ht]; exact Nat.le_refl _
         · rw [hph u hu, hqd]; exact Nat.le_refl _
   · rw [hth]
     by_cases hu : u = t
@@ -1034,8 +1078,24 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
   · by_cases hut : u = t
     · subst hut; rw [upd_self] at h ⊢; exact (hcr h).1
     · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.crit u h
-  · have hut := hnsig u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
-  · have hut := hnsig u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self] at h ⊢
+      obtain ⟨sh, c, hp⟩ := quiet_sl hg' h
+      exact (hsl sh c hp).1
+    · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self] at h ⊢
+      obtain ⟨sh, c, hp⟩ := quiet_sl hg' h
+      exact (hsl sh c hp).2.1
+    · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self] at h
+      obtain ⟨sh', c, hp⟩ := quiet_sl hg' (CPh.snap_sig h)
+      rw [hp] at h; cases h; exact (hsl _ c hp).2.2.1
+    · rw [hph u hut] at h; exact (hI.snap u sh h).extend (.of_eq hS)
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self] at h; exact (hsl sh c h).2.2.2
+    · rw [hph u hut] at h; exact VClock.le_trans (hI.snapC u sh c h) (hclk u)
 
 /-! ## Steps without a write -/
 
@@ -1157,15 +1217,16 @@ theorem Inv.frame {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
     rw [hwq] at this; exact (Array.mem_filter.mp this).1
   refine ⟨by rw [hS]; exact hI.spos, by rw [hS]; exact hI.sv, by rw [hS]; exact hI.steps,
     by rw [hE]; exact hI.e32, by rw [hE]; exact hI.ep, fun q h0 hq' hlt => ?_,
-    fun v q n h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
+    fun v q n sh h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
     fun w hw hp => ?_, hcnt, fun u h => ?_, fun u h => ?_, fun u v hu hv => ?_,
-    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwq]; exact hI.qnd⟩
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwq]; exact hI.qnd,
+    fun u sh h => ?_, fun u sh c h => ?_⟩
   · rw [hS] at hq' hlt ⊢; rw [hE]
-    rcases hI.pub q h0 hq' hlt with ⟨v, n, hv, hn⟩ | h
-    · exact .inl ⟨v, n, by rw [hsg v (by rw [hv]; rfl)]; exact hv, hn⟩
+    rcases hI.pub q h0 hq' hlt with ⟨v, n, sh, hv, hn⟩ | h
+    · exact .inl ⟨v, n, sh, by rw [hsg v (by rw [hv]; rfl)]; exact hv, hn⟩
     · exact .inr h
   · rw [hsg' v (by rw [h]; rfl)] at h
-    obtain ⟨h1, h2, h3⟩ := hI.inc v q n h
+    obtain ⟨h1, h2, h3⟩ := hI.inc v q n sh h
     rw [hS]; exact ⟨h1, h2, VClock.le_trans h3 (hclk v)⟩
   · rw [hE]
     by_cases hut : u = t
@@ -1219,6 +1280,8 @@ theorem Inv.frame {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
       obtain ⟨e1, -, e3⟩ := hsig (.inl h)
       rw [e1] at h; exact e3 (hI.sx u h)
     · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · rw [hsg' u (CPh.snap_sig h)] at h; exact (hI.snap u sh h).extend (.of_eq hS)
+  · rw [hsg' u (by rw [h]; rfl)] at h; exact VClock.le_trans (hI.snapC u sh c h) (hclk u)
 
 /-- **A registered waiter's step without a write** (`reg i jr sn e` to `reg i jr sn' e`): the
 writes, the futex queue and the threads stay, `t` is not queued at the epoch, the clocks only
@@ -1474,8 +1537,10 @@ code, outside or holding the mutex, that may signal: the state's new write `x` k
 and raises `signals` by at most `n` up to `waiters`; `t` goes to `inc q n` with `q` the new
 write, which happened before it (`hxc`). -/
 theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g' : γ}
-    {x : Word.Entry} (hI : C.Inv L G m) (ht : C.ph (G t) = .out)
-    (hg' : C.ph g' = .inc (C.S.hist m).size n) (hlg : L.ph g' = .out ∨ L.ph g' = .holds)
+    {x : Word.Entry} {sh : Array Word.Entry} {c : VClock} (hI : C.Inv L G m)
+    (ht : C.ph (G t) = .sl sh c)
+    (hg' : C.ph g' = .inc (C.S.hist m).size n (C.S.hist m'))
+    (hlg : L.ph g' = .out ∨ L.ph g' = .holds)
     (hsx : C.sx g') (hS : C.S.hist m' = (C.S.hist m).push x) (hx : x.Val (val x))
     (hxw : wOf x = wOf (C.lastS m)) (hxs : sOf (C.lastS m) < sOf x) (hxsw : sOf x ≤ wOf x)
     (hxn : sOf x ≤ sOf (C.lastS m) + n) (hxc : VClock.le x.clock (m'.clocks[t]!) = true)
@@ -1496,12 +1561,13 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
     subst hu; rw [upd_self, hg'] at h; rw [← h] at hp; cases hp
   have hncr : ∀ u, (C.ph (upd G t g' u)).crit → u ≠ t := fun u h hu => by
     subst hu; rw [upd_self, hg'] at h; cases h
-  have hnsig₀ : ∀ v, (C.ph (G v)).sig → v ≠ t := fun v h hv => by
+  have hninc₀ : ∀ v q n sh, C.ph (G v) = .inc q n sh → v ≠ t := fun v q n sh h hv => by
     subst hv; rw [ht] at h; cases h
   refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
-    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i e h => ?_,
+    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' sh' h => ?_, fun u i e h => ?_,
     fun u i jr sn e h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
-    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
+    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_,
+    by rw [hwt]; exact hI.qnd, fun u sh' h => ?_, fun u sh' c' h => ?_⟩
   · -- (H1) values
     by_cases hk' : k < (C.S.hist m).size
     · rw [hlt k hk']; exact hI.sv k hk'
@@ -1518,18 +1584,18 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
     rw [hsz] at hq; rw [hE]
     by_cases hq' : q < (C.S.hist m).size
     · rw [hlt q hq', hlt (q - 1) (by omega)] at hlt' ⊢
-      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', hv, hn⟩ | ⟨b, hb, hc⟩
-      · refine .inl ⟨v, n'', ?_, hn⟩
-        rw [hph v (hnsig₀ v (by rw [hv]; rfl))]; exact hv
+      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', sh', hv, hn⟩ | ⟨b, hb, hc⟩
+      · refine .inl ⟨v, n'', sh', ?_, hn⟩
+        rw [hph v (hninc₀ v _ _ _ hv)]; exact hv
       · exact .inr ⟨b, hb, hc⟩
     · obtain rfl : q = (C.S.hist m).size := by omega
       rw [hnew, hlt _ (by omega), ← hold]
-      exact .inl ⟨t, n, by rw [upd_self, hg'], by omega⟩
+      exact .inl ⟨t, n, _, by rw [upd_self, hg'], by omega⟩
   · by_cases hvt : v = t
     · subst hvt; rw [upd_self, hg'] at h; cases h
       rw [hsz, hnew]; exact ⟨hpos, by omega, hxc⟩
     · rw [hph v hvt] at h
-      obtain ⟨h1, h2, h3⟩ := hI.inc v q n' h
+      obtain ⟨h1, h2, h3⟩ := hI.inc v q n' sh' h
       rw [hsz, hlt q h2]; exact ⟨h1, by omega, VClock.le_trans h3 (hclk v)⟩
   · have hut : u ≠ t := fun hu => by subst hu; rw [upd_self, hg'] at h; cases h
     rw [hph u hut] at h
@@ -1562,6 +1628,12 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
   · by_cases hut : u = t
     · subst hut; rw [upd_self]; exact hsx
     · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self, hg'] at h; cases h; exact Word.Prefix.self m'
+    · rw [hph u hut] at h; exact (hI.snap u sh' h).extend (.of_push hS)
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self, hg'] at h; cases h
+    · rw [hph u hut] at h; exact VClock.le_trans (hI.snapC u sh' c' h) (hclk u)
 
 /-- **A consume** (the waiter's acquire `cmpxchg` `(w, s) → (w - 1, s - 1)`) by `t` at
 `reg i jr true e`, which leaves the condition's code: the state's new write `x`. -/
@@ -1586,9 +1658,10 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
   have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hS]; simp
   have hold : C.lastS m = (C.S.hist m)[(C.S.hist m).size - 1]! := rfl
   refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
-    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i' e' h => ?_,
+    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' sh h => ?_, fun u i' e' h => ?_,
     fun u i' jr' sn' e' h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
-    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
+    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_,
+    by rw [hwt]; exact hI.qnd, fun u sh h => ?_, fun u sh c h => ?_⟩
   · by_cases hk' : k < (C.S.hist m).size
     · rw [hlt k hk']; exact hI.sv k hk'
     · obtain rfl : k = (C.S.hist m).size := by omega
@@ -1602,8 +1675,8 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
   · rw [hsz] at hq; rw [hE]
     by_cases hq' : q < (C.S.hist m).size
     · rw [hlt q hq', hlt (q - 1) (by omega)] at hlt' ⊢
-      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', hv, hn⟩ | ⟨b, hb, hc⟩
-      · refine .inl ⟨v, n'', ?_, hn⟩
+      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', sh, hv, hn⟩ | ⟨b, hb, hc⟩
+      · refine .inl ⟨v, n'', sh, ?_, hn⟩
         have hvt : v ≠ t := fun e' => by rw [e', ht] at hv; cases hv
         rw [hph v hvt]; exact hv
       · exact .inr ⟨b, hb, hc⟩
@@ -1612,7 +1685,7 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
       omega
   · have hvt := hout v _ h nofun
     rw [hph v hvt] at h
-    obtain ⟨h1, h2, h3⟩ := hI.inc v q n' h
+    obtain ⟨h1, h2, h3⟩ := hI.inc v q n' sh h
     rw [hsz, hlt q h2]; exact ⟨h1, by omega, VClock.le_trans h3 (hclk v)⟩
   · have hut := hout u _ h nofun
     rw [hph u hut] at h
@@ -1644,6 +1717,10 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
     rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
   · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
     rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
+    rw [hph u hut] at h; exact (hI.snap u sh h).extend (.of_push hS)
+  · have hut := hout u _ h nofun
+    rw [hph u hut] at h; exact VClock.le_trans (hI.snapC u sh c h) (hclk u)
 
 /-- `waiters += 1` with room (`waiters < 65535`): one waiter more and the same signals. -/
 theorem wOf_sOf_succ {x y : Word.Entry} (hy : val y = val x + 1) (h : wOf x < 65535) :
@@ -1692,10 +1769,10 @@ theorem Inv.register {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i : Nat}
   have hnsig₀ : ∀ v, (C.ph (G v)).sig → v ≠ t := fun v h hv => by
     subst hv; rw [ht] at h; cases h
   refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
-    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i' e' h => ?_,
+    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' sh h => ?_, fun u i' e' h => ?_,
     fun u i' jr' sn' e' h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
     fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_,
-    by rw [hwt]; exact hI.qnd⟩
+    by rw [hwt]; exact hI.qnd, fun u sh h => ?_, fun u sh c h => ?_⟩
   · -- (H1) values
     by_cases hk' : k < (C.S.hist m).size
     · rw [hlt k hk']; exact hI.sv k hk'
@@ -1712,8 +1789,8 @@ theorem Inv.register {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i : Nat}
     rw [hsz] at hq; rw [hE]
     by_cases hq' : q < (C.S.hist m).size
     · rw [hlt q hq', hlt (q - 1) (by omega)] at hlt' ⊢
-      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', hv, hn⟩ | ⟨b, hb, hc⟩
-      · refine .inl ⟨v, n'', ?_, hn⟩
+      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', sh, hv, hn⟩ | ⟨b, hb, hc⟩
+      · refine .inl ⟨v, n'', sh, ?_, hn⟩
         rw [hph v (hnsig₀ v (by rw [hv]; rfl))]; exact hv
       · exact .inr ⟨b, hb, hc⟩
     · obtain rfl : q = (C.S.hist m).size := by omega
@@ -1721,7 +1798,7 @@ theorem Inv.register {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i : Nat}
       omega
   · have hvt := hnsig v (by rw [h]; rfl)
     rw [hph v hvt] at h
-    obtain ⟨h1, h2, h3⟩ := hI.inc v q n' h
+    obtain ⟨h1, h2, h3⟩ := hI.inc v q n' sh h
     rw [hsz, hlt q h2]; exact ⟨h1, by omega, VClock.le_trans h3 (hclk v)⟩
   · have hut : u ≠ t := fun hu => by subst hu; rw [upd_self, hg'] at h; cases h
     rw [hph u hut] at h
@@ -1781,13 +1858,18 @@ theorem Inv.register {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i : Nat}
   · rw [hncr u] at h; cases h
   · have hut := hnsig u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
   · have hut := hnsig u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · have hut := hnsig u (CPh.snap_sig h); rw [hph u hut] at h
+    exact (hI.snap u sh h).extend (.of_push hS)
+  · have hut := hnsig u (by rw [h]; rfl); rw [hph u hut] at h
+    exact VClock.le_trans (hI.snapC u sh c h) (hclk u)
 
 /-- **The signaller's `epoch += 1`** (a release RMW, `hrel`) by `t` at `inc q n`, now `wk n`: the
 epoch's new write is the newest plus one, in its release sequence, and its release clock covers
 `t`'s clock, so `t`'s post is published (H2). `hlp`, `hsx`: `t` keeps its lock place and role. -/
 theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {g' : γ}
-    {ord : AtomicOrder} {o : BitVec 32} (hI : C.Inv L G m) (ht : C.ph (G t) = .inc q n)
-    (hg' : C.ph g' = .wk n) (hlp : L.ph g' = L.ph (G t)) (hsx : C.sx (G t) → C.sx g')
+    {sh : Array Word.Entry}
+    {ord : AtomicOrder} {o : BitVec 32} (hI : C.Inv L G m) (ht : C.ph (G t) = .inc q n sh)
+    (hg' : C.ph g' = .wk n q sh) (hlp : L.ph g' = L.ph (G t)) (hsx : C.sx (G t) → C.sx g')
     (hrel : ord.isRel = true) (ho : (C.lastE m).Val o)
     (hE : C.Ep.hist m' = (C.Ep.hist m).push (Word.rmwEnt m' t ord (C.lastE m) (o + 1)))
     (hS : C.S.hist m' = C.S.hist m) (hwt : m'.waiters = m.waiters) (hwk : m'.woken = m.woken)
@@ -1811,13 +1893,14 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
       (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).relClock = true := by
     simp only [Word.rmwEnt, hrel, ↓reduceIte]; exact VClock.le_merge_left _ _
   have hts : (C.ph (G t)).sig := by rw [ht]; rfl
-  have hnt : ∀ u, C.ph (upd G t g' u) ≠ .wk n → u ≠ t := fun u h hu => by
+  have hnt : ∀ u, C.ph (upd G t g' u) ≠ .wk n q sh → u ≠ t := fun u h hu => by
     rw [hu, upd_self] at h; exact h hg'
   refine ⟨by rw [hS]; exact hI.spos, by rw [hS]; exact hI.sv, by rw [hS]; exact hI.steps,
-    fun k hk => ?_, fun k hk => ?_, fun q' h0 hq hlt' => ?_, fun v q' n' h => ?_,
+    fun k hk => ?_, fun k hk => ?_, fun q' h0 hq hlt' => ?_, fun v q' n' sh' h => ?_,
     fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_, fun w hw hp => ?_,
     hI.cnt_bump ht hg' hS hsz hqd hwk, fun u h => ?_, fun u h => ?_, fun u v hu hv => ?_,
-    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd,
+    fun u sh' h => ?_, fun u sh' c h => ?_⟩
   · -- the epoch's values
     by_cases hk' : k < (C.Ep.hist m).size
     · rw [hlt k hk']; exact hI.e32 k hk'
@@ -1833,18 +1916,18 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
       exact ⟨rfl, hyl⟩
   · -- (H2) `t`'s post is published by the new write
     rw [hS] at hq hlt' ⊢; rw [hsz]
-    rcases hI.pub q' h0 hq hlt' with ⟨v, n'', hv, hn⟩ | ⟨b, hb, hc⟩
+    rcases hI.pub q' h0 hq hlt' with ⟨v, n'', sh'', hv, hn⟩ | ⟨b, hb, hc⟩
     · by_cases hvt : v = t
       · rw [hvt, ht] at hv
         injection hv with hq1 hn1
         subst hq1
         refine .inr ⟨(C.Ep.hist m).size, by omega, ?_⟩
-        rw [hnew]; exact VClock.le_trans (hI.inc t _ _ ht).2.2 hyc
-      · exact .inl ⟨v, n'', by rw [hph v hvt]; exact hv, hn⟩
+        rw [hnew]; exact VClock.le_trans (hI.inc t _ _ _ ht).2.2 hyc
+      · exact .inl ⟨v, n'', sh'', by rw [hph v hvt]; exact hv, hn⟩
     · exact .inr ⟨b, by omega, by rw [hlt b hb]; exact hc⟩
   · have hvt : v ≠ t := hnt v (by rw [h]; exact nofun)
     rw [hph v hvt] at h
-    obtain ⟨h1, h2, h3⟩ := hI.inc v q' n' h
+    obtain ⟨h1, h2, h3⟩ := hI.inc v q' n' sh' h
     rw [hS]; exact ⟨h1, h2, VClock.le_trans h3 (hclk v)⟩
   · have hut : u ≠ t := hnt u (by rw [h]; exact nofun)
     rw [hph u hut] at h
@@ -1879,13 +1962,20 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
   · by_cases hut : u = t
     · rw [hut, upd_self]; exact hsx (hI.sx t hts)
     · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self, hg'] at h; cases h
+      exact (hI.snap u _ (by rw [ht]; rfl)).extend (.of_eq hS)
+    · rw [hph u hut] at h; exact (hI.snap u sh' h).extend (.of_eq hS)
+  · have hut : u ≠ t := hnt u (by rw [h]; exact nofun)
+    rw [hph u hut] at h; exact VClock.le_trans (hI.snapC u sh' c h) (hclk u)
 
 /-- **The signaller's wake at the epoch** by `t` at `wk n`, now out: a futex wake of up to `c`
 waiters with `n ≤ c` (signal: `wake(1)` after one signal; broadcast: `wake(w - s)` after `w - s`).
 The queue at the epoch holds each thread once (`qnd`), so the wake takes `min c` of the queued
 waiters off it; they are woken, so claims (`cnt_wake`). -/
-theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n c : Nat} {cs : List Nat}
-    {g' : γ} (hI : C.Inv L G m) (ht : C.ph (G t) = .wk n) (hg' : C.ph g' = .out) (hn : n ≤ c)
+theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q c : Nat} {cs : List Nat}
+    {sh : Array Word.Entry}
+    {g' : γ} (hI : C.Inv L G m) (ht : C.ph (G t) = .wk n q sh) (hg' : C.ph g' = .out) (hn : n ≤ c)
     (h : ((Thread.futexWake C.Ep.ptr c cs).run { m with current := t }).run = some (.ok ((), m'))) :
     C.Inv L (upd G t g') m' := by
   have hm' := Proto.modify_ok h
@@ -1998,17 +2088,17 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n c : Nat} {
       omega
   refine ⟨by rw [hS]; exact hI.spos, by rw [hS]; exact hI.sv, by rw [hS]; exact hI.steps,
     by rw [hE]; exact hI.e32, by rw [hE]; exact hI.ep, fun q h0 hq hlt => ?_,
-    fun v q n' h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
+    fun v q n' sh' h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
     fun w hw hp => ?_, hcnt, fun u h => ?_, fun u h => ?_, fun u v hu hv => ?_,
-    fun u h => ?_, fun u h => ?_, fun u h => ?_, ?_⟩
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, ?_, fun u sh' h => ?_, fun u sh' c' h => ?_⟩
   · rw [hS] at hq hlt ⊢; rw [hE]
-    rcases hI.pub q h0 hq hlt with ⟨v, n', hv, hn'⟩ | h
+    rcases hI.pub q h0 hq hlt with ⟨v, n', sh', hv, hn'⟩ | h
     · have hvt : v ≠ t := fun e' => by rw [e', ht] at hv; cases hv
-      exact .inl ⟨v, n', by rw [hph v hvt]; exact hv, hn'⟩
+      exact .inl ⟨v, n', sh', by rw [hph v hvt]; exact hv, hn'⟩
     · exact .inr h
   · have hvt := hout v _ h nofun
     rw [hph v hvt] at h
-    rw [hS, hclk]; exact hI.inc v q n' h
+    rw [hS, hclk]; exact hI.inc v q n' sh' h
   · have hut := hout u _ h nofun
     rw [hph u hut] at h
     rw [hE, hclk]; exact hI.ld u i e h
@@ -2041,6 +2131,10 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n c : Nat} {
     have h0 := hI.qnd
     simp only [Array.toList_filter] at h0 ⊢
     exact h0.sublist (List.Sublist.map _ (List.Sublist.filter _ List.filter_sublist))
+  · have hut := hout u _ rfl (fun e' => by rw [e'] at h; cases h)
+    rw [hph u hut] at h; exact (hI.snap u sh' h).extend (.of_eq hS)
+  · have hut := hout u _ h nofun
+    rw [hph u hut] at h; rw [hclk]; exact hI.snapC u sh' c' h
 
 end FCond
 

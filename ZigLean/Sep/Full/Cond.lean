@@ -97,7 +97,7 @@ abbrev prim (L : FLock γ) : FPrim γ :=
       ((q = L.ph g ∧ h = L.held g) ∨
         ((L.ph g = .out ∨ L.ph g = .away) ∧ (q = .out ∨ (q = .away ∧ p.waits = true)) ∧
           h = rnil)) ∧
-      C.MStep W t m m' ∧ (C.Ep.hist m' = C.Ep.hist m ∨ ∃ q n, C.ph g = .inc q n))
+      C.MStep W t m m' ∧ (C.Ep.hist m' = C.Ep.hist m ∨ ∃ q n h, C.ph g = .inc q n h))
     (fun q => q = .out ∨ q = .holds)
 
 /-- **A protocol that keeps the condition** next to its mutex `L`: `FLock.Fits` with the
@@ -395,7 +395,7 @@ theorem _root_.Zig.Full.FLock.Fits.backC (hC : L.Fits (C.prim L) P U ok)
     {rY : Res} {m₁ m' : Mem} {g : γ} {p : CPh} {W : Word 32 4}
     (hW : W = C.S ∨ W = C.Ep) (hg₁ : G₁ t = g) (hn : CPh.Next (C.ph g) p)
     (hU : U G₁ (rsum (W.cellsR m₁) rY) m₁) (hY : ∀ l, W.In l → rY.heap l = none)
-    (hs : C.MStep W t m₁ m') (hEp : C.Ep.hist m' = C.Ep.hist m₁ ∨ ∃ q n, C.ph g = .inc q n)
+    (hs : C.MStep W t m₁ m') (hEp : C.Ep.hist m' = C.Ep.hist m₁ ∨ ∃ q n h, C.ph g = .inc q n h)
     (hL : L.Inv G₁ (rsum (W.cellsR m') rY) m') (hI : C.Inv L (upd G₁ t (C.set g p)) m') :
     P.inv (upd G₁ t (C.set g p)) m' :=
   hC.back hW hg₁ ⟨hn, .inl ⟨rfl, rfl⟩, hs, hEp⟩ hU hY hL hI
@@ -416,7 +416,7 @@ theorem _root_.Zig.Full.FLock.Fits.enterEn (hC : L.Fits (C.prim L) P U ok) {G : 
     exact FLock.notQ_mem this
   have hI₀ := hC.wInv _ _ _ hU
   have hI := hI₀.quiet (t := t) (g' := C.set g .en) (m' := m)
-    (by rw [upd_self, hgx]; exact ⟨rfl, rfl⟩) (by rw [C.ph_set]; exact ⟨rfl, rfl⟩) rfl rfl rfl rfl
+    (by rw [upd_self, hgx]; trivial) (by rw [C.ph_set]; trivial) rfl rfl rfl rfl
     rfl (fun _ => VClock.le_refl _) hnq (fun i e h => by rw [C.ph_set] at h; cases h)
     (fun _ => ⟨by rw [hC.lph]; exact hgh, by
       obtain ⟨T, hT, hw, -⟩ := hI₀.cnt; rw [hw]; exact hroom T hT, fun u hu => by
@@ -426,6 +426,7 @@ theorem _root_.Zig.Full.FLock.Fits.enterEn (hC : L.Fits (C.prim L) P U ok) {G : 
         have h2 : L.ph (upd G t g t) = .holds := by rw [upd_self, hgh]
         exact absurd (hL.w.one u t h1 h2) hu⟩)
     (fun _ => (hL.ht (t := t) (by rw [upd_self, hgh]; decide)).1)
+    (fun _ _ h => by rw [C.ph_set] at h; cases h)
   rw [upd_upd] at hI
   have hL' := hL.relabel (t := t) (g := C.set g .en) (by rw [upd_self, hC.lph])
     (by rw [upd_self, hC.lpart]) (by rw [upd_self, hC.lheld]) (fun r hr => by
@@ -455,7 +456,7 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
       refine h k hk G₁ m' b j (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
         (by rw [hg]; exact True.intro) hU hY hms (.inl hh) hL ?_)
       have hI' := hI.quiet (t := t) (g' := C.set g (.ld j b)) (m' := m')
-        (by rw [hg₁, hg]; exact ⟨rfl, rfl⟩) (by rw [C.ph_set]; exact ⟨rfl, rfl⟩)
+        (by rw [hg₁, hg]; trivial) (by rw [C.ph_set]; trivial)
         (hC.keepS hU hms) hh hop.waiters hop.woken hop.threads hop.clock hnq
         (fun i e h' => by rw [C.ph_set] at h'; cases h'; exact ⟨hj, hv, hacq rfl⟩)
         (fun _ => ⟨by rw [hC.lph]; exact hgh, hI.room t hcr, fun u hu => by
@@ -463,6 +464,7 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
           · rfl
           · exact absurd (hI.crit1 u t hc hcr) hu⟩)
         (fun _ => hI.ex t (by rw [hg₁, hg]; exact nofun))
+        (fun _ _ h => by rw [C.ph_set] at h; cases h)
       exact hI'
 
 /-- The `waiters` and `signals` of a state value with `s ≤ w < 65535` (the facts `wp_reg` gives
