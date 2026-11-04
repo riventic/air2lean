@@ -500,7 +500,8 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
   ⟨hu.shape, hu.io, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we, wordOk _ hu.wv,
     hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
       (Nat.le_refl _) (fun _ => VClock.le_refl _),
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _) id id
+    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _)
+      (Nat.le_refl _) id id
       hu.einv.fresh,
     hu.places, hu.ep1, hu.ep2, hu.epS, hu.incE, hu.ent, hu.hold, hu.reg, hu.w1, hu.snap, hu.lvc,
     hu.fin, hu.q, hu.xc⟩
@@ -564,7 +565,7 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
       (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
       (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock)
     (hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
-      (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock
+      (by rw [upd_self]; exact hph) hhV hs.waiters hs.clock (Nat.le_of_eq (by rw [hs.threads]))
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
       (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h)
       (hu.einv.fresh.fstep hs (fun x h1 h2 => hwB _ (Lo.wv_box ⟨rfl, h1, h2⟩))
@@ -1036,7 +1037,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · have := Lo.ok; have := hr.2.2; omega
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2.1 (fun hne => ?_) hV (fun w hw => ?_)
-      hclk (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
+      hclk (Nat.le_of_eq (by rw [hth])) (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
       (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h') hFV
     · by_cases hl : (L Lo).ph (G' t) = (L Lo).ph (G t)
       · exact .inl hl
@@ -1238,8 +1239,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 
 /-- **A step of the event's code keeps `U`** (`FLock.Fits.kstep` of `FEvent.prim`). -/
 theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : EPh) (q : LPh)
-    (hlo : (L Lo).ph (G t) = .out ∨ ((L Lo).ph (G t) = .away ∧ (E Lo).ph (G t) = .w1))
-    (hq : q = .out ∨ (q = .away ∧ p = .w1))
+    (hlq : (((L Lo).ph (G t) = .out ∨ ((L Lo).ph (G t) = .away ∧ (E Lo).ph (G t) = .w1)) ∧
+      (q = .out ∨ (q = .away ∧ p = .w1))) ∨ ((L Lo).ph (G t) = .gone ∧ q = .gone))
     (hu : U Lo G (rsum ((E Lo).W.cellsR m) rY) m) (hY : ∀ l, (E Lo).W.In l → rY.heap l = none)
     (hs : (E Lo).MStep t m m')
     (hI : (E Lo).Inv (L Lo) (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil)) m') :
@@ -1274,14 +1275,15 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · rw [hG u e]
   -- `t` is not `holds`
   have hnh : (G t).1.ph ≠ .holds := fun h => by
-    rcases hlo with h' | ⟨h', -⟩ <;> rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;>
-      cases h'
+    rcases hlq with ⟨h' | ⟨h', -⟩, -⟩ | ⟨h', -⟩ <;>
+      rw [show (L Lo).ph (G t) = (G t).1.ph from rfl, h] at h' <;> cases h'
   -- `t` in the condition's code is out of the event's, so not in its futex wait
   have hnaw : (G t).2.c ≠ .out → (L Lo).ph (G t) ≠ .away := fun hc ha => by
-    rcases hlo with h' | ⟨-, hw⟩
+    rcases hlq with ⟨h' | ⟨-, hw⟩, -⟩ | ⟨h', -⟩
     · rw [ha] at h'; cases h'
     · have he : (G t).2.e = .out := hu.e_out hc
       rw [show (E Lo).ph (G t) = (G t).2.e from rfl, he] at hw; cases hw
+    · rw [ha] at h'; cases h'
   -- a waiter of the event is `main` from its event wait on
   have hEt : (E Lo).ph (upd G t ((L Lo).set ((E Lo).set (G t) p) q rnil) t) = p := by
     rw [upd_self]; rfl
@@ -1373,9 +1375,10 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         · have := hu.cinv.crit t hc; exact absurd this hnh
       have hlp : (G t).1.ph = .out := (hu.cinv.lp t hsig).resolve_right hnh
       have hsg : (G t).2.ph = .sg := hu.cinv.sx t hsig
-      rcases hq with rfl | ⟨rfl, rfl⟩
+      rcases hlq with ⟨-, rfl | ⟨rfl, rfl⟩⟩ | ⟨hg', -⟩
       · show LPh.out = (G t).1.ph; rw [hlp]
       · rcases hwx (.inr rfl) with h' | h' <;> rw [hsg] at h' <;> cases h'
+      · exact absurd (hlp.symm.trans hg') (by decide)
     · rcases hnw w hw with h' | ⟨rfl, hp⟩
       · exact .inl h'
       · refine .inr ⟨rfl, ?_⟩
@@ -1512,8 +1515,8 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
-      · exact estep G rY m m' t p q hl hq hu hY hs hI
+      ⟨p, q, h, ⟨hlq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      · exact estep G rY m m' t p q hlq hu hY hs hI
       · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }
 

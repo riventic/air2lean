@@ -285,10 +285,11 @@ open Os in
 /-- **An OS futex wake** (`Os.futexWake`, OSF-02) by thread `t`: it stops with the ghost value `g`
 at the oracle's pick; in the same turn it wakes `wakeSize w k` of the `k` threads queued at `p`,
 the same threads as a scheduler wake with some choices `cs` (`wakeAt_futexWake`), or, with
-`spurious`, nobody (`EINTR`). -/
+`spurious`, nobody (`EINTR`). At the pick `t` exists (`t < m₁.threads.size`). -/
 theorem WP.osFutexWake {p : Ptr} {w : Option Nat} {spurious : Bool}
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      t < m₁.threads.size →
       (∀ cs m', ((Thread.futexWake p (wakeSize w (m₁.waitersAt p).length) cs).run
           { m₁ with current := t }).run = some (.ok ((), m')) →
         Q (some (wakeSize w (m₁.waitersAt p).length)) G₁ m' k) ∧
@@ -298,8 +299,8 @@ theorem WP.osFutexWake {p : Ptr} {w : Option Nat} {spurious : Bool}
   unfold Os.futexWake Os.pick
   refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hcr => ?_⟩
-  obtain ⟨hw, hsp⟩ := hc G₁ m₁ hg hi₁
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hcr => ?_⟩
+  obtain ⟨hw, hsp⟩ := hc G₁ m₁ hg hi₁ ht
   refine WP.liftMem (fun e he => ?_) (fun r m' hr => ?_) fun hn => ?_
   · obtain ⟨r, m', hr⟩ := wakeAt_run c p w { m₁ with current := t }
     rw [hr] at he; cases he
@@ -331,11 +332,12 @@ interrupt is delivered first (the memory `m₀`); the thread stops with the ghos
 the oracle's pick; in the same turn the kernel reads the word (`futexWord`, an atomic relaxed read
 of its newest message, the memory `m₂`): `mismatch` if it is not `e`, else `EINTR`
 (`interrupted`) or a sleep at the scheduler's `wait p e`, after which a pending interrupt makes it
-`interrupted`, else `woken`. -/
+`interrupted`, else `woken`. At each stop `t` exists (`t < m₁.threads.size`). -/
 theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
     {Q : WaitResult → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ b₀ m₀, (Os.takeInterrupt.run m).run = some (.ok (b₀, m₀)) →
       ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m₀ ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      t < m₁.threads.size →
       (∀ er, ((futexWord p).run { m₁ with current := t }).run = some (.error er) → P.ErrOk er) ∧
       (((futexWord p).run { m₁ with current := t }).run = none → P.Partial) ∧
       ∀ v m₂, ((futexWord p).run { m₁ with current := t }).run = some (.ok (v, m₂)) →
@@ -343,7 +345,7 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
         (v ≠ e → Q .mismatch G₁ m₂ k) ∧
         (v = e → Q .interrupted G₁ m₂ k ∧
           ∀ k', k = k' + 1 → ∃ g', P.inv (upd G₁ t g') m₂ ∧ ∀ G₂ m₃, G₂ t = g' → P.inv G₂ m₃ →
-            P.Step t (.wait p e) G₂ m₃ fun _ G₄ m₄ =>
+            t < m₃.threads.size → P.Step t (.wait p e) G₂ m₃ fun _ G₄ m₄ =>
               Q (if m₄.os.interrupts.contains m₄.current then .interrupted else .woken) G₄
                 (if m₄.os.interrupts.contains m₄.current then
                   { m₄ with os := { m₄.os with interrupts := m₄.os.interrupts.erase m₄.current } }
@@ -356,8 +358,8 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
   · rw [takeInterrupt_run] at h₀; cases h₀; split <;> rfl
   · refine WP.bind (WP.sync (fun k hk => ?_) hcost)
     obtain ⟨g, hi, hc⟩ := h b₀ m₀ h₀ k hk
-    refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hcr => ?_⟩
-    obtain ⟨herr, hnone, hk'⟩ := hc G₁ m₁ hg hi₁
+    refine ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hcr => ?_⟩
+    obtain ⟨herr, hnone, hk'⟩ := hc G₁ m₁ hg hi₁ ht
     refine WP.bind (WP.liftMem herr (fun v m₂ hr => ?_) hnone)
     obtain ⟨hsz, hne, heq⟩ := hk' v m₂ hr
     refine ⟨hsz, ?_⟩
@@ -372,7 +374,7 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
           simp only [Bool.false_eq_true, ↓reduceIte]
           refine WP.bind (WP.sync (fun k' hk'' => ?_) hcost)
           obtain ⟨g', hi', hs⟩ := hw k' hk''
-          refine ⟨g', hi', fun G₂ m₃ hg' hi₂ _ => Step.mono P ?_ (hs G₂ m₃ hg' hi₂)⟩
+          refine ⟨g', hi', fun G₂ m₃ hg' hi₂ ht₂ => Step.mono P ?_ (hs G₂ m₃ hg' hi₂ ht₂)⟩
           intro _ G₄ m₄ hq
           refine WP.bind (WP.liftMem (fun er he => by rw [takeInterrupt_run] at he; cases he)
             (fun b m₅ h₅ => ?_) fun hn => by rw [takeInterrupt_run] at hn; cases hn)
