@@ -420,8 +420,9 @@ theorem waitInner_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       (by rw [hC.lph]; exact hgh)
       ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
         (by simpa only [FCond.set_of hgx] using hok)),
-    WP.loop _ _ (inv23 P L C t g _ _ _ d) (fun _ => 0) (post23 P L g t d)
-      (loop23_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
+    (fun (i jr : Nat) (e : BitVec 32) =>
+      WP.loop _ _ (inv23 P L C t g i jr e d) (fun _ => 0) (post23 P L g t d)
+        (loop23_body hC hcost hLc t g hgx hok hu i jr e d io hlive)),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
         {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} =>
       WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)
@@ -623,8 +624,9 @@ theorem ioCond_wait_wp_v017 (hC : L.Fits (C.prim L) P U ok)
       (by rw [hC.lph]; exact hgh)
       ((hC.ok_calm g (.reg _ _ false _) .out rfl rfl).mpr
         (by simpa only [FCond.set_of hgx] using hok)),
-    WP.loop _ _ (inv22 P L C t g _ _ _ d) (fun _ => 0) (post22 P L g t d)
-      (loop22_body hC hcost hLc t g hgx hok hu _ _ _ d io hlive),
+    (fun (i jr : Nat) (e : BitVec 32) =>
+      WP.loop _ _ (inv22 P L C t g i jr e d) (fun _ => 0) (post22 P L g t d)
+        (loop22_body hC hcost hLc t g hgx hok hu i jr e d io hlive)),
     (fun {G : ThreadId → γ} {m : Mem} {d : Nat}
         {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} =>
       WP.liftMem_pure (P := P) (t := t) (G := G) (m := m) (m' := m) (n := d) (Q := Q)

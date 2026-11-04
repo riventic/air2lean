@@ -327,7 +327,9 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
       (hgo := .inr (by simpa only [hC.lph] using hgh)) (hi := hi0) (hc := hc)
       (htt := halloc) (hp := by simp only [hC.lpart]) (hret := .inl (.inr hcost)),
     FCond.wp_liftPartCur hC (hret := .inl (.inr hcost)), hfree,
-    FCond.wp_liftPart hC (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp))
+    FCond.wp_liftPart hC (g := gD L C g .en _) (t := t)
+      (hgo := .inr (by simpa only [gD_lph hC] using hgh))
+      (htt := dstore (P := DR) (bs := Array.replicate 48 .undef) (by simp))
       (hret := .inl (.inr hcost)), dstore,
     hC.wp_projE (t := t),
     FCond.wp_ldEp hC (g := gD L C g .en _) (t := t) (hg := gD_ph hC)
