@@ -204,5 +204,29 @@ theorem FTotalTriple.toTotal_on {c : MemM α} {P : Assn} {Q : α → Assn}
   obtain ⟨hQ', h1, h2, h3, h4⟩ := this
   exact ⟨v, m', hQ', hrun, h1, h2, h3, h4⟩
 
+/-- **Strength (D1a), total form in the plain mode**: `FTotalTriple.toTotal_on` for a triple whose
+steps run in the plain mode (`plain`, `docs/sep-full-state.md` §Step ticks). The legacy
+statement has no step count: a `Mem.FSeqPlain` memory has no stack budget and the legacy frame no
+meter, so the plain mode is added before the run (`Holds.addPlain`) and dropped after it. -/
+theorem FTotalTriple.toTotal_on_plain {c : MemM α} {P : Assn} {Q : α → Assn}
+    (ht : FTotalTriple (up P ⋆ plain) c (fun v => up (Q v) ⋆ plain))
+    (hQ : ∀ v, SizeFree (fun _ => none) (Q v)) :
+    ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → m.FSeqPlain →
+      ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
+        m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq := by
+  intro m hP hF hd hm hp _ ⟨hs, hns⟩
+  have ht' : FTotalTriple (up P ⋆ plain) c (fun v => up (Q v)) :=
+    ht.eupd_post fun _ => (EUpd.of_imp fun _ h => by unfold plain at h; exact sep_assoc' h).trans
+      ((EUpd.drop (K := unmetered) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩).trans
+        (EUpd.drop (K := noStack) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩))
+  obtain ⟨v, m', r', hr, hh', hq, hs'⟩ := ht'.runs
+    ((holds_ofHeap hd hm hns).addPlain hns fun _ => by simp [Ghost.exts])
+    (sep_plain_intro ⟨by simpa using hp, rfl, rfl⟩) hs
+  have hF' := frame_back hd hm hh'
+  refine ⟨v, m', (r'.fix m').heap.erase, hr, ?_, ?_,
+    upE_fix (hQ v) (fun _ _ _ _ _ _ _ h => by cases h) hh' (upE_none.mpr hq), hs'.1⟩
+  · rw [← hF']; exact FHeap.erase_disjoint (FHeap.fix_disjoint hh'.disj)
+  · rw [← hF']; exact hh'.fix.heap_exact hh'.fix_exact hh'.fix_exactF
+
 end Full
 end Zig

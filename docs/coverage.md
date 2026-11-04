@@ -75,8 +75,8 @@ records `mechanical` or `reviewed-override`.
 
 **AIR tags.** Derived in pipeline order from the exporter's `writeInst` switch
 (with comptime `Compat.vNN` branches resolved for the inventory's version),
-`normalizeOp` and the emitter's instruction dispatch (`emitScalar`, `emitStmts`,
-`emitTerminator`):
+`normalizeOp` and the emitter's instruction dispatch (`emitScalar`, `lowerStmts`,
+`lowerTerminator`):
 
 | Disposition | Mechanical rule |
 | --- | --- |

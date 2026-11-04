@@ -77,6 +77,7 @@ def copy.again6 : copyExit → Bool
   | _ => false
 
 def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocals copyExit := do
+  Zig.callM Zig.tick
   let i7 ← pure ((← get).local3)
   match ← ((do
     let i9 ← pure (i7)

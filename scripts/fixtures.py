@@ -20,7 +20,9 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   `scripts/assumptions.py --all-declarations` (kernel replay included; in a fixture-checks run
   through the run's one replay cache, AIR2LEAN_FIXTURE_REPLAY_CACHE), not from a message log.
   Fails unless every theorem of the modules depends on the standard axioms only (propext,
-  Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
+  Classical.choice, Quot.sound), no declaration depends on `sorry`, the report has no violation
+  in the modules (an axiom, opaque or unsafe declaration outside the policy, a float-semantics
+  label issue: docs/float-semantics.md), and each
   `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
   reaches only the standard axioms in the extractor's dependency graph. `--library LIB` audits
   every module of LIB too, and fails when a `.lean` file below LIB's directory is no module of
@@ -160,6 +162,12 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
     return axioms
 
 
+def scripts_on_path() -> None:
+    """Lazy imports of the sibling scripts (assumptions, theorem_universe)."""
+    if str(Path(__file__).resolve().parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
 def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
           package: Path | None = None, all_declarations: bool = True) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
@@ -167,8 +175,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
     Lake package (`package`, else the fixture package when `lib` is not given) has Lake build the
     extractor's driver on that package (scripts/assumptions.py --extract-in); a fixture Unit
     audit only while Lake resolves exactly its compiler-owned lookup path."""
-    if str(Path(__file__).resolve().parent) not in sys.path:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
+    scripts_on_path()
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
     import theorem_universe
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
@@ -230,8 +237,10 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
             audited = [t for t in report["theorems"] if t["module"] in modules]
             problems += [f"{t['name']}: axioms {sorted(set(t['axioms']) - STANDARD_AXIOMS)}"
                          for t in audited if not set(t["axioms"]) <= STANDARD_AXIOMS]
-            problems += [f"{v['name']} ({v['module']}): {v['reason']}" for v in report["violations"]
-                         if v["trust_class"] == "sorry"]
+            # A sorry anywhere, and every violation of an audited module (an axiom, opaque or unsafe
+            # declaration outside the policy, a float-semantics label issue), as theorem_universe's gate.
+            problems += [f"{v['name']} ({v['module']}): {v['trust_class']}: {v['reason']}"
+                         for v in report["violations"] if v["trust_class"] == "sorry" or v["module"] in modules]
             nodes = {n["name"]: n for n in report["nodes"]}
             for name in declarations:
                 node = nodes.get(name)
@@ -340,7 +349,16 @@ def main(argv: list[str]) -> int:
         modules = sorted(set(a.modules) | set(library_modules(a.library) if a.library else []))
         if not modules:
             parser.error("audit: name MODULEs or --library LIB")
-        return audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
+        scripts_on_path()
+        from assumptions import runtime_run
+        try:
+            # One toolchain-runtime digest for the audit's steps, hashed again at its end.
+            with runtime_run():
+                code = audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
+        except (OSError, ValueError, RuntimeError) as error:
+            print(f"fixtures audit: FAILED\n  {error}", file=sys.stderr)
+            return 1
+        return code
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
     print("\n".join(files()))

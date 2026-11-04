@@ -43,7 +43,8 @@ private def bareContext (fc : FCtx) : FCtx := {
   types := fc.types, structNames := fc.structNames, funcNames := fc.funcNames
   allocFields := fc.allocFields, places := fc.places, blockTys := fc.blockTys
   allInsts := fc.allInsts, brT := fc.brT, repT := fc.repT
-  retTy := fc.retTy, fnName := fc.fnName, localsName := fc.localsName, exitName := fc.exitName
+  retTy := fc.retTy, sourceName := fc.sourceName, fnName := fc.fnName
+  localsName := fc.localsName, exitName := fc.exitName
   floatSemantics := fc.floatSemantics, dialect := fc.dialect
   mem := fc.mem, memFuncs := fc.memFuncs, layouts := fc.layouts, escaping := fc.escaping }
 

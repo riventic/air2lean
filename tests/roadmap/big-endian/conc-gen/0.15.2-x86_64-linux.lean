@@ -41,7 +41,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .adder (capture0, _) => [.ptr capture0, .value]
 
@@ -74,6 +74,7 @@ def adder.again5 : adderExit → Bool
   | _ => false
 
 def adder.loop5 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.CM Tgt adderLocals adderExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i7 ← pure ((← get).i)
     let i8 ← pure (Zig.lt false i7 p1)

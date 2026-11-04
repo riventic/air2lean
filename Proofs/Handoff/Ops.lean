@@ -50,21 +50,18 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (.inr (.inl (hnw _ (.inr (.inl rfl)))))
   obtain ⟨hwV, hhV⟩ := hu.wv.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
     (.inr (.inl (hnw _ (.inr (.inr rfl)))))
-  refine ⟨hu.shape, hu.io.read (hc ▸ ht) hcs 0 0 n, hu.rest.congr fun _ _ => rfl, hu.blk,
-    hwS, hwE, hwV,
-    hu.cinv.stay t hhS hhE apE.ptr_ne (fun _ _ h => h) hclk,
-    hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id
-      hu.einv.fresh, hu.places,
-    fun h => by rw [hhE]; exact hu.ep1 h, by rw [hhE]; exact VClock.le_trans hu.ep0 (hclk 0),
-    hu.ent, hu.hold, fun i jr sn e hr => ?_, fun h0 h1 => ?_, fun h1 => ?_, hu.q, hu.xc⟩
-  · rw [hhS]
-    rcases hu.reg i jr sn e hr with h' | ⟨hlk, h'⟩
+  refine hu.congrHist (fun _ => ⟨rfl, rfl, rfl⟩) hhS hhE hu.shape
+    (hu.io.read (hc ▸ ht) hcs 0 0 n) (hu.rest.congr fun _ _ => rfl) hu.blk hwS hwE hwV
+    (hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk)
+    (hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk (Nat.le_refl _) id id
+      hu.einv.fresh)
+    hu.hold (fun j hj => ?_) (fun h1 => ?_) hu.q
+  · rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hclk 1))
     · refine .inr ⟨hlk, ?_⟩
       rcases h' with ⟨hh, hle⟩ | hb
       · exact .inl ⟨hh, VClock.le_trans hle (hclk 0)⟩
       · exact .inr (before_atomics rfl hb)
-  · show ((Lo.WS.hist _)[(Lo.WS.hist _).size - 1]!).Val _; rw [hhS]; exact hu.lvc h0 h1
   · show ((Lo.WV.hist _)[(Lo.WV.hist _).size - 1]!).Val _; rw [hhV]; exact hu.fin h1
 
 /-- **`io` is in the protocol's rest** (the obligation of `FLock.Fits.wp_readRest`, the read of
@@ -217,31 +214,31 @@ variable (mi : MutexImpl Tgt) (ci : CondImpl Tgt) (ei : EventImpl Tgt)
 
 /-- **The producer's `lock`**: it holds the mutex, at `hl`. -/
 theorem wp_lockP (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    (hi : (proto Lo prodOf).inv (upd G 1 (gO rnil { ph := .lk })) m) :
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res} (hpP : rp.Plain)
+    (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .lk })) m) :
     (proto Lo prodOf).WP 1 (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
-      ∃ rL, (proto Lo prodOf).inv (upd G' 1 (gH rnil rL { ph := .hl })) m') G m d :=
+      ∃ rL, (proto Lo prodOf).inv (upd G' 1 (gH rp rL { ph := .hl })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, inv_hl hi'⟩)
-    (mi.lock_wp fitsL rfl hp hLc 1 (gO rnil { ph := .lk }) rfl ⟨rfl, rfl, nofun, nofun⟩
-      io G m d hi)
+    (mi.lock_wp fitsL rfl hp hLc 1 (gO rp { ph := .lk }) rfl ⟨rfl, rfl, nofun, nofun⟩
+      hpP.unmetered io G m d hi)
 
 /-- **The producer's `unlock`** at `rdy`: it is out of the mutex, to its `signal`. -/
 theorem wp_unlockP (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rL : Res}
-    (hi : (proto Lo prodOf).inv (upd G 1 (gH rnil rL { ph := .rdy })) m) (hc : m.current = 1) :
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp rL : Res}
+    (hi : (proto Lo prodOf).inv (upd G 1 (gH rp rL { ph := .rdy })) m) (hc : m.current = 1) :
     (proto Lo prodOf).WP 1 (mi.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = 1 ∧
-      (proto Lo prodOf).inv (upd G' 1 (gO rnil { ph := .sg })) m') G m d :=
+      (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .sg })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc', hi'⟩ => ⟨hd, hc', inv_sg hi'⟩)
-    (mi.unlock_wp fitsL rfl hp hLc 1 (gH rnil rL { ph := .rdy }) rfl
+    (mi.unlock_wp fitsL rfl hp hLc 1 (gH rp rL { ph := .rdy }) rfl
       ⟨rfl, rfl, nofun, nofun⟩ io G m d hi hc)
 
 /-- **`main`'s `lock`** at `run`. -/
 theorem wp_lockM (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
-    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res}
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res} (hpM : rM.Plain)
     (hi : (proto Lo prodOf).inv (upd G 0 (gO rM { ph := .run })) m) :
     (proto Lo prodOf).WP 0 (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       ∃ rL, (proto Lo prodOf).inv (upd G' 0 (gH rM rL { ph := .run })) m') G m d :=
-  mi.lock_wp fitsL rfl hp hLc 0 (gO rM { ph := .run }) rfl ⟨rfl, rfl, nofun, nofun⟩ io G
+  mi.lock_wp fitsL rfl hp hLc 0 (gO rM { ph := .run }) rfl ⟨rfl, rfl, nofun, nofun⟩ hpM.unmetered io G
     m d hi
 
 /-- **`main`'s `unlock`** at `run`: out of the mutex, to the event's wait. -/
@@ -261,27 +258,32 @@ theorem wp_cwait (hLc : Lo.c = ci.c) {p q : Ptr} (hp : p = Lo.WS.ptr) (hq : q = 
     (hr : (G 1).2.ph.hasR = false) :
     (proto Lo prodOf).WP 0 (ci.wait p io q) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       ∃ rL', (proto Lo prodOf).inv (upd G' 0 (gH rM rL' { ph := .run })) m') G m d := by
-  obtain ⟨hone, hhb, hent⟩ := cwait_ok hi hr
+  obtain ⟨hroom, hent⟩ := cwait_ok hi hr
   exact ci.wait_wp fitsC rfl hp hq hLc 0 (gH rM rL { ph := .run }) rfl rfl
-    ⟨rfl, rfl, nofun, nofun⟩ io G m d
-    hone hhb hent cwait_live hpl hi hc
+    ⟨rfl, rfl, nofun, nofun⟩ io G m d hroom hent cwait_live hpl hi hc
 
-/-- **The producer's `signal`** at `sg`: a registered `main` is signalled; to the event's `set`. -/
+/-- **The producer's `signal`** at `sg`, with its call snapshot (`inv_snap`): a registered `main`
+is signalled (`signal_sig`); to the event's `set`. -/
 theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem}
-    {d : Nat} (hi : (proto Lo prodOf).inv (upd G 1 (gO rnil { ph := .sg })) m) :
+    {d : Nat} {rp : Res} (hpl : rp.Plain)
+    (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .sg })) m) :
     (proto Lo prodOf).WP 1 (ci.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
-      (proto Lo prodOf).inv (upd G' 1 (gO rnil { ph := .st })) m') G m d :=
-  WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun i jr sn e h => hs 0 i jr sn e h⟩)
-    (ci.signal_wp fitsC rfl hp 1 (gO rnil { ph := .sg }) rfl (.inl rfl) rfl io G m d
-      (fun G₁ rX m₁ hg hu u i jr sn e hr => signal_seen G₁ rX m₁ hg hu u i jr sn e hr) hi)
+      (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .st })) m') G m d := by
+  obtain ⟨_, -, hu⟩ := id hi
+  exact WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun hr => by
+      obtain ⟨_, -, hu'⟩ := id hi'
+      exact signal_sig hu (by rw [upd_self]; rfl) hu' (by rw [upd_self]; rfl) hs
+        (by rw [upd1_0]; exact hr)⟩)
+    (ci.signal_wp fitsC rfl hp 1 (gO rp { ph := .sg, sz := some (Lo.WS.hist m).size }) rfl
+      (.inl rfl) rfl io G m d hpl.unmetered (inv_snap hi))
 
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
 theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    (hi : (proto Lo prodOf).inv (upd G 1 (gO rnil { ph := .st })) m) :
+    {rp : Res} (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .st })) m) :
     (proto Lo prodOf).WP 1 (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
-      (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rnil, rnil⟩, { ph := .fin })) m') G m d :=
+      (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp 1 (gO rnil { ph := .st }) rfl rfl (.inl rfl) io G m d hi)
+    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl (.inl rfl) (.inl rfl) io G m d hi)
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
@@ -318,8 +320,8 @@ theorem vOf_ready {x : X} (hr : x.ph.hasR = true) : vOf x = 7 := by
 /-! ## The producer's end and `main`'s join -/
 
 /-- **The producer's end** (`QKid`): it is `gone` at `fin` and spawned no thread. -/
-theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat}
-    (hi : (proto Lo prodOf).inv (upd G 1 (⟨.gone, rnil, rnil⟩, { ph := .fin })) m) :
+theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res}
+    (hi : (proto Lo prodOf).inv (upd G 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m) :
     (proto Lo prodOf).QKid 1 () G m d := by
   refine ⟨_, hi, ⟨rfl, rfl⟩, fun _ => ?_⟩
   obtain ⟨rX, -, hu⟩ := hi

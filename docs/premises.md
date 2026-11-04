@@ -872,28 +872,28 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: meaning.
 - Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
-  than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
-  bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
+  than SEM-03 and only cover their stated finite clients. An `FTotalTriple` that holds `B`
+  credits additionally bounds the steps (`Zig.tick`) of the run by `B`
+  (`FTotalTriple.ticks_le`, `ZigLean/Sep/Full/Cost.lean`); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
   satisfy its stated premise and is not an unconditional total result. `Proto.returnsWithin`
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
+- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Full.Cost`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
 - Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
 ### SEM-05 — Model step and allocation counts are not time or memory measurements
 
 - Kind: meaning.
-- Statement: `Mem.allocs`, `Mem.liveHeap`, `Mem.ticks` and `LoopRuns` counts are counts in the
-  model. They count allocation requests, live `.heap` blocks, `Zig.tick` steps (credits,
-  [sep-full-state.md](sep-full-state.md#step-ticks)) and loop-body runs of successful runs.
+- Statement: `Mem.allocs` and `Mem.ticks` are counts in the model. They count allocation
+  requests and `Zig.tick` steps (one per loop-body run and recursive entry; credits,
+  [sep-full-state.md](sep-full-state.md#step-ticks)) of successful runs.
   A count does not measure CPU time, instruction count, cache behavior or native allocator
   memory use. Relating one to those needs a separate calibration argument.
-- Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Full.MemAuth`,
-  `ZigLean.Sep.Full.Tick`.
-- Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
+- Derived from: `ZigLean.Sep.Full.MemAuth`, `ZigLean.Sep.Full.Tick`, `ZigLean.Sep.Full.Cost`.
+- Sources: [proof-tools.md](proof-tools.md#model-cost-step-counts-p06), `ZigLean/Sep/Full/Cost.lean`.
 
 <a id="sem-06"></a>
 ### SEM-06 — Canonical AIR fragment semantics

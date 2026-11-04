@@ -805,6 +805,12 @@ theorem loop4_body (t : ThreadId) (s : semWorkLocals) (G : ThreadId → Gh) (m :
       else workPost t r G' m' d') G m d := by
   obtain ⟨hc, hle, hi⟩ := h
   unfold semWork.loop4
+  -- the step tick
+  rw [StateT.run_bind]
+  refine WP.bind (fits.wp_tick hi fun hi => ?_)
+  replace hc : ({ m with ticks := m.ticks + 1 } : Mem).current = t := hc
+  generalize ({ m with ticks := m.ticks + 1 } : Mem) = m at hc hi ⊢
+  dsimp only
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   have hx : XG (upd G t (gOut s.local1.toNat)) t = .work s.local1.toNat false := by
     show (upd G t (gOut _) t).2.2 = _; rw [upd_self]; rfl

@@ -50,6 +50,18 @@
     ],
     "budgets": [
       {
+        "file": "Proofs/Lists/Alloc.lean",
+        "declaration": "push_grant",
+        "measured": 286293,
+        "budget": 400000
+      },
+      {
+        "file": "Proofs/Lists/Alloc.lean",
+        "declaration": "push_spec",
+        "measured": 776858,
+        "budget": 1000000
+      },
+      {
         "file": "tests/roadmap/alloc-arena/ArenaSpec.lean",
         "declaration": "free_ct",
         "measured": 252235,

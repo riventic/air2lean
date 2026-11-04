@@ -87,24 +87,6 @@ inductive isEvenExit where
 
 mutual
 
-def isOdd (p0 : BitVec 32) : Zig.Result (Bool) := do
-  let e ← ((do
-    match ← ((do
-      let i2 ← pure (p0 == (0 : BitVec 32))
-      if i2 then (do
-        pure (.ret false))
-      else (do
-        pure .br1)) : Zig.M isOddLocals isOddExit) with
-    | .br1 => (do
-      let i6 ← Zig.sub false p0 (1 : BitVec 32)
-      let i7 ← Zig.call (isEven i6)
-      pure (.ret i7))
-    | e => pure e) : Zig.M isOddLocals isOddExit).run' (default : isOddLocals)
-  match e with
-  | .ret v => pure v
-  | _ => throw .panic
-partial_fixpoint
-
 def isEven (p0 : BitVec 32) : Zig.Result (Bool) := do
   let e ← ((do
     match ← ((do
@@ -118,6 +100,24 @@ def isEven (p0 : BitVec 32) : Zig.Result (Bool) := do
       let i7 ← Zig.call (isOdd i6)
       pure (.ret i7))
     | e => pure e) : Zig.M isEvenLocals isEvenExit).run' (default : isEvenLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+partial_fixpoint
+
+def isOdd (p0 : BitVec 32) : Zig.Result (Bool) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← pure (p0 == (0 : BitVec 32))
+      if i2 then (do
+        pure (.ret false))
+      else (do
+        pure .br1)) : Zig.M isOddLocals isOddExit) with
+    | .br1 => (do
+      let i6 ← Zig.sub false p0 (1 : BitVec 32)
+      let i7 ← Zig.call (isEven i6)
+      pure (.ret i7))
+    | e => pure e) : Zig.M isOddLocals isOddExit).run' (default : isOddLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
