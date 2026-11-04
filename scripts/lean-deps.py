@@ -133,20 +133,21 @@ def package_sources(package: pathlib.Path) -> list[pathlib.Path]:
 
 
 def orphan_outputs(package: pathlib.Path) -> list[pathlib.Path]:
-    """The files of `package/.lake/build/lib/lean` (oleans, ileans, traces, hashes) of modules
-    with no source in `package` (`package_sources`): what an older build compiled from a module
-    deleted or renamed since. Lake never removes them, nor can it build them again, while
-    `leanchecker` takes its argument as a prefix and checks every olean below it
-    (scripts/assumptions.py `checked_modules`), and a plain `lean` on LEAN_PATH imports them."""
-    build = package / ".lake/build/lib/lean"
+    """The files of `package/.lake/build/lib/lean` (oleans, ileans, traces, hashes) and
+    `.lake/build/ir` (C code, objects) of modules with no source in `package` (`package_sources`):
+    what an older build compiled from a module deleted or renamed since. Lake never removes them,
+    nor can it build them again, while `leanchecker` takes its argument as a prefix and checks
+    every olean below it (scripts/assumptions.py `checked_modules`), a plain `lean` on LEAN_PATH
+    imports them, and a proof receipt refuses them (scripts/proof-receipt.py `compiled`)."""
     sources = package_sources(package)
     orphans = []
-    for path in sorted(build.rglob("*")) if build.is_dir() else []:
-        if path.is_file():
-            relative = path.relative_to(build)
-            source_file = relative.parent / (relative.name.split(".", 1)[0] + ".lean")
-            if not any((source / source_file).is_file() for source in sources):
-                orphans.append(path)
+    for build in (package / ".lake/build/lib/lean", package / ".lake/build/ir"):
+        for path in sorted(build.rglob("*")) if build.is_dir() else []:
+            if path.is_file():
+                relative = path.relative_to(build)
+                source_file = relative.parent / (relative.name.split(".", 1)[0] + ".lean")
+                if not any((source / source_file).is_file() for source in sources):
+                    orphans.append(path)
     return orphans
 
 

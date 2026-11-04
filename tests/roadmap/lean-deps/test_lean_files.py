@@ -100,13 +100,18 @@ class Classify(unittest.TestCase):
         self.write('fix/Fix/C.lean', 'def c := 1\n')
         self.write('tests/pkg/lakefile.toml', '[[lean_lib]]\nname = "P"\n')  # a second tracked package
         build = self.repo / '.lake/build/lib/lean'
+        ir = self.repo / '.lake/build/ir'
         kept = [build / f'{m}{s}' for m in ('Lib/A', 'Lib/B', 'Fix/C') for s in ('.olean', '.trace')]
+        kept += [ir / 'Lib.setup.json', ir / 'Lib/A.c.o.export']
         gone = [build / f'Lib/Gone{s}' for s in ('.olean', '.olean.hash', '.ilean', '.trace')]
+        gone += [ir / 'Lib/Gone.c', ir / 'Lib/Gone.c.o.export.hash']
+        own = sorted(gone)
         gone.append(self.repo / 'tests/pkg/.lake/build/lib/lean/P/Gone.olean')
+        self.write('Lib.lean', 'import Lib.A\n')
         for path in kept + gone:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b'')
-        self.assertEqual(ld.orphan_outputs(self.repo), sorted(gone[:4]))
+        self.assertEqual(sorted(ld.orphan_outputs(self.repo)), own)
         spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
         assumptions = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(assumptions)
