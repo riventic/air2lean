@@ -418,7 +418,7 @@ theorem Ok.record {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.cur
     (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true) :
     W.Ok (m.recordAt W.b W.o nb k) ∧ W.Op t m (m.recordAt W.b W.o nb k) ∧
       W.hist (m.recordAt W.b W.o nb k) = W.hist m := by
-  obtain ⟨hwr, hh⟩ := hw.record_ok hc ht hcs hk
+  obtain ⟨hwr, hh⟩ := hw.record_native hc ht hcs hk
   subst hc
   have hct : m.current < m.clocks.size := by rw [hcs]; exact ht
   -- the record
@@ -452,7 +452,7 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
     ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.Op t m m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
       m₁.seen = m.seen ∧ W.Rec m₁ t := by
-  obtain ⟨l₁, hl₁, hw₁, hh₁, hb₁, hs₁, hrec₁⟩ := hw.prep_loc hc ht hcs hk h
+  obtain ⟨l₁, hl₁, hw₁, hh₁, hb₁, hs₁, hrec₁⟩ := hw.prep_native hc ht hcs hk h
   refine ⟨l₁, hl₁, hw₁, ?_, hh₁, hb₁, hs₁, hrec₁⟩
   subst hc
   let mr := m.recordAt W.b W.o nb k
@@ -930,24 +930,12 @@ theorem offWord {γ : Type} {L : Lock γ} {G : ThreadId → γ} {m : Mem} (hw : 
 
 end futex
 
-end Word
-
-end Conc
-
 /-! ## The old Word contract over full-state resources
 
 The roots of the full-state word that consume `Word.Op` and its `BlkStep` (moved from
 `ZigLean/Sep/Full/Word.lean`). -/
 
-namespace Conc
-
-namespace Word
-
 open Full
-
-variable {n nb : Nat} (W : Word n nb)
-
-variable {W}
 
 /-- The blocks after an op at the word, from the block of the word. -/
 theorem BlkStep.eq_set {m m' : Mem} (h : W.BlkStep m m') {blk : Block}

@@ -6,30 +6,26 @@ import ZigLean.Conc.Clock
 # A shared atomic word
 
 A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition`, the
-state of an `Io.Event`. It is 4 or 8 bytes (`n` = 32 or 64 bits) at offset `o` of block `b`, and each thread accesses it
-only with atomic ops (translated std code; the futex under it is the model). A lock's word owns a
-resource (`ZigLean/Sep/Full/Lock.lean`); a shared word owns nothing, so a proof keeps facts about
-its values and clocks in the rest of its invariant.
+state of an `Io.Event`. It is 4 or 8 bytes (`n` = 32 or 64 bits) at offset `o` of block `b`, and
+each thread accesses it only with atomic ops (translated std code; the futex under it is the
+model). A lock's word owns a resource (`ZigLean/Sep/Full/Lock.lean`); a shared word owns nothing,
+so a proof keeps facts about its values and clocks in the rest of its invariant.
 
 - **The writes** (`Word.hist`): the messages of the word's atomic location, oldest first, without
   their ids; before the first atomic op, the block's bytes. The first entry has no clock: a
   thread can always read it or a newer one.
 - **The invariant** (`Word.Ok`): the block is live and aligned, no other atomic location overlaps
-  the word, the location is an RMW chain of messages of the word's size whose newest has the word's bytes,
-  and each access to the word is atomic or happened before every thread. So an atomic op at the
-  word does not race, and an RMW reads the newest message.
+  the word, the location is an RMW chain of messages of the word's size whose newest has the
+  word's bytes, and each access to the word is atomic or happened before every thread. So an atomic
+  op at the word does not race, and an RMW reads the newest message.
 - **The writes only grow** (`Word.Prefix`, `Word.Extends`): a step keeps the writes or adds one.
-- **The ops**: the record of an atomic access keeps the word (`Ok.record_ok`) and finds or adds
-  its location (`Ok.prep_loc`); a read can read at least the floor (`floor_le`, `Word.Floor`); an
-  RMW writes `rmwEnt`. In strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`,
-  `Ok.cas_noErr`), and a futex wait at the word runs (`Ok.futexWait_run`).
+- **The ops**: the record of an atomic access keeps the word (`Ok.record_native`) and finds or
+  adds its location (`Ok.prep_native`); a read can read at least the floor (`floor_le`,
+  `Word.Floor`); an RMW writes `rmwEnt`. In strict mode no op throws (`Ok.load_noErr`,
+  `Ok.rmw_noErr`, `Ok.cas_noErr`), and a futex wait at the word runs (`Ok.futexWait_run`).
 
 This is the permanent vocabulary of a shared word; the native steps over it are in
-`ZigLean/Sep/Full/Word.lean`. The legacy part is in `ZigLean/Conc/Word.lean`: the step records
-`Word.BlkStep`, `Word.AtomsStep`, `Word.Keep` and `Word.KeepK` with their lemmas, the part typed by
-the legacy lock (`Apart`, `keep_lockStep`, `Lock.Inv.wordOp`, `offWord`) and the old Word contract
-(`Word.Op`, whose `locs` field is the legacy `LocsKeep`, with its producers `Ok.load`, `Ok.rmw`,
-`Ok.cas`, `Ok.futexWait` and its projections).
+`ZigLean/Sep/Full/Word.lean`, the legacy part in `ZigLean/Conc/Word.lean`.
 -/
 
 namespace Zig
@@ -405,9 +401,11 @@ theorem Ok.access {m : Mem} (hw : W.Ok m) :
   unfold Mem.accessW; rw [hacc]
   simp [hk, pure, bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont]
 
-/-- Recording an atomic access preserves the shared word and its history. -/
-theorem Ok.record_ok {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.current = t)
-    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true) :
+/-- Recording an atomic access preserves validity and history directly. No operation-summary
+type occurs in the statement or proof. -/
+theorem Ok.record_native {m : Mem} {t : ThreadId} {k : AccessKind} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hk : k.isAtomic = true) :
     W.Ok (m.recordAt W.b W.o nb k) ∧ W.hist (m.recordAt W.b W.o nb k) = W.hist m := by
   subst hc
   have hct : m.current < m.clocks.size := by rw [hcs]; exact ht
@@ -415,8 +413,8 @@ theorem Ok.record_ok {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.
   let mr := m.recordAt W.b W.o nb k
   have hrc : ∀ u : Nat, VClock.le (m.clocks[u]!) (mr.clocks[u]!) = true :=
     recordAt_le m _ _ _ _
-  have hrt : mr.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
-    simp only [mr, Mem.recordAt]; rw [Proto.getElem!_set!_ite]; simp [hct]
+  have hrt : mr.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current :=
+    recordAt_clock hct
   have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
   have hwr : W.Ok mr := by
     refine ⟨hw.blk, hw.only, fun i l hl => ?_, fun e he hh => ?_, hw.val,
@@ -437,17 +435,18 @@ theorem Ok.record_ok {m : Mem} {t : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.
       rw [hrt]; exact VClock.le_refl _
   exact ⟨hwr, hist_congr rfl rfl⟩
 
-/-- The record of an atomic access to the word, and the word's location (`locIdx`): the
-location exists after it, with the same writes. -/
-theorem Ok.prep_loc {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc : m.current = t)
-    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size) (hk : k.isAtomic = true)
+/-- Actual valid-word preparation preserves validity, history and the recorded access without
+passing through the old operation summary. -/
+theorem Ok.prep_native {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
     ∃ l, W.Loc m₁ li l ∧ W.Ok m₁ ∧ W.hist m₁ = W.hist m ∧ m₁.blocks = m.blocks ∧
       m₁.seen = m.seen ∧ W.Rec m₁ t := by
   subst hc
   let mr := m.recordAt W.b W.o nb k
   have hcur : curBytes mr W.b W.o nb = curBytes m W.b W.o nb := curBytes_congr rfl _ _ _
-  obtain ⟨hwr, -⟩ := hw.record_ok rfl ht hcs hk
+  obtain ⟨hwr, -⟩ := hw.record_native rfl ht hcs hk
   have hrec : W.Rec mr m.current := rec_recordAt rfl (by rw [hcs]; exact ht)
   -- the location
   cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
@@ -577,7 +576,7 @@ theorem Ok.opts {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
       ∀ pos < (m₁.atomics[li]!).msgs.size,
         ∃ w, (intOfBytes n ((m₁.atomics[li]!).msgs[pos]!).bytes).run = some (.ok w) := by
   rw [W.sz_eq] at hl
-  obtain ⟨l, hl', hw₁, -⟩ := hw.prep_loc rfl ht hcs hk hl
+  obtain ⟨l, hl', hw₁, -⟩ := hw.prep_native rfl ht hcs hk hl
   obtain ⟨-, h0, hch, -, hval⟩ := hw₁.loc li l hl'
   have hl0 := (loc_get hl').2.2
   rw [hl0]
@@ -643,7 +642,7 @@ theorem Ok.cas_noErr {m : Mem} {c : Nat} {succ fail : AtomicOrder} {exp new : Bi
   · obtain ⟨b, blk', o, ha, -, hl, -⟩ := casPrep_ok hp
     rw [haw] at ha; cases ha
     rw [W.sz_eq] at hl
-    obtain ⟨l, hl', hw₁, -⟩ := hw.prep_loc rfl ht hcs rfl hl
+    obtain ⟨l, hl', hw₁, -⟩ := hw.prep_native rfl ht hcs rfl hl
     have ht₁ : m₁.current < m₁.threads.size := by
       obtain ⟨_, _, _, rfl⟩ := locIdx_updates hl
       exact ht
