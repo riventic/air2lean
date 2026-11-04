@@ -1,5 +1,5 @@
 import ZigLean.Conc.Share
-import ZigLean.Conc.Csl
+import ZigLean.Sep.Full.ThreadOwned
 
 /-!
 # Detached threads and join-handle ownership (C07)
@@ -29,8 +29,8 @@ The model rules of `Thread.detach` and of an explicit handle transfer
   access that a detached thread makes after the exit reads or writes stack data that is gone. A
   stack `free` records no access, so an access before the exit is not checked against it (as in
   `ZigLean/Conc/Share.lean`). The logic adds the static side: a region granted `owned` to another
-  thread (C01, `FTransfer.owned`, `ZigLean/Sep/Full/ThreadSpawn.lean`) is not in the parent's
-  part, so the parent cannot establish the precondition of its frame's `free` for it
+  thread (C01, `FCapture.grant`, `ZigLean/Sep/Full/ThreadSpawn.lean`) is not in the parent's part
+  (`FOwned`), so the parent cannot establish the precondition of its frame's `free` for it
   (`not_bytesAt_granted`), and a detached thread is never joined, so no join returns the region.
   A detached worker may only capture values, or heap/global regions that it owns and frees itself
   (`Proofs/Detach/Worker.lean`).
@@ -377,27 +377,20 @@ theorem frame_exit_kills {b : BlockId} (h : ((free ⟨some b, 0⟩).run m).run =
       (Array.getElem?_eq_some_iff.mp hblk).1]
   exact ⟨fun T _ => load_dead hdead rfl u off a, fun T _ v => store_dead hdead rfl u off a v⟩
 
-/-- **The static side.** In a proof's parts (`Owned`), a cell granted to thread `c` is not in
+/-- **The static side.** In a proof's parts (`FOwned`), a cell granted to thread `c` is not in
 another thread's part: so a parent `t` that granted cells of a block to a (detached) thread
-cannot hold `bytesAt` of that block, the precondition of `TTriple.free` for its frame's exit. -/
-theorem not_bytesAt_granted {own : ThreadId → Heap} {t c : ThreadId} (ho : Owned own m)
-    (hct : c ≠ t) {b : BlockId} {x : Nat} (hc : own c (b, x) ≠ none) {p : Ptr} {A S : Nat}
-    {K : BlockKind} {bs : Array Byte} (hp : p.block = some b) (h0 : p.off = 0)
-    (hx : x < bs.size) : ¬ bytesAt p A S K bs (own t) := by
-  rintro ⟨b', hb', -, hcell⟩
+cannot hold `bytesAt` of that block, the precondition of its frame's `free` at the exit. -/
+theorem not_bytesAt_granted {own : ThreadId → Full.Res} {rO : Full.Res} {t c : ThreadId}
+    (ho : Full.FOwned own rO m) (hct : c ≠ t) {b : BlockId} {x : Nat}
+    (hc : (own c).heap (b, x) ≠ none) {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    (hp : p.block = some b) (h0 : p.off = 0) (hx : x < bs.size) :
+    ¬ Full.FAssn.up (bytesAt p A S K bs) (own t) := by
+  rintro ⟨⟨b', hb', -, hcell⟩, -, -⟩
   rw [hp] at hb'; cases hb'
-  have hnone := ho.hne hct hc
-  rw [hcell] at hnone
-  simp [h0, hx] at hnone
+  have hcell := hcell (b, x)
+  simp [Full.FHeap.erase, ((ho.disj_any hct) (b, x)).resolve_left hc, h0, hx] at hcell
 
 /-! ## Rules for a proof over all schedules -/
-
-/-- A detach or a transfer changes only the thread table, with the same size: it keeps every
-thread's part (`Owned`). -/
-theorem Owned.setThread {own : ThreadId → Heap} (ho : Owned own m) (r : ThreadRec) :
-    Owned own { m with threads := m.threads.set! tid r } :=
-  Owned.keep ho (by simp [Array.set!_eq_setIfInBounds]) rfl (fun u => ho.sub u) (Nat.le_refl _)
-    (fun _ _ => VClock.le_refl _) fun _ he => .inl he
 
 variable {Tgt γ σ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {n : Nat}
 

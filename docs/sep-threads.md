@@ -14,8 +14,7 @@ The concurrent proofs have two layers.
   thread `t` that holds at every stop. `run_safe` / `run_sound` turn it into statements about
   `Sched.run`. This layer has no heap assertions and stays as it is.
 * **Concurrent separation logic** over the legacy `Heap` (`ZigLean/Conc/Own.lean`, `Csl.lean`,
-  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Witness.lean`, `Unroll.lean`; about 5.9k
-  lines):
+  `Lock.lean`, `LockRules.lean`, `Witness.lean`, `Unroll.lean`; about 5.5k lines):
   * `Mem.Owns m t h`: every recorded access to a byte of `h` happened before `t`'s clock;
   * `TTriple P c Q`: `Triple` with ownership in place of `SingleThread`, plus `StepIn hF m m'`
     (the step touches no frame byte and changes no other thread's clock);
@@ -474,8 +473,9 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   the frame of a failed spawn keeps `FOwned` unchanged (`WP.spawnFailureRetains_fowned`). A
   struct store whose encoding is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'`
   (`Full/Local.lean`).
-* **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
-  `up (bytesAt …)` in a part.
+* **Detach** (`Conc/Detach.lean`, off the legacy layer): `not_bytesAt_granted` for
+  `up (bytesAt …)` in a part (`FOwned`); a detach keeps the parts by `FOwned.setThread` (a
+  `keep`, `Full/ThreadOwned.lean`).
 * **TLS** (`TlsLemmas.lean`, deleted): a thread-local block is a part of its thread; its knowledge
   may be shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an
   instance is a `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`);
