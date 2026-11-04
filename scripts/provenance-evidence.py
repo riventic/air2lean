@@ -368,7 +368,10 @@ def record(fx, a):
     record_manifest(fx, staged, fx['dir'] + '/air', fx['dir'] + '/receipt', work / 'native' / fx['example'], stock,
                     a.generated_from_head)
     path = fx['path'] / 'manifest.json'
-    os.replace(staged, path)
+    # WORKDIR may be on another file system (a tmpfs /tmp): copy beside the fixture, then rename.
+    partial = path.with_name(path.name + '.partial')
+    shutil.copyfile(staged, partial)
+    os.replace(partial, path)
     manifest = am.load(path)
     links = manifest['links']
     pins = {'note': 'Reviewer pins for %s/manifest.json (scripts/provenance-evidence.py). '
