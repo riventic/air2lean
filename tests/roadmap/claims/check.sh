@@ -14,27 +14,24 @@ case "${1:-}" in
 esac
 out=.lake/assurance/claims
 mkdir -p "$out"
-# The unit tests (Python only) run meanwhile; their result is required below.
+# The unit tests (Python only) run in the background once fixture-report.json is final (at once
+# without --write); their result is required below.
 tests_pid=
+start_tests() {
+  python3 tests/roadmap/claims/test_claims.py > "$out/test_claims.log" 2>&1 &
+  tests_pid=$!
+}
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-claims.XXXXXX")
 trap '[ -z "$tests_pid" ] || kill "$tests_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
 # The four audits below replay the same Lake-built imports: one replay cache for this run (a
 # fixture-checks run passes its own, shared by all its audits; nothing outlives the run).
 export AIR2LEAN_FIXTURE_REPLAY_CACHE="${AIR2LEAN_FIXTURE_REPLAY_CACHE:-$work/replay-cache.json}"
-if [ "$write" = 0 ]; then
-  python3 tests/roadmap/claims/test_claims.py > "$out/test_claims.log" 2>&1 &
-  tests_pid=$!
-fi
+[ "$write" = 1 ] || start_tests
 # The fixtures are the library Claims (tests/roadmap/lakefile.toml), built by Lake with what they
 # import (scripts/fixtures.py; run this under scripts/build-guard.py). Each audit binds the
 # Lake-built outputs it audits (the compiler-owned run binding, theorem_universe).
 python3 -B scripts/fixtures.py build Claims
 python3 -B scripts/fixtures.py audit Fixture --theorem-roots --output "$out/assurance.json"
-python3 -B scripts/fixtures.py audit AllocatorApplications --theorem-roots --output "$out/allocator-applications.json"
-python3 -B scripts/fixtures.py audit AllocatorImported --theorem-roots --output "$out/allocator-imported.json"
-python3 -B scripts/fixtures.py audit AllocatorImported --output "$out/allocator-imported-all.json"
-python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
-python3 -B tests/roadmap/claims/test_allocator_imported.py "$out/allocator-imported.json" "$out/allocator-imported-all.json"
 if [ "$write" = 1 ]; then
   python3 - "$out/assurance.json" <<'PY'
 import json, sys
@@ -54,8 +51,19 @@ if text != path.read_text():
     print('wrote', path)
 PY
   # Then every check below, as without --write: a failing extraction is not a fixture.
-  python3 tests/roadmap/claims/test_claims.py
+  start_tests
 fi
+# The allocator audits find their modules built, as the units of a fixture-checks run do, and
+# share the replay cache (each module is replayed once). scripts/par.py runs them at once as far
+# as the guard's AIR2LEAN_JOBS and memory allow: a cold audit peaks at 4.1 GB (its extraction
+# driver; arc, 2026-11-04), so --mem-mib 4600 and regen's 6144 MiB step runs one at a time,
+# beside the unit tests.
+python3 -B scripts/par.py --mem-mib 4600 -- bash -c 'python3 -B scripts/fixtures.py audit $0' ::: \
+  "AllocatorApplications --theorem-roots --output $out/allocator-applications.json" \
+  "AllocatorImported --theorem-roots --output $out/allocator-imported.json" \
+  "AllocatorImported --output $out/allocator-imported-all.json"
+python3 -B tests/roadmap/claims/test_allocator_applications.py "$out/allocator-applications.json"
+python3 -B tests/roadmap/claims/test_allocator_imported.py "$out/allocator-imported.json" "$out/allocator-imported-all.json"
 python3 - "$out" <<'PY'
 import json, subprocess, sys
 from pathlib import Path
