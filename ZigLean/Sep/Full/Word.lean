@@ -3457,8 +3457,8 @@ namespace FLock
 /-! ## A word's writes and the lock's holder
 
 A client whose word is written only holding the lock (a condition's epoch under a semaphore,
-`FCond.ld_newest`) carries in its rest that every write of the word happened before the lock's holder
-(`WordHB`, `HB`). It stays over the lock's steps (`WordHB.lstep`) and over a step that keeps the
+`FCond.ld_newest`) carries in its rest that every write of the word happened before the lock's
+holder (`WordHB`, `HB`). It stays over the lock's steps (`WordHB.lstep`) and over a step that keeps the
 word's writes or pushes one that happened before the holder (`WordHB.step`, `HB.of_holder`); with
 the lock's word invariant, a load by the holder then reads the newest write (`WordHB.last`, the
 load's floor `Word.Floor`). -/

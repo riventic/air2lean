@@ -197,10 +197,8 @@ theorem SigStep.inc_fresh {L : FLock γ} {G G' : ThreadId → γ} {t : ThreadId}
 
 /-! ## The epoch's writes and the mutex's holder
 
-A client whose signallers raise the epoch holding the mutex (a semaphore) carries in its rest that
-every epoch write happened before the mutex's holder (`FLock.WordHB L C.Ep`, kept over steps by
-`FLock.WordHB.step`/`lstep`). A waiter's load at `en` (it holds the mutex, `Inv.crit`) then reads
-the newest epoch write (`ld_newest`). -/
+A client whose signallers raise the epoch holding the mutex (a semaphore) keeps
+`FLock.WordHB L C.Ep` in its rest (`FLock.WordHB.step`/`lstep`); it gives `ld_newest`. -/
 
 /-- **At a step of the condition's code from `en` to `ld i e`, the waiter read the newest epoch
 write** (for a client's rest `U`, `Fits.kstep`), when every epoch write happened before the
