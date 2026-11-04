@@ -792,17 +792,16 @@ def needs_first(needs: list[str], targets: list[str]) -> list[str]:
     `module_needs`): each needed module's `:olean` first, then `targets` (ledger `lake-needs-race`,
     docs/upstream/lake-concurrent-needs.md).
 
-    Lake 4.34 fetches each facet key of a library's `needs` in a pool task of its own, and its job
-    store is check-then-create. Two keys of one library (`:olean` and `:depTrace` of a module, or
-    several modules) traverse their shared import closure at the same time, and both create jobs
-    for the same modules. A `(sync := true)` continuation of one copy (`Module.computeExportInfo`)
-    then blocks on the other copy's unfinished job. The runtime does not replace a worker blocked
-    in a sync task, so the build can deadlock at 0% CPU (seen with LEAN_NUM_THREADS 1, 2 and 4).
-    Lake fetches command-line targets one after another on its build thread instead. `:olean`
-    creates every job of the module's closure, `presetup` included. The library's `needs` tasks
-    then find those jobs instead of creating copies, and `:depTrace` (not buildable on the command
-    line) adds a job without awaits. The receipts' traces are those of the `needs`, unchanged."""
+    Lake 4.34 fetches each facet key of `needs` in a pool task of its own, and concurrent tasks
+    create the same jobs twice, which can deadlock the build at 0% CPU. Lake fetches command-line
+    targets one after another on its build thread. So `:olean` creates every job of the module's
+    closure first, `presetup` included, and the `needs` tasks then only find jobs. `:depTrace`
+    cannot be named on the command line, and its job awaits nothing. The traces are unchanged.
+    A key of another shape fails: no needed module may be left to the racing tasks."""
+    modules = {key.rsplit(":", 1)[0] for key in needs}
     first = sorted({key for key in needs if key.endswith(":olean")})
+    if not all(key.endswith((":olean", ":depTrace")) for key in needs) or len(first) != len(modules):
+        raise ValueError(f"needs_first: expected each module's :olean and :depTrace, got {needs}")
     return [*first, *targets]
 
 
@@ -891,13 +890,15 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
                 path.write_text(content)
         if resolved_roots(lake, workspace, env) != list(map(str, roots)):
             return None
-        result = subprocess.run([*lake, "build", *needs_first(needs, [module])], cwd=workspace, text=True,
-                                capture_output=True, env=env)
+        targets = needs_first(needs, [module])
+        result = subprocess.run([*lake, "build", *targets], cwd=workspace, text=True, capture_output=True,
+                                env=env)
     finally:
         os.close(descriptor)
     if result.returncode:
         sys.stderr.write(result.stdout[-20000:] + result.stderr)
-        raise RuntimeError(f"extraction build failed ({result.returncode}): lake build {module} in {workspace}")
+        raise RuntimeError(f"extraction build failed ({result.returncode}): "
+                           f"lake build {' '.join(targets)} in {workspace}")
     # A message of the driver itself: `info: <its path>:<line>:<column>: AIR2LEAN_ASSURANCE_JSON:...`.
     own = re.compile(r"info: (.+?):\d+:\d+: " + re.escape(MARKER))
     lines = []

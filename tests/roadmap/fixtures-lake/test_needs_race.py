@@ -22,6 +22,8 @@ import subprocess
 import tempfile
 import unittest
 
+from test_fixtures import without_cache
+
 ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
 assumptions = importlib.util.module_from_spec(spec)
@@ -35,8 +37,8 @@ def lake(cwd: Path, args: list[str], timeout: float = 600) -> tuple[int | None, 
     """`lake ARGS` in `cwd` with one Lean thread and without the shared artifact cache: (exit
     status, output), status None when Lake is still running after `timeout` s (its process group
     is then stopped)."""
-    env = {k: v for k, v in os.environ.items() if k != "AIR2LEAN_CAS_DIR" and not k.startswith("LAKE_")}
-    env["LEAN_NUM_THREADS"] = "1"
+    with without_cache():
+        env = {**os.environ, "LEAN_NUM_THREADS": "1"}
     process = subprocess.Popen(["lake", *args], cwd=cwd, env=env, text=True, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, start_new_session=True)
     try:
@@ -56,13 +58,19 @@ def jobs(output: str) -> int:
 
 
 class NeedsRace(unittest.TestCase):
+    def test_a_need_of_another_shape_fails(self):
+        for needs in (["@dep/+A:depTrace"], ["@dep/+A:olean", "@dep/+A:ilean"]):
+            with self.assertRaises(ValueError):
+                assumptions.needs_first(needs, ["W.R"])
+        self.assertEqual(assumptions.needs_first([], ["W.R"]), ["W.R"])
+
     def test_needed_oleans_first_create_each_job_once(self):
         tmp = tempfile.TemporaryDirectory(prefix="air2lean-needs-race-test.")
         self.addCleanup(tmp.cleanup)
         dep, ws = Path(tmp.name) / "dep", Path(tmp.name) / "ws"
-        for package in (dep, ws):
-            (package / ("Dep" if package == dep else "W")).mkdir(parents=True)
-            shutil.copy(ROOT / "lean-toolchain", package / "lean-toolchain")
+        for sources in (dep / "Dep", ws / "W"):
+            sources.mkdir(parents=True)
+            shutil.copy(ROOT / "lean-toolchain", sources.parent / "lean-toolchain")
         (dep / "lakefile.toml").write_text('name = "dep"\n[[lean_lib]]\nname = "Dep"\n')
         for i in range(CHAIN):
             imports = "".join(f"import Dep.M{j}\n" for j in (i - 1, i - 2) if j >= 0)
@@ -88,7 +96,7 @@ class NeedsRace(unittest.TestCase):
         once = jobs(output)
         self.assertLessEqual(once, CHAIN + 8, output)  # a job per module, a few for the rest
 
-        status, control = lake(ws, ["build", "W.R"], timeout=120)
+        status, control = lake(ws, ["build", "W.R"], timeout=45)  # up to date: seconds, unless deadlocked
         if status is not None:  # a deadlocked control shows the race as well
             self.assertEqual(status, 0, control)
             self.assertGreater(jobs(control), once + CHAIN // 2,
