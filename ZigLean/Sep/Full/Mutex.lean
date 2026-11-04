@@ -95,6 +95,23 @@ theorem lock_wp (C : MutexImpl Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ
   subst r
   exact ⟨hd, hc, rL, by simpa only [L.setPart_self] using hi'⟩
 
+/-- **The holder's `unlock`** by the mutex's contract, back to its ghost value `g` out of the
+mutex's code with no held resource. -/
+theorem unlock_wp_to (mi : MutexImpl Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop} {K : FPrim γ}
+    (hF : L.Fits K P U ok)
+    (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr) (hLc : L.c = mi.c) (t : ThreadId) (g : γ)
+    (rh : Res) (hgo : L.ph g = .out) (hgh : L.held g = rnil) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t (L.set g .holds rh)) m)
+    (hc : m.current = t) :
+    P.WP t (mi.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧ P.inv (upd G' t g) m')
+      G m d := by
+  have hg : L.set (L.set g .holds rh) .out rnil = g := by
+    rw [L.set_set, ← hgo, ← hgh, L.set_self]
+  refine WP.mono (fun _ G' m' d' ⟨hd, hc', hi'⟩ => ⟨hd, hc', ?_⟩)
+    (mi.unlock_wp hF hcost hp hLc t _ (L.ph_set _ _ _) ((hF.ok_set _ _ _).mpr hok) io G m d hi hc)
+  rwa [hg] at hi'
+
 end MutexImpl
 
 end Full

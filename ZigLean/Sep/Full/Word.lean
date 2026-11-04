@@ -326,6 +326,23 @@ theorem Op.word {n' nb' : Nat} {W' : Word n' nb'} {t : ThreadId} {m m' : Mem} (h
     W'.Ok m' ∧ W'.hist m' = W'.hist m :=
   ⟨hok.keep (keep_op h hap), hist_keep hok (keep_op h hap)⟩
 
+/-- A cell of a word is not a cell of a word apart from it. -/
+theorem notIn_apart {n' nb' : Nat} {V : Word n' nb'}
+    (h : W.b ≠ V.b ∨ W.o + nb ≤ V.o ∨ V.o + nb' ≤ W.o)
+    {l : Zig.Loc} (hl : V.In l) : ¬ W.In l := by
+  rintro ⟨h1, h2, h3⟩
+  obtain ⟨h1', h2', h3'⟩ := hl
+  rcases h with h | h | h
+  · exact h (h1.symm.trans h1')
+  · have : W.o + nb ≤ V.o := h
+    have h3 : l.2 < W.o + nb := h3
+    have h2' : V.o ≤ l.2 := h2'
+    omega
+  · have : V.o + nb' ≤ W.o := h
+    have h3' : l.2 < V.o + nb' := h3'
+    have h2 : W.o ≤ l.2 := h2
+    omega
+
 end Word
 end Conc
 
@@ -3343,14 +3360,7 @@ theorem preserve_apart {n' nb' : Nat} {V : Word n' nb'} {m m' : Mem}
     (hcells : ∀ l, ¬ W.In l → m'.heap l = m.heap l)
     (hap : W.b ≠ V.b ∨ W.o + nb ≤ V.o ∨ V.o + nb' ≤ W.o) :
     V.Ok m' ∧ V.hist m' = V.hist m := by
-  have hd : ∀ l, V.In l → ¬ W.In l := by
-    rintro ⟨b, x⟩ ⟨hbV, hV₁, hV₂⟩ ⟨hbW, hW₁, hW₂⟩
-    change b = V.b at hbV
-    change b = W.b at hbW
-    rcases hap with h | h | h
-    · exact h (hbW.symm.trans hbV)
-    · omega
-    · omega
+  have hd : ∀ l, V.In l → ¬ W.In l := fun _ => notIn_apart hap
   let hF : Heap := fun l => if V.In l then m.heap l else none
   have hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none := by
     intro x h₁ h₂
