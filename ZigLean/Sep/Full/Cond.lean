@@ -539,6 +539,90 @@ theorem wp_regAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok) {i :
       obtain ⟨hro, hi'⟩ := hC.afterReg hg₁ hg hgh hU hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩)) hw' (.inr ⟨_, _, hh⟩)) hA hL hv hh
       exact h k hk G₁ m' _ old r (hop.current.trans hc₁) hro hd hi'
 
+/-- A state value `(w, s)` with `s ≤ w` (H1: every state write has one). -/
+def SOk (b : BitVec 32) : Prop := b.toNat / 65536 ≤ b.toNat % 65536
+
+/-- The waiter's place after it read the state value `b` at `reg i jr true e`: it goes back to
+its futex wait (`sn := false`, the loop-back) when `b` has no signal. -/
+abbrev afterRead (i jr : Nat) (e b : BitVec 32) : CPh := .reg i jr (decide (b.toNat / 65536 ≠ 0)) e
+
+/-- **The waiter's read of the state** at `reg i jr true e` (a relaxed load, or a failed
+`cmpxchg`), of a write `j` at or after its floor, with no write: with no signal it loops back
+(`Inv.loopBack`), else it stays. -/
+theorem _root_.Zig.Full.FLock.Fits.afterReadS (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ} {rY : Res} {m₁ m' : Mem} {i jr j : Nat} {e b : BitVec 32}
+    (hg₁ : G₁ t = g) (hg : C.ph g = .reg i jr true e)
+    (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
+    (hms : C.MStep C.S t m₁ m')
+    (hA : ∀ hF, (∀ x, C.S.o ≤ x → x < C.S.o + 4 → hF (C.S.b, x) = none) →
+      FStepIn hF m₁ m')
+    (hL : L.Inv G₁ (rsum (C.S.cellsR m') rY) m')
+    (hj : j < (C.S.hist m₁).size) (hv : (C.S.hist m₁)[j]!.Val b)
+    (hfl : Word.Floor (C.S.hist m₁) (m₁.clocks[t]!) j) (hh : C.S.hist m' = C.S.hist m₁) :
+    SOk b ∧ P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' := by
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  have hI := hC.wInv _ _ _ hU
+  have hE := hC.keepE hU hms
+  have hsv := (hI.sv j hj).2
+  unfold sOf wOf at hsv
+  rw [val_of hv] at hsv
+  refine ⟨hsv, ?_⟩
+  by_cases hs : b.toNat / 65536 = 0
+  · have hp : afterRead i jr e b = .reg i jr false e := by simp [afterRead, hs]
+    rw [hp]
+    exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, Nat.le_refl _⟩) hU hY hms (.inl hE) hL
+      (hI.loopBack (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh hE hop.waiters hop.woken
+        hop.threads hop.clock hj hfl (by unfold sOf; rw [val_of hv]; exact hs))
+  · have hp : afterRead i jr e b = .reg i jr true e := by simp [afterRead, hs]
+    rw [hp, ← hg, set_of rfl]
+    have hI' := hI.stay hh hE (by rw [hop.waiters]) (fun w hw _ => by rw [hop.waiters] at hw; exact hw)
+      (fun u _ hw => by rw [hop.woken]; exact hw) (by rw [hop.threads]; exact Nat.le_refl _) hop.clock
+    have := hC.backC (p := C.ph g) (.inl rfl) hg₁ (CPh.Next.refl _) hU hY hms (.inl hE) hL
+      (by rw [set_of rfl, ← hg₁, upd_same]; exact hI')
+    rwa [set_of rfl] at this
+
+/-- The waiter's relaxed load of the state at `reg i jr true e` (`atomicLoadC`,
+`Thread.Condition`). -/
+theorem wp_loadS (hC : L.Fits (C.prim L) P U ok) {i jr : Nat}
+    {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → SOk b →
+      P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (b, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicLoadC (n := 32) .relaxed 4 C.S.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
+  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL => by
+      have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      obtain ⟨hok, hi'⟩ := hC.afterReadS hg₁ hg hU hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)) hA hL hj hv hfl hh
+      exact h k hk G₁ m' b (hop.current.trans hc₁) hok hi'
+
+/-- The decode of every state value (`SOk`, H1). -/
+theorem dec_of {α : Type} [Packed α 32]
+    (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {G₁ : ThreadId → γ} {m₁ : Mem} (hI : C.Inv L G₁ m₁) :
+    ∀ j < (C.S.hist m₁).size, ∀ b, (C.S.hist m₁)[j]!.Val b →
+      ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r) :=
+  fun j hj b hv => hdec b (by
+    have hsv := (hI.sv j hj).2
+    unfold sOf wOf at hsv; rw [val_of hv] at hsv; exact hsv)
+
+/-- The waiter's relaxed load of the state with a decode (`atomicLoadAsC`, `Io.Condition`). -/
+theorem wp_loadSAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
+    (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    {i jr : Nat} {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    (hi : P.inv (upd G t g) m) {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' b r, m'.current = t →
+      (Packed.ofBits? (α := α) b).run = some (.ok r) → SOk b →
+      P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicLoadAsC α .relaxed 4 C.S.ptr : CM Tgt σ α).run s) Q G m n :=
+  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+    (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
+    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL => by
+      have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      obtain ⟨hok, hi'⟩ := hC.afterReadS hg₁ hg hU hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)) hA hL hj hv hfl hh
+      exact h k hk G₁ m' b r (hop.current.trans hc₁) hd hok hi'
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
