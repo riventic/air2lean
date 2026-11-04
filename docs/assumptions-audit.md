@@ -411,11 +411,15 @@ and exact olean/Lake-trace/executable hashes must match before output can be reu
 output and changed source or release pin force rebuilding. There is no skip-compile flag.
 These hashes are kept as one record per context (`.lake/assurance/tool-traces/<context
 hash>.json`), so invocations with different contexts do not invalidate each other's records; a
-context without a valid record unlinks the olean and Lake rebuilds it. All invocations in one
+context without a valid record unlinks the olean and Lake rebuilds it. The caller's `LEAN_PATH`
+is not part of the context: Lake compiles every module on the workspace's own path, so it
+cannot change the olean or the executable. It binds each run instead (the trace's
+`caller_lean_path`, checked again after preparation and after extraction). All invocations in one
 worktree share the olean: an exclusive lock (`.lake/assurance/tool.lock`) is held from
-preparation until the `lake env lean` run that imports the olean ends, so parallel audits never
+preparation until the extractor run and its input check end, so parallel audits never
 remove or rebuild it under each other. Kernel replay runs outside the lock. A lock or IO error
-fails the audit.
+fails the audit. scripts/fixture-checks.py prepares the extractor before its parallel units, so
+no unit rebuilds this root-package output under the others.
 The regression harness reuses a validated extractor while still importing every fixture
 into a separate real Lean driver, in serial order.
 Neither is a substitute for the default complete build-and-audit release gate. The report

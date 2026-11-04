@@ -42,6 +42,13 @@ def offline_runtime_run(fails=None):
         raise fails
 
 
+@contextlib.contextmanager
+def offline_prepared_tool(prepare=lambda: None):
+    """assumptions.prepared_tool without Lake: `prepare` stands for the extractor's preparation."""
+    prepare()
+    yield {}
+
+
 class NoReuse(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix="air2lean fixture-checks ")
@@ -60,6 +67,7 @@ class NoReuse(unittest.TestCase):
         for patch in (mock.patch.object(fc, "discover", lambda tree: [dict(self.unit)]),
                       mock.patch.object(fc, "resolve", no_toolchain),
                       mock.patch.object(fc.assumptions, "runtime_run", offline_runtime_run),
+                      mock.patch.object(fc.assumptions, "prepared_tool", offline_prepared_tool),
                       mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas),
                                                    "AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp / "schedule.json")})):
             patch.start()
@@ -164,6 +172,37 @@ class NoReuse(unittest.TestCase):
         self.assertEqual(status, 1, out + err)
         self.assertIn("build outputs changed while the units ran", err)
         self.assertIn("M/A.olean", err)
+
+    def test_the_extractor_is_prepared_before_the_units(self):
+        # The race of 2026-11-04: a unit's audit rebuilt tools/Assurance.olean under the others.
+        # Its preparation, which may rebuild it, runs before the units, outside the comparison.
+        shared = self.temp / "build"
+        (shared / "tools").mkdir(parents=True)
+        (shared / "tools" / "Assurance.olean").write_text("a")
+        (self.hidden / "input").write_text("ok\n")
+        marker = self.temp / "unit-ran"
+        self.unit["run"] = 'touch "%s"\n' % marker
+
+        def rebuild():
+            self.assertFalse(marker.exists(), "a unit ran before the extractor was prepared")
+            (shared / "tools" / "Assurance.olean").unlink()
+            (shared / "tools" / "Assurance.olean").write_text("b")
+
+        with mock.patch.object(fc, "SHARED", shared), \
+                mock.patch.object(fc.assumptions, "prepared_tool", lambda: offline_prepared_tool(rebuild)):
+            status, out, err = self.run_checks()
+        self.assertEqual(status, 0, out + err)
+        self.assertTrue(marker.exists())
+        marker.unlink()
+
+        def fail():
+            raise RuntimeError("command failed (1): lake --rehash build AssuranceTools assurance")
+
+        with mock.patch.object(fc.assumptions, "prepared_tool", lambda: offline_prepared_tool(fail)):
+            status, out, err = self.run_checks()
+        self.assertEqual(status, 1, out + err)
+        self.assertIn("FAILED the assurance extractor: command failed", err)
+        self.assertFalse(marker.exists(), "a unit ran without a prepared extractor")
 
     def test_the_units_share_the_runs_toolchain_digest_and_a_change_fails_the_run(self):
         (self.hidden / "input").write_text("ok\n")

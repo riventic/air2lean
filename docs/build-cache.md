@@ -243,7 +243,9 @@ are hashed before and after preparation and extraction; a change rejects the res
 persistent metadata-only digest cache is used. Loader overlays (`LD_*`, `DYLD_*`) are rejected.
 Caller `LEAN_PATH` libraries remain supported for theorem-universe and witness fixtures:
 their ordered roots, top-level directory selection, logical/IR/shared-library bytes and aliases
-join the same fresh binding. Changes, including added or removed companions, fail closed.
+are bound per run (the trace's `caller_lean_path`; not the record's context, since Lake compiles
+the extractor on the workspace's own path). Changes during a run, including added or removed
+companions, fail closed.
 Caller `LEAN_SYSROOT` replacement, empty/nonabsolute Lake sysroots and empty path components
 are rejected. A caller library written during preparation is rejected rather than rebound.
 This sidecar binding concerns extractor inputs; it does not authenticate replay-cache

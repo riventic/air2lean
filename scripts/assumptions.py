@@ -855,10 +855,14 @@ def prepare_tool(root: Path, runner) -> dict:
         "lake_manifest_sha256": file_sha256(manifest_path) if manifest_path.is_file() else None,
         "lean_sysroot": str(toolchain),
         "toolchain_runtime_sha256": toolchain_runtime_sha256(toolchain),
-        "caller_lean_path": caller_path,
     }
     # One record per context: invocations with different contexts keep their own records
-    # instead of invalidating each other's.
+    # instead of invalidating each other's. The caller's LEAN_PATH is not part of it: Lake
+    # compiles every module on the workspace's own path (Lake `Workspace.leanPath`), so it cannot
+    # change the olean or the executable. It binds the run instead (the returned trace,
+    # `verify_extractor_inputs`). Were it a context, a caller with its own LEAN_PATH
+    # (tests/roadmap/assurance/check.sh) would unlink and rebuild this root-package output under
+    # every reader of it (the fixture checks' race of 2026-11-04).
     key = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
     manifest = root / ".lake/assurance/tool-traces" / f"{key}.json"
     try:
@@ -879,13 +883,15 @@ def prepare_tool(root: Path, runner) -> dict:
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools", "assurance"])
-    verify_extractor_inputs({**context, 'library_source_inputs': sources}, root, 'preparation')
-    trace = {**context, "library_source_inputs": sources, "olean_sha256": file_sha256(artifact),
-             "lake_trace_sha256": file_sha256(lake_trace), "executable_sha256": file_sha256(executable)}
-    trace["cache_reused"] = bool(valid and all(cached.get(key) == trace[key] for key in
-                                               ("olean_sha256", "lake_trace_sha256", "executable_sha256")))
-    write_report(manifest, trace)
-    return trace
+    # Checked before the outputs are hashed: a runtime or caller change fails the preparation.
+    verify_extractor_inputs({**context, 'caller_lean_path': caller_path, 'library_source_inputs': sources},
+                            root, 'preparation')
+    record = {**context, "library_source_inputs": sources, "olean_sha256": file_sha256(artifact),
+              "lake_trace_sha256": file_sha256(lake_trace), "executable_sha256": file_sha256(executable)}
+    record["cache_reused"] = bool(valid and all(cached.get(key) == record[key] for key in
+                                                ("olean_sha256", "lake_trace_sha256", "executable_sha256")))
+    write_report(manifest, record)
+    return {**record, "caller_lean_path": caller_path}
 
 
 def framework_runtime_types() -> tuple[str, ...]:
@@ -1251,6 +1257,8 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
             lines = lake_extraction(arguments, extract_in.resolve(), tool_trace, root, binding, audited)
             if lines is not None and binding is not None and lean_path_binding(root, lean_path) != binding:
                 raise ValueError('compiled Unit lookup inputs changed during extraction')
+            if lines is not None:  # Under the lock: once it is released, another audit may rebuild.
+                verify_extractor_inputs(tool_trace, root, 'extraction')
     if lines is None:
         with prepared_tool(root, runner) as tool_trace:  # The run is of the extractor the trace records.
             binding = lean_path_binding(root, lean_path) if lean_path is not None else None
@@ -1260,8 +1268,8 @@ def extract(modules: list[str], build: bool, witnesses: list[str] = (), *,
                              *command])
             if binding is not None and lean_path_binding(root, lean_path) != binding:
                 raise ValueError('compiled Unit lookup inputs changed during extraction')
+            verify_extractor_inputs(tool_trace, root, 'extraction')
         lines = [line[len(MARKER):] for line in output.splitlines() if line.startswith(MARKER)]
-    verify_extractor_inputs(tool_trace, root, 'extraction')
     if len(lines) != 1:
         raise ValueError("extractor did not return exactly one environment report")
     raw = json.loads(lines[0])
