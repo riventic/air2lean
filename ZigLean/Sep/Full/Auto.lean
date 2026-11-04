@@ -2620,8 +2620,9 @@ def boolFactCtx : MetaM Simp.Context := do
 
 /-- The local `f` of an earlier context in `g`'s: itself, or the local a substitution
 reintroduced it as (a fact reverted by `subst` and introduced again, followed through
-`caches.substs`); `none` if it is gone. A loop that splits facts one after another uses it, as
-splitting one fact may substitute a local that a later one mentions. -/
+`caches.substs`, as `refreshSubsts` follows a term); `none` if it is gone. A loop that splits
+facts one after another uses it (`destructAll`), as splitting one fact may substitute a local
+that a later one mentions. -/
 def liveFVar? (g : MVarId) (f : FVarId) : MetaM (Option FVarId) := g.withContext do
   let lctx ← getLCtx
   let substs ← (← caches).substs.get
@@ -2656,10 +2657,7 @@ partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option M
     let res ← g1.rewrite (← g1.getType) (mkFVar h) symm
     let g2 ← g1.replaceTargetEq res.eNew res.eqProof
     let (xs, g3) ← g2.introNP rev.size
-    let mut g := g3
-    for x in xs do
-      if let some x ← liveFVar? g x then g ← destruct g x
-    return some g
+    return some (← destructAll g3 xs)
   catch ex =>
     trace[fsym] "substCtor {t}: {ex.toMessageData}"
     s.restore; return none
@@ -2701,9 +2699,7 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
       if ty' != ty then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
         changed := changed.push d.fvarId
-    for f in changed do
-      if let some f ← liveFVar? g f then g ← destruct g f
-    return some g
+    return some (← destructAll g changed)
   catch ex =>
     trace[fsym] "etaProj: {ex.toMessageData}"
     s.restore; return none
@@ -2716,14 +2712,9 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
     let gs ← g.cases h
     let some sg := gs[0]? | return g
     let fs := sg.fields
-    let mut g := sg.mvarId
-    if isAnd then
-      let f1 := fs[1]!.fvarId!
-      g ← destruct g fs[0]!.fvarId!
-      -- (the left conjunct's substitution may have reintroduced the right one: `liveFVar?`)
-      if let some f1 ← liveFVar? g f1 then g ← destruct g f1
-      return g
-    return ← destruct g fs[1]!.fvarId!
+    -- (the left conjunct's substitution may reintroduce the right one: `destructAll`)
+    if isAnd then return ← destructAll sg.mvarId #[fs[0]!.fvarId!, fs[1]!.fvarId!]
+    return ← destruct sg.mvarId fs[1]!.fvarId!
   if ty.isConstOf ``True then return ← g.clear h
   -- a Boolean test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`): as a proposition
   if isBoolTest ty then
@@ -2737,7 +2728,7 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
     unless ← isCaseCtorApp o do
       let pf ← mkAppM lem #[mkFVar h]
       let pty ← inferType pf
-      -- (once: a fact can be split again, `liveFVar?`)
+      -- (once: a reintroduced fact is split again, `destructAll`; a known one falls through)
       unless ← (← getLCtx).anyM fun d => return d.type == pty do
         let (h', g') ← (← g.assert `hopt pty pf).intro1
         return ← destruct g' h'
@@ -2779,6 +2770,15 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         let ty'' ← whnfR ty'
         if ty''.isAppOfArity ``And 2 || ty''.isAppOfArity ``Exists 2 then return ← destruct g' h
         return g'
+  return g
+
+/-- `destruct` the facts `hs` one after another: a fact that splitting an earlier one
+reintroduced (a substitution reverts the facts that mention its local) is split as the new
+local (`liveFVar?`). -/
+partial def destructAll (g : MVarId) (hs : Array FVarId) : TacticM MVarId := do
+  let mut g := g
+  for h in hs do
+    if let some h ← liveFVar? g h then g ← destruct g h
   return g
 end
 
