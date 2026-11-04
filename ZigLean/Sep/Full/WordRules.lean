@@ -14,7 +14,9 @@ that its rest `rX` is the word's cells and a rest `rY` without the word's bytes,
 word is `Ok`). Each rule is the stop (the pick of the op, or the futex op) and then the op; it
 hands the client the native facts from the actual primitive run (`Word.Ok.load_native`,
 `Ok.rmw_native`, `Ok.cas_native`, `Ok.weakCas_native`, `Ok.futexWait_native`) and the lock's invariant after the op, whose
-rest has the word's new cells (`FLock.Inv.wordStep`). The client shows its `U` after the op.
+rest has the word's new cells (`FLock.Inv.wordStep`), and the lock's word invariant before the
+op (`LockWord.WInv`, from the stop's `FLock.Inv`; a step of a primitive over futex words carries
+it, `FPrim.ofWords`). The client shows its `U` after the op.
 
 The continuations also receive the actual reader's resulting floor (or the new last position
 for a write), conditionally on the invariant's existing `Word.Fresh`. This is information
@@ -94,7 +96,8 @@ theorem wp_wordLoad (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
     {ord : AtomicOrder} (hi : P.inv (upd G t g) m)
     {Q : BitVec bits × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m' v j, G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val v → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
       W.hist m' = W.hist m₁ → W.Ok m' → W.Ok m₁ → t < m₁.clocks.size →
@@ -119,7 +122,7 @@ theorem wp_wordLoad (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
   have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
       FStepIn hF { m₁ with current := t } m' :=
     fun hF hoff => Word.atomicLoad_fstep hw hc₁ hoff hr
-  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' v j hg₁ rfl hU hY hj hv hfl hacq hh hw' hw hc₁ ⟨c, hr⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩)
+  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' v j hg₁ rfl hU hiL.w hY hj hv hfl hacq hh hw' hw hc₁ ⟨c, hr⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩)
     (fun hf => (Word.atomicLoad_read_seen hw hf hr).2.2)
     (hiL.wordStep hY hw hrest hA hap)⟩
 
@@ -131,7 +134,8 @@ theorem wp_wordLoadAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : 
         ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m' b r j, G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) →
       (Packed.ofBits? (α := α) b).run = some (.ok r) →
       j < (W.hist m₁).size → (W.hist m₁)[j]!.Val b → Word.Floor (W.hist m₁) (m₁.clocks[t]!) j →
       (ord.isAcq = true → VClock.le (W.hist m₁)[j]!.relClock (m'.clocks[t]!) = true) →
@@ -161,7 +165,7 @@ theorem wp_wordLoadAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : 
   have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
       FStepIn hF { m₁ with current := t } m' :=
     fun hF hoff => Word.atomicLoad_fstep hw hc₁ hoff hb
-  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' b r j hg₁ rfl hU hY hd hj hv hfl hacq hh hw' hw hc₁ ⟨c, hb⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hb; ⟨hs.1, hs.2.1⟩)
+  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' b r j hg₁ rfl hU hiL.w hY hd hj hv hfl hacq hh hw' hw hc₁ ⟨c, hb⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hb; ⟨hs.1, hs.2.1⟩)
     (fun hf => (Word.atomicLoad_read_seen hw hf hb).2.2)
     (hiL.wordStep hY hw hrest hA hap)⟩
 
@@ -172,7 +176,8 @@ theorem wp_wordRmw (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
     (hi : P.inv (upd G t g) m)
     {Q : BitVec bits × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m' old, G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) →
       (W.hist m₁)[(W.hist m₁).size - 1]!.Val old → W.Holds m' (op.apply signed old v) →
       W.hist m' = (W.hist m₁).push
         (Word.rmwEnt m' t ord (W.hist m₁)[(W.hist m₁).size - 1]! (op.apply signed old v)) →
@@ -199,7 +204,7 @@ theorem wp_wordRmw (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
   have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
       FStepIn hF { m₁ with current := t } m' :=
     fun hF hoff => Word.atomicRmw_fstep hw hc₁ hoff hr
-  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' old hg₁ rfl hU hY hv hH hh hacq hw' hw hc₁ ⟨c, hr⟩ hA (fun hf => let hs := Word.atomicRmw_seen hw hf hr; ⟨hs.1, hs.2.1⟩)
+  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' old hg₁ rfl hU hiL.w hY hv hH hh hacq hw' hw hc₁ ⟨c, hr⟩ hA (fun hf => let hs := Word.atomicRmw_seen hw hf hr; ⟨hs.1, hs.2.1⟩)
     (fun hf => Word.atomicRmw_write_seen hw hf hr)
     (hiL.wordStep hY hw hrest hA hap)⟩
 
@@ -212,7 +217,8 @@ theorem wp_wordRmwAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : W
         ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m' old r, G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) →
       (Packed.ofBits? (α := α) old).run = some (.ok r) →
       (W.hist m₁)[(W.hist m₁).size - 1]!.Val old →
       W.Holds m' (op.apply false old (Packed.toBits v)) →
@@ -245,7 +251,7 @@ theorem wp_wordRmwAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : W
   have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
       FStepIn hF { m₁ with current := t } m' :=
     fun hF hoff => Word.atomicRmw_fstep hw hc₁ hoff hb
-  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' old r hg₁ rfl hU hY hd hv hH hh hacq hw' hw hc₁ ⟨c, hb⟩ hA (fun hf => let hs := Word.atomicRmw_seen hw hf hb; ⟨hs.1, hs.2.1⟩)
+  exact ⟨by rw [hrest.threads], h k hk G₁ rY _ m' old r hg₁ rfl hU hiL.w hY hd hv hH hh hacq hw' hw hc₁ ⟨c, hb⟩ hA (fun hf => let hs := Word.atomicRmw_seen hw hf hb; ⟨hs.1, hs.2.1⟩)
     (fun hf => Word.atomicRmw_write_seen hw hf hb)
     (hiL.wordStep hY hw hrest hA hap)⟩
 
@@ -259,7 +265,8 @@ theorem wp_wordCasAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : W
         ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
       W.Ok m₁ → t < m₁.clocks.size →
       (∃ c r, ((cmpxchgAt c succ fail bytes W.ptr (Packed.toBits exp)
         (Packed.toBits new)).run m₁).run = some (.ok (r, m'))) →
@@ -299,7 +306,7 @@ theorem wp_wordCasAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : W
       have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
           FStepIn hF { m₁ with current := t } m' :=
         fun hF hoff => Word.cmpxchg_fstep hw hc₁ hoff ho
-      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hw hc₁ ⟨c, none, ho⟩ hA (fun hf => let hs := Word.cmpxchg_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hiL.w hY hw' hw hc₁ ⟨c, none, ho⟩ hA (fun hf => let hs := Word.cmpxchg_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
         (hiL.wordStep hY hw hrest hA hap)).1 hv hH hh hacq
         (fun hf => Word.cmpxchg_write_seen hw hf ho)⟩
     · cases he
@@ -311,7 +318,7 @@ theorem wp_wordCasAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW : W
       have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
           FStepIn hF { m₁ with current := t } m' :=
         fun hF hoff => Word.cmpxchg_fstep hw hc₁ hoff ho
-      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hw hc₁ ⟨c, some b, ho⟩ hA (fun hf => let hs := Word.cmpxchg_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hiL.w hY hw' hw hc₁ ⟨c, some b, ho⟩ hA (fun hf => let hs := Word.cmpxchg_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
         (hiL.wordStep hY hw hrest hA hap)).2 j b v hne hd hj hv hfl hacq hh
         (fun hf => (Word.cmpxchg_read_seen hw hf ho).2.2)⟩
 
@@ -321,7 +328,8 @@ RMW of the newest write, which holds `exp`; on failure a read of write `j`, whos
 theorem wp_wordCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
     {succ fail : AtomicOrder} {exp new : BitVec bits} (hi : P.inv (upd G t g) m) {Q : Option (BitVec bits) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
       W.Ok m₁ → t < m₁.clocks.size →
       (∃ c r, ((cmpxchgAt c succ fail bytes W.ptr exp new).run m₁).run =
         some (.ok (r, m'))) →
@@ -356,7 +364,7 @@ theorem wp_wordCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.to
   have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
       FStepIn hF { m₁ with current := t } m' :=
     fun hF hoff => Word.cmpxchg_fstep hw hc₁ hoff hr
-  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hw hc₁ ⟨c, r, hr⟩ hA (fun hf => let hs := Word.cmpxchg_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
+  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hiL.w hY hw' hw hc₁ ⟨c, r, hr⟩ hA (fun hf => let hs := Word.cmpxchg_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
   refine ⟨by rw [hrest.threads], ?_⟩
   rcases hcase with ⟨rfl, hv, hH, hh, hacq⟩ | ⟨j, b, rfl, hne, hj, hv, hfl, hacq, hh⟩
   · exact hk.1 hv hH hh hacq (fun hf => Word.cmpxchg_write_seen hw hf hr)
@@ -367,7 +375,8 @@ RMW of the newest write, which holds `exp`; on failure (spurious ones too) a rea
 theorem wp_wordWeakCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
     {succ fail : AtomicOrder} {exp new : BitVec bits} (hi : P.inv (upd G t g) m) {Q : Option (BitVec bits) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
       W.Ok m₁ → t < m₁.clocks.size →
       (∃ c r, ((cmpxchgWeakAt c succ fail bytes W.ptr exp new).run m₁).run =
         some (.ok (r, m'))) →
@@ -402,7 +411,7 @@ theorem wp_wordWeakCas (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL 
   have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
       FStepIn hF { m₁ with current := t } m' :=
     fun hF hoff => Word.cmpxchgWeak_fstep hw hc₁ hoff hr
-  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hw hc₁ ⟨c, r, hr⟩ hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
+  have hk := h k hk G₁ rY _ m' hg₁ rfl hU hiL.w hY hw' hw hc₁ ⟨c, r, hr⟩ hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
   refine ⟨by rw [hrest.threads], ?_⟩
   rcases hcase with ⟨rfl, hv, hH, hh, hacq⟩ | ⟨j, b, rfl, hj, hv, hfl, hacq, hh⟩
   · exact hk.1 hv hH hh hacq (fun hf => Word.cmpxchgWeak_write_seen hw hf hr)
@@ -417,7 +426,8 @@ theorem wp_wordWeakCasAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW
         ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t →
-      U G₁ (rsum (W.cellsR m₁) rY) m₁ → (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
+      U G₁ (rsum (W.cellsR m₁) rY) m₁ → L.WInv (L.pl G₁) m₁ →
+      (∀ l, W.In l → rY.heap l = none) → W.Ok m' →
       W.Ok m₁ → t < m₁.clocks.size →
       (∃ c r, ((cmpxchgWeakAt c succ fail bytes W.ptr (Packed.toBits exp)
         (Packed.toBits new)).run m₁).run = some (.ok (r, m'))) →
@@ -457,7 +467,7 @@ theorem wp_wordWeakCasAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW
       have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
           FStepIn hF { m₁ with current := t } m' :=
         fun hF hoff => Word.cmpxchgWeak_fstep hw hc₁ hoff ho
-      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hw hc₁ ⟨c, none, ho⟩ hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hiL.w hY hw' hw hc₁ ⟨c, none, ho⟩ hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
         (hiL.wordStep hY hw hrest hA hap)).1 hv hH hh hacq
         (fun hf => Word.cmpxchgWeak_write_seen hw hf ho)⟩
     · cases he
@@ -469,7 +479,7 @@ theorem wp_wordWeakCasAs {α : Type} [Packed α bits] (hP : L.Fits K P U ok) (hW
       have hA : ∀ hF, (∀ x, W.o ≤ x → x < W.o + bytes → hF (W.b, x) = none) →
           FStepIn hF { m₁ with current := t } m' :=
         fun hF hoff => Word.cmpxchgWeak_fstep hw hc₁ hoff ho
-      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hY hw' hw hc₁ ⟨c, some b, ho⟩ hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
+      exact ⟨by rw [hrest.threads], (h k hk G₁ rY _ m' hg₁ rfl hU hiL.w hY hw' hw hc₁ ⟨c, some b, ho⟩ hA (fun hf => let hs := Word.cmpxchgWeak_seen hw hf ho; ⟨hs.1, hs.2.1⟩)
         (hiL.wordStep hY hw hrest hA hap)).2 j b v hd hj hv hfl hacq hh
         (fun hf => (Word.cmpxchgWeak_read_seen hw hf ho).2.2)⟩
 
@@ -478,17 +488,18 @@ end Atomic
 variable {W : Word 32 4}
 
 /-- A futex wake at the word (`futexWakeC`), by thread `t` (`g`): the lock's invariant holds with
-the same rest; the client shows its `U` after the wake. -/
+the same rest; the client shows its `U` after the wake, given its `U` and the lock's word invariant
+at the stop. -/
 theorem wp_wordWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {io : Io}
     {c : BitVec 32} (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁ cs m', G₁ t = g → U G₁ rX m₁ →
+    (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁ cs m', G₁ t = g → U G₁ rX m₁ → L.WInv (L.pl G₁) m₁ →
       ((Thread.futexWake W.ptr c.toNat cs).run { m₁ with current := t }).run =
         some (.ok ((), m')) → L.Inv G₁ rX m' → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io W.ptr c : CM Tgt σ Unit).run s) Q G m n := by
   refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ cs m' hw => ?_⟩
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
-  exact h k hk G₁ rX m₁ cs m' hg₁ hU hw (hiL.wakeOff hap hw)
+  exact h k hk G₁ rX m₁ cs m' hg₁ hU hiL.w hw (hiL.wakeOff hap hw)
 
 /-- The thread `t` at `out` (`g`) holds nothing of the lock. -/
 theorem Fits.heldOut (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd G t g) m) :
@@ -498,7 +509,8 @@ theorem Fits.heldOut (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (up
 /-- Thread `t` at `out` (`g`) goes `away`, to a futex wait off the lock's word, when its `U` lets
 it (`hUa`). -/
 theorem Fits.goAway (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd G t g) m)
-    (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m) :
+    (hUa : ∀ rX, U (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m →
+      U (upd G t (L.set g .away rnil)) rX m) :
     P.inv (upd G t (L.set g .away rnil)) m := by
   obtain ⟨rX₀, hiL₀, hU₀⟩ := (hP.inv _ _).mp hi
   have hl := hiL₀.ghost (t := t) (g := L.set g .away rnil) (by rw [upd_self]; exact hg)
@@ -508,7 +520,7 @@ theorem Fits.goAway (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd
       have := (L.R_set (upd G t g) t .away rnil r).mpr hr
       rwa [upd_self] at this)
   rw [upd_upd] at hl
-  exact (hP.inv _ _).mpr ⟨rX₀, hl, hUa _ hU₀⟩
+  exact (hP.inv _ _).mpr ⟨rX₀, hl, hUa _ hU₀ hiL₀.w⟩
 
 /-- A change of `t`'s place in the primitive keeps the lock's invariant (`Inv.relabel`: the
 primitive's place and the lock's are independent, `Fits.lph`, …). -/
@@ -528,7 +540,7 @@ theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U)
     {e : BitVec 32} (hg : L.ph g = .out) (hheld : L.held g = rnil)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
@@ -536,7 +548,7 @@ theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U)
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -571,7 +583,7 @@ theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U)
     fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hw₀.futexWait_run ht0), fun b m' hr => ?_⟩⟩
   have hl := hiL.waitOff hph₁ hw hap hX hq hr
   have hfields := Word.futexWait_fields hr
-  have hUo' := fun M => hUo G₁ rY m₁ M hg₁ hU hY hq
+  have hUo' := fun M => hUo G₁ rY m₁ M hg₁ hU hiL.w hY hq
   rcases hw₀.futexWait_native rfl ht0 hiL.w.csize hr with
     ⟨-, rfl, rfl⟩ | ⟨hwk, M, hok₂, hrecord, hh, hbl, ⟨hU32, rfl, rfl⟩ | ⟨rfl, rfl⟩⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
@@ -582,7 +594,7 @@ theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U)
     have hs := hiL.spuriousOff hph₁ hq
     rw [hback] at hs
     exact ⟨(hP.inv _ _).mpr ⟨_, hl,
-        hUs G₁ rY m₁ M hg₁ hU hY hwk hq hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
+        hUs G₁ rY m₁ M hg₁ hU hiL.w hY hwk hq hw₀ hc₁ hrecord hfields hh hok₂ hbl hU32⟩,
       h G₁ _ rfl ((hP.inv _ _).mpr ⟨_, hP.relabelK p hs,
         hUo' _ ⟨rfl, rfl, rfl⟩ (.inr (.inl rfl))⟩)⟩
   · simp only [Bool.false_eq_true, ↓reduceIte] at hl ⊢
@@ -603,10 +615,11 @@ theorem wp_wordWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (p : K.Ph)
     {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hg : L.ph g = .out)
     (hi : P.inv (upd G t g) m)
-    (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
+    (hUa : ∀ rX, U (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m →
+      U (upd G t (L.set g .away rnil)) rX m)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
@@ -615,7 +628,7 @@ theorem wp_wordWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -636,10 +649,11 @@ theorem wp_wordWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
 theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.toLockWord)
     {ε : Type} {w : Nat} [Packed ε w] {io : Io} {e : ε} (hg : L.ph g = .out)
     (hi : P.inv (upd G t g) m)
-    (hUa : ∀ rX, U (upd G t g) rX m → U (upd G t (L.set g .away rnil)) rX m)
+    (hUa : ∀ rX, U (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m →
+      U (upd G t (L.set g .away rnil)) rX m)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
@@ -648,7 +662,7 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L.t
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -686,17 +700,18 @@ theorem wp_wordOsWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL
     (hret : ∀ G₁ m₁, G₁ t = g → m₁.current = t → P.inv G₁ m₁ →
       P.inv (upd G₁ t (K.pl.set g p)) m₁)
     (hrd : ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → W.hist m' = W.hist m₁ → W.Ok m' → W.Ok m₁ → t < m₁.clocks.size →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → W.hist m' = W.hist m₁ → W.Ok m' → W.Ok m₁ → t < m₁.clocks.size →
       (∃ c, ∃ v : BitVec 32, ((atomicLoadAt c .relaxed 4 W.ptr).run m₁).run =
         some (.ok (v, m'))) →
       (∀ hF, (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
         FStepIn hF m₁ m') →
       (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
       L.Inv G₁ (rsum (W.cellsR m') rY) m' → P.inv G₁ m')
-    (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → U (upd G₁ t (L.set g .away rnil)) rX m₁)
+    (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → L.WInv (L.pl (upd G₁ t g)) m₁ →
+      U (upd G₁ t (L.set g .away rnil)) rX m₁)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
@@ -704,7 +719,7 @@ theorem wp_wordOsWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -737,7 +752,7 @@ theorem wp_wordOsWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL
     (hA (fun _ => none) (fun _ _ _ => rfl)).current
   have hi₂ : P.inv (upd G₁ t g) m₂ := by
     rw [← hg₁, upd_same]
-    exact hrd G₁ rY _ m₂ hg₁ rfl hU hY hh hw' hw hc₁ ⟨0, v, hr⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
+    exact hrd G₁ rY _ m₂ hg₁ rfl hU hiL.w hY hh hw' hw hc₁ ⟨0, v, hr⟩ hA (fun hf => let hs := Word.atomicLoad_seen hw hf hr; ⟨hs.1, hs.2.1⟩) (hiL.wordStep hY hw hrest hA hap)
   have hr₂ : P.inv (upd G₁ t (K.pl.set g p)) m₂ := by
     have := hret _ _ (upd_self _ _ _) hc₂ hi₂; rwa [upd_upd] at this
   refine ⟨by rw [hrest.threads], fun _ => h k (by omega) _ G₁ m₂ hc₂ (by decide) hr₂,
@@ -755,17 +770,18 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     {e : BitVec 32} (hg : L.ph g = .out) (hc : m.current = t) (hi : P.inv (upd G t g) m)
     (hos : ∀ G₁ m₁ o, G₁ t = g → m₁.current = t → P.inv G₁ m₁ → P.inv G₁ { m₁ with os := o })
     (hrd : ∀ G₁ rY m₁ m', G₁ t = g → m₁.current = t → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → W.hist m' = W.hist m₁ → W.Ok m' → W.Ok m₁ → t < m₁.clocks.size →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → W.hist m' = W.hist m₁ → W.Ok m' → W.Ok m₁ → t < m₁.clocks.size →
       (∃ c, ∃ v : BitVec 32, ((atomicLoadAt c .relaxed 4 W.ptr).run m₁).run =
         some (.ok (v, m'))) →
       (∀ hF, (∀ x, W.o ≤ x → x < W.o + 4 → hF (W.b, x) = none) →
         FStepIn hF m₁ m') →
       (W.Fresh m₁ → W.Fresh m' ∧ ∀ u, W.ownPos m₁ u ≤ W.ownPos m' u) →
       L.Inv G₁ (rsum (W.cellsR m') rY) m' → P.inv G₁ m')
-    (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → U (upd G₁ t (L.set g .away rnil)) rX m₁)
+    (hUa : ∀ G₁ rX m₁, U (upd G₁ t g) rX m₁ → L.WInv (L.pl (upd G₁ t g)) m₁ →
+      U (upd G₁ t (L.set g .away rnil)) rX m₁)
     (hlive : ∀ G₁ m₁, G₁ t = L.set g .away rnil → P.inv G₁ m₁ → P.Live t G₁ m₁)
     (hUs : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.woken.contains t = false →
       m₁.waiters.any (·.1 == t) = false →
       W.Ok { m₁ with current := t } → t < m₁.clocks.size →
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
@@ -773,7 +789,7 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
       W.hist M = W.hist m₁ → W.Ok M → M.blocks = m₁.blocks → W.Holds m₁ e →
       U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
-      (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
+      L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       (M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
         (W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
@@ -791,12 +807,13 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U) (hap : W.ApartL L
     (by rw [K.pl.set_self]; exact hUo) (by rw [K.pl.set_self]; exact h) hcost
 
 /-- **An OS futex wake at the word** (`Os.futexWake`, OSF-02) by thread `t` (`g`): a wake keeps
-the lock's invariant with the same rest, and the client shows its `U` after it; a spurious
+the lock's invariant with the same rest, and the client shows its `U` after it (given its `U`
+and the lock's word invariant at the stop); a spurious
 `EINTR` (`spurious`, macOS) wakes nobody, and the protocol's invariant holds at the stop. -/
 theorem wp_wordOsWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {w : Option Nat}
     {spurious : Bool} (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ →
+    (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → L.WInv (L.pl G₁) m₁ →
       (∀ cs m', ((Thread.futexWake W.ptr (Os.wakeSize w (m₁.waitersAt W.ptr).length) cs).run
           { m₁ with current := t }).run = some (.ok ((), m')) → L.Inv G₁ rX m' →
         Q (some (Os.wakeSize w (m₁.waitersAt W.ptr).length)) G₁ m' k) ∧
@@ -806,7 +823,7 @@ theorem wp_wordOsWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {w : 
     P.WP t (Os.futexWake W.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n := by
   refine WP.osFutexWake fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht => ?_⟩
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
-  obtain ⟨hw, hsp⟩ := h k hk G₁ rX m₁ hg₁ hU
+  obtain ⟨hw, hsp⟩ := h k hk G₁ rX m₁ hg₁ hU hiL.w
   refine ⟨fun cs m' hr => hw cs m' hr (hiL.wakeOff hap hr), fun hs => hsp hs ?_⟩
   obtain ⟨-, -, -, hic⟩ := hP.curT t hi₁ ht
   rw [← hg₁, upd_same]; exact hic
@@ -942,9 +959,11 @@ end FLock
 the roles, its words `Ws`, its invariant `Inv`, the steps of its code at a word
 (`Move W t g p q h m m'`: thread `t` at `g` goes to the place `p`, the lock place `q` and the
 lock resource `h`) and the lock places `ownAt` at which a thread in its code steps on its own
-part. The rest has each word's cells (`Sub`, `Word.InRest`); a step is a step of its code at a
-word or a native framed step on the thread's own part that preserves word validity and exact
-history, with the word's new cells in the rest and the invariant after it. -/
+part. The rest has each word's cells (`Sub`, `Word.InRest`). A step, with the word's new cells in
+the rest and the invariant after it, is either a step of its code at a word, with the lock's word
+invariant before it (`LockWord.WInv`: the step is taken from a state of the protocol, so a client's
+rest may use who holds the lock, e.g. `FLock.HB.le`), or a native framed step on the thread's own
+part that preserves word validity and exact history. -/
 abbrev FPrim.ofWords {γ Ph Rl : Type} (L : FLock γ) (pl : FPlace γ Ph) (out : Ph)
     (calm : Ph → Prop) (role : Rl → γ → Prop) (Ws : Word 32 4 → Prop)
     (Inv : (ThreadId → γ) → Mem → Prop)
@@ -961,7 +980,8 @@ abbrev FPrim.ofWords {γ Ph Rl : Type} (L : FLock γ) (pl : FPlace γ Ph) (out :
   Apart := ∀ W, Ws W → W.ApartL L.toLockWord
   Step t G rX m G' rX' m' := ∃ W rY, Ws W ∧ rX = rsum (W.cellsR m) rY ∧
     rX' = rsum (W.cellsR m') rY ∧ (∀ l, W.In l → rY.heap l = none) ∧ Inv G' m' ∧
-    ((∃ p q h, Move W t (G t) p q h m m' ∧ G' = upd G t (L.set (pl.set (G t) p) q h)) ∨
+    ((∃ p q h, Move W t (G t) p q h m m' ∧ L.WInv (L.pl G) m ∧
+        G' = upd G t (L.set (pl.set (G t) p) q h)) ∨
      (∃ r, ownAt (L.ph (G t)) ∧ L.Inv G rX m ∧ m.current = t ∧
        FStepIn (rsum (L.wordR m) rX).heap.erase m m' ∧
        (∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) ∧
@@ -1000,13 +1020,15 @@ theorem Fits.wAp (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move ownA
   hK.apart W hW
 
 /-- **A step of the primitive's code** at the word `W` keeps the rest, with the stepping thread's
-new place `p`, lock place `q` and lock resource `h`, given the invariant after it. -/
+new place `p`, lock place `q` and lock resource `h`, given the lock's word invariant before it and
+the primitive's invariant after it. -/
 theorem Fits.wStep (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move ownAt) P U ok)
     {q : LPh} {h : Res} (hW : Ws W) (hmv : Move W t (G t) p q h m m')
-    (hU : U G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
+    (hU : U G (rsum (W.cellsR m) rY) m) (hwL : L.WInv (L.pl G) m)
+    (hY : ∀ l, W.In l → rY.heap l = none)
     (hI : Inv (upd G t (L.set (pl.set (G t) p) q h)) m') :
     U (upd G t (L.set (pl.set (G t) p) q h)) (rsum (W.cellsR m') rY) m' :=
-  hK.kstep t G _ m _ _ m' (.inl ⟨W, rY, hW, rfl, rfl, hY, hI, .inl ⟨p, q, h, hmv, rfl⟩⟩) hU
+  hK.kstep t G _ m _ _ m' (.inl ⟨W, rY, hW, rfl, rfl, hY, hI, .inl ⟨p, q, h, hmv, hwL, rfl⟩⟩) hU
 
 /-- **A step of a thread on its own part** in the primitive's code (at a lock place `ownAt`; a
 stack block) keeps the rest, with the thread's new part `r`, given the lock's invariant before it
@@ -1025,16 +1047,17 @@ theorem Fits.wOwn (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move own
 
 /-- **After a step of the primitive's code** by `t` (`g`, new place `p`) at the word `W` that
 keeps `t`'s lock place and resource: the protocol's invariant, from the lock's invariant after the
-step, the rest before it, and the primitive's invariant after it. -/
+step, the rest and the lock's word invariant before it, and the primitive's invariant after it. -/
 theorem Fits.back (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Inv Move ownAt) P U ok)
     (hW : Ws W) (hg₁ : G₁ t = g) (hmv : Move W t g p (L.ph g) (L.held g) m₁ m')
-    (hU : U G₁ (rsum (W.cellsR m₁) rY) m₁) (hY : ∀ l, W.In l → rY.heap l = none)
+    (hU : U G₁ (rsum (W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
+    (hY : ∀ l, W.In l → rY.heap l = none)
     (hL : L.Inv G₁ (rsum (W.cellsR m') rY) m') (hI : Inv (upd G₁ t (pl.set g p)) m') :
     P.inv (upd G₁ t (pl.set g p)) m' := by
   subst hg₁
   have hset : L.set (pl.set (G₁ t) p) (L.ph (G₁ t)) (L.held (G₁ t)) = pl.set (G₁ t) p := by
     have := L.set_self (pl.set (G₁ t) p); rwa [hK.lph, hK.lheld] at this
-  have hU' := hK.wStep hW hmv hU hY (by rw [hset]; exact hI)
+  have hU' := hK.wStep hW hmv hU hwL hY (by rw [hset]; exact hI)
   rw [hset] at hU'
   have hL' := hL.relabel (g := pl.set (G₁ t) p) (hK.lph _ _) (hK.lpart _ _) (hK.lheld _ _)
     (fun r hr => hK.lR G₁ t p r hr)

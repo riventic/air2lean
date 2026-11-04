@@ -82,14 +82,14 @@ theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.co
     FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
 
 /-- macOS: an event's setter at `sw` wakes every waiter (`__ulock_wake(… | WAKE_ALL, 0)`,
-`FEvent.wp_osWake`, over `wp_wordOsWake`): the event is set and it leaves, or after a spurious
-`EINTR` it is still at `sw`. -/
+`FEvent.wp_osWake`, over `wp_wordOsWake`): the event is set and it is done (`sd`), or after a
+spurious `EINTR` it is still at `sw`. -/
 theorem event_wakeAll (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hg : E.ph g = .sw) (hgo : L.ph g = .out) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Darwin.__ulock_wake 0x01000101 (some E.W.ptr) 0)
       (fun r G' m' d' => d' < d ∧ m'.current = t ∧
-        (E.IsSet m' ∧ P.inv (upd G' t (E.set g .out)) m' ∨
+        (E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m' ∨
          r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
   fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg (.inl hgo) hi]
 

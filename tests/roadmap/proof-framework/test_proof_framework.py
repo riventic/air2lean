@@ -342,6 +342,62 @@ class Ratchet(unittest.TestCase):
         (self.repo / "New.lean").write_text("import ZigLean.Sep.Loop\n")
         self.assertEqual(self.check(), 1)
 
+    def declare_retiring_tactic(self):
+        """Commit a base in which `Old.lean` declares the tactic to retire `rt_old` and uses it once."""
+        (self.repo / "Old.lean").write_text(
+            'syntax "rt_old" : tactic\nmacro_rules | `(tactic| rt_old) => `(tactic| skip)\n'
+            "theorem a : True := by rt_old\n")
+        pf.main(["--root", str(self.repo), "--write"])
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-qm", "uses")
+        self.assertEqual(self.check(), 0)
+
+    def test_tactic_uses_are_recorded_per_file(self):
+        self.declare_retiring_tactic()
+        uses = json.loads((self.repo / pf.FILE).read_text())["tactic_uses"]
+        self.assertEqual([(u["path"], u["tactic"], u["count"]) for u in uses], [("Old.lean", "rt_old", 2)])
+
+    def test_new_use_in_an_allowed_file_fails(self):
+        self.declare_retiring_tactic()
+        with (self.repo / "Old.lean").open("a") as f:
+            f.write("theorem a2 : True := by rt_old\n")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("Old.lean: 1 new use(s) of the tactic to retire `rt_old`", err)
+
+    def test_use_in_a_new_file_fails(self):
+        self.declare_retiring_tactic()
+        (self.repo / "Fresh.lean").write_text("theorem b : True := by rt_old\n")
+        git(self.repo, "add", ".")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("Fresh.lean: 1 new use(s)", err)
+
+    def test_removed_use_shrinks_the_list(self):
+        self.declare_retiring_tactic()
+        (self.repo / "Old.lean").write_text('syntax "rt_old" : tactic\ntheorem a : True := trivial\n')
+        self.assertEqual(self.check(), 1)  # the entry is stale until it is lowered
+        pf.main(["--root", str(self.repo), "--write"])
+        self.assertEqual(json.loads((self.repo / pf.FILE).read_text())["tactic_uses"], [])
+        self.assertEqual(self.check(), 0)
+
+    def test_use_in_a_comment_or_string_is_ignored(self):
+        self.declare_retiring_tactic()
+        (self.repo / "Fresh.lean").write_text(
+            "-- by rt_old\n/- rt_old\n /- rt_old -/ rt_old -/\ndef s := \"rt_old\"\n"
+            "theorem c : True := by rt_older\n")
+        git(self.repo, "add", ".")
+        self.assertEqual(self.check(), 0)
+
+    def test_raised_count_needs_approval_against_base(self):
+        self.declare_retiring_tactic()
+        with (self.repo / "Old.lean").open("a") as f:
+            f.write("theorem a2 : True := by rt_old\n")
+        pf.main(["--root", str(self.repo), "--write"])
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)
+        self.assertIn("rises from 2 to 3", err)
+
     def test_stale_entry_fails(self):
         (self.repo / "Old.lean").write_text("theorem a : FTriple P c Q := h\n")
         self.assertEqual(self.check(), 1)

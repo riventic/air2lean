@@ -185,6 +185,18 @@ retain the zero-divisor error, and signed overflow uses the runtime's existing p
   obtain ⟨b, blk, o, -, -, -, rfl⟩ := load_ok h
   exact hc.readAt _ _ _ _ _
 
+/-- `free` keeps the clocks: what happened before a step still happened before the next after a
+thread frees a block (e.g. a waiter's stack block, `FEvent.Synced.of_clocks`). -/
+@[fsym_run] theorem free_clocks {m m' : Mem} {q : Ptr} {x : Unit}
+    (h : ((free q).run m).run = some (.ok (x, m'))) : m'.clocks = m.clocks := by
+  obtain ⟨_, _, _, _, rfl⟩ := free_ok h
+  rfl
+
+/-- A pure step (`StateT.lift` of a `Result`, a `debug_assert`) keeps the clocks. -/
+@[fsym_run] theorem lift_clocks {α : Type} {x : Result α} {a : α} {m m' : Mem}
+    (h : ((StateT.lift x : MemM α).run m).run = some (.ok (a, m'))) : m'.clocks = m.clocks := by
+  rw [(MemM.lift_ok h).2]
+
 /-- A field pointer leaves the memory as it is. -/
 @[fsym_run] theorem ptrProject_runFacts {m m' : Mem} {p q : Ptr} {f : Ptr → Ptr}
     (h : ((ptrProject p f).run m).run = some (.ok (q, m'))) : m' = m := by
