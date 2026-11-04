@@ -86,6 +86,14 @@ theorem read_unwritten_word (v w : BitVec 16) :
         up (regionIn p A S K 2 (writeBytes (memsetBytes 4 (some v)) 6 (Enc.encode w)))) := by
   fsym
 
+/-- A kept prefix of one byte (`replicate 1`, not a singleton, until it is decoded). -/
+theorem read_kept_one (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
+    (hk : keepsPrefix (memsetBytes 1 (some v)) bs) :
+    FTotalTriple (up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w))))
+      (Zig.load (BitVec 8) 1 (p.elem 1 0#64))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K 1 (writeBytes bs 7 (Enc.encode w)))) := by
+  fsym
+
 /-- A read of a reallocation's kept prefix, past a store to a byte after it (`keptExtract`). -/
 theorem read_kept (v w : BitVec 8) (bs : Array Byte) (hs : bs.size = 8)
     (hk : keepsPrefix (memsetBytes 4 (some v)) bs) :

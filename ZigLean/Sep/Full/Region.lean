@@ -325,12 +325,13 @@ replicated byte, the prefix that a reallocation kept; and then decodes them. -/
     (Array.replicate n a).extract i j = Array.replicate (j - i) a := by
   simp [Array.extract_replicate, Nat.min_eq_left h]
 
-/-- One byte decodes to itself. -/
+/-- One byte decodes to itself (as the read of a replicated byte leaves it, `replicate 1`: a
+singleton `#[b]` would not match `extract_replicate_le` when a one-byte memset is read). -/
 @[fsym_arith] theorem _root_.Zig.decode_byte (v : BitVec 8) :
-    (Enc.decode #[Byte.int v] : Result (BitVec 8)) = pure v := by
-  rw [← Enc.encode_byte]; exact LawfulEnc.decode_encode v
+    (Enc.decode (Array.replicate 1 (Byte.int v)) : Result (BitVec 8)) = pure v := by
+  rw [Array.replicate_one, ← Enc.encode_byte]; exact LawfulEnc.decode_encode v
 
-attribute [fsym_arith] LawfulEnc.decode_encode Array.replicate_one Array.size_replicate
+attribute [fsym_arith] LawfulEnc.decode_encode
 
 /-- Bytes within a kept prefix (`keepsPrefix old new`, a reallocation's) are the old ones. -/
 theorem _root_.Zig.extract_of_keepsPrefix {old new : Array Byte} {lo hi : Nat}
@@ -355,6 +356,11 @@ simproc [fsym_arith] keptExtract (Array.extract _ _ _) := fun e => do
     let ty ← instantiateMVars d.type
     unless ty.isAppOfArity ``Zig.keepsPrefix 2 && ty.appArg! == x do continue
     let old := ty.appFn!.appArg!
+    -- (no cycle: `old` mentions `x`, or a fact `keepsPrefix x old` leads back; a reallocation's
+    -- facts form a chain, old to new)
+    if old.containsFVar x.fvarId! then continue
+    if old.isFVar && (← getLCtx).any fun d' => d'.type.isAppOfArity ``Zig.keepsPrefix 2 &&
+        d'.type.appFn!.appArg! == x && d'.type.appArg! == old then continue
     let some p1 ← (← getMethods).discharge? (← mkAppM ``LE.le #[hi, ← mkAppM ``Array.size #[old]])
       | continue
     let some p2 ← (← getMethods).discharge? (← mkAppM ``LE.le #[hi, ← mkAppM ``Array.size #[x]])
