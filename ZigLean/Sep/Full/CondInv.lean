@@ -1074,6 +1074,105 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
   · have hut := hnsig u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
   · have hut := hnsig u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
 
+/-- The newest write of a word with a write pushed. -/
+theorem last_push {h : Array Word.Entry} {x : Word.Entry} :
+    (h.push x)[(h.push x).size - 1]! = x := by
+  simp only [Array.size_push, Nat.add_sub_cancel]; exact FEvent.get_push_eq
+
+/-- **A post** (`signal`'s or `broadcast`'s release `cmpxchg`) by `t`, out of the condition's
+code, outside or holding the mutex, that may signal: the state's new write `x` keeps `waiters`
+and raises `signals` by at most `n` up to `waiters`; `t` goes to `inc q n` with `q` the new
+write, which happened before it (`hxc`). -/
+theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g' : γ}
+    {x : Word.Entry} (hI : C.Inv L G m) (ht : C.ph (G t) = .out)
+    (hg' : C.ph g' = .inc (C.S.hist m).size n) (hlg : L.ph g' = .out ∨ L.ph g' = .holds)
+    (hsx : C.sx g') (hS : C.S.hist m' = (C.S.hist m).push x) (hx : x.Val (val x))
+    (hxw : wOf x = wOf (C.lastS m)) (hxs : sOf (C.lastS m) < sOf x) (hxsw : sOf x ≤ wOf x)
+    (hxn : sOf x ≤ sOf (C.lastS m) + n) (hxc : VClock.le x.clock (m'.clocks[t]!) = true)
+    (hE : C.Ep.hist m' = C.Ep.hist m) (hwt : m'.waiters = m.waiters) (hwk : m'.woken = m.woken)
+    (hth : m'.threads = m.threads) (htn : t < m.threads.size)
+    (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    C.Inv L (upd G t g') m' := by
+  have hph : ∀ u, u ≠ t → C.ph (upd G t g' u) = C.ph (G u) := fun u hu => by rw [upd_ne _ _ hu]
+  have hqd : ∀ u, C.qd m' u = C.qd m u := fun u => by unfold qd; rw [hwt]
+  have hpos := hI.spos
+  have hlast : C.lastS m' = x := by unfold FCond.lastS; rw [hS]; exact last_push
+  have hlt : ∀ k, k < (C.S.hist m).size → (C.S.hist m')[k]! = (C.S.hist m)[k]! := fun k hk => by
+    rw [hS]; exact FEvent.get_push_lt hk
+  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact FEvent.get_push_eq
+  have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hS]; simp
+  have hold : C.lastS m = (C.S.hist m)[(C.S.hist m).size - 1]! := rfl
+  have hnr : ∀ u p, C.ph (upd G t g' u) = p → p.isReg = true → u ≠ t := fun u p h hp hu => by
+    subst hu; rw [upd_self, hg'] at h; rw [← h] at hp; cases hp
+  have hncr : ∀ u, (C.ph (upd G t g' u)).crit → u ≠ t := fun u h hu => by
+    subst hu; rw [upd_self, hg'] at h; cases h
+  have hnsig₀ : ∀ v, (C.ph (G v)).sig → v ≠ t := fun v h hv => by
+    subst hv; rw [ht] at h; cases h
+  refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
+    by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i e h => ?_,
+    fun u i jr sn e h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
+    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_⟩
+  · -- (H1) values
+    by_cases hk' : k < (C.S.hist m).size
+    · rw [hlt k hk']; exact hI.sv k hk'
+    · obtain rfl : k = (C.S.hist m).size := by omega
+      rw [hnew]; exact ⟨hx, hxsw⟩
+  · -- (H1) steps
+    by_cases hk' : k + 1 < (C.S.hist m).size
+    · rw [hlt k (by omega), hlt (k + 1) hk']; exact hI.steps k hk'
+    · obtain rfl : k = (C.S.hist m).size - 1 := by omega
+      rw [hlt _ (by omega), show (C.S.hist m).size - 1 + 1 = (C.S.hist m).size by omega, hnew,
+        ← hold]
+      exact .inr (.inl ⟨hxw, hxs, by omega⟩)
+  · -- (H2) the new write is `t`'s own post
+    rw [hsz] at hq; rw [hE]
+    by_cases hq' : q < (C.S.hist m).size
+    · rw [hlt q hq', hlt (q - 1) (by omega)] at hlt' ⊢
+      rcases hI.pub q h0 hq' hlt' with ⟨v, n'', hv, hn⟩ | ⟨b, hb, hc⟩
+      · refine .inl ⟨v, n'', ?_, hn⟩
+        rw [hph v (hnsig₀ v (by rw [hv]; rfl))]; exact hv
+      · exact .inr ⟨b, hb, hc⟩
+    · obtain rfl : q = (C.S.hist m).size := by omega
+      rw [hnew, hlt _ (by omega), ← hold]
+      exact .inl ⟨t, n, by rw [upd_self, hg'], by omega⟩
+  · by_cases hvt : v = t
+    · subst hvt; rw [upd_self, hg'] at h; cases h
+      rw [hsz, hnew]; exact ⟨hpos, by omega, hxc⟩
+    · rw [hph v hvt] at h
+      obtain ⟨h1, h2, h3⟩ := hI.inc v q n' h
+      rw [hsz, hlt q h2]; exact ⟨h1, by omega, VClock.le_trans h3 (hclk v)⟩
+  · have hut : u ≠ t := fun hu => by subst hu; rw [upd_self, hg'] at h; cases h
+    rw [hph u hut] at h
+    obtain ⟨h1, h2, h3⟩ := hI.ld u i e h
+    rw [hE]; exact ⟨h1, h2, VClock.le_trans h3 (hclk u)⟩
+  · have hut := hnr u _ h rfl
+    rw [hph u hut] at h
+    obtain ⟨h1, h2, h3, h4, h5, h6⟩ := hI.reg u i jr sn e h
+    rw [hE, hsz, hlt jr h4]
+    exact ⟨h1, h2, VClock.le_trans h3 (hclk u), by omega, VClock.le_trans h5 (hclk u), h6⟩
+  · rw [hwt] at hw
+    obtain ⟨i, jr, e, h⟩ := hI.q w hw hp
+    have hwt' : w.1 ≠ t := fun e' => by rw [e', ht] at h; cases h
+    rw [hph _ hwt']; exact ⟨i, jr, e, h⟩
+  · rw [hwt] at hw
+    have hwt' : w.1 ≠ t := fun e' => by rw [e', upd_self, hg'] at hp; cases hp
+    rw [hph _ hwt'] at hp; exact hI.qw w hw hp
+  · exact hI.cnt_post ht hg' (by rw [hlast, hxw]) (by rw [hlast]; exact hxn) (by rw [hE]) hqd
+      (by rw [hwk])
+  · rw [hth]
+    by_cases hu : u = t
+    · subst hu; exact htn
+    · rw [hph u hu] at h; exact hI.ex u h
+  · have hut := hncr u h; rw [hph u hut] at h; rw [hlast, hxw]; exact hI.room u h
+  · rw [hph u (hncr u hu)] at hu; rw [hph v (hncr v hv)] at hv; exact hI.crit1 u v hu hv
+  · have hut := hncr u h; rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.crit u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self]; exact hlg
+    · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.lp u h
+  · by_cases hut : u = t
+    · subst hut; rw [upd_self]; exact hsx
+    · rw [hph u hut] at h; rw [upd_ne _ _ hut]; exact hI.sx u h
+
 end FCond
 
 end Full
