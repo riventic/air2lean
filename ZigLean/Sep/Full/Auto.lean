@@ -6109,7 +6109,7 @@ def rebaseLitPtr? (P x : Expr) : TacticM (Option (Expr × Expr)) := do
         let e ← mkAppOptM ``Zig.Full.Auto.ptr_eq_add_off_sub #[q, p, hqp]
         -- the offset in the arithmetic's normal form (`3` for `⟨some 0, 15⟩.off - (bp.add 12).off`)
         let (ctx, procs) ← arithSimpCtx
-        let (rk, _) ← simp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
+        let (rk, _) ← fsimp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
         let e ← match rk.proof? with
           | some pk => mkEqTrans e (← mkCongrArg (mkApp (mkConst ``Zig.Ptr.add) p) pk)
           | none => pure e
