@@ -296,7 +296,7 @@ theorem SUp.chain {h : Array Word.Entry} {k : Nat} : ∀ n, k < n →
 /-- `SUp` of an old write after a push. -/
 theorem SUp.push {h : Array Word.Entry} {x : Word.Entry} {p : Nat} (hp : p < h.size) :
     SUp (h.push x) p ↔ SUp h p := by
-  unfold SUp; rw [FEvent.get_push_lt hp, FEvent.get_push_lt (by omega : p - 1 < h.size)]
+  unfold SUp; rw [Word.get_push_lt hp, Word.get_push_lt (by omega : p - 1 < h.size)]
 
 /-- `SUp` of a write of a prefix. -/
 theorem SUp.prefix {W : Word 32 4} {h : Array Word.Entry} {m : Mem} {p : Nat}
@@ -476,7 +476,7 @@ theorem Inv.push_sup {G G' : ThreadId → γ} {t : ThreadId} {m m' : Mem}
   have hpos := hI.spos
   have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hx]; simp
   have hprev : (C.S.hist m')[(C.S.hist m).size - 1]! = C.lastS m := by
-    rw [hx]; exact FEvent.get_push_lt (by omega)
+    rw [hx]; exact Word.get_push_lt (by omega)
   have hlast : C.lastS m' = (C.S.hist m')[(C.S.hist m).size]! := by
     unfold FCond.lastS; rw [hsz, Nat.add_sub_cancel]
   have hnr : ∀ T, C.nreg G' T = C.nreg G T := fun T => tsum_congr fun u _ => by
@@ -1660,7 +1660,7 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h
 /-- The newest write of a word with a write pushed. -/
 theorem last_push {h : Array Word.Entry} {x : Word.Entry} :
     (h.push x)[(h.push x).size - 1]! = x := by
-  simp only [Array.size_push, Nat.add_sub_cancel]; exact FEvent.get_push_eq
+  simp only [Array.size_push, Nat.add_sub_cancel]; exact Word.get_push_eq
 
 /-! ## The state's writes, for a client's history facts -/
 
@@ -1688,12 +1688,12 @@ theorem RegW.push {m m' : Mem} {x : Word.Entry} (h : C.S.hist m' = (C.S.hist m).
   rw [h, Array.size_push] at hjs
   rw [h] at hw0 hw1
   by_cases e : j < (C.S.hist m).size
-  · rw [FEvent.get_push_lt e] at hw1
-    rw [FEvent.get_push_lt (by omega)] at hw0
+  · rw [Word.get_push_lt e] at hw1
+    rw [Word.get_push_lt (by omega)] at hw0
     exact .inl ⟨h0, e, hw0, hw1⟩
   · obtain rfl : j = (C.S.hist m).size := by omega
-    rw [FEvent.get_push_eq] at hw1
-    rw [FEvent.get_push_lt (by omega)] at hw0
+    rw [Word.get_push_eq] at hw1
+    rw [Word.get_push_lt (by omega)] at hw0
     exact .inr ⟨rfl, hw0, hw1⟩
 
 /-- A new state write is one of the kinds of `SStep` from the newest one before it. -/
@@ -1701,8 +1701,8 @@ theorem Inv.step_push {G : ThreadId → γ} {m m' : Mem} {x : Word.Entry} (hI : 
     (hpos : 0 < (C.S.hist m).size) (h : C.S.hist m' = (C.S.hist m).push x) :
     SStep (C.lastS m) x := by
   have hst := hI.steps ((C.S.hist m).size - 1) (by rw [h, Array.size_push]; omega)
-  rwa [h, FEvent.get_push_lt (by omega),
-    show (C.S.hist m).size - 1 + 1 = (C.S.hist m).size by omega, FEvent.get_push_eq] at hst
+  rwa [h, Word.get_push_lt (by omega),
+    show (C.S.hist m).size - 1 + 1 = (C.S.hist m).size by omega, Word.get_push_eq] at hst
 
 /-- After a new state write that registers no thread (`waiters` does not rise), `Sated` stays:
 no post follows a sated write. -/
@@ -1736,8 +1736,8 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
   have hpos := hI.spos
   have hlast : C.lastS m' = x := by unfold FCond.lastS; rw [hS]; exact last_push
   have hlt : ∀ k, k < (C.S.hist m).size → (C.S.hist m')[k]! = (C.S.hist m)[k]! := fun k hk => by
-    rw [hS]; exact FEvent.get_push_lt hk
-  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact FEvent.get_push_eq
+    rw [hS]; exact Word.get_push_lt hk
+  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact Word.get_push_eq
   have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hS]; simp
   have hold : C.lastS m = (C.S.hist m)[(C.S.hist m).size - 1]! := rfl
   have hnr : ∀ u p, C.ph (upd G t g' u) = p → p.isReg = true → u ≠ t := fun u p h hp hu => by
@@ -1836,8 +1836,8 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
   have hsw := hI.s_le_w
   have hlast : C.lastS m' = x := by unfold FCond.lastS; rw [hS]; exact last_push
   have hlt : ∀ k, k < (C.S.hist m).size → (C.S.hist m')[k]! = (C.S.hist m)[k]! := fun k hk => by
-    rw [hS]; exact FEvent.get_push_lt hk
-  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact FEvent.get_push_eq
+    rw [hS]; exact Word.get_push_lt hk
+  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact Word.get_push_eq
   have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hS]; simp
   have hold : C.lastS m = (C.S.hist m)[(C.S.hist m).size - 1]! := rfl
   refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
@@ -1935,8 +1935,8 @@ theorem Inv.register {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i : Nat}
   obtain ⟨hxw, hxs⟩ := wOf_sOf_succ hval (hI.room t (by rw [ht]; rfl))
   have hlast : C.lastS m' = x := by unfold FCond.lastS; rw [hS]; exact last_push
   have hlt : ∀ k, k < (C.S.hist m).size → (C.S.hist m')[k]! = (C.S.hist m)[k]! := fun k hk => by
-    rw [hS]; exact FEvent.get_push_lt hk
-  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact FEvent.get_push_eq
+    rw [hS]; exact Word.get_push_lt hk
+  have hnew : (C.S.hist m')[(C.S.hist m).size]! = x := by rw [hS]; exact Word.get_push_eq
   have hsz : (C.S.hist m').size = (C.S.hist m).size + 1 := by rw [hS]; simp
   have hold : C.lastS m = (C.S.hist m)[(C.S.hist m).size - 1]! := rfl
   -- `t` was the only thread in the critical code, and leaves it
@@ -2064,9 +2064,9 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
   have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
   have hsz : (C.Ep.hist m').size = (C.Ep.hist m).size + 1 := by rw [hE]; simp
   have hlt : ∀ k, k < (C.Ep.hist m).size → (C.Ep.hist m')[k]! = (C.Ep.hist m)[k]! :=
-    fun k hk => by rw [hE]; exact FEvent.get_push_lt hk
+    fun k hk => by rw [hE]; exact Word.get_push_lt hk
   have hnew : (C.Ep.hist m')[(C.Ep.hist m).size]! = Word.rmwEnt m' t ord (C.lastE m) (o + 1) := by
-    rw [hE]; exact FEvent.get_push_eq
+    rw [hE]; exact Word.get_push_eq
   have hold : C.lastE m = (C.Ep.hist m)[(C.Ep.hist m).size - 1]! := rfl
   have hyv : (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).Val (o + 1) := FEvent.rmwEnt_val
   have hyc : VClock.le (m.clocks[t]!) (Word.rmwEnt m' t ord (C.lastE m) (o + 1)).relClock = true := by
