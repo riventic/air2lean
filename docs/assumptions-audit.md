@@ -52,6 +52,16 @@ cache record or successful result is published. Extraction's recorded runtime mu
 replay entry. This tightens existing admission; it does not expand the cacheable module set or
 authenticate complete project/private import closures.
 
+One run hashes the runtime's bytes once (`runtime_run`: `assumptions.py`, `theorem_universe.py`,
+`fixtures.py audit`, `fixture-checks.py`; nested audits, also in child processes, share it through
+`AIR2LEAN_TOOLCHAIN_RUNTIME_RUN`). Every later `toolchain_runtime_sha256` of that toolchain in the
+run returns the shared digest only while the runtime's stat identity is unchanged: each selected
+file's and link's path, link target, device, inode, size, mtime and ctime, taken before and after
+the run's hash (they must agree). A different identity hashes the bytes afresh. At the end of the
+run the bytes are hashed again; a different digest fails the run, so a runtime changed during the
+run (even with every stat field kept) never passes with the digest of the old one. Another
+toolchain is always hashed afresh.
+
 `no-sorry.sh` (`theorem_universe.py scan`) also rejects `debug.skipKernelTC` and
 `set_option debug.*` anywhere in the theorem universe, and environment edits, `unsafe`,
 `extern` and `implemented_by` outside the reviewed counts in `assurance/kernel-escapes.json`.
@@ -277,32 +287,46 @@ unused private definitions and compiler-generated recursors, and records their n
 The default roots remain theorems and project boundary declarations; the flag does not select
 every unused declaration in imported modules or certify that a dependency is legacy-free.
 
-The driver imports only `tools.Assurance`. `#assurance_audit` imports the audited modules itself
-and runs none of their initializers (`importWithoutInitializers`): the closure beyond the
-extractor's own is read from the `.olean` headers (`importClosure`, each module's data freed after
-its imports are read), every module of it is recorded as initialized in Lean's
-`interpretedModInits`, and then the closure is imported with extensions loaded. An audited
-module's `initialize` code therefore never runs in the process that writes the report
-([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). The import still holds
-a second copy of the extractor's own imports (the `ZigLean.Sep.Full` claim heads among them):
-a module already mapped at its base address is copied, not mapped, by a later import. One audit
-of `ZigLean.Sep.Full.Triple --all-declarations` peaks at about 3.6 GB, against 1.5 GB when the
-driver's header imported the audited modules.
+The extractor is a compiled program, `.lake/build/bin/assurance` (`lake build assurance`,
+`tools/AssuranceMain.lean`):
 
-`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) builds the extractor's driver with
-Lake instead of elaborating it with `lake env lean`. The driver is the module of a generated
-workspace `PACKAGE/.lake/extraction/M<digest>` that requires the Lake package of the audited
-modules, so the driver's outputs stay off the caller's LEAN_PATH. The driver imports no audited
-module; its library `needs` `@pkg/+M:olean` and `@pkg/+M:depTrace` for each of them. Lake
-elaborates it again exactly when its trace changes: the driver's text (with the modules,
-options and family checks), `tools.Assurance`, those needs (each audited module and everything
-below it), and the toolchain. An unchanged driver replays the build's stored log, and the report
-is read from that log (the driver's own `AIR2LEAN_ASSURANCE_JSON` message, exactly one). The
-workspace does not use Lake's artifact cache (`enableArtifactCache = false`): the cache keeps no
-build log, so a driver restored from it (another checkout's build, or an earlier checkout at the
-same path) would replay no report. A missing report fails the audit.
-A compiler-owned Unit audit uses that driver only while Lake resolves exactly its bound lookup
-path there; otherwise the driver is elaborated afresh on that path.
+    assurance --sysroot DIR [--all-declarations] [--family NAME]... MODULE...
+
+It imports `tools.Assurance` and the audited modules once and runs none of the audited modules'
+initializers (`Air2Lean.Assurance.importAudited`). The import is Lean's `importModules` in its
+steps, through Lean's public API: `importModulesCore` reads every module of the closure from its
+`.olean` and runs nothing; `finalizeImport` of that read without extensions (`loadExts := false`,
+which runs nothing either) names its modules in the environment header, and each of them is
+recorded as initialized in Lean's `interpretedModInits`; then `finalizeImport` of the same read
+loads the extensions and runs the `[init]` attributes of no recorded module. Both headers are
+built from the one read alone, so the recorded set is exactly the imported one. An audited module's `initialize` code therefore
+never runs in the process that writes the report
+([soundness-2026-10-20](architecture-audit/soundness-2026-10-20.md) E1). Only the extractor's
+own modules, compiled into the program, have run their initializers; they are the tool. Each
+module is held once. The `#assurance_audit` command this replaces ran in a `lean` process whose
+header had already imported the extractor's closure (the whole of `Lean` and the
+`ZigLean.Sep.Full` claim heads), and a second import copies a module already mapped at its base
+address. Measured on the remote build host (2026-11-04), auditing `ZigLean.Sep.Full.Triple`
+with `--all-declarations` (121 checked theorems, the same report either way): the largest process
+of the audit fell from 3783 MiB to 1661 MiB, and the run took 50.9 s instead of 44.3 s (one
+warm run each, on a loaded host).
+
+`--extract-in PACKAGE` (used by `scripts/fixtures.py audit`) runs the extractor through a Lake
+build, so an unchanged audit is not run again. The driver is the module of a generated workspace
+`PACKAGE/.lake/extraction/M<digest>` that requires the Lake package of the audited modules, so
+the driver's outputs stay off the caller's LEAN_PATH. It imports only `tools.AssuranceRun` (no
+`Lean`, no audited module) and runs `#eval Air2Lean.AssuranceRun.run "<extractor>" #[ARGS]`,
+which starts the extractor and prints its output. Its library `needs` `@pkg/+M:olean` and
+`@pkg/+M:depTrace` for each audited module. Lake builds it again exactly when its trace changes:
+the driver's text (the extractor's path and SHA-256, the toolchain runtime, the modules, options
+and family checks), `tools.AssuranceRun`, those needs (each audited module and everything below
+it), and the toolchain. An unchanged driver replays the build's stored log, and the report is
+read from that log (exactly one `AIR2LEAN_ASSURANCE_JSON` line). An extractor that fails makes the
+driver's build fail, so no log is stored. The workspace does not use Lake's artifact cache
+(`enableArtifactCache = false`): the cache keeps no build log, so a driver restored from it
+(another checkout's build, or an earlier checkout at the same path) would replay no report. A
+missing report fails the audit. A compiler-owned Unit audit uses that driver only while Lake
+resolves exactly its bound lookup path there; otherwise the extractor runs directly on that path.
 
 With `--extract-in PACKAGE` the kernel replay is Lake-built as well: each audited module `M` has
 a receipt module in `PACKAGE/.lake/replay` that imports only `tools.KernelReplay` and runs
@@ -381,9 +405,9 @@ kernel replay, freshness and audit-scope requirements still apply. The default e
 omits `selected_declaration_evidence` and `selected_declaration_roots`; the default CLI
 report omits `framework_candidates` and `selected_declaration_roots`.
 
-The extractor always runs `lake --rehash build AssuranceTools` to validate its source,
+The extractor always runs `lake --rehash build AssuranceTools assurance` to validate its source,
 compiler identity, and imported dependencies. Its separately recorded source/pin/configuration
-and exact olean/Lake-trace hashes must match before output can be reused. Missing or corrupt
+and exact olean/Lake-trace/executable hashes must match before output can be reused. Missing or corrupt
 output and changed source or release pin force rebuilding. There is no skip-compile flag.
 These hashes are kept as one record per context (`.lake/assurance/tool-traces/<context
 hash>.json`), so invocations with different contexts do not invalidate each other's records; a

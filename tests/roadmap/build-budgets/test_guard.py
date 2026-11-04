@@ -684,6 +684,62 @@ fixture_pause()
         self.assertEqual(os.listdir(self.tickets), [])
         self.assertIsNone(holder.poll())
 
+    def test_a_normal_guard_arriving_later_is_admitted_before_a_background_one(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        background, err = self.start_waiter("background", order, *budget, "--priority", "background")
+        self.assertIn("background priority", err.read_text())
+        normal, _ = self.start_waiter("normal", order, *budget)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(normal, background)
+        self.assertEqual(order.read_text().split(), ["normal", "background"])
+        self.assertFalse(self.tickets.exists() and os.listdir(self.tickets))
+
+    def test_a_waiting_background_guard_holds_no_slot(self):
+        # Budget 2 GiB: the holder takes one slot, the background guard (weight 2) waits for both.
+        # A normal guard of weight 1 is admitted at once, as the queue head (no backfill): the
+        # background guard keeps neither the queue nor a slot while it waits.
+        order, budget = self.root / "order", ("--mem-budget-mib", "2048")
+        holder, _ = self.start_holder(*budget)
+        background, _ = self.start_waiter("background", order, *budget, "--rss-mib", "2000",
+                                          "--priority", "background")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("normal"))
+        self.assertEqual((code, evidence["admission"]["backfilled"]), (0, False))
+        self.assertIsNone(background.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(background)
+        self.assertEqual(order.read_text().split(), ["background"])
+
+    def test_a_background_guard_waits_for_a_head_a_ticket_and_a_waiting_guard(self):
+        budget = ("--mem-budget-mib", "4096", "--priority", "background", "--lock-wait", "2")
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        with contextlib.ExitStack() as stack:
+            self.stand_in_head({"pid": os.getpid(), "unmet": 0, "need": 1}, stack.enter_context)
+            code, evidence = self.attempt(*budget, cwd=self.worktree("behind-head"))
+            self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # free slots, but a head
+        for registry in ("merge", "waiting"):  # a merge guard; a normal guard between two heads
+            with self.subTest(registry=registry), \
+                    guard.publish_entry(directory / registry, "00000000000000000001-1", {}, lambda p: p.open("a")):
+                code, _ = self.attempt(*budget, cwd=self.worktree("behind-" + registry))
+                self.assertEqual(code, 75)
+        code, evidence = self.attempt(*budget, cwd=self.worktree("alone"))
+        self.assertEqual((code, evidence["admission"]["priority"]), (0, "background"))
+        self.assertEqual(os.listdir(directory / "waiting"), [])  # the dead entry went too
+
+    def test_a_waiting_background_guard_holds_no_workspace(self):
+        budget = ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)  # takes the only slot
+        background, _ = self.start_waiter("background", self.root / "order", *budget, "--priority", "background",
+                                          cwd=self.worktree("shared"))
+        # Had the background guard taken the workspace, the normal one would wait for it.
+        normal, _ = self.start_waiter("normal", self.root / "order", *budget, cwd=self.worktree("shared"))
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(normal, background)
+        self.assertEqual((self.root / "order").read_text().split(), ["normal", "background"])
+
     def test_priority_comes_from_the_environment_or_the_option(self):
         def priority(*options):
             return guard.parse_args(["--report", "r.json", "--log", "l.log", *options, "--", "true"]).priority

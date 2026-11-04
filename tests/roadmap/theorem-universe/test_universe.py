@@ -489,9 +489,10 @@ class LakeExtractionTests(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
-    def extract(self, runtime='a' * 64, binding=None):
-        return assumptions.lake_extraction('#assurance_audit ["M"]\n', self.package, runtime, self.root,
-                                           binding, ['M'])
+    def extract(self, runtime='a' * 64, binding=None, extractor='e' * 64, library='1' * 64):
+        tool = {'toolchain_runtime_sha256': runtime, 'executable_sha256': extractor,
+                'lake_trace_sha256': library, 'executable': assumptions.EXTRACTOR, 'lean_sysroot': '/toolchain'}
+        return assumptions.lake_extraction(['M'], self.package, tool, self.root, binding, ['M'])
 
     def test_the_driver_imports_no_audited_module_and_needs_its_traces(self):
         self.assertEqual(self.extract(), ['{}'])
@@ -499,6 +500,11 @@ class LakeExtractionTests(unittest.TestCase):
         self.assertTrue(workspace.is_relative_to(self.extraction))
         source = next(workspace.rglob('M*.lean'))
         self.assertNotIn('import M', source.read_text())
+        # It runs the compiled extractor, which imports M without running its initializers (E1).
+        self.assertEqual([line for line in source.read_text().splitlines() if line.startswith('import ')],
+                         ['import tools.AssuranceRun'])
+        self.assertIn(f'#eval Air2Lean.AssuranceRun.run "{self.root / assumptions.EXTRACTOR}" '
+                      '#["--sysroot", "/toolchain", "M"]\n', source.read_text())
         manifest = tomllib.loads((workspace / 'lakefile.toml').read_text())
         self.assertEqual(manifest['lean_lib'][0]['needs'], ['@fixtures/+M:olean', '@fixtures/+M:depTrace'])
         # The needed olean comes first on the command line (Lake's build thread, ledger
@@ -547,8 +553,14 @@ class LakeExtractionTests(unittest.TestCase):
         self.extract('a' * 64)
         self.extract('b' * 64)  # only the installed runtime changes: Lake must build another module
         self.assertNotEqual(self.built[0][0], self.built[1][0])
-        with self.assertRaises(ValueError):
-            self.extract(None)  # no runtime binding: fail closed
+        self.extract('b' * 64, extractor='f' * 64)  # another extractor: another module
+        self.assertNotIn(self.built[2][0], (self.built[0][0], self.built[1][0]))
+        # The same program, another library it imports at run time (a changed claim head): another module.
+        self.extract('b' * 64, extractor='f' * 64, library='2' * 64)
+        self.assertNotIn(self.built[3][0], [b[0] for b in self.built[:3]])
+        for missing in ({'runtime': None}, {'extractor': None}, {'library': None}):
+            with self.subTest(missing=missing), self.assertRaises(ValueError):
+                self.extract(**missing)  # an unbound input: fail closed
 
 
 class LakeKernelReplayTests(unittest.TestCase):
