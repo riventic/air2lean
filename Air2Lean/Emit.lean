@@ -4518,7 +4518,7 @@ def captureClass (types : Array Ty) (id : TyId) : CaptureClass :=
   | _ => if pointerFree types id then .value else .other
 
 /-- `Tgt.captures`: every captured field in source order, as a `Zig.Conc.Capture`. The
-ownership obligation over it is `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`). -/
+ownership obligation over it is `Zig.Full.FCapture.grant` (`ZigLean/Sep/Full/ThreadSpawn.lean`). -/
 def emitTgtCaptures (targets : Array (String × Array CaptureClass))
     (futures : Array (String × Array CaptureClass) := #[]) : String :=
   let arm (lead : String) (n : String) (classes : Array CaptureClass) :=
@@ -4541,7 +4541,7 @@ def emitTgtCaptures (targets : Array (String × Array CaptureClass))
   let body := if arms.isEmpty then ["  fun t => nomatch t"] else arms
   String.intercalate "\n" (["/-- Each captured field in source order. A value is copied and carries no ownership;",
     "a pointer or slice copies only its identity, so a spawn proof must hand over or share its",
-    "region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/",
+    "region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/",
     s!"def Tgt.captures : Tgt → List Zig.Conc.Capture{if arms.isEmpty then " :=" else ""}"] ++ body)
 
 /-- A target retains the complete source tuple. Each dispatcher applies the fields in

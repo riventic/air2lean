@@ -74,14 +74,14 @@ postcondition, which neither an implication nor the model's own result alone sta
 | legacy tactic | where | target |
 | --- | --- | --- |
 | `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
-| `sep_normalize`, `sep_frame` | `Sep/Automation` | `fsym` (frame inference is the planner) |
-| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers`, `Full/Tame` | native `@[fsym]` rules (no lifting) |
+| `sep_normalize`, `sep_frame` | `Sep/Automation` (deleted, L6 D-b) | `fsym` (frame inference is the planner) |
+| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` | native `@[fsym]` rules (no lifting) |
 | `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
 | `vc_gen(?)` | `VC/Extract` | retargeted onto `FTriple` (Plan A, D3) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |
 | `blkat_alloc`, `tomega`, `zig_range` | `Conc/Lemmas`, `Conc/Spec/Count`, `Range` | `fsym_arith` and `@[fsym_provider]` facts |
-| module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `bridge_*`, `pure_norm`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
+| module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
 
 A legacy entry leaves the list when its last user is migrated and the definition is deleted
 ([ROADMAP.md](../ROADMAP.md), architecture work). The lanes, blockers, deletion stages (D-a to D-e)

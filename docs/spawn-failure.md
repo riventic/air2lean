@@ -51,8 +51,9 @@ fallback directly to the runtime API requires the caller to justify its agreemen
 with the intended task; generated calls use the audited worker and captures.
 
 `ZigLean.Conc.SpawnLemmas` provides all-choice WP rules (`WP.assignmentChoiceC`, which
-requires the assignment branch only where the budget admits it), a failure frame rule, the
-ownership rule `WP.spawnFailureRetains`, and a cleanup continuation rule. A successful branch must establish the existing child
+requires the assignment branch only where the budget admits it), a failure frame rule and a
+cleanup continuation rule; `ZigLean.Sep.Full.ThreadSpawn` adds the ownership rule
+`WP.spawnFailureRetains_fowned` over the threads' parts (`FOwned`). A successful branch must establish the existing child
 protocol and disjoint ownership transfer. A failed branch retains caller ownership.
 An eager branch must prove the caller task body. The same declared result contract
 can therefore be proved for assigned and eager execution without granting child
@@ -67,7 +68,7 @@ synthetic gate retranslates the AIR, requires the checked body, and kernel-check
 0.16.0 `--full` gate also requires fresh AIR to translate to the same body.
 
 - `SpawnFailure/Pair.lean` (`threadPair`): each spawn hands its child exactly the C01
-  `Capture.grant` of the generated `Tgt.captures`. `WP.spawnFailureRetains` keeps the caller's
+  `FCapture.grant` of the generated `Tgt.captures`. `WP.spawnFailureRetains_fowned` keeps the caller's
   ownership split and grant on failure, so `main` frees the refused capture itself, after the
   errdefer join in the second-failure path. `threadPair_spec` and `threadPair_safe` hold under
   every schedule, every resource outcome of both spawns and every initial budget: the result is

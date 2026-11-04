@@ -73,7 +73,7 @@ abbrev sentinelBytes (n : Nat) : Array Byte :=
 
 section Bytes
 
-variable {a bs : Array Byte} {len n o o1 o2 : Nat}
+variable {a : Array Byte} {len n o o1 o2 : Nat}
 
 private theorem enc8 (v : BitVec 8) : (Enc.encode v).size = 1 := by
   simpa [Enc.size, intSize, intAlign, alignUp] using LawfulEnc.size_encode v
@@ -81,9 +81,6 @@ private theorem enc8 (v : BitVec 8) : (Enc.encode v).size = 1 := by
 private theorem written_size (c : BitVec 8) (hs : a.size = len + 2) :
     (writeBytes a len (Enc.encode c)).size = len + 2 := by
   rw [writeBytes_size _ _ _ (by rw [enc8]; omega)]; exact hs
-
--- The old payload below the stores is `fsym`'s: it reads through the stores and the kept prefix
--- (`keepsPrefix`, `Zig.extract_of_keepsPrefix`).
 
 /-- `append` stores `c` at the old length. -/
 theorem appended_byte (c : BitVec 8) (hs : a.size = len + 2) (h1 : o1 = len) (h2 : o2 = len + 1) :
@@ -207,7 +204,7 @@ theorem resize_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (resize ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (resized I φ s.ptr bs s.len.toNat n r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc_spec ctx vtp fns I e φ (h := h)]
-  exact resized_sentinel (by fsym_arith) (by fsym_arith)
+  · exact resized_sentinel (by fsym_arith) (by fsym_arith)
 
 /-- **`release`** (`free` of a `[:0]u8`) for every allocator: the grant of `len + 1` bytes, the
 sentinel included, goes back. -/

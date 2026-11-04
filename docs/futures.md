@@ -67,7 +67,7 @@ These rules follow the audited `lib/std/Io.zig` and `lib/std/Io/Threaded.zig` of
   late as the awaiter's join. The translation's `--spawn-policy` does not change this; every
   proof covers both executions.
 - **Ownership.** The task gets its by-value argument tuple as a spawn target. `Tgt.captures`
-  classifies every field for `Zig.Conc.Capture.grant`, as for `Thread.spawn`. The task owns the
+  classifies every field for `Zig.Full.FCapture.grant`, as for `Thread.spawn`. The task owns the
   result cells of its record until the join returns them to the awaiter. The record is not a
   capture.
 

@@ -8,17 +8,6 @@
       "approved": "coordinator 2026-10-13 (structural gate, csl)"
     },
     {
-      "name": "AllocInv",
-      "module": "ZigLean.Sep.AllocSpec",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "AllocSpec",
-      "module": "ZigLean.Sep.AllocSpec",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "BlkStep",
       "module": "ZigLean.Conc.Word",
       "status": "legacy-to-retire",
@@ -302,12 +291,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Logic",
-      "module": "ZigLean.Sep.AllocSpec",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Mem.SameThreads",
       "module": "ZigLean.Sep.Base.Block",
       "status": "target",
@@ -567,18 +550,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "bridge_close",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "bridge_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "conc_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Conc",
@@ -634,12 +605,6 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "pure_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Fba",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "reachability_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
@@ -647,33 +612,9 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "sep_frame",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_from",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.AllocSpec.Wrappers",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_normalize",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "tame",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Tame",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "tame_prim",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.AllocSpec.Wrappers",
       "status": "legacy-to-retire"
     },
     {
@@ -833,10 +774,6 @@
       "path": "Proofs/Sync/Semaphore.lean"
     },
     {
-      "path": "Proofs/Threads/Disjoint.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "Proofs/Threadsync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -845,10 +782,6 @@
     },
     {
       "path": "ZigLean/Conc/Csl.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Detach.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/Lock.lean",
@@ -862,38 +795,11 @@
       "path": "ZigLean/Conc/Own.lean"
     },
     {
-      "path": "ZigLean/Conc/Share.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/Transfer.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/Unroll.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "ZigLean/Conc/Witness.lean"
     },
     {
       "path": "ZigLean/Conc/Word.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Dispatch.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Wrap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Wrappers.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Automation.lean"
     },
     {
       "path": "ZigLean/Sep/Block.lean"
@@ -906,15 +812,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Client.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
     }
   ]
 }

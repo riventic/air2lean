@@ -1,6 +1,7 @@
+import Lean
 import ZigLean.Conc.Sched
 import ZigLean.Conc.Call
-import ZigLean.Conc.Witness
+import ZigLean.Conc.RunResult
 
 /-!
 # Runs of programs with loops, by the kernel

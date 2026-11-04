@@ -104,7 +104,8 @@ free of error storage (`Node` and its bytes), `*anyopaque` fields in such a grap
 ## Removing the hand-written allocator models (plan)
 
 Allocator milestone 1 proves the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba`,
-`FBA.allocSpec`, `FBA.fallocSpec`) and the translated `PageAllocator`
+`FBA.fallocSpec`, and a client through the generated wrappers, `Client.client_spec`) and the
+translated `PageAllocator`
 (`tests/roadmap/alloc-translated`: `free`/`resize`/`remap` on x86_64-linux and aarch64-macos,
 `alloc` on x86_64-linux for every alignment, partial correctness) against the generic
 specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), from their Zig
@@ -122,14 +123,10 @@ translated replacement or a register entry (`ROADMAP.md`, `remaining-acceptance.
 
 Steps, one PR each, in this order:
 
-1. **FBA client port** (prerequisite of L1). Lift the client proofs that use the fixed-buffer
-   model onto `FBA.fallocSpec` through the generated wrappers. The full-state wrapper contracts
-   (`ZigLean/Sep/Full/Wrappers.lean`, through the legacy embedding `FLogic.legacy`) were removed
-   with block extents (`docs/sep-full-state.md` §Block extents); they are to be restated over
-   `FAllocSpec` directly first.
-   Blocker: `tame` does not see through the `StateT.run (match …)` that `fsym_norm` leaves in the
-   generated wrappers (one matcher per generated `match`); it needs a `StateT`-level `Tame` rule
-   or a split-then-renormalize step. Then delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
+1. **FBA client port** (prerequisite of L1). Done: the generated wrappers' contracts are stated
+   over `FAllocSpec` directly (`tests/roadmap/alloc-fba/AllocFba/Wrappers.lean`, walked by
+   `fsym`), and the client is proved through them on `FBA.fallocSpec` (`Client.client_spec`; the
+   legacy bridge and client are deleted, L6). Remaining: delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
    `OwnedAlloc.starts`, their `Owned.lean` cases and the fixed-buffer cases of
    `tests/roadmap/allocator-identity`; narrow ALC-07 to the arena.
 2. **Translated `ArenaAllocator`** (prerequisite of L2), the arena milestone: translated
