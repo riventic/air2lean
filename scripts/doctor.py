@@ -187,6 +187,11 @@ class Doctor:
                      'run: elan toolchain install %s' % self.toolchain, toolchain=self.toolchain)
             return False
         self.add('lean-toolchain', 'ok', 'pinned Lean %s is installed' % self.toolchain, toolchain=self.toolchain)
+        if shutil.which('ps', path=self.env.get('PATH')):
+            self.add('audit-tools', 'ok', 'ps (procps) is available for the assurance audits')
+        else:
+            self.add('audit-tools', 'warn', 'ps (procps) is missing; the assurance audits '
+                     '(scripts/assumptions.py) fail without it', 'install procps with the system package manager')
         built = (self.root / '.lake/build/lib/lean/Proofs/Basic/Proofs.olean').is_file()
         if built:
             self.add('proof-build', 'ok', 'Proofs.Basic.Proofs is built; tutorials and editors can import it')

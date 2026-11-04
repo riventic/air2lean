@@ -395,8 +395,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
     have hjall : joinedAll u m := joinedAll_of_main (spawner0 hi) hu
     show (proto a b).WP u ((fun _ => ()) <$> ConcM.liftMem (writeFlag c)) _ G _ d
     fsym [writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
-      (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v),
-      inv_kid_done, joinedAll_of_threads]
+      (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)]
     all_goals
       rename_i ret m' r' hF hrun ho' hq hcurrent hthreads hwaiters hwoken hgroups hclocks hstep
       refine ⟨.kid r' c ac x ax v true, ?_, ⟨r', c, ac, x, ax, v, rfl⟩, fun _ => ?_⟩
@@ -720,30 +719,9 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
     · rw [Array.getElem?_setIfInBounds_ne (by decide), hi₁₇.t0] at hget; cases hget; rfl
     · rw [Array.getElem?_setIfInBounds_ne (by decide), r1₁₇] at hget; cases hget; rfl
     · rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₇]; decide)] at hget; cases hget; rfl
-  have htl : 0 < m₁₈.threads.size := by rw [hth₁₈, Array.size_setIfInBounds, hsz₁₇]; decide
-  -- `x +% y`.
-  refine WP.bind (WP.liftM_fowned ((blk_load (w := a) hxb hx0 hAx).frameL.frame.post
-    fun _ _ h => sep_assoc (sep_mono_left (fun _ h => sep_lcomm h) h))
-    ho₁₈ hc₁₈ htl hA fun r₁ m₁₉ r₁₉ _ ho₁₉ hq₁₉ hc₁₉ ht₁₉ => ?_)
-  obtain ⟨hr₁, hA₁₉⟩ := sep_lift.mp hq₁₉
-  refine WP.bind (WP.liftM_fowned ((blk_load (w := b) hyb hy0 hAy).frameL.frameL.post
-    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm h) h))
-    ho₁₉ hc₁₉ (by rw [ht₁₉]; exact htl) hA₁₉ fun r₂ m₂₀ r₂₀ _ ho₂₀ hq₂₀ hc₂₀ ht₂₀ => ?_)
-  obtain ⟨hr₂, hA₂₀⟩ := sep_lift.mp hq₂₀
-  refine WP.pure' ?_
-  -- The frees.
-  have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
-  -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ _ _ _ _ _ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ _ _ _ _ _ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₂₂ hc₂₂
-    (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂ fun _ m₂₃ r₂₃ _ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ _ _ _ _ _ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ _ ht₂₄ _ _ _ _ _ => ?_)
-  refine WP.pure' ⟨by simp [hr₁, hr₂, addWrap], fun r hr hs => hja r ?_ hs⟩
-  rwa [ht₂₄, ht₂₃, ht₂₂, ht₂₁, ht₂₀, ht₁₉] at hr
+  -- `x +% y`, then the reverse-order frees (MM-18): `c2`, `c1`, `y`, `x`.
+  fsym [blk_load (w := a) hxb hx0 hAx, blk_load (w := b) hyb hy0 hAy,
+    Array.size_setIfInBounds, joinedAll_of_threads]
 
 /-! ## The results -/
 

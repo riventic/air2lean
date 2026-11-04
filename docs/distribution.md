@@ -96,7 +96,7 @@ scripts/clean-env.sh --translate   # also bootstrap the default Zig, check the l
 ```
 
 It builds `Dockerfile.clean-env` (Ubuntu 24.04 with only bash, ca-certificates, curl, git,
-patch, python3 and xz-utils; `linux/amd64`) with no build context, copies tracked files only
+patch, procps, python3 and xz-utils; `linux/amd64`) with no build context, copies tracked files only
 (no `.lake`, compilers or caches), mounts no cache volumes and runs as an unprivileged user.
 Inside it follows [getting started](getting-started.md) literally: installs the pinned elan
 (sha256-verified), `elan toolchain install $(cat lean-toolchain)`, `scripts/doctor.sh --require
