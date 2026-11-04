@@ -264,6 +264,9 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
   crit : ∀ u, (C.ph (G u)).crit → L.ph (G u) = .holds
   lp : ∀ u, (C.ph (G u)).sig → L.ph (G u) = .out ∨ L.ph (G u) = .holds
   sx : ∀ u, (C.ph (G u)).sig → C.sx (G u)
+  /-- The futex queue at the epoch holds each thread once (a sleeper was not queued: the sleep's
+  `hnq`); a wake of `n` then wakes `min n q` of the `q` queued waiters (`cnt_wake`'s `hmin`). -/
+  qnd : ((m.waiters.filter (·.2 == C.Ep.ptr)).toList.map (·.1)).Nodup
 
 variable {C}
 
@@ -299,6 +302,7 @@ theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hS : (C.S.hist
   crit u h := by rw [hout u] at h; exact absurd h (by decide)
   lp u h := by rw [hout u] at h; exact absurd h (by decide)
   sx u h := by rw [hout u] at h; exact absurd h (by decide)
+  qnd := by simp [hq]
 
 /-! ## Counting lemmas -/
 
@@ -830,7 +834,7 @@ theorem Inv.sleep {G : ThreadId → γ} {M : Mem} {t : ThreadId} {i jr : Nat} {e
     C.Inv L G { M with waiters := M.waiters.push (t, C.Ep.ptr) } := by
   have hfresh := hI.fresh_of_val ht hv
   refine { hI with
-    q := fun w hw hp => ?_, qw := fun w hw hp => ?_, cnt := ?_ }
+    q := fun w hw hp => ?_, qw := fun w hw hp => ?_, cnt := ?_, qnd := ?_ }
   · rcases Array.mem_push.mp hw with hw | rfl
     · exact hI.q w hw hp
     · exact ⟨i, jr, e, ht⟩
@@ -852,6 +856,26 @@ theorem Inv.sleep {G : ThreadId → γ} {M : Mem} {t : ThreadId} {i jr : Nat} {e
       refine tsum_le fun u _ => ?_
       rw [qd_push]
       cases (C.ph (G u)).isReg <;> cases C.qd M u <;> cases (t == u) <;> simp
+  · have hnot : t ∉ (M.waiters.filter (·.2 == C.Ep.ptr)).toList.map (·.1) := by
+      intro hm
+      obtain ⟨w, hw, rfl⟩ := List.mem_map.mp hm
+      have hw' := Array.mem_toList_iff.mp hw
+      obtain ⟨hw1, hw2⟩ := Array.mem_filter.mp hw'
+      have : C.qd M w.1 = true := by
+        unfold qd; exact Array.any_eq_true'.mpr ⟨w, hw1, by simpa using hw2⟩
+      rw [hnq] at this; cases this
+    rw [Array.filter_push]
+    simp only [beq_self_eq_true, if_true, Array.toList_push, List.map_append, List.map_cons,
+      List.map_nil]
+    have hnot' : (t, C.Ep.ptr) ∉ M.waiters := by simpa using hnot
+    exact List.nodup_append.mpr ⟨hI.qnd, by simp, by
+      simp only [List.mem_singleton]
+      intro a ha b hb hab
+      subst hb hab
+      obtain ⟨w, hw, hwa⟩ := List.mem_map.mp ha
+      obtain ⟨hw1, hw2⟩ := Array.mem_filter.mp (Array.mem_toList_iff.mp hw)
+      exact hnot' (by rw [← hwa]; have : w.2 = C.Ep.ptr := by simpa using hw2
+                      rw [← this]; exact hw1)⟩
 
 /-- **The waiter's return from its futex wait** (`reg i jr false e` to `reg i jr true e`): after a
 pending wake (`woken` loses `t`), a spurious return, or the kernel's read without sleeping. `hnq`:
@@ -883,7 +907,7 @@ theorem Inv.ret {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Nat} {
     by rw [hE]; exact hI.e32, by rw [hE]; exact hI.ep, fun q h0 hq hlt => ?_,
     fun v q n h => ?_, fun u i' e' h => ?_, fun u i' jr' sn' e' h => ?_, fun w hw hp => ?_,
     fun w hw hp => ?_, ?_, fun u h => ?_, fun u h => ?_, fun u v hu hv => ?_,
-    fun u h => ?_, fun u h => ?_, fun u h => ?_⟩
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
   · rw [hS] at hq hlt ⊢; rw [hE]
     rcases hI.pub q h0 hq hlt with ⟨v, n, hv, hn⟩ | h
     · refine .inl ⟨v, n, ?_, hn⟩
@@ -995,7 +1019,7 @@ theorem Inv.quiet {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
     by rw [hE]; exact hI.e32, by rw [hE]; exact hI.ep, fun q h0 hq hlt => ?_,
     fun v q n h => ?_, fun u i e h => ?_, fun u i jr sn e h => ?_, fun w hw hp => ?_,
     fun w hw hp => ?_, ?_, fun u h => ?_, fun u h => ?_, fun u v hu hv => ?_,
-    fun u h => ?_, fun u h => ?_, fun u h => ?_⟩
+    fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
   · rw [hS] at hq hlt ⊢; rw [hE]
     rcases hI.pub q h0 hq hlt with ⟨v, n, hv, hn⟩ | h
     · refine .inl ⟨v, n, ?_, hn⟩
@@ -1111,7 +1135,7 @@ theorem Inv.post {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {g'
   refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
     by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i e h => ?_,
     fun u i jr sn e h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
-    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_⟩
+    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
   · -- (H1) values
     by_cases hk' : k < (C.S.hist m).size
     · rw [hlt k hk']; exact hI.sv k hk'
@@ -1198,7 +1222,7 @@ theorem Inv.consume {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {i jr : Na
   refine ⟨by omega, fun k hk => ?_, fun k hk => ?_, by rw [hE]; exact hI.e32,
     by rw [hE]; exact hI.ep, fun q h0 hq hlt' => ?_, fun v q n' h => ?_, fun u i' e' h => ?_,
     fun u i' jr' sn' e' h => ?_, fun w hw hp => ?_, fun w hw hp => ?_, ?_, fun u h => ?_,
-    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_⟩
+    fun u h => ?_, fun u v hu hv => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_, by rw [hwt]; exact hI.qnd⟩
   · by_cases hk' : k < (C.S.hist m).size
     · rw [hlt k hk']; exact hI.sv k hk'
     · obtain rfl : k = (C.S.hist m).size := by omega
