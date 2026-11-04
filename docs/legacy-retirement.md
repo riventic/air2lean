@@ -19,7 +19,7 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L5b owned/arena | done | #338 |
 | L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
 | L6 wrappers and FBA client | done: client over `FAllocSpec` (Bridge, legacy Client, Fba deleted); stage D-b deleted Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation; `Sep/Step` deleted early | #384 (in #407), #567, D-b |
-| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, #435 |
+| L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11 (RwLockContract), `Witnesses/Sep` for L8 | #340, #435 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L8, L10, L11, L12, L13 | open | |
 
@@ -83,7 +83,7 @@ Direct importers on main, minus the 16 done files:
 | Sep/Cost, Bounded | Lists/Cost, Lists/Bounded, Witnesses/Sep, claims/Fixture, tools/Assurance |
 | Sep/AllocSpec (+Wrap, Wrappers, Dispatch) | each other, Full/AllocSpec, Full/Dispatch, alloc-fba/{Bridge,Fba}, PageObstruction |
 | Sep/AllocSpec/{Region,Ops,Norm} | **kept as base**: Full/{AutoRules,Reclaim,Region,Malloc}, Wrappers; they import Total/Block and hold legacy `TotalTriple` rules (strip) |
-| Sep/Witness, Conc/Witness | Lists/Sep, Witnesses/{Sep,Conc}, claims/Fixture, Conc/Unroll, Proofs/Threads/Disjoint, RwLockContract, SnapshotCache |
+| Sep/Witness, Conc/Witness | Lists/Sep, Witnesses/{Sep,Conc}, claims/Fixture, RwLockContract, SnapshotCache (Conc/Unroll and Proofs/Threads/Disjoint moved to Conc/RunResult, L12) |
 | Sep/{Try,TryAlias,Discard,Step,Automation,Mmap(Sep),AddrReuse} | Sep.lean, each other, Lists/Sep, Wrappers, tutorials/Controls (AddrReuse); Sep/Mmap: none |
 | Conc/Own (TTriple) | Conc/Csl, Conc/Witness, claims/Fixture, tools/Assurance |
 | Conc/Csl (TlsLemmas and Transfer deleted, Detach off it, L12) | Conc/Lock |
@@ -256,7 +256,7 @@ Witnesses/{Mem,VC} are not legacy. L7 step 2 deletes Sep/Witness after L4, and C
 - Sep/Witness: deleted. Proofs/Lists/Cost imports `Mem.Witness` (it used only `mem1`, `p0`, `blk`), Conc/Witness imports `Sep.Full.Witness` and loses `TAdmit/TLive.of_empty` (no users).
 - Witnesses/Conc: no legacy import or name left, out of the ratchet.
 - Witnesses/Sep: keeps only the `LoopRuns.run` companion; it goes with Sep/Cost in L8.
-- Conc/Witness: still used by Proofs/Sync/RwLockContract.lean (`TAdmit/TLive.mem1`; L11, #395), Proofs/Threads/Disjoint.lean (`okVal`; #403) and Conc/Unroll.lean (`okVal`, `errOf`; L12). It goes in whichever of those lands last; `okVal`/`errOf` are plain run readers and move to a non-legacy module then if Unroll's replacement still needs them.
+- Conc/Witness: still used by Proofs/Sync/RwLockContract.lean (`TAdmit/TLive.mem1`; L11, #395). It goes with that file. The run readers `okVal`/`errOf` moved to the non-legacy `Conc/RunResult` (L12), so Proofs/Threads/Disjoint.lean and Conc/Unroll.lean left the ratchet.
 
 Group 3 (needs design or engine work; start the design now, implement as unblocked)
 
