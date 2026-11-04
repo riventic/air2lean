@@ -936,7 +936,6 @@
         "Proofs.Lists.Bounded",
         "Proofs.Lists.Client",
         "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
         "Proofs.Lists.Gen",
         "Proofs.Lists.Linked",
         "Proofs.Lists.Open",
@@ -1125,8 +1124,6 @@
         "ZigLean.Range",
         "ZigLean.ReprCast",
         "ZigLean.ResultRun",
-        "ZigLean.Sep",
-        "ZigLean.Sep.Alloc",
         "ZigLean.Sep.AllocSpec",
         "ZigLean.Sep.AllocSpec.Dispatch",
         "ZigLean.Sep.AllocSpec.Norm",
@@ -1140,8 +1137,6 @@
         "ZigLean.Sep.Base.Block",
         "ZigLean.Sep.Base.Pts",
         "ZigLean.Sep.Block",
-        "ZigLean.Sep.Bounded",
-        "ZigLean.Sep.Cost",
         "ZigLean.Sep.Full.ACell",
         "ZigLean.Sep.Full.AllocBridge",
         "ZigLean.Sep.Full.AllocSpec",
@@ -1239,7 +1234,6 @@
         "ZigLean.Witness",
         "ZigLean.Witnesses.Conc",
         "ZigLean.Witnesses.Mem",
-        "ZigLean.Witnesses.Sep",
         "ZigLean.Witnesses.VC"
       ],
       "producer": {
@@ -1250,16 +1244,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "5a3d56bc1b6d1931526b0ffb886d3b1c1237e36c",
+        "head": "739d4656d80491f4839134bb4ea96fb940d39910",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T11:01:00.286786+00:00",
-      "elapsed_seconds": 95.318,
+      "started_utc": "2026-11-04T13:16:27.357642+00:00",
+      "elapsed_seconds": 30.369,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f9e8275793b9e59a0e92711e1590ae19f04748a55eba2f1c06f5048b52d10261",
+      "log_sha256": "fd94eecfe8ceb43dfe879a484c89e8a89dc5a13acc3aa3e32b32a1d3a026bd37",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1307,7 +1301,6 @@
         "Proofs.Lists.Bounded",
         "Proofs.Lists.Client",
         "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
         "Proofs.Lists.Open",
         "Proofs.Lists.Policy",
@@ -1379,31 +1372,31 @@
         },
         "Proofs.Lists.Open": {
           "path": "Proofs/Lists/Open.lean",
-          "sha256": "195f9fd4b05a909c401a855dccad6390d60d83067cda62a5068e52f296916d18"
+          "sha256": "402c4261e6c5720f052fb67e93fb4f707d79c0a359f3c4b37b9f1b938b061cc0"
         },
         "Proofs.Sync.Gen.V0_16_0.H_64617277696e.Gen": {
           "path": "Proofs/Sync/Gen/V0_16_0/H_64617277696e/Gen.lean",
-          "sha256": "2a9e94cdfd645bbd74782969beea9ee66f24427c08570c2b32919e83f826148c"
+          "sha256": "ad5090fd9e63b971a4f7ed38ae9aa9b5c8f0c534bd234a508fb41a0542832878"
         },
         "Proofs.Sync.Gen.V0_16_0.H_6c696e7578.Gen": {
           "path": "Proofs/Sync/Gen/V0_16_0/H_6c696e7578/Gen.lean",
-          "sha256": "a94204c49a045ee438b6b8a5deef212441d33a3ab60e46828372429a07c48868"
+          "sha256": "378b08703a1c49dfc4f2d8359c29e3bcfdbcd57e447eeee7773a1f3673f68cf2"
         },
         "Proofs.Sync.Gen.V0_17_0.H_6c696e7578.Gen": {
           "path": "Proofs/Sync/Gen/V0_17_0/H_6c696e7578/Gen.lean",
-          "sha256": "a963ae3570796ad6845ba40bc2fa9a99d43fd4ef1536c643ff1e37af4ba67467"
+          "sha256": "3bfc7c9d4fabebb36f42efd71ea2c11e9ba996abde95ba99e3d6053edebea71e"
         },
         "Proofs.Threadsync.Gen.V0_15_2.H_64617277696e.Gen": {
           "path": "Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean",
-          "sha256": "5cf297e91e821e08e4cf020130e9ef49536535d41d8a70800868e3c54a9e234f"
+          "sha256": "32a10d8cec5e0036bde6443d4fc4f5e61018de819763650d509017edba85fac7"
         },
         "Proofs.Threadsync.Gen.V0_15_2.H_6c696e7578.Gen": {
           "path": "Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean",
-          "sha256": "0a20711099eeccfc241b3192492a809d9836affa47b69e50c3126a074ae13102"
+          "sha256": "9010c70bf5f2c198c561eaaa7c33acfad8367461243d1c9d8f16b88aec8eabe3"
         },
         "Proofs.Threadsync.Gen.V0_15_2.H_6c696e75782d61617263683634.Gen": {
           "path": "Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean",
-          "sha256": "ca0b1d43a263eef329805c28ce72631209241c91f40ac91d738de0cc384ca97e"
+          "sha256": "cb7e484521f4b901d06e883a42ce8d4730537fd98a58ac483502006cd74db183"
         },
         "asm": {
           "path": "Proofs/Asm/Gen.lean",
@@ -1411,7 +1404,7 @@
         },
         "atomics": {
           "path": "Proofs/Atomics/Gen.lean",
-          "sha256": "bb011fe14b537f3880022cc62e6d7a29a81370cceb56917458b5ee150b1ebc89"
+          "sha256": "28c486fe36b6357aa286042aa579ab4715427136e871336cbf5cf233733d87bc"
         },
         "basic": {
           "path": "Proofs/Basic/Gen.lean",
@@ -1435,7 +1428,7 @@
         },
         "iogroup": {
           "path": "Proofs/Iogroup/Gen.lean",
-          "sha256": "b64a39c3657cc4feb97962d83f489c7472782b198891fd0c7aa17977f92c43ed"
+          "sha256": "4f42119419127e1096ae91e44c43e6e392428ac5986cd75682f056acb4aae4be"
         },
         "layout": {
           "path": "Proofs/Layout/Gen.lean",
@@ -1443,7 +1436,7 @@
         },
         "lists": {
           "path": "Proofs/Lists/Gen.lean",
-          "sha256": "759b89433e892e9bb2ac6f5f5bdc8b3752aa3470c492d308cc356f1d1c7eac9c"
+          "sha256": "b0dc68fb756be9e3a580d379801611bc28ff1679787a1306f99d8a2728b735ef"
         },
         "options": {
           "path": "Proofs/Options/Gen.lean",
@@ -1451,7 +1444,7 @@
         },
         "pointers": {
           "path": "Proofs/Pointers/Gen.lean",
-          "sha256": "258102dd6a0c3b077b96259aed6a15d71553fb563054a82d43337a49e1796552"
+          "sha256": "acafdf01a2472d4ce35be5d24176204d2d3fd2cd0946993be87fc1dbac11fb05"
         },
         "provenance": {
           "path": "Proofs/Provenance/Gen.lean",
@@ -1463,23 +1456,23 @@
         },
         "recursion": {
           "path": "Proofs/Recursion/Gen.lean",
-          "sha256": "d40d069ca39cee2fff2e4588ed04caa130c19e7214a7a24dc78f5317c2428584"
+          "sha256": "27e44aa2ce136072d0aed887c145109bdf0a4c8cf7c378a7efd03ac6321a5419"
         },
         "slices": {
           "path": "Proofs/Slices/Gen.lean",
-          "sha256": "8df1e0bc31138d551b8644b70ed80a0a1fa6d67179cd0c98539062b3dd708be5"
+          "sha256": "060ec9b81da0b8570f5dbbe81d576940c5e11e0cb1e5aed2b52b943c70423afe"
         },
         "sync": {
           "path": "Proofs/Sync/Gen.lean",
-          "sha256": "90d5707ce4d87d4a3a57bf729e151b0dbf472c471814532b0d944effbfb13e23"
+          "sha256": "585ea55c972fc0b1ec3cd5816881c44dda659140746345c63de1a3b5d05cceea"
         },
         "threads": {
           "path": "Proofs/Threads/Gen.lean",
-          "sha256": "4defefee7b5511b044169883a0ded982aa2ee891f717f3fd6bba3994d8cd3c81"
+          "sha256": "c4fa6e183555f1f1cb8fdbbb4bba285a0f8a38823ebdde9fd9e0f4c0e216c01e"
         },
         "threadsync": {
           "path": "Proofs/Threadsync/Gen.lean",
-          "sha256": "85cbc97be066b52cde225f6e3dcb086263bf465341cd25a300210e8f7d7aedcd"
+          "sha256": "b4030f7cfbb4ba99f7d7617fc3df8b4261307430ab81ba304a57ae95801cc211"
         },
         "variants": {
           "path": "Proofs/Variants/Gen.lean",
@@ -1499,8 +1492,8 @@
         "Proofs.Atomics.Proofs": "81bff9fe28426231ba9ea8cd40a17aade817abd14789ef8d0983f110ac0718a2",
         "Proofs.Atomics.PtrPublish": "f775fb0152ee259a5f21670358e84978fd82cd308d898ee8609ebf3c082e2aeb",
         "Proofs.Atomics.Relaxed": "46bef6fe4716ad04ecbd4c9af96da96797dd5858edd11b69d6bd356229352c97",
-        "Proofs.Atomics.Stack": "7bd01dd6e64bbef416a036c1b198fdacfd4f04a6722ed4c23a7433cece6b1477",
-        "Proofs.Basic.AirCert": "fda4a43a4d2ae4d9b8eca1f43b65dc32135c407254b42725853ccf98c8691d72",
+        "Proofs.Atomics.Stack": "e25898a169bf9447c1d298051c7021a9d34320218df6e4d26e2e5cef08058089",
+        "Proofs.Basic.AirCert": "999724780ba066e99c1c0d2eb45447494a601c35f913e1e228c12e0ce96b8a59",
         "Proofs.Basic.Arith": "f00e1973c38a12cfc5f5a6a2e900ab301a694479d9aa0df3889d0b881c97005e",
         "Proofs.Basic.Cases": "efc15a76c9113ac6e7d78b1e7b23461184d829a05c61da9e3a92843a0cf23ef5",
         "Proofs.Basic.ClampCases": "a7767eb38aa4ebd4d6d869ab85eb473b525cc115622bc545320d91e32b5d84d5",
@@ -1512,7 +1505,7 @@
         "Proofs.Cancel.Spurious": "63f1f25d1075f5361e1ac11c5792bc685856daa1e52fb58a395d1f6f0d3c4fa1",
         "Proofs.Detach.Transfer": "d6445d875fefe170f442e1db9a70c0d8fa3f73f491efe9786fd3ae3b316064be",
         "Proofs.Detach.Worker": "432d60845a5151f09d08008c7003dcccae4d85ece2e03385b4fe144637257146",
-        "Proofs.Errors.AirCert": "67fb0f99efdd62d5579f2cb3cc06bba29b33dbd03bdf77cdbf551215934fe5a2",
+        "Proofs.Errors.AirCert": "d41f760d3dc050db872b2a608f4ad1b3a8f5f9cf60259c399e69b006fdcf58c1",
         "Proofs.Errors.Proofs": "4f0167b71938299b74bb99a36dcb976749aaaed0855645fce59878cd76966dca",
         "Proofs.Floatconv.AirCert": "cf1010a8e0fab479845db8978dc86b327ad7e21121afcc881730ad3808e942ac",
         "Proofs.Floatconv.Proofs": "2b29d446af3ced3269487565d35a68aaa1db83d74591077cfcd37cbc55d03525",
@@ -1522,69 +1515,68 @@
         "Proofs.Floats.Fitness": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
         "Proofs.Floats.Proofs": "37acbc5c06dc0f00bcfaf422e17c73b78245c860d8b109b9aade2ec33fd473e0",
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
-        "Proofs.Handoff.Ops": "3e1273942c4992a7f3d108960b77b69b224832e3ace9fa4ad1ea690c4d7b1085",
-        "Proofs.Handoff.Protocol": "153d9f39b2fd74ebc9ba10854da4dab6dd044eadc2cbab744a34f86cd6c9dd94",
+        "Proofs.Handoff.Ops": "ffeff8471de0187594c0614f7a6e763929808cfd9ee3c5198cf4153b253d3e7c",
+        "Proofs.Handoff.Protocol": "26c62756ec561bfbb8bfa7b46f48f0ad2f8471778e20a6a8703615ebaebbf2d0",
         "Proofs.Handoff.Start": "eabfb0aa075ab8ef3329d8981b1ba6fe942c26e71ab24555cbe03aabc7d4ea6d",
-        "Proofs.Handoff.Steps": "063d955740db4833db54f7baca41b7ea3b73739ece5d82794d95e733d17fdbad",
-        "Proofs.Iogroup.AirCert": "478ef5622c84ae2d1075693e65af5e50e04352af2861d4aa8fa4592f2dc011ff",
-        "Proofs.Iogroup.Counter": "e3009576184323d607ec51ae2c5389a27fef7a611bdbda024e216591a8e89224",
+        "Proofs.Handoff.Steps": "e728749b4316fdcaecce733d554175ab1c92d24fee29231e5486cccf2d21c2a8",
+        "Proofs.Iogroup.AirCert": "db2706c6e0373423ef9c0abd8a09858493a21500ba393161a17dff997b774f0b",
+        "Proofs.Iogroup.Counter": "9d01f6b134f4b2add9847123b47e7d23c444ef25fa12fc2ca5d31f2a07a2854f",
         "Proofs.Iogroup.Lock": "19346879c3d59dbe4bc0b36f399c7fc981cf3df262ee9eb969a13041991105c9",
         "Proofs.Layout.Mem": "4e03c6137c89f7a600f2d5f12096cc388955ce41d1a94e0bddaa5dc49892f7d2",
         "Proofs.Layout.Proofs": "02e4224b39965d385b878b8ca9656e0fc13e55e29b598204e612484e145508b1",
-        "Proofs.Lists.Alloc": "b5014a7d07eca05329bbd6c4b6cce6655bf99980c94cc93776626a3828d74143",
+        "Proofs.Lists.Alloc": "67d975589b06bcf3984db177fae3bfd3af9d264da657708cffe023a52d1e064d",
         "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
-        "Proofs.Lists.Bounded": "dc4e5211a13986dd4e0a5a33f3f174e35bf12679049563fd5e8c358284a2a721",
-        "Proofs.Lists.Client": "826ea9c2329a223912ccf713581cbd8cf44ac60a93832aaa3d050b1b0d8266ee",
+        "Proofs.Lists.Bounded": "012d9fd21a2f208dd448bf13a6d0144296a1b18fd88c07399a77c7ff49aeff7b",
+        "Proofs.Lists.Client": "fed6c41ddde8de4403adb6eb80f47090b559f56b306e7e1f98b0bb95352c84d0",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
-        "Proofs.Lists.Cost": "e27441a44098ed513d8ce280db6610ae1c33879850eb5e7742fd342bc0057d45",
-        "Proofs.Lists.Linked": "cdb6286ac2a7e4280898c7c86e2e64ec95b0d9ac1fc2c8c286c17dded661e96a",
+        "Proofs.Lists.Linked": "d85f3823d6b172b697fde1f8ae8a57d5883b00e78e2eb3233b3bea235dea53b1",
         "Proofs.Lists.Policy": "9612a37544ffb9408eeed8adf4707c33a480680b9bccc675eebc4e13bd14a64a",
-        "Proofs.MutexCounter.Protocol": "03c7c08f863c1e55e366f70beb42393c464a0d1cad895f6a3c1a2db0b4a6afc6",
-        "Proofs.Options.AirCert": "e3389e898eee5e26463ee064e1ccd7c7ed07132554c69bf43f31f07961678a43",
+        "Proofs.MutexCounter.Protocol": "b6dd9f87bfb4a712c8716b17a0b75af0263d1f163b83f4dd1cabbefddf070efa",
+        "Proofs.Options.AirCert": "8634ed54698b3bba733f02ac6cf60a57243c39afc84a32c2694dcd1ee20c9bcc",
         "Proofs.Options.Proofs": "c89695a484e97a3b5a91d7ca45752f2cce98cf979d852bb2dcca500136e8c728",
-        "Proofs.Pointers.AirCert": "7a38d2821c2a68d2a2f0ac8a1da2c3bb80d16870f6c728330eaa212b0fb5a257",
+        "Proofs.Pointers.AirCert": "861741a1250c035f446dac0e2ac6c43fbd783c38868a8f6371fd9744e32ff7c2",
         "Proofs.Pointers.Proofs": "ef9ff18b0c0929f5247338a6719a0220143251e94f88a2f9531e704a58bbdf8f",
         "Proofs.Pointers.Sep": "a01bab1cdd78f76caa6da0b2304474115deb3745655b4f6005a56671636e78b1",
         "Proofs.Provenance.Proofs": "d6a38ee33edda4ac56da01990788ef2b6da5d76a2deed2d3dbe2805f08e2aef5",
         "Proofs.ProvenanceGap.Proofs": "e477163adc3fdef52699f91047b6c3518ff874edf9edf8cfac6ab2d484161dc3",
-        "Proofs.Recursion.AirCert": "2abd81ee5f61fd3294d59a77c732b70c453bbdb9b3c49f4fafc418c2aa8ecdcd",
+        "Proofs.Recursion.AirCert": "bb5e3127c95a47f83281381d5eedbf038bef1eab78c4ceabb88e27885e9013b0",
         "Proofs.Recursion.Proofs": "03a4aecb6eb40699c265a527fb4899a1e7dc34a49eff5ab3ecaacaabb7e08270",
         "Proofs.Slices.Proofs": "2626be020120a31c877198f9b345820c48666fe22061a8744693851bcd0b0ebb",
-        "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
+        "Proofs.Slices.Sep": "8be2acf664ad5c7b941b46915e2924154250ae7b9df5a90ef8ec14e5587a5113",
         "Proofs.Sync.Cases": "aea70dca286ca9f99183cf3fd260fb4c13e08e59b5c74ab309effb3667b47f3b",
-        "Proofs.Sync.Cond": "adf15a1351eaa7373d0187ea5b908214e40f52223f684fdec9c58b5d36628b0a",
+        "Proofs.Sync.Cond": "134d8a68c84f1a26bdbcfe1800b2e7450bf15390aa77600a0a61347dcf9563de",
         "Proofs.Sync.Contracts": "0d7a537b5982fa4f88547fd32fb605eeb9f0a39b0921cf1acf8e62722df1f617",
-        "Proofs.Sync.Event": "5853ee26d8166692407aca6cad4f251fc8ea7e312f38dab7026efd6239b849fa",
-        "Proofs.Sync.Handoff": "f9dc1b2d2e8354cc5cfb8287de94e96bc67a7343810650e8e2cad0b2a7262ac3",
+        "Proofs.Sync.Event": "a126a10239daed170557d9496c341a3453f2127cb4a82dc67b8551f7a262e841",
+        "Proofs.Sync.Handoff": "c3fb9dce1e7c99ffc12e60fc9ac505c966e940551f59c02b05a9291aebc7e277",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
-        "Proofs.Sync.Lock": "b1a07c42dac125f1d8c0f53e9a910c918f54999823c93475d4ab146d732801e0",
+        "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
-        "Proofs.Sync.Mutex": "dc973c9863d70ebe8f2afcbce7d2e07be71f11f78bcf73eb830abbf642d38269",
+        "Proofs.Sync.Mutex": "b43c3957ce335fc1e97f20d0f15af962f1a110862743928114b06cb7e36708c8",
         "Proofs.Sync.MutexCases": "a59c50342d614e64de8749fd42cb2d614a0bd93efe88792a2242feb81b19f3cd",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "807ad592ceca602c77c370c6461e0126c4ab7ecf7cc22918882570ab5c6372da",
+        "Proofs.Sync.RwLock": "f010e7d222835dad310ec241b0f8ec244fda8553f42cb9367ac2d3c9a9aeb462",
         "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
         "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
-        "Proofs.Sync.SemCounter": "fd3e2b97d1508289886da4169c310ec8cbf2f146ad9aaff9bceace83ac63ab5c",
-        "Proofs.Sync.Semaphore": "9c6daef4a568f8fcba65b2fc13aa9b7a3cdaa4930bc448e4f40583d8fd45c590",
-        "Proofs.Sync.SnapshotCache": "e7fc9fdd54e8766c9eca4a4a3b0b764ca0b2acf5ba14bb050c7ad491744a2a7a",
-        "Proofs.Threads.AirCert": "6c22d4c63eeb116cf4da9d3e1b6cf5bafc58b68e8649ad041bbe3302833bbf81",
-        "Proofs.Threads.Counter": "833b0787372e00b55a7f36c577e0b5c81bd80e2dd7c646cd981726c97f89ff5f",
+        "Proofs.Sync.SemCounter": "965afeca82769da2e3ed29960341d788d15cb9377d56cd521a38a5d20d53d2a8",
+        "Proofs.Sync.Semaphore": "7e49419f74a548a8f65a3b4bf57dcb5bbb610bc7967042ea7ad48da527a76e96",
+        "Proofs.Sync.SnapshotCache": "d4ca7aed8660d24d430dd836d067bdc0a52457bc0a81cf79a9ebbdfde8cc044a",
+        "Proofs.Threads.AirCert": "e14f74fe9dcdbd97a394276a84a50d73a7075dbc06247d43e62d8bda2ac7ca5f",
+        "Proofs.Threads.Counter": "e1faf3cafefab301278dc0c4aa8c7885b719219504588a0160d9bf1aa2dadcc5",
         "Proofs.Threads.Disjoint": "34f365d3c38ef46a0bba62390a8deb99cc84715e8467be99e2a9b913048fe560",
         "Proofs.Threads.Proofs": "d93dd4fff8a8fa3256a166675a6584399be81f4662146d198e472e9bdacd0ab2",
         "Proofs.Threadsync.Cases": "288ae8f77d8eb80a7105bf0dc92f704810d4a54264dfe7273b48d62501a89633",
-        "Proofs.Threadsync.Cond": "0a2f1f6024ed8c189bf4a665ee821ae99ba06e5e987d31ebb47d5a4a3e841be0",
-        "Proofs.Threadsync.Deadline": "c47f4611f0580da8f12050ba20163c7c473a6b8e689309eaf76dd37c9ae1807a",
-        "Proofs.Threadsync.Event": "28936ad8884a3ca663a1ac7b7f63dfc9ae2d706a410c36bceb8d78f94f3a011f",
-        "Proofs.Threadsync.Handoff": "d8cb27b82d60e0b6f4f36b4d5d10e8269f9c1ffba812d1461ae9d4f171bc8649",
-        "Proofs.Threadsync.Lock": "1dec1cc508274cd3e9933cabda3239b16a39cb9b02669eca14b120639a8e3d5a",
-        "Proofs.Threadsync.Mutex": "ec6f13e13c0f4ed9c667e2d283f3ad4cf8bcfcfceb8a2964e9c020762d0752a2",
-        "Proofs.Threadsync.ThreadMutex": "7b384b1608310921bfa58741de958318f18ca9d0653f9f3d5d2975cc449c6a67",
+        "Proofs.Threadsync.Cond": "865da573b001d4a3a0ad414c78400331a28923ac482ed9f54c8eb0631802fb21",
+        "Proofs.Threadsync.Deadline": "83de9dc11188ad48d9bceb547c666cb856f2c381f62b2a069f7b7b6b8598e9bb",
+        "Proofs.Threadsync.Event": "dfb440f511871a4271cf8665830facab5affe47cf063cfe2459c9fc265a9895e",
+        "Proofs.Threadsync.Handoff": "c83fcbbad424a33309c79777233ec2ce99ced1d0c6d88a93c874d83355ae4839",
+        "Proofs.Threadsync.Lock": "aa539905116a5bca0e255c4de8bd8b15d9d2471d933ded4943b6e21981893c76",
+        "Proofs.Threadsync.Mutex": "5f6d55c0c3e36a24c4a143a62b56d92f8930e67494b742331236d09fd8fae43b",
+        "Proofs.Threadsync.ThreadMutex": "4d32bc41e5f5fa87b43584373d932f49cbc876db1b690f3ccb8846c6ea2e24b2",
         "Proofs.Threadsync.Variant": "20189521d5edf339517077cda5a478641bfc6b26e7922ae799832a123bcd6a1c",
-        "Proofs.Threadsync.WaitGroup": "2bfc809da6cc8859783f0b955872a024f5315721606205e1660c2dfe1665a40e",
+        "Proofs.Threadsync.WaitGroup": "0023d70e36c2d2fce2f1b0b389c97701f1551e0b15ca18c7184d7afc4568702e",
         "Proofs.Variants.AirCert": "f0d0cc9e0a5212d7990086aaebcf9d057a5d09b49984bfc18fc191f1419e113c",
         "Proofs.Variants.Proofs": "ae6e50199262841e1b5087dda0b3c0e8fedd42a1f5287da06fb9e1af117bd05b",
-        "Proofs.Vectors.AirCert": "3f0926a38f08ca9674f03d2717b6e8b9c15c37e26fa2625d0ad1623ecb8c70c5",
+        "Proofs.Vectors.AirCert": "8f9f68cfea8632d23fdc6336f4301b98addfef8af06cefe66acb1fe04b8b51f5",
         "Proofs.Vectors.CheckedAdd": "803b849c0a331341bf5e1a164fb07858dfdc8baee2c8c32a219645591425a3fa",
         "Proofs.Vectors.Proofs": "36534835f81002d8e748074aeba2b6fb4d2ecb3a1366a761ef7dc87344861b7b"
       }
@@ -1691,16 +1683,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "5a3d56bc1b6d1931526b0ffb886d3b1c1237e36c",
+        "head": "739d4656d80491f4839134bb4ea96fb940d39910",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T10:57:12.377247+00:00",
-      "elapsed_seconds": 226.996,
+      "started_utc": "2026-11-04T13:16:26.258319+00:00",
+      "elapsed_seconds": 0.244,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "06ed594d4d207891fbd150e158de007792080ace26c247d8f0461ac139515cce",
+      "log_sha256": "686c01540a6d99db2425595a2a3e0c67a97268eac7d8ae9b50eaae27b9859353",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Sync.Contracts",
@@ -1717,20 +1709,20 @@
       "gens": {
         "sync": {
           "path": "Proofs/Sync/Gen.lean",
-          "sha256": "90d5707ce4d87d4a3a57bf729e151b0dbf472c471814532b0d944effbfb13e23"
+          "sha256": "585ea55c972fc0b1ec3cd5816881c44dda659140746345c63de1a3b5d05cceea"
         }
       },
       "sources": {
         "Proofs.Sync.Contracts": "0d7a537b5982fa4f88547fd32fb605eeb9f0a39b0921cf1acf8e62722df1f617",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
-        "Proofs.Sync.Lock": "b1a07c42dac125f1d8c0f53e9a910c918f54999823c93475d4ab146d732801e0",
+        "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "807ad592ceca602c77c370c6461e0126c4ab7ecf7cc22918882570ab5c6372da",
+        "Proofs.Sync.RwLock": "f010e7d222835dad310ec241b0f8ec244fda8553f42cb9367ac2d3c9a9aeb462",
         "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
         "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
-        "Proofs.Sync.Semaphore": "9c6daef4a568f8fcba65b2fc13aa9b7a3cdaa4930bc448e4f40583d8fd45c590",
-        "Proofs.Sync.SnapshotCache": "e7fc9fdd54e8766c9eca4a4a3b0b764ca0b2acf5ba14bb050c7ad491744a2a7a"
+        "Proofs.Sync.Semaphore": "7e49419f74a548a8f65a3b4bf57dcb5bbb610bc7967042ea7ad48da527a76e96",
+        "Proofs.Sync.SnapshotCache": "d4ca7aed8660d24d430dd836d067bdc0a52457bc0a81cf79a9ebbdfde8cc044a"
       }
     },
     "0.17.0-linux-goldens": {
@@ -1752,7 +1744,6 @@
         "Proofs.Floatops.Proofs",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
         "Proofs.Lists.Policy",
         "Proofs.Lists.Linked",
         "Proofs.Sync.Lock",
@@ -1776,16 +1767,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "5a3d56bc1b6d1931526b0ffb886d3b1c1237e36c",
-        "tracked_dirty": true
+        "head": "739d4656d80491f4839134bb4ea96fb940d39910",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-11-04T10:48:47.803658+00:00",
-      "elapsed_seconds": 503.733,
+      "started_utc": "2026-11-04T13:15:39.179540+00:00",
+      "elapsed_seconds": 46.144,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "56d3192f4594af07104ec099cc428c0bcd884d2b4b5a84602cbeca780e72f697",
+      "log_sha256": "4eb5ca250eb213ede1ee895cbe3cb511b775e31d61166f594601ed8f5d7f5cfa",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1797,7 +1788,6 @@
         "Proofs.Lists.Alloc",
         "Proofs.Lists.Append",
         "Proofs.Lists.Container",
-        "Proofs.Lists.Cost",
         "Proofs.Lists.Linked",
         "Proofs.Lists.Open",
         "Proofs.Lists.Policy",
@@ -1821,50 +1811,45 @@
       "gens": {
         "Proofs.Lists.Open": {
           "path": "Proofs/Lists/Open.lean",
-          "sha256": "195f9fd4b05a909c401a855dccad6390d60d83067cda62a5068e52f296916d18"
+          "sha256": "402c4261e6c5720f052fb67e93fb4f707d79c0a359f3c4b37b9f1b938b061cc0"
         },
         "floatops": {
           "path": "tests/golden/0.17.0/floatops/Gen.lean",
           "sha256": "a02019a5ee040517a28d064443199970a0a5fa59fa3ef8601c48bd875026f874"
         },
-        "lists": {
-          "path": "tests/golden/0.17.0/lists/Gen.lean",
-          "sha256": "0923af824c5f3402f344e8118646cd348b377dc7b0fab9883cd49f3ae640bd23"
-        },
         "sync": {
           "path": "tests/golden/0.17.0/sync/Gen.lean",
-          "sha256": "a7c0a480d926521f57f0e6e5eeb9d0d0c46704a8400a3d0de495141ca05b451c"
+          "sha256": "ac6de3d01c96c9515ba8fb0bfaef4dc20159dcad20cbd093c3a6aebec908fb79"
         }
       },
       "sources": {
         "Proofs.Floatops.Proofs": "7310cbf7a99b93bb9c1d34ccdff71d9617c49fc5d0b2fdd62f0f749d49fd6628",
         "Proofs.Handoff.Layout": "1ac3da6117e12479b5e32b75aa60a13645fe23d7a02543d58d6d640c0d868a1b",
-        "Proofs.Handoff.Ops": "3e1273942c4992a7f3d108960b77b69b224832e3ace9fa4ad1ea690c4d7b1085",
-        "Proofs.Handoff.Protocol": "153d9f39b2fd74ebc9ba10854da4dab6dd044eadc2cbab744a34f86cd6c9dd94",
+        "Proofs.Handoff.Ops": "ffeff8471de0187594c0614f7a6e763929808cfd9ee3c5198cf4153b253d3e7c",
+        "Proofs.Handoff.Protocol": "26c62756ec561bfbb8bfa7b46f48f0ad2f8471778e20a6a8703615ebaebbf2d0",
         "Proofs.Handoff.Start": "eabfb0aa075ab8ef3329d8981b1ba6fe942c26e71ab24555cbe03aabc7d4ea6d",
-        "Proofs.Handoff.Steps": "063d955740db4833db54f7baca41b7ea3b73739ece5d82794d95e733d17fdbad",
-        "Proofs.Lists.Alloc": "b5014a7d07eca05329bbd6c4b6cce6655bf99980c94cc93776626a3828d74143",
+        "Proofs.Handoff.Steps": "e728749b4316fdcaecce733d554175ab1c92d24fee29231e5486cccf2d21c2a8",
+        "Proofs.Lists.Alloc": "67d975589b06bcf3984db177fae3bfd3af9d264da657708cffe023a52d1e064d",
         "Proofs.Lists.Append": "93c11a39d9bacd81eac99eb53845dd9f6077251abb0c1682e05780a7e61e9aca",
         "Proofs.Lists.Container": "faaa2b3f6985a10df4dd0881a1bb985322dda1c9565f7819dacdce126f84a98b",
-        "Proofs.Lists.Cost": "e27441a44098ed513d8ce280db6610ae1c33879850eb5e7742fd342bc0057d45",
-        "Proofs.Lists.Linked": "cdb6286ac2a7e4280898c7c86e2e64ec95b0d9ac1fc2c8c286c17dded661e96a",
+        "Proofs.Lists.Linked": "d85f3823d6b172b697fde1f8ae8a57d5883b00e78e2eb3233b3bea235dea53b1",
         "Proofs.Lists.Policy": "9612a37544ffb9408eeed8adf4707c33a480680b9bccc675eebc4e13bd14a64a",
-        "Proofs.MutexCounter.Protocol": "03c7c08f863c1e55e366f70beb42393c464a0d1cad895f6a3c1a2db0b4a6afc6",
-        "Proofs.Sync.Cond": "adf15a1351eaa7373d0187ea5b908214e40f52223f684fdec9c58b5d36628b0a",
+        "Proofs.MutexCounter.Protocol": "b6dd9f87bfb4a712c8716b17a0b75af0263d1f163b83f4dd1cabbefddf070efa",
+        "Proofs.Sync.Cond": "134d8a68c84f1a26bdbcfe1800b2e7450bf15390aa77600a0a61347dcf9563de",
         "Proofs.Sync.Contracts": "0d7a537b5982fa4f88547fd32fb605eeb9f0a39b0921cf1acf8e62722df1f617",
-        "Proofs.Sync.Event": "5853ee26d8166692407aca6cad4f251fc8ea7e312f38dab7026efd6239b849fa",
-        "Proofs.Sync.Handoff": "f9dc1b2d2e8354cc5cfb8287de94e96bc67a7343810650e8e2cad0b2a7262ac3",
+        "Proofs.Sync.Event": "a126a10239daed170557d9496c341a3453f2127cb4a82dc67b8551f7a262e841",
+        "Proofs.Sync.Handoff": "c3fb9dce1e7c99ffc12e60fc9ac505c966e940551f59c02b05a9291aebc7e277",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
-        "Proofs.Sync.Lock": "b1a07c42dac125f1d8c0f53e9a910c918f54999823c93475d4ab146d732801e0",
+        "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
         "Proofs.Sync.Mailbox": "649b44bbd477fdbb2a9de9ec9e788c8d76441e80c1ade79b4b57e39de0e99e42",
-        "Proofs.Sync.Mutex": "dc973c9863d70ebe8f2afcbce7d2e07be71f11f78bcf73eb830abbf642d38269",
+        "Proofs.Sync.Mutex": "b43c3957ce335fc1e97f20d0f15af962f1a110862743928114b06cb7e36708c8",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
-        "Proofs.Sync.RwLock": "807ad592ceca602c77c370c6461e0126c4ab7ecf7cc22918882570ab5c6372da",
+        "Proofs.Sync.RwLock": "f010e7d222835dad310ec241b0f8ec244fda8553f42cb9367ac2d3c9a9aeb462",
         "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
         "Proofs.Sync.RwLockSnapshotPair": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9",
-        "Proofs.Sync.SemCounter": "fd3e2b97d1508289886da4169c310ec8cbf2f146ad9aaff9bceace83ac63ab5c",
-        "Proofs.Sync.Semaphore": "9c6daef4a568f8fcba65b2fc13aa9b7a3cdaa4930bc448e4f40583d8fd45c590",
-        "Proofs.Sync.SnapshotCache": "e7fc9fdd54e8766c9eca4a4a3b0b764ca0b2acf5ba14bb050c7ad491744a2a7a"
+        "Proofs.Sync.SemCounter": "965afeca82769da2e3ed29960341d788d15cb9377d56cd521a38a5d20d53d2a8",
+        "Proofs.Sync.Semaphore": "7e49419f74a548a8f65a3b4bf57dcb5bbb610bc7967042ea7ad48da527a76e96",
+        "Proofs.Sync.SnapshotCache": "d4ca7aed8660d24d430dd836d067bdc0a52457bc0a81cf79a9ebbdfde8cc044a"
       }
     },
     "0.15.2-darwin-floatops": {
@@ -2329,16 +2314,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8bb62cdd4d07ca3b3f8940f5a6ff368042af4e06",
+        "head": "739d4656d80491f4839134bb4ea96fb940d39910",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-20T23:07:18.157193+00:00",
-      "elapsed_seconds": 0.414,
+      "started_utc": "2026-11-04T13:17:06.258005+00:00",
+      "elapsed_seconds": 0.247,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "6d32241043adf409663302c200be42ee9d08471c16babd9cda0f73fb4c0475b7",
+      "log_sha256": "9204896718c609414d40b418dccecf1570730f22fb2ae77ee87a8c2ee13bd07d",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Detach.Worker",
@@ -2347,7 +2332,7 @@
       "gens": {
         "threads": {
           "path": "Proofs/Threads/Gen.lean",
-          "sha256": "4defefee7b5511b044169883a0ded982aa2ee891f717f3fd6bba3994d8cd3c81"
+          "sha256": "c4fa6e183555f1f1cb8fdbbb4bba285a0f8a38823ebdde9fd9e0f4c0e216c01e"
         }
       },
       "sources": {
@@ -2359,8 +2344,7 @@
       "zig": "0.15.2",
       "target": "linux",
       "command": [
-        "/Users/konstantinrr/.local/share/uv/python/cpython-3.14.5-macos-aarch64-none/bin/python3.14",
-        "-B",
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
         "scripts/theorem-inventory.py",
         "swap-build",
         "--lake",
@@ -2378,16 +2362,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "8bb62cdd4d07ca3b3f8940f5a6ff368042af4e06",
+        "head": "739d4656d80491f4839134bb4ea96fb940d39910",
         "tracked_dirty": true
       },
-      "started_utc": "2026-10-20T23:07:42.860590+00:00",
-      "elapsed_seconds": 4.467,
+      "started_utc": "2026-11-04T13:17:02.702483+00:00",
+      "elapsed_seconds": 3.218,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "cc14c3be7484dd702021245bae3c9c03b2345eadd2fcc838ab76c2159998b2fa",
+      "log_sha256": "c24b6e9518b6ac0a89ce75cfb98a795048c60bb003fd22ef9f97e812418fcfb1",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Threads.Disjoint"
@@ -2395,7 +2379,7 @@
       "gens": {
         "threads": {
           "path": "tests/golden/0.15.2/threads/Gen.lean",
-          "sha256": "4defefee7b5511b044169883a0ded982aa2ee891f717f3fd6bba3994d8cd3c81"
+          "sha256": "c4fa6e183555f1f1cb8fdbbb4bba285a0f8a38823ebdde9fd9e0f4c0e216c01e"
         }
       },
       "sources": {
