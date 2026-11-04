@@ -361,6 +361,110 @@ theorem _root_.Zig.Full.FLock.Fits.wp_projE (hC : L.Fits (C.prim L) P U ok)
   · rw [hr] at he; cases he; exact ⟨rfl, h⟩
   · rw [hr] at hn; cases hn
 
+/-! ## The protocol after a step -/
+
+/-- An op at the state keeps the epoch's writes. -/
+theorem _root_.Zig.Full.FLock.Fits.keepE (hC : L.Fits (C.prim L) P U ok) {G : ThreadId → γ}
+    {rX : Res} {m m' : Mem} (hU : U G rX m) (hms : C.MStep C.S t m m') :
+    C.Ep.hist m' = C.Ep.hist m := by
+  obtain ⟨_, hh⟩ := hms.word ((hC.wRest (.inr rfl)) _ _ _ hU).1
+    (.inr (.inr (.inl (by have := C.ep_o; omega)))) (.inl rfl)
+  rcases hh with hh | ⟨he, _⟩
+  · exact hh
+  · have ho := congrArg (fun w : Word 32 4 => w.o) he
+    have := C.ep_o
+    omega
+
+/-- An op at the epoch keeps the state's writes. -/
+theorem _root_.Zig.Full.FLock.Fits.keepS (hC : L.Fits (C.prim L) P U ok) {G : ThreadId → γ}
+    {rX : Res} {m m' : Mem} (hU : U G rX m) (hms : C.MStep C.Ep t m m') :
+    C.S.hist m' = C.S.hist m := by
+  obtain ⟨_, hh⟩ := hms.word ((hC.wRest (.inl rfl)) _ _ _ hU).1
+    (.inr (.inr (.inr (by have := C.ep_o; omega)))) (.inr (.inr (.inr (by have := C.ep_o; omega))))
+  rcases hh with hh | ⟨he, _⟩
+  · exact hh
+  · have ho := congrArg (fun w : Word 32 4 => w.o) he
+    have := C.ep_o
+    omega
+
+/-- After a step of the condition's code by `t` (`g`, new place `p`) that keeps `t`'s lock
+place: the protocol's invariant, from the lock's invariant after the step, the rest before it,
+and the condition's invariant after it. -/
+theorem _root_.Zig.Full.FLock.Fits.backC (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
+    {rY : Res} {m₁ m' : Mem} {g : γ} {p : CPh} {W : Word 32 4}
+    (hW : W = C.S ∨ W = C.Ep) (hg₁ : G₁ t = g) (hn : CPh.Next (C.ph g) p)
+    (hU : U G₁ (rsum (W.cellsR m₁) rY) m₁) (hY : ∀ l, W.In l → rY.heap l = none)
+    (hs : C.MStep W t m₁ m') (hEp : C.Ep.hist m' = C.Ep.hist m₁ ∨ ∃ q n, C.ph g = .inc q n)
+    (hL : L.Inv G₁ (rsum (W.cellsR m') rY) m') (hI : C.Inv L (upd G₁ t (C.set g p)) m') :
+    P.inv (upd G₁ t (C.set g p)) m' :=
+  hC.back hW hg₁ ⟨hn, .inl ⟨rfl, rfl⟩, hs, hEp⟩ hU hY hL hI
+
+/-- **A thread enters the wait** (`out` → `en`) holding the mutex: `hroom`, fewer than `65535`
+waiters are registered (the state's `u16` count; a protocol bounds its waiters); `hent`, the
+client's rest allows the entry. No other thread need be out of the condition's code. -/
+theorem _root_.Zig.Full.FLock.Fits.enterEn (hC : L.Fits (C.prim L) P U ok) {G : ThreadId → γ}
+    {m : Mem} {g : γ} (hgx : C.ph g = .out) (hgh : L.ph g = .holds)
+    (hroom : ∀ T, (∀ u, T ≤ u → C.ph (upd G t g u) = .out) → C.nreg (upd G t g) T < 65535)
+    (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
+      U (upd G t (C.set g .en)) rX m)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (C.set g .en)) m := by
+  obtain ⟨rX, hL, hU⟩ := (hC.inv _ _).mp hi
+  have hnq : ∀ w ∈ m.waiters, w.1 ≠ t := by
+    have := hL.w.notQ (t := t) (show L.ph (upd G t g t) ≠ .wait by rw [upd_self, hgh]; decide)
+      (show L.ph (upd G t g t) ≠ .away by rw [upd_self, hgh]; decide)
+    exact FLock.notQ_mem this
+  have hI₀ := hC.wInv _ _ _ hU
+  have hI := hI₀.quiet (t := t) (g' := C.set g .en) (m' := m)
+    (by rw [upd_self, hgx]; exact ⟨rfl, rfl⟩) (by rw [C.ph_set]; exact ⟨rfl, rfl⟩) rfl rfl rfl rfl
+    rfl (fun _ => VClock.le_refl _) hnq (fun i e h => by rw [C.ph_set] at h; cases h)
+    (fun _ => ⟨by rw [hC.lph]; exact hgh, by
+      obtain ⟨T, hT, hw, -⟩ := hI₀.cnt; rw [hw]; exact hroom T hT, fun u hu => by
+      cases hc : (C.ph (upd G t g u)).crit
+      · rfl
+      · have h1 := hI₀.crit u hc
+        have h2 : L.ph (upd G t g t) = .holds := by rw [upd_self, hgh]
+        exact absurd (hL.w.one u t h1 h2) hu⟩)
+    (fun _ => (hL.ht (t := t) (by rw [upd_self, hgh]; decide)).1)
+  rw [upd_upd] at hI
+  have hL' := hL.relabel (t := t) (g := C.set g .en) (by rw [upd_self, hC.lph])
+    (by rw [upd_self, hC.lpart]) (by rw [upd_self, hC.lheld]) (fun r hr => by
+      have := hC.lR (upd G t g) t .en r hr; rwa [upd_self] at this)
+  rw [upd_upd] at hL'
+  exact (hC.inv _ _).mpr ⟨rX, hL', hent rX hU hI⟩
+
+/-! ## The ops of the condition's code in generated code (`WP`) -/
+
+variable {σ : Type} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ}
+
+/-- The waiter's acquire load of the epoch at `en` (holding the mutex): it reads a write `i` its
+view allows (not only the newest), `ld i b`, and acquires it. -/
+theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
+    (hgh : L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' b i, m'.current = t →
+      P.inv (upd G₁ t (C.set g (.ld i b))) m' → Q (b, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicLoadC (n := 32) .acquire 4 C.Ep.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
+  FLock.wp_wordLoad hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) (by rw [hgh]; decide) hi
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv _hfl hacq hh hw' hw₀ hct hrun hA _hS _hR hL => by
+      have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)
+      obtain ⟨hI, hnq⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide) hop.waiters hL
+      have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
+      refine h k hk G₁ m' b j (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
+        (by rw [hg]; exact True.intro) hU hY hms (.inl hh) hL ?_)
+      have hI' := hI.quiet (t := t) (g' := C.set g (.ld j b)) (m' := m')
+        (by rw [hg₁, hg]; exact ⟨rfl, rfl⟩) (by rw [C.ph_set]; exact ⟨rfl, rfl⟩)
+        (hC.keepS hU hms) hh hop.waiters hop.woken hop.threads hop.clock hnq
+        (fun i e h' => by rw [C.ph_set] at h'; cases h'; exact ⟨hj, hv, hacq rfl⟩)
+        (fun _ => ⟨by rw [hC.lph]; exact hgh, hI.room t hcr, fun u hu => by
+          cases hc : (C.ph (G₁ u)).crit
+          · rfl
+          · exact absurd (hI.crit1 u t hc hcr) hu⟩)
+        (fun _ => hI.ex t (by rw [hg₁, hg]; exact nofun))
+      exact hI'
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
