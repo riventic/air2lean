@@ -291,12 +291,6 @@ def PartTick (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem)
     FTTotalTriple (fun rp => rp = L.part (G t)) Zig.tick (fun _ rp => rp = r) ∧
     G' = upd G t (L.setPart (G t) r) ∧ rX' = rX ∧ m' = m.ticked ∧ L.Inv G' rX' m'
 
-/-- Composite instrumentation advances the counter; the primitive's exact `Mem.Aux` is not
-used to erase it. Sequential composite steps therefore retain monotone tick counts. -/
-theorem PartTick.ticks {t : ThreadId} {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem}
-    (h : L.PartTick t G rX m G' rX' m') : m.ticks < m'.ticks := by
-  obtain ⟨_, _, _, r, _, _, _, rfl, _⟩ := h
-  exact Nat.lt_succ_self _
 
 /-- **A protocol with the lock `L` keeps the primitive `K`** (module doc), where only a thread with
 `ok` runs the lock's code: its invariant is `FLock.Inv` and `U`, with the same rest `rX`; `U` keeps
