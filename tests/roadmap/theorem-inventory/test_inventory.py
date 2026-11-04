@@ -574,6 +574,11 @@ class FixtureTests(unittest.TestCase):
         self.assertRunCurrent('all', False)
         calls = self.assertReplayRuns('all')
         self.assertEqual(calls[0].args[1], [str(self.fx.lake), 'build', 'Proofs', 'Proofs.Demo.Proofs'])
+        # With every target gone the renewal would be a bare default-target build: refused.
+        inv = self.fx.load()
+        inv['runs']['all']['command'] = [str(self.fx.lake), 'build', 'Proofs.Demo.Gone']
+        self.fx.save(inv)
+        self.assertReplayRejected()
 
     def test_swapped_imports_are_recorded_and_checked_from_the_selected_source(self):
         helper_module = 'Proofs.Extra.Helper'
