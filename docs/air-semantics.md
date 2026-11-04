@@ -87,6 +87,16 @@ The file first quotes every original function and validated model input with con
 terms (`Reify`), including bodies outside the proof fragment. The complete `program` owns
 lookup and derived classification. For each selected function `f`, `air_f` names that original
 function; native round-trip checks compare the complete program to the decoded golden AIR.
+One theorem `policies` states the step-policy table `program.tickPolicies` (every function's
+loop and entry ticks, the call groups and classifications computed once) in a single kernel
+evaluation; each function's `policy_f`/`entry_f` reads its entry
+(`Program.tickPolicy_of_tickPolicies`). The emitter reads the same table.
+
+A requested certificate that cannot be built at all (the compiler metadata of a recursive
+group, an inconsistent proof clique) fails the
+whole translation closed with one `--air-certificate: cannot build the AIR certificate, nothing
+written: …` diagnostic, before any write: neither the Lean output nor any sidecar appears. A function outside
+the certificate fragment is not such a failure; the certificate lists it with its reason.
 The file then contains:
 
 * `f_step`: `(execFunc program call air_f [args]).run m` equals the generated definition's result:
