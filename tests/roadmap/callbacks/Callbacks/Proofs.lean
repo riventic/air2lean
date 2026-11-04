@@ -164,9 +164,18 @@ theorem forEach_step (xs : Slice) (ctx cb : Ptr) (n : BitVec 64) (before : Mem) 
       ((forEach.loop7 xs ctx cb n).run s).run m = pure ((e, s'), m') →
       if forEach.again7 e then Kept ctx before m'
       else Kept ctx before m' ∧ ∀ v, e = .ret v → v = true := by
-  intro s m hk e s' m' h
+  intro s m₀ hk₀ e s' m' h
   simp only [forEach.loop7, bind_assoc, pure_bind] at h
-  obtain ⟨a, s₁, m₁, hg, hA⟩ := MM.run_bind_ok h
+  -- The iteration's step (`tick`) changes no block.
+  obtain ⟨u, s₀, m, hT, hR⟩ := MM.run_bind_ok h
+  obtain ⟨rfl, ht⟩ := MM.run_callM_ok hT
+  have hk : Kept ctx before m := by
+    rw [tick_run] at ht
+    have ht : some (Except.ok ((), _)) = some (Except.ok (u, m)) := ht
+    simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at ht
+    exact ht.2 ▸ hk₀.trans ⟨id, fun _ _ => rfl⟩
+  clear h hT ht hk₀
+  obtain ⟨a, s₁, m₁, hg, hA⟩ := MM.run_bind_ok hR
   obtain ⟨ha, hs₁, hm₁⟩ := MM.run_get_ok hg
   subst a s₁ m₁
   obtain ⟨d, s₂, m₂, hI, hB⟩ := MM.run_bind_ok hA
