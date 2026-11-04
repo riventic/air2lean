@@ -83,7 +83,7 @@ Direct importers on main, minus the 16 done files:
 | Sep/Cost, Bounded | Lists/Cost, Lists/Bounded, Witnesses/Sep, claims/Fixture, tools/Assurance |
 | Sep/AllocSpec (+Wrap, Wrappers, Dispatch) | each other, Full/AllocSpec, Full/Dispatch, alloc-fba/{Bridge,Fba}, PageObstruction |
 | Sep/AllocSpec/{Region,Ops,Norm} | **kept as base**: Full/{AutoRules,Reclaim,Region,Malloc}, Wrappers; they import Total/Block and hold legacy `TotalTriple` rules (strip) |
-| Sep/Witness, Conc/Witness | Lists/Sep, Witnesses/{Sep,Conc}, claims/Fixture, Conc/Unroll, Proofs/Threads/Disjoint, RwLockContract, SnapshotCache |
+| Sep/Witness, Conc/Witness | Lists/Sep, Witnesses/{Sep,Conc}, claims/Fixture, RwLockContract, SnapshotCache (Conc/Unroll and Proofs/Threads/Disjoint moved to Conc/RunResult, L12) |
 | Sep/{Try,TryAlias,Discard,Step,Automation,Mmap(Sep),AddrReuse} | Sep.lean, each other, Lists/Sep, Wrappers, tutorials/Controls (AddrReuse); Sep/Mmap: none |
 | Conc/Own (TTriple) | Conc/Csl, Conc/Witness, claims/Fixture, tools/Assurance |
 | Conc/Csl (TlsLemmas deleted, L12) | Conc/{Detach,Lock,Transfer}, Full/{ThreadOwned,ThreadTls}, spawn-failure/Runtime, thread-tuples |
