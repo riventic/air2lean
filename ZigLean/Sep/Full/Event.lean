@@ -1091,24 +1091,38 @@ theorem Inv.frame {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.I
       fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt
     (fun h => hsxt (hI.sx t (by rw [← hph]; exact h))) hF
 
-/-- **A thread out of the event's code or done (`out`, `sd`) gets a ghost value out of it**
-(`g`, at `out`; a client's own ghost step, e.g. a setter's end after its `set`, before it sets
-or waits again): the writes and the queue stay, and it keeps its waiter role (`hwx`). -/
+/-- **A thread out of the event's code or done (`out`, `sd`) gets a ghost value there** (`g`, at
+`out` or `sd`; a client's own ghost step, e.g. a setter's end after its `set`, before it sets or
+waits again, or a setter that finds the event set, `Fits.doneSet`): the writes and the queue stay,
+it keeps its waiter role (`hwx`), and at `sd` it is out of the lock's code or gone from it (`hgo`)
+and may set (`hsx`). -/
 theorem Inv.toOut {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : E.Inv L G m)
-    (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out)
-    (hwx : E.wx (G t) → E.wx g) :
-    E.Inv L (upd G t g) m :=
-  hI.move (fun u hu => upd_ne _ _ hu) rfl rfl (fun _ => VClock.le_refl _) (Nat.le_refl _)
-    (fun h => by rw [upd_self, hg] at h; rcases h with h | h <;> cases h)
-    (fun h => by rw [upd_self, hg] at h; cases h) (fun h => by rw [upd_self, hg] at h; cases h)
-    ⟨fun h => (by rcases ht with e | e <;> rw [e] at h <;> cases h),
-      fun h => (by rw [upd_self, hg] at h; cases h)⟩
-    (fun h => absurd (by rw [upd_self]; exact hg) h)
-    (fun w hw e => ⟨fun h => (by rw [upd_self, hg] at h; cases h), fun h => by
+    (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out ∨ E.ph g = .sd)
+    (hgo : E.ph g = .sd → L.ph g = .out ∨ L.ph g = .gone) (hwx : E.wx (G t) → E.wx g)
+    (hsx : E.ph g = .sd → E.sx g) :
+    E.Inv L (upd G t g) m := by
+  have hgt : E.ph (upd G t g t) = .out ∨ E.ph (upd G t g t) = .sd := by rw [upd_self]; exact hg
+  refine hI.move (fun u hu => upd_ne _ _ hu) rfl rfl (fun _ => VClock.le_refl _) (Nat.le_refl _)
+    (fun h => ?_) (fun h => ?_) (fun h => ?_)
+    ⟨fun h => (by rcases ht with e | e <;> rw [e] at h <;> cases h), fun h => ?_⟩
+    (fun h => ?_)
+    (fun w hw e => ⟨fun h => ?_, fun h => by
       have := (hI.q w hw h).1; rw [e] at this; rcases ht with e' | e' <;> rw [e'] at this <;>
         cases this⟩)
     (fun h => by rw [upd_self]; exact hwx h)
-    (fun h => by rw [upd_self, hg] at h; rcases h with h | h <;> cases h) hI.fresh
+    (fun h => by
+      rw [upd_self] at h ⊢
+      rcases h with e | e
+      · rcases hg with e' | e' <;> rw [e'] at e <;> cases e
+      · exact hsx e) hI.fresh
+  · rcases hgt with e | e <;> rw [e] at h <;> rcases h with h | h <;> cases h
+  all_goals first
+    | (rcases hgt with e | e <;> rw [e] at h <;> cases h)
+    | (rw [upd_self] at h ⊢
+       have hsd : E.ph g = .sd := hg.resolve_left h
+       rcases hgo hsd with e | e
+       · exact .inl e
+       · exact .inr (.inl ⟨.inr hsd, e⟩))
 
 /-- **A step of another component of the protocol** (a condition's code) by `t`, which keeps
 `t`'s place in the event and the word's writes: `t` keeps its lock place or goes `out` of the
@@ -1503,24 +1517,11 @@ theorem _root_.Zig.Full.FLock.Fits.doneSet (hE : L.Fits (E.prim L) P U ok) {G : 
   obtain ⟨rX, hL, hU⟩ := (hE.inv _ _).mp hi
   obtain ⟨-, rY, rfl, hY⟩ := (hE.wRest rfl) _ _ _ hU
   have hI := hE.wInv _ _ _ hU
-  have hgt : E.ph (upd G t g t) = .out := by rw [upd_self]; exact hgx
   have := hE.backOut (p := .sd) (upd_self G t g) hgo hU hY .same
     (.inl ⟨rfl, by rw [hgx]; exact hs⟩) hL
-    (hI.move (t := t) (G' := upd (upd G t g) t (E.set g .sd))
-      (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu]) rfl rfl
-      (fun _ => VClock.le_refl _) (Nat.le_refl _)
-      (fun h => by simp only [upd_self, E.ph_set] at h; rcases h with h | h <;> cases h)
-      (fun h => by simp only [upd_self, E.ph_set] at h; cases h)
-      (fun h => by simp only [upd_self, E.ph_set] at h; cases h)
-      ⟨fun h => (by rw [hgt] at h; cases h),
-        fun h => (by simp only [upd_self, E.ph_set] at h; cases h)⟩
-      (fun _ => by
-        simp only [upd_self, E.ph_set, hE.lph]
-        rcases hgo with h | h <;> simp [h, EPh.Setting])
-      (fun w hw e => ⟨fun h => (by simp only [upd_self, E.ph_set] at h; cases h), fun h => by
-        have := (hI.q w hw h).1; rw [e, hgt] at this; cases this⟩)
-      (by simp only [upd_self, E.wx_set]; exact id)
-      (fun _ => by simp only [upd_self, E.sx_set]; exact hsx) hI.fresh)
+    (hI.toOut (t := t) (g := E.set g .sd) (by rw [upd_self]; exact .inl hgx)
+      (.inr (E.ph_set _ _)) (fun _ => by rw [hE.lph]; exact hgo)
+      (by rw [upd_self, E.wx_set]; exact id) (fun _ => (E.sx_set _ _).mpr hsx))
   rwa [upd_upd] at this
 
 /-- The setter's wake at the word (`sw` → `sd`), of at least one waiter. -/

@@ -124,8 +124,10 @@ theorem U_relabel {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g�
     by_cases e : u = t
     · subst e; rw [upd_self, upd_self, hc₀, hc₁]
     · rw [upd_ne _ _ e, upd_ne _ _ e]
-  have hJ := hu.einv.toOut (t := t) (g := g₁) (by rw [upd_self]; exact he₀) he₁
-    (fun h => by rw [upd_self] at h; exact hwx h)
+  have hsd : (E Lo).ph g₁ ≠ .sd := fun h => by
+    rw [show (E Lo).ph g₁ = g₁.2.e from rfl, he₁] at h; cases h
+  have hJ := hu.einv.toOut (t := t) (g := g₁) (by rw [upd_self]; exact he₀) (.inl he₁)
+    (fun h => absurd h hsd) (fun h => by rw [upd_self] at h; exact hwx h) (fun h => absurd h hsd)
   rw [upd_upd] at hJ
   refine ⟨hsh, hu.io, hu.rest, hu.blk, hu.ws, hu.we, hu.wv, hI, hJ, by rw [hcu]; exact hu.places,
     hep1, hu.ep2, hu.epS, fun q n h hq => hu.incE q n h (by rw [← hcu]; exact hq), hent, hhold,
@@ -408,14 +410,14 @@ theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : Thre
   · exact (LockWord.fork_clocks ht).1 u hu
   · rw [getElem!_neg cs u hu]; exact le_nil _
 
-/-- A thread out of the event's code, with no role, gets another ghost value out of it. -/
+/-- A thread out of the event's code gets another ghost value out of it (`FEvent.Inv.toOut`). -/
 theorem einv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     (hI : (E Lo).Inv (L Lo) G m) (h₀ : (G t).2.e = .out) (h₁ : g.2.e = .out)
-    (hwx : (E Lo).wx (G t) → (E Lo).wx g) (hsx : (E Lo).sx (G t) → (E Lo).sx g) :
+    (hwx : (E Lo).wx (G t) → (E Lo).wx g) :
     (E Lo).Inv (L Lo) (upd G t g) m :=
-  hI.relabel (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; show g.2.e = (G t).2.e; rw [h₀, h₁])
-    (fun h => absurd (by rw [upd_self]; exact h₁) h) (fun h => by rw [upd_self]; exact hwx h)
-    (fun h => by rw [upd_self]; exact hsx h)
+  have hsd : (E Lo).ph g ≠ .sd := fun h => by
+    rw [show (E Lo).ph g = g.2.e from rfl, h₁] at h; cases h
+  hI.toOut (.inl h₀) (.inl h₁) (fun h => absurd h hsd) hwx (fun h => absurd h hsd)
 
 /-- Spawn after the parent's caller part has been split. The child gets the copied plain
 resource; `main` keeps its entire original caller part. -/
@@ -474,12 +476,8 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
   have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl
       (fun h => by
         have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h
-        rw [hG1] at h'; rcases h' with h' | h' <;> cases h')
-      (fun h => by
-        have h' : (G 1).2.ph = .st ∨ (G 1).2.ph = .fin := h
         rw [hG1] at h'; rcases h' with h' | h' <;> cases h'))
     (t := 0) (g := gO rM { ph := .run }) (by rw [upd1_0]; exact hG0e) rfl
-    (fun h => by rw [upd1_0, hg] at h; rcases h with h | h <;> cases h)
     (fun h => by rw [upd1_0, hg] at h; rcases h with h | h <;> cases h)
   refine ⟨rfl, rX, hL', ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by dsimp only; rw [hX0]; rfl,
       by dsimp only; rw [hX0]; decide, by dsimp only; rw [hX1]; rfl, hXu⟩⟩, ?_,
