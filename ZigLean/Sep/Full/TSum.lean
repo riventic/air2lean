@@ -170,5 +170,23 @@ theorem le_add_tsum_up (a : Nat → Nat) {k n : Nat} (hk : k ≤ n) :
       simp only [show k < n + 1 by omega, ite_true, Nat.add_sub_cancel]
       omega
 
+/-- **Counting a list**: the points below `N` that are in a list without duplicates, all of
+whose members are below `N`, are as many as its length. -/
+theorem tsum_mem {N : Nat} {l : List Nat} (hl : l.Nodup) (hN : ∀ u ∈ l, u < N) :
+    tsum N (fun u => if u ∈ l then 1 else 0) = l.length := by
+  induction l with
+  | nil => exact tsum_eq_zero fun u _ => by simp
+  | cons a l ih =>
+    obtain ⟨ha, hl'⟩ := List.nodup_cons.mp hl
+    have hsplit : tsum N (fun u => if u ∈ a :: l then 1 else 0) =
+        tsum N (fun u => if u ∈ l then 1 else 0) + tsum N (fun u => if u = a then 1 else 0) := by
+      rw [← tsum_add]
+      refine tsum_congr fun u _ => ?_
+      by_cases h : u = a
+      · subst h; simp [ha]
+      · simp [h]
+    rw [hsplit, ih hl' (fun u hu => hN u (List.mem_cons_of_mem _ hu)),
+      tsum_point (hN a (List.mem_cons_self ..)) 1, List.length_cons]
+
 end Full
 end Zig
