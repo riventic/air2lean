@@ -25,6 +25,8 @@ variable {Lo : Layout} {Tgt : Type} {prodOf : Tgt → Option Ptr}
 /-- A thread out of the lock's code with the part `r` at the places `x`. -/
 def gO (r : Res) (x : X) : Gh := (⟨.out, r, rnil⟩, x)
 
+theorem part_gO {r : Res} {x : X} : (L Lo).part (gO r x) = r := rfl
+
 /-- A thread with the part `r` at the places `x` that holds the mutex and its resource `rL`. -/
 def gH (r rL : Res) (x : X) : Gh := (⟨.holds, r, rL⟩, x)
 
@@ -414,7 +416,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfork
   have hL' := hL.fork (t := 0) (g₁ := gO rM { ph := .run }) (g₀ := gO rP { ph := .lk })
     (by rw [hg]; rfl) hf (by rw [hg]; rfl)
-    (by rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
+    (by rw [part_gO, part_gO, (plain_ghost hP).1]; exact FHeap.disjoint_empty _) rfl rfl
     rfl rfl fun r hR => by
       rw [← hfork.1]
       have hR' : R Lo (fun u => (G u).2) r := hR
@@ -490,10 +492,10 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     rw [upd_same]
     exact hL.cur 0
   obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart (proto Lo prodOf) rfl
-    (by rw [hg]; decide) (EUpd.plain_split (P := fun r => r = (L Lo).part (G 0))
+    (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = (L Lo).part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
-  have hrM : r₁ = rM := by simpa only [hg] using hr₁
-  subst r₁
+  have hrM : rM = r₁ := by rw [hr₁, hg]; rfl
+  subst hrM
   have hU₀ := atStop 0 hU
   have hU' := U_part hU₀ (by simpa only [upd_same] using hL₀) (by
     simpa only [upd_upd] using hL')
