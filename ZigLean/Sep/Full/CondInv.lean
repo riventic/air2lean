@@ -60,7 +60,7 @@ epoch's value, so a stale waiter does not sleep.
 - a post adds `n` signals and a claim `n`; a consume takes one signal and its taker's claim;
 - `epoch += 1` makes every waiter that is not queued stale: either the queued waiters are at
   least the pending wakes (and the claim moves from `inc` to `wk`), or every registered waiter
-  is a claim (queued: through `wk`; not queued: stale), and `signals ≤ waiters` (`claims_ge`);
+  is a claim (queued: through `wk`; not queued: stale), and `signals ≤ waiters` (`nreg_le_claims`);
 - a wake of `n` wakes `min n q` of the `q` queued waiters; they become claims (`woken`);
 - a waiter's loop-back (it read `signals = 0` at write `k`) with the newest saved write: every
   post after `k` is still its signaller's (a published one is covered by the release clock of
@@ -742,8 +742,8 @@ theorem Inv.cnt_wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q : Na
   rw [hnq]
   omega
 
-/-- **Pending signals have a claim** (no lost wakeup): with a signal pending or a signaller
-between its post and its wake, some thread is such a signaller or a registered waiter that is
+/-- **Pending signals have a claim** (no lost wakeup): with a signal pending or a signaller in
+its signal code (`sl`, `inc`, `wk`), some thread is such a signaller or a registered waiter that is
 not queued at the epoch (it will read the state). -/
 theorem Inv.claim_of {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m)
     (h : 0 < sOf (C.lastS m) ∨ ∃ v, (C.ph (G v)).sig) :
@@ -772,8 +772,8 @@ theorem Inv.claim_of {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m)
   · exact ⟨v, .inl hv⟩
 
 /-- **No deadlock with a pending signal** (no lost wakeup, the memory's part of `P.Live`): with a
-signal pending or a signaller between its post and its wake, not every thread has ended, sleeps
-at a futex or waits at a join. `hfin`, `hjoins`: such a thread is out of the condition's code;
+signal pending or a signaller in its signal code (`sl`, `inc`, `wk`), not every thread has
+ended, sleeps at a futex or waits at a join. `hfin`, `hjoins`: such a thread is out of the condition's code;
 `hL`: nobody waits at the mutex (all blocked); `hnq`: a thread outside or holding the mutex is
 not in the futex queue (the lock's invariant). -/
 theorem Inv.noDeadlock {G : ThreadId → γ} {m : Mem} (hI : C.Inv L G m) {fin joins : γ → Prop}
@@ -963,7 +963,7 @@ theorem Inv.sleep {G : ThreadId → γ} {M : Mem} {t : ThreadId} {i jr : Nat} {e
       exact hnot' (by rw [← hwa]; have : w.2 = C.Ep.ptr := by simpa using hw2
                       rw [← this]; exact hw1)⟩
 
-/-- A place that the count does not see (`out`, `en`, `ld`). -/
+/-- A place that the count does not see (`out`, `en`, `ld`, `sl`). -/
 def quiet : CPh → Prop
   | .out | .en | .ld _ _ | .sl _ _ => True
   | _ => False

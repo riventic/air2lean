@@ -27,11 +27,12 @@ the epoch (`Calm`), and any threads `t`, `u`, `v` (they need not differ):
 No thread is then between its signal and its wake, and until another waiter registers every
 `signal` finds `waiters = signals` and does nothing: the signal is pending and its wake is lost.
 This is a liveness gap of the algorithm, not a safety one: no wrong value is returned and no
-registration is miscounted. It is why the general (multi-waiter) condition contract, still to
-come, must bound the epoch writes between a waiter's save and its enqueue below `2^32` (PR #397,
-ruling 6264821278), and why a contract may not demand that every implementation wake a sleeping
-waiter. With one waiter (today's singleton `CondImpl`) at most one increment fits in that
-window. The schedule is a kernel-checked fact about the model's op runs in one chosen order,
+registration is miscounted. It is why the condition contract (`CondImpl`, any number of
+waiters) bounds the epoch writes between a waiter's save and its enqueue below `2^32` (PR #397,
+ruling 6264821278; the window `FCond.Fits.win`, which the client's rest keeps), and why a
+contract may not demand that every implementation wake a sleeping waiter. A client with one
+waiter has at most one increment in that window (each `epoch += 1` follows its signaller's own
+post: `FCond.SigStep`). The schedule is a kernel-checked fact about the model's op runs in one chosen order,
 not a run of the scheduler.
 -/
 
