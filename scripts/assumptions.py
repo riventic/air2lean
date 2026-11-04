@@ -787,6 +787,25 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
     return needs
 
 
+def needs_first(needs: list[str], targets: list[str]) -> list[str]:
+    """`lake build`'s targets for generated modules whose libraries have `needs` (from
+    `module_needs`): each needed module's `:olean` first, then `targets` (ledger `lake-needs-race`,
+    docs/upstream/lake-concurrent-needs.md).
+
+    Lake 4.34 fetches each facet key of a library's `needs` in a pool task of its own, and its job
+    store is check-then-create. Two keys of one library (`:olean` and `:depTrace` of a module, or
+    several modules) traverse their shared import closure at the same time, and both create jobs
+    for the same modules. A `(sync := true)` continuation of one copy (`Module.computeExportInfo`)
+    then blocks on the other copy's unfinished job. The runtime does not replace a worker blocked
+    in a sync task, so the build can deadlock at 0% CPU (seen with LEAN_NUM_THREADS 1, 2 and 4).
+    Lake fetches command-line targets one after another on its build thread instead. `:olean`
+    creates every job of the module's closure, `presetup` included. The library's `needs` tasks
+    then find those jobs instead of creating copies, and `:depTrace` (not buildable on the command
+    line) adds a job without awaits. The receipts' traces are those of the `needs`, unchanged."""
+    first = sorted({key for key in needs if key.endswith(":olean")})
+    return [*first, *targets]
+
+
 def resolved_roots(lake: list[str], workspace: Path, env: dict,
                    library: str = EXTRACTION_LIBRARY) -> list[str] | None:
     """The lookup roots Lake gives a generated workspace's modules besides its own library
@@ -872,8 +891,8 @@ def lake_extraction(driver: str, package: Path, runtime_sha: str, root: Path = R
                 path.write_text(content)
         if resolved_roots(lake, workspace, env) != list(map(str, roots)):
             return None
-        result = subprocess.run([*lake, "build", module], cwd=workspace, text=True, capture_output=True,
-                                env=env)
+        result = subprocess.run([*lake, "build", *needs_first(needs, [module])], cwd=workspace, text=True,
+                                capture_output=True, env=env)
     finally:
         os.close(descriptor)
     if result.returncode:
@@ -933,11 +952,12 @@ def lake_kernel_replay(modules: list[str], package: Path, checker_sha: str, runt
     name = tomllib.loads((package / "lakefile.toml").read_text(encoding="utf-8"))["name"]
     workspace = package / ".lake/replay"
     roots = [(root / entry).resolve() for entry in lean_path.split(os.pathsep)]
-    sources, manifest = {}, REPLAY_MANIFEST.format(package=json.dumps(name))
+    sources, manifest, all_needs = {}, REPLAY_MANIFEST.format(package=json.dumps(name)), []
     for module in sorted(modules):
         needs = module_needs([module], roots, [root, package])
         if needs is None:
             return None  # no Lake package of this workspace builds it: replay afresh
+        all_needs += needs
         text = (f"-- The kernel-replay receipt of {module} in {workspace} (scripts/assumptions.py).\n"
                 f"-- leanchecker {checker_sha}\n-- toolchain runtime {runtime_sha}\n"
                 f"import tools.KernelReplay\nrun_meta Air2Lean.KernelReplay.run `{module}\n")
@@ -964,8 +984,8 @@ def lake_kernel_replay(modules: list[str], package: Path, checker_sha: str, runt
         for path, content in sources_files:
             if not path.is_file() or path.read_text() != content:
                 path.write_text(content)
-        result = subprocess.run([*lake, "build", *sorted(sources)], cwd=workspace, text=True,
-                                capture_output=True, env=env)
+        result = subprocess.run([*lake, "build", *needs_first(all_needs, sorted(sources))], cwd=workspace,
+                                text=True, capture_output=True, env=env)
     finally:
         os.close(descriptor)
     if result.returncode:
