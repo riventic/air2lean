@@ -232,6 +232,12 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
+      "name": "Fits",
+      "module": "ZigLean.Sep.Full.Sem",
+      "status": "target",
+      "approved": "coordinator 2026-11-04 (L10i brief: FSem.Fits extends L.Fits S.prim with the window field, mirroring FCond.Fits; maintainer decision PR #575 comment 6625654179)"
+    },
+    {
       "name": "FitsOn",
       "module": "ZigLean.Conc.Lock",
       "status": "legacy-to-retire",
