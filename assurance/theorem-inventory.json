@@ -1226,16 +1226,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "226fd3c9c3939aed630cadfbe81e72f550fdbe33",
+        "head": "376ce7a92e37ff5ed43c5c09d043adf62b0b5c3d",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-04T14:39:36.016892+00:00",
-      "elapsed_seconds": 127.345,
+      "started_utc": "2026-11-04T14:53:47.349465+00:00",
+      "elapsed_seconds": 1.958,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "56c2412829115c1c241b757d4b438b7614a3491b3ee335ce3617418f6f82fef1",
+      "log_sha256": "3a2b28316c73603834ebc3af3dd2470ad06ccfc6fb2dab0891be81d146a9bf71",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1524,7 +1524,7 @@
         "Proofs.Provenance.Proofs": "d6a38ee33edda4ac56da01990788ef2b6da5d76a2deed2d3dbe2805f08e2aef5",
         "Proofs.ProvenanceGap.Proofs": "e477163adc3fdef52699f91047b6c3518ff874edf9edf8cfac6ab2d484161dc3",
         "Proofs.Recursion.AirCert": "2abd81ee5f61fd3294d59a77c732b70c453bbdb9b3c49f4fafc418c2aa8ecdcd",
-        "Proofs.Recursion.Proofs": "46b18d11dd919e2dc66b980ff975c857719ff9ad702e75e31f031a7884841ce3",
+        "Proofs.Recursion.Proofs": "1dcd801b146cce03a5f56ae90271796a7ea55d687c3d44e23d18eaf35199354e",
         "Proofs.Slices.Proofs": "2626be020120a31c877198f9b345820c48666fe22061a8744693851bcd0b0ebb",
         "Proofs.Slices.Sep": "78a07aff4bbc95df2b1cd60398454397e1199f4f07c7e21764d7255f7b18cd35",
         "Proofs.Sync.Cases": "aea70dca286ca9f99183cf3fd260fb4c13e08e59b5c74ab309effb3667b47f3b",

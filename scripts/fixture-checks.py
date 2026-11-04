@@ -487,8 +487,11 @@ def main(argv=None):
                     for job in jobs:
                         if job.env is not None:
                             job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
-                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
-                                       order=order, mem_budget_mib=budget)
+                    try:
+                        statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
+                                           order=order, mem_budget_mib=budget)
+                    except (OSError, ValueError) as error:  # a bad order, a job that cannot spawn
+                        failed.append('the run: %s' % error)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
                 failed.append('the toolchain runtime: %s' % error)
             finally:  # also the finished units of a stopped run (a guard's timeout)
