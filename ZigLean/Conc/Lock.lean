@@ -344,6 +344,13 @@ theorem Inv.groups {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (gs : Array 
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hi.fq, hi.wit, hi.owner⟩
 
+/-- The same memory, one step tick later (`Zig.tick`): the invariant reads no step count. -/
+theorem Inv.ticked {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) :
+    L.Inv G { m with ticks := m.ticks + 1 } :=
+  ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
+    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
+    hi.res, hi.fq, hi.wit, hi.owner⟩
+
 /-- The queue with fewer threads, whose places stay. -/
 theorem Queue.mono {G G' : ThreadId → γ} {ws ws' : Array (ThreadId × Ptr)} (hq : L.Queue G ws)
     (hsub : ∀ w ∈ ws', w ∈ ws) (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) :

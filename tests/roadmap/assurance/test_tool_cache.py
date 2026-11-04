@@ -34,6 +34,15 @@ def olean(root: Path) -> Path:
     return root / ".lake/build/lib/lean/tools/Assurance.olean"
 
 
+def executable(root: Path) -> Path:
+    return root / audit.EXTRACTOR
+
+
+def extracts(command) -> bool:
+    """Whether `command` runs the compiled extractor (scripts/assumptions.py `extract`)."""
+    return command[:2] == ["lake", "env"] and any(arg.endswith(audit.EXTRACTOR) for arg in command)
+
+
 def record_of(root: Path, trace: dict) -> Path:
     """The per-context record `prepared_tool` wrote for `trace`."""
     found = [r for r in (root / ".lake/assurance/tool-traces").glob("*.json") if json.loads(r.read_text()) == trace]
@@ -42,9 +51,10 @@ def record_of(root: Path, trace: dict) -> Path:
 
 
 class Lake:
-    """Mock `lake --rehash build AssuranceTools`, which owns dependency freshness: it rebuilds a
-    missing olean or one whose inputs changed. The olean's bytes follow from its inputs only, so
-    two contexts that differ in the Lake configuration share them. The root is the sysroot."""
+    """Mock `lake --rehash build AssuranceTools assurance`, which owns dependency freshness: it
+    rebuilds a missing olean or executable or one whose inputs changed. Their bytes follow from the
+    inputs only, so two contexts that differ in the Lake configuration share them. The root is the
+    sysroot."""
 
     def __init__(self, root: Path):
         self.root, self.builds, self.validations = root, 0, 0
@@ -52,14 +62,17 @@ class Lake:
     def __call__(self, command):
         if command == ["lake", "env", "printenv", "LEAN_SYSROOT"]:
             return str(self.root)
-        assert command == ["lake", "--rehash", "build", "AssuranceTools"], command
+        assert command == ["lake", "--rehash", "build", "AssuranceTools", "assurance"], command
         self.validations += 1
         inputs = b"".join((self.root / name).read_bytes() for name in INPUTS)
-        artifact, trace = olean(self.root), olean(self.root).with_suffix(".trace")
-        if not artifact.is_file() or not trace.is_file() or trace.read_bytes() != hashlib.sha256(inputs).digest():
+        artifact, trace, program = olean(self.root), olean(self.root).with_suffix(".trace"), executable(self.root)
+        if (not artifact.is_file() or not trace.is_file() or not program.is_file()
+                or trace.read_bytes() != hashlib.sha256(inputs).digest()):
             self.builds += 1
             artifact.write_bytes(b"checked artifact: " + inputs)
             trace.write_bytes(hashlib.sha256(inputs).digest())
+            program.parent.mkdir(parents=True, exist_ok=True)
+            program.write_bytes(b"compiled extractor: " + inputs)
 
 
 def contend(root: Path) -> None:
@@ -110,10 +123,12 @@ class ToolCacheTests(unittest.TestCase):
         def build(command):
             if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
                 return str(root)
-            self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools'])
+            self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools', 'assurance'])
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_bytes(b'fixed compiled extractor')
             artifact.with_suffix('.trace').write_bytes(b'fixed Lake trace')
+            executable(root).parent.mkdir(parents=True, exist_ok=True)
+            executable(root).write_bytes(b'fixed extractor executable')
 
         return build
 
@@ -261,7 +276,7 @@ class ToolCacheTests(unittest.TestCase):
             def changing_builder(command):
                 if command == ['lake', 'env', 'printenv', 'LEAN_SYSROOT']:
                     return str(root)
-                self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools'])
+                self.assertEqual(command, ['lake', '--rehash', 'build', 'AssuranceTools', 'assurance'])
                 (root / 'lib/libleanshared.so').write_bytes(b'runtime2')
 
             with self.assertRaisesRegex(ValueError, 'runtime changed during extractor preparation'):
@@ -343,7 +358,7 @@ class ToolCacheTests(unittest.TestCase):
                 dependency.write_bytes(b'original')
 
                 def runner(command, *, root=root):
-                    if command[:3] == ['lake', 'env', 'lean']:
+                    if extracts(command):
                         if stage == 'extraction':
                             dependency.write_bytes(b'modified')
                         return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
@@ -440,6 +455,116 @@ class RuntimeDigestTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'missing toolchain library directory'):
                 audit.toolchain_runtime_sha256(root)
 
+class RuntimeRunTests(unittest.TestCase):
+    """One digest per run (`runtime_run`): hashed at the start and the end, shared in between
+    while the toolchain's metadata is unchanged."""
+
+    def run_on(self, root):
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(audit.RUNTIME_RUN, None)
+        return patch.object(audit, 'lake_env', {'LEAN_SYSROOT': str(root)}.__getitem__)
+
+    def test_shared_while_unchanged_and_rehashed_at_the_end(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            fresh = audit.hash_runtime(root)
+            with self.run_on(root), patch.object(audit, 'hash_runtime', wraps=audit.hash_runtime) as hashed:
+                with audit.runtime_run():
+                    self.assertIn(audit.RUNTIME_RUN, os.environ)
+                    with audit.runtime_run():  # an enclosing run's: nothing hashed again
+                        for _ in range(3):
+                            self.assertEqual(audit.toolchain_runtime_sha256(root), fresh)
+                    self.assertEqual(hashed.call_count, 1)
+                self.assertEqual(hashed.call_count, 2)  # the end of the run
+            self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_change_is_hashed_afresh_and_fails_the_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            other = toolchain(Path(directory) / 'other')
+            with self.run_on(root):
+                with self.assertRaisesRegex(ValueError, 'toolchain runtime changed during the run'):
+                    with audit.runtime_run():
+                        shared = audit.toolchain_runtime_sha256(root)
+                        (root / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+                        changed = audit.toolchain_runtime_sha256(root)
+                        self.assertNotEqual(shared, changed)
+                        self.assertEqual(changed, audit.hash_runtime(root))
+                        # Another toolchain is never the run's.
+                        with patch.object(audit, 'hash_runtime', wraps=audit.hash_runtime) as hashed:
+                            audit.toolchain_runtime_sha256(other)
+                            self.assertEqual(hashed.call_count, 1)
+                self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_failing_run_is_not_hashed_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            with self.run_on(root), patch.object(audit, 'hash_runtime', wraps=audit.hash_runtime) as hashed:
+                with self.assertRaisesRegex(RuntimeError, 'body'):
+                    with audit.runtime_run():
+                        raise RuntimeError('body')
+                self.assertEqual(hashed.call_count, 1)
+            self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_record_no_ancestor_published_is_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            forged = Path(directory) / 'forged.json'
+            forged.write_text(json.dumps({'pid': 999999, 'runtimes': {str(root.resolve()): {
+                'sha256': '0' * 64, 'identity': audit.runtime_identity(root)}}}))
+            with self.run_on(root):
+                os.environ[audit.RUNTIME_RUN] = str(forged)
+                self.assertEqual(audit.toolchain_runtime_sha256(root), audit.hash_runtime(root))
+                with audit.runtime_run():  # a run of its own, not the leftover's
+                    self.assertNotEqual(os.environ[audit.RUNTIME_RUN], str(forged))
+                self.assertEqual(os.environ[audit.RUNTIME_RUN], str(forged))
+            # A record that cannot be read fails.
+            with self.run_on(root):
+                os.environ[audit.RUNTIME_RUN] = str(Path(directory) / 'missing.json')
+                with self.assertRaises(ValueError), audit.runtime_run():
+                    pass
+
+    def test_a_process_of_the_run_checks_the_metadata_when_it_ends(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            with self.run_on(root), self.assertRaisesRegex(ValueError, 'changed during the run'):
+                with audit.runtime_run():
+                    with self.assertRaisesRegex(ValueError, 'changed during the run'):
+                        with audit.runtime_run():  # an enclosing run's
+                            audit.toolchain_runtime_sha256(root)  # the shared digest is used
+                            (root / 'lib/lean/Init.ir.sig').write_bytes(b'modified')
+
+    def test_a_metadata_change_alone_does_not_fail_the_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = toolchain(Path(directory) / 'install')
+            with self.run_on(root):
+                with audit.runtime_run():
+                    with audit.runtime_run():  # an enclosing run's
+                        audit.toolchain_runtime_sha256(root)  # the shared digest is used
+                        before = audit.runtime_identity(root)
+                        os.utime(root / 'lib/libleanshared.so', ns=(1, 1))  # new times, the same bytes
+                        self.assertNotEqual(audit.runtime_identity(root), before)
+                self.assertNotIn(audit.RUNTIME_RUN, os.environ)
+
+    def test_a_failed_process_listing_fails_the_audit(self):
+        error = subprocess.CalledProcessError(1, ['ps'])
+        for failure in (error, subprocess.TimeoutExpired(['ps'], 30), FileNotFoundError('ps')):
+            with patch.object(audit.subprocess, 'run', side_effect=failure):
+                with self.assertRaisesRegex(ValueError, 'cannot list the processes'):
+                    audit.ancestors()
+
+    def test_a_stale_successful_report_never_survives_a_crash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'assumptions.json'
+            output.write_text(json.dumps({'schema_version': 1, 'status': 'pass'}))
+            with patch.object(audit, 'runtime_run', side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    audit.main(['--output', str(output)])
+            self.assertEqual(json.loads(output.read_text())['status'], 'error')
+
+
 class SourceInputTests(unittest.TestCase):
     prepare = staticmethod(ToolCacheTests.prepare)
 
@@ -499,7 +624,7 @@ class SourceInputTests(unittest.TestCase):
                 build, _ = self.source_project(root)
 
                 def run(command, *, root=root):
-                    if command[:3] == ['lake', 'env', 'lean']:
+                    if extracts(command):
                         if stage == 'extraction':
                             (root / 'tools/Helper.lean').write_text('def value := 2\n')
                         return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
@@ -551,7 +676,7 @@ class SourceInputTests(unittest.TestCase):
                     build, _ = self.source_project(root)
 
                     def runner(command, *, root=root):
-                        phase = 'extraction' if command[:3] == ['lake', 'env', 'lean'] else 'preparation'
+                        phase = 'extraction' if extracts(command) else 'preparation'
                         if phase == 'extraction':
                             result = audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
                         else:
@@ -610,8 +735,8 @@ class SourceInputTests(unittest.TestCase):
 
             def runner(command, *, root):
                 selected.append(root)
-                if command[:3] == ['lake', 'env', 'lean']:
-                    self.assertEqual(Path(command[-1]).parent, root / '.lake/assurance')
+                if extracts(command):
+                    self.assertIn(str(root / audit.EXTRACTOR), command)  # the selected root's extractor
                     return audit.MARKER + json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
                 return build(command)
 

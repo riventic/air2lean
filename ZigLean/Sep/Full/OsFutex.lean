@@ -48,6 +48,20 @@ theorem wakePick_length : ∀ (n : Nat) (l : List ThreadId) (cs : List Nat),
     simp only [List.length_cons, Nat.add_sub_cancel, Nat.min_def]
     split <;> split <;> omega
 
+/-- A wake picks each waiter at most once: from a queue without duplicates, the picked threads
+have none either. -/
+theorem wakePick_nodup : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat},
+    l.Nodup → (wakePick n l cs).Nodup
+  | 0, _, _, _ => by simp [wakePick]
+  | _ + 1, [], _, _ => by simp [wakePick]
+  | n + 1, w :: ws, cs, h => by
+    let i := cs.headD 0 % (ws.length + 1)
+    have hi : i < (w :: ws).length := Nat.mod_lt _ (Nat.succ_pos _)
+    change ((w :: ws)[i] :: wakePick n ((w :: ws).eraseIdx i) cs.tail).Nodup
+    refine List.nodup_cons.mpr ⟨fun hm => ?_, wakePick_nodup (h.sublist (List.eraseIdx_sublist _ _))⟩
+    obtain ⟨j, hj, hji, hje⟩ := List.mem_eraseIdx_iff_getElem.mp (wakePick_mem hm)
+    exact hji ((h.getElem_inj (hi := hj) (hj := hi)).mp hje)
+
 /-- A wake at `p` with nobody queued there wakes nobody, whatever its count. -/
 theorem futexWake_none {p : Ptr} {m : Mem} (h0 : m.waitersAt p = []) (n n' : Nat)
     (cs : List Nat) : (futexWake p n cs).run m = (futexWake p n' cs).run m := by
@@ -284,7 +298,7 @@ theorem WP.osFutexWake {p : Ptr} {w : Option Nat} {spurious : Bool}
   unfold Os.futexWake Os.pick
   refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ c hcr => ?_⟩
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hcr => ?_⟩
   obtain ⟨hw, hsp⟩ := hc G₁ m₁ hg hi₁
   refine WP.liftMem (fun e he => ?_) (fun r m' hr => ?_) fun hn => ?_
   · obtain ⟨r, m', hr⟩ := wakeAt_run c p w { m₁ with current := t }
@@ -342,7 +356,7 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
   · rw [takeInterrupt_run] at h₀; cases h₀; split <;> rfl
   · refine WP.bind (WP.sync (fun k hk => ?_) hcost)
     obtain ⟨g, hi, hc⟩ := h b₀ m₀ h₀ k hk
-    refine ⟨g, hi, fun G₁ m₁ hg hi₁ c hcr => ?_⟩
+    refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hcr => ?_⟩
     obtain ⟨herr, hnone, hk'⟩ := hc G₁ m₁ hg hi₁
     refine WP.bind (WP.liftMem herr (fun v m₂ hr => ?_) hnone)
     obtain ⟨hsz, hne, heq⟩ := hk' v m₂ hr
@@ -358,7 +372,7 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
           simp only [Bool.false_eq_true, ↓reduceIte]
           refine WP.bind (WP.sync (fun k' hk'' => ?_) hcost)
           obtain ⟨g', hi', hs⟩ := hw k' hk''
-          refine ⟨g', hi', fun G₂ m₃ hg' hi₂ => Step.mono P ?_ (hs G₂ m₃ hg' hi₂)⟩
+          refine ⟨g', hi', fun G₂ m₃ hg' hi₂ _ => Step.mono P ?_ (hs G₂ m₃ hg' hi₂)⟩
           intro _ G₄ m₄ hq
           refine WP.bind (WP.liftMem (fun er he => by rw [takeInterrupt_run] at he; cases he)
             (fun b m₅ h₅ => ?_) fun hn => by rw [takeInterrupt_run] at hn; cases hn)

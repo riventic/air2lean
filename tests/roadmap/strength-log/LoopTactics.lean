@@ -4,7 +4,7 @@ import Proof
 /-!
 Strength log of `tests/roadmap/loop-tactics/nested/Proof.lean` (`ZigLean/Sep/Full/Strength.lean`;
 deleted with the legacy logic): `pairs_total` gives back the legacy total triple on every
-`Mem.FSeqPlain` memory (`FTotalTriple.toTotal_on`).
+`Mem.FSeqPlain` memory. Its loops run in the plain mode (`FTotalTriple.toTotal_on_plain`).
 
 The statement is the legacy `TotalTripleIn Mem.FSeqPlain P c Q` (`ZigLean/Sep/Total.lean`) with
 its definition unfolded, word for word, so the log does not use the legacy layer.
@@ -21,6 +21,6 @@ example (p : Ptr) (n : BitVec 32) (v : BitVec 64)
     ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → pts p 8 v hP → m.Seq → m.FSeqPlain →
       ∃ r m' hQ, (pairs p n).run m = pure (r, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧
         pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat)) hQ ∧ m'.Seq :=
-  FTotalTriple.toTotal_on (pairs_total p n v hfit) fun _ => SizeFree.pts _ _ _
+  FTotalTriple.toTotal_on_plain (pairs_total p n v hfit) fun _ => SizeFree.pts _ _ _
 
 end StrengthLog.LoopTactics

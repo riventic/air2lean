@@ -28,6 +28,7 @@ inductive addDownExit where
 mutual
 
 def addDown (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
+  Zig.tick
   Zig.enterFrame
   let e ← ((do
     match ← ((do
@@ -245,6 +246,7 @@ def sumTo.again6 : sumToExit → Bool
   | _ => false
 
 def sumTo.loop6 (p0 : BitVec 32) (i1 : Zig.Ptr) : Zig.MM sumToLocals sumToExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).i)
     let i9 ← pure (Zig.lt false i8 p0)

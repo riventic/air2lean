@@ -11,6 +11,7 @@ Offline: no toolchain, no Lean.
 import contextlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import sys
@@ -27,6 +28,18 @@ spec.loader.exec_module(fc)
 
 def no_toolchain(kind, version):
     raise fc.Unavailable("no %s Zig %s in this test" % (kind, version))
+
+
+@contextlib.contextmanager
+def offline_runtime_run(fails=None):
+    """assumptions.runtime_run without Lake or a Lean toolchain: publishes a record, or fails."""
+    os.environ[fc.assumptions.RUNTIME_RUN] = "offline-record"
+    try:
+        yield
+    finally:
+        del os.environ[fc.assumptions.RUNTIME_RUN]
+    if fails:
+        raise fails
 
 
 class NoReuse(unittest.TestCase):
@@ -46,7 +59,9 @@ class NoReuse(unittest.TestCase):
                      "error": None, "toolchains": {"patched": [], "stock": []}}
         for patch in (mock.patch.object(fc, "discover", lambda tree: [dict(self.unit)]),
                       mock.patch.object(fc, "resolve", no_toolchain),
-                      mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas)})):
+                      mock.patch.object(fc.assumptions, "runtime_run", offline_runtime_run),
+                      mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas),
+                                                   "AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp / "schedule.json")})):
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -69,6 +84,43 @@ class NoReuse(unittest.TestCase):
         self.assertEqual(self.run_checks()[0], 0)  # and a fixed input passes again
         self.assertEqual(list(self.cas.iterdir()), [])  # no pass is published to the shared store
 
+    def test_the_schedule_orders_and_sizes_but_never_decides(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.assertEqual(self.run_checks()[0], 0)
+        hint = json.loads((self.temp / "schedule.json").read_text())[self.unit["name"]]
+        self.assertEqual(sorted(hint), ["elapsed_s", "lean_threads", "peak_rss_kib"])  # no status
+        (self.hidden / "input").write_text("broken\n")
+        self.assertEqual(self.run_checks()[0], 1)  # a measured unit still runs and fails
+        units = [{"name": n} for n in ("short", "long", "new", "bad", "wide")]
+        (self.temp / "schedule.json").write_text(json.dumps({
+            "short": {"elapsed_s": 1, "lean_threads": 2, "peak_rss_kib": [100 << 10]},
+            "long": {"elapsed_s": 9, "lean_threads": 2, "peak_rss_kib": [4000 << 10, 6000 << 10]},
+            "bad": {"elapsed_s": 5},  # malformed: unmeasured, not a crash
+            "wide": {"elapsed_s": 3, "lean_threads": 1, "peak_rss_kib": [1000 << 10]}}))
+        with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "2"}):
+            order, requests = fc.schedule(units, 5000)
+        self.assertEqual([units[i]["name"] for i in order], ["new", "bad", "long", "wide", "short"])
+        # A peak measured with fewer Lean threads is scaled up to this run's count.
+        self.assertEqual(requests, [fc.MEM_FLOOR_MIB, int(6000 * fc.MEM_MARGIN), 5000, 5000,
+                                    int(1000 * fc.MEM_MARGIN * 2)])
+        with mock.patch.dict(os.environ, {"AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp)}), \
+             contextlib.redirect_stderr(io.StringIO()) as err:
+            fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
+        self.assertIn("not recorded", err.getvalue())
+
+    def test_the_default_guard_stays_within_the_budget_and_an_enclosing_admission(self):
+        # A nested guard above its enclosing admission is refused (build-guard.py `inherited`);
+        # one above the machine's budget would take every slot and still exceed it.
+        for budget, grant, expected in (
+                ("64000", None, fc.GUARD_RSS_MIB), ("64000", {"rss_mib": 22000}, 22000),
+                ("64000", {"rss_mib": 11000.0}, 11000), ("64000", {"rss_mib": 64000}, fc.GUARD_RSS_MIB),
+                ("64000", {"rss_mib": True}, fc.GUARD_RSS_MIB), ("64000", "not json", fc.GUARD_RSS_MIB),
+                ("16000", None, 16000), ("16000", {"rss_mib": 11000}, 11000)):
+            value = grant if isinstance(grant, str) else json.dumps(grant)
+            with self.subTest(budget=budget, grant=grant), \
+                 mock.patch.dict(os.environ, {fc.GUARD.INHERIT: value, "AIR2LEAN_BUILD_MEM_MIB": budget}):
+                self.assertEqual(fc.guard_rss_mib(), expected)
+
     def test_there_is_no_selection_by_key(self):
         # `--base REF` chose the units by the key's files; it is rejected, not ignored.
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exit_:
@@ -82,6 +134,18 @@ class NoReuse(unittest.TestCase):
             for _ in range(2):
                 self.assertEqual(self.run_checks("--prepare")[0], 0)
         self.assertEqual(resolved, [("stock", "0.16.0")] * 2)
+
+    def test_a_missing_native_runner_fails_the_unit_naming_it(self):
+        # Unit 12 of 2026-11-04: big-endian/check.sh sent the runner's stderr to a file, so a
+        # missing qemu-s390x-static failed with exit 127 and no message.
+        (self.hidden / "input").write_text("ok\n")
+        self.unit["env"].update({"AIR2LEAN_S390X_RUN": "no-such-runner-air2lean -cpu max",
+                                 "AIR2LEAN_X86_64_RUN": ""})
+        status, out, err = self.run_checks()
+        self.assertEqual(status, 1, out + err)
+        self.assertIn("missing prerequisite: AIR2LEAN_S390X_RUN=no-such-runner-air2lean -cpu max", err)
+        self.unit["runner"] = "s390x-linux"  # a unit for another host runs no native step here
+        self.assertEqual(self.run_checks()[0], 0)
 
     def test_a_unit_that_rebuilds_a_root_module_fails_the_run(self):
         # The race of 2026-10-20: a unit rebuilt root modules in place while others imported them.
@@ -100,6 +164,16 @@ class NoReuse(unittest.TestCase):
         self.assertEqual(status, 1, out + err)
         self.assertIn("build outputs changed while the units ran", err)
         self.assertIn("M/A.olean", err)
+
+    def test_the_units_share_the_runs_toolchain_digest_and_a_change_fails_the_run(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.unit["run"] = '[ "$AIR2LEAN_TOOLCHAIN_RUNTIME_RUN" = offline-record ]\n'
+        self.assertEqual(self.run_checks()[0], 0)
+        for error in (ValueError("toolchain runtime changed during the run"), OSError("no lake")):
+            with mock.patch.object(fc.assumptions, "runtime_run", lambda: offline_runtime_run(error)):
+                status, out, err = self.run_checks()
+            self.assertEqual(status, 1, out + err)
+            self.assertIn("the toolchain runtime: " + str(error), err)
 
 
 if __name__ == "__main__":

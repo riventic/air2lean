@@ -8,17 +8,6 @@
       "approved": "coordinator 2026-10-13 (structural gate, csl)"
     },
     {
-      "name": "AllocInv",
-      "module": "ZigLean.Sep.AllocSpec",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "AllocSpec",
-      "module": "ZigLean.Sep.AllocSpec",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "BlkStep",
       "module": "ZigLean.Conc.Word",
       "status": "legacy-to-retire",
@@ -232,6 +221,12 @@
     },
     {
       "name": "Fits",
+      "module": "ZigLean.Sep.Full.Cond",
+      "status": "target",
+      "approved": "coordinator 2026-11-04 (maintainer decision PR #575 comment 6625654179: C.Fits extends L.Fits (C.prim L) with the window field)"
+    },
+    {
+      "name": "Fits",
       "module": "ZigLean.Sep.Full.Lock",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
@@ -304,18 +299,6 @@
     {
       "name": "LocsKeep",
       "module": "ZigLean.Conc.LockBase",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Logic",
-      "module": "ZigLean.Sep.AllocSpec",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Mem.SameAllocs",
-      "module": "ZigLean.Sep.Cost",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
@@ -499,11 +482,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "TTripleIn",
-      "module": "ZigLean.Conc.TlsLemmas",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "ThreadLocal",
       "module": "ZigLean.Sep.Full.ThreadStep",
       "status": "target",
@@ -519,11 +497,6 @@
       "module": "ZigLean.Sep.Total",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "name": "TotalTripleWithin",
-      "module": "ZigLean.Sep.Bounded",
-      "status": "legacy-to-retire"
     },
     {
       "name": "Triple",
@@ -561,13 +534,6 @@
   ],
   "tactics": [
     {
-      "tactic": "#assurance_audit",
-      "kind": "command",
-      "module": "tools.Assurance",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
       "tactic": "#audit_unchecked_theorem",
       "kind": "command",
       "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
@@ -599,18 +565,6 @@
       "tactic": "blkat_alloc",
       "kind": "syntax",
       "module": "ZigLean.Conc.Lemmas",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "bridge_close",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "bridge_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Bridge",
       "status": "legacy-to-retire"
     },
     {
@@ -669,12 +623,6 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "pure_norm",
-      "kind": "syntax",
-      "module": "tests.roadmap.alloc-fba.AllocFba.Fba",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "reachability_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
@@ -682,33 +630,9 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "sep_frame",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_from",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.AllocSpec.Wrappers",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "sep_normalize",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Automation",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "tame",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Tame",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "tame_prim",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.AllocSpec.Wrappers",
       "status": "legacy-to-retire"
     },
     {
@@ -846,12 +770,6 @@
   ],
   "legacy_users": [
     {
-      "path": "Proofs/Lists/Bounded.lean"
-    },
-    {
-      "path": "Proofs/Lists/Cost.lean"
-    },
-    {
       "path": "Proofs/Sync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -874,10 +792,6 @@
       "path": "Proofs/Sync/Semaphore.lean"
     },
     {
-      "path": "Proofs/Threads/Disjoint.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "Proofs/Threadsync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -886,10 +800,6 @@
     },
     {
       "path": "ZigLean/Conc/Csl.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Detach.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/Lock.lean",
@@ -903,21 +813,6 @@
       "path": "ZigLean/Conc/Own.lean"
     },
     {
-      "path": "ZigLean/Conc/Share.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/TlsLemmas.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Transfer.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/Unroll.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "ZigLean/Conc/Witness.lean"
     },
     {
@@ -925,34 +820,7 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "ZigLean/Sep.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Alloc.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Dispatch.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Wrap.lean"
-    },
-    {
-      "path": "ZigLean/Sep/AllocSpec/Wrappers.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Automation.lean"
-    },
-    {
       "path": "ZigLean/Sep/Block.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Bounded.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Cost.lean"
     },
     {
       "path": "ZigLean/Sep/Loop.lean"
@@ -962,22 +830,6 @@
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
-    },
-    {
-      "path": "ZigLean/Witnesses/Sep.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Bridge.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Client.lean"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
-    },
-    {
-      "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     }
   ]
 }

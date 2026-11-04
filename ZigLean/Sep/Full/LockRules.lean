@@ -17,7 +17,7 @@ with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the r
 | `wp_cas` | `cmpxchg(0 → 1)`, acquire | `out` | `holds` (with the resource), `spin` (read `1`), `wait` (read `c`) |
 | `wp_orLock` | `or(1)`, acquire (`c = 3`) | `out` | `holds` (read `0`), or `spin` (read `1` or `3`) |
 | `wp_casWeakLock` | weak `cmpxchg(0 → 1)`, acquire (off x86) | `out` | `holds`, or `spin` (any failure) |
-| `wp_loadLock` | load, relaxed | any but `gone` | the same |
+| `wp_loadLock` | load, relaxed | any but `gone` and `away` | the same |
 | `Fits.toWait` | (no op) | `spin` | `wait` |
 | `wp_xchgLock` | `xchg(c)`, acquire | `spin` | `holds` (read `0`), or `wait` |
 | `wp_wait`, `wp_waitD` | futex wait for `c` | `wait` | `spin` |
@@ -33,6 +33,34 @@ namespace Zig
 namespace Full
 
 open FAssn Conc Proto LockWord
+
+/-! ## Caller parts of composite operations
+
+A composite contract (`MutexImpl`, `CondImpl`, `EventImpl`) states, for each operation `op`, the
+caller-part assertions its actual code proves, as fields of the contract itself: `op_pre t r` (the
+part `r` that admits the call), `op_post t r r'` (the part `r'` it returns), and the two
+entailments that admit a caller with the minimal resource the operation family needs, with its
+exact part: a positive unmetered fragment for an operation that may tick (`lock_unmetered_pre`,
+`signal_unmetered_pre`, …), the plain mode for one that may also keep a stack block
+(`wait_plain_pre`, …). An operation that ticks in no implementation states no caller part
+(`MutexImpl.unlock_wp`, `EventImpl.set_wp`). They assert no tick count or repeated-payment
+obligation. The assertions below are the ones the translated code families share. -/
+
+/-- A Plain part has a positive unmetered fragment: a Plain caller meets every
+`…_unmetered_pre` admission. -/
+theorem Res.Plain.unmetered {r : Res} (h : r.Plain) : 0 < r.gh.ac.frag .unmetered := h.2
+
+/-- An unticked operation admits every caller part. -/
+def anyPart : ThreadId → FAssn := fun _ _ => True
+
+/-- The caller pays each reachable tick from a positive unmetered fragment. -/
+def payUnmetered : ThreadId → FAssn := fun _ r => 0 < r.gh.ac.frag .unmetered
+
+theorem payUnmetered_plain {t : ThreadId} {r : Res} (h : r.Plain) : payUnmetered t r :=
+  h.unmetered
+
+/-- The operation returns (or holds meanwhile) the caller's exact part. -/
+def keepPart : ThreadId → Res → FAssn := fun _ r r' => r' = r
 
 namespace FLock
 
@@ -75,22 +103,24 @@ theorem Fits.live (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : M
 /-- A lock step with `t`'s new place and resource keeps the protocol's invariant. -/
 theorem Fits.step (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
     {t : ThreadId} {p : LPh} {h : Res} (hU : U G rX m) (hok : ok (G t)) (hph : L.ph (G t) ≠ .gone)
+    (hna : L.ph (G t) ≠ .away)
     (hs : L.Step t m m') (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
     (hl : L.Inv (upd G t (L.set (G t) p h)) rX m') : P.inv (upd G t (L.set (G t) p h)) m' :=
-  (hP.inv _ _).mpr ⟨rX, hl, hP.stable G rX m m' t p h hok hph hU hs hrel⟩
+  (hP.inv _ _).mpr ⟨rX, hl, hP.stable G rX m m' t p h hok hph hna hU hs hrel⟩
 
 /-- A lock step with the same ghost values keeps the protocol's invariant. -/
 theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
     {t : ThreadId} (hU : U G rX m) (hok : ok (G t)) (hph : L.ph (G t) ≠ .gone)
-    (hs : L.Step t m m') (hl : L.Inv G rX m') : P.inv G m' := by
-  have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hU hok hph hs (fun h1 h2 => absurd h1 h2)
+    (hna : L.ph (G t) ≠ .away) (hs : L.Step t m m') (hl : L.Inv G rX m') : P.inv G m' := by
+  have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hU hok hph hna hs
+    (fun h1 h2 => absurd h1 h2)
     (by rw [upd_set_self]; exact hl)
   rwa [upd_set_self] at this
 
 /-- The lock's invariant at a stop of `t` (`current := t`). -/
 theorem Inv.cur {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (t : ThreadId) :
     L.Inv G rX { m with current := t } :=
-  hi.lstay (t := t) (Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (hi.w.current t)
+  hi.lstay (t := t) (Step.same rfl rfl rfl rfl rfl rfl rfl) (hi.w.current t)
 
 /-- The protocol's invariant at a stop of `t`: the same, with `current := t`. -/
 theorem Fits.cur (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
@@ -105,6 +135,53 @@ theorem Fits.curU (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : M
   hP.atStop G rX m t hph hU
 
 /-! ## The ops in generated code (`WP`) -/
+
+/-- A composite operation's actual caller-resource post is a spatial frame beside its
+complete held resource. The actual post invariant supplies ownership and disjointness. -/
+theorem Fits.wp_preservePartPost (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p : LPh}
+    {g : γ} {t : ThreadId} {c : ConcM Tgt α} {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {B : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hp : p ≠ .gone)
+    (hbody : P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ r rH,
+      A r ∧ P.inv (upd G' t (L.set (L.setPart g r) p rH)) m') G m d) :
+    P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ r rH, A r ∧
+      P.inv (upd G' t (L.set (L.setPart g r) p rH)) m' ∧
+      (A ⋆ fun r => r = rH)
+        (L.own (upd G' t (L.set (L.setPart g r) p rH)) m' t)) G m d := by
+  refine WP.mono ?_ hbody
+  rintro a G' m' d' ⟨hB, r, rH, hA, hi⟩
+  obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi
+  have hlive : L.ph (upd G' t (L.set (L.setPart g r) p rH) t) ≠ .gone := by
+    rw [upd_self, L.ph_set]; exact hp
+  refine ⟨hB, r, rH, hA, hi, ?_⟩
+  rw [own_live (L := L) (hiL.ht hlive).2]
+  refine ⟨r, rH, ?_, ?_, hA, rfl⟩
+  · simpa only [upd_self, L.part_set, L.part_setPart, L.held_set] using hiL.pdisj t
+  · rw [upd_self, L.part_set, L.part_setPart, L.held_set]
+
+/-- An operation whose post keeps the caller part through `set` preserves every assertion on
+that complete part as a spatial frame beside its held resource. The post invariant supplies
+actual ownership, liveness and disjointness; no tick or mode assumption is introduced. -/
+theorem Fits.wp_preservePart (hP : L.Fits K P U ok) {α : Type} {A : FAssn} {p : LPh}
+    {g : γ} {t : ThreadId} {c : ConcM Tgt α} {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {B : α → (ThreadId → γ) → Mem → Nat → Prop}
+    (hp : p ≠ .gone) (hA : A (L.part g))
+    (hbody : P.WP t c (fun a G' m' d' => B a G' m' d' ∧
+      ∃ rH, P.inv (upd G' t (L.set g p rH)) m') G m d) :
+    P.WP t c (fun a G' m' d' => B a G' m' d' ∧ ∃ rH,
+      P.inv (upd G' t (L.set g p rH)) m' ∧
+      (A ⋆ fun r => r = rH) (L.own (upd G' t (L.set g p rH)) m' t)) G m d := by
+  refine WP.mono ?_ (hP.wp_preservePartPost (g := g) (p := p) (B := B)
+    (A := fun r => r = L.part g ∧ A r) hp (WP.mono ?_ hbody))
+  · rintro a G' m' d' ⟨hB, r, rH, ⟨rfl, _⟩, hi, hs⟩
+    have hs' : (A ⋆ fun r => r = rH)
+        (L.own (upd G' t (L.set (L.setPart g (L.part g)) p rH)) m' t) :=
+      sep_mono_left (fun _ h => h.2) hs
+    refine ⟨hB, rH, ?_, ?_⟩
+    · simpa only [L.setPart_self] using hi
+    · simpa only [L.setPart_self] using hs'
+  · rintro a G' m' d' ⟨hB, rH, hi⟩
+    exact ⟨hB, L.part g, rH, ⟨rfl, hA⟩, by rwa [L.setPart_self]⟩
 
 variable {σ α : Type} [Packed α 32]
 
@@ -154,6 +231,7 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
   have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
   have hng : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
   have hnh : L.ph (G₁ t) ≠ .holds := by rw [hg₁, hg]; decide
+  have hna : L.ph (G₁ t) ≠ .away := by rw [hg₁, hg]; decide
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.cas S hS hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   have hrel : L.ph (G₁ t) = .holds → ∀ p : LPh, p ≠ .holds →
@@ -161,34 +239,36 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
   rcases hcase with ⟨rfl, hF, hw, hacq⟩ | ⟨rfl, hw⟩ | ⟨rfl, hw⟩
   · obtain ⟨rL, -, hl⟩ := hiL.acq hst hnh hng hF hacq hw
     refine .inl ⟨rfl, rL, ?_⟩
-    have := hP.step hU hok₁ hng hst (fun h' => hrel h' _) hl
+    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _) hl
     rwa [hg₁] at this
   · refine .inr (.inl ⟨rfl, ?_⟩)
-    have := hP.step hU hok₁ hng hst (fun h' => hrel h' _) (hiL.lstepAt hst hnh hng (by decide) hw)
+    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _)
+      (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
   · refine .inr (.inr ⟨rfl, ?_⟩)
-    have := hP.step hU hok₁ hng hst (fun h' => hrel h' _) (hiL.lstepAt hst hnh hng (by decide) hw)
+    have := hP.step hU hok₁ hng hna hst (fun h' => hrel h' _)
+      (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
 
 /-- A lock step of `t` (not the holder) to a place `p ≠ holds`, as the protocol's invariant. -/
 theorem Fits.stepAt (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}
     {t : ThreadId} {g : γ} {p : LPh} (hg₁ : G₁ t = g) (hok : ok g) (hng : L.ph g ≠ .gone)
-    (hnh : L.ph g ≠ .holds) (hp : p ≠ .holds) (hiL : L.Inv G₁ rX m₁) (hU : U G₁ rX m₁)
-    (hst : L.Step t m₁ m') (hw : L.WInv (upd (L.pl G₁) t p) m') :
+    (hnh : L.ph g ≠ .holds) (hna : L.ph g ≠ .away) (hp : p ≠ .holds) (hiL : L.Inv G₁ rX m₁)
+    (hU : U G₁ rX m₁) (hst : L.Step t m₁ m') (hw : L.WInv (upd (L.pl G₁) t p) m') :
     P.inv (upd G₁ t (L.set g p rnil)) m' := by
   subst hg₁
-  exact hP.step hU hok hng hst (fun h => absurd h hnh) (hiL.lstepAt hst hnh hng hp hw)
+  exact hP.step hU hok hng hna hst (fun h => absurd h hnh) (hiL.lstepAt hst hnh hng hp hw)
 
 /-- An acquire of `t` as the protocol's invariant. -/
 theorem Fits.stepAcq (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}
     {t : ThreadId} {g : γ} (hg₁ : G₁ t = g) (hok : ok g) (hng : L.ph g ≠ .gone)
-    (hnh : L.ph g ≠ .holds) (hiL : L.Inv G₁ rX m₁) (hU : U G₁ rX m₁)
+    (hnh : L.ph g ≠ .holds) (hna : L.ph g ≠ .away) (hiL : L.Inv G₁ rX m₁) (hU : U G₁ rX m₁)
     (hst : L.Step t m₁ m') (hF : L.Free G₁) (hacq : L.Acq (L.pl G₁) t m₁ m')
     (hw : L.WInv (upd (L.pl G₁) t .holds) m') :
     ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m' := by
   subst hg₁
   obtain ⟨rL, -, hl⟩ := hiL.acq hst hnh hng hF hacq hw
-  exact ⟨rL, hP.step hU hok hng hst (fun h => absurd h hnh) hl⟩
+  exact ⟨rL, hP.step hU hok hng hna hst (fun h => absurd h hnh) hl⟩
 
 /-- A release of the holder `t` as the protocol's invariant. -/
 theorem Fits.stepRel (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}
@@ -198,7 +278,8 @@ theorem Fits.stepRel (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} 
     (hw : L.WInv (upd (L.pl G₁) t p) m') :
     P.inv (upd G₁ t (L.set g p rnil)) m' := by
   subst hg₁
-  exact hP.step hU hok (by rw [hph]; decide) hst (fun _ _ => hbf) (hiL.rel hst hph hp hrel hw)
+  exact hP.step hU hok (by rw [hph]; decide) (by rw [hph]; decide) hst (fun _ _ => hbf)
+    (hiL.rel hst hph hp hrel hw)
 
 /-- `lock`'s loop, `xchg(contended)`, by thread `t` at `spin` (`g`). -/
 theorem wp_xchgLockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ}
@@ -220,8 +301,10 @@ theorem wp_xchgLockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.xchgLock S hS hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
 
 /-- `unlock`'s `xchg(unlocked)`, by the holder `t` (`g`). -/
 theorem wp_xchgUnlockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ}
@@ -268,12 +351,14 @@ theorem wp_futexWaitOn (hP : L.Fits K P U ok) {ε : Type} {w : Nat} [Packed ε w
   cases b
   · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
     exact h k hk G₁ m' hb.1
-      (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst hb.2)
+      (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide)
+        (by decide) hiL hU hst hb.2)
   · simp only [↓reduceIte] at hb ⊢
     obtain ⟨hst', hcu', hl'⟩ := hiL.w.spurious hph hq
-    exact ⟨hP.stay hU hok₁ hng hst (hiL.lstay hst hb),
+    exact ⟨hP.stay hU hok₁ hng (by rw [hg₁, hg]; decide) hst (hiL.lstay hst hb),
       h k hk G₁ _ hcu'
-        (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst' hl')⟩
+        (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by rw [hg]; decide)
+          (by decide) hiL hU hst' hl')⟩
 
 /-- `lock`'s futex wait for `contended`, by thread `t` at `wait` (`g`): it goes on at `spin`. -/
 theorem wp_waitOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {io : Io} {s : σ}
@@ -298,7 +383,8 @@ theorem wp_wakeOn (hP : L.Fits K P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
   have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph (by decide) hw
   exact h k hk G₁ m' hcu
-    (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst hl)
+    (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide) hiL hU hst hl)
 
 /-! ### `ok = True`: every thread runs the lock's code -/
 
@@ -378,7 +464,8 @@ theorem Fits.toWait (hP : L.Fits K P U ok) {t : ThreadId} {G : ThreadId → γ} 
     cases m; rfl
   rw [hm] at hl
   have := hP.stepAt (G₁ := upd G t g) (upd_self _ _ _) hok (by rw [hg]; decide)
-    (by rw [hg]; decide) (by decide) hiL hU (Step.same rfl rfl rfl rfl rfl rfl fun _ _ => Iff.rfl) hl
+    (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU
+    (Step.same rfl rfl rfl rfl rfl rfl rfl) hl
   rwa [upd_upd] at this
 
 /-- `tryLock`, `or(1)` with an acquire, by thread `t` at `out` (`g`). -/
@@ -402,9 +489,11 @@ theorem wp_orLock (hP : L.Fits K P U ok) (hc3 : L.c = 3) {s : σ} {t : ThreadId}
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.orLock hc3 hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) hiL hU hst
       hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide)
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide)
       hiL hU hst hw⟩
 
 /-- `tryLock` off x86, a weak acquire `cmpxchg` `0 → 1` (`WInv.casWeakLock`), by thread `t` at
@@ -429,14 +518,15 @@ theorem wp_casWeakLock (hP : L.Fits K P U ok) {s : σ} {t : ThreadId} {G : Threa
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.casWeakLock hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) hiL hU hst
-      hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide) (by decide)
-      hiL hU hst hw⟩
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
+      (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
 
-/-- A relaxed load of the word by thread `t` (`g`, not `gone`): no place changes. -/
+/-- A relaxed load of the word by thread `t` (`g`, not `gone` or `away`): no place changes. -/
 theorem wp_loadLock (hP : L.Fits K P U ok) {s : σ} {t : ThreadId} {G : ThreadId → γ}
-    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g ≠ .gone) (hok : ok g) (hi : P.inv (upd G t g) m)
+    {m : Mem} {n : Nat} {g : γ} (hg : L.ph g ≠ .gone) (hna : L.ph g ≠ .away) (hok : ok g)
+    (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' r, m'.current = t → P.inv (upd G₁ t g) m' → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
@@ -449,7 +539,8 @@ theorem wp_loadLock (hP : L.Fits K P U ok) {s : σ} {t : ThreadId} {G : ThreadId
   obtain ⟨hst, hcu, hl⟩ := hiL.w.load rfl ((hiL.ht (t := t) (by rw [hg₁]; exact hg)).1) rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rw [← hg₁, upd_same]
-  exact hP.stay hU (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hg) hst (hiL.lstay hst hl)
+  exact hP.stay hU (by rw [hg₁]; exact hok) (by rw [hg₁]; exact hg) (by rw [hg₁]; exact hna) hst
+    (hiL.lstay hst hl)
 
 /-- `os_unfair_lock_lock`'s `cmpxchg` `0 → 1`, by thread `t` at `out` or `spin` (`g`). -/
 theorem wp_casD (hP : L.Fits K P U ok) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {G : ThreadId → γ}
@@ -464,6 +555,7 @@ theorem wp_casD (hP : L.Fits K P U ok) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {
       Q G m n := by
   have hnh : L.ph g ≠ .holds := by rcases hg with h | h <;> rw [h] <;> decide
   have hng : L.ph g ≠ .gone := by rcases hg with h | h <;> rw [h] <;> decide
+  have hna : L.ph g ≠ .away := by rcases hg with h | h <;> rw [h] <;> decide
   unfold cmpxchgC
   refine hP.pick hng hi
     (fun G₁ rX m₁ c hg₁ hiL hcr => hiL.w.cmpxchgAt_noErr ((hiL.ht (t := t) (by rw [hg₁]; exact hng)).1)
@@ -474,8 +566,8 @@ theorem wp_casD (hP : L.Fits K P U ok) (hc1 : L.c = 1) {s : σ} {t : ThreadId} {
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.casD hc1 hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨rfl, hF, hw, hacq⟩ | ⟨rfl, hw⟩
-  · exact .inl ⟨rfl, hP.stepAcq hg₁ hok hng hnh hiL hU hst hF hacq hw⟩
-  · exact .inr ⟨rfl, hP.stepAt hg₁ hok hng hnh (by decide) hiL hU hst hw⟩
+  · exact .inl ⟨rfl, hP.stepAcq hg₁ hok hng hnh hna hiL hU hst hF hacq hw⟩
+  · exact .inr ⟨rfl, hP.stepAt hg₁ hok hng hnh hna (by decide) hiL hU hst hw⟩
 
 /-- `os_unfair_lock_lock`'s futex wait for `1`, by thread `t` at `wait` (`g`). -/
 theorem wp_waitD (hP : L.Fits K P U ok) {s : σ} {t : ThreadId}
@@ -528,19 +620,20 @@ theorem Fits.held (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {t : Th
 /-- A change of the OS state only (an interrupt's delivery, `Os.takeInterrupt`) by a thread in
 the lock's code keeps the protocol's invariant. -/
 theorem Fits.osState (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
-    (hi : P.inv G m) (hok : ok (G t)) (hng : L.ph (G t) ≠ .gone) (o : OsState) :
-    P.inv G { m with os := o } := by
+    (hi : P.inv G m) (hok : ok (G t)) (hng : L.ph (G t) ≠ .gone) (hna : L.ph (G t) ≠ .away)
+    (o : OsState) : P.inv G { m with os := o } := by
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi
   have hst : L.Step t m { m with os := o } :=
-    Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)
-  exact hP.stay hU hok hng hst (hiL.lstay hst (hiL.w.osState o))
+    Step.same rfl rfl rfl rfl rfl rfl rfl
+  exact hP.stay hU hok hng hna hst (hiL.lstay hst (hiL.w.osState o))
 
 /-- `takeInterrupt` keeps the protocol's invariant. -/
 theorem Fits.takeInterrupt (hP : L.Fits K P U ok) {G : ThreadId → γ} {m m' : Mem} {t : ThreadId}
     {b : Bool} (hi : P.inv G m) (hok : ok (G t)) (hng : L.ph (G t) ≠ .gone)
+    (hna : L.ph (G t) ≠ .away)
     (h : (Os.takeInterrupt.run m).run = some (.ok (b, m'))) : P.inv G m' := by
   obtain ⟨o, rfl⟩ := Os.takeInterrupt_os h
-  exact hP.osState hi hok hng o
+  exact hP.osState hi hok hng hna o
 
 /-- **The untimed OS futex wait for `c` at the lock's word** (`Os.futexWait`, OSF-01), by thread
 `t` at `spin` (`g`): it goes on at `spin` with a result other than `timedOut`. The thread stays at
@@ -557,13 +650,15 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
     P.WP t (Os.futexWait L.ptr e false : ConcM Tgt Os.WaitResult) Q G m n := by
   subst he
   have hng : L.ph g ≠ .gone := by rw [hg]; decide
+  have hna : L.ph g ≠ .away := by rw [hg]; decide
   have hgw : L.ph (L.set g .wait rnil) = .wait := L.ph_set _ _ _
   have hokw : ok (L.set g .wait rnil) := (hP.ok_set _ _ _).mpr hok
   -- `t` holds nothing at `spin`, so `g` is `g` with the place `spin`
   have hgs : L.set (L.set g .wait rnil) .spin rnil = g := by
     rw [L.set_set, ← hg, ← hP.held (by rw [hg]; decide) hi, L.set_self]
   refine WP.osFutexWait fun b₀ m₀ h₀ k hk => ⟨g, ?_, fun G₁ m₁ hg₁ hi₁ => ?_⟩
-  · exact hP.takeInterrupt hi (by rw [upd_self]; exact hok) (by rw [upd_self]; exact hng) h₀
+  · exact hP.takeInterrupt hi (by rw [upd_self]; exact hok) (by rw [upd_self]; exact hng)
+      (by rw [upd_self]; exact hna) h₀
   -- at the pick: `t` at `spin`
   have hng₁ : L.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hng
   have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
@@ -576,7 +671,8 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
     fun _ => .inr hcost, fun v m₂ hr => ?_⟩
   obtain ⟨hst, hcu, hl⟩ := hiL.w.load rfl ht rfl hr
   have hi₂ : P.inv (upd G₁ t g) m₂ := by
-    rw [← hg₁, upd_same]; exact hP.stay hU' hok₁ hng₁ hst (hiL.lstay hst hl)
+    rw [← hg₁, upd_same]
+    exact hP.stay hU' hok₁ hng₁ (by rw [hg₁]; exact hna) hst (hiL.lstay hst hl)
   refine ⟨by rw [hst.threads], fun _ => h k (by omega) _ G₁ m₂ hcu (by decide) hi₂,
     fun _ => ⟨h k (by omega) _ G₁ m₂ hcu (by decide) hi₂, fun k' hk' => ?_⟩⟩
   -- the sleep: `t` goes to `wait`, then the scheduler's wait
@@ -595,23 +691,27 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
     have hok' : ok (upd G₂ t g t) := by rw [upd_self]; exact hok
     have hng' : L.ph (upd G₂ t g t) ≠ .gone := by rw [upd_self]; exact hng
     split
-    · exact h k' (by omega) _ G₂ _ hc₄ (by decide) (hP.osState hi₄ hok' hng' _)
+    · exact h k' (by omega) _ G₂ _ hc₄ (by decide)
+        (hP.osState hi₄ hok' hng' (by rw [upd_self]; exact hna) _)
     · exact h k' (by omega) _ G₂ _ hc₄ (by decide) hi₄
   refine ⟨fun _ => hP.live hiL₃ (by rw [hg₂]; exact hgw), fun hq => ⟨fun _ => hwo,
     fun _ he => Zig.Conc.Proto.noErr_of_ok hwo he, fun b m' hw => ?_⟩⟩
   obtain ⟨hst, hb⟩ := hiL₃.w.wait hph hq hw
   cases b
   · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
-    have := hP.stepAt hg₂ hokw (by rw [hgw]; decide) (by rw [hgw]; decide) (by decide) hiL₃ hU₃
+    have := hP.stepAt hg₂ hokw (by rw [hgw]; decide) (by rw [hgw]; decide) (by rw [hgw]; decide)
+      (by decide) hiL₃ hU₃
       hst hb.2
     rw [hgs] at this
     exact hend m' hb.1 this
   · simp only [↓reduceIte] at hb ⊢
     obtain ⟨hst', hcu', hl'⟩ := hiL₃.w.spurious hph hq
-    have := hP.stepAt hg₂ hokw (by rw [hgw]; decide) (by rw [hgw]; decide) (by decide) hiL₃ hU₃
+    have := hP.stepAt hg₂ hokw (by rw [hgw]; decide) (by rw [hgw]; decide) (by rw [hgw]; decide)
+      (by decide) hiL₃ hU₃
       hst' hl'
     rw [hgs] at this
-    exact ⟨hP.stay hU₃ hok₃ hng₃ hst (hiL₃.lstay hst hb), hend _ hcu' this⟩
+    exact ⟨hP.stay hU₃ hok₃ hng₃ (by rw [hg₂, hgw]; decide) hst (hiL₃.lstay hst hb),
+      hend _ hcu' this⟩
 
 /-- **`unlock`'s OS futex wake** (`Os.futexWake`, OSF-02) of up to `w ≥ 1` waiters (or all) at the
 lock's word, by thread `t` at `wake` (`g`): after a wake it goes on at `out`; after a spurious
@@ -631,7 +731,7 @@ theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some 
     obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
     obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph hc hr'
     exact h k hk _ G₁ m' hcu (.inl ⟨⟨_, rfl⟩, hP.stepAt hg₁ hok (by rw [hg]; decide)
-      (by rw [hg]; decide) (by decide) hiL hU hst hl⟩)
+      (by rw [hg]; decide) (by rw [hg]; decide) (by decide) hiL hU hst hl⟩)
   · have hng : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
     obtain ⟨-, -, -, hic⟩ := hP.cur t hi₁ hng
     exact h k hk none G₁ _ rfl (.inr ⟨hs, rfl, by rw [← hg₁, upd_same]; exact hic⟩)

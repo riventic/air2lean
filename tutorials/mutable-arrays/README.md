@@ -24,10 +24,13 @@ measure (`fsym` walks the loop body):
 
 ```lean
 theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
-    FTotalTriple (up (arr sl.ptr vs)) (reverse sl) (fun _ => up (arr sl.ptr vs.reverse))
+    FTotalTriple (up (arr sl.ptr vs) ⋆ plain) (reverse sl)
+      (fun _ => up (arr sl.ptr vs.reverse) ⋆ plain)
 ```
 
-`arr p vs` owns the bytes of the items `vs` at `p` (`up` lifts it to the full-state logic). An
+`arr p vs` owns the bytes of the items `vs` at `p` (`up` lifts it to the full-state logic).
+`plain` is the plain mode: the loop's steps (`Zig.tick`) run without a meter and without a stack
+budget (`docs/sep-full-state.md` §Step ticks). An
 `FTotalTriple P c Q` says: run `c` in any memory that holds `P` beside a frame; the run returns
 without a safety error, the frame is unchanged and the new state holds `Q`.
 
@@ -48,7 +51,7 @@ Prove that reversing a one-item slice leaves it unchanged:
 
 ```lean
 theorem reverse_one (sl : Slice) (x : BitVec 32) (hlen : sl.len.toNat = 1) :
-    FTotalTriple (up (arr sl.ptr [x])) (reverse sl) (fun _ => up (arr sl.ptr [x]))
+    FTotalTriple (up (arr sl.ptr [x]) ⋆ plain) (reverse sl) (fun _ => up (arr sl.ptr [x]) ⋆ plain)
 ```
 
 Hint: `reverse_spec sl [x] hlen` and `simp` (`[x].reverse = [x]`). A solution is in

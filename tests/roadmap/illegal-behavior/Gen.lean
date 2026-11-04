@@ -175,6 +175,7 @@ def forArray.again13 : forArrayExit → Bool
   | _ => false
 
 def forArray.loop13 (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MM forArrayLocals forArrayExit := do
+  Zig.callM Zig.tick
   let i14 ← pure ((← get).local4)
   match ← ((do
     let i16 ← pure (i14)
@@ -297,6 +298,7 @@ def forLenMem.again16 : forLenMemExit → Bool
   | _ => false
 
 def forLenMem.loop16 (i6 : Zig.Slice) (i7 : Zig.Slice) (i8 : BitVec 64) : Zig.MM forLenMemLocals forLenMemExit := do
+  Zig.callM Zig.tick
   let i17 ← pure ((← get).local4)
   match ← ((do
     let i19 ← pure (i17)

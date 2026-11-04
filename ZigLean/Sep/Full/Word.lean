@@ -351,47 +351,26 @@ theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G 
   simp only [FHeap.union_apply]
   cases (L.wordR m).heap l <;> cases rL.heap l <;> simp_all
 
-/-- A byte of the rest is the memory's, up to `Cell.norm`. -/
-theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
-    {fc : FCell} (hl : rX.heap l = some fc) : (m.heap l).map Cell.norm = some fc.cell.norm := by
+/-- The protocol's rest is in the lock's complete rest (with the word's cells and the free lock's
+resource). -/
+theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) :
+    ∃ rL, FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧
+      ∀ l fc, rX.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc := by
   obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
+  refine ⟨rL, ho, fun l fc hl => ?_⟩
   have hrL : rL.heap l = none := (hLX l).resolve_right (by simp [hl])
   have hwr : (L.wordR m).heap l = none := by
     by_cases hin : L.In l
     · have := LockWord.off_erase.mp hi.xoff l hin
       simp [hl] at this
     · exact cellsAt_none hin
-  exact ho.rest_cell (by simp only [FHeap.union_apply, hl, hwr, hrL, Option.none_or])
+  simp only [rsum, FHeap.union_apply, hl, hwr, hrL, Option.none_or]
 
-/-- **Bytes of the rest are the memory's**: a part `r` of the rest with the bytes `bs` at `p`
-(`0 < bs.size`): `p`'s block holds `bs` there. -/
-theorem Inv.restBytes {G : ThreadId → γ} {rX r : Res} {m : Mem} (hi : L.Inv G rX m) {p : Ptr}
-    {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId} (hp : up (bytesAt p A S K bs) r)
-    (hpb : p.block = some b) (hsub : ∀ l fc, r.heap l = some fc → rX.heap l = some fc)
-    (hpos : 0 < bs.size) :
-    ∃ blk, m.blocks[b]? = some blk ∧ blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
-  have cell : ∀ j (hj : j < bs.size), ∃ blk, m.blocks[b]? = some blk ∧
-      blk.bytes[p.off.toNat + j]? = some bs[j] := by
-    intro j hj
-    obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hp hpb hj
-    have hn := hi.restCell (hsub _ _ hfc)
-    cases e : m.heap (b, p.off.toNat + j) with
-    | none => rw [e] at hn; cases hn
-    | some c =>
-      rw [e] at hn
-      obtain ⟨blk, hb, -, hx, rfl⟩ := Mem.heap_some e
-      have hbyte := congrArg Cell.byte (Option.some.inj hn)
-      simp only [Cell.norm, hc] at hbyte
-      exact ⟨blk, hb, by rw [Array.getElem?_eq_getElem hx, hbyte, getElem!_pos bs j hj]⟩
-  obtain ⟨blk, hb, -⟩ := cell 0 hpos
-  obtain ⟨blk', hb', hlast⟩ := cell (bs.size - 1) (by omega)
-  rw [hb] at hb'; cases hb'
-  have hlt := (Array.getElem?_eq_some_iff.mp hlast).1
-  refine ⟨blk, hb, Array.ext (by simp only [Array.size_extract]; omega) fun j h1 h2 => ?_⟩
-  obtain ⟨blk', hb', hx⟩ := cell j h2
-  rw [hb] at hb'; cases hb'
-  simp only [Array.getElem_extract]
-  exact (Array.getElem?_eq_some_iff.mp hx).2
+/-- A byte of the rest is the memory's, up to `Cell.norm`. -/
+theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
+    {fc : FCell} (hl : rX.heap l = some fc) : (m.heap l).map Cell.norm = some fc.cell.norm := by
+  obtain ⟨rL, ho, hin⟩ := hi.restIn
+  exact ho.rest_cell (hin _ _ hl)
 
 /-- The word's cells of the rest are the memory's, up to `Cell.norm`. -/
 theorem Inv.cellsN {G : ThreadId → γ} {rY : Res} {m₀ m : Mem}
@@ -2599,6 +2578,66 @@ theorem cmpxchgWeak_write_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     exact rmwM_seen_last hlr (hf₁.of_eq rfl (Nat.le_refl _)) (by omega) succ _ new
   · cases he
 
+/-! ## Every step extends the writes (`Word.Extends`)
+
+The instances of `Extends` for the native steps: a snapshot of the writes stays a prefix across
+each of them (`Prefix.extend`). -/
+
+/-- A framed step of any thread. -/
+theorem Extends.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m) (hs : FStepIn hF m m')
+    (hwF : ∀ l, W.In l → hF l ≠ none)
+    (hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
+    W.Extends m m' :=
+  .of_eq (hist_fstep hw hs hwF hcells)
+
+/-- A step of the lock's code (the word apart from the lock's). -/
+theorem Extends.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
+    (hs : L.Step t m m') (hap : W.ApartL L) : W.Extends m m' :=
+  .of_eq (hw.lockStep hs hap).2
+
+/-- A fork. -/
+theorem Extends.fork {m m' : Mem} {t c : ThreadId} {gt : Bool} (hw : W.Ok m)
+    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    W.Extends m m' :=
+  .of_eq (hw.fork_native ht hcs hf).2
+
+/-- An atomic load at the word. -/
+theorem Extends.load {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (h : ((atomicLoadAt c ord nb W.ptr : MemM (BitVec n)).run m).run = some (.ok (v, m'))) :
+    W.Extends m m' :=
+  let ⟨_, _, _, _, _, he, _⟩ := hw.load_native hc ht hcs h
+  .of_eq he
+
+/-- An atomic RMW at the word. -/
+theorem Extends.rmw {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    W.Extends m m' :=
+  .of_push (hw.rmw_native hc ht hcs h).2.2.2.1
+
+/-- A strong `cmpxchg` at the word. -/
+theorem Extends.cas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
+    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
+    W.Extends m m' := by
+  rcases (hw.cas_native hc ht hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, -, he⟩
+  · exact .of_push he
+  · exact .of_eq he
+
+/-- A weak `cmpxchg` at the word. -/
+theorem Extends.weakCas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
+    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
+    W.Extends m m' := by
+  rcases (hw.weakCas_native hc ht hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, he⟩
+  · exact .of_push he
+  · exact .of_eq he
+
 end Word
 end Conc
 end Zig
@@ -3365,6 +3404,24 @@ theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Boo
   · subst hc
     exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, rfl⟩
   · exact .inr ⟨rfl, rfl⟩
+
+/-- A futex wait at the word extends its writes (`Word.Extends`). -/
+theorem Extends.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m)
+    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) : W.Extends m m' := by
+  rcases hw.futexWait_native hc ht hcs h with
+    ⟨-, -, rfl⟩ | ⟨-, M, -, -, hM, -, ⟨-, -, rfl⟩ | ⟨-, rfl⟩⟩
+  · exact .congr rfl rfl
+  · exact (Extends.of_eq hM).trans (.congr rfl rfl)
+  · exact .of_eq hM
+
+/-- A futex wake at any word extends this word's writes. -/
+theorem Extends.futexWake {p : Ptr} {k : Nat} {cs : List Nat} {t : ThreadId} {m m' : Mem}
+    (h : ((Thread.futexWake p k cs).run { m with current := t }).run = some (.ok ((), m'))) :
+    W.Extends m m' := by
+  have hm' := Proto.modify_ok h
+  subst hm'
+  exact .congr rfl rfl
 
 end futex_native
 

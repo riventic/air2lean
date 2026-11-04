@@ -25,6 +25,7 @@ def fillSum.again6 : fillSumExit → Bool
   | _ => false
 
 def fillSum.loop6 (p0 : BitVec 64) (i1 : Zig.Ptr) : Zig.MM fillSumLocals fillSumExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).i)
     let i9 ← pure (i8)
