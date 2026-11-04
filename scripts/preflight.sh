@@ -48,7 +48,7 @@ while [ $# -gt 0 ]; do
     --no-sources) sources=0 ;;
     --no-materialize) materialize=0 ;;
     --pr) heavy=skip ;;
-    --logs) [ $# -ge 2 ] || { echo "$usage" >&2; exit 2; }; logs=$2; shift ;;
+    --logs) [ -n "${2:-}" ] || { echo "$usage" >&2; exit 2; }; logs=$2; shift ;;
     *) echo "$usage" >&2; exit 2 ;;
   esac
   shift
