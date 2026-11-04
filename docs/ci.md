@@ -807,7 +807,10 @@ that fixture's check, and a module of the proof-fixture package (`scripts/fixtur
 Lake. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
-the files that import it run again (about 3.5 min for all 360 on the dev Mac).
+the files that import it run again (about 3.5 min for all 360 on the dev Mac). The phase prints
+its five largest sampled peaks (summed RSS of each file's process group, in MiB) with their files,
+because they size its guard. On the remote build host the phase peaked at 10.4 GB with one Lean
+thread (2026-11-03), and the guard's whole-tree sample could not name the file.
 
 A fourth phase builds the **proof-fixture package** and runs the **proof-fixture checks**. The
 package (`tests/roadmap/lakefile.toml`, one library per converted fixture directory,
@@ -836,7 +839,14 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to two at once inside their own guard (11000 MiB). **Every unit runs on every invocation**: no
+to eight at once inside their own guard (24000 MiB, at most the guard budget `AIR2LEAN_BUILD_MEM_MIB`
+and the admission of an enclosing guard: the full build's whole admission; `--jobs`, `--rss-mib`),
+each with up to two Lean processes (`--lean-threads`; the full build passes its own count, one
+11000 MiB process per thread), the longest first by
+the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
+unit's largest recent sampled peak, scaled up when the run has more Lean threads than the
+measured one) fit in 85% of the guard's limit; the measurements
+(`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
 result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
 by path, and of the stock compiler's path, size and modification time. That key missed every input
@@ -848,7 +858,7 @@ to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs
 own (`--only TEXT`: the units whose name or checks contain TEXT). It writes each unit's wall time,
 peak RSS (its process group, sampled) and wall time by process kind (lean, zig, the translator,
 lake, python) to `DIR/units.json` and prints the 20 longest units; these are measurements, used
-for nothing else.
+only for the order and admission above.
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
 does not test one).
 
