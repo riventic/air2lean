@@ -113,4 +113,83 @@ theorem block_of_value (b : BlockId) (A S : Nat) (K : BlockKind) (bs cs : Array 
       (up (regionIn ⟨some b, 0⟩ A S K 8 (bs ++ cs))) := by
   fsym_entail
 
+/-- **A conjunction split after its left conjunct substituted a local** that the right one
+mentions (a token's facts `A = B.A ∧ S = B.S ∧ …`): the substitution reintroduces the right
+conjunct as a new local, which is still split, so its `k = .global` fixes the kind. -/
+theorem conj_after_subst (T : BlockKind → FAssn) (a b : Nat) (k : BlockKind) (c : MemM Unit)
+    (rule : FTotalTriple (T .global) c (fun _ => T .global)) :
+    FTotalTriple (⟪a = b ∧ (k = .global ∧ a + b = 8)⟫ ⋆ T k) c (fun _ => T k) := by
+  fsym [rule]
+
+/-- A buffer record at a global pointer (`⟨some 0, 0⟩`), as a client names its allocator's
+buffer. -/
+structure Buf where
+  ptr : Ptr
+  cap : Nat
+
+abbrev gbuf (n : Nat) : Buf := ⟨⟨some 0, 0⟩, n⟩
+
+/-- A block variable of a pointer whose block is a value is that block: the invariant's share of
+`b` with `(gbuf n).ptr.block = some b` meets a rule at block `0` (an allocator's granted region,
+whose share the planner opens at the evaluated block). -/
+theorem value_block (n : Nat) (q : Frac) (c : MemM Unit)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (FAssn.ex fun b => ⟪(gbuf n).ptr.block = some b⟫ ⋆ bshare b q n) c
+      (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The same through a fact between two pointers' blocks: a grant at `p` in the buffer (its
+token's `p.block = (gbuf n).ptr.block`) has its share at block `0`. -/
+theorem value_block_linked (p : Ptr) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = (gbuf n).ptr.block)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q n) c
+      (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The same from a fact `p.block = some 0` (no evaluation). -/
+theorem value_block_fact (p : Ptr) (n : Nat) (q : Frac) (c : MemM Unit) (hp : p.block = some 0)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (FAssn.ex fun b => ⟪p.block = some b⟫ ⋆ bshare b q n) c
+      (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The same from `some 0 = some b` of a block variable `b` (one declared at `BlockId`, no block
+fact needed: `isBlockVar`). -/
+theorem value_block_eq (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit) (hb : some 0 = some b)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The same from `some b = some 0`. -/
+theorem value_block_eq_symm (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = some b) (hb : some b = some 0)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- A caller's term that names the substituted block variable takes its value (the
+substitution is recorded, `substRecorded`). -/
+theorem value_block_caller_term (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hb : (gbuf n).ptr.block = some b)
+    (rule : FTotalTriple (bshare b q n) c (fun _ => bshare b q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- Two block variables of one block (`hxy`), one of them equal to a value: both are that value
+(one variable per block first, then its value). -/
+theorem value_block_chain (x y : Ptr) (b1 b2 : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (h1 : x.block = some b1) (h2 : y.block = some b2) (hxy : x.block = y.block)
+    (hb : some 0 = some b1)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b2 q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
+/-- The block of a pointer formed from a base whose block is a fact (`Ptr.add`: of one base). -/
+theorem value_block_add (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM Unit)
+    (hp : p.block = some 0) (h : (p.add 4).block = some b)
+    (rule : FTotalTriple (bshare 0 q n) c (fun _ => bshare 0 q n)) :
+    FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
+  fsym [rule]
+
 end SepAuto.Facts

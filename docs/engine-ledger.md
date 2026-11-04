@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 145 rows, 57 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 147 rows, 59 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -21,6 +21,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 
 | Row | Title | Requester | Workaround sites | Deletion plan |
 |---|---|---|---|---|
+| [lake-needs-race](#row-lake-needs-race) | Lake 4.34 creates the jobs of concurrent `needs` facet keys twice and can deadlock | lake-hang lane (arc hangs of the assurance extraction and kernel-replay builds, 2026-11-04) | `scripts/assumptions.py`, `tests/roadmap/fixtures-lake/test_needs_race.py` | When a toolchain update fixes the race, the control assertion of tests/roadmap/fixtures-lake/test_needs_race.py fails. Then delete assumptions.needs_first (its callers build only the generated modules again), delete the test, and close this row. |
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
@@ -78,6 +79,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [arena-retained-capacity](#row-arena-retained-capacity) | The retaining reset's retained capacity is not stated | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | state the retained capacity in `reset_retain_capacity_spec` and `reset_retain_with_limit_spec` of each ArenaSpec*.lean (after the per-translation-walks row, once in the shared module) by linking `Kept`'s `sz` to the limit and the list's capacity, then close this row and drop the 'not stated' wording from docs/alloc-arena.md, docs/allocator-identity.md, tests/roadmap/alloc-arena/README.md and register row M01. |
 | [region-end-opt-in](#row-region-end-opt-in) | The owned-region end bound is a per-file opt-in fact | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost). |
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
+| [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 
 ## Closed rows
 
@@ -189,6 +191,19 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
+
+<a id="row-lake-needs-race"></a>
+### #lake-needs-race Lake 4.34 creates the jobs of concurrent `needs` facet keys twice and can deadlock
+
+Status: **open**. Requester: lake-hang lane (arc hangs of the assurance extraction and kernel-replay builds, 2026-11-04).
+
+Progress: Workaround: scripts/assumptions.py needs_first names each needed module's `:olean` on the command line before the generated modules, so Lake creates every job on its build thread before a library's `needs` tasks run. Upstream draft docs/upstream/lake-concurrent-needs.md (issue #131 row 17).
+
+Request: A Lake whose facet keys in `needs` share one job per key (an atomic fetchOrCreate, or `needs` fetched on the calling thread), or whose Module.computeExportInfo does not await inside a sync continuation.
+
+Workaround sites: `scripts/assumptions.py`, `tests/roadmap/fixtures-lake/test_needs_race.py`
+
+Deletion plan: When a toolchain update fixes the race, the control assertion of tests/roadmap/fixtures-lake/test_needs_race.py fails. Then delete assumptions.needs_first (its callers build only the generated modules again), delete the test, and close this row.
 
 <a id="row-case-family-enrollment"></a>
 ### #case-family-enrollment Remove transitional golden case-family enrollment markers
@@ -1680,3 +1695,16 @@ Progress: Qualified in PR529: at2f1b/main737, Auto/AutoWP fe270e1f/b9839887, who
 Request: At an existing Proto.WP pure side goal, use a current local h : R -> forall u, A u -> B after current facts supply R and A u. Keep whole-hypothesis matching and caller-lemma priority; try each current local function once at the current chain level only after its final stable conclusion head matches, then unify every conclusion argument, prove every premise through the existing bounded backward side-proof path, close all data metavariables and restore failed choices. Share existing fuel/depth3; no new case search, forward saturation, provider search or unsupplied nested program walk. Scope-valid already-built proof reuse is permitted; case-free proof ancestry is not promised.
 
 Deletion plan: Completed in PR529: all four actual translated signal walks (Sync.sig_body, Sync.ioCond_signal_wp, Threadsync.wake_body and Threadsync.cond_signal_wp) use one fsym each with exact initial ghost, hseen, complete holder resource and unchanged six public result/safety/completion statements. Current ROOT/all Proofs/Append, official fixture/axiom gates, genuine inventory renewal and focused metadata/framework pass with their original source bindings. The all-width Result run fact preserves zero-width, zero-divisor and signed-overflow errors through unchanged Basic semantics; no legacy VC rule or manual WP walk remains for this capability. Wait-family, general condition accounting and SemImpl/L8 obligations remain separately open.
+
+<a id="row-l11-waitgroup-rwlock-impl"></a>
+### #l11-waitgroup-rwlock-impl Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic
+
+Status: **open**. Requester: L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03).
+
+Note: Rejected alternatives: a new lock place `.done` that keeps `WInv.live` (existence and unjoined) for a thread past the lock: it cannot hold for a detached thread (joined while running), so such a thread could never use an FEvent or FCond. A per-protocol premise `Runs P t g` (existence from each protocol's invariant): every protocol with a gone or detached thread would restate what the scheduler already knows. No new judgment, tactic or premise.
+
+Progress: Maintainer decision 2026-11-03: (1) the lock-word atomic rules get the stepping thread's existence without a non-gone lock place, and `FEvent`'s set path admits a lock-gone setter; (2) the L10/L11 implementation gate is released: `SemImpl` (L10) and `RwLockImpl` are built like `MutexImpl`/`CondImpl`. Step 1a (branch claude/l11-safe-exists): the concurrent logic itself hands the existence to every resumption, once and generically: `Proto.Safe`'s and `PausedOk`'s resumption and `WP.sync`/`WP.syncC`'s continuation get `t < m₁.threads.size`, which the scheduler discharges (`go_spec`, `go_some`: main is thread 0, kid i is thread i + 1, `SInv.size`). This supersedes the per-protocol premise `Full.Runs P t g` of PR #579. Step 1b: the derived stop rules (`WP.pickC`, `WP.futexWaitC`, `WP.futexWakeC`, `WP.osFutexWait`, `WP.osFutexWake`) and the word rules pass that fact on, and PR #579 shrinks to the word-rule and `FEvent` changes.
+
+Request: WaitGroup's last `finish` sets the ResetEvent after its `fetchSub` left the lock's protocol (lock place `gone`). The word rules required `L.ph g != .gone` only to get `t < m.threads.size` at the scheduler's resumption; the scheduler cannot supply liveness (`Thread.detach` sets `joined` on a running thread), only existence, which `Safe` now states at every resumption. Then: a general FLock plain-read rule spanning the rest, the lock word and the free lock resource, by the only non-gone thread (WaitGroup's waiter reads the result after the event); WaitGroup on fsym with ThreadMutex and ResetEvent `EventImpl`; `RwLockImpl` over L10's `SemImpl`; the three RwLock files on it.
+
+Deletion plan: Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged.
