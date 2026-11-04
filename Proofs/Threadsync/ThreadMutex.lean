@@ -234,6 +234,8 @@ theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
     · exact hok
     · exact (hP.ok_set _ _ _).mpr hok
   unfold osUnfairLockTry
+  -- Hand walk until engine-ledger row `fsym-unknown-fvar-mutex-loop` is fixed (its deletion plan
+  -- restores the one `fsym` call).
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   refine WP.bind (wp_casD hP hc1 hph hok₀ hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
   rcases hcase with ⟨rfl, rL, hi₁⟩ | ⟨rfl, hi₁⟩
