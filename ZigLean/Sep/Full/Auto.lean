@@ -442,8 +442,9 @@ structure RunCaches where
   /-- The `WP` backend's simp contexts: concurrent bodies, and hypotheses after a stop. -/
   wpProg : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
   wpHyp : IO.Ref (Option Simp.Context)
-  /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value
-  (`refreshUser` relates a caller's term to the context after them). -/
+  /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value,
+  and a local that a substitution reverted and introduced again, by the new local
+  (`refreshUser` relates a caller's term to the context after them, `liveFVar?` a fact). -/
   substs : IO.Ref (Std.HashMap FVarId Expr)
   /-- The heads of the assertions that the caller's updates produce (`fsym [u]`, `u : EUpd X Y`):
   a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`), except
@@ -2627,6 +2628,21 @@ def boolFactCtx : MetaM Simp.Context := do
   (← caches).boolCtx.set (some c)
   return c
 
+/-- The local `f` of an earlier context in `g`'s: itself, or the local a substitution
+reintroduced it as (a fact reverted by `subst` and introduced again, followed through
+`caches.substs`, as `refreshSubsts` follows a term); `none` if it is gone. A loop that splits
+facts one after another uses it (`destructAll`), as splitting one fact may substitute a local
+that a later one mentions. -/
+def liveFVar? (g : MVarId) (f : FVarId) : MetaM (Option FVarId) := g.withContext do
+  let lctx ← getLCtx
+  let substs ← (← caches).substs.get
+  let mut f := f
+  for _ in [0:substs.size + 1] do
+    if lctx.contains f then return some f
+    let some (.fvar f') := substs.get? f | return none
+    f := f'
+  return none
+
 mutual
 /-- A fact `t = C …` of a term `t` that is not a variable (a field of the locals, of a witness)
 and a constructor application: `t` is replaced by `C …` in the goal and in the other facts,
@@ -2651,10 +2667,7 @@ partial def substCtor (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option M
     let res ← g1.rewrite (← g1.getType) (mkFVar h) symm
     let g2 ← g1.replaceTargetEq res.eNew res.eqProof
     let (xs, g3) ← g2.introNP rev.size
-    let mut g := g3
-    for x in xs do
-      if (← g.withContext x.findDecl?).isSome then g ← destruct g x
-    return some g
+    return some (← destructAll g3 xs)
   catch ex =>
     trace[fsym] "substCtor {t}: {ex.toMessageData}"
     s.restore; return none
@@ -2696,9 +2709,7 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
       if ty' != ty then
         g ← g.replaceLocalDeclDefEq d.fvarId ty'
         changed := changed.push d.fvarId
-    for f in changed do
-      if (← g.withContext f.findDecl?).isSome then g ← destruct g f
-    return some g
+    return some (← destructAll g changed)
   catch ex =>
     trace[fsym] "etaProj: {ex.toMessageData}"
     s.restore; return none
@@ -2711,13 +2722,9 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
     let gs ← g.cases h
     let some sg := gs[0]? | return g
     let fs := sg.fields
-    let mut g := sg.mvarId
-    if isAnd then
-      let f1 := fs[1]!.fvarId!
-      g ← destruct g fs[0]!.fvarId!
-      if (← g.withContext f1.findDecl?).isSome then g ← destruct g f1
-      return g
-    return ← destruct g fs[1]!.fvarId!
+    -- (the left conjunct's substitution may reintroduce the right one: `destructAll`)
+    if isAnd then return ← destructAll sg.mvarId #[fs[0]!.fvarId!, fs[1]!.fvarId!]
+    return ← destruct sg.mvarId fs[1]!.fvarId!
   if ty.isConstOf ``True then return ← g.clear h
   -- a Boolean test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`): as a proposition
   if isBoolTest ty then
@@ -2730,8 +2737,11 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
   if let some (lem, o) := optTest? ty then
     unless ← isCaseCtorApp o do
       let pf ← mkAppM lem #[mkFVar h]
-      let (h', g') ← (← g.assert `hopt (← inferType pf) pf).intro1
-      return ← destruct g' h'
+      let pty ← inferType pf
+      -- (once: a reintroduced fact is split again, `destructAll`; a known one falls through)
+      unless ← (← getLCtx).anyM fun d => return d.type == pty do
+        let (h', g') ← (← g.assert `hopt pty pf).intro1
+        return ← destruct g' h'
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
       if let some (fs, g') ← observing? (substEq g h) then
@@ -2770,6 +2780,15 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         let ty'' ← whnfR ty'
         if ty''.isAppOfArity ``And 2 || ty''.isAppOfArity ``Exists 2 then return ← destruct g' h
         return g'
+  return g
+
+/-- `destruct` the facts `hs` one after another: a fact that splitting an earlier one
+reintroduced (a substitution reverts the facts that mention its local) is split as the new
+local (`liveFVar?`). -/
+partial def destructAll (g : MVarId) (hs : Array FVarId) : TacticM MVarId := do
+  let mut g := g
+  for h in hs do
+    if let some h ← liveFVar? g h then g ← destruct g h
   return g
 end
 
@@ -6120,7 +6139,8 @@ partial def casesThen (g : MVarId) (d : Expr) (next : MVarId → TacticM (List M
       let mut g' := g0
       for decl in (← g'.withContext getLCtx) do
         unless decl.isImplementationDetail do
-          g' ← destruct g' decl.fvarId <|> pure g'
+          if let some f ← liveFVar? g' decl.fvarId then
+            g' ← destruct g' f <|> pure g'
       out := out ++ (← next g')
     finally
       ref.set previous
@@ -7011,13 +7031,9 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
     let some sg := gs[0]? | return []
     let f1 := sg.fields[1]!.fvarId!
     return ← (← wpSplit sg.mvarId sg.fields[0]!.fvarId!).flatMapM fun g' => do
-      -- (a substitution of the first part renames the second: followed by `substs`)
-      let mut f := f1
-      for _ in [0:16] do
-        if (← g'.withContext f.findDecl?).isSome then return ← wpSplit g' f
-        let some (.fvar f') := (← (← caches).substs.get).get? f | break
-        f := f'
-      pure [g']
+      -- (a substitution of the first part renames the second: `liveFVar?`)
+      let some f ← liveFVar? g' f1 | pure [g']
+      wpSplit g' f
   if ty.isAppOfArity ``Exists 2 then
     let gs ← g.cases h
     let some sg := gs[0]? | return []
@@ -7053,12 +7069,7 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         g := g'
         fs := fs.push f
       for f0 in fs do
-        let mut f := f0
-        for _ in [0:16] do
-          if (← g.withContext f.findDecl?).isSome then break
-          let some (.fvar f') := (← (← caches).substs.get).get? f | break
-          f := f'
-        unless (← g.withContext f.findDecl?).isSome do continue
+        let some f ← liveFVar? g f0 | continue
         let some (fn, g') ← wpNorm g f #[] | return []
         let some g' ← wpForward g' fn | return []
         match ← g'.withContext (wpCurrentHyp? fn) with
@@ -7728,7 +7739,8 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
       let .const c _ := (← whnfR (← instantiateMVars d.type)).getAppFn | continue
       unless isStructure (← getEnv) c && (← isProp d.type) && !(← isLibrary c) do continue
       if (← isClass? d.type).isSome then continue
-      g ← destruct g d.fvarId
+      let some f ← liveFVar? g d.fvarId | continue
+      g ← destruct g f
     pure g
   withRunCaches do
     discard <| arithSimpCtx
