@@ -1176,4 +1176,32 @@ theorem equation_fields_constructors_only (a b : Nat) : True := by
       throwError "equation_fields_constructors_only: a function under a constructor accepted"
   trivial
 
+/-- A ghost value with a field (a thread's part at its join, `gJoin rp`). -/
+def tagged (n : Nat) : Nat × Nat := (n, 0)
+
+/-- A ghost value whose field goes through a non-injective function. -/
+def taggedPar (n : Nat) : Nat × Nat := (parity n, 0)
+
+/-- A definition whose value is a constructor's application is compared by that value:
+`tagged ?v = tagged a` fixes `?v := a` (`wpAtom` closes it), but not through a function inside
+the value (`taggedPar ?v = taggedPar a`). -/
+theorem equation_fields_definition (a : Nat) : True := by
+  run_tac withRunCaches do
+    let a := (← getLocalDeclFromUserName `a).toExpr
+    let v ← mkFreshExprMVar (mkConst ``Nat)
+    let tag (x : Expr) := mkApp (mkConst ``SepAuto.WP.tagged) x
+    let tagPar (x : Expr) := mkApp (mkConst ``SepAuto.WP.taggedPar) x
+    if ← eqFixesUnknowns (tagPar v) (tagPar a) then
+      throwError "equation_fields_definition: a function inside a definition's value accepted"
+    let target ← mkEq (tag v) (tag a)
+    let proof ← mkFreshExprSyntheticOpaqueMVar target
+    unless (← wpAtom proof.mvarId! #[] #[] 4 (noCases := true)).isEmpty do
+      throwError "equation_fields_definition: the definition's field remained unresolved"
+    unless (← instantiateMVars v) == a do
+      throwError "equation_fields_definition: the field did not get the value"
+    let proof ← instantiateMVars proof
+    if proof.hasExprMVar then throwError "equation_fields_definition: proof unknowns"
+    checkWithKernel (← mkExpectedTypeHint proof (← instantiateMVars target))
+  trivial
+
 end SepAuto.WP
