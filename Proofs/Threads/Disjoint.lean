@@ -721,29 +721,9 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
     · rw [Array.getElem?_setIfInBounds_ne (by decide), r1₁₇] at hget; cases hget; rfl
     · rw [Array.getElem?_setIfInBounds_self_of_lt (by rw [hsz₁₇]; decide)] at hget; cases hget; rfl
   have htl : 0 < m₁₈.threads.size := by rw [hth₁₈, Array.size_setIfInBounds, hsz₁₇]; decide
-  -- `x +% y`.
-  refine WP.bind (WP.liftM_fowned ((blk_load (w := a) hxb hx0 hAx).frameL.frame.post
-    fun _ _ h => sep_assoc (sep_mono_left (fun _ h => sep_lcomm h) h))
-    ho₁₈ hc₁₈ htl hA fun r₁ m₁₉ r₁₉ _ ho₁₉ hq₁₉ hc₁₉ ht₁₉ => ?_)
-  obtain ⟨hr₁, hA₁₉⟩ := sep_lift.mp hq₁₉
-  refine WP.bind (WP.liftM_fowned ((blk_load (w := b) hyb hy0 hAy).frameL.frameL.post
-    fun _ _ h => sep_lcomm (sep_mono_right (fun _ h => sep_lcomm h) h))
-    ho₁₉ hc₁₉ (by rw [ht₁₉]; exact htl) hA₁₉ fun r₂ m₂₀ r₂₀ _ ho₂₀ hq₂₀ hc₂₀ ht₂₀ => ?_)
-  obtain ⟨hr₂, hA₂₀⟩ := sep_lift.mp hq₂₀
-  refine WP.pure' ?_
-  -- The frees.
-  have htl₂₀ : 0 < m₂₀.threads.size := by rw [ht₂₀, ht₁₉]; exact htl
-  -- In reverse order of allocation (MM-18): `c2`, `c1`, `y`, `x`.
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₀ hc₂₀ htl₂₀ hA₂₀ fun _ m₂₁ r₂₁ _ _ ho₂₁ hq₂₁ hc₂₁ ht₂₁ _ _ _ _ _ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₁ hc₂₁ (by rw [ht₂₁]; exact htl₂₀) hq₂₁ fun _ m₂₂ r₂₂ _ _ ho₂₂ hq₂₂ hc₂₂ ht₂₂ _ _ _ _ _ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _) ho₂₂ hc₂₂
-    (by rw [ht₂₂, ht₂₁]; exact htl₂₀) hq₂₂ fun _ m₂₃ r₂₃ _ _ ho₂₃ hq₂₃ hc₂₃ ht₂₃ _ _ _ _ _ => ?_)
-  refine WP.bind (WP.liftMem_fowned (by fsym : FTTriple _ _ _)
-    ho₂₃ hc₂₃ (by rw [ht₂₃, ht₂₂, ht₂₁]; exact htl₂₀) hq₂₃ fun _ m₂₄ _ _ _ _ _ _ ht₂₄ _ _ _ _ _ => ?_)
-  refine WP.pure' ⟨by simp [hr₁, hr₂, addWrap], fun r hr hs => hja r ?_ hs⟩
-  rwa [ht₂₄, ht₂₃, ht₂₂, ht₂₁, ht₂₀, ht₁₉] at hr
+  -- `x +% y`, then the reverse-order frees (MM-18): `c2`, `c1`, `y`, `x`.
+  fsym [blk_load (w := a) hxb hx0 hAx, blk_load (w := b) hyb hy0 hAy,
+    ctxBytes_size, enc_u32, Array.size_setIfInBounds, joinedAll_of_threads]
 
 /-! ## The results -/
 
