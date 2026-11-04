@@ -38,7 +38,7 @@ named=()
 for name in Wrappers.realloc_of Wrappers.allocSentinel_of FBA.fallocSpec \
     FBA.fthread_alloc FBA.fthread_resize FBA.fthread_remap FBA.fthread_free FBA.freset_spec \
     FBA.fown_init FBA.fallocator_init FBA.fallocator_creation FBA.fallocSpec.creation \
-    FBA.ledger Client.client_spec; do
+    FBA.ledger Client.client_spec Client.client_start; do
   named+=(--declaration "AllocFba.$name")
 done
 python3 -B scripts/fixtures.py audit AllocFba.Client AllocFba.Full \

@@ -18,7 +18,7 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L5a sentinel/realloc chain | done | #406 (in #412) |
 | L5b owned/arena | done | #338 |
 | L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
-| L6 wrappers and FBA client | open; `Sep/Step` deleted early | #384 (in #407) |
+| L6 wrappers and FBA client | client done (Bridge, legacy Client, Fba deleted); stage D-b (Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation) follows; `Sep/Step` deleted early | #384 (in #407), #567 |
 | L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, #435 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L8, L10, L11, L12, L13 | open | |
