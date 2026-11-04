@@ -240,7 +240,7 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   rotate_left
   · rw [hg₁] at g0; cases g0
   · rw [hg₁] at g0; cases g0
-  obtain ⟨hc, hth₂, -⟩ := Detach.fork_eq hf
+  obtain ⟨hc, hth₂⟩ := fork_threads hf
   rw [hs₁] at hc
   subst hc
   dsimp only
@@ -260,7 +260,8 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   · rw [hg₂] at g0; cases g0
   rotate_left
   · rw [hg₂] at g0; cases g0
-  obtain ⟨hc, hth₄, hcur₄⟩ := Detach.fork_eq hf
+  have hcur₄ := congrArg Mem.current (fork_eq hf).2
+  obtain ⟨hc, hth₄⟩ := fork_threads hf
   rw [hs₃] at hc
   subst hc
   dsimp only
