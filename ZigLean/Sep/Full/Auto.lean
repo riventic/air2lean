@@ -5985,6 +5985,47 @@ def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId :=
     mkLambdaFVars #[z] (mkT L α P c' Q)
   g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
+/-- **A literal pointer of a command, rebased.** A closed pointer of the command `x` that the
+state `P` does not name (generated code's address of a global's item, evaluated: `⟨some 0, 15⟩`)
+restated from the state's region that holds it as `p.add (q.off - p.off)`
+(`ptr_eq_add_off_sub`; the state's regions are disjoint, so at most one holds it): the rules and
+providers about a pointer derived from a region's apply to it (`regionStoreAdd`,
+`ReadsAt.regionIn`). The command so restated and `x = x'`, or none. -/
+def rebaseLitPtr? (P x : Expr) : TacticM (Option (Expr × Expr)) := do
+  let ptr := mkConst ``Zig.Ptr
+  let regions := (atoms P).filterMap regionArgs?
+  if regions.isEmpty then return none
+  -- (the pointers the atoms name: `pts q …`, `up (regionIn q …)`)
+  let named := (atoms P).flatMap fun a =>
+    (if a.isAppOfArity ``Zig.Full.FAssn.up 1 then a.appArg! else a).getAppArgs
+  for q in subterms x do
+    if q.hasFVar || q.hasMVar || q.hasLooseBVars || named.contains q then continue
+    unless ← withReducible (isDefEq (← inferType q) ptr) do continue
+    let some (bq, hq) ← blockOf q | continue
+    for r in regions do
+      let p := r[0]!
+      let s ← saveState
+      let some (b, hp) ← blockOf p | continue
+      unless ← withReducible (isDefEq b bq) do s.restore; continue
+      let po ← mkAppM ``Zig.Ptr.off #[p]
+      let qo ← mkAppM ``Zig.Ptr.off #[q]
+      let size ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
+        ← mkAppM ``Array.size #[r[5]!]]
+      unless (← proveArith (← mkAppM ``LE.le #[po, qo])).isSome &&
+          (← proveArith (← mkAppM ``LT.lt #[qo, ← mkAppM ``HAdd.hAdd #[po, size]])).isSome do
+        s.restore; continue
+      let e ← mkAppM ``Zig.Full.ptr_eq_add_off_sub #[← mkEqTrans hq (← mkEqSymm hp)]
+      -- the offset in the arithmetic's normal form (`3` for `⟨some 0, 15⟩.off - (bp.add 12).off`)
+      let (ctx, procs) ← arithSimpCtx
+      let (rk, _) ← simp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
+      let e ← match rk.proof? with
+        | some pk => mkEqTrans e (← mkCongrArg (mkApp (mkConst ``Zig.Ptr.add) p) pk)
+        | none => pure e
+      let some (_, _, q') := (← inferType e).eq? | s.restore; continue
+      let xa ← kabstract x q
+      return some (xa.instantiate1 q', ← mkCongrArg (.lam `z ptr xa .default) e)
+  return none
+
 /-- A postcondition that the walk infers: an unknown, or an unknown applied to distinct locals
 (`?Q x h` after a substitution reverted `x` and `h`). -/
 def isUnknownPost (Q : Expr) : MetaM Bool := do
@@ -6583,6 +6624,10 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     let some (_, _, k, left) := partial? | return [g]
     return left ++ (← walk k user extra (fuel - 1))
   trace[fsym.prof] "norule {((← IO.getNumHeartbeats)-h2)/1000}"
+  -- a literal pointer that the state does not name: from the region that holds it
+  if let some (x', e) ← rebaseLitPtr? P x then
+    trace[fsym] "rebased a literal pointer:{indentExpr x'}"
+    return ← walk (← rewriteCmd g L α P Q c x x' e) user extra (fuel - 1)
   -- views of the atoms that provide what a rule's precondition wanted
   if let some r ← viewed wanted then return r
   -- an indirect call that no rule covers: the arm that the function pointer selects
