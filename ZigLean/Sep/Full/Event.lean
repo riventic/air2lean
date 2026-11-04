@@ -1066,16 +1066,16 @@ theorem _root_.Zig.Full.FLock.Fits.liveSet (hE : L.Fits (E.prim L) P U ok) {G : 
     · rw [hE.kjoins _ h] at hu; cases hu
 
 /-- After a step of the event's code by `t` at `out` of the lock (`g`, new place `p`): the
-protocol's invariant, from the lock's invariant after the step, the rest before it, and the
-event's invariant after it. -/
+protocol's invariant, from the lock's invariant after the step, the rest and the lock's word
+invariant before it, and the event's invariant after it. -/
 theorem _root_.Zig.Full.FLock.Fits.backOut (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {p : EPh} (hg₁ : G₁ t = g)
-    (hgo : L.ph g = .out) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
+    (hgo : L.ph g = .out) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
     (hY : ∀ l, E.W.In l → rY.heap l = none) (hs : E.MStep t m₁ m')
     (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m') (hI : E.Inv L (upd G₁ t (E.set g p)) m') :
     P.inv (upd G₁ t (E.set g p)) m' :=
-  hE.back rfl hg₁ ⟨.inl hgo, .inl hgo, hg₁ ▸ hL.idle t (by rw [hg₁, hgo]; decide), hs⟩ hU hY hL hI
+  hE.back rfl hg₁ ⟨.inl hgo, .inl hgo, hg₁ ▸ hL.idle t (by rw [hg₁, hgo]; decide), hs⟩ hU hwL hY hL hI
 
 /-- The facts at a stop of `t` (at `out` of the lock) before an op at the word: the event's
 invariant, `t` is not in the futex queue, the word is `Ok`. -/
@@ -1094,7 +1094,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} (hg₁ : G₁ t = g) (hgw : (E.ph g).Waiting)
     (hgo : L.ph g = .out)
-    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hms : E.MStep t m₁ m')
     (hA : ∀ hF, (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
       FStepIn hF m₁ m')
@@ -1134,9 +1135,9 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
       · obtain ⟨i, hi, hv1, hc⟩ := hI.seen t (by rw [hgt]; exact e)
         have := hI.read_ge hi hv1 hc hfl hj hv
         simp at this
-    refine .inl ⟨rfl, hw0, hE.backOut hg₁ hgo hU hY hms hL
+    refine .inl ⟨rfl, hw0, hE.backOut hg₁ hgo hU hwL hY hms hL
       (hmv .w0 (by decide) (fun _ => hgw) (fun _ => hw0) (fun h => by cases h))⟩
-  · refine .inr (.inl ⟨rfl, hE.backOut hg₁ hgo hU hY hms hL
+  · refine .inr (.inl ⟨rfl, hE.backOut hg₁ hgo hU hwL hY hms hL
       (hmv .w1 (by decide) (fun _ => hgw) (fun h => by cases h) fun _ => ?_)⟩)
     rcases hgw with e | e
     · exact ⟨j, hj, hv, VClock.le_trans (hI.hb t (by rw [hgt]; exact e) j hj hv) (hclk t)⟩
@@ -1145,7 +1146,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
   · have hset : E.IsSet m' := by
       have := hI.isSet_of hj hv
       unfold FEvent.IsSet FEvent.newest at this ⊢; rw [hh]; exact this
-    refine .inr (.inr ⟨rfl, hset, hE.backOut hg₁ hgo hU hY hms hL
+    refine .inr (.inr ⟨rfl, hset, hE.backOut hg₁ hgo hU hwL hY hms hL
       (hmv .out (by decide) (by rw [E.ph_set]; intro h; rcases h with h | h <;> cases h)
         (fun h => by cases h) (fun h => by cases h))⟩)
 
@@ -1155,7 +1156,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterPeek (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} (hg₁ : G₁ t = g) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out)
-    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hms : E.MStep t m₁ m')
     (hA : ∀ hF, (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
       FStepIn hF m₁ m')
@@ -1173,7 +1175,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterPeek (hE : L.Fits (E.prim L) P U ok)
       (by rw [upd_self, E.ph_set]; intro h; cases h) (by rw [hgt, upd_self, E.ph_set])
       (by rw [upd_self, E.ph_set]; intro h; exact absurd rfl h) (fun w hw e => absurd e (hnq w hw))
       (wx_upd_set hg₁) (sx_upd_set hg₁) (hS hI.fresh).1
-  have := hE.backOut hg₁ hgo hU hY hms hL hI'
+  have := hE.backOut hg₁ hgo hU hwL hY hms hL hI'
   rw [set_of hgx] at this
   refine ⟨this, fun hb => ?_⟩
   subst hb
@@ -1185,7 +1187,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterCasOk (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {ord : AtomicOrder} (hg₁ : G₁ t = g)
     (hg : E.ph g = .w0) (hgo : L.ph g = .out)
-    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hms : E.MStep t m₁ m')
     (hA : ∀ hF, (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
       FStepIn hF m₁ m')
@@ -1196,7 +1199,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterCasOk (hE : L.Fits (E.prim L) P U ok)
     P.inv (upd G₁ t (E.set g .w1)) m' := by
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   obtain ⟨hI, hnq, hw₁⟩ := hE.atWord (by rw [hg₁]; exact hgo) hU hop.waiters hL
-  refine hE.backOut hg₁ hgo hU hY hms
+  refine hE.backOut hg₁ hgo hU hwL hY hms
     hL (hI.casOk (fun u hu => upd_ne _ _ hu) (by rw [hg₁]; exact hg)
       (by rw [upd_self, E.ph_set]) (by rw [upd_self, hE.lph]; exact hgo) hv hh hop.waiters hnq
       (hist_pos hw₁) hop.clock (wx_upd_set hg₁) (hS hI.fresh).1)
@@ -1207,7 +1210,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterXchg (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {ord : AtomicOrder} (hg₁ : G₁ t = g)
     (hgx : E.ph g = .out) (hgo : L.ph g = .out) (hsx : E.sx g)
-    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hms : E.MStep t m₁ m')
     (hA : ∀ hF, (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
       FStepIn hF m₁ m')
@@ -1233,8 +1237,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterXchg (hE : L.Fits (E.prim L) P U ok)
   refine ⟨hset, ?_⟩
   by_cases ho : o = 1
   · subst ho
-    exact .inl ⟨rfl, hE.backOut hg₁ hgo hU hY hms hL (hx .sw (.inl rfl) fun _ => rfl)⟩
-  · exact .inr ⟨ho, hE.backOut hg₁ hgo hU hY hms hL (hx .out (.inr rfl) fun h1 =>
+    exact .inl ⟨rfl, hE.backOut hg₁ hgo hU hwL hY hms hL (hx .sw (.inl rfl) fun _ => rfl)⟩
+  · exact .inr ⟨ho, hE.backOut hg₁ hgo hU hwL hY hms hL (hx .out (.inr rfl) fun h1 =>
       absurd (val_eq hv h1) ho)⟩
 
 /-- A thread enters the wait (`out` → `w0`; module doc, scope). -/
@@ -1248,7 +1252,7 @@ theorem _root_.Zig.Full.FLock.Fits.enterWait (hE : L.Fits (E.prim L) P U ok) {G 
   obtain ⟨rX, hL, hU⟩ := (hE.inv _ _).mp hi
   obtain ⟨-, rY, rfl, hY⟩ := (hE.wRest rfl) _ _ _ hU
   have hI := hE.wInv _ _ _ hU
-  have := hE.backOut (upd_self G t g) hgo hU hY .same hL
+  have := hE.backOut (upd_self G t g) hgo hU hL.w hY .same hL
     (by rw [upd_upd]; exact hI.enter hgx (by rw [hE.lph]; exact hgo) hwx hone hhb)
   rwa [upd_upd] at this
 
@@ -1257,7 +1261,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterWake (hE : L.Fits (E.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rX : Res} {m₁ m' : Mem} {t : ThreadId} {g : γ} {c : Nat} {cs : List Nat} (hg₁ : G₁ t = g)
     (hg : E.ph g = .sw) (hgo : L.ph g = .out) (hc : 1 ≤ c) (hU : U G₁ rX m₁)
-    (hw : ((Thread.futexWake E.W.ptr c cs).run { m₁ with current := t }).run =
+    (hwL : L.WInv (L.pl G₁) m₁) (hw : ((Thread.futexWake E.W.ptr c cs).run { m₁ with current := t }).run =
       some (.ok ((), m'))) (hL : L.Inv G₁ rX m') :
     m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .out)) m' := by
   have hm' := Proto.modify_ok hw
@@ -1265,7 +1269,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterWake (hE : L.Fits (E.prim L) P U ok)
   have hI := hE.wInv _ _ _ hU
   have hcl : E.W.cellsR m' = E.W.cellsR m₁ := Word.cellsR_congr (by rw [hm'])
   have hh : E.W.hist m' = E.W.hist m₁ := by rw [hm']; rfl
-  refine ⟨by rw [hm'], ?_, hE.backOut hg₁ hgo hU hY (.wake c cs hw) (by rw [hcl]; exact hL) ?_⟩
+  refine ⟨by rw [hm'], ?_, hE.backOut hg₁ hgo hU hwL hY (.wake c cs hw) (by rw [hcl]; exact hL) ?_⟩
   · have := hI.swset t (by rw [hg₁]; exact hg)
     unfold FEvent.IsSet FEvent.newest at this ⊢; rw [hh]; exact this
   exact hI.wake (by rw [hg₁]; exact hg) (E.ph_set _ _) hc
@@ -1293,7 +1297,7 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     P.WP t ((cmpxchgAsC succ fail 4 E.W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
   refine FLock.wp_wordCasAs hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
-    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA hS hL =>
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
         (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct (by
@@ -1304,8 +1308,8 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
       fun j b r hne hd hj hv hfl _ hh _hR => ?_⟩
   · rw [he] at hv; rw [hn] at hh
     exact (h k hk G₁ m' (hop.current.trans hc₁)).1
-      (hE.afterCasOk hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
-  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
+      (hE.afterCasOk hg₁ hg hgo hU hwL hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
+  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hwL hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
       ⟨rfl, -⟩ | h1 | h1
     · exact absurd he.symm hne
     · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b r hd (.inl h1)
@@ -1325,7 +1329,7 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
     P.WP t ((cmpxchgC (n := 32) succ fail 4 E.W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst he hn
   refine FLock.wp_wordCas hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
-    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw₀ hct hrun hA hS hL =>
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
         (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct (by
@@ -1335,8 +1339,8 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
       ⟨fun hv _ hh _ _hR => ?_,
       fun j b hne hj hv hfl _ hh _hR => ?_⟩
   · exact (h k hk G₁ m' (hop.current.trans hc₁)).1
-      (hE.afterCasOk hg₁ hg hgo hU hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
-  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
+      (hE.afterCasOk hg₁ hg hgo hU hwL hY (hms (.inr ⟨_, _, hh⟩)) hA hS hL hv hh)
+  · rcases hE.afterRead hg₁ (.inl hg) hgo hU hwL hY (hms (.inl hh)) hA hS hL hh hj hv hfl with
       ⟨rfl, -⟩ | h1 | h1
     · exact absurd rfl hne
     · exact (h k hk G₁ m' (hop.current.trans hc₁)).2 b (.inl h1)
@@ -1353,10 +1357,10 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
 
-      h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hY (by
+      h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl)
@@ -1377,11 +1381,11 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     P.WP t ((atomicLoadAsC α ord 4 E.W.ptr : CM Tgt σ α).run s) Q G m n :=
   FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
-    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
 
       h k hk G₁ m' b r (hop.current.trans hc₁) hd
-        (hE.afterRead hg₁ hg hgo hU hY (by
+        (hE.afterRead hg₁ hg hgo hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl)
@@ -1395,10 +1399,10 @@ theorem wp_peek (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hY hj hv _ _ hh hw' hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv _ _ hh hw' hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
 
-      let ⟨h1, h2⟩ := hE.afterPeek hg₁ hg hgo hU hY (by
+      let ⟨h1, h2⟩ := hE.afterPeek hg₁ hg hgo hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv
@@ -1421,12 +1425,12 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
   FLock.wp_wordRmwAs hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
     (fun G₁ rY m₁ _ _ hU b hv => hdec b ((hE.wInv _ _ _ hU).val3
       (by have := hist_pos ((hE.wRest rfl) _ _ _ hU).1; omega) hv))
-    fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hY hd hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
+    fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hwL hY hd hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
-      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hU hY (by
+      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inr ⟨_, _, hh'⟩)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩))) hA hS hL hv hh'
@@ -1444,12 +1448,12 @@ theorem wp_xchg (hE : L.Fits (E.prim L) P U ok) {signed : Bool}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .xchg signed ord 4 E.W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   FLock.wp_wordRmw hE (hE.wRest rfl) (hE.wAp rfl) (by rw [hgo]; decide) hi
-    fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hY hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
+    fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hwL hY hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
-      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hU hY (by
+      obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inr ⟨_, _, hh'⟩)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩))) hA hS hL hv hh'
@@ -1462,21 +1466,22 @@ theorem wp_wake (hE : L.Fits (E.prim L) P U ok) {io : Io} {c : BitVec 32}
       P.inv (upd G₁ t (E.set g .out)) m' → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io E.W.ptr c : CM Tgt σ Unit).run s) Q G m n :=
-  FLock.wp_wordWake hE (hE.wAp rfl) hi fun k hk G₁ rX m₁ cs m' hg₁ hU hw hL =>
-    let ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hw hL
+  FLock.wp_wordWake hE (hE.wAp rfl) hi fun k hk G₁ rX m₁ cs m' hg₁ hU hwL hw hL =>
+    let ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hwL hw hL
     h k hk G₁ m' h1 h2 h3
 
 /-! ### The waiter's futex wait at `w1`: its facts for `FLock.wp_wordWait`, `wp_wordOsWait` -/
 
 /-- The waiter at `w1` (`g`, out of the lock's code) goes `away` while it waits. -/
 theorem waitAway (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
-    (G : ThreadId → γ) (rX : Res) (m : Mem) (hU : U (upd G t g) rX m) :
+    (G : ThreadId → γ) (rX : Res) (m : Mem) (hU : U (upd G t g) rX m)
+    (hwL : L.WInv (L.pl (upd G t g)) m) :
     U (upd G t (L.set g .away rnil)) rX m := by
   obtain ⟨-, rY, rfl, hY⟩ := (hE.wRest rfl) _ _ _ hU
   have hI := hE.wInv _ _ _ hU
   have := hE.wStep (G := upd G t g) (rY := rY) (m := m) (m' := m) (t := t) (p := .w1)
     (q := .away) (h := rnil) rfl ⟨.inl (by rw [upd_self]; exact hgo), .inr ⟨rfl, rfl⟩, rfl, .same⟩
-    hU hY
+    hU hwL hY
   rw [upd_self, upd_upd, set_of hg] at this
   exact this (hI.relabel (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
     (by rw [upd_self, upd_self, hE.ph_l])
@@ -1500,6 +1505,7 @@ theorem waitLive (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1)
 theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (hg : E.ph g = .w1) (G₁ : ThreadId → γ) (rY : Res) (m₁ M : Mem)
     (hg₁ : G₁ t = L.set g .away rnil) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
+    (hwL : L.WInv (L.pl G₁) m₁)
     (hY : ∀ l, E.W.In l → rY.heap l = none) (_ : m₁.woken.contains t = false)
     (_ : m₁.waiters.any (·.1 == t) = false)
     (hw₀ : E.W.Ok { m₁ with current := t }) (hct : t < m₁.clocks.size)
@@ -1520,7 +1526,7 @@ theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
   have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := .w1) (q := .away)
     (h := rnil) rfl ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [hg₁]; exact hga⟩, .inr ⟨rfl, rfl⟩, rfl,
       .sleep hw₀ hct hrecord hh hok₂⟩
-    hU hY
+    hU hwL hY
   rw [hg₁, hgq, ← hg₁, upd_same, Word.cellsR_congr (W := E.W) (show
     ({ M with waiters := M.waiters.push (t, E.W.ptr) } : Mem).blocks = m₁.blocks from hbl)] at hst
   exact hst (hI.sleep (by rw [hg₁]; exact hga) hop.clock hop.waiters hh hv
@@ -1530,7 +1536,8 @@ theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
 of the lock's code: it stays at `w1`. -/
 theorem waitCompare (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
     (G₁ : ThreadId → γ) (rY : Res) (m₁ m' : Mem) (hg₁ : G₁ t = g)
-    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hY : ∀ l, E.W.In l → rY.heap l = none)
+    (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwL : L.WInv (L.pl G₁) m₁)
+    (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hh : E.W.hist m' = E.W.hist m₁) (hms : E.MStep t m₁ m')
     (hA : ∀ hF, (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
       FStepIn hF m₁ m')
@@ -1538,7 +1545,7 @@ theorem waitCompare (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L
     (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m') : P.inv G₁ m' := by
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   obtain ⟨hI, -, -⟩ := hE.atWord (by rw [hg₁]; exact hgo) hU hop.waiters hL
-  have := hE.backOut (p := .w1) hg₁ hgo hU hY hms hL (by
+  have := hE.backOut (p := .w1) hg₁ hgo hU hwL hY hms hL (by
     rw [set_of hg, ← hg₁, upd_same]
     exact hI.frame (t := t) (fun _ _ => rfl) rfl rfl hh hop.waiters hop.clock id id
       (hS hI.fresh).1)
@@ -1558,6 +1565,7 @@ pending, or a spurious return. -/
 theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph g = .out)
     (hheld : L.held g = rnil) (G₁ : ThreadId → γ) (rY : Res) (m₁ M : Mem)
     (hg₁ : G₁ t = L.set g .away rnil) (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁)
+    (hwL : L.WInv (L.pl G₁) m₁)
     (hY : ∀ l, E.W.In l → rY.heap l = none) (_ : m₁.waiters.any (·.1 == t) = false)
     (hf : M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg)
     (hM : M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
@@ -1584,7 +1592,7 @@ theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph
   · have hI := hE.wInv _ _ _ hU
     have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t) (p := .w1)
       (q := .out) (h := rnil) rfl ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [hg₁]; exact hga⟩, .inl rfl,
-        rfl, ?_⟩ hU hY
+        rfl, ?_⟩ hU hwL hY
     · rw [hg₁, hgq, hgo'] at hst
       have hbl : M.blocks = m₁.blocks := by
         rcases hM with rfl | rfl | ⟨-, -, -, -, -, hb⟩
@@ -1638,9 +1646,9 @@ theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWait E.W.ptr e false : ConcM Tgt Os.WaitResult) Q G m n :=
   FLock.wp_wordOsWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hc hi (waitOs hE hgo)
-    (fun G₁ rY m₁ m' hg₁ hc₁ hU hY hh hw' hw₀ hct hrun hA hS hL =>
+    (fun G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hh hw' hw₀ hct hrun hA hS hL =>
       waitCompare hE hg hgo G₁ rY m₁ m' hg₁
-        hU hY hh (by
+        hU hwL hY hh (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, v, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL) (waitAway hE hg hgo) (waitLive hE hg hlive) (waitSleep hE he hg)
@@ -1657,10 +1665,10 @@ theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake E.W.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n :=
-  FLock.wp_wordOsWake hE (hE.wAp rfl) (by rw [hgo]; decide) hi fun k hk G₁ rX m₁ hg₁ hU =>
+  FLock.wp_wordOsWake hE (hE.wAp rfl) (by rw [hgo]; decide) hi fun k hk G₁ rX m₁ hg₁ hU hwL =>
     ⟨fun cs m' hr hL => by
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
-      obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hr' hL
+      obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hwL hr' hL
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 

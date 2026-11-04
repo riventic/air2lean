@@ -1476,7 +1476,7 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, hW, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
       · refine cstep G rY m m' t p q h W hW hn hq hu hY hs hEp (fun sh c q n h' e1 e2 => ?_) hI
         rw [e1, e2] at hsg
         obtain ⟨-, x, e⟩ := hsg
@@ -1512,7 +1512,7 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hl, hq, rfl, hs⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hl hq hu hY hs hI
       · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }

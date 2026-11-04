@@ -17,7 +17,7 @@ theorem load_keeps_rest {ord : AtomicOrder}
     P.WP t ((atomicLoadC (n := bits) ord bytes W.ptr : CM Tgt Unit (BitVec bits)).run ())
     (fun _ G' m' _ => W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordLoad hP hW hap hgone hi (hcost := hcost)
-  intro k hk G₁ rY m₁ m' v j hg₁ hc₁ hU hY hj hv hfloor hacq hhist hw' hw ht hrun hframe hfresh hseen hInv
+  intro k hk G₁ rY m₁ m' v j hg₁ hc₁ hU _hwL hY hj hv hfloor hacq hhist hw' hw ht hrun hframe hfresh hseen hInv
   exact ⟨hw', rY, hInv⟩
 
 theorem loadAs_keeps_rest {α : Type} [Packed α bits] {ord : AtomicOrder}
@@ -29,7 +29,7 @@ theorem loadAs_keeps_rest {α : Type} [Packed α bits] {ord : AtomicOrder}
     P.WP t ((atomicLoadAsC α ord bytes W.ptr : CM Tgt Unit α).run ())
     (fun _ G' m' _ => W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordLoadAs hP hW hap hgone hi hdec (hcost := hcost)
-  intro k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hY hd hj hv hfloor hacq hhist hw' hw ht hrun hframe hfresh hseen hInv
+  intro k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU _hwL hY hd hj hv hfloor hacq hhist hw' hw ht hrun hframe hfresh hseen hInv
   exact ⟨hw', rY, hInv⟩
 
 theorem rmw_keeps_rest {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec bits}
@@ -39,7 +39,7 @@ theorem rmw_keeps_rest {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : Bit
     (fun r G' m' _ => W.Ok m' ∧ W.Holds m' (op.apply signed r.1 v) ∧
       ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordRmw hP hW hap hgone hi (hcost := hcost)
-  intro k hk G₁ rY m₁ m' old hg₁ hc₁ hU hY hv hH hhist hacq hw' hw ht hrun hframe hfresh hseen hInv
+  intro k hk G₁ rY m₁ m' old hg₁ hc₁ hU _hwL hY hv hH hhist hacq hw' hw ht hrun hframe hfresh hseen hInv
   exact ⟨hw', hH, rY, hInv⟩
 
 theorem rmwAs_keeps_rest {α : Type} [Packed α bits] {op : RmwOp} {ord : AtomicOrder} {v : α}
@@ -52,7 +52,7 @@ theorem rmwAs_keeps_rest {α : Type} [Packed α bits] {op : RmwOp} {ord : Atomic
     P.WP t ((atomicRmwAsC op ord bytes W.ptr v : CM Tgt Unit α).run ())
     (fun _ G' m' _ => W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordRmwAs hP hW hap hgone hi hdec (hcost := hcost)
-  intro k hk G₁ rY m₁ m' old r hg₁ hc₁ hU hY hd hv hH hhist hacq hw' hw ht hrun hframe hfresh hseen hInv
+  intro k hk G₁ rY m₁ m' old r hg₁ hc₁ hU _hwL hY hd hv hH hhist hacq hw' hw ht hrun hframe hfresh hseen hInv
   exact ⟨hw', rY, hInv⟩
 
 theorem cas_keeps_rest {succ fail : AtomicOrder} {exp new : BitVec bits}
@@ -62,7 +62,7 @@ theorem cas_keeps_rest {succ fail : AtomicOrder} {exp new : BitVec bits}
     (fun r G' m' _ => (r.1 = none → W.Holds m' new) ∧
       W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordCas hP hW hap hgone hi (hcost := hcost)
-  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw ht hrun hframe hfresh hInv
+  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU _hwL hY hw' hw ht hrun hframe hfresh hInv
   constructor
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
@@ -79,7 +79,7 @@ theorem casAs_keeps_rest {α : Type} [Packed α bits] {succ fail : AtomicOrder} 
     (fun r G' m' _ => (r.1 = none → W.Holds m' (Packed.toBits new)) ∧
       W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordCasAs hP hW hap hgone hi hdec (hcost := hcost)
-  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw ht hrun hframe hfresh hInv
+  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU _hwL hY hw' hw ht hrun hframe hfresh hInv
   constructor
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
@@ -93,7 +93,7 @@ theorem weakCas_keeps_rest {succ fail : AtomicOrder} {exp new : BitVec bits}
     (fun r G' m' _ => (r.1 = none → W.Holds m' new) ∧
       W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordWeakCas hP hW hap hgone hi (hcost := hcost)
-  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw ht hrun hframe hfresh hInv
+  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU _hwL hY hw' hw ht hrun hframe hfresh hInv
   constructor
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩
@@ -110,7 +110,7 @@ theorem weakCasAs_keeps_rest {α : Type} [Packed α bits] {succ fail : AtomicOrd
     (fun r G' m' _ => (r.1 = none → W.Holds m' (Packed.toBits new)) ∧
       W.Ok m' ∧ ∃ rY, L.Inv G' (rsum (W.cellsR m') rY) m') G m n := by
   apply wp_wordWeakCasAs hP hW hap hgone hi hdec (hcost := hcost)
-  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU hY hw' hw ht hrun hframe hfresh hInv
+  intro k hk G₁ rY m₁ m' hg₁ hc₁ hU _hwL hY hw' hw ht hrun hframe hfresh hInv
   constructor
   · intro hv hH hhist hacq hseen
     exact ⟨fun _ => hH, hw', rY, hInv⟩

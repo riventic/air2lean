@@ -441,7 +441,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
     S.Inv G' m' := by
   have hap : ∀ W, (W = C.S ∨ W = C.Ep) → W.ApartL L.toLockWord := hS.apart
   obtain ⟨W, rY, hW, rfl, rfl, hY, hC', hmv | hown⟩ := hst
-  · obtain ⟨p, q, h, ⟨hn, hq, hms, -, -⟩, rfl⟩ := hmv
+  · obtain ⟨p, q, h, ⟨hn, hq, hms, -, -⟩, -, rfl⟩ := hmv
     have hqh : L.ph (G t) = .holds → q = .holds := fun hh => by
       rcases hq with ⟨rfl, -⟩ | ⟨ho, -, -⟩
       · exact hh
