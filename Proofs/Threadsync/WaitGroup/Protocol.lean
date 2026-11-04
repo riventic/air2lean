@@ -345,6 +345,15 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
 
 /-! ## Steps that keep the threads' places -/
 
+/-- `omega` does not see through `ThreadId`: the two thread facts it is needed for, over `Nat`. -/
+theorem lt3 {u : Nat} (h : u < 3) : u = 0 ∨ u = 1 ∨ u = 2 := by omega
+theorem ne_of_lt3 {u t : Nat} (h : 3 ≤ u) (ht : t < 3) : u ≠ t := by omega
+
+/-- The group's value reads only the places. -/
+theorem wgv_congr {a b c a' b' c' : X} (ha : a'.ph = a.ph) (hb : b'.ph = b.ph) (hc : c'.ph = c.ph) :
+    wgv a' b' c' = wgv a b c := by
+  unfold wgv X.fdn; rw [ha, hb, hc]
+
 /-- A task's bound grows with the clocks, at the same places. -/
 theorem bnd_mono {G G' : ThreadId → Gh} {m m' : Mem} (hX : ∀ u, (G' u).2 = (G u).2)
     (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) (u : ThreadId) :
@@ -376,11 +385,10 @@ theorem attr_step {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hu : U G rX 
     · refine .inr (.inr ⟨j, by rw [hhE]; exact hj, ?_, ?_⟩)
       · unfold IsSetW; rw [hhE]; exact hs
       · rw [hhE]; exact VClock.le_trans hc h
-  · rcases (by omega : u = 0 ∨ u = 1 ∨ u = 2) with rfl | rfl | rfl
+  · rcases lt3 hu3 with rfl | rfl | rfl
     · exact .inl hle
-    all_goals
-      refine .inr (.inl ⟨_, by simp, ?_⟩)
-      unfold bnd; rw [hX, hfd]; exact hle
+    · exact .inr (.inl ⟨1, .inl rfl, by unfold bnd; rw [hX, hfd]; exact hle⟩)
+    · exact .inr (.inl ⟨2, .inr rfl, by unfold bnd; rw [hX, hfd]; exact hle⟩)
 
 /-- **`U` after a step that keeps the threads' places and the words' histories**, given the
 fields that read the memory (the step's facts) and the new write accesses (`attr_step`). -/
@@ -396,8 +404,8 @@ theorem U.congrX {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U G 
       (∃ u, u < 3 ∧ (G u).2.ph.fd = false ∧ VClock.le e.clock (m'.clocks[u]!) = true))
     (q : ∀ w ∈ m'.waiters, w.2 = L.ptr ∨ w.2 = EV.ptr) : U G' rX' m' := by
   have hY : (fun u => (G' u).2) = fun u => (G u).2 := funext hX
-  refine ⟨?_, rest, blk, wg, ev, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, attr_step hu hX hclk hhE hnew,
-    ?_, q⟩
+  refine ⟨?_, rest, blk, wg, ev, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    attr_step hu hX hclk hhE hnew, ?_, q⟩
   · rw [hY]; unfold Shape at *; rw [hth]; exact hu.shape
   · show (newest WG m').Val _; unfold newest; rw [hhW, hX 0, hX 1, hX 2]; exact hu.gv
   · intro u h; unfold newest; rw [hhW, hX u]; rw [hX u] at h; exact hu.gw u h
@@ -470,8 +478,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   · by_cases e : u = t
     · subst e; rw [htf] at hfd; cases hfd
     · rw [upd_ne _ _ e]; exact hu.lg u hfd
-  · have : u ≠ t := by omega
-    rw [upd_ne _ _ this]; exact hu.out3 u h3
+  · rw [upd_ne _ _ (ne_of_lt3 h3 ht3)]; exact hu.out3 u h3
   · rcases hs.fpt e he with h' | ⟨-, hle⟩
     · exact .inl ⟨e, h', .refl e⟩
     · exact .inr ⟨t, ht3, htf, hle⟩
@@ -500,7 +507,7 @@ theorem U_own {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {
     (hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhE hs.waiters hs.clock (Nat.le_of_eq (by rw [hs.threads]))
       (fun h => by rw [upd_self]; show g.2.ph.wa = true; rw [hX]; exact h)
-      (fun h => by rw [upd_self]; show g.2.sx = true; rw [hX]; exact h) hfr)
+      (fun h => by rw [upd_self]; show g.2.sx = true ∧ g.2.ph = .st; rw [hX]; exact h) hfr)
     (fun u hfd => by rw [hP']; exact hu.lg u hfd) (fun u h3 => by rw [hP']; exact hu.out3 u h3)
     (fun e he _ _ => ?_) (fun w hw => by rw [hs.waiters] at hw; exact hu.q w hw)
   rcases hs.fp e he with h' | ⟨-, -⟩
@@ -599,56 +606,58 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rw [he u e]; exact hS
   have hto : (G t).2.sx = true → p = .out → (G t).2.e = .out := fun hx hp => by
     subst hp
-    rcases hN with ⟨-, hn⟩ | ⟨_, _, -, ⟨-, -, -, h⟩ | ⟨-, -, -, -, h⟩⟩
+    rcases hN with ⟨-, hn⟩ | ⟨_, _, -, ⟨-, -, -, h⟩ | ⟨-, -, -, h, -⟩⟩
     · have hn' : EPh.Next (G t).2.e .out (E.IsSet m) := hn
-      cases h' : (G t).2.e <;> rw [h'] at hn' <;> simp only [EPh.Next] at hn' <;> try rfl
+      cases h' : (G t).2.e <;> rw [h'] at hn' <;>
+        simp only [EPh.Next, reduceCtorEq, or_self] at hn' <;> try rfl
       all_goals
         have hw := hu.einv.wx t (by show (G t).2.e.Waiting; rw [h']; simp [EPh.Waiting])
         have h0 := hu.wa0 t hw
         subst h0
         exact absurd (hu.sto 0 hx).1 (by decide)
     · cases h
-    · cases h
+    · exact h
   -- the new writes of the event's word
   have hpush : ∀ x, EV.hist m' = (EV.hist m).push x →
       (t = 0 ∧ ¬ x.Val (2 : BitVec 32)) ∨
       ((G t).2.sx = true ∧ (G t).2.ph = .st ∧ (G t).2.e = .out ∧ p.Setting ∧
         x.Val (2 : BitVec 32) ∧ x.clock = m'.clocks[t]!) := fun x hx => by
     rcases hN with ⟨hh, -⟩ | ⟨ord, v, hh, ⟨rfl, hw, -, -⟩ | ⟨rfl, ⟨hx', hst⟩, -, h0, hS⟩⟩
-    · have := congrArg Array.size (hx.symm.trans hh); simp at this
-    · have hx2 := Array.push_inj_right (hx.symm.trans hh)
+    · have h2 : (EV.hist m).push x = EV.hist m := hx.symm.trans hh
+      have := congrArg Array.size h2; simp at this
+    · have hx2 := Array.push_inj_right.mp (hx.symm.trans hh)
       refine .inl ⟨hu.wa0 t hw, fun h2 => ?_⟩
       rw [hx2] at h2
       exact absurd (FEvent.val_eq h2 FEvent.rmwEnt_val) (by decide)
-    · have hx2 := Array.push_inj_right (hx.symm.trans hh)
+    · have hx2 := Array.push_inj_right.mp (hx.symm.trans hh)
       exact .inr ⟨hx', hst, h0, hS, by rw [hx2]; exact FEvent.rmwEnt_val, by rw [hx2]; rfl⟩
   -- old writes stay
   have hold : ∀ j < (EV.hist m).size, j < (EV.hist m').size ∧ (EV.hist m')[j]! = (EV.hist m)[j]! :=
     fun j hj => by
-      rcases hhE.2 with e | ⟨-, x, e⟩
+      rcases hhE with e | ⟨-, x, e⟩
       · rw [e]; exact ⟨hj, rfl⟩
       · rw [e]; exact ⟨by simp; omega, Word.get_push_lt hj⟩
   have hsetS : (EV.hist m').size = (EV.hist m).size ∨ ∃ x, EV.hist m' = (EV.hist m).push x :=
-    hhE.2.imp (fun e => by rw [e]) fun ⟨-, x, e⟩ => ⟨x, e⟩
+    hhE.imp (fun e => by rw [e]) fun ⟨_, x, e⟩ => ⟨x, e⟩
   have hnewj : ∀ j < (EV.hist m').size, (EV.hist m).size ≤ j → ∃ x,
       EV.hist m' = (EV.hist m).push x ∧ j = (EV.hist m).size ∧ (EV.hist m')[j]! = x := fun j hj hle => by
-    rcases hhE.2 with e | ⟨-, x, e⟩
+    rcases hhE with e | ⟨-, x, e⟩
     · rw [e] at hj; omega
     · rw [e] at hj; simp at hj
       refine ⟨x, e, by omega, ?_⟩
       rw [e, show j = (EV.hist m).size by omega, Word.get_push_eq]
   refine ⟨Shape.congr hu.shape hs.threads (fun u => (hph u).1) fun u hu0 => ?_,
     Rest.step (fun _ => ev_box) hu.rest rfl hY (fun l _ hw => hs.cells hw),
-    hu.blk.of_block fun _ _ hb => hs.block hb, hwG, hwE.1, hI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_, ?_⟩
+    hu.blk.of_block fun _ _ hb => hs.block hb, hwG, hwE, hI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    ?_, ?_, ?_, ?_⟩
   · -- shape: a thread without a role stays out of the event's code
     by_cases e : u = t
     · subst e
-      rw [hXt, hu0, hpo (by rw [hu0]; rfl) (by rw [hu0]; rfl)]; rfl
+      rw [hXt, hu0, hpo (by rw [hu0]; rfl) (by rw [hu0])]
     · rw [hG u e]; exact hu0
   · -- gv
-    show (newest WG m').Val _; unfold newest; rw [hhG, (hph 0).1, (hph 1).1, (hph 2).1]
-    exact hu.gv
+    show (newest WG m').Val _; unfold newest
+    rw [hhG, wgv_congr (hph 0).1 (hph 1).1 (hph 2).1]; exact hu.gv
   · -- gw
     intro u h; unfold newest; rw [hhG, (hph u).2.1]; rw [(hph u).1] at h; exact hu.gw u h
   · -- sto
@@ -688,7 +697,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     intro u h1 h2; rw [(hph u).2.2] at h1; rw [(hph u).1] at h2
     have hS := hu.sfin u h1 h2
     have hpos := FEvent.hist_pos hu.ev
-    rcases hhE.2 with e | ⟨-, x, e⟩
+    rcases hhE with e | ⟨-, x, e⟩
     · exact E.IsSet_of_hist_eq e hS
     · refine hI.isSet_of (j := (EV.hist m).size - 1) ?_ ?_
       · show _ < (EV.hist m').size; rw [e, Array.size_push]; omega
@@ -734,6 +743,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         · unfold IsSetW at hsj ⊢; rw [hgj]; exact hsj
         · rw [hgj]; exact VClock.le_trans hc h
     · obtain ⟨x, hx⟩ := hw hk
+      replace hx : EV.hist m' = (EV.hist m).push x := hx
       rcases hpush x hx with ⟨rfl, -⟩ | ⟨-, -, -, -, hv, hc⟩
       · exact .inl hle
       · refine .inr (.inr ⟨(EV.hist m).size, by rw [hx]; simp, ?_, ?_⟩)
@@ -776,11 +786,103 @@ theorem frame_ev {G : ThreadId → Gh} {rY : Res} {m : Mem}
     (hu : U G (rsum (EV.cellsR m) rY) m) {x : Nat} (h1 : EV.o ≤ x) (h2 : x < EV.o + 4) :
     (rsum (L.wordR m) (rsum (EV.cellsR m) rY)).heap.erase (EV.b, x) ≠ none := by
   have hc := hu.ev.cellIn (l := (EV.b, x)) ⟨rfl, h1, h2⟩
-  simp only [FHeap.erase, rsum, FHeap.union_apply, Word.cellsR, ne_eq, Option.map_eq_none_iff,
+  simp only [FHeap.erase, FHeap.union_apply, Word.cellsR, ne_eq, Option.map_eq_none_iff,
     Option.or_eq_none_iff, not_and]
   intro _
   rw [cellsAt_of (W := EV.In) ⟨rfl, h1, h2⟩]
-  simpa using hc
+  intro h; exact absurd (Option.map_eq_none_iff.mp h) hc
+
+/-! ## A native step on the caller's part, next to the event -/
+
+theorem wg_ev {l : Zig.Loc} (h : WG.In l) : ¬ EV.In l := fun h' => by
+  obtain ⟨-, -, h3⟩ := h; obtain ⟨-, h2, -⟩ := h'; simp [WG, EV] at h2 h3; omega
+
+/-- The two words' bytes are live. -/
+theorem box_live {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m) {l : Zig.Loc}
+    (hl : BoxW l) : m.heap l ≠ none := by
+  obtain ⟨h1, h2⟩ := hl
+  by_cases h : l.2 < 8
+  · exact hu.wg.cellIn ⟨h1, Nat.zero_le _, h⟩
+  · exact hu.ev.cellIn ⟨h1, show 8 ≤ l.2 by omega, show l.2 < 8 + 4 by omega⟩
+
+/-- The frame of a step on a part with the mutex's word and the rest has the words' bytes. -/
+theorem frame_box {rX : Res} {m : Mem} (hr : Rest rX m) {l : Zig.Loc} (hl : BoxW l)
+    (hw : m.heap l ≠ none) : (rsum (L.wordR m) rX).heap.erase l ≠ none := by
+  obtain ⟨rB, -, -, rfl⟩ := hr
+  have := cellsAt_some hl hw (m := m)
+  simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff, Option.or_eq_none_iff,
+    not_and]
+  intro _ h; exact absurd h this
+
+/-- **The `Tally` is block 0**: live, 24 bytes on the stack (the extent in the rest). -/
+theorem blk_of {G : ThreadId → Gh} {c rY rB : Res} {m : Mem} (hi : L.Inv G (rsum c rY) m)
+    (hB : bext 0 24 .stack rB) (hg : rY.gh = rB.gh) : BlkOk m := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  obtain ⟨rT, -, hh⟩ := ho.holds
+  have he := hh.swap.extTrue
+  simp only at he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [Ghost.add_comm] at he; replace he := ExtTrue.of_add he
+  rw [hg, bauth_eq hB] at he
+  obtain ⟨blk, h1, h2, h3, h4, -⟩ := (he 0).1 24 .stack (by simp [Ghost.atExt, ECell.auth1])
+  exact ⟨blk, h1, h2, h3, h4⟩
+
+theorem heap_blk {m : Mem} {blk : Block} (hb : m.blocks[0]? = some blk) (hl : blk.live = true)
+    (hk : blk.kind = .stack) {x : Nat} (hx : x < blk.bytes.size) :
+    m.heap (0, x) = some ⟨blk.bytes[x], blk.addr, blk.bytes.size, blk.kind⟩ := by
+  simp [Mem.heap, hb, hl, hx, hk, BlockKind.mappedLo]
+
+/-- A byte of the `Tally` that the rest after a step holds with its cell before it: the same
+cell (the block is pinned). -/
+theorem cell_eq {G' : ThreadId → Gh} {rX' : Res} {m m' : Mem} (hbk : BlkOk m)
+    (hbk' : BlkOk m') (hi' : L.Inv G' rX' m') {x : Nat} (hx : x < 24)
+    (hr : rX'.heap (0, x) = (m.heap (0, x)).map fun c => ⟨c, none⟩) :
+    m'.heap (0, x) = m.heap (0, x) := by
+  obtain ⟨blk, hb, hlv, hs, hk⟩ := hbk
+  obtain ⟨blk', hb', hlv', hs', hk'⟩ := hbk'
+  have e := heap_blk hb hlv hk (by omega : x < blk.bytes.size)
+  have e' := heap_blk hb' hlv' hk' (by omega : x < blk'.bytes.size)
+  rw [e] at hr
+  have hrc := hi'.restCell (l := (0, x)) hr
+  rw [e', e]
+  rw [e'] at hrc
+  simp only [Option.map_some, Option.some.injEq, Cell.norm, Cell.mk.injEq] at hrc
+  obtain ⟨hby, had, -⟩ := hrc
+  simp only [Option.some.injEq, Cell.mk.injEq]
+  exact ⟨hby, had, by omega, by rw [hk, hk']⟩
+
+/-- **A native step of `t` on its own part, out of the lock** (the second step of
+`FPrim.ofWords`) keeps `U`: the lock's invariant after it pins the block and the cells of the
+group's word (`cell_eq`); the event's word is the step's. -/
+theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {r : Res}
+    (hu : U G (rsum (EV.cellsR m) rY) m) (hY : ∀ l, EV.In l → rY.heap l = none)
+    (hng : (G t).1.ph ≠ .gone) (hc : m.current = t)
+    (hs : FStepIn (rsum (L.wordR m) (rsum (EV.cellsR m) rY)).heap.erase m m')
+    (hw' : EV.Ok m') (hh : EV.hist m' = EV.hist m)
+    (hL : L.Inv (upd G t (L.setPart (G t) r)) (rsum (EV.cellsR m') rY) m') :
+    U (upd G t (L.setPart (G t) r)) (rsum (EV.cellsR m') rY) m' := by
+  obtain ⟨rB, hB, hBoff, hrX⟩ := hu.rest
+  have hg : rY.gh = rB.gh := by
+    have := congrArg Res.gh hrX; simpa [cellsAt, Word.cellsR] using this
+  have hbk' := blk_of hL hB hg
+  have hcs : ∀ l, BoxW l → ¬ EV.In l → m'.heap l = m.heap l := by
+    rintro ⟨b, x⟩ ⟨h0, h1⟩ hw
+    simp only at h0 h1; subst h0
+    refine cell_eq hu.blk hbk' hL (by omega) ?_
+    have := congrFun (congrArg Res.heap hrX) (0, x)
+    simp only [FHeap.union_apply] at this ⊢
+    rw [cellsAt_none hw, Option.none_or] at this ⊢
+    rw [this, cellsAt_of (W := BoxW) ⟨rfl, h1⟩, hBoff _ ⟨rfl, h1⟩, Option.or_none]
+  have hcov : ∀ l, BoxW l → (rsum (L.wordR m) (rsum (EV.cellsR m) rY)).heap.erase l ≠ none :=
+    fun l hl => frame_box hu.rest hl (box_live hu hl)
+  have hnG : ∀ l, WG.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => by rw [hcs l (wg_box hl) (wg_ev hl)]
+  exact U_own hu hs hc hng (Rest.step (fun _ => ev_box) hu.rest rfl hY hcs) hbk'
+    (hu.wg.fstep hs (fun l hl => hcov l (wg_box hl)) hnG) hw'
+    (Word.hist_fstep hu.wg hs (fun l hl => hcov l (wg_box hl)) hnG) hh
+    (hu.einv.fresh.fstep hs (fun x h1 h2 => hcov _ (ev_box ⟨rfl, h1, h2⟩))
+      (fun i l hl => (hu.ev.loc i l hl).1)) rfl rfl
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
 theorem fitsE : L.Fits (E.prim L) proto U ok := { fitsL with
@@ -811,10 +913,9 @@ theorem fitsE : L.Fits (E.prim L) proto U ok := { fitsL with
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
         ⟨p, q, h, ⟨hlq, rfl, hs, hN⟩, hwL, rfl⟩ | ⟨r, hout, hi, hc, hs, hcW, hw', hh, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hlq hu hY hs hN hwL hI
-      · -- TODO(l11d-wg): a native step on the caller's part (`U_own`): the rest's WG cells,
-        -- WG's validity and `BlkOk` after it, as `Proofs/Handoff/Protocol.lean` `U_own_native`
-        -- (`cells_same`, `cell_eq`, `frame_word`) derives them from `L.Inv` before and after.
-        sorry
+      · exact U_own_native hu hY
+          (fun h => absurd ((show L.ph (G t) = .gone from h).symm.trans hout) (by decide))
+          hc hs hw' hh hL
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 end Threadsync.WG
