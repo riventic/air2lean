@@ -170,7 +170,7 @@ theorem WP.pickC {count : Mem → Nat} {s : σ} {Q : Nat × σ → (ThreadId →
   show P.WP t (ConcM.sync (.pick count) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hcr => WP.pure' (hc G₁ m₁ hg hi₁ c hcr)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hcr => WP.pure' (hc G₁ m₁ hg hi₁ c hcr)⟩
 
 /-- A call to another concurrent function: its post, with the locals of the caller. -/
 theorem WP.callC {r : ConcM Tgt α} {s : σ} {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -192,7 +192,7 @@ theorem WP.spawnC {tgt : Tgt} {s : σ} {Q : Except ErrName ThreadId × σ → (T
   show P.WP t (ConcM.sync (.spawn tgt) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ?_⟩
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
   exact ⟨(fun hp => by rw [hsf] at hp; cases hp), g₀, hg₀,
     fun child m' hf => WP.pure' (hk' child m' hf)⟩
@@ -206,7 +206,8 @@ theorem WP.spawnGated {tgt : Tgt} {Q : ThreadId → (ThreadId → γ) → Mem �
         Q child (upd G₁ child g₀) m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (ConcM.sync (.spawnGated tgt)) Q G m n :=
-  WP.sync h hcost
+  WP.sync (fun k hk => let ⟨g, hi, hc⟩ := h k hk; ⟨g, hi, fun G₁ m₁ hg hi₁ _ => hc G₁ m₁ hg hi₁⟩)
+    hcost
 
 /-- `Thread.join` of `tid`: it goes on after thread `tid` ended, so `fin (G₁ tid)` holds. In
 strict mode, `tid` has a higher rank (`Proto.rank`) and a valid handle even before it ends, and the join
@@ -225,7 +226,7 @@ theorem WP.joinC {tid : ThreadId} {s : σ} {Q : Unit × σ → (ThreadId → γ)
     pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨hg ▸ (hc G₁ m₁ hg hi₁).1, fun hf =>
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ => ⟨hg ▸ (hc G₁ m₁ hg hi₁).1, fun hf =>
     ⟨((hc G₁ m₁ hg hi₁).2 hf).1, fun m' hj => WP.pure' (((hc G₁ m₁ hg hi₁).2 hf).2 m' hj)⟩⟩⟩
 
 /-- A futex wait (`futexWaitC`, the bits `e'` of `e`): the thread stops with the ghost value
@@ -249,7 +250,7 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
     (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => ⟨(hc G₁ m₁ hg hi₁).1, fun hq =>
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ => ⟨(hc G₁ m₁ hg hi₁).1, fun hq =>
     ⟨((hc G₁ m₁ hg hi₁).2 hq).1, ((hc G₁ m₁ hg hi₁).2 hq).2.1, fun b m' hr => ?_⟩⟩⟩
   have := ((hc G₁ m₁ hg hi₁).2 hq).2.2 b m' hr
   cases b <;> simp only [Bool.false_eq_true, ↓reduceIte] at this ⊢
@@ -269,7 +270,7 @@ theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
     pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ cs m' hw => WP.pure' (hc G₁ m₁ hg hi₁ cs m' hw)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ cs m' hw => WP.pure' (hc G₁ m₁ hg hi₁ cs m' hw)⟩
 
 /-- `Thread.isTask`: whether the current thread is an `Io` task; the memory stays. -/
 theorem isTask_run (m : Mem) : (Thread.isTask.run m).run = some (.ok (m.current != 0, m)) := rfl
@@ -2524,7 +2525,7 @@ theorem WP.groupAsyncCFail {g : Ptr} {io : Io} {tgt : Tgt} {fallback : ConcM Tgt
   simp only [StateT.run_bind]
   refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨gh, hi, hc⟩ := h k hk
-  refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
+  refine ⟨gh, hi, fun G₁ m₁ hg hi₁ _ => ?_⟩
   obtain ⟨hfail, g₀, hg₀, hk'⟩ := hc G₁ m₁ hg hi₁
   refine ⟨fun hp e => WP.pure' (hfail hp), g₀, hg₀, fun child m' hf => WP.pure' ?_⟩
   dsimp only
@@ -2562,7 +2563,7 @@ theorem WP.groupDeferC {g : Ptr} {io : Io} {tgt : Tgt} {s : σ}
   simp only [StateT.run_bind]
   refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨gh, hi, hc⟩ := h k hk
-  refine ⟨gh, hi, fun G₁ m₁ hg hi₁ => ?_⟩
+  refine ⟨gh, hi, fun G₁ m₁ hg hi₁ _ => ?_⟩
   obtain ⟨g₀, hg₀, hj₀, hk'⟩ := hc G₁ m₁ hg hi₁
   refine ⟨g₀, hg₀, hj₀, fun child m' hf => WP.pure' ?_⟩
   refine WP.callMC (fun e he => (MemM.modify_err he).elim) fun a m'' hr => ?_
