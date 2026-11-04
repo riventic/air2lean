@@ -46,9 +46,33 @@ does not hold the admission queue for slots that other running builds hold.
   build: it drains the machine (below). The guard exports `AIR2LEAN_GUARD_MODE` (`shared` or
   `exclusive`). A guard from a checkout older than this scheme holds `<lock>` exclusively and so
   still runs alone.
-- Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it collects its slots
-  while later ones wait, so a large workload is not starved by small ones. The workspace lock is
-  taken before the queue, so waiting for one's own checkout holds up nobody.
+- Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it (the head) collects its
+  slots while later ones wait, so a large workload is not starved by small ones. The workspace
+  lock is taken before the queue, so waiting for one's own checkout holds up nobody.
+- Backfill: a head that holds all the free slots and waits for running workloads to free the
+  rest leaves the machine partly idle. On the remote build host (2026-11-03), 11-slot heads
+  waited up to 20 minutes while 18 GB were unused. So a head short of its slots holds only a
+  reservation: ceil(weight x waited / `--backfill-ramp`) slots, where `waited` counts from when
+  it became the head. The ramp is 900 s by default, and after it the head holds every slot it
+  needs. The head publishes in `<lock>.d/heads/`, flock-held, the part of its reservation that
+  it does not hold yet (`unmet`) and the slots it still lacks (`need`). A normal guard waiting
+  behind the head, with no drain ticket queued, may run ahead in what is left.
+  - It must take all its slots at once.
+  - The head's unmet reservation must stay free beside them.
+  - The free slots must not cover the head's `need`: free slots that would admit the head now
+    go to the head.
+  - Backfilling guards and the head's bound check are serialized by `<lock>.d/register`. A
+    backfill attempt skips when the lock is busy, and the head waits for it within
+    `--lock-wait`, so a stalled holder cannot block admission past that.
+  - Bound on the head's wait: the ramp, plus the backfilled workloads already running, each
+    bounded by its `--timeout`. After the ramp, a backfill only uses slots the head does not
+    need. `--backfill-ramp 0` reserves everything at once, which is the earlier behavior.
+  - A queue holder that publishes nothing gets no backfill. That covers a guard of an older
+    checkout, and a stand-in in a test. An entry of another shape also gets none.
+  - `free_mib` (the sizing hint of `scripts/full-build.sh`) does not count the head's unmet
+    reservation as free.
+  - Memory safety is unchanged: a backfilled workload holds its slots like any admitted one, and
+    the report records `backfilled`.
 - Drain tickets: a merge guard and an `--exclusive` guard take a ticket in `<lock>.d/merge/`
   (`<ns>-<pid>-<lane>`, flock-held by its guard). While a ticket is queued no normal guard is
   admitted, and one that is still collecting slots gives them back; running workloads are never
@@ -87,7 +111,7 @@ does not hold the admission queue for slots that other running builds hold.
   core change) is charged by its recent successes; the two bounds below carry that risk:
   - The declared limits of the running workloads add up to at most 1.5 x the budget. Held slots
     never exceed the budget, and an overcommitted workload registers its excess (declared minus
-    held slots) in `<lock>.d/running/`, flock-held, under the queue lock; the registered excess
+    held slots) in `<lock>.d/running/`, flock-held, under `<lock>.d/register`; the registered excess
     stays within 0.5 x the budget, and a workload that would break that collects its declared
     slots instead. Guards at their declared charge and guards of older checkouts need no check.
   - Backstop: when MemAvailable falls below max(2 GiB, 10% of RAM), the youngest overcommitted
@@ -105,8 +129,8 @@ does not hold the admission queue for slots that other running builds hold.
   its admission and records nothing.
 - The report's `admission` records the budget, slots, weight (the slots held), mode, priority
   and workspace, and the charge: `declared_slots`, `overcommit`, `charge_mib`, `history_runs`,
-  `why_declared` (why it holds its declared slots) and `preempted_at_available_mib`;
-  `lock_wait_seconds` the time to admission.
+  `why_declared` (why it holds its declared slots), `preempted_at_available_mib` and
+  `backfilled`; `lock_wait_seconds` the time to admission.
 
 A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the
 machine overcommits memory and thrashes, and every build gets slower. Do not use one; lower
