@@ -1,4 +1,5 @@
 import Air2Lean
+import Air2Lean.Certificate
 import Air2Lean.Check
 import Air2Lean.Emit
 
@@ -428,6 +429,42 @@ example : graphPureSelf.recursive "pureSelf" = true ∧
     graphPureSelf.ticked "pureSelf" = false ∧ graphPureSelf.entryTicked "pureSelf" = false := by
   decide +kernel
 
+/-- A generic instance calling itself with a comptime function argument (`comptime_fn`) is
+recursive: the call keeps its callee edge beside the function argument's edge. Before, the
+argument's edge replaced the callee's, and the instance got no entry tick. -/
+private def graphApply : Func :=
+  graphFunc "apply" #[.call (.func "apply" false (some "step")) #[], .retAddr]
+
+private def graphGenericSelf : Program :=
+  ⟨#[graphApply, graphFunc "step" #[.retAddr]], #[]⟩
+
+example : graphGenericSelf.recursive "apply" = true ∧ graphGenericSelf.entryTicked "apply" = true ∧
+    graphGenericSelf.recursive "step" = false ∧
+    calleesOf #["apply", "step"] #[] graphApply = #["apply", "step"] := by
+  decide +kernel
+
+/-- The emitter's tick policy is the semantics' (`Program.tickPolicy_eq`). -/
+example : graphSelf.tickPolicy "self" = { loop := true, entry := true } ∧
+    graphPureSelf.tickPolicy "pureSelf" = {} ∧
+    graphChain.tickPolicy "chain0" = { loop := true } := by decide +kernel
+
+-- Standalone emission of a self-recursive memory function charges its frame and its entry
+-- tick, as `Sem` does for the same function alone.
+#guard
+  let parts := emitOneFunction (graphFunc "self" #[graphCall "self", .retAddr]) #[] #[] .ieee
+    #["self"] #[] #[]
+  (parts.defn.splitOn "Zig.enterFrame").length > 1 && (parts.defn.splitOn "Zig.tick").length > 1
+
+-- A body the certificate printer does not print fails the certificate closed; it is never
+-- printed as another (empty) body.
+#guard Certificate.printBodyOrThrow "x" #[{ id := 0, ty := 0, op := .retAddr }] matches .error _
+#guard Certificate.printBodyOrThrow "x" #[{ id := 0, ty := 0, op := .ret .void }] matches .ok _
+
+/-- A spawn through a std wrapper outside the program keeps only the worker's edge. -/
+example : calleesOf #["caller", "worker"] #[]
+    (graphFunc "caller" #[.call (.func "Thread.spawn" false (some "worker")) #[]]) = #["worker"] := by
+  decide +kernel
+
 private def graphMutual : Program :=
   ⟨#[graphFunc "first" #[graphCall "second"],
      graphFunc "second" #[graphCall "first", .retAddr],
@@ -583,7 +620,8 @@ private def checkTickPlacement : IO Unit := do
           let fc := { base with mem, conc, dialect }
           let scope := s!"{version}/{target.arch}-{target.os}/{backend}/{label}"
           for recursive in #[false, true] do
-            let fc := { fc with recursive }
+            -- The policy of this classification, as program emission sets it.
+            let fc := { fc with recursive, ticks := TickPolicy.of recursive mem conc }
             for (inst, shape) in #[(loop, "loop"), (dispatch, "dispatch")] do
               let text := emitLoopBody fc inst
               require (count text "Zig.tick" == if mem then 1 else 0)

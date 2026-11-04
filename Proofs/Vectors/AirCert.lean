@@ -139,19 +139,57 @@ def source_30 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, source_3, source_4, source_5, source_6, source_7, source_8, source_9, source_10, source_11, source_12, source_13, source_14, source_15, source_16, source_17, source_18, source_19, source_20, source_21, source_22, source_23, source_24, source_25, source_26, source_27, source_28, source_29, source_30], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("vectors.addTo", { loop := true, entry := false }),
+      ("vectors.andLanes", { loop := false, entry := false }),
+      ("vectors.checkedAdd", { loop := false, entry := false }),
+      ("vectors.fDot", { loop := false, entry := false }),
+      ("vectors.fMax", { loop := false, entry := false }),
+      ("vectors.fMin", { loop := false, entry := false }),
+      ("vectors.interleave", { loop := false, entry := false }),
+      ("vectors.maxLane", { loop := false, entry := false }),
+      ("vectors.minLane", { loop := false, entry := false }),
+      ("vectors.orLanes", { loop := false, entry := false }),
+      ("vectors.pick", { loop := false, entry := false }),
+      ("vectors.reverse", { loop := false, entry := false }),
+      ("vectors.sMod", { loop := false, entry := false }),
+      ("vectors.sRem", { loop := false, entry := false }),
+      ("vectors.satAdd", { loop := false, entry := false }),
+      ("vectors.splatAdd", { loop := false, entry := false }),
+      ("vectors.twiceInMem", { loop := true, entry := false }),
+      ("vectors.uDotWrap", { loop := false, entry := false }),
+      ("vectors.uMinLane", { loop := false, entry := false }),
+      ("vectors.vAbs", { loop := false, entry := false }),
+      ("vectors.vBits", { loop := false, entry := false }),
+      ("vectors.vDiv", { loop := false, entry := false }),
+      ("vectors.vLess", { loop := false, entry := false }),
+      ("vectors.vMinMax", { loop := false, entry := false }),
+      ("vectors.vMod", { loop := false, entry := false }),
+      ("vectors.vNarrow", { loop := false, entry := false }),
+      ("vectors.vNeg", { loop := false, entry := false }),
+      ("vectors.vOverflow", { loop := false, entry := false }),
+      ("vectors.vShift", { loop := false, entry := false }),
+      ("vectors.vToFloat", { loop := false, entry := false }),
+      ("vectors.xorLanes", { loop := false, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `vectors.sMod` in the original program. -/
 def air_sMod : _root_.Air2Lean.Func := source_12
 
 theorem lookup_sMod : program.lookup "vectors.sMod" = some air_sMod := rfl
-theorem policy_sMod : program.ticked "vectors.sMod" = false := by decide +kernel
-theorem entry_sMod : program.entryTicked "vectors.sMod" = false := by decide +kernel
+theorem policy_sMod : program.ticked "vectors.sMod" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 12 (by decide))
+theorem entry_sMod : program.entryTicked "vectors.sMod" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 12 (by decide))
 
 /-- The decoded canonical AIR of `vectors.sRem` in the original program. -/
 def air_sRem : _root_.Air2Lean.Func := source_13
 
 theorem lookup_sRem : program.lookup "vectors.sRem" = some air_sRem := rfl
-theorem policy_sRem : program.ticked "vectors.sRem" = false := by decide +kernel
-theorem entry_sRem : program.entryTicked "vectors.sRem" = false := by decide +kernel
+theorem policy_sRem : program.ticked "vectors.sRem" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 13 (by decide))
+theorem entry_sRem : program.entryTicked "vectors.sRem" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 13 (by decide))
 
 theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
 
