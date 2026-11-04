@@ -43,8 +43,10 @@ The units of one run audit one build, so their `fixtures.py audit`s share one ke
 Lake-built module that one audit replayed is not replayed again in this run
 (scripts/assumptions.py `kernel_replay`). They also share one digest of the Lean toolchain's
 runtime, hashed when the run starts and again when it ends (a change fails the run;
-assumptions.py `runtime_run`), and the compiled assurance extractor, prepared before the units
-start (assumptions.py `prepared_tool`): no unit rebuilds a root module. Nothing outlives the run.
+assumptions.py `runtime_run`). Before the units start, every library of the proof-fixture
+package (tests/roadmap/lakefile.toml, `scripts/fixtures.py build`) and the compiled assurance
+extractor (assumptions.py `prepared_tool`) are built (`prepare_shared`): no unit builds a module
+of the root or the fixture package, and a run in which one changed fails. Nothing outlives the run.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
@@ -407,22 +409,54 @@ def report(units, statuses, stats, path, top=20):
                                          row['name']))
 
 
-SHARED = ROOT / '.lake/build/lib/lean'
+# The compiled modules the units import: the root package's and the proof-fixture package's
+# (tests/roadmap/lakefile.toml), whose every library `FIXTURE_BUILD` builds before the units.
+SHARED = (ROOT / '.lake/build/lib/lean', ROOT / 'tests/roadmap/.lake/build/lib/lean')
+FIXTURE_BUILD = [sys.executable, '-B', str(ROOT / 'scripts/fixtures.py'), 'build']
+
+
+def log_tail(log: Path, lines=15):
+    """The last lines of a failure's log, indented, for the failure message (the log may not
+    outlive the run)."""
+    tail = log.read_text(errors='replace').strip().splitlines()[-lines:] if log.is_file() else []
+    return ''.join('\n    ' + line for line in tail)
+
+
+def prepare_shared(log: Path):
+    """Build what the units share before any of them starts, so no unit builds it under the
+    others: every library of the proof-fixture package (a unit's own `fixtures.py build` is then
+    an up-to-date check), and the compiled assurance extractor (assumptions.py `prepared_tool`).
+    Returns the failure, or None."""
+    try:
+        with open(log, 'wb') as out:
+            status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
+    except OSError as error:
+        return 'the proof-fixture package: %s' % error
+    if status:
+        return 'the proof-fixture package: fixtures.py build exited %d (log %s)%s' % (status, log, log_tail(log))
+    try:
+        with assumptions.prepared_tool():
+            pass
+    except (OSError, ValueError, RuntimeError) as error:
+        return 'the assurance extractor: %s' % error
+    return None
 
 
 def shared_outputs():
-    """Identity (inode, size, mtime) of every root-package module the units import, its .olean.
-    The full build compiles them before this phase; Lake has no build lock, so a unit that
-    rebuilds one in place races every unit importing it (a missing .olean mid-write, compiled
-    inputs changed during a kernel replay). Lake's trace and hash files are not compared: an
-    up-to-date check may rewrite them."""
+    """Identity (inode, size, mtime) of every compiled file of the shared packages (`SHARED`):
+    each module's .olean and its companions, the files an audit binds (assumptions.py
+    `COMPILED_SUFFIXES`, `lean_path_binding`). They are built before the units (`prepare_shared`);
+    Lake has no build lock, so a unit that rebuilds or deletes one in place races every unit that
+    reads the package (a missing .olean mid-walk, "compiler-owned Unit imported inputs changed").
+    Lake's trace and hash files are not compared: an up-to-date check may rewrite them."""
     found = {}
-    for path in SHARED.rglob('*.olean'):
-        try:
-            info = path.lstat()
-        except FileNotFoundError:
-            continue
-        found[str(path.relative_to(SHARED))] = (info.st_ino, info.st_size, info.st_mtime_ns)
+    for shared in SHARED:
+        for path in (p for suffix in assumptions.COMPILED_SUFFIXES for p in shared.rglob('*' + suffix)):
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
+            found[os.path.relpath(path, ROOT)] = (info.st_ino, info.st_size, info.st_mtime_ns)
     return found
 
 
@@ -492,14 +526,10 @@ def main(argv=None):
                 # The units' audits share one toolchain-runtime digest, hashed again when they end
                 # (assumptions.runtime_run): a toolchain changed during the run fails it.
                 with assumptions.runtime_run(), open(os.devnull, 'wb') as null:
-                    # They also share the root package's compiled extractor (assumptions.py
-                    # `prepared_tool`), which preparing may rebuild: it is prepared here, before
-                    # the units, so no unit rebuilds a root module under the units that read it.
-                    try:
-                        with assumptions.prepared_tool():
-                            pass
-                    except (OSError, ValueError, RuntimeError) as error:
-                        failed.append('the assurance extractor: %s' % error)
+                    # They also share the proof-fixture package and the compiled extractor, built
+                    # here, before the units, so no unit builds them under the units that read them.
+                    if error := prepare_shared(logs / 'shared-build.log'):
+                        failed.append(error)
                     else:
                         before = shared_outputs()
                         for job in jobs:
@@ -516,17 +546,16 @@ def main(argv=None):
                 report(units, statuses or [None] * len(units), stats, a.report)
                 write_hints(units, stats)
             if before is not None and (changed := changed_outputs(before, shared_outputs())):
-                failed.append('the root package\'s build outputs changed while the units ran (a unit '
-                              'built root modules, racing the units that read them): '
+                failed.append('the shared build outputs changed while the units ran (a unit built '
+                              'modules of the root or the proof-fixture package, racing the units '
+                              'that read them): '
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses or []):  # none: the run did not start
             if status != 0:
                 log = logs / (names[u['name']] + '.log')
-                tail = log.read_text(errors='replace').strip().splitlines()[-15:] if log.is_file() else []
-                failed.append('%s (exit %d, log %s)%s' % (u['name'], status, log,
-                                                          ''.join('\n    ' + l for l in tail)))
+                failed.append('%s (exit %d, log %s)%s' % (u['name'], status, log, log_tail(log)))
         if not failed and not a.logs:
             shutil.rmtree(logs, ignore_errors=True)
     skipped = sum(len(u['skipped']) for u in units)

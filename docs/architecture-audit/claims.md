@@ -50,7 +50,9 @@ flips its row. `test_exposure.py --require-fixed` is the gate for a hardening br
 `AIR2LEAN_CAS_DIR` set it restores unchanged ones from the shared artifact cache
 (docs/build-cache.md). `test_cache.py` (CI, after `check.sh`) runs `build.sh`
 without the cache, fills a new cache, runs `build.sh` again from it, and requires byte-identical
-fixtures, assurance reports and extraction.
+fixtures, assurance reports and extraction. It does this in a check tree
+(`.lake/check-tree/audit-cache`), so it never rebuilds the checkout's fixture package under
+parallel checks.
 `assurance/premises.json` excludes the fixture directory, as it does `tests/roadmap/assurance/`.
 
 ## Fix status (soundness batch)

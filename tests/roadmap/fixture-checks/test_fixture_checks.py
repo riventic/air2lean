@@ -68,6 +68,7 @@ class NoReuse(unittest.TestCase):
                       mock.patch.object(fc, "resolve", no_toolchain),
                       mock.patch.object(fc.assumptions, "runtime_run", offline_runtime_run),
                       mock.patch.object(fc.assumptions, "prepared_tool", offline_prepared_tool),
+                      mock.patch.object(fc, "FIXTURE_BUILD", ["true"]),
                       mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.cas),
                                                    "AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp / "schedule.json")})):
             patch.start()
@@ -163,7 +164,7 @@ class NoReuse(unittest.TestCase):
         (shared / "M" / "A.trace").write_text("t")
         (self.hidden / "input").write_text("ok\n")
         self.unit["env"]["SHARED"] = str(shared)
-        with mock.patch.object(fc, "SHARED", shared):
+        with mock.patch.object(fc, "SHARED", (self.temp / "root-build", shared)):
             self.assertEqual(self.run_checks()[0], 0)
             self.unit["run"] = 'printf t2 > "$SHARED/M/A.trace"\n'  # an up-to-date check: no race
             self.assertEqual(self.run_checks()[0], 0)
@@ -188,7 +189,7 @@ class NoReuse(unittest.TestCase):
             (shared / "tools" / "Assurance.olean").unlink()
             (shared / "tools" / "Assurance.olean").write_text("b")
 
-        with mock.patch.object(fc, "SHARED", shared), \
+        with mock.patch.object(fc, "SHARED", (shared,)), \
                 mock.patch.object(fc.assumptions, "prepared_tool", lambda: offline_prepared_tool(rebuild)):
             status, out, err = self.run_checks()
         self.assertEqual(status, 0, out + err)
@@ -203,6 +204,25 @@ class NoReuse(unittest.TestCase):
         self.assertEqual(status, 1, out + err)
         self.assertIn("FAILED the assurance extractor: command failed", err)
         self.assertFalse(marker.exists(), "a unit ran without a prepared extractor")
+
+    def test_the_fixture_package_is_built_before_the_units(self):
+        # The race of 2026-11-04 (L8j): a unit rebuilt AuditClaims in the shared fixture package
+        # while five other units' audits walked it (a missing AsmTotal.olean, "imported inputs
+        # changed"). Every library is built before the units; a failed build stops the run.
+        (self.hidden / "input").write_text("ok\n")
+        built, marker = self.temp / "fixtures-built", self.temp / "unit-ran"
+        self.unit["run"] = '[ -e "%s" ] && touch "%s"\n' % (built, marker)
+        with mock.patch.object(fc, "FIXTURE_BUILD", ["sh", "-c", 'touch "%s"' % built]):
+            status, out, err = self.run_checks()
+        self.assertEqual(status, 0, out + err)
+        self.assertTrue(marker.exists())
+        marker.unlink()
+        with mock.patch.object(fc, "FIXTURE_BUILD", ["sh", "-c", "echo lake failed; exit 1"]):
+            status, out, err = self.run_checks()
+        self.assertEqual(status, 1, out + err)
+        self.assertIn("FAILED the proof-fixture package:", err)
+        self.assertIn("lake failed", (self.temp / "logs" / "shared-build.log").read_text())
+        self.assertFalse(marker.exists(), "a unit ran without the fixture package")
 
     def test_the_units_share_the_runs_toolchain_digest_and_a_change_fails_the_run(self):
         (self.hidden / "input").write_text("ok\n")
