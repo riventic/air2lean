@@ -1296,9 +1296,14 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
     let s ← saveState
-    let g' ← g.replaceTargetDefEq (← reduceProjs t')
+    let t'' ← reduceProjs t'
+    let g' ← g.replaceTargetDefEq t''
     if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
+    -- a disjunction (a result predicate `r = 1 ∨ r = 2 ∨ …`): the solver on the unfolding, which
+    -- the arithmetic normalization does not unfold
+    if t''.isAppOfArity ``Or 2 then
+      if (← arithGoals g' quick cases).isEmpty then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
