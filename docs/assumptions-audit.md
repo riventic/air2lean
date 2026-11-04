@@ -323,6 +323,14 @@ Lake replays the stored receipt. A failing check stays a failing receipt. The re
 only while Lake resolves exactly the audit's lookup path in that workspace; a missing, foreign or
 repeated receipt fails the audit. Policy, the tool binding and freshness run on every audit.
 
+Both generated workspaces are built with each needed module's `@pkg/+M:olean` on the command line
+before the generated modules (`needs_first`). Lake 4.34 fetches each facet key of a library's
+`needs` in a pool task of its own. Two keys with a shared import closure create its jobs twice,
+and the build can deadlock at 0% CPU
+([docs/upstream/lake-concurrent-needs.md](upstream/lake-concurrent-needs.md), ledger
+`lake-needs-race`). Lake fetches command-line targets one after another on its build thread, so
+the `needs` tasks then find every job. The traces above are those of the `needs`, unchanged.
+
 The raw opt-in extractor records `selected_declaration_evidence`: one row, in the same order,
 for each exact selected root. The CLI report preserves those rows under
 `framework_candidates.declarations`, adding the summaries below. A row identifies the
