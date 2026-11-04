@@ -5,8 +5,9 @@
 #
 #   scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr] [--logs DIR]
 #
-# --logs DIR keeps the full build's phase logs in DIR/full-build (a failed phase also prints its
-# errors and last lines into this script's output, scripts/full-build.sh).
+# --logs DIR keeps the full build's phase logs in DIR/full-build (no full build with
+# --no-translator); a failed phase also prints its error lines, else its last lines, into this
+# script's output (scripts/full-build.sh).
 # scripts/regen.sh regenerates what these checks find stale (`scripts/regen.sh --check` runs this).
 # First it materializes the whole-tree generated files (assurance/generated.json; not committed,
 # docs/ci.md#whole-tree-generated-files): `scripts/generated.py materialize` regenerates the
