@@ -1307,9 +1307,18 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
     let s ← saveState
-    let g' ← g.replaceTargetDefEq (← reduceProjs t')
+    let t'' ← reduceProjs t'
+    let g' ← g.replaceTargetDefEq t''
     if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
+    -- an unfolding of library form (a result predicate `r = 1 ∨ r = 2 ∨ …`, a negation, an
+    -- implication): the solver on it, as the arithmetic normalization does not unfold the user
+    -- definition (once: a library head is not unfolded again)
+    let libHead ← match t''.getAppFn with
+      | .const c _ => isLibrary c
+      | _ => pure t''.isArrow
+    if libHead then
+      if (← arithGoals g' quick cases).isEmpty then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []

@@ -113,7 +113,6 @@ theorem block_of_value (b : BlockId) (A S : Nat) (K : BlockKind) (bs cs : Array 
       (up (regionIn ⟨some b, 0⟩ A S K 8 (bs ++ cs))) := by
   fsym_entail
 
-<<<<<<< HEAD
 /-- **A conjunction split after its left conjunct substituted a local** that the right one
 mentions (a token's facts `A = B.A ∧ S = B.S ∧ …`): the substitution reintroduces the right
 conjunct as a new local, which is still split, so its `k = .global` fixes the kind. -/
@@ -122,8 +121,6 @@ theorem conj_after_subst (T : BlockKind → FAssn) (a b : Nat) (k : BlockKind) (
     FTotalTriple (⟪a = b ∧ (k = .global ∧ a + b = 8)⟫ ⋆ T k) c (fun _ => T k) := by
   fsym [rule]
 
-||||||| b8b302c51
-=======
 /-- A buffer record at a global pointer (`⟨some 0, 0⟩`), as a client names its allocator's
 buffer. -/
 structure Buf where
@@ -195,5 +192,4 @@ theorem value_block_add (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM U
     FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
   fsym [rule]
 
->>>>>>> claude/fsym-value-block
 end SepAuto.Facts
