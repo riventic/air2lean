@@ -14,8 +14,8 @@ The concurrent proofs have two layers.
   thread `t` that holds at every stop. `run_safe` / `run_sound` turn it into statements about
   `Sched.run`. This layer has no heap assertions and stays as it is.
 * **Concurrent separation logic** over the legacy `Heap` (`ZigLean/Conc/Own.lean`, `Csl.lean`,
-  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Transfer.lean`, `TlsLemmas.lean`,
-  `SpawnLemmas.lean`, `Witness.lean`, `Unroll.lean`; about 7.5k lines):
+  `Lock.lean`, `LockRules.lean`, `Detach.lean`, `Witness.lean`, `Unroll.lean`; about 5.9k
+  lines):
   * `Mem.Owns m t h`: every recorded access to a byte of `h` happened before `t`'s clock;
   * `TTriple P c Q`: `Triple` with ownership in place of `SingleThread`, plus `StepIn hF m m'`
     (the step touches no frame byte and changes no other thread's clock);
@@ -104,7 +104,8 @@ provable. Now no `CTriple` with an admissible precondition holds across such a s
 relied on the old answers: none of the clients spawns, joins or waits.
 
 **Why not `∀ n, FTTriple P (soloRun n x) Q`** (the first plan, withdrawn): `Proto.WP` resumes a
-thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran) and for a pick with
+thread at each sync stop in an *arbitrary* memory `m₁` (other threads ran; it knows only the
+invariant, its ghost value and that it exists, `t < m₁.threads.size`) and for a pick with
 *any* `c < count m₁` (`Conc/Logic.lean`, `Safe`/`Step`). A thread triple of the uninterrupted
 `soloRun` from `m` says nothing about the continuation `k c m₁`, so no rule for a thread follows;
 its only consumer would stay the sequential caller, which the current definition already serves.
@@ -466,19 +467,20 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   protocol fits the lock if its invariant is `∃ rX, Inv G rX m ∧ U G rX m` with `U` stable under
   lock steps. The client contract is `MutexImpl` (`lock_wp`, `unlock_wp`); an implementation
   (std `Io.Mutex`, `Thread.Mutex`) proves it from the rules, a client uses only the contract.
-* **Transfer** (`Transfer.lean`, C01 captures): `Capture.grant` over `Res`; `fork_grant` and
-  `join_regain` are `FOwned.fork`/`join`. Done in `Full/ThreadSpawn.lean` (`FTransfer`,
-  `FCapture.grant`, `FCapture.fork_grant`/`join_regain`; `tests/roadmap/spawn-failure` migrated).
-* **Spawn failure** (`SpawnLemmas.lean`): the frame of a failed spawn keeps `FOwned` unchanged.
-  Done in `Full/ThreadSpawn.lean` (`WP.spawnFailureRetains_fowned`). A struct store whose encoding
-  is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'` (`Full/Local.lean`).
+* **Transfer** (C01 captures, `Full/ThreadSpawn.lean`): `FTransfer` and `FCapture.grant` over
+  `Res`; `FCapture.fork_grant` and `join_regain` are `FOwned.fork`/`join`
+  (`tests/roadmap/spawn-failure`, `tests/roadmap/thread-tuples`).
+* **Spawn failure** (`Full/ThreadSpawn.lean`; the resource-free rules are in `SpawnLemmas.lean`):
+  the frame of a failed spawn keeps `FOwned` unchanged (`WP.spawnFailureRetains_fowned`). A
+  struct store whose encoding is not `LawfulEnc` (an `Io.Group`) is `FTTriple.storeAt'`
+  (`Full/Local.lean`).
 * **Detach** (`Detach.lean`): `FOwned.setThread` (a `keep`), and `not_bytesAt_granted` for
   `up (bytesAt …)` in a part.
-* **TLS** (`TlsLemmas.lean`): a thread-local block is a part of its thread; its knowledge may be
-  shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an instance is a
-  `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`); the thread
-  start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with the record
-  update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
+* **TLS** (`TlsLemmas.lean`, deleted): a thread-local block is a part of its thread; its knowledge
+  may be shared. Done in `Full/ThreadTls.lean` (`tests/roadmap/thread-locals` migrated): an
+  instance is a `.global` block with its full extent in its thread's part (`tlsOwn`, `tlsDying`);
+  the thread start and end are `FTTriple`s on the part (`FTTriple.tlsAllocs`, `freeBlocks`) with
+  the record update kept by `FOwned.setTls` (`WP.liftMem_tlsEnter_fowned`, `WP.liftMem_tlsExit_fowned`).
   `tlsPtr` reads only the thread records, which are protocol facts, not resources: it is resolved
   against the current memory inside a `MemM` step (`WP.liftMem_tlsPtr_bind`), so no thread triple
   needs the records (the legacy `TTripleIn` has no counterpart). `main`'s instances are start
@@ -582,7 +584,7 @@ theorems (`## Strength` at the end of the file).
 | T1 | `FTTriple`, structural rules, `toFTriple` (`Full/Thread.lean`); the bridge `ofTTriple` (removed) | done |
 | T2 | `FOwned` + `WP.liftMem_fowned` (`Full/ThreadOwned.lean`); thread `alloc`/`free'`/`storeAt`; `Proofs/Detach/Worker` | done |
 | T3 | `Proofs/Threads` (`Disjoint` done: `FOwned.join`, `disj`, `WP.callMC_fowned`), `Proofs/Cancel/Group` (done: `FOwned.keep`, `recordAt`, `cover`, `WP.callMC_fownedS`), `Proofs/Detach/Transfer` | next |
-| T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
+| T4 | `Transfer`, `SpawnLemmas` (done: `Full/ThreadSpawn`; the legacy `Transfer` is deleted), `Detach`, `TlsLemmas` (done: `Full/ThreadTls`) restated; `spawn-failure` (done), `thread-locals` (done), `thread-tuples`, `detached-threads` | next |
 | T5 | `Lock`, `LockRules` over `FOwned`; `Proofs/Iogroup/Counter` (a lock that owns the counter), `Proofs/Sync`, `Proofs/Threadsync`, `rwlock-contracts`, `sync-contracts`, `shared-reclamation`, `pointer-atomics` | library done (`Full/LockWord`, `ThreadRest`, `Lock`, `LockRules`, `Mutex`, `Word`, `WordRules`); one judgment for every sync primitive: `FLock.Fits L K P U ok` (the protocol with the lock `L` keeps the primitive `K : FPrim`, a data record: place, roles, what the rest keeps, its steps; the lock alone is `FPrim.empty`, a primitive over futex words is `FPrim.ofWords`, with its generic lemmas `Fits.back`, `Fits.atOp`, `Fits.wStep`, `Fits.wOwn`); `Io.Mutex` proved once over its code (`Full/IoMutex`, `IoMutexCode`; instances `Proofs/Iogroup/Lock`, `Proofs/Sync/IoMutex`); `Thread.Mutex` of 0.15.2 (Linux x86/aarch64, macOS) in `Proofs/Threadsync/ThreadMutex`; `Proofs/Iogroup/Counter` done (over `MutexImpl`); the futex event `Full/Event` (`FEvent`, `EventImpl`; scope: one waiter at a time, after every earlier `waiting` write, because a read's model facts give its happens-before floor but not the read-read coherence of `Mem.seen`; several waiters are a follow-up; roles: the client names who may wait (`FEvent.wx`) and who may set (`FEvent.sx`, the setter role that `set_wp` requires and that a setter keeps after its `set`), and a step of one sync object moves a thread's place in the other's code only between `out` and `away`, `away` only for a waiter (the steps of `FCond.prim`, `FEvent.prim`); a condition step is indexed by the word it splits off the rest (`FCond.MStep W`)), `Io.Event` in `Proofs/Sync/Event` (0.16.0 and 0.17.0 translations); `Thread.ResetEvent` of 0.15.2 in `Proofs/Threadsync/Event` (its `Deadline` stack block is in the waiter's part: `FLock.setPart`, `FEvent.wp_liftPart`); the futex-epoch condition `Full/Cond` (`FCond`, `CondImpl`; scope: one waiter at a time that enters after every epoch write, and signallers whose stops come after the registration, for the same reason as the event; several waiters are a follow-up), `Io.Condition` in `Proofs/Sync/Cond` (0.16.0 `waitInner` and the 0.17.0 inlined loops), `Thread.Condition` of 0.15.2 in `Proofs/Threadsync/Cond` (its `Deadline` block is allocated while the waiter holds the mutex: `FLock.Inv.wp_liftPart` frames the held resource, `FCond.wp_liftPart`); `handoff` done once over `MutexImpl`, `CondImpl` and `EventImpl` for every `Box` layout (`Proofs/Handoff/`: protocol, steps, operations; `io` read for a layout with an `io` prefix whose alignment divides the `Box`'s), walked per version in `Proofs/Sync/Handoff` (0.16.0, 0.17.0) and `Proofs/Threadsync/Handoff` (0.15.2) |
 | T6 = T-ctriple S1–S4 | generalized race relation, atomic thread rules (S1); primitives as `FTTotalTriple` (S2); `TLogic` `fsym` backend (S3, engine lane); stop-wise `CTriple`, `WP.call_fowned` (S4) | next (after T3, T-term) |
 | T-term | credits in `Res` (merged, #193), `WPT`, `returnsWithin` from credits; #178's theorems | next |

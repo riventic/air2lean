@@ -4,8 +4,8 @@ import ZigLean.Sep.Full.AllocSpec
 /-!
 # Checked counterexamples behind the legacy page-allocator obstruction (P4b finding)
 
-`AllocSpec` (`ZigLean/Sep/AllocSpec.lean`) states each vtable entry as a `Triple` in some
-`Logic`. A triple quantifies over every sequential memory whose *heap* (`Mem.heap`: the live
+The legacy `AllocSpec` (deleted with the legacy layer, L6; `docs/alloc-page.md`) stated each
+vtable entry as a `Triple` in some `Logic`. A triple quantifies over every sequential memory whose *heap* (`Mem.heap`: the live
 bytes) splits into the precondition's part and a frame. Two parts of `Mem` that the translated
 `std.heap.PageAllocator.alloc` (Zig 0.16.0, x86_64-linux) reads are not in the heap:
 

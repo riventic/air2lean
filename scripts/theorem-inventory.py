@@ -25,6 +25,7 @@ docs/theorem-inventory.md.
 from __future__ import annotations
 
 import argparse
+import copy
 import functools
 import hashlib
 import importlib.util
@@ -78,6 +79,11 @@ def sha256(path: Path) -> str:
 
 def module_path(module: str) -> Path:
     return Path(*module.split('.')).with_suffix('.lean')
+
+
+def source_path(module: str, swaps: dict[str, str]) -> Path:
+    """The source a build reads for `module`: its swapped translation, else its own file."""
+    return Path(swaps.get(canonical_example(module), module_path(module)))
 
 
 def gen_module(example: str) -> str:
@@ -146,6 +152,18 @@ class BuildCommand:
         """Fresh renewal permits rebuilding; historical recording keeps captured policy."""
         command = self.invocation(lake, python)
         return [arg for arg in command if arg != '--no-build'] if self.kind == 'lake' else command
+
+    def existing(self, root: Path) -> BuildCommand:
+        """The recorded targets that still exist, for a renewal: a module deleted since the
+        recording has no theorem left to check, and Lake refuses its missing source. Library
+        and executable targets carry no dot and always stay."""
+        kept = copy.copy(self)
+        kept.modules = [m for m in self.modules
+                        if '.' not in m or (root / source_path(m, self.swaps)).is_file()]
+        if not kept.modules:
+            raise Error('every recorded build target is deleted: drop the run instead')
+        kept.lake_args = [a for a in self.lake_args if a not in self.modules or a in kept.modules]
+        return kept
 
 
 def parse_build_command(root: Path, command: list[str], *, lake: str | None = None) -> BuildCommand:
@@ -404,7 +422,7 @@ def closure(root: Path, modules: list[str], swaps: dict[str, str] | None = None)
         if mod in seen:
             continue
         seen.add(mod)
-        path = root / swaps.get(canonical_example(mod), module_path(mod))
+        path = root / source_path(mod, swaps)
         if not path.is_file():
             raise Error(f'{mod}: no source file {module_path(mod)}')
         try:

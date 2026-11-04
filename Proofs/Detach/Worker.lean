@@ -9,11 +9,11 @@ import ZigLean.Sep.Full.Auto
 
 `main` allocates a 4-byte heap buffer, spawns a worker with the buffer as its argument, detaches
 the worker and returns without joining it. The worker writes the buffer and frees it itself. The
-buffer is a C01 `owned` transfer (`ZigLean/Conc/Transfer.lean`): `main` hands its whole part (the
-buffer's bytes and its block's extent) to the worker at the spawn (`FOwned.fork`), so the worker's
-accesses do not race with anyone, and the worker alone can free it. The proof is in the full-state
-logic (`docs/sep-threads.md`): thread triples (`FTTriple`) on the threads' parts (`FOwned`). For
-every schedule and every fuel:
+buffer is a C01 `owned` transfer (`FTransfer.owned`, `ZigLean/Sep/Full/ThreadSpawn.lean`):
+`main` hands its whole part (the buffer's bytes and its block's extent) to the worker at the spawn
+(`FOwned.fork`), so the worker's accesses do not race with anyone, and the worker alone can free
+it. The proof is in the full-state logic (`docs/sep-threads.md`): thread triples (`FTTriple`) on
+the threads' parts (`FOwned`). For every schedule and every fuel:
 
 - no run gives an error (`worker_safe`): no data race, no use after free, no invalid handle, no
   missing join (`checkJoinedByChild 0` passes with the worker detached and possibly running);

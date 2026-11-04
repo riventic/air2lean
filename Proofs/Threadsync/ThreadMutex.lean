@@ -160,7 +160,8 @@ theorem lockSlow_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc3 : L.c = 
     rintro ⟨e, s'⟩ G' m' d' ⟨rfl, hd', hc', rL, hi'⟩
     simp only [StateT.run_pure]
     exact WP.pure' (WP.pure' ⟨hd', hc', rL, hi'⟩)
-  refine WP.bind (wp_loadLock hP (g := L.set g .spin rnil) (by rw [L.ph_set]; decide) (hok' _ _)
+  refine WP.bind (wp_loadLock hP (g := L.set g .spin rnil) (by rw [L.ph_set]; decide)
+    (by rw [L.ph_set]; decide) (hok' _ _)
     hi fun k₁ hk₁ G₁ m₁ v hc₁ hi₁ => ?_)
   simp only [StateT.run_pure, pure_bind]
   by_cases hv : (v == (3 : BitVec 32)) = true
