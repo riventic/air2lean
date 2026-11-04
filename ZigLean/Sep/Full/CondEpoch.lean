@@ -56,28 +56,31 @@ structure Calm (m : Mem) (w e : BitVec 32) : Prop where
 saved value `e`) and `waiters += 1` (relaxed), whose old `waiters` is below `65535` (the code's
 assertion). -/
 def Register (u : ThreadId) (e : BitVec 32) (m m' : Mem) : Prop :=
-  ∃ w m₁, ((atomicLoadAt (n := 32) 0 .acquire 4 C.Ep.ptr).run { m with current := u }).run =
+  ∃ (w : BitVec 32) (m₁ : Mem),
+    ((atomicLoadAt (n := 32) 0 .acquire 4 C.Ep.ptr).run { m with current := u }).run =
       some (.ok (e, m₁)) ∧
-    ((atomicRmwAt 0 .add false .relaxed 4 C.S.ptr 1).run m₁).run = some (.ok (w, m')) ∧
+    ((atomicRmwAt (n := 32) 0 .add false .relaxed 4 C.S.ptr 1).run m₁).run =
+      some (.ok (w, m')) ∧
     w.toNat % 0x10000 < 0xFFFF
 
 /-- `signal` by `v`: a relaxed load of the state `w`, which has `waiters > signals`, a weak
 release `cmpxchg` to `signals += 1`, `epoch += 1` (release) and a futex wake of one waiter. -/
 def Signal (v : ThreadId) (m m' : Mem) : Prop :=
-  ∃ w x m₁ m₂ m₃,
+  ∃ (w x : BitVec 32) (m₁ m₂ m₃ : Mem),
     ((atomicLoadAt (n := 32) 0 .relaxed 4 C.S.ptr).run { m with current := v }).run =
       some (.ok (w, m₁)) ∧
     w.toNat / 0x10000 < w.toNat % 0x10000 ∧
-    ((cmpxchgWeakAt 0 .release .relaxed 4 C.S.ptr w (w + 0x10000)).run m₁).run =
+    ((cmpxchgWeakAt (n := 32) 0 .release .relaxed 4 C.S.ptr w (w + 0x10000)).run m₁).run =
       some (.ok (none, m₂)) ∧
-    ((atomicRmwAt 0 .add false .release 4 C.Ep.ptr 1).run m₂).run = some (.ok (x, m₃)) ∧
+    ((atomicRmwAt (n := 32) 0 .add false .release 4 C.Ep.ptr 1).run m₂).run =
+      some (.ok (x, m₃)) ∧
     ((Thread.futexWake C.Ep.ptr 1 []).run m₃).run = some (.ok ((), m'))
 
 /-- `wait`'s loop by `u` with the saved epoch `e`: the futex wait returns without sleeping, an
 acquire load of the epoch, a relaxed load of the state `w`, which has `signals > 0`, and a weak
 acquire `cmpxchg` that takes the signal (`waiters -= 1`, `signals -= 1`). -/
 def Consume (u : ThreadId) (e : BitVec 32) (m m' : Mem) : Prop :=
-  ∃ x w m₁ m₂ m₃,
+  ∃ (x w : BitVec 32) (m₁ m₂ m₃ : Mem),
     ((Thread.futexWait C.Ep.ptr e).run { m with current := u }).run = some (.ok (false, m₁)) ∧
     ((atomicLoadAt (n := 32) 0 .acquire 4 C.Ep.ptr).run m₁).run = some (.ok (x, m₂)) ∧
     ((atomicLoadAt (n := 32) 0 .relaxed 4 C.S.ptr).run m₂).run = some (.ok (w, m₃)) ∧
@@ -92,7 +95,7 @@ def Round (u v : ThreadId) (m m' : Mem) : Prop :=
 /-- `k` rounds of `u` and `v`. -/
 def Rounds (u v : ThreadId) : Nat → Mem → Mem → Prop
   | 0, m, m' => m' = m
-  | k + 1, m, m' => ∃ m₁, C.Rounds u v k m m₁ ∧ C.Round u v m₁ m'
+  | k + 1, m, m' => ∃ m₁, Rounds u v k m m₁ ∧ C.Round u v m₁ m'
 
 variable {C}
 
@@ -256,7 +259,8 @@ theorem epoch_aba {m : Mem} {t u v : ThreadId} {e : BitVec 32} (hA : C.Calm m 1 
   obtain ⟨m₂, h₂, hA₂, ht₂⟩ := hA₁.signal (by rw [ht₁]; exact hv) (by decide)
   have he : e + BitVec.ofNat 32 (2 ^ 32 - 1) + 1 = e := by
     have h0 : BitVec.ofNat 32 (2 ^ 32 - 1) + 1 = 0 := by decide
-    rw [BitVec.add_assoc, h0, BitVec.add_zero]
+    rw [BitVec.add_assoc, h0]
+    exact BitVec.add_zero e
   have hs : (1 : BitVec 32) + 0x10000 = 0x10001 := by decide
   rw [he, hs] at hA₂
   have hA₃ := hA₂.cur t

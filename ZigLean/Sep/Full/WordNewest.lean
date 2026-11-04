@@ -25,7 +25,7 @@ open Conc Proto Full
 theorem rmwWrite_run_ne_none {n : Nat} (li pos : Nat) (ord : AtomicOrder) (rd : Msg)
     (new : BitVec n) : ∀ m, ((rmwWrite li pos ord rd new).run m).run ≠ none := by
   unfold rmwWrite
-  cases hq : ord.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte]
+  cases ord.isAcq <;> simp only [Bool.false_eq_true, ↓reduceIte]
   · exact M.bind_run_ne_none M.get_run_ne_none fun _ =>
       M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => M.modify_run_ne_none _
   · exact M.bind_run_ne_none (M.modify_run_ne_none _) fun _ =>
@@ -141,7 +141,7 @@ private theorem filter_first {α : Type} {a : Array α} {x : α} {p : α → Boo
   | cons y l =>
     simp only [List.getElem?_toArray, List.getElem?_cons_zero, Option.some.injEq] at h
     subst h
-    simp [List.filter_cons, hp]
+    simp [hp]
 
 /-- **A load of the newest write**: the first choice of a load at a valid word returns the
 value the word holds, and keeps it. -/
