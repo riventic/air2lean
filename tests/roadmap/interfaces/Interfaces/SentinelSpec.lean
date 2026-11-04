@@ -82,23 +82,8 @@ private theorem written_size (c : BitVec 8) (hs : a.size = len + 2) :
     (writeBytes a len (Enc.encode c)).size = len + 2 := by
   rw [writeBytes_size _ _ _ (by rw [enc8]; omega)]; exact hs
 
-/-- The two stores of `append` keep the old payload. -/
-theorem appended_prefix (c : BitVec 8) (hs : a.size = len + 2) (hb : bs.size = len + 1)
-    (hk : keepsPrefix bs a) (h1 : o1 = len) (h2 : o2 = len + 1) :
-    (writeBytes (writeBytes a o1 (Enc.encode c)) o2 (Enc.encode (0 : BitVec 8))).extract 0 len =
-      bs.extract 0 len := by
-  rw [h1, h2]
-  have hw := written_size c hs
-  have e2 := extract_writeBytes_disjoint (writeBytes a len (Enc.encode c)) (len + 1)
-    (Enc.encode (0 : BitVec 8)) 0 len (by rw [enc8, hw]; omega) (by omega) (by right; omega)
-  have e1 := extract_writeBytes_disjoint a len (Enc.encode c) 0 len (by rw [enc8]; omega)
-    (by omega) (by right; omega)
-  simp only [Nat.zero_add] at e1 e2
-  rw [e2, e1]
-  have ek : a.extract 0 (len + 1) = bs.extract 0 (len + 2) := by rw [← hb, ← hs]; exact hk
-  have := congrArg (fun x : Array Byte => x.extract 0 len) ek
-  simp only [Array.extract_extract, Nat.zero_add] at this
-  rwa [show min len (len + 1) = len by omega, show min len (len + 2) = len by omega] at this
+-- The old payload below the stores is `fsym`'s: it reads through the stores and the kept prefix
+-- (`keepsPrefix`, `Zig.extract_of_keepsPrefix`).
 
 /-- `append` stores `c` at the old length. -/
 theorem appended_byte (c : BitVec 8) (hs : a.size = len + 2) (h1 : o1 = len) (h2 : o2 = len + 1) :
@@ -120,22 +105,6 @@ theorem appended_sentinel (c : BitVec 8) (hs : a.size = len + 2) (h1 : o1 = len)
   have e := extract_writeBytes (writeBytes a len (Enc.encode c)) (len + 1)
     (Enc.encode (0 : BitVec 8)) (by rw [enc8, hw]; omega)
   rwa [enc8] at e
-
-/-- The sentinel store of `resize` keeps every retained byte below the new length. -/
-theorem resized_prefix (hs : a.size = n + 1) (hb : bs.size = len + 1) (hk : keepsPrefix bs a)
-    (ho : o = n) :
-    (writeBytes a o (Enc.encode (0 : BitVec 8))).extract 0 (min n (len + 1)) =
-      bs.extract 0 (min n (len + 1)) := by
-  rw [ho]
-  have e := extract_writeBytes_disjoint a n (Enc.encode (0 : BitVec 8)) 0 (min n (len + 1))
-    (by rw [enc8]; omega) (by omega) (by right; omega)
-  simp only [Nat.zero_add] at e
-  rw [e]
-  have ek : a.extract 0 (len + 1) = bs.extract 0 (n + 1) := by rw [← hb, ← hs]; exact hk
-  have := congrArg (fun x : Array Byte => x.extract 0 (min n (len + 1))) ek
-  simp only [Array.extract_extract, Nat.zero_add] at this
-  rwa [show min (min n (len + 1)) (len + 1) = min n (len + 1) by omega,
-    show min (min n (len + 1)) (n + 1) = min n (len + 1) by omega] at this
 
 /-- `resize` stores the sentinel at the new length. -/
 theorem resized_sentinel (hs : a.size = n + 1) (ho : o = n) :
@@ -219,7 +188,6 @@ theorem append_grant (s : Slice) (c : BitVec 8) (bs : Array Byte)
       (append ⟨ctx, vtp⟩ s c)
       (fun r => I.own ⋆ (appended I φ s.ptr bs s.len.toNat c r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc_spec ctx vtp fns I e φ (h := h)]
-  · exact appended_prefix c (by fsym_arith) (by fsym_arith) ‹_› (by fsym_arith) (by fsym_arith)
   · exact appended_byte c (by fsym_arith) (by fsym_arith) (by fsym_arith)
   · exact appended_sentinel c (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
@@ -239,8 +207,7 @@ theorem resize_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (resize ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (resized I φ s.ptr bs s.len.toNat n r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc_spec ctx vtp fns I e φ (h := h)]
-  · exact resized_prefix (by fsym_arith) (by fsym_arith) ‹_› (by fsym_arith)
-  · exact resized_sentinel (by fsym_arith) (by fsym_arith)
+  exact resized_sentinel (by fsym_arith) (by fsym_arith)
 
 /-- **`release`** (`free` of a `[:0]u8`) for every allocator: the grant of `len + 1` bytes, the
 sentinel included, goes back. -/
