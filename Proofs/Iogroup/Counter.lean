@@ -624,6 +624,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 /-- `main` after `j` asyncs, `k` of which made a task. -/
 abbrev gSpawn (rM : Res) (j k : Nat) : Gh := gOut rM (.spawn j k)
 
+theorem setPart_gSpawn {rM r : Res} {j k : Nat} : L.setPart (gSpawn rM j k) r = gSpawn r j k := rfl
+
 /-- `main` after the `await` of `k` tasks and `i` joins. -/
 abbrev gJoins (rM : Res) (i k : Nat) : Gh := gOut rM (.joins i k)
 
@@ -657,8 +659,8 @@ theorem inv_copy_plain {G : ThreadId → Gh} {m : Mem} {rM : Res} {j k : Nat}
   subst hrM
   have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.io, hu.rest, hu.jle⟩
   refine ⟨rP, hpP, rX, ?_, ?_⟩
-  · simpa only [upd_same, hg] using hL'
-  · simpa only [hg] using (U_part (t := 0) (r := rsum rM rP) hu₀)
+  · simpa only [upd_same, hg, setPart_gSpawn] using hL'
+  · simpa only [hg, setPart_gSpawn] using (U_part (t := 0) (r := rsum rM rP) hu₀)
 
 /-- Spawn task `k + 1` after the real plain copy has been split off. `main` retains all of rM;
 the child receives rP, and the group records it. -/
