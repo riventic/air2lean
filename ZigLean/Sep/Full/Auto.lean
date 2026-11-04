@@ -6014,14 +6014,19 @@ def rebaseLitPtr? (P x : Expr) : TacticM (Option (Expr × Expr)) := do
       unless (← proveArith (← mkAppM ``LE.le #[po, qo])).isSome &&
           (← proveArith (← mkAppM ``LT.lt #[qo, ← mkAppM ``HAdd.hAdd #[po, size]])).isSome do
         s.restore; continue
-      let e ← mkAppM ``Zig.Full.ptr_eq_add_off_sub #[← mkEqTrans hq (← mkEqSymm hp)]
+      -- (at the region's pointer `p` itself: its block fact may be its base's, `p.add k`'s)
+      let hqp ← mkExpectedTypeHint (← mkEqTrans hq (← mkEqSymm hp))
+        (← mkEq (← mkAppM ``Zig.Ptr.block #[q]) (← mkAppM ``Zig.Ptr.block #[p]))
+      let e ← mkAppOptM ``Zig.Full.Auto.ptr_eq_add_off_sub #[q, p, hqp]
       -- the offset in the arithmetic's normal form (`3` for `⟨some 0, 15⟩.off - (bp.add 12).off`)
       let (ctx, procs) ← arithSimpCtx
-      let (rk, _) ← simp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
+      let k ← mkAppM ``HSub.hSub #[qo, po]
+      let (rk, _) ← simp k ctx procs
       let e ← match rk.proof? with
         | some pk => mkEqTrans e (← mkCongrArg (mkApp (mkConst ``Zig.Ptr.add) p) pk)
         | none => pure e
-      let some (_, _, q') := (← inferType e).eq? | s.restore; continue
+      let q' := mkApp2 (mkConst ``Zig.Ptr.add) p rk.expr
+      let e ← mkExpectedTypeHint e (← mkEq q q')
       let xa ← kabstract x q
       return some (xa.instantiate1 q', ← mkCongrArg (.lam `z ptr xa .default) e)
   return none
