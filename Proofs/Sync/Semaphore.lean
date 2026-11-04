@@ -476,6 +476,20 @@ theorem Fits.cur (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (t c : Thr
     (fun h => by rcases h with h | h <;> exact absurd rfl h)
   rwa [upd_same] at this
 
+/-- A step tick (`Zig.tick`): only the step count moves. -/
+theorem Step.ticked (t : ThreadId) (m : Mem) : S.Step t m { m with ticks := m.ticks + 1 } :=
+  ⟨rfl, rfl, fun _ => VClock.le_refl _, rfl, fun _ _ => rfl, fun _ he => .inl he,
+    fun _ hw _ _ => hw, rfl, fun _ _ _ _ _ => Iff.rfl, fun _ hl => .inl hl⟩
+
+/-- The protocol's invariant one step tick later (`Zig.tick`): it reads no step count. -/
+theorem Fits.ticked (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (t : ThreadId)
+    (hi : P.inv G m) : P.inv G { m with ticks := m.ticks + 1 } := by
+  obtain ⟨hl, hs, hu⟩ := hP.split hi
+  refine hP.pack hl.ticked (hs.congr rfl rfl rfl rfl rfl rfl) ?_
+  have := hP.stable G m _ t (G t) hu (Step.ticked t m) rfl rfl (fun h => .inl h)
+    (fun h => by rcases h with h | h <;> exact absurd rfl h)
+  rwa [upd_same] at this
+
 /-- No thread owns a byte of the condition, and the mutex's resource has none. -/
 theorem R_off {Y : ThreadId → SPh × X} {h : Heap} (hR : S.R Y h) {x : Nat} (h1 : S.o + 8 ≤ x)
     (h2 : x < S.o + 20) : h (S.b, x) = none := by
@@ -543,6 +557,17 @@ theorem alive (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} {t : ThreadId
 
 theorem hcs (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (hi : P.inv G m) :
     m.clocks.size = m.threads.size := (hP.split hi).1.own.csize
+
+/-- A loop body's step tick (`Zig.tick`, `WP.callMC_tick`) by thread `t` at `g`: no stop and no
+error, and the protocol's invariant stays (`Fits.ticked`). The continuation gets the exact ticked
+memory, so every fact about the semaphore's words carries over by definition. -/
+theorem Fits.wp_tick (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh X} {m : Mem}
+    {n : Nat} {g : SGh X} {Q : Unit × σ → (ThreadId → SGh X) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m)
+    (h : P.inv (upd G t g) { m with ticks := m.ticks + 1 } →
+      Q ((), s) G { m with ticks := m.ticks + 1 } n) :
+    P.WP t ((Zig.callMC Zig.tick : CM Tgt σ Unit).run s) Q G m n :=
+  WP.callMC_tick (h (hP.ticked t hi))
 
 /-- An atomic load of a `u32` at the state or the epoch, by thread `t` (`g`). -/
 theorem wp_load (hP : S.Fits P U) {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {s : σ}
@@ -1516,6 +1541,8 @@ theorem sig_body (hP : S.Fits P U) (t : ThreadId) (a : LG) (x : X) (ha : a.ph = 
   subst hps
   unfold Io_Condition_signal.loop11
   simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
+  refine WP.bind (hP.wp_tick hi fun hi => ?_)
+  dsimp only
   by_cases hb : b = 1
   · subst hb
     refine WP.bind ?_
@@ -2101,7 +2128,9 @@ theorem loop56_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   simp only at hps hep
   subst hps
   unfold Io_Condition_waitInner.loop56
-  simp only [StateT.run_bind, StateT.run_get]
+  simp only [StateT.run_bind]
+  refine WP.bind (hP.wp_tick hi fun hi => ?_)
+  simp only [StateT.run_get]
   simp only [pure_bind]
   refine WP.bind ?_
   simp only [StateT.run_pure]
@@ -2207,6 +2236,8 @@ theorem loop23_body (hP : S.Fits P U) (hinS : S.inS x) (D : Nat) (s : Io_Conditi
   subst ep
   unfold Io_Condition_waitInner.loop23
   simp only [StateT.run_bind]
+  refine WP.bind (hP.wp_tick hi fun hi => ?_)
+  dsimp only
   simp only [pure_bind]
   refine WP.bind ?_
   simp only [↓reduceIte]
@@ -2687,6 +2718,8 @@ theorem loop5_body (hP : S.Fits P U) (io : Io)
   obtain ⟨hD, hc, hL, hi⟩ := h
   unfold Io_Semaphore_waitUncancelable.loop5
   simp only [StateT.run_bind, pure_bind]
+  refine WP.bind (hP.wp_tick hi fun hi => ?_)
+  dsimp only
   refine WP.bind (WP.bind (wp_cntLoad hP hi hc fun m' hL' hc' hi' => ?_))
   by_cases hz : S.pv (xs fun u => (upd G t (⟨.holds, pa, hL⟩, .none, x) u).2) = 0
   · rw [hz]
