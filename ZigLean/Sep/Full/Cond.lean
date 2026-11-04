@@ -236,15 +236,18 @@ theorem waiters (hs : C.MStep W t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.wai
   | wake c cs h => rw [Proto.modify_ok h] at hw; exact .inl (Array.mem_filter.mp hw).1
   | _ => exact .inl hw
 
-theorem word {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
+/-- A word stays valid; its writes stay, or the step's op at it adds the stepping thread's RMW
+write (at its clock after the step). -/
+theorem word_rmw {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
     (hW : W' = W ∨ W.b ≠ W'.b ∨ W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ W.o)
     (hE : W' = C.Ep ∨ C.Ep.b ≠ W'.b ∨ C.Ep.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ C.Ep.o) :
-    W'.Ok m' ∧ (W'.hist m' = W'.hist m ∨ (W' = W ∧ ∃ x, W'.hist m' = (W'.hist m).push x)) := by
+    W'.Ok m' ∧ (W'.hist m' = W'.hist m ∨ (W' = W ∧ ∃ (ord : AtomicOrder) (v : BitVec 32),
+      W'.hist m' = (W'.hist m).push (Word.rmwEnt m' t ord (W'.hist m)[(W'.hist m).size - 1]! v))) := by
   have hmem : ∀ l, ¬ W.In l → m'.heap l = m.heap l := fun _ hl => hs.cells hl
   have hk : ∀ {m₁ : Mem}, m₁.blocks = m.blocks → m₁.atomics = m.atomics →
       m₁.footprint = m.footprint → m₁.threads = m.threads → m₁.clocks = m.clocks →
-      W'.Ok m₁ ∧ (W'.hist m₁ = W'.hist m ∨
-        (W' = W ∧ ∃ x, W'.hist m₁ = (W'.hist m).push x)) :=
+      W'.Ok m₁ ∧ (W'.hist m₁ = W'.hist m ∨ (W' = W ∧ ∃ (ord : AtomicOrder) (v : BitVec 32),
+        W'.hist m₁ = (W'.hist m).push (Word.rmwEnt m₁ t ord (W'.hist m)[(W'.hist m).size - 1]! v))) :=
     fun hb ha hf ht hc => by
       obtain ⟨hw', hh⟩ := hok.fields_native hb ha hf ht
         (fun u => by rw [hc]; exact VClock.le_refl _)
@@ -253,8 +256,7 @@ theorem word {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
   | same => exact hk rfl rfl rfl rfl rfl
   | @op M hw hc hop hw' hh =>
     rcases hW with rfl | hap
-    · exact ⟨hw', hh.imp id fun ⟨ord, v, h⟩ =>
-        ⟨rfl, Word.rmwEnt m' t ord ((W'.hist m)[(W'.hist m).size - 1]!) v, h⟩⟩
+    · exact ⟨hw', hh.imp id fun h => ⟨rfl, h⟩⟩
     · obtain ⟨hv, hvHist⟩ := hok.fields_native (m' := { m with current := t })
         rfl rfl rfl rfl (fun _ => VClock.le_refl _)
       have hsteps : ∀ hF : Heap,
@@ -288,6 +290,14 @@ theorem word {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
   | woken => exact hk rfl rfl rfl rfl rfl
   | resume => exact hk rfl rfl rfl rfl rfl
   | wake c cs h => rw [Proto.modify_ok h]; exact hk rfl rfl rfl rfl rfl
+
+theorem word {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
+    (hW : W' = W ∨ W.b ≠ W'.b ∨ W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ W.o)
+    (hE : W' = C.Ep ∨ C.Ep.b ≠ W'.b ∨ C.Ep.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ C.Ep.o) :
+    W'.Ok m' ∧ (W'.hist m' = W'.hist m ∨ (W' = W ∧ ∃ x, W'.hist m' = (W'.hist m).push x)) := by
+  obtain ⟨hok', h | ⟨hw, _, _, e⟩⟩ := hs.word_rmw hok hW hE
+  · exact ⟨hok', .inl h⟩
+  · exact ⟨hok', .inr ⟨hw, _, e⟩⟩
 
 end MStep
 
