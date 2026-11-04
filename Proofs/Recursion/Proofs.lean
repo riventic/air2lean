@@ -117,10 +117,16 @@ private def factCode (n : BitVec 32) : MemM (BitVec 32) :=
 private def factValue (n : BitVec 32) : BitVec 32 :=
   BitVec.ofNat 32 (natFact n.toNat)
 
+private theorem natFact_12 : natFact 12 = 479001600 := by decide
+
 private theorem natFact_lt {k : Nat} (h : k ≤ 12) : natFact k < 2 ^ 32 := by
-  have h12 : natFact 12 = 479001600 := by decide
   have := natFact_mono h
+  have := natFact_12
   omega
+
+private theorem fact_zero (n : BitVec 32) (h : n = 0#32) : 1#32 = factValue n := by
+  subst h
+  rfl
 
 private theorem fact_product (n p : BitVec 32) (hb : n.toNat ≤ 12)
     (hp : p.toNat + 1 = n.toNat) : n.toNat * (factValue p).toNat = natFact n.toNat := by
@@ -151,32 +157,32 @@ private theorem fact_group_total (n : BitVec 32) :
   all_goals first
     | apply fact_mul_bound <;> first | assumption | omega
     | apply fact_value_step <;> first | assumption | omega
-    | simp_all [factValue, natFact]
+    | apply fact_zero; assumption
 
 theorem fact_total (n : BitVec 32) (h : n.toNat ≤ 12) :
     FTotalTriple emp (StateT.lift (fact n) : MemM (BitVec 32))
       (fun v => ⟪v = BitVec.ofNat 32 (natFact n.toNat)⟫) :=
   (fact_group_total n).pre (fun _ hr => ⟨h, hr⟩)
 
-/-- The original bounded auxiliary statement, now from the full-state group contract.
-`12! < 2^32`; `13!` overflows — see `fact_13_panics`. -/
+/-- `12! < 2^32`; `13!` overflows — see `fact_13_panics`. -/
+theorem fact_ok (n : BitVec 32) (h : n.toNat ≤ 12) :
+    fact n = pure (BitVec.ofNat 32 (natFact n.toNat)) :=
+  (fact_total n h).result_eq
+
+/-- The original bounded auxiliary statement, as a consequence of the bounded group contract. -/
 theorem fact_ok_aux :
     ∀ k : Nat, ∀ n : BitVec 32, n.toNat = k → k ≤ 12 →
       fact n = pure (BitVec.ofNat 32 (natFact k)) := by
   intro k n hn hb
-  simpa only [hn] using (fact_total n (by simpa only [hn] using hb)).result_eq
-
-theorem fact_ok (n : BitVec 32) (h : n.toNat ≤ 12) :
-    fact n = pure (BitVec.ofNat 32 (natFact n.toNat)) :=
-  fact_ok_aux n.toNat n rfl h
+  subst hn
+  exact fact_ok n hb
 
 /-- `13! = 6227020800 ≥ 2^32`: the checked multiply `13 * fact 12` overflows. -/
 theorem fact_13_panics : fact (13 : BitVec 32) = throw .overflow := by
   have h12 : fact (12#32 : BitVec 32) = pure (BitVec.ofNat 32 (natFact 12)) :=
     fact_ok 12#32 (by decide)
-  have hval : natFact 12 = 479001600 := by decide
   rw [fact.eq_1]
-  simp [zig_unfold, h12, hval]
+  simp [zig_unfold, h12, natFact_12]
 
 /-! ## `gcd` -/
 
