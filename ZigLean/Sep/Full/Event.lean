@@ -541,47 +541,6 @@ theorem get_push_lt {h : Array Word.Entry} {x : Word.Entry} {k : Nat} (hk : k < 
 theorem get_push_eq {h : Array Word.Entry} {x : Word.Entry} : (h.push x)[h.size]! = x := by
   rw [getElem!_pos _ _ (by simp)]; simp
 
-/-- An RMW's release clock covers the release clock of the write it read. -/
-theorem rmwEnt_relLe {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Word.Entry}
-    {v : BitVec 32} : VClock.le last.relClock (Word.rmwEnt M t ord last v).relClock = true := by
-  unfold Word.rmwEnt
-  dsimp only
-  split
-  · exact VClock.le_merge_left _ _
-  · exact VClock.le_refl _
-
-/-- A release RMW's release clock covers its writer's clock. -/
-theorem rmwEnt_rel {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Word.Entry}
-    {v : BitVec 32} (h : ord.isRel = true) :
-    VClock.le (Word.rmwEnt M t ord last v).clock (Word.rmwEnt M t ord last v).relClock = true := by
-  simp only [Word.rmwEnt, h, ↓reduceIte]; exact VClock.le_merge_right _ _
-
-/-- The release sequence after a push of an RMW of the newest write (`Inv.relMono`). -/
-theorem relMono_push {h : Array Word.Entry} {x : Word.Entry}
-    (hm : ∀ i j, i ≤ j → j < h.size → VClock.le h[i]!.relClock h[j]!.relClock = true)
-    (hx : VClock.le h[h.size - 1]!.relClock x.relClock = true) :
-    ∀ i j, i ≤ j → j < (h.push x).size →
-      VClock.le (h.push x)[i]!.relClock (h.push x)[j]!.relClock = true := fun i j hij hj => by
-  rw [Array.size_push] at hj
-  rcases (by omega : j < h.size ∨ j = h.size) with hj' | rfl
-  · rw [get_push_lt (by omega), get_push_lt hj']; exact hm i j hij hj'
-  · rw [get_push_eq]
-    rcases (by omega : i < h.size ∨ i = h.size) with hi | rfl
-    · rw [get_push_lt hi]
-      exact VClock.le_trans (hm i (h.size - 1) (by omega) (by omega)) hx
-    · rw [get_push_eq]; exact VClock.le_refl _
-
-/-- `Inv.rel` after a push of `x`, which is `is_set` only as a release write. -/
-theorem rel_push {h : Array Word.Entry} {x : Word.Entry}
-    (hm : ∀ j < h.size, h[j]!.Val (2 : BitVec 32) → VClock.le h[j]!.clock h[j]!.relClock = true)
-    (hx : x.Val (2 : BitVec 32) → VClock.le x.clock x.relClock = true) :
-    ∀ j < (h.push x).size, (h.push x)[j]!.Val (2 : BitVec 32) →
-      VClock.le (h.push x)[j]!.clock (h.push x)[j]!.relClock = true := fun j hj hv => by
-  rw [Array.size_push] at hj
-  rcases (by omega : j < h.size ∨ j = h.size) with hj' | rfl
-  · rw [get_push_lt hj'] at hv ⊢; exact hm j hj' hv
-  · rw [get_push_eq] at hv ⊢; exact hx hv
-
 /-- The word has a write. -/
 theorem hist_pos {W : Word 32 4} {m : Mem} (hw : W.Ok m) : 0 < (W.hist m).size := by
   unfold Word.hist
@@ -826,8 +785,8 @@ theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : At
       else by rw [hG u e] at hu ⊢; exact hI.sx u hu, hF,
     fun u hu => if e : u = t then by subst e; rw [ht1] at hu; cases hu
       else by rw [hG u e] at hu; exact Nat.lt_of_lt_of_le (hI.swex u hu) hth,
-    by rw [hh]; exact rel_push hI.rel fun hv => absurd (val_eq rmwEnt_val hv) (by decide),
-    by rw [hh]; exact relMono_push hI.relMono rmwEnt_relLe⟩
+    by rw [hh]; exact Word.rel_push hI.rel fun hv => absurd (val_eq rmwEnt_val hv) (by decide),
+    by rw [hh]; exact Word.relMono_push hI.relMono Word.rmwEnt_relLe⟩
   rotate_right
   · -- the `waiting` writes: the new one is `t`'s
     rw [hsz] at hj
@@ -910,8 +869,8 @@ theorem Inv.xchg {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : Ato
       else by rw [hG u e] at hu ⊢; exact hI.sx u hu, hF,
     fun u hu => if e : u = t then e ▸ ht'
       else by rw [hG u e] at hu; exact Nat.lt_of_lt_of_le (hI.swex u hu) hth,
-    by rw [hh]; exact rel_push hI.rel fun _ => rmwEnt_rel hrel,
-    by rw [hh]; exact relMono_push hI.relMono rmwEnt_relLe⟩
+    by rw [hh]; exact Word.rel_push hI.rel fun _ => Word.rmwEnt_rel hrel,
+    by rw [hh]; exact Word.relMono_push hI.relMono Word.rmwEnt_relLe⟩
   rotate_right
   · rw [hsz] at hj
     rcases (by omega : j < (E.W.hist m).size ∨ j = (E.W.hist m).size) with hj' | rfl

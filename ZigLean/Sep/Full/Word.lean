@@ -709,6 +709,62 @@ end FLock
 end Full
 end Zig
 
+/-! ## Release clocks of RMWs
+
+An RMW of the newest write continues the release sequence: its release clock covers the one of
+the write it read, and a release RMW's covers its writer's clock. A protocol that keeps these
+facts for a word's history (`FEvent.Inv.rel`, `FEvent.Inv.relMono`) keeps them after each push. -/
+
+namespace Zig.Conc.Word
+
+variable {n : Nat}
+
+/-- An RMW's release clock covers the release clock of the write it read. -/
+theorem rmwEnt_relLe {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Entry}
+    {v : BitVec n} : VClock.le last.relClock (rmwEnt M t ord last v).relClock = true := by
+  unfold rmwEnt
+  dsimp only
+  split
+  · exact VClock.le_merge_left _ _
+  · exact VClock.le_refl _
+
+/-- A release RMW's release clock covers its writer's clock. -/
+theorem rmwEnt_rel {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Entry}
+    {v : BitVec n} (h : ord.isRel = true) :
+    VClock.le (rmwEnt M t ord last v).clock (rmwEnt M t ord last v).relClock = true := by
+  simp only [rmwEnt, h, ↓reduceIte]; exact VClock.le_merge_right _ _
+
+/-- The release sequence (each write's release clock covers every earlier one's) after a push of
+an entry whose release clock covers the newest one's (an RMW of the newest write: `rmwEnt_relLe`). -/
+theorem relMono_push {h : Array Entry} {x : Entry}
+    (hm : ∀ i j, i ≤ j → j < h.size → VClock.le h[i]!.relClock h[j]!.relClock = true)
+    (hx : VClock.le h[h.size - 1]!.relClock x.relClock = true) :
+    ∀ i j, i ≤ j → j < (h.push x).size →
+      VClock.le (h.push x)[i]!.relClock (h.push x)[j]!.relClock = true := fun i j hij hj => by
+  rw [Array.size_push] at hj
+  rw [Proto.getElem!_push, Proto.getElem!_push]
+  rcases (by omega : j < h.size ∨ j = h.size) with hj' | rfl
+  · simp only [hj', Nat.lt_of_le_of_lt hij hj', ↓reduceIte]; exact hm i j hij hj'
+  · rcases (by omega : i < h.size ∨ i = h.size) with hi | rfl
+    · simp only [hi, Nat.lt_irrefl, ↓reduceIte]
+      exact VClock.le_trans (hm i (h.size - 1) (by omega) (by omega)) hx
+    · simp only [Nat.lt_irrefl, ↓reduceIte]; exact VClock.le_refl _
+
+/-- Every write of value `a` is a release write (its release clock covers its writer's clock)
+after a push of `x`, which is one if it has the value `a`. -/
+theorem rel_push {h : Array Entry} {x : Entry} {a : BitVec n}
+    (hm : ∀ j < h.size, h[j]!.Val a → VClock.le h[j]!.clock h[j]!.relClock = true)
+    (hx : x.Val a → VClock.le x.clock x.relClock = true) :
+    ∀ j < (h.push x).size, (h.push x)[j]!.Val a →
+      VClock.le (h.push x)[j]!.clock (h.push x)[j]!.relClock = true := fun j hj hv => by
+  rw [Array.size_push] at hj
+  rw [Proto.getElem!_push] at hv ⊢
+  rcases (by omega : j < h.size ∨ j = h.size) with hj' | rfl
+  · simp only [hj', ↓reduceIte] at hv ⊢; exact hm j hj' hv
+  · simp only [Nat.lt_irrefl, ↓reduceIte] at hv ⊢; exact hx hv
+
+end Zig.Conc.Word
+
 /-! ## Per-thread observed-message floors
 
 The floor is a position in the word's history, derived from `Mem.seen` and distinct

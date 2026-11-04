@@ -186,7 +186,7 @@ theorem next_isSet (h : E.Next t g p m m') (hsz : (E.W.hist m').size = (E.W.hist
   · rw [hh] at hsz; omega
   · rw [hh, FEvent.get_push_eq] at hv
     exact absurd (FEvent.val_eq FEvent.rmwEnt_val hv) (by decide)
-  · rw [hh, FEvent.get_push_eq]; exact ⟨hsx, hph, ord, hrel, rfl, FEvent.rmwEnt_rel hrel⟩
+  · rw [hh, FEvent.get_push_eq]; exact ⟨hsx, hph, ord, hrel, rfl, Word.rmwEnt_rel hrel⟩
 
 /-- **The contract excludes the double set**: a setter at `sd`, where `EventImpl.set_wp`
 returns it, writes nothing and stays at `sd`. -/
