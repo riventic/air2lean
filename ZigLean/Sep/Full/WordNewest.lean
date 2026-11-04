@@ -25,21 +25,12 @@ open Conc Proto Full
 theorem rmwWrite_run_ne_none {n : Nat} (li pos : Nat) (ord : AtomicOrder) (rd : Msg)
     (new : BitVec n) : ∀ m, ((rmwWrite li pos ord rd new).run m).run ≠ none := by
   unfold rmwWrite
-  have hrest : ∀ m, ((do
-      let m ← get
-      let cl := m.clocks[m.current]!
-      let id := m.nextMsg
-      let msg : Msg :=
-        { id := id, bytes := padTo (intSize n) (intBytes new), clock := cl,
-          relClock := (if ord.isRel then VClock.merge rd.relClock cl else rd.relClock),
-          rmwOf := some rd.id, writer := some m.current }
-      insertMsg li (pos + 1) msg
-      observe li id : MemM Unit).run m).run ≠ none :=
-    M.bind_run_ne_none M.get_run_ne_none fun _ =>
+  cases hq : ord.isAcq <;> simp only [hq, Bool.false_eq_true, ↓reduceIte]
+  · exact M.bind_run_ne_none M.get_run_ne_none fun _ =>
       M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => M.modify_run_ne_none _
-  split
-  · exact M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => hrest
-  · exact hrest
+  · exact M.bind_run_ne_none (M.modify_run_ne_none _) fun _ =>
+      M.bind_run_ne_none M.get_run_ne_none fun _ =>
+        M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => M.modify_run_ne_none _
 
 /-- An atomic RMW returns a value or an error, for every pointer, oracle choice and memory. -/
 theorem atomicRmwAt_run_ne_none {n : Nat} (c : Nat) (op : RmwOp) (signed : Bool)
@@ -66,26 +57,37 @@ theorem casReadPrep_run_ne_none (n align : Nat) (p : Ptr) :
     M.bind_run_ne_none (locIdx_run_ne_none _ _ _) fun _ => ?_
   exact M.bind_run_ne_none M.get_run_ne_none fun _ => M.pure_run_ne_none _
 
+/-- The weak CAS preparation returns in every memory. -/
+theorem weakCasPrep_run_ne_none (n align : Nat) (p : Ptr) (expected : BitVec n) :
+    ∀ m, ((weakCasPrep n align p expected).run m).run ≠ none := by
+  unfold weakCasPrep
+  refine M.bind_run_ne_none (casReadPrep_run_ne_none _ _ _) fun r => ?_
+  obtain ⟨li, readable⟩ := r
+  exact M.bind_run_ne_none M.get_run_ne_none fun _ => M.pure_run_ne_none _
+
+/-- A successful CAS's write access returns in every memory. -/
+theorem casMarkWrite_run_ne_none (n align : Nat) (p : Ptr) :
+    ∀ m, ((casMarkWrite n align p).run m).run ≠ none := by
+  unfold casMarkWrite
+  refine M.bind_run_ne_none M.get_run_ne_none fun m => ?_
+  refine M.bind_run_ne_none (M.lift_run_ne_none (m.accessW_run_ne_none _ _ _)) fun r => ?_
+  obtain ⟨b, _, o⟩ := r
+  exact recordAccess_run_ne_none _ _ _ _
+
 /-- A weak `cmpxchg` returns a result or an error, for every pointer, oracle choice and memory. -/
 theorem cmpxchgWeakAt_run_ne_none {n : Nat} (c : Nat) (succ fail : AtomicOrder) (align : Nat)
     (p : Ptr) (expected new : BitVec n) :
     ∀ m, ((cmpxchgWeakAt c succ fail align p expected new).run m).run ≠ none := by
-  unfold cmpxchgWeakAt weakCasPrep
-  refine M.bind_run_ne_none (M.bind_run_ne_none (casReadPrep_run_ne_none _ _ _) fun _ =>
-    M.bind_run_ne_none M.get_run_ne_none fun _ => M.pure_run_ne_none _) fun r => ?_
+  unfold cmpxchgWeakAt
+  refine M.bind_run_ne_none (weakCasPrep_run_ne_none _ _ _ _) fun r => ?_
   obtain ⟨li, opts⟩ := r
   dsimp only
   split
   · refine M.bind_run_ne_none M.get_run_ne_none fun _ =>
       M.bind_run_ne_none (M.lift_run_ne_none (intOfBytes_run_ne_none _ _ _)) fun _ => ?_
     split
-    · unfold casMarkWrite
-      refine M.bind_run_ne_none (M.bind_run_ne_none M.get_run_ne_none fun m =>
-        M.bind_run_ne_none (M.lift_run_ne_none (m.accessW_run_ne_none _ _ _)) fun r => ?_)
-        fun _ => M.bind_run_ne_none (rmwWrite_run_ne_none _ _ _ _ _) fun _ =>
-          M.pure_run_ne_none _
-      obtain ⟨b, _, o⟩ := r
-      exact recordAccess_run_ne_none _ _ _ _
+    · exact M.bind_run_ne_none (casMarkWrite_run_ne_none _ _ _) fun _ =>
+        M.bind_run_ne_none (rmwWrite_run_ne_none _ _ _ _ _) fun _ => M.pure_run_ne_none _
     · refine M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => ?_
       split
       · exact M.bind_run_ne_none (M.modify_run_ne_none _) fun _ => M.pure_run_ne_none _
@@ -106,11 +108,13 @@ theorem futexWake_run_idle {m : Mem} {p : Ptr} {n : Nat} {cs : List Nat}
     unfold wakeSet
     rw [hf]
     cases n <;> rfl
-  show (some (.ok ((), { m with waiters := m.waiters.filter
-      (fun w => !(wakeSet m.waiters p n cs).contains w.1),
-    woken := m.woken ++ wakeSet m.waiters p n cs })) : Option (Except Error (Unit × Mem))) = _
-  rw [hs]
-  simp
+  have hrun : ((futexWake p n cs).run m).run = some (.ok ((), { m with
+      waiters := m.waiters.filter (fun w => !(wakeSet m.waiters p n cs).contains w.1),
+      woken := m.woken ++ wakeSet m.waiters p n cs })) := rfl
+  have h1 : m.waiters.filter (fun w => !(#[] : Array ThreadId).contains w.1) = m.waiters := by
+    simp
+  rw [hrun, hs]
+  simp only [h1, Array.append_empty]
 
 end Thread
 
