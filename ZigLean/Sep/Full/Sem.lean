@@ -39,7 +39,9 @@ Any number of threads may wait and post: the condition is the multi-waiter one
   or every thread that has not ended (`FLock.HB`: registrations and posts, made holding the
   mutex), or before a taker (its consume); for a thread at `pst h c`, every write of `h` is a post,
   happened before `c` or there is a taker, and every later write is a post or there is a taker;
-  and the no-lost-wakeup fact above.
+  and the no-lost-wakeup fact above. It holds at a fresh semaphore (`Inv.start`), and a client's
+  protocol keeps it over the lock's steps out of `pst` (`Inv.lstep`) and over ticks
+  (`Inv.partTick`).
 - **The end of `pst`.** After its signal (`CondImpl.signal_wp`'s history post `FCond.SigPost`: a
   write `k` at or after every write that happened before the call is served or a post), every
   later write is a post (or there is a taker), so with a registered waiter a signal is pending
@@ -1131,7 +1133,8 @@ wait (`wp_lockWt`), the holder's access to the count that keeps it (`Fits.wp_cnt
 take and the poster's give at the store of the count, which move the holder to `pst` with its
 snapshot (`Fits.wp_take`, `Fits.wp_give`), the condition's wait at count 0 and its signal at
 `pst` by the condition's contract (`wp_cwait`, `wp_csignal`), the end of `pst` at count 0
-(`Fits.unpst`), and the `unlock` by the mutex's contract (`wp_unlock`). -/
+(`Fits.unpst`, `Fits.wp_unlockPst`); the `unlock` out of `pst` is the mutex's
+(`MutexImpl.unlock_wp_to`). -/
 
 theorem p_block (S : FSem γ X L C) : S.p.block = some L.b := by
   have := congrArg Ptr.block S.ptr_l
