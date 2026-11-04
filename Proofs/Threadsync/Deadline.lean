@@ -123,8 +123,10 @@ block's entry token and the complete residual resource. The existing cur-aware c
 lift supplies `cur t` only for the local allocation/free step. -/
 
 open Zig.Full Zig.Full.FAssn in
-/-- The deadline block and its actual block-indexed residual resource. -/
-def DPart (P : BlockId → FAssn) (q : Ptr) (bs : Array Byte) : FAssn :=
+/-- The deadline block and its actual block-indexed residual resource. An `fsym` atom: its
+rules below (`dalloc`, `dstore`, `dload`, `dfree`) are its interface, so a fact `DPart … r`
+stays folded and meets the next rule's precondition as it is. -/
+@[fsym_atom] def DPart (P : BlockId → FAssn) (q : Ptr) (bs : Array Byte) : FAssn :=
   FAssn.ex fun A : Nat => FAssn.ex fun b : BlockId =>
     ⟪q.block = some b ∧ q.off = 0 ∧ A % 8 = 0⟫ ⋆
       ((up (bytesAt q A 48 .stack bs) ⋆ bext b 48 .stack) ⋆ P b)

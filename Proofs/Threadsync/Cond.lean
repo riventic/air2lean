@@ -347,7 +347,8 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
         (loop29_body hC hcost DR hu hLc t g hgx hok q i jr e d hlive)),
     dinit_eq, bsD_size, gD_ph hC, gD_lph hC, gD_set hC, gD_unlock hC, gD_free,
     hC.lpart, hC.ok_setPart, hC.ok_calm, FCond.set_of, L.part_setPart, L.setPart_setPart,
-    FCond.ptr_ep, inv29, post29]
+    L.ph_setPart, L.ph_set, L.part_set, L.setPart_set, L.setPart_self, FCond.ptr_ep, inv29,
+    post29]
 
 /-- **`Condition.wait`** by the mutex's holder, out of the condition's code: it returns holding
 the mutex again. -/
