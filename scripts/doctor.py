@@ -311,7 +311,8 @@ class Doctor:
         except OSError as exc:
             self.add('native-runners', 'warn', 'cannot read the CI workflow: %s' % exc)
             return
-        tools = set(re.findall(r'^\s*AIR2LEAN_\w+_RUN:\s*([A-Za-z0-9_.+-]+)\s*$', workflow, re.M)) | {'node'}
+        # The command of each runner prefix (quoted or not, with or without arguments); "" is the host.
+        tools = set(re.findall(r'^\s*AIR2LEAN_\w+_RUN:\s*["\']?([^\s"\']+)', workflow, re.M)) | {'node'}
         missing = sorted(t for t in tools if not shutil.which(t, path=self.env.get('PATH')))
         if not missing:
             self.add('native-runners', 'ok', 'native-row runners available: ' + ', '.join(sorted(tools)))

@@ -106,9 +106,6 @@ if [ "$mode" = --native ]; then
       docker run --rm --platform "linux/$([ "$arch" = s390x ] && echo s390x || echo amd64)" \
         -v "$work:/w:ro" alpine:3 sh -c "/w/native-$arch 2>&1" > "$work/native-$arch.txt"
     else
-      # The binary's output is its stderr, so a missing runner would only show in that file.
-      [ -z "$runner" ] || command -v "${runner%% *}" >/dev/null ||
-        { echo "missing prerequisite: $var=$runner is not installed (scripts/doctor.sh native-runners)" >&2; exit 1; }
       # shellcheck disable=SC2086
       $runner "$bin" 2> "$work/native-$arch.txt"
     fi

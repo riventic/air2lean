@@ -87,6 +87,9 @@ WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch 
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
+# A native row's runner (AIR2LEAN_<ARCH>_RUN, a command prefix; empty: the host): `_stage` fails a
+# unit whose runner is not installed, since a check script may send the runner's errors to a file.
+RUNNER = re.compile(r'AIR2LEAN_\w+_RUN')
 # Scheduling (`schedule`): a request is the largest of a unit's last HINT_RUNS sampled peaks times
 # MEM_MARGIN (sampling every 2 s misses short spikes), at least MEM_FLOOR_MIB; the requests of
 # the running units stay within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the
@@ -293,6 +296,11 @@ def _stage(unit, scratch):
         return text.replace(WS, str(workspace)).replace(TMP, str(temp))
 
     env.update({name: place(value) for name, value in unit['env'].items()})
+    if unit['runner'] == HOST:  # its native runs execute here, each through its row's runner
+        for name in sorted(n for n in unit['env'] if RUNNER.fullmatch(n) and env[n].strip()):
+            if not shutil.which(env[name].split()[0], path=env['PATH']):
+                raise Unavailable('missing prerequisite: %s=%s is not installed '
+                                  '(scripts/doctor.sh native-runners)' % (name, env[name]))
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
