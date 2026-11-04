@@ -68,7 +68,7 @@ theorem semWaitLoop_body (hS : S.Fits P U ok) (hcost : P.cost = none)
 (`SemImpl.wait_wp_resource` at the kept part). -/
 theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = ioMutex.c)
     {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (T : FAssn)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hcnt : ∀ G rL m, P.inv (upd G t (L.set (S.set g .wt) .holds rL)) m →
@@ -104,7 +104,7 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
     fun _ => Res.unmetered_rsum_left hu
   unfold Io_Semaphore_waitUncancelable
   fsym [WP.liftMem_pure (projI hF _ _ _) rfl,
-    wp_lockWt ioMutex hF hcost S.ptr_l.symm hLc t g hgo hgx hokg hu,
+    wp_lockWt ioMutex hF hcost S.ptr_l.symm hLc t g hgo hgx hgs hokg hu,
     WP.loop _ _ (semWaitInv P L S t g d) (fun _ => 0) (semWaitPost P L S t g d)
       (semWaitLoop_body hS hcost hLc t g hgx hokg hu hroom hlive d io),
     Fits.wp_cnt hF hcost, Fits.wp_take hF hcost hcnt hpool hU hgx hxx,
@@ -119,7 +119,7 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
 caller's (`keepPart`), so the premises at it are at the caller's ghost value. -/
 theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (T : FAssn)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (_ : S.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hcnt : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G rL m,
@@ -153,7 +153,7 @@ theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
   have hU := hU _ rfl
   have hroom := hroom _ rfl
   simp only [L.setPart_self] at hcnt hpool hU hroom
-  refine WP.mono ?_ (ioSem_wait_wp hS hcost hLc hp t g gx T hgo hgx hokg hxo hxh hxx hxs hokx
+  refine WP.mono ?_ (ioSem_wait_wp hS hcost hLc hp t g gx T hgo hgx hgs hokg hxo hxh hxx hxs hokx
     hcnt hpool hU hroom hlive io G m d hu hi hc)
   rintro _ G' m' d' ⟨hd, hc', r, hT, hdj, hi'⟩
   exact ⟨hd, hc', L.part g, r, rfl, hT, hdj, hi'⟩
@@ -164,7 +164,7 @@ theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
 the kept part). -/
 theorem ioSem_post_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = ioMutex.c)
     {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (rT : Res)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hsplit : L.part g = rsum (L.part gx) rT) (hdj : FHeap.Disjoint (L.part gx).heap rT.heap)
@@ -191,7 +191,7 @@ theorem ioSem_post_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
       (S.cnt (upd G t g)).toNat + 1 < 2 ^ 64 := fun hi => (hcnt _ _ _ hi).2
   fsym [WP.liftMem_pure (projI hF _ _ _) rfl,
     ioMutex.lock_wp hF hcost S.ptr_l.symm hLc t g hgo hokg hug,
-    Fits.wp_cnt hF hcost, hbound, Fits.wp_give hF hcost hcnt hpool hU hgx hxx hsplit hdj,
+    Fits.wp_cnt hF hcost, hbound, Fits.wp_give hF hcost hcnt hpool hU hgx hgs hxx hsplit hdj,
     wp_csignal ioCond hS hcost S.ptr_c.symm t,
     ioMutex.unlock_wp_to hF hcost S.ptr_l.symm hLc t, hokx, hu,
     S.cph_set, S.ph_set, cph_l hF, sph_l hF, L.ph_set, hxo, hxh, hxx, hxs]
@@ -200,7 +200,7 @@ theorem ioSem_post_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
 (`keepPart`), so the premises at it are at the caller's ghost value. -/
 theorem ioSem_post_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
     (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (rT : Res)
-    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (_ : S.ph g = .out) (hokg : ok g)
+    (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hokg : ok g)
     (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
     (hokx : ok gx)
     (hsplit : L.part g = rsum (L.part gx) rT) (hdj : FHeap.Disjoint (L.part gx).heap rT.heap)
@@ -225,7 +225,7 @@ theorem ioSem_post_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
   have hpool := hpool _ rfl
   have hU := hU _ rfl
   simp only [hg, L.setPart_self] at hcnt hpool hU
-  refine WP.mono ?_ (ioSem_post_wp hS hcost hLc hp t g gx rT hgo hgx hokg hxo hxh hxx hxs hokx
+  refine WP.mono ?_ (ioSem_post_wp hS hcost hLc hp t g gx rT hgo hgx hgs hokg hxo hxh hxx hxs hokx
     hsplit hdj hcnt hpool hU io G m d hu hi hc)
   rintro _ G' m' d' ⟨hd, hc', hi'⟩
   exact ⟨hd, hc', L.part gx, rfl, by rwa [L.setPart_self]⟩
