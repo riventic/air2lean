@@ -6,6 +6,7 @@
     python3 -B scripts/lean-deps.py --files
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
     python3 -B scripts/lean-deps.py --precompiled check|write
+    python3 -B scripts/lean-deps.py --prune-orphans
 
 Prints the imports of the given `.lean` files (a directory: every `.lean` file below it) that are
 modules of this package's libraries (`lakefile.toml`; `import ZigLean.Sep.Full.Auto` with
@@ -29,6 +30,10 @@ A file with imports of a fixture's own modules is elaborated by the check of tha
 `--precompiled check|write` checks (or writes) the `globs` of each library `<P>Deps` of
 `lakefile.toml`: the modules that the precompiled library P's modules import, transitively
 (`precompiled_deps`; docs/build-cache.md#precompiled-fsym).
+
+`--prune-orphans` deletes, in every tracked Lake package (`lakefile.toml`), the compiled outputs of
+modules that have no source there any more (`orphan_outputs`), and prints them;
+scripts/full-build.sh runs it first.
 
 A check that runs `lake env lean` on test files builds their imports first with `--build`: the
 modules are derived from the files, so the list cannot drift, and a stale `.olean` (a merge that
@@ -116,6 +121,47 @@ def repo_modules(files: list[pathlib.Path]) -> list[str]:
 
 def module_file(mod: str) -> pathlib.Path:
     return ROOT / (mod.replace(".", "/") + ".lean")
+
+
+def package_sources(package: pathlib.Path) -> list[pathlib.Path]:
+    """The source directories of the Lake package `package` (`lakefile.toml`): the package's
+    `srcDir` and, below it, each library's and executable's own."""
+    lake = tomllib.loads((package / "lakefile.toml").read_text(encoding="utf-8"))
+    base = package / lake.get("srcDir", ".")
+    return sorted({base, *(base / target.get("srcDir", ".")
+                           for target in [*lake.get("lean_lib", []), *lake.get("lean_exe", [])])})
+
+
+def has_source(sources: list[pathlib.Path], module: str) -> bool:
+    """Whether the module at the relative path `module` (`A/B` for `A.B`) has a source in one of
+    `sources` (`package_sources`)."""
+    return any((source / (module + ".lean")).is_file() for source in sources)
+
+
+MODULE_OUTPUTS = {"olean", "ilean", "c", "setup"}  # M.olean, M.ilean, ir/M.c, ir/M.setup.json
+
+
+def orphan_outputs(package: pathlib.Path) -> list[pathlib.Path]:
+    """The files of `package/.lake/build/lib/lean` (oleans, ileans, traces, hashes) and
+    `.lake/build/ir` (C code, objects) of modules with no source in `package` (`package_sources`):
+    what an older build compiled from a module deleted or renamed since. Lake never removes them,
+    nor can it build them again, while `leanchecker` takes its argument as a prefix and checks
+    every olean below it (scripts/assumptions.py `checked_modules`), a plain `lean` on LEAN_PATH
+    imports them, and a proof receipt refuses them (scripts/proof-receipt.py `compiled`). A
+    module's outputs are the files `M.*` beside one of `MODULE_OUTPUTS`; others (a precompiled
+    module's `<pkg>_<M>.dylib`, named after no file) are left alone."""
+    sources = package_sources(package)
+    orphans = []
+    for build in (package / ".lake/build/lib/lean", package / ".lake/build/ir"):
+        groups: dict[pathlib.Path, list[pathlib.Path]] = {}
+        for path in build.rglob("*") if build.is_dir() else []:
+            if path.is_file() and "." in path.name:
+                groups.setdefault(path.parent / path.name.split(".", 1)[0], []).append(path)
+        for stem, files in groups.items():
+            module = any(f.name.split(".")[1] in MODULE_OUTPUTS for f in files)
+            if module and not has_source(sources, stem.relative_to(build).as_posix()):
+                orphans += files
+    return sorted(orphans)
 
 
 def library_files() -> list[str]:
@@ -313,6 +359,14 @@ def main(argv: list[str]) -> int:
             print("usage: lean-deps.py --precompiled check|write", file=sys.stderr)
             return 2
         return precompiled(argv[1] == "write")
+    if argv == ["--prune-orphans"]:
+        tracked = subprocess.run(["git", "ls-files", "-z", "--", "lakefile.toml", "*/lakefile.toml"],
+                                 cwd=ROOT, check=True, capture_output=True, text=True).stdout
+        for lakefile in filter(None, tracked.split("\0")):
+            for path in orphan_outputs((ROOT / lakefile).parent):
+                print(f"lean-deps: removing {path} (its module has no source)")
+                path.unlink(missing_ok=True)  # another prune of this tree may have removed it
+        return 0
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:

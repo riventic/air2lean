@@ -135,6 +135,18 @@ class NoReuse(unittest.TestCase):
                 self.assertEqual(self.run_checks("--prepare")[0], 0)
         self.assertEqual(resolved, [("stock", "0.16.0")] * 2)
 
+    def test_a_missing_native_runner_fails_the_unit_naming_it(self):
+        # Unit 12 of 2026-11-04: big-endian/check.sh sent the runner's stderr to a file, so a
+        # missing qemu-s390x-static failed with exit 127 and no message.
+        (self.hidden / "input").write_text("ok\n")
+        self.unit["env"].update({"AIR2LEAN_S390X_RUN": "no-such-runner-air2lean -cpu max",
+                                 "AIR2LEAN_X86_64_RUN": ""})
+        status, out, err = self.run_checks()
+        self.assertEqual(status, 1, out + err)
+        self.assertIn("missing prerequisite: AIR2LEAN_S390X_RUN=no-such-runner-air2lean -cpu max", err)
+        self.unit["runner"] = "s390x-linux"  # a unit for another host runs no native step here
+        self.assertEqual(self.run_checks()[0], 0)
+
     def test_a_unit_that_rebuilds_a_root_module_fails_the_run(self):
         # The race of 2026-10-20: a unit rebuilt root modules in place while others imported them.
         shared = self.temp / "build"
