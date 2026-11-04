@@ -1058,6 +1058,10 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
           | some pf => match r.proof? with
             | some eq => pure (some (← mkEqMPR eq pf))
             | none => pure (some pf)
+    -- (stated as the side condition: a step by a `dsimproc`, `Enc.size (BitVec 16)` to `2`, leaves
+    -- no proof, and the proof's type is then the reduced form, which simp's reducible assignment
+    -- of the rewrite's hypothesis does not unify)
+    let out ← out.mapM (mkExpectedTypeHint · e)
     if let some pf := out then (← caches).disch.modify (·.insert e (some pf))
     return out
   r
@@ -1162,6 +1166,12 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
       | some eq => g.assign (← mkEqMPR eq pf)
       | none => g.assign (← mkExpectedTypeHint pf tgt0)
     if r.expr.isTrue then close (mkConst ``True.intro); return true
+    -- an equation with an unknown side (a provider's `Enc.decode (bs.extract lo hi) = pure ?v`):
+    -- the unknown is the other side's normal form (reducibly: no evaluation of a decoding that
+    -- did not normalize)
+    if let some (_, x, y) := r.expr.eq? then
+      if r.expr.hasExprMVar && (!x.hasExprMVar || !y.hasExprMVar) then
+        if ← withReducible (isDefEq x y) then close (← mkEqRefl x); return true
     -- a fact in normal form that is the target (`x0 = none` from `none = none → x0 = none`: no
     -- arithmetic for `omega`)
     unless r.expr.hasExprMVar do
