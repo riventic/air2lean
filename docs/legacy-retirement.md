@@ -18,7 +18,7 @@ their tables still list files that are gone. `assurance/proof-framework.json` is
 | L5a sentinel/realloc chain | done | #406 (in #412) |
 | L5b owned/arena | done | #338 |
 | L5c alloc/policy | done; `Sep/Alloc` keeps `Triple.freeSentinel` until its last users go | #404 (in #412) |
-| L6 wrappers and FBA client | client done (Bridge, legacy Client, Fba deleted); stage D-b (Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation) follows; `Sep/Step` deleted early | #384 (in #407), #567 |
+| L6 wrappers and FBA client | done: client over `FAllocSpec` (Bridge, legacy Client, Fba deleted); stage D-b deleted Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation; `Sep/Step` deleted early | #384 (in #407), #567, D-b |
 | L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11, #403 and L12, `Witnesses/Sep` for L8 | #340, #435 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L8, L10, L11, L12, L13 | open | |
@@ -305,6 +305,12 @@ Deletable after L6: Sep/AllocSpec, Wrap, Wrappers, Dispatch, Automation (and Ste
 - Bridge, the legacy Client and Fba are deleted, with the `bridge_close`/`bridge_norm`/`pure_norm`
   tactics. Sep/AllocSpec, Wrap, Wrappers, Dispatch (and Automation) have no importer left: stage
   D-b deletes them next (their `legacy_users` rows in `assurance/proof-framework.json`).
+
+**L6 stage D-b (2026-11-04, claude/l6-db-allocspec):** Sep/AllocSpec, Sep/AllocSpec/{Wrap,Wrappers,Dispatch}
+and Sep/Automation are deleted, with the judgments `AllocSpec`, `AllocInv`, `Logic` and the tactics
+`sep_from`, `tame_prim`, `sep_frame`, `sep_normalize` (`legacy_users` 36 → 31). The base vocabulary
+Sep/AllocSpec/{Region,Ops,Norm} stays (L3: it imports only Sep/Base; `proof-framework.py` does not
+count it as legacy). L6 is done.
 
 ### L8. Tick-cost model (L, design-blocked). Blocker TICK.
 | file | proves | legacy pieces | eff | class |

@@ -12,12 +12,12 @@ proved once from it.
 | `ZigLean/Sep/AllocSpec/Region.lean` | region permissions and their algebra |
 | `ZigLean/Sep/AllocSpec/Ops.lean` | ownership facts for `@intFromPtr`, pointer `<=` and pointer formation, read-only and explicit-block `pts`, coverage |
 | `ZigLean/Sep/AllocSpec/Norm.lean` | normalizing generated code (`MM σ` bodies) to `MemM` programs (lemmas of `fsym_norm`) |
-| `ZigLean/Sep/AllocSpec.lean` | legacy: `Logic`, `AllocInv`, `granted`, `AllocSpec`, and the `TotalTriple` rules of the region and ownership operations |
-| `ZigLean/Sep/AllocSpec/Wrap.lean` | legacy: the step semantics `Wrap.*` of the `std.mem.Allocator` wrappers |
-| `ZigLean/Sep/AllocSpec/Wrappers.lean` | legacy: the wrappers' contracts |
-| `ZigLean/Sep/AllocSpec/Dispatch.lean` | legacy: the vtable dispatch of translated wrappers and `dispatch_allocSpec` |
+| `ZigLean/Sep/Full/AllocSpec.lean` | `FAllocSpec`, `FAllocInv`: the specification in the full-state logic |
 
-CI builds all of them (`Generic allocator specification`). The translated
+CI builds the vocabulary (`Allocator vocabulary`). The legacy `AllocSpec` (`Logic`, `AllocInv`,
+`granted`), the hand-written wrapper semantics `Wrap.*`, their contracts and the legacy vtable
+dispatch were deleted with the legacy layer (L6 stage D-b, `docs/legacy-retirement.md`); the
+sections below that name them describe the design `FAllocSpec` carries over. The translated
 `FixedBufferAllocator` instance of `FAllocSpec`, the generated wrappers' contracts and a proved
 client are in `tests/roadmap/alloc-fba` (`Translated FixedBufferAllocator against FAllocSpec`).
 
