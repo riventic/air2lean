@@ -3601,6 +3601,12 @@ def authArgs? (e : Expr) : Option (Array Expr) :=
   else if e.isAppOfArity ``Zig.Full.bext 3 then some (e.getAppArgs.push (mkConst ``Zig.Full.Frac.one))
   else none
 
+/-- An atom that the planner's own passes place, not unification: a fact, a region, a share, an
+authority, a frame. -/
+def isPlannedKind (e : Expr) : Bool :=
+  e.isAppOfArity liftN 1 || (regionArgs? e).isSome || (shareArgs? e).isSome ||
+    (authArgs? e).isSome || isAssnHole e
+
 def mkAuth (b S K q : Expr) : Expr := mkAppN (mkConst ``Zig.Full.bauth) #[b, S, K, q]
 
 /-- The state's authority over block `b`, as a `bauth` atom (a `bext` is restated). -/
@@ -4082,29 +4088,55 @@ def sizedRegionBytes (qats : Array Expr) (sizes : Array (Expr × Expr) := #[]) :
       out := out ++ (bs.collectMVars {}).result
   return out
 
-/-- An atom of the postcondition (not a region, not a fact) with the size of the unknown bytes
-`bs` as an argument (a grant's token `tok p bs.size …`): its position. -/
-def sizeArg? (a bs : Expr) : Option Nat :=
-  if a.isAppOfArity liftN 1 || (regionArgs? a).isSome then none
-  else a.getAppArgs.findIdx? fun x => x.isAppOfArity ``Array.size 2 && x.appArg! == bs
+/-- A measure: `xs.size`, `l.length`. -/
+def isMeasure (e : Expr) : Bool :=
+  e.isAppOfArity ``Array.size 2 || e.isAppOfArity ``List.length 2
 
-/-- The size of the unknown bytes `bs` of a postcondition region from an atom of the
-postcondition that has `bs.size` as an argument (`sizeArg?`): the argument of the state atom of
-that head whose other arguments unify with it (they are assigned). -/
-def atomSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
+/-- `e` with each measure of an unknown (`?bs.size`, `?l.length`, `(?bs ++ t).size`) replaced by
+a fresh variable, and the pairs (measure, variable). Unification takes an application argument
+by argument, so `?bs.size =?= old.size` would assign `?bs := old`; but a measure is not
+injective, and a grant's token `tok p ?bs.size` (or its ledger fragment
+`gfrag γ e i (p, ?bs.size, …)`) names only the size of the bytes its region holds now. The
+planner unifies abstracted atoms: a measure takes its value from the state, never its unknown
+(`measuredSize?` reads the size the region planner carves the unknown bytes at), and the final
+match checks the measure up to arithmetic. The measures are `isMeasure`'s; another head still
+unifies argument by argument (only a solver could tell which heads are injective). -/
+def abstractMeasures (e : Expr) : MetaM (Expr × Array (Expr × Expr)) := do
+  let e ← instantiateMVars e
+  unless e.hasExprMVar && (e.find? fun x => isMeasure x && x.appArg!.hasExprMVar).isSome do
+    return (e, #[])
+  let lctx ← getLCtx
+  let insts ← getLocalInstances
+  let ms ← IO.mkRef (#[] : Array (Expr × Expr))
+  let e' ← Meta.transform e (pre := fun x => do
+    unless isMeasure x && x.appArg!.hasExprMVar do return .continue
+    -- (not a measure of a bound variable)
+    if x.hasAnyFVar (!lctx.contains ·) then return .continue
+    -- (in the outer context: under a binder, a variable of the inner one would depend on it)
+    let n ← mkFreshExprMVarAt lctx insts (← inferType x)
+    ms.modify (·.push (x, n))
+    return .done n)
+  return (e', ← ms.get)
+
+/-- The size of the unknown bytes `bs` of a postcondition region that another atom names: an
+atom (not a fact, a region, a share, an authority or a frame) with the measure `bs.size`
+somewhere in it (an argument, a field of one, under arithmetic) that unifies with a state atom
+of its head with its measures abstracted (`abstractMeasures`): the value the measure takes.
+Assignments are not kept. -/
+def measuredSize? (qats sats : Array Expr) (bs : Expr) : MetaM (Option Expr) := do
+  let sizeOf (x : Expr) := x.isAppOfArity ``Array.size 2 && x.appArg! == bs
   for a in qats do
     let a ← instantiateMVars a
-    let some k := sizeArg? a bs | continue
-    let args := a.getAppArgs
+    if isPlannedKind a || (a.find? sizeOf).isNone then continue
+    let (a', ms) ← abstractMeasures a
+    let some (_, n) := ms.find? (sizeOf ·.1) | continue
     for x in sats do
-      unless headKey x == headKey a && x.getAppNumArgs == args.size do continue
-      let s ← saveState
-      let xs := x.getAppArgs
-      if ← (List.range args.size).allM fun j => do
-          if j == k then return true
-          withReducible (isDefEq args[j]! xs[j]!) then
-        return some xs[k]!
-      s.restore
+      unless headKey x == headKey a && x.getAppNumArgs == a.getAppNumArgs do continue
+      let size? ← withoutModifyingState do
+        unless ← withReducible (isDefEq a' x) do return none
+        let n ← instantiateMVars n
+        return if n.hasExprMVar then none else some n
+      if size?.isSome then return size?
   return none
 
 /-- `r` added to the atoms the planner did not find, unless it is one of them. -/
@@ -4276,14 +4308,13 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     -- assigned (a `match` on an existential) is opened again. The unknown bytes of a region with
     -- a size fact are the region planner's (`carve`, from the state's current bytes): an atom that
     -- mentions them (a token `I.tok p bs.size …` of the allocation) waits for the final match,
-    -- where it matches up to arithmetic.
+    -- where it matches up to arithmetic. A measure of an unknown (`?bs.size`) does not fix the
+    -- unknown (`abstractMeasures`): the region planner carves the bytes at that size.
     let preassign (st : St) (qats : Array Expr) : TacticM Unit := do
       let deferred ← sizedRegionBytes qats sizes
       let skip (a : Expr) : MetaM Bool := do
         let a ← instantiateMVars a
-        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || isAssnHole a || a.isAppOfArity ``Zig.Full.known 2 || planned a then
-          return true
+        if isPlannedKind a || a.isAppOfArity ``Zig.Full.known 2 || planned a then return true
         return (a.collectMVars {}).result.any (deferred.contains ·)
       -- each state atom pre-assigns one atom of the postcondition (two atoms of one head with
       -- unknown arguments, `fee ?u ⋆ fee ?v`, take two atoms of the state)
@@ -4293,6 +4324,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       let ranked ← qats.mapM fun a => return (a, ((← instantiateMVars a).collectMVars {}).result.size)
       for (a, _) in ranked.insertionSort (·.2 < ·.2) do
         if ← skip a then continue
+        let (a, _) ← abstractMeasures a
         for i in [0:st.ats.size] do
           if taken.contains i then continue
           let s' ← saveState
@@ -4301,6 +4333,7 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       for a in qats do
         if ← skip a then continue
         if (← instantiateMVars a).hasExprMVar then
+          let (a, _) ← abstractMeasures a
           for i in [0:st.ats.size] do
             let x := st.ats[i]!
             if taken.contains i || headKey a != headKey x then continue
@@ -4313,11 +4346,11 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       for a in qats do
         let a ← instantiateMVars a
         unless a.hasExprMVar && (a.collectMVars {}).result.any (deferred.contains ·) do continue
-        if a.isAppOfArity liftN 1 || (regionArgs? a).isSome || (shareArgs? a).isSome ||
-          (authArgs? a).isSome || isAssnHole a || planned a then continue
+        if isPlannedKind a || planned a then continue
         let xs := st.ats.filter (headKey · == headKey a)
         let #[x] := xs | continue
         unless a.getAppFn == x.getAppFn && a.getAppNumArgs == x.getAppNumArgs do continue
+        let (a, _) ← abstractMeasures a
         let s' ← saveState
         let ok ← (a.getAppArgs.zip x.getAppArgs).allM fun (u, v) => do
           if (u.collectMVars {}).result.any (deferred.contains ·) then return true
@@ -4388,14 +4421,17 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     -- unknown size, which extends as far as the state's bytes go, or when no region holds it)
     let mut exact : Array Nat := #[]
     let mut claimed : Array Expr := #[]
+    -- the sizes other atoms name (`measuredSize?`), by the unknown bytes
+    let mut measured : Array (Expr × Expr) := #[]
     for a in qats do
       let some q := regionArgs? (← instantiateMVars a) | continue
-      -- a region with a size fact, or whose size another atom names, is carved (its bytes may
-      -- change)
+      -- a region with a size fact, or whose size another atom names (`measuredSize?`), is
+      -- carved (its bytes may change)
       let qbs ← instantiateMVars q[5]!
       if qbs.hasExprMVar then
         if (← sizeFact? facts qbs sizes).isSome then continue
-        if ← qats.anyM fun b => return (sizeArg? (← instantiateMVars b) qbs).isSome then continue
+        if let some n ← measuredSize? qats st.ats qbs then
+          measured := measured.push (qbs, n); continue
       for i in [0:st.ats.size] do
         if (regionArgs? st.ats[i]!).isNone || exact.contains i then continue
         let s' ← saveState
@@ -4413,7 +4449,10 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       let whole := demand?.isSome
       let n? ← match fact? <|> demand? with
         | some n => pure (some n)
-        | none => if qbs.hasExprMVar then atomSize? qats st.ats qbs else pure none
+        | none =>
+          if !qbs.hasExprMVar then pure none
+          else if let some (_, n) := measured.find? (·.1 == qbs) then pure (some n)
+          else measuredSize? qats st.ats qbs
       let mut done := false
       if n?.isNone && (← instantiateMVars q[5]!).hasExprMVar then
         repeat
