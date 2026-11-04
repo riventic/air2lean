@@ -10,10 +10,9 @@ import ZigLean.Sep.Full.Loop
 Each theorem is about the generated code in `Gen.lean`, so it holds for the Zig function to the
 extent the translation is faithful (see the differential tests in `tests/diff/`).
 
-`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. The parity group has a full-state total
-contract, proved by `FTotalTriple.rec_group` and one `fsym` step for both members. The public
-parity equalities follow from total adequacy. The `fact` proof still inducts on `n.toNat`, and
-the `gcd` proof does strong induction on the second argument (`a % b < b`).
+`isEven`/`isOdd`/`fact`/`gcd` are `partial_fixpoint`. The parity and gcd groups have full-state
+total contracts, proved by `FTotalTriple.rec_group` and one `fsym` step per group. Their public
+equalities follow from total adequacy. The `fact` proof still inducts on `n.toNat`.
 
 **Stack premise.** These functions are pure (`Zig.Result`), so the model charges no frames:
 each theorem holds for the native function only if the native stack holds the recursion it
@@ -83,23 +82,11 @@ theorem isOdd_total (n : BitVec 32) :
       (fun v => ⟪v = (n.toNat % 2 == 1)⟫) :=
   parity_total (.inr n)
 
-/-- Project the pure result from the existing total start-memory adequacy theorem. -/
-private theorem parity_eq (a : ParityInvocation) :
-    (match a with | .inl n => isEven n | .inr n => isOdd n) = pure (parityValue a) := by
-  obtain ⟨v, m', r', hr, _, hq, _⟩ :=
-    (parity_total a).run_init default [] (by decide) (by simp)
-  change ((match a with | .inl n => isEven n | .inr n => isOdd n) >>=
-    fun v => pure (v, Mem.ofGlobals default [])) = pure (v, m') at hr
-  obtain ⟨w, hw, hpair⟩ := result_bind_eq_pure hr
-  have hwv : w = v := congrArg Prod.fst (Zig.Full.Auto.result_pure_inj hpair)
-  rw [hwv, hq.1] at hw
-  exact hw
-
 theorem isEven_spec (n : BitVec 32) : isEven n = pure (n.toNat % 2 == 0) :=
-  parity_eq (.inl n)
+  (isEven_total n).result_eq
 
 theorem isOdd_spec (n : BitVec 32) : isOdd n = pure (n.toNat % 2 == 1) :=
-  parity_eq (.inr n)
+  (isOdd_total n).result_eq
 
 /-- Compatibility with the original simultaneous statement, now from the group contract. -/
 theorem isEven_isOdd_aux :
@@ -182,37 +169,62 @@ theorem rem_unsigned (a b : BitVec 32) :
 theorem gcd_step (a b : Nat) : Nat.gcd a b = Nat.gcd b (a % b) := by
   rw [Nat.gcd_comm a b, Nat.gcd_rec b a, Nat.gcd_comm (a % b) b]
 
-/-- `gcd`, proved by strong induction on the recursion depth `b = bb.toNat` (the second argument
-decreases via `a % bb < bb`, not by one, so plain induction does not apply here). The generated
-code's `p1 != 0` (Sema's `divideByZero` check) / `Zig.rem`'s own `b = 0` guard (`.illegal`) are
-both discharged by `hb0`: the
-divisor is never zero on the recursive branch. -/
+private def gcdCode (a : BitVec 32 × BitVec 32) : MemM (BitVec 32) :=
+  StateT.lift (gcd a.1 a.2)
+
+private def gcdValue (a : BitVec 32 × BitVec 32) : BitVec 32 :=
+  BitVec.ofNat 32 (Nat.gcd a.1.toNat a.2.toNat)
+
+private theorem gcd_zero (a : BitVec 32 × BitVec 32) (h : a.2 = 0#32) :
+    a.1 = gcdValue a := by
+  simp [gcdValue, h]
+
+private theorem gcd_rank_step (a : BitVec 32 × BitVec 32) (r : BitVec 32)
+    (h : a.2 ≠ 0#32) (hr : r.toNat = a.1.toNat % a.2.toNat) :
+    (a.2, r).2.toNat < a.2.toNat := by
+  change r.toNat < a.2.toNat
+  rw [hr]
+  have hne : a.2.toNat ≠ 0 := by
+    intro h0
+    apply h
+    apply BitVec.eq_of_toNat_eq
+    simpa using h0
+  exact Nat.mod_lt _ (Nat.pos_of_ne_zero hne)
+
+private theorem gcd_value_step (a : BitVec 32 × BitVec 32) (r : BitVec 32)
+    (hr : r.toNat = a.1.toNat % a.2.toNat) :
+    gcdValue (a.2, r) = gcdValue a := by
+  simp only [gcdValue]
+  rw [hr, ← gcd_step]
+
+/-- The generated Euclidean algorithm terminates for every pair, including a zero divisor.
+Its own branch discharges both remainder guards; the smaller-call contract uses the second
+argument's natural value as its rank. Native stack use retains STK-01. -/
+private theorem gcd_pair_total (a : BitVec 32 × BitVec 32) :
+    FTotalTriple emp (gcdCode a) (fun v => ⟪v = gcdValue a⟫) := by
+  refine FTotalTriple.rec_group gcdCode (fun _ => emp)
+    (fun a v => ⟪v = gcdValue a⟫) (fun a => a.2.toNat) ?_ a
+  intro a smaller
+  fsym
+  all_goals first
+    | apply gcd_zero; assumption
+    | apply gcd_rank_step <;> assumption
+    | apply gcd_value_step; assumption
+
+theorem gcd_total (a b : BitVec 32) :
+    FTotalTriple emp (StateT.lift (gcd a b) : MemM (BitVec 32))
+      (fun v => ⟪v = BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)⟫) :=
+  gcd_pair_total (a, b)
+
+theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
+  (gcd_total a b).result_eq
+
+/-- The original auxiliary statement, as a consequence of the all-input group contract. -/
 theorem gcd_spec_aux :
     ∀ b : Nat, ∀ a bb : BitVec 32, bb.toNat = b →
       gcd a bb = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b)) := by
-  intro b
-  induction b using Nat.strongRecOn with
-  | ind b ih =>
-    intro a bb hbb
-    by_cases hb0 : bb = 0#32
-    · subst hb0
-      simp only [BitVec.toNat_ofNat] at hbb
-      subst hbb
-      rw [gcd.eq_1]
-      simp [zig_unfold, Nat.gcd_zero_right, BitVec.ofNat_toNat]
-    · have hbne : bb.toNat ≠ 0 := by
-        intro h0; apply hb0; apply BitVec.eq_of_toNat_eq; simpa using h0
-      have hmodlt : (a % bb).toNat < b := by
-        rw [BitVec.toNat_umod, ← hbb]; exact Nat.mod_lt _ (by omega)
-      have hres := ih (a % bb).toNat hmodlt bb (a % bb) rfl
-      have hgcdval : Nat.gcd bb.toNat (a % bb).toNat = Nat.gcd a.toNat b := by
-        rw [BitVec.toNat_umod, ← hbb, ← gcd_step]
-      rw [hgcdval] at hres
-      rw [gcd.eq_1]
-      simp [zig_unfold, hb0, rem_unsigned, hres]
-
-theorem gcd_spec (a b : BitVec 32) : gcd a b = pure (BitVec.ofNat 32 (Nat.gcd a.toNat b.toNat)) :=
-  gcd_spec_aux b.toNat a b rfl
+  intro b a bb hbb
+  simpa only [hbb] using gcd_spec a bb
 
 /-! ## Non-vacuity witnesses -/
 
