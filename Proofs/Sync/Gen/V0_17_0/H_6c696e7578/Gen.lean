@@ -243,6 +243,7 @@ def Io_Condition_signal.again11 : Io_Condition_signalExit → Bool
   | _ => false
 
 def Io_Condition_signal.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Condition_signalLocals Io_Condition_signalExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i14 ← pure (((← get).prev_state).waiters)
     let i16 ← pure (((← get).prev_state).signals)
@@ -386,6 +387,7 @@ def Io_Mutex_lockUncancelable.again23 : Io_Mutex_lockUncancelableExit → Bool
   | _ => false
 
 def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i25 ← pure p0
     match ← ((do
@@ -476,6 +478,7 @@ def Io_Condition_waitUncancelable.again22 : Io_Condition_waitUncancelableExit �
   | _ => false
 
 def Io_Condition_waitUncancelable.loop45 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.Ptr) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i48 ← pure (((← get).prev_state).signals)
     let i49 ← pure (Zig.gt false i48 (0 : BitVec 16))
@@ -512,6 +515,7 @@ def Io_Condition_waitUncancelable.loop45 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.
   | e => pure e
 
 def Io_Condition_waitUncancelable.loop22 (p0 : Zig.Ptr) (p1 : Zig.Io) (p2 : Zig.Ptr) : Zig.CM Tgt Io_Condition_waitUncancelableLocals Io_Condition_waitUncancelableExit := do
+  Zig.callMC Zig.tick
   let i23 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
   let i24 ← pure i23
   let i25 ← pure (i24)
@@ -618,6 +622,7 @@ def Io_Event_waitUncancelable.again17 : Io_Event_waitUncancelableExit → Bool
   | _ => false
 
 def Io_Event_waitUncancelable.loop17 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Event_waitUncancelableLocals Io_Event_waitUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i19 ← pure (p0)
     let _i20 ← Zig.futexWaitC p1 i19 Io_Event.waiting
@@ -680,6 +685,7 @@ def Io_Mutex_lock.again27 : Io_Mutex_lockExit → Bool
   | _ => false
 
 def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockLocals Io_Mutex_lockExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i29 ← pure p0
     match ← ((do
@@ -791,6 +797,7 @@ def Io_RwLock_lockSharedUncancelable.again8 : Io_RwLock_lockSharedUncancelableEx
   | _ => false
 
 def Io_RwLock_lockSharedUncancelable.loop8 (p0 : Zig.Ptr) : Zig.CM Tgt Io_RwLock_lockSharedUncancelableLocals Io_RwLock_lockSharedUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i10 ← pure ((← get).state)
     let i11 ← pure (i10 &&& (4294967295 : BitVec 64))
@@ -856,6 +863,7 @@ def Io_Semaphore_waitUncancelable.again5 : Io_Semaphore_waitUncancelableExit →
   | _ => false
 
 def Io_Semaphore_waitUncancelable.loop5 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Semaphore_waitUncancelableLocals Io_Semaphore_waitUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i7 ← pure p0
     let i8 ← Zig.load (BitVec 64) 8 i7
@@ -1066,6 +1074,7 @@ def handoff.again24 : handoffExit → Bool
   | _ => false
 
 def handoff.loop24 (p0 : Zig.Io) (i1 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i26 ← Zig.callMC (Zig.ptrProject i1 (·.add 36))
     let i27 ← Zig.load (Bool) 1 i26
@@ -1142,6 +1151,7 @@ def work.again4 : workExit → Bool
   | _ => false
 
 def work.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt workLocals workExit := do
+  Zig.callMC Zig.tick
   let i5 ← pure ((← get).local1)
   match ← ((do
     let i7 ← pure (i5)
@@ -1256,6 +1266,7 @@ def writer.again4 : writerExit → Bool
   | _ => false
 
 def writer.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt writerLocals writerExit := do
+  Zig.callMC Zig.tick
   let i5 ← pure ((← get).local1)
   match ← ((do
     let i7 ← pure (i5)
@@ -1392,6 +1403,7 @@ def semWork.again4 : semWorkExit → Bool
   | _ => false
 
 def semWork.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt semWorkLocals semWorkExit := do
+  Zig.callMC Zig.tick
   let i5 ← pure ((← get).local1)
   match ← ((do
     let i7 ← pure (i5)

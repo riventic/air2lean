@@ -230,7 +230,13 @@ again on the new state, whose facts and existentials open as usual. A view is ke
 walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
-the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+the granted region, whose size the grant's token names (`tok p bs.size …`). When the planner
+pre-assigns unknowns by unifying atoms with the state's, a measure of an unknown (`?bs.size`,
+`?l.length`: a token's argument, a field of a ledger fragment's tuple, under arithmetic) gives
+only its value, never the unknown (`abstractMeasures`: `Array.size` is not injective, so the
+token's `?bs.size` against the state's `old.size` must not take `?bs := old`, the bytes the
+grant had before a write). The region planner carves the bytes at the size the token names
+(`measuredSize?`), and the final match checks the token up to arithmetic.
 Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
@@ -283,7 +289,13 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   both branches of each `if` before it). A call of a generated function is inlined; a vtable
   projection is reduced. Every rewrite carries its proof, a `rfl` lemma too (`StateT.run_bind`):
   as a definitional step it would leave the kernel to unfold `StateT.run`/`bind` against the
-  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there).
+  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there). So is
+  each of the engine's own reductions of a projection of a structure value (`unfold1Eq?`,
+  `reduceProjsEq`: a vtable projection, a hypothesis, the atoms of a precondition or a
+  postcondition, a goal's field): one proof step per projection, as two definitional steps
+  (`(a, c).2` to `c`, `c.f` to `s.f`) reach the kernel as the one comparison
+  `((a, c).2).f =?= s.f`, which can exhaust its recursion on a literal field (ledger
+  `kernel-proj-ctor`).
 * **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
   implies the pointer's block, a nonnegative offset and, for a region, its alignment
   (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs
@@ -300,7 +312,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  variables of pointers derived by `Ptr.add`/`elem` are identified, and a block variable equal to
+  a value (`some k = some b`, a fact `x.block = some k`, or a global's pointer `⟨some 0, 0⟩` by
+  reducible evaluation) is that value (`unifyBlocks`; the substitutions are recorded for the
+  caller's terms). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
@@ -369,8 +384,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   reclaim an outstanding grant, or supply a replacement token. A proof that must retain the
   ability to reset an allocator or form a pointer through an extent share must require those
   resources in its postcondition. Their intentional omission no longer makes an otherwise
-  valid return fail. Exclusive stack resources (`sp`, `ent`, `cur`) are not affine and are never
-  disposed of by these laws; a stack block must still be released with its exact refund.
+  valid return fail. Exclusive stack-depth and entry resources (`sp`, `ent`) are not affine and
+  are never disposed of by these laws; a stack block must still be released with its exact
+  refund. The running-thread token may be forgotten by the separate `EUpd.cur_drop` rule,
+  which uses `MemAuth.dropCur` and does not refund stack space.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
   invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
@@ -520,6 +537,8 @@ backend):
   lemmas about `U` and its shape, no per-field rule.
   `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
   caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
+  `Fits.wp_readAll` (over `FLock.Inv.loadAll`) is the read by the only thread that has not left
+  the lock: its bytes may span the protocol's rest, the lock's word and the free lock's resource.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
@@ -735,7 +754,9 @@ The supplied invocation type is a tagged union of the members' arguments and the
 contract parameters; each invocation has its own precondition, postcondition and result type.
 The measure maps invocations into any well-founded order. Its natural-number specialization,
 `FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
-the latter is itself an instance of this rule.
+the latter is itself an instance of this rule. `FTTotalTriple.rec_group_wf` and `rec_group`
+(`Full/ThreadLoop`) retain the stronger thread-total contract, including locality and frame
+safety, for every smaller invocation.
 
 The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
 unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
@@ -744,11 +765,40 @@ may change at a recursive call without changing the program arguments: a memory-
 contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
 depth after `enterFrame`.
 
+After applying the group rule and introducing the current invocation and smaller-call
+contract, one `fsym` walks the step. It recognizes the compiler's complete recursive group
+through proof-carrying aliases and constructor-known dispatch. The full current contract must
+determine the invocation, including logical data supplied only by its pre/postcondition; the
+measure cannot supply missing data. Exactly one positional own-member equation is exposed.
+Every later occurrence of any member, including an identical call or a sibling lacking a
+contract, must use the ordinary contract selector and frame planner. Complete explicit, local
+or registered contracts have priority over a smaller-call contract. A failed decrease remains
+its actual side goal; it does not permit another body unfolding.
+
+An unknown initial conditional is still a refusal boundary. Constructor-decided condition
+views do not authorize a branch search or entry after an ordinary caller prefix. Without a
+recognized local smaller-call family, the existing bounded unfolding behavior is unchanged,
+except two changes shared by every run: an `if` is rewritten in its condition only
+(`ite_cond_congr`; its branches are normalized once the walk reaches them), and the arithmetic
+simp set unfolds `frameBase` and `InvImage id WellFoundedRelation.rel`.
+These engine rules do not complete the remaining concrete recursive clients or protocol/P03
+integration; the `recursive-group-total` engine-ledger row remains open.
+
 The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
 consume and restore the stack-depth token `sp t S D`, with the room requirement proved from
 the caller's precondition. A decreasing argument does not establish stack room. Pure
 `Result` recursion has no modeled frame operations; its native interpretation retains premise
 STK-01 even when its lifted program has a total triple.
+
+`addDown_total` in `Proofs/Pointers/Sep.lean` is a generated memory-backed instance. Its flat
+invocation record holds the input, accumulator and logical stack depth; one `fsym` step uses
+the callee's contract with the decreased input and increased depth. Per-item sum identities
+supply the remaining overflow and result equalities. The contract preserves the exact owned
+accumulator, current thread, original stack depth and explicit `unmetered` mode. Its room
+condition includes all `n + 1` frames, and a budgeted start-memory witness supplies a real
+32-byte reserve. Unmetered mode makes no cost claim. This is a proof of the current generated
+`MemM` code, not an AIR/native certificate: `Certificate.fragment` still refuses recursive
+memory functions, and P03/native stack and producer integration remain open.
 
 ## Extending it
 

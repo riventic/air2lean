@@ -9,6 +9,8 @@
 # root imports neither the full-state logic (ZigLean.Sep.Full.*) nor Proofs, so a check run with
 # `lake env lean` after it can read stale oleans. "Full build" (docs/ci.md#full-build) means this
 # script:
+#   - first, in every tracked Lake package, the compiled outputs of modules deleted since they
+#     were built (`lean-deps.py --prune-orphans`): Lake keeps them, and a kernel replay checks them;
 #   - root package (`--targets`, also what CI's `lake` job builds): `scripts/lean-deps.py --all`,
 #     every library and executable of lakefile.toml and every tracked module of each library
 #     without explicit roots, whether or not a library root imports it (the per-check builds,
@@ -54,7 +56,7 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -76,7 +78,7 @@ mkdir -p "$logs"
 # One admission for the whole build: this script runs again inside one guard, and each phase's
 # guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The phases
 # keep their own limits and reports, each within $rss (the fixture checks' guard,
-# scripts/fixture-checks.sh: 11000 MiB). A phase guard above it fails (inheritance_refused).
+# scripts/fixture-checks.sh: all of it). A phase guard above it fails (inheritance_refused).
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
   [ "$fixtures" = 1 ] || inner+=(--no-fixtures)
@@ -97,6 +99,11 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
       --report "$logs/$name.json" --log "$logs/$name.log" --timeout 7200 \
       --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- "$@"; then
     echo "full-build: $name failed (log: $logs/$name.log)" >&2
+    # The cause in this script's own output: the log may live in a temporary directory its caller
+    # removes (scripts/preflight.sh). Its error lines, else its last lines; the prefix keeps them
+    # in the outer summary (above).
+    { grep -m 40 'error:' "$logs/$name.log" || tail -n 20 "$logs/$name.log"; } \
+      | sed "s/^/full-build: $name | /" >&2 || true
     exit 1
   fi
   echo "full-build: $name $((SECONDS - start)) s"
@@ -105,6 +112,9 @@ guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through th
 # The precompiled fsym libraries (docs/build-cache.md#precompiled-fsym): FsymDeps must be the import
 # closure of Fsym and Lake must build them as listed, else an importer of Auto fails to load them.
 python3 -B scripts/lean-deps.py --precompiled check || { echo 'full-build: precompiled libraries are stale' >&2; exit 1; }
+# Lake never removes what it compiled from a module deleted since, and the kernel-replay receipts
+# check every olean below a module's name (scripts/assumptions.py `module_needs` refuses those).
+python3 -B scripts/lean-deps.py --prune-orphans
 root=()
 # The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
@@ -124,5 +134,9 @@ jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certif
 # in parallel, and two Lake builds of one workspace must not build the same module at once.
 if [ "$fixtures" = 1 ]; then
   guarded fixtures-lean "$PWD" python3 -B scripts/fixtures.py build
-  scripts/fixture-checks.sh --logs "$logs/fixtures" || { echo 'full-build: fixtures failed' >&2; exit 1; }
+  # Within this build's admission ($rss): the units share it, the longest first, each admitted by
+  # its measured peak (scripts/fixture-checks.py `schedule`), each Lake with this build's Lean
+  # processes ($threads: one 11000 MiB process each, so a unit fits its share).
+  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 --lean-threads "$threads" \
+    || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi

@@ -2250,6 +2250,22 @@ theorem FitsOn.alive (hP : L.FitsOn P U ok) {G : ThreadId → γ} {m : Mem} {t :
     (hi : P.inv G m) (hg : G t = g) (hph : L.ph g ≠ .gone) : t < m.threads.size :=
   ((hP.lock hi).live t (by rw [hg]; exact hph)).1
 
+/-- The protocol's invariant one step tick later (`Zig.tick`): only the step count moves. -/
+theorem FitsOn.ticked (hP : L.FitsOn P U ok) {G : ThreadId → γ} {m : Mem} (t : ThreadId)
+    (hi : P.inv G m) (hok : ok (G t)) (hph : L.ph (G t) ≠ .gone) :
+    P.inv G { m with ticks := m.ticks + 1 } :=
+  hP.stay (t := t) hi hok hph (Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl))
+    (hP.lock hi).ticked
+
+/-- A body's step tick (`Zig.tick`, `WP.callMC_tick`) by thread `t` at `g`: no stop and no error,
+and the protocol's invariant stays (`FitsOn.ticked`). -/
+theorem wp_tickOn (hP : L.FitsOn P U ok) {s : σ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
+    {n : Nat} {g : γ} (hph : L.ph g ≠ .gone) (hok : ok g) (hi : P.inv (upd G t g) m)
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ m', m'.current = m.current → P.inv (upd G t g) m' → Q ((), s) G m' n) :
+    P.WP t ((Zig.callMC Zig.tick : CM Tgt σ Unit).run s) Q G m n :=
+  WP.callMC_tick (h _ rfl (hP.ticked t hi (by rw [upd_self]; exact hok) (by rw [upd_self]; exact hph)))
+
 /-- `lock`'s first try, `cmpxchg(unlocked → locked_once)`, by thread `t` at `out` (`g`). -/
 theorem wp_casOn (hP : L.FitsOn P U ok) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId} {G : ThreadId → γ}
     {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out) (hok : ok g) (hi : P.inv (upd G t g) m)
@@ -2430,6 +2446,13 @@ theorem Fits.cur (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} (t : ThreadId
 theorem Fits.alive (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
     (hi : P.inv G m) (hg : G t = g) (hph : L.ph g ≠ .gone) : t < m.threads.size :=
   hP.on.alive hi hg hph
+
+theorem wp_tick (hP : L.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat}
+    {g : γ} (hph : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ m', m'.current = m.current → P.inv (upd G t g) m' → Q ((), s) G m' n) :
+    P.WP t ((Zig.callMC Zig.tick : CM Tgt σ Unit).run s) Q G m n :=
+  wp_tickOn hP.on hph trivial hi h
 
 theorem wp_cas (hP : L.Fits P U) (S : States α) (hS : S.c = L.c) {s : σ} {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .out) (hi : P.inv (upd G t g) m)

@@ -220,11 +220,11 @@ theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.v
 once, `Full.loop_run`), in the caller's thread (`reset` runs it). -/
 theorem count_loop (CI : Child) (free : Bool) :
     ∀ (ns : List NodeV) (it : Option Ptr) (c : BitVec 64),
-      FTTotalTriple (⟪c.toNat + capOf ns < 2 ^ 64⟫ ⋆ Chain CI free ns it)
+      FTTotalTriple (⟪c.toNat + capOf ns < 2 ^ 64⟫ ⋆ (Chain CI free ns it ⋆ plain))
         ((Zig.loop heap_ArenaAllocator_countListCapacity.loop6
           heap_ArenaAllocator_countListCapacity.again6).run ⟨c, it⟩)
         (fun r => FAssn.ex fun c' : BitVec 64 =>
-          ⟪r = (.br5, ⟨c', none⟩) ∧ c'.toNat = c.toNat + capOf ns⟫ ⋆ Chain CI free ns it)
+          ⟪r = (.br5, ⟨c', none⟩) ∧ c'.toNat = c.toNat + capOf ns⟫ ⋆ (Chain CI free ns it ⋆ plain))
   | [], none, c => by
     rw [Full.loop_run]
     conv in StateT.run heap_ArenaAllocator_countListCapacity.loop6 _ =>
@@ -245,17 +245,17 @@ theorem count_loop (CI : Child) (free : Bool) :
 header fits in `2 ^ 63` because the list owns its bytes (`chain_capOf_le`), so the checked `+`
 never overflows. In the caller's thread. -/
 theorem count_spec (CI : Child) (ns : List NodeV) (x : Option Ptr) :
-    FTTotalTriple (Chain CI true ns x) (heap_ArenaAllocator_countListCapacity x)
-      (fun c => ⟪c.toNat = capOf ns ∧ capOf ns + 24 ≤ 2 ^ 63⟫ ⋆ Chain CI true ns x) :=
-  FTTotalTriple.eupd (chain_capOf_le CI ns x).eupd <| FTTotalTriple.lift fun _ => by
+    FTTotalTriple (Chain CI true ns x ⋆ plain) (heap_ArenaAllocator_countListCapacity x)
+      (fun c => ⟪c.toNat = capOf ns ∧ capOf ns + 24 ≤ 2 ^ 63⟫ ⋆ (Chain CI true ns x ⋆ plain)) :=
+  FTTotalTriple.eupd (chain_capOf_le CI ns x).sepL.eupd <| FTTotalTriple.lift fun _ => by
     unfold heap_ArenaAllocator_countListCapacity
     fsym [count_loop CI true]
 
 /-- **`countListCapacity`** of the free list `FreeList CI x`: the sum fits with a header in
 `2 ^ 63` (`count_spec`). -/
 theorem count_free (CI : Child) (x : Option Ptr) :
-    FTTotalTriple (FreeList CI x) (heap_ArenaAllocator_countListCapacity x)
-      (fun c => ⟪c.toNat + 24 ≤ 2 ^ 63⟫ ⋆ FreeList CI x) := by
+    FTTotalTriple (FreeList CI x ⋆ plain) (heap_ArenaAllocator_countListCapacity x)
+      (fun c => ⟪c.toNat + 24 ≤ 2 ^ 63⟫ ⋆ (FreeList CI x ⋆ plain)) := by
   fsym [count_spec CI]
 
 section Deinit
@@ -265,12 +265,12 @@ variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx C
 /-- The inner loop's invariant: the list from `it` (`FreeList`, its nodes opened). -/
 def Inv19 (l : BitVec 64) (s : heap_ArenaAllocator_deinitLocals) : FAssn :=
   FAssn.ex fun ns : List NodeV => ⟪s.local1 = l⟫ ⋆
-    (Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
+    (Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ plain))
 
 /-- The inner loop's exit. -/
 def Exit19 (l : BitVec 64) (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals) :
     FAssn :=
-  ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
+  ⟪r = (.br18, ⟨l, none⟩)⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ plain)
 
 include h in
 /-- One node given back to the child (`free` through the vtable; the refund joins the
@@ -298,11 +298,11 @@ def Lists9 (used fl : Option Ptr) (k : BitVec 64) : FAssn :=
 
 /-- The outer loop's invariant. -/
 def Inv9 (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) : FAssn :=
-  ⟪s.local1.toNat ≤ 2⟫ ⋆ (Lists9 CI used fl s.local1 ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
+  ⟪s.local1.toNat ≤ 2⟫ ⋆ (Lists9 CI used fl s.local1 ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ plain))
 
 /-- The outer loop's exit. -/
 def Exit9 (r : heap_ArenaAllocator_deinitExit × heap_ArenaAllocator_deinitLocals) : FAssn :=
-  FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList)
+  FAssn.ex fun s' => ⟪r = (.br8, s')⟫ ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ plain)
 
 include h in
 theorem loop9_step (used fl : Option Ptr) (s : heap_ArenaAllocator_deinitLocals) :
@@ -326,9 +326,9 @@ include h in
 /-- **`deinit` gives every node of both lists back to the child** (the child's `free` through its
 vtable, `CAllocSpec`), and each node's fee back into the reservoir (`Child.cown_refund`). -/
 theorem deinit_ct (used fl : Option Ptr) :
-    CTriple (Tgt := Tgt) (FreeList CI used ⋆ FreeList CI fl ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList))
+    CTriple (Tgt := Tgt) (FreeList CI used ⋆ FreeList CI fl ⋆ (CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ plain))
       (heap_ArenaAllocator_deinit ⟨⟨CI.cctx, CI.vtp⟩, ⟨used, fl⟩⟩)
-      (fun _ => CI.cown ⋆ vtR CI.vtp CI.fns.toList) := by
+      (fun _ => CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ plain) := by
   unfold heap_ArenaAllocator_deinit
   fsym [loop9_ct CI h]
 
@@ -359,13 +359,13 @@ variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx C
 list was. -/
 def Inv78 (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
   FAssn.ex fun ns : List NodeV => ⟪s.it = none → x0 = none⟫ ⋆
-    (aptsE p x0 ⋆ Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc)
+    (aptsE p x0 ⋆ Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
 
 /-- `loop78`'s exits: the list's last node, or an empty list. -/
 def Exit78 (p : Ptr) (x0 : Option Ptr) :
     heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals → FAssn
-  | (.br77 N, _) => aptsE p x0 ⋆ Last CI N ⋆ Cm CI ctx Ac Sc Kc
-  | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc)
+  | (.br77 N, _) => aptsE p x0 ⋆ Last CI N ⋆ Cm CI ctx Ac Sc Kc ⋆ plain
+  | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
   | _ => ⟪False⟫
 
 attribute [local fsym_atom] Chain FreeCl in
@@ -401,7 +401,7 @@ include h in
 `Inv78`), from the list's head word `p` holding `x` and the list of whole nodes from `x`. A rule
 from the loop's start state, where the invariant's implication holds (ledger #59). -/
 theorem loop78_ct (p : Ptr) (x : Option Ptr) (ok : Bool) (l : BitVec 64) :
-    CTriple (Tgt := Tgt) (aptsE p x ⋆ FreeList CI x ⋆ Cm CI ctx Ac Sc Kc)
+    CTriple (Tgt := Tgt) (aptsE p x ⋆ FreeList CI x ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
       ((Zig.loop (heap_ArenaAllocator_reset.loop78 ctx) heap_ArenaAllocator_reset.again78).run ⟨ok, l, x⟩)
       (fun r => FAssn.ex fun e => FAssn.ex fun s' => ⟪r = (e, s')⟫ ⋆ Exit78 CI ctx Ac Sc Kc p x (e, s')) := by
   refine CTriple.pre ((CTriple.loop (Inv78 CI ctx Ac Sc Kc p x) (Exit78 CI ctx Ac Sc Kc p x)
@@ -410,9 +410,9 @@ theorem loop78_ct (p : Ptr) (x : Option Ptr) (ok : Bool) (l : BitVec 64) :
   obtain ⟨r₁, r₂, hd', he, h1, h2⟩ := hr
   obtain ⟨ns, h2⟩ := sep_ex.mp h2
   refine ⟨ns, sep_lift.mpr ⟨id, ?_⟩⟩
-  show (aptsE p x ⋆ Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc) r
+  show (aptsE p x ⋆ Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc ⋆ plain) r
   have h3 : (aptsE p x ⋆ ((Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns) ⋆
-    Cm CI ctx Ac Sc Kc)) r := ⟨r₁, r₂, hd', he, h1, h2⟩
+    Cm CI ctx Ac Sc Kc ⋆ plain)) r := ⟨r₁, r₂, hd', he, h1, h2⟩
   exact of_eq (by ac_rfl) h3
 
 attribute [local fsym_facts] MemFacts.region_end
@@ -420,11 +420,11 @@ attribute [local fsym_facts] MemFacts.region_end
 /-- `loop66`'s invariant: the lists before index `local55` are handled (`Lst`). -/
 def Inv66 (pu pf : Ptr) (xu xf : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
   ⟪s.local55.toNat ≤ 2⟫ ⋆ (Lst CI (decide (0 < s.local55.toNat)) pu xu ⋆
-    Lst CI (decide (1 < s.local55.toNat)) pf xf ⋆ Cm CI ctx Ac Sc Kc)
+    Lst CI (decide (1 < s.local55.toNat)) pf xf ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
 
 /-- `loop66`'s exit: both lists handled. -/
 def Exit66 (pu pf : Ptr) (r : heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals) : FAssn :=
-  FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc)
+  FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
 
 include h in
 set_option maxHeartbeats 2650000 in
@@ -501,8 +501,8 @@ to the child, the list heads become empty, and the arena has no node at epoch `e
 (`own_empty`). -/
 theorem reset_free_all_ct (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
     (γ e : Nat) (ctx : Ptr) :
-    CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .free_all)
-      (fun r => ⟪r = true⟫ ⋆ (own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one)) := by
+    CTriple (Tgt := Tgt) (Released CI γ e ctx ⋆ plain) (heap_ArenaAllocator_reset ctx .free_all)
+      (fun r => ⟪r = true⟫ ⋆ (own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one ⋆ plain)) := by
   have hd := child_decode CI
   unfold heap_ArenaAllocator_reset
   fsym [deinit_ct CI h, own_empty]
@@ -512,9 +512,10 @@ whole epoch token (no grant outstanding), the arena's state at epoch `e + 1` and
 whole token; every node is back with the child. -/
 theorem reset_free_all_spec (CI : Child)
     (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv) (γ e : Nat) (ctx : Ptr) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one) (heap_ArenaAllocator_reset ctx .free_all)
-      (fun r => ⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one)) :=
-  CTriple.eupd (reset_release CI γ e ctx) (reset_free_all_ct CI h γ e ctx)
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one ⋆ plain) (heap_ArenaAllocator_reset ctx .free_all)
+      (fun r => ⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one ⋆ plain)) :=
+  CTriple.eupd (EUpd.of_imp fun _ h => sep_assoc' h) <|
+    CTriple.eupd (reset_release CI γ e ctx).frame (reset_free_all_ct CI h γ e ctx)
 
 /-- **(M01) `reset(.free_all)` ends exactly the arena's allocations.** Every resource `F` of the
 caller (another allocator's grants and state, stack and global buffers, other threads' shares)
@@ -525,9 +526,9 @@ token, which no client holds next to a grant (`granted_epTok_false`), and a toke
 theorem reset_free_all_frame (CI : Child)
     (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv) (γ e : Nat) (ctx : Ptr)
     (F : FAssn) :
-    CTriple (Tgt := Tgt) (((inv CI γ e ctx).own ⋆ epTok γ e Frac.one) ⋆ F)
+    CTriple (Tgt := Tgt) (((inv CI γ e ctx).own ⋆ epTok γ e Frac.one ⋆ plain) ⋆ F)
       (heap_ArenaAllocator_reset ctx .free_all)
-      (fun r => (⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one)) ⋆ F) :=
+      (fun r => (⟪r = true⟫ ⋆ ((inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one ⋆ plain)) ⋆ F) :=
   (reset_free_all_spec CI h γ e ctx).frame
 
 end Reset
@@ -548,8 +549,8 @@ include h hfit in
 node back to the child except at most one per list, and what is kept is the arena at epoch `e + 1`
 (`own_kept`). -/
 theorem reset_retain_capacity_ct (γ e : Nat) (ctx : Ptr) :
-    CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx .retain_capacity)
-      (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one) := by
+    CTriple (Tgt := Tgt) (Released CI γ e ctx ⋆ plain) (heap_ArenaAllocator_reset ctx .retain_capacity)
+      (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one ⋆ plain) := by
   have hd := child_decode CI
   unfold heap_ArenaAllocator_reset
   fsym [count_free CI, loop66_ct CI h ctx, own_kept]
@@ -559,8 +560,8 @@ include h hfit in
 /-- `reset(.retain_with_limit l)` from the released arena: as `retain_capacity` with the limit
 `l` (a limit of `0` is `free_all`'s path: `deinit`, `own_empty`). -/
 theorem reset_retain_with_limit_ct (γ e : Nat) (ctx : Ptr) (l : BitVec 64) :
-    CTriple (Tgt := Tgt) (Released CI γ e ctx) (heap_ArenaAllocator_reset ctx (.retain_with_limit l))
-      (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one) := by
+    CTriple (Tgt := Tgt) (Released CI γ e ctx ⋆ plain) (heap_ArenaAllocator_reset ctx (.retain_with_limit l))
+      (fun _ => own CI γ (e + 1) ctx ⋆ epTok γ (e + 1) Frac.one ⋆ plain) := by
   have hd := child_decode CI
   unfold heap_ArenaAllocator_reset
   fsym [count_free CI, loop66_ct CI h ctx, own_kept, deinit_ct CI h, own_empty]
@@ -574,19 +575,21 @@ capacity kept, and its relation to the limit, is not stated (`Kept`'s `sz` is ex
 one per list. The result (`false` when the child had no room for a kept node) is a capacity hint,
 not part of the contract. For every child that takes requests up to `2 ^ 63` bytes (`hfit`). -/
 theorem reset_retain_capacity_spec (γ e : Nat) (ctx : Ptr) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one)
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one ⋆ plain)
       (heap_ArenaAllocator_reset ctx .retain_capacity)
-      (fun _ => (inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one) :=
-  CTriple.eupd (reset_release CI γ e ctx) (reset_retain_capacity_ct CI h hfit γ e ctx)
+      (fun _ => (inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one ⋆ plain) :=
+  CTriple.eupd (EUpd.of_imp fun _ h => sep_assoc' h) <|
+    CTriple.eupd (reset_release CI γ e ctx).frame (reset_retain_capacity_ct CI h hfit γ e ctx)
 
 include h hfit in
 /-- **`reset(.retain_with_limit l)` meets the reset contract**, for every limit `l`
 (`reset_retain_capacity_spec`). -/
 theorem reset_retain_with_limit_spec (γ e : Nat) (ctx : Ptr) (l : BitVec 64) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one)
+    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ epTok γ e Frac.one ⋆ plain)
       (heap_ArenaAllocator_reset ctx (.retain_with_limit l))
-      (fun _ => (inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one) :=
-  CTriple.eupd (reset_release CI γ e ctx) (reset_retain_with_limit_ct CI h hfit γ e ctx l)
+      (fun _ => (inv CI γ (e + 1) ctx).own ⋆ epTok γ (e + 1) Frac.one ⋆ plain) :=
+  CTriple.eupd (EUpd.of_imp fun _ h => sep_assoc' h) <|
+    CTriple.eupd (reset_release CI γ e ctx).frame (reset_retain_with_limit_ct CI h hfit γ e ctx l)
 
 end ResetRetain
 

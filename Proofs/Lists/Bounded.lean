@@ -1,56 +1,61 @@
-import Proofs.Lists.Cost
-import ZigLean.Sep.Bounded
+import Proofs.Lists.Linked
 
 /-!
-# Resource-bounded total correctness for `examples/lists/lists.zig` (P05)
+# Step bounds for `examples/lists/lists.zig` (P05)
 
-`sum_loop_within`: the generated loop of `sum` over a list of `xs.length` items exits within
-`xs.length + 1` body runs (`TotalTripleWithin`, counted by P06's `LoopRuns`) with the sum in its
-locals and the list unchanged. `sum_loop_total` is the total triple it implies.
-`sum_loop_not_within` shows the bound is tight: the bound `xs.length` is refuted by any list
-satisfying the precondition. The function-level total triple for `sum` is
-`Lists.Linked.sum_total` (`Proofs/Lists/Linked.lean`, full-state logic).
+The translator puts a step (`Zig.tick`) at every run of a loop body, and a step needs a credit or
+the plain mode (`docs/sep-full-state.md` §Step ticks). `Lists.Linked.sum_loop_exact` and
+`Lists.Linked.sum_exact` state the cost of `sum` exactly: over a list of `xs.length` items it pays
+`xs.length + 1` credits (one per node and the final null test) and returns as many receipts.
+This file shows that the bound is tight:
 
-The bound counts loop-body runs of the model; it is not CPU time. It stays in the legacy logic
-until the model counts loop-body runs: a full-state triple with credits does not bound them yet,
-since no run spends a credit (`docs/alloc-spec.md`, §Retired claims, `Sep/Cost`).
+* `sum_loop_not_within`, `sum_not_within`: from any credit-free start (`CreditFree`) that holds
+  the list, `xs.length` credits do not pay the loop or the function, whatever the postcondition
+  (`FTotalTriple.not_fewer_credits`).
+* `sum_steps`: the same start runs `sum` to the sum of the items in exactly `xs.length + 1`
+  steps, and the final memory's live bytes are the untouched frame and a part that holds the same
+  list (`FTotalTriple.ticks_eq_post`).
+
+The bound counts steps of the model, not CPU time. The plain-mode statements of `sum` and its loop
+follow from the cost statements (`FTotalTriple.of_credits_plain`).
 -/
 
-namespace Lists
-open Zig Assn
+namespace Lists.Linked
+open Zig Zig.Full Zig.Full.FAssn Lists.Open
 
-/-- `sum`'s translated loop exits within `xs.length + 1` body runs, with the sum. -/
-theorem sum_loop_within (hd : Option Ptr) (xs : List (BitVec 32))
-    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
-    TotalTripleWithin (xs.length + 1) (list hd xs) sum.loop6 sum.again6 (sumStart hd)
-      (fun e s => ⌜e = .br5 ∧ s.s = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⌝ ∗ list hd xs) := by
-  intro m h hF hdj hm hl hst
-  obtain ⟨e, s', m', hrun, he, hs, hH, hst', -⟩ :=
-    loopRuns_exact sum.loop6 sum.again6 (sumInv m (xs.map BitVec.toNat).sum)
-      (fun e s m' => e = .br5 ∧ s.s.toNat = (xs.map BitVec.toNat).sum ∧ m'.heap = m.heap ∧
-        m'.Seq ∧ m.SameAllocs m')
-      (sum_count_step m _ htot) (sumStart hd) m xs.length
-      ⟨rfl, hst, .refl m, xs, h, hF, rfl, hdj, hm, hl, by simp⟩
-  refine ⟨xs.length + 1, e, s', m', h, Nat.le_refl _, hrun, hdj, by rw [hH, hm],
-    sep_lift.mpr ⟨⟨he, ?_⟩, hl⟩, hst'⟩
-  apply BitVec.eq_of_toNat_eq
-  rw [hs, BitVec.toNat_ofNat, Nat.mod_eq_of_lt htot]
+variable {X : Ptr → FAssn}
 
-/-- Bounded implies total: the loop returns, with the sum. -/
-theorem sum_loop_total (hd : Option Ptr) (xs : List (BitVec 32))
-    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
-    TotalTriple (list hd xs) ((Zig.loop sum.loop6 sum.again6).run (sumStart hd))
-      (fun r => ⌜r.1 = .br5 ∧ r.2.s = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⌝ ∗ list hd xs) :=
-  (sum_loop_within hd xs htot).toTotal
+/-- **The loop bound is tight**: from any credit-free start that holds the list, `xs.length`
+credits do not pay `sum`'s loop, whatever the postcondition. -/
+theorem sum_loop_not_within {mb : Lean.Order.MonoBind (MM sumLocals)} (hd : Option Ptr)
+    (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) (s : sumLocals)
+    (hs : s.s = 0) (hp : s.p = hd) {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hl : list X hd xs r) (hseq : m.FSeq) (hc : CreditFree r rF) (Q : sumExit × sumLocals → FAssn) :
+    ¬ FTotalTriple (list X hd xs ⋆ credits xs.length)
+      ((@Zig.loop (MM sumLocals) _ _ mb _ sum.loop6 sum.again6).run s) Q :=
+  FTotalTriple.not_fewer_credits (sum_loop_exact hd xs htot s hs hp) (Nat.lt_succ_self _) hh hl
+    hseq hc
 
-/-- The bound is tight: from any list satisfying the precondition, `xs.length` body runs do not
-suffice, whatever the postcondition. -/
-theorem sum_loop_not_within (hd : Option Ptr) (xs : List (BitVec 32))
-    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) {m : Mem} {h hF : Heap} (hl : list hd xs h)
-    (hm : m.heap = h ∪ hF) (hdj : Heap.Disjoint h hF) (hst : m.Seq) (Q : sumExit → sumLocals → Assn) :
-    ¬ TotalTripleWithin xs.length (list hd xs) sum.loop6 sum.again6 (sumStart hd) Q := by
-  obtain ⟨k, e, s', m', _, -, hk, -⟩ := sum_loop_within hd xs htot m h hF hdj hm hl hst
-  have := sum_count_unique hd xs hl hm hdj hst htot hk
-  exact TotalTripleWithin.not_within_of_count hdj hm hl hst hk (by omega)
+/-- **The bound of `sum` is tight**: from any credit-free start that holds the list, `xs.length`
+credits do not pay `sum`, whatever the postcondition. -/
+theorem sum_not_within (hd : Option Ptr) (xs : List (BitVec 32))
+    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hl : list X hd xs r) (hseq : m.FSeq) (hc : CreditFree r rF) (Q : BitVec 64 → FAssn) :
+    ¬ FTotalTriple (list X hd xs ⋆ credits xs.length) (sum hd) Q :=
+  FTotalTriple.not_fewer_credits (sum_exact hd xs htot) (Nat.lt_succ_self _) hh hl hseq hc
 
-end Lists
+/-- **`sum` runs exactly `xs.length + 1` steps**: from any credit-free start `m` that holds the
+list (`r`) and a frame `rF`, `sum` returns the sum of the items after exactly that many steps, and
+the live bytes of its final memory are the frame's and a part `r'` that holds the same list
+(`FMatch`: the frame's bytes are untouched). -/
+theorem sum_steps (hd : Option Ptr) (xs : List (BitVec 32))
+    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hl : list X hd xs r) (hseq : m.FSeq) (hc : CreditFree r rF) :
+    ∃ m', (sum hd).run m = pure (BitVec.ofNat 64 (xs.map BitVec.toNat).sum, m') ∧
+      m'.ticks = m.ticks + (xs.length + 1) ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
+        FMatch m' (r'.heap ∪ rF.heap) ∧ list X hd xs r' ∧ m'.FSeq := by
+  obtain ⟨v, m', hr, ht, r', hd', hm, hq, hs'⟩ := (sum_exact hd xs htot).ticks_eq_post hh hl hseq hc
+  obtain ⟨rfl, hl'⟩ := sep_lift.mp hq
+  exact ⟨m', hr, ht, r', hd', hm, hl', hs'⟩
+
+end Lists.Linked

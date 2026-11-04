@@ -1319,7 +1319,6 @@ theorem ExtTrue.keep {m m' : Mem} {g : Ghost} (h : ExtTrue m g) (hk : KeepsExt m
 
 theorem ExtTrue.of_add {m : Mem} {a b : Ghost} (h : ExtTrue m (a.add b)) : ExtTrue m a :=
   fun x => ECell.TrueIn.of_le (Ghost.ls_add a b) (ECell.le_add _ _) (h x)
-
 /-- **No byte claim on a block that `m` has not created** (`docs/sep-full-state.md`
 §Byte-range claims): a new block's bytes can be claimed by its creator (`FTriple.mintClaim`). -/
 def ClFresh (m : Mem) (g : Ghost) : Prop := ∀ b, m.blocks.size ≤ b → ∀ x, g.cl b x = ECell.unit

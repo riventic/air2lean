@@ -33,7 +33,7 @@ pub fn cancelClient(io: Io, gpa: Allocator) !struct { u32, u32 } {
 }
 ```
 
-`main` hands the two words to the task (C01 `Transfer.owned`), cancels the group and takes them
+`main` hands the two words to the task (C01 `FTransfer.owned`), cancels the group and takes them
 back at the join that `Group.cancel` does. The task completes (`status = 1`, all three steps
 done) or observes `error.Canceled` at one of its three cancelation points (`status = 2`, fewer
 than three steps done). `Proofs/Cancel/Group.lean` proves over all schedules that these are the

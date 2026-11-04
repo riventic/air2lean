@@ -248,6 +248,7 @@ def idle.again2 : idleExit → Bool
   | _ => false
 
 def idle.loop2 (p0 : Zig.Ptr) : Zig.CM Tgt idleLocals idleExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i4 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 p0
     let i5 ← pure (i4 == (0 : BitVec 32))

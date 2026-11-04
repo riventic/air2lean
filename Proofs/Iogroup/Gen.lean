@@ -112,6 +112,7 @@ def Io_Mutex_lock.again27 : Io_Mutex_lockExit → Bool
   | _ => false
 
 def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockLocals Io_Mutex_lockExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i29 ← pure p0
     match ← ((do
@@ -203,6 +204,7 @@ def Io_Mutex_lockUncancelable.again23 : Io_Mutex_lockUncancelableExit → Bool
   | _ => false
 
 def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i25 ← pure p0
     match ← ((do
@@ -387,6 +389,7 @@ def groupConcurrent.again13 : groupConcurrentExit → Bool
   | _ => false
 
 def groupConcurrent.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit := do
+  Zig.callMC Zig.tick
   let i14 ← pure ((← get).local10)
   match ← ((do
     let i16 ← pure (i14)
@@ -458,6 +461,7 @@ def groupCounter.again13 : groupCounterExit → Bool
   | _ => false
 
 def groupCounter.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt groupCounterLocals groupCounterExit := do
+  Zig.callMC Zig.tick
   let i14 ← pure ((← get).local10)
   match ← ((do
     let i16 ← pure (i14)

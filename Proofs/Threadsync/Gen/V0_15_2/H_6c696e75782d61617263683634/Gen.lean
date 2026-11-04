@@ -1126,6 +1126,7 @@ def Thread_Mutex_FutexImpl_lockSlow.again16 : Thread_Mutex_FutexImpl_lockSlowExi
   | _ => false
 
 def Thread_Mutex_FutexImpl_lockSlow.loop16 (p0 : Zig.Ptr) : Zig.CM Tgt Thread_Mutex_FutexImpl_lockSlowLocals Thread_Mutex_FutexImpl_lockSlowExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i18 ← pure p0
     match ← ((do
@@ -1262,6 +1263,7 @@ def Thread_Condition_FutexImpl_wait.again29 : Thread_Condition_FutexImpl_waitExi
   | _ => false
 
 def Thread_Condition_FutexImpl_wait.loop107 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i109 ← pure ((← get).state)
     let i110 ← pure (i109 &&& (4294901760 : BitVec 32))
@@ -1301,6 +1303,7 @@ def Thread_Condition_FutexImpl_wait.loop107 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 :
   | e => pure e
 
 def Thread_Condition_FutexImpl_wait.loop45 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i47 ← pure ((← get).state)
     let i48 ← pure (i47 &&& (4294901760 : BitVec 32))
@@ -1340,6 +1343,7 @@ def Thread_Condition_FutexImpl_wait.loop45 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : 
   | e => pure e
 
 def Thread_Condition_FutexImpl_wait.loop42 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i38 : Zig.ErrName) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     match ← ((do
       Zig.loop (Thread_Condition_FutexImpl_wait.loop45 p0 p1) Thread_Condition_FutexImpl_wait.again45) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit) with
@@ -1373,6 +1377,7 @@ def Thread_Condition_FutexImpl_wait.loop42 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : 
   | e => pure e
 
 def Thread_Condition_FutexImpl_wait.loop29 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (i26 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_waitLocals Thread_Condition_FutexImpl_waitExit := do
+  Zig.callMC Zig.tick
   let i30 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
   let i31 ← pure (i30)
   let i32 ← pure ((← get).epoch)
@@ -1469,6 +1474,7 @@ def Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9 : Thread_Condition
   | _ => false
 
 def Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 (p0 : Zig.Ptr) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i11 ← pure ((← get).state)
     let i12 ← pure (i11 &&& (65535 : BitVec 32))
@@ -1675,6 +1681,7 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet.again37 : Thread_ResetEvent_FutexIm
   | _ => false
 
 def Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 [Zig.Os.HasEnv] (p0 : Zig.Ptr) (i33 : Zig.Ptr) : Zig.CM Tgt Thread_ResetEvent_FutexImpl_waitUntilSetLocals Thread_ResetEvent_FutexImpl_waitUntilSetExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i39 ← pure p0
     let i40 ← pure (i39)
@@ -2056,6 +2063,7 @@ def handoff.again12 : handoffExit → Bool
   | _ => false
 
 def handoff.loop12 [Zig.Os.HasEnv] (i0 : Zig.Ptr) : Zig.CM Tgt handoffLocals handoffExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i14 ← Zig.callMC (Zig.ptrProject i0 (·.add 20))
     let i15 ← Zig.load (Bool) 1 i14
@@ -2120,6 +2128,7 @@ def work.again4 : workExit → Bool
   | _ => false
 
 def work.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt workLocals workExit := do
+  Zig.callMC Zig.tick
   let i5 ← pure ((← get).local1)
   match ← ((do
     let i7 ← pure (i5)

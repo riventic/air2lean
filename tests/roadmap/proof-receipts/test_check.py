@@ -31,6 +31,9 @@ class CheckFailureTests(unittest.TestCase):
 import json, sys
 from pathlib import Path
 root = Path(__file__).parent.parent
+if sys.argv[1:] == ['inputs']:  # the guard's --input list: a query, not a receipt step
+    print('lean-toolchain')
+    raise SystemExit(0)
 with (root / 'calls').open('a') as out: print(sys.argv[1], file=out)
 if sys.argv[1] == 'prepare':
     Path(sys.argv[2]).mkdir()
@@ -44,9 +47,12 @@ with (Path(__file__).parent.parent / 'calls').open('a') as out: print('gen-integ
 raise SystemExit(int(os.environ.get('STUB_GEN_STATUS', '0')))
 """)
         (scripts / 'build-guard.py').write_text("""
-import os, sys
+import json, os, sys
 from pathlib import Path
 log = Path(sys.argv[sys.argv.index('--log') + 1])
+inputs = [sys.argv[i + 1] for i, arg in enumerate(sys.argv) if arg == '--input']
+Path(os.environ['STUB_GUARD_CALL']).write_text(
+    json.dumps({'cas': os.environ.get('AIR2LEAN_CAS_DIR'), 'inputs': inputs}))
 kind = os.environ['STUB_LOG_KIND']
 if kind == 'regular': log.write_bytes(b'prefix-excluded' * 701 + bytes(range(256)) * 32)
 elif kind == 'symlink':
@@ -73,7 +79,8 @@ raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
         options = ['--guard', str(guard), '--guard-sha256', '0' * 64] if external else []
         environment = dict(os.environ, STUB_LOG_KIND=kind, STUB_GUARD_STATUS=str(status),
                            PATH=str(Path(sys.executable).parent) + os.pathsep + os.defpath,
-                           AIR2LEAN_BUILD_LOCK=str(self.base / 'mock-lock'), PYTHONDONTWRITEBYTECODE='1')
+                           AIR2LEAN_BUILD_LOCK=str(self.base / 'mock-lock'), PYTHONDONTWRITEBYTECODE='1',
+                           AIR2LEAN_CAS_DIR=str(self.base / 'cas'), STUB_GUARD_CALL=str(self.base / 'guard-call.json'))
         result = subprocess.run([shell, str(self.check), *options, str(attempt),
                                  str(self.base / 'mock-toolchain'), 'mock-failed-audit', *modules],
                                 env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
@@ -88,6 +95,11 @@ raise SystemExit(int(os.environ['STUB_GUARD_STATUS']))
         expected += ['--guard', str(guard)]
         if external: expected += ['--guard-sha256', '0' * 64]
         self.assertEqual(json.loads((self.root / 'prepare-argv.json').read_text()), expected)
+        # The guard runs without the shared cache (its Lake overlays would stop the worker), and
+        # its inputs are the plan, proof-receipt.py's INPUTS (the stub's: lean-toolchain), the guard.
+        call = json.loads((self.base / 'guard-call.json').read_text())
+        self.assertIsNone(call['cas'])
+        self.assertEqual(call['inputs'], [str(attempt / 'plan.json'), str(self.root / 'lean-toolchain'), str(guard)])
         self.assertFalse((attempt / 'receipt.json').exists())
         self.assertEqual((attempt / 'retained').read_bytes(), b'prior evidence')
         (self.root / 'calls').unlink()

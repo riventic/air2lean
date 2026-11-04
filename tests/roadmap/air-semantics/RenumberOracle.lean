@@ -1,6 +1,7 @@
 import Air2Lean.CanonCertificate
 import Air2Lean.Air.Normalize
 import Air2Lean.Check
+import Init.Data.Array.Bootstrap
 
 /-!
 Audit regression: full live-ID renumbering cannot preserve `Sem.execFunc` for the same
@@ -35,23 +36,112 @@ def identity : Func :=
     ret := 1
     body := #[⟨0, 1, .arg 0⟩, ⟨1, 3, .ret (.inst 0)⟩] }
 
+/-- Both executions retain the complete original source program as their classification
+context. Changing a live ID is the proposed transformation under test, not a second
+choice of execution policy. -/
+def program (records : Array Identity.Record) : Program :=
+  { funcs := #[caller 10 records, identity] }
+
+private theorem caller_allInsts (base : Nat) (records : Array Identity.Record) :
+    (caller base records).allInsts = (caller base records).body := by
+  rw [Func.allInsts, ← Array.foldl_toList]
+  simp only [caller, List.foldl_cons, List.foldl_nil, flattenInst]
+  simp only [flattenOp, Op.call_control_bodies, Op.effects, Op.effectsIn,
+    Effects.pure, Effects.placeAccess, Effects.flow, Control.bodies,
+    Array.attach_empty, Array.foldl_empty] <;> rfl
+
+private theorem identity_allInsts : identity.allInsts = identity.body := by
+  rw [Func.allInsts, ← Array.foldl_toList]
+  simp only [identity, List.foldl_cons, List.foldl_nil, flattenInst]
+  simp only [flattenOp, Op.call_control_bodies, Op.effects, Op.effectsIn,
+    Effects.pure, Effects.placeAccess, Effects.flow, Control.bodies,
+    Array.attach_empty, Array.foldl_empty] <;> rfl
+
+private theorem caller_edges (base : Nat) (records : Array Identity.Record) :
+    calleesOf #["canon.caller", "canon.identity"] #[] (caller base records) =
+      #["canon.identity"] := by
+  simp only [calleesOf, Func.indirectCallees, caller_allInsts]
+  apply Array.ext'
+  simp only [dedupNames, Graph.dedupKeys, ← Array.foldl_toList,
+    Array.toList_append, Array.toList_flatMap, Array.toList_filter,
+    Option.toArray_none, Option.toArray_some,
+    caller, Func.calleeValFnTy?, Array.toList_push, Array.toList_empty,
+    List.append_nil, List.nil_append, List.filterMap_cons, List.filterMap_nil,
+    List.flatMap_cons, List.flatMap_nil, List.filter_cons, List.filter_nil,
+    List.foldl_cons, List.foldl_nil]
+  simp only [← Array.contains_toList, List.contains_cons, List.contains_nil,
+    beq_self_eq_true, Bool.or_true, Bool.or_false, List.foldl_cons, List.foldl_nil,
+    Array.toList_push, Array.toList_empty, List.nil_append,
+    Bool.false_eq_true, ite_false, ite_true] <;> rfl
+
+private theorem identity_edges :
+    calleesOf #["canon.caller", "canon.identity"] #[] identity = #[] := by
+  simp only [calleesOf, Func.indirectCallees, identity_allInsts] <;> rfl
+
+/-- The actual source graph, retaining arbitrary identity records in its original nodes. -/
+private theorem program_rows (records : Array Identity.Record) :
+    (program records).funcs.map (fun f =>
+      (f.name, calleesOf ((program records).funcs.map (·.name))
+        (fnRefs (program records).funcs) f)) =
+      #[("canon.caller", #["canon.identity"]), ("canon.identity", #[])] := by
+  have hnames : (program records).funcs.map (·.name) =
+      #["canon.caller", "canon.identity"] := by
+    apply Array.ext'
+    simp only [Array.toList_map, program, caller, identity, List.map_cons, List.map_nil]
+  have hrefs : fnRefs (program records).funcs = #[] := by rfl
+  rw [hnames, hrefs]
+  apply Array.ext'
+  simp only [Array.toList_map, program, List.map_cons, List.map_nil,
+    caller_edges, identity_edges]
+  rfl
+
+private theorem recursive_false_of_rows (records : Array Identity.Record)
+    (hrows : (program records).funcs.map (fun f =>
+      (f.name, calleesOf ((program records).funcs.map (·.name))
+        (fnRefs (program records).funcs) f)) =
+      #[("canon.caller", #["canon.identity"]), ("canon.identity", #[])]) :
+    (program records).recursive "canon.caller" = false := by
+  let nodes := (program records).funcs
+  let project (f : Func) :=
+    (f.name, calleesOf (nodes.map (·.name)) (fnRefs nodes) f)
+  let observe (groups : Array (Array (String × Array String) × Bool)) :=
+    groups.any fun (members, recursive) =>
+      recursive && members.any (fun member => member.1 == "canon.caller")
+  have hmapped := congrArg observe
+    (Graph.callGroupsBy_map nodes project Prod.fst Prod.snd)
+  have hrecursive : (program records).recursive "canon.caller" =
+      observe (Graph.callGroupsBy (nodes.map project) Prod.fst Prod.snd) := by
+    simpa only [observe, nodes, project, Program.recursive, recursiveIn, Program.groups, callGroups,
+      Array.any_map, Function.comp_def] using hmapped.symm
+  rw [hrecursive]
+  change observe (Graph.callGroupsBy ((program records).funcs.map (fun f =>
+    (f.name, calleesOf ((program records).funcs.map (·.name))
+      (fnRefs (program records).funcs) f))) Prod.fst Prod.snd) = false
+  rw [hrows]
+  decide +kernel
+
+theorem entry_unticked (records : Array Identity.Record) :
+    (program records).entryTicked "canon.caller" = false := by
+  have hrecursive := recursive_false_of_rows records (program_rows records)
+  simp only [Program.entryTicked, hrecursive, Bool.false_and]
+
 def oracle : Oracle := fun _ _ => pure (.cell 11)
 
 theorem identity_not_panic : panicOf? "canon.identity" = none := by rfl
 
 theorem before_run (records : Array Identity.Record) (m : Zig.Mem) (p : Zig.Ptr) :
-    ((execFunc oracle (caller 10 records) [.ptr p]).run m).run =
+    ((execFunc (program records) oracle (caller 10 records) [.ptr p]).run m).run =
       some (.ok (.bool true, m)) := by
-  simp only [caller, oracle, air_sem, Nat.reduceAdd, identity_not_panic] <;> rfl
+  simp only [caller, oracle, air_sem, entry_unticked, Nat.reduceAdd, identity_not_panic] <;> rfl
 
 theorem after_run (records : Array Identity.Record) (m : Zig.Mem) (p : Zig.Ptr) :
-    ((execFunc oracle (caller 0 records) [.ptr p]).run m).run =
+    ((execFunc (program records) oracle (caller 0 records) [.ptr p]).run m).run =
       some (.error .unspecified) := by
-  simp only [caller, oracle, air_sem, Nat.reduceAdd, identity_not_panic] <;> rfl
+  simp only [caller, oracle, air_sem, entry_unticked, Nat.reduceAdd, identity_not_panic] <;> rfl
 
 theorem same_oracle_not_preserved (records : Array Identity.Record) (m : Zig.Mem) (p : Zig.Ptr) :
-    (execFunc oracle (caller 10 records) [.ptr p]).run m ≠
-      (execFunc oracle (caller 0 records) [.ptr p]).run m := by
+    (execFunc (program records) oracle (caller 10 records) [.ptr p]).run m ≠
+      (execFunc (program records) oracle (caller 0 records) [.ptr p]).run m := by
   intro h
   have h' := congrArg (fun r => r.run) h
   rw [before_run, after_run] at h'

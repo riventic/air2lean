@@ -289,6 +289,7 @@ def push.again12 : pushExit → Bool
   | _ => false
 
 def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
+  Zig.callMC Zig.tick
   let i13 ← pure p0
   let i14 ← Zig.load (Zig.Ptr) 8 i13
   let i15 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))

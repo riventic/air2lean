@@ -1422,6 +1422,12 @@ theorem U_q {G : ThreadId → Gh S} {m m' : Mem} {c : ThreadId} {ws : Array (Thr
   · obtain ⟨hn, hp, hs, hc⟩ := hu.car h
     exact ⟨hn, hp, hs, fun e he ht => by rw [hhS]; exact hc e he ht⟩
 
+/-- The invariant one step tick later (`Zig.tick`, `WP.callMC_tick`): it reads no step count. -/
+theorem inv_ticked (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto E).inv G m) :
+    (proto E).inv G { m with ticks := m.ticks + 1 } :=
+  ⟨hi.1.ticked, { hi.2.1 with ws := hi.2.1.ws.ticked, wm := hi.2.1.wm.ticked },
+    hE.frame G G m _ hi.2.2 ⟨fun _ _ _ _ => Word.keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _,
+      rfl, fun _ _ => Iff.rfl, fun _ => VClock.le_refl _⟩ (econd0 hi.2.1)⟩
 
 theorem wmL : WM.ptr ≠ (L S).ptr := by simp [WM, Word.ptr, Lock.ptr, L, Lock.prod]
 
@@ -1698,6 +1704,9 @@ theorem mloop_body (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) {sx : S} 
   have hxs : (x.setM .spin).isMx := by simpa using hx
   unfold Io_Mutex_lockUncancelable.loop23
   simp only [StateT.run_bind, pure_bind, bind_assoc]
+  refine WP.bind (WP.callMC_tick ?_)
+  have hi := inv_ticked hE hi
+  dsimp only
   refine WP.bind (wp_rmwAs (W := WM) hi (wat (fun _ _ h => h.2.1.wm) (by simp [gA]))
     (fun G₁ m₁ _ hi₁ b hb => (mdec hi₁.2.1 (hist_pos hi₁.2.1.wm) hb).imp fun _ h => h.1)
     fun k hk G₁ m₁ m' old r hg₁ hi₁ hd hv hU hh hacq hw' hop => ?_)
@@ -2858,7 +2867,10 @@ theorem wloop_body (hE : E.Spec) (s : writerLocals) (G : ThreadId → Gh S) (m :
   obtain ⟨hc, hle, hi⟩ := h
   unfold writer.loop4
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
-  have htl : 1 < m.threads.size :=
+  refine WP.bind (WP.callMC_tick ?_)
+  have hi := inv_ticked hE hi
+  dsimp only
+  have htl : 1 < { m with ticks := m.ticks + 1 }.threads.size :=
     (hi.1.live 1 (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone))).1
   split
   · rename_i hlt
@@ -3111,6 +3123,9 @@ theorem ls_body (hE : E.Spec) (j : Bool) (D : Nat) (s : Io_RwLock_lockSharedUnca
   obtain ⟨hD, hc, hvS, hi⟩ := h
   unfold Io_RwLock_lockSharedUncancelable.loop8
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  have hi := inv_ticked hE hi
+  dsimp only
   cases htest : (s.state &&& 4294967295 == 0)
   rotate_left
   · simp only [↓reduceIte]
