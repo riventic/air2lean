@@ -113,7 +113,7 @@ if [ "$translator" = 1 ]; then
   # AIR2LEAN_CAS_DIR is set. Its phase logs go to --logs DIR/full-build (replaced on each run,
   # kept afterwards), else to a temporary directory removed at exit.
   if [ -n "$logs" ]; then
-    rm -rf "$logs/full-build" && mkdir -p "$logs" || exit 2
+    rm -rf "$logs/full-build" && mkdir -p "$logs" && logs=$(cd "$logs" && pwd) || exit 2
   else
     logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
     trap 'rm -rf "$logs"' EXIT
