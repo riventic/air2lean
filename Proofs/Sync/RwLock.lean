@@ -4346,16 +4346,16 @@ theorem inv_spawn {G₁ : ThreadId → Gh SPh} {m₅ m₆ : Mem} {c : ThreadId}
     (g₀ := gA (.wo 0) Heap.empty default) (by rw [hg₁]; rfl) hf (by rw [hg₁]; rfl)
     (Heap.disjoint_empty _) rfl rfl rfl rfl (fun hL hR => ?_)
   rotate_left
-  · obtain ⟨hch, -⟩ := Lock.fork_eq hf
+  · obtain ⟨hch, -⟩ := fork_eq hf
     rw [hs1] at hch; subst hch
     refine (R_nohas ?_ ?_ hL).mpr hR
     · simp [hasP, upd_self, upd0_1, gA, Ph.isWs]
     · show ((G₁ 1).2.2.isWs && (G₁ 0).2.2.gave) = false
       have := hnone 1 (Nat.le_refl _); change (G₁ 1).2.2 = _ at this; rw [this]; rfl
-  obtain ⟨hch, hm₆⟩ := Lock.fork_eq hf
+  obtain ⟨hch, hm₆⟩ := fork_eq hf
   rw [hs1] at hch
   subst hch hm₆
-  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs]; decide)
+  obtain ⟨hcl, hcn, -⟩ := fork_clocks (cs := m₅.clocks) (t := 0) (by rw [hcs]; decide)
   have hcl' : ∀ u : Nat, VClock.le (m₅.clocks[u]!) (((m₅.clocks.set! 0 (VClock.bump (m₅.clocks[0]!) 0)).push
       (VClock.bump (m₅.clocks[0]!) 0))[u]!) = true := fun u => by
     by_cases hu : u < m₅.clocks.size

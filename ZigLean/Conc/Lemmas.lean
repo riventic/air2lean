@@ -26,6 +26,14 @@ instance : LawfulEnc ThreadId where
       | _ => throw .unspecified : Result ThreadId) = pure t
     rw [handleOfBytes_handleBytes _ (by decide) (by decide)]; rfl
 
+/-- `std.Io` (one value, 16 bytes): a store of it is a store of an encoding. -/
+instance : LawfulEnc Io where
+  size_encode _ := handleBytes_size .io (by decide)
+  decode_encode _ := by
+    show (do if (← handleOfBytes 16 (handleBytes .io 16)) = .io then pure ⟨⟩ else throw .unspecified :
+      Result Io) = pure ⟨⟩
+    rw [handleOfBytes_handleBytes .io (by decide) (by decide)]; rfl
+
 namespace Conc
 namespace Proto
 

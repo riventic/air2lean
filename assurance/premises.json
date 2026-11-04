@@ -147,6 +147,7 @@
     "ZigLean.Conc.Share": ["THR-08"],
     "ZigLean.Conc.Detach": ["THR-08", "THR-10"],
     "ZigLean.Conc.Word": ["THR-08", "THR-05", "ORD-01"],
+    "ZigLean.Conc.Base.Word": ["THR-08", "THR-05", "ORD-01"],
     "ZigLean.Conc.WeakWord": ["THR-08", "THR-05", "ORD-04"],
     "ZigLean.Conc.AtomicWord": ["ORD-01", "THR-01"],
     "ZigLean.Conc.WeakCas": ["ORD-04"],

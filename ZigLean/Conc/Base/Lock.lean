@@ -44,6 +44,25 @@ def AllLe (m : Mem) (c : VClock) : Prop :=
 def SomeLe (m : Mem) (c : VClock) : Prop :=
   ∃ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
 
+theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
+    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (h : AllLe m c) : AllLe m' c := fun u hu =>
+  VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
+
+theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
+    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (h : SomeLe m c) : SomeLe m' c := by
+  obtain ⟨u, hu, hle⟩ := h
+  exact ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u hu)⟩
+
+/-- Recording an access does not lower a clock. -/
+theorem recordAt_le (m : Mem) (b o n : Nat) (k : AccessKind) (u : Nat) :
+    VClock.le (m.clocks[u]!) ((m.recordAt b o n k).clocks[u]!) = true := by
+  simp only [Mem.recordAt]; rw [Proto.getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+  · exact VClock.le_refl _
+
 /-- `findIdx?` with a predicate that has the same value at each index. -/
 theorem findIdx?_congr {α : Type} {xs ys : Array α} {p : α → Bool} (hs : ys.size = xs.size)
     (h : ∀ k (h1 : k < ys.size) (h2 : k < xs.size), p ys[k] = p xs[k]) :
@@ -139,6 +158,35 @@ theorem fork_threads {m m' : Mem} {t c : ThreadId} {gt : Bool}
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
   exact ⟨rfl, rfl⟩
+
+theorem fork_eq {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    c = m.threads.size ∧ m' = { m with
+      current := t,
+      clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
+      threads := m.threads.push { spawner := t, joined := false, gated := gt } } := by
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  exact ⟨rfl, rfl⟩
+
+/-- The clocks after a fork by `t`: the old ones are not smaller, the new thread's is above
+`t`'s, and the others stay. -/
+theorem fork_clocks {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) :
+    (∀ u < cs.size, VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[u]!) = true) ∧
+    VClock.le (cs[t]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[cs.size]!) = true ∧
+    (∀ u < cs.size, u ≠ t → ((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[u]! = cs[u]!) := by
+  refine ⟨fun u hu => ?_, ?_, fun u hu hut => ?_⟩
+  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite]
+    split
+    · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+    · exact VClock.le_refl _
+  · rw [Proto.getElem!_push, if_neg (by simp), if_pos (by simp)]
+    exact VClock.le_bump _ _
+  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite, if_neg (by omega)]
 
 theorem join_threads {m m' : Mem} {t u : ThreadId} {rec : ThreadRec}
     (hr : m.threads[u]? = some rec)
