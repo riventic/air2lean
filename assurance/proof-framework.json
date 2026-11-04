@@ -791,10 +791,6 @@
       "path": "Proofs/Sync/Semaphore.lean"
     },
     {
-      "path": "Proofs/Threads/Disjoint.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
       "path": "Proofs/Threadsync/Lock.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -803,10 +799,6 @@
     },
     {
       "path": "ZigLean/Conc/Csl.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Detach.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/Lock.lean",
@@ -818,14 +810,6 @@
     },
     {
       "path": "ZigLean/Conc/Own.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Share.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/Unroll.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/Witness.lean"
