@@ -521,7 +521,7 @@ theorem wp_asyncC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {mk : Ptr → Tg
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok ha; rfl
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h slot m₁ ha k hk
-  refine ⟨g, hi, fun G₁ m₂ hg hi₂ => ?_⟩
+  refine ⟨g, hi, fun G₁ m₂ hg hi₂ _ => ?_⟩
   obtain ⟨g₀, hg₀, hk'⟩ := hc G₁ m₂ hg hi₂
   refine ⟨(fun hp => by rw [hsf] at hp; cases hp), g₀, hg₀, fun child m₃ hf => Proto.WP.pure' ?_⟩
   simp only [StateT.run_bind]
@@ -659,7 +659,7 @@ theorem wp_asyncWithPolicyC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {polic
   simp only [StateT.run_bind, StateT.run_lift]
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hb⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => Proto.WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hc => Proto.WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
 /-- `Io.checkCancel` in thread `t`: a stop, then the cancelation point. -/
 theorem wp_checkCancelC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} {s : σ}
@@ -674,7 +674,7 @@ theorem wp_checkCancelC {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {io : Io} 
   simp only [StateT.run_bind, StateT.run_lift]
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync (fun k hk => ?_) hcost)))
   obtain ⟨g, hi, hc⟩ := h k hk
-  refine ⟨g, hi, fun G₁ m₁ hg hi₁ => Proto.WP.pure' ?_⟩
+  refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ => Proto.WP.pure' ?_⟩
   refine Proto.WP.callMC (Proto.ErrOk.of_run hns Future.takeCancel_native)
     fun c m₂ ht => ⟨?_, hc G₁ m₁ hg hi₁ c m₂ ht⟩
   rw [(Future.takeCancel_eq ht).2.1]
@@ -755,7 +755,7 @@ theorem cancel_wp {io : Io} {p slot : Ptr} {child : ThreadId} {s : σ} {G : Thre
       obtain ⟨rfl, rfl, rfl⟩ := htasks u sl d hu
       exact ⟨upd_self _ _ _, fun h => by cases h⟩
   refine Proto.WP.bind (Proto.WP.bind (Proto.WP.map (Proto.WP.sync fun k _ =>
-    ⟨.main slot child, hstop, fun G₁ m₃ hg hi₃ => ?_⟩)))
+    ⟨.main slot child, hstop, fun G₁ m₃ hg hi₃ _ => ?_⟩)))
   refine Proto.WP.pure' (Proto.WP.bind (Proto.WP.callMC
     (Proto.ErrOk.of_run rfl (by unfold Future.requestCancel; exact Proto.MemM.native_modify))
     fun _ m₄ hc => ?_))

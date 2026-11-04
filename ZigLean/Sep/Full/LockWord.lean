@@ -24,8 +24,9 @@ with the resource moved between a thread's part and the protocol's rest.
   waits at the word, a thread that is not asleep is in the lock's code (`wit`), so there is no
   deadlock at the word. The holder made the newest acquire of the word (`owner`).
 - **A step of the lock's code** (`Step t m m'`): the threads, the groups and the other threads'
-  clocks stay, only the word's bytes change, each new access is an atomic access to the word, and
-  the atomic layout changes at most by a new location at the word.
+  clocks stay, only the word's bytes change, each new access is an atomic access to the word, the
+  atomic layout changes at most by a new location at the word, and the other threads' pending
+  wakes stay.
 - **The free resource's clocks** (`Owns P m h`): each access to `h` happened before every thread
   that has not ended, or before the release clock of the word's newest message. An acquire gives
   them to the acquiring thread's clock (`Acq`), a release takes them from the releasing thread's
@@ -164,8 +165,8 @@ from every other one. -/
 def ShapesStep (m m' : Mem) : Prop :=
   shapes m' = shapes m ∨ (shapes m' = shapes m ++ [L.shape] ∧ ∀ s ∈ shapes m, Apart s L.shape)
 
-/-- A step of thread `t` in the lock's code: the threads, the groups and the other threads'
-clocks stay, `t`'s clock does not get smaller, and only the word's bytes can change. -/
+/-- A step of thread `t` in the lock's code: the threads, the groups, the other threads' clocks
+and pending wakes stay, `t`'s clock does not get smaller, and only the word's bytes can change. -/
 structure Step (t : ThreadId) (m m' : Mem) : Prop where
   threads : m'.threads = m.threads
   fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
@@ -179,6 +180,9 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
     bs.size = 4 ∧ L.o + 4 ≤ blk.bytes.size ∧ m'.blocks = (m.write L.b blk L.o bs).blocks
   /-- The threads at another futex stay in the queue. -/
   waiters : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters)
+  /-- Another thread's pending wake stays: the lock's futex wake only adds entries, and only
+  `t`'s own futex wait consumes one (`t`'s). -/
+  woken : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true
   /-- A clock that happened before the newest message of the word still does. -/
   before : ∀ c, L.Before m c → L.Before m' c
   /-- The actual array effect at the word: no change, or replacement of the first
@@ -354,16 +358,19 @@ theorem ShapesStep.trans {m₁ m₂ m₃ : Mem} (h₁ : L.ShapesStep m₁ m₂) 
     rcases this rfl with h | h <;> simp [LockWord.shape] at h <;> omega
 
 /-- A step that keeps the threads, the groups, the blocks, the clocks, the footprint, the atomic
-locations and the threads at another futex. -/
+locations, the threads at another futex and (`hk`, by default unchanged) the other threads'
+pending wakes. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
     (hw : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters))
     (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩)
     (hs : m'.seen = m.seen := by first | rfl | assumption)
-    (hn : m.nextMsg ≤ m'.nextMsg := by first | exact Nat.le_refl _ | assumption) : L.Step t m m' :=
+    (hn : m.nextMsg ≤ m'.nextMsg := by first | exact Nat.le_refl _ | assumption)
+    (hk : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true :=
+      by first | exact fun _ _ h => h | assumption) : L.Step t m m' :=
   ⟨ht, fun e he => .inl (hf ▸ he), hg, by rw [hc], fun _ _ => by rw [hc],
-    by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw,
+    by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw, hk,
     fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold LockWord.Loc; rw [ha]; exact hl, hle⟩, .inl ha,
     fun e he => .inl (hf ▸ he), .of_atomics ha, hx,
     (fun h => h.keep (fun _ hl _ => ha ▸ hl) (fun _ _ _ hin => hin.of_blocks hb) fun _ he => hf ▸ he),
@@ -920,7 +927,8 @@ theorem Step.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : L.Step t m₁ m
     h₂.csize.trans h₁.csize,
     fun u hu => (h₂.others u hu).trans (h₁.others u hu), VClock.le_trans h₁.mine h₂.mine,
     h₂.bsize.trans h₁.bsize, ?_, fun w hw => (h₂.waiters w hw).trans (h₁.waiters w hw),
-    fun c h => h₂.before c (h₁.before c h), hlocs, fun e he => ?_,
+    fun u hu h => h₂.woken u hu (h₁.woken u hu h), fun c h => h₂.before c (h₁.before c h), hlocs,
+    fun e he => ?_,
     h₁.shapes.trans h₂.shapes, h₁.aux.trans h₂.aux, (fun h => h₂.cov (h₁.cov h)),
     Nat.le_trans h₁.nextMsg h₂.nextMsg, fun hF hoff => ?_⟩
   rotate_right
@@ -1114,7 +1122,8 @@ theorem WInv.recordStep {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {k : Acc
     (hk : k.isAtomic = true) : L.Step t m (m.recordAt L.b L.o 4 k) := by
   have hcs : t < m.clocks.size := by rw [hi.csize]; exact ht
   refine ⟨rfl, fun e he => ?_, rfl, by simp [Mem.recordAt], ?_, ?_, rfl, .inl rfl,
-    fun _ _ => Iff.rfl, fun _ h => h, .inl rfl, fun e he => ?_, .of_atomics rfl, ⟨rfl, rfl, rfl⟩,
+    fun _ _ => Iff.rfl, fun _ _ h => h, fun _ h => h, .inl rfl, fun e he => ?_, .of_atomics rfl,
+    ⟨rfl, rfl, rfl⟩,
     Mem.MsgCov.recordAt, Nat.le_refl _, fun _ _ => ⟨some, AMap.of_eq rfl rfl⟩⟩
   · simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
@@ -1592,6 +1601,7 @@ theorem WInv.rmwStep {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
   refine ⟨blk, _, hb, rfl, ⟨hth, fun e he => .inl (hfp ▸ he), hg, by rw [hcl, hs1],
     fun u hu => by rw [hcl, hs2 u hu], by rw [hcl]; exact hs3, by rw [hbl]; simp [Mem.write],
     .inr ⟨blk, _, hb, hlv, bs4 new, hsz, hbl⟩, fun _ _ => by rw [hwq],
+    fun _ _ h => (htransport (fun _ => none) (fun _ _ _ => rfl)).woken ▸ h,
     fun c ⟨i, l₀, hl₀, hle⟩ => ?_, .inr ⟨next, by
       obtain ⟨hlb, hlo⟩ := loc_at hl
       simp only [next, ALoc.shape, LockWord.shape, hlb, hlo, (hi.loc.ok li l hl).1],
@@ -1964,7 +1974,9 @@ theorem WInv.wait {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {b : Bool} 
         rw [hw] at hw'; rw [upd_ne _ _ (ne_of_notQ hq hw')])
       (wit_keep hii hnh (by decide) fun _ => rfl)
   rcases futexWait_eq h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, -, hv, ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩⟩
-  · exact ⟨Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl), rfl, hspin m _ hi rfl⟩
+  · exact ⟨Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl) (hk := fun _ hu h =>
+      Array.contains_iff_mem.mpr ((Array.mem_erase_of_ne hu).mpr (Array.contains_iff_mem.mp h))),
+      rfl, hspin m _ hi rfl⟩
   · -- it sleeps: the word is `c`
     obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hi.blk.access
     have : ({ m with current := t } : Mem).access L.ptr 4 4 = m.access L.ptr 4 4 := rfl
@@ -2028,7 +2040,8 @@ theorem WInv.wake {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {n : Nat} {
     · exact h
     · exact absurd hp h1
   subst hm'
-  refine ⟨Step.same rfl rfl rfl rfl rfl rfl fun w hw => ?_, rfl,
+  refine ⟨Step.same rfl rfl rfl rfl rfl rfl (fun w hw => ?_)
+      (hk := fun _ _ h => by simp only [Array.contains_append, h, Bool.true_or]), rfl,
     hi.queue hnh hng (by decide) (by decide)
     ((fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)).mono
       (fun w hw => (Array.mem_filter.mp hw).1) fun _ _ => rfl) (fun hpos => ?_)⟩
@@ -2190,7 +2203,9 @@ theorem WInv.prepK {P : ThreadId → LPh} {m m₁ : Mem} {t li : Nat} {k : Acces
     unfold Rec at this ⊢; rw [hf₁, hc₁]; exact this
   refine ⟨l, hl', hi₁, ⟨by rw [ht₁]; rfl, fun e he => ?_, by rw [hg₁]; rfl,
     by rw [hc₁]; simp [Mem.recordAt], fun u hu => ?_, ?_, by rw [hb₁]; rfl, .inl (by rw [hb₁]; rfl),
-    fun _ _ => by rw [hw₁]; rfl, fun _ ⟨i, l₀, h₀, hle⟩ => ⟨i, l₀, hlk i l₀ h₀, hle⟩,
+    fun _ _ => by rw [hw₁]; rfl,
+    fun _ _ h => (htransport (fun _ => none) (fun _ _ _ => rfl)).woken ▸ h,
+    fun _ ⟨i, l₀, h₀, hle⟩ => ⟨i, l₀, hlk i l₀ h₀, hle⟩,
     (by simpa only [Mem.recordAt] using hks), fun e he => ?_,
     (ShapesStep.of_atomics (m := m) (m' := m.recordAt L.b L.o 4 k) rfl).trans hsh,
     (Mem.Aux.refl m).trans hax, hcov,
@@ -2294,7 +2309,7 @@ theorem Step.observe {t : ThreadId} {m₁ : Mem} {li id : Nat} {l : ALoc}
     (hc : m₁.current = t) (hl : L.Loc m₁ li l) (hlen : l.len = 4) :
     L.Step t m₁ (observeM m₁ li id) := by
   refine ⟨rfl, fun _ he => .inl he, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl,
-    .inl rfl, fun _ _ => Iff.rfl, fun _ h => h, .inl rfl, fun _ he => .inl he,
+    .inl rfl, fun _ _ => Iff.rfl, fun _ _ h => h, fun _ h => h, .inl rfl, fun _ he => .inl he,
     .of_atomics rfl, .refl _, (fun h => h), Nat.le_refl _, fun hF hoff => ?_⟩
   have hnot : ¬ (m₁.atomics[li]!).In hF := by
     rw [(loc_get hl).2.2]

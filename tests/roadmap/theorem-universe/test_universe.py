@@ -224,8 +224,9 @@ class ReplayTests(unittest.TestCase):
         installed_inputs(self.toolchain)
         self.calls = self.toolchain / 'calls'
         checker = self.toolchain / 'bin/leanchecker'
-        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\n[ "$1" != Bad ] || {{ echo rejected; exit 1; }}\n'
-                           '[ "$1" != Killed ] || kill -9 $$\n')
+        self.threads = self.toolchain / 'threads'
+        checker.write_text(f'#!/bin/sh\necho "$1" >> {self.calls}\necho "$LEAN_NUM_THREADS" >> {self.threads}\n'
+                           '[ "$1" != Bad ] || { echo rejected; exit 1; }\n[ "$1" != Killed ] || kill -9 $$\n')
         checker.chmod(0o755)
         (self.toolchain / 'bin/lean').write_text('lean')
 
@@ -236,6 +237,13 @@ class ReplayTests(unittest.TestCase):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g'}, self.toolchain, '')
         self.assertEqual((record['status'], [r['module'] for r in record['rejected']]), ('fail', ['Bad']))
         self.assertEqual(assumptions.replay_record(record), ({'Bad', 'Good'}, {'Bad'}))
+
+    def test_every_checker_runs_on_one_worker_whatever_the_caller_allows(self):
+        # `leanchecker M` checks every `M.*` module in a task of its own: its memory grows with its
+        # workers, so the replay's parallelism is only its pool (replay_jobs), on every host.
+        with mock.patch.dict(os.environ, {'LEAN_NUM_THREADS': '16', 'AIR2LEAN_REPLAY_JOBS': '2'}):
+            assumptions.kernel_replay({'A': 'a', 'B': 'b', 'C': 'c'}, self.toolchain, '')
+        self.assertEqual(self.threads.read_text().split(), ['1', '1', '1'])
 
     def test_rejection_records_the_checker_exit_status(self):
         record = assumptions.kernel_replay({'Bad': 'b', 'Good': 'g', 'Killed': 'k'}, self.toolchain, '')
@@ -369,7 +377,7 @@ class ReplayTests(unittest.TestCase):
             sizes.append(n)
             return real(n)
 
-        keys = ('AIR2LEAN_JOBS', 'AIR2LEAN_REPLAY_JOBS', 'AIR2LEAN_UNIVERSE_JOBS')
+        keys = ('AIR2LEAN_JOBS', 'AIR2LEAN_REPLAY_JOBS', 'AIR2LEAN_UNIVERSE_JOBS', 'AIR2LEAN_MEM_MIB')
         saved = {k: os.environ.pop(k, None) for k in keys}
         os.environ.update(env)
         concurrent.futures.ThreadPoolExecutor, universe.ThreadPoolExecutor = pool, pool
@@ -405,6 +413,13 @@ class ReplayTests(unittest.TestCase):
                 self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1'}, work), [1])
                 self.assertEqual(self.worker_counts({'AIR2LEAN_JOBS': '1', stage: '2'}, work), [2])
                 self.assertEqual(self.worker_counts({}, work), [min(4, os.cpu_count() or 1)])
+            # Replays also fit the guard's memory budget, REPLAY_MIB each, and at least one runs.
+            per = assumptions.REPLAY_MIB
+            self.assertEqual(self.worker_counts({'AIR2LEAN_REPLAY_JOBS': '4', 'AIR2LEAN_MEM_MIB': str(2 * per + 1)},
+                                                replay), [2])
+            self.assertEqual(self.worker_counts({'AIR2LEAN_REPLAY_JOBS': '4', 'AIR2LEAN_MEM_MIB': '100'}, replay), [1])
+            self.assertEqual(self.worker_counts({'AIR2LEAN_REPLAY_JOBS': '2', 'AIR2LEAN_MEM_MIB': str(9 * per)},
+                                                replay), [2])
         finally:
             universe.compile_unit = original
 
@@ -449,7 +464,7 @@ class LakeExtractionTests(unittest.TestCase):
         lib.mkdir(parents=True)
         (lib / 'M.olean').write_bytes(b'olean')  # the audited module, built by the fixtures package
         self.extraction = self.package / '.lake/extraction'
-        self.built, self.workspaces = [], []
+        self.built, self.workspaces, self.targets = [], [], []
         self.roots = [str(base / 'root/.lake/build/lib/lean'), str(lib)]
         # Lake's order: the required packages' libraries, then the workspace's own (Lean 4.34).
         self.own = 'OWN'
@@ -464,6 +479,7 @@ class LakeExtractionTests(unittest.TestCase):
                     own if e == 'OWN' else e for e in self.resolved]
                 return subprocess.CompletedProcess(command, 0, os.pathsep.join(entries) + '\n', '')
             module = command[-1]
+            self.targets.append(command[command.index('build') + 1:])
             self.built.append((module, (Path(cwd) / 'lean-toolchain').read_text()))
             self.workspaces.append(Path(cwd))
             path = module.replace('.', '/') + '.lean'
@@ -491,6 +507,9 @@ class LakeExtractionTests(unittest.TestCase):
                       '#["--sysroot", "/toolchain", "M"]\n', source.read_text())
         manifest = tomllib.loads((workspace / 'lakefile.toml').read_text())
         self.assertEqual(manifest['lean_lib'][0]['needs'], ['@fixtures/+M:olean', '@fixtures/+M:depTrace'])
+        # The needed olean comes first on the command line (Lake's build thread, ledger
+        # `lake-needs-race`), the driver last.
+        self.assertEqual(self.targets[0], ['@fixtures/+M:olean', self.built[0][0]])
         (self.package / '.lake/build/lib/lean/M.olean').unlink()  # no package builds it
         self.assertIsNone(self.extract())
 
@@ -564,17 +583,21 @@ class LakeKernelReplayTests(unittest.TestCase):
         self.workspace = self.package / '.lake/replay'
         self.lean_path = os.pathsep.join([str(base / 'root/.lake/build/lib/lean'), str(self.package / '.lake/build/lib/lean')])
         self.resolved = [*self.lean_path.split(os.pathsep), str(self.workspace / '.lake/build/lib/lean')]
-        self.builds, self.status, self.drop, self.foreign = [], {}, set(), {}
+        self.builds, self.needed, self.status, self.drop, self.foreign = [], [], {}, set(), {}
 
         def lake(command, cwd, **kwargs):
             if command[-3:] == ['env', 'printenv', 'LEAN_PATH']:
                 return subprocess.CompletedProcess(command, 0, os.pathsep.join(self.resolved) + '\n', '')
             targets = command[command.index('build') + 1:]
+            needed = [t for t in targets if t.startswith('@')]
+            self.assertEqual(targets[:len(needed)], needed)  # the needed oleans first (`lake-needs-race`)
+            self.needed.append(needed)
+            targets = targets[len(needed):]
             self.builds.append(targets)
             lines = []
             for target in targets:
                 path = target.replace('.', '/') + '.lean'
-                module = re.search(r'KernelReplay\.run `(\S+)', (Path(cwd) / path).read_text()).group(1)
+                module = json.loads(re.search(r'KernelReplay\.run (".*")', (Path(cwd) / path).read_text()).group(1))
                 if module in self.drop:
                     continue
                 record = {'module': self.foreign.get(module, module), 'status': self.status.get(module, 'pass'),
@@ -589,6 +612,18 @@ class LakeKernelReplayTests(unittest.TestCase):
     def replay(self, modules=('A', 'B'), checker='c' * 64, runtime='a' * 64):
         return assumptions.lake_kernel_replay(list(modules), self.package, checker, runtime, self.lean_path, self.root)
 
+    def test_a_receipt_needs_every_module_its_checker_reads(self):
+        # `leanchecker A` also checks every A.* olean on the lookup path, imported by A or not: the
+        # receipt needs them all, so Lake refreshes a stale one before the checker reads it.
+        built = self.root / '.lake/build/lib/lean'
+        for module in ('A/Sub', 'A/Deep/Leaf', 'AB'):  # AB is not below A
+            (built / module).parent.mkdir(parents=True, exist_ok=True)
+            (built / (module + '.olean')).write_bytes(b'olean')
+        self.replay(('A',))
+        manifest = tomllib.loads((self.workspace / 'lakefile.toml').read_text())
+        self.assertEqual([lib['needs'] for lib in manifest['lean_lib']],
+                         [[f'@air2lean/+{m}:{t}' for m in ('A', 'A.Deep.Leaf', 'A.Sub') for t in ('olean', 'depTrace')]])
+
     def test_one_receipt_per_module_named_by_checker_and_runtime(self):
         self.status['B'] = 'fail'
         receipts = self.replay()
@@ -602,6 +637,7 @@ class LakeKernelReplayTests(unittest.TestCase):
         self.assertEqual(sorted(lib['needs'] for lib in manifest['lean_lib']),
                          [['@air2lean/+A:olean', '@air2lean/+A:depTrace'],
                           ['@fixtures/+B:olean', '@fixtures/+B:depTrace']])
+        self.assertEqual(self.needed[-1], ['@air2lean/+A:olean', '@fixtures/+B:olean'])
         self.replay()
         self.assertEqual(self.builds[-1], first)  # same inputs: the same receipt modules
         self.replay(checker='d' * 64)
