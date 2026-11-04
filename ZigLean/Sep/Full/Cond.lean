@@ -1557,7 +1557,7 @@ private theorem liftPartPost (hC : L.Fits (C.prim L) P U ok) {rY r' : Res} {m' :
       (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).heap.erase l ≠ none := fun l hl => by
     have := cellsAt_some hl (hwE.cellIn hl) (m := m)
     rw [hrX]
-    simp only [rsum, FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+    simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
       Option.or_eq_none_iff, not_and]
     intro _ h; exact absurd h this
   have hhE := Word.hist_fstep hwE hs hwF hcE
