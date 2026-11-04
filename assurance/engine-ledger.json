@@ -1513,6 +1513,17 @@
    "note": "Not unsound: `win` is a client obligation, so merged proofs stay valid. No client in the tree has two or more registered waiters on a `CondImpl`/`SemImpl` yet."
   },
   {
+   "id": "sem-go-code-moves",
+   "title": "The semaphore's holder moves (`FSem.Go`) are not tied to its code",
+   "status": "open",
+   "requester": "L10k (SemCounter over SemImpl, 2026-11-04)",
+   "progress": "Open; a contract decision (register C14). Blocks SemCounter over `SemImpl` (legacy user `Proofs/Sync/SemCounter.lean`). `FCond.ld_newest` and `FLock.WordHB` (row `cond-epoch-load-floor`) give the newest epoch write at a waiter's load; the missing part is a bound on epoch writes per registration.",
+   "request": "`FSem.Go` (ZigLean/Sep/Full/Sem.lean) admits `s = .wt` and `s = .pst (C.S.hist m) clk` from any place, and `Move.hold` and the condition's steps keep the client's ghost `x`, so the count stays. Counterexample for a client `U` that must hold `win` (`S.Fits`): threads u and v, v holds the permit (count 0), u registered at `reg i` with `i` the newest epoch write, v holding the mutex in `post`. v repeats: `Move.hold` with `Go .pst`; signal (`out -> sl -> inc -> wk -> out`, one epoch write); `Move.hold` with `Go .wt`; `Move.enter` at count 0; `en -> ld -> reg`; consume a signal (`reg -> out`). Every step is admitted by `S.prim` with both invariants after it (`Inv.hold`, `Inv.enter`, `Inv.cstep`), and its start state is reachable (the poster after `MutexImpl.lock_wp`), so `U` contains the states after `2^32 + 1` rounds, where `(C.Ep.hist m).size > i + 2^32` with u at `reg i`. The real `Io.Semaphore` code never makes these moves. Proposed: `.wt` only from `.out` (wait's lock), `.pst` only from `.out` (post's store) or from `.wt` with `S.cnt G != 0` (wait's take), `.out` from `pst` as now, and staying in place.",
+   "workaround_sites": [],
+   "deletion_plan": "Closes when `FSem.Go` is restricted to the code's moves (a contract change, the maintainer's decision; stronger for clients, and the semaphore rules `wp_lockWt`/`wp_take`/`wp_give` are expected to meet it already) and SemCounter proves `win` with at most one epoch write per registration.",
+   "note": "Not unsound: `Go` is too permissive for clients, not for implementations. No in-tree client of `SemImpl` exists yet."
+  },
+  {
    "id": "thread-store-sized",
    "title": "A store of a packed struct into an owned word in a thread",
    "status": "closed",
