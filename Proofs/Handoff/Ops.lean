@@ -40,7 +40,7 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (ht : t < m.threads.size) (hn : 0 < n) (hio : n ≤ Lo.io) :
     U Lo G rX (m.recordAt 0 0 n .read) := by
   have hok := Lo.ok
-  have hclk := LockWord.recordAt_le m 0 0 n .read
+  have hclk := Conc.recordAt_le m 0 0 n .read
   have hnw (W : Word 32 4) (hW : Three Lo W) : 0 + n ≤ W.o := by
     have := three_o hW
     omega

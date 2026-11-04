@@ -8,8 +8,8 @@ import ZigLean.Conc.Clock
 A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition`, the
 state of an `Io.Event`. It is 4 or 8 bytes (`n` = 32 or 64 bits) at offset `o` of block `b`, and each thread accesses it
 only with atomic ops (translated std code; the futex under it is the model). A lock's word owns a
-resource (`ZigLean/Conc/Lock.lean`); a shared word owns nothing, so a proof keeps facts about its
-values and clocks in the rest of its invariant.
+resource (`ZigLean/Sep/Full/Lock.lean`); a shared word owns nothing, so a proof keeps facts about
+its values and clocks in the rest of its invariant.
 
 - **The writes** (`Word.hist`): the messages of the word's atomic location, oldest first, without
   their ids; before the first atomic op, the block's bytes. The first entry has no clock: a
@@ -18,18 +18,18 @@ values and clocks in the rest of its invariant.
   the word, the location is an RMW chain of messages of the word's size whose newest has the word's bytes,
   and each access to the word is atomic or happened before every thread. So an atomic op at the
   word does not race, and an RMW reads the newest message.
-- **Steps that keep the word** (`Word.Keep`): the same cells and location, and no new access to
-  the word. A step of a thread on its own part (`keep_stepIn`), a spawn, a join and a plain read
-  keep each word that the step does not touch, with the same writes (`hist_keep`).
+- **The writes only grow** (`Word.Prefix`, `Word.Extends`): a step keeps the writes or adds one.
 - **The ops**: the record of an atomic access keeps the word (`Ok.record_ok`) and finds or adds
   its location (`Ok.prep_loc`); a read can read at least the floor (`floor_le`, `Word.Floor`); an
   RMW writes `rmwEnt`. In strict mode no op throws (`Ok.load_noErr`, `Ok.rmw_noErr`,
   `Ok.cas_noErr`), and a futex wait at the word runs (`Ok.futexWait_run`).
 
-This is the permanent vocabulary of a shared word. The part typed by the legacy lock (`Apart`,
-`keep_lockStep`, `Lock.Inv.wordOp`, `offWord`) and the old Word contract (`Word.Op`, whose `locs`
-field is the legacy `LocsKeep`, with its producers `Ok.load`, `Ok.rmw`, `Ok.cas`,
-`Ok.futexWait` and its projections) are in `ZigLean/Conc/Word.lean`.
+This is the permanent vocabulary of a shared word; the native steps over it are in
+`ZigLean/Sep/Full/Word.lean`. The legacy part is in `ZigLean/Conc/Word.lean`: the step records
+`Word.BlkStep`, `Word.AtomsStep`, `Word.Keep` and `Word.KeepK` with their lemmas, the part typed by
+the legacy lock (`Apart`, `keep_lockStep`, `Lock.Inv.wordOp`, `offWord`) and the old Word contract
+(`Word.Op`, whose `locs` field is the legacy `LocsKeep`, with its producers `Ok.load`, `Ok.rmw`,
+`Ok.cas`, `Ok.futexWait` and its projections).
 -/
 
 namespace Zig
@@ -134,85 +134,16 @@ block's extent can resize it, or unmap pages below the word (`Cell.norm` of the 
 logic keeps the same). -/
 def cellKey (c : Cell) : Byte × Nat × Bool := (c.byte, c.addr, c.kind == .constGlobal)
 
-/-- The blocks after an op at the word: the same, but the bytes of the word. -/
-structure BlkStep (m m' : Mem) : Prop where
-  size : m'.blocks.size = m.blocks.size
-  other : ∀ b, b ≠ W.b → m'.blocks[b]? = m.blocks[b]?
-  word : ∀ blk, m.blocks[W.b]? = some blk → ∃ blk', m'.blocks[W.b]? = some blk' ∧
-    blk'.addr = blk.addr ∧ blk'.live = blk.live ∧ blk'.kind = blk.kind ∧
-    blk'.bytes.size = blk.bytes.size ∧ ∀ x, (x < W.o ∨ W.o + nb ≤ x) → blk'.bytes[x]? = blk.bytes[x]?
-
 /-- The shapes (block, offset, length) of the atomic locations. -/
 def keys (m : Mem) : Array (BlockId × Nat × Nat) := m.atomics.map fun l => (l.block, l.off, l.len)
 
-/-- The atomic locations after an op at the word: the same shapes, or one new location at the
-word, where there was none. -/
-def AtomsStep (m m' : Mem) : Prop :=
-  keys m' = keys m ∨
-    (keys m' = (keys m).push (W.b, W.o, nb) ∧ ∀ l ∈ m.atomics, ¬ (l.block = W.b ∧ l.off = W.o))
-
-/-- A step that keeps the word, its cells up to `cellKey` (a step of the full-state logic,
-`FStepIn`, whose frame keeps cells up to `Cell.norm`): the word's location stays (perhaps at
-another index), a location of the step has the bytes of an old one or is apart from the word, an
-access to the word is an old one or a narrowing of one, and the clocks of the threads do not get
-smaller. -/
-structure KeepK (m m' : Mem) : Prop where
-  cells : ∀ x, W.o ≤ x → x < W.o + nb →
-    (m'.heap (W.b, x)).map cellKey = (m.heap (W.b, x)).map cellKey
-  loc : ∀ l, (∃ i, W.Loc m' i l) ↔ (∃ i, W.Loc m i l)
-  only : ∀ l ∈ m'.atomics, (∃ l₀ ∈ m.atomics, l.block = l₀.block ∧ l.off = l₀.off ∧ l.len = l₀.len) ∨
-    l.block ≠ W.b ∨ l.off + l.len ≤ W.o ∨ W.o + nb ≤ l.off
-  fp : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨ ¬ W.Hits e
-  all : ∀ c, AllLe m c → AllLe m' c
-  some : ∀ c, SomeLe m c → SomeLe m' c
-
-/-- A step that keeps the word (module doc): the clocks of the threads do not get smaller (a
-new thread's clock is above another one's). -/
-structure Keep (m m' : Mem) : Prop where
-  cells : ∀ x, W.o ≤ x → x < W.o + nb → m'.heap (W.b, x) = m.heap (W.b, x)
-  loc : ∀ i l, W.Loc m' i l ↔ W.Loc m i l
-  only : ∀ l ∈ m'.atomics, l ∈ m.atomics ∨ l.block ≠ W.b ∨ l.off + l.len ≤ W.o ∨ W.o + nb ≤ l.off
-  fp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ ¬ W.Hits e
-  all : ∀ c, AllLe m c → AllLe m' c
-  some : ∀ c, SomeLe m c → SomeLe m' c
-
 variable {W}
 
-/-! ## The blocks and the atomic layout after an op -/
-
-theorem BlkStep.of_eq {m m' : Mem} (h : m'.blocks = m.blocks) : W.BlkStep m m' :=
-  ⟨by rw [h], fun b _ => by rw [h], fun blk hb => ⟨blk, by rw [h]; exact hb, rfl, rfl, rfl, rfl,
-    fun _ _ => rfl⟩⟩
-
-theorem BlkStep.trans {m₁ m₂ m₃ : Mem} (h₁ : W.BlkStep m₁ m₂) (h₂ : W.BlkStep m₂ m₃) :
-    W.BlkStep m₁ m₃ := by
-  refine ⟨h₂.size.trans h₁.size, fun b hb => (h₂.other b hb).trans (h₁.other b hb), fun blk hb => ?_⟩
-  obtain ⟨blk₂, hb₂, a₂, l₂, k₂, s₂, x₂⟩ := h₁.word blk hb
-  obtain ⟨blk₃, hb₃, a₃, l₃, k₃, s₃, x₃⟩ := h₂.word blk₂ hb₂
-  exact ⟨blk₃, hb₃, a₃.trans a₂, l₃.trans l₂, k₃.trans k₂, s₃.trans s₂,
-    fun x hx => (x₃ x hx).trans (x₂ x hx)⟩
-
-/-- A write of the word's bytes. -/
-theorem BlkStep.write {m m' : Mem} {blk : Block} {bs : Array Byte} (hb : m.blocks[W.b]? = some blk)
-    (hs : bs.size = nb) (hsz : W.o + nb ≤ blk.bytes.size)
-    (h : m'.blocks = m.blocks.set! W.b { blk with bytes := writeBytes blk.bytes W.o bs }) :
-    W.BlkStep m m' := by
-  have hlt : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  refine ⟨by rw [h]; simp, fun b hne => ?_, fun blk' hb' => ?_⟩
-  · rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (Ne.symm hne)]
-  · rw [hb] at hb'; cases hb'
-    refine ⟨{ blk with bytes := writeBytes blk.bytes W.o bs },
-      by rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt hlt],
-      rfl, rfl, rfl, writeBytes_size _ _ _ (by omega), fun x hx => ?_⟩
-    show (writeBytes blk.bytes W.o bs)[x]? = blk.bytes[x]?
-    rw [writeBytes_getElem? _ _ _ (by omega), if_neg (by omega)]
+/-! ## The atomic layout -/
 
 theorem mem_keys {m : Mem} {k : BlockId × Nat × Nat} :
     k ∈ keys m ↔ ∃ l ∈ m.atomics, (l.block, l.off, l.len) = k := by
   unfold keys; exact Array.mem_map
-
-theorem AtomsStep.of_eq {m m' : Mem} (h : m'.atomics = m.atomics) : W.AtomsStep m m' :=
-  .inl (by unfold keys; rw [h])
 
 /-- A location replaced by one of the same shape (an RMW's new message). -/
 theorem keys_set {m m' : Mem} {i : Nat} {l l' : ALoc} (hl : m.atomics[i]? = some l)
@@ -227,22 +158,6 @@ theorem keys_set {m m' : Mem} {i : Nat} {l l' : ALoc} (hl : m.atomics[i]? = some
   · rename_i e; subst e
     rw [(Array.getElem?_eq_some_iff.mp hl).2]; exact hk
   · rfl
-
-theorem AtomsStep.trans {m₁ m₂ m₃ : Mem} (h₁ : W.AtomsStep m₁ m₂) (h₂ : W.AtomsStep m₂ m₃) :
-    W.AtomsStep m₁ m₃ := by
-  rcases h₁ with e₁ | ⟨e₁, n₁⟩ <;> rcases h₂ with e₂ | ⟨e₂, n₂⟩
-  · exact .inl (e₂.trans e₁)
-  · refine .inr ⟨by rw [e₂, e₁], fun l hl hw => ?_⟩
-    obtain ⟨l', hl', he⟩ := mem_keys.mp (show (l.block, l.off, l.len) ∈ keys m₂ by
-      rw [e₁]; exact mem_keys.mpr ⟨l, hl, rfl⟩)
-    simp only [Prod.mk.injEq] at he
-    exact n₂ l' hl' ⟨he.1.trans hw.1, he.2.1.trans hw.2⟩
-  · exact .inr ⟨by rw [e₂, e₁], n₁⟩
-  · exfalso
-    obtain ⟨l', hl', he⟩ := mem_keys.mp (show (W.b, W.o, nb) ∈ keys m₂ by
-      rw [e₁]; exact Array.mem_push_self)
-    simp only [Prod.mk.injEq] at he
-    exact n₂ l' hl' ⟨he.1, he.2.1⟩
 
 /-! ## Basic facts -/
 
@@ -393,36 +308,11 @@ theorem Ok.holds_last {m : Mem} (hw : W.Ok m) {v : BitVec n} :
     rw [Array.back?_eq_getElem?, Array.getElem?_eq_getElem (by omega)]
     simp only [Array.size_mapIdx, Option.map_some, Option.getD_some]
 
-/-! ## Steps that keep the word -/
-
-/-- A step that keeps the word with the same cells keeps them up to `cellKey`. -/
-theorem Keep.toK {m m' : Mem} (hk : W.Keep m m') : W.KeepK m m' :=
-  ⟨fun x h1 h2 => by rw [hk.cells x h1 h2],
-    fun l => ⟨fun ⟨i, h⟩ => ⟨i, (hk.loc i l).mp h⟩, fun ⟨i, h⟩ => ⟨i, (hk.loc i l).mpr h⟩⟩,
-    fun l hl => (hk.only l hl).imp (fun h => ⟨l, h, rfl, rfl, rfl⟩) id,
-    fun e he => (hk.fp e he).imp (fun h => ⟨e, h, .refl e⟩) id, hk.all, hk.some⟩
-
 /-- A narrowing of an access that hits the word is one that hits it. -/
 theorem hits_narrows {e e₀ : FootprintEntry} (hn : e.Narrows e₀) (h : W.Hits e) : W.Hits e₀ := by
   obtain ⟨-, hb, -, ho, hl, -⟩ := hn
   obtain ⟨hb', x, h1, h2, h3, h4⟩ := h
   exact ⟨hb.symm.trans hb', x, by omega, by omega, h3, h4⟩
-
-theorem hist_keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.hist m' = W.hist m := by
-  cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
-  | some i =>
-    have hl := loc_of_find hf
-    obtain ⟨j, hj⟩ := (hk.loc _).mpr ⟨i, hl⟩
-    rw [hist_loc hl, hist_loc hj]
-  | none =>
-    have hn : ∀ i l, ¬ W.Loc m i l := fun i l hl => by rw [hl.1] at hf; cases hf
-    have hn' : ∀ i l, ¬ W.Loc m' i l := fun i l hl => by
-      obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
-      exact hn j l hj
-    rw [hist_none hn, hist_none hn', (congr hk.cells hw.blk).2]
-
-theorem hist_keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.hist m' = W.hist m :=
-  hist_keepK hw hk.toK
 
 /-! ## The writes only grow
 
@@ -484,135 +374,11 @@ theorem Extends.congr {m m' : Mem} (ha : m'.atomics = m.atomics) (hb : m'.blocks
     W.Extends m m' :=
   .of_eq (hist_congr ha hb)
 
-/-- A step that keeps the word (`Keep`, `KeepK`: a lock step, a step on a thread's own part, a
-spawn, a join, a plain read, an op at another word). -/
-theorem Extends.keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.Extends m m' :=
-  .of_eq (hist_keepK hw hk)
-
-/-- A step that keeps the word keeps its invariant. -/
-theorem Ok.keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.Ok m' := by
-  obtain ⟨hb', hcur⟩ := congr hk.cells hw.blk
-  refine ⟨hb', fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun e he hh => ?_, ?_,
-    fun i l hl e he hp => ?_⟩
-  · rcases hk.only l hl with ⟨l₀, hl₀, eb, eo, el⟩ | h | h | h
-    · have := hw.only l₀ hl₀ (eb.symm.trans hb) (by omega) (by omega)
-      omega
-    · exact absurd hb h
-    · omega
-    · omega
-  · obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
-    obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc j l hj
-    exact ⟨h1, h2, h3, by rw [h4, hcur], h5⟩
-  · rcases hk.fp e he with ⟨e₀, he₀, hn⟩ | h
-    · rcases hw.wfp e₀ he₀ (hits_narrows hn hh) with ⟨ha, u, hu, hle⟩ | ha
-      · exact .inl ⟨by rw [hn.2.2.1]; exact ha, hk.some _ ⟨u, hu, VClock.le_trans hn.clock hle⟩⟩
-      · exact .inr (hk.all _ fun u hu => VClock.le_trans hn.clock (ha u hu))
-    · exact absurd hh h
-  · obtain ⟨v, hv⟩ := hw.val; exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
-  · obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
-    rcases hk.fp e he with ⟨e₀, he₀, hn⟩ | h
-    · exact VClock.le_trans hn.clock (hw.plain j l hj e₀ he₀ (hn.plainHit hp))
-    · rw [plainHit_false h] at hp; cases hp
-
-theorem Ok.keep {m m' : Mem} (hw : W.Ok m) (hk : W.Keep m m') : W.Ok m' := hw.keepK hk.toK
-
-/-- The same blocks, atomic locations and footprint, and clocks that do not get smaller. -/
-theorem keep_of {m m' : Mem} (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
-    (hf : m'.footprint = m.footprint) (ht : m'.threads = m.threads)
-    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) : W.Keep m m' :=
-  ⟨fun x _ _ => by simp only [Mem.heap, hb], fun i l => by unfold Word.Loc; rw [ha],
-    fun l hl => .inl (ha ▸ hl), fun e he => .inl (hf ▸ he),
-    fun _ h u hu => VClock.le_trans (h u (ht ▸ hu)) (hcl u),
-    fun _ ⟨u, hu, hle⟩ => ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u)⟩⟩
-
 /-- A step tick (`Zig.tick`, `Mem.ticked`) keeps the word: it changes only the step count. -/
 theorem Ok.ticked {m : Mem} (hw : W.Ok m) : W.Ok { m with ticks := m.ticks + 1 } :=
-  hw.keep (keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _)
+  ⟨hw.blk, hw.only, hw.loc, hw.wfp, hw.val, hw.plain⟩
 
-/-- The same memory, but `current`, `seen`, `nextMsg`, the futex queue, the woken threads and
-the groups. -/
-theorem keep_same (m : Mem) (c : ThreadId) (s : Array (ThreadId × Nat × Nat)) (k : Nat)
-    (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId) (gs : Array (Ptr × ThreadId)) :
-    W.Keep m { m with current := c, seen := s, nextMsg := k, waiters := ws, woken := wk, groups := gs } :=
-  keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _
-
-/-- A step of thread `t` on its own part (`WP.liftMem_owned`), which has no byte of the word
-(its cells are in the rest of the heap, `hF`). -/
-theorem keep_stepIn_of {m m' : Mem} {own hQ : Heap}
-    (hF : ∀ x, W.o ≤ x → x < W.o + nb → m.heap.diff own (W.b, x) ≠ none)
-    (hs : StepIn (m.heap.diff own) m m') (hm' : m'.heap = hQ ∪ m.heap.diff own)
-    (hd : Heap.Disjoint hQ (m.heap.diff own)) : W.Keep m m' := by
-  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
-    by_cases hu : u = m.current
-    · subst hu; exact hs.mine
-    · rw [hs.others u hu]; exact VClock.le_refl _
-  refine ⟨fun x h1 h2 => ?_, fun i l => by unfold Word.Loc; rw [hs.atomics],
-    fun l hl => .inl (hs.atomics ▸ hl), fun e he => ?_,
-    fun _ h u hu => VClock.le_trans (h u (hs.threads ▸ hu)) (hcl u),
-    fun _ ⟨u, hu, hle⟩ => ⟨u, hs.threads ▸ hu, VClock.le_trans hle (hcl u)⟩⟩
-  · rw [hm', Heap.union_of_right ((hd (W.b, x)).resolve_right (hF x h1 h2))]
-    have hF' := hF x h1 h2
-    unfold Heap.diff at hF' ⊢; split at hF' <;> simp_all
-  · rcases hs.fp e he with h | ⟨-, hnt, -⟩
-    · exact .inl h
-    · exact .inr fun hh => hnt (touches_of hh hF)
-
-/-- A step of thread `t` on its own part (`WP.liftMem_owned`), which has no byte of the word. -/
-theorem keep_stepIn {m m' : Mem} {own hQ : Heap} (hw : W.Ok m) (hoff : W.Off own)
-    (hs : StepIn (m.heap.diff own) m m') (hm' : m'.heap = hQ ∪ m.heap.diff own)
-    (hd : Heap.Disjoint hQ (m.heap.diff own)) : W.Keep m m' :=
-  keep_stepIn_of (fun x h1 h2 => by
-    simp only [Heap.diff, hoff x h1 h2, ↓reduceIte]; exact hw.cell h1 h2) hs hm' hd
-
-/-- A spawn by `t`. -/
-theorem keep_fork {m m' : Mem} {t c : ThreadId} (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) : W.Keep m m' := by
-  obtain ⟨rfl, rfl⟩ := fork_eq hf
-  obtain ⟨hcl, hcn, -⟩ := fork_clocks (cs := m.clocks) (t := t) (by rw [hcs]; exact ht)
-  refine ⟨fun x _ _ => rfl, fun i l => Iff.rfl, fun l hl => .inl hl, fun e he => .inl he,
-    fun _ h u hu => ?_, fun _ ⟨u, hu, hle⟩ => ⟨u, by simp only [Array.size_push]; omega,
-      VClock.le_trans hle (hcl u (by rw [hcs]; exact hu))⟩⟩
-  simp only [Array.size_push] at hu
-  by_cases hu' : u < m.threads.size
-  · exact VClock.le_trans (h u hu') (hcl u (by rw [hcs]; exact hu'))
-  · have : u = m.threads.size := by omega
-    subst this; rw [← hcs]; exact VClock.le_trans (h t ht) hcn
-
-/-- A join of `u` by `t`. -/
-theorem keep_join {m m' : Mem} {t u : ThreadId}
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) : W.Keep m m' := by
-  obtain ⟨rec, -, -, rfl⟩ := Proto.join_eq hj
-  have hcl : ∀ w : Nat, VClock.le (m.clocks[w]!) ((m.clocks.set! t (VClock.merge
-      (VClock.bump (m.clocks[t]!) t) (m.clocks[u]!)))[w]!) = true := by
-    intro w
-    rw [Proto.getElem!_set!_ite]
-    split
-    · rename_i h; rw [h.1]
-      exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
-    · exact VClock.le_refl _
-  have hsz : (m.threads.set! u { rec with joined := true }).size = m.threads.size := by simp
-  exact ⟨fun x _ _ => rfl, fun i l => Iff.rfl, fun l hl => .inl hl, fun e he => .inl he,
-    fun _ h w hw => VClock.le_trans (h w (hsz ▸ hw)) (hcl w),
-    fun _ ⟨w, hw, hle⟩ => ⟨w, by rw [hsz]; exact hw, VClock.le_trans hle (hcl w)⟩⟩
-
-/-- A plain read of `n` bytes at `o` of block `b` that do not hit the word. -/
-theorem keep_read (m : Mem) {b o n : Nat} (hnw : b ≠ W.b ∨ o + n ≤ W.o ∨ W.o + nb ≤ o) :
-    W.Keep m (m.recordAt b o n .read) := by
-  refine ⟨fun x _ _ => rfl, fun i l => Iff.rfl, fun l hl => .inl hl, fun e he => ?_,
-    fun _ h u hu => VClock.le_trans (h u hu) (recordAt_le m _ _ _ _ u),
-    fun _ ⟨u, hu, hle⟩ => ⟨u, hu, VClock.le_trans hle (recordAt_le m _ _ _ _ u)⟩⟩
-  simp only [Mem.recordAt, Array.mem_push] at he
-  rcases he with he | rfl
-  · exact .inl he
-  · refine .inr fun ⟨hb', x, h1, h2, h3, h4⟩ => ?_
-    dsimp only at hb' h1 h2
-    rcases hnw with h | h | h
-    · exact h hb'
-    · omega
-    · omega
-
-/-! ## An atomic op at the word -/
+/-! ## The access, the record and the location of an atomic op -/
 
 /-- Thread `t`'s clock is the clock of a recorded access to the word (an RMW's message clock is
 covered, `FStepIn.rmwM`). -/

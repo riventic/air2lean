@@ -89,8 +89,10 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
 - The runtime model is layered, and `implies` records the layers: THR-01 implies SEM-02 (the
   scheduler runs over the block memory), and SEM-02 and SEM-03 imply SEM-01 (memory ops and
   loops return `Zig.Result`).
-- `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: their ops and frame
-  structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
+- `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: the
+  word vocabulary and its ops (`Conc.Base.Word`) use the futex wait and the atomic ops, and the
+  legacy `Word.Op` and `Word.Keep` part (`Conc.Word`) and `Conc.WeakWord` also use
+  `ZigLean.Conc.Lock` (`LocsKeep`).
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
 - A proof that names a runtime definition can unfold it, so the closure rules also see the
@@ -408,7 +410,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
   (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
+- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -445,7 +447,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   kernel-proved. A client theorem holds for the protocol, global invariant, ghost state and
   ownership splits that it states or discharges. Strict-safety theorems additionally exclude
   every scheduler error, including races and deadlock.
-- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
+- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
 - Sources: [proofs.md](proofs.md), [rwlock-contracts.md](rwlock-contracts.md).
 
 
@@ -510,7 +512,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   integers, enums, bools, packed structs or single/many pointers (ORD-05). Under
   `--allocator-model translated` an `unordered` load may also read any message not older than
   one that happened before it, ignoring and not updating the thread's own read view.
-- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
+- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
 <a id="ord-02"></a>

@@ -121,20 +121,6 @@ theorem cellKey_norm (c : Cell) : cellKey c.norm = cellKey c := by
   obtain ⟨b, a, s, k⟩ := c
   cases k <;> rfl
 
-/-- The blocks after an op at the word, from the block of the word. -/
-theorem BlkStep.eq_set {m m' : Mem} (h : W.BlkStep m m') {blk : Block}
-    (hb : m.blocks[W.b]? = some blk) : ∃ blk', m'.blocks[W.b]? = some blk' ∧
-      blk'.addr = blk.addr ∧ blk'.live = blk.live ∧ blk'.kind = blk.kind ∧
-      blk'.bytes.size = blk.bytes.size ∧ m'.blocks = m.blocks.set! W.b blk' := by
-  obtain ⟨blk', hb', ha, hl, hk, hs, -⟩ := h.word blk hb
-  refine ⟨blk', hb', ha, hl, hk, hs, ?_⟩
-  have hlt : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  apply Array.ext_getElem? fun i => ?_
-  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
-  by_cases e : W.b = i
-  · subst e; simp [hlt, hb']
-  · simp only [e, ↓reduceIte]; exact h.other i (Ne.symm e)
-
 theorem keys_toList (m : Mem) : (keys m).toList = shapes m := by
   simp [keys, shapes, ALoc.shape]
 
@@ -816,9 +802,9 @@ theorem Ok.record_native {m : Mem} {t : ThreadId} {k : AccessKind} (hw : W.Ok m)
   · simp only [mr, Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · rcases hw.wfp e he hh with ⟨ha, hle⟩ | hle
-      · exact .inl ⟨ha, LockWord.someLe_mono (m := m) (m' := mr) rfl
+      · exact .inl ⟨ha, Conc.someLe_mono (m := m) (m' := mr) rfl
           (fun u _ => hs.clock u) hle⟩
-      · exact .inr (LockWord.allLe_mono (m := m) (m' := mr) rfl
+      · exact .inr (Conc.allLe_mono (m := m) (m' := mr) rfl
           (fun u _ => hs.clock u) hle)
     · refine .inl ⟨hk, m.current, ht, ?_⟩
       show VClock.le _ (mr.clocks[m.current]!) = true
@@ -948,8 +934,8 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
     exact ⟨h1, h2, h3, by rw [h4, curBytes_congr hb], h5⟩
   · rw [hf] at he
     rcases hw.wfp e he hh with ⟨hk, hle⟩ | hle
-    · exact .inl ⟨hk, LockWord.someLe_mono ht (fun u _ => hcl u) hle⟩
-    · exact .inr (LockWord.allLe_mono ht (fun u _ => hcl u) hle)
+    · exact .inl ⟨hk, Conc.someLe_mono ht (fun u _ => hcl u) hle⟩
+    · exact .inr (Conc.allLe_mono ht (fun u _ => hcl u) hle)
   · obtain ⟨v, hv⟩ := hw.val
     refine ⟨v, ?_⟩
     unfold Holds at hv ⊢
@@ -975,14 +961,14 @@ theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : 
       · exact hn hb
       · omega
       · omega
-  have hcl := LockWord.recordAt_le m b o len k
+  have hcl := Conc.recordAt_le m b o len k
   refine ⟨⟨hw.blk, hw.only, fun i l hl => hw.loc i l hl, fun e he hh => ?_, hw.val,
     fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
   · rcases hfp e he with he | hn
     · rcases hw.wfp e he hh with ⟨hk, hs⟩ | ha
-      · exact .inl ⟨hk, LockWord.someLe_mono (m := m) (m' := m.recordAt b o len k)
+      · exact .inl ⟨hk, Conc.someLe_mono (m := m) (m' := m.recordAt b o len k)
           rfl (fun u _ => hcl u) hs⟩
-      · exact .inr (LockWord.allLe_mono (m := m) (m' := m.recordAt b o len k)
+      · exact .inr (Conc.allLe_mono (m := m) (m' := m.recordAt b o len k)
           rfl (fun u _ => hcl u) ha)
     · exact absurd hh hn
   · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
@@ -996,7 +982,7 @@ theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
   rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
-  obtain ⟨hcl, hcn, _⟩ := Full.LockWord.fork_clocks (cs := m.clocks) (t := t)
+  obtain ⟨hcl, hcn, _⟩ := Conc.fork_clocks (cs := m.clocks) (t := t)
     (by rw [hcs]; exact ht)
   refine ⟨⟨hw.blk, hw.only, hw.loc, ?_, hw.val, hw.plain⟩, hist_congr rfl rfl⟩
   intro e he hh
@@ -1522,8 +1508,8 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
       · exact ⟨new, W.enc_val new⟩
   · have he' : e ∈ m₁.footprint := hMf ▸ he
     rcases hw.wfp e he' hh with ⟨ha', hle⟩ | hle
-    · exact .inl ⟨ha', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
-    · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
+    · exact .inl ⟨ha', Conc.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
+    · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
   · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
     intro e he hh
     have he' : e ∈ m₁.footprint := hMf ▸ he

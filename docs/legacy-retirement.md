@@ -60,23 +60,27 @@ replacement named below is on main, except where the row says it is not.
   `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
   full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
-- `ZigLean/Witnesses/Conc` imports Conc/Word. No module imports it. It is not pure legacy: it holds
-  the non-vacuity witnesses of Proto, Total, TimedBody and `Word.enc_val` lemmas (premises THR-08,
-  SEM-02). Only its `Lock.States.*` witnesses need LockRules; they leave with it (stage D-d).
+- `ZigLean/Witnesses/Conc` imports Conc/Word and Conc/Total. No module imports it. Stage D-d
+  deletes it as a whole. It also holds non-vacuity witnesses of surviving base lemmas (Proto,
+  TimedBody, `Word.enc_val`; premises THR-08, SEM-02 in `assurance/premises.json`); at D-d they
+  move to a base witness module.
 - **Conc/Word split (L8j).** Full/Word used to import Conc/Word, so every full-state concurrency
   module transitively imported Conc/LockRules → Conc/Lock → Csl → Own → Sep/Block → Sep/Triple.
   The split resolves this:
-  - The legacy-independent vocabulary (`Word`, `Ok`, `hist`, `Entry`, `Keep`, `Prefix`/`Extends`,
-    the no-error lemmas, …) is in `ZigLean/Conc/Base/Word`. The generic thread and clock facts it
-    needs (`fork_eq`, `fork_clocks`, `recordAt_le`, `allLe_mono`, `someLe_mono`) moved from
-    Conc/Lock and LockRules to `Conc/Base/Lock`.
+  - `ZigLean/Conc/Base/Word` holds the legacy-independent vocabulary: `Word`, `Ok`, `hist`,
+    `Entry`, `Prefix`/`Extends`, `Ok.ticked`, the records and locations of the ops, the no-error
+    lemmas, …. The generic thread and clock facts (`fork_eq`, `fork_clocks`, `recordAt_le`,
+    `allLe_mono`, `someLe_mono`) moved from Conc/Lock and LockRules to `Conc/Base/Lock`, which
+    also replaces the copies that Full/LockWord had.
   - Full/Word imports only the base module and reaches no legacy module.
   - Conc/Word keeps what depends on the legacy layer:
     - the `Lock`-typed part (`Apart (L : Lock γ)`, `keep_lockStep`, `Lock.Inv.wordOp`, `offWord`);
+    - the step records `BlkStep`, `AtomsStep`, `Keep` and `KeepK` with their lemmas, including
+      the `StepIn` consumers (`keep_stepIn`);
     - the old Word-contract family: `Op`, whose `locs` field is the legacy `LocsKeep`, and its
       producers;
-    - the six old `Op` roots of row `seen-floor-sync-retirement` that were in Full/Word:
-      `Word.Op.{block,fpAt,lockLoc,rest,word}` and `FLock.Inv.wordOp`.
+    - the seven old roots of row `seen-floor-sync-retirement` that were in Full/Word:
+      `Word.BlkStep.eq_set`, `Word.Op.{block,fpAt,lockLoc,rest,word}` and `FLock.Inv.wordOp`.
 
     It leaves with Conc/Lock.
 
@@ -462,8 +466,8 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
 Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec), Automation, Step; `sep_*`, `sep_from`, `tame_prim`, `sep_frame/normalize` tactic entries go.
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
-Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc
-(Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
+Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Word,WeakWord,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc
+(its witnesses of base lemmas move to a base witness module; Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
 Stage D-e = the **final PR** (needs the strength log):
 1. Run every `tests/roadmap/strength-log/*.lean` (the legacy statements, written out) and `Full/Strength.lean`; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
 2. Delete `tests/roadmap/strength-log/`, `Full/Strength.lean` (`toTriple_on`, `toTotal_on`), `Sep/{Triple,Total,Loop,Block}.lean`, `Sep.lean`; check `Full/Init` lost its dependency on `Sep.Total`.

@@ -336,9 +336,9 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     · obtain ⟨-, hb, hk, ho, hl, hcl⟩ := hn
       rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
         by have := hr.2.2; omega⟩ with ⟨hk', h''⟩ | h''
-      · exact .inl ⟨hk.trans hk', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u)
+      · exact .inl ⟨hk.trans hk', Conc.someLe_mono hs.threads (fun u _ => hs.clock u)
           (LockWord.someLe_le hcl h'')⟩
-      · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u)
+      · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
           fun u hu => VClock.le_trans hcl (h'' u hu))
     · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
       rw [hr.1]
@@ -558,7 +558,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
     rw [hX, ite_eq_right (by unfold ThreadId at *; omega),
       ite_eq_right (by unfold ThreadId at *; omega)]
     exact hnone u (by unfold ThreadId at *; omega)
-  · obtain ⟨hcl, hcn, -⟩ := LockWord.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
+  · obtain ⟨hcl, hcn, -⟩ := Conc.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
     exact hu.io.fork (t := 0) (by rw [hs1]; decide) (by simp)
       (fun u hu => hcl u (by rw [hcs]; exact hu)) (by rw [← hcs]; exact hcn) fun _ he _ => he
 

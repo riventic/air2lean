@@ -577,9 +577,9 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
     · obtain ⟨-, hb, hk, ho, hl, hc⟩ := hn
       rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
         by have := hr.2.2; omega⟩ with ⟨hk', h''⟩ | h''
-      · exact .inl ⟨hk.trans hk', LockWord.someLe_mono hs.threads (fun u _ => hs.clock u)
+      · exact .inl ⟨hk.trans hk', Conc.someLe_mono hs.threads (fun u _ => hs.clock u)
           (LockWord.someLe_le hc h'')⟩
-      · exact .inr (LockWord.allLe_mono hs.threads (fun u _ => hs.clock u)
+      · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
           fun u hu => VClock.le_trans hc (h'' u hu))
     · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
       rw [hr.1]; exact hio _ hr.2.2
@@ -1031,8 +1031,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- io
     rcases hfp e he with h' | ⟨hb, ho⟩
     · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, LockWord.someLe_mono hth (fun u _ => hclk u) h''⟩
-      · exact .inr (LockWord.allLe_mono hth (fun u _ => hclk u) h'')
+      · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
+      · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
     · have := Lo.ok; have := hr.2.2; omega
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2.1 (fun hne => ?_) hV (fun w hw => ?_)
@@ -1342,8 +1342,8 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- io
     rcases hfp e he with h' | ⟨hb, ho⟩
     · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, LockWord.someLe_mono hth (fun u _ => hclk u) h''⟩
-      · exact .inr (LockWord.allLe_mono hth (fun u _ => hclk u) h'')
+      · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
+      · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
     · have := Lo.ok; have := hr.2.2; omega
   · -- the condition's invariant
     refine hu.cinv.other (t := t) rfl (fun hb => ?_)
