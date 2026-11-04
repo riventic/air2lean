@@ -47,7 +47,10 @@ inputs+=(--input "$guard")
 outputs=()
 for path in before.json audit.json after.json; do outputs+=(--output "$attempt/$path"); done
 status=0
-PATH="$toolchain/bin:$PATH" "$python" "$guard" \
+# The audit runs without Lake's artifact cache: with AIR2LEAN_CAS_DIR set the guard would give
+# the worker LAKE_CACHE_DIR and the other cache settings (build-guard.py lake_cache_env), and the
+# worker refuses every Lake environment overlay (proof-receipt.py context).
+env -u AIR2LEAN_CAS_DIR PATH="$toolchain/bin:$PATH" "$python" "$guard" \
   --cwd "$repo_root" --lock "$lock" --profile "$profile" --phase proof \
   --timeout 2700 --rss-mib 12288 --log-bytes 1048576 \
   --report "$attempt/guard.json" --log "$attempt/guard.log" \
