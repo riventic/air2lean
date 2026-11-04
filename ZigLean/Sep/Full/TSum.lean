@@ -11,6 +11,10 @@ waiters and of pending claims, and for the signals posted after a write.
 * `tsum_tag`: a sum over writes is at most a sum over threads, when each write with a positive
   weight has its own thread (a thread names at most one write, its tag).
 * `le_add_tsum_up`: a sequence grows by at most the sum of its increases.
+
+This is the end-state home of the sum. The legacy `Zig.Spec.tsum` (`ZigLean/Conc/Spec/Count.lean`,
+with its lemmas) is the same definition for the legacy sync specs; it is deleted with the
+`Conc.Spec` layer (`docs/legacy-retirement.md`, legacy-to-retire), never bridged to this one.
 -/
 
 namespace Zig

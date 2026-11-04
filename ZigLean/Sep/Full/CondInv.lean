@@ -306,7 +306,9 @@ structure Inv (L : FLock γ) (G : ThreadId → γ) (m : Mem) : Prop where
 variable {C}
 
 /-- **The condition at its start**: every thread out of its code, no thread in the futex queue,
-the state has its first write `(0, 0)` and the epoch its first write. -/
+the state has its first write `(0, 0)` and the epoch its first write (any value `e0`). The
+invariant starts at a fresh condition (`.{}`, its initialising stores): `Inv.ep` relates each
+later epoch write to the one before it, so a start after earlier epoch writes is not admitted. -/
 theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hS : (C.S.hist m).size = 1)
     (hS0 : (C.S.hist m)[0]!.Val (0 : BitVec 32)) (hE : (C.Ep.hist m).size = 1)
     {e0 : BitVec 32} (hE0 : (C.Ep.hist m)[0]!.Val e0) (hout : ∀ u, C.ph (G u) = .out)
