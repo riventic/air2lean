@@ -74,6 +74,38 @@
       "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`: it returns the sum, the list unchanged"
     },
     {
+      "name": "Lists.Linked.sum_exact",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`, with exactly `xs.length + 1` credits: it returns the sum, the list unchanged, and `xs.length + 1` receipts (one per loop-body run)"
+    },
+    {
+      "name": "Lists.Linked.sum_loop_not_within",
+      "module": "Proofs.Lists.Bounded",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: no `FTotalTriple` with `xs.length` credits holds for `sum`'s loop, whatever the postcondition"
+    },
+    {
+      "name": "Lists.Linked.sum_not_within",
+      "module": "Proofs.Lists.Bounded",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: no `FTotalTriple` with `xs.length` credits holds for `sum`, whatever the postcondition"
+    },
+    {
+      "name": "Lists.Linked.sum_steps",
+      "module": "Proofs.Lists.Bounded",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: `sum` returns some value after exactly `xs.length + 1` steps (`Mem.ticks`)"
+    },
+    {
       "name": "Lists.Alloc.push_spec",
       "module": "Proofs.Lists.Alloc",
       "example": "lists",

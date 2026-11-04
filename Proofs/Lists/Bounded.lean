@@ -44,7 +44,7 @@ theorem sum_not_within (hd : Option Ptr) (xs : List (BitVec 32))
   FTotalTriple.not_fewer_credits (sum_exact hd xs htot) (Nat.lt_succ_self _) hh hl hseq hc
 
 /-- **`sum` runs exactly `xs.length + 1` steps**: from any credit-free start that holds the list,
-it returns the sum after exactly that many steps. -/
+it returns after exactly that many steps (its value is `sum_exact`'s). -/
 theorem sum_steps (hd : Option Ptr) (xs : List (BitVec 32))
     (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) {m : Mem} {r rF : Res} (hh : Holds m r rF)
     (hl : list X hd xs r) (hseq : m.FSeq) (hc : CreditFree r rF) :
