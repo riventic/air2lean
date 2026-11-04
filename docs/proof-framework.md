@@ -42,7 +42,15 @@ proof framework").
   Applying one (`@[fsym]`, `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is
   not a declaration and is not recorded;
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
-  triple.
+  triple;
+* `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
+  status `legacy-to-retire` (`unroll_sched`, `blkat_alloc`, `vc_gen`, …), found as a word match in
+  the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
+  gates building new proofs on it, so a new file cannot import `ZigLean.Conc.Unroll` and call
+  `unroll_sched` without a reviewed addition. A new file or a rising count fails, also against the
+  base (unless the entry records `"approved"`); a falling count is stale (`--write` lowers it).
+  A local name equal to a retiring tactic (`let within := …`) also counts, a conservative
+  over-approximation.
 
 Status is `target` (the framework above) or `legacy-to-retire`. The check fails on anything new
 and on entries that no longer exist (delete them: the file is exact). Against the base branch the
