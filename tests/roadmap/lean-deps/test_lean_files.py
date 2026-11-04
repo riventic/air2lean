@@ -93,6 +93,34 @@ class Classify(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
             ld.lib_roots(strict_sources=True)
 
+    def test_orphan_outputs_are_pruned_and_refused(self):
+        # Outputs of a deleted module (Lib.Gone), also in a library with its own srcDir (Fix).
+        self.write('lakefile.toml', 'name = "air2lean"\n[[lean_lib]]\nname = "Lib"\n'
+                   '[[lean_lib]]\nname = "Fix"\nsrcDir = "fix"\n')
+        self.write('fix/Fix/C.lean', 'def c := 1\n')
+        self.write('tests/pkg/lakefile.toml', '[[lean_lib]]\nname = "P"\n')  # a second tracked package
+        build = self.repo / '.lake/build/lib/lean'
+        kept = [build / f'{m}{s}' for m in ('Lib/A', 'Lib/B', 'Fix/C') for s in ('.olean', '.trace')]
+        gone = [build / f'Lib/Gone{s}' for s in ('.olean', '.olean.hash', '.ilean', '.trace')]
+        gone.append(self.repo / 'tests/pkg/.lake/build/lib/lean/P/Gone.olean')
+        for path in kept + gone:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'')
+        self.assertEqual(ld.orphan_outputs(self.repo), sorted(gone[:4]))
+        spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
+        assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(assumptions)
+        self.assertEqual(assumptions.module_needs(['Fix.C', 'Lib.A'], [build.resolve()], [self.repo]),
+                         ['@air2lean/+Fix.C:olean', '@air2lean/+Fix.C:depTrace',
+                          '@air2lean/+Lib.A:olean', '@air2lean/+Lib.A:depTrace'])
+        with self.assertRaisesRegex(ValueError, 'Lib/Gone.olean: compiled module without a source'):
+            assumptions.module_needs(['Lib.A', 'Lib.Gone'], [build.resolve()], [self.repo])
+        self.classify()  # tracks both lakefiles
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(ld.main(['--prune-orphans']), 0)
+        self.assertEqual(out.getvalue().count('removing'), len(gone))
+        self.assertTrue(all(p.exists() for p in kept) and not any(p.exists() for p in gone))
+
     def test_elaborate_names_the_largest_peaks(self):
         # The guard samples the phase's whole tree; the per-file peaks name the file that sized it.
         self.write("t/Small.lean", "import Lib.A\n")
