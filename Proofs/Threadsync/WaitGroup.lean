@@ -2895,6 +2895,8 @@ theorem loop37_body [Zig.Os.HasEnv] (p0 q : Ptr) (hp : p0 = EV.ptr)
   obtain ⟨hc, hD, hdl, hi⟩ := h
   unfold Thread_ResetEvent_FutexImpl_waitUntilSet.loop37
   simp only [StateT.run_bind]
+  refine WP.bind (wp_tick fits (by show LPh.out ≠ .gone; decide) hi fun m hc' hi => ?_)
+  replace hc := hc'.trans hc
   simp only [StateT.run_pure, pure_bind]
   rw [hp]
   refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (dwait_spec hdl hi hc))))
