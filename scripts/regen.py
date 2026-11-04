@@ -95,18 +95,18 @@ def retry_while_busy(name, attempt, busy):
         time.sleep(120)
 
 
-def guarded(name, argv, env=None, timeout=18000, tools=()):
+def guarded(name, argv, env=None, timeout=18000, tools=(), rss_mib=6144):
     """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
-    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 6144 MiB: the largest measured step peak,
-    `claims` building its modules in a cold worktree at 4131 MiB, plus 30%, in whole GiB; the guard
-    reserves that much of the machine's build memory budget while the step runs).
-    Returns (report path, log path)."""
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB, else `rss_mib` (the guard reserves that much of the
+    machine's build memory budget while the step runs). The default 6144 MiB is the largest
+    measured peak of the fixed steps, `claims` building its modules in a cold worktree at 4131 MiB,
+    plus 30%, in whole GiB. Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '6144'), '--log-bytes', 16 << 20,
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', rss_mib), '--log-bytes', 16 << 20,
          '--report', report, '--log', logfile,
          *[arg for tool in tools for arg in ('--tool', str(tool))], '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
@@ -346,8 +346,11 @@ def step_inventory(check):
         record = inventory['runs'][rid]
         log('re-recording theorem-inventory run %s' % rid)
         plan = plans[rid]
+        # A renewal rebuilds a run's proof set cold, up to the whole tree: the full build's
+        # per-process limit (scripts/full-build.sh), since one-thread Proofs.Sync builds peak at 5.3 GB
+        # and up to 6.9 GB within the accepted variance (assurance/perf-budgets.json, `sync`).
         report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
-                                  tools=[lake] if plan.kind == 'swap' else [])
+                                  tools=[lake] if plan.kind == 'swap' else [], rss_mib=11000)
         run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
              '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
     if not ok([PY, '-B', 'scripts/theorem-inventory.py', 'check']):

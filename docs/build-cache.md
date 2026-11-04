@@ -24,7 +24,7 @@ it. On the dev Mac agents set it in their shell:
 | `AIR2LEAN_HOST_ZIG_<v>` | stock Zig `<v>` (dots as `_`) that bootstraps a patched build; default `$AIR2LEAN_CACHE/host-<v>/zig`, else `zig` on `PATH` of that version |
 | `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lock (keep the default: one per machine, see below) and lock wait (seconds) of the heavy steps |
 | `AIR2LEAN_BUILD_MEM_MIB` | memory budget of all guarded workloads of the machine (default 75% of RAM) |
-| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 6144) |
+| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 6144; theorem-inventory renewals 11000) |
 
 ## What is cached, and why a hit is always right
 
@@ -284,7 +284,7 @@ needs nothing special for this. The host is an ordinary checkout with its own ca
 coordinator's tooling holds the host's name and the runner script. The mechanism:
 
 - **Host.** Linux on x86_64; a VM such as WSL2 works. It needs git, curl, tar, xz and
-  python ≥ 3.12 ([ci.md](ci.md); the macOS 3.13 minimum of build-guard does not apply). Install
+  python ≥ 3.12 ([ci.md](ci.md); build-guard's `os.waitid` needs 3.13 only on macOS). Install
   elan from the `[ci.elan]` pin of `zig-patch/versions.toml` (sha256-checked) and the
   `lean-toolchain` release. Install the stock Zig of each version from `[ci.host-zig."V"]` as
   `$AIR2LEAN_CACHE/host-V/zig`, where `cas.py host-zig` finds it. `scripts/zig-air.sh V` then
@@ -341,12 +341,10 @@ Which work runs where:
 - An x86_64-linux host runs the x86_64-linux parts natively, without Rosetta: the CI `test`
   rows, and every `--native` invocation of a fixture check, which `scripts/fixture-checks.py`
   skips on the Mac (`fixture-checks.py --list`: `not on aarch64-macos (needs x86_64-linux)`).
-- The aarch64-macos parts stay on the Mac: the `macos` CI part (Darwin AIR export, native
-  differential, ABI probes and T04 qualification, the proof build of the Darwin translations).
-  So do the aarch64-linux native parts: the `ubuntu-24.04-arm` jobs and the aarch64-linux unit
-  of `tests/roadmap/dispatch/check.sh --native-only` (its x86_64-linux invocations run on the
-  host). These run in the Mac's native `linux/arm64` container ([CLAUDE.md](../CLAUDE.md),
-  [rosetta.md](rosetta.md)).
+- The aarch64-macos parts stay on the Mac: the `macos` CI part ([ci.md](ci.md#3-macos-rows)).
+  So do the aarch64-linux native parts, in the Mac's native `linux/arm64` container
+  ([CLAUDE.md](../CLAUDE.md), [rosetta.md](rosetta.md)); the x86_64-linux invocations of
+  `tests/roadmap/dispatch/check.sh --native-only` run on the host.
 
 ## `scripts/regen.sh`
 
