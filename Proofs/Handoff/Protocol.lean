@@ -304,7 +304,7 @@ theorem wlast {G : ThreadId → Gh} {m : Mem} (hI : (C Lo).Inv (L Lo) G m)
     · exact tsum_point hT0 _
   · by_cases e : u = 0
     · subst e; rfl
-    · rw [if_neg e]
+    · simp only [e, ↓reduceIte]
       cases hr : ((G u).2.c).isReg
       · show (if ((G u).2.c).isReg = true then 1 else 0) = 0; rw [hr]; rfl
       · exact absurd (h0 u hr) e
@@ -1166,7 +1166,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · have := hcw 1 hw; rw [hu.places] at this; cases this
   · -- ep1
     rw [(hph 1).1] at h1
-    rcases hEp' with e | ⟨-, -, -, e, -⟩
+    rcases hEp' with e | ⟨_, _, _, e, -⟩
     · rw [e]; exact hu.ep1 h1
     · obtain ⟨rfl, h3⟩ := hu.sig1 (u := t) (by rw [e]; rfl)
       rw [h3] at h1; cases h1
@@ -1201,21 +1201,21 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
           rw [hwx x e, hwl, hG 0 (by decide)]
         have hw1 : FCond.wOf x ≤ 1 := by rw [hwx x e]; split <;> omega
         have hE : Lo.WE.hist m' = Lo.WE.hist m := by
-          rcases hEp' with e' | ⟨-, -, -, e', -⟩
+          rcases hEp' with e' | ⟨_, _, _, e', -⟩
           · exact e'
           · rw [hc] at e'; cases e'
         refine ⟨?_, ?_⟩
         · rw [hE]
           have h1 := FEvent.hist_pos hu.we
           have h2 := hu.ep2
-          by_contra hne
+          refine Classical.byContradiction fun hne => ?_
           have hsw := hu.epS (by omega)
           unfold SW at hsw; unfold FCond.SStep at hst; omega
         · unfold SW; rw [last_push e]; unfold FCond.SStep at hst; omega
       · -- `inc → inc`
         have hinc1 := hu.incE q' n h' hc
         have hE : Lo.WE.hist m' = Lo.WE.hist m := by
-          rcases hEp' with e' | ⟨-, -, -, -, e'⟩
+          rcases hEp' with e' | ⟨_, _, _, -, e'⟩
           · exact e'
           · cases e'
         rw [hE]
@@ -1224,7 +1224,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       have hinc1 := hu.incE q' n h' hq'
       have hsg : (G 1).2.ph = .sg := (hu.sig1 (u := 1) (by rw [hq']; rfl)).2
       have hE : Lo.WE.hist m' = Lo.WE.hist m := by
-        rcases hEp' with e' | ⟨-, -, -, e', -⟩
+        rcases hEp' with e' | ⟨_, _, _, e', -⟩
         · exact e'
         · exact absurd (hu.sig1 (u := t) (by rw [e']; rfl)).1 et
       rw [hE]
@@ -1289,6 +1289,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
           obtain rfl : p = (Lo.WS.hist m).size := by omega
           rw [e, FEvent.get_push_eq, hwx x e, h0]; rfl
     · obtain ⟨j, hj, hp⟩ := hu.w1 hr
+      have hjs : j < (Lo.WS.hist m).size := hj.2.1
       rcases hSh with e | ⟨x, -, e⟩
       · exact ⟨j, (RegW_congr e).mpr hj, by rw [e]; exact hp⟩
       · refine ⟨j, ⟨hj.1, by rw [e, Array.size_push]; omega, ?_, ?_⟩, fun p hp1 hp2 => ?_⟩
@@ -1464,8 +1465,8 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · exact .inr (LockWord.allLe_mono hth (fun u _ => hclk u) h'')
     · have := Lo.ok; have := hr.2.2; omega
   · -- the condition's invariant
-    refine hu.cinv.other (fun u hu => hG u hu) (hph t).2 (fun hb => ?_) hS hE (fun w hw => ?_)
-      hclk (fun h' => by show (_ = _); rw [(hph t).1]; exact h') apE.ptr_ne
+    refine hu.cinv.other (t := t) rfl (fun hb => ?_) sorry (fun h' => h') hS hE sorry
+      (fun w hw _ => ?_) sorry (Nat.le_of_eq (by rw [hth])) hclk
     · -- `t` in the condition's busy code is a signaller out of the lock, not a waiter
       have hsig : ((G t).2.c).sig = true := by
         unfold CPh.busy at hb
@@ -1475,11 +1476,11 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       have hlp : (G t).1.ph = .out := (hu.cinv.lp t hsig).resolve_right hnh
       have hsg : (G t).2.ph = .sg := hu.cinv.sx t hsig
       rcases hq with rfl | ⟨rfl, rfl⟩
-      · rw [upd_self]; show LPh.out = (G t).1.ph; rw [hlp]
+      · show LPh.out = (G t).1.ph; rw [hlp]
       · rcases hwx (.inr rfl) with h' | h' <;> rw [hsg] at h' <;> cases h'
     · rcases hnw w hw with h' | ⟨rfl, hp⟩
       · exact .inl h'
-      · refine .inr ⟨rfl, fun h => ptr_EV h.symm, ?_⟩
+      · refine .inr ⟨rfl, ?_⟩
         show ((G t).2.c).waits = false
         rw [hco (.inr hp)]; rfl
   · -- hold
@@ -1557,8 +1558,11 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
   ok_calm _ _ _ hp hq := ⟨fun h => ⟨hq, h.2⟩, fun h => ⟨hp, h.2⟩⟩
   kstep := by
     rintro t G _ m _ _ m' ⟨W, rY, hW, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hn, hq, hs, hEp⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
-    · exact cstep G rY m m' t p q h W hW hn hq hu hY hs sorry sorry hI
+      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩ hu
+    · refine cstep G rY m m' t p q h W hW hn hq hu hY hs hEp (fun sh c q n h' e1 e2 => ?_) hI
+      rw [e1, e2] at hsg
+      obtain ⟨-, x, e⟩ := hsg
+      rw [e, Array.size_push]
     · exact U_own_native (hW.imp id .inl) hu hi hY hs hw' hh hL rfl rfl }
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
