@@ -381,6 +381,37 @@ class ToolCacheTests(unittest.TestCase):
                 if stage == 'preparation':
                     self.assertTrue(no_record(root))
 
+    def test_the_extraction_check_runs_under_the_lock(self):
+        # Once the lock is released another audit's preparation may rebuild the extractor, so a
+        # check after it could fail a sound run (the fixture checks' race of 2026-11-04).
+        report = json.dumps({'modules': ['Proofs.Fixture'], 'nodes': []})
+        for driver in ('lake env', 'Lake-built driver'):
+            with self.subTest(driver=driver), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                build = self.project(root)
+                checked, verify = [], audit.verify_extractor_inputs
+
+                def held(trace, root, stage):
+                    descriptor = os.open(root / '.lake/assurance/tool.lock', os.O_RDWR)
+                    try:
+                        with self.assertRaises(BlockingIOError, msg=stage + ' check outside the lock'):
+                            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    finally:
+                        os.close(descriptor)
+                    checked.append(stage)
+                    return verify(trace, root, stage)
+
+                def runner(command, *, root=root):
+                    return audit.MARKER + report if extracts(command) else build(command)
+
+                with patch.object(audit, 'ROOT', root), patch.object(audit, 'run', runner), \
+                        patch.object(audit, 'verify_extractor_inputs', held), \
+                        patch.object(audit, 'lake_extraction', lambda *args: [report]):
+                    raw = audit.extract(['Proofs.Fixture'], False,
+                                        **({'extract_in': root} if driver != 'lake env' else {}))
+                self.assertEqual(raw['modules'], ['Proofs.Fixture'])
+                self.assertEqual(checked, ['preparation', 'extraction'])
+
     def test_sysroot_overlay_and_invalid_caller_roots_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

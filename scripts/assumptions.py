@@ -863,7 +863,7 @@ def prepare_tool(root: Path, runner) -> dict:
     # `verify_extractor_inputs`). Were it a context, a caller with its own LEAN_PATH
     # (tests/roadmap/assurance/check.sh) would unlink and rebuild this root-package output under
     # every reader of it (the fixture checks' race of 2026-11-04).
-    key =hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+    key = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
     manifest = root / ".lake/assurance/tool-traces" / f"{key}.json"
     try:
         cached = json.loads(manifest.read_text())
@@ -883,6 +883,7 @@ def prepare_tool(root: Path, runner) -> dict:
     # --rehash makes Lake recompute file hashes rather than trust cached hash sidecars.
     # Its dependency trace includes compiler identity and imported module build traces.
     runner(["lake", "--rehash", "build", "AssuranceTools", "assurance"])
+    # Checked before the outputs are hashed: a runtime or caller change fails the preparation.
     verify_extractor_inputs({**context, 'caller_lean_path': caller_path, 'library_source_inputs': sources},
                             root, 'preparation')
     record = {**context, "library_source_inputs": sources, "olean_sha256": file_sha256(artifact),
