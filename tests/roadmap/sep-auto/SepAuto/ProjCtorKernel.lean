@@ -40,10 +40,13 @@ structure Loc where
 inductive Ex where
   | again | done
 
+/-- The loop's exit paired with its locals after the compare-and-swap: `s`'s epoch, a packed
+literal. A notation, not a definition: each use elaborates to the term written out. -/
+local notation "again% " s:max =>
+  (Ex.again, ({ epoch := Loc.epoch s, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc))
+
 /-- `fsimp` with `eq_self` closes the goal, and the kernel accepts the proof. -/
-theorem fsimp_epoch (s : Loc) :
-    (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch
-      = s.epoch := by
+theorem fsimp_epoch (s : Loc) : (again% s).2.epoch = s.epoch := by
   run_tac do
     let g ← getMainGoal
     let ctx ← Simp.mkContext (simpTheorems := #[← ({} : SimpTheorems).addConst ``eq_self])
@@ -51,64 +54,51 @@ theorem fsimp_epoch (s : Loc) :
     unless r.expr.isTrue do throwError "fsimp did not close {r.expr}"
     g.assign (← mkOfEqTrue (← r.getProof))
 
-open Zig.Full Zig.Full.FAssn in
+open Zig.Full Zig.Full.FAssn
+
 /-- The same projection in a postcondition, by `fsym`: the entailment planner reduces the
 postcondition's projections (`reduceProjsEq`) with a proof, so the kernel accepts the
 entailment. As a definitional step (`reduceProjs` with the reduced form installed by its type)
 the kernel rejected it (deep recursion, ledger `kernel-proj-ctor`). -/
 theorem fsym_post_epoch (s : Loc) :
-    FTotalTriple emp
-      (pure (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)) :
-        Zig.MemM (Ex × Loc))
-      (fun r => ⟪r.2.epoch = s.epoch⟫) := by
+    FTotalTriple emp (pure (again% s) : Zig.MemM (Ex × Loc)) (fun r => ⟪r.2.epoch = s.epoch⟫) := by
   fsym
 
 -- The definitional step the engine no longer takes, on a goal: its reduced form installed by
 -- its type (`replaceTargetDefEq`, `show`) is rejected by the kernel.
 /-- error: (kernel) deep recursion detected, use `set_option maxRecDepth <num>` to increase the limit -/
 #guard_msgs in
-example (s : Loc) :
-    (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch
-      = s.epoch :=
+example (s : Loc) : (again% s).2.epoch = s.epoch :=
   show s.epoch = s.epoch from rfl
 
 -- The same on a hypothesis: used at its reduced type (`replaceLocalDeclDefEq`), it is rejected
 -- by the kernel.
 /-- error: (kernel) deep recursion detected, use `set_option maxRecDepth <num>` to increase the limit -/
 #guard_msgs in
-example (s : Loc) (P : BitVec 32 → Prop)
-    (h : P (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch) :
-    P s.epoch := h
+example (s : Loc) (P : BitVec 32 → Prop) (h : P (again% s).2.epoch) : P s.epoch := h
 
-open Zig.Full Zig.Full.FAssn in
 /-- The same projection in a hypothesis, by `fsym`: its projections are reduced with a proof
 (`reduceProjsHyps`: a new local by `Eq.mp`), not definitionally (rejected above). -/
-theorem fsym_hyp_epoch (s : Loc) (P : BitVec 32 → Prop)
-    (h : P (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch) :
+theorem fsym_hyp_epoch (s : Loc) (P : BitVec 32 → Prop) (h : P (again% s).2.epoch) :
     FTotalTriple emp (pure () : Zig.MemM Unit) (fun _ => ⟪P s.epoch⟫) := by
   fsym
 
-open Zig.Full Zig.Full.FAssn in
 /-- The same with the hypothesis a binder after the colon: `fsym` introduces it, and replaces it
 in the goal's context. -/
 theorem fsym_hyp_binder : ∀ (s : Loc) (P : BitVec 32 → Prop),
-    P (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch →
-    FTotalTriple emp (pure () : Zig.MemM Unit) (fun _ => ⟪P s.epoch⟫) := by
+    P (again% s).2.epoch → FTotalTriple emp (pure () : Zig.MemM Unit) (fun _ => ⟪P s.epoch⟫) := by
   fsym
 
 /-- A command that a caller's rule covers. -/
 @[irreducible] def tick : Zig.MemM Unit := pure ()
 
-open Zig.Full Zig.Full.FAssn in
 theorem tick_spec (R : Prop) (hR : R) : FTotalTriple emp tick (fun _ => ⟪R⟫) := by
   unfold tick; fsym
 
-open Zig.Full Zig.Full.FAssn in
 /-- A caller's term that names the replaced hypothesis: it takes the new local cast back to the
 hypothesis's type (`Eq.mpr`, the run's substitution), not the new local itself, which would meet
 the term at the reduced type (the definitional step rejected above). -/
-theorem fsym_caller_term (s : Loc) (P : BitVec 32 → Prop)
-    (h : P (Ex.again, ({ epoch := s.epoch, prev := Zig.Packed.ofBits (65537 : BitVec 32) } : Loc)).2.epoch) :
+theorem fsym_caller_term (s : Loc) (P : BitVec 32 → Prop) (h : P (again% s).2.epoch) :
     FTotalTriple emp tick (fun _ => ⟪P s.epoch⟫) := by
   fsym [tick_spec _ h]
 
