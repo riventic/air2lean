@@ -135,14 +135,6 @@ theorem client_start (σ : Placement) (S : Nat) (hS : stackCharge 24 8 ≤ S)
     obtain ⟨x, m', r', hrun, -, ⟨R, hq⟩, -⟩ :=
       FTotalTriple.run_init_stack_claims σ gs gs_fit gs_lo S hr ht
     exact ⟨x, m', hrun, (sep_lift.mp hq).1⟩
-  -- the client's contract, with an empty stack, framed
-  have key : ∀ (A₀ : Nat) (Fr : FAssn), A₀ + 0 + 16 ≤ 2 ^ 63 →
-      FTotalTriple ((up (regionIn bufp A₀ 16 .global 1 (Array.replicate 16 .undef)) ⋆
-          (vtR vtp fns.toList ⋆ (cur 0 ⋆ (sp 0 S 0 ⋆ (⟪0 + stackCharge 24 8 ≤ S⟫ ⋆
-            (bshare 0 Frac.one.half 12 ⋆ bclaim 0 0 12 none)))))) ⋆ Fr)
-        (fba_client v) (fun x => FAssn.ex fun R : FAssn => ⟪Res v x⟫ ⋆ R) := fun A₀ Fr hA =>
-    ((client_spec v A₀ S 0 Frac.one.half _ (by simp) (by omega)).frame (R := Fr)).post
-      fun _ _ h => ⟨_, sep_assoc h⟩
   simp only [globals, gclaims, stackStart, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
     List.getElem?_cons_succ, List.getElem?_cons_zero, Nat.reduceAdd, vtBytes_size,
     Array.size_replicate, List.size_toArray, sep_ex_eq, sep_ex_eq_right]
@@ -164,10 +156,14 @@ theorem client_start (σ : Placement) (S : Nat) (hS : stackCharge 24 8 ≤ S)
     (by simpa [vtp] using h5) (by rw [vtBytes_size]; rfl) (by decide) vtBytes_decode))) ?_
   refine FTotalTriple.eupd (EUpd.of_imp fun _ h => sep_assoc h) ?_
   refine FTotalTriple.lift fun hA => ?_
-  -- the client's claim is the allocator's part `[0,12)` of the buffer's claim
-  exact FTotalTriple.pre (key a0 (bauth 0 16 .global Frac.one.half ⋆ (bclaim 0 12 16 ⋆
-      (up (bytesAt vtp a5 32 .constGlobal vtBytes) ⋆ (known 0 a0 ⋆ (known 5 a5 ⋆
-        (bext 5 32 .constGlobal ⋆ (bclaim 5 0 32 ⋆ (unmetered ⋆ fnBlocks a1 a2 a3 a4)))))))) hA)
+  -- the client's contract with an empty stack, framed; its claim is the allocator's part
+  -- `[0,12)` of the buffer's claim
+  exact FTotalTriple.pre
+    (((client_spec v a0 S 0 Frac.one.half (Array.replicate 16 .undef) (by simp) (by omega)).frame
+      (R := bauth 0 16 .global Frac.one.half ⋆ (bclaim 0 12 16 ⋆
+        (up (bytesAt vtp a5 32 .constGlobal vtBytes) ⋆ (known 0 a0 ⋆ (known 5 a5 ⋆
+          (bext 5 32 .constGlobal ⋆ (bclaim 5 0 32 ⋆ (unmetered ⋆ fnBlocks a1 a2 a3 a4))))))))).post
+      fun _ _ h => ⟨_, sep_assoc h⟩)
     fun _ h => by
       rw [← bclaim_split (lo := 0) (m := 12) (hi := 16) (by omega) (by omega)] at h
       have h := sep_lift.mpr ⟨(by omega : 0 + stackCharge 24 8 ≤ S), h⟩

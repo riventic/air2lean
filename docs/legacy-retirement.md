@@ -267,9 +267,9 @@ Group 3 (needs design or engine work; start the design now, implement as unblock
 | Sep/AllocSpec/Wrap.lean (188) | `Wrap.*` hand-written step semantics of std `mem.Allocator` wrappers | AllocSpec | D2 (hand-written std model) | M | library (delete) |
 | Sep/AllocSpec/Wrappers.lean (746) | wrapper contracts for any `AllocSpec` (`sep_from`, `tame_prim`) | Wrap, Automation | D2 | M | library (delete; Full/Wrappers is the native one) |
 | Sep/AllocSpec/Dispatch.lean (158) | vtable dispatch, `vtR` | Wrappers | D2 (vocabulary to Base in L3) | S | library (delete) |
-| tests/roadmap/alloc-fba/AllocFba/Fba.lean (1268) | translated FixedBufferAllocator meets `AllocSpec` | Dispatch, TotalTriple (146) | ENG #12 realloc contract, #20, FBA reset design (ResetLedger second instance) | L | proof |
-| tests/roadmap/alloc-fba/AllocFba/Client.lean (691) | `fba_client` returns OOM code or `v+v+(v+1)`, realloc keeps prefix | TotalTriple (89), `sep_from`, TotalTripleIn | ENG (same), `roomFor` full-state form | L | proof |
-| tests/roadmap/alloc-fba/AllocFba/Bridge.lean (161) | translated wrappers = `Wrap.*` | Wrap, Dispatch, Norm; tactics `bridge_norm`, `bridge_close` | D2: disappears when Client is proved over the translated wrappers (alloc-param lane) | M | proof |
+| tests/roadmap/alloc-fba/AllocFba/Fba.lean (1268) | translated FixedBufferAllocator meets `AllocSpec` | Dispatch, TotalTriple (146) | ENG #12 realloc contract, #20, FBA reset design (ResetLedger second instance) | L | proof (deleted, #567) |
+| tests/roadmap/alloc-fba/AllocFba/Client.lean (691) | `fba_client` returns OOM code or `v+v+(v+1)`, realloc keeps prefix | TotalTriple (89), `sep_from`, TotalTripleIn | ENG (same), `roomFor` full-state form | L | proof (replaced by the full-state `Client.lean`, #567) |
+| tests/roadmap/alloc-fba/AllocFba/Bridge.lean (161) | translated wrappers = `Wrap.*` | Wrap, Dispatch, Norm; tactics `bridge_norm`, `bridge_close` | D2: disappears when Client is proved over the translated wrappers (alloc-param lane) | M | proof (deleted, #567) |
 | tests/roadmap/alloc-translated/PageObstruction.lean (193) | why the legacy `AllocSpec` cannot hold for the page allocator | AllocSpec, Triple | OTHER | S | test |
 End state: FBA and Client move to `FAllocSpec`/`CAllocSpec` (lists-append's four `FnSpec`s) with the translated `Allocator` code walked
 directly (no `Wrap.*` model); `Bridge.lean` and the `bridge_*`/`pure_norm` tactics are deleted. PageObstruction becomes a doc record
