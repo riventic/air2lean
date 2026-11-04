@@ -763,6 +763,24 @@ theorem ioCond_wait_wp_unmetered (hC : C.Fits L P U ok)
     | exact ioCond_wait_wp_v017 hC hcost hp hq hLc t g hgx hgh hok hu io G m d hroom hent
         hlive hi
 
+/-- The existing Plain wait: its unmetered fragment pays; it supplies no extra assumption
+about stack budgets in condition or mutex code. -/
+theorem ioCond_wait_wp (hC : C.Fits L P U ok)
+    (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g) (io : Io)
+    (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hroom : ∀ T, (∀ u, T ≤ u → C.ph (upd G t g u) = .out) → C.nreg (upd G t g) T < 65535)
+    (hent : ∀ rX, U (upd G t g) rX m → C.Inv L (upd G t (C.set g .en)) m →
+      U (upd G t (C.set g .en)) rX m)
+    (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
+      P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
+      P.Live t G₁ m₁)
+    (hplain : (L.part g).Plain) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
+    P.WP t (Io_Condition_waitUncancelable p io q) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d :=
+  ioCond_wait_wp_unmetered hC hcost hp hq hLc t g hgx hgh hok io G m d hroom hent
+    hlive hplain.2 hi hc
+
 /-- The wait contract at its caller part: this implementation's proved profile returns the
 part it was called with (`keepPart`), with the protected resource returned separately after the
 re-lock. -/
