@@ -306,7 +306,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  variables of pointers derived by `Ptr.add`/`elem` are identified, and a block variable equal to
+  a value (`some k = some b`, a fact `x.block = some k`, or a global's pointer `⟨some 0, 0⟩` by
+  reducible evaluation) is that value (`unifyBlocks`; the substitutions are recorded for the
+  caller's terms). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
