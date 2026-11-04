@@ -9,7 +9,7 @@
     },
     {
       "name": "BlkStep",
-      "module": "ZigLean.Conc.Word",
+      "module": "ZigLean.Conc.Base.Word",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
@@ -274,13 +274,13 @@
     },
     {
       "name": "Keep",
-      "module": "ZigLean.Conc.Word",
+      "module": "ZigLean.Conc.Base.Word",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed); retires into FStepIn/RestStep (coordinator 2026-10-14, maintainer-allowed)"
     },
     {
       "name": "KeepK",
-      "module": "ZigLean.Conc.Word",
+      "module": "ZigLean.Conc.Base.Word",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },

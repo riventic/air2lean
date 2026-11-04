@@ -293,11 +293,6 @@ theorem Inv.wfpW {G G' : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
 
 /-! ## Basic facts -/
 
-theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
-    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (h : AllLe m c) : AllLe m' c := fun u hu =>
-  VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
-
 theorem LiveLe.mono {G : ThreadId → γ} {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : L.LiveLe G m c) : L.LiveLe G m' c := fun u hu hg =>
@@ -311,12 +306,6 @@ theorem LiveLe.weaken {G G' : ThreadId → γ} {m : Mem} {c : VClock}
 theorem LiveLe.le {G : ThreadId → γ} {m : Mem} {c : VClock} {u : ThreadId} (h : L.LiveLe G m c)
     (hu : u < m.threads.size) (hg : L.ph (G u) ≠ .gone) : VClock.le c (m.clocks[u]!) = true :=
   h u hu hg
-
-theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
-    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (h : SomeLe m c) : SomeLe m' c := by
-  obtain ⟨u, hu, hle⟩ := h
-  exact ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u hu)⟩
 
 /-- A step that keeps the threads, the groups, the blocks, the clocks, the footprint, the atomic
 locations and the threads at another futex. -/
@@ -659,36 +648,7 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
     exact ⟨v, hv, hq, by rw [upd_ne _ _ hvt]; exact h1,
       fun hh => h2 (by rw [upd_ne _ _ hvt] at hh; exact hh)⟩
 
-/-! ## Spawn and join -/
-
-theorem fork_eq {m m' : Mem} {t c : ThreadId} {gt : Bool}
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m' = { m with
-      current := t,
-      clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
-      threads := m.threads.push { spawner := t, joined := false, gated := gt } } := by
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl⟩
-
-/-- The clocks after a fork by `t`: the old ones are not smaller, the new thread's is above
-`t`'s, and the others stay. -/
-theorem fork_clocks {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) :
-    (∀ u < cs.size, VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
-      (VClock.bump (cs[t]!) t))[u]!) = true) ∧
-    VClock.le (cs[t]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
-      (VClock.bump (cs[t]!) t))[cs.size]!) = true ∧
-    (∀ u < cs.size, u ≠ t → ((cs.set! t (VClock.bump (cs[t]!) t)).push
-      (VClock.bump (cs[t]!) t))[u]! = cs[u]!) := by
-  refine ⟨fun u hu => ?_, ?_, fun u hu hut => ?_⟩
-  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite]
-    split
-    · rename_i h; rw [h.1]; exact VClock.le_bump _ _
-    · exact VClock.le_refl _
-  · rw [Proto.getElem!_push, if_neg (by simp), if_pos (by simp)]
-    exact VClock.le_bump _ _
-  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite, if_neg (by omega)]
+/-! ## Spawn and join (`fork_eq`, `fork_clocks`: `ZigLean/Conc/Base/Lock.lean`) -/
 
 /-- A spawn by `t`, which is out of the lock's code: `t` keeps `part g₁`, the new thread gets
 `part g₀` and starts out of the lock's code. -/

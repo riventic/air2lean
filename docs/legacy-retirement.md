@@ -44,7 +44,7 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
 | Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | WaitGroup |
 | ZigLean/Conc/Witness | imports Conc/Own | `TLive` | `CLive` (Full/Witness) | RwLockContract |
-| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `StepIn`, `Lock.Inv.wordOp`; defines `Word`, `Ok`, `hist`, `BlkStep`, `Op`, `Keep` | Full/Word, Full/WordRules, Full/WordNewest | RwLock, Semaphore, WaitGroup, WeakWord; and Full/Word's own import (below) |
+| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord |
 | ZigLean/Conc/LockRules | imports Conc/Lock | legacy `Lock` rules | Full/LockRules, Full/LockSteps | Sync/Lock, Threadsync/Lock, Conc/Word |
 | ZigLean/Conc/Lock | imports Conc/Csl | `Lock`, `Fits`, `FitsOn`, `Step` | `FLock` (Full/Lock, Full/LockWord) | LockRules |
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
@@ -60,16 +60,25 @@ replacement named below is on main, except where the row says it is not.
   `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
   full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
-- `ZigLean/Witnesses/Conc` imports Conc/Word. No module imports it.
-- **`ZigLean/Sep/Full/Word` imports Conc/Word.** Through that import, every full-state
-  concurrency module (Full/Mutex, Cond, Event, …) transitively imports Conc/LockRules → Conc/Lock →
-  Csl → Own → Sep/Block → Sep/Triple. Full/Word uses Conc/Word's `Word`/`Ok`/`hist`/`Entry`
-  vocabulary and op lemmas. It also uses the seven old roots of row `seen-floor-sync-retirement`:
-  `Word.BlkStep.eq_set`, `Word.Op.{block,fpAt,lockLoc,rest,word}` and `FLock.Inv.wordOp`.
-  Stage D-d therefore needs a split first. Conc/Word's vocabulary moves to a lock-free base module
-  (as `Conc/Base/*`). The `Lock`-typed part (`Apart (L : Lock γ)`, `keep_lockStep`,
-  `keep_stepIn*`, `Lock.Inv.wordOp`, `offWord`) leaves with Conc/Lock. That split belongs to
-  the Task06 row and has no owner yet.
+- `ZigLean/Witnesses/Conc` imports Conc/Word. No module imports it. It is not pure legacy: it holds
+  the non-vacuity witnesses of Proto, Total, TimedBody and `Word.enc_val` lemmas (premises THR-08,
+  SEM-02). Only its `Lock.States.*` witnesses need LockRules; they leave with it (stage D-d).
+- **Conc/Word split (L8j).** Full/Word used to import Conc/Word, so every full-state concurrency
+  module transitively imported Conc/LockRules → Conc/Lock → Csl → Own → Sep/Block → Sep/Triple.
+  The split resolves this:
+  - The legacy-independent vocabulary (`Word`, `Ok`, `hist`, `Entry`, `Keep`, `Prefix`/`Extends`,
+    the no-error lemmas, …) is in `ZigLean/Conc/Base/Word`. The generic thread and clock facts it
+    needs (`fork_eq`, `fork_clocks`, `recordAt_le`, `allLe_mono`, `someLe_mono`) moved from
+    Conc/Lock and LockRules to `Conc/Base/Lock`.
+  - Full/Word imports only the base module and reaches no legacy module.
+  - Conc/Word keeps what depends on the legacy layer:
+    - the `Lock`-typed part (`Apart (L : Lock γ)`, `keep_lockStep`, `Lock.Inv.wordOp`, `offWord`);
+    - the old Word-contract family: `Op`, whose `locs` field is the legacy `LocsKeep`, and its
+      producers;
+    - the six old `Op` roots of row `seen-floor-sync-retirement` that were in Full/Word:
+      `Word.Op.{block,fpAt,lockLoc,rest,word}` and `FLock.Inv.wordOp`.
+
+    It leaves with Conc/Lock.
 
 **Retirement order** (each step needs only the steps before it):
 
@@ -79,7 +88,7 @@ replacement named below is on main, except where the row says it is not.
    and `Contracts.{RwContract,SemContract}`.
 3. Sync/Lock: after Semaphore and `Contracts.mutex`. Threadsync/Lock: after WaitGroup.
    Conc/Witness: after RwLockContract.
-4. Conc/Word: the split above. Then the legacy part, once RwLock, Semaphore, WaitGroup and
+4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore, WaitGroup and
    WeakWord are gone.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
 6. Sep/{Block,Triple,Loop,Total}: stage D-e.

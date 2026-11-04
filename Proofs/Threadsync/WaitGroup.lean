@@ -2013,7 +2013,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {k : Nat} {p
   have hk0 : (0 : ThreadId) ≠ k := by rcases hk12 with rfl | rfl <;> decide
   have hcs : m.clocks.size = k := by rw [hi.1.own.csize, hsz]
   have hjb := joinedB_fork hf
-  obtain ⟨hch, hm'⟩ := Lock.fork_eq hf
+  obtain ⟨hch, hm'⟩ := fork_eq hf
   rw [hsz] at hch
   subst hch
   have hGk : (G c).2 = {} := by
@@ -2046,7 +2046,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {k : Nat} {p
   have hXc : (upd (upd G c (gT .lk)) 0 (gM Heap.empty { ph := p' }) c).2 = { ph := .lk } := by
     rw [upd_ne _ _ (Ne.symm hk0), upd_self]; rfl
   have hG0 : (G 0).2 = { ph := p } := by rw [hg]; rfl
-  obtain ⟨hcl, hcn, -⟩ := Lock.fork_clocks (cs := m.clocks) (t := 0)
+  obtain ⟨hcl, hcn, -⟩ := fork_clocks (cs := m.clocks) (t := 0)
     (by rw [hcs]; rcases hk12 with rfl | rfl <;> decide)
   have hcl' : ∀ u : Nat, VClock.le (m.clocks[u]!) (((m.clocks.set! 0 (VClock.bump (m.clocks[0]!) 0)).push
       (VClock.bump (m.clocks[0]!) 0))[u]!) = true := fun u => by
@@ -3473,7 +3473,7 @@ theorem main_spec [Zig.Os.HasEnv] (σ : Placement) (d : Nat) :
     ((size_sm hi₆).2 rfl) hf₂
   rw [upd_g hg₆] at hi₇
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
-  have hc₇ : m₇.current = 0 := by rw [(Lock.fork_eq hf₂).2]
+  have hc₇ : m₇.current = 0 := by rw [(fork_eq hf₂).2]
   -- `wait`
   refine WP.bind (WP.callC (WP.mono ?_ (wgwait_spec _ m₇ k hi₇ hc₇)))
   rintro _ G₈ m₈ d₈ ⟨hc₈, e1, hi₈⟩
