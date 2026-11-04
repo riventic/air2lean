@@ -14,8 +14,10 @@ Zig version proves (`CondImpl`).
 
 **The window** (PR397 ruling 6264821278): a waiter's futex compare is against its saved epoch
 value, so it can miss its wake if exactly a multiple of `2^32` epoch increments happen inside
-its save-to-enqueue window. The contract asks the protocol for fewer: every registered waiter
-`reg i …` has `(C.Ep.hist m).size ≤ i + 2^32` in every state its rest allows (`Fits.win`). The
+its save-to-enqueue window. The contract asks the protocol for fewer: every registered waiter on
+its way to its futex wait, `reg i jr false e` and not queued at the epoch, has
+`(C.Ep.hist m).size ≤ i + 2^32` in every state its rest allows (`Fits.win`). A queued waiter, or
+one back from its futex wait (`sn`), has its compare behind it and is not asked. The
 client bounds it in its rest `U`, by its own ghost accounting (`CondImpl` has no cost resource,
 `P.cost = none`). The primitive helps: a signaller reaches `inc` only at its own post, the step
 that pushes its state write (`SigStep`, `SigStep.inc_fresh`), and each `epoch += 1` is its step
@@ -27,9 +29,9 @@ When every epoch write happened before the mutex's holder (`FLock.WordHB`), the 
 holds the mutex at its load, saves the newest write (`ld_newest`), so a client with at most one
 registered waiter at a time bounds the window by its posts per registration. With two or more
 registered waiters, one that does not reach its futex wait (not scheduled, or reloading an older
-write in its wait loop), or that stays queued under an unfair wake, keeps its saved write while the
-others go on, so that count is not enough for a long-running client (register C14, ledger
-`cond-window-multi-waiter`). It is not a premise ID and not a global cap.
+write in its wait loop) keeps its saved write while the others go on, so that count is not enough
+for a long-running client (register C14, ledger `cond-window-multi-waiter`). A waiter that stays
+queued under an unfair wake is not asked (above).
 
 **Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.0) and
 `Thread.Condition.wait` (0.15.2). The cancelable `Io.Condition.wait` (and `waitTimeout` in
@@ -147,12 +149,13 @@ abbrev prim (L : FLock γ) : FPrim γ :=
     (fun q => q = .out ∨ q = .holds)
 
 /-- **A protocol that keeps the condition** next to its mutex `L`: `FLock.Fits` with the
-condition as its primitive, and the window (module doc): every registered waiter has fewer than
-`2^32` epoch writes after its saved one, in every state the rest allows. -/
+condition as its primitive, and the window (module doc): every registered waiter on its way to
+its futex wait (`reg i jr false e`, not queued at the epoch) has fewer than `2^32` epoch writes
+after its saved one, in every state the rest allows. -/
 structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     (U : (ThreadId → γ) → Res → Mem → Prop) (ok : γ → Prop) : Prop
     extends FLock.Fits L (C.prim L) P U ok where
-  win : ∀ G rX m, U G rX m → ∀ u i jr sn e, C.ph (G u) = .reg i jr sn e →
+  win : ∀ G rX m, U G rX m → ∀ u i jr e, C.ph (G u) = .reg i jr false e → C.qd m u = false →
     (C.Ep.hist m).size ≤ i + 4294967296
 
 variable {C}
@@ -1479,7 +1482,7 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
     have hv : (C.lastE M).Val e := by
       unfold FCond.lastE; rw [hh]; exact ((hF.wRest (.inr rfl)) _ _ _ hU).1.holds_last.mp hU32
     have hwin : (C.Ep.hist M).size ≤ i + 4294967296 := by
-      rw [hh]; exact hC.win G₁ _ m₁ hU t i jr false e (ht hg₁)
+      rw [hh]; exact hC.win G₁ _ m₁ hU t i jr e (ht hg₁) (qd_false hnq)
     have hst := hF.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := C.ph (G₁ t))
       (q := L.ph (G₁ t)) (h := L.held (G₁ t)) (.inr rfl)
       ⟨CPh.Next.refl _, .inl ⟨rfl, rfl⟩, .sleep hw₀ hct hrecord hh hok₂, .inl hh,
