@@ -544,13 +544,6 @@
   ],
   "tactics": [
     {
-      "tactic": "#assurance_audit",
-      "kind": "command",
-      "module": "tools.Assurance",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
       "tactic": "#audit_unchecked_theorem",
       "kind": "command",
       "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
