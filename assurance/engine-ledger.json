@@ -1634,6 +1634,17 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Engine fix found on the way: every conditional `@[fsym_arith]` rewrite whose side condition contains a `dsimproc`-reduced term (`Enc.size (BitVec 16)`) failed with simp's \"failed to assign proof\": the discharger's proof had the reduced statement, which reducible unification does not match. Rejected alternatives: one load rule per byte source (store, memset, reallocation), which the provider already decomposes; reading a kept prefix by a user-supplied update, which every client would repeat."
+  },
+  {
+   "id": "literal-pointer-provider",
+   "title": "A literal pointer in a state region, found by the planner instead of a walk rewrite",
+   "status": "open",
+   "requester": "coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow)",
+   "progress": "open",
+   "request": "Row `literal-pointer-rebase` (#604) restates a command's literal pointer (`⟨some 0, 15⟩`) as `p.add k` from the state region that holds it, by rewriting the command in walk's no-rule fallback (`rebaseLitPtr?`, Auto.lean). The end state is a pointer-in-region provider in the planner: when a rule's precondition wants a region or a `pts` at a literal pointer, the planner finds the region whose block and extent hold it and supplies `q = p.add k` (`ptr_eq_add_off_sub`), so that every rule and provider about derived pointers applies without rewriting the program.",
+   "workaround_sites": ["ZigLean/Sep/Full/Auto.lean"],
+   "deletion_plan": "Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.",
+   "note": "Recorded with the L6 D-b PR, which lands the coordinator's decision on #604."
   }
  ],
  "mechanisms": [

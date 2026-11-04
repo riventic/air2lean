@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 150 rows, 60 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 151 rows, 61 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -81,6 +81,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [region-end-opt-in](#row-region-end-opt-in) | The owned-region end bound is a per-file opt-in fact | coordinator (takeover review of PR #468) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost). |
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 | [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
+| [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
 
 ## Closed rows
 
@@ -1742,3 +1743,18 @@ Note: Engine fix found on the way: every conditional `@[fsym_arith]` rewrite who
 Progress: Branch claude/fsym-read-through. Region.lean `@[fsym_arith]`: `extract_writeBytes_other`, `extract_memsetBytes_item`, `extract_replicate_le`, `decode_byte`, `LawfulEnc.decode_encode`, `Array.replicate_one`, `Array.size_replicate`, and the simproc `keptExtract` (with `extract_of_keepsPrefix`). Auto.lean: `arithCore` closes an equation with an unknown side by reducible unification of the normalized sides; `omegaDisch` states a discharged side condition as itself. Tests: SepAuto.Region `read_unwritten`, `read_unwritten_word`, `read_kept`.
 
 Request: The provider `ReadsAt.regionIn` asks `Enc.decode (bs.extract lo hi) = pure ?v` of a region whose bytes are `writeBytes (memsetBytes n (some v)) o (Enc.encode w)`, or bytes `bs` with a fact `keepsPrefix old bs` (a reallocation's). The arithmetic normalization did not read through a disjoint write, an item of a memset or a kept prefix, and did not assign `?v`.
+
+<a id="row-literal-pointer-provider"></a>
+### #literal-pointer-provider A literal pointer in a state region, found by the planner instead of a walk rewrite
+
+Status: **open**. Requester: coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow).
+
+Note: Recorded with the L6 D-b PR, which lands the coordinator's decision on #604.
+
+Progress: open
+
+Request: Row `literal-pointer-rebase` (#604) restates a command's literal pointer (`⟨some 0, 15⟩`) as `p.add k` from the state region that holds it, by rewriting the command in walk's no-rule fallback (`rebaseLitPtr?`, Auto.lean). The end state is a pointer-in-region provider in the planner: when a rule's precondition wants a region or a `pts` at a literal pointer, the planner finds the region whose block and extent hold it and supplies `q = p.add k` (`ptr_eq_add_off_sub`), so that every rule and provider about derived pointers applies without rewriting the program.
+
+Workaround sites: `ZigLean/Sep/Full/Auto.lean`
+
+Deletion plan: Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.
