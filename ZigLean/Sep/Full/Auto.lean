@@ -5985,50 +5985,64 @@ def rewriteCmd (g : MVarId) (L : Bk) (α P Q c x x' eq : Expr) : MetaM MVarId :=
     mkLambdaFVars #[z] (mkT L α P c' Q)
   g.replaceTargetEq (mkApp mot x').headBeta (← mkCongrArg mot eq)
 
-/-- **A literal pointer of a command, rebased.** A closed pointer of the command `x` that the
-state `P` does not name (generated code's address of a global's item, evaluated: `⟨some 0, 15⟩`)
+/-- **A literal pointer of a command, rebased.** A literal pointer argument of the command `x`
+that the state `P` does not name (generated code's address of a global's item, evaluated: `⟨some 0, 15⟩`)
 restated from the state's region that holds it as `p.add (q.off - p.off)`
 (`ptr_eq_add_off_sub`; the state's regions are disjoint, so at most one holds it): the rules and
 providers about a pointer derived from a region's apply to it (`regionStoreAdd`,
 `ReadsAt.regionIn`). The command so restated and `x = x'`, or none. -/
 def rebaseLitPtr? (P x : Expr) : TacticM (Option (Expr × Expr)) := do
   let ptr := mkConst ``Zig.Ptr
-  let regions := (atoms P).filterMap regionArgs?
+  let ats := atoms P
+  -- (the regions with a known block, once)
+  let regions ← (ats.filterMap regionArgs?).filterMapM fun r => do
+    if r[0]!.hasExprMVar then return none
+    return (← blockOf r[0]!).map (r, ·)
   if regions.isEmpty then return none
   -- (the pointers the atoms name: `pts q …`, `up (regionIn q …)`)
-  let named := (atoms P).flatMap fun a =>
+  let named := ats.flatMap fun a =>
     (if a.isAppOfArity ``Zig.Full.FAssn.up 1 then a.appArg! else a).getAppArgs
-  for q in subterms x do
-    if q.hasFVar || q.hasMVar || q.hasLooseBVars || named.contains q then continue
-    unless ← withReducible (isDefEq (← inferType q) ptr) do continue
-    let some (bq, hq) ← blockOf q | continue
-    for r in regions do
-      let p := r[0]!
-      let s ← saveState
-      let some (b, hp) ← blockOf p | continue
-      unless ← withReducible (isDefEq b bq) do s.restore; continue
-      let po ← mkAppM ``Zig.Ptr.off #[p]
-      let qo ← mkAppM ``Zig.Ptr.off #[q]
-      let size ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
-        ← mkAppM ``Array.size #[r[5]!]]
-      unless (← proveArith (← mkAppM ``LE.le #[po, qo])).isSome &&
-          (← proveArith (← mkAppM ``LT.lt #[qo, ← mkAppM ``HAdd.hAdd #[po, size]])).isSome do
-        s.restore; continue
-      -- (at the region's pointer `p` itself: its block fact may be its base's, `p.add k`'s)
-      let hqp ← mkExpectedTypeHint (← mkEqTrans hq (← mkEqSymm hp))
-        (← mkEq (← mkAppM ``Zig.Ptr.block #[q]) (← mkAppM ``Zig.Ptr.block #[p]))
-      let e ← mkAppOptM ``Zig.Full.Auto.ptr_eq_add_off_sub #[q, p, hqp]
-      -- the offset in the arithmetic's normal form (`3` for `⟨some 0, 15⟩.off - (bp.add 12).off`)
-      let (ctx, procs) ← arithSimpCtx
-      let k ← mkAppM ``HSub.hSub #[qo, po]
-      let (rk, _) ← simp k ctx procs
-      let e ← match rk.proof? with
-        | some pk => mkEqTrans e (← mkCongrArg (mkApp (mkConst ``Zig.Ptr.add) p) pk)
-        | none => pure e
-      let q' := mkApp2 (mkConst ``Zig.Ptr.add) p rk.expr
-      let e ← mkExpectedTypeHint e (← mkEq q q')
-      let xa ← kabstract x q
-      return some (xa.instantiate1 q', ← mkCongrArg (.lam `z ptr xa .default) e)
+  -- (a pointer argument of the command that is a literal `⟨b, o⟩`, not one derived by `Ptr.add`
+  -- from a region's: a rebased pointer is never rebased again)
+  for q in x.getAppArgs do
+    unless q.isAppOfArity ``Zig.Ptr.mk 2 do continue
+    if q.hasFVar || q.hasMVar || named.contains q then continue
+    let s ← saveState
+    try
+      let some (bq, hq) ← blockOf q | s.restore; continue
+      for (r, b, hp) in regions do
+        let p := r[0]!
+        unless ← withReducible (isDefEq b bq) do continue
+        let po ← mkAppM ``Zig.Ptr.off #[p]
+        let qo ← mkAppM ``Zig.Ptr.off #[q]
+        let size ← mkAppOptM ``Nat.cast #[mkConst ``Int, mkConst ``instNatCastInt,
+          ← mkAppM ``Array.size #[r[5]!]]
+        unless (← proveArith (← mkAppM ``LE.le #[po, qo])).isSome &&
+            (← proveArith (← mkAppM ``LT.lt #[qo, ← mkAppM ``HAdd.hAdd #[po, size]])).isSome do
+          continue
+        -- (at the region's pointer `p` itself: its block fact may be its base's, `p.add k`'s)
+        let hqp ← mkExpectedTypeHint (← mkEqTrans hq (← mkEqSymm hp))
+          (← mkEq (← mkAppM ``Zig.Ptr.block #[q]) (← mkAppM ``Zig.Ptr.block #[p]))
+        let e ← mkAppOptM ``Zig.Full.Auto.ptr_eq_add_off_sub #[q, p, hqp]
+        -- the offset in the arithmetic's normal form (`3` for `⟨some 0, 15⟩.off - (bp.add 12).off`)
+        let (ctx, procs) ← arithSimpCtx
+        let (rk, _) ← simp (← mkAppM ``HSub.hSub #[qo, po]) ctx procs
+        let e ← match rk.proof? with
+          | some pk => mkEqTrans e (← mkCongrArg (mkApp (mkConst ``Zig.Ptr.add) p) pk)
+          | none => pure e
+        let q' := mkApp2 (mkConst ``Zig.Ptr.add) p rk.expr
+        let e ← mkExpectedTypeHint e (← mkEq q q')
+        -- (the pointer as an argument of the command, not inside its other arguments' proofs)
+        let xa := mkAppN x.getAppFn (x.getAppArgs.map fun a => if a == q then .bvar 0 else a)
+        let mot := Expr.lam `z ptr xa .default
+        unless ← isTypeCorrect mot do continue
+        let x' := xa.instantiate1 q'
+        if x' == x then continue
+        return some (x', ← mkCongrArg mot e)
+      s.restore
+    catch ex =>
+      trace[fsym] "rebase of {q}: {ex.toMessageData}"
+      s.restore
   return none
 
 /-- A postcondition that the walk infers: an unknown, or an unknown applied to distinct locals
