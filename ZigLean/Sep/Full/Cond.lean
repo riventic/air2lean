@@ -677,7 +677,7 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
       P.inv (upd G₁ t (C.set g (.ld i b))) m' → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .acquire 4 C.Ep.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) (by rw [hgh]; decide) hi
+  FLock.wp_wordLoad hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)
@@ -739,7 +739,7 @@ theorem wp_reg (hC : L.Fits (C.prim L) P U ok) {i : Nat} {e : BitVec 32}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .add false .relaxed 4 C.S.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n :=
-  FLock.wp_wordRmw hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgh]; decide) hi
+  FLock.wp_wordRmw hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hwL hY hv _ hh _ hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       obtain ⟨hro, hi'⟩ := hC.afterReg hg₁ hg hgh hU hwL hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩)) hw' (.inr ⟨_, _, hh⟩)) hA hL hv hh
@@ -757,7 +757,7 @@ theorem wp_regAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok) {i :
       P.inv (upd G₁ t (C.set g (.reg i jr false e))) m' → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwAsC .add .relaxed 4 C.S.ptr v : CM Tgt σ α).run s) Q G m n :=
-  FLock.wp_wordRmwAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgh]; decide) hi
+  FLock.wp_wordRmwAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun G₁ rY m₁ hg₁ hc₁ hU b hb => by
       have hI := hC.wInv _ _ _ hU
       have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
@@ -819,13 +819,13 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadS (hC : L.Fits (C.prim L) P U ok)
 /-- The waiter's relaxed load of the state at `reg i jr true e` (`atomicLoadC`,
 `Thread.Condition`). -/
 theorem wp_loadS (hC : L.Fits (C.prim L) P U ok) {i jr : Nat}
-    {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    {e : BitVec 32} (hg : C.ph g = .reg i jr true e)
     (hi : P.inv (upd G t g) m) {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → SOk b →
       P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .relaxed 4 C.S.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       obtain ⟨hok, hi'⟩ := hC.afterReadS hg₁ hg hU hwL hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)) hA hL hj hv hfl hh
@@ -844,14 +844,14 @@ theorem dec_of {α : Type} [Packed α 32]
 /-- The waiter's relaxed load of the state with a decode (`atomicLoadAsC`, `Io.Condition`). -/
 theorem wp_loadSAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
-    {i jr : Nat} {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    {i jr : Nat} {e : BitVec 32} (hg : C.ph g = .reg i jr true e)
     (hi : P.inv (upd G t g) m) {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b r, m'.current = t →
       (Packed.ofBits? (α := α) b).run = some (.ok r) → SOk b →
       P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α .relaxed 4 C.S.ptr : CM Tgt σ α).run s) Q G m n :=
-  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -900,7 +900,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
 (`afterReadS`). -/
 theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     {exp new : BitVec 32} (hs : 0 < exp.toNat / 65536) (hnew : new = exp - 0x10001) {i jr : Nat}
-    {e : BitVec 32} (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out)
+    {e : BitVec 32} (hg : C.ph g = .reg i jr true e)
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (P.inv (upd G₁ t (C.set g .out)) m' → Q (none, s) G₁ m' k) ∧
@@ -909,7 +909,7 @@ theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC (n := 32) succ fail 4 C.S.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst hnew
-  exact FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  exact FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA _hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
@@ -928,7 +928,7 @@ theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     {succ fail : AtomicOrder} {exp new : α} {i jr : Nat} {e : BitVec 32}
     (hs : 0 < (Packed.toBits exp).toNat / 65536)
     (hnew : Packed.toBits new = Packed.toBits exp - 0x10001)
-    (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .reg i jr true e) (hi : P.inv (upd G t g) m)
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (P.inv (upd G₁ t (C.set g .out)) m' → Q (none, s) G₁ m' k) ∧
@@ -936,7 +936,7 @@ theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
         P.inv (upd G₁ t (C.set g (afterRead i jr e b))) m' → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakAsC succ fail 4 C.S.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n :=
-  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA _hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1144,15 +1144,14 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSl (hC : L.Fits (C.prim L) P U ok)
 
 /-- The signaller's relaxed load of the state at `sl h c` (`atomicLoadC`, `Thread.Condition`). -/
 theorem wp_sload (hC : L.Fits (C.prim L) P U ok) {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → SOk b →
       (b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost sh c all m') →
       P.inv (upd G₁ t (C.set g (afterSRead sh c b))) m' → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .relaxed 4 C.S.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
-    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
+  FLock.wp_wordLoad hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       obtain ⟨h1, h2, h3⟩ := hC.afterReadSl hg₁ hg hU hwL hY (mstep_op hc₁ hw₀ hct
@@ -1163,7 +1162,7 @@ theorem wp_sload (hC : L.Fits (C.prim L) P U ok) {sh : Array Word.Entry} {c : VC
 theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b r, m'.current = t →
       (Packed.ofBits? (α := α) b).run = some (.ok r) → SOk b →
@@ -1171,8 +1170,7 @@ theorem wp_sloadAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
       P.inv (upd G₁ t (C.set g (afterSRead sh c b))) m' → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α .relaxed 4 C.S.ptr : CM Tgt σ α).run s) Q G m n :=
-  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
-    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
+  FLock.wp_wordLoadAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl _ hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1242,7 +1240,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterPost (hC : L.Fits (C.prim L) P U ok)
 state, as `wp_sload`. -/
 theorem wp_post (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     {exp new : BitVec 32} (hpk : PostOk exp new) {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : Option (BitVec 32) × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (∀ q, ((∀ all, (all = true → new.toNat % 65536 ≤ new.toNat / 65536) →
@@ -1253,8 +1251,7 @@ theorem wp_post (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
         P.inv (upd G₁ t (C.set g (afterSRead sh c b))) m' → Q (some b, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC (n := 32) succ fail 4 C.S.ptr exp new : CM Tgt σ _).run s) Q G m n :=
-  FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
-    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
+  FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA _hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
@@ -1271,7 +1268,7 @@ theorem wp_postAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
     (hdec : ∀ b : BitVec 32, SOk b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
     {succ fail : AtomicOrder} {exp new : α}
     (hpk : PostOk (Packed.toBits exp) (Packed.toBits new)) {sh : Array Word.Entry} {c : VClock}
-    (hg : C.ph g = .sl sh c) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .sl sh c) (hi : P.inv (upd G t g) m)
     {Q : Option α × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
       (∀ q, ((∀ all, (all = true →
@@ -1284,8 +1281,7 @@ theorem wp_postAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
         P.inv (upd G₁ t (C.set g (afterSRead sh c b))) m' → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakAsC succ fail 4 C.S.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n :=
-  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl))
-    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
+  FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA _hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
@@ -1300,15 +1296,14 @@ theorem wp_postAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
 
 /-- The signaller's `epoch += 1` (release) at `inc q nw h`: it is at `wk nw q h`. -/
 theorem wp_bump (hC : L.Fits (C.prim L) P U ok) {q nw : Nat} {sh : Array Word.Entry}
-    (hg : C.ph g = .inc q nw sh) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (hg : C.ph g = .inc q nw sh)
     (hi : P.inv (upd G t g) m) {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' o, m'.current = t →
       P.inv (upd G₁ t (C.set g (.wk nw q sh))) m' → Q (o, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .add false .release 4 C.Ep.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
       Q G m n :=
-  FLock.wp_wordRmw hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl))
-    (by rcases hgo with hgo | hgo <;> rw [hgo] <;> decide) hi
+  FLock.wp_wordRmw hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hi
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hwL hY hv _ hh _ hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct
@@ -1358,14 +1353,14 @@ after a wake it is out; after a spurious `EINTR` (macOS; nobody woken) it is sti
 (std wakes again). -/
 theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} {q : Nat} {sh : Array Word.Entry}
-    (hg : C.ph g = .wk 1 q sh) (hgone : L.ph g ≠ .gone) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .wk 1 q sh) (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j) ∧ C.S.Prefix sh m' ∧ P.inv (upd G₁ t (C.set g .out)) m' ∨
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake C.Ep.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n :=
-  FLock.wp_wordOsWake hC (hC.wAp (.inr rfl)) hgone hi fun k hk G₁ rX m₁ hg₁ hU hwL =>
+  FLock.wp_wordOsWake hC (hC.wAp (.inr rfl)) hi fun k hk G₁ rX m₁ hg₁ hU hwL =>
     ⟨fun cs m' hr hL => by
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
       obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hwL hr' hL
@@ -1633,13 +1628,13 @@ theorem wp_osWaitEp (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
 lock's code): it reads a write `i'` its view allows, at or after its saved one (`Inv.ep_floor`),
 and saves it (`Inv.reload`). -/
 theorem wp_loadEp (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
-    (hg : C.ph g = .reg i jr true e) (hgo : L.ph g = .out) (hi : P.inv (upd G t g) m)
+    (hg : C.ph g = .reg i jr true e) (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b i', m'.current = t →
       P.inv (upd G₁ t (C.set g (.reg i' jr true b))) m' → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) .acquire 4 C.Ep.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) (by rw [hgo]; decide) hi
+  FLock.wp_wordLoad hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hi
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct

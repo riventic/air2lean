@@ -326,7 +326,7 @@ theorem loop56_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     dsimp only
     rw [hps]
     refine WP.bind (FCond.wp_consumeAs hC condS_dec (by rw [condS_bits]; omega)
-      (condS_take hb hs) gR_ph (gR_lph hC) hi
+      (condS_take hb hs) gR_ph hi
       fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' r hd hb' hi₁ => ?_⟩)
     · -- the signal taken: `lock`
       rw [gR_out hC hgx] at hi₁
@@ -399,11 +399,11 @@ theorem loop23_body (hC : C.Fits L P U ok) (hcost : P.cost = none)
   refine WP.bind (WP.callMC_ptrProject (hF.projE hi₁) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_loadEp hF gR_ph (gR_lph hF) hi₁
+  refine WP.bind (FCond.wp_loadEp hF gR_ph hi₁
     fun k₂ hk₂ G₂ m₂ v i' hc₂ hi₂ => ?_)
   rw [gR_set] at hi₂
   simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (FCond.wp_loadSAs hF condS_dec gR_ph (gR_lph hF) hi₂
+  refine WP.bind (FCond.wp_loadSAs hF condS_dec gR_ph hi₂
     fun k₃ hk₃ G₃ m₃ b r hc₃ hd hb hi₃ => ?_)
   obtain rfl := condS_eq hd
   rw [FCond.afterRead, gR_set] at hi₃
@@ -576,7 +576,7 @@ theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     dsimp only
     rw [hps]
     refine WP.bind (FCond.wp_consumeAs hC condS_dec (by rw [condS_bits]; omega)
-      (condS_take hb hs) gR_ph (gR_lph hC) hi
+      (condS_take hb hs) gR_ph hi
       fun k hk G₁ m₁ hc₁ => ⟨fun hi₁ => ?_, fun b' r hd hb' hi₁ => ?_⟩)
     · -- the signal taken: `lock`
       rw [gR_out hC hgx] at hi₁
@@ -650,11 +650,11 @@ theorem loop22_body (hC' : C.Fits L P U ok) (hcost : P.cost = none)
   refine WP.bind (WP.callMC_ptrProject (hC.projE hi₁) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_loadEp hC gR_ph (gR_lph hC) hi₁
+  refine WP.bind (FCond.wp_loadEp hC gR_ph hi₁
     fun k₂ hk₂ G₂ m₂ v i' hc₂ hi₂ => ?_)
   rw [gR_set] at hi₂
   simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (FCond.wp_loadSAs hC condS_dec gR_ph (gR_lph hC) hi₂
+  refine WP.bind (FCond.wp_loadSAs hC condS_dec gR_ph hi₂
     fun k₃ hk₃ G₃ m₃ b r hc₃ hd hb hi₃ => ?_)
   obtain rfl := condS_eq hd
   rw [FCond.afterRead, gR_set] at hi₃

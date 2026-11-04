@@ -311,9 +311,11 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
     L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) rX m'
-  /-- A stop of any thread (`current := t`) keeps `U`: a thread without `ok` (one inside another
-  sync object's code, which runs no lock code) stops too. -/
-  atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }
+  /-- A stop of any thread (`current := t`, a thread that exists) keeps `U`: a thread without `ok`
+  (one inside another sync object's code, which runs no lock code) stops too, and so does a thread
+  that left the lock (`gone`) and runs other sync code. The scheduler resumes only a thread that
+  exists (`Proto.Safe`), so the stop knows `t < m.threads.size`. -/
+  atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t }
   /-- A finished or joinable thread is out of the primitive's code. -/
   kfin : ∀ g, P.fin g → K.pl.ph g = K.out
   kjoins : ∀ g, P.joins g → K.pl.ph g = K.out
@@ -354,7 +356,7 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
       U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
-    (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t })
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m') :
     L.Fits (FPrim.empty γ) P U ok where
   inv := inv
@@ -382,22 +384,18 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
   kstep t G rX m G' rX' m' h hU := h.elim (fun h => nomatch h)
     (fun h => tick t G rX m G' rX' m' h hU)
 
-/-- **A protocol with the lock alone**, where every thread may run the lock's code: a stop keeps
-`U` as a step of the lock's code that changes nothing. -/
+/-- **A protocol with the lock alone**, where every thread may run the lock's code. -/
 theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
       (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m') :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ hg _ => stable G rX m m' t p h hg) (fun G rX m t hph hU => by
-      have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
-        (LockWord.Step.same rfl rfl rfl rfl rfl rfl rfl) (fun h1 h2 => absurd h1 h2)
-      rwa [upd_set_self] at this)
-    tick
+    (fun G rX m m' t p h _ hg _ => stable G rX m m' t p h hg) atStop tick
 
 /-! ## Basic facts -/
 
