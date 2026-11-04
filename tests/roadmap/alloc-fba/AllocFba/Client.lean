@@ -9,8 +9,7 @@ import ZigLean.Sep.Full.WitnessStart
 `client_spec`: the generated client is walked by `fsym`, using the generated wrappers' contracts
 over `FAllocSpec`, the initialized FBA invariant and its reset contract. The buffer's authority is
 a positive extent share at bound 12 and an untagged claim on `[0,12)`; the other four bytes remain
-the client's. Stack allocation is paid by the running thread's token and room resource (the
-legacy client's stack-room premise, restated as a resource).
+the client's. Stack allocation is paid by the running thread's token and room resource.
 
 `client_start` is the strength example: from the program's actual start memory (`Gen.mem0`) with
 a stack budget, the client runs to a result that satisfies `Res`. The precondition of
@@ -34,8 +33,8 @@ def Res (v : BitVec 8) (r : BitVec 32) : Prop :=
   r = 1 ∨ r = 2 ∨ r = 3 ∨ r = 4 ∨ r = expected v
 
 set_option maxHeartbeats 4000000 in
-/-- The full-state client contract: the old stack-room premise is an owned resource, and the
-buffer carries only the extent share and claim approved for the native invariant. -/
+/-- The full-state client contract: the stack room is an owned resource, and the buffer carries
+only the extent share and claim approved for the native invariant. -/
 theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
     (hs : bs.size = 16) (hA : A₀ + 16 ≤ 2 ^ 64) :
     FTotalTriple

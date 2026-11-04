@@ -2,10 +2,11 @@
 # The translated FixedBufferAllocator against the full-state allocator specification (P4a):
 # the retained translation is the fresh one; the entries satisfy FAllocSpec (Full.lean), the
 # generated std.mem.Allocator wrappers meet their contracts over it (Wrappers.lean) and the client
-# is proved through them (Client.lean), all walked by the general tactic fsym; the client
-# evaluates to the native results; a mutated alloc fails the proof (mutant.sh). Every Lean file is
-# a module of the fixture's library AllocFba (tests/roadmap/lakefile.toml), built by Lake with what it imports
-# (scripts/fixtures.py; run it under scripts/build-guard.py). Needs a built translator; runs no
+# is proved through them (Client.lean, also from the program's start), all walked by the general
+# tactic fsym; the client evaluates to the native results; a mutated alloc fails the proof
+# (mutant.sh). Every Lean file is a module of the fixture's library AllocFba
+# (tests/roadmap/lakefile.toml), built by Lake with what it imports (scripts/fixtures.py; run it
+# under scripts/build-guard.py). Needs a built translator; runs no
 # compiler. With AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and
 # compares it with expected.txt.
 set -euo pipefail
