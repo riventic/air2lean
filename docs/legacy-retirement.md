@@ -35,7 +35,7 @@ replacement named below is on main, except where the row says it is not.
 | file | reason | legacy items it uses | full-state replacement | waits for |
 | --- | --- | --- | --- | --- |
 | Proofs/Sync/RwLockSnapshotPair | names `TTriple` | `TTriple.{alloc,storeAt,load}` under `WP.liftM_owned`; RwLock's protocol (`RwContract`) | `FOwned` + fsym WP mode; an `RwLockImpl` contract (none on main) | RwLock |
-| Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's `wlock_spec`/`E.Spec` | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
+| Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's protocol and `E.Spec` (`acquire_shared`, `read_with_facts`) | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
 | Proofs/Sync/RwLock | names `TTriple` | legacy `Lock`/`Proto` protocol, Conc/Word `Word.Op`/`Keep`, WeakWord, `TTriple.load/store`, local `Sem.Spec` (the semaphore as an abstract part `E`) | `FLock`/`MutexImpl` for its inner `Io.Mutex`; **`SemImpl` (#575, open)** for its semaphore; `RwLockImpl` (none) | #575 SemImpl |
 | Proofs/Sync/Mailbox | names `TTriple` | `SemContract` (Proofs/Sync/Contracts), `TTriple.{store,alloc,storeAt,load}` | **`SemImpl` (#575, open)**; `FOwned` | #575 SemImpl |
 | Proofs/Sync/SemCounter | names `TTriple` | Semaphore's kit | `SemImpl` (#575) | L10i |
@@ -49,7 +49,7 @@ replacement named below is on main, except where the row says it is not.
 | ZigLean/Conc/Lock | imports Conc/Csl | `Lock`, `Fits`, `FitsOn`, `Step` | `FLock` (Full/Lock, Full/LockWord) | LockRules |
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
 | ZigLean/Conc/Own | imports Sep/Block | `TTriple` | `FTriple`/`FOwned` | Csl, Witness |
-| ZigLean/Sep/Block | imports Sep/Triple | `Mem.SameThreads` | Full/Block | Conc/Own; then D-e |
+| ZigLean/Sep/Block | imports Sep/Triple | `Triple.alloc`, `Triple.free` (`Mem.SameThreads` is base vocabulary, Sep/Base/Block) | `FTriple.alloc'`/`allocStack'` (Full/Block) | Conc/Own (`TTriple.alloc/free`); then D-e |
 | ZigLean/Sep/Triple, Loop, Total | names `Triple` / imports | `Triple`, `TotalTriple`, loop rules | `FTriple`/`FTotalTriple` | D-e (decision 4). No other module imports them; once Conc/Own is gone they are an island. |
 
 **Hidden users** (not in `legacy_users`, because the scanner matches only direct imports of
