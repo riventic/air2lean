@@ -107,7 +107,8 @@ def SigStep (t : ThreadId) : CPh → CPh → Mem → Mem → Prop
 those out of the busy code (`ok` reads no other place: a thread out of the busy code runs lock
 code). A step of its code at a word `W` is an `MStep` with the stepping thread's transition
 (`CPh.Next`), its lock place and resource (the same, or `out`/`away` around a futex wait: only a
-waiter goes `away`), the epoch's writes (they change only at a signaller's `epoch += 1`, its
+waiter goes `away`, and only a registered waiter comes back from it: a thread in another
+primitive's futex wait does not step in this one's code), the epoch's writes (they change only at a signaller's `epoch += 1`, its
 step `inc q n h → wk n q h`), and a signaller's entry and post as the code takes them
 (`SigStep`). A thread steps on its
 own part (a stack block of the condition's code) out of the lock's code or holding the lock. -/
@@ -116,7 +117,8 @@ abbrev prim (L : FLock γ) : FPrim γ :=
     (fun W => W = C.S ∨ W = C.Ep) (C.Inv L)
     (fun W t g p q h m m' => CPh.Next (C.ph g) p ∧
       ((q = L.ph g ∧ h = L.held g) ∨
-        ((L.ph g = .out ∨ L.ph g = .away) ∧ (q = .out ∨ (q = .away ∧ p.waits = true)) ∧
+        ((L.ph g = .out ∨ (L.ph g = .away ∧ (C.ph g).isReg = true)) ∧
+          (q = .out ∨ (q = .away ∧ p.waits = true)) ∧
           h = rnil)) ∧
       C.MStep W t m m' ∧
       (C.Ep.hist m' = C.Ep.hist m ∨ ∃ q n h, C.ph g = .inc q n h ∧ p = .wk n q h) ∧
@@ -296,6 +298,26 @@ theorem waiters (hs : C.MStep W t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.wai
     · exact .inr hw
   | wake c cs h => rw [Proto.modify_ok h] at hw; exact .inl (Array.mem_filter.mp hw).1
   | _ => exact .inl hw
+
+/-- A step of the condition's code keeps the queue at another futex `p` exactly, when a thread
+queued at `p` is queued only there (`hone`, for the wake: `FLock.futexWake_waitersAt`). -/
+theorem waiters_at (hs : C.MStep W t m m') {p : Ptr} (hp : p ≠ C.Ep.ptr)
+    (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 = p) :
+    m'.waiters.filter (·.2 == p) = m.waiters.filter (·.2 == p) := by
+  cases hs with
+  | @op M hv hc hop _ _ =>
+    have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
+      exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
+    rw [hstep.waiters]
+  | @sleep M _ _ hr _ _ =>
+    subst hr
+    apply Array.toList_inj.mp
+    simp only [Array.toList_filter, Array.toList_push, List.filter_append, List.filter_cons,
+      List.filter_nil, beq_eq_false_iff_ne.mpr (Ne.symm hp), Bool.false_eq_true, ↓reduceIte,
+      List.append_nil]
+    rfl
+  | wake c cs h => exact FLock.futexWake_waitersAt (m := { m with current := t }) hp hone h
+  | _ => rfl
 
 theorem word {W' : Word 32 4} (hs : C.MStep W t m m') (hok : W'.Ok m)
     (hW : W' = W ∨ W.b ≠ W'.b ∨ W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ W.o)
@@ -1300,9 +1322,9 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
     have hI' : C.Inv L (upd (upd G t g) t (L.set g .away rnil)) m :=
       (hF.wInv _ _ _ hU).other (t := t) (g' := L.set g .away rnil) (by rw [upd_self, hga])
         (fun h => by rw [upd_self, hg] at h; simp [CPh.busy, CPh.crit, CPh.sig] at h)
-        (fun h => by rw [upd_self, hgo] at h; cases h)
+        (fun _ h => by rw [upd_self, hgo] at h; cases h)
         (fun h => by rw [upd_self] at h; exact (hF.role_l () g .away rnil).mpr h)
-        rfl rfl rfl (fun w hw _ => .inl hw) (fun _ _ h => h) (Nat.le_refl _)
+        rfl rfl rfl (fun w hw _ => .inl hw) (fun _ _ _ h => h) (Nat.le_refl _)
         (fun _ => VClock.le_refl _)
     have := hF.wStep (G := upd G t g) (rY := rY) (m := m) (m' := m) (t := t) (p := C.ph g)
       (q := .away) (h := rnil) (.inr rfl) ⟨by rw [upd_self]; exact CPh.Next.refl _,
@@ -1371,7 +1393,7 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
     have hst := hF.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t)
       (p := afterWait i jr e) (q := .out) (h := rnil) (.inr rfl)
       ⟨by rw [ht hg₁]; exact ⟨rfl, Nat.le_refl _⟩,
-        .inr ⟨.inr (by rw [hg₁, L.ph_set]), .inl rfl, rfl⟩, hms, .inl hEh,
+        .inr ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [ht hg₁]; rfl⟩, .inl rfl, rfl⟩, hms, .inl hEh,
         by rw [ht hg₁]; trivial⟩ hU hY (by
         rw [hgq]
         have := hI.ret (t := t) (g' := C.set g (afterWait i jr e)) (ht hg₁) (C.ph_set _ _) hSh hEh
@@ -1503,10 +1525,10 @@ theorem wp_liftPart (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α}
       have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
         have := (hC.wInv _ _ _ hU).other (t := t) (g' := L.setPart g r')
           (by rw [upd_self, hC.ph_part]) (fun _ => by rw [upd_self, L.ph_setPart])
-          (fun h => by rw [L.ph_setPart]; rwa [upd_self] at h)
+          (fun _ h => by rw [L.ph_setPart]; rwa [upd_self] at h)
           (fun h => by rw [upd_self] at h; exact (hC.role_part () _ _).mpr h) hhS hhE
           (by rw [hs.waiters]) (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
-          (fun _ _ hw => by rw [hs.woken]; exact hw) (by rw [hs.threads]; exact Nat.le_refl _)
+          (fun _ _ _ hw => by rw [hs.woken]; exact hw) (by rw [hs.threads]; exact Nat.le_refl _)
           hs.clock
         rwa [upd_upd] at this
       have hU' := hC.wOwn (G := upd G t g) (t := t) (r := r') (.inl rfl)

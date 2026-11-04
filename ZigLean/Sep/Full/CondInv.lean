@@ -1425,18 +1425,21 @@ theorem Inv.stay {G : ThreadId → γ} {m m' : Mem} (hI : C.Inv L G m)
   rwa [upd_same] at this
 
 /-- **A step of `t` outside the condition's code** (another component's code, e.g. an event's):
-`t` keeps its place in the condition, its lock place in the condition's busy code, and stays in
-a futex wait it is in (`hlaw`: lock place `away`); both words' writes and the epoch's part of the
-futex queue stay; a new queue entry off the mutex is `t`'s, out of the waiter's places; the
-registered waiters keep their pending wakes; the threads and clocks only grow. -/
+`t` keeps its place in the condition, its lock place in the condition's busy code, and as a
+registered waiter stays in a futex wait it is in (`hlaw`: lock place `away`); both words' writes
+and the epoch's part of the futex queue stay; a new queue entry off the mutex is `t`'s, out of the
+waiter's places; the registered waiters keep their pending wakes (`t` only while it is `away`:
+elsewhere its claim does not rest on one); the threads and clocks only grow. -/
 theorem Inv.other {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (hI : C.Inv L G m)
     (hph : C.ph g' = C.ph (G t)) (hlph : (C.ph (G t)).busy = true → L.ph g' = L.ph (G t))
-    (hlaw : L.ph (G t) = .away → L.ph g' = .away) (hsxt : C.sx (G t) → C.sx g')
+    (hlaw : (C.ph (G t)).isReg → L.ph (G t) = .away → L.ph g' = .away)
+    (hsxt : C.sx (G t) → C.sx g')
     (hS : C.S.hist m' = C.S.hist m) (hE : C.Ep.hist m' = C.Ep.hist m)
     (hwq : m'.waiters.filter (·.2 == C.Ep.ptr) = m.waiters.filter (·.2 == C.Ep.ptr))
     (hwt : ∀ w ∈ m'.waiters, w.2 ≠ L.ptr →
       w ∈ m.waiters ∨ (w.1 = t ∧ (C.ph (G t)).waits = false))
-    (hwk : ∀ u, (C.ph (G u)).isReg → m.woken.contains u = true → m'.woken.contains u = true)
+    (hwk : ∀ u, (C.ph (G u)).isReg → (u = t → L.ph (G t) = .away) →
+      m.woken.contains u = true → m'.woken.contains u = true)
     (hth : m.threads.size ≤ m'.threads.size)
     (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
     C.Inv L (upd G t g') m' := by
@@ -1452,7 +1455,7 @@ theorem Inv.other {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
       exact ⟨h1, h2, VClock.le_trans h3 (hclk t), h4, VClock.le_trans h5 (hclk t)⟩)
     (fun h => by
       obtain ⟨i, jr, e, h1⟩ := hI.qd_reg h
-      exact ⟨i, jr, e, by rw [hph]; exact h1, hlaw (hI.qd_away h)⟩)
+      exact ⟨i, jr, e, by rw [hph]; exact h1, hlaw (by rw [h1]; rfl) (hI.qd_away h)⟩)
     (fun hw w hm h0 => by
       by_cases hl : w.2 = L.ptr
       · exact .inr hl
@@ -1467,11 +1470,14 @@ theorem Inv.other {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (h
       · rfl
       · exact absurd (hI.crit1 u t hc h) hu)
     (fun h => Nat.lt_of_lt_of_le (hI.ex t (by rwa [hph] at h)) hth)
-    (hI.cnt_frame hS (by rw [hE]) (qd_filter hwq) (fun u _ => hwk u) (by rw [hph]) (by rw [hph])
+    (hI.cnt_frame hS (by rw [hE]) (qd_filter hwq) (fun u hu hr => hwk u hr fun e => absurd e hu)
+      (by rw [hph]) (by rw [hph])
       (by
         unfold cl; rw [upd_self, hph]
-        exact Nat.add_le_add_left (regCl_le (qd_filter hwq t) (Nat.le_of_eq (by rw [hE])) fun hr ha hw =>
-          ⟨by rw [beq_iff_eq] at ha ⊢; exact hlaw ha, hwk t hr hw⟩) _))
+        exact Nat.add_le_add_left (regCl_le (qd_filter hwq t) (Nat.le_of_eq (by rw [hE]))
+          fun hr ha hw => by
+            rw [beq_iff_eq] at ha
+            exact ⟨by rw [beq_iff_eq]; exact hlaw hr ha, hwk t hr (fun _ => ha) hw⟩) _))
   have hs : (C.ph (G t)).sig := by
     rcases h with h | h
     · rwa [hph] at h
