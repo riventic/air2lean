@@ -15,23 +15,30 @@ Zig version proves (`CondImpl`).
 **The window** (PR397 ruling 6264821278): a waiter's futex compare is against its saved epoch
 value, so it can miss its wake if exactly a multiple of `2^32` epoch increments happen inside
 its save-to-enqueue window. The contract asks the protocol for fewer: every registered waiter
-`reg i …` has `(C.Ep.hist m).size ≤ i + 2^32` in every state its rest allows (`Fits.win`). A
-client with a bounded run discharges it from its cost or admission accounting; a singleton
-client (one increment per registration) trivially. It is not a premise ID and not a global cap.
+`reg i …` has `(C.Ep.hist m).size ≤ i + 2^32` in every state its rest allows (`Fits.win`). The
+client bounds it in its rest `U`, by its own ghost accounting (`CondImpl` has no cost resource,
+`P.cost = none`). The primitive helps: a signaller reaches `inc` only at its own post, the step
+that pushes its state write (`SigStep`, `SigStep.inc_fresh`), and each `epoch += 1` is its step
+`inc → wk` (`FCond.prim`); so each epoch write follows a post of its own, and a client that
+bounds its posts bounds the epoch writes (the Handoff client: one post, at most two epoch
+writes). The bound counts from the waiter's saved write, which may lag behind the newest (its
+load reads any write its view allows), so counting posts per registration is not enough for a
+waiter that waits again. It is not a premise ID and not a global cap.
+
+**Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.0) and
+`Thread.Condition.wait` (0.15.2). The cancelable `Io.Condition.wait` (and `waitTimeout` in
+0.17.0) leaves on cancel with a waiter's `waiters -= 1` (in 0.17.0 `deregister`, with an
+`epoch += 1`), which this primitive does not admit: a client calling them has no contract and is rejected (register C14).
 
 **The client's part.** Roles: `FCond.sx` are the ghost values that may signal (`Inv.sx`). A
-thread in the condition's critical code (`en`, `ld`) holds the mutex (`Inv.crit`); one between
-its post and its wake (`inc`, `wk`) is outside or holding the mutex (`Inv.lp`); both run no lock
+thread in the condition's critical code (`en`, `ld`) holds the mutex (`Inv.crit`); one in its
+signal code (`sl`, `inc`, `wk`) is outside or holding the mutex (`Inv.lp`); both run no lock
 code, so a client's `Fits` `ok` excludes them (`CPh.busy`, `Fits.ok_calm`) and a lock step keeps
 the invariant (`Inv.lstep`). A step of the condition's code keeps the client's rest `U` given
 the code's transition (`CPh.Next`; the entry `out → en` is the client's `hent` of
-`CondImpl.wait_wp`) and the epoch's writes (they change only at a signaller's `epoch += 1`,
-`FCond.prim`, `Fits.wStep`).
-
-WORK IN PROGRESS (PR #599): the step lemmas of the singleton module and the `wp_*` rules are
-being ported onto `CondInv` (git history of this file on `main`); the clients
-(`Proofs/Sync/Cond.lean`, `Proofs/Threadsync/Cond.lean`, `Proofs/Handoff/*`,
-`SepAuto.WPCond`) move in the same PR.
+`CondImpl.wait_wp`) and the epoch's writes (they change only at a signaller's `epoch += 1`, its
+step `inc → wk`: `FCond.prim`, `Fits.wStep`), and a signaller's entry and post are the code's
+(`SigStep`).
 -/
 
 namespace Zig
@@ -82,14 +89,28 @@ inductive MStep (W : Word 32 4) (t : ThreadId) (m : Mem) : Mem → Prop
       ((Thread.futexWake C.Ep.ptr c cs).run { m with current := t }).run =
         some (.ok ((), m')) → MStep W t m m'
 
+/-- **A signaller's entry and post, as the code takes them** (thread `t` from the place `a` to
+`b`, the memory from `m` to `m'`): the entry `out → sl h c` takes the call snapshot, the state's
+writes and `t`'s clock at the entry (`Fits.enterSl`); the post `sl → inc q n h` is the step that
+pushes the state write `q`, `t`'s own RMW (`Fits.afterPost`). The other transitions are not
+constrained here. Without it a signaller could take `sl → inc q` again at an old post `q` by a
+ghost-only step and raise the epoch without bound, past every registered waiter's window
+(`Fits.win`); with it, and the epoch's writes only at `inc → wk` (`prim`), each `epoch += 1`
+follows a post of its own (`SigStep.inc_fresh`). -/
+def SigStep (t : ThreadId) : CPh → CPh → Mem → Mem → Prop
+  | .out, .sl h c, m, _ => h = C.S.hist m ∧ c = m.clocks[t]!
+  | .sl _ _, .inc q _ _, m, m' => q = (C.S.hist m).size ∧ ∃ x, C.S.hist m' = (C.S.hist m).push x
+  | _, _, _, _ => True
+
 /-- **The condition as a primitive next to its mutex `L`** (`FPrim.ofWords`; a protocol keeps it:
 `C.Fits L P U ok`). Its words are the state and the epoch; the role is `sx`; the calm places are
 those out of the busy code (`ok` reads no other place: a thread out of the busy code runs lock
 code). A step of its code at a word `W` is an `MStep` with the stepping thread's transition
 (`CPh.Next`), its lock place and resource (the same, or `out`/`away` around a futex wait: only a
-waiter goes `away`), and the epoch's writes (they change only at a signaller's `epoch += 1`, at
-`inc`). A thread steps on its own part (a stack block of the condition's code) out of the lock's
-code or holding the lock. -/
+waiter goes `away`), the epoch's writes (they change only at a signaller's `epoch += 1`, its
+step `inc q n h → wk n q h`), and a signaller's entry and post as the code takes them
+(`SigStep`). A thread steps on its
+own part (a stack block of the condition's code) out of the lock's code or holding the lock. -/
 abbrev prim (L : FLock γ) : FPrim γ :=
   FPrim.ofWords L C.toFPlace .out (fun p => p.busy = false) (fun (_ : Unit) g => C.sx g)
     (fun W => W = C.S ∨ W = C.Ep) (C.Inv L)
@@ -97,7 +118,9 @@ abbrev prim (L : FLock γ) : FPrim γ :=
       ((q = L.ph g ∧ h = L.held g) ∨
         ((L.ph g = .out ∨ L.ph g = .away) ∧ (q = .out ∨ (q = .away ∧ p.waits = true)) ∧
           h = rnil)) ∧
-      C.MStep W t m m' ∧ (C.Ep.hist m' = C.Ep.hist m ∨ ∃ q n h, C.ph g = .inc q n h))
+      C.MStep W t m m' ∧
+      (C.Ep.hist m' = C.Ep.hist m ∨ ∃ q n h, C.ph g = .inc q n h ∧ p = .wk n q h) ∧
+      C.SigStep t (C.ph g) p m m')
     (fun q => q = .out ∨ q = .holds)
 
 /-- **A protocol that keeps the condition** next to its mutex `L`: `FLock.Fits` with the
@@ -110,6 +133,44 @@ structure Fits (L : FLock γ) {Tgt : Type} (P : Proto Tgt γ)
     (C.Ep.hist m).size ≤ i + 4294967296
 
 variable {C}
+
+/-- A step that keeps the place is not a signaller's entry or post. -/
+theorem SigStep.refl {t : ThreadId} (a : CPh) (m m' : Mem) : C.SigStep t a a m m' := by
+  cases a <;> trivial
+
+/-- **A signaller's post is its own new write** (for a client's rest `U`, `Fits.kstep`): a step
+of the condition's code (`prim`) by `t` from `sl sh c` to `inc q n h`, from a state with the
+invariant to one with it (`G'` changes only `t`), pushes the state write `q`, after the call's
+writes (`sh.size ≤ q`), and it is a post: `signals` rose (`waiters` is kept by the count). -/
+theorem SigStep.inc_fresh {L : FLock γ} {G G' : ThreadId → γ} {t : ThreadId} {m m' : Mem}
+    {sh : Array Word.Entry} {c : VClock} {q n : Nat} {h : Array Word.Entry}
+    (ht : C.ph (G t) = .sl sh c) (ht' : C.ph (G' t) = .inc q n h)
+    (hG : ∀ u, u ≠ t → G' u = G u) (hs : C.SigStep t (C.ph (G t)) (C.ph (G' t)) m m')
+    (hI : C.Inv L G m) (hI' : C.Inv L G' m') :
+    q = (C.S.hist m).size ∧ (∃ x, C.S.hist m' = (C.S.hist m).push x) ∧ sh.size ≤ q ∧ 0 < q ∧
+      sOf (C.S.hist m')[q - 1]! < sOf (C.S.hist m')[q]! := by
+  rw [ht, ht'] at hs
+  obtain ⟨hq, x, hx⟩ := hs
+  have hpos := hI.spos
+  have hsz : (C.S.hist m').size = q + 1 := by rw [hx, hq]; simp
+  have hprev : (C.S.hist m')[q - 1]! = C.lastS m := by
+    rw [hx, hq]; exact FEvent.get_push_lt (by omega)
+  have hlast : C.lastS m' = (C.S.hist m')[q]! := by
+    unfold FCond.lastS; rw [hsz, Nat.add_sub_cancel]
+  have hnr : ∀ T, C.nreg G' T = C.nreg G T := fun T => tsum_congr fun u _ => by
+    by_cases hu : u = t
+    · subst hu; rw [ht, ht']; rfl
+    · rw [hG u hu]
+  obtain ⟨T, hT, hw, -⟩ := hI.cnt
+  obtain ⟨T', hT', hw', -⟩ := hI'.cnt
+  have hww : wOf (C.S.hist m')[q]! = wOf (C.S.hist m')[q - 1]! := by
+    rw [← hlast, hprev, hw, hw', ← nreg_ext hT (Nat.le_max_left T T'),
+      ← nreg_ext hT' (Nat.le_max_right T T'), hnr]
+  have hst := hI'.steps (q - 1) (by omega)
+  rw [show q - 1 + 1 = q by omega] at hst
+  refine ⟨hq, ⟨x, hx⟩, ?_, by omega, ?_⟩
+  · have := (hI.snap t sh (by rw [ht]; rfl)).size_le; omega
+  · unfold SStep at hst; omega
 
 /-! ## A step of the condition's code, as the memory sees it
 
@@ -404,11 +465,13 @@ theorem _root_.Zig.Full.FLock.Fits.backC (hC : L.Fits (C.prim L) P U ok)
     {G₁ : ThreadId → γ}
     {rY : Res} {m₁ m' : Mem} {g : γ} {p : CPh} {W : Word 32 4}
     (hW : W = C.S ∨ W = C.Ep) (hg₁ : G₁ t = g) (hn : CPh.Next (C.ph g) p)
+    (hsg : C.SigStep t (C.ph g) p m₁ m')
     (hU : U G₁ (rsum (W.cellsR m₁) rY) m₁) (hY : ∀ l, W.In l → rY.heap l = none)
-    (hs : C.MStep W t m₁ m') (hEp : C.Ep.hist m' = C.Ep.hist m₁ ∨ ∃ q n h, C.ph g = .inc q n h)
+    (hs : C.MStep W t m₁ m')
+    (hEp : C.Ep.hist m' = C.Ep.hist m₁ ∨ ∃ q n h, C.ph g = .inc q n h ∧ p = .wk n q h)
     (hL : L.Inv G₁ (rsum (W.cellsR m') rY) m') (hI : C.Inv L (upd G₁ t (C.set g p)) m') :
     P.inv (upd G₁ t (C.set g p)) m' :=
-  hC.back hW hg₁ ⟨hn, .inl ⟨rfl, rfl⟩, hs, hEp⟩ hU hY hL hI
+  hC.back hW hg₁ ⟨hn, .inl ⟨rfl, rfl⟩, hs, hEp, hsg⟩ hU hY hL hI
 
 /-- **A thread enters the wait** (`out` → `en`) holding the mutex: `hroom`, fewer than `65535`
 waiters are registered (the state's `u16` count; a protocol bounds its waiters); `hent`, the
@@ -464,7 +527,7 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
       obtain ⟨hI, hnq⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide) hop.waiters hL
       have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
       refine h k hk G₁ m' b j (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
-        (by rw [hg]; exact True.intro) hU hY hms (.inl hh) hL ?_)
+        (by rw [hg]; exact True.intro) (by rw [hg]; trivial) hU hY hms (.inl hh) hL ?_)
       have hI' := hI.quiet (t := t) (g' := C.set g (.ld j b)) (m' := m')
         (by rw [hg₁, hg]; trivial) (by rw [C.ph_set]; trivial)
         (hC.keepS hU hms) hh hop.waiters hop.woken hop.threads hop.clock hnq
@@ -503,8 +566,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok)
   have hsw := hI.s_le_w
   unfold wOf at hroom hsw; unfold sOf at hsw
   rw [hold] at hroom hsw
-  refine ⟨⟨hroom, hsw⟩, hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, rfl, rfl⟩) hU hY hms
-    (.inl (hC.keepE hU hms)) hL ?_⟩
+  refine ⟨⟨hroom, hsw⟩, hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, rfl, rfl⟩)
+    (by rw [hg]; trivial) hU hY hms (.inl (hC.keepE hU hms)) hL ?_⟩
   exact hI.register (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh
     (by rw [hold]; exact FEvent.rmwEnt_val) (VClock.le_refl _) (hC.keepE hU hms) hop.waiters
     hop.woken hop.threads hop.clock
@@ -582,14 +645,15 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadS (hC : L.Fits (C.prim L) P U ok)
   by_cases hs : b.toNat / 65536 = 0
   · have hp : afterRead i jr e b = .reg i jr false e := by simp [afterRead, hs]
     rw [hp]
-    exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, Nat.le_refl _⟩) hU hY hms (.inl hE) hL
-      (hI.loopBack (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh hE hop.waiters hop.woken
-        hop.threads hop.clock hj hfl (by unfold sOf; rw [val_of hv]; exact hs))
+    exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, Nat.le_refl _⟩) (by rw [hg]; trivial)
+      hU hY hms (.inl hE) hL (hI.loopBack (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh hE
+        hop.waiters hop.woken hop.threads hop.clock hj hfl
+        (by unfold sOf; rw [val_of hv]; exact hs))
   · have hp : afterRead i jr e b = .reg i jr true e := by simp [afterRead, hs]
     rw [hp, ← hg, set_of rfl]
     have hI' := hI.stay hh hE (by rw [hop.waiters]) (fun w hw _ => by rw [hop.waiters] at hw; exact hw)
       (fun u _ hw => by rw [hop.woken]; exact hw) (by rw [hop.threads]; exact Nat.le_refl _) hop.clock
-    have := hC.backC (p := C.ph g) (.inl rfl) hg₁ (CPh.Next.refl _) hU hY hms (.inl hE) hL
+    have := hC.backC (p := C.ph g) (.inl rfl) hg₁ (CPh.Next.refl _) (SigStep.refl _ _ _) hU hY hms (.inl hE) hL
       (by rw [set_of rfl, ← hg₁, upd_same]; exact hI')
     rwa [set_of rfl] at this
 
@@ -665,9 +729,9 @@ theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
   obtain ⟨hw1, hs1⟩ := consume_val hs hok
   have hxv : (Word.rmwEnt m' t ord (C.lastS m₁) (exp - 0x10001)).Val (exp - 0x10001) :=
     FEvent.rmwEnt_val
-  exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) hU hY hms (.inl (hC.keepE hU hms)) hL
-    (hI.consume (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh (by rw [val_of hxv]; exact hxv)
-      (by unfold wOf; rw [val_of hxv, val_of hv]; exact hw1)
+  exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) (by rw [hg]; trivial) hU hY hms
+    (.inl (hC.keepE hU hms)) hL (hI.consume (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh
+      (by rw [val_of hxv]; exact hxv) (by unfold wOf; rw [val_of hxv, val_of hv]; exact hw1)
       (by unfold sOf; rw [val_of hxv, val_of hv]; exact hs1)
       (hC.keepE hU hms) hop.waiters hop.woken hop.threads hop.clock)
 
@@ -766,7 +830,7 @@ theorem SigPost.mono {h : Array Word.Entry} {c : VClock} {all : Bool} {m : Mem}
   obtain ⟨hpre, k, hk, hfl, hs⟩ := hp
   exact ⟨hpre, k, hk, hfl, hs.elim .inl fun h => absurd h.1 Bool.noConfusion⟩
 
-/-- **A signal with one waiter** (`signal_wp_one`, maintainer decision 6625654179): if a waiter's
+/-- **A signal with one waiter** (maintainer decision 6625654179): if a waiter's
 registration `jr` happened before the call (`hseen`) and the client's invariant has one waiter
 from it on (`hw1`: every state write from `jr` has `waiters = 1`; the singleton fact the client
 keeps in its rest `U`), the newest state is `(1, 1)`: the waiter is signalled. From `jr` on only
@@ -839,7 +903,8 @@ theorem _root_.Zig.Full.FLock.Fits.enterSl (hC : L.Fits (C.prim L) P U ok) {G : 
         VClock.le_refl _⟩)
   rw [upd_upd] at hI'
   have := hC.backC (.inl rfl) (upd_self G t g) (p := .sl (C.S.hist m) (m.clocks[t]!))
-    (by rw [hgx]; exact True.intro) hU hY .same (.inl rfl) hL (by rw [upd_upd]; exact hI')
+    (by rw [hgx]; exact True.intro) (by rw [hgx]; exact ⟨rfl, rfl⟩) hU hY .same (.inl rfl) hL
+    (by rw [upd_upd]; exact hI')
   rwa [upd_upd] at this
 
 /-- The signaller's place after it read the state value `b` at `sl h c`: out when `b` is served
@@ -879,8 +944,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSl (hC : L.Fits (C.prim L) P U ok)
     have hlp := hI.lp t (by rw [hgt]; rfl)
     obtain ⟨-, hnq⟩ := hC.atOp hU (by rcases hlp with h | h <;> rw [h] <;> decide)
       (by rcases hlp with h | h <;> rw [h] <;> decide) hop.waiters hL
-    exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) hU hY hms (.inl hE) hL
-      (hI.quiet (t := t) (g' := C.set g .out) (m' := m') (by rw [hgt]; trivial)
+    exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) (by rw [hg]; trivial) hU hY hms
+      (.inl hE) hL (hI.quiet (t := t) (g' := C.set g .out) (m' := m') (by rw [hgt]; trivial)
         (by rw [C.ph_set]; trivial) hh hE hop.waiters hop.woken hop.threads hop.clock hnq
         (fun i e h => by rw [C.ph_set] at h; cases h) (fun h => by rw [C.ph_set] at h; cases h)
         (fun h => absurd (C.ph_set _ _) h) (fun _ _ h => by rw [C.ph_set] at h; cases h))
@@ -888,7 +953,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSl (hC : L.Fits (C.prim L) P U ok)
     rw [hp, ← hg, set_of rfl]
     have hI' := hI.stay hh hE (by rw [hop.waiters]) (fun w hw _ => by rw [hop.waiters] at hw; exact hw)
       (fun u _ hw => by rw [hop.woken]; exact hw) (by rw [hop.threads]; exact Nat.le_refl _) hop.clock
-    have := hC.backC (p := C.ph g) (.inl rfl) hg₁ (CPh.Next.refl _) hU hY hms (.inl hE) hL
+    have := hC.backC (p := C.ph g) (.inl rfl) hg₁ (CPh.Next.refl _) (SigStep.refl _ _ _) hU hY hms (.inl hE) hL
       (by rw [set_of rfl, ← hg₁, upd_same]; exact hI')
     rwa [set_of rfl] at this
 
@@ -977,7 +1042,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterPost (hC : L.Fits (C.prim L) P U ok)
     · refine .inr ⟨rfl, hpos, ?_⟩
       rw [hprev]; unfold sOf; rw [hxval, hold]; exact hps
     · exact .inl (by unfold Served wOf sOf; rw [hxval]; exact hall rfl)
-  · refine hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) hU hY hms (.inl hE) hL ?_
+  · refine hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) (by rw [hg]; exact ⟨rfl, _, hh⟩)
+      hU hY hms (.inl hE) hL ?_
     exact hI.post hgt (by rw [C.ph_set]) (by rw [hC.lph, ← hg₁]; exact hlp)
       (by rw [C.sx_set, ← hg₁]; exact hsx) hh (by rw [hxval]; exact hxv)
       (by unfold wOf; rw [hxval, hold]; exact hpw) (by unfold sOf; rw [hxval, hold]; exact hps)
@@ -1063,7 +1129,7 @@ theorem wp_bump (hC : L.Fits (C.prim L) P U ok) {q nw : Nat} {sh : Array Word.En
         (by rcases hrun with ⟨c₀, hr⟩; exact .inr (.inl ⟨c₀, _, _, _, _, _, hr⟩)) hw' (.inr ⟨_, _, hh⟩)
       have hI := hC.wInv _ _ _ hU
       exact h k hk G₁ m' old (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
-        (by rw [hg]; exact ⟨rfl, rfl, rfl⟩) hU hY hms (.inr ⟨_, _, _, hg⟩) hL
+        (by rw [hg]; exact ⟨rfl, rfl, rfl⟩) (by rw [hg]; trivial) hU hY hms (.inr ⟨_, _, _, hg, rfl⟩) hL
         (hI.bump (by rw [hg₁]; exact hg) (by rw [C.ph_set]) (by rw [hC.lph, hg₁])
           (fun h' => by rw [C.sx_set, ← hg₁]; exact h') rfl hv hh (hC.keepS hU hms) hop.waiters
           hop.woken hop.threads hop.clock))
@@ -1083,7 +1149,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterWakeEp (hC : L.Fits (C.prim L) P U ok)
   have hEh : C.Ep.hist m' = C.Ep.hist m₁ := by rw [hm']; rfl
   have hSh : C.S.hist m' = C.S.hist m₁ := by rw [hm']; rfl
   exact ⟨by rw [hm'], (hI.snap t sh (by rw [hg₁, hg]; rfl)).extend (.of_eq hSh),
-    hC.backC (.inr rfl) hg₁ (by rw [hg]; exact True.intro) hU hY (.wake c cs hw)
+    hC.backC (.inr rfl) hg₁ (by rw [hg]; exact True.intro) (by rw [hg]; trivial) hU hY
+      (.wake c cs hw)
       (.inl hEh) (by rw [hcl]; exact hL)
       (hI.wake (by rw [hg₁]; exact hg) (C.ph_set _ _) hc hw)⟩
 
@@ -1171,7 +1238,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadC (hC : L.Fits (C.prim L) P U ok)
     rcases hW with rfl | rfl
     · exact hC.keepE hU hms
     · exact hh
-  have := hC.backC hW hg₁ (CPh.Next.refl _) hU hY hms (.inl hE) hL (by
+  have := hC.backC hW hg₁ (CPh.Next.refl _) (SigStep.refl _ _ _) hU hY hms (.inl hE) hL (by
     rw [C.set_self, ← hg₁, upd_same]
     exact (hC.wInv _ _ _ hU).stay hS hE (by rw [hop.waiters])
       (fun w hw _ => by rw [hop.waiters] at hw; exact hw) (fun u _ hw => by rw [hop.woken]; exact hw)
@@ -1193,7 +1260,8 @@ theorem _root_.Zig.Full.FLock.Fits.retEp (hC : L.Fits (C.prim L) P U ok) {i jr :
   have hnq : C.qd m₁ t = false := qd_false (hL.w.notQ (t := t)
     (show L.ph (G₁ t) ≠ .wait by rw [hg₁, hgo]; decide)
     (show L.ph (G₁ t) ≠ .away by rw [hg₁, hgo]; decide))
-  exact hC.backC (.inr rfl) hg₁ (by rw [hg]; exact ⟨rfl, Nat.le_refl _⟩) hU hY .same (.inl rfl) hL
+  exact hC.backC (.inr rfl) hg₁ (by rw [hg]; exact ⟨rfl, Nat.le_refl _⟩) (by rw [hg]; trivial)
+    hU hY .same (.inl rfl) hL
     ((hC.wInv _ _ _ hU).ret (by rw [hg₁, hg]) (C.ph_set _ _) rfl rfl rfl rfl (fun _ _ => rfl) hnq
       (fun _ => VClock.le_refl _))
 
@@ -1252,7 +1320,8 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
         (fun _ => VClock.le_refl _)
     have := hF.wStep (G := upd G t g) (rY := rY) (m := m) (m' := m) (t := t) (p := C.ph g)
       (q := .away) (h := rnil) (.inr rfl) ⟨by rw [upd_self]; exact CPh.Next.refl _,
-        .inr ⟨.inl (by rw [upd_self]; exact hgo), .inr ⟨rfl, hw⟩, rfl⟩, .same, .inl rfl⟩
+        .inr ⟨.inl (by rw [upd_self]; exact hgo), .inr ⟨rfl, hw⟩, rfl⟩, .same, .inl rfl,
+        by rw [upd_self]; exact SigStep.refl _ _ _⟩
       hU hY (by rw [upd_self, C.set_self]; exact hI')
     rwa [upd_self, C.set_self, upd_upd] at this
   · -- no deadlock
@@ -1277,7 +1346,8 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
       rw [hh]; exact hC.win G₁ _ m₁ hU t i jr false e (ht hg₁)
     have hst := hF.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := C.ph (G₁ t))
       (q := L.ph (G₁ t)) (h := L.held (G₁ t)) (.inr rfl)
-      ⟨CPh.Next.refl _, .inl ⟨rfl, rfl⟩, .sleep hw₀ hct hrecord hh hok₂, .inl hh⟩ hU hY (by
+      ⟨CPh.Next.refl _, .inl ⟨rfl, rfl⟩, .sleep hw₀ hct hrecord hh hok₂, .inl hh,
+        SigStep.refl _ _ _⟩ hU hY (by
         rw [C.set_self, L.set_self, upd_same]
         exact hI₁.sleep (ht hg₁) hv (by rw [hop.woken]; exact hwk)
           (qd_false (by rw [hop.waiters]; exact hnq)) (by rw [hg₁, L.ph_set]) hwin)
@@ -1315,7 +1385,8 @@ theorem waitEpFacts (hC : C.Fits L P U ok) {i jr : Nat} {e : BitVec 32}
     have hst := hF.wStep (G := G₁) (rY := rY) (m := m₁) (m' := M) (t := t)
       (p := afterWait i jr e) (q := .out) (h := rnil) (.inr rfl)
       ⟨by rw [ht hg₁]; exact ⟨rfl, Nat.le_refl _⟩,
-        .inr ⟨.inr (by rw [hg₁, L.ph_set]), .inl rfl, rfl⟩, hms, .inl hEh⟩ hU hY (by
+        .inr ⟨.inr (by rw [hg₁, L.ph_set]), .inl rfl, rfl⟩, hms, .inl hEh,
+        by rw [ht hg₁]; trivial⟩ hU hY (by
         rw [hgq]
         have := hI.ret (t := t) (g' := C.set g (afterWait i jr e)) (ht hg₁) (C.ph_set _ _) hSh hEh
           hwait hms.threads hwk (qd_false hnq) hms.clocks
@@ -1397,7 +1468,7 @@ theorem wp_loadEp (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
       have hI := hC.wInv _ _ _ hU
       have ht : C.ph (G₁ t) = .reg i jr true e := by rw [hg₁, hg]
       exact h k hk G₁ m' b j (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
-        (by rw [hg]; exact ⟨rfl, hI.ep_floor ht hfl⟩) hU hY hms (.inl hh) hL
+        (by rw [hg]; exact ⟨rfl, hI.ep_floor ht hfl⟩) (by rw [hg]; trivial) hU hY hms (.inl hh) hL
         (hI.reload ht (C.ph_set _ _) hj hv (hacq rfl) (hC.keepS hU hms) hh hop.waiters
           (fun u _ hw => by rw [hop.woken]; exact hw) hop.threads hop.clock))
 
@@ -1489,8 +1560,8 @@ counts no turns. Any number of threads may wait and signal.
 - `wait_wp`: the mutex's holder, out of the condition's code, that waits returns holding the
   mutex again (after it took a signal). Fewer than `65535` waiters are registered at its entry
   (`hroom`, as `Fits.enterEn`: the state's `u16` count), the client's rest allows its entry
-  (`hent`), and the client shows that its sleep is not a deadlock when no signal is pending and no signaller is
-  between its post and its wake (`hlive`); otherwise the library shows it from the count
+  (`hent`), and the client shows that its sleep is not a deadlock when no signal is pending and
+  no signaller is in its signal code (`sl`, `inc`, `wk`; `hlive`); otherwise the library shows it from the count
   (`Inv.noDeadlock`). The waiter is the running thread (`m.current = t`), the same premise and
   reason as `MutexImpl.unlock_wp`: the waiter holds the mutex, which only the running thread can
   (Zig's `Thread.mutexOwnerCheck`), and every client has the fact from its previous step (the
