@@ -53,7 +53,8 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
   refine hu.congrHist (fun _ => ⟨rfl, rfl, rfl⟩) hhS hhE hu.shape
     (hu.io.read (hc ▸ ht) hcs 0 0 n) (hu.rest.congr fun _ _ => rfl) hu.blk hwS hwE hwV
     (hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk)
-    (hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk id id hu.einv.fresh)
+    (hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk (Nat.le_refl _) id id
+      hu.einv.fresh)
     hu.hold (fun j hj => ?_) (fun h1 => ?_) hu.q
   · rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hclk 1))
@@ -282,7 +283,7 @@ theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m
     (proto Lo prodOf).WP 1 (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl rfl (.inl rfl) io G m d hi)
+    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl (.inl rfl) (.inl rfl) io G m d hi)
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}

@@ -91,7 +91,7 @@ theorem event_wakeAll (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P
       (fun r G' m' d' => d' < d ∧ m'.current = t ∧
         (E.IsSet m' ∧ P.inv (upd G' t (E.set g .out)) m' ∨
          r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
-  fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg hgo hi]
+  fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg (.inl hgo) hi]
 
 /-- A retained address run must not make the walker commit to the unaligned case before
 checking its guard. The address and protocol are arbitrary. -/
