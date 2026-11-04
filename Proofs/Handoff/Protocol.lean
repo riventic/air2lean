@@ -1447,7 +1447,7 @@ theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
 /-- **The protocol has the condition** (the lock's laws as for `fitsL`); the window: the epoch
 has at most two writes (`ep2`). -/
 theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
-  win _ _ m hu _ _ _ _ _ _ := by
+  win _ _ m hu _ _ _ _ _ _ _ := by
     have : ((C Lo).Ep.hist m).size ≤ 2 := hu.ep2
     omega
   toFits := { fitsL with

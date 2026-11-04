@@ -49,9 +49,9 @@ reads, or its post, to the writes that happened before its call.
 
 The window (`< 2^32` epoch writes after a registered waiter's save, PR397 ruling 6264821278)
 is not a field of the invariant: the protocol's rest supplies it (the window field of `C.Fits`:
-every registered waiter on its way to its futex wait, `reg i jr false e` and not queued at the
-epoch, has `(C.Ep.hist m).size ≤ i + 2^32`), and the one step that
-needs it, the sleep, takes it (`hwin` of `Inv.stale_ne`, `Inv.fresh_of_val`, `Inv.sleep`).
+every registered waiter on its way to its futex wait, `reg i jr false e`, neither queued at the
+epoch nor woken, has `(C.Ep.hist m).size ≤ i + 2^32`), and the one step that needs it, the
+sleep, takes it (`hwin` of `Inv.stale_ne`, `Inv.fresh_of_val`, `Inv.sleep`).
 It cannot be an inductive field: a waiter's epoch load may read an old write (any its view
 allows), so its window at the load, and so at its registration, is the protocol's fact, not the
 condition's. With it and (H3), a saved value that is not the newest write's differs from the
