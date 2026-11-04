@@ -98,8 +98,12 @@ Response-like `@...` tokens before that boundary are refused conservatively,
 including literal filename values. Version-specific operands can also cause a
 conservative refusal (for example, `--debug-libc -j2`, absent in 0.14.1). A value
 named `-j1` does not replace the injected build option. It also stops a
-workload when a sample contains more leaf Zig processes than `--jobs` (default 1). A build driver
-supervising one compiler is counted once. `zig`, `zig-air`, and `zig-unlocked`
+workload when a sample contains more Zig compiler invocations than `--jobs` (default 1). One
+invocation counts once, together with the `zig clang`/`zig cc` children it starts for C sources
+and libc (a Zig process whose parent is a Zig process). A cold global cache makes one
+`zig build-exe … -lc` start several such children, so counting them separately stopped one
+sequential build (2026-11-04). A build driver (`zig build`, its compilers below it through the
+build runner) is not counted: each of its compilers is. `zig`, `zig-air`, and `zig-unlocked`
 are recognized; use `--zig-name NAME` for a renamed executable. Linux `comm`
 truncation is matched conservatively at 15 bytes, so aliases sharing that prefix
 can cause a refusal even when the longer names differ. Scripts must

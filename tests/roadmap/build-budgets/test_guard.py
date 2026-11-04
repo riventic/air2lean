@@ -687,17 +687,30 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
                         ["zig", "build", "-j"], ["zig", "build", "@options"]):
             with self.assertRaises(ValueError):
                 guard.sequential_command(command, names)
-        rows = {1: {"parent": 0, "name": "zig"}, 2: {"parent": 1, "name": "zig"}}
-        self.assertFalse(guard.parallel_zig(rows, {1, 2}, names))
-        rows[3] = {"parent": 1, "name": "zig"}
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, names))
-        self.assertFalse(guard.parallel_zig(rows, {1, 2, 3}, names, jobs=2))
-        rows[4] = {"parent": 1, "name": "zig"}
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3, 4}, names, jobs=2))
-        del rows[4]
+        # `zig build` (1) runs its compilers (2, 3, 4) below its build runner (10).
+        rows = {1: {"parent": 0, "name": "zig"}, 10: {"parent": 1, "name": "build"},
+                2: {"parent": 10, "name": "zig"}}
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2}, names))
+        rows[3] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3}, names))
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2, 3}, names, jobs=2))
+        rows[4] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3, 4}, names, jobs=2))
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2, 3, 4}, names, jobs=3))
+        # A cold libc build under it: compiler 2's `zig clang` children are part of compiler 2.
+        for pid in (20, 21, 22, 23):
+            rows[pid] = {"parent": 2, "name": "zig"}
+        tree = {1, 10, 2, 3, 4, 20, 21, 22, 23}
+        self.assertFalse(guard.parallel_zig(rows, tree, names, jobs=3))
+        self.assertTrue(guard.parallel_zig(rows, tree, names, jobs=2))
+        # One `zig build-exe ... -lc` (30) with its clang children: one invocation.
+        single = {30: {"parent": 0, "name": "zig"}, **{pid: {"parent": 30, "name": "zig"} for pid in (31, 32, 33)}}
+        self.assertFalse(guard.parallel_zig(single, set(single), names))
+        for pid in (20, 21, 22, 23, 4):
+            del rows[pid]
         alias = "zig-very-long-configured-alias"
         rows[2]["name"] = rows[3]["name"] = alias[:15]
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, {alias}))
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3}, {alias}))
         self.assertEqual(guard.sequential_command(["zig", "build", "--prefix", "-j1"], names),
                          ["zig", "build", "-j1", "--prefix", "-j1"])
         self.assertEqual(guard.sequential_command(["zig", "build", "run", "--", "-j1", "-j2"], names),
