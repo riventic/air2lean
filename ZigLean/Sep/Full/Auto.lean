@@ -1013,9 +1013,9 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
       ``Int.toNat_add_nat, ``Nat.add_zero, ``Nat.zero_add, ``Int.add_zero, ``Int.zero_add, ``Int.one_mul,
       ``Int.mul_one, ``Nat.div_one, ``Nat.mod_one, ``Nat.min_self, ``Nat.max_self, ``Nat.add_sub_add_left,
       ``Nat.add_sub_add_right, ``Decidable.not_not, ``Bool.not_eq_false, ``beq_eq_false_iff_ne,
-      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_and,
-      ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies, ``false_implies,
-      ``implies_true] do
+      ``bne_eq_false_iff_eq, ``ne_eq, ``eq_self, ``iff_self, ``false_or, ``or_false, ``true_or,
+      ``or_true, ``true_and, ``and_true, ``not_false_eq_true, ``not_true_eq_false, ``true_implies,
+      ``false_implies, ``implies_true] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   let mut procs : Simp.SimprocsArray := #[← Simp.getSimprocs]
@@ -1317,9 +1317,18 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   -- or a hypothesis of the unfolded form (`w.Cov` destructured earlier)
   if t' != t0 then
     let s ← saveState
-    let g' ← g.replaceTargetDefEq (← reduceProjs t')
+    let t'' ← reduceProjs t'
+    let g' ← g.replaceTargetDefEq t''
     if let some g'' ← matchCase? g' then return ← arithGoals g'' quick cases
     if ← assumptionR g' then return []
+    -- an unfolding of library form (a result predicate `r = 1 ∨ r = 2 ∨ …`, a negation, an
+    -- implication): the solver on it, as the arithmetic normalization does not unfold the user
+    -- definition (once: a library head is not unfolded again)
+    let libHead ← match t''.getAppFn with
+      | .const c _ => isLibrary c
+      | _ => pure t''.isArrow
+    if libHead then
+      if (← arithGoals g' quick cases).isEmpty then return []
     s.restore
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
@@ -2638,6 +2647,22 @@ def boolFactCtx : MetaM Simp.Context := do
   (← caches).boolCtx.set (some c)
   return c
 
+/-- Substitute the local of the equation `h : l = r` (`substEq`) and record the substitution
+(`caches.substs`): a caller's term that names an eliminated local takes its value
+(`refreshUser`). `none` if `h` substitutes nothing (no local side, a `let`, a dependency). -/
+def substRecorded (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarId) := do
+  let some (fs, g') ← observing? (substEq g h) | return none
+  let fs ← g'.withContext do
+    let lhs := fs.apply l
+    let rhs := fs.apply r
+    let lctx ← getLCtx
+    if lhs.hasAnyFVar (fun f => !lctx.contains f) ||
+        rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
+    -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
+    pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
+  (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
+  return some g'
+
 /-- The local `f` of an earlier context in `g`'s: itself, or the local a substitution
 reintroduced it as (a fact reverted by `subst` and introduced again, followed through
 `caches.substs`, as `refreshSubsts` follows a term); `none` if it is gone. A loop that splits
@@ -2754,18 +2779,7 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
         return ← destruct g' h'
   if let some (_, l, r) := ty.eq? then
     if l.isFVar || r.isFVar then
-      if let some (fs, g') ← observing? (substEq g h) then
-        let fs ← g'.withContext do
-          let lhs := fs.apply l
-          let rhs := fs.apply r
-          let lctx ← getLCtx
-          if lhs.hasAnyFVar (fun f => !lctx.contains f) ||
-              rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
-          -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
-          pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
-        -- (recorded: a caller's term that names an eliminated local takes its value)
-        (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
-        return g'
+      if let some g' ← substRecorded g h l r then return g'
     if let some g' ← substCtor g h l r then return g'
     if let some g' ← etaProj g l r then return g'
     return g
@@ -2810,19 +2824,61 @@ partial def ptrBase (p : Expr) : Expr :=
       p.isAppOfArity `Zig.Ptr.elemOf 4 || p.isAppOfArity `Zig.Ptr.elemSubOf 4 then
     ptrBase (p.getArg! 0) else p
 
+/-- A local declared at `BlockId` (`Nat` behind an `abbrev`: the declared type tells a block
+from a number). -/
+def isBlockVar (b : Expr) : MetaM Bool := do
+  let some d := (← getLCtx).find? b.fvarId! | return false
+  return d.type.consumeMData.isConstOf ``Zig.BlockId
+
 /-- One block variable per block: from `x.block = some b₁` and `y.block = some b₂` with
 `x.block = y.block` (definitionally, also through `Ptr.add`/`Ptr.elem`, or by a fact), `b₂` is
-replaced by `b₁`. -/
+replaced by `b₁`. A block variable `b` (one with a fact `_.block = some b`, or declared at
+`BlockId`: the walk's start reduces a fact `(gbuf n).ptr.block = some b` of a global's pointer to
+`some 0 = some b`; a number stays a fact of the arithmetic solver, `isSubstValue`) equal to a
+value is that value, `b` replaced by `k`:
+* from `some k = some b`, in either orientation;
+* from `x.block = some b` where `x.block`, or the other side of a fact `x.block = y.block` or
+  `x.block = some k`, is `some k` by reducible evaluation (a global's pointer `⟨some 0, 0⟩`, also
+  behind an `abbrev`; not default transparency, which would evaluate the facts, ledger #55).
+
+Every substitution is recorded for caller terms (`substRecorded`); an equation whose variable
+cannot be substituted is skipped. -/
 partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
   let hyps := (← getLCtx).foldl (fun acc d => if d.isImplementationDetail then acc else acc.push d) #[]
+  -- `some k` of a value `k`
+  let isVal (e : Expr) := e.isAppOfArity ``Option.some 2 && !e.appArg!.hasFVar && !e.appArg!.hasMVar
+  -- `b` of `some b`, a local
+  let someVar? (e : Expr) : Option Expr :=
+    if e.isAppOfArity ``Option.some 2 && e.appArg!.isFVar then some e.appArg! else none
+  -- `b` replaced by `k` from `e : some k = some b`, recorded; `none` (the state kept) if `b`
+  -- cannot be substituted
+  let substSome (e k b : Expr) : TacticM (Option MVarId) := do
+    let s ← saveState
+    let (h, g') ← (← g.assert `hblk (← mkEq k b) (← mkAppM ``Option.some.inj #[e])).intro1
+    let some g' ← substRecorded g' h k b
+      | trace[fsym] "unifyBlocks: cannot substitute {b} by {k}"; s.restore; return none
+    return some g'
+  -- `x.block` and `y.block` of one block: reducibly equal, or of one base (`Ptr.add`, …: the
+  -- kernel unfolds them, `block_add`)
+  let sameBlock (x y : Expr) : MetaM Bool := do
+    if ← withNewMCtxDepth (withReducible (isDefEq x y)) then return true
+    return x.isAppOfArity ``Zig.Ptr.block 1 && y.isAppOfArity ``Zig.Ptr.block 1 &&
+      ptrBase x.appArg! == ptrBase y.appArg!
   let mut someEqs := #[]
-  let mut blkEqs := #[]
+  -- the facts `x.block = y.block` and `x.block = some k`: proof, `x.block`, other side
+  let mut links : Array (Expr × Expr × Expr) := #[]
+  -- `some k = some b` of a value `k` (either orientation, the proof turned): proof, `some k`, `b`
+  let mut optEqs : Array (Expr × Expr × Expr) := #[]
   for d in hyps do
     let ty ← instantiateMVars d.type
     let some (_, l, r) := ty.eq? | continue
+    if isVal l then if let some b := someVar? r then optEqs := optEqs.push (d.toExpr, l, b)
+    if isVal r then
+      if let some b := someVar? l then optEqs := optEqs.push (← mkEqSymm d.toExpr, r, b)
     unless l.isAppOfArity ``Zig.Ptr.block 1 do continue
-    if r.isAppOfArity ``Option.some 2 && r.appArg!.isFVar then someEqs := someEqs.push (d, l, r.appArg!)
-    else if r.isAppOfArity ``Zig.Ptr.block 1 then blkEqs := blkEqs.push d
+    if let some b := someVar? r then someEqs := someEqs.push (d, l, b)
+    else if r.isAppOfArity ``Zig.Ptr.block 1 || isVal r then links := links.push (d.toExpr, l, r)
+  -- first one variable per block (its value then substitutes them all)
   for i in [0:someEqs.size] do
     for j in [i+1:someEqs.size] do
       let (d1, l1, b1) := someEqs[i]!
@@ -2830,27 +2886,36 @@ partial def unifyBlocks (g : MVarId) : TacticM MVarId := g.withContext do
       if b1 == b2 then continue
       -- `l1 = l2`
       let link? : Option Expr ← do
-        if ← withReducible (isDefEq l1 l2) then pure (some (← mkEqRefl l1))
-        else if ptrBase l1.appArg! == ptrBase l2.appArg! then
+        if ← sameBlock l1 l2 then
           pure (some (← mkExpectedTypeHint (← mkEqRefl l1) (← mkEq l1 l2)))
         else
           let mut found := none
-          for d in blkEqs do
-            let ty ← instantiateMVars d.type
-            let some (_, a, b) := ty.eq? | continue
-            if (← withReducible (isDefEq a l1)) && (← withReducible (isDefEq b l2)) then
-              found := some d.toExpr; break
-            if (← withReducible (isDefEq a l2)) && (← withReducible (isDefEq b l1)) then
-              found := some (← mkEqSymm d.toExpr); break
+          for (e, a, b) in links do
+            if (← sameBlock a l1) && (← sameBlock b l2) then found := some e; break
+            if (← sameBlock a l2) && (← sameBlock b l1) then found := some (← mkEqSymm e); break
           pure found
       let some link := link? | continue
       -- `some b1 = some b2`
       let e ← mkEqTrans (← mkEqTrans (← mkEqSymm d1.toExpr) link) d2.toExpr
-      let pf ← mkAppM ``Option.some.inj #[e]
-      let g ← g.assert `hblk (← mkEq b1 b2) pf
-      let (h, g) ← g.intro1
-      let g ← subst g h
-      return ← unifyBlocks g
+      if let some g ← substSome e b1 b2 then return ← unifyBlocks g
+  for (e, v, b) in optEqs do
+    if someEqs.any (·.2.2 == b) || (← isBlockVar b) then
+      if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
+  for (d, l, b) in someEqs do
+    -- `l`, or the other side `x` of a link, with its proof of `x = l`
+    let mut alts : Array (Expr × Expr) := #[(l, ← mkEqRefl l)]
+    for (e, x, y) in links do
+      if ← sameBlock x l then alts := alts.push (y, ← mkEqSymm e)
+      else if ← sameBlock y l then alts := alts.push (x, e)
+    for (x, link) in alts do
+      let v ← if x.isAppOfArity ``Zig.Ptr.block 1 then
+          whnfR (mkApp (mkConst ``Zig.Ptr.block) (ptrBase x.appArg!)) else pure x
+      unless isVal v do continue
+      -- (`pf : x = some b` read as `v = some b`: checked, the kernel would reject it late)
+      unless ← withNewMCtxDepth (isDefEq x v) do continue
+      let e ← mkExpectedTypeHint (← mkEqTrans link d.toExpr)
+        (← mkEq v (← mkAppM ``Option.some #[b]))
+      if let some g ← substSome e v.appArg! b then return ← unifyBlocks g
   return g
 
 /-- The continuation of opening an existential `FAssn.ex F` of a precondition: a fresh goal
