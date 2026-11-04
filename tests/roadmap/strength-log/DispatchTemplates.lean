@@ -22,9 +22,8 @@ example (p : Ptr) (xs : List (BitVec 8)) (hlen : xs.length < 2 ^ 64) :
       ∃ v m' hQ, (countTokens p (BitVec.ofNat 64 xs.length)).run m = pure (v, m') ∧
         Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧
         (⌜v.toNat = tokens .start xs % 2 ^ 32⌝ ∗ arr p xs) hQ ∧ m'.Seq :=
-  FTotalTriple.toTotal_on_plain ((countTokens_total p xs hlen).post fun _ _ h => by
-      obtain ⟨hv, h⟩ := sep_lift.mp h
-      exact sep_mono_left (fun _ h => up_lift.mpr ⟨hv, h⟩) h)
+  FTotalTriple.toTotal_on_plain ((countTokens_total p xs hlen).post fun _ _ h =>
+      sep_mono_left (fun _ h => up_lift.mpr (sep_lift.mp h)) (Full.sep_assoc' h))
     fun _ => SizeFree.sep SizeFree.lift (SizeFree.arr _ _)
 
 end StrengthLog.DispatchTemplates
