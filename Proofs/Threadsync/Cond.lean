@@ -322,7 +322,8 @@ theorem fwait_wp [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost
     P.WP t (Thread_Condition_FutexImpl_wait C.S.ptr L.ptr none) (fun x G' m' d' => d' < d ∧
       x = .ok () ∧ m'.current = t ∧ ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   have hi0 := hC.enterEn hgx hgh hone hhb hent hi
-  fsym [FCond.wp_liftPartCur hC (g := C.set g .en) (t := t)
+  fsym [WP.liftMem_pure (x := StateT.lift (debug_assert true)) (by rfl) rfl,
+    FCond.wp_liftPartCur hC (g := C.set g .en) (t := t)
       (hgo := .inr (by simpa only [hC.lph] using hgh)) (hi := hi0) (hc := hc)
       (htt := halloc) (hp := by simp only [hC.lpart]) (hret := .inl (.inr hcost)),
     FCond.wp_liftPartCur hC (hret := .inl (.inr hcost)), hfree,

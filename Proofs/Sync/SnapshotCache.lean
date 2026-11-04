@@ -426,6 +426,8 @@ def G0 : ThreadId → Gh := fun _ => (⟨.gone, rnil, rnil⟩, .none)
 def gPre (rp : Res) : Gh := gOut rp .pre
 /-- `main` after its spawn. -/
 def gRun (rp : Res) : Gh := gOut rp .run
+
+theorem part_gOut {rp : Res} {x : Ph} : L.part (gOut rp x) = rp := rfl
 /-- `main` at its join. -/
 def gJoin (rp : Res) : Gh := gOut rp .joins
 
@@ -592,7 +594,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart proto rfl
     (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = L.part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
-  have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
+  have hrM : rM = r₁ := by rw [hr₁, hg]; rfl
   subst hrM
   have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.rest, hu.mid⟩
   have hG' : upd G 0 (L.setPart (G 0) (rsum rM rP)) 0 = gPre (rsum rM rP) := by
@@ -702,7 +704,8 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   fsym [FTriple.allocStack', inv_start, inv_spawn,
     mi.lock_wp fits rfl rfl hmc.symm 0 (gRun _) rfl rfl, snapshot_ok,
     fits.wp_hold (g' := gH _ .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
-    main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, gRun, gJoin, aVal]
+    main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, part_gOut, gRun, gJoin,
+    aVal]
 
 end Proofs
 

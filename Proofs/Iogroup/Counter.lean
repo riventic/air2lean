@@ -653,7 +653,7 @@ theorem inv_copy_plain {G : ThreadId → Gh} {m : Mem} {rM : Res} {j k : Nat}
   obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart proto rfl
     (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = L.part (G 0))
       fun r hr => by rw [hr, hg]; exact hp)
-  have hrM : r₁ = rM := by rw [hr₁, hg]; rfl
+  have hrM : rM = r₁ := by rw [hr₁, hg]; rfl
   subst hrM
   have hu₀ : U G rX { m with current := 0 } := ⟨hu.shape, hu.io, hu.rest, hu.jle⟩
   refine ⟨rP, hpP, rX, ?_, ?_⟩
@@ -942,7 +942,7 @@ theorem async_spec {σ : Type} {s : σ} {rM : Res} {j k : Nat}
       exact WP.mono (fun r G' m' d' ⟨h1, h2, h3, h4⟩ => ⟨h1, by omega, h3, h4⟩)
         (eager_spec (s := s) (d := k₂) hp hj hk hi₂')
     · obtain ⟨rfl, hc', hi'⟩ := inv_spawnParts hpP hj hiP (by rw [upd_self]) hf
-      rw [upd_comm G₂ _ _ (by omega : (0 : ThreadId) ≠ k + 1), upd_upd] at hi'
+      rw [upd_comm G₂ _ _ (Nat.succ_ne_zero k).symm, upd_upd] at hi'
       exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
   · -- `main` runs the task itself
     rw [groupAsyncOutcomeC, if_neg (by decide), if_pos rfl]
@@ -954,7 +954,7 @@ theorem async_spec {σ : Type} {s : σ} {rM : Res} {j k : Nat}
     refine ⟨gOut rP (.task false), ⟨rfl, rP, hpP, rfl⟩,
       fun _ => ⟨rfl, .inr rfl⟩, fun child m' hf => ?_⟩
     obtain ⟨rfl, hc', hi'⟩ := inv_spawnParts hpP hj hiP (by rw [upd_self]) hf
-    rw [upd_comm G₂ _ _ (by omega : (0 : ThreadId) ≠ k + 1), upd_upd] at hi'
+    rw [upd_comm G₂ _ _ (Nat.succ_ne_zero k).symm, upd_upd] at hi'
     exact ⟨rfl, by omega, hc', k + 1, by omega, hi'⟩
 
 /-- The async loop's invariant: `main` did `local10` asyncs. -/
@@ -1267,7 +1267,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
         simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
         exact fun h => False.elim (hio h)
       cases e' : (rsum rM (rsum rC rW)).heap (e.block, e.off) <;>
-        simp [FHeap.erase, FHeap.union_apply, e', hRest]
+        simp [FHeap.erase, FHeap.union_apply, e', hRest, hio]
     · rw [rsum_rnil]
       exact ⟨A, _, hA, enc_io io, by cases io; exact LawfulEnc.decode_encode _,
         rIO, rStable, hdStable, rfl, hIO,
