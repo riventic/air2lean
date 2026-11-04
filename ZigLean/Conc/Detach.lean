@@ -432,16 +432,6 @@ theorem WP.transferHandleC {owner : ThreadId} {rec : ThreadRec} {s : σ}
 theorem rec_eq {ts : Array ThreadRec} {i : Nat} {r r' : ThreadRec} (h : ts[i]? = some r)
     (h' : ts[i]? = some r') : r' = r := Option.some.inj (h'.symm.trans h)
 
-/-- A spawn by `t`: the child's id, the thread table and the current thread after it. -/
-theorem fork_eq {t c : ThreadId}
-    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m'.threads = m.threads.push { spawner := t, joined := false } ∧
-      m'.current = t := by
-  rw [fork_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl, rfl⟩
-
 end Detach
 end Conc
 end Zig
