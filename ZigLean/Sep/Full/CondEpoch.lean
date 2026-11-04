@@ -10,9 +10,10 @@ futex for that value. The futex compares values, not writes (`Thread.futexWait`:
 reads the word's newest bytes). So after `2^32` increments of the 32-bit epoch the value is the
 saved one again, and the wait sleeps though the epoch moved past the signal meant for it.
 
-This module checks that schedule through the model's actual atomic and futex ops, for every
-condition (`FCond`), every memory where its two words are valid and nothing is queued at the
-epoch (`Calm`), and any three threads:
+This module checks that schedule through the model's actual atomic and futex ops (the
+condition's own ops; the mutex's unlock and lock between them are not part of the fact), for
+every condition (`FCond`), every memory where its two words are valid and nothing is queued at
+the epoch (`Calm`), and any threads `t`, `u`, `v` (they need not differ):
 
 - waiter `t` has saved the epoch `e` and registered (the state is `(1, 0)`);
 - one round (`Round`) of a waiter `u` and a signaller `v`: `u` registers (`Register`), `v`
@@ -23,14 +24,15 @@ epoch (`Calm`), and any three threads:
 - after `2^32 - 1` rounds a last signal by `v` posts `t`'s signal (the state is `(1, 1)`) and
   brings the epoch back to `e`. Then `t`'s futex wait sleeps (`epoch_aba`).
 
-No thread is then between its signal and its wake, and every later `signal` finds
-`waiters = signals` and does nothing: the signal is pending and its wake is lost. This is a
-liveness gap of the algorithm, not a safety one: no wrong value is returned and no registration
-is miscounted. It is why the general condition contract (`CondImpl`) bounds the epoch writes
-between a waiter's save and its enqueue below `2^32` (PR #397, ruling 6264821278), and why a
-contract may not demand that every implementation wake a sleeping waiter. With one waiter
-(the singleton contract) at most one increment fits in that window. The schedule is a
-kernel-checked fact about the model's op runs, not a run of the scheduler.
+No thread is then between its signal and its wake, and until another waiter registers every
+`signal` finds `waiters = signals` and does nothing: the signal is pending and its wake is lost.
+This is a liveness gap of the algorithm, not a safety one: no wrong value is returned and no
+registration is miscounted. It is why the general (multi-waiter) condition contract, still to
+come, must bound the epoch writes between a waiter's save and its enqueue below `2^32` (PR #397,
+ruling 6264821278), and why a contract may not demand that every implementation wake a sleeping
+waiter. With one waiter (today's singleton `CondImpl`) at most one increment fits in that
+window. The schedule is a kernel-checked fact about the model's op runs in one chosen order,
+not a run of the scheduler.
 -/
 
 namespace Zig
@@ -120,6 +122,8 @@ theorem next {m' : Mem} {w' x' : BitVec 32} (hA : C.Calm m w x)
 
 /-! ## The steps of the schedule -/
 
+section Steps
+
 variable (ht : m.current < m.threads.size)
 include ht
 
@@ -178,13 +182,7 @@ theorem waitGo (hA : C.Calm m w x) {e : BitVec 32} (hne : x ≠ e) :
   exact ⟨hS, hE, hA.s.holds_of_hist hS hhS hA.sv, hA.ep.holds_of_hist hE hhE hA.ev,
     by simp [Mem.recordAt, hA.cs], hA.wk, hA.q⟩
 
-omit ht in
-/-- A futex wake at the epoch finds no thread. -/
-theorem wake (hA : C.Calm m w x) (n : Nat) (cs : List Nat) :
-    ((Thread.futexWake C.Ep.ptr n cs).run m).run = some (.ok ((), m)) :=
-  Thread.futexWake_run_idle hA.q
-
-omit ht
+end Steps
 
 /-! ## The schedule -/
 
@@ -205,7 +203,7 @@ theorem signal (hA : C.Calm m w x) (hv : v < m.threads.size)
     (w + 0x10000)
   obtain ⟨m₃, h₃, hA₃, ht₃, -⟩ := hA₂.rmwE (by rw [ht₂, hc₂, ht₁, hc₁]; exact hv)
     .add false .release 1
-  exact ⟨m₃, ⟨w, x, m₁, m₂, m₃, h₁, hg, h₂, h₃, hA₃.wake 1 []⟩, hA₃, by rw [ht₃, ht₂, ht₁]⟩
+  exact ⟨m₃, ⟨w, x, m₁, m₂, m₃, h₁, hg, h₂, h₃, Thread.futexWake_run_idle hA₃.q⟩, hA₃, by rw [ht₃, ht₂, ht₁]⟩
 
 theorem consume (hA : C.Calm m w x) (hu : u < m.threads.size) {e : BitVec 32} (hne : x ≠ e)
     (hg : 0 < w.toNat / 0x10000) :
@@ -245,8 +243,9 @@ theorem rounds (hA : C.Calm m 1 x) (hu : u < m.threads.size) (hv : v < m.threads
 
 end Calm
 
-/-- **The epoch ABA schedule** (module doc). Waiter `t` saved the epoch `e` and registered
-(the state is `(1, 0)`). After `2^32 - 1` rounds of a waiter `u` and a signaller `v` and a last
+/-- **The epoch ABA schedule** (module doc). The state is `(1, 0)` and the epoch `e`, as after
+waiter `t` saved `e` and registered (`Calm.register`; `t`'s own registration is not part of the
+statement). After `2^32 - 1` rounds of a waiter `u` and a signaller `v` and a last
 signal by `v`, the state is `(1, 1)`: `t`'s signal is pending. The epoch holds `e` again, and
 `t`'s futex wait for `e` sleeps. -/
 theorem epoch_aba {m : Mem} {t u v : ThreadId} {e : BitVec 32} (hA : C.Calm m 1 e)

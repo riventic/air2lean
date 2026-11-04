@@ -8,8 +8,9 @@ Every atomic op at a valid word (`Word.Ok`) has a run for its first oracle choic
 that run uses the word's newest write: a load returns its value, an RMW updates it, and a weak
 `cmpxchg` that expects it succeeds. A futex wait of a thread that is not woken compares the
 newest value (`Thread.futexWait`), and a futex wake at an address where nothing waits changes
-nothing. Each run is also a native full-state step of the empty frame (`FStepIn`), and it keeps
-every word apart from it (`Ok.apart_run`).
+nothing. Each atomic op's run is also a native full-state step of the empty frame (`FStepIn`),
+and it keeps every word apart from it (`Ok.apart_run`, which also covers a bare access record);
+the futex lemmas state their run's memory directly instead.
 
 These are the runs of a schedule that a proof exhibits, for a thread that reads the newest
 write (`ZigLean/Sep/Full/CondEpoch.lean`). What every run does, whatever the choice, is the
