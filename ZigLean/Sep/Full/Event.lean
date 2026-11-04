@@ -442,14 +442,6 @@ theorem val_eq {x : Word.Entry} {a b : BitVec 32} (ha : x.Val a) (hb : x.Val b) 
 theorem rmwEnt_val {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Word.Entry}
     {v : BitVec 32} : (Word.rmwEnt M t ord last v).Val v := intOfBytes_rmw v
 
-theorem get_push_lt {h : Array Word.Entry} {x : Word.Entry} {k : Nat} (hk : k < h.size) :
-    (h.push x)[k]! = h[k]! := by
-  have h1 : k < (h.push x).size := by simp; omega
-  rw [getElem!_pos (h.push x) k h1, getElem!_pos h k hk, Array.getElem_push_lt hk]
-
-theorem get_push_eq {h : Array Word.Entry} {x : Word.Entry} : (h.push x)[h.size]! = x := by
-  rw [getElem!_pos _ _ (by simp)]; simp
-
 /-- The word has a write. -/
 theorem hist_pos {W : Word 32 4} {m : Mem} (hw : W.Ok m) : 0 < (W.hist m).size := by
   unfold Word.hist
@@ -667,9 +659,9 @@ theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : At
     E.Inv L G' m' := by
   have hsz : (E.W.hist m').size = (E.W.hist m).size + 1 := by rw [hh]; simp
   have hold : ∀ j, j < (E.W.hist m).size → (E.W.hist m')[j]! = (E.W.hist m)[j]! := fun j hj => by
-    rw [hh]; exact get_push_lt hj
+    rw [hh]; exact Word.get_push_lt hj
   have hnew : (E.W.hist m')[(E.W.hist m).size]!.Val (1 : BitVec 32) := by
-    rw [hh, get_push_eq]; exact rmwEnt_val
+    rw [hh, Word.get_push_eq]; exact rmwEnt_val
   -- `t` is the only waiter
   have hot : ∀ u, u ≠ t → ¬ (E.ph (G u)).Waiting := fun u hu hw => hu (hI.one u t hw (.inl ht0))
   have key : ∀ u, u ≠ t → ¬ (E.ph (G' u)).Waiting := fun u hu hw => by
@@ -690,7 +682,7 @@ theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : At
     rcases (by omega : j < (E.W.hist m).size ∨ j = (E.W.hist m).size) with hj' | rfl
     · rw [hold j hj'] at hv ⊢; exact hI.wby_of hG hwxt hclk hj' hv
     · refine ⟨t, hwx, ?_⟩
-      rw [hh, get_push_eq]; exact VClock.le_refl _
+      rw [hh, Word.get_push_eq]; exact VClock.le_refl _
   rotate_right
   · -- no setter at `sw`: the newest write was `unset`
     exfalso
@@ -723,7 +715,7 @@ theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : At
   · by_cases eu : u = t
     · subst eu
       refine ⟨(E.W.hist m).size, by omega, hnew, ?_⟩
-      rw [hh, get_push_eq]; exact VClock.le_refl _
+      rw [hh, Word.get_push_eq]; exact VClock.le_refl _
     · exact absurd (.inr hu) (key u eu)
   · by_cases eu : u = t
     · subst eu; exact .inl hlpt
@@ -750,9 +742,9 @@ theorem Inv.xchg {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : Ato
     E.Inv L G' m' := by
   have hsz : (E.W.hist m').size = (E.W.hist m).size + 1 := by rw [hh]; simp
   have hold : ∀ j, j < (E.W.hist m).size → (E.W.hist m')[j]! = (E.W.hist m)[j]! := fun j hj => by
-    rw [hh]; exact get_push_lt hj
+    rw [hh]; exact Word.get_push_lt hj
   have hnew : (E.W.hist m')[(E.W.hist m).size]!.Val (2 : BitVec 32) := by
-    rw [hh, get_push_eq]; exact rmwEnt_val
+    rw [hh, Word.get_push_eq]; exact rmwEnt_val
   have hnw : ¬ (E.ph (G' t)).Waiting := fun hw => by
     rcases ht1 with h | h <;> rw [h] at hw <;> rcases hw with h | h <;> cases h
   have key : ∀ x, (E.ph (G' x)).Waiting → (E.ph (G x)).Waiting ∧ x ≠ t := fun x hx => by
@@ -1270,7 +1262,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterXchg (hE : L.Fits (E.prim L) P U ok)
   have hset : E.IsSet m' := by
     unfold FEvent.IsSet FEvent.newest; rw [hh]
     simp only [Array.size_push, Nat.add_sub_cancel]
-    rw [get_push_eq]; exact rmwEnt_val
+    rw [Word.get_push_eq]; exact rmwEnt_val
   have hx : ∀ p, (p = .sw ∨ p = .out) → ((E.newest m₁).Val (1 : BitVec 32) → p = .sw) →
       E.Inv L (upd G₁ t (E.set g p)) m' := fun p hp h1 =>
     hI.xchg (fun u hu => upd_ne _ _ hu) hgt (by rw [upd_self, E.ph_set]; exact hp)

@@ -527,7 +527,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
         · rw [h] at h2; omega
         · rw [h, Array.size_push] at h2; exact ⟨x, h, hc, by omega⟩
     have hgetx : ∀ x : Word.Entry, C.S.hist m' = (C.S.hist m).push x →
-        (C.S.hist m')[(C.S.hist m).size]! = x := fun x h => by rw [h]; exact FEvent.get_push_eq
+        (C.S.hist m')[(C.S.hist m).size]! = x := fun x h => by rw [h]; exact Word.get_push_eq
     refine ⟨fun u hu => ?_, fun u hu => hhold u (hI.pst u (by rw [← hsph u]; exact hu)),
       fun u hu => ?_, fun u hu => ?_, fun u v hu hv => ?_, fun w hw hk => ?_,
       fun j h0 hj => ?_, fun u sh c hu => ?_, fun u sh c hu j h0 hj => ?_,
@@ -693,20 +693,9 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem}
     by_cases e : u = t
     · subst e; rw [upd_self, hcl]
     · rw [upd_ne _ _ e]
-  have hhold : ∀ u, L.ph (G u) = .holds → L.ph (upd G t (L.set (G t) q h) u) = .holds ∨
-      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c := fun u hu => by
-    by_cases e : u = t
-    · subst e
-      by_cases hq : q = .holds
-      · exact .inl (by rw [upd_self, L.ph_set, hq])
-      · exact .inr fun c hc => L.before_le (hrel hu hq) hc
-    · exact .inl (by rw [upd_ne _ _ e]; exact hu)
   refine hI.mono hsph hcph (by rw [pv_lupd, upd_same])
-    (fun u hu => ?_) hhold hs.clocks hs.before hs.threads
-    (fun u _ => by
-      by_cases e : u = t
-      · subst e; exact hg
-      · rwa [upd_ne _ _ e] at *)
+    (fun u hu => ?_) (FLock.lstep_hold hrel) hs.clocks hs.before hs.threads
+    (FLock.lstep_live hg)
     (fun w hw => by
       by_cases hl : w.2 = L.ptr
       · exact .inr hl
