@@ -87,7 +87,7 @@ Direct importers on main, minus the 16 done files:
 | Sep/Witness, Conc/Witness | Lists/Sep, Witnesses/{Sep,Conc}, claims/Fixture, Conc/Unroll, Proofs/Threads/Disjoint, RwLockContract, SnapshotCache |
 | Sep/{Try,TryAlias,Discard,Step,Automation,Mmap(Sep),AddrReuse} | Sep.lean, each other, Lists/Sep, Wrappers, tutorials/Controls (AddrReuse); Sep/Mmap: none |
 | Conc/Own (TTriple) | Conc/Csl, Conc/Witness, claims/Fixture, tools/Assurance |
-| Conc/Csl, TlsLemmas | Conc/{Detach,Lock,Transfer}, Full/{ThreadOwned,ThreadTls}, spawn-failure/Runtime, thread-tuples, thread-locals/Leak |
+| Conc/Csl (TlsLemmas deleted, L12) | Conc/{Detach,Lock,Transfer}, Full/{ThreadOwned,ThreadTls}, spawn-failure/Runtime, thread-tuples |
 | ZigLean/Sep.lean (umbrella) | Lists/Sep, Witnesses/Sep |
 
 Non-Lean references that must be edited in the deletion lanes: `.github/workflows/ci.yml` (about 20 `lake build` lines
@@ -112,7 +112,7 @@ against legacy defs, until the final PR).
 | D2 (hand-written allocator / std model) | 19 | Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient}, 7 model tests, Sep/AllocSpec, Wrap, Wrappers, Sep/Dispatch, alloc-fba/Bridge |
 | ENG (fsym engine rows #12 realloc, #20 atom arithmetic, FBA reset design) | 2 | alloc-fba/{Fba,Client} |
 | OTHER | 1 | alloc-translated/PageObstruction (obsolete finding, becomes a doc record) |
-| CONC (CTriple/WP, seen-floor, Impl instances) | 13 | 10 Sync/Threadsync clients, Conc/{Own,Csl,TlsLemmas} |
+| CONC (CTriple/WP, seen-floor, Impl instances) | 13 | 10 Sync/Threadsync clients, Conc/{Own,Csl,TlsLemmas (deleted)} |
 | STAY (strength-log / last-PR core) | 12 | 8 strength-log files + Sep/{Triple,Total,Loop,Block} |
 | total | 80 | |
 
@@ -348,9 +348,9 @@ Remaining shared-prefix and holder proof copies are tracked in [engine ledger #7
 | --- | --- | --- | --- | --- |
 | ZigLean/Conc/Own.lean (408) | `TTriple` thread-local heap triple, `TTriple.{load,store,alloc,free,storeAt,..}` | Block | M | library (delete) |
 | ZigLean/Conc/Csl.lean (537) | `Owned` parts of the heap, `Owned.{step,fork,join,keep,start,shrink,add}`, `WP.liftM_owned` | Own | L | library (delete or re-state over FOwned) |
-| ZigLean/Conc/TlsLemmas.lean (629) | `TTripleIn`, TLS lemmas | Csl | M | library (delete; Full/ThreadTls is native) |
+| ZigLean/Conc/TlsLemmas.lean (629) | `TTripleIn`, TLS lemmas | Csl | M | library (deleted: Leak used nothing from it; Full/ThreadTls is native) |
 Consumers to move first (invisible to the ratchet today, listed by L1): Conc/{Detach,Lock,Transfer,Unroll}, Full/{ThreadOwned,ThreadTls}, Proofs/Threads/Disjoint,
-spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs, thread-locals/ThreadLocals/Leak (`unroll_sched`, `blkat_alloc` tactics, legacy `Lock/Fits/Step`).
+spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs (`unroll_sched`, `blkat_alloc` tactics, legacy `Lock/Fits/Step`).
 Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migrated sync proofs (Handoff, Counter) use it with FOwned. Recommended: the maintainer re-statuses
 `Proto.WP` as `target` (it is the all-schedules adequacy engine under `CTriple`, with fsym WP mode as its backend), and retires only `TTriple`, `Owned`, `TlsLemmas`, `Conc.Lock`, the Conc specs
 (`MutexSpec` ...) and `Conc.Total`. Without this decision L12 has no end state.
@@ -408,7 +408,7 @@ Proofs/Lists/Sep L4 NONE M proof | Lists/Bounded L8 TICK L proof | Lists/Cost L8
 Proofs/Sync/Mutex L9 CONC M proof | Sync/SnapshotCache L9 CONC M proof | Sync/RwLockContract L9 CONC M proof | Threadsync/Mutex L9 CONC M proof |
 Sync/Semaphore L10 CONC L proof | Sync/SemCounter L10 CONC M proof | Sync/Mailbox L10 CONC M proof |
 Sync/RwLock L11 CONC L proof | Sync/RwLockSnapshotPair L11 CONC M proof | Threadsync/WaitGroup L11 CONC L proof |
-Conc/Own L12 CONC M lib | Conc/Csl L12 CONC L lib | Conc/TlsLemmas L12 CONC M lib | Conc/Witness L7 TOOL S lib |
+Conc/Own L12 CONC M lib | Conc/Csl L12 CONC L lib | Conc/TlsLemmas L12 deleted | Conc/Witness L7 TOOL S lib |
 Witnesses/Conc L7 TOOL S tool | Witnesses/Sep L7 TOOL S tool | Sep/Witness L7 TOOL S lib |
 Sep.lean L13 NONE S lib | Sep/{Triple,Total,Loop,Block} L13 STAY L/M lib | Sep/{Step,Automation} L6/L13 NONE S lib | Sep/{Try,TryAlias,Discard,Mmap,AddrReuse} L4 NONE S lib |
 Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient} L5 D2 S-M lib | Sep/{Cost,Bounded} L8 TICK M lib |

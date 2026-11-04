@@ -59,7 +59,7 @@ moves to another module, unless the entry records the maintainer's `"status_appr
 | `TotalTriple`, `Returns` | `Sep/Total` | `FTotalTriple`, `FReturns` (`FTotalTriple.toTotal_on`) |
 | `TotalTripleIn`, `TotalTripleStk` (#166) | `Sep/Total`, stack work | `FTotalTriple` whose precondition owns the room it needs (a stack-room resource) |
 | `TotalTripleWithin`, `FailsWithin` (#166), `Sep/Cost` | `Sep/Bounded`, `Sep/Cost` (deleted, L8) | `FTotalTriple` with a cost resource (credits in the ghost state, spent by the step rules; `Full/Cost`: exact counts, tight bounds, counted loops) |
-| `TTriple`, `TTripleIn` | `Conc/Own`, `Conc/TlsLemmas` | `CTriple` (thread-local resources in `FAssn`; Plan A4) |
+| `TTriple` (`TTripleIn` and `Conc/TlsLemmas` deleted) | `Conc/Own` | `CTriple` (thread-local resources in `FAssn`; Plan A4) |
 | `EventuallyReturns`, `EventuallyReturnsUnder`, `ReturnsWithin`, `Stops`, `Turns` (#178) | `Conc/Total` | a total `CTriple` with turn credits as a ghost resource |
 | `MemM.Halts` (#178) | | a consequence of the total step rules (`FReturns`) |
 | `LoopTemplate`, `DispatchTemplate`, `DispatchSpec`, `RecTemplate` | `Sep/LoopTemplate`, `Sep/DispatchTemplate`, `RecTemplate` | loop, dispatch and call rules for `fsym` (`Full/Loop`: `FTotalTriple.loop_ghost`, `FTriple.loop`; recursion by `FTriple.admissible_fun`) |

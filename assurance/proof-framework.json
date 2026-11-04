@@ -481,11 +481,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "TTripleIn",
-      "module": "ZigLean.Conc.TlsLemmas",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "ThreadLocal",
       "module": "ZigLean.Sep.Full.ThreadStep",
       "status": "target",
@@ -878,9 +873,6 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "ZigLean/Conc/TlsLemmas.lean"
-    },
-    {
       "path": "ZigLean/Conc/Transfer.lean",
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
@@ -930,10 +922,6 @@
     },
     {
       "path": "tests/roadmap/alloc-fba/AllocFba/Fba.lean"
-    },
-    {
-      "path": "tests/roadmap/thread-locals/ThreadLocals/Leak.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     }
   ]
 }
