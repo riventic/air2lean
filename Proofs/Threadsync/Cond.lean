@@ -71,8 +71,9 @@ theorem wake_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     Thread_Condition_FutexImpl_wake__anon_b3c587c57789.again9]
 
 /-- **`Condition.signal`** (`wake(1)`) outside or holding the mutex, preserving its complete
-resource, after every registration (`hseen`). -/
-theorem cond_signal_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+resource, after every registration (`hseen`); its part pays the loop's ticks from its unmetered
+fragment. -/
+theorem cond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
@@ -103,25 +104,11 @@ theorem cond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost 
     P.WP t (Thread_Condition_signal p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         ∀ u i jr sn e, C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d := by
-  refine WP.mono ?_ (cond_signal_wp_unmetered hC hcost hp t g hgx hgo hsx io G m d hu ?_ hi)
+  refine WP.mono ?_ (cond_signal_wp hC hcost hp t g hgx hgo hsx io G m d hu ?_ hi)
   · rintro _ G' m' d' ⟨hd, hc, hi', hs⟩
     exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hs⟩
   · intro G₁ rX m₁ hg hU
     exact hseen (L.part g) rfl G₁ rX m₁ (by simpa only [L.setPart_self] using hg) hU
-
-/-- Concrete Plain signal convenience, derived from its actual unmetered resource. -/
-theorem cond_signal_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
-    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
-    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hpl : (L.part g).Plain)
-    (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
-      C.ph (G₁ u) = .reg i jr sn e →
-      VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
-    (hi : P.inv (upd G t g) m) :
-    P.WP t (Thread_Condition_signal p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      P.inv (upd G' t g) m' ∧ ∀ u i jr sn e,
-        C.ph (G' u) = .reg i jr sn e → C.Signalled m') G m d :=
-  cond_signal_wp_unmetered hC hcost hp t g hgx hgo hsx io G m d hpl.2 hseen hi
 
 /-! ## `wait`
 
@@ -405,8 +392,9 @@ def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   signal_pre := payUnmetered
   signal_during := keepPart
   signal_post := keepPart
-  signal_plain_pre _ _ := payUnmetered_plain
-  signal_plain_post _ _ _ _ hr := hr
+  signal_unmetered_pre _ _ hu := hu
+  signal_unmetered_during _ _ _ _ hr := hr
+  signal_unmetered_post _ _ _ _ hr := hr
   wait_wp_resource := cond_wait_wp_resource
   signal_wp_resource := cond_signal_wp_resource
 

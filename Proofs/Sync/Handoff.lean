@@ -66,7 +66,7 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res} (hp :
     wp_lockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩ hp,
     wp_unlockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
     wp_signal (Lo := lo) (prodOf := prodOf) ioCond rfl ⟨⟩ hp,
-    wp_set (Lo := lo) (prodOf := prodOf) ioEvent rfl ⟨⟩ hp,
+    wp_set (Lo := lo) (prodOf := prodOf) ioEvent rfl ⟨⟩,
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .v7 }),
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .rdy }),
     U_storeHeld (Lo := lo), vOf, Ph.hasV, Ph.hasR]

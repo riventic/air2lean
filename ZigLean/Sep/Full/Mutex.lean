@@ -31,8 +31,10 @@ every program, instantiated by `Proofs/Iogroup/Lock.lean` and `Proofs/Sync/IoMut
 The primary resource contract exposes the actual caller-resource pre/post assertions. Each
 implementation proves payment only at its actual tick sites: an unticked native operation
 needs none, while an unbounded emitted retry needs a real invariant that supplies each tick.
-`lock_wp` is the exact-part specialization for concrete Plain clients. Counting no turns
-provides no resource mode, and this interface claims no numerical tick or retry bound.
+Every implementation admits a caller part with a positive unmetered fragment and returns it
+exactly (`lock_unmetered_pre`, `lock_unmetered_post`), so `lock_wp` is the exact-part rule for
+such a caller; a Plain part has one (`Res.Plain.unmetered`). Counting no turns provides no
+resource mode, and this interface claims no numerical tick or retry bound.
 -/
 
 namespace Zig
@@ -53,8 +55,12 @@ structure MutexImpl (Tgt : Type) where
   lock_pre : ThreadId → FAssn
   /-- The caller part `lock` returns, from the one it was called with. -/
   lock_post : ThreadId → Res → FAssn
-  lock_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → lock_pre t r
-  lock_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → lock_post t r r' → r' = r
+  /-- A caller part with a positive unmetered fragment admits `lock` (the minimal resource of
+  an emitted retry loop that ticks). -/
+  lock_unmetered_pre : ∀ (t : ThreadId) (r : Res), 0 < r.gh.ac.frag .unmetered → lock_pre t r
+  /-- `lock` returns such a caller part exactly. -/
+  lock_unmetered_post : ∀ (t : ThreadId) (r r' : Res), 0 < r.gh.ac.frag .unmetered →
+    lock_post t r r' → r' = r
   lock_wp_resource : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
     ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → lock_pre t (L.part g) →
@@ -72,20 +78,20 @@ structure MutexImpl (Tgt : Type) where
 
 namespace MutexImpl
 
-/-- The exact-part rule for a concrete Plain caller, derived from the implementation's
-actual resource contract and its verified compatibility entailments. -/
+/-- The exact-part rule for a caller part with a positive unmetered fragment, derived from the
+implementation's actual resource contract and its verified compatibility entailments. -/
 theorem lock_wp (C : MutexImpl Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop} {K : FPrim γ}
     (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hplain : (L.part g).Plain) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : P.inv (upd G t g) m) :
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
   refine WP.mono ?_ (C.lock_wp_resource hP hcost hp hS t g hg hok
-    (C.lock_plain_pre t (L.part g) hplain) io G m d hi)
+    (C.lock_unmetered_pre t (L.part g) hu) io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, r, rL, hr, hi'⟩
-  have he := C.lock_plain_post t (L.part g) r hplain hr
+  have he := C.lock_unmetered_post t (L.part g) r hu hr
   subst r
   exact ⟨hd, hc, rL, by simpa only [L.setPart_self] using hi'⟩
 

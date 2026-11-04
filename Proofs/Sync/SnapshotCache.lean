@@ -351,7 +351,8 @@ theorem update_spec (rp : Res) (hp : rp.Plain) {k : Nat} (hk : k < 2)
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
       proto.inv (upd G' 1 (gOut rp (.wk (k + 1) false))) m') G m d := by
   unfold update
-  fsym [mi.lock_wp fits rfl rfl hmc.symm _ (gOut rp (.wk k false)) _ _ hp, mi.unlock_wp fits rfl rfl hmc.symm,
+  fsym [mi.lock_wp fits rfl rfl hmc.symm _ (gOut rp (.wk k false)) _ _ hp.unmetered,
+    mi.unlock_wp fits rfl rfl hmc.symm,
     fits.wp_hold (g' := gH rp (.wk k false)), fits.wp_hold (g' := gH rp (.wk k true)),
     fits.wp_hold (g' := gH rp (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
     set_out, set_hold, ph_out, ph_hold, ok_out, ok_hold, aVal, Ph.cnt, Ph.mid]
@@ -704,7 +705,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the cache. The holder's step names `main`'s caller part `?rp` in both `G'` and `g'`, so the
   -- invariant's hypothesis fixes it before the post's obligations (`hR`) mention it.
   fsym [FTriple.allocStack', inv_start, inv_spawn,
-    (fun {w : Res} (hw : w.Plain) => mi.lock_wp fits rfl rfl hmc.symm 0 (gRun w) rfl rfl hw io),
+    (fun {w : Res} (hw : w.Plain) => mi.lock_wp fits rfl rfl hmc.symm 0 (gRun w) rfl rfl hw.unmetered io),
     snapshot_ok,
     fits.wp_hold (G' := upd _ 0 (gH ?rp .run _)) (g' := gH ?rp .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
     main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, part_gOut, gRun, gJoin,

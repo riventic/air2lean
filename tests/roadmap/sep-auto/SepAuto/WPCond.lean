@@ -6,9 +6,10 @@ import ZigLean.Sep.Full.Cond
 
 The same condition contract applies in either phase. The post retains the exact initial
 ghost value and arbitrary assertions about both complete resource components, including
-knowledge and ghosts. The regression supplies only the contract of the implementation and the
-Plain caller part that `CondImpl.signal_wp` admits (its exact-part rule), with the floor
-`hseen` at every intermediate part the implementation's signal may hold.
+knowledge and ghosts. The regression supplies only the contract of the implementation, a
+caller part with a positive unmetered fragment (which every implementation's `signal` admits
+and holds exactly: `CondImpl.signal_unmetered_pre`, `…_during`, `…_post`), and the floor
+`hseen` at the caller's own ghost value `g`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full
@@ -25,10 +26,9 @@ theorem signal_preserves {Tgt γ : Type} (ci : CondImpl Tgt)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (A B : FAssn) (ha : A (L.part g)) (hb : B (L.held g))
-    (hplain : (L.part g).Plain)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hseen : ∀ rᵢ, ci.signal_during t (L.part g) rᵢ → ∀ G₁ rX m₁,
-      G₁ t = L.setPart g rᵢ → U G₁ rX m₁ → ∀ u i jr sn e,
+    (hseen : ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → ∀ u i jr sn e,
       C.ph (G₁ u) = .reg i jr sn e →
       VClock.le (C.S.hist m₁)[jr]!.clock (m₁.clocks[t]!) = true)
     (hi : P.inv (upd G t g) m) :

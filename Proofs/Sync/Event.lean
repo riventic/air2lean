@@ -151,19 +151,6 @@ theorem ioEvent_wait_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost
   rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
   exact ⟨hd, hc, hs, L.part g, rfl, by simpa only [L.setPart_self] using hi'⟩
 
-/-- The setter's resource contract: `set` contains no tick and preserves every caller part
-without a payment guard. -/
-theorem ioEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
-    {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (_hpre : anyPart t (L.part g)) (hi : P.inv (upd G t g) m) :
-    P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      ∃ r', keepPart t (L.part g) r' ∧
-        P.inv (upd G' t (L.setPart g r')) m') G m d := by
-  refine WP.mono ?_ (ioEvent_set_wp hE hcost hp t g hgx hgo hsx io G m d hi)
-  rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
-  exact ⟨hd, hc, hs, L.part g, rfl, by simpa only [L.setPart_self] using hi'⟩
-
 end
 
 /-- **`Io.Event` is an event** (`EventImpl`) in this program. -/
@@ -174,11 +161,7 @@ def ioEvent : EventImpl Tgt where
   wait_post := keepPart
   wait_plain_pre _ _ := payUnmetered_plain
   wait_plain_post _ _ _ _ hr := hr
-  set_pre := anyPart
-  set_post := keepPart
-  set_plain_pre _ _ _ := True.intro
-  set_plain_post _ _ _ _ hr := hr
   wait_wp_resource := ioEvent_wait_wp_resource
-  set_wp_resource := ioEvent_set_wp_resource
+  set_wp := ioEvent_set_wp
 
 end Sync
