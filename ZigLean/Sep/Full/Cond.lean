@@ -465,6 +465,80 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
         (fun _ => hI.ex t (by rw [hg₁, hg]; exact nofun))
       exact hI'
 
+/-- The `waiters` and `signals` of a state value with `s ≤ w < 65535` (the facts `wp_reg` gives
+for the value it read; Zig's `assert(prev_state.waiters < maxInt(u16))`). -/
+def RegOld (b : BitVec 32) : Prop := b.toNat % 65536 < 65535 ∧ b.toNat / 65536 ≤ b.toNat % 65536
+
+/-- The waiter's `waiters += 1` at `ld i e` (after it, `reg i jr false e` with `jr` the new
+write): it reads the newest state, with room for one more waiter (`RegOld`). -/
+theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok)
+    {G₁ : ThreadId → γ}
+    {rY : Res} {m₁ m' : Mem} {i : Nat} {e : BitVec 32} {ord : AtomicOrder} {old : BitVec 32}
+    (hg₁ : G₁ t = g) (hg : C.ph g = .ld i e) (hgh : L.ph g = .holds)
+    (hU : U G₁ (rsum (C.S.cellsR m₁) rY) m₁) (hY : ∀ l, C.S.In l → rY.heap l = none)
+    (hms : C.MStep C.S t m₁ m')
+    (hA : ∀ hF, (∀ x, C.S.o ≤ x → x < C.S.o + 4 → hF (C.S.b, x) = none) →
+      FStepIn hF m₁ m')
+    (hL : L.Inv G₁ (rsum (C.S.cellsR m') rY) m')
+    (hv : (C.lastS m₁).Val old)
+    (hh : C.S.hist m' = (C.S.hist m₁).push (Word.rmwEnt m' t ord (C.lastS m₁) (old + 1))) :
+    RegOld old ∧ P.inv (upd G₁ t (C.set g (.reg i (C.S.hist m₁).size false e))) m' := by
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  obtain ⟨hI, -⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide) hop.waiters hL
+  have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
+  have hold : val (C.lastS m₁) = old := val_of hv
+  have hroom := hI.room t hcr
+  have hsw := hI.s_le_w
+  unfold wOf at hroom hsw; unfold sOf at hsw
+  rw [hold] at hroom hsw
+  refine ⟨⟨hroom, hsw⟩, hC.backC (.inl rfl) hg₁ (by rw [hg]; exact ⟨rfl, rfl, rfl⟩) hU hY hms
+    (.inl (hC.keepE hU hms)) hL ?_⟩
+  exact hI.register (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh
+    (by rw [hold]; exact FEvent.rmwEnt_val) (VClock.le_refl _) (hC.keepE hU hms) hop.waiters
+    hop.woken hop.threads hop.clock
+
+/-- The waiter's `waiters += 1` on bits (`atomicRmwC`, `Thread.Condition`). -/
+theorem wp_reg (hC : L.Fits (C.prim L) P U ok) {i : Nat} {e : BitVec 32}
+    (hg : C.ph g = .ld i e) (hgh : L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' jr old, m'.current = t → RegOld old →
+      P.inv (upd G₁ t (C.set g (.reg i jr false e))) m' → Q (old, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicRmwC .add false .relaxed 4 C.S.ptr (1 : BitVec 32) : CM Tgt σ (BitVec 32)).run s)
+      Q G m n :=
+  FLock.wp_wordRmw hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgh]; decide) hi
+    fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hY hv _ hh _ hw' hw₀ hct hrun hA _hS _hR hL => by
+      have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      obtain ⟨hro, hi'⟩ := hC.afterReg hg₁ hg hgh hU hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩)) hw' (.inr ⟨_, _, hh⟩)) hA hL hv hh
+      exact h k hk G₁ m' _ old (hop.current.trans hc₁) hro hi'
+
+/-- The waiter's `waiters += 1` with a decode (`atomicRmwAsC`, `Io.Condition`): `v` encodes one
+waiter, and every state value with room decodes (`hdec`). -/
+theorem wp_regAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok) {i : Nat}
+    {e : BitVec 32} {v : α} (hv1 : Packed.toBits v = (1 : BitVec 32))
+    (hdec : ∀ b : BitVec 32, RegOld b → ∃ r, (Packed.ofBits? (α := α) b).run = some (.ok r))
+    (hg : C.ph g = .ld i e) (hgh : L.ph g = .holds) (hi : P.inv (upd G t g) m)
+    {Q : α × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' jr old r, m'.current = t → RegOld old →
+      (Packed.ofBits? (α := α) old).run = some (.ok r) →
+      P.inv (upd G₁ t (C.set g (.reg i jr false e))) m' → Q (r, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicRmwAsC .add .relaxed 4 C.S.ptr v : CM Tgt σ α).run s) Q G m n :=
+  FLock.wp_wordRmwAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) (by rw [hgh]; decide) hi
+    (fun G₁ rY m₁ hg₁ hc₁ hU b hb => by
+      have hI := hC.wInv _ _ _ hU
+      have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
+      have hroom := hI.room t hcr
+      have hsw := hI.s_le_w
+      unfold wOf at hroom hsw; unfold sOf at hsw
+      rw [val_of hb] at hroom hsw
+      exact hdec b ⟨hroom, hsw⟩)
+    fun k hk G₁ rY m₁ m' old r hg₁ hc₁ hU hY hd hv _ hh _ hw' hw₀ hct hrun hA _hS _hR hL => by
+      have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+      rw [hv1] at hh
+      obtain ⟨hro, hi'⟩ := hC.afterReg hg₁ hg hgh hU hY (mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩)) hw' (.inr ⟨_, _, hh⟩)) hA hL hv hh
+      exact h k hk G₁ m' _ old r (hop.current.trans hc₁) hro hd hi'
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
