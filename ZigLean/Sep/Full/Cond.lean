@@ -687,6 +687,10 @@ theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
         let r := hC.afterReadS hg₁ hg hU hY (hms (.inl hh)) hA hL hj hv hfl hh
         (h k hk G₁ m' (hop.current.trans hc₁)).2 b r.1 r.2⟩
 
+/-! ## The waiter's futex wait at the epoch -/
+
+/-! ## The signaller -/
+
 end FCond
 
 /-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
