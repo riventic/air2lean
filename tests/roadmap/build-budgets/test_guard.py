@@ -40,6 +40,7 @@ class GuardTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         os.environ.pop("AIR2LEAN_GUARD_PRIORITY", None)
+        os.environ.pop("AIR2LEAN_GUARD_IDLE_MINUTES", None)
 
     def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
         self.fixture_counter += 1
@@ -221,6 +222,52 @@ fixture_pause()
             self.cleanup_fixture(token)
         self.assertTrue(all(not self.live(int(pid)) for pid in pids.read_text().split()))
         self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
+
+    def test_idle_limit_stops_a_workload_without_cpu_progress(self):
+        started = time.monotonic()
+        result, report, _ = self.run_guard("fixture_pause()", "--idle-minutes", "0.02")
+        self.assertEqual((result.returncode, report["outcome"]), (123, "hung"), result.stderr)
+        self.assertEqual(report["budget"]["idle_minutes"], 0.02)
+        self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
+
+    def test_idle_limit_spares_a_workload_that_computes(self):
+        # 6 s of silent computing against a 3 s limit and a 1 s step: each window needs a third
+        # of a core, and Linux ps counts whole seconds.
+        source = "import time\nend = time.monotonic() + 6\nwhile time.monotonic() < end: pass"
+        result, report, _ = self.run_guard(source, "--idle-minutes", "0.05", "--timeout", "10")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), result.stderr)
+
+    def test_idle_limit_comes_from_the_environment_or_is_off(self):
+        os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "0.02"
+        result, report, _ = self.run_guard("fixture_pause()")
+        self.assertEqual((result.returncode, report["outcome"]), (123, "hung"), result.stderr)
+        os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "soon"
+        result = subprocess.run(self.command("pass")[0], capture_output=True, text=True, timeout=12)
+        self.assertEqual(result.returncode, 2)
+        del os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"]
+        result, report, _ = self.run_guard("import time; time.sleep(1.5)")
+        self.assertEqual((result.returncode, report["budget"]["idle_minutes"]), (0, 0))
+
+    def test_progress_is_a_started_process_output_or_cpu_time(self):
+        rows = {1: {"start": "a", "cpu_s": 5.0}, 2: {"start": "a", "cpu_s": 0.0}}
+        progress = guard.Progress(60, 0)
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 1))  # both started: progress
+        self.assertEqual(progress.since, 1)
+        rows[1]["cpu_s"] = 5.5
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 30))  # 0.5 s of CPU: under the 1 s step
+        self.assertEqual(progress.since, 1)
+        del rows[1]  # an ended process takes nothing back
+        rows[2]["cpu_s"] = 0.6
+        self.assertFalse(progress.hung(rows, {2}, 0, 40))  # 0.5 + 0.6 s reach the step
+        self.assertEqual(progress.since, 40)
+        self.assertFalse(progress.hung(rows, {2}, 7, 90))  # output
+        self.assertEqual(progress.since, 90)
+        rows[2] = {"start": "b", "cpu_s": 0.0}  # PID reuse: a started process
+        self.assertFalse(progress.hung(rows, {2}, 7, 149))
+        self.assertEqual(progress.since, 149)
+        self.assertTrue(progress.hung(rows, {2}, 7, 209))
+        self.assertEqual([guard.cpu_seconds(text) for text in ("0:01.50", "01:02:03", "2-00:00:01")],
+                         [1.5, 3723.0, 172801.0])
 
     def test_sampled_memory_limit_without_large_allocations(self):
         result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
