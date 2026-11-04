@@ -941,16 +941,26 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
     trace without importing it (`@pkg/+M:olean`, `@pkg/+M:depTrace`): an import would run the
     module's initializers. `:depTrace` covers everything below `M`; `:olean` alone misses a
     change below `M` that leaves `M`'s olean bytes equal. `pkg` is the package of `packages` whose
-    build directory holds the olean found first on `roots`; None when some module has none."""
+    build directory holds the olean found first on `roots`; None when some module has none. An
+    olean of `pkg` whose module has no source there (deleted since it was built) fails: Lake can
+    build it no more, and `leanchecker` would check it (lean-deps.py `orphan_outputs`)."""
+    deps = lean_deps()
     owners = {(path / ".lake/build/lib/lean").resolve():
-              tomllib.loads((path / "lakefile.toml").read_text(encoding="utf-8"))["name"] for path in packages}
+              (path, tomllib.loads((path / "lakefile.toml").read_text(encoding="utf-8"))["name"],
+               deps.package_sources(path)) for path in packages}
     needs = []
     for module in sorted(modules):
-        relative = module.replace(".", "/") + ".olean"
+        stem = module.replace(".", "/")
+        relative = stem + ".olean"
         owner = next((root for root in roots if (root / relative).is_file()), None)
         if owner not in owners:
             return None
-        needs += [f"@{owners[owner]}/+{module}:olean", f"@{owners[owner]}/+{module}:depTrace"]
+        package, name, sources = owners[owner]
+        if not deps.has_source(sources, stem):
+            raise ValueError(f"{owner / relative}: compiled module without a source in {package} (deleted "
+                             "since it was built); scripts/full-build.sh removes such outputs "
+                             "(python3 -B scripts/lean-deps.py --prune-orphans)")
+        needs += [f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
     return needs
 
 
