@@ -52,18 +52,25 @@ does not hold the admission queue for slots that other running builds hold.
 - Backfill: a head that holds all the free slots and waits for running workloads to free the
   rest leaves the machine partly idle. On the remote build host (2026-11-03), 11-slot heads
   waited up to 20 minutes while 18 GB were unused. So a head short of its slots holds only a
-  reservation: ceil(weight x waited / `--backfill-ramp`) slots. The ramp is 900 s by default,
-  and after it the head holds every slot it needs. The head publishes the part of its
-  reservation that it does not hold yet (`unmet`) in `<lock>.d/heads/`, flock-held. A normal
-  guard waiting behind the head, with no drain ticket queued, may run ahead in what is left.
-  It must take all its slots at once, and only when the head's unmet reservation stays free
-  beside them. Backfilling guards and the head's bound check are serialized by
-  `<lock>.d/register`.
+  reservation: ceil(weight x waited / `--backfill-ramp`) slots, where `waited` counts from when
+  it became the head. The ramp is 900 s by default, and after it the head holds every slot it
+  needs. The head publishes in `<lock>.d/heads/`, flock-held, the part of its reservation that
+  it does not hold yet (`unmet`) and the slots it still lacks (`need`). A normal guard waiting
+  behind the head, with no drain ticket queued, may run ahead in what is left.
+  - It must take all its slots at once.
+  - The head's unmet reservation must stay free beside them.
+  - The free slots must not cover the head's `need`: free slots that would admit the head now
+    go to the head.
+  - Backfilling guards and the head's bound check are serialized by `<lock>.d/register`. A
+    backfill attempt skips when the lock is busy, and the head waits for it within
+    `--lock-wait`, so a stalled holder cannot block admission past that.
   - Bound on the head's wait: the ramp, plus the backfilled workloads already running, each
     bounded by its `--timeout`. After the ramp, a backfill only uses slots the head does not
     need. `--backfill-ramp 0` reserves everything at once, which is the earlier behavior.
   - A queue holder that publishes nothing gets no backfill. That covers a guard of an older
-    checkout, and a stand-in in a test.
+    checkout, and a stand-in in a test. An entry of another shape also gets none.
+  - `free_mib` (the sizing hint of `scripts/full-build.sh`) does not count the head's unmet
+    reservation as free.
   - Memory safety is unchanged: a backfilled workload holds its slots like any admitted one, and
     the report records `backfilled`.
 - Drain tickets: a merge guard and an `--exclusive` guard take a ticket in `<lock>.d/merge/`
