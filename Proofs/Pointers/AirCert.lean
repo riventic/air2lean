@@ -59,62 +59,74 @@ def source_11 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, source_3, source_4, source_5, source_6, source_7, source_8, source_9, source_10, source_11], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("pointers.addDown", { loop := true, entry := true }),
+      ("pointers.addTo", { loop := true, entry := false }),
+      ("pointers.bumpOpt", { loop := true, entry := false }),
+      ("pointers.copyJob", { loop := true, entry := false }),
+      ("pointers.delay", { loop := true, entry := false }),
+      ("pointers.dueOf", { loop := true, entry := false }),
+      ("pointers.maxPtr", { loop := true, entry := false }),
+      ("pointers.same", { loop := true, entry := false }),
+      ("pointers.setOpt", { loop := true, entry := false }),
+      ("pointers.setOptJob", { loop := true, entry := false }),
+      ("pointers.sumTo", { loop := true, entry := false }),
+      ("pointers.swap", { loop := true, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `pointers.addTo` in the original program. -/
 def air_addTo : _root_.Air2Lean.Func := source_1
 
 theorem lookup_addTo : program.lookup "pointers.addTo" = some air_addTo := rfl
+theorem policy_addTo : program.ticked "pointers.addTo" = true :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
+theorem entry_addTo : program.entryTicked "pointers.addTo" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
 
 /-- The decoded canonical AIR of `pointers.delay` in the original program. -/
 def air_delay : _root_.Air2Lean.Func := source_4
 
 theorem lookup_delay : program.lookup "pointers.delay" = some air_delay := rfl
+theorem policy_delay : program.ticked "pointers.delay" = true :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 4 (by decide))
+theorem entry_delay : program.entryTicked "pointers.delay" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 4 (by decide))
 
 /-- The decoded canonical AIR of `pointers.dueOf` in the original program. -/
 def air_dueOf : _root_.Air2Lean.Func := source_5
 
 theorem lookup_dueOf : program.lookup "pointers.dueOf" = some air_dueOf := rfl
+theorem policy_dueOf : program.ticked "pointers.dueOf" = true :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 5 (by decide))
+theorem entry_dueOf : program.entryTicked "pointers.dueOf" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 5 (by decide))
 
 /-- The decoded canonical AIR of `pointers.same` in the original program. -/
 def air_same : _root_.Air2Lean.Func := source_7
 
 theorem lookup_same : program.lookup "pointers.same" = some air_same := rfl
+theorem policy_same : program.ticked "pointers.same" = true :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 7 (by decide))
+theorem entry_same : program.entryTicked "pointers.same" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 7 (by decide))
 
 /-- The decoded canonical AIR of `pointers.sumTo` in the original program. -/
 def air_sumTo : _root_.Air2Lean.Func := source_10
 
 theorem lookup_sumTo : program.lookup "pointers.sumTo" = some air_sumTo := rfl
+theorem policy_sumTo : program.ticked "pointers.sumTo" = true :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 10 (by decide))
+theorem entry_sumTo : program.entryTicked "pointers.sumTo" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 10 (by decide))
 
 /-- The decoded canonical AIR of `pointers.swap` in the original program. -/
 def air_swap : _root_.Air2Lean.Func := source_11
 
 theorem lookup_swap : program.lookup "pointers.swap" = some air_swap := rfl
-
-theorem policies :
-    program.ticked "pointers.addTo" = true ∧
-    program.entryTicked "pointers.addTo" = false ∧
-    program.ticked "pointers.delay" = true ∧
-    program.entryTicked "pointers.delay" = false ∧
-    program.ticked "pointers.dueOf" = true ∧
-    program.entryTicked "pointers.dueOf" = false ∧
-    program.ticked "pointers.same" = true ∧
-    program.entryTicked "pointers.same" = false ∧
-    program.ticked "pointers.sumTo" = true ∧
-    program.entryTicked "pointers.sumTo" = false ∧
-    program.ticked "pointers.swap" = true ∧
-    program.entryTicked "pointers.swap" = false := by
-  decide +kernel
-theorem policy_addTo : program.ticked "pointers.addTo" = true := policies.1
-theorem entry_addTo : program.entryTicked "pointers.addTo" = false := policies.2.1
-theorem policy_delay : program.ticked "pointers.delay" = true := policies.2.2.1
-theorem entry_delay : program.entryTicked "pointers.delay" = false := policies.2.2.2.1
-theorem policy_dueOf : program.ticked "pointers.dueOf" = true := policies.2.2.2.2.1
-theorem entry_dueOf : program.entryTicked "pointers.dueOf" = false := policies.2.2.2.2.2.1
-theorem policy_same : program.ticked "pointers.same" = true := policies.2.2.2.2.2.2.1
-theorem entry_same : program.entryTicked "pointers.same" = false := policies.2.2.2.2.2.2.2.1
-theorem policy_sumTo : program.ticked "pointers.sumTo" = true := policies.2.2.2.2.2.2.2.2.1
-theorem entry_sumTo : program.entryTicked "pointers.sumTo" = false := policies.2.2.2.2.2.2.2.2.2.1
-theorem policy_swap : program.ticked "pointers.swap" = true := policies.2.2.2.2.2.2.2.2.2.2.1
-theorem entry_swap : program.entryTicked "pointers.swap" = false := policies.2.2.2.2.2.2.2.2.2.2.2
+theorem policy_swap : program.ticked "pointers.swap" = true :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 11 (by decide))
+theorem entry_swap : program.entryTicked "pointers.swap" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 11 (by decide))
 
 theorem callee_0 : panicOf? "pointers.addTo" = none := rfl
 

@@ -243,7 +243,9 @@ def main():
     result = lean(ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean')
     assert result.returncode == 0, result.stdout + result.stderr
     tables = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text().count('\n#eval checkTable ')
-    assert result.stdout.count('certified AIR terms equal the decoded golden files') == tables, result.stdout
+    # RoundTrip's line per table (#562: the complete original program binds the certified names).
+    assert len(re.findall(r'original AIR terms and \d+ certified names bound', result.stdout)) == tables, \
+        result.stdout
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
         check_native_binding()

@@ -48,17 +48,25 @@ def source_7 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, source_3, source_4, source_5, source_6, source_7], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("Io.Mutex.lock", { loop := true, entry := false }),
+      ("Io.Mutex.lockUncancelable", { loop := true, entry := false }),
+      ("Io.Mutex.tryLock", { loop := true, entry := false }),
+      ("Io.Mutex.unlock", { loop := true, entry := false }),
+      ("debug.assert", { loop := false, entry := false }),
+      ("iogroup.add", { loop := true, entry := false }),
+      ("iogroup.groupConcurrent", { loop := true, entry := false }),
+      ("iogroup.groupCounter", { loop := true, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `debug.assert` in the original program. -/
 def air_debug_assert : _root_.Air2Lean.Func := source_4
 
 theorem lookup_debug_assert : program.lookup "debug.assert" = some air_debug_assert := rfl
-
-theorem policies :
-    program.ticked "debug.assert" = false ∧
-    program.entryTicked "debug.assert" = false := by
-  decide +kernel
-theorem policy_debug_assert : program.ticked "debug.assert" = false := policies.1
-theorem entry_debug_assert : program.entryTicked "debug.assert" = false := policies.2
+theorem policy_debug_assert : program.ticked "debug.assert" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 4 (by decide))
+theorem entry_debug_assert : program.entryTicked "debug.assert" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 4 (by decide))
 
 theorem callee_0 : panicOf? "debug.FullPanic((function 'defaultPanic')).reachedUnreachable" = some .unreachable := rfl
 

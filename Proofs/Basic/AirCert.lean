@@ -43,62 +43,70 @@ def source_7 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, source_3, source_4, source_5, source_6, source_7], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("basic.absDiff", { loop := false, entry := false }),
+      ("basic.clampAdd", { loop := false, entry := false }),
+      ("basic.classify", { loop := false, entry := false }),
+      ("basic.scale", { loop := false, entry := false }),
+      ("basic.sum", { loop := false, entry := false }),
+      ("basic.tardiness", { loop := false, entry := false }),
+      ("basic.totalWeightedTardiness", { loop := false, entry := false }),
+      ("basic.weightedTardiness", { loop := false, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `basic.absDiff` in the original program. -/
 def air_absDiff : _root_.Air2Lean.Func := source_0
 
 theorem lookup_absDiff : program.lookup "basic.absDiff" = some air_absDiff := rfl
+theorem policy_absDiff : program.ticked "basic.absDiff" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
+theorem entry_absDiff : program.entryTicked "basic.absDiff" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
 
 /-- The decoded canonical AIR of `basic.clampAdd` in the original program. -/
 def air_clampAdd : _root_.Air2Lean.Func := source_1
 
 theorem lookup_clampAdd : program.lookup "basic.clampAdd" = some air_clampAdd := rfl
+theorem policy_clampAdd : program.ticked "basic.clampAdd" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
+theorem entry_clampAdd : program.entryTicked "basic.clampAdd" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
 
 /-- The decoded canonical AIR of `basic.classify` in the original program. -/
 def air_classify : _root_.Air2Lean.Func := source_2
 
 theorem lookup_classify : program.lookup "basic.classify" = some air_classify := rfl
+theorem policy_classify : program.ticked "basic.classify" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 2 (by decide))
+theorem entry_classify : program.entryTicked "basic.classify" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 2 (by decide))
 
 /-- The decoded canonical AIR of `basic.scale` in the original program. -/
 def air_scale : _root_.Air2Lean.Func := source_3
 
 theorem lookup_scale : program.lookup "basic.scale" = some air_scale := rfl
+theorem policy_scale : program.ticked "basic.scale" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 3 (by decide))
+theorem entry_scale : program.entryTicked "basic.scale" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 3 (by decide))
 
 /-- The decoded canonical AIR of `basic.sum` in the original program. -/
 def air_sum : _root_.Air2Lean.Func := source_4
 
 theorem lookup_sum : program.lookup "basic.sum" = some air_sum := rfl
+theorem policy_sum : program.ticked "basic.sum" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 4 (by decide))
+theorem entry_sum : program.entryTicked "basic.sum" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 4 (by decide))
 
 /-- The decoded canonical AIR of `basic.tardiness` in the original program. -/
 def air_tardiness : _root_.Air2Lean.Func := source_5
 
 theorem lookup_tardiness : program.lookup "basic.tardiness" = some air_tardiness := rfl
-
-theorem policies :
-    program.ticked "basic.absDiff" = false ∧
-    program.entryTicked "basic.absDiff" = false ∧
-    program.ticked "basic.clampAdd" = false ∧
-    program.entryTicked "basic.clampAdd" = false ∧
-    program.ticked "basic.classify" = false ∧
-    program.entryTicked "basic.classify" = false ∧
-    program.ticked "basic.scale" = false ∧
-    program.entryTicked "basic.scale" = false ∧
-    program.ticked "basic.sum" = false ∧
-    program.entryTicked "basic.sum" = false ∧
-    program.ticked "basic.tardiness" = false ∧
-    program.entryTicked "basic.tardiness" = false := by
-  decide +kernel
-theorem policy_absDiff : program.ticked "basic.absDiff" = false := policies.1
-theorem entry_absDiff : program.entryTicked "basic.absDiff" = false := policies.2.1
-theorem policy_clampAdd : program.ticked "basic.clampAdd" = false := policies.2.2.1
-theorem entry_clampAdd : program.entryTicked "basic.clampAdd" = false := policies.2.2.2.1
-theorem policy_classify : program.ticked "basic.classify" = false := policies.2.2.2.2.1
-theorem entry_classify : program.entryTicked "basic.classify" = false := policies.2.2.2.2.2.1
-theorem policy_scale : program.ticked "basic.scale" = false := policies.2.2.2.2.2.2.1
-theorem entry_scale : program.entryTicked "basic.scale" = false := policies.2.2.2.2.2.2.2.1
-theorem policy_sum : program.ticked "basic.sum" = false := policies.2.2.2.2.2.2.2.2.1
-theorem entry_sum : program.entryTicked "basic.sum" = false := policies.2.2.2.2.2.2.2.2.2.1
-theorem policy_tardiness : program.ticked "basic.tardiness" = false := policies.2.2.2.2.2.2.2.2.2.2.1
-theorem entry_tardiness : program.entryTicked "basic.tardiness" = false := policies.2.2.2.2.2.2.2.2.2.2.2
+theorem policy_tardiness : program.ticked "basic.tardiness" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 5 (by decide))
+theorem entry_tardiness : program.entryTicked "basic.tardiness" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 5 (by decide))
 
 
 /-- The items of `basic.sum`'s slice parameters, by their `arg` instruction. -/

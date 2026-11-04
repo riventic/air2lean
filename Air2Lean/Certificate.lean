@@ -175,7 +175,11 @@ def printDialect (d : Dialect) : String :=
   s!"endian := {repr d.endian}, errorSetBits := {d.errorSetBits}, backend := {str d.backend}, " ++
   s!"buildMode := {str d.buildMode}, noLibc := {bool d.noLibc} }"
 
-
+/-- Constructor quotation of the whole decoded `Func`, including every source field and
+operations outside the proof fragment (the round trip compares it with the decoded golden AIR).
+`none` denotes an unexpected quotation expression, never an unsupported body replaced by
+`default`. -/
+def printFunc (f : Func) : Option String := (Reify.func f).toOption
 
 /-! ## The certificate fragment -/
 
@@ -466,7 +470,7 @@ def localReason (f : Func) (mem : Bool) : Except String (Array String) := do
   let regs := registers f
   for i in insts do instReason f tyOfInst regs i
   -- The body printer that the certificate's statements use (`Reify` quotes every operation).
-  discard <| printBodyOrThrow "the body" f.body
+  unless (printBody f.body).isSome do throw "an instruction the certificate printer does not print"
   pure ((callsIn f).filter fun n => (panicCallee? n).isNone)
 
 /-! ## Locals and loops -/
@@ -1489,32 +1493,29 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
   let models ← Reify.models program.models
   let sources := (Array.range funcs.size).map fun index => s!"source_{index}"
   lines := lines.push s!"/-- The complete original translation input, before certificate selection. -/\ndef program : _root_.Air2Lean.Program := ⟨{arr id sources}, {models}⟩\n"
+  -- The step policy table (`Program.tickPolicies`: the call groups and classifications computed
+  -- once) in ONE kernel evaluation; each certified function's lemmas read its entry
+  -- (`Program.tickPolicy_of_tickPolicies`). The table is `funcs.map`: a function's index in it is
+  -- its index in `funcs`.
+  let table := program.tickPolicies
+  let entry (p : String × TickPolicy) : String :=
+    s!"({str p.1}, \{ loop := {bool p.2.loop}, entry := {bool p.2.entry} })"
+  lines := lines.push (s!"theorem policies : program.tickPolicies =\n    #[" ++
+    ",\n      ".intercalate (table.toList.map entry) ++ "] := by\n  decide +kernel\n")
   let mut sourceLemmas : Array (String × String) := #[]
   for f in frag do
     let some index := funcs.findIdx? (·.name == f.name)
       | throw s!"certificate function {f.name} is absent from its original program"
     sourceLemmas := sourceLemmas.push (f.name, s!"source_{index}")
-    lines := lines.push s!"/-- The decoded canonical AIR of `{f.name}` in the original program. -/"
-    lines := lines.push s!"def {airName f} : _root_.Air2Lean.Func := source_{index}\n"
-    lines := lines.push s!"theorem lookup_{declOf f.name} : program.lookup {str f.name} = some {airName f} := rfl\n"
-  -- The step policies of every certified function in ONE kernel evaluation, so the call graph
-  -- and the classifications are computed once (here from the groups computed once, as
-  -- `Program.tickPolicy_eq` states); each function's lemmas are projections of it.
-  let groups := program.groups
-  let policyOf (f : Func) : TickPolicy :=
-    TickPolicy.of (groups.any fun (members, recursive) => recursive && members.any (·.name == f.name))
-      (memFuncs.contains f.name) (concFuncs.contains f.name)
-  let facts := frag.flatMap fun f =>
-    #[s!"program.ticked {str f.name} = {bool (policyOf f).loop}",
-      s!"program.entryTicked {str f.name} = {bool (policyOf f).entry}"]
-  lines := lines.push s!"theorem policies :\n    {" ∧\n    ".intercalate facts.toList} := by\n  decide +kernel"
-  -- Conjunct `k` of the right-nested conjunction of `facts`.
-  let conjunct (k : Nat) : String :=
-    "policies" ++ String.join (List.replicate k ".2") ++ (if k + 1 < facts.size then ".1" else "")
-  for f in frag, index in [:frag.size] do
-    lines := lines.push s!"theorem policy_{declOf f.name} : program.ticked {str f.name} = {bool (policyOf f).loop} := {conjunct (2 * index)}"
-    lines := lines.push s!"theorem entry_{declOf f.name} : program.entryTicked {str f.name} = {bool (policyOf f).entry} := {conjunct (2 * index + 1)}"
-  lines := lines.push ""
+    let d := declOf f.name
+    let policy := table[index]!.2
+    let read := s!"(_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies {index} (by decide))"
+    lines := lines ++ #[
+      s!"/-- The decoded canonical AIR of `{f.name}` in the original program. -/",
+      s!"def {airName f} : _root_.Air2Lean.Func := source_{index}\n",
+      s!"theorem lookup_{d} : program.lookup {str f.name} = some {airName f} := rfl",
+      s!"theorem policy_{d} : program.ticked {str f.name} = {bool policy.loop} :=\n  congrArg _root_.Air2Lean.TickPolicy.loop {read}",
+      s!"theorem entry_{d} : program.entryTicked {str f.name} = {bool policy.entry} :=\n  congrArg _root_.Air2Lean.TickPolicy.entry {read}\n"]
   -- Functions with a viewed slice parameter, and the program of the others.
   let views := frag.filter (isView · memFuncs)
   let frag := frag.filter (!isView · memFuncs)

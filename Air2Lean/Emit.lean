@@ -893,8 +893,9 @@ structure FCtx where
   by the call graph, so a function that uses memory charges its frame to the stack budget
   (`Zig.enterFrame`, MM-5). -/
   recursive : Bool := false
-  /-- The step ticks of this function, as `Sem` charges them (`Program.tickPolicy`). -/
-  ticks : TickPolicy := {}
+  /-- The step ticks of this function, as `Sem` charges them (`Program.tickPolicies`). Program
+  emission sets it from that table; a context built alone gets the policy of its own flags. -/
+  ticks : TickPolicy := TickPolicy.of recursive mem conc
   /-- `some`: the function has `noalias` parameters, or one that has them may call it; the roots
   of the reads and writes of each instruction that can touch memory (`Air2Lean/Noalias.lean`),
   or why the function is rejected. Each such instruction is followed by its `Zig.naMark`. -/
@@ -3925,7 +3926,7 @@ private def emitOneFunctionWithFallbackMap (f : Func)
     (memFuncs : Array String) (globalIds : Array Nat) (fnBlocks : Array (String × String × Nat))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × EmittedCode) := #[]) (rawFuncs : Array String := #[])
-    (recursive : Bool := false) (ticks : TickPolicy := {}) (device : Option DeviceContract := none)
+    (recursive : Bool) (ticks : TickPolicy) (device : Option DeviceContract := none)
     (naCallee : Bool := false) (envFuncs : Array String := #[]) :
     FuncParts :=
   let fc := mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs globalIds concFuncs
@@ -4090,7 +4091,7 @@ def emitOneFunction (f : Func) (structNames : Array (String × String))
     (concFuncs : Array String := #[]) (spawnSemantics : SpawnSemantics := .available)
     (spawnFallbacks : Array (String × EmittedCode) := #[]) (rawFuncs : Array String := #[]) :
     FuncParts :=
-  let recursive := (calleesOf #[f.name] (fnRefs #[f]) f).contains f.name
+  let recursive := (callGroups #[f]).any (·.2)
   emitOneFunctionWithFallbackMap f (prepareSpawnFallbackMap spawnFallbacks) structNames funcNames
     floatSemantics memFuncs globalIds fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs
     recursive (TickPolicy.of recursive (memFuncs.contains f.name) (concFuncs.contains f.name))
@@ -4954,14 +4955,14 @@ def emitProgramParts (program : Program) (prefix_ : String)
   -- Every function that a function with `noalias` parameters may call (`FCtx.noalias`).
   let naCallees := dedupNames ((funcs.filter (!·.noalias.isEmpty)).flatMap fun f =>
     reachable funcs allNames refs f.name)
+  -- The step ticks, from the same table as the certificate's (`Program.tickPolicies`). Every
+  -- source function has an entry.
+  let tickPolicies : Std.HashMap String TickPolicy := Std.HashMap.ofList program.tickPolicies.toList
   let groupParts := program.groups.map fun (members, recursive) =>
     (members, recursive, members.toList.map fun f =>
       emitOneFunctionWithFallbackMap f spawnFallbackMap structNames funcNames floatSemantics memFuncs
         (idsOf f) fnBlocks concFuncs spawnSemantics spawnFallbacks rawFuncs recursive
-        -- `program.tickPolicy f.name` (`Program.tickPolicy_eq`) from the groups and
-        -- classifications computed once above.
-        (TickPolicy.of recursive (memFuncs.contains f.name) (concFuncs.contains f.name)) device
-        (naCallees.contains f.name) envFuncs)
+        (tickPolicies.getD f.name {}) device (naCallees.contains f.name) envFuncs)
   let shapes := groupParts.flatMap fun (members, _, parts) =>
     (members.toList.zip parts).toArray.map fun (f, p) => (f.name, p.ctx.certShape)
   let sourceOwners : Std.HashMap String Nat := groupParts.zipIdx.foldl

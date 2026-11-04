@@ -28,17 +28,20 @@ def source_2 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("options.find", { loop := false, entry := false }),
+      ("options.findOr", { loop := false, entry := false }),
+      ("options.firstIndexPlusOne", { loop := false, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `options.find` in the original program. -/
 def air_find : _root_.Air2Lean.Func := source_0
 
 theorem lookup_find : program.lookup "options.find" = some air_find := rfl
-
-theorem policies :
-    program.ticked "options.find" = false ∧
-    program.entryTicked "options.find" = false := by
-  decide +kernel
-theorem policy_find : program.ticked "options.find" = false := policies.1
-theorem entry_find : program.entryTicked "options.find" = false := policies.2
+theorem policy_find : program.ticked "options.find" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
+theorem entry_find : program.entryTicked "options.find" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
 
 
 /-- The items of `options.find`'s slice parameters, by their `arg` instruction. -/

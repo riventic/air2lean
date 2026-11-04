@@ -107,8 +107,8 @@ def check_example(binary, ex, work):
     if certified:
         # The step policies are one kernel evaluation (the call graph computed once); each
         # function's `policy_`/`entry_` lemma is a projection of it.
-        assert len(re.findall(r'^theorem policies :', text, re.M)) == 1, ex
-        assert not re.search(r'^theorem (policy|entry)_\w+ .*decide', text, re.M), ex
+        assert len(re.findall(r'^theorem policies : program\.tickPolicies =', text, re.M)) == 1, ex
+        assert not re.search(r'^theorem (policy|entry)_\w+ .*\n.*decide \+kernel', text, re.M), ex
 
 
 def check_flags(binary, work):

@@ -27,26 +27,29 @@ def source_2 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("errors.digitOrZero", { loop := false, entry := false }),
+      ("errors.parseDigit", { loop := false, entry := false }),
+      ("errors.sumDigits", { loop := false, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `errors.digitOrZero` in the original program. -/
 def air_digitOrZero : _root_.Air2Lean.Func := source_0
 
 theorem lookup_digitOrZero : program.lookup "errors.digitOrZero" = some air_digitOrZero := rfl
+theorem policy_digitOrZero : program.ticked "errors.digitOrZero" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
+theorem entry_digitOrZero : program.entryTicked "errors.digitOrZero" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
 
 /-- The decoded canonical AIR of `errors.parseDigit` in the original program. -/
 def air_parseDigit : _root_.Air2Lean.Func := source_1
 
 theorem lookup_parseDigit : program.lookup "errors.parseDigit" = some air_parseDigit := rfl
-
-theorem policies :
-    program.ticked "errors.digitOrZero" = false ∧
-    program.entryTicked "errors.digitOrZero" = false ∧
-    program.ticked "errors.parseDigit" = false ∧
-    program.entryTicked "errors.parseDigit" = false := by
-  decide +kernel
-theorem policy_digitOrZero : program.ticked "errors.digitOrZero" = false := policies.1
-theorem entry_digitOrZero : program.entryTicked "errors.digitOrZero" = false := policies.2.1
-theorem policy_parseDigit : program.ticked "errors.parseDigit" = false := policies.2.2.1
-theorem entry_parseDigit : program.entryTicked "errors.parseDigit" = false := policies.2.2.2
+theorem policy_parseDigit : program.ticked "errors.parseDigit" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
+theorem entry_parseDigit : program.entryTicked "errors.parseDigit" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
 
 theorem callee_0 : panicOf? "errors.parseDigit" = none := rfl
 

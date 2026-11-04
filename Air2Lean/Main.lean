@@ -90,7 +90,7 @@ def help : String :=
   "  --split-modules <Module>     Write one module per call group; -o is the umbrella <Module>.\n" ++
   "                               See docs/modular-output.md.\n" ++
   "  --air-certificate <lean>     Also write AIR semantics certificates; see docs/air-semantics.md.\n" ++
-  "                               If the certificate cannot be built, nothing is written.\n" ++
+  "                               If it cannot be built, the translation fails before any write.\n" ++
   "  --air-certificate-import <M> The module the certificates import (the generated -o file).\n" ++
   "  --canon-certificate          Check native debug-ID binding; print JSON evidence, no files.\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
@@ -327,10 +327,11 @@ def die (msg : String) : IO UInt32 := do
   IO.eprintln msg
   pure 1
 
-/-- A requested certificate that cannot be built fails the whole translation closed: neither
-the Lean output nor any sidecar is written, so no output exists without the certificate the
-caller asked for. Functions outside the certificate fragment are not failures (the certificate
-lists them with their reasons); this is for a certificate that cannot be built at all. -/
+/-- A requested certificate that cannot be built fails the whole translation closed, before any
+output is written: neither the Lean output nor any sidecar appears. Functions outside the
+certificate fragment are not failures (the certificate lists them with their reasons); this is
+for a certificate that cannot be built at all. (A later file-system error writing an output is
+reported as such and may leave the outputs written before it.) -/
 private def certificateFailure (reason : String) : String :=
   s!"--air-certificate: cannot build the AIR certificate, nothing written: {reason}"
 

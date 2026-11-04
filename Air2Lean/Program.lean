@@ -285,8 +285,12 @@ def Program.concFuncs (p : Program) : Array String :=
 def Program.groups (p : Program) : Array (Array Func × Bool) :=
   callGroups p.funcs
 
+/-- `name` is a member of a recursive group of `groups`. -/
+def recursiveIn (groups : Array (Array Func × Bool)) (name : String) : Bool :=
+  groups.any fun (members, recursive) => recursive && members.any (·.name == name)
+
 def Program.recursive (p : Program) (name : String) : Bool :=
-  p.groups.any fun (members, recursive) => recursive && members.any (·.name == name)
+  recursiveIn p.groups name
 
 def Program.usesMemory (p : Program) (name : String) : Bool :=
   p.memFuncs.contains name
@@ -320,6 +324,24 @@ def Program.tickPolicy (p : Program) (name : String) : TickPolicy :=
 
 theorem Program.tickPolicy_eq (p : Program) (name : String) :
     p.tickPolicy name = TickPolicy.of (p.recursive name) (p.usesMemory name) (p.concurrent name) :=
+  rfl
+
+/-- The policy of every function, the call groups and classifications computed once (`let`):
+the table the emitter reads and an AIR certificate states in one kernel evaluation. -/
+def Program.tickPolicies (p : Program) : Array (String × TickPolicy) :=
+  let groups := p.groups
+  let mem := p.memFuncs
+  let conc := p.concFuncs
+  p.funcs.map fun f =>
+    (f.name, TickPolicy.of (recursiveIn groups f.name) (mem.contains f.name) (conc.contains f.name))
+
+/-- Every entry of the table is the policy of its name (`Program.tickPolicy`), whatever the
+table was computed to be (`h`, by one kernel evaluation in a certificate). -/
+theorem Program.tickPolicy_of_tickPolicies {p : Program} {xs : Array (String × TickPolicy)}
+    (h : p.tickPolicies = xs) (i : Nat) (hi : i < xs.size) :
+    p.tickPolicy xs[i].1 = xs[i].2 := by
+  subst h
+  simp only [tickPolicies, Array.getElem_map]
   rfl
 
 end Air2Lean

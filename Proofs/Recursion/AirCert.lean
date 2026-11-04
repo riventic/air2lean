@@ -30,44 +30,48 @@ def source_3 : _root_.Air2Lean.Func :=
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, source_3], (@_root_.List.toArray @_root_.Air2Lean.ModelBinding (@_root_.List.nil @_root_.Air2Lean.ModelBinding))⟩
 
+theorem policies : program.tickPolicies =
+    #[("recursion.fact", { loop := false, entry := false }),
+      ("recursion.gcd", { loop := false, entry := false }),
+      ("recursion.isEven", { loop := false, entry := false }),
+      ("recursion.isOdd", { loop := false, entry := false })] := by
+  decide +kernel
+
 /-- The decoded canonical AIR of `recursion.fact` in the original program. -/
 def air_fact : _root_.Air2Lean.Func := source_0
 
 theorem lookup_fact : program.lookup "recursion.fact" = some air_fact := rfl
+theorem policy_fact : program.ticked "recursion.fact" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
+theorem entry_fact : program.entryTicked "recursion.fact" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 0 (by decide))
 
 /-- The decoded canonical AIR of `recursion.gcd` in the original program. -/
 def air_gcd : _root_.Air2Lean.Func := source_1
 
 theorem lookup_gcd : program.lookup "recursion.gcd" = some air_gcd := rfl
+theorem policy_gcd : program.ticked "recursion.gcd" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
+theorem entry_gcd : program.entryTicked "recursion.gcd" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 1 (by decide))
 
 /-- The decoded canonical AIR of `recursion.isEven` in the original program. -/
 def air_isEven : _root_.Air2Lean.Func := source_2
 
 theorem lookup_isEven : program.lookup "recursion.isEven" = some air_isEven := rfl
+theorem policy_isEven : program.ticked "recursion.isEven" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 2 (by decide))
+theorem entry_isEven : program.entryTicked "recursion.isEven" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 2 (by decide))
 
 /-- The decoded canonical AIR of `recursion.isOdd` in the original program. -/
 def air_isOdd : _root_.Air2Lean.Func := source_3
 
 theorem lookup_isOdd : program.lookup "recursion.isOdd" = some air_isOdd := rfl
-
-theorem policies :
-    program.ticked "recursion.fact" = false ∧
-    program.entryTicked "recursion.fact" = false ∧
-    program.ticked "recursion.gcd" = false ∧
-    program.entryTicked "recursion.gcd" = false ∧
-    program.ticked "recursion.isEven" = false ∧
-    program.entryTicked "recursion.isEven" = false ∧
-    program.ticked "recursion.isOdd" = false ∧
-    program.entryTicked "recursion.isOdd" = false := by
-  decide +kernel
-theorem policy_fact : program.ticked "recursion.fact" = false := policies.1
-theorem entry_fact : program.entryTicked "recursion.fact" = false := policies.2.1
-theorem policy_gcd : program.ticked "recursion.gcd" = false := policies.2.2.1
-theorem entry_gcd : program.entryTicked "recursion.gcd" = false := policies.2.2.2.1
-theorem policy_isEven : program.ticked "recursion.isEven" = false := policies.2.2.2.2.1
-theorem entry_isEven : program.entryTicked "recursion.isEven" = false := policies.2.2.2.2.2.1
-theorem policy_isOdd : program.ticked "recursion.isOdd" = false := policies.2.2.2.2.2.2.1
-theorem entry_isOdd : program.entryTicked "recursion.isOdd" = false := policies.2.2.2.2.2.2.2
+theorem policy_isOdd : program.ticked "recursion.isOdd" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.loop (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 3 (by decide))
+theorem entry_isOdd : program.entryTicked "recursion.isOdd" = false :=
+  congrArg _root_.Air2Lean.TickPolicy.entry (_root_.Air2Lean.Program.tickPolicy_of_tickPolicies policies 3 (by decide))
 
 theorem callee_0 : panicOf? "recursion.fact" = none := rfl
 theorem callee_1 : panicOf? "debug.FullPanic((function 'defaultPanic')).divideByZero" = some .divByZero := rfl
