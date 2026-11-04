@@ -181,11 +181,12 @@ theorem place_c (g : γ) (p : CPh) : S.place.set g (p, S.ph g) = C.set g p := by
 theorem place_s (g : γ) (s : SPh) : S.place.set g (C.ph g, s) = S.set g s := by
   rw [place_set]; simp only; rw [C.set_self]
 
-/-- **The holder's moves in the semaphore's own code** (module doc), the code's moves only: thread
-`t` stays; enters the wait (`wt`) from `out` (`wait`'s lock); enters `pst` with the state's writes
-and its clock (its snapshot) from `out` (`post`'s store of the count) or from `wt` at a count not 0
-(`wait`'s take); or leaves `pst` when, with permits and a registered waiter, a signal is pending or
-there is a taker. A free move to `wt` or `pst` would let the permit's holder signal and register
+/-- **The holder's moves in the semaphore's own code** (module doc), only between the places the
+code moves between: thread `t` stays; enters the wait (`wt`) from `out` (`wait`'s lock); enters
+`pst` with the state's writes and its clock (its snapshot) from `out` (`post`'s store of the count)
+or from `wt` at a count not 0 (`wait`'s take); or leaves `pst` when, with permits and a registered
+waiter, a signal is pending or there is a taker. `Go` constrains the places, not the step that
+makes the move (the count is the client's ghost, which `Move.hold` keeps). A free move to `wt` or `pst` would let the permit's holder signal and register
 again at count 0 without bound while another waiter stays registered (ledger row
 `sem-go-code-moves`). -/
 def Go (G : ThreadId → γ) (m : Mem) (t : ThreadId) (s : SPh) : Prop :=
