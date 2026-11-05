@@ -18,11 +18,14 @@ with the resource moved between a thread's part and the protocol's rest.
   `Thread.Mutex` on macOS).
 - **The places** (`P : ThreadId → LPh`): where each thread is in the lock's code.
 - **The invariant** (`WInv P m`): the word is `0` if no thread holds the lock, else `1` or `c`; at
-  most one thread holds it. The word's atomic location is an RMW chain, and no other location
-  overlaps the word. An access to the word is atomic, or happened before every thread that has not
-  ended. A thread in the futex queue waits at the word or at another futex (`away`); if a thread
-  waits at the word, a thread that is not asleep is in the lock's code (`wit`), so there is no
-  deadlock at the word. The holder made the newest acquire of the word (`owner`).
+  most one thread holds it (`holds`, or `holdsAway`: at the futex wait of another object). The
+  word's atomic location is an RMW chain, and no other location overlaps the word. An access to
+  the word is atomic, or happened before every thread that has not ended. A thread in the futex
+  queue waits at the word, at another futex (`away`), or holds the lock and sleeps at a futex of
+  the lock's nest (`holdsAway`, `LockWord.nest`); if a thread waits at the word, a thread in the
+  lock's code is not asleep, or is the holder at `holdsAway` (`wit`), so there is no deadlock at
+  the word (for the holder asleep elsewhere, by the protocol's `FLock.Fits.holdLive`). The holder
+  made the newest acquire of the word (`owner`).
 - **A step of the lock's code** (`Step t m m'`): the threads, the groups and the other threads'
   clocks stay, only the word's bytes change, each new access is an atomic access to the word, the
   atomic layout changes at most by a new location at the word, and the other threads' pending
