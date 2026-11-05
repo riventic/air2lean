@@ -1488,6 +1488,26 @@ os._exit(0)
         self.assertFalse(early.my_turn())
         self.assertEqual(early.drain_tickets(), [merge.ticket])
 
+    def test_normal_guards_take_the_queue_in_arrival_order(self):
+        # A lane job waits in the queue loop; the parts of an elastic workload come after it.
+        # However often they poll, the queue is the lane job's first; a guard still waiting for
+        # its workspace (not `queued`) holds up nobody.
+        queue = lambda admission: admission.open("queue")
+        lane, part = self.lock_admission(rss="6000"), self.part()
+        outside = self.lock_admission()
+        outside.publish_waiting()  # waiting for its workspace: before both, but not in the queue loop
+        lane.publish_waiting(queued=True)
+        self.assertFalse(part.takes_queue(queue(part)))
+        self.assertTrue(json.loads((lane.waiters / lane.waiting[0]).read_text())["queued"])
+        lane_queue = queue(lane)
+        self.assertTrue(lane.takes_queue(lane_queue))
+        fcntl.flock(lane_queue, fcntl.LOCK_UN)
+        name = lane.waiting[0]
+        lane.publish_waiting()  # waiting again keeps its entry and its place
+        self.assertEqual(lane.waiting[0], name)
+        lane.clear_waiting()  # admitted: the part is first in line
+        self.assertTrue(part.takes_queue(queue(part)))
+
     def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):
         # The remote host, 2026-11-05: an unmeasured part (11 slots) took its workload's lifeline
         # while running workloads held 20 of 28 slots; as a drain ticket it kept every normal guard

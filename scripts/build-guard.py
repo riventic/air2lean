@@ -880,7 +880,7 @@ class Admission:
         self.heads = self.directory / "heads"
         self.head = None  # (entry name, handle, content) while this guard is the waiting queue head
         self.waiters = self.directory / "waiting"
-        self.waiting = None  # (entry name, handle) while this guard waits for admission (not background)
+        self.waiting = None  # (entry name, handle, queued) while it waits for admission (not background)
         self.backfilled = False
         self.next_attempt = 0.0
         self.waited = False
@@ -1236,20 +1236,42 @@ class Admission:
         self.next_attempt = time.monotonic() + ATTEMPT_EVERY
         return True
 
-    def publish_waiting(self):
+    def publish_waiting(self, queued=None):
         """Mark this guard as waiting for admission (`<lock>.d/waiting/`), so no background guard
-        is admitted ahead of it, also while no guard holds the queue (between two heads)."""
-        if self.waiting is None:
-            name = entry_name()
-            self.waiting = (name, publish_entry(self.waiters, name, {"pid": os.getpid()},
-                                                lambda path: path.open("a")))
+        is admitted ahead of it, also while no guard holds the queue (between two heads). `queued`
+        (None: as it is) marks a normal guard in the queue loop (`first_in_line`); the entry is
+        replaced under its name, so it keeps its arrival order."""
+        if self.waiting and (queued is None or self.waiting[2] == queued):
+            return
+        name, flag = self.waiting[0] if self.waiting else entry_name(), bool(queued)
+        handle = publish_entry(self.waiters, name, {"pid": os.getpid(), "queued": flag},
+                               lambda path: path.open("a"))
+        if self.waiting:
+            self.waiting[1].close()  # its file is replaced already
+        self.waiting = (name, handle, flag)
 
     def clear_waiting(self):
         if self.waiting:
-            name, handle = self.waiting
+            name, handle, _ = self.waiting
             (self.waiters / name).unlink(missing_ok=True)
             handle.close()
             self.waiting = None
+
+    def first_in_line(self):
+        """Whether no normal guard that waited longer is in the queue loop (an older `queued`
+        entry in `<lock>.d/waiting/`). Normal guards take the queue in arrival order, not by
+        whoever polls first: the parts of an elastic workload, several waiting at any time, each
+        followed by the next, won that race again and again, and on the remote host (2026-11-05)
+        a full build's parts kept the queue from three lane jobs with 86% of its memory free. A
+        guard waiting for its workspace, outside the queue, or with a ticket is not `queued`."""
+        mine = self.waiting[0]
+        return not any(entry.get("queued") for name, entry in held_entries(self.waiters).items() if name < mine)
+
+    def takes_queue(self, queue):
+        """Whether this guard takes the queue now (as its head): in its turn (`my_turn`) and, a
+        normal guard, first in line (`first_in_line`)."""
+        self.publish_waiting(queued=not self.ticket)
+        return self.my_turn() and (bool(self.ticket) or self.first_in_line()) and try_flock(queue, fcntl.LOCK_EX)
 
     def try_background(self, workspace, queue, main, slots, register):
         """Whether this background guard was admitted now (module docstring): only while no other
@@ -1355,7 +1377,7 @@ class Admission:
             if self.priority != "normal" and not self.ticket:
                 self.join_queue()
             # The queue holder (the head) collects; a guard waiting behind it may backfill.
-            while not (self.my_turn() and try_flock(queue, fcntl.LOCK_EX)):
+            while not self.takes_queue(queue):
                 if cancelled[0]:
                     return "cancelled"
                 if self.backfill(main, slots, register):
