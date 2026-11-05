@@ -32,4 +32,6 @@ def absSum (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] absSum
+
 end ExternCalls.Trusted

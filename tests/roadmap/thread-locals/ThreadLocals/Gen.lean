@@ -47,6 +47,8 @@ def bumpTwice (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] bumpTwice
+
 structure leakLocals where
   deriving Inhabited
 
@@ -60,6 +62,8 @@ def leak (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM leakLocals leakExit).run' (default : leakLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] leak
 
 structure leakedLocals where
   p : Zig.Ptr
@@ -90,6 +94,8 @@ def leaked  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   Zig.free s0
   match e with
   | .ret v => pure v
+
+attribute [zig_run] leaked
 
 structure twoCountersLocals where
   a : Zig.Ptr
@@ -146,9 +152,13 @@ def twoCounters  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] twoCounters
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .leak a => Zig.ConcM.tlsThread tlsInit (discard (Zig.ConcM.liftMem (leak a)))
   | .bumpTwice a => Zig.ConcM.tlsThread tlsInit (discard (Zig.ConcM.liftMem (bumpTwice a)))
+
+attribute [zig_run] dispatch
 
 end ThreadLocals

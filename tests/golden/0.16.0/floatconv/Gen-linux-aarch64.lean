@@ -16,6 +16,8 @@ def bits32 (p0 : Zig.F32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bits32
+
 structure f16ToF128Locals where
   deriving Inhabited
 
@@ -28,6 +30,8 @@ def f16ToF128 (p0 : Zig.F16) : Zig.Result (Zig.F128) := do
     pure (.ret i1)) : Zig.M f16ToF128Locals f16ToF128Exit).run' (default : f16ToF128Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] f16ToF128
 
 structure f64ToF16Locals where
   deriving Inhabited
@@ -42,6 +46,8 @@ def f64ToF16 (p0 : Zig.F64) : Zig.Result (Zig.F16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] f64ToF16
+
 structure f80ToF64Locals where
   deriving Inhabited
 
@@ -54,6 +60,8 @@ def f80ToF64 (p0 : Zig.F80) : Zig.Result (Zig.F64) := do
     pure (.ret i1)) : Zig.M f80ToF64Locals f80ToF64Exit).run' (default : f80ToF64Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] f80ToF64
 
 structure fromI64Locals where
   deriving Inhabited
@@ -68,6 +76,8 @@ def fromI64 (p0 : BitVec 64) : Zig.Result (Zig.F32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] fromI64
+
 structure fromU128Locals where
   deriving Inhabited
 
@@ -80,6 +90,8 @@ def fromU128 (p0 : BitVec 128) : Zig.Result (Zig.F64) := do
     pure (.ret i1)) : Zig.M fromU128Locals fromU128Exit).run' (default : fromU128Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] fromU128
 
 structure ofBits64Locals where
   deriving Inhabited
@@ -94,6 +106,8 @@ def ofBits64 (p0 : BitVec 64) : Zig.Result (Zig.F64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] ofBits64
+
 structure toByteLocals where
   deriving Inhabited
 
@@ -106,6 +120,8 @@ def toByte (p0 : Zig.F32) : Zig.Result (BitVec 8) := do
     pure (.ret i1)) : Zig.M toByteLocals toByteExit).run' (default : toByteLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] toByte
 
 structure toI32Locals where
   deriving Inhabited
@@ -120,6 +136,8 @@ def toI32 (p0 : Zig.F64) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] toI32
+
 structure toU64Locals where
   deriving Inhabited
 
@@ -132,5 +150,7 @@ def toU64 (p0 : Zig.F32) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M toU64Locals toU64Exit).run' (default : toU64Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] toU64
 
 end Floatconv

@@ -38,6 +38,8 @@ def clearStatus (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] clearStatus
+
 structure putcLocals where
   deriving Inhabited
 
@@ -80,6 +82,8 @@ def putc (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] putc.loop3 putc
+
 structure sendThenStatusLocals where
   deriving Inhabited
 
@@ -97,6 +101,8 @@ def sendThenStatus (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] sendThenStatus
+
 structure statusTwiceLocals where
   deriving Inhabited
 
@@ -113,6 +119,8 @@ def statusTwice (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i5)) : Zig.MM statusTwiceLocals statusTwiceExit).run' (default : statusTwiceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] statusTwice
 
 structure writeAllLocals where
   local2 : BitVec 64
@@ -159,5 +167,7 @@ def writeAll (p0 : Zig.Ptr) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] writeAll.loop6 writeAll
 
 end DeviceEffects

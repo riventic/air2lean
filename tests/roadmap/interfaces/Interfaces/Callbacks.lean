@@ -69,6 +69,8 @@ def sumVisit (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] sumVisit
+
 structure callOpsLocals where
   deriving Inhabited
 
@@ -84,6 +86,8 @@ def callOps [Ext] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.ConcM Tgt
   match e with
   | .ret v => pure v
 
+attribute [zig_run] callOps
+
 structure evaluateLocals where
   deriving Inhabited
 
@@ -96,6 +100,8 @@ def evaluate [Ext] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.ConcM Tg
     pure (.ret i3)) : Zig.CM Tgt evaluateLocals evaluateExit).run' (default : evaluateLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] evaluate
 
 structure forEachLocals where
   local3 : BitVec 64
@@ -152,6 +158,8 @@ def forEach [Ext] (p0 : Zig.Slice) (p1 : Zig.Ptr) (p2 : Zig.Ptr) : Zig.ConcM Tgt
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] forEach.loop7 forEach
+
 structure viaOpsLocals where
   deriving Inhabited
 
@@ -167,6 +175,8 @@ def viaOps [Ext] (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : Zig.Ptr) : Zig.ConcM Tgt 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] viaOps
+
 structure runExternalLocals where
   deriving Inhabited
 
@@ -179,6 +189,8 @@ def runExternal [Ext] (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := 
     pure (.ret i2)) : Zig.CM Tgt runExternalLocals runExternalExit).run' (default : runExternalLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] runExternal
 
 structure runLocalLocals where
   deriving Inhabited
@@ -193,8 +205,12 @@ def runLocal [Ext] (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] runLocal
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch [Ext] : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end Interfaces.Callbacks

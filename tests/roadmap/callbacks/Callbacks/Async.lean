@@ -56,6 +56,8 @@ def worker (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.MemM (Unit) := d
   match e with
   | .ret => pure ()
 
+attribute [zig_run] worker
+
 structure runBothLocals where
   deriving Inhabited
 
@@ -79,6 +81,8 @@ def runBoth (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Zig.Ptr) (p3 : BitVec 32) : Zig.
   match e with
   | .ret v => pure v
 
+attribute [zig_run] runBoth
+
 structure runExternalLocals where
   deriving Inhabited
 
@@ -99,10 +103,14 @@ def runExternal (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.ConcM Tgt (
   match e with
   | .ret v => pure v
 
+attribute [zig_run] runExternal
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .worker a =>
     let (capture0, capture1, capture2) := a
     discard (Zig.ConcM.liftMem (worker capture0 capture1 capture2))
+
+attribute [zig_run] dispatch
 
 end Callbacks.Async

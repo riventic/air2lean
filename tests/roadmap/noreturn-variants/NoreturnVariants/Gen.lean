@@ -336,6 +336,8 @@ def get_air2lean1 (p0 : U) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] get_air2lean1
+
 structure bumpLocals where
   deriving Inhabited
 
@@ -353,6 +355,8 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM bumpLocals bumpExit).run' (default : bumpLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] bump
 
 structure isColorLocals where
   deriving Inhabited
@@ -385,6 +389,8 @@ def isColor (p0 : Io_Terminal_Mode) : Zig.Result (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] isColor
+
 structure colorOfLocals where
   deriving Inhabited
 
@@ -408,6 +414,8 @@ def colorOf (p0 : BitVec 8) : Zig.Result (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] colorOf
+
 structure holderColorLocals where
   deriving Inhabited
 
@@ -422,6 +430,8 @@ def holderColor (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
     pure (.ret i3)) : Zig.MM holderColorLocals holderColorExit).run' (default : holderColorLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] holderColor
 
 structure setModeLocals where
   deriving Inhabited
@@ -445,6 +455,8 @@ def setMode (p0 : Zig.Ptr) (p1 : Bool) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] setMode
 
 structure holderRoundTripLocals where
   h : Zig.Ptr
@@ -483,6 +495,8 @@ def holderRoundTrip (p0 : Bool) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] holderRoundTrip
+
 structure mkLocals where
   local1 : U
   deriving Inhabited
@@ -498,6 +512,8 @@ def mk (p0 : BitVec 8) : Zig.Result (U) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mk
+
 structure readULocals where
   deriving Inhabited
 
@@ -511,6 +527,8 @@ def readU (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM readULocals readUExit).run' (default : readULocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readU
 
 structure memRoundTripLocals where
   u : Zig.Ptr
@@ -533,6 +551,8 @@ def memRoundTrip (p0 : BitVec 8) : Zig.MemM (BitVec 32) := do
   Zig.free s1
   match e with
   | .ret v => pure v
+
+attribute [zig_run] memRoundTrip
 
 structure mkVLocals where
   local1 : V
@@ -561,6 +581,8 @@ def mkV (p0 : BitVec 16) : Zig.Result (V) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mkV
+
 structure vValueLocals where
   deriving Inhabited
 
@@ -587,6 +609,8 @@ def vValue (p0 : V) : Zig.Result (BitVec 16) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] vValue
+
 structure readVLocals where
   deriving Inhabited
 
@@ -600,6 +624,8 @@ def readV (p0 : Zig.Ptr) : Zig.MemM (BitVec 16) := do
     pure (.ret i2)) : Zig.MM readVLocals readVExit).run' (default : readVLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readV
 
 structure memVLocals where
   v : Zig.Ptr
@@ -621,6 +647,8 @@ def memV (p0 : BitVec 16) : Zig.MemM (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] memV
+
 structure oneValueLocals where
   deriving Inhabited
 
@@ -640,6 +668,8 @@ def oneValue (p0 : One) : Zig.Result (BitVec 16) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] oneValue
+
 structure oneRoundTripLocals where
   local1 : One
   deriving Inhabited
@@ -656,6 +686,8 @@ def oneRoundTrip (p0 : BitVec 16) : Zig.Result (BitVec 16) := do
     pure (.ret i7)) : Zig.M oneRoundTripLocals oneRoundTripExit).run' (default : oneRoundTripLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] oneRoundTrip
 
 structure roundTripLocals where
   u : U
@@ -678,6 +710,8 @@ def roundTrip (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] roundTrip
+
 structure vTagLocals where
   deriving Inhabited
 
@@ -692,5 +726,7 @@ def vTag (p0 : BitVec 16) : Zig.Result (BitVec 8) := do
     pure (.ret i3)) : Zig.M vTagLocals vTagExit).run' (default : vTagLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vTag
 
 end NoreturnVariants

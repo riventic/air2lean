@@ -93,6 +93,8 @@ def fillSum (p0 : BitVec 64) : Zig.MemM (BitVec 9) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fillSum.loop6 fillSum
+
 structure setBoolLocals where
   deriving Inhabited
 
@@ -115,6 +117,8 @@ def setBool (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : Bool) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] setBool
 
 structure setF80Locals where
   deriving Inhabited
@@ -139,6 +143,8 @@ def setF80 (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : Zig.F80) : Zig.MemM (Unit) := d
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] setF80
+
 structure setU24Locals where
   deriving Inhabited
 
@@ -162,6 +168,8 @@ def setU24 (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 24) : Zig.MemM (Unit) :=
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] setU24
+
 structure setU9Locals where
   deriving Inhabited
 
@@ -184,5 +192,7 @@ def setU9 (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 9) : Zig.MemM (Unit) := d
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] setU9
 
 end RuntimeLanes

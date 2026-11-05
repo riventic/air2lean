@@ -22,6 +22,8 @@ def flipBool (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] flipBool
+
 structure boolLaneLocals where
   v : Zig.Ptr
   local46 : Zig.Ptr
@@ -166,6 +168,8 @@ def boolLane (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] boolLane
+
 structure getU3Locals where
   deriving Inhabited
 
@@ -179,6 +183,8 @@ def getU3 (p0 : Zig.Ptr) : Zig.MemM (BitVec 3) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] getU3
+
 structure putU3Locals where
   deriving Inhabited
 
@@ -191,6 +197,8 @@ def putU3 (p0 : Zig.Ptr) (p1 : BitVec 3) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM putU3Locals putU3Exit).run' (default : putU3Locals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] putU3
 
 structure u24LaneLocals where
   v : Zig.Ptr
@@ -238,6 +246,8 @@ def u24Lane (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   Zig.free s2
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u24Lane
 
 structure u3LaneLocals where
   v : Zig.Ptr
@@ -442,6 +452,8 @@ def u3Lane (p0 : BitVec 32) (p1 : BitVec 8) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] u3Lane
+
 structure u9LaneLocals where
   v : Zig.Ptr
   local27 : Zig.Ptr
@@ -502,5 +514,7 @@ def u9Lane (p0 : BitVec 16) (p1 : BitVec 16) (p2 : BitVec 16) : Zig.MemM (BitVec
   Zig.free s3
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u9Lane
 
 end Lanes

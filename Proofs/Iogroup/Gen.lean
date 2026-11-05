@@ -186,6 +186,8 @@ def Io_Mutex_lock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrNa
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Io_Mutex_lock.loop27 Io_Mutex_lock
+
 structure Io_Mutex_lockUncancelableLocals where
   deriving Inhabited
 
@@ -266,6 +268,8 @@ def Io_Mutex_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Io_Mutex_lockUncancelable.loop23 Io_Mutex_lockUncancelable
+
 structure Io_Mutex_tryLockLocals where
   deriving Inhabited
 
@@ -287,6 +291,8 @@ def Io_Mutex_tryLock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] Io_Mutex_tryLock
 
 structure Io_Mutex_unlockLocals where
   deriving Inhabited
@@ -325,6 +331,8 @@ def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Io_Mutex_unlock
+
 structure debug_assertLocals where
   deriving Inhabited
 
@@ -346,6 +354,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] debug_assert
 
 structure addLocals where
   deriving Inhabited
@@ -371,6 +381,8 @@ def add (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt addLocals addExit).run' (default : addLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] add
 
 structure groupConcurrentLocals where
   c : Zig.Ptr
@@ -444,6 +456,8 @@ def groupConcurrent (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] groupConcurrent.loop13 groupConcurrent
+
 structure groupCounterLocals where
   c : Zig.Ptr
   g : Zig.Ptr
@@ -515,8 +529,12 @@ def groupCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] groupCounter.loop13 groupCounter
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .add a => discard (add a)
+
+attribute [zig_run] dispatch
 
 end Iogroup

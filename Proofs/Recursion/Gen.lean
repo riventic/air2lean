@@ -33,6 +33,8 @@ partial_fixpoint
 
 end
 
+attribute [zig_run] fact
+
 structure gcdLocals where
   deriving Inhabited
 
@@ -70,6 +72,8 @@ def gcd (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
 partial_fixpoint
 
 end
+
+attribute [zig_run] gcd
 
 structure isOddLocals where
   deriving Inhabited
@@ -124,5 +128,7 @@ def isOdd (p0 : BitVec 32) : Zig.Result (Bool) := do
 partial_fixpoint
 
 end
+
+attribute [zig_run] isEven isOdd
 
 end Recursion
