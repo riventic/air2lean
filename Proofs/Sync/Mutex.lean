@@ -1,7 +1,7 @@
 import Proofs.MutexCounter.Protocol
 import Proofs.Sync.IoMutex
 import ZigLean.Sep.Full.AutoWP
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 
 /-!
 # `mutexCounter` over all schedules
@@ -138,10 +138,14 @@ theorem mutexCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Plac
   P.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the mutex counter returns 4 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops). -/
 theorem mutexCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩) (mem0 σ)) = some 4 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩) (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch mutexCounter work Io_Mutex_lockUncancelable
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 end Sync.MutexCounter

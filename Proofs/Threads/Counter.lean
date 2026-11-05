@@ -1,4 +1,4 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import Proofs.Threads.Gen
 import ZigLean.Conc.Base.Lock
 import ZigLean.Conc.Lemmas
@@ -2354,11 +2354,15 @@ theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {σ : P
     (main_spec n σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, `parallelCounter 1` returns 4 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops; the loops over the 4 threads need 5 unfoldings). -/
 theorem parallelCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch bump parallelCounter parallelCounter.loop32
+  iterate 5 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 /-! ## Non-vacuity witnesses -/
 

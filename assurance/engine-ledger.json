@@ -1820,6 +1820,19 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Not a soundness gap: a thread outside the live set cannot access the word (every access rule takes the live-set premise); the gap is what can be proved."
+  },
+  {
+   "id": "run-witness-loop-names",
+   "title": "Kernel run witnesses name the generated functions that hold loops, and std's differ between Zig versions",
+   "status": "open",
+   "requester": "L17 (retiring unroll_sched)",
+   "progress": "open",
+   "request": "A kernel-evaluated run witness (`delta` the generated functions down to every one that holds a `Zig.loop` the run reaches, `simp only [Zig.loop.eq_1]` a few passes, `decide +kernel`; docs/proof-tools.md, concrete runs of programs with loops) names those functions. `Sync.Handoff.handoff_completes` (Proofs/Sync/Handoff.lean) reaches `Io.Condition`'s wait loops: 0.16.0 holds them in `Io_Condition_waitInner` and its body `loop23`, 0.17.0 in `Io_Condition_waitUncancelable.loop22`. `lake build Proofs` also runs against the 0.17.0 sync translation (theorem-inventory swap build `0.17.0-linux-goldens`), so no one name list holds for both, and the file keeps `unroll_sched`, which finds the loops itself. Needed: a version-neutral way to reach the loops of a run, for example the translator putting every generated function that holds a `Zig.loop` into one simp set declared in ZigLean (the witness then is `simp only [<set>, Zig.loop.eq_1]`). Rejected: `when_defined` (legacy-to-retire) and `first | delta <0.16.0 names> | delta <0.17.0 names>` (version glue that a new Zig release breaks again); moving the theorem to a compiled runtime check (as `mailbox_completes` did) drops the theorem.",
+   "workaround_sites": [
+    "Proofs/Sync/Handoff.lean"
+   ],
+   "deletion_plan": "When the mechanism lands, handoff_completes uses it and its `unroll_sched` goes; then the tactic goes with its last use (docs/legacy-retirement.md, section 5).",
+   "note": "The other run witnesses reach only functions whose names are the same in every translation that builds them (`Proofs/{Sync,Threadsync}/Mutex.lean`, `Proofs/Threadsync/Handoff.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Atomics/Stack.lean`, `Proofs/Threads/Counter.lean`, `Proofs/Sync/SemCounter.lean`)."
   }
  ],
  "mechanisms": [

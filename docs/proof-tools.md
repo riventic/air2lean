@@ -280,12 +280,42 @@ are not restated: with a translated allocator, "no leak" is a postcondition that
 (`docs/alloc-spec.md`); `freeAll_cost`'s loop-step count is `freeAll_exact`. Build with
 `lake build ZigLean.Sep.Full.Cost Proofs.Lists.Bounded Proofs.Lists.Alloc`.
 
-## Concrete runs of programs with loops (`unroll_sched`)
+## Concrete runs of programs with loops
 
 `Zig.loop` is a `partial_fixpoint`: the least fixpoint of its unfolding, which the kernel does
-not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. Import
-`ZigLean.Conc.Unroll` (an optional module) for a kernel-checked run of a concurrent program
-with loops under one schedule:
+not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. A kernel-checked run
+of a concurrent program with loops under one schedule unfolds the loops first
+(`Proofs/Sync/Mutex.lean`):
+
+```lean
+theorem mutexCounter_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩)
+      (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch mutexCounter work Io_Mutex_lockUncancelable
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
+```
+
+1. `delta` unfolds the generated functions from the goal down to every function whose body holds
+   a `Zig.loop` that the run reaches. A loop body `f.loopN` holds one only when another loop is
+   nested in it.
+2. Each `simp` pass rewrites every `Zig.loop` once by its defining equation (`Zig.loop.eq_1`), so
+   `iterate n` unrolls each loop `n` times. Pick `n` above the iterations of any loop of the run.
+3. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
+   A wrong value, a run out of fuel, or a reached loop that is not unfolded or needs more
+   iterations leaves the goal unproved.
+
+Name only the functions the run reaches. `lake build Proofs` also runs against the translations
+of other Zig versions and targets (the swap builds of [theorem-inventory.md](theorem-inventory.md)),
+where std functions off the run's path may have other names or not exist. The uses: the
+`completes` companions of the concurrent all-schedules theorems in `Proofs/` and
+`tests/roadmap/sync-contracts/EventSet.lean`.
+
+### `unroll_sched` (legacy-to-retire)
+
+`ZigLean.Conc.Unroll` (an optional module) is the earlier tactic for the same goals, being
+retired (`docs/legacy-retirement.md`, section 5):
 
 ```lean
 theorem parallelCounter_completes :
