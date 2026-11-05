@@ -13,11 +13,11 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
   rest (`hrest`), the region is read-shared (`hsh`, `hcov`: no race, `ReadShared.noRace_read`),
   and the protocol's `U` is kept by the read's record (`hrec`). The lock's invariant is kept by
   `Inv.recordX`.
-- **A read by the only thread that has not left the lock** (`Fits.wp_readAll`: a whole struct
-  with the lock's word and the counter it protects, read after every other thread finished with
-  the lock): the bytes may lie in the protocol's rest, the word's cells and the free lock's
-  resource. The lock's invariant is kept by `Inv.recordAll`. A read of the memory's own value
-  (not one fixed for every memory) uses `Fits.wp_loadWith` with `Inv.loadMem`.
+- **A read by the only thread that has not left the lock** (`Fits.wp_loadWith` with
+  `Inv.loadMem`, over `Inv.loadAll`: a whole struct with the lock's word and the counter it
+  protects, read after every other thread finished with the lock): the bytes may lie in the
+  protocol's rest, the word's cells and the free lock's resource, and the read returns the
+  memory's own value. The lock's invariant is kept by `Inv.recordAll`.
 - **A step that redistributes the holder's resource** (`Fits.wp_holdParts`): a thread triple on
   the caller's part together with the protected resource. Its separating post gives a new caller
   part and protected resource, whose complete sum is the triple's post-resource, including
@@ -31,7 +31,7 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
   kept by `Inv.wp_liftMem`.
 
 `fsym`'s `WP` backend applies them as caller rules: a read with the protocol's obligations as
-arguments (`fsym [hF.wp_readRest …]`, `fsym [hF.wp_readAll …]`, as the lock's contract rules `MutexImpl.lock_wp`), the
+arguments (`fsym [hF.wp_readRest …]`, as the lock's contract rules `MutexImpl.lock_wp`), the
 holder's step with the holder's next place (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per
 place a walk reaches): the walk takes the segment's precondition from `hpa`, infers its post,
 proves `hR` from the post and `hU` by the protocol's lemmas given as terms
@@ -271,40 +271,6 @@ theorem Fits.wp_readRestOf (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {
     P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
   exact hF.wp_loadWith (fun rX hiL hU ht => hiL.loadRest hpb hn (hrest G' rX m t hU ha) hc hg
     (hread G' rX m t hU ha hc ht)) (fun rX hU => hrec G' rX m t hU ha hc) hi hc hg h
-
-/-- **A read by the only thread that has not left the lock** (`Inv.loadAll`): the bytes are in the
-lock's complete rest, the protocol's rest with the word's cells and the free lock's resource, so
-the read may span the word and what the lock protects (a whole struct read after every other
-thread finished with the lock). The reader's admission `A` gives that every other thread is `gone`
-(`hsole`), the bytes for every lock resource the invariant allows (`hrest`), no race (`hread`) and
-`U` after the read's record (`hrec`). -/
-theorem Fits.wp_readAll (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b : BlockId}
-    {a : Nat} {v : T} {A : ThreadId → γ → Prop} (hpb : p.block = some b)
-    (hn : 0 < Enc.size T)
-    (hsole : ∀ G rX m u, U G rX m → A u (G u) → ∀ w < m.threads.size, w ≠ u → L.ph (G w) = .gone)
-    (hrest : ∀ G rX m u rL, L.Inv G rX m → U G rX m → A u (G u) → (L.Free G → L.R G rL) →
-      (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase → FHeap.Disjoint rL.heap rX.heap →
-      (∀ l fc, (rsum (L.wordR m) (rsum rL rX)).heap l = some fc →
-        (m.heap l).map Cell.norm = some fc.cell.norm) →
-      ∃ r B S K' bs, up (bytesAt p B S K' bs) r ∧
-      (∀ l fc, r.heap l = some fc → ∃ fc', (rsum (L.wordR m) (rsum rL rX)).heap l = some fc' ∧
-        fc'.cell.norm = fc.cell.norm) ∧
-      bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧ (B + p.off.toNat) % a = 0 ∧
-      K' ≠ .constGlobal)
-    (hread : ∀ G rX m u, U G rX m → A u (G u) → m.current = u →
-      u < m.threads.size → NoRace m b p.off.toNat (Enc.size T) .read)
-    (hrec : ∀ G rX m u, U G rX m → A u (G u) → m.current = u →
-      u < m.threads.size → joinedB m u = false → m.clocks.size = m.threads.size →
-      U G rX (m.recordAt b p.off.toNat (Enc.size T) .read))
-    {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
-    {Q : T → (ThreadId → γ) → Mem → Nat → Prop}
-    (hi : P.inv G' m) (hc : m.current = t) (hg : L.ph (G' t) ≠ .gone)
-    (ha : A t (G' t))
-    (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
-    P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
-  exact hF.wp_loadWith (fun rX hiL hU ht => hiL.loadAll hpb hn (hrest G' rX m t · hiL hU ha) hc
-    hg (hsole G' rX m t hU ha) (hread G' rX m t hU ha hc ht))
-    (fun rX hU => hrec G' rX m t hU ha hc) hi hc hg h
 
 /-- **A read of read-shared bytes of the protocol's rest** (module doc) by a live thread `t`:
 `T`'s `Enc.size T` bytes at `p` (block `b`) are bytes `bs` of the rest that decode to `v`, at an

@@ -8,8 +8,7 @@ The translation of `Thread.Mutex` depends on the OS (`tests/golden/0.15.2/thread
 Linux has `FutexImpl` (contended value `3`), macOS `DarwinImpl` (`os_unfair_lock`, the word is only
 `0` or `1`). The code of the other translation does not exist, so `when_defined`
 (`ZigLean/VersionGate.lean`) checks the translation before it compiles the commands that name it.
-Shared by the proofs over the legacy thread logic (`Proofs/Threadsync/Lock.lean`) and over
-full-state resources (`Proofs/Threadsync/ThreadMutex.lean`).
+Used by the proofs over full-state resources (`Proofs/Threadsync/ThreadMutex.lean`).
 -/
 
 namespace Threadsync
