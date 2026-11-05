@@ -1340,6 +1340,16 @@ os._exit(0)
         self.assertLess(report["peak_sampled_rss_kib"], 64 * 1024)
         self.assertTrue(json.loads(report["environment_overrides"][guard.INHERIT])["elastic"]["id"])
 
+    def test_a_sub_admissions_compilers_count_against_its_own_jobs(self):
+        # Two "compilers" (sleep, via --zig-name) at once in a part with --jobs 2, inside an
+        # elastic guard with --jobs 1: the part's own bound, not the enclosing one, applies.
+        source = ("import subprocess; ps = [subprocess.Popen(['sleep', '1.5']) for _ in range(2)]; "
+                  "[p.wait() for p in ps]")
+        inner = self.sub_args(source, "--charge-mib", "64", "--rss-mib", "64", "--jobs", "2",
+                              "--zig-name", "sleep")
+        result, report, log = self.in_elastic(inner, "--rss-mib", "64", "--zig-name", "sleep")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), log.read_text())
+
     def test_a_sub_admission_over_its_charge_runs_again_at_its_declared_bound(self):
         count, report = self.root / "count", self.root / "inner.json"
         source = (f"import pathlib, time; p = pathlib.Path({str(count)!r}); n = len(p.read_text()) + 1 "

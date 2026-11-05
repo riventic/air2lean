@@ -1593,14 +1593,15 @@ def run(a, retry_of=None):
                     next_sample = time.monotonic() + a.interval
                     if rows is not None:
                         owned = tree.owned(rows)
-                        # Only an elastic workload (or a guard inside one) has parts in its tree.
+                        # Only an elastic workload (or a guard inside one) has parts in its tree;
+                        # each part enforces its own limit and --jobs.
                         own = outside_leaves(rows, owned, leaf_roots(lock.directory)) if elastic_tree else owned
                         rss = sum(rows[pid]["rss_kib"] for pid in own)
                         report["samples"] += 1
                         report["peak_sampled_rss_kib"] = max(report["peak_sampled_rss_kib"], rss)
                         if not reason and rss > limit_mib * 1024:
                             reason, code = "rss_limit", 125
-                        if not reason and parallel_zig(rows, owned, names, a.jobs):
+                        if not reason and parallel_zig(rows, own, names, a.jobs):
                             reason, code = "parallel_zig", 126
                         if not reason and progress and progress.hung(rows, owned, report["output_bytes"],
                                                                      time.monotonic()):
