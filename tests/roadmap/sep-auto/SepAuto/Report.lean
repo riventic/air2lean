@@ -14,7 +14,7 @@ open Lean Meta Elab Tactic Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto Zig.Full.Au
 private def targetTypes (gs : List MVarId) : MetaM (List Expr) :=
   gs.mapM fun g => do instantiateMVars (← g.getType)
 
-/-- The goals of a walk and the messages it logged; the caller's message log is kept. -/
+/-- Capture only this invocation's messages and preserve the surrounding command's log. -/
 private def messagesOf (execute : TacticM (List MVarId)) :
     TacticM (List MVarId × List String) := do
   let old ← Core.getMessageLog
@@ -435,7 +435,6 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
 
 /-! Diagnostic coverage for the current shared entry. -/
 
-/-- Capture only this invocation's messages and preserve the surrounding command's log. -/
 /-- Exercise the public reporting branch, including its nested collector and message. -/
 private def reportedTactic (tac : Syntax) (g : MVarId) :
     TacticM (List MVarId × Result) :=
