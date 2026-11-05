@@ -1258,16 +1258,21 @@ class Admission:
     def line_up(self, turn):
         """Keep this normal guard's place in line while it waits in the queue loop: an entry in
         `<lock>.d/queued/` named for when it entered the loop, its mtime refreshed while it is in
-        its turn (`first_in_line`). A ticket holder has none (its ticket orders it)."""
+        its turn or held up only by drain tickets, which hold up every normal guard alike
+        (`first_in_line`). A ticket holder has none (its ticket orders it)."""
         if self.ticket:
             self.leave_line()
-        elif self.in_line is None:
-            name = entry_name()
+            return
+        name = self.in_line[0] if self.in_line else entry_name()
+        path = self.lined_up / name
+        fresh = turn or bool(self.drain_tickets())
+        if self.in_line is None or not path.exists():  # new, or removed under it: its place again
+            if self.in_line:
+                self.in_line[1].close()
             self.in_line = (name, publish_entry(self.lined_up, name, {"pid": os.getpid()},
                                                 lambda path: path.open("a")))
-        elif turn:
-            with contextlib.suppress(FileNotFoundError):
-                os.utime(self.lined_up / self.in_line[0])
+        with contextlib.suppress(FileNotFoundError):
+            os.utime(path, None if fresh else (0, 0))
 
     def leave_line(self):
         if self.in_line:
@@ -1284,8 +1289,13 @@ class Admission:
         and again (remote host, 2026-11-05: three lane jobs waited behind a full build's parts
         with 86% of the memory free). A guard that is not in its turn (`my_turn`: behind a ticket,
         or too large beside the elastic bases while a lifeline waits), or stopped while alive,
-        stops refreshing and holds up nobody: it falls back to the race."""
-        mine, now = self.in_line[0], time.time()
+        stops refreshing and holds up nobody: it falls back to the race. Freshness is measured
+        against its own entry, just refreshed (`line_up`): one clock, the file system's."""
+        mine = self.in_line[0]
+        try:
+            now = (self.lined_up / mine).stat().st_mtime
+        except FileNotFoundError:
+            return True  # its entry is published again at its next attempt
         for name in held_entries(self.lined_up):
             if name >= mine:
                 return True

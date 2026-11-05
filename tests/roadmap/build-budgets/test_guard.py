@@ -1501,15 +1501,19 @@ os._exit(0)
         lane_queue = queue(lane)
         self.assertTrue(lane.takes_queue(lane_queue))
         fcntl.flock(lane_queue, fcntl.LOCK_UN)
-        name, past = lane.in_line[0], time.time() - guard.IN_LINE_FRESH - 1
-        lane.line_up(False)  # out of its turn: no refresh
-        os.utime(lane.lined_up / name, (past, past))
-        self.assertTrue(part.first_in_line())
-        lane.line_up(True)  # in its turn again: its place, refreshed
+        name, part_queue = lane.in_line[0], queue(part)
+        lane.line_up(False)  # out of its turn (no drain ticket): passed over
+        self.assertTrue(part.takes_queue(part_queue))
+        fcntl.flock(part_queue, fcntl.LOCK_UN)
+        (lane.lined_up / name).unlink()  # removed under it: published again, in its turn, in its place
+        lane.line_up(True)
         self.assertEqual(lane.in_line[0], name)
-        self.assertFalse(part.first_in_line())
+        self.assertFalse(part.takes_queue(part_queue))
         lane.leave_line()  # admitted
-        self.assertTrue(part.takes_queue(queue(part)))
+        part.leave_line()
+        early = self.lock_admission()
+        early.line_up(False)  # new but out of its turn: holds up nobody either
+        self.assertTrue(part.takes_queue(part_queue))
 
     def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):
         # The remote host, 2026-11-05: an unmeasured part (11 slots) took its workload's lifeline
