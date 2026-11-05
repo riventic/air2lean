@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.AutoConc
+import ZigLean.Sep.Full.ThreadLoop
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.Typed
 import ZigLean.Sep.Full.Parts
@@ -1289,6 +1290,102 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     return out
   r
 
+/-- The facts relevant to `tgt` normalized again, each against all the facts. A hypothesis is
+normalized against the facts before it, once, when it enters the context (`normFacts`, cached),
+so a conditional rewrite whose side condition only a later fact proves did not apply to it
+(`tsum b g - tsum x g` with `x < b`, `tsum_sub_of_lt`: the loop test `x < b` comes after the
+invariant). A fact used for its own side condition is sound (every fact is a hypothesis), and
+each fact stays beside its new form, which may have lost what it said about itself. Only the
+arithmetic facts relevant to `tgt`; one that fails to normalize stays as it was. The facts with
+their types (a new form was added iff there are more of them). Only after `omega` failed: the
+normal form of every other use stays `normFacts`'. -/
+def renormFacts (facts : Array Expr) (tgt : Expr) (cases := true) :
+    MetaM (Array (Expr × Expr)) := do
+  let (ctx, procs) ← arithSimpCtx
+  let typed ← facts.mapM fun f => return (f, ← instantiateMVars (← inferType f))
+  let rel : Std.HashSet Expr := (relevantFacts typed tgt).foldl (fun s (f, _) => s.insert f) {}
+  let mut out := #[]
+  for (f, ty) in typed do
+    -- (the fact as it was stays: normalized against itself, `k % 8 = k` would become `True`)
+    out := out.push (f, ty)
+    unless rel.contains f && (← isArithProp ty) do continue
+    let s ← saveState
+    try
+      let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
+      unless r.expr == ty || r.expr.isTrue do
+        out := out.push (← mpResult r f, r.expr)
+    catch _ => s.restore
+  return out
+
+/-- **Congruence of atoms**: an atom of `omega` that applies a function the solver does not read
+(a library sum `tsum x.toNat g`, a caller's `f x.toNat`) to terms containing the side `l` of a
+fact `l = r` (`l` itself an atom: a word's value, `x.toNat = i.toNat + 1`) equals the atom with
+`r` for `l`, in normal form (`tsum (i.toNat + 1) g` is `tsum i.toNat g + g i.toNat`,
+`fsym_arith`). These equations, for `omega`, which reads `tsum x.toNat g` and `tsum i.toNat g` as
+unrelated atoms (ledger #arith-atom-congruence). The atoms are those of `tgt` and of the facts
+relevant to it; only at `Nat` and `Int`. The equations are any fact's, each fact used at most
+once for an atom (one of its directions): first one whose other side is not an atom (`x = i + 1`),
+else an alias (`x₃ = x`, which a later equation of `x` may continue), so the rewrites end and
+an alias does not hide the equation behind it. An atom whose step fails is skipped. `facts`:
+proofs with their types. -/
+def atomCongr (facts : Array (Expr × Expr)) (tgt : Expr) (cases := true) : MetaM (Array Expr) := do
+  -- the equations `l = r` whose side `l` is an atom, as `(fact, l, r, proof of l = r)`, those
+  -- whose `r` is no atom first
+  let isAtom (e : Expr) : Bool := let s := arithAtoms e; s.size == 1 && s.contains e
+  let mut eqs : Array (Nat × Expr × Expr × Expr) := #[]
+  let mut aliases : Array (Nat × Expr × Expr × Expr) := #[]
+  for i in [0:facts.size] do
+    let (f, ty) := facts[i]!
+    if ty.hasExprMVar then continue
+    let some (T, l, r) := ty.eq? | continue
+    unless T.isConstOf ``Nat || T.isConstOf ``Int do continue
+    match isAtom l, isAtom r with
+    | true, true => aliases := aliases ++ #[(i, l, r, f), (i, r, l, ← mkEqSymm f)]
+    | true, false => eqs := eqs.push (i, l, r, f)
+    | false, true => eqs := eqs.push (i, r, l, ← mkEqSymm f)
+    | false, false => pure ()
+  eqs := eqs ++ aliases
+  if eqs.isEmpty then return #[]
+  let ats := (relevantFacts facts tgt).foldl (fun s (_, ty) => arithAtoms ty s) (arithAtoms tgt)
+  let mut out := #[]
+  for t in ats do
+    -- (a constant's application or a local function's: a caller's `f : Nat → Nat`)
+    unless (t.getAppFn.isConst || t.getAppFn.isFVar) && t.getAppNumArgs > 0 && !t.hasLooseBVars &&
+      !t.hasExprMVar do continue
+    let T ← whnfR (← inferType t)
+    unless T.isConstOf ``Nat || T.isConstOf ``Int do continue
+    let s ← saveState
+    match ← (try at? eqs t cases catch _ => do s.restore; pure none) with
+    | some e => out := out.push e
+    | none => pure ()
+  return out
+where
+  /-- `t = t'` for the atom `t`: each round the first equation that applies (at most one per
+  fact), then `fsym_arith`'s normal form; `none` if nothing changed. -/
+  at? (eqs : Array (Nat × Expr × Expr × Expr)) (t : Expr) (cases : Bool) : MetaM (Option Expr) := do
+    let mut cur : Simp.Result := { expr := t }
+    let mut used : Array Nat := #[]
+    for _ in [0:eqs.size] do
+      let mut step := false
+      for (i, l, r, h) in eqs do
+        if used.contains i || cur.expr == l || (cur.expr.find? (· == l)).isNone then continue
+        let mot ← withLocalDeclD `z (← inferType l) fun z => do
+          mkLambdaFVars #[z] (cur.expr.replace fun y => if y == l then some z else none)
+        -- (a dependent position, a width `BitVec w`, does not take another term)
+        unless ← isTypeCorrect mot do continue
+        let e' := (mkApp mot r).headBeta
+        let pf ← mkExpectedTypeHint (← mkCongrArg mot h) (← mkEq cur.expr e')
+        cur ← cur.mkEqTrans { expr := e', proof? := some pf }
+        used := used.push i; step := true; break
+      unless step do break
+    if used.isEmpty then return none
+    let (ctx, procs) ← arithSimpCtx
+    let (res, _) ← fsimp cur.expr ctx procs (discharge? := some (omegaDisch cases))
+    let res ← cur.mkEqTrans res
+    if res.expr == t then return none
+    let some pf := res.proof? | return none
+    return some (← mkExpectedTypeHint pf (← mkEq t res.expr))
+
 /-- `e` with the reducible aliases of `Nat` and `Int` (`ThreadId`) as those types: `omega` reads
 an order or a numeral only at `Nat` or `Int` itself (`t < m.threads.size` of a `t : ThreadId`). -/
 def numAliases (e : Expr) : MetaM Expr :=
@@ -1368,8 +1465,9 @@ def assumptionR (g : MVarId) : MetaM Bool := g.withContext do
 (values of words and pointers as natural numbers, no wrap-around where it cannot happen, user
 definitions of values unfolded), the target in normal form, facts about symbolic powers of two
 and masks (`extraFacts`), then `omega`; unless `quick`, also the congruence of remainders
-(`modCongr`). Without `cases`, no search through the case facts (`omegaFacts`); a probe (`quick`
-or `budget`) searches them within `probeCaseBudget`. -/
+(`modCongr`); unless a probe (`quick` or `budget`), `omega` again with the relevant facts each
+normalized against all the facts (`renormFacts`) and the congruence of atoms (`atomCongr`). Without `cases`, no search through the
+case facts (`omegaFacts`); a probe (`quick` or `budget`) searches them within `probeCaseBudget`. -/
 def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : TacticM Bool :=
     g.withContext do
   if ← assumptionR g then return true
@@ -1408,12 +1506,28 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
     let h1 ← IO.getNumHeartbeats
     -- (a target that normalizes to `False`, `8 ∣ 1`, is refuted: the case facts only for a
     -- refutation of the context that the target asks for, `False` itself)
-    let ok ← omegaFacts all r.expr (cases := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse))
-      (budget := quick || budget)
+    let cs := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse)
+    let ok ← omegaFacts all r.expr (cases := cs) (budget := quick || budget)
     trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
     if let some pf := ok then close pf; return true
     unless quick do
       if let some pf ← modCongr all r.expr cases then close pf; return true
+    -- not in a probe: the relevant facts each against all the facts, and the congruence of atoms
+    unless quick || budget do
+      let typed ← renormFacts facts r.expr cases
+      let changed := typed.size != facts.size
+      let facts' := typed.map (·.1)
+      -- (the solver's facts are then all of them, for the dischargers below)
+      if changed then (← caches).facts.set facts'
+      let congr ← atomCongr typed r.expr cases
+      if changed || !congr.isEmpty then
+        let extra' ← if changed then extraFacts facts' r.expr cases else pure extra
+        let all' := facts' ++ extra' ++ congr
+        trace[fsym.arith] "omega again {r.expr} from {← all'.mapM fun f => inferType f}"
+        -- (the case facts as for the first `omega`; a refutation of the context, a target
+        -- `False`, searches them within the probe's budget: this pass runs on every failed one)
+        if let some pf ← omegaFacts all' r.expr (cases := cs) (budget := r.expr.isFalse) then
+          close pf; return true
     s.restore; return false
   catch ex =>
     trace[fsym.arith] "exception {ex.toMessageData}"
@@ -3556,6 +3670,14 @@ partial def unfoldCmd (x : Expr) : MetaM (Option Simp.Result) := do
   if x.isAppOfArity ``StateT.lift 5 || x.isAppOfArity ``ConcM.liftMem 3 then
     let some r ← unfoldCmd x.appArg! | return none
     return some (← Simp.mkCongrArg x.appFn! r)
+  -- a generated program over locals run from a state (a loop's body, `StateT.run (B xs) s`); a
+  -- `match` there is split, not unfolded (`casesWalk`)
+  if x.isAppOfArity ``StateT.run 5 then
+    let p := (x.getArg! 3).consumeMData.headBeta
+    if let .const c _ := p.getAppFn then
+      if ← isMatcher c then return none
+    let some r ← unfoldCmd p | return none
+    return some (← congrAt (fun z => mkAppN x.getAppFn (x.getAppArgs.set! 3 z)) p r)
   let .const c _ := x.getAppFn | return none
   if (← getProjectionFnInfo? c).isSome then return ← unfold1Eq? x
   if ← isLibrary c then return none
@@ -5351,7 +5473,10 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
           unless determined do
             trace[fsym] "rule {rule}: no plan for its precondition"
             rollback; return none
-          preLeft := left
+          -- (determined only by the rest of the plan, e.g. an existential's witness that a later
+          -- atom fixed: proved by arithmetic now, if the facts show them; a quick probe, since
+          -- the rule may still be rolled back)
+          preLeft ← left.filterM fun m => return !(← arith m (quick := true))
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
     synthInstArgs args
@@ -6547,6 +6672,114 @@ def refutedSide (left : List MVarId) : TacticM Bool :=
       s.restore
       restoreArith
 
+/-- The backend's loop rule (`Full/Loop`, `Full/ThreadLoop`, `Conc`): with a measure in a total
+logic (`!L.part`), else partial correctness. `none` in a logic that is not one of the backends'
+constants (a proof over a variable `FLogic`). -/
+def loopRuleOf (L : Bk) : Option Name :=
+  if L.conc then some ``CTriple.loop
+  else if L.L.isConstOf ``FLogic.total then some ``FTotalTriple.loop_measure
+  else if L.L.isConstOf ``FLogic.partial then some ``FTriple.loop
+  else if L.L.isConstOf ``TLogic.total then some ``FTTotalTriple.loop_measure
+  else if L.L.isConstOf ``TLogic.partial then some ``FTTriple.loop
+  else none
+
+/-- A loop command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`):
+the loop, its body's definition `B` and `B`'s registered `inv`, `meas` and `post`. -/
+structure RegLoop where
+  loop : Expr
+  body : Name
+  inv : Name
+  meas? : Option Name
+  post? : Option Name
+
+/-- The command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`). -/
+def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
+  let x := x.consumeMData
+  unless x.isAppOfArity ``StateT.run 5 do return none
+  let l := (x.getArg! 3).consumeMData
+  unless l.isAppOfArity ``Zig.loop 7 do return none
+  let some B := (l.getArg! 5).consumeMData.getAppFn.constName? | return none
+  let (some inv, meas?, post?) := loopInvOf (← getEnv) B | return none
+  return some { loop := l, body := B, inv, meas?, post? }
+
+/-- **A loop with a registered invariant** (`@[fsym_inv]`, P09-E4): the command
+`(Zig.loop (B xs) again).run s₀` of `x >>= f` by the backend's loop rule (`loopRuleOf`) with the
+invariant `B.inv`, the measure `B.meas` (total correctness) and the exit post `B.post` (without
+one: the invariant with `again r.1 = false`), applied as a rule (`tryRule`: its precondition
+planned, the frame inferred). Their parameters before the locals are matched by name with
+`B.inv`'s: `B.inv`'s first ones are the body's arguments `xs`, one named `s0` is the locals at
+loop entry `s₀`, and the others are unknowns that the plan of the precondition assigns. `lem` is
+`loopRuleOf L`.
+* `.ok (k, step, left)`: the continuation, the goal of the body's step (`∀ s, …`, which the
+  caller walks) and the side goals left;
+* `.error why`: the invariant does not hold at the entry (no plan, or an unknown that the
+  plan leaves; nothing changed).
+
+A registration that does not fit the loop (no measure in a total logic, a parameter of `B.meas`
+that `B.inv` does not have) is an error. -/
+def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
+    TacticM (Except MessageData (MVarId × MVarId × List MVarId)) := g.withContext do
+  let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN? } := R
+  let (body, again, s₀) := ((l.getArg! 5).consumeMData, l.getArg! 6, x.consumeMData.getArg! 4)
+  let fail {α} (why : MessageData) : TacticM α :=
+    throwError "fsym: the loop invariant of `{B}` (`@[fsym_inv]`): {why}"
+  let total := !L.part
+  let s ← saveState
+  let restoreArith ← (← caches).saveArith
+  let rollback : TacticM Unit := do s.restore; restoreArith
+  try
+    let xs := body.getAppArgs
+    let σ ← inferType s₀
+    -- `B.inv`'s parameters: the body's arguments, the locals at entry `s0` and the unknowns
+    let invTy ← inferType (mkConst invN)
+    let names := invTy.getForallBinderNames.toArray.pop
+    let pre := (← forallMetaTelescope invTy).1.pop
+    unless xs.size ≤ pre.size do fail m!"`{invN}` does not take the body's {xs.size} arguments"
+    for h : i in [0:pre.size] do
+      if i < xs.size then
+        unless ← isDefEq pre[i] xs[i]! do
+          fail m!"`{invN}`'s parameter {names[i]!} is not the body's argument{indentExpr xs[i]!}"
+      else if names[i]! == loopEntryParam then
+        unless ← isDefEq pre[i] s₀ do
+          fail m!"`{invN}`'s parameter {loopEntryParam} is not of the loop's locals{indentExpr s₀}"
+    -- `B.meas`, `B.post` at `B.inv`'s parameters of the same names (and types)
+    let atParams (c : Name) : TacticM Expr := do
+      let args ← ((← inferType (mkConst c)).getForallBinderNames.toArray.pop).mapM fun y => do
+        let some i := names.idxOf? y | fail m!"`{c}`'s parameter {y} is not one of `{invN}`'s"
+        return pre[i]!
+      try mkAppM' (mkConst c) args
+      catch _ => fail m!"`{c}`'s parameters do not have the types of `{invN}`'s of the same names"
+    let I := mkAppN (mkConst invN) pre
+    let post ← match postN? with
+      | some p => atParams p
+      | none => withLocalDeclD `r (← mkAppM ``Prod #[l.getArg! 4, σ]) fun r => do
+          let φ ← mkEq (mkApp again (← mkAppM ``Prod.fst #[r])).headBeta (mkConst ``Bool.false)
+          mkLambdaFVars #[r] (mkSep (mkApp (mkConst liftN) φ) (mkApp I (← mkAppM ``Prod.snd #[r])))
+    -- the rule `lem I μ post ?step s₀`: the loop rules' last parameters are `I`, `μ` (total only),
+    -- `post`, `step` and `s`
+    let lemC ← mkConstWithFreshMVarLevels lem
+    let (lms, _, concl) ← forallMetaTelescope (← inferType lemC)
+    let n := lms.size
+    let mut data : Array (Expr × Nat) := #[(I, n - 4 - total.toNat), (post, n - 3), (s₀, n - 1)]
+    if total then
+      let some measN := measN? | fail m!"no measure `{B}.meas` for total correctness"
+      data := data.push (← atParams measN, n - 4)
+    for (e, i) in data do
+      unless ← isDefEq lms[i]! e do fail m!"`{lem}` does not take{indentExpr e}"
+    let some (_, cmd) := ruleConcl? (← whnfR concl) | fail m!"`{lem}` is not a loop rule"
+    unless ← isDefEq cmd x do fail m!"`{lem}`'s command does not unify with{indentExpr x}"
+    let step ← mkFreshExprSyntheticOpaqueMVar (← instantiateMVars (← inferType lms[n - 2]!))
+    lms[n - 2]!.mvarId!.assign step
+    let some (k, left) ← tryRule g (← instantiateMVars (mkAppN lemC lms)) x f (keepPre := true) | do
+      rollback; return .error m!"`{invN}` has no plan in the state at the loop's entry"
+    for h : i in [0:pre.size] do
+      if (← instantiateMVars pre[i]).hasExprMVar then
+        rollback
+        return .error m!"the plan at the loop's entry does not determine `{invN}`'s \
+          parameter {names[i]!}"
+    return .ok (k, step.mvarId!, left)
+  catch ex => rollback; throw ex
+
 mutual
 /-- An indirect call `callIndirect f ((p, y) :: arms) d` that no rule covers: `y` if the facts
 show `f = p`, else both cases (`C.callIndirect_pos`/`_neg`); no arm left is the last arm `d`:
@@ -6966,17 +7199,41 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
         return left ++ (← walk k user extra (fuel - 1))
   s.restore
   restoreSplitArith
+  let partialRule := partial?.isSome
   -- (a refuted rule only for a command that cannot be inlined either)
-  if partial?.isNone then
-    if (← unfoldCmd x).isNone then partial? := refuted?
+  let unfold? ← if partial?.isNone then unfoldCmd x else pure none
+  if partial?.isNone && unfold?.isNone then partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
   -- (a rule whose command unified but whose precondition the planner did not find: with more
   -- facts, then with views, before the command is unfolded)
   let unfolded? ← if partial?.isSome || ((← (← caches).viewProg.get).map Prod.fst) == some c then pure none
-    else unfoldCmd x
+    else pure unfold?
   if partial?.isSome || unfolded?.isNone || !wanted.isEmpty then
     if let some r ← moreFacts then return r
+  -- a loop that no rule applies to (with all facts: `moreFacts` retried the rules; a refuted rule
+  -- does not count): its registered invariant (`@[fsym_inv]`), after the views that a rule's
+  -- precondition wanted; the body's step and the rest walked as branches. An invariant with no
+  -- plan at the entry: after the views and the rebase of what its plan wanted, reported.
+  -- (a proof over a variable logic has no loop rule: the loop stays a residual)
+  let loop? ← if partialRule then pure none else registeredLoop? x
+  if let (some R, some lem) := (loop?, loopRuleOf L) then
+    if !wanted.isEmpty then
+      if let some r ← viewed wanted then return r
+    match ← reportLimit m!"the registered invariant of the loop{indentExpr x}"
+        (loopInvRule? g L lem R x f) with
+    | .ok (k, step, left) =>
+      let (_, step) ← step.intro `s
+      return left ++ (← eachBranch [step, k] id (walk · user extra (fuel - 1)))
+    | .error why =>
+      let wantedInv ← (← caches).wanted.get
+      if wantedInv.size != wanted.size then
+        if let some r ← viewed wantedInv then return r
+      if let some (x', e) ← rebaseLitPtr? P x then
+        return ← walk (← rewriteCmd g L α P Q c x { expr := x', proof? := some e }) user extra
+          (fuel - 1)
+      Report.stopMessage m!"fsym: {why}{indentExpr x}\nwith the precondition{indentExpr P}"
+      return ← Report.leave g [g] "invariant_not_established" "loop_entry" (some x)
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
     let s1 ← saveState

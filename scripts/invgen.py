@@ -21,6 +21,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The library module that air2lean-invgen imports besides the translated module: `fsym` for the
+# Houdini pruning walks.
+LIBRARY = 'ZigLean.Sep.Full.AutoAll'
+
 # (Inv.lean, fixture root, translated module, its namespace)
 TARGETS = [
     ('tests/roadmap/loop-tactics/nested/Nested/Inv.lean', 'tests/roadmap/loop-tactics/nested',
@@ -65,6 +69,8 @@ def main(argv=None):
     if unknown:
         parser.error('not a target of scripts/invgen.py: ' + ', '.join(unknown))
     stale = []
+    # The library the generator imports for its pruning walks (Air2Lean/InvGenMain.lean).
+    subprocess.run(['lake', 'build', '-q', LIBRARY], cwd=ROOT, check=True)
     for path, root, module, namespace in [known[p] for p in args.paths] or TARGETS:
         with tempfile.TemporaryDirectory(prefix='air2lean-invgen.') as work:
             fresh = generate(root, module, namespace, Path(work))

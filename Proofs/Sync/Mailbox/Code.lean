@@ -166,6 +166,11 @@ variable (K : Cfg)
 /-- The mutex (byte 8). -/
 abbrev L : FLock Gh := FLock.prod 0 8 R K.c K.c_ok
 
+/-- The epoch's word and the mutex's word have different futex keys (one block, offsets 16 and 8,
+`Mem.wordKey_ne_off`). -/
+theorem weKey_ne (m : Mem) : WE.key m ≠ (L K).key m :=
+  Mem.wordKey_ne_off (o := 16) (o' := 8) (by decide) (by decide) (by decide) false false
+
 /-- The condition: its place is `X.c`; the threads at the semaphore's `pst` signal. -/
 def C : FCond Gh where
   S := WS

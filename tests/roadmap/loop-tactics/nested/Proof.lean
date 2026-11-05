@@ -2,6 +2,7 @@ import Nested.Inv
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Tick
+import ZigLean.Sep.Full.TSum
 
 /-!
 # A translated nested loop in the full-state logic
@@ -33,11 +34,6 @@ Its strength log (the legacy total triple on every `Mem.FSeqPlain` memory, the s
 namespace Nested.Proof
 open Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto
 
-/-- `cnt k = 0 + 1 + … + (k - 1)`: the pairs `j < i < k`. -/
-def cnt : Nat → Nat
-  | 0 => 0
-  | k + 1 => k + cnt k
-
 /-- `*p` holds `x`. -/
 def acc (p : Ptr) (x : Nat) : FAssn := FAssn.ex fun v : BitVec 64 => ⟪v.toNat = x⟫ ⋆ up (pts p 8 v)
 
@@ -66,54 +62,44 @@ theorem inner_loop {mb : Lean.Order.MonoBind (MM pairsLocals)} (p : Ptr) (w : Bi
       obtain ⟨⟨he, hi⟩, h⟩ := sep_lift.mp h
       exact ⟨t, sep_lift.mpr ⟨⟨by simp only at he; rw [he], hi⟩, h⟩⟩
 
-theorem cnt_mono {a b : Nat} (h : a ≤ b) : cnt a ≤ cnt b := by
-  induction h with
-  | refl => exact Nat.le_refl _
-  | step _ ih => exact Nat.le_trans ih (Nat.le_add_left _ _)
-
-/-- Outer loop: `i` counts up to `n`; `*p = v + cnt i`; the steps run in the plain mode. Hand-written
-until the generator covers counter-dependent sums (ledger #arith-atom-congruence). -/
+/-- Outer loop: `i` counts up to `n`; `*p + (S n - S i) = v + S n` with the library sum
+`S k = tsum k (fun u => u) = 0 + 1 + … + (k - 1)`; the steps run in the plain mode. Hand-written
+until the generator covers counter-dependent sums (`docs/invariant-synthesis.md`, S2c′); `fsym`
+walks it (the counter's step `S x.toNat` against `S (i.toNat + 1)`: the congruence of atoms). -/
 def outerI (p : Ptr) (n : BitVec 32) (v : Nat) (s : pairsLocals) : FAssn :=
-  ⟪s.i.toNat ≤ n.toNat ∧ v + cnt n.toNat < 2 ^ 64⟫ ⋆ (acc p (v + cnt s.i.toNat) ⋆ plain)
+  ⟪s.i.toNat ≤ n.toNat ∧ v + tsum n.toNat (fun u => u) < 2 ^ 64⟫ ⋆
+    ((FAssn.ex fun w : BitVec 64 =>
+      ⟪w.toNat + (tsum n.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) = v + tsum n.toNat (fun u => u)⟫ ⋆
+        up (pts p 8 w)) ⋆ plain)
 
 def outerPost (p : Ptr) (n : BitVec 32) (v : Nat) (r : pairsExit × pairsLocals) : FAssn :=
-  ⟪r.1 = .br4⟫ ⋆ (acc p (v + cnt n.toNat) ⋆ plain)
+  ⟪r.1 = .br4⟫ ⋆ (acc p (v + tsum n.toNat (fun u => u)) ⋆ plain)
 
 theorem outer_step (p : Ptr) (n : BitVec 32) (v : Nat) (s : pairsLocals) :
     FTotalTriple (outerI p n v s) ((pairs.loop5 p n).run s)
       (fun r => if pairs.again5 r.1 then ⟪n.toNat - r.2.i.toNat < n.toNat - s.i.toNat⟫ ⋆ outerI p n v r.2
         else outerPost p n v r) := by
-  unfold pairs.loop5 outerI outerPost
-  have hm : s.i.toNat < n.toNat → cnt s.i.toNat + s.i.toNat ≤ cnt n.toNat := fun h => by
-    have := cnt_mono (show s.i.toNat + 1 ≤ n.toNat by omega); simpa only [cnt, Nat.add_comm] using this
+  unfold pairs.loop5 outerI outerPost acc
   fsym [inner_loop]
-  · -- the counter's step: `cnt (i + 1) = cnt i + i`
-    rename_i hti _ hx
-    rw [show x.toNat = s.i.toNat + 1 by rw [hx, hti]; rfl, cnt]
-    have : (0#32).toNat = 0 := rfl
-    omega
-  · -- the exit: `i = n`
-    have : s.i.toNat = n.toNat := by simp only [lt_false, decide_eq_true_eq] at hc; omega
-    rw [← this]; omega
 
 theorem outer_loop {mb : Lean.Order.MonoBind (MM pairsLocals)} (p : Ptr) (n : BitVec 32) (w : BitVec 64)
-    (s : pairsLocals) (hi : s.i = 0) (hfit : w.toNat + cnt n.toNat < 2 ^ 64) :
+    (s : pairsLocals) (hi : s.i = 0) (hfit : w.toNat + tsum n.toNat (fun u => u) < 2 ^ 64) :
     FTotalTriple (up (pts p 8 w) ⋆ plain)
       ((@Zig.loop (MM pairsLocals) _ _ mb _ (pairs.loop5 p n) pairs.again5).run s)
       (fun r => FAssn.ex fun t : pairsLocals => ⟪r = (.br4, t)⟫ ⋆
-        ((FAssn.ex fun v : BitVec 64 => ⟪v.toNat = w.toNat + cnt n.toNat⟫ ⋆ up (pts p 8 v)) ⋆
+        ((FAssn.ex fun v : BitVec 64 => ⟪v.toNat = w.toNat + tsum n.toNat (fun u => u)⟫ ⋆ up (pts p 8 v)) ⋆
           plain)) :=
   (FTotalTriple.loop_measure (outerI p n w.toNat) (fun t => n.toNat - t.i.toNat) _
-    (outer_step p n w.toNat) s).eupd (by unfold outerI acc; simp only [hi]; fsym_entail)
+    (outer_step p n w.toNat) s).eupd (by unfold outerI; simp only [hi]; fsym_entail)
     |>.eupd_post fun ⟨e, t⟩ => EUpd.of_imp fun _ h => by
       obtain ⟨he, h⟩ := sep_lift.mp h
       exact ⟨t, sep_lift.mpr ⟨by simp only at he; rw [he], h⟩⟩
 
 /-- `pairs` adds `0 + 1 + … + (n - 1)` to `*acc`, under the premise that the sum fits; its steps
 run in the plain mode. -/
-theorem pairs_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + cnt n.toNat < 2 ^ 64) :
+theorem pairs_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + tsum n.toNat (fun u => u) < 2 ^ 64) :
     FTotalTriple (up (pts p 8 v) ⋆ plain) (pairs p n)
-      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat))) ⋆ plain) := by
+      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + tsum n.toNat (fun u => u)))) ⋆ plain) := by
   unfold pairs
   fsym [outer_loop]
 

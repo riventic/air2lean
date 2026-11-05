@@ -43,6 +43,7 @@ def lo : Layout where
   c := 2
   c_ok := by decide
   ok := by decide
+  fits := by decide
 
 /-- The producer's argument. -/
 def prodOf : Tgt → Option Ptr

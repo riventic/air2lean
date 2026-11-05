@@ -18,12 +18,14 @@ Outside the certificate fragment:
 * `asm.popcnt64`: inst 1: an instruction outside the fragment
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `asm.bswap32` trusted-Canon: renumber
-* `asm.divmod` trusted-Canon: renumber
-* `asm.lzcnt64` trusted-Canon: renumber
-* `asm.popcnt64` trusted-Canon: renumber
+* `asm.bswap32` trusted-Canon: none
+* `asm.divmod` trusted-Canon: none
+* `asm.lzcnt64` trusted-Canon: none
+* `asm.popcnt64` trusted-Canon: none
 -/
 
 end Asm.AirCert

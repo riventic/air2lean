@@ -94,7 +94,7 @@ protocol's `Fits.holdLive`. -/
 theorem Fits.noWaits (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : Mem}
     (hi : L.Inv G rX m) (hU : U G rX m)
     (hall : ∀ u < m.threads.size, P.fin (G u) ∨ m.waiters.any (·.1 == u) = true ∨ P.joins (G u)) :
-    ¬ L.Waits m.waiters := fun hp => by
+    ¬ L.Waits m m.waiters := fun hp => by
   obtain ⟨v, hv, hq, hb, -⟩ := hi.w.wit hp
   rcases hall v hv with h | h | h
   · have := hP.fin _ h; simp only [pl] at hb; rw [this] at hb; cases hb
@@ -377,7 +377,7 @@ theorem wp_futexWaitOn (hP : L.Fits K P U ok) {ε : Type} {w : Nat} [Packed ε w
   have hph : L.pl G₁ t = .wait := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
   have hng : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
-  have hwo := hiL.w.wait_ok (e := BitVec.ofNat 32 L.c) (hiL.ht hng).1 hng
+  have hwo := hiL.w.wait_ok (e := BitVec.ofNat 32 L.c) (sh := false) (hiL.ht hng).1 hng
   refine ⟨fun _ => hP.live hiL hU (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hwo,
     fun _ he => Zig.Conc.Proto.noErr_of_ok hwo he, fun b m' hw => ?_⟩⟩
   obtain ⟨hst, hb⟩ := hiL.w.wait hph hq hw
@@ -415,7 +415,7 @@ theorem wp_wakeOn (hP : L.Fits K P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
   refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ cs m' hw => ?_⟩
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
   have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
-  obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph (by decide) hw
+  obtain ⟨hst, hcu, hl⟩ := hiL.w.wakePtr hph (by decide) hw
   exact h k hk G₁ m' hcu
     (hP.stepAt hg₁ hok (by rw [hg]; decide) (by rw [hg]; decide)
       (by rw [hg]; decide) (by decide) hiL hU hst hl)
@@ -687,7 +687,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
     (h : ∀ d, d < n → ∀ r G₁ m', m'.current = t → r ≠ .timedOut → P.inv (upd G₁ t g) m' →
       Q r G₁ m' d)
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWait L.ptr e false : ConcM Tgt Os.WaitResult) Q G m n := by
+    P.WP t (Os.futexWait L.ptr e false false : ConcM Tgt Os.WaitResult) Q G m n := by
   subst he
   have hng : L.ph g ≠ .gone := by rw [hg]; decide
   have hna : L.ph g ≠ .away := by rw [hg]; decide
@@ -722,7 +722,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   have hph : L.pl G₂ t = .wait := by show L.ph (G₂ t) = _; rw [hg₂, hgw]
   have hok₃ : ok (G₂ t) := by rw [hg₂]; exact hokw
   have hng₃ : L.ph (G₂ t) ≠ .gone := by rw [hg₂, hgw]; decide
-  have hwo := hiL₃.w.wait_ok (e := BitVec.ofNat 32 L.c) ht₃ hng₃
+  have hwo := hiL₃.w.wait_ok (e := BitVec.ofNat 32 L.c) (sh := false) ht₃ hng₃
   -- after the wait, at `spin`: the interrupt's delivery keeps the invariant
   have hend : ∀ m₄, m₄.current = t → P.inv (upd G₂ t g) m₄ →
       Q (if m₄.os.interrupts.contains m₄.current then .interrupted else .woken) G₂
@@ -778,11 +778,11 @@ theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some 
       ((∃ j, r = some j) ∧ P.inv (upd G₁ t (L.set g .out rnil)) m' ∨
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWake L.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n := by
-  refine WP.osFutexWake fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht =>
-    ⟨fun cs m' hr => ?_, fun hs => ?_⟩⟩
-  · obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
-    have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
+    P.WP t (Os.futexWake L.ptr false w spurious : ConcM Tgt (Option Nat)) Q G m n := by
+  refine WP.osFutexWake fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht => ?_⟩
+  obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
+  refine ⟨L.key m₁, hiL.w.blk.keyAt, fun cs m' hr => ?_, fun hs => ?_⟩
+  · have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
     obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
     obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph hc hr'
     exact h k hk _ G₁ m' hcu (.inl ⟨⟨_, rfl⟩, hP.stepAt hg₁ hok (by rw [hg]; decide)

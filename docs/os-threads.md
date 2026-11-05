@@ -105,7 +105,8 @@ footprint, so a racing plain write is `.illegal`, and an `observe` (audit findin
 pointer is `.illegal`. A different value returns `mismatch` (`EAGAIN`). Otherwise the oracle
 picks:
 
-1. sleep. An untimed wait stops at the scheduler's `wait p e`, which compares again and sleeps
+1. sleep. An untimed wait stops at the scheduler's `wait p e sh` (`sh` the key's domain), which
+   compares again and sleeps
    until a wake. A changed word goes on, which is a return with `0`, as Linux allows. A timed
    wait joins `Mem.waiters` and stops at a `yield`, so it stays runnable: at any later turn it
    returns `woken` if a wake reached it, else `timedOut`. A timed wait never deadlocks.
@@ -133,8 +134,10 @@ the run placed (`Mem.userBelow`, so a freed word's private WAKE returns 0). Ever
 is a conservative `.illegal` refusal (for example a shared WAKE at a freed word, or an address
 above every block). The macOS rows (`Darwin.ulockAddr`) return `-EINVAL` for a null WAIT or
 WAKE address and an unaligned WAIT address; an unaligned WAKE finds no waiter. A pointer into a
-block the memory does not have resolves to no numeric address: `.illegal`. The queue's missing
-numeric-address/domain distinction remains open under S6.
+block the memory does not have resolves to no numeric address: `.illegal`. The queue is keyed by
+the futex key, the numeric address and the domain (`FutexKey`, `Mem.waiters`), so a private
+wake never reaches a shared waiter and two pointers at one address reach the same waiters
+(audit S6, fixed for the OS rows).
 
 The raw rules `WP.futex_4arg`/`WP.futex_3arg` expose the EINVAL post, the key's error and
 result cases (`WP.futexKey`), and the generic operation. The specializations
