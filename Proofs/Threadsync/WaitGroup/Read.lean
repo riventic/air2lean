@@ -148,7 +148,7 @@ theorem U_read {G : ThreadId → Gh} {rX : Res} {m : Mem} {o n : Nat} (hu : U G 
     (fun u hu3 h => live6 hu h6 u hu3 h) rfl
   refine hu.congrX (fun _ => rfl) hhG hhE hclk rfl (hu.rest.congr fun _ _ => rfl) hu.blk hwG hwE
     (hu.einv.frame (t := 0) (fun _ _ => rfl) rfl rfl hhE rfl hclk (Nat.le_refl _) id id
-      (hu.einv.fresh.of_eq rfl (Nat.le_refl _)))
+      (hu.einv.fresh.of_eq rfl (Nat.le_refl _)) rfl rfl)
     (fun u h => hu.lg u h) hu.out3 (fun e he _ hk => ?_) hu.q
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl

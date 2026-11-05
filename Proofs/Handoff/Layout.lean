@@ -35,6 +35,9 @@ structure Layout where
   /-- The parts are in this order, 4-aligned, and in the `Box`. -/
   ok : io ≤ mo ∧ mo + 4 ≤ so ∧ so + 8 = vo ∧ vo + 4 ≤ xo ∧ xo + 4 ≤ ro ∧ ro + 1 ≤ size ∧
     mo % 4 = 0 ∧ so % 4 = 0 ∧ xo % 4 = 0 ∧ 0 < align ∧ 4 ∣ align
+  /-- The `Box` fits a `usize` (every Zig type does), so its words' offsets tell their futex keys
+  apart (`Mem.wordKey_ne_off`). -/
+  fits : size < 2 ^ 64
 
 /-- The `Box` (block 0). -/
 def bPtr : Ptr := ⟨some 0, 0⟩
