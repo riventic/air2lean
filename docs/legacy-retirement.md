@@ -204,7 +204,7 @@ Group 1 (start now, independent)
 | file | what | uses | blocker | eff | class |
 | --- | --- | --- | --- | --- | --- |
 | ZigLean/Sep/Full/Ghost.lean | ghost-resource FTriple rules | none (listed through `import Full.Triple`) | TOOL false positive | S | library |
-| ZigLean/Sep/Full/Tame.lean | `Tame` (program keeps layout), `tame` tactic | none (same false positive); `tame` tactic entry is legacy-to-retire | TOOL | S | library |
+| ZigLean/Sep/Full/Tame.lean | `Tame` (program keeps layout) | none (same false positive); the `tame` tactic is deleted (L16) | TOOL | S | library |
 | ZigLean/Sep/Full/Logic.lean | `FLogic`, `FReturns`, FTotalTriple | `Sep.Total` import + `TotalTriple` until fold-delete-bridge; false positive after | TOOL (after fold chain) | S | library |
 Work: strip `import` lines in the name scan; extend `LEGACY_MODULES` to the Conc cluster (maintainer approval, adds 10
 entries, section 1); re-run `--write`. Also decisions memo (section 7).
@@ -486,7 +486,7 @@ Stage D-e = the **final PR** (needs the strength log):
 * Conc.* (`TTriple`, `TTripleIn`, `TLive`, `Lock*`, `Spec.*`, `Total`, `TimedBudget`, `Clock.StepIn`, `Lemmas.Grows`, `WP`): L12 + D-WP; `Conc.Total`/`TimedBudget` also need the L8 tick mechanism.
 * Proofs.Sync.{Semaphore,RwLock} local `Fits/Sem/Step/Sem.Spec`: vanish with L10/L11.
 * Tests: `CancelSpec` (futures), `asm-wrappers Interp.Spec`, `FTripleCell/FTripleExact` (sep-full CX files), `Wrapped/FWrapped` (Fixture, L7): pure-result or counterexample fixtures; re-status as target when they are `FTriple` instances, or rewrite (needs maintainer approval for any status change).
-* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
+* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `within` was approved only "gone before landing" and remains; `unroll_solo`, `conc_norm` and `tame` are deleted (L16). The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
 
 ## 6. Execution order and critical path
 

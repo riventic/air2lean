@@ -31,7 +31,8 @@ closed: such functions need the protocol logic (`Proto.WP`).
   groups yet. `admissible_solo` is the admissibility of the in-thread reading.
 
 The `CNorm` lemmas push `StateT.run` through the body monad `CM` of a generated concurrent
-function; they are `fsym_norm` lemmas (`ZigLean/Sep/Full/AutoConc.lean`), as the `MM` ones are.
+function. All but `run_ite` (`fsym_norm` has the generic `run_ite'`) and `run_liftM` (for walks
+by hand) are `fsym_norm` lemmas (`ZigLean/Sep/Full/AutoConc.lean`), as the `MM` ones are.
 -/
 
 namespace Zig

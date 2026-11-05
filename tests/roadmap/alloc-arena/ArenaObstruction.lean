@@ -30,9 +30,8 @@ addition: `getelementptr inbounds` natively, `Zig.ptrProject` here), which lies 
 node's block: `.illegal` (MM-3), and undefined behaviour natively
 (`docs/upstream/arena-oob-gep.md`). `arena_oob_free` builds that state by hand (a 64-byte node
 with `end_index = 1000`) and frees a foreign slice. `not_fallocSpec_arena` reaches it by the
-arena's own `alloc` (the kernel runs it once `unfold` has unrolled its `partial_fixpoint` group
-and loops by their defining equations) and refutes
-every `FAllocSpec` of the stock arena whose invariant holds after `init`.
+arena's own `alloc`, computed by the kernel (`client_illegal`), and refutes every `FAllocSpec` of
+the stock arena whose invariant holds after `init`.
 ## O-H: an address at the top of the address space overflows `alloc`'s alignment
 
 `alloc`'s fast path aligns `buf.ptr + end_index` with `Alignment.forward`, an addition with an
@@ -161,7 +160,7 @@ theorem mInit_fseq : mInit.FSeq := by decide +kernel
 
 set_option maxRecDepth 100000 in
 /-- The client's run in the caller's thread is illegal (O-E): the kernel runs the stock arena's
-`alloc`, `alloc`, `free` (`alloc`'s group and loops unrolled three times by `unfold`). -/
+`alloc`, `alloc`, `free`. -/
 theorem client_illegal :
     Witness.errOf ((Sched.soloRun 1000 client).run mInit) = some .illegal := by
   unfold client vt
@@ -245,8 +244,8 @@ def resetClient : ConcM Tgt (Option Ptr × Option Ptr) := do
 
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 100000 in
-/-- The client's run: both allocations return byte 24 of the child's buffer (`reset`'s and
-`deinit`'s loops and `alloc`'s group unrolled by `unfold`, as for `client_illegal`). -/
+/-- The client's run: both allocations return byte 24 of the child's buffer (computed as
+`client_illegal` is; `reset` and `deinit` are unfolded too, so that their loops are). -/
 theorem reset_client_run :
     (((Sched.soloRun 1000 resetClient).run mInit).run.map fun r => r.map (·.1)) =
       some (.ok (some ⟨some 0, 24⟩, some ⟨some 0, 24⟩)) := by

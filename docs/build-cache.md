@@ -139,9 +139,10 @@ tables of the modules below it) runs as native code in every Lake build of a mod
 package and `tests/diff`. Lean's interpreter runs the same code otherwise. This is a build mode,
 not a proof rule: the elaborator produces the same terms and the kernel checks them as before
 (the `.olean` of every measured module is byte-identical in both modes, on aarch64-macos and
-x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`) stays interpreted. Native code does change one thing: `native_decide` and
-`Lean.ofReduceBool` would evaluate a closure function with compiled code. Both are already
-rejected (`scripts/no-sorry.sh`, the claim policy).
+x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`) stays
+interpreted. Native code does change one thing: `native_decide` and `Lean.ofReduceBool` would
+evaluate a closure function with compiled code. Both are already rejected
+(`scripts/no-sorry.sh`, the claim policy).
 
 Two libraries of `lakefile.toml` do it:
 

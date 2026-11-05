@@ -85,17 +85,19 @@ example : Witness.errOf (Sched.run ⟨.any, .available⟩ (fun _ => pure ()) 100
   unroll_sched 8
 
 /-! The in-thread reading (`Sched.soloRun`) that `CTriple` speaks about: the group's defining
-equations (`unfold`) take the run past every recursive call it makes, then the kernel computes it. -/
+equations (`unfold`) take the run past every recursive call it makes, then the kernel computes it.
+Each round unfolds `evenC` and then `oddC`, so round `r` reaches `evenC (6 - 2 * r)`: 4 rounds
+reach `evenC 0`, whose result needs no further call. -/
 
 theorem even_six_solo : Witness.okVal ((Sched.soloRun 100 (evenC 6)).run {}) = some 1 := by
-  iterate 7 unfold evenC oddC
+  iterate 4 unfold evenC oddC
   decide +kernel
 
 /-- info: 'even_six_solo' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms even_six_solo
 
--- Rejected: unfolded 3 times, the run reaches the group's fixpoint, which the kernel does not compute.
+-- Rejected: after 3 rounds the run reaches `evenC 0` still folded, a `partial_fixpoint` the kernel
+-- does not compute, so `decide` fails (it gets stuck rather than proving anything).
 example : Witness.okVal ((Sched.soloRun 100 (evenC 6)).run {}) = some 1 := by
-  fail_if_success (iterate 3 unfold evenC oddC; decide +kernel)
-  iterate 7 unfold evenC oddC
-  decide +kernel
+  fail_if_success ((iterate 3 unfold evenC oddC); decide +kernel)
+  exact even_six_solo
