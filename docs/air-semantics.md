@@ -335,8 +335,12 @@ by fixpoint induction). The statement ([below](#generic-renaming-theorem-and-nat
 Inj ρ → Oracle.CellFree o → execFunc p o (renFunc ρ f) args = execFunc p o f args
 ```
 
-The contract is not a premise: every oracle a certificate uses is the program's own. An
-external call model would have to prove it before `execFunc_rename` applies to it. The
+The contract is not a premise. A certificate's final statements (`_run`, `_eq`, `_sound`) are
+about the program's own oracles (`run`, `runOn`), which keep it. A `_step` theorem stated for
+an arbitrary oracle transfers to the function before `renumber` only for an oracle that keeps
+the contract. A `_view` theorem is about `execFuncV`, which `execFunc_rename` does not cover;
+only its `_step`, through `SemView.execFunc_view` (memories equal up to read entries), transfers.
+An external call model would have to prove the contract before `execFunc_rename` applies to it. The
 debug-definition step (`CanonSem`) keeps its stronger equality for every arbitrary oracle,
 since it changes no live register cell, operand or branch target.
 
@@ -429,7 +433,18 @@ canonical function (`sameFunction`, every field). The pairing is only a guess fo
 guess fails `sameFunction`, so soundness rests on the final comparison alone. Where the check
 holds, the report drops `renumber` from the function's `trusted-Canon` line; where it fails or
 `pre` does not decode, `renumber` stays listed (fail closed). In the 13 committed examples it
-holds for all 124 functions.
+holds for all 124 functions. `tests/roadmap/air-semantics/CanonBinding.lean` has the causal
+controls: a collapsed ID, a changed operand or changed metadata does not bind.
+
+The binding is **per function, inside the certificate's program**. `execFunc_rename` relates the
+function's body before and after `renumber` within one program: the canonical one. Its other
+functions (reached through the oracle) are canonical, and so are its tick policies
+(`Program.ticked`, `entryTicked`, computed from every body by `memoryFunctions`,
+`concFunctions` and `callGroups`). Each callee's own `renumber` is bound on its own line. A
+whole-program statement would say that `run` of the program of pre-`renumber` functions equals
+`run` of the canonical program. It would also need those program analyses to be invariant
+under renaming. It is not proved, so the program-level part of `renumber` (callee bodies and
+tick policies) stays under TRU-02.
 
 ### How SEM-06 shrinks
 
@@ -497,8 +512,14 @@ in `test_lean.py`.
 * `tests/roadmap/air-semantics/test_cli.py`: the certificate flag leaves `Gen.lean`
   byte-identical; each committed certificate equals a fresh one; the certified set is the
   expected one and every other function is listed; every function has exactly one
-  `trusted-Canon` line of known rewrites in pipeline order; flag misuse is rejected; no `sorry`,
-  `admit` or `native_decide`; a certified memory function with calls has `_sound`.
+  `trusted-Canon` line of known rewrites in pipeline order, and none lists `renumber` (its native
+  binding holds for every committed example); flag misuse is rejected; no `sorry`, `admit` or
+  `native_decide`; a certified memory function with calls has `_sound`.
+* `tests/roadmap/air-semantics/CanonBinding.lean` (run by `test_lean.py`): the native bindings'
+  causal controls, for the debug-ID map and for `renumberBound` (an injective renaming binds; a
+  collapsed ID, a changed operand or changed metadata does not).
+* `scripts/canon_certification.py` (gen-integrity, full build): a fresh Assurance audit and
+  kernel replay of the generic modules `CanonSem` and `Renumber` with their theorem roots.
 * `lake build Proofs/<Ex>/AirCert` for every committed certificate.
 * `tests/roadmap/air-semantics/test_lean.py`: the round trip (`RoundTrip.lean`: every
   embedded `Func` is the decoded golden AIR); ten one-operator mutations (arithmetic, a

@@ -44,8 +44,10 @@ def renVal (ρ : InstId → InstId) : Val → Val
 
 def renAsm (ρ : InstId → InstId) (o : AsmOperand) : AsmOperand := { o with ref := o.ref.map (renVal ρ) }
 
-/-- Every operand and branch target of an operation renamed; the operations with nested bodies
-are `renInst`'s. -/
+/-- Every `Val` operand and branch target of an operation renamed; the operations with nested
+bodies are `renInst`'s. Shuffle masks and constants hold no instruction references
+(`Raw.validateRefs` rejects them), so they stay as they are; if one did, `renumberBound`'s
+comparison would fail and `renumber` would stay trusted. -/
 def renFlat (ρ : InstId → InstId) : Op → Op
   | .arith op m a b => .arith op m (renVal ρ a) (renVal ρ b)
   | .div op a b => .div op (renVal ρ a) (renVal ρ b)
@@ -298,9 +300,6 @@ theorem renEnv_apply (env : Env) (j : InstId) :
     renEnv ρ env (ρ j) = (env j).map fun p => (p.1, renV ρ p.2) := by
   simp only [renEnv, dif_pos (⟨j, rfl⟩ : ∃ i, ρ i = ρ j), choose_eq hρ]
 
-theorem renEnv_comp (env : Env) : (fun j => renEnv ρ env (ρ j)) = renVals ρ env := by
-  funext j; exact renEnv_apply hρ env j
-
 theorem renEnv_set (env : Env) (j : InstId) (t : TyId) (v : Value) :
     renEnv ρ (env.set j t v) = (renEnv ρ env).set (ρ j) t (renV ρ v) := by
   funext x
@@ -322,9 +321,6 @@ theorem renFrame_empty (ρ : InstId → InstId) : renFrame ρ {} = {} := by
 
 theorem renEnv_empty (ρ : InstId → InstId) : renEnv ρ (fun _ => none) = fun _ => none := by
   funext x; simp only [renEnv]; split <;> rfl
-
-theorem renFrame_blocks (ρ : InstId → InstId) (fr : Frame) (b : List Zig.Ptr) :
-    renFrame ρ { fr with blocks := b } = { renFrame ρ fr with blocks := b } := rfl
 
 /-! ## Register locals are renamed with their allocations -/
 
@@ -414,10 +410,6 @@ theorem operandTy_ren {ρ : InstId → InstId} (hρ : Inj ρ) (env : Env) (v : V
     operandTy (renEnv ρ env) (renVal ρ v) = operandTy env v := by
   cases v <;> simp [renVal, operandTy, renEnv_apply hρ, Option.map_map, Function.comp_def, Val.constTy?]
 
-theorem operandTy_renVals (ρ : InstId → InstId) (env : Env) (v : Val) :
-    operandTy (renVals ρ env) v = operandTy env v := by
-  cases v <;> simp [operandTy, renVals, Option.map_map, Function.comp_def]
-
 /-- The top-level operands that `evalPure`, `evalMem` and `execInst` read. -/
 def topVals : Op → List Val
   | .arith _ _ a b | .div _ a b | .minMax _ a b | .bit _ a b | .cmp _ a b | .boolAnd a b
@@ -433,13 +425,6 @@ def topVals : Op → List Val
 /-- `E₁` holds at the renamed operand what `E₂` holds at the operand. -/
 def Agree (ρ : InstId → InstId) (f : Func) (E₁ E₂ : Env) (v : Val) : Prop :=
   operand f E₁ (renVal ρ v) = operand f E₂ v ∧ operandTy E₁ (renVal ρ v) = operandTy E₂ v
-
-/-- `evalPure` reads the environment only through its operands. -/
-theorem evalPure_congr (ρ : InstId → InstId) (f : Func) (E₁ E₂ : Env) (id₁ id₂ : InstId) (ty : TyId)
-    (op : Op) (h : ∀ v ∈ topVals op, Agree ρ f E₁ E₂ v) :
-    evalPure f E₁ ⟨id₁, ty, renFlat ρ op⟩ = evalPure f E₂ ⟨id₂, ty, op⟩ := by
-  cases op <;> simp only [topVals, List.forall_mem_cons, List.not_mem_nil, false_implies,
-    implies_true, and_true, Agree] at h <;> simp only [renFlat, evalPure, intBin, h]
 
 theorem storeAs_congr {ρ : InstId → InstId} {f : Func} {E₁ E₂ : Env} {p : Zig.Ptr} {a : Nat} {v : Val}
     (h : Agree ρ f E₁ E₂ v) : storeAs f E₁ p a (renVal ρ v) = storeAs f E₂ p a v := by

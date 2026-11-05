@@ -568,7 +568,7 @@ stays trusted). -/
 def normalizeTraced (raw : Raw.RawFunc) (track : Bool) :
     Except String (Func × Option Func × Array String) := do
   let trace ← Raw.canonicalizeTraced raw track
-  let pre := if track && trace.fired.contains "renumber" then
+  let pre := if trace.fired.contains "renumber" then
     (normalizeCanonical trace.input).toOption else none
   return (← normalizeCanonical trace.afterDebug, pre, trace.fired)
 

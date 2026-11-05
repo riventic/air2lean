@@ -14,7 +14,9 @@ For each function in the certificate fragment (`fragmentReason?`), writes a Lean
   (`docs/air-semantics.md`), proved by the kernel when the file is compiled;
 * a report of the certified functions, those outside the fragment with their reasons, and the
   Canon rewrites that fired on each function (`trusted-Canon`: the theorems are over canonical
-  AIR, so these rewrites stay in the trusted base).
+  AIR, so these rewrites stay in the trusted base). A `renumber` natively bound to
+  `Renumber.execFunc_rename` is left out; its binding (TRU-02) and the program-level renaming stay
+  trusted (docs/air-semantics.md §Canonicalization).
 
 The certificate is a separate file: the ordinary translation output does not change. Nothing
 here is trusted for soundness except source quotation (the printed term must be the decoded `Func`;
@@ -1489,7 +1491,8 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
   if out.isEmpty then lines := lines.push "(none)"
   lines := lines ++ #["", "The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate",
     "is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).",
-    "`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:", ""]
+    "`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;",
+    "that binding is per function, and the program-level renaming stays trusted:", ""]
   let firedOf : Std.HashMap String (Array String) := .ofList canonFired.toList
   for f in funcs do
     let some fired := firedOf[f.name]? | throw s!"no Canon trace for {f.name}"

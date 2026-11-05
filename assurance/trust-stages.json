@@ -79,13 +79,25 @@
       "components": ["Air2Lean/Renumber.lean"],
       "class": "kernel-checked",
       "premises": ["TRU-01", "SEM-06", "SEM-01", "SEM-02", "SEM-03", "TRU-04"],
-      "summary": "One generic theorem (Renumber.execFunc_rename) proves that renaming every instruction ID, operand and branch target of any reified normalized Func by any injective map preserves the complete Sem.execFunc result for every argument list, start memory and oracle that keeps the register-cell contract Oracle.CellFree; the program's own run and runOn keep it (run_cellFree, runOn_cellFree). The equality is vacuous when both executions are stuck. The kernel checks it in the translator build (it is imported by CanonCertificate). Per-function native comparisons (CanonCertificate.renumberBound: the canonical Func equals the decoded renumber input renamed by Renumber.zipRen of the zipped instruction IDs, with distinct targets, so the map is injective by Renumber.zipRen_inj) are binding evidence under TRU-02; where one fails, renumber stays in the function's trusted-Canon line.",
+      "summary": "One generic theorem (Renumber.execFunc_rename) proves that renaming every instruction ID, operand and branch target of any reified normalized Func by any injective map preserves the complete Sem.execFunc result for every argument list, start memory and oracle that keeps the register-cell contract Oracle.CellFree; the program's own run and runOn keep it (run_cellFree, runOn_cellFree). The equality is vacuous when both executions are stuck. The kernel checks it in the translator build (it is imported by CanonCertificate). Per-function native comparisons (CanonCertificate.renumberBound: the canonical Func equals the decoded renumber input renamed by Renumber.zipRen of the zipped instruction IDs, with distinct targets, so the map is injective by Renumber.zipRen_inj) are binding evidence under TRU-02; where one fails, renumber stays in the function's trusted-Canon line. The binding is per function inside the canonical program; the program-level part (run of the program of pre-renumber functions equals run of the canonical program, which needs the tick-policy analyses to be renaming-invariant) is not proved and stays under TRU-02.",
       "checks": [
         {
           "what": "generic renaming theorem kernel-checked in the translator build; the certificate report omits renumber exactly where the native binding holds",
           "checker": "Air2Lean/CanonCertificate.lean",
           "test": "tests/roadmap/air-semantics/test_cli.py",
           "ci": ["python3 -I -B tests/roadmap/air-semantics/test_cli.py", "lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\\.lean$##') Air2Lean.Main"]
+        },
+        {
+          "what": "exact generic-module artifact binding and fresh independent kernel replay of Renumber with its theorem roots (together with CanonSem)",
+          "checker": "scripts/assumptions.sh",
+          "test": "tests/roadmap/gen-integrity/test_certification.py",
+          "ci": ["python3 -I -B scripts/gen-integrity.py certify", "python3 -I -B tests/roadmap/gen-integrity/test_certification.py"]
+        },
+        {
+          "what": "causal controls: an injective renaming binds; a collapsed ID, a changed operand or changed metadata keeps renumber trusted",
+          "checker": "Air2Lean/CanonCertificate.lean",
+          "test": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "ci": ["python3 -I -B tests/roadmap/air-semantics/test_lean.py"]
         }
       ],
       "evidence": ["tests/roadmap/air-semantics/RenumberOracle.lean", "docs/air-semantics.md"]
