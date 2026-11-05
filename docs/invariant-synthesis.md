@@ -1,7 +1,8 @@
 # Invariant synthesis (P09)
 
-Status: design, approved as part of the end state by the maintainer on 2026-10-14. Nothing here is
-implemented yet. Register entry: `assurance/register/P09.md`. Spike:
+Status: design, approved as part of the end state by the maintainer on 2026-10-14. The first
+generator slice (counted loops, stage S2) is implemented: see "Implemented: counted loops" below.
+Register entry: `assurance/register/P09.md`. Spike:
 `tests/roadmap/invariant-synthesis/Vacuity.lean` (kernel-checked, not in CI).
 
 ## Goal
@@ -490,6 +491,57 @@ Each stage is a permanent part of the end state, and none adds a shim.
 
 P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
 the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
+
+### Implemented: counted loops (S2, first slice)
+
+`air2lean-invgen` (`Air2Lean/InvGen.lean`, executable `Air2Lean/InvGenMain.lean`, lake target
+`air2lean-invgen`) is the generator of decision 5: a compiled Lean program in this package, with
+no `syntax`, `macro`, `elab`, tactic or command. `air2lean-invgen MODULE NAMESPACE -o FILE`, run
+under `lake env`, imports the translated module and reads each loop `F.loopN` with its exit test
+`F.againN` as the elaborated term that `fsym` walks: a symbolic run over `bind`, `pure`, `get`,
+`modify`, `ite`, the lifted `Zig.load`/`Zig.store`/`Zig.add`, `Zig.lt`, `Zig.tick` and a `match`
+on a known exit gives each path of one iteration with its guard, its result and its changes to the
+locals and to the cells behind pointer parameters. It writes `Inv.lean`: a first line
+`-- air2lean-invgen: {…}` recording the generator, the module and, per loop, the family or why the
+loop has none; then plain `def`s. Nothing it reads or concludes is trusted.
+
+The slice's family is the **counted loop**: one repeating path, guarded by an unsigned `x < b`
+(`b` a local the loop does not write, or a loop parameter), that adds 1 to the local `x`, adds a
+constant `cₖ` to each cell `*pₖ` it writes (an unsigned word behind a loop parameter) and writes
+no other local; and exit paths, guarded by `¬ x < b`, that change nothing. For it the generator
+writes `F.invN params s0 v₀ … s` (the other locals pinned to the entry locals `s0`,
+`s0.x ≤ x ≤ b`, each cell `vₖ + cₖ * (x - s0.x)` and the no-overflow fact
+`vₖ + cₖ * (b - s0.x) < 2 ^ w` of its checked adds, and `plain` when the body ticks) and
+`F.measN params s := b - x`. Every other loop gets no definition and the reason (a nested loop, a
+call, a signed test, a second guard, a cell that is only read, …): a proof that needs it does not
+build.
+
+First client: the inner loop `pairs.loop14` of `tests/roadmap/loop-tactics/nested` (the
+translated `while (j < i) : (j += 1) acc.* += 1`). Its hand-written `innerI` and measure are
+deleted; `Proof.lean` imports the committed `Nested/Inv.lean` and uses `pairs.inv14` and
+`pairs.meas14` with the same `fsym` walks, and the theorem it proves (`inner_loop`, and with it
+`pairs_total`) is unchanged. `nested/check.sh`:
+
+* regenerates `Inv.lean` from the committed translation and compares it byte for byte;
+* checks the proof against it;
+* checks three seeded mutants of the generated file (a wrong cell relation, a dropped bound `x ≤ b`,
+  a measure that does not decrease): each still elaborates, and the proof then fails with an
+  elaboration error.
+
+The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
+for it, and its invariant (`outerI`, with the quadratic `cnt`) stays hand-written.
+
+What the slice does not have yet (next slices, sizes S < M < L):
+
+| Next | Content | Size |
+|---|---|---|
+| S2a | `@[fsym_inv]` (P09-E4), its own engine PR with a `sep-auto` regression: `fsym` applies `loop_measure` with a registered invariant and measure, and the generator emits the attribute. This deletes the step and loop lemmas (`inner_step`, `inner_loop`) | M |
+| S2b | the `invgen` step of `scripts/regen.py` (`pr` scope, CAS-cached) and input hashes in the record, checked by `scripts/gen-integrity.py`, so `scripts/regen.sh` reproduces every `Inv.lean` and staleness is found without the fixture check | S |
+| S2c | the counted family widened: down-counting (`x > b`, `x -= 1`), `x != b` and `x ≤ b` guards, slice-length bounds (`i < sl.len`), cell updates that depend on the counter (sums with library closed forms such as the outer loop's `cnt`), with Houdini pruning through `Auto.runReport` (P09-E1) so a candidate conjunct that does not check is dropped and reported | M |
+| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
+| S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
+
+S3 to S6 follow the staging table above.
 
 The arena lane does not rewrite the arena invariant by hand in the meantime (coordinator,
 2026-10-14). Its work after #337, moving the macro steps into general `fsym` rules, is a
