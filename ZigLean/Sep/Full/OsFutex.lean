@@ -395,19 +395,15 @@ theorem _root_.Zig.Mem.wordAt_of {m : Mem} {b : BlockId} {blk : Block} {o : Nat}
     (hb : m.blocks[b]? = some blk) (hl : blk.live = true) (hs : o + 4 ≤ blk.bytes.size)
     (ha : (blk.addr + o) % 4 = 0) (hk : blk.kind ≠ .constGlobal) (hlo : blk.kind.mappedLo ≤ o) :
     m.wordAt ⟨some b, (o : Int)⟩ = true := by
-  have hc : blk.live = true ∧ (0 : Int) ≤ o ∧ (o : Int) + ((4 : Nat) : Int) ≤ blk.bytes.size ∧
-      (blk.addr + (o : Int).toNat) % 4 = 0 ∧ blk.kind.mappedLo ≤ (o : Int).toNat :=
-    ⟨hl, by omega, by omega, by simpa using ha, by simpa using hlo⟩
-  have hacc : m.access ⟨some b, (o : Int)⟩ 4 4 = pure (b, blk, (o : Int).toNat) := by
-    unfold Mem.access
-    simp only [hb]
-    exact if_pos hc
+  have hacc : m.access ⟨some b, (o : Int)⟩ 4 4 = pure (b, blk, (o : Int).toNat) :=
+    access_of rfl hb hl (Int.natCast_nonneg o) (by show (o : Int) + ((4 : Nat) : Int) ≤ _; omega)
+      (by simpa using ha) (by simpa using hlo)
   have hw : m.accessW ⟨some b, (o : Int)⟩ 4 4 = pure (b, blk, (o : Int).toNat) := by
     unfold Mem.accessW
     rw [hacc]
     show (if blk.kind = .constGlobal then (throw Error.illegal : Result _)
       else pure (b, blk, (o : Int).toNat)) = _
-    rw [if_neg hk]
+    simp [hk]
   unfold Mem.wordAt
   rw [hw]
   rfl
@@ -415,23 +411,15 @@ theorem _root_.Zig.Mem.wordAt_of {m : Mem} {b : BlockId} {blk : Block} {o : Nat}
 /-- A live writable word has an aligned numeric address, resolved without a state change. -/
 theorem _root_.Zig.Mem.wordAt_ptrAddr {m : Mem} {p : Ptr} (h : m.wordAt p = true) :
     ∃ a, (Zig.ptrAddr p).run m = pure (a, m) ∧ a % 4 = 0 := by
-  obtain ⟨bo, off⟩ := p
-  unfold Mem.wordAt Mem.accessW Mem.access at h
-  rcases bo with _ | b
-  · change false = true at h
-    exact absurd h Bool.false_ne_true
-  · rcases hb : m.blocks[b]? with _ | blk
-    · simp only [hb] at h
-      change false = true at h
-      exact absurd h Bool.false_ne_true
-    · simp only [hb] at h
-      by_cases hc : blk.live = true ∧ 0 ≤ off ∧ off + ((4 : Nat) : Int) ≤ blk.bytes.size ∧
-          (blk.addr + off.toNat) % 4 = 0 ∧ blk.kind.mappedLo ≤ off.toNat
-      · obtain ⟨-, h0, -, ha, -⟩ := hc
-        exact ⟨blk.addr + off, Full.ptrAddr_run hb off, by omega⟩
-      · rw [if_neg hc] at h
-        change false = true at h
-        exact absurd h Bool.false_ne_true
+  unfold Mem.wordAt at h
+  split at h
+  · rename_i r hr
+    obtain ⟨hb, hblk, -, h0, -, ha, -⟩ := access_eq (accessW_pure hr).1
+    obtain ⟨bo, off⟩ := p
+    cases hb
+    simp only at h0 ha
+    exact ⟨_, Full.ptrAddr_run hblk off, by omega⟩
+  · cases h
 
 /-- `get_futex_key` at a live writable word forms the key, for both domains. -/
 theorem Linux.futexKey_wordAt {p : Ptr} {a : Int} {s : Bool} {m : Mem} (h : m.wordAt p = true) :

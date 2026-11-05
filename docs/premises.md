@@ -1303,8 +1303,7 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `access_ok` and key/queue lookup. An unaligned address returns `-EINVAL` without a
   futex-word access, wake selection, scheduling turn or state change. The key follows as for
   WAIT (OSF-01; no word access). macOS WAKE returns `-EINVAL` for a null address. On the
-  post-validation
-  wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
+  post-validation wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
   result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
