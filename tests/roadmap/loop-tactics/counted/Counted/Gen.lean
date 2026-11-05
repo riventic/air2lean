@@ -52,6 +52,8 @@ def down (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] down.loop5 down
+
 structure lenCountLocals where
   i : BitVec 64
   deriving Inhabited
@@ -99,6 +101,8 @@ def lenCount (p0 : Zig.Ptr) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] lenCount.loop5 lenCount
 
 structure pairAtLocals where
   i : BitVec 32
@@ -150,6 +154,8 @@ def pairAt (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] pairAt.loop5 pairAt
+
 structure readBoundLocals where
   i : BitVec 32
   deriving Inhabited
@@ -195,6 +201,8 @@ def readBound (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] readBound.loop5 readBound
 
 structure triLocals where
   i : BitVec 32
@@ -243,6 +251,8 @@ def tri (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] tri.loop5 tri
+
 structure upLeLocals where
   i : BitVec 32
   deriving Inhabited
@@ -288,6 +298,8 @@ def upLe (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] upLe.loop5 upLe
+
 structure upNeLocals where
   i : BitVec 32
   deriving Inhabited
@@ -332,5 +344,7 @@ def upNe (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] upNe.loop5 upNe
 
 end Counted
