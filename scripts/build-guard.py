@@ -74,8 +74,8 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   wrong measurement costs a retry, never the host. Enclosing guards leave a running part's
   subtree out of their sums (its pid in `<lock>.d/leaves/`). With --lean-processes SYSROOT every
   Lean elaboration of the workload is such a part, charged 1.3 x its module's measured peak
-  (scripts/lean-peaks.py; PROCESS_MIB unmeasured), through a sysroot whose `bin/lean` runs it as
-  `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
+  (scripts/lean-peaks.py; a changed one its earlier peak, PROCESS_MIB never measured), through
+  a sysroot whose `bin/lean` runs it as `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
   goes back between them and to other workloads. Bounds: the bases of the admitted elastic
   workloads (`<lock>.d/elastic/`, under `<lock>.d/register`) leave PROCESS_MIB of the budget free,
   and a part takes its workload's lifeline (`<lock>.d/lifeline/<workload>`) only while none of
@@ -1837,8 +1837,9 @@ def lean_processes_env(sysroot, lock):
 def lean_process(lean, args):
     """One Lean elaboration of a --lean-processes workload (its sysroot's `bin/lean`): a
     sub-admission charged by the module's measured peak (scripts/lean-peaks.py: this machine's
-    measurements of the same source, else the committed table, else PROCESS_MIB or, for a
-    seeding run, AIR2LEAN_LEAN_UNMEASURED_MIB), stopped there and run again at PROCESS_MIB if it
+    measurements of the same source, else the committed table, else the peak of an earlier
+    source, else PROCESS_MIB or, for a seeding run, AIR2LEAN_LEAN_UNMEASURED_MIB), stopped there
+    and run again at PROCESS_MIB if it
     outgrows it. One Lean thread, so the peaks are comparable. Its exact peak
     (`peak_process_rss_kib`) is recorded for the next charge, its report written to
     AIR2LEAN_LEAN_REPORTS when set (scripts/full-build.sh: the build's logs). Outside an elastic
@@ -1854,8 +1855,9 @@ def lean_process(lean, args):
     module = path.relative_to(workspace).as_posix() if path.is_relative_to(workspace) else str(path)
     sha = digest(path) if path.is_file() else None
     store = peaks.store_of(Path(grant["lock"]))
-    peak = peaks.known_peak_kib(store, workspace, module, sha)
-    if peak is None:  # a seeding run may guess lower: a guess too low only costs a retry
+    # A changed source is charged by its earlier source's peak: a guess too low only costs a retry.
+    peak = peaks.known_peak_kib(store, workspace, module, sha) or peaks.prior_peak_kib(store, workspace, module)
+    if peak is None:  # a seeding run may guess lower, for the same reason
         try:
             charge = positive(os.environ.get("AIR2LEAN_LEAN_UNMEASURED_MIB") or PROCESS_MIB)
         except (argparse.ArgumentTypeError, ValueError):

@@ -1568,6 +1568,16 @@ os._exit(0)
         store = json.loads((Path(str(self.root / "shared.lock") + ".d") / "lean-peaks.json").read_text())
         self.assertEqual(store["Foo.lean"]["sha256"], guard.digest(self.root / "Foo.lean"))
         self.assertGreater(store["Foo.lean"]["peaks_kib"][0], 0)
+        # Its source changes: the next elaboration is charged by the earlier peak, not PROCESS_MIB.
+        (self.root / "Foo.lean").write_text("def x := 2\n")
+        reports = self.root / "lean-reports"
+        reports.mkdir()
+        os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
+        result, _, log = self.run_guard(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                        "--lean-processes", str(toolchain))
+        self.assertEqual(result.returncode, 0, log.read_text())
+        [part] = [json.loads(path.read_text()) for path in reports.iterdir()]
+        self.assertEqual(part["admission"]["charge_mib"], guard.SLOT_MIB)  # 1.3 x a few MiB, one slot
         # --lean-processes needs an elastic admission.
         result, report, _ = self.run_guard("pass", "--lean-processes", str(toolchain))
         self.assertEqual((result.returncode, report["outcome"]), (75, "inheritance_refused"))
@@ -1612,8 +1622,16 @@ class LeanPeaksTests(unittest.TestCase):
         self.assertEqual(table["modules"], {"A.lean": {"peak_mib": 3, "sha256": sha("A.lean")},
                                             "B.lean": {"peak_mib": 7, "sha256": sha("B.lean")}})
         self.assertEqual(peaks.known_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
+        # A changed source: not measured, but its earlier peak stays as the prior of its guess,
+        # this machine's before the committed row's; a module never measured has none.
         (self.ws / "B.lean").write_text("changed")
-        self.assertNotIn("B.lean", peaks.table(self.store, self.ws)["modules"])  # stale: the bound
+        self.assertIsNone(peaks.known_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")))
+        self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], old["modules"]["B.lean"])
+        self.assertEqual(peaks.prior_peak_kib(self.store, self.ws, "B.lean"), 7 * 1024)
+        peaks.record(self.store, "B.lean", "earlier", 5 * 1024)
+        self.assertEqual(peaks.prior_peak_kib(self.store, self.ws, "B.lean"), 5 * 1024)
+        self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], {"peak_mib": 5, "sha256": "earlier"})
+        self.assertIsNone(peaks.prior_peak_kib(self.store, self.ws, "New.lean"))
 
 
 if __name__ == "__main__":

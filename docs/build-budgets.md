@@ -186,10 +186,15 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   (replaced whole on each record). `assurance/lean-peaks.json` seeds a machine that has not
   measured a module yet. It is generated (`python3 -B scripts/lean-peaks.py write`, from the
   store and the table before it; never hand-edited). It is measurement data, not a derived file:
-  `scripts/regen.sh` does not rewrite it (every run would differ) and no check fails on it. An
-  entry whose source changed is ignored when read and dropped by the next `write`, so that
-  module is charged 11000 MiB until measured again; a refresh is an ordinary PR after a build on
-  the remote host. `lean-peaks.py top` lists the largest. A seeding run (a cold
+  `scripts/regen.sh` does not rewrite it (every run would differ) and no check fails on it. A
+  module whose source changed is charged 1.3 x the peak of its earlier source (the row `write`
+  keeps, with that source's SHA-256, until the module is measured again): a guess, safe because
+  the charge is the process's limit, so a module that grew costs one retry at 11000 MiB. A module
+  never measured is charged 11000 MiB. Before, every changed module was charged 11000 MiB, and
+  `write` dropped its row: after one main merge (2026-11-05) 49 rows went and 223 of 977 tracked
+  modules had none, so the remote host's after-run met one 11-slot queue head after another,
+  with lane jobs waiting beside them on a host 86% free. A refresh is an ordinary PR
+  after a build on the remote host. `lean-peaks.py top` lists the largest. A seeding run (a cold
   build to measure every module) may set `AIR2LEAN_LEAN_UNMEASURED_MIB` lower: a guess that is
   too low costs a retry at 11000 MiB. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard
   report (full-build.sh: `<logs>/lean-processes`).
