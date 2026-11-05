@@ -287,7 +287,7 @@ theorem Fits.stepAt (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {
     (hU : U G₁ rX m₁) (hst : L.Step t m₁ m') (hw : L.WInv (upd (L.pl G₁) t p) m') :
     P.inv (upd G₁ t (L.set g p rnil)) m' := by
   subst hg₁
-  exact hP.step hU hok hng hna (fun h => by rw [h] at hnh; cases hnh) hst
+  exact hP.step hU hok hng hna (LPh.ne_holdsAway_of_not_held hnh) hst
     (fun h => by rw [h] at hnh; cases hnh) (hiL.lstepAt hst hnh hng hp hw)
 
 /-- An acquire of `t` as the protocol's invariant. -/
@@ -299,7 +299,7 @@ theorem Fits.stepAcq (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} 
     ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m' := by
   subst hg₁
   obtain ⟨rL, -, hl⟩ := hiL.acq hst hnh hng hF hacq hw
-  exact ⟨rL, hP.step hU hok hng hna (fun h => by rw [h] at hnh; cases hnh) hst
+  exact ⟨rL, hP.step hU hok hng hna (LPh.ne_holdsAway_of_not_held hnh) hst
     (fun h => by rw [h] at hnh; cases hnh) hl⟩
 
 /-- A release of the holder `t` as the protocol's invariant. -/

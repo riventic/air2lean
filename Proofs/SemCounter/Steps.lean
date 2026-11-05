@@ -38,7 +38,7 @@ theorem lt2 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) (hI : S.
 the threads. -/
 theorem hb_same {G G' : ThreadId → Gh} {m : Mem} (hph : ∀ u, (G' u).1.ph = (G u).1.ph)
     {c : VClock} (h : L.HB G m c) : L.HB G' m c :=
-  h.mono (fun u hu => .inl (by show ((G' u).1.ph).held = true; rw [hph u]; exact hu)) (fun _ => VClock.le_refl _) (fun _ h => h) rfl
+  h.mono (fun u hu => .inl ((congrArg LPh.held (hph u)).trans hu)) (fun _ => VClock.le_refl _) (fun _ h => h) rfl
     (fun u hg => by
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)
@@ -48,7 +48,7 @@ every thread's lock place. -/
 theorem hb_fstep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
     (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hph : ∀ u, (G' u).1.ph = (G u).1.ph)
     {c : VClock} (h : L.HB G m c) : L.HB G' m' c :=
-  h.mono (fun u hu => .inl (by show ((G' u).1.ph).held = true; rw [hph u]; exact hu)) hs.clock (hL.before_fstep hs) hs.threads
+  h.mono (fun u hu => .inl ((congrArg LPh.held (hph u)).trans hu)) hs.clock (hL.before_fstep hs) hs.threads
     (fun u hg => by
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)

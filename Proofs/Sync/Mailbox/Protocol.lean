@@ -609,7 +609,7 @@ theorem enterStep {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} (hu 
     · exact Classical.byContradiction fun hne => absurd (hC.ex u hne) (by simp only [ThreadId] at *; omega)
     · exact Classical.byContradiction fun hne => absurd (hS.ex u hne) (by simp only [ThreadId] at *; omega)
   · rw [(hps u).1]; exact hu.swt u (by rw [← (hps u).2]; exact h)
-  · exact hc.mono (fun u h => .inl (by show ((G' u).1.ph).held = true; rw [hlp]; exact h))
+  · exact hc.mono (fun u h => .inl ((congrArg LPh.held (hlp u)).trans h))
       (fun _ => VClock.le_refl _) (fun _ h => h) rfl
       (fun u h => by have h' : (G' u).1.ph ≠ .gone := h; rwa [hlp] at h')
 
@@ -665,7 +665,7 @@ theorem holdStep {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {s
       · cases e
       · cases e
     · rw [hX u e] at h'; exact hu.swt u h'
-  · exact hc.mono (fun u h => .inl (by show ((G' u).1.ph).held = true; rw [hlp]; exact h)) hfs.clock
+  · exact hc.mono (fun u h => .inl ((congrArg LPh.held (hlp u)).trans h)) hfs.clock
       (FLock.Inv.before_fstep hL hfs) hfs.threads
       (fun u h => by have h' : (G' u).1.ph ≠ .gone := h; rwa [hlp] at h')
 
@@ -758,22 +758,18 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     rcases hq with ⟨rfl, -⟩ | ⟨h1, -, -⟩
     · exact absurd rfl hne
     · exact h1.imp_right And.left
-  have hhold : (G t).1.ph = .holds → (G' t).1.ph = .holds := fun hh => by
-    rw [hLt]
-    by_cases hqe : (G t).1.ph = q
-    · rw [← hqe]; exact hh
-    · rcases hlq hqe with h' | h' <;> rw [hh] at h' <;> cases h'
+  have hheld : ∀ u, ((L K).ph (G u)).held = true → ((L K).ph (G' u)).held = true := fun u hu' => by
+    show ((G' u).1.ph).held = true
+    by_cases e : u = t
+    · subst e
+      have hu'' : ((G u).1.ph).held = true := hu'
+      rw [hLt]
+      by_cases hqe : (G u).1.ph = q
+      · rw [← hqe]; exact hu''
+      · rcases hlq hqe with h' | h' <;> rw [h'] at hu'' <;> cases hu''
+    · rw [hG u e]; exact hu'
   have hmono : ∀ c, (L K).HB G m c → (L K).HB G' m' c := fun c hc =>
-    hc.mono (fun u hu' => .inl (by
-        show ((G' u).1.ph).held = true
-        by_cases e : u = t
-        · subst e
-          have hu'' : ((G u).1.ph).held = true := hu'
-          rw [hLt]
-          by_cases hqe : (G u).1.ph = q
-          · rw [← hqe]; exact hu''
-          · rcases hlq hqe with h' | h' <;> rw [h'] at hu'' <;> cases hu''
-        · rw [hG u e]; exact hu'))
+    hc.mono (fun u hu' => .inl (hheld u hu'))
       hs.clocks (fun _ ⟨i, l, hl, hc⟩ => ⟨i, l, hs.lockLoc (two_ap hW2) apE hl, hc⟩) hth
       (fun u hg => by
         show (G u).1.ph ≠ .gone
@@ -791,7 +787,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rcases hEh with e' | ⟨x, e', hx⟩
       · exact .inl e'
       · refine .inr ⟨x, e', FLock.HB.of_holder (t := t)
-          (LPh.held_of_holds (hhold (hu.sig_holds (by rw [e] <;> rfl))))
+          (hheld t (LPh.held_of_holds (hu.sig_holds (by rw [e] <;> rfl))))
           (by rw [hx]; exact VClock.le_refl _)⟩
   -- a post (`sl → inc`): `waiters` stays, `signals` goes up
   have hpost : ∀ sh c q₀ n₀ h₀, (G t).2.c = .sl sh c → p = .inc q₀ n₀ h₀ →
@@ -947,7 +943,7 @@ theorem U.xMove {G G' : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U K G rX m)
     (swt : ∀ u, (G' u).2.s = .wt → (G' u).2.ph = .wt) : U K G' rX m :=
   hu.congr (fun u i e h => by rwa [hc] at h) (fun u i jr sn e h => by rwa [hc] at h)
     (fun u q n h' h => by rwa [hc] at h) rfl rfl shape hu.rest hu.blk hu.ws hu.we cinv sinv swt
-    (fun c h => h.mono (fun u h' => .inl (by show ((G' u).1.ph).held = true; rw [hl]; exact h'))
+    (fun c h => h.mono (fun u h' => .inl ((congrArg LPh.held (hl u)).trans h'))
       (fun _ => VClock.le_refl _) (fun _ h => h) rfl
       (fun u h' => by have h'' : (G' u).1.ph ≠ .gone := h'; rwa [hl] at h''))
     hu.q
