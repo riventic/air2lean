@@ -24,19 +24,20 @@ Outside the certificate fragment:
 * `threads.xchgRace`: a concurrent function (`Zig.ConcM`)
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:
 
-* `atomic.Value(threads.Phase).init` trusted-Canon: renumber
-* `atomic.Value(u32).init` trusted-Canon: renumber
-* `threads.bump` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.claim` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.claimOnce` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.disjoint` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.parallelCounter` trusted-Canon: forwardReadOnlyCopies, itemReads, renumber
-* `threads.race` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.swapFlag` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.writeFlag` trusted-Canon: forwardReadOnlyCopies, renumber
-* `threads.xchgRace` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomic.Value(threads.Phase).init` trusted-Canon: none
+* `atomic.Value(u32).init` trusted-Canon: none
+* `threads.bump` trusted-Canon: forwardReadOnlyCopies
+* `threads.claim` trusted-Canon: forwardReadOnlyCopies
+* `threads.claimOnce` trusted-Canon: forwardReadOnlyCopies
+* `threads.disjoint` trusted-Canon: forwardReadOnlyCopies
+* `threads.parallelCounter` trusted-Canon: forwardReadOnlyCopies, itemReads
+* `threads.race` trusted-Canon: forwardReadOnlyCopies
+* `threads.swapFlag` trusted-Canon: forwardReadOnlyCopies
+* `threads.writeFlag` trusted-Canon: forwardReadOnlyCopies
+* `threads.xchgRace` trusted-Canon: forwardReadOnlyCopies
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

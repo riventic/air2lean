@@ -16,16 +16,17 @@ Outside the certificate fragment:
 * `basic.weightedTardiness`: a parameter that is not an integer, bool, plain pointer or slice
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:
 
-* `basic.absDiff` trusted-Canon: renumber
-* `basic.clampAdd` trusted-Canon: renumber
-* `basic.classify` trusted-Canon: renumber
-* `basic.scale` trusted-Canon: renumber
-* `basic.sum` trusted-Canon: renumber
-* `basic.tardiness` trusted-Canon: renumber
-* `basic.totalWeightedTardiness` trusted-Canon: renumber
-* `basic.weightedTardiness` trusted-Canon: renumber
+* `basic.absDiff` trusted-Canon: none
+* `basic.clampAdd` trusted-Canon: none
+* `basic.classify` trusted-Canon: none
+* `basic.scale` trusted-Canon: none
+* `basic.sum` trusted-Canon: none
+* `basic.tardiness` trusted-Canon: none
+* `basic.totalWeightedTardiness` trusted-Canon: none
+* `basic.weightedTardiness` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

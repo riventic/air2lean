@@ -16,11 +16,12 @@ Outside the certificate fragment:
 * `options.firstIndexPlusOne`: a function with a slice parameter that calls a function (a view function calls only panic handlers, `Sem.roBody`)
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:
 
-* `options.find` trusted-Canon: renumber
-* `options.findOr` trusted-Canon: renumber
-* `options.firstIndexPlusOne` trusted-Canon: renumber
+* `options.find` trusted-Canon: none
+* `options.findOr` trusted-Canon: none
+* `options.firstIndexPlusOne` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

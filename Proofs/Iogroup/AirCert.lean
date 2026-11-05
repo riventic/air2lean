@@ -21,16 +21,17 @@ Outside the certificate fragment:
 * `iogroup.groupCounter`: a concurrent function (`Zig.ConcM`)
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:
 
-* `Io.Mutex.lock` trusted-Canon: forwardReadOnlyCopies, renumber
-* `Io.Mutex.lockUncancelable` trusted-Canon: forwardReadOnlyCopies, renumber
-* `Io.Mutex.tryLock` trusted-Canon: forwardReadOnlyCopies, renumber
-* `Io.Mutex.unlock` trusted-Canon: forwardReadOnlyCopies, renumber
-* `debug.assert` trusted-Canon: renumber
-* `iogroup.add` trusted-Canon: forwardReadOnlyCopies, renumber
-* `iogroup.groupConcurrent` trusted-Canon: renumber
-* `iogroup.groupCounter` trusted-Canon: renumber
+* `Io.Mutex.lock` trusted-Canon: forwardReadOnlyCopies
+* `Io.Mutex.lockUncancelable` trusted-Canon: forwardReadOnlyCopies
+* `Io.Mutex.tryLock` trusted-Canon: forwardReadOnlyCopies
+* `Io.Mutex.unlock` trusted-Canon: forwardReadOnlyCopies
+* `debug.assert` trusted-Canon: none
+* `iogroup.add` trusted-Canon: forwardReadOnlyCopies
+* `iogroup.groupConcurrent` trusted-Canon: none
+* `iogroup.groupCounter` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=
