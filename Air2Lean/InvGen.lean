@@ -521,9 +521,9 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
   let use (i : Nat) := s!"{q c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
   let inv (s : String) := s!"{q c.name}.inv {c.args}s0 {c.vargs}{s}"
   let meas (s : String) := s!"{q c.name}.meas {c.args}{c.measArgs}{s}"
-  let (defs, exit, post) := if final then (c.output keep, s!"{q c.name}.post {c.args}s0 {c.vargs}r", s!" {q c.name}.post")
+  let (text, exit, post) := if final then (c.output keep, s!"{q c.name}.post {c.args}s0 {c.vargs}r", s!" {q c.name}.post")
     else (defs ++ c.defs keep use, inv "r.2", "")
-  return s!"{defs}\n\
+  return s!"{text}\n\
     set_option fsym.report true in\n\
     theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
       FTotalTriple ({inv "s"}) (({q c.name} {c.args}).run s)\n      \
