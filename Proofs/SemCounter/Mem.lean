@@ -209,14 +209,6 @@ theorem frame_rest {rX : Res} {m : Mem} {l : Zig.Loc} (h : rX.heap.erase l ≠ n
     Option.or_eq_none_iff, not_and] at h ⊢
   intro _; exact h
 
-theorem frame_word {G : ThreadId → Gh} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {x : Nat}
-    (h1 : L.o ≤ x) (h2 : x < L.o + 4) :
-    (rsum (L.wordR m) rX).heap.erase (L.b, x) ≠ none := by
-  have := LockWord.wordR_some hi.w.blk (l := (L.b, x)) ⟨rfl, h1, h2⟩
-  simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-    Option.or_eq_none_iff, not_and]
-  intro h; exact absurd h this
-
 /-! ## `UM` over the steps -/
 
 /-- **`UM` over a step of the lock's code** (it reads the client's places only). -/

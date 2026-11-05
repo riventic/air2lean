@@ -683,7 +683,7 @@ theorem R_congr {Y Y' : ThreadId → X} (h : ∀ u, (Y' u).ph = (Y u).ph) : R Y'
 
 variable {Tgt : Type} {semOf : Tgt → Option Ptr}
 
-/-- **The protocol has the semaphore** (`FSem.Fits`); the window: at most two epoch writes after a
+/-- **The protocol has the semaphore** (`FSem.Fits`); the window: at most one epoch write after a
 registered waiter's saved one (`f2`). -/
 theorem fits : S.Fits (proto semOf) U ok where
   ok_s _ h := h.2

@@ -18,7 +18,8 @@ only the contract, with the semaphore component `FSem` (`ZigLean/Sep/Full/Sem.le
   took), its place in the condition's code (`CPh`) and in the semaphore's (`SPh`).
 - **The mutex** (`L`, `FLock.prod`) owns the count and the pool (`R`, `FSem.R_eq`): the count is
   1 while no thread has the permit, else 0 (`pv`), and the free permit owns `n`, with the
-  increments of both threads (`Pool`). The thread that took the permit owns `n` in its part.
+  increments of both threads (`Pool`). The thread that took the permit gets `n` with it
+  (`SemImpl.wait_wp`'s `T`) and keeps it in its part until its post (`semWork`'s walk).
 - **The rest `U`**: the threads (`Shape`), the read shares of `io`, the cells of the condition's
   words, the invariants of the condition and the semaphore, at most one holder of the permit
   (`one`), whose recorded value is the increments of both threads (`tot`); only a thread without
@@ -39,7 +40,7 @@ inductive Ph where
   /-- `main` before its spawn. -/
   | pre
   /-- A thread in `semWork`: it did `k` increments; `hold`: it has the permit, with `s` the
-  value of `n` while it has it. -/
+  value of `n` it took. -/
   | work (k : Nat) (hold : Bool) (s : Nat)
   /-- `main` at its join. -/
   | joins
