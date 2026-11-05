@@ -1226,8 +1226,8 @@
    "requester": "P09",
    "progress": "pending maintainer approval",
    "request": "`@[fsym_inv]` loop-invariant registry: apply the backend's loop rule with a registered invariant and measure; parameters by the planner, frame inferred",
-   "workaround_sites": ["tests/roadmap/loop-tactics/nested/Proof.lean"],
-   "deletion_plan": "The hand step and loop lemmas around the generated `pairs.loop14.inv`/`pairs.loop14.meas` (`inner_step`, `inner_loop`: `loop_measure` applied by hand, the entry entailment and the exit repackaging). Delete when `air2lean-invgen` emits `@[fsym_inv]` on its definitions and `fsym` applies the loop rule itself, so the outer body's walk needs no `fsym [inner_loop]` argument (docs/invariant-synthesis.md, S2a)."
+   "workaround_sites": ["tests/roadmap/loop-tactics/nested/Proof.lean", "tests/roadmap/loop-tactics/counted/Proof.lean"],
+   "deletion_plan": "The hand step and loop lemmas around the generated `F.loopN.inv`/`F.loopN.meas` (nested: `inner_step`, `inner_loop`; counted: `down_step`/`down_loop` and the same pair for `upNe`, `upLe`, `lenCount`, `readBound`: `loop_measure` applied by hand, the entry entailment and the exit repackaging). Delete when `air2lean-invgen` emits `@[fsym_inv]` on its definitions and `fsym` applies the loop rule itself, so the callers' walks need no `fsym [inner_loop]`/`fsym [F_loop]` argument (docs/invariant-synthesis.md, S2a); the mutants then name the callers' theorems."
   },
   {
    "id": "P09-E5",
@@ -1837,6 +1837,7 @@
     "Proofs/Atomics/Stack.lean",
     "Proofs/Threads/Counter.lean",
     "Proofs/Sync/SemCounter.lean",
+    "Proofs/Threadsync/WaitGroup.lean",
     "tests/roadmap/sync-contracts/EventSet.lean",
     "tests/roadmap/sync-contracts/Runtime.lean"
    ],
@@ -1862,6 +1863,17 @@
    "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
    "workaround_sites": [],
    "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
+  },
+  {
+   "id": "fstepin-addrs",
+   "title": "FStepIn does not keep the blocks' addresses, so a futex key of another block is lost across a frame step",
+   "status": "closed",
+   "requester": "S6e (audit finding S6, futex keys, #668); maintainer decision 2026-11-05: option A",
+   "progress": "closed by PR #681: `FStepIn.addrs : m.SameAddrs m'` (ZigLean/Conc/Clock.lean) replaces the field `blocks` (now the theorem `FStepIn.blocks`), with the library lemmas `Mem.SameAddrs.refl/trans/of_blocks/of_push/of_set/size/addrIn_eq` and `Mem.sameAddrs_write` (ZigLean/Mem/Lemmas.lean)",
+   "request": "With the futex queue keyed by `FutexKey` (#668), a lock word's invariant names keys: its own (`Mem.wordKey`), and in `LockWord.nest` the keys of other blocks' words (a nested lock's word). `FStepIn` kept only `m.blocks.size ≤ m'.blocks.size`. The word's own key still transports through its cells (the step keeps the word's bytes and block), but a key of another block does not. Counterexample: a frame step by the lock's owner that replaces block `b'` (another lock's word, not in the frame) by a block at another address satisfies every old `FStepIn` field, and `LockWord.nest k` read in `m` (`m.keyAt ⟨b', o⟩ false = some k`) is false in `m'`; so `WInv` is not stable under a frame step and the FLock rules cannot be proved. The model never does this (a block never moves; every `addr :=` is a new block: `Mem.afterAlloc`, a mapping, a moving `mremap`), so the step relation can say it. Needed: a field `addrs : m.SameAddrs m'` of `FStepIn`, discharged at every producer by general lemmas.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Rejected: option B, a field `a : Nat` (the word's address) in `LockWord` with a memory-independent key. It is a per-object special case that FCond, FSem and FEvent would each repeat, and every LockWord construction would supply the address. Option A strengthens what every client of `FStepIn` gets and weakens nothing."
   }
  ],
  "mechanisms": [

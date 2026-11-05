@@ -1340,7 +1340,7 @@ theorem _root_.Zig.FStepIn.bumpAllocs {m : Mem} {hF : Heap} :
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := Nat.le_refl _
+  addrs := .of_blocks rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -1359,7 +1359,7 @@ theorem _root_.Zig.FStepIn.push {m : Mem} {hF : Heap} (x : Block) :
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := by simp
+  addrs := .of_push rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -1476,7 +1476,8 @@ theorem munmap (os : Os.Target) (s : Slice)
             (fun _ ⟨blk', e1, e2⟩ => ?_)).trans
             (FStepIn.retire fun x h1 h2 =>
               ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hown' x h1 h2))).trans
-            (FStepIn.setBlock (fun hK => ?_) hsz),
+            (FStepIn.setBlock (fun _ h => by cases hb.symm.trans h; cases u <;> rfl)
+              (fun hK => ?_) hsz),
           Mem.NoRevive.setBlock (m := m) hb rfl ?_ ?_ ?_⟩
         · rw [hb] at e1; cases e1; rw [hk] at e2; cases e2
         · cases u <;> simp [Os.Unmap.apply, hk] at hK
@@ -1583,7 +1584,7 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
         (fun _ ⟨blk', e1, e2⟩ => ?_)).trans
         (FStepIn.retire fun x h1 h2 =>
           ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x h1 h2))).trans
-        (FStepIn.setBlock (fun hK => ?_) hsz), ?_⟩
+        (FStepIn.setBlock (fun _ h => by cases hb.symm.trans h; rfl) (fun hK => ?_) hsz), ?_⟩
     · rw [hb] at e1; cases e1; rw [hk] at e2; cases e2
     · simp [hk] at hK
     exact Mem.NoRevive.setBlock (m := m) hb rfl (fun h => h)
@@ -1596,7 +1597,7 @@ theorem _root_.Zig.Mem.mremapGrown_step {m : Mem} {hF : Heap} {P : Nat} {b : Blo
     FStepIn hF m (m.mremapGrown P b blk lo n) ∧ m.RevivesOwned (m.mremapGrown P b blk lo n) := by
   refine ⟨(FStepIn.forgetFrom b blk.bytes.size fun blk' h => by
       rw [hb] at h; cases h; exact Nat.le_refl _).trans
-    (FStepIn.setBlock (m := m.forgetFrom b blk.bytes.size) (fun h => ⟨blk, hb, h⟩)
+    (FStepIn.setBlock_of (m := m.forgetFrom b blk.bytes.size) hb rfl id
       fun l _ e _ ⟨blk', h1, h2⟩ => by
         have h1' : m.blocks[b]? = some blk' := by rw [← e]; exact h1
         rw [hb] at h1'; cases h1'
