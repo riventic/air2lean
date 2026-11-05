@@ -68,24 +68,26 @@ theorem wrong_contract_false :
 /-! ## Compositional calls use proved contracts
 
 `fsym [tardiness_total]` executes the call of `tardiness` by its contract: its result is the
-fact `x✝¹` below, not its body. Without bounds, the obligations of `weightedTardiness` are the
+fact `x✝³` below, not its body. Without bounds, the obligations of `weightedTardiness` are the
 overflow of its `add` (the last goal) and of its `mul` (the second), each split off as the
-premise of its step rule (`hc✝`, `hc`), and its result at the return under either case of the
-`mul` bound (the first and the third). -/
+premise of its step rule (`hc✝`, `hc`), and its result at the return (the first), where the
+product is the fact `x✝` of `mul_step`. -/
 
 /--
 error: unsolved goals
 j : Basic.Job
 start : BitVec 32
 hc✝ : start.toNat + j.duration.toNat < 2 ^ 32
+x✝⁶ : BitVec 32
+x✝⁵ : x✝⁶.toNat = start.toNat + j.duration.toNat
 x✝⁴ : BitVec 32
-x✝³ : x✝⁴.toNat = start.toNat + j.duration.toNat
+x✝³ : x✝⁴.toNat = x✝⁶.toNat - j.due.toNat
 x✝² : BitVec 32
-x✝¹ : x✝².toNat = x✝⁴.toNat - j.due.toNat
+x✝¹ : x✝².toNat = j.weight.toNat
+hc : x✝⁴.toNat * x✝².toNat < 2 ^ 32
 x : BitVec 32
-x✝ : x.toNat = j.weight.toNat
-hc : x✝².toNat * x.toNat < 2 ^ 32
-⊢ (x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat
+x✝ : x.toNat = x✝⁴.toNat * x✝².toNat
+⊢ x.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat
 
 case h
 j : Basic.Job
@@ -99,18 +101,6 @@ x : BitVec 32
 x✝ : x.toNat = j.weight.toNat
 hc : ¬x✝².toNat * x.toNat < 2 ^ 32
 ⊢ x✝².toNat * x.toNat < 2 ^ 32
-
-j : Basic.Job
-start : BitVec 32
-hc✝ : start.toNat + j.duration.toNat < 2 ^ 32
-x✝⁴ : BitVec 32
-x✝³ : x✝⁴.toNat = start.toNat + j.duration.toNat
-x✝² : BitVec 32
-x✝¹ : x✝².toNat = x✝⁴.toNat - j.due.toNat
-x : BitVec 32
-x✝ : x.toNat = j.weight.toNat
-hc : ¬x✝².toNat * x.toNat < 2 ^ 32
-⊢ (x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat
 
 case h
 j : Basic.Job
@@ -132,7 +122,7 @@ theorem weightedTardiness_contract (j : Basic.Job) (start : BitVec 32)
       r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat := by
   refine FTotalTriple.result_spec ?_
   fsym [tardiness_total]
-  all_goals simp_all [BitVec.toNat_mul, Nat.mod_eq_of_lt h2]
+  all_goals simp_all
 
 /-! ## Error returns
 
