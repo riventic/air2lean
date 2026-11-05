@@ -594,8 +594,10 @@ prefix sums over array items, and `Proofs/Slices/Sep.lean`'s `reverse` swaps ite
 `check.sh` (shared with `nested` through `../invgen-fixture.sh`) regenerates and compares the
 translation and `Inv.lean`, checks the proof, and runs the seeded mutants of `mutants.json`
 (`../invgen_mutants.py`): a wrong down-counting relation, a dropped `x ≤ b` under `!=`, a dropped
-`x ≤ b + 1` of a `<=` counter, a measure that does not decrease over a slice length and a
-dropped read-only cell each fail inside their function's theorem. (A dropped no-wrap fact of the
+`x ≤ b + 1` of a `<=` counter, a measure that does not decrease over a slice length, a
+dropped read-only cell and an exit post that is too strong (`down`'s counter at `1`, which its
+caller does not need, so only the loop rule's exit obligation rejects it) each fail inside their
+function's theorem. (A dropped no-wrap fact of the
 `<=` counter is not among them: the walk runs in `upLe_total`'s context, whose premise
 `n + 1 < 2 ^ 32` restores it.)
 
@@ -659,8 +661,10 @@ Each walk drops at least one candidate, so the fixpoint takes at most one walk p
 plus one. Each loop runs with its own heartbeat budget.
 
 The output is the definitions with the kept facts written out, in the S2c text, registered
-with `@[fsym_inv]` beside the exit post `F.loopN.post` (P09-E4; the post is no candidate: the
-callers' proofs check that it follows from the invariant and the exit). The proofs of the
+with `@[fsym_inv]` beside the exit post `F.loopN.post` (P09-E4). The post is no candidate: after
+the fixpoint the generator walks the output once more, with the post at the exit as the loop rule's
+step has it, and a residual there means no invariant (fail closed, at generation). The callers'
+proofs check the post again. The proofs of the
 fixtures, which are the kernel checks that count, are bare `fsym` walks of the callers. Every pruning decision is
 in the record: each loop's entry in `loops` lists, under `pruned`, the dropped fact, the walk
 that dropped it and its residual goal there. On every loop of `counted` and on `nested`'s inner

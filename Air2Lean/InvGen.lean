@@ -353,8 +353,9 @@ structure Counted where
   /-- The cells the body accesses, in order, with their increments (`0` for a cell it only
   reads). -/
   cells : Array (Cell × Nat)
-  /-- The exits' labels: the constructors of the exit type that an exiting iteration returns. -/
-  exits : Array Name
+  /-- The exits' labels: the constructors of the exit type that an exiting iteration returns
+  (`none`: an exit that returns a constructor with a payload). -/
+  exits : Option (Array Name)
   plain : Bool
 
 /-- `R` includes the bound: the counter passes it by one before the loop exits. -/
@@ -407,11 +408,11 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     unless (base == .local x && (k == 0 || k == step)) ||
         cells.any (fun (cell, n) => cell.stored && base == .cell cell.param && 0 ≤ k && k ≤ n) do
       throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
-  let mut labels := #[]
-  for p in exits do
-    let some l := (match p.res with | .val e => e.constName? | _ => none)
-      | throwError "an exit that is not a constructor of the exit type"
-    unless labels.contains l do labels := labels.push l
+  -- (an exit with a payload has no label: the post then states only that it exits)
+  let labels := exits.foldl (init := some #[]) fun ls? p => do
+    let l ← match p.res with | .val e => e.constName? | _ => none
+    let ls ← ls?
+    return if ls.contains l then ls else ls.push l
   return { counter := x, rel, bound := b, down, cells, exits := labels,
            plain := paths.any (·.st.tick) }
 
@@ -444,8 +445,8 @@ inductive Owned where
   | written (k : Nat) (ty atom : String)
   | plain
 
-/-- The candidate invariant `name.inv` of a loop and its measure `name.meas`, as source text: the
-facts are candidates, which `houdini` prunes. -/
+/-- The candidate invariant `name.inv` of a loop, its measure `name.meas` and its exit post
+`name.post`, as source text: the invariant's facts are candidates, which `houdini` prunes. -/
 structure Cand where
   /-- The loop body's name and its exit test's, without the namespace. -/
   name : String
@@ -504,12 +505,13 @@ def Cand.output (c : Cand) (keep : Array Bool) : String :=
 /-- The check of the kept facts: each one a definition `name.candᵢ` (so that a residual goal
 names it), the invariant over them, the measure, and the step triple of one iteration, walked by
 `fsym` with its report on: from the invariant, a repeating iteration ends in it with a smaller
-measure, an exiting one in it. (The exit post is the invariant: in the counted family an exit
-changes no local and no memory.) -/
-def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) : String := Id.run do
+measure, an exiting one in it (in the counted family an exit changes no local and no memory).
+`final`: the check of the output instead (`Cand.output`, the kept facts written out), where an
+exiting iteration ends in the exit post `name.post`, as the loop rule's step requires. -/
+def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : String := Id.run do
   let mut defs := ""
   for h : i in [0:c.facts.size] do
-    if !keep[i]! then continue
+    if final || !keep[i]! then continue
     let v := match c.facts[i].cell? with | some (_, ty) => s!"(v : {ty}) " | none => ""
     defs := defs ++ s!"def {c.name}.cand{i} {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) {v}: Prop :=\n  \
       {c.facts[i].text}\n\n"
@@ -519,12 +521,14 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) : String := Id.run do
   let use (i : Nat) := s!"{q c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
   let inv (s : String) := s!"{q c.name}.inv {c.args}s0 {c.vargs}{s}"
   let meas (s : String) := s!"{q c.name}.meas {c.args}{c.measArgs}{s}"
-  return s!"{defs}{c.defs keep use}\n\
+  let (defs, exit, post) := if final then (c.output keep, s!"{q c.name}.post {c.args}s0 {c.vargs}r", s!" {q c.name}.post")
+    else (defs ++ c.defs keep use, inv "r.2", "")
+  return s!"{defs}\n\
     set_option fsym.report true in\n\
     theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
       FTotalTriple ({inv "s"}) (({q c.name} {c.args}).run s)\n      \
-      (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {inv "r.2"}) := by\n  \
-      unfold {q c.name} {q c.name}.inv {q c.name}.meas\n  fsym\n"
+      (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {exit}) := by\n  \
+      unfold {q c.name} {q c.name}.inv {q c.name}.meas{post}\n  fsym\n"
 
 /-- The opens of the generated file, which the pruning walks elaborate under too. -/
 def opens : String := "open Zig Zig.Full Zig.Full.FAssn"
@@ -539,10 +543,12 @@ the postcondition whose goal is a candidate's definition). It throws why the wal
 the step: a residual that no candidate explains (the measure, an overflow), an error other than
 the unsolved goals of those residuals (a check that does not elaborate: a candidate whose text is
 ill-typed is an error here, never a pruned fact), or not exactly one report. The walk is not
-trusted: the generated definitions are checked by the proofs that use them. -/
-def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Array (Nat × String)) := do
+trusted: the generated definitions are checked by the proofs that use them. `final`
+(`Cand.check`'s): any residual is an error. -/
+def walk (ns : Name) (c : Cand) (keep : Array Bool) (final := false) :
+    MetaM (Array (Nat × String)) := do
   let text := s!"namespace {ns}\n{opens}\n\
-    set_option linter.unusedVariables false\n\n{c.check ns keep}\nend {ns}\n"
+    set_option linter.unusedVariables false\n\n{c.check ns keep final}\nend {ns}\n"
   let opts := ({} : Options).setBool `Elab.async false
   let (_, msgs) ← Lean.Elab.process text (← getEnv) opts (some "<air2lean-invgen check>")
   let mut reports := #[]
@@ -558,6 +564,10 @@ def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Array (Nat × Strin
   -- Each residual leaves the step theorem with unsolved goals; any other error is fatal.
   if let some e := errors.find? fun e => residuals.isEmpty || !e.startsWith "unsolved goals" then
     throwError "the step check failed: {e}"
+  if final then
+    if let some res := residuals[0]? then
+      throwError "the kept facts do not establish the exit post `{c.name}.post`: \
+        `{(res.getObjValD "goal").getObjValAs? String "text" |>.toOption.getD ""}`"
   let pre := s!"{ns}.{c.name}.cand"
   let mut drop := #[]
   for res in residuals do
@@ -592,15 +602,17 @@ def houdini (ns : Name) (c : Cand) : MetaM (Array Bool × Array Json) := do
       pruned := pruned.push (Json.mkObj [("fact", c.facts[i]!.text), ("walk", n), ("residual", goal)])
   throwError "Houdini pruning reached no fixpoint"
 
-/-- The candidate invariant and measure of the loop `body` (the definition run by `Zig.loop`) with
-exit test `again`; throws why there are none. -/
+/-- The candidate invariant, measure and exit post of the loop `body` (the definition run by
+`Zig.loop`) with exit test `again`; throws why there are none. -/
 def candLoop (ns body again : Name) : MetaM Cand := do
     let some (.defnInfo d) := (← getEnv).find? body | throwError "not a definition"
     lambdaTelescope d.value fun xs code => do
       let ty ← inferType code
       unless ty.isAppOfArity `Zig.MM 2 do throwError "not a loop body of `Zig.MM`"
       let some structName := (ty.getArg! 0).constName? | throwError "locals that are not a structure"
-      let some exitName := (ty.getArg! 1).constName? | throwError "an exit type that is not named"
+      let exit ← match (ty.getArg! 1).constName? with
+        | some n => pure (relName ns n)
+        | none => pure (toString (← ppExpr (ty.getArg! 1)))
       unless isStructure (← getEnv) structName do throwError "locals that are not a structure"
       for x in xs do
         let n := (← x.fvarId!.getDecl).userName
@@ -649,8 +661,8 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       let boundAt (sv : String) := match c.bound with
         | .local y => s!"{sv}.{y}.toNat"
         | _ => bound
-      -- `X` the counter, `X0` its entry value: the loop counts `delta` iterations so far, `total`
-      -- in all, and its measure is `left`.
+      -- `X` the counter, `X0` its entry value: the loop counts `total` iterations in all, and its
+      -- measure is `left`.
       let X := s!"s.{x}.toNat"
       let X0 := s!"s0.{x}.toNat"
       let mut facts : Array Fact := #[]
@@ -683,8 +695,11 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       -- The exit post: the exit's label, the other locals at their entry values, the counter at
       -- its exit value and each written cell after all `total` iterations.
       let XR := s!"r.2.{x}.toNat"
-      let label := " ∨ ".intercalate (c.exits.map (s!"r.1 = {relName ns ·}")).toList
-      let mut post := #[if c.exits.size == 1 then label else s!"({label})"]
+      let label := match c.exits with
+        | some #[l] => s!"r.1 = {relName ns l}"
+        | some ls => s!"({" ∨ ".intercalate (ls.map (s!"r.1 = {relName ns ·}")).toList})"
+        | none => s!"{relName ns again} r.1 = false"
+      let mut post := #[label]
       for f in fields do
         if f != x then post := post.push s!"r.2.{f} = s0.{f}"
       post := post.push <|
@@ -719,20 +734,22 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       let name := relName ns body
       return {
         name, again := relName ns again, binders, args, loc, entry, vargs, measEntry, measArgs,
-        facts, owned, meas := left, exit := relName ns exitName,
+        facts, owned, meas := left, exit,
         post := " ⋆\n    ".intercalate (s!"⟪{" ∧\n      ".intercalate post.toList}⟫" :: ownedPost.toList),
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
           by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
 
-/-- The invariant `body.inv` and measure `body.meas` of the loop `body` with exit test `again`
-(`candLoop`, pruned by `houdini`) as source text with the pruning decisions, or why there are
-none. Each loop has its own heartbeat budget: the walks of the loops before it do not count. -/
+/-- The invariant `body.inv`, measure `body.meas` and exit post `body.post` of the loop `body`
+with exit test `again` (`candLoop`, pruned by `houdini`, the output walked once more with its exit
+post) as source text with the pruning decisions, or why there are none. Each loop has its own heartbeat budget: the walks of the loops before it do not count. -/
 def genLoop (ns body again : Name) : MetaM (Except String (String × Array Json)) :=
   -- (a heartbeat or recursion limit, too, only costs this loop its invariant)
   withCurrHeartbeats <| tryCatchRuntimeEx
     (do
       let c ← candLoop ns body again
       let (keep, pruned) ← houdini ns c
+      -- the output itself, with its exit post: a walk with no residual (else no invariant)
+      discard <| walk ns c keep (final := true)
       return .ok (c.output keep, pruned))
     fun ex => return .error (← ex.toMessageData.toString)
 

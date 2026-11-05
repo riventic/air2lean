@@ -48,6 +48,14 @@
   ]
  },
  {
+  "name": "post-exit-counter",
+  "old": "r.2.i.toNat = 0⟫",
+  "new": "r.2.i.toNat = 1⟫",
+  "in": [
+   "down_total"
+  ]
+ },
+ {
   "name": "houdini-kept-dropped",
   "old": "⟪s.i.toNat ≤ s0.i.toNat ∧\n      ",
   "new": "⟪",
