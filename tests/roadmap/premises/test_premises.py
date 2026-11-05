@@ -1231,7 +1231,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("OSK-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dinit_eq"))
         # Linux selects FutexImpl. The Darwin attribution comes only from the conservative
         # runtime-source fallback, rather than elaborating the inactive DarwinImpl block.
-        lock = self.entries[("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")]
+        lock = self.entries[("Proofs/Threadsync/ThreadMutex.lean", "Threadsync.ThreadMutex.lock_wp")]
         self.assertIn("THR-05", lock["premises"])
         self.assertIn("THR-06", lock["premises"])
         self.assertTrue(lock["via"]["THR-06"])

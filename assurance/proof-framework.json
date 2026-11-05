@@ -481,20 +481,6 @@
   ],
   "tactics": [
     {
-      "tactic": "#audit_unchecked_theorem",
-      "kind": "command",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "#audit_unchecked_universal",
-      "kind": "command",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Universal",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
       "tactic": "conc_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Conc",
@@ -685,10 +671,6 @@
     },
     {
       "path": "Proofs/Sync/Semaphore.lean"
-    },
-    {
-      "path": "Proofs/Threadsync/Lock.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/Csl.lean"
