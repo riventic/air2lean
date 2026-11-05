@@ -1489,23 +1489,26 @@ os._exit(0)
         self.assertEqual(early.drain_tickets(), [merge.ticket])
 
     def test_normal_guards_take_the_queue_in_arrival_order(self):
-        # A lane job waits in the queue loop; the parts of an elastic workload come after it.
-        # However often they poll, the queue is the lane job's first; a guard still waiting for
-        # its workspace (not `queued`) holds up nobody.
-        queue = lambda admission: admission.open("queue")
-        lane, part = self.lock_admission(rss="6000"), self.part()
-        outside = self.lock_admission()
-        outside.publish_waiting()  # waiting for its workspace: before both, but not in the queue loop
-        lane.publish_waiting(queued=True)
+        # A lane job waits in the queue loop; the part of an elastic workload comes after it.
+        # However often the part polls, the queue is the lane job's first. A guard waiting for
+        # its workspace (not in the queue loop) holds up nobody, nor does one in line that stopped
+        # refreshing its place (not in its turn, or stopped while alive).
+        lane, part, outside = self.lock_admission(rss="6000"), self.part(), self.lock_admission()
+        queue = lambda admission: admission.open("queue")  # closed on release
+        outside.publish_waiting()  # waiting for its workspace, before both
+        lane.line_up(True)
         self.assertFalse(part.takes_queue(queue(part)))
-        self.assertTrue(json.loads((lane.waiters / lane.waiting[0]).read_text())["queued"])
         lane_queue = queue(lane)
         self.assertTrue(lane.takes_queue(lane_queue))
         fcntl.flock(lane_queue, fcntl.LOCK_UN)
-        name = lane.waiting[0]
-        lane.publish_waiting()  # waiting again keeps its entry and its place
-        self.assertEqual(lane.waiting[0], name)
-        lane.clear_waiting()  # admitted: the part is first in line
+        name, past = lane.in_line[0], time.time() - guard.IN_LINE_FRESH - 1
+        lane.line_up(False)  # out of its turn: no refresh
+        os.utime(lane.lined_up / name, (past, past))
+        self.assertTrue(part.first_in_line())
+        lane.line_up(True)  # in its turn again: its place, refreshed
+        self.assertEqual(lane.in_line[0], name)
+        self.assertFalse(part.first_in_line())
+        lane.leave_line()  # admitted
         self.assertTrue(part.takes_queue(queue(part)))
 
     def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):

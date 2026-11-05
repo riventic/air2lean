@@ -99,6 +99,7 @@ is only a bound when every heavy workload of the machine goes through the same l
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
 
 import argparse
+import contextlib
 import datetime
 import fcntl
 import hashlib
@@ -696,6 +697,7 @@ DECLARED_BOUND = 1.5    # declared limits of the running workloads <= bound x bu
 PREEMPT_HOLDOFF = 5     # seconds between two preemptions under one lock
 BACKFILL_RAMP = 900     # seconds after which the queue head reserves all its slots (--backfill-ramp)
 ATTEMPT_EVERY = 1.0    # seconds between two backfill (or background) attempts of one waiting guard
+IN_LINE_FRESH = 3.0    # seconds an entry in line (`first_in_line`) counts after its guard's last refresh
 UNSAFE_OUTCOMES = ("rss_limit", "preempted")
 KILLED = 128 + signal.SIGKILL  # exit code of a workload SIGKILLed from outside (the OOM killer)
 # Elastic workloads (module docstring). PROCESS_MIB is the declared bound of one sub-admitted
@@ -880,7 +882,9 @@ class Admission:
         self.heads = self.directory / "heads"
         self.head = None  # (entry name, handle, content) while this guard is the waiting queue head
         self.waiters = self.directory / "waiting"
-        self.waiting = None  # (entry name, handle, queued) while it waits for admission (not background)
+        self.waiting = None  # (entry name, handle) while this guard waits for admission (not background)
+        self.lined_up = self.directory / "queued"
+        self.in_line = None  # (entry name, handle) while it waits in the queue loop (`line_up`)
         self.backfilled = False
         self.next_attempt = 0.0
         self.waited = False
@@ -1236,42 +1240,66 @@ class Admission:
         self.next_attempt = time.monotonic() + ATTEMPT_EVERY
         return True
 
-    def publish_waiting(self, queued=None):
+    def publish_waiting(self):
         """Mark this guard as waiting for admission (`<lock>.d/waiting/`), so no background guard
-        is admitted ahead of it, also while no guard holds the queue (between two heads). `queued`
-        (None: as it is) marks a normal guard in the queue loop (`first_in_line`); the entry is
-        replaced under its name, so it keeps its arrival order."""
-        if self.waiting and (queued is None or self.waiting[2] == queued):
-            return
-        name, flag = self.waiting[0] if self.waiting else entry_name(), bool(queued)
-        handle = publish_entry(self.waiters, name, {"pid": os.getpid(), "queued": flag},
-                               lambda path: path.open("a"))
-        if self.waiting:
-            self.waiting[1].close()  # its file is replaced already
-        self.waiting = (name, handle, flag)
+        is admitted ahead of it, also while no guard holds the queue (between two heads)."""
+        if self.waiting is None:
+            name = entry_name()
+            self.waiting = (name, publish_entry(self.waiters, name, {"pid": os.getpid()},
+                                                lambda path: path.open("a")))
 
     def clear_waiting(self):
         if self.waiting:
-            name, handle, _ = self.waiting
+            name, handle = self.waiting
             (self.waiters / name).unlink(missing_ok=True)
             handle.close()
             self.waiting = None
 
+    def line_up(self, turn):
+        """Keep this normal guard's place in line while it waits in the queue loop: an entry in
+        `<lock>.d/queued/` named for when it entered the loop, its mtime refreshed while it is in
+        its turn (`first_in_line`). A ticket holder has none (its ticket orders it)."""
+        if self.ticket:
+            self.leave_line()
+        elif self.in_line is None:
+            name = entry_name()
+            self.in_line = (name, publish_entry(self.lined_up, name, {"pid": os.getpid()},
+                                                lambda path: path.open("a")))
+        elif turn:
+            with contextlib.suppress(FileNotFoundError):
+                os.utime(self.lined_up / self.in_line[0])
+
+    def leave_line(self):
+        if self.in_line:
+            name, handle = self.in_line
+            (self.lined_up / name).unlink(missing_ok=True)
+            handle.close()
+            self.in_line = None
+
     def first_in_line(self):
-        """Whether no normal guard that waited longer is in the queue loop (an older `queued`
-        entry in `<lock>.d/waiting/`). Normal guards take the queue in arrival order, not by
-        whoever polls first: the parts of an elastic workload, several waiting at any time, each
-        followed by the next, won that race again and again, and on the remote host (2026-11-05)
-        a full build's parts kept the queue from three lane jobs with 86% of its memory free. A
-        guard waiting for its workspace, outside the queue, or with a ticket is not `queued`."""
-        mine = self.waiting[0]
-        return not any(entry.get("queued") for name, entry in held_entries(self.waiters).items() if name < mine)
+        """Whether no normal guard that entered the queue loop before this one is still in line
+        and in its turn (its entry refreshed within IN_LINE_FRESH). Normal guards take the queue
+        in that order, not by whoever polls the free queue lock first: the parts of an elastic
+        workload, several waiting at any time and each followed by the next, won that race again
+        and again (remote host, 2026-11-05: three lane jobs waited behind a full build's parts
+        with 86% of the memory free). A guard that is not in its turn (`my_turn`: behind a ticket,
+        or too large beside the elastic bases while a lifeline waits), or stopped while alive,
+        stops refreshing and holds up nobody: it falls back to the race."""
+        mine, now = self.in_line[0], time.time()
+        for name in held_entries(self.lined_up):
+            if name >= mine:
+                return True
+            with contextlib.suppress(FileNotFoundError):
+                if now - (self.lined_up / name).stat().st_mtime < IN_LINE_FRESH:
+                    return False
+        return True
 
     def takes_queue(self, queue):
         """Whether this guard takes the queue now (as its head): in its turn (`my_turn`) and, a
         normal guard, first in line (`first_in_line`)."""
-        self.publish_waiting(queued=not self.ticket)
-        return self.my_turn() and (bool(self.ticket) or self.first_in_line()) and try_flock(queue, fcntl.LOCK_EX)
+        turn = self.my_turn()
+        self.line_up(turn)
+        return turn and (bool(self.ticket) or self.first_in_line()) and try_flock(queue, fcntl.LOCK_EX)
 
     def try_background(self, workspace, queue, main, slots, register):
         """Whether this background guard was admitted now (module docstring): only while no other
@@ -1372,6 +1400,7 @@ class Admission:
             while self.a.elastic and self.weight > self.elastic_room():
                 self.leave_queue()
                 self.clear_waiting()
+                self.leave_line()
                 if refused := wait(publish=False):
                     return refused
             if self.priority != "normal" and not self.ticket:
@@ -1439,6 +1468,7 @@ class Admission:
         self.leave_queue()
         self.clear_head()
         self.clear_waiting()
+        self.leave_line()
         self.unregister()
         for directory, name in ((self.leaves, self.leaf_entry), (self.elastic, self.elastic_entry),
                                 (self.directory / "lifeline", self.elastic_entry)):
@@ -1617,6 +1647,7 @@ def run(a, retry_of=None):
             report["admission"]["inherited_from"] = grant
         refused = None if grant and not a.sub_admission else lock.acquire(cancelled)
         lock.clear_waiting()  # admitted or refused, it waits no longer
+        lock.leave_line()
         if refused == "cancelled":
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
             return report

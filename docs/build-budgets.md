@@ -49,12 +49,14 @@ and fixture unit holds slots of its own, charged its measured need, only while i
 - Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it (the head) collects its
   slots while later ones wait, so a large workload is not starved by small ones. The workspace
   lock is taken before the queue, so waiting for one's own checkout holds up nobody. Normal
-  guards take the queue in the order they entered it (their `<lock>.d/waiting/` entry, marked
-  `queued`, `first_in_line`), not by whoever polls the free queue lock first. That race let the
-  parts of an elastic workload (several always waiting, each followed by the next) keep the
-  queue from lane jobs: on the remote host (2026-11-05) a full build's 6-slot part was the head
-  while three lane jobs waited and 86% of the memory was free. Ticket holders keep their own
-  order (drain tickets below), and guards of older checkouts still race.
+  guards take the queue in the order they entered it (an entry in `<lock>.d/queued/`,
+  `first_in_line`), not by whoever polls the free queue lock first. That race let the parts of
+  an elastic workload (several always waiting, each followed by the next) keep the queue from
+  lane jobs: on the remote host (2026-11-05) a full build's 6-slot part was the head while three
+  lane jobs waited and 86% of the memory was free. A guard counts in line only while it is in
+  its turn and alive (it refreshes its entry; one not refreshed for 3 s is passed over), so one
+  behind a ticket, too large beside the elastic bases, or stopped holds up nobody. Ticket holders
+  keep their own order (drain tickets below), and guards of older checkouts still race.
 - Backfill: a head that holds all the free slots and waits for running workloads to free the
   rest leaves the machine partly idle. On the remote build host (2026-11-03), 11-slot heads
   waited up to 20 minutes while 18 GB were unused. So a head short of its slots holds only a
