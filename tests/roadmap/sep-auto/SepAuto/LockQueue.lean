@@ -12,7 +12,13 @@ thread `u` in the futex queue at `B`'s word:
 - leaves `A`'s invariant false whenever `u` is at `A`'s place `out` (`queue_other_breaks`): `A`'s
   `Queue` places a thread queued at another futex at `away` or `holdsAway`. So the two-lock
   product's lemma "a step of `B` keeps `A`'s invariant" needs `newQ`;
-- is not a `Step` (`queue_other_rejected`).
+- is not a `Step` (`queue_other_rejected`); `newQ` is the only field that rejects it
+  (`queue_step_iff`: the step is a `Step` iff it queues `t` itself or an entry already queued).
+
+`newQ` is necessary for the product, not sufficient: `B`'s own futex wait by `t` queues `t` at
+`B`'s word, which `A`'s `Queue` admits only with `t` at `A`'s `away` (or `holdsAway` at a futex of
+`A`'s nest). `newQ` is a membership fact: a duplicate of an entry already queued passes it, which
+the membership-based `Queue` does not see.
 
 Every producer of `Step` in `LockWord.lean` meets `newQ`: the futex wait pushes only its caller
 (`newQ_push`, `WInv.wait`), the wake only removes entries and the other steps keep the queue
@@ -53,6 +59,23 @@ theorem queue_other_breaks (A B : LockWord) (P : ThreadId → LPh) (u : ThreadId
 theorem queue_other_rejected (B : LockWord) (t u : ThreadId) (m : Mem) (hut : u ≠ t)
     (hn : (u, B.ptr) ∉ m.waiters) : ¬ B.Step t m (queued B u m) := fun hs =>
   hut (hs.newQ (u, B.ptr) (Array.mem_push.mpr (.inr rfl)) hn)
+
+/-- **`newQ` is the only obstruction**: the step is a `Step` exactly when it queues the stepping
+thread itself or an entry already in the queue. -/
+theorem queue_step_iff (B : LockWord) (t u : ThreadId) (m : Mem) :
+    B.Step t m (queued B u m) ↔ u = t ∨ (u, B.ptr) ∈ m.waiters := by
+  constructor
+  · intro hs
+    by_cases hn : (u, B.ptr) ∈ m.waiters
+    · exact .inr hn
+    · exact .inl (hs.newQ (u, B.ptr) (Array.mem_push.mpr (.inr rfl)) hn)
+  · intro h
+    refine queue_other_admitted B t u m fun w hw hn => ?_
+    rcases Array.mem_push.mp hw with hw | rfl
+    · exact absurd hw hn
+    · rcases h with rfl | h
+      · rfl
+      · exact absurd h hn
 
 /-- A step that queues the stepping thread itself stays a `Step`. -/
 theorem queue_self (B : LockWord) (t : ThreadId) (m : Mem) : B.Step t m (queued B t m) :=
