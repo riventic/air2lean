@@ -3,9 +3,11 @@
 
 import contextlib
 import fcntl
+import hashlib
 import importlib.util
 import io
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -22,6 +24,9 @@ sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("build_guard", GUARD)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
+
+# 13 slots: one elastic base of up to 2 slots leaves the 11 of one PROCESS_MIB sub-admission.
+ELASTIC_BUDGET = ("--mem-budget-mib", "13312")
 
 # Longer than the coordinator's 12-second timeout and bounded PID waits. Tests
 # assert removal before this deadline; expiry only protects a broken harness.
@@ -41,6 +46,7 @@ class GuardTests(unittest.TestCase):
         self.addCleanup(environment.stop)
         os.environ.pop("AIR2LEAN_GUARD_PRIORITY", None)
         os.environ.pop("AIR2LEAN_GUARD_IDLE_MINUTES", None)
+        os.environ.pop("AIR2LEAN_LOCK_WAIT", None)  # the tests' guards that wait say so
 
     def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
         self.fixture_counter += 1
@@ -236,6 +242,16 @@ fixture_pause()
         source = "import time\nend = time.monotonic() + 6\nwhile time.monotonic() < end: pass"
         result, report, _ = self.run_guard(source, "--idle-minutes", "0.05", "--timeout", "10")
         self.assertEqual((result.returncode, report["outcome"]), (0, "success"), result.stderr)
+
+    def test_the_lock_wait_comes_from_the_option_the_environment_or_is_none(self):
+        args = ["--cwd", str(self.root), "--report", "r", "--log", "l", "--", "true"]
+        self.assertEqual(guard.parse_args(args).lock_wait, 0)
+        os.environ["AIR2LEAN_LOCK_WAIT"] = "21600"
+        self.assertEqual(guard.parse_args(args).lock_wait, 21600)
+        self.assertEqual(guard.parse_args(["--lock-wait", "5", *args]).lock_wait, 5)
+        os.environ["AIR2LEAN_LOCK_WAIT"] = "soon"
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            guard.parse_args(args)
 
     def test_idle_limit_comes_from_the_environment_or_is_off(self):
         os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "0.02"
@@ -647,7 +663,7 @@ fixture_pause()
         code, evidence = self.attempt(*budget, "--lock-wait", "1", cwd=self.worktree("late"))
         self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # no new admission meanwhile
         normal, err = self.start_waiter("normal", order, *budget)
-        self.assertIn("0 merge and 1 exclusive guard(s) queued", err.read_text())
+        self.assertIn("0 merge, 1 exclusive and 0 lifeline guard(s) queued", err.read_text())
         self.assertIsNone(holder.poll())  # the running workload is not preempted
         self.assertIsNone(exclusive.poll())
         holder.send_signal(signal.SIGTERM)
@@ -1307,6 +1323,379 @@ os._exit(0)
                     self.assertEqual(command[2], "-j1")
                     self.assertEqual(command[3:], list(suffix))
                     self.assertEqual(frontend_jobs(command[2:], operands), 1)
+
+    # Elastic workloads and their sub-admissions (build-guard.py module docstring).
+
+    def sub_args(self, source, *options, report=None):
+        """A sub-admission guard of `source` (its stdout passes through); its report if given."""
+        args = [sys.executable, str(GUARD), "--cwd", str(self.root), "--lock", str(self.root / "shared.lock"),
+                "--sub-admission", "--timeout", "5", "--interval", "0.02", "--grace", "0.1", *options]
+        return args + (["--report", str(report)] if report else []) + ["--", sys.executable, "-c", source]
+
+    def in_elastic(self, inner, *outer):
+        """Run `inner` (a guard's argv) in an elastic guard's workload: (outer result, report, log)."""
+        source = "import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % inner
+        return self.run_guard(source, "--elastic", *ELASTIC_BUDGET, *outer)
+
+    def test_a_sub_admission_holds_its_own_slots_outside_the_enclosing_sum(self):
+        # It allocates 96 MiB inside an elastic guard limited to 64: the enclosing guard leaves it
+        # out of its sum, and the free slots show the base (1) and the charge (2) held.
+        source = ("import importlib.util, sys; spec = importlib.util.spec_from_file_location('g', %r); "
+                  "g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g); "
+                  "block = bytearray(96 << 20); import time; time.sleep(0.5); "
+                  "print('free', g.free_mib(g.Path(%r), 13312)); print('hello')") % (str(GUARD), str(self.root / "shared.lock"))
+        # Its declared bound is far above its charge: it is no overcommitted workload (no excess).
+        inner = self.sub_args(source, "--charge-mib", "2048", "--rss-mib", "11000")
+        result, report, log = self.in_elastic(inner, "--rss-mib", "64")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), log.read_text())
+        self.assertIn("free 10240\nhello\n", log.read_text())  # base 1 + charge 2 of 13 slots
+        self.assertLess(report["peak_sampled_rss_kib"], 64 * 1024)
+        self.assertTrue(json.loads(report["environment_overrides"][guard.INHERIT])["elastic"]["id"])
+
+    def test_a_sub_admissions_compilers_count_against_its_own_jobs(self):
+        # Two "compilers" (sleep, via --zig-name) at once in a part with --jobs 2, inside an
+        # elastic guard with --jobs 1: the part's own bound, not the enclosing one, applies.
+        source = ("import subprocess; ps = [subprocess.Popen(['sleep', '1.5']) for _ in range(2)]; "
+                  "[p.wait() for p in ps]")
+        inner = self.sub_args(source, "--charge-mib", "64", "--rss-mib", "64", "--jobs", "2",
+                              "--zig-name", "sleep")
+        result, report, log = self.in_elastic(inner, "--rss-mib", "64", "--zig-name", "sleep")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), log.read_text())
+
+    def test_a_sub_admission_over_its_charge_runs_again_at_its_declared_bound(self):
+        count, report = self.root / "count", self.root / "inner.json"
+        source = (f"import pathlib, time; p = pathlib.Path({str(count)!r}); n = len(p.read_text()) + 1 "
+                  f"if p.exists() else 1; p.write_text('x' * n); print('run', n); "
+                  "block = bytearray(80 << 20); time.sleep(0.5)")
+        inner = self.sub_args(source, "--charge-mib", "40", "--rss-mib", "400", report=report)
+        result, outer, log = self.in_elastic(inner, "--rss-mib", "64")
+        self.assertEqual(result.returncode, 0, log.read_text())
+        evidence = json.loads(report.read_text())
+        self.assertEqual(evidence["outcome"], "success")
+        self.assertEqual(evidence["budget"]["limit_mib"], 400)
+        self.assertEqual(evidence["stopped_run"]["admission"]["weight"], 1)
+        self.assertEqual(evidence["admission"]["weight"], 1)
+        self.assertGreater(evidence["peak_process_rss_kib"], 80 * 1024)  # the kernel's mark
+        self.assertIn("over its charge of 40 MiB", log.read_text())
+        # The stopped run's stdout is dropped: the workload's output is that of its last run.
+        self.assertNotIn("run 1", log.read_text())
+        self.assertIn("run 2", log.read_text())
+
+    def test_a_sub_admission_needs_an_enclosing_elastic_admission(self):
+        report = self.root / "inner.json"
+        inner = self.sub_args("print('ran')", "--charge-mib", "64", "--rss-mib", "64", report=report)
+        result = subprocess.run(inner, capture_output=True, text=True, timeout=12)
+        self.assertEqual(result.returncode, 75)
+        self.assertEqual(json.loads(report.read_text())["outcome"], "inheritance_refused")
+        self.assertNotIn("ran", result.stdout)
+        result, _, _ = self.run_guard("import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % inner,
+                                      *ELASTIC_BUDGET, "--rss-mib", "64")  # not elastic
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("no enclosing --elastic admission", json.loads(report.read_text())["error"])
+
+    def test_the_elastic_bases_leave_room_for_one_sub_admission(self):
+        holder, _ = self.start_holder("--elastic", *ELASTIC_BUDGET, "--rss-mib", "2048")
+        # A second elastic base would leave less than 11 slots: it waits, outside the queue ...
+        code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "1024", "--lock-wait", "0.5",
+                                      cwd=self.worktree("second"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        # ... so a normal guard behind it is admitted at once.
+        code, _ = self.attempt(*ELASTIC_BUDGET, "--rss-mib", "1024", cwd=self.worktree("normal"))
+        self.assertEqual(code, 0)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "1024", cwd=self.worktree("second"))
+        self.assertEqual(code, 0)
+        code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "3072", cwd=self.worktree("big"))
+        self.assertEqual((code, evidence["outcome"]), (75, "elastic_too_large"))
+
+    def lock_admission(self, *options, rss="1024"):
+        """An Admission (not acquired) on the test's lock, in the elastic budget (13 slots)."""
+        return self.admission(*options, budget=ELASTIC_BUDGET[1], rss=rss)
+
+    def part(self, workload="elastic-1"):
+        part = self.lock_admission("--sub-admission", "--charge-mib", "1024")
+        part.enclosing = {"elastic": {"id": workload}}
+        return part
+
+    @staticmethod
+    def take(part):
+        """Take the lifeline now, not after the part's next attempt time (ATTEMPT_EVERY)."""
+        part.next_lifeline = 0
+        return part.take_lifeline()
+
+    def test_the_lifeline_goes_ahead_of_every_exclusive_ticket(self):
+        admission, take = self.lock_admission, self.take
+        merge = admission("--priority", "merge")
+        merge.join_queue()
+        exclusive = admission("--exclusive")
+        exclusive.join_queue()
+        first, second, running = (self.part() for _ in range(3))
+        running.publish_leaf()  # while a part of the workload runs, nobody needs the lifeline
+        self.assertFalse(take(first))
+        running.release()
+        self.assertTrue(take(first))
+        self.assertFalse(take(second))  # one lifeline per elastic workload
+        self.assertEqual(second.priority, "normal")
+        # Behind a merge guard (which needs no running workload to end), ahead of an exclusive one
+        # (which waits for the elastic workload, so for its lifeline).
+        self.assertTrue(first.ticket.endswith("-" + guard.LEAF))
+        self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
+        self.assertIsNone(first.mirror)  # not its turn: older guards drain behind the merge ticket anyway
+        merge.leave_queue()
+        self.assertTrue(first.my_turn() and not exclusive.my_turn())
+        # Its turn, and no head that knows lifelines: a guard of an older checkout may keep the
+        # queue from it. It mirrors its ticket first in `merge/`, where those guards drain behind
+        # every entry; new guards leave the mirror out.
+        first.mirror_lifeline()
+        self.assertEqual(sorted(os.listdir(self.tickets)), [first.mirror[0], exclusive.ticket])
+        self.assertTrue(first.mirror[0].startswith("%020d-" % 0))
+        self.assertEqual(exclusive.drain_tickets(), [exclusive.ticket])
+        heads = first.heads
+        for content, mirrored in (({"pid": 1, "unmet": 0, "need": 2, "lifeline_aware": True}, False),
+                                  ({"pid": 1, "unmet": 0, "need": 2}, True)):  # a new head, an older one
+            with self.subTest(content=content), guard.publish_entry(heads, guard.entry_name(), content,
+                                                                     lambda path: path.open("a")):
+                first.mirror_lifeline()
+                self.assertEqual(first.mirror is not None, mirrored)
+        first.hold_queue(True)  # its head: the mirror goes, older guards backfill beside it
+        self.assertEqual(os.listdir(self.tickets), [exclusive.ticket])
+        first.release()
+        self.assertTrue(take(second))
+
+    def test_a_normal_head_leads_ahead_of_later_lifelines_only_if_it_fits_beside_the_bases(self):
+        early, large, late = (self.lock_admission(rss=mib) for mib in ("2048", "13312", "1024"))
+        for guard_ in (early, large):
+            guard_.publish_waiting()
+        lifeline = self.part()
+        self.assertTrue(self.take(lifeline))
+        late.publish_waiting()
+        # 13 slots, no elastic base: the early guard (2) and the large one (13) fit; they waited
+        # before the lifeline, the late one after it.
+        self.assertEqual([g.my_turn() for g in (early, large, late)], [True, True, False])
+        self.assertTrue(lifeline.my_turn())
+        # A base of 2 slots: the large guard could only be admitted once that workload ends, which
+        # may need its lifeline, so the lifeline leads ahead of it.
+        guard.publish_entry(early.elastic, guard.entry_name(), {"pid": os.getpid(), "slots": 2}, early.open)
+        self.assertEqual([g.my_turn() for g in (early, large, late)], [True, False, False])
+        # An elastic entry of another shape: no normal guard leads ahead of a lifeline (fail closed).
+        guard.publish_entry(early.elastic, guard.entry_name(), {"slots": "x"}, early.open)
+        self.assertFalse(early.my_turn())
+        # A drain ticket: no normal guard leads, none backfills.
+        lifeline.release()
+        merge = self.lock_admission("--priority", "merge")
+        merge.join_queue()
+        self.assertFalse(early.my_turn())
+        self.assertEqual(early.drain_tickets(), [merge.ticket])
+
+    def test_normal_guards_take_the_queue_in_arrival_order(self):
+        # A lane job waits in the queue loop; the part of an elastic workload comes after it.
+        # However often the part polls, the queue is the lane job's first. A guard waiting for
+        # its workspace (not in the queue loop) holds up nobody, nor does one in line that stopped
+        # refreshing its place (not in its turn, or stopped while alive).
+        lane, part, outside = self.lock_admission(rss="6000"), self.part(), self.lock_admission()
+        queue = lambda admission: admission.open("queue")  # closed on release
+        outside.publish_waiting()  # waiting for its workspace, before both
+        lane.line_up(True)
+        self.assertFalse(part.takes_queue(queue(part)))
+        lane_queue = queue(lane)
+        self.assertTrue(lane.takes_queue(lane_queue))
+        fcntl.flock(lane_queue, fcntl.LOCK_UN)
+        name, part_queue = lane.in_line[0], queue(part)
+        lane.line_up(False)  # out of its turn (no drain ticket): passed over
+        self.assertTrue(part.takes_queue(part_queue))
+        fcntl.flock(part_queue, fcntl.LOCK_UN)
+        (lane.lined_up / name).unlink()  # removed under it: published again, in its turn, in its place
+        lane.line_up(True)
+        self.assertEqual(lane.in_line[0], name)
+        self.assertFalse(part.takes_queue(part_queue))
+        lane.leave_line()  # admitted
+        part.leave_line()
+        early = self.lock_admission()
+        early.line_up(False)  # new but out of its turn: holds up nobody either
+        self.assertTrue(part.takes_queue(part_queue))
+
+    def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):
+        # The remote host, 2026-11-05: an unmeasured part (11 slots) took its workload's lifeline
+        # while running workloads held 20 of 28 slots; as a drain ticket it kept every normal guard
+        # waiting (8 to 19 minutes, 4.7 of 24 GB in use).
+        budget, order = ("--mem-budget-mib", "28672"), self.root / "order"
+        holder, _ = self.start_holder(*budget, "--rss-mib", "20480", "--timeout", "20", cwd=self.worktree("holder"))
+        part = self.sub_args(f'open({str(order)!r}, "a").write("lifeline\\n")',
+                             "--charge-mib", "11000", "--rss-mib", "11000", "--lock-wait", "20")
+        args, _, log = self.command("import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % part,
+                                    "--elastic", *budget, "--rss-mib", "1024", "--timeout", "20", "--lock-wait", "5")
+        elastic = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, elastic)
+        lifelines, heads = self.tickets.parent / "lifeline-tickets", self.tickets.parent / "heads"
+        deadline = time.monotonic() + 5
+        while not (guard.held_entries(lifelines) and guard.held_entries(heads)) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(guard.held_entries(heads), "the lifeline never became the queue head")
+        self.assertFalse(guard.held_entries(self.tickets))  # no drain ticket
+        # A 1-slot normal guard runs beside the lifeline's unmet reservation (7 free, 11 needed).
+        code, evidence = self.attempt(*budget, "--rss-mib", "1024", "--lock-wait", "3", cwd=self.worktree("small"))
+        self.assertEqual(code, 0)
+        self.assertTrue(evidence["admission"]["backfilled"])
+        # A later normal guard (17 slots) waits; once the holder ends, the lifeline goes first.
+        late, _ = self.start_waiter("late", order, *budget, "--rss-mib", "17408")
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        elastic.communicate(timeout=12)
+        self.assertEqual(elastic.returncode, 0, log.read_text())
+        self.finish(late)
+        self.assertEqual(order.read_text().split(), ["lifeline", "late"])
+
+    def test_the_elastic_plan_nests_and_falls_back_to_one_plain_admission(self):
+        lock = self.root / "shared.lock"
+        grant = lambda **fields: json.dumps({"lock": str(lock.resolve()), **fields})
+        for inherit, budget, expected in (
+                (None, 64000, ("elastic", 4096)),
+                (None, 13312, ("elastic", 2048)),       # 13 slots: 2 beside one 11000 MiB process
+                (None, 11264, ("plain", 11000)),        # no room: one admission, as before
+                (None, 8000, ("plain", 8000)),
+                (grant(rss_mib=2048, elastic={"id": "e"}), 64000, ("elastic", 2048)),
+                (grant(rss_mib=16000), 64000, ("plain", 16000)),  # a plain enclosing admission
+                (grant(rss_mib=True), 64000, ("elastic", 4096)),  # malformed: none
+                ("not json", 64000, ("elastic", 4096))):
+            with self.subTest(inherit=inherit, budget=budget), \
+                 mock.patch.dict(os.environ, {guard.INHERIT: inherit or ""}):
+                self.assertEqual(guard.elastic_plan(4096, lock, budget), expected)
+
+    def fake_toolchain(self):
+        toolchain = self.root / "toolchain"
+        (toolchain / "bin").mkdir(parents=True)
+        (toolchain / "lib").mkdir()
+        lean = toolchain / "bin" / "lean"
+        lean.write_text('#!/bin/sh\necho "real $*"\n')
+        lean.chmod(0o755)
+        (toolchain / "bin" / "lake").write_text("")
+        return toolchain
+
+    def test_lean_processes_run_each_elaboration_through_the_guard(self):
+        toolchain = self.fake_toolchain()
+        env = guard.lean_processes_env(toolchain, self.root / "shared.lock")
+        sysroot = Path(env["LEAN_SYSROOT"])
+        self.assertEqual((env["LAKE_OVERRIDE_LEAN"], env["LEAN"]), ("true", str(sysroot / "bin" / "lean")))
+        self.assertTrue(env["PATH"].startswith(str(sysroot / "bin") + os.pathsep))
+        self.assertEqual((sysroot / "lib").resolve(), toolchain / "lib")
+        self.assertEqual((sysroot / "bin" / "lake").resolve(), toolchain / "bin" / "lake")
+        self.assertEqual(guard.lean_processes_env(toolchain, self.root / "shared.lock"), env)  # reused
+        os.environ.pop(guard.INHERIT, None)
+        for args in (["--githash"], ["Foo.lean", "-o", "x"]):  # outside an elastic admission: the real lean
+            done = subprocess.run([env["LEAN"], *args], capture_output=True, text=True, timeout=12)
+            self.assertEqual(done.stdout, "real %s\n" % " ".join(args))
+        # In one, each elaboration is a sub-admission, and its peak is measured.
+        (self.root / "Foo.lean").write_text("def x := 1\n")
+        source = "import os, subprocess, sys; sys.exit(subprocess.run([os.environ['LEAN'], 'Foo.lean']).returncode)"
+        result, report, log = self.run_guard(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                             "--lean-processes", str(toolchain))
+        self.assertEqual(result.returncode, 0, log.read_text())
+        self.assertEqual(log.read_text(), "real Foo.lean\n")
+        self.assertEqual(report["environment_overrides"]["LEAN"], env["LEAN"])
+        store = json.loads((Path(str(self.root / "shared.lock") + ".d") / "lean-peaks.json").read_text())
+        self.assertEqual(store["Foo.lean"]["sha256"], guard.digest(self.root / "Foo.lean"))
+        self.assertGreater(store["Foo.lean"]["peaks_kib"][0], 0)
+        # Its source changes: the next elaboration is charged by the earlier peak, not PROCESS_MIB.
+        (self.root / "Foo.lean").write_text("def x := 2\n")
+        reports = self.root / "lean-reports"
+        reports.mkdir()
+        os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
+        result, _, log = self.run_guard(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                        "--lean-processes", str(toolchain))
+        self.assertEqual(result.returncode, 0, log.read_text())
+        [part] = [json.loads(path.read_text()) for path in reports.iterdir()]
+        self.assertEqual(part["admission"]["charge_mib"], guard.SLOT_MIB)  # 1.3 x a few MiB, one slot
+        # --lean-processes needs an elastic admission.
+        result, report, _ = self.run_guard("pass", "--lean-processes", str(toolchain))
+        self.assertEqual((result.returncode, report["outcome"]), (75, "inheritance_refused"))
+
+    def test_a_module_never_measured_is_charged_the_tables_typical_peak(self):
+        # The committed table's 95th-percentile peak (nearest rank) is 800 MiB: below its largest
+        # row, above its median. Two modules without a row: one fits 1.3 x 800 MiB, one (1500 MiB
+        # of incompressible pages, held over three samples) outgrows it and runs again at PROCESS_MIB.
+        toolchain = self.fake_toolchain()
+        (toolchain / "bin" / "lean").write_text(
+            f"#!{sys.executable}\nimport os, sys, time\n"
+            "block = os.urandom(1 << 20) * int(open(sys.argv[1]).read()); time.sleep(3)\n")
+        rows = [100] * 18 + [800, 9000]
+        (self.root / peaks.TABLE).parent.mkdir()
+        (self.root / peaks.TABLE).write_text(json.dumps(
+            {"modules": {f"M{i}.lean": {"peak_mib": mib, "sha256": "x"} for i, mib in enumerate(rows)}}))
+        (self.root / "Small.lean").write_text("1")
+        (self.root / "Big.lean").write_text("1500")
+        reports = self.root / "lean-reports"
+        reports.mkdir()
+        os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
+        source = ("import os, subprocess, sys; sys.exit(max(subprocess.run([os.environ['LEAN'], m]).returncode "
+                  "for m in ('Small.lean', 'Big.lean')))")
+        args, report_path, log = self.command(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                              "--timeout", "30", "--lean-processes", str(toolchain))
+        result = subprocess.run(args, capture_output=True, text=True, timeout=40)
+        self.assertEqual(result.returncode, 0, log.read_text() + result.stderr)
+        parts = {path.name.split(".")[0]: json.loads(path.read_text()) for path in reports.iterdir()}
+        charge = math.ceil(guard.CHARGE_MARGIN * 800)
+        small, big = parts["Small"], parts["Big"]
+        self.assertEqual((small["outcome"], small["admission"]["charge_mib"]), ("success", charge))
+        self.assertNotIn("stopped_run", small)
+        self.assertEqual((big["outcome"], big["admission"]["charge_mib"]), ("success", guard.PROCESS_MIB))
+        self.assertEqual(big["stopped_run"]["admission"]["charge_mib"], charge)
+        self.assertGreater(big["peak_process_rss_kib"], charge * 1024)
+
+
+peaks_spec = importlib.util.spec_from_file_location("lean_peaks", ROOT / "scripts/lean-peaks.py")
+peaks = importlib.util.module_from_spec(peaks_spec)
+peaks_spec.loader.exec_module(peaks)
+
+
+class LeanPeaksTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="air2lean-peaks-test-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.store = self.root / "lock.d" / "lean-peaks.json"
+        subprocess.run(["git", "init", "-q", str(self.root / "ws")], check=True)
+        self.ws = self.root / "ws"
+        (self.ws / "A.lean").write_text("a")
+        (self.ws / "B.lean").write_text("b")
+        subprocess.run(["git", "add", "A.lean", "B.lean"], cwd=self.ws, check=True)
+
+    def test_a_measurement_belongs_to_one_source(self):
+        self.assertIsNone(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"))  # no table
+        for kib in (100, 300, 200, 50):
+            peaks.record(self.store, "A.lean", "s1", kib)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"), 300)  # the last 3
+        peaks.record(self.store, "A.lean", "s1", 10)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"), 200)
+        peaks.record(self.store, "A.lean", "s2", 70)
+        self.assertEqual(peaks.read_store(self.store)["A.lean"]["peaks_kib"], [70])  # s1's are stale
+
+    def test_the_table_is_regenerated_from_the_store_and_keeps_unchanged_rows(self):
+        sha = lambda name: hashlib.sha256((self.ws / name).read_bytes()).hexdigest()
+        (self.ws / "assurance").mkdir()
+        old = {"modules": {"B.lean": {"peak_mib": 7, "sha256": sha("B.lean")},
+                           "Gone.lean": {"peak_mib": 9, "sha256": "x"}}}
+        (self.ws / peaks.TABLE).write_text(json.dumps(old))
+        peaks.record(self.store, "A.lean", sha("A.lean"), 2049)
+        table = peaks.table(self.store, self.ws)
+        self.assertEqual(table["modules"], {"A.lean": {"peak_mib": 3, "sha256": sha("A.lean")},
+                                            "B.lean": {"peak_mib": 7, "sha256": sha("B.lean")}})
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
+        # A changed source: not measured, but its earlier peak stays as the prior of its guess,
+        # this machine's before the committed row's.
+        (self.ws / "B.lean").write_text("changed")
+        self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], old["modules"]["B.lean"])
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
+        peaks.record(self.store, "B.lean", "earlier", 5 * 1024)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 5 * 1024)
+        self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], {"peak_mib": 5, "sha256": "earlier"})
+
+    def test_a_module_never_measured_is_guessed_from_the_tables_95th_percentile(self):
+        (self.ws / "assurance").mkdir()
+        for count, rank in ((1, 0), (19, 18), (20, 18), (100, 94)):  # nearest rank, ceil(0.95 n)
+            rows = {f"M{i}.lean": {"peak_mib": i + 1, "sha256": "x"} for i in range(count)}
+            (self.ws / peaks.TABLE).write_text(json.dumps({"modules": rows}))
+            self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "New.lean", "s"), (rank + 1) * 1024)
 
 
 if __name__ == "__main__":

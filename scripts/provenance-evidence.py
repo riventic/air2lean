@@ -226,11 +226,14 @@ def lean_toolchain():
     return Path.home() / '.elan/toolchains' / (ROOT / 'lean-toolchain').read_text().strip().replace('/', '--').replace(':', '---')
 
 
-def fresh_receipt(fx, attempt):
-    """A guarded, sealed proof receipt over the tracked tree for the fixture's proof module."""
+def fresh_receipt(fx, attempt, lock_wait=None):
+    """A guarded, sealed proof receipt over the tracked tree for the fixture's proof module. Its
+    guard waits lock_wait seconds for admission (check.sh: AIR2LEAN_LOCK_WAIT), as the
+    pipeline's did; None keeps the caller's AIR2LEAN_LOCK_WAIT."""
     toolchain = lean_toolchain()
+    env = None if lock_wait is None else os.environ | {'AIR2LEAN_LOCK_WAIT': str(lock_wait)}
     done = subprocess.run(['bash', str(ROOT / 'tests/roadmap/proof-receipts/check.sh'), str(attempt),
-                           str(toolchain), fx['label'], fx['proof_module']])
+                           str(toolchain), fx['label'], fx['proof_module']], env=env)
     am.demand(done.returncode == 0, 'fresh proof receipt failed')
     am.receipt.verify(attempt)
     return am.audit_theorems(ROOT, {'proofs': [fx['proofs']]}, attempt / 'audit.json')
@@ -281,7 +284,7 @@ def regenerate(fx, a):
             same('AIR ' + path.name, air / path.name, path)
     same('Gen.lean', work / 'Gen.lean', ROOT / fx['gen'])
     # 2/4 guarded proof receipt over the tracked tree.
-    fresh_audit = fresh_receipt(fx, attempt)
+    fresh_audit = fresh_receipt(fx, attempt, a.lock_wait)
     # --refresh (a new fixture, or an intentional proof change): the fresh manifest is only
     # self-checked, and `install` + `record` replace the committed manifest and pins.
     committed = None if a.refresh else json.loads((fx['path'] / 'manifest.json').read_text())
