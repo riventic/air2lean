@@ -41,6 +41,41 @@ Outside the certificate fragment:
 * `vectors.vShift`: a parameter that is not an integer, bool, plain pointer or slice
 * `vectors.vToFloat`: a parameter that is not an integer, bool, plain pointer or slice
 * `vectors.xorLanes`: a parameter that is not an integer, bool, plain pointer or slice
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `vectors.addTo` trusted-Canon: renumber
+* `vectors.andLanes` trusted-Canon: renumber
+* `vectors.checkedAdd` trusted-Canon: renumber
+* `vectors.fDot` trusted-Canon: renumber
+* `vectors.fMax` trusted-Canon: renumber
+* `vectors.fMin` trusted-Canon: renumber
+* `vectors.interleave` trusted-Canon: renumber
+* `vectors.maxLane` trusted-Canon: renumber
+* `vectors.minLane` trusted-Canon: renumber
+* `vectors.orLanes` trusted-Canon: renumber
+* `vectors.pick` trusted-Canon: renumber
+* `vectors.reverse` trusted-Canon: renumber
+* `vectors.sMod` trusted-Canon: renumber
+* `vectors.sRem` trusted-Canon: renumber
+* `vectors.satAdd` trusted-Canon: renumber
+* `vectors.splatAdd` trusted-Canon: renumber
+* `vectors.twiceInMem` trusted-Canon: renumber
+* `vectors.uDotWrap` trusted-Canon: renumber
+* `vectors.uMinLane` trusted-Canon: renumber
+* `vectors.vAbs` trusted-Canon: renumber
+* `vectors.vBits` trusted-Canon: renumber
+* `vectors.vDiv` trusted-Canon: renumber
+* `vectors.vLess` trusted-Canon: renumber
+* `vectors.vMinMax` trusted-Canon: renumber
+* `vectors.vMod` trusted-Canon: renumber
+* `vectors.vNarrow` trusted-Canon: renumber
+* `vectors.vNeg` trusted-Canon: renumber
+* `vectors.vOverflow` trusted-Canon: forwardReadOnlyCopies, renumber
+* `vectors.vShift` trusted-Canon: renumber
+* `vectors.vToFloat` trusted-Canon: renumber
+* `vectors.xorLanes` trusted-Canon: renumber
 -/
 
 def source_0 : _root_.Air2Lean.Func :=
