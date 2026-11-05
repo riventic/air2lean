@@ -925,7 +925,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   have hkE : Lo.WE.key m' = Lo.WE.key m := hs.key hu.we
   have hkV : Lo.WV.key m' = Lo.WV.key m := hs.key hu.wv
   have hkL : (L Lo).key m' = (L Lo).key m :=
-    hu.blk.key_of_addrs hs.addrs
+    let ⟨_, hb₀, _⟩ := hu.blk; (L Lo).key_of_addrs hs.addrs hb₀
   have hwd := fun W' (hW' : Three Lo W') (h : W'.Ok m) =>
     hs.word h (three_word hW3 hW') (three_word (W := Lo.WE) (.inr (.inl rfl)) hW')
   have hok3 := fun W' (hW' : Three Lo W') (h : W'.Ok m) => (hwd W' hW' h).1
@@ -1285,7 +1285,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   have hkV : Lo.WV.key m' = Lo.WV.key m := hs.key
   have hkE : Lo.WE.key m' = Lo.WE.key m := hu.we.key_of_addrs hs.addrs
   have hkL : (L Lo).key m' = (L Lo).key m :=
-    hu.blk.key_of_addrs hs.addrs
+    let ⟨_, hb₀, _⟩ := hu.blk; (L Lo).key_of_addrs hs.addrs hb₀
   have hwd := fun W' (hW' : Three Lo W') (h : W'.Ok m) =>
     hs.word h (three_word (W := Lo.WV) (.inr (.inr rfl)) hW')
   have hok3 := fun W' (hW' : Three Lo W') (h : W'.Ok m) => (hwd W' hW' h).1
