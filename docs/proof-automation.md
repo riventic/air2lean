@@ -919,7 +919,7 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
   citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
-  (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
+  (the partial ones). The legacy `TotalTriple` layer is deleted (L13).
 * Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are native
   like the partial-mapping steps: they are the block steps `Holds.push` and `Holds.free`.
 * Time: the `fsym` proofs are slower than the handwritten ones; the largest cost is `omega`
