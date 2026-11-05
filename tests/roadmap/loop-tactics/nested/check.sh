@@ -34,7 +34,7 @@ export LEAN_PATH="$work/olean:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN
 lake env lean -R "$dir" -o "$work/olean/Nested/Gen.olean" "$dir/Nested/Gen.lean"
 # The generated invariants, reproduced byte for byte from the committed translation (the
 # fixture's target of scripts/invgen.py, run on the Gen.olean just built).
-lake exe air2lean-invgen Nested.Gen Nested -o "$work/Inv.lean"
+lake exe air2lean-invgen Nested.Gen Nested --source "$dir/Nested/Gen.lean" -o "$work/Inv.lean"
 cmp "$work/Inv.lean" "$dir/Nested/Inv.lean"
 lake env lean -R "$dir" -o "$work/olean/Nested/Inv.olean" "$dir/Nested/Inv.lean"
 lake env lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"

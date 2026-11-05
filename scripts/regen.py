@@ -147,7 +147,8 @@ def step_gen(check):
 
 
 def step_invgen(check):
-    """Generated loop invariants (`Inv.lean`) from the translated modules `gen` wrote."""
+    """Generated loop invariants (`Inv.lean`) from the translated modules `gen` wrote: always a
+    generator run, which also sees what the records do not hash (docs/invariant-synthesis.md)."""
     guarded('invgen', [PY, '-B', 'scripts/invgen.py', 'check' if check else 'write'], env=lake_env(),
             timeout=3600)
 
