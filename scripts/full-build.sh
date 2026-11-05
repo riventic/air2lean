@@ -100,15 +100,16 @@ if [ "$AIR2LEAN_FULL_BUILD_INNER" = elastic ]; then
   mkdir -p "$AIR2LEAN_LEAN_REPORTS"
 fi
 
-# guarded NAME DIR GUARD-OPTION... -- CMD...: CMD in DIR under an inheriting build-guard, through
-# the shared Lake cache. Its timeout is the build's: its Lean processes may wait for admission.
+# guarded NAME DIR [GUARD-OPTION...] -- CMD...: CMD in DIR under an inheriting build-guard of
+# $rss (later options win), through the shared Lake cache. Its timeout is the build's: its Lean
+# processes may wait for admission.
 guarded() {
   local name=$1 dir=$2 start=$SECONDS options=()
   shift 2
   while [ "$1" != -- ]; do options+=("$1"); shift; done
   shift
   if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$dir" \
-      --lean-threads "$threads" --jobs "${jobs:-1}" "${options[@]}" \
+      --lean-threads "$threads" --jobs "${jobs:-1}" --rss-mib "$rss" ${options[@]+"${options[@]}"} \
       --report "$logs/$name.json" --log "$logs/$name.log" --timeout 28800 \
       --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- "$@"; then
     echo "full-build: $name failed (log: $logs/$name.log)" >&2
@@ -131,19 +132,19 @@ python3 -B scripts/lean-deps.py --prune-orphans
 root=()
 # The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
-guarded root "$PWD" --rss-mib "$rss" ${lean[@]+"${lean[@]}"} -- lake build "${root[@]}"
-guarded diff "$PWD/tests/diff" --rss-mib "$rss" ${lean[@]+"${lean[@]}"} -- lake build Outcome ScheduleSearch Concurrent
+guarded root "$PWD" ${lean[@]+"${lean[@]}"} -- lake build "${root[@]}"
+guarded diff "$PWD/tests/diff" ${lean[@]+"${lean[@]}"} -- lake build Outcome ScheduleSearch Concurrent
 # Lean files that only a `lake env lean` elaborates (strength logs, fixtures, tutorials): the
 # libraries' modules cannot import them. Up to $threads at once; in an elastic build each `lean`
 # is its own sub-admission (the guard's --rss-mib holds only the `lake env` processes). Results
 # are remembered per input (lean-deps.py), so an unchanged file costs nothing.
-jobs=$threads guarded files "$PWD" --rss-mib "$rss" ${lean[@]+"${lean[@]}"} -- \
+jobs=$threads guarded files "$PWD" ${lean[@]+"${lean[@]}"} -- \
   python3 -B scripts/lean-deps.py --elaborate --mem-mib 256
 # Retain per-case native binding evidence and the one generic kernel audit beside the logs.
 canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
 # Its per-case bindings run on AIR2LEAN_JOBS threads (scripts/canon_certification.py), light on
 # memory (about 2 GB): within the build's base, and its kernel audit sees the toolchain's sysroot.
-jobs=2 guarded canon "$PWD" --rss-mib "$rss" --lean-threads 1 -- \
+jobs=2 guarded canon "$PWD" --lean-threads 1 -- \
   python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh). It builds the
 # proof-fixture package (tests/roadmap/lakefile.toml), every library, first, once: the checks run

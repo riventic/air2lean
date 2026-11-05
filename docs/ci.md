@@ -797,8 +797,8 @@ each Lean process holds its module's measured need while it runs,
 A third phase elaborates the **standalone Lean files** (`scripts/lean-deps.py --elaborate`): every
 tracked `.lean` file outside the libraries' directories that imports only Lean and modules of this
 package (the strength logs, the proof-client fixtures, the tutorials; `lean-deps.py --files` lists
-them), with `lake env lean`, each its own sub-admission inside the same guard. The libraries cannot import
-such files, so before this phase a break in one (a renamed module, #342 and the strength logs)
+them), with `lake env "$LEAN"`, each its own sub-admission inside the same guard. The libraries
+cannot import such files, so before this phase a break in one (a renamed module, #342 and the strength logs)
 was found only by the `check.sh` that happened to run it. The set is derived, not listed: a new
 file is covered by being committed. Two rules besides "it checks": an import of a package module
 that has no file fails for every Lean file, standalone or not; and the files under `reject` in

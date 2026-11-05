@@ -623,11 +623,8 @@ def elastic_plan(base_mib, lock=None, budget_mib=None):
     leaves PROCESS_MIB of the budget beside it; on a budget too small for that, plain at
     min(PROCESS_MIB, budget): one admission, as before elastic workloads."""
     lock = (lock or default_lock()).expanduser().resolve()
-    try:
-        grant = json.loads(os.environ.get(INHERIT) or "null")
-    except ValueError:
-        grant = None
-    if isinstance(grant, dict) and grant.get("lock") == str(lock) \
+    grant = read_grant()
+    if grant is not None and grant.get("lock") == str(lock) \
             and isinstance(grant.get("rss_mib"), (int, float)) and not isinstance(grant["rss_mib"], bool) \
             and grant["rss_mib"] > 0:
         if grant.get("elastic"):
@@ -653,10 +650,16 @@ def lake_cache_env():
     path = Path(__file__).with_name("cas.py")
     if not path.is_file():
         return {}
-    spec = importlib.util.spec_from_file_location("air2lean_cas", path)
-    cas = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cas)
-    return cas.lake_env()
+    return load_sibling("cas.py").lake_env()
+
+
+def load_sibling(name):
+    """The script `name` beside this one, as a module (a hyphenated name cannot be imported)."""
+    path = Path(__file__).with_name(name)
+    spec = importlib.util.spec_from_file_location("air2lean_" + path.stem.replace("-", "_"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def workspace(cwd):
@@ -853,12 +856,12 @@ class Admission:
         self.handles = []
         # Elastic workloads: an --elastic guard's entry in `elastic/` (its base, for the bound), the
         # enclosing grant (the elastic admission of a sub-admission, the admission an inheriting
-        # guard runs in), the lifeline a sub-admission may hold and its entry in `leaves/` while it
-        # runs.
+        # guard runs in), the lifeline a sub-admission may lock (held while its priority is LEAF)
+        # and its entry in `leaves/` while it runs.
         self.elastic = self.directory / "elastic"
         self.elastic_entry = None
         self.enclosing = None
-        self.lifeline = self.lifeline_handle = None
+        self.lifeline_handle = None
         self.next_lifeline = 0.0
         self.leaves = self.directory / "leaves"
         self.leaf_entry = None
@@ -1085,9 +1088,9 @@ class Admission:
         whose parts runs always progresses (module docstring). A running part ends on its own.
         Tried at most once per ATTEMPT_EVERY: parts run for seconds, so a faster reaction buys
         nothing."""
-        if not self.a.sub_admission or self.lifeline or not self.enclosing \
+        if not self.a.sub_admission or self.priority == LEAF or not self.enclosing \
                 or time.monotonic() < self.next_lifeline:
-            return self.lifeline is not None
+            return self.priority == LEAF
         self.next_lifeline = time.monotonic() + ATTEMPT_EVERY
         workload = self.enclosing["elastic"]["id"]
         if any(entry.get("elastic") == workload for entry in held_entries(self.leaves).values()):
@@ -1097,7 +1100,6 @@ class Admission:
             self.lifeline_handle = self.open(Path("lifeline") / workload)
         if not try_flock(self.lifeline_handle, fcntl.LOCK_EX):
             return False
-        self.lifeline = self.lifeline_handle
         self.leave_queue()
         self.priority = LEAF
         self.join_queue()
@@ -1337,7 +1339,7 @@ class Admission:
                                 (self.directory / "lifeline", self.elastic_entry)):
             if name:  # an elastic guard's lifeline: its parts have ended with its workload
                 (directory / name).unlink(missing_ok=True)
-        self.leaf_entry = self.elastic_entry = self.lifeline = None
+        self.leaf_entry = self.elastic_entry = self.lifeline_handle = None
         for handle in self.handles:
             handle.close()
         self.handles = []
@@ -1368,6 +1370,16 @@ class Admission:
 INHERIT = "AIR2LEAN_GUARD_ADMISSION"
 
 
+def read_grant():
+    """The enclosing guard's admission (INHERIT) as a dict, else None (absent or malformed). Its
+    readers check the fields they rely on."""
+    try:
+        grant = json.loads(os.environ.get(INHERIT) or "null")
+    except ValueError:
+        return None
+    return grant if isinstance(grant, dict) else None
+
+
 def ancestors(pid=None):
     rows = processes()
     pid, seen = (os.getpid() if pid is None else pid), set()
@@ -1380,11 +1392,8 @@ def ancestors(pid=None):
 def inherited(lock):
     """(grant, None) when the enclosing guard's admission covers this guard, (None, reason) when
     an enclosing guard of the same lock and workspace does not, (None, None) without one."""
-    try:
-        grant = json.loads(os.environ.get(INHERIT) or "null")
-    except ValueError:
-        grant = None
-    if not isinstance(grant, dict) or grant.get("lock") != str(lock.a.lock) \
+    grant = read_grant()
+    if grant is None or grant.get("lock") != str(lock.a.lock) \
             or grant.get("workspace") != str(lock.workspace):
         return None, None
     try:
@@ -1406,11 +1415,8 @@ def inherited(lock):
 def enclosing_elastic(lock):
     """(grant, None) when a sub-admission belongs to the enclosing guard's elastic admission (the
     same lock and workspace, and the granting guard is its ancestor), else (None, why not)."""
-    try:
-        grant = json.loads(os.environ.get(INHERIT) or "null")
-    except ValueError:
-        grant = None
-    if not isinstance(grant, dict) or grant.get("lock") != str(lock.a.lock) \
+    grant = read_grant()
+    if grant is None or grant.get("lock") != str(lock.a.lock) \
             or not isinstance(grant.get("elastic"), dict) or not isinstance(grant["elastic"].get("id"), str):
         return None, "no enclosing --elastic admission of this lock"
     if grant.get("workspace") != str(lock.workspace):
@@ -1445,9 +1451,9 @@ def outside_leaves(rows, owned, roots):
     return owned - covered
 
 
-def run(a, preempted=None, stopped=None):
-    """One guarded run; `preempted`: the record of the run the backstop stopped before it;
-    `stopped`: that of a sub-admission's run stopped at its charge before it."""
+def run(a, retry_of=None):
+    """One guarded run; `retry_of`: (report key, record) of the run before it that was stopped
+    (`guarded`): `preempted_run` by the backstop, `stopped_run` at a sub-admission's charge."""
     cancelled = [None]
     def cancel(sig, _frame):
         cancelled[0] = sig
@@ -1469,10 +1475,8 @@ def run(a, preempted=None, stopped=None):
               "lock": str(a.lock), "log": str(a.log), "outcome": "setup_error", "exit_code": 70,
               "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0, "failed_samples": 0,
               "output_bytes": 0, "log_truncated": False, "drain_incomplete": False}
-    if preempted:
-        report["preempted_run"] = preempted
-    if stopped:
-        report["stopped_run"] = stopped
+    if retry_of:
+        report[retry_of[0]] = retry_of[1]
     started = time.monotonic()
     say = (lambda text: None) if a.quiet else \
         (lambda text: print("build-guard: " + text, file=sys.stderr, flush=True))
@@ -1545,7 +1549,7 @@ def run(a, preempted=None, stopped=None):
         # After a preemption or a stop at the charge the log keeps the stopped run's output (`main`).
         # Without --log (a sub-admission) its stdout is collected, its stderr inherited, and the
         # stdout passed on once it ends: a run stopped at its charge prints nothing.
-        with a.log.open("ab" if preempted or stopped else "wb") if a.log else tempfile.TemporaryFile() as output:
+        with a.log.open("ab" if retry_of else "wb") if a.log else tempfile.TemporaryFile() as output:
             # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
             # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
             # A sub-admission's environment already has the Lake cache settings of its workload.
@@ -1762,19 +1766,16 @@ def lean_process(lean, args):
     AIR2LEAN_LEAN_REPORTS when set (scripts/full-build.sh: the build's logs). Outside an elastic
     admission (a sub-admission's own Lake) it is the toolchain's lean."""
     source = next((arg for arg in args if arg.endswith(".lean")), None)
-    try:
-        grant = json.loads(os.environ.get(INHERIT) or "null")
-    except ValueError:
-        grant = None
-    if source is None or not isinstance(grant, dict) or not grant.get("elastic") \
+    grant = read_grant()
+    if source is None or grant is None or not grant.get("elastic") \
             or not isinstance(grant.get("workspace"), str) or not isinstance(grant.get("lock"), str):
         os.execv(lean, [lean, *args])
-    peaks = load_lean_peaks()
+    peaks = load_sibling("lean-peaks.py")
     path = Path(source).resolve()
     workspace = Path(grant["workspace"])
     module = path.relative_to(workspace).as_posix() if path.is_relative_to(workspace) else str(path)
     sha = digest(path) if path.is_file() else None
-    store = Path(grant["lock"] + ".d") / "lean-peaks.json"
+    store = peaks.store_of(Path(grant["lock"]))
     peak = peaks.known_peak_kib(store, workspace, module, sha)
     if peak is None:  # a seeding run may guess lower: a guess too low only costs a retry
         try:
@@ -1785,10 +1786,7 @@ def lean_process(lean, args):
         charge = max(SLOT_MIB, math.ceil(CHARGE_MARGIN * peak / 1024))
     reports = os.environ.get("AIR2LEAN_LEAN_REPORTS")
     report_path = Path(reports) / ("%s.%d.json" % (module.replace("/", "__"), os.getpid())) if reports else None
-    # Its wait is bounded by the enclosing workload's --timeout: the elastic bounds admit it in the end.
-    a = parse_args(["--sub-admission", "--charge-mib", str(charge), "--rss-mib", str(PROCESS_MIB),
-                    "--lock", grant["lock"], "--interval", "1", "--timeout", str(PART_TIMEOUT),
-                    "--lock-wait", str(PART_TIMEOUT),
+    a = parse_args([*part_options(charge, grant["lock"], 1),
                     *(["--report", str(report_path)] if report_path else []), "--", lean, *args])
     # Its stderr is Lean's, which Lake keeps in the module's build log and replays on every later
     # build: the guard says nothing there unless it fails the elaboration itself.
@@ -1805,12 +1803,14 @@ def lean_process(lean, args):
     return report["exit_code"]
 
 
-def load_lean_peaks():
-    path = Path(__file__).with_name("lean-peaks.py")
-    spec = importlib.util.spec_from_file_location("air2lean_lean_peaks", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def part_options(charge_mib, lock, interval):
+    """The guard options of a part of an elastic workload (a Lean process, a fixture unit): a
+    sub-admission charged charge_mib, run again at PROCESS_MIB if it outgrows that, sampled every
+    `interval` seconds. Its wait and run are bounded by PART_TIMEOUT, the enclosing workload's
+    --timeout: the elastic bounds admit it in the end."""
+    return ["--sub-admission", "--charge-mib", str(charge_mib), "--rss-mib", str(PROCESS_MIB),
+            "--lock", str(lock), "--interval", str(interval), "--timeout", str(PART_TIMEOUT),
+            "--lock-wait", str(PART_TIMEOUT)]
 
 
 def guarded(a):
@@ -1834,7 +1834,7 @@ def guarded(a):
         a.timeout = max(1.0, a.timeout - report.get("workload_seconds", 0))
         first = {key: report.get(key) for key in (
             "started_utc", "lock_wait_seconds", "workload_seconds", "peak_sampled_rss_kib", "admission")}
-        report = run(a, **{"stopped" if stopped else "preempted": first})
+        report = run(a, ("stopped_run" if stopped else "preempted_run", first))
     return report
 
 

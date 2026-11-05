@@ -310,24 +310,19 @@ def _stage(unit, scratch):
 def elastic_grant():
     """The enclosing guard's admission when it is elastic (build-guard.py --elastic: the units'
     guard, scripts/fixture-checks.sh), else None."""
-    try:
-        grant = json.loads(os.environ.get(GUARD.INHERIT) or 'null')
-    except ValueError:
-        return None
-    return grant if isinstance(grant, dict) and grant.get('elastic') and isinstance(grant.get('lock'), str) else None
+    grant = GUARD.read_grant()
+    return grant if grant and grant.get('elastic') and isinstance(grant.get('lock'), str) else None
 
 
 def admitted(command, request_mib, grant):
     """A unit's command as a sub-admission of the elastic guard: it holds its own slots, charged
     its request, while it runs, and runs again at build-guard's PROCESS_MIB if it outgrows them.
     It keeps the units' guard's jobs and Lean threads (which the sub-admission sets again), samples
-    as often as the hints were measured, and may wait as long as a Lean process of the build
-    (build-guard PART_TIMEOUT): the units wait for slots beside other workloads."""
-    return [sys.executable, '-B', str(ROOT / 'scripts/build-guard.py'), '--sub-admission',
-            '--charge-mib', str(request_mib), '--rss-mib', str(GUARD.PROCESS_MIB), '--lock', grant['lock'],
-            '--cwd', str(ROOT), '--jobs', os.environ.get('AIR2LEAN_JOBS') or '1',
-            '--lean-threads', os.environ.get('LEAN_NUM_THREADS') or '1', '--interval', '2',
-            '--timeout', str(GUARD.PART_TIMEOUT), '--lock-wait', str(GUARD.PART_TIMEOUT), '--', *command]
+    as often as the hints were measured (`write_hints`)."""
+    return [sys.executable, '-B', str(ROOT / 'scripts/build-guard.py'),
+            *GUARD.part_options(request_mib, grant['lock'], 2), '--cwd', str(ROOT),
+            '--jobs', os.environ.get('AIR2LEAN_JOBS') or '1',
+            '--lean-threads', os.environ.get('LEAN_NUM_THREADS') or '1', '--', *command]
 
 
 def lean_processes_env(grant):
