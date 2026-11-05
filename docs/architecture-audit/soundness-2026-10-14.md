@@ -409,7 +409,7 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
   other stays queued. Neither witness establishes two valid std join-handle owners or a false
   shipped client termination theorem.
 
-Every assertion here except `unaligned_wake_einval` and the key regressions observes the `CoN` call frontier and its
+Every assertion here except `unaligned_wake_einval` observes the `CoN` call frontier and its
 actual continuation before scheduler completion. Their definitions retain the original input thread records rather
 than rewriting them to force completion. The actual primitive still performs its effects,
 including `cloneExit`'s `markExited` update. Completing such a seeded run also invokes
@@ -517,8 +517,9 @@ std's join is the hand `joinC` (STD-02). The two paths share one queue: an OS-ro
 is woken by the hand `.wake`.
 
 The hand `.wait` needs a live in-bounds word (`Thread.futexWait`'s `access`), so a bad address
-is `.illegal`, which is conservative. The hand `.wake` checks nothing: no alignment, no
-`access_ok`, no key. It matches waiters by provenance pointer and wakes `min n k`. The STD-06
+is `.illegal`, which is conservative. The hand `.wake` checks no alignment and no `access_ok`:
+it resolves the private key by numeric address (`Thread.futexWakePtr`) and wakes `min n k` of
+that key's waiters. The STD-06
 `Thread.Mutex.DarwinImpl` rows model `os_unfair_lock` the same way, without the kernel. This
 conflicts with CLAUDE.md's "Never hand-write a model of a std module": `Thread.Futex`, the futex
 part of `Io.Threaded` and `os_unfair_lock` are modelled by hand in place of their translation.

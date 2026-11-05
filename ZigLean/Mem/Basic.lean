@@ -497,7 +497,7 @@ the domain and the address.
 The address is the `usize` that the kernel receives (`futexAddr` of the pointer's numeric
 address), so every key is the native key's address, also for a pointer whose numeric address
 lies outside `[0, 2 ^ 64)`. Two words of one block at offsets below `2 ^ 64` have different keys
-without any bound on the block (`Mem.keyAt_ne_same`). -/
+without any bound on the block (`Mem.wordKey_ne_off`, `Mem.keyAt_ne_off`). -/
 structure FutexKey where
   /-- A shared (not `FUTEX_PRIVATE_FLAG`) key. -/
   shared : Bool

@@ -6,11 +6,13 @@ import ZigLean.Conc.Sched
 # Audit S6: regressions of the corrected OS futex primitive
 
 Each theorem observes the actual definitions in `ZigLean/Os/Futex.lean` and
-`ZigLean/Os/Thread.lean` at a fixed state, as the corrected model must behave natively. The
-first observes `Sched.runTrace`; the second observes the actual call's `CoN` frontier and its
-continuation, before the scheduler's separate child-handle completion check. They are not
-client proofs, native executions, valid std join ownership claims or whole-program termination
-claims. The open witnesses are in `CurrentModel.lean`.
+`ZigLean/Os/Thread.lean` at a fixed state, as the corrected model must behave natively:
+address validation (`unaligned_wake_einval` observes `Sched.runTrace`), the futex keys (a
+private wake skips a shared waiter, two pointers at one address reach the same waiters) and
+`CHILD_CLEARTID` (these observe the actual call's `CoN` frontier and its continuation, before
+the scheduler's separate child-handle completion check). They are not client proofs, native
+executions, valid std join ownership claims or whole-program termination claims. They replace
+the current-model witnesses of the open finding (`CurrentModel.lean`, deleted with the fix).
 
 Linux v6.16, commit 038d61fd642278bab63ee8ef722c50d10ab01e8f, supplies the comparison:
 `kernel/futex/core.c` (`get_futex_key`) and `kernel/fork.c:1418–1428` (`mm_release`).
