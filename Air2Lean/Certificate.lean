@@ -1489,9 +1489,9 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
   if out.isEmpty then lines := lines.push "(none)"
   lines := lines ++ #["", "The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate",
     "is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):", ""]
+  let firedOf : Std.HashMap String (Array String) := .ofList canonFired.toList
   for f in funcs do
-    let some (_, fired) := canonFired.find? (·.1 == f.name)
-      | throw s!"no Canon trace for {f.name}"
+    let some fired := firedOf[f.name]? | throw s!"no Canon trace for {f.name}"
     lines := lines.push s!"* `{f.name}` trusted-Canon: {if fired.isEmpty then "none" else ", ".intercalate fired.toList}"
   lines := lines ++ #["-/", ""]
   if frag.isEmpty then

@@ -914,30 +914,33 @@ structure CanonTrace extends RenumberTrace where
   by their function names, in pipeline order. -/
   fired : Array String
 
-/-- The rewrites (module doc), retaining the actual snapshots of the final debug step and the
-rewrites that fired. A rewrite is compared as a whole `RawFunc`, so any change it makes counts. -/
-def canonicalizeTraced (f : RawFunc) : Except String CanonTrace := do
-  let pass (name : String) (g : RawFunc → Except String RawFunc) (s : RawFunc × Array String) :
+/-- The rewrites between `versionTags` and `renumber` (module doc), in pipeline order, with the
+names `CanonTrace.fired` reports. -/
+def midRewrites : Array (String × (RawFunc → Except String RawFunc)) := #[
+  ("argRanks", argRanks), ("errTraces", errTraces),
+  ("dropDeadAllocPlaceholders", pure ∘ dropDeadAllocPlaceholders),
+  ("dropDeadRuntimeLanePtrs", pure ∘ dropDeadRuntimeLanePtrs),
+  ("forwardReadOnlyCopies", pure ∘ forwardReadOnlyCopies), ("itemReads", pure ∘ itemReads),
+  ("dropTrueChecks", pure ∘ dropTrueChecks), ("sinkPastChecks", pure ∘ sinkPastChecks)]
+
+/-- The rewrites (module doc), retaining the actual snapshots of the final debug step and, with
+`track`, the rewrites that fired. A rewrite is compared as a whole `RawFunc`, so any change it
+makes counts; without `track` (the ordinary path) nothing is compared and `fired` is empty. -/
+def canonicalizeTraced (f : RawFunc) (track := true) : Except String CanonTrace := do
+  let step (s : RawFunc × Array String) (r : String × (RawFunc → Except String RawFunc)) :
       Except String (RawFunc × Array String) := do
-    let f ← g s.1
-    pure (f, if f == s.1 then s.2 else s.2.push name)
-  let s ← pass "versionTags" versionTags (f, #[])
+    let g ← r.2 s.1
+    pure (g, if track && g != s.1 then s.2.push r.1 else s.2)
+  let s ← step (f, #[]) ("versionTags", versionTags)
   validateRefs s.1
-  let s ← pass "argRanks" argRanks s
-  let s ← pass "errTraces" errTraces s
-  let s ← pass "dropDeadAllocPlaceholders" (pure ∘ dropDeadAllocPlaceholders) s
-  let s ← pass "dropDeadRuntimeLanePtrs" (pure ∘ dropDeadRuntimeLanePtrs) s
-  let s ← pass "forwardReadOnlyCopies" (pure ∘ forwardReadOnlyCopies) s
-  let s ← pass "itemReads" (pure ∘ itemReads) s
-  let s ← pass "dropTrueChecks" (pure ∘ dropTrueChecks) s
-  let (f, fired) ← pass "sinkPastChecks" (pure ∘ sinkPastChecks) s
+  let (f, fired) ← midRewrites.foldlM step s
   validateRefs f
   let trace := renumberTraced f
   pure { toRenumberTrace := trace,
-         fired := if trace.afterDebug == f then fired else fired.push "renumber" }
+         fired := if track && trace.afterDebug != f then fired.push "renumber" else fired }
 
 /-- The ordinary and certificate paths share the complete canonicalization pipeline. -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do
-  return (← canonicalizeTraced f).afterDebug
+  return (← canonicalizeTraced f (track := false)).afterDebug
 
 end Air2Lean.Raw

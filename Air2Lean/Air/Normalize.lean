@@ -566,9 +566,9 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
 def normalize (raw : Raw.RawFunc) : Except String Func := do
   normalizeCanonical (← Raw.canonicalize raw)
 
-/-- `normalize`, with the Canon rewrites that fired (`Raw.CanonTrace.fired`). -/
-def normalizeTraced (raw : Raw.RawFunc) : Except String (Func × Array String) := do
-  let trace ← Raw.canonicalizeTraced raw
+/-- `normalize`, with the Canon rewrites that fired when `track` (`Raw.CanonTrace.fired`). -/
+def normalizeTraced (raw : Raw.RawFunc) (track := true) : Except String (Func × Array String) := do
+  let trace ← Raw.canonicalizeTraced raw track
   return (← normalizeCanonical trace.afterDebug, trace.fired)
 
 /-- Actual normalized inputs and outputs of canonicalization's final debug-definition

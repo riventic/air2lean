@@ -9,7 +9,8 @@ TRU-02. A successful native comparison is not a kernel proof of Raw or normaliza
 namespace Air2Lean.CanonCertificate
 
 -- Derive a complete structural comparison, including every operation and Func field.
--- These instances are local implementation details, not imported typeclass defaults.
+-- These instances are local implementation details, not imported typeclass defaults
+-- (`Global`'s derived `BEq` is the default one, from `Air/Op.lean`).
 deriving instance BEq for Op, SwitchCase, Inst, Func
 attribute [-instance] instBEqOp instBEqSwitchCase instBEqInst instBEqFunc
 attribute [local instance] instBEqOp instBEqSwitchCase instBEqInst instBEqFunc

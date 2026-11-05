@@ -447,7 +447,7 @@ private def run (args : List String) : IO UInt32 := do
                 let after ← withErrorTable after errorTable
                 pure (after, some (offset, before, after), #[])
               else
-                let (f, fired) ← normalizeTraced raw
+                let (f, fired) ← normalizeTraced raw (track := a.airCertificate.isSome)
                 pure (← withErrorTable f errorTable, none, fired)
               : Except String (Func × Option (Nat × Func × Func) × Array String))
             times := { times with normalize := times.normalize + normalizeNs }

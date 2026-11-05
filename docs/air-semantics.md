@@ -299,7 +299,9 @@ it, as a line ``* `<fn>` trusted-Canon: <passes>`` (or `none`), in pipeline orde
 compares each rewrite's whole `RawFunc` output with its input, so any change counts, and
 `renumber` is listed whenever it moves an ID. Until the rewrites above are proved, these are the
 Canon rewrites a certified function trusts; a function the translator gives no trace fails the
-certificate closed.
+certificate closed. The line covers `Canon.lean` only: the cross-file renaming of anonymous
+declarations (`Anon.lean`, on the JSON text before parsing) and the error-table merge stay in the
+trusted base for every function ([§Trusted base](#trusted-base-of-a-certificate)).
 
 #### Live-ID and memory boundaries
 
@@ -495,8 +497,9 @@ instruction. Each theorem unfolds only its own function.
 
 ### Trusted base of a certificate
 
-* the exporter and the compiler (V03); JSON parsing, `Canon.lean` (the rewrites on the
-  function's `trusted-Canon` line) and `Normalize.lean`;
+* the exporter and the compiler (V03); the renaming of anonymous declarations (`Anon.lean`),
+  JSON parsing, `Canon.lean` (the rewrites on the function's `trusted-Canon` line) and
+  `Normalize.lean` (with the error-table merge);
 * `printFunc`, checked by the round trip (it prints every field, so equal prints are equal
   values);
 * `Sem` itself and ZigLean's primitives and memory model, shared with the generated code
