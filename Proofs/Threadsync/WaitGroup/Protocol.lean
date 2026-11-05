@@ -139,6 +139,11 @@ abbrev L : FLock Gh := FLock.prod 0 16 R mutexC (by decide)
 def WG : Word 64 8 := { b := 0, o := 0 }
 def EV : Word 32 4 := { b := 0, o := 8 }
 
+/-- The event's word and the mutex's word have different futex keys (one block, offsets 8 and
+16, `Mem.wordKey_ne_off`). -/
+theorem evKey_ne (m : Mem) : EV.key m ≠ L.key m :=
+  Mem.wordKey_ne_off (o := 8) (o' := 16) (by decide) (by decide) (by decide) false false
+
 /-- The event: its place is `X.e`; `main` waits once its `add(1)` read a pending task (`wk`), the
 task that read 3 sets. -/
 def E : FEvent Gh where
@@ -274,7 +279,7 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
     (∀ j < (EV.hist m).size, IsSetW m j → VClock.le (EV.hist m)[j]!.clock (m.clocks[0]!) = true) ∧
     ∀ u, (G u).2.sx = true → (G u).2.e.Setting ∨ (G u).2.ph = .fin
   /-- A thread waits only at the mutex or the event. -/
-  q : ∀ w ∈ m.waiters, w.2 = L.ptr ∨ w.2 = EV.ptr
+  q : ∀ w ∈ m.waiters, w.2 = L.key m ∨ w.2 = EV.key m
 
 /-- The protocol, in strict mode. -/
 def proto : Proto Tgt Gh where
@@ -383,7 +388,7 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
   ⟨hu.shape, hu.rest, hu.blk, wordOk _ hu.wg, wordOk _ hu.ev,
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _)
-      (Nat.le_refl _) id id hu.einv.fresh,
+      (Nat.le_refl _) id id hu.einv.fresh rfl rfl,
     hu.gv, hu.gw, hu.sto, hu.last3, hu.isw, hu.one, hu.sfin, hu.lg, hu.out3, hu.wa0, hu.wk0, hu.sx1, hu.attr,
     hu.done, hu.q⟩
 
@@ -453,7 +458,7 @@ theorem U.congrX {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U G 
     (hnew : ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true →
       (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
       (∃ u, u < 3 ∧ (G u).2.ph.fd = false ∧ VClock.le e.clock (m'.clocks[u]!) = true))
-    (q : ∀ w ∈ m'.waiters, w.2 = L.ptr ∨ w.2 = EV.ptr) : U G' rX' m' := by
+    (q : ∀ w ∈ m'.waiters, w.2 = L.key m' ∨ w.2 = EV.key m') : U G' rX' m' := by
   have hY : (fun u => (G' u).2) = fun u => (G u).2 := funext hX
   refine ⟨?_, rest, blk, wg.anti fun u h => (WLive_snd (hX u)).mp h,
     ev.anti fun u h => (ELive_snd (hX u)).mp h, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
@@ -527,7 +532,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   obtain ⟨ht3, htf⟩ := live3 hu hng
   refine hu.congrX hX hhG hhE hs.clocks hs.threads
     (hu.rest.congr fun l hl => hs.heap (box_notL hl)) (hu.blk.lstep hs) hwG hwE
-    (hu.einv.lstep hu.ev apE hok.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
+    (hu.einv.lstep hu.ev apE (evKey_ne m) hok.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
       (fun _ _ _ => Iff.rfl) hs)
     (fun u hfd => ?_) (fun u h3 => ?_) (fun e he _ _ => ?_) (fun w hw => ?_)
   · by_cases e : u = t
@@ -537,7 +542,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   · rcases hs.fpt e he with h' | ⟨-, hle⟩
     · exact .inl ⟨e, h', .refl e⟩
     · exact .inr ⟨t, ht3, htf, hle⟩
-  · by_cases hl : w.2 = L.ptr
+  · rw [hs.key, hu.ev.key_of_addrs hs.addrs]
+    by_cases hl : w.2 = L.key m
     · exact .inl hl
     · exact hu.q w ((hs.waiters_mem w hl).mp hw)
 
@@ -559,13 +565,16 @@ theorem U_own {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
   obtain ⟨ht3, htf⟩ := live3 hu hng
+  have hkE : EV.key m' = EV.key m := hu.ev.key_of_addrs hs.addrs
+  obtain ⟨blk₀, hb₀, -⟩ := hu.blk
+  have hkL : L.key m' = L.key m := L.key_of_addrs hs.addrs hb₀
   refine hu.congrX hX' hhG hhE hs.clock hs.threads hrest hbk hwG hwE
     (hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
       (by rw [upd_self]; exact hph) hhE hs.waiters hs.clock (Nat.le_of_eq (by rw [hs.threads]))
       (fun h => by rw [upd_self]; show g.2.wk = true; rw [hX]; exact h)
-      (fun h => by rw [upd_self]; show g.2.sx = true ∧ g.2.ph = .st; rw [hX]; exact h) hfr)
+      (fun h => by rw [upd_self]; show g.2.sx = true ∧ g.2.ph = .st; rw [hX]; exact h) hfr hkE hkL)
     (fun u hfd => by rw [hP']; exact hu.lg u hfd) (fun u h3 => by rw [hP']; exact hu.out3 u h3)
-    (fun e he _ _ => ?_) (fun w hw => by rw [hs.waiters] at hw; exact hu.q w hw)
+    (fun e he _ _ => ?_) (fun w hw => by rw [hs.waiters] at hw; rw [hkL, hkE]; exact hu.q w hw)
   rcases hs.fp e he with h' | ⟨-, -⟩
   · exact .inl h'
   rcases hs.fpc e he with h' | hle
@@ -871,6 +880,9 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · exact .inr (by rw [(hph u).1]; exact hS)
   · -- q
     intro w hw
+    have hkE : EV.key m' = EV.key m := hs.key
+    have hkL : L.key m' = L.key m := hs.lockKey hwL.blk
+    rw [hkE, hkL]
     rcases hs.waiters hw with h' | rfl
     · exact hu.q w h'
     · exact .inr rfl
