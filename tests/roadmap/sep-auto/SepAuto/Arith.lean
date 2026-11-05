@@ -268,13 +268,8 @@ run_meta budget_within_limit
 
 end Budget
 
-/-! ## Shared certificates (`omegaRaw`)
-
-Core `omega` builds its certificate as a tree: every step serializes its coefficient lists again,
-a constraint used twice is proved twice, and every call serializes its atoms and facts again.
-Unshared, the certificates of one walk reached 64M term nodes for 0.23M distinct ones
-(ArenaSpec's `loop66_c0`), which the elaborator held until the theorem was checked. `omegaRaw`
-hash-conses each certificate against the run's table (`RunCaches.omegaTerms`). -/
+/-! ## Shared certificates (`omegaRaw`; docs/proof-automation.md, "`omega`'s certificates are
+shared") -/
 
 section Shared
 open Lean Meta Zig.Full.Auto
@@ -322,6 +317,16 @@ def omega_proofs_shared : MetaM Unit := do
     let w ← mkFreshExprMVar (mkConst ``Nat)
     let some _ ← omegaRaw #[h1] (← le w (← add w (mkNatLit 1)))
       | throwError "omega_proofs_shared: no proof of ?w ≤ ?w + 1"
+    -- terms that differ only in a binder's name or annotation stay apart
+    let tbl ← IO.mkRef {}
+    let fs := [(`x, .default), (`y, .default), (`x, .implicit)].map fun (n, bi) =>
+      mkLambda n bi (mkConst ``Nat) (.bvar 0)
+    for e in fs do
+      unless (← internTerms tbl e).equal e do
+        throwError "omega_proofs_shared: {e} interned as a different term"
+    -- `Nat`, `#0` and the three functions
+    unless (← tbl.get).size == 5 do
+      throwError "omega_proofs_shared: binder names or annotations merged: {(← tbl.get).size}"
   finally fsymRuns.modify (·.erase id)
 
 run_meta omega_proofs_shared
