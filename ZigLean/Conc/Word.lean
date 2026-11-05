@@ -82,6 +82,14 @@ theorem BlkStep.of_eq {m m' : Mem} (h : m'.blocks = m.blocks) : W.BlkStep m m' :
   ⟨by rw [h], fun b _ => by rw [h], fun blk hb => ⟨blk, by rw [h]; exact hb, rfl, rfl, rfl, rfl,
     fun _ _ => rfl⟩⟩
 
+/-- An op at the word keeps every block's address, so every futex key (`Mem.keyAt_of_addrs`). -/
+theorem BlkStep.addrs {m m' : Mem} (h : W.BlkStep m m') : m.SameAddrs m' := fun b blk hb => by
+  by_cases e : b = W.b
+  · subst e
+    obtain ⟨blk', h1, h2, -⟩ := h.word blk hb
+    exact ⟨blk', h1, h2⟩
+  · exact ⟨blk, by rw [h.other b e]; exact hb, rfl⟩
+
 theorem BlkStep.trans {m₁ m₂ m₃ : Mem} (h₁ : W.BlkStep m₁ m₂) (h₂ : W.BlkStep m₂ m₃) :
     W.BlkStep m₁ m₃ := by
   refine ⟨h₂.size.trans h₁.size, fun b hb => (h₂.other b hb).trans (h₁.other b hb), fun blk hb => ?_⟩
@@ -193,7 +201,7 @@ theorem keep_of {m m' : Mem} (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.at
 /-- The same memory, but `current`, `seen`, `nextMsg`, the futex queue, the woken threads and
 the groups. -/
 theorem keep_same (m : Mem) (c : ThreadId) (s : Array (ThreadId × Nat × Nat)) (k : Nat)
-    (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId) (gs : Array (Ptr × ThreadId)) :
+    (ws : Array (ThreadId × FutexKey)) (wk : Array ThreadId) (gs : Array (Ptr × ThreadId)) :
     W.Keep m { m with current := c, seen := s, nextMsg := k, waiters := ws, woken := wk, groups := gs } :=
   keep_of rfl rfl rfl rfl fun _ => VClock.le_refl _
 
@@ -811,6 +819,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
     · exact .inr (by omega)
     · exact .inr (by omega)
   have hloc : ∀ i l, L.Loc m' i l ↔ L.Loc m i l := fun i l => hop.locs.same L.b L.o hne i l
+  have hkey := L.key_congr (fun x h1 h2 => hop.cells _ (hnw x h1 h2)) hi.blk
   have hWb : W.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hw.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
   -- a new access is at the word, so it touches no heap without the word's bytes
@@ -832,7 +841,8 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
     ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_,
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp fun e he =>
         (hop.fp e he).imp id fun h => plainHit_atomic h.2.2.2.1⟩, fun u => hown ▸ hi.off u,
-    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hop.waiters]; exact hi.fq,
+    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res,
+    by rw [hop.waiters]; exact Lock.Queue.of_key L hkey hi.fq,
     fun hp => ?_, fun u hu =>
       let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [hown]
@@ -879,7 +889,7 @@ theorem _root_.Zig.Conc.Lock.Inv.wordOp {γ : Type} {L : Lock γ} {G : ThreadId 
       · rcases hop.fp e he with h' | ⟨hb, -⟩
         · exact absurd h' hm
         · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hop.waiters ▸ hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (Lock.Waits.of_key L hkey (hop.waiters ▸ hp))
     exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
 /-! ## A futex wait at the word
@@ -894,14 +904,15 @@ variable {W : Word 32 4}
 /-- A futex wait at the word by the current thread `t`: a woken thread goes on; else the
 kernel's read of the word is an op `M` that keeps the word's writes and the blocks (a read),
 and the thread sleeps (it joins `waiters`) only if the word holds `e`. -/
-theorem Ok.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m)
+theorem Ok.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {sh b : Bool} (hw : W.Ok m)
     (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) :
+    (h : ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
     (m.woken.contains m.current = false ∧ ∃ M, W.Ok M ∧ W.Op t m M ∧ W.hist M = W.hist m ∧
       M.blocks = m.blocks ∧
-      ((W.Holds m e ∧ b = true ∧ m' = { M with waiters := M.waiters.push (t, W.ptr) }) ∨
+      ((W.Holds m e ∧ b = true ∧
+          m' = { M with waiters := M.waiters.push (t, m.wordKey W.b W.o sh) }) ∨
        (b = false ∧ m' = M))) := by
   rcases futexWait_eq h with hwk | ⟨hwk, bid, blk, o, v, ha, -, hv, hcase⟩
   · exact .inl hwk
@@ -911,7 +922,7 @@ theorem Ok.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw 
   obtain ⟨hok, hop, hh⟩ := hw.record (k := .atomicRead) hc ht hcs rfl
   refine .inr ⟨hwk, _, hok, hop, hh, rfl, ?_⟩
   rcases hcase with ⟨rfl, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
-  · subst hc; exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, rfl⟩
+  · subst hc; exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, by rw [Mem.wordKey_of hb₀]; rfl⟩
   · exact .inr ⟨rfl, rfl⟩
 
 /-- The word is off the lock's word, the threads' parts and the resources: a futex wait at it
@@ -1064,6 +1075,8 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
     obtain ⟨blk, hb, -⟩ := hw.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
   have hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true :=
     fun u _ => hop.clocks u
+  obtain ⟨blk₀, hb₀, -⟩ := hi.w.blk
+  have hadd : m.SameAddrs m' := hop.blocks.addrs
   -- a new access is at the word, so it does not touch the lock's word
   have hnL : ∀ e ∈ m'.footprint, e ∉ m.footprint → ¬ L.Hits e := by
     intro e he hn ⟨hb, x, h1, h2, h3, h4⟩
@@ -1077,7 +1090,8 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
   have hwi : L.WInv (L.pl G) m' := by
     refine ⟨by rw [hop.csize, hop.threads]; exact hi.w.csize, fun u hu => ?_, hblk', ?_, hi.w.one,
       ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩, fun e he hh => ?_,
-      fun i l hl => ?_, by rw [hop.waiters]; exact hi.w.fq, fun hp => ?_,
+      fun i l hl => ?_, by rw [hop.waiters]; exact hi.w.fq.of_addrs L.toLockWord hadd hb₀,
+      fun hp => ?_,
       fun u hu => let ⟨i, l, hl, hw⟩ := hi.w.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
     · rw [hop.threads, hjb]; exact hi.w.live u hu
     · obtain ⟨w, hw', hu, hz⟩ := hi.w.word; exact ⟨w, hw', (hU32 _).mpr hu, hz⟩
@@ -1100,7 +1114,8 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
     · obtain ⟨h1, h2⟩ := hi.w.rel i l ((hloc i l).mp hl)
       exact ⟨Conc.someLe_mono hop.threads hcl h1,
         fun u hu => VClock.le_trans (h2 u hu) (hop.clocks u)⟩
-    · obtain ⟨v, hv, hq, h1, h2⟩ := hi.w.wit (hop.waiters ▸ hp)
+    · obtain ⟨v, hv, hq, h1, h2⟩ :=
+        hi.w.wit (LockWord.Waits.of_addrs L.toLockWord hadd hb₀ (hop.waiters ▸ hp))
       exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   -- the rest as `cells W ⋆ (word ⋆ (rL ⋆ rY))`
