@@ -26,6 +26,7 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L12 Sync/Lock, Threadsync/Lock, Conc/Witness | open: the legacy `MutexContract`, `SemContract`, `CondContract` removed from `Proofs/Sync/Contracts`; the three files wait for their importers (Semaphore via RwLock, WaitGroup, RwLockContract) | #653 |
 | L10, L11 | open | |
 | L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
+| L15 VC layer | done: `vc_gen`, `#vc_extract(_all)`, the `vc_contract` registry, the `ResultProgram` AST and `scripts/vc-report.py` deleted; P02's VCs are `fsym`'s residual goals (`docs/vcs.md`) | #657 |
 
 Stage D-a (section 4) is done.
 
@@ -60,10 +61,12 @@ replacement named below is on main, except where the row says it is not.
   `SemContract` and `CondContract` (no users since L9 and #643); their full-state replacements
   are `MutexImpl` (`ioMutex`), `SemImpl` (`ioSem`) and `CondImpl` (`ioCond`).
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
-- `ZigLean/Witnesses/Conc` imports Conc/Word and Conc/Total. No module imports it. Stage D-d
-  deletes it as a whole. It also holds non-vacuity witnesses of surviving base lemmas (Proto,
-  TimedBody, `Word.enc_val`; premises THR-08, SEM-02 in `assurance/premises.json`); at D-d they
-  move to a base witness module.
+- `ZigLean/Witnesses/Conc` is the base concurrency witness module (L12): it imports
+  `Conc/Base/Word` instead of Conc/Word and witnesses the full-state `LockWord.States` instead of
+  the legacy `Lock.States`, so it reaches no module of the legacy layer (`LEGACY_MODULES`). It
+  stays: its non-vacuity witnesses of the base lemmas (Proto, Total, TimedBody, `Word.enc_val`)
+  keep their premise citations (THR-08, SEM-02 in `assurance/premises.json`). Its `Total`
+  witnesses go with Conc/Total at D-d.
 - **Conc/Word split (L8j).** Full/Word used to import Conc/Word, so every full-state concurrency
   module transitively imported Conc/LockRules → Conc/Lock → Csl → Own → Sep/Block → Sep/Triple.
   The split resolves this:
@@ -318,7 +321,7 @@ the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, 
 | ZigLean/Sep/Witness.lean (74) | `Admit`/`Live` witnesses for `Triple` | Total | S | library (delete) |
 | ZigLean/Conc/Witness.lean (72) | `TLive` for TTriple | Conc.Own, Sep.Witness | S | library (delete; FTTAdmit/FTTLive exist in Full/Witness) |
 | ZigLean/Witnesses/Sep.lean (229) | witnesses for Lists/Sep and Cost theorems | Sep, Witness, Cost | S | tool (delete) |
-| ZigLean/Witnesses/Conc.lean (151) | witnesses for TTriple theorems | Conc.Witness | S | tool (delete) |
+| ZigLean/Witnesses/Conc.lean (151) | witnesses for TTriple theorems | Conc.Witness | S | tool (delete; since L12 it stays as the legacy-free base witness module, see "Hidden users") |
 | tests/roadmap/claims/Fixture.lean (271) | claim-strength classifier fixtures over `Triple`, `TotalTripleWithin`, `EventuallyReturns`, `TTriple`, `Wrapped` | Witness, Bounded, Own | M | test |
 | tools/Assurance.lean (342) | imports every claim head so a module cannot shadow it | Triple, Total, Bounded, Own | M | tool |
 End state for Fixture and Assurance (long-term, no loss of the anti-spoofing property): `claim-heads.json` keeps the legacy head names as
@@ -483,7 +486,7 @@ so guaranteed-return still needs `FTotalTriple` or `FTTotalTriple`.
 Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
 Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec), Automation, Step; `sep_*`, `sep_from`, `tame_prim`, `sep_frame/normalize` tactic entries go.
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
-Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Word,WeakWord,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc
+Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Word,WeakWord,Unroll,Total,Spec/*,TimedBudget} (not Witnesses/Conc: it stays, see "Hidden users")
 (its witnesses of base lemmas move to a base witness module; Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
 Stage D-e = the **final PR** (needs the strength log):
 1. Run every `tests/roadmap/strength-log/*.lean` (the legacy statements, written out) and `Full/Strength.lean`; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
