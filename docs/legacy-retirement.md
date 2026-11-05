@@ -23,7 +23,8 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11 (RwLockContract); `Witnesses/Sep` deleted (L8) | #340, #435 |
 | L8 tick-cost model | done: emitted step ticks, `Full/Cost`, Lists/Bounded restated, Lists/Cost, Sep/{Cost,Bounded,Alloc}, `ZigLean/Sep.lean`, Witnesses/Sep deleted | #568, #580, #562 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
-| L10, L11, L12 | open | |
+| L12 Sync/Lock, Threadsync/Lock, Conc/Witness | open: the legacy `MutexContract`, `SemContract`, `CondContract` removed from `Proofs/Sync/Contracts`; the three files wait for their importers (Semaphore via RwLock, WaitGroup, RwLockContract) | #653 |
+| L10, L11 | open | |
 | L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
 
 Stage D-a (section 4) is done.
@@ -38,9 +39,9 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/RwLockSnapshotPair | names `TTriple` | `TTriple.{alloc,storeAt,load}` under `WP.liftM_owned`; RwLock's protocol (`RwContract`) | `FOwned` + fsym WP mode; an `RwLockImpl` contract (none on main) | RwLock |
 | Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's protocol and `E.Spec` (`acquire_shared`, `read_with_facts`) | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
 | Proofs/Sync/RwLock | names `TTriple` | legacy `Lock`/`Proto` protocol, Conc/Word `Word.Op`/`Keep`, WeakWord, `TTriple.load/store`, local `Sem.Spec` (the semaphore as an abstract part `E`) | `FLock`/`MutexImpl` for its inner `Io.Mutex`; **`SemImpl` (#575, open)** for its semaphore; `RwLockImpl` (none) | #575 SemImpl |
-| Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl` | L10i (#575) |
+| Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl`: `Proofs/Sync/IoSemaphore.ioSem` | its importer RwLock (`Sync.Sem.{wait,post}_spec`, `spec₀`); `Contracts.semaphore` removed, L12 |
 | Proofs/Threadsync/WaitGroup | names `TTriple` | Threadsync/Lock, Conc/Word, legacy `Lock`/`Proto` | `EventImpl` (Full/Event) + `MutexImpl` (Threadsync/ThreadMutex) | L10i; #572 blocker 1 (plain 24-byte read over the mutex word vs `FLock` `LiveLe`), #579 |
-| Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
+| Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumer Semaphore, which waits for RwLock (`Contracts.mutex` removed, L12) |
 | Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | WaitGroup |
 | ZigLean/Conc/Witness | imports Conc/Own | `TLive` | `CLive` (Full/Witness) | RwLockContract |
 | ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord (no longer Witnesses/Conc, L12) |
@@ -54,11 +55,10 @@ replacement named below is on main, except where the row says it is not.
 **Hidden users** (not in `legacy_users`, because the scanner matches only direct imports of
 `LEGACY_MODULES` and the legacy names):
 
-- `Proofs/Sync/Contracts`. It imports RwLockContract. `MutexContract`/`mutex` use Sync/Lock's
-  `MutexOps.lock_specOn`; `RwContract`/`rwLock` use RwLock. `SemContract` has no user since
-  Mailbox's migration (#643).
-  `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
-  full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
+- `Proofs/Sync/Contracts`. It imports RwLock and keeps only `RwContract`/`rwLock`
+  (RwLock's specs), which has no user outside the file. L12 removed the legacy `MutexContract`,
+  `SemContract` and `CondContract` (no users since L9 and #643); their full-state replacements
+  are `MutexImpl` (`ioMutex`), `SemImpl` (`ioSem`) and `CondImpl` (`ioCond`).
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
 - `ZigLean/Witnesses/Conc` is the base concurrency witness module (L12): it imports
   `Conc/Base/Word` instead of Conc/Word and witnesses the full-state `LockWord.States` instead of
@@ -90,8 +90,8 @@ replacement named below is on main, except where the row says it is not.
 1. Semaphore: SemImpl (#575, L10i); SemCounter done (#648), Mailbox done (#643). WaitGroup: L10i, #572/#579.
 2. RwLock (needs SemImpl, plus a new `RwLockImpl` contract with `Io.RwLock` as its instance), then
    RwLockContract and RwLockSnapshotPair as clients of `RwLockImpl` (for every implementation),
-   and `Contracts.{RwContract,SemContract}`.
-3. Sync/Lock: after Semaphore and `Contracts.mutex`. Threadsync/Lock: after WaitGroup.
+   and `Contracts.RwContract`; then Semaphore (its only importer is RwLock).
+3. Sync/Lock: after Semaphore (`Contracts.mutex` is gone, L12). Threadsync/Lock: after WaitGroup.
    Conc/Witness: after RwLockContract.
 4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore, WaitGroup and
    WeakWord are gone.
