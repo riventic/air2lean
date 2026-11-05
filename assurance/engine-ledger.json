@@ -1009,10 +1009,9 @@
    "title": "Read of a read-shared io prefix in a protocol: hand copies of wp_io",
    "status": "open",
    "requester": "critic run 15 (coordinator)",
-   "progress": "PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule. LEFT: the copies in the legacy-layer files RwLock and SemCounter (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`.",
+   "progress": "PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule; SemCounter's copy is gone with its migration (PR648, `wp_readRest`). LEFT: the copy in the legacy-layer file RwLock (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`.",
    "request": "**`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).",
    "workaround_sites": [
-    "Proofs/Sync/SemCounter.lean",
     "Proofs/Sync/RwLock.lean",
     "Proofs/Threadsync/WaitGroup.lean",
     "Proofs/Sync/Semaphore.lean"
@@ -1733,6 +1732,28 @@
    "workaround_sites": ["ZigLean/Sep/Full/Auto.lean"],
    "deletion_plan": "Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.",
    "note": "Recorded with the L6 D-b PR, which lands the coordinator's decision on #604."
+  },
+  {
+   "id": "client-glue-copies",
+   "title": "Sync clients copy the memory glue of their protocol's rest (cells of the words in the rest, the block, start and fork facts)",
+   "status": "open",
+   "requester": "L10p (/review of PR648, 2026-11-05)",
+   "progress": "open",
+   "request": "Each client of the full-state sync contracts proves its own copy of the same lemma family, which differs only in the layout (the block, the words in the rest, the `io` prefix). Copies: `Proofs/SemCounter/Mem.lean` (`res_eq`, `Rest.split`/`step`/`congr`, `blk_ofG`, `blk_of`, `heap_blk`, `cell_eq`, `cells_same`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `box_notL`, `io_notL`, `BlkOk.lstep`, `Shape.congr`) and `Proofs/SemCounter/Start.lean` (`word_init`, `heap_ne_l`/`heap_ne_r`/`erase_ne_r`, `clk_fork`, `cinv_out`, `split_at`, `box_split`, `sep_box`, `upd0_1`/`upd1_0`) against `Proofs/Handoff/Protocol.lean` (same names), `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean` and `Proofs/Handoff/Ops.lean`; `blk_of` also in `Proofs/MutexCounter/Protocol.lean`. `Proofs/SemCounter/Start.lean`'s `hb_fork` and `sinv_grow` are generic over `FLock`/`FSem` (`sinv_grow` repeats `FSem.Inv.mono` with a growing thread array). A next client would copy them again.",
+   "workaround_sites": ["Proofs/SemCounter/Mem.lean", "Proofs/SemCounter/Start.lean", "Proofs/Handoff/Protocol.lean", "Proofs/Handoff/Start.lean", "Proofs/Handoff/Steps.lean", "Proofs/Handoff/Ops.lean", "Proofs/MutexCounter/Protocol.lean"],
+   "deletion_plan": "Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, replace Handoff's `le_nil` by `VClock.le_default` (as SemCounter does) and `upd0_1`/`upd1_0` by `upd_ne`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row.",
+   "note": "Not a soundness issue: every copy is kernel-checked. Recorded instead of done in PR648 because the change rewrites the merged Handoff and MutexCounter proofs."
+  },
+  {
+   "id": "fsym-split-nested-struct-subst",
+   "title": "fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local",
+   "status": "open",
+   "requester": "L10p (SemCounter over SemImpl, PR648, 2026-11-05)",
+   "progress": "open",
+   "request": "When `fsym` splits a hypothesis of a user structure into its fields and one field is again a user structure whose own split substitutes a local (an equation `x = e` with `x` a local), the next continuation fails with `unknown free variable`. Repro (on PR648 before the workaround): `structure T3 (G rX m) : Prop where um : UM G rX m; ci : C.Inv L G m` with `Zig.SemCounter.UM` (its field `rest : Rest rX m` holds `rX = rsum (cellsAt BoxW m) rIO`), as the hypothesis of a continuation of a rule built from `FLock.Fits.wp_tick_plain`, fails even with post `True`. `UM` alone, `Lg` alone, a nested structure without the `rX` equation, `Rest` as a direct field, and the plain conjunction all pass. Same class as row `fsym-unknown-fvar-mutex-loop` (a substitution inside the engine while a pending goal still mentions the local); the fix is in the structure branch of the engine's split (`ZigLean/Sep/Full/Auto.lean`).",
+   "workaround_sites": ["Proofs/SemCounter/Protocol.lean"],
+   "deletion_plan": "Transitional: once the split keeps nested structure fields with substituted locals in the current local context, make `Zig.SemCounter.U` a structure with the fields `um`, `cinv`, `sinv`, `lg` (as `Proofs/Handoff/Protocol.lean`'s `U`), delete the projection theorems `U.um`/`U.cinv`/`U.sinv`/`U.lg`, rebuild `Proofs.Sync.SemCounter`, and close this row.",
+   "note": "Not a soundness issue: the engine fails closed (the walk does not elaborate); the workaround states the same invariant as a conjunction."
   },
   {
    "id": "fsym-unknown-fvar-mutex-loop",
