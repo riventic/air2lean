@@ -1548,7 +1548,7 @@ theorem weakCasPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicP
       exact ⟨r', hh', sep_lift.mpr ⟨rfl, hq'⟩, h'⟩
 
 /-- `weakCasPtr` followed by the rest `g` of the program, in the shape of a normalized body
-(`conc_norm`: the pick bound over the op and the rest), with the frame `R`: a rule of `fsym`'s
+(`fsym_norm`: the pick bound over the op and the rest), with the frame `R`: a rule of `fsym`'s
 pick step whose premises are the triples of the two resumptions (a bind rule, walked as the
 continuation). -/
 theorem weakCasPtr_bind {α β : Type} [Enc α] [LawfulEnc α] [DecidableEq α]

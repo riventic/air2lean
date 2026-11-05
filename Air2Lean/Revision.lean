@@ -69,12 +69,13 @@ def sha256 (data : ByteArray) : String := Id.run do
       hex2 (x % 256).toNat)
 
 /-- `revision` digests `"<lean version>\n"` followed by `"<module> <sha256>\n"` for each
-module in name order. Recomputable with `hashlib` from `modules`. -/
+module in name order. Recomputable with `hashlib` from `modules`. Its records (`Lean.toJson`)
+are `{lean, modules: [[module, sha256], …], revision}`. -/
 structure Translator where
   lean : String
   modules : Array (String × String)
   revision : String
-  deriving Inhabited
+  deriving Inhabited, Lean.ToJson
 
 def Translator.of (lean : String) (sources : Array (String × ByteArray)) : Translator :=
   let modules := (sources.map fun (m, bytes) => (m, sha256 bytes)).qsort (fun a b => a.1 < b.1)
