@@ -137,7 +137,7 @@ lock's word invariant before it. A thread steps on its own part (a stack block o
 code) out of the lock's code or holding the lock. -/
 abbrev prim (L : FLock γ) : FPrim γ :=
   FPrim.ofWords L C.toFPlace .out (fun p => p.busy = false) (fun (_ : Unit) g => C.sx g)
-    (fun W => W = C.S ∨ W = C.Ep) (C.Inv L)
+    (fun W => W = C.S ∨ W = C.Ep) (fun _ _ => True) (C.Inv L)
     (fun W t g p q h m m' => CPh.Next (C.ph g) p ∧
       ((q = L.ph g ∧ h = L.held g) ∨
         ((L.ph g = .out ∨ (L.ph g = .away ∧ (C.ph g).isReg = true)) ∧
