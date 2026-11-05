@@ -445,6 +445,11 @@ theorem held_upd {P : ThreadId → LPh} {t : ThreadId} {p : LPh} {b : Bool} (h1 
   · rename_i h; subst h; rw [h1, h2]
   · rfl
 
+/-- At most one thread holds the lock (`one`): with `u` a holder, any other thread `t` is not. -/
+theorem WInv.held_false_of_ne {P : ThreadId → LPh} {m : Mem} {t u : ThreadId} (hi : L.WInv P m)
+    (hu : (P u).held = true) (h : u ≠ t) : (P t).held = false :=
+  Bool.eq_false_iff.mpr fun ht => h (hi.one u t hu ht)
+
 theorem free_upd {P : ThreadId → LPh} {t : ThreadId} {p : LPh} (h1 : (P t).held = false)
     (h2 : p.held = false) : Free (upd P t p) ↔ Free P :=
   forall_congr' fun u => by rw [held_upd h1 h2]

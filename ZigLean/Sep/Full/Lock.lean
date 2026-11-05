@@ -447,9 +447,7 @@ theorem free_iff_of {G G' : ThreadId → γ}
     (h : ∀ u, (L.ph (G' u)).held = true ↔ (L.ph (G u)).held = true) :
     L.Free G' ↔ L.Free G := by
   unfold FLock.Free LockWord.Free pl
-  exact forall_congr' fun u => by
-    have := h u
-    cases h1 : (L.ph (G' u)).held <;> cases h2 : (L.ph (G u)).held <;> simp_all
+  exact forall_congr' fun u => imp_congr_left (h u)
 
 theorem Inv.ht {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {t : ThreadId}
     (hg : L.ph (G t) ≠ .gone) : t < m.threads.size ∧ joinedB m t = false :=
@@ -759,10 +757,7 @@ theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     by_cases e : u = t
     · subst e; rw [upd_self]; exact hres (by rw [hph]; exact hu)
     · rw [upd_ne _ _ e]
-      exact hRk (by
-        cases ht : (L.ph (G t)).held
-        · rfl
-        · exact absurd (hi.w.one u t hu ht) e) _ (hi.res u hu)
+      exact hRk (hi.w.held_false_of_ne hu e) _ (hi.res u hu)
 
 /-- Take one complete resource from protocol rest into this caller's part at the same
 mutex phase. The free/held lock resource, all other callers, memory and phase map stay.
@@ -1007,11 +1002,7 @@ private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m'
     · subst hut; rw [upd_self]; exact hres (by rw [hph]; rw [hphu] at hu; exact hu)
     · rw [upd_ne _ _ hut]
       rw [hphu] at hu
-      have htn : (L.ph (G t)).held = false := by
-        cases e : (L.ph (G t)).held
-        · rfl
-        · exact absurd (hi.w.one u t hu e) hut
-      exact hRk htn _ (hi.res u hu)
+      exact hRk (hi.w.held_false_of_ne hu hut) _ (hi.res u hu)
 
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
