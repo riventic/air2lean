@@ -274,9 +274,13 @@ frame's bytes, and
 * the **record of accesses**: an old entry stays or is narrowed (`FootprintEntry.Narrows`: part
   of its bytes, an earlier clock; `Mem.forgetFrom`), a new one is the current thread's, touches
   no byte of the frame and writes no `const` global;
-* **`const` globals**: no block of `m` becomes one.
+* **`const` globals**: no block of `m` becomes one;
+* **block addresses** (`Mem.SameAddrs`): every block of `m`, also one of the frame, stays at
+  its address. A futex key or an `addrIn` read in `m` is the same in `m'`
+  (`Mem.SameAddrs.addrIn_eq`), so an invariant may name another block's key.
 
-A `StepIn` that writes no `const` global and makes none is an `FStepIn` (`FStepIn.of_stepIn`). -/
+A `StepIn` that keeps the block addresses, writes no `const` global and makes none is an
+`FStepIn` (`FStepIn.of_stepIn`). -/
 
 /-- Block `b` of `m` is a `const` global. -/
 def Mem.IsConst (m : Mem) (b : BlockId) : Prop :=
@@ -626,7 +630,10 @@ structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
   size : m'.clocks.size = m.clocks.size
   others : ∀ u, u ≠ m.current → m'.clocks[u]! = m.clocks[u]!
   mine : VClock.le (m.clocks[m.current]!) (m'.clocks[m.current]!) = true
-  blocks : m.blocks.size ≤ m'.blocks.size
+  /-- Every block stays, at its address (`Mem.SameAddrs`): a block never moves, and every new
+  address is a new block. So every futex key and `addrIn` of `m` is the same in `m'`, also for
+  blocks of the frame. -/
+  addrs : m.SameAddrs m'
   nextMsg : m.nextMsg ≤ m'.nextMsg
   atomics : ∃ σ, AMap hF m m' σ
   fp : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
@@ -639,6 +646,11 @@ structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
   const : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b
   /-- The messages stay covered, relative to any record in front (`Mem.MsgCov`). -/
   cov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov
+
+/-- No block disappears. -/
+theorem FStepIn.blocks {hF : Heap} {m m' : Mem} (hs : FStepIn hF m m') :
+    m.blocks.size ≤ m'.blocks.size :=
+  hs.addrs.size
 
 theorem FootprintEntry.Narrows.refl (e : FootprintEntry) : e.Narrows e :=
   ⟨rfl, rfl, rfl, Nat.le_refl _, Nat.le_refl _, VClock.le_refl _⟩
@@ -1009,7 +1021,7 @@ theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat)
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := Nat.le_refl _
+  addrs := .of_blocks rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := by
@@ -1049,7 +1061,7 @@ theorem FStepIn.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := Nat.le_refl _
+  addrs := .of_blocks rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨_, AMap.retire hcut⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -1066,7 +1078,7 @@ variable {m m' m'' : Mem} {hF hF' : Heap}
 
 /-- A `StepIn` that makes no `const` global, writes none and keeps the messages covered is an
 `FStepIn`. -/
-theorem FStepIn.of_stepIn (hs : StepIn hF m m')
+theorem FStepIn.of_stepIn (hs : StepIn hF m m') (ha : m.SameAddrs m')
     (hk : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b)
     (hw : ∀ e ∈ m'.footprint, e ∉ m.footprint → e.kind.isWrite = true → ¬ m'.IsConst e.block)
     (hcov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov) :
@@ -1079,7 +1091,7 @@ theorem FStepIn.of_stepIn (hs : StepIn hF m m')
   size := hs.size
   others := hs.others
   mine := hs.mine
-  blocks := hs.blocks
+  addrs := ha
   nextMsg := Nat.le_of_eq hs.nextMsg.symm
   atomics := ⟨some, AMap.of_eq hs.atomics hs.seen⟩
   fp e he := by
@@ -1101,7 +1113,7 @@ theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m where
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := Nat.le_refl _
+  addrs := .of_blocks rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.refl m hF⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -1122,7 +1134,7 @@ theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FSte
   refine ⟨h₂.current.trans h₁.current, h₂.threads.trans h₁.threads, h₂.waiters.trans h₁.waiters,
     h₂.woken.trans h₁.woken, h₂.groups.trans h₁.groups, h₂.size.trans h₁.size,
     fun u hu => (h₂.others u (h₁.current ▸ hu)).trans (h₁.others u hu), hmine,
-    Nat.le_trans h₁.blocks h₂.blocks, Nat.le_trans h₁.nextMsg h₂.nextMsg,
+    h₁.addrs.trans h₂.addrs, Nat.le_trans h₁.nextMsg h₂.nextMsg,
     ⟨_, ha.trans ha' h₁.current⟩, fun e he => ?_, fun e he => ?_,
     fun b hb hc => h₁.const b hb (h₂.const b (Nat.lt_of_lt_of_le hb h₁.blocks) hc),
     fun F h => h₂.cov F (h₁.cov F h)⟩
@@ -1208,9 +1220,11 @@ theorem ALoc.InBlock.setBlock {l : ALoc} {b : BlockId} {nb : Block} (h : l.InBlo
     exact ⟨nb, by simp [(Array.getElem?_eq_some_iff.mp h1).1], hsz rfl⟩
   · exact ⟨blk, by simp [e, h1], h2⟩
 
-/-- A change of block `b` to `nb` records no access; `nb` is a `const` global only if `b` was,
-and the locations of `b` fit in it. -/
-theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal → m.IsConst b)
+/-- A change of block `b` to `nb` records no access; `nb` is at `b`'s address, is a `const`
+global only if `b` was, and the locations of `b` fit in it. -/
+theorem FStepIn.setBlock {b : BlockId} {nb : Block}
+    (ha : ∀ blk, m.blocks[b]? = some blk → nb.addr = blk.addr)
+    (hk : nb.kind = .constGlobal → m.IsConst b)
     (hsz : ∀ l ∈ m.atomics, l.block = b → 0 < l.len → l.InBlock m → l.off + l.len ≤ nb.bytes.size) :
     FStepIn hF m { m with blocks := m.blocks.set! b nb } where
   current := rfl
@@ -1221,7 +1235,7 @@ theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := by simp
+  addrs := .of_set rfl ha
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -1241,7 +1255,8 @@ theorem FStepIn.setBlock {b : BlockId} {nb : Block} (hk : nb.kind = .constGlobal
 /-- `Mem.write` of block `b` of `m` keeps its kind. -/
 theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)
     (bs : Array Byte) : FStepIn hF m (m.write b blk o bs) :=
-  FStepIn.setBlock (fun h => ⟨blk, hb, h⟩) fun _ _ e _ ⟨blk', h1, h2⟩ => by
+  FStepIn.setBlock (fun _ h => by rw [hb] at h; cases h; rfl) (fun h => ⟨blk, hb, h⟩)
+    fun _ _ e _ ⟨blk', h1, h2⟩ => by
     rw [e, hb] at h1; cases h1
     exact Nat.le_trans h2 (writeBytes_size_ge _ _ _)
 
@@ -1261,7 +1276,7 @@ theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
     show (m.clocks.set! m.current _)[u]! = _
     rw [Conc.Proto.getElem!_set!_ite]; simp [hu]
   mine := by rw [recordAt_clock hc]; exact VClock.le_bump _ _
-  blocks := Nat.le_refl _
+  addrs := .of_blocks rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := by
@@ -1363,7 +1378,7 @@ theorem FStepIn.ofAMap {σ : Nat → Option Nat} (ha : AMap hF m m' σ) (hn : m.
   refine ⟨(congrArg Mem.current he).trans rfl, (congrArg Mem.threads he).trans rfl,
     (congrArg Mem.waiters he).trans rfl, (congrArg Mem.woken he).trans rfl,
     (congrArg Mem.groups he).trans rfl, by rw [hcl], fun u _ => by rw [hcl],
-    by rw [hcl]; exact VClock.le_refl _, by rw [hbl]; exact Nat.le_refl _, hn, ⟨σ, ha⟩,
+    by rw [hcl]; exact VClock.le_refl _, .of_blocks hbl, hn, ⟨σ, ha⟩,
     fun e he' => .inl ⟨e, hfp ▸ he', .refl e⟩, fun e he' => .inl ⟨e, hfp ▸ he', .refl e⟩,
     fun b _ hc => ?_, hcov⟩
   obtain ⟨blk, h1, h2⟩ := hc
@@ -1539,7 +1554,7 @@ theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m
   mine := by
     show VClock.le _ ((m.clocks.set! m.current _)[m.current]!) = true
     rw [Array.getElem!_set!_self _ _ _ hc]; exact VClock.le_merge_left _ _
-  blocks := Nat.le_refl _
+  addrs := .of_blocks rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -1565,7 +1580,8 @@ theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
     FStepIn hF m (insertM m li (m.atomics[li]!).msgs.size msg) := by
   rw [insertM_last hb]
   refine (FStepIn.setLoc (M := (m.atomics[li]!).msgs.push msg) (Nat.le_succ _) hnot
-    fun F h hpos x hx => ?_).trans (FStepIn.setBlock (fun h => ⟨blk, hb, h⟩) fun l _ e _ hin => ?_)
+    fun F h hpos x hx => ?_).trans (FStepIn.setBlock (fun _ h => by simp_all)
+      (fun h => ⟨blk, hb, h⟩) fun l _ e _ hin => ?_)
   · rcases Array.mem_push.mp hx with hx | rfl
     · by_cases hi : li < m.atomics.size
       · have hmem : m.atomics[li]! ∈ m.atomics := by
