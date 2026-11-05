@@ -430,27 +430,36 @@ shared wake-one correction and OSL-01 in [437/6262067015](https://github.com/riv
 the catalogue changes are separate from this runtime correction. `cloneExit` now wakes at most
 one raw waiter; the Darwin lock representation/interface is not implemented here.
 
-**Named validation scenarios still open** (coordinator review465/6267927217):
+**Named validation scenarios** (coordinator review465/6267927217). All of them are now
+resolved: exactly where the native result is known, and otherwise as a documented conservative
+refusal. The regressions are in `Regression.lean`, and the runtime controls are in
+`tests/roadmap/os-threads/Check.lean`.
 
-* Darwin WAIT with a null address currently throws `.illegal`; native ulock returns its
-  address-validation error. An unaligned WAIT must likewise expose the native validation
-  result before comparison or queue effects. Darwin WAKE with a null address currently
-  throws `.illegal`, whereas native ulock returns `-ENOENT`. These include conservative
-  model refusals, not a claim that a whole valid client finishes with a false result.
-* Process-shared and 64-bit Darwin ulock requests remain outside the process-local 32-bit
-  model and must be refused, rather than interpreted as that supported operation. Their
-  exact native validation/return cases need controls before any support is admitted.
-* Linux `access_ok` is not implemented by the alignment check: private WAKE at
-  `⟨none, 2^63⟩`, or at aligned negative offset `⟨none, -4⟩`, can return 0 with an empty
-  model queue; native address-range validation returns `-EFAULT` before a key or queue lookup.
-* A shared Linux WAKE at an aligned user-range address with no valid backing mapping
-  (for example unmapped 4096) needs shared-key lookup and `-EFAULT`. The current Ptr-only
-  empty-queue model can return 0 without that lookup; the same private unmapped-address
-  wake is not evidence that the shared lookup is valid.
+* **Darwin WAIT and WAKE address validation (fixed).** xnu-12377.121.6
+  [`sys_ulock.c:571`](https://github.com/apple-oss-distributions/xnu/blob/ac9718fb1af618d5ce8678d0dc6e8a58f252216f/bsd/kern/sys_ulock.c#L571)
+  rejects a null or unaligned WAIT with `EINVAL` before the compare. `:966` rejects a null
+  WAKE with `EINVAL`, not `-ENOENT` as first recorded; an unaligned WAKE looks up its key and
+  finds no waiter. `Darwin.ulockAddr` models these cases. The regression is
+  `ulock_null_einval`.
+* **Process-shared and 64-bit ulock (fail closed, unchanged).** These requests stay
+  `.unspecified`, outside the process-local 32-bit model.
+* **Linux `access_ok` (fixed).** An address at or above `2^63`, including an aligned
+  negative offset as a `usize`, returns `-EFAULT` before a key or queue lookup: every
+  modelled user address space ends below it. The regression is `access_ok_efault`.
+* **Linux shared key without a backing mapping (conservative refusal).** A shared key needs
+  `get_user_pages_fast`. The model knows the page only for a live writable word
+  (`Mem.wordAt`). At any other address it says `.illegal`, never a returned 0. Natively this
+  is `-EFAULT` for an unmapped page, a key for a page mapped outside the model, or an
+  inode-based key for a read-only file page. The private key needs only a user address: any
+  address below the end of a block the run placed (SEM-07) forms it. A private address above
+  every block depends on the target's address-space limit and is also refused. The
+  regression is `private_key_shared_refusal`.
 
-These are the finite residual scenarios named in the takeover, alongside the two remaining
-key witnesses above. Each correction needs its own causal witness before it is called
-fixed; recording them here neither implements them nor expands this slice.
+WAIT's word read after validation keeps its conservative refusal: a bad pointer is
+`.illegal` where native code returns `-EFAULT`. Every refusal is `.illegal` where native code
+returns an error code or forms a key, so a proof that a program never reaches it is
+stronger than the native fact. These refusals sit alongside the two remaining key witnesses
+above.
 
 **Status: open.** `check.sh S6-futex-primitive` reports `alignment and CHILD_CLEARTID fixed;
 S6 open` only after the regressions and the two remaining witnesses elaborate.

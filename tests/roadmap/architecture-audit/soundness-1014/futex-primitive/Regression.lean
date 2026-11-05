@@ -47,6 +47,38 @@ theorem unaligned_wake_einval :
       some (.ok (-22, #[], #[])) := by
   decide +kernel
 
+/-- `access_ok` (core.c:540): an address at or above `2^63`, also an aligned negative offset as a
+`usize`, is outside every modelled user address space: `-EFAULT` before a key or queue lookup,
+for private and shared WAKE and for WAIT. -/
+theorem access_ok_efault :
+    observeWake (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) base = some (.ok (-14, #[], #[])) ∧
+    observeWake (Linux.futex_3arg ⟨none, -4⟩ 0x81 1) base = some (.ok (-14, #[], #[])) ∧
+    observeWake (Linux.futex_3arg ⟨none, -4⟩ 1 1) base = some (.ok (-14, #[], #[])) ∧
+    observeWake (Linux.futex_4arg ⟨none, -4⟩ 0x80 0 none) base = some (.ok (-14, #[], #[])) :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
+
+/-- A private key needs a user address, not a live word (core.c:596–611): a private WAKE below
+the end of a placed block returns 0. A shared key needs a writable page (`get_user_pages_fast`),
+which the model knows only for a live writable word: a shared WAKE at an address without one is
+a conservative refusal (`.illegal`), never a returned 0. -/
+theorem private_key_shared_refusal :
+    observeWake (Linux.futex_3arg ⟨none, 4096⟩ 0x81 1) { blocks := #[{ block 4096 8 with
+      live := false }] } = some (.ok (0, #[], #[])) ∧
+    observeWake (Linux.futex_3arg ⟨none, 4096⟩ 1 1) { blocks := #[{ block 4096 8 with
+      live := false }] } = some (.error .illegal) :=
+  ⟨by decide +kernel, by decide +kernel⟩
+
+/-- `__ulock_wait2`/`__ulock_wake` (xnu-12377.121.6 `bsd/kern/sys_ulock.c:571`, `:966`): a null
+or unaligned WAIT and a null WAKE return `-EINVAL` before any compare or queue effect. -/
+theorem ulock_null_einval :
+    (Darwin.__ulock_wait2 0x01000001 none 0 0 0 : ConcM Nat (BitVec 32)) 0 base =
+      .leaf (some (.ok (negErrno32 Darwin.E.INVAL, base))) ∧
+    (Darwin.__ulock_wait2 0x01000001 (some (p.add 1)) 0 0 0 : ConcM Nat (BitVec 32)) 0 base =
+      .leaf (some (.ok (negErrno32 Darwin.E.INVAL, base))) ∧
+    (Darwin.__ulock_wake 0x01000001 none 0 : ConcM Nat (BitVec 32)) 0 base =
+      .leaf (some (.ok (negErrno32 Darwin.E.INVAL, base))) :=
+  ⟨rfl, rfl, rfl⟩
+
 private def twoRawWaiters : Mem := {
   base with
   blocks := #[{ block 4096 8 with
