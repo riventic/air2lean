@@ -702,9 +702,6 @@
       "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
-      "path": "Proofs/Threadsync/WaitGroup.lean"
-    },
-    {
       "path": "ZigLean/Conc/Csl.lean"
     },
     {
@@ -801,12 +798,6 @@
     },
     {
       "path": "Proofs/Threadsync/Mutex.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Threadsync/WaitGroup.lean",
       "tactic": "unroll_sched",
       "count": 1,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
