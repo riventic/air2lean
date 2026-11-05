@@ -362,9 +362,7 @@ is `fixN F k` (`F` applied `k` times to `⊥`) at `approx` and the fixpoint at `
 (`fixN_le_fix`, `monotone_fixSel`); `k` bounds the nested unfoldings of the group. A definition
 met again inside its own expansion (a recursion through a dispatch table) stays uncut there.
 
-The `completes` companions of the concurrent all-schedules theorems
-([theorem-inventory.md](theorem-inventory.md)) that keep it use one concrete schedule (the oracle that
-always picks option 0), fuel 1000, `mem0`. `tests/roadmap/proof-tools/Unroll.lean` checks a
+`tests/roadmap/proof-tools/Unroll.lean` checks a
 run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
 goal without a run, and a mutual `partial_fixpoint` group (`even_six`, rejected when cut too
 early). Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run

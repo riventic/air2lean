@@ -2360,7 +2360,7 @@ programs with loops; the loops over the 4 threads need 5 unfoldings). -/
 theorem parallelCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch bump parallelCounter parallelCounter.loop32
+  delta dispatch bump parallelCounter
   iterate 5 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
   decide +kernel
 

@@ -176,8 +176,8 @@ theorem handoff_completes :
       (@handoff ⟨Os.Env.example⟩) (mem0 σ)) = some 7 := by
   refine ⟨.fresh, ?_⟩
   delta dispatch producer handoff handoff.loop12 Thread_Mutex_lock Zig.osUnfairLockC Thread_Condition_wait
-    Thread_Condition_FutexImpl_wait Thread_Condition_FutexImpl_wait.loop29 Thread_Condition_FutexImpl_wait.loop42
-    Thread_Condition_FutexImpl_wait.loop45 Thread_Condition_FutexImpl_wait.loop107 Thread_Condition_signal
+    Thread_Condition_FutexImpl_wait Thread_Condition_FutexImpl_wait.loop29
+    Thread_Condition_FutexImpl_wait.loop107 Thread_Condition_signal
     Thread_Condition_FutexImpl_wake__anon_b3c587c57789 Thread_ResetEvent_wait Thread_ResetEvent_FutexImpl_wait
     Thread_ResetEvent_FutexImpl_waitUntilSet
   iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
