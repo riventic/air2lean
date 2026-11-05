@@ -186,10 +186,6 @@ def futexWake (p : Ptr) (n : Option Nat) (spurious : Bool := false) : ConcM Tgt 
   let c ← pick fun m => wakeCount p n m + (if spurious then 1 else 0)
   ConcM.liftMem (wakeAt c p n)
 
-/-- Wake every thread queued at `p` (the kernel's wake after `CHILD_CLEARTID`): no choice. -/
-def wakeAll (p : Ptr) : MemM Unit := do
-  wakeThreads ((← get).waitersAt p)
-
 /-! ## `struct timespec` -/
 
 /-- A `timespec` (`{ sec: isize, nsec: isize }`, 16 bytes, both targets) as the kernel reads it:
