@@ -91,7 +91,6 @@ def ctxBytes (f : Ptr) (v : BitVec 32) : Array Byte :=
 
 theorem enc_ptr (f : Ptr) : (Enc.encode f).size = 8 := LawfulEnc.size_encode f
 
-theorem enc_u32 (v : BitVec 32) : (Enc.encode v).size = 4 := LawfulEnc.size_encode v
 
 theorem ctxBytes_one (f : Ptr) :
     (writeBytes (Array.replicate 16 .undef) 0 (Enc.encode f)).size = 16 := by
@@ -99,13 +98,13 @@ theorem ctxBytes_one (f : Ptr) :
 
 @[fsym_arith] theorem ctxBytes_size (f : Ptr) (v : BitVec 32) : (ctxBytes f v).size = 16 := by
   unfold ctxBytes
-  rw [writeBytes_size _ _ _ (by rw [ctxBytes_one, enc_u32]; decide), ctxBytes_one]
+  rw [writeBytes_size _ _ _ (by rw [ctxBytes_one, LawfulEnc.size_encode_u32]; decide), ctxBytes_one]
 
 theorem ctxBytes_flag (f : Ptr) (v : BitVec 32) :
     Enc.decode ((ctxBytes f v).extract 0 8) = pure f := by
   unfold ctxBytes
   rw [show (8 : Nat) = 0 + 8 from rfl, extract_writeBytes_disjoint _ _ _ _ _
-      (by rw [ctxBytes_one, enc_u32]; decide) (by rw [ctxBytes_one]; decide) (.inr (Nat.le_refl _)),
+      (by rw [ctxBytes_one, LawfulEnc.size_encode_u32]; decide) (by rw [ctxBytes_one]; decide) (.inr (Nat.le_refl _)),
     extract_writeBytes_in _ _ _ _ _ (by simp [enc_ptr]) (Nat.le_refl _) (by simp [enc_ptr])]
   simp only [Nat.sub_zero, Nat.zero_add]
   rw [show (8 : Nat) = (Enc.encode f).size from (enc_ptr f).symm, Array.extract_size]
@@ -115,9 +114,9 @@ theorem ctxBytes_val (f : Ptr) (v : BitVec 32) :
     Enc.decode ((ctxBytes f v).extract 8 12) = pure v := by
   unfold ctxBytes
   rw [show (12 : Nat) = 8 + 4 from rfl, extract_writeBytes_in _ _ _ _ _
-    (by rw [ctxBytes_one, enc_u32]; decide) (Nat.le_refl _) (by rw [enc_u32]; exact Nat.le_refl _)]
+    (by rw [ctxBytes_one, LawfulEnc.size_encode_u32]; decide) (Nat.le_refl _) (by rw [LawfulEnc.size_encode_u32]; exact Nat.le_refl _)]
   simp only [Nat.sub_self, Nat.zero_add]
-  rw [show (4 : Nat) = (Enc.encode v).size from (enc_u32 v).symm, Array.extract_size]
+  rw [show (4 : Nat) = (Enc.encode v).size from (LawfulEnc.size_encode_u32 v).symm, Array.extract_size]
   exact LawfulEnc.decode_encode v
 
 /-- A context at `c` (block `bc`, address `A`) with the flag `f` and the value `v`. -/
@@ -395,7 +394,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto a b).init tgt g) (u : Th
     have hjall : joinedAll u m := joinedAll_of_main (spawner0 hi) hu
     show (proto a b).WP u ((fun _ => ()) <$> ConcM.liftMem (writeFlag c)) _ G _ d
     fsym [writeFlag_spec (xb := Enc.encode (0 : BitVec 32)) hcb hxb hc0 hac hx0 hax
-      (ctxBytes_size x v) (enc_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)]
+      (ctxBytes_size x v) (LawfulEnc.size_encode_u32 0) (ctxBytes_flag x v) (ctxBytes_val x v)]
     all_goals
       rename_i ret m' r' hF hrun ho' hq hcurrent hthreads hwaiters hwoken hgroups hclocks hstep
       refine ⟨.kid r' c ac x ax v true, ?_, ⟨r', c, ac, x, ax, v, rfl⟩, fun _ => ?_⟩
@@ -416,7 +415,7 @@ theorem ownOf_main (m : Mem) (g : Gh) :
 
 theorem enc_zero : writeBytes (Array.replicate 4 .undef) 0 (Enc.encode (0 : BitVec 32)) =
     Enc.encode (0 : BitVec 32) :=
-  writeBytes_all (by simp [enc_u32])
+  writeBytes_all (by simp [LawfulEnc.size_encode_u32])
 
 /-- `main`'s four blocks: it keeps `y`, `c2` and gives `c1`, `x` to kid 1. -/
 theorem split_pre {X Y C1 C2 : FAssn} {r : Res} (hh : (X ⋆ (Y ⋆ (C1 ⋆ C2))) r) :
@@ -425,18 +424,13 @@ theorem split_pre {X Y C1 C2 : FAssn} {r : Res} (hh : (X ⋆ (Y ⋆ (C1 ⋆ C2))
   refine sep_assoc' (sep_mono (fun _ h => h) (fun _ h => ?_) h1)
   exact sep_lcomm (sep_assoc (sep_comm h))
 
-theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + Enc.size (BitVec 32))) =
-    (pure v : Result (BitVec 32)) := by
-  rw [show 0 + Enc.size (BitVec 32) = (Enc.encode v).size from (enc_u32 v).symm, Array.extract_size]
-  exact LawfulEnc.decode_encode v
-
 /-- The load of a `u32` stack word. -/
 theorem blk_load {p : Ptr} {A : Nat} {w : BitVec 32} {b : BlockId} (hpb : p.block = some b)
     (h0 : p.off = 0) (hA : A % 4 = 0) :
     FTTriple (blk p A 4 (Enc.encode w) b) (Zig.load (BitVec 32) 4 p)
       (fun r => ⟪r = w⟫ ⋆ blk p A 4 (Enc.encode w) b) := by
   fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .stack) (al := 4) hpb
-    (by decide) (by rw [enc_u32]; decide) (decode_u32 w) (by simp [h0, hA])]
+    (by decide) (by rw [LawfulEnc.size_encode_u32]; decide) (LawfulEnc.decode_extract w) (by simp [h0, hA])]
 
 /-- The start memory holds the parts: `main` holds the plain mode, no thread owns anything else. -/
 theorem start (σ : Placement) :
