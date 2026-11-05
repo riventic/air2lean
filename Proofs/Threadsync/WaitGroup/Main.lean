@@ -82,8 +82,9 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
     (hL : L.Inv G (rsum (WG.cellsR m') rY) m')
     (he₀ : (G 0).2.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hfd₁ : x₁.ph.fd = false)
     (hwx : (G 0).2.ph.wa = true → x₁.ph.wa = true)
+    (hwxk : (G 0).2.wk = true → x₁.wk = true) (hwk₁ : x₁.wk = true → x₁.ph.wa = true)
     (hsh : Shape (fun u => (upd G 0 ((G 0).1, x₁) u).2) m)
-    (hlast3 : x₁.ph = .ev → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
+    (hlast3 : x₁.wk = true → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
       ∃ u, (G u).2.sx = true)
     (hdone : 6 ≤ x₁.ph.rank → (G 1).2.ph.fd = true ∧ (G 2).2.ph.fd = true ∧
       VClock.le (G 1).2.fc (m'.clocks[0]!) = true ∧ VClock.le (G 2).2.fc (m'.clocks[0]!) = true ∧
@@ -114,7 +115,7 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
   have hI : E.Inv L (upd G 0 ((G 0).1, x₁)) m' :=
     hu.einv.frame (t := 0) (fun u hu => upd_ne _ _ hu)
       (by rw [upd_self]; exact he₁.trans he₀.symm) (by rw [upd_self]; rfl) hhE hs.waiters hclk
-      (Nat.le_of_eq (by rw [hs.threads])) (fun h => by rw [upd_self]; exact hwx h)
+      (Nat.le_of_eq (by rw [hs.threads])) (fun h => by rw [upd_self]; exact hwxk h)
       (fun h => absurd hmain (by rw [h.2]; decide)) hfr
   have hnew : ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true →
       (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
@@ -125,7 +126,7 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
     rintro u (rfl | rfl) <;> unfold bnd <;> rw [hX _ (by decide)]
   refine ⟨Shape.congr hsh hs.threads (fun _ => rfl) (fun _ h => h), Rest.step (fun _ => wg_box)
     hu.rest rfl hY hcs, hbk', hw'.anti fun u h => ?_, hwE.anti fun u h => ?_, hI, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, fun w hw => hu.q w (by rw [← hs.waiters]; exact hw)⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, fun w hw => hu.q w (by rw [← hs.waiters]; exact hw)⟩
   · by_cases e : u = 0
     · subst e; exact hmain
     · rwa [hX u e] at h
@@ -149,9 +150,9 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
     rw [hX u e] at h ⊢
     obtain ⟨a, b, c, d, f⟩ := hu.sto u h
     refine ⟨a, by rw [hX0]; exact hwx b, by rw [hX 1 h10]; exact c, by rw [hX 2 h20]; exact d,
-      fun ho => ?_⟩
+      fun hs ho => ?_⟩
     rw [hX 1 h10, hX 2 h20]
-    obtain ⟨x, y⟩ := f ho
+    obtain ⟨x, y⟩ := f hs ho
     exact ⟨VClock.le_trans x (hclk u), VClock.le_trans y (hclk u)⟩
   · -- last3
     intro h0 h1 h2
@@ -185,6 +186,11 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
     by_cases e : u = 0
     · exact e
     · rw [hX u e] at h; exact hu.wa0 u h
+  · -- wk0
+    intro u h
+    by_cases e : u = 0
+    · subst e; rw [hX0] at h ⊢; exact ⟨rfl, hwk₁ h⟩
+    · rw [hX u e] at h ⊢; exact hu.wk0 u h
   · -- sx1
     intro u v h1 h2
     have e1 : u ≠ 0 := by
@@ -242,10 +248,11 @@ theorem inv_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {rM : Res} {x�
     (hA : ∀ hF : Heap, (∀ x, WG.o ≤ x → x < WG.o + 8 → hF (WG.b, x) = none) → FStepIn hF m m')
     (hL : L.Inv G (rsum (WG.cellsR m') rY) m')
     (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hfd₁ : x₁.ph.fd = false)
-    (hwx : x₀.ph.wa = true → x₁.ph.wa = true) (hm : x₁.ph.isMain = true)
+    (hwx : x₀.ph.wa = true → x₁.ph.wa = true) (hwxk : x₀.wk = true → x₁.wk = true)
+    (hwk₁ : x₁.wk = true → x₁.ph.wa = true) (hm : x₁.ph.isMain = true)
     (h1 : x₀.ph.rank ≤ 1 → x₁.ph.rank ≤ 1) (h2 : x₀.ph = .sp1 → x₁.ph = .sp1)
     (h3 : 3 ≤ x₀.ph.rank → 3 ≤ x₁.ph.rank ∧ (x₀.ph = .j1 ↔ x₁.ph = .j1))
-    (hlast3 : x₁.ph = .ev → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
+    (hlast3 : x₁.wk = true → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
       ∃ u, (G u).2.sx = true)
     (hdone : 6 ≤ x₁.ph.rank → (G 1).2.ph.fd = true ∧ (G 2).2.ph.fd = true ∧
       VClock.le (G 1).2.fc (m'.clocks[0]!) = true ∧ VClock.le (G 2).2.fc (m'.clocks[0]!) = true ∧
@@ -259,7 +266,7 @@ theorem inv_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {rM : Res} {x�
     fun _ hR => R_upd0 hR, ?_⟩
   rw [e]
   exact U_mainRmw hu hY hc hhW hrel hH hw' hA hL (by rw [hx₀]; exact he₀) he₁ hsx₁ hfd₁
-    (by rw [hx₀]; exact hwx)
+    (by rw [hx₀]; exact hwx) (by rw [hx₀]; exact hwxk) hwk₁
     (shape_main hu.shape (by exact hm) (by rw [hx₀]; exact h1) (by rw [hx₀]; exact h2)
       (by rw [hx₀]; exact h3))
     hlast3 hdone
@@ -290,8 +297,8 @@ theorem wp_smRmw {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     have := hU.gv; rw [hx₀] at this; exact this)
   subst h0
   refine h k hk G₁ m' ((hA (fun _ => none) (fun _ _ _ => rfl)).current.trans hc₁) ?_
-  refine inv_mainRmw hg₁ hU hY hc₁ hh rfl ?_ hw' hA hL rfl rfl rfl rfl (fun h => h) rfl
-    (fun _ => by decide) (fun h => by cases h) (fun h => by simp [Ph.rank] at h)
+  refine inv_mainRmw hg₁ hU hY hc₁ hh rfl ?_ hw' hA hL rfl rfl rfl rfl (fun h => h) (fun h => h)
+    (fun h => by cases h) rfl (fun _ => by decide) (fun h => by cases h) (fun h => by simp [Ph.rank] at h)
     (fun h => by cases h) (fun h => by simp [Ph.rank] at h)
   rw [h1, h2]; exact hH
 
@@ -358,7 +365,7 @@ theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM
     (hcs : m.clocks.size = m.threads.size) (he₀ : (G 0).2.e = .out)
     (hwa₀ : (G 0).2.ph.wa = false) (hpre : (G 0).2.ph ≠ .pre)
     (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hwa₁ : x₁.ph.wa = false) (hfd₁ : x₁.ph.fd = false)
-    (hr₁ : x₁.ph.rank < 4) (hpre₁ : x₁.ph ≠ .pre)
+    (hr₁ : x₁.ph.rank < 4) (hpre₁ : x₁.ph ≠ .pre) (hwk₁ : x₁.wk = false)
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (k, m')))
     (hsh : Shape (fun u => (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u).2)
       { m with threads := m.threads.push { spawner := 0, joined := false } }) :
@@ -415,14 +422,15 @@ theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM
     (by simp) id id hu.einv.fresh
   have hJ' := einv_out (einv_out hJ (t := k) (g := gO rP { ph := .lk }) (by rw [hGk]) rfl
       (fun h => by
-        have h' : (G k).2.ph.wa = true := h
+        have h' : (G k).2.wk = true := h
         rw [hGk] at h'; cases h'))
     (t := 0) (g := gO rM x₁) (by rw [upd_ne _ _ (Ne.symm hk0)]; exact he₀) he₁
     (fun h => by
-      have h' : (upd G k (gO rP { ph := .lk }) 0).2.ph.wa = true := h
-      rw [upd_ne _ _ (Ne.symm hk0), hwa₀] at h'; cases h')
+      have h' : (upd G k (gO rP { ph := .lk }) 0).2.wk = true := h
+      rw [upd_ne _ _ (Ne.symm hk0)] at h'
+      have := (hu.wk0 0 h').2; rw [hwa₀] at this; cases this)
   refine ⟨Shape.congr hsh rfl (fun _ => rfl) (fun _ h => h), hu.rest.congr fun _ _ => rfl, hu.blk,
-    hwG, hwE, hJ', ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hu.q⟩
+    hwG, hwE, hJ', ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hu.q⟩
   · -- gv: `main` past `pre` before its `add`, no task finished
     show (newest WG _).Val _
     unfold newest; rw [hhG]
@@ -436,7 +444,7 @@ theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM
     rw [e]; exact hu.gv
   · intro u h; obtain ⟨e, -⟩ := hfdT u h; unfold newest; rw [hhG, e]; rw [e] at h; exact hu.gw u h
   · intro u h; rw [hsx' u] at h; cases h
-  · intro h; rw [h0] at h; have h' : x₁.ph = .ev := h; rw [h'] at hr₁; simp [Ph.rank] at hr₁
+  · intro h; rw [h0] at h; have h' : x₁.wk = true := h; rw [hwk₁] at h'; cases h'
   · intro j hj hs; unfold IsSetW at hs; rw [hhE] at hj hs; exact absurd hs (hnis j hj)
   · intro i hi j hj h1 h2; unfold IsSetW at h1 h2; rw [hhE] at hi hj h1 h2
     exact hu.one i hi j hj h1 h2
@@ -450,6 +458,15 @@ theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM
     by_cases ek : u = k
     · subst ek; rw [hk'] at h; cases h
     rw [hX u e0 ek] at h; exact hu.wa0 u h
+  · intro u h
+    by_cases e0 : u = 0
+    · subst e0
+      rw [h0] at h
+      have h' : x₁.wk = true := h
+      rw [hwk₁] at h'; cases h'
+    by_cases ek : u = k
+    · subst ek; rw [hk'] at h; cases h
+    rw [hX u e0 ek] at h ⊢; exact hu.wk0 u h
   · intro u v h; rw [hsx' u] at h; cases h
   · -- attr: the same accesses; the bounds grow
     intro e he hb hkw hl ho
@@ -528,7 +545,7 @@ the task's): the lock forks (`FLock.Inv.fork`) and `U` holds (`U_spawn`). -/
 theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c k : ThreadId} {rM rP : Res}
     {x₀ x₁ : X} (hP : plain rP) (hi : proto.inv G m) (hg : G 0 = gO (rsum rM rP) x₀)
     (hk : (k = 1 ∧ x₀.ph = .sm ∧ x₁.ph = .sp1) ∨ (k = 2 ∧ x₀.ph = .sp1 ∧ x₁.ph = .run))
-    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false)
+    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hwk₁ : x₁.wk = false)
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
     c = k ∧ proto.inv (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁)) m' := by
   obtain ⟨rX, hL, hu⟩ := hi
@@ -555,7 +572,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c k : ThreadId} {rM r
   obtain ⟨hr₁, hp₁, hwa₁, hfd₁, hwa₀, hp₀⟩ := hph
   refine ⟨rfl, _, hL', U_spawn hu hk0 (by rcases hk with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide) hGk hcs
     (by rw [hx₀]; exact he₀) (by rw [hx₀]; exact hwa₀) (by rw [hx₀]; exact hp₀) he₁ hsx₁ hwa₁ hfd₁
-    hr₁ hp₁ (by rw [← hfork.1, hsz] at hf; exact hf) hsh⟩
+    hr₁ hp₁ hwk₁ (by rw [← hfork.1, hsz] at hf; exact hf) hsh⟩
 
 /-- A change of `t`'s part at the same memory keeps `U` (`U_own_native` with no step). -/
 theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Res}
@@ -571,7 +588,7 @@ theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Re
 theorem inv_spawnK {G : ThreadId → Gh} {m m' : Mem} {c k : ThreadId} {rM : Res} {x₀ x₁ : X}
     (hp : rM.Plain) (hi : proto.inv G m) (hg : G 0 = gO rM x₀)
     (hk : (k = 1 ∧ x₀.ph = .sm ∧ x₁.ph = .sp1) ∨ (k = 2 ∧ x₀.ph = .sp1 ∧ x₁.ph = .run))
-    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false)
+    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hwk₁ : x₁.wk = false)
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
     c = k ∧ ∃ rP, plain rP ∧
       proto.inv (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁)) m' := by
@@ -590,7 +607,7 @@ theorem inv_spawnK {G : ThreadId → Gh} {m m' : Mem} {c k : ThreadId} {rM : Res
   have hG' : upd G 0 (L.setPart (G 0) (rsum rM rP)) 0 = gO (rsum rM rP) x₀ := by
     rw [upd_self, hg]; rfl
   obtain ⟨hc, hi'⟩ := inv_spawnParts hpP ⟨rX, by simpa only [upd_upd] using hL', hU'⟩ hG' hk he₀
-    he₁ hsx₁ hf
+    he₁ hsx₁ hwk₁ hf
   refine ⟨hc, rP, hpP, ?_⟩
   have hk0 : k ≠ 0 := by rcases hk with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
   have he : upd (upd (upd G 0 (L.setPart (G 0) (rsum rM rP))) k (gO rP { ph := .lk }))
@@ -604,7 +621,7 @@ theorem inv_spawn1 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res} 
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
     c = 1 ∧ ∃ rP, plain rP ∧
       proto.inv (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .sp1 })) m' :=
-  inv_spawnK hp hi hg (.inl ⟨rfl, rfl, rfl⟩) rfl rfl rfl hf
+  inv_spawnK hp hi hg (.inl ⟨rfl, rfl, rfl⟩) rfl rfl rfl rfl hf
 
 /-- `main`'s second spawn, at `sp1`: task 2; `main` to `run`. -/
 theorem inv_spawn2 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res} (hp : rM.Plain)
@@ -612,6 +629,6 @@ theorem inv_spawn2 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res} 
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
     c = 2 ∧ ∃ rP, plain rP ∧
       proto.inv (upd (upd G 2 (gO rP { ph := .lk })) 0 (gO rM { ph := .run })) m' :=
-  inv_spawnK hp hi hg (.inr ⟨rfl, rfl, rfl⟩) rfl rfl rfl hf
+  inv_spawnK hp hi hg (.inr ⟨rfl, rfl, rfl⟩) rfl rfl rfl rfl hf
 
 end Threadsync.WG
