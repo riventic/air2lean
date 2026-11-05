@@ -8,7 +8,9 @@ nested body with it. `execFunc_rename` proves once, for every function, every in
 renaming `ρ`, every argument list and the full memory, that the renamed function has the same
 execution as the original, under every call oracle that does not leak register-cell names
 (`Oracle.CellFree`). The program's own least-fixpoint oracles (`run`, `runOn`) satisfy it
-(`run_cellFree`, `runOn_cellFree`), so `runOn_rename` lifts the theorem to whole programs.
+(`run_cellFree`, `runOn_cellFree`), so `execFunc_rename_run` and `execFunc_rename_runOn` hold
+with no side condition but injectivity. A certificate gets the renaming from the actual snapshots
+(`zipRen`, injective by `zipRen_inj`; `CanonCertificate.renumberBound`).
 
 The contract is needed: an arbitrary oracle can return the value `.cell k`, the name of a
 caller's register local, and renaming moves that local
