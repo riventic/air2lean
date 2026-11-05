@@ -162,7 +162,7 @@ theorem alloc_edge : (((vt.alloc ⟨none, 0⟩ 1 13 0).run (placedAt (2 ^ 47 - 8
 theorem alloc_threadFree (c : Ptr) (len : BitVec 64) (a : mem_Alignment) (ra : BitVec 64) :
     ConcM.ThreadFree (heap_PageAllocator_alloc c len a ra) := by
   unfold heap_PageAllocator_alloc heap_PageAllocator_map
-  conc_norm
+  simp only [fsym_norm]
   set_option maxRecDepth 8192 in repeat' (first
     | apply Sched.ThreadFreeC.bind
     | apply Sched.ThreadFreeC.ite

@@ -434,7 +434,7 @@ theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Re
       (fun _ _ _ h => h) (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.sinv.mono (fun u => congrArg X.sp (hX u)) (fun u => congrArg X.c (hX u)) hcnt
       (fun u h => by show (upd G t _ u).1.ph = _; rw [hP u]; exact hu.sinv.pst u h)
-      (fun u h => .inl (by show (upd G t _ u).1.ph = _; rw [hP u]; exact h))
+      (fun u h => .inl (by show ((upd G t _ u).1.ph).held = _; rw [hP u]; exact h))
       (fun _ => VClock.le_refl _) (fun _ h => h) rfl
       (fun u h => by show (G u).1.ph ≠ _; rw [← hP u]; exact h) (fun _ h => .inl h) rfl rfl,
     hu.lg.congr (fun u => congrArg X.ph (hX u)) (fun u => congrArg X.c (hX u)) rfl rfl
@@ -457,7 +457,7 @@ theorem hb_fork {G G' : ThreadId → Gh} {m m' : Mem} {c : VClock} (h : L.HB G m
     (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hnew : VClock.le (m.clocks[0]!) (m'.clocks[m.threads.size]!) = true)
     (hsz : m'.threads.size = m.threads.size + 1) (hbef : ∀ c, L.Before m c → L.Before m' c)
-    (hhold : ∀ u, L.ph (G u) = .holds → L.ph (G' u) = .holds)
+    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true)
     (h0 : 0 < m.threads.size) (hg0 : L.ph (G 0) ≠ .gone)
     (hgone : ∀ u, u < m.threads.size → L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) :
     L.HB G' m' c := by
@@ -746,6 +746,11 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} {rp : Re
       by_cases e : u = t
       · subst e; rw [upd_self] at h; cases h
       · rw [hne u e]; exact h
+  have hlheld : ∀ u, ((upd G t (gW rp 2 false 0) u).1.ph).held = true →
+      ((upd G t g u).1.ph).held = true := fun u h => by
+    by_cases e : u = t
+    · subst e; rw [upd_self] at h; cases h
+    · rw [hne u e]; exact h
   have hcnt : S.cnt (upd G t g) = S.cnt (upd G t (gW rp 2 false 0)) := by
     show pv (xs _) = pv (xs _); unfold pv; rw [hheld]
   have hshape := hU.um.shape
@@ -771,10 +776,10 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} {rp : Re
     by have := cinv_out (t := t) (g := g) hU.cinv (by rw [upd_self]; rfl) hgc
        rwa [upd_upd] at this,
     hU.sinv.mono hsph hcph hcnt
-      (fun u h => hhold u (hU.sinv.pst u h)) (fun u h => .inl (hhold u h))
+      (fun u h => hhold u (hU.sinv.pst u h)) (fun u h => .inl (hlheld u h))
       (fun _ => VClock.le_refl _) (fun _ h => h) rfl hlph (fun _ h => .inl h) rfl rfl,
     hU.lg.relabel hcph rfl rfl ?_ ?_ ?_
-      (fun j hj => (hU.lg.ehb j hj).mono (fun u h => .inl (hhold u h)) (fun _ => VClock.le_refl _)
+      (fun j hj => (hU.lg.ehb j hj).mono (fun u h => .inl (hlheld u h)) (fun _ => VClock.le_refl _)
         (fun _ h => h) rfl hlph)⟩
   · by_cases h0 : t = 0
     · subst h0; exact .inl (by rw [upd_self]; exact hgh)

@@ -292,10 +292,10 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rc : Res
     · subst e; rw [hg]; exact ⟨rfl, rfl⟩
     · have h : (G u).2 = {} := hnone u (by simp only [ThreadId] at *; omega)
       rw [h]; exact ⟨rfl, rfl⟩
-  have hnh : ∀ u, (L K).ph (G u) ≠ .holds := fun u h => by
+  have hnh : ∀ u, ((L K).ph (G u)).held ≠ true := fun u h => by
     by_cases e : u = 0
     · subst e; rw [hg] at h; cases h
-    · have := (hL.w.live u (by show (L K).ph (G u) ≠ .gone; rw [h]; decide)).1
+    · have := (hL.w.live u (LPh.ne_gone_of_held h)).1
       rw [hs1] at this; exact e (by simp only [ThreadId] at *; omega)
   -- the plain mode, copied off `main`'s part
   have hpl : (rsum rM rc).Plain :=
