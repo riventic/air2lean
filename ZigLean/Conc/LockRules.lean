@@ -198,7 +198,7 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
   refine ⟨?_, hi.pdisj, hi.idle, fun u hu => ?_, by rw [hb]; exact hi.blk, ?_, hi.one,
     ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_,
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp hpl⟩, fun u => hown ▸ hi.off u,
-    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hw, hkey]; exact hi.fq,
+    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hw]; exact hi.fq.of_key hkey,
     fun hp => ?_, fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [hown]
     refine hi.own.keep (by rw [ht]) hcs (fun u => hheap ▸ hi.own.sub u)
@@ -228,7 +228,7 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
         · exact absurd htc (hnR hL hR hoff)
         · rw [hb] at hb'; exact absurd hbl (Nat.not_lt.mpr hb')
       · exact .inl hle
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ hkey ▸ hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ L.Waits.of_key hkey hp)
     exact ⟨v, ht ▸ hv, hw ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
 /-- The record of an atomic access to the word by the current thread. -/
@@ -589,8 +589,8 @@ theorem Inv.rmw {G G' : ThreadId → γ} {m₁ M : Mem} {t : ThreadId} {li : Nat
     (hfree : L.Free G' → ∃ hL, L.R G' hL ∧ hL.Sub M.heap ∧
       (∀ u, Heap.Disjoint hL (L.own G' M u)) ∧ L.Off hL ∧ L.Owns G' M hL)
     (hres : ∀ u, L.ph (G' u) = .holds → L.R G' (L.held (G' u)))
-    (hfq : L.Queue G' (L.key M) M.waiters)
-    (hwit : L.U32 M (BitVec.ofNat 32 w') → L.Waits (L.key M) M.waiters → ∃ v, v < M.threads.size ∧
+    (hfq : L.Queue G' M M.waiters)
+    (hwit : L.U32 M (BitVec.ofNat 32 w') → L.Waits M M.waiters → ∃ v, v < M.threads.size ∧
       M.waiters.any (·.1 == v) = false ∧ (L.ph (G' v)).busy = true ∧
       (L.ph (G' v) = .holds → L.U32 M (BitVec.ofNat 32 L.c)))
     (hpt : L.ph (G t) ≠ .gone) (hmc : msg.clock = M.clocks[t]!)
@@ -754,7 +754,7 @@ theorem Inv.notQ {G : ThreadId → γ} {m : Mem} {t : ThreadId} (hi : L.Inv G m)
 /-- The futex queue without `t`, which is not at a futex wait: the waiters stay. -/
 theorem fq_keep {G : ThreadId → γ} {m : Mem} {t : ThreadId} {p : LPh} {h : Heap} (hi : L.Inv G m)
     (hw : L.ph (G t) ≠ .wait) (ha : L.ph (G t) ≠ .away) :
-    L.Queue (upd G t (L.set (G t) p h)) (L.key m) m.waiters :=
+    L.Queue (upd G t (L.set (G t) p h)) m m.waiters :=
   hi.fq.mono (fun w hw => hw) fun w hwm => by
     have hwt : w.1 ≠ t := fun e => by
       rcases hi.fq w hwm with ⟨-, h2⟩ | ⟨-, h2⟩ <;> rw [e] at h2
@@ -1138,8 +1138,8 @@ goes to `p`, not `holds`): the memory is the same but `current`, `waiters` and `
 theorem Inv.queue {G : ThreadId → γ} {m : Mem} {t c : ThreadId} {p : LPh}
     {ws : Array (ThreadId × FutexKey)} {wk : Array ThreadId} (hi : L.Inv G m)
     (hnh : L.ph (G t) ≠ .holds) (hng : L.ph (G t) ≠ .gone) (hp : p ≠ .holds) (hpg : p ≠ .gone)
-    (hfq : L.Queue (upd G t (L.set (G t) p Heap.empty)) (L.key m) ws)
-    (hwit : L.Waits (L.key m) ws → ∃ v, v < m.threads.size ∧ ws.any (·.1 == v) = false ∧
+    (hfq : L.Queue (upd G t (L.set (G t) p Heap.empty)) m ws)
+    (hwit : L.Waits m ws → ∃ v, v < m.threads.size ∧ ws.any (·.1 == v) = false ∧
       (L.ph (upd G t (L.set (G t) p Heap.empty) v)).busy = true ∧
       (L.ph (upd G t (L.set (G t) p Heap.empty) v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))) :
     L.Inv (upd G t (L.set (G t) p Heap.empty))
@@ -1195,7 +1195,7 @@ theorem Inv.queue {G : ThreadId → γ} {m : Mem} {t c : ThreadId} {p : LPh}
 /-- The old witness of the queue, if `t` keeps a busy place or was not busy. -/
 theorem wit_keep {G : ThreadId → γ} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.Inv G m)
     (hnh : L.ph (G t) ≠ .holds) (hp : p ≠ .holds) (hb : (L.ph (G t)).busy = true → p.busy = true) :
-    L.Waits (L.key m) m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
+    L.Waits m m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
       (L.ph (upd G t (L.set (G t) p Heap.empty) v)).busy = true ∧
       (L.ph (upd G t (L.set (G t) p Heap.empty) v) = .holds → L.U32 m (BitVec.ofNat 32 L.c)) := by
   intro hpos
@@ -1347,7 +1347,7 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n : Nat} {cs
 /-- A change of the futex queue and the woken threads, with the same ghost values. -/
 theorem Inv.requeue {G : ThreadId → γ} {m : Mem} {c : ThreadId}
     {ws : Array (ThreadId × FutexKey)} {wk : Array ThreadId} (hi : L.Inv G m)
-    (hfq : L.Queue G (L.key m) ws) (hwit : L.Waits (L.key m) ws → ∃ v, v < m.threads.size ∧ ws.any (·.1 == v) = false ∧
+    (hfq : L.Queue G m ws) (hwit : L.Waits m ws → ∃ v, v < m.threads.size ∧ ws.any (·.1 == v) = false ∧
       (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))) :
     L.Inv G { m with current := c, waiters := ws, woken := wk } :=
   ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
@@ -1405,7 +1405,7 @@ theorem Inv.waitOff {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Ptr} 
     · rcases Array.mem_push.mp hw with hw | rfl
       · exact hiM.fq w hw
       · exact .inr ⟨hp', hph⟩
-    · have hw' : L.Waits (L.key m) m.waiters := by
+    · have hw' : L.Waits m m.waiters := by
         change ((m.waiters.push (t, blk.key o sh)).any (·.2 == L.key m)) = true at hw
         unfold Lock.Waits
         rw [Array.any_push] at hw
@@ -1449,7 +1449,7 @@ theorem Inv.wakeOffKey {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : Fu
   have hsub : ∀ w ∈ m.waiters.filter (fun w => !woke.contains w.1), w ∈ m.waiters :=
     fun w hw => (Array.mem_filter.mp hw).1
   refine hi.requeue (hi.fq.mono hsub fun _ _ => rfl) fun hw => ?_
-  have hw' : L.Waits (L.key m) m.waiters := by
+  have hw' : L.Waits m m.waiters := by
     obtain ⟨i, hi', he⟩ := Array.any_eq_true.mp hw
     exact Array.any_eq_true.mpr (by
       obtain ⟨j, hj, hje⟩ := Array.mem_iff_getElem.mp (hsub _ (Array.getElem_mem hi'))
@@ -2219,7 +2219,7 @@ variable {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop
 word: the queue's witness would go on. -/
 theorem FitsOn.noWaits (hP : L.FitsOn P U ok) {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
     (hall : ∀ u < m.threads.size, P.fin (G u) ∨ m.waiters.any (·.1 == u) = true ∨ P.joins (G u)) :
-    ¬ L.Waits (L.key m) m.waiters := fun hp => by
+    ¬ L.Waits m m.waiters := fun hp => by
   obtain ⟨v, hv, hq, hb, -⟩ := hi.wit hp
   rcases hall v hv with h | h | h
   · rw [hP.fin _ h] at hb; cases hb
@@ -2442,7 +2442,7 @@ theorem wp_wakeOn (hP : L.FitsOn P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
 
 theorem Fits.noWaits (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
     (hall : ∀ u < m.threads.size, P.fin (G u) ∨ m.waiters.any (·.1 == u) = true ∨ P.joins (G u)) :
-    ¬ L.Waits (L.key m) m.waiters := hP.on.noWaits hi hall
+    ¬ L.Waits m m.waiters := hP.on.noWaits hi hall
 
 theorem Fits.live (hP : L.Fits P U) {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
     {t : ThreadId} (ht : L.ph (G t) = .wait) : P.Live t G m := hP.on.live hi ht

@@ -196,13 +196,22 @@ def Free (G : ThreadId → γ) : Prop := ∀ u, L.ph (G u) ≠ .holds
 def Before (m : Mem) (c : VClock) : Prop :=
   ∃ i l, L.Loc m i l ∧ VClock.le c (l.msgs.back!).relClock = true
 
-/-- A thread waits at the key `k` (the word's, `Lock.key`) in the futex queue `ws`. -/
-def Waits (k : FutexKey) (ws : Array (ThreadId × FutexKey)) : Prop := ws.any (·.2 == k) = true
+/-- A thread waits at the word's key in `m` (`Lock.key`) in the futex queue `ws`. -/
+def Waits (m : Mem) (ws : Array (ThreadId × FutexKey)) : Prop := ws.any (·.2 == L.key m) = true
 
-/-- The futex queue `ws` with the word's key `k`: a thread at `k` is at `lock`'s futex wait; a
+/-- The futex queue `ws` with the word's key in `m`: a thread at it is at `lock`'s futex wait; a
 thread at another key is `away`. -/
-def Queue (G : ThreadId → γ) (k : FutexKey) (ws : Array (ThreadId × FutexKey)) : Prop :=
-  ∀ w ∈ ws, (w.2 = k ∧ L.ph (G w.1) = .wait) ∨ (w.2 ≠ k ∧ L.ph (G w.1) = .away)
+def Queue (G : ThreadId → γ) (m : Mem) (ws : Array (ThreadId × FutexKey)) : Prop :=
+  ∀ w ∈ ws, (w.2 = L.key m ∧ L.ph (G w.1) = .wait) ∨ (w.2 ≠ L.key m ∧ L.ph (G w.1) = .away)
+
+/-- The queue in a memory with the same key of the word. -/
+theorem Queue.of_key {G : ThreadId → γ} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
+    (h : L.key m' = L.key m) (hq : L.Queue G m ws) : L.Queue G m' ws := by
+  unfold Lock.Queue; rw [h]; exact hq
+
+theorem Waits.of_key {m m' : Mem} {ws : Array (ThreadId × FutexKey)} (h : L.key m' = L.key m)
+    (hw : L.Waits m' ws) : L.Waits m ws := by
+  unfold Lock.Waits at hw; rw [h] at hw; exact hw
 
 /-- The invariant of the lock (module doc). -/
 structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
@@ -227,8 +236,8 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
     L.Off hL ∧ L.Owns G m hL
   /-- The holder's resource. -/
   res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
-  fq : L.Queue G (L.key m) m.waiters
-  wit : L.Waits (L.key m) m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
+  fq : L.Queue G m m.waiters
+  wit : L.Waits m m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
     (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))
   /-- The holder made the most recent successful acquire of the word (`ALoc.holder`), for the
   owner check of the unlock (`Thread.mutexOwnerCheck`). -/
@@ -355,9 +364,9 @@ theorem Inv.ticked {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) :
     hi.res, hi.fq, hi.wit, hi.owner⟩
 
 /-- The queue with fewer threads, whose places stay. -/
-theorem Queue.mono {G G' : ThreadId → γ} {k : FutexKey} {ws ws' : Array (ThreadId × FutexKey)}
-    (hq : L.Queue G k ws) (hsub : ∀ w ∈ ws', w ∈ ws)
-    (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) : L.Queue G' k ws' := fun w hw => by
+theorem Queue.mono {G G' : ThreadId → γ} {m : Mem} {ws ws' : Array (ThreadId × FutexKey)}
+    (hq : L.Queue G m ws) (hsub : ∀ w ∈ ws', w ∈ ws)
+    (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) : L.Queue G' m ws' := fun w hw => by
   rw [hph w hw]; exact hq w (hsub w hw)
 
 theorem Inv.current {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (t : ThreadId) :
@@ -558,7 +567,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   refine ⟨hown ▸ ho', fun u => ?_, fun u hu => ?_, fun u hu => ?_, hblk', ?_,
     fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_,
       fun i l hl => ?_⟩, fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
-    hkey ▸ hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1), fun hp => ?_,
+    (hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1)).of_key hkey, fun hp => ?_,
     fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u (by rwa [hphu] at hu)
       ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · by_cases hu : u = t
@@ -609,7 +618,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
     · rw [upd_ne _ _ hut] at hu ⊢
       have htn : L.ph (G t) ≠ .holds := fun h => hut (hi.one u t hu h)
       exact hRk htn _ (hi.res u hu)
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ hkey ▸ hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ L.Waits.of_key hkey hp)
     refine ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, by rw [hphu]; exact h1, fun hh => ?_⟩
     rw [hphu] at hh; exact (hU32 _).mpr (h2 hh)
 

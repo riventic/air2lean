@@ -218,7 +218,7 @@ theorem turn_budget {β : Type} {cr : γ → Nat} (hcost : P.cost = some cr) {t 
     (hc : (P.Charged t p'.op G₂ g ∧ p'.depth + 1 = p.depth) ∨
       (p'.op = p.op ∧ ∃ ptr e sh, p.op = .wait ptr e sh)) :
     P.PB cr g (cr (G t) - 1) p' := by
-  rcases hc with ⟨hch, hd⟩ | ⟨-, ptr, e, he⟩
+  rcases hc with ⟨hch, hd⟩ | ⟨-, ptr, e, sh, he⟩
   · have hco := hch cr hcost
     rw [hG] at hco
     have hgle : cr g + 1 ≤ cr (G t) := by
