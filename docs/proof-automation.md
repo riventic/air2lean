@@ -837,8 +837,7 @@ memory functions, and P03/native stack and producer integration remain open.
 followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
 fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
 A reporting call suppresses the ordinary
-human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
-enabling a report.
+human-readable stop messages.
 
 Reporting currently formats origins during the walk. That work consumes heartbeats, including
 inside speculative rule probes, so enabling it can change where a finite-budget probe stops.

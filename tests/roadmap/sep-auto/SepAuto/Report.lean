@@ -14,6 +14,18 @@ open Lean Meta Elab Tactic Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto Zig.Full.Au
 private def targetTypes (gs : List MVarId) : MetaM (List Expr) :=
   gs.mapM fun g => do instantiateMVars (← g.getType)
 
+/-- The goals of a walk and the messages it logged; the caller's message log is kept. -/
+private def messagesOf (execute : TacticM (List MVarId)) :
+    TacticM (List MVarId × List String) := do
+  let old ← Core.getMessageLog
+  Core.resetMessageLog
+  try
+    let gs ← execute
+    let messages ← (← Core.getMessageLog).toList.mapM fun m => m.data.toString
+    return (gs, messages)
+  finally
+    Core.setMessageLog old
+
 /-- Both entries start from identical executor state, including Lean's non-backtracked
 name generators. The repeated ordinary call first checks that the control is stable. -/
 private def compareRuns (ty : Expr)
@@ -30,12 +42,13 @@ private def compareRuns (ty : Expr)
     s.restore
     modifyThe Core.State fun _ => core
     modifyThe Meta.State fun _ => metaState
-  let plain ← withOptions (·.setBool `fsym.quiet true) (ordinary g.mvarId!)
+  -- (`restart` also drops the ordinary walks' stop messages)
+  let plain ← ordinary g.mvarId!
   let plainTypes ← targetTypes plain
   let plainTags ← plain.mapM (·.getTag)
   let plainProof ← instantiateMVars g
   restart
-  let repeated ← withOptions (·.setBool `fsym.quiet true) (ordinary g.mvarId!)
+  let repeated ← ordinary g.mvarId!
   unless (← targetTypes repeated) == plainTypes && (← instantiateMVars g) == plainProof &&
       (← repeated.mapM (·.getTag)) == plainTags do
     throwError "ordinary walk comparison did not restart identical executor state"
@@ -104,15 +117,16 @@ set_option fsym.report true in
 theorem report_complete : FTotalTriple emp (pure ()) (fun _ => emp) := by
   fsym
 
-/- A quiet ordinary entry does not emit a stop message or a report. -/
-#guard_msgs in
-set_option fsym.quiet true in
+/-- The ordinary entry emits its stop message and no report. -/
 example : True := by
   run_tac do
     let ty ← elabTerm (← `(FTotalTriple emp unavailable (fun _ => emp))) none
     let g ← mkFreshExprSyntheticOpaqueMVar ty
-    let gs ← Auto.run g.mvarId!
-    unless gs.length == 1 do throwError "quiet mode changed the residuals"
+    let (gs, messages) ← messagesOf (Auto.run g.mvarId!)
+    unless gs.length == 1 do throwError "the ordinary entry changed the residuals"
+    let [message] := messages | throwError "the ordinary entry must emit one stop message"
+    unless message.startsWith "fsym: no rule for the command" do
+      throwError "the ordinary entry emitted something else than its stop message"
   trivial
 
 /-- A failed earlier rule contributes no residual when the next rule completes the walk. -/
@@ -422,17 +436,6 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
 /-! Diagnostic coverage for the current shared entry. -/
 
 /-- Capture only this invocation's messages and preserve the surrounding command's log. -/
-private def messagesOf (execute : TacticM (List MVarId)) :
-    TacticM (List MVarId × List String) := do
-  let old ← Core.getMessageLog
-  Core.resetMessageLog
-  try
-    let gs ← execute
-    let messages ← (← Core.getMessageLog).toList.mapM fun m => m.data.toString
-    return (gs, messages)
-  finally
-    Core.setMessageLog old
-
 /-- Exercise the public reporting branch, including its nested collector and message. -/
 private def reportedTactic (tac : Syntax) (g : MVarId) :
     TacticM (List MVarId × Result) :=
@@ -443,15 +446,15 @@ private def reportedTactic (tac : Syntax) (g : MVarId) :
       throwError "public reporting tactic must emit exactly one report"
     return gs
 
-/-- The actual public tactic emits one parseable report, one ordinary stop message, or
-nothing, according to its two options. A stopped proof stays a diagnostic metavariable. -/
+/-- The actual public tactic emits one parseable report or one ordinary stop message,
+according to `fsym.report`. A stopped proof stays a diagnostic metavariable. -/
 example : True := by
   run_tac do
-    for (report, quiet) in [(false, false), (false, true), (true, false), (true, true)] do
+    for report in [false, true] do
       let ty ← elabTerm (← `(FTotalTriple emp unavailable (fun _ => emp))) none
       let g ← mkFreshExprSyntheticOpaqueMVar ty
       let (gs, messages) ← messagesOf do
-        withOptions (fun o => (o.setBool `fsym.report report).setBool `fsym.quiet quiet) do
+        withOptions (·.setBool `fsym.report report) do
           if report then
             let (gs, collected) ← Auto.Report.collect do
               evalTacticAt (← `(tactic| fsym)) g.mvarId!
@@ -477,8 +480,6 @@ example : True := by
           | throwError "missing public origin"
         unless (origin.getObjValAs? String "reason").toOption == some "no_rule" do
           throwError "wrong public stop reason"
-      else if quiet then
-        unless messages.isEmpty do throwError "quiet public walk emitted a message"
       else
         let [message] := messages | throwError "ordinary walk lost its stop message"
         unless message.startsWith "fsym: no rule for the command" do
@@ -499,7 +500,7 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (t : ThreadId)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
       throwError "caller existential facts were dropped by a shared entry"
     let g ← mkFreshExprSyntheticOpaqueMVar ty
-    let stopped ← withOptions (·.setBool `fsym.quiet true) do
+    let (stopped, _) ← messagesOf do
       evalTacticAt (← `(tactic| fsym [$(mkIdent `stop)])) g.mvarId!
     unless !stopped.isEmpty do
       throwError "existential-forward control did not require its caller argument"
@@ -520,8 +521,7 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
       (fun _ _ _ _ => $(mkIdent `R)) $(mkIdent `G) $(mkIdent `m) $(mkIdent `n))) none
     let tac ← `(tactic| fsym [$(mkIdent `fact)])
     let ordinary ← mkFreshExprSyntheticOpaqueMVar ty
-    unless (← withOptions (·.setBool `fsym.quiet true)
-        (evalTacticAt tac ordinary.mvarId!)).isEmpty do
+    unless (← evalTacticAt tac ordinary.mvarId!).isEmpty do
       throwError "ordinary run-fact control did not close"
     let (gs, report) ← compareRuns ty (evalTacticAt tac) (reportedTactic tac)
     unless gs.isEmpty && report.status == "complete" && report.residuals.isEmpty do
@@ -532,7 +532,7 @@ example {Tgt γ : Type} (P : Zig.Conc.Proto Tgt γ) (_hpart : P.Partial) (t : Th
       throwError "local run facts were dropped by a shared entry: {line report}"
     let g ← mkFreshExprSyntheticOpaqueMVar ty
     let missingFact ← g.mvarId!.clear (← getLocalDeclFromUserName `fact).fvarId
-    let stopped ← withOptions (·.setBool `fsym.quiet true) do
+    let (stopped, _) ← messagesOf do
       evalTacticAt localTac missingFact
     unless !stopped.isEmpty do
       throwError "run-fact control did not require its caller fact"

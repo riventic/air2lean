@@ -112,7 +112,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [11](#row-11) | CTriple backend on top of FTTriple (T-ctriple | open (after #1); exact request below (2026-10-12, approved design R2, docs/sep-threads.md §T-ctriple) |
 | [12](#row-12) | Precondition planning: region atoms before size-dependent atoms | READY #250 |
 | [14](#row-14) | One fsym entry for other front ends | Auto.run is the shared entry of evalFsym (and was memVc's until vc_gen was retired), including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry |
-| [15](#row-15) | Quiet stop | fsym.quiet suppresses the human stop messages (its consumer, vc_gen's memVc, was retired; tests/roadmap/sep-auto/SepAuto/Report.lean still checks it). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON |
+| [15](#row-15) | Quiet stop | Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON (a reporting walk emits no human stop message). The fsym.quiet option, whose only consumer was vc_gen's memVc, was removed (L19) |
 | [19](#row-19) | (same shape as 9b, second user) Pair facts from the memory | open |
 | [20](#row-20) | Split a match on a symbolic Except result | DONE codex/fsym-wp (agent 13: a body's match on a variable as the command is split) |
 | [20a](#row-20a) | Atoms equal up to arithmetic | READY #250 (allocSentinel + realloc drafts close) |
@@ -490,9 +490,9 @@ Request: One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (use
 
 Status: **closed**. Requester: one-logic-vc.
 
-Note: vc_gen and its memVc were retired (L15), and tests/roadmap/vcs/Memory.lean now pins fsym's own reports. fsym.quiet has no caller left outside its test: removing it is an engine follow-up
+Note: vc_gen and its memVc were retired (L15), and tests/roadmap/vcs/Memory.lean now pins fsym's own reports. fsym.quiet then had no caller outside its test and was removed (L19); tests/roadmap/sep-auto/SepAuto/Report.lean captures the stop messages it checks
 
-Progress: fsym.quiet suppresses the human stop messages (its consumer, vc_gen's memVc, was retired; tests/roadmap/sep-auto/SepAuto/Report.lean still checks it). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON
+Progress: Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON (a reporting walk emits no human stop message). The fsym.quiet option, whose only consumer was vc_gen's memVc, was removed (L19)
 
 Request: Quiet stop: at "no rule for the command" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason
 
