@@ -128,6 +128,8 @@ class NoReuse(unittest.TestCase):
             requests = fc.schedule(units, 11000, guess=True)[1]
             self.assertEqual(requests[:-1], [max(fc.MEM_FLOOR_MIB, int(150 * k)) for k in range(1, 21)])
             self.assertEqual(requests[-1], 2850)  # the 95th percentile (nearest rank), not the largest
+            # Of every unit measured, not only those selected (--only): the guess is the machine's.
+            self.assertEqual(fc.schedule([units[0], units[-1]], 11000, guess=True)[1], [fc.MEM_FLOOR_MIB, 2850])
             self.assertEqual(fc.schedule(units, 11000)[1][-1], 11000)  # no guess: no limit backs it
             self.assertEqual(fc.schedule(units, 2000, guess=True)[1][-1], 2000)  # at most the bound
             (self.temp / "schedule.json").write_text("{}")
