@@ -96,6 +96,11 @@ abbrev L : FLock Gh := FLock.prod 0 24 R 2 (by decide)
 def WS : Word 32 4 := { b := 0, o := 28 }
 def WE : Word 32 4 := { b := 0, o := 32 }
 
+/-- The epoch's word and the mutex's word have different futex keys (one block, offsets 32 and
+24, `Mem.wordKey_ne_off`). -/
+theorem weKey_ne (m : Mem) : WE.key m ≠ L.key m :=
+  Mem.wordKey_ne_off (o := 32) (o' := 24) (by decide) (by decide) (by decide) false false
+
 /-- The bytes of the condition's two words: `28 .. 36`. -/
 def BoxW (l : Zig.Loc) : Prop := l.1 = 0 ∧ 28 ≤ l.2 ∧ l.2 < 36
 
@@ -191,7 +196,7 @@ structure UM (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   ws : WS.Ok m
   we : WE.Ok m
   /-- A thread waits only at the mutex or at the epoch. -/
-  q : ∀ w ∈ m.waiters, w.2 = L.ptr ∨ w.2 = WE.ptr
+  q : ∀ w ∈ m.waiters, w.2 = L.key m ∨ w.2 = WE.key m
 
 /-- The client's part of the rest of the invariant: the permit and the window (module doc). -/
 structure Lg (G : ThreadId → Gh) (m : Mem) : Prop where
