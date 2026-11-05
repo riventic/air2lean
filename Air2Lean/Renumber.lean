@@ -1636,11 +1636,11 @@ theorem eq_of_mem_nodup : ∀ (pairs : List (InstId × InstId)), (pairs.map (·.
   | [], _, _, _, _, h, _ => by cases h
   | p :: ps, hn, x, y, t, hx, hy => by
     rw [List.map_cons, List.nodup_cons] at hn
-    rcases List.mem_cons.mp hx with ex | hx <;> rcases List.mem_cons.mp hy with ey | hy
+    rcases List.mem_cons.mp hx with ex | hx' <;> rcases List.mem_cons.mp hy with ey | hy'
     · exact (Prod.mk.inj (ex.trans ey.symm)).1
-    · exfalso; apply hn.1; subst ex; exact List.mem_map.mpr ⟨_, hy, rfl⟩
-    · exfalso; apply hn.1; subst ey; exact List.mem_map.mpr ⟨_, hx, rfl⟩
-    · exact eq_of_mem_nodup ps hn.2 x y t hx hy
+    · exfalso; apply hn.1; subst ex; exact List.mem_map.mpr ⟨_, hy', rfl⟩
+    · exfalso; apply hn.1; subst ey; exact List.mem_map.mpr ⟨_, hx', rfl⟩
+    · exact eq_of_mem_nodup ps hn.2 x y t hx' hy'
 
 /-- `zipRen` is injective when no two pairs share a target. -/
 theorem zipRen_inj (pairs : List (InstId × InstId)) (h : (pairs.map (·.2)).Nodup) :
@@ -1650,9 +1650,10 @@ theorem zipRen_inj (pairs : List (InstId × InstId)) (h : (pairs.map (·.2)).Nod
     fun z t hz => Nat.lt_succ_of_le (le_foldr_max pairs z t (lookup_mem pairs z t hz))
   unfold zipRen at hxy
   cases hx : pairs.lookup x <;> cases hy : pairs.lookup y <;> simp only [hx, hy] at hxy
-  · omega
-  · have := bound y _ hy; omega
-  · have := bound x _ hx; omega
+  -- `omega` needs `Nat`, not the abbreviation `InstId`.
+  · dsimp only [InstId] at *; omega
+  · have := bound y _ hy; dsimp only [InstId] at *; omega
+  · have := bound x _ hx; dsimp only [InstId] at *; omega
   · subst hxy; exact eq_of_mem_nodup pairs h x y _ (lookup_mem pairs x _ hx) (lookup_mem pairs y _ hy)
 
 /-- `execFunc_rename` under a certified subprogram's semantics. -/
