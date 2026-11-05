@@ -145,6 +145,25 @@ def E : FEvent Gh where
   sx g := g.2.sx = true ∧ g.2.ph = .st
   sx_set _ _ := Iff.rfl
 
+/-- **The group's state's live set** (`Word.Ok`): the threads that may still access it, `main` and
+each task before its finish. A task does not access the `Tally` after its finish, so `main`'s whole
+read after its wait need be below `main` alone. -/
+def WLive (g : Gh) : Prop := g.2.ph.fd = false
+
+/-- **The event's word's live set**: `main` (from its `add(1)` on the waiter; its store of the
+`Tally` and its whole read are its own accesses) and the event's own live set (`FEvent.Live`: the
+setter until its `is_set` write). -/
+def ELive (g : Gh) : Prop := g.2.ph.isMain = true ∨ E.Live g
+
+/-- The live sets read only the places outside the lock. -/
+theorem WLive_snd {g g' : Gh} (h : g'.2 = g.2) : WLive g' ↔ WLive g := by
+  unfold WLive; rw [h]
+
+theorem ELive_snd {g g' : Gh} (h : g'.2 = g.2) : ELive g' ↔ ELive g := by
+  show (_ ∨ (g'.2.ph.wa = true ∨ (g'.2.sx = true ∧ g'.2.ph = .st)) ∧ ¬ g'.2.e.Setting) ↔
+    (_ ∨ (g.2.ph.wa = true ∨ (g.2.sx = true ∧ g.2.ph = .st)) ∧ ¬ g.2.e.Setting)
+  rw [h]
+
 /-- The threads that run the lock's code: out of the event's code, and not a task while it holds
 the mutex for its own steps. -/
 def ok (g : Gh) : Prop := g.2.e = .out ∧ g.2.ph ≠ .hl
@@ -194,8 +213,9 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   shape : Shape (fun u => (G u).2) m
   rest : Rest rX m
   blk : BlkOk m
-  wg : WG.Ok m
-  ev : EV.Ok m
+  /-- The words, for their live sets. -/
+  wg : WG.Ok m (fun u => WLive (G u))
+  ev : EV.Ok m (fun u => ELive (G u))
   einv : E.Inv L G m
   /-- The group's newest write. -/
   gv : (newest WG m).Val (BitVec.ofNat 64 (wgv (G 0).2 (G 1).2 (G 2).2))
@@ -329,9 +349,11 @@ theorem Rest.congr {rX : Res} {m m' : Mem} (h : Rest rX m)
   · rw [cellsAt_none hb, cellsAt_none hb]
 
 /-- The words are in the protocol's rest (`Word.InRest`). -/
-theorem wg_inRest : WG.InRest U := fun _ _ _ hu => ⟨hu.wg, Rest.split (fun _ => wg_box) hu.rest⟩
+theorem wg_inRest : WG.InRest U WLive :=
+  fun _ _ _ hu => ⟨hu.wg, Rest.split (fun _ => wg_box) hu.rest⟩
 
-theorem ev_inRest : EV.InRest U := fun _ _ _ hu => ⟨hu.ev, Rest.split (fun _ => ev_box) hu.rest⟩
+theorem ev_inRest : EV.InRest U ELive :=
+  fun _ _ _ hu => ⟨hu.ev, Rest.split (fun _ => ev_box) hu.rest⟩
 
 /-- The words are apart from the mutex's word. -/
 theorem apG : WG.ApartL L.toLockWord := .inr (.inr (by simp [WG, L, FLock.prod]))
@@ -342,7 +364,8 @@ theorem apE : EV.ApartL L.toLockWord := .inr (.inr (by simp [EV, L, FLock.prod])
 /-- A stop keeps `U`: it reads no current thread. -/
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U G rX m) :
     U G rX { m with current := t } :=
-  have wordOk : ∀ {n nb : Nat} (W : Word n nb), W.Ok m → W.Ok { m with current := t } :=
+  have wordOk : ∀ {n nb : Nat} {A : ThreadId → Prop} (W : Word n nb), W.Ok m A →
+      W.Ok { m with current := t } A :=
     fun _ hw => (hw.fields_native (m' := { m with current := t })
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
   ⟨hu.shape, hu.rest, hu.blk, wordOk _ hu.wg, wordOk _ hu.ev,
@@ -409,8 +432,9 @@ fields that read the memory (the step's facts) and the new write accesses (`attr
 theorem U.congrX {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U G rX m)
     (hX : ∀ u, (G' u).2 = (G u).2) (hhW : WG.hist m' = WG.hist m) (hhE : EV.hist m' = EV.hist m)
     (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hth : m'.threads = m.threads) (rest : Rest rX' m') (blk : BlkOk m') (wg : WG.Ok m')
-    (ev : EV.Ok m') (einv : E.Inv L G' m')
+    (hth : m'.threads = m.threads) (rest : Rest rX' m') (blk : BlkOk m')
+    (wg : WG.Ok m' (fun u => WLive (G u))) (ev : EV.Ok m' (fun u => ELive (G u)))
+    (einv : E.Inv L G' m')
     (hlg : ∀ u, (G u).2.ph.fd = true → (G' u).1.ph = .gone)
     (hout3 : ∀ u, 3 ≤ u → (G' u).1.ph = .gone)
     (hnew : ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true →
@@ -418,7 +442,8 @@ theorem U.congrX {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U G 
       (∃ u, u < 3 ∧ (G u).2.ph.fd = false ∧ VClock.le e.clock (m'.clocks[u]!) = true))
     (q : ∀ w ∈ m'.waiters, w.2 = L.ptr ∨ w.2 = EV.ptr) : U G' rX' m' := by
   have hY : (fun u => (G' u).2) = fun u => (G u).2 := funext hX
-  refine ⟨?_, rest, blk, wg, ev, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+  refine ⟨?_, rest, blk, wg.anti fun u h => (WLive_snd (hX u)).mp h,
+    ev.anti fun u h => (ELive_snd (hX u)).mp h, einv, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     attr_step hu hX hclk hhE hnew, ?_, q⟩
   · rw [hY]; unfold Shape at *; rw [hth]; exact hu.shape
   · show (newest WG m').Val _; unfold newest; rw [hhW, hX 0, hX 1, hX 2]; exact hu.gv
@@ -506,8 +531,9 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
 on its own stack block) keeps `U`, with the words' validity and histories and the rest. -/
 theorem U_own {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {hF : Heap} (hu : U G rX m) (hs : FStepIn hF m m') (hc : m.current = t)
-    (hng : (G t).1.ph ≠ .gone) (hrest : Rest rX' m') (hbk : BlkOk m') (hwG : WG.Ok m')
-    (hwE : EV.Ok m') (hhG : WG.hist m' = WG.hist m) (hhE : EV.hist m' = EV.hist m)
+    (hng : (G t).1.ph ≠ .gone) (hrest : Rest rX' m') (hbk : BlkOk m')
+    (hwG : WG.Ok m' (fun u => WLive (G u))) (hwE : EV.Ok m' (fun u => ELive (G u)))
+    (hhG : WG.hist m' = WG.hist m) (hhE : EV.hist m' = EV.hist m)
     (hfr : EV.Fresh m') (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
     U (upd G t g) rX' m' := by
   have hX' : ∀ u, (upd G t g u).2 = (G u).2 := fun u => by
@@ -605,21 +631,33 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     | sw => rw [hsx (.inl rfl)] at h2; cases h2
     | sd => rw [hsx (.inr rfl)] at h2; cases h2
   -- a setter stays a setter; `out` is reached only from a waiter's place
+  have hsetT : (G t).2.e.Setting → p.Setting := fun hS => by
+    rcases hN with ⟨-, hn⟩ | ⟨_, _, -, ⟨-, -, h0, -⟩ | ⟨-, -, -, h0, -⟩⟩
+    · have hn' : EPh.Next (G t).2.e p (E.IsSet m) := hn
+      rcases hS with h | h <;> rw [h] at hn' <;> simp only [EPh.Next] at hn'
+      · rcases hn' with h' | h' <;> rw [h'] <;> simp [EPh.Setting]
+      · rw [hn']; simp [EPh.Setting]
+    · have h0' : (G t).2.e = .w0 := h0
+      rcases hS with h | h <;> rw [h] at h0' <;> cases h0'
+    · have h0' : (G t).2.e = .out := h0
+      rcases hS with h | h <;> rw [h] at h0' <;> cases h0'
   have hset : ∀ u, (G u).2.sx = true → (G u).2.e.Setting →
-      (upd G t (L.set (E.set (G t) p) q rnil) u).2.e.Setting := fun u hx hS => by
+      (upd G t (L.set (E.set (G t) p) q rnil) u).2.e.Setting := fun u _ hS => by
     by_cases e : u = t
-    · subst e
-      rw [hXt]; show p.Setting
-      rcases hN with ⟨-, hn⟩ | ⟨_, _, -, ⟨-, -, h0, -⟩ | ⟨-, -, -, h0, -⟩⟩
-      · have hn' : EPh.Next (G u).2.e p (E.IsSet m) := hn
-        rcases hS with h | h <;> rw [h] at hn' <;> simp only [EPh.Next] at hn'
-        · rcases hn' with h' | h' <;> rw [h'] <;> simp [EPh.Setting]
-        · rw [hn']; simp [EPh.Setting]
-      · have h0' : (G u).2.e = .w0 := h0
-        rcases hS with h | h <;> rw [h] at h0' <;> cases h0'
-      · have h0' : (G u).2.e = .out := h0
-        rcases hS with h | h <;> rw [h] at h0' <;> cases h0'
+    · subst e; rw [hXt]; exact hsetT hS
     · rw [he u e]; exact hS
+  -- the live sets: the places stay, and a thread in the event's code enters none of them
+  have hwG' : WG.Ok m' (fun u => WLive (upd G t (L.set (E.set (G t) p) q rnil) u)) :=
+    hwG.anti fun u h => by unfold WLive at h ⊢; rw [← (hph u).1]; exact h
+  have hwE' : EV.Ok m' (fun u => ELive (upd G t (L.set (E.set (G t) p) q rnil) u)) :=
+    hwE.anti fun u h => by
+      by_cases e : u = t
+      · subst e
+        rw [upd_self] at h
+        rcases h with h | ⟨hr, hn⟩
+        · exact .inl h
+        · exact .inr ⟨hr, fun hS => hn (hsetT hS)⟩
+      · rwa [hG u e] at h
   have hto : (G t).2.sx = true → p = .out → (G t).2.e = .out := fun hx hp => by
     subst hp
     rcases hN with ⟨-, hn⟩ | ⟨_, _, -, ⟨-, -, -, h⟩ | ⟨-, -, -, h, -⟩⟩
@@ -664,7 +702,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       rw [e, show j = (EV.hist m).size by omega, Word.get_push_eq]
   refine ⟨Shape.congr hu.shape hs.threads (fun u => (hph u).1) fun u hu0 => ?_,
     Rest.step (fun _ => ev_box) hu.rest rfl hY (fun l _ hw => hs.cells hw),
-    hu.blk.of_block fun _ _ hb => hs.block hb, hwG, hwE, hI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    hu.blk.of_block fun _ _ hb => hs.block hb, hwG', hwE', hI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
     ?_, ?_, ?_, ?_, ?_⟩
   · -- shape: a thread without a role stays out of the event's code
     by_cases e : u = t
@@ -905,7 +943,8 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
     (hu : U G (rsum (EV.cellsR m) rY) m) (hY : ∀ l, EV.In l → rY.heap l = none)
     (hng : (G t).1.ph ≠ .gone) (hc : m.current = t)
     (hs : FStepIn (rsum (L.wordR m) (rsum (EV.cellsR m) rY)).heap.erase m m')
-    (hw' : EV.Ok m') (hh : EV.hist m' = EV.hist m)
+    (hcW : ∀ l, EV.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
+    (hh : EV.hist m' = EV.hist m)
     (hL : L.Inv (upd G t (L.setPart (G t) r)) (rsum (EV.cellsR m') rY) m') :
     U (upd G t (L.setPart (G t) r)) (rsum (EV.cellsR m') rY) m' := by
   obtain ⟨rB, hB, hBoff, hrX⟩ := hu.rest
@@ -925,7 +964,8 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
   have hnG : ∀ l, WG.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
     fun l hl => by rw [hcs l (wg_box hl) (wg_ev hl)]
   exact U_own hu hs hc hng (Rest.step (fun _ => ev_box) hu.rest rfl hY hcs) hbk'
-    (hu.wg.fstep hs (fun l hl => hcov l (wg_box hl)) hnG) hw'
+    (hu.wg.fstep hs (fun l hl => hcov l (wg_box hl)) hnG)
+    (hu.ev.fstep hs (fun l hl => hcov l (ev_box hl)) hcW)
     (Word.hist_fstep hu.wg hs (fun l hl => hcov l (wg_box hl)) hnG) hh
     (hu.einv.fresh.fstep hs (fun x h1 h2 => hcov _ (ev_box ⟨rfl, h1, h2⟩))
       (fun i l hl => (hu.ev.loc i l hl).1)) rfl rfl
@@ -934,7 +974,8 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
 theorem fitsE : L.Fits (E.prim L) proto U ok := { fitsL with
   kfin g h := by show g.2.e = _; rw [h.2.2]
   kjoins g h := by show g.2.e = _; rw [h.2.2]
-  sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.ev, Rest.split (fun _ => ev_box) hu.rest⟩⟩
+  sub _ _ _ hu := ⟨hu.einv, fun _ hW => by
+    subst hW; exact ⟨hu.ev.anti fun _ h => .inr h, Rest.split (fun _ => ev_box) hu.rest⟩⟩
   apart _ hW := hW ▸ apE
   lph _ _ := rfl
   lpart _ _ := rfl
@@ -957,11 +998,11 @@ theorem fitsE : L.Fits (E.prim L) proto U ok := { fitsL with
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
-        ⟨p, q, h, ⟨hlq, rfl, hs, hN⟩, hwL, rfl⟩ | ⟨r, hout, hi, hc, hs, hcW, hw', hh, hL, rfl⟩⟩
+        ⟨p, q, h, ⟨hlq, rfl, hs, hN⟩, hwL, rfl⟩ | ⟨r, hout, hi, hc, hs, hcW, -, hh, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hlq hu hY hs hN hwL hI
       · exact U_own_native hu hY
           (fun h => absurd ((show L.ph (G t) = .gone from h).symm.trans hout) (by decide))
-          hc hs hw' hh hL
+          hc hs hcW hh hL
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 end Threadsync.WG

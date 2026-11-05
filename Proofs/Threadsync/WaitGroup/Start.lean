@@ -36,7 +36,7 @@ theorem word_init {n nb : Nat} {W : Word n nb} {m : Mem} {blk : Block} (hW : W.b
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hsz, hal, by rw [hk]; simp⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
-    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
+    fun e he hh => .inr ((hfp e he hh).on _), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
 
@@ -239,7 +239,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
         fun u hu => hXu u (by unfold ThreadId at *; omega),
         .inl ⟨h1, by show (upd G0 0 _ 0).2.ph.rank ≤ 1; rw [hX0]; decide,
           hXu 1 (by decide), hXu 2 (by decide)⟩⟩,
-      ⟨rE, hE₁, fun l _ => hEoff l, rfl⟩, ⟨blk, hblk, hl, hS, hK⟩, hwgOk, hevOk,
+      ⟨rE, hE₁, fun l _ => hEoff l, rfl⟩, ⟨blk, hblk, hl, hS, hK⟩, hwgOk.on _, hevOk.on _,
       FEvent.Inv.start (E := E) hevz hevv he hq hFresh, ?_,
       fun u h => absurd h (by rw [hfd u]; decide),
       fun u h => absurd h (by rw [hsx u]; decide),
