@@ -88,7 +88,8 @@ postcondition, which neither an implication nor the model's own result alone sta
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
 | `vc_gen(?)` | `VC/Extract` | retargeted onto `FTriple` (Plan A, D3) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |
-| `blkat_alloc`, `tomega`, `zig_range` | `Conc/Lemmas`, `Conc/Spec/Count`, `Range` | `fsym_arith` and `@[fsym_provider]` facts |
+| `blkat_alloc` | `Conc/Lemmas` (deleted, L14) | term proofs over `BlkAt.alloc` and `BlkAt.afterAlloc` |
+| `tomega`, `zig_range` | `Conc/Spec/Count`, `Range` | `fsym_arith` and `@[fsym_provider]` facts |
 | module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
 
 A legacy entry leaves the list when its last user is migrated and the definition is deleted

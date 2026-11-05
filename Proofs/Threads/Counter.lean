@@ -2162,7 +2162,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- The three blocks.
   have hpb3 : PreB m₃ := by
     subst hm₁ hm₂ hm₃
-    refine ⟨by blkat_alloc, by blkat_alloc, by blkat_alloc, fun e he => ?_⟩
+    refine ⟨((BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _).afterAlloc _ _ _,
+      (BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _, BlkAt.alloc _ _ _ (by decide),
+      fun e he => ?_⟩
     simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he
   simp only [e0, e1, e2]
   refine WP.bind ?_

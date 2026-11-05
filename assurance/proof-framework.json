@@ -568,12 +568,6 @@
       "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
-      "tactic": "blkat_alloc",
-      "kind": "syntax",
-      "module": "ZigLean.Conc.Lemmas",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "conc_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Conc",
@@ -840,24 +834,6 @@
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
-      "path": "Proofs/Atomics/MessagePassing.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Atomics/Relaxed.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Atomics/Stack.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
       "path": "Proofs/Atomics/Stack.lean",
       "tactic": "unroll_sched",
       "count": 1,
@@ -907,12 +883,6 @@
     },
     {
       "path": "Proofs/Threads/Counter.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Threads/Counter.lean",
       "tactic": "unroll_sched",
       "count": 1,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
@@ -933,12 +903,6 @@
       "path": "Proofs/Threadsync/WaitGroup.lean",
       "tactic": "unroll_sched",
       "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/Lemmas.lean",
-      "tactic": "blkat_alloc",
-      "count": 2,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {

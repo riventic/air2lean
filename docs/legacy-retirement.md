@@ -453,7 +453,7 @@ Remaining shared-prefix and holder proof copies are tracked in [engine ledger #7
 | ZigLean/Conc/Csl.lean (537) | `Owned` parts of the heap, `Owned.{step,fork,join,keep,start,shrink,add}`, `WP.liftM_owned` | Own | L | library (delete or re-state over FOwned) |
 | ZigLean/Conc/TlsLemmas.lean (629) | `TTripleIn`, TLS lemmas | Csl | M | library (deleted: Leak used nothing from it; Full/ThreadTls is native) |
 Consumers to move first (invisible to the ratchet today, listed by L1): Conc/{Detach,Lock,Transfer,Unroll}, Full/{ThreadOwned,ThreadTls}, Proofs/Threads/Disjoint,
-spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs (`unroll_sched`, `blkat_alloc` tactics, legacy `Lock/Fits/Step`).
+spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs (`unroll_sched` tactic, legacy `Lock/Fits/Step`).
 Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migrated sync proofs (Handoff, Counter) use it with FOwned. Recommended: the maintainer re-statuses
 `Proto.WP` as `target` (it is the all-schedules adequacy engine under `CTriple`, with fsym WP mode as its backend), and retires only `TTriple`, `Owned`, `TlsLemmas`, `Conc.Lock`, the Conc specs
 (`MutexSpec` ...) and `Conc.Total`. Without this decision L12 has no end state.
@@ -486,7 +486,7 @@ Stage D-e = the **final PR** (needs the strength log):
 * Conc.* (`TTriple`, `TTripleIn`, `TLive`, `Lock*`, `Spec.*`, `Total`, `TimedBudget`, `Clock.StepIn`, `Lemmas.Grows`, `WP`): L12 + D-WP; `Conc.Total`/`TimedBudget` also need the L8 tick mechanism.
 * Proofs.Sync.{Semaphore,RwLock} local `Fits/Sem/Step/Sem.Spec`: vanish with L10/L11.
 * Tests: `CancelSpec` (futures), `asm-wrappers Interp.Spec`, `FTripleCell/FTripleExact` (sep-full CX files), `Wrapped/FWrapped` (Fixture, L7): pure-result or counterexample fixtures; re-status as target when they are `FTriple` instances, or rewrite (needs maintainer approval for any status change).
-* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
+* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `blkat_alloc` (Conc.Lemmas) is gone: its uses are term proofs over `BlkAt.alloc`/`BlkAt.afterAlloc` (L14). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
 
 ## 6. Execution order and critical path
 

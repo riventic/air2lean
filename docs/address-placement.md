@@ -55,7 +55,7 @@ address facts available are the ones above:
 | `Mem.newAddr_mod`, `Mem.ofGlobals_addr_mod` | a new block or a global is aligned |
 | `Mem.newAddr_clear`, `alloc_run` | a new block is clear of every live block (`≤`, no gap) |
 | `Mem.ofGlobals_block`, `Mem.ofGlobals_getElem?` | block `k` at program start is global `k` |
-| `BlkAt.alloc` (`blkat_alloc`) | a stack block is live, of its size, aligned |
+| `BlkAt.alloc`, `BlkAt.afterAlloc` | a stack block is live, of its size, aligned, and stays so across later allocations |
 
 `Mem.Seq` (the invariant of `Triple`) is only the single-thread condition: there is no
 address invariant (`Mem.AddrBelow` and `Mem.nextAddr` are gone), so no rule exports an order
