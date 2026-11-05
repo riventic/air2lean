@@ -30,8 +30,8 @@ closed: such functions need the protocol logic (`Proto.WP`).
   the elements of a chain need not have a common one), so there is no general rule for recursive
   groups yet. `admissible_solo` is the admissibility of the in-thread reading.
 
-The `cnorm` simp set pushes `StateT.run` through the body monad `CM` of a generated concurrent
-function (as `fsym_norm` does for `MM`).
+The `CNorm` lemmas push `StateT.run` through the body monad `CM` of a generated concurrent
+function; they are `fsym_norm` lemmas (`ZigLean/Sep/Full/AutoConc.lean`), as the `MM` ones are.
 -/
 
 namespace Zig
@@ -766,16 +766,5 @@ theorem liftMem_lift_throw (e : Error) :
     (ConcM.liftMem (StateT.lift (throw e : Result α)) : ConcM Tgt α) = throw e := rfl
 
 end CNorm
-
-/-- Normalize the body of a generated concurrent function to a `ConcM` program of `liftMem`
-steps, oracle picks and `pure`/`if` (module doc). -/
-macro "conc_norm" : tactic => `(tactic| (
-  simp only [atomicLoadUnorderedEncC, cmpxchgPtrC, StateT.run'_eq, StateT.run_bind, StateT.run_pure, CNorm.run_callC,
-    CNorm.run_callMC, CNorm.run_callRC, CNorm.run_liftR, CNorm.run_pickC, CNorm.run_ite,
-    Norm.ite_bind, CNorm.run_throw, CNorm.throw_bind, CNorm.run_get, CNorm.run_modify,
-    CNorm.pick_assoc, CNorm.liftMem_pure, CNorm.liftMem_lift_pure, CNorm.liftMem_lift_throw, Norm.sub_zero,
-    Norm.elem_zero, Norm.add_zero_ptr, bind_assoc, pure_bind, map_pure, bind_map_left, map_bind,
-    Norm.beq_true_iff, bind_pure_unit, Bool.not_false, Bool.not_true, ↓reduceIte,
-    Bool.false_eq_true]))
 
 end Zig

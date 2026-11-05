@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 167 rows, 69 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 167 rows, 67 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -28,8 +28,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
-| [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
-| [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | - | - |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
@@ -101,6 +99,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [5](#row-5) | intCast step rule (a.toNat < 2^n → r.toNat = a.toNat) | DONE by one-logic-tactics PR2 (`@[fsym] intCast_step` added to AutoRules.lean after `divTrunc_step`; heads-up for merges) |
 | [6](#row-6) | fsym_arith: toNat / width-change normal forms | READY #237 (arith lane, cd5d17f1): both pass; AutoArith.lean normal forms, intCast_step for every signedness |
 | [8](#row-8) | TLogic record so fsym drives FTTriple/FTTotalTriple (no FTotalTriple rules in TLogic goals) | open |
+| [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | 9a-9h closed (9h by L16); the `within` macro's last use is tracked by its legacy-to-retire tactic entry |
 | [9a](#row-9a) | Provider backtracking on arithmetic failure | READY #239 |
 | [9b](#row-9b) | Pair facts of atoms | open |
 | [9c](#row-9c) | Bool facts to constructor equations | open |
@@ -108,6 +107,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [9e](#row-9e) | Memory use of plain fsym on arena resize | open |
 | [9f](#row-9f) | Returns closed by module EUpd lemmas (free_last_upd, free_other_upd, resize_shrink_upd, resize_grow_upd, re... | READY #260 |
 | [9g](#row-9g) | within goals as planner goals (fsym_entail) | READY #239 (fsym_entail on Within) |
+| [9h](#row-9h) | unroll_solo: concrete counterexample runs | DONE by L16, no engine change: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (as ListsPage does); ArenaObstruction and proof-tools/Unroll do so |
 | [10](#row-10) | Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join) | not engine (library Full/Arr); note only |
 | [11](#row-11) | CTriple backend on top of FTTriple (T-ctriple | open (after #1); exact request below (2026-10-12, approved design R2, docs/sep-threads.md §T-ctriple) |
 | [12](#row-12) | Precondition planning: region atoms before size-dependent atoms | READY #250 |
@@ -207,7 +207,7 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M6** unification modulo reducible definitions and proof irrelevance (unifyKeyed). Closes 4.
 - **M7** one shared entry + quiet stop reason (Auto.run, stop flag, path conditions, unsplit side conditions, binder names). Closes 14–18.
 - **M8** (OWNED BY engine-arith agent, new module ZigLean/Sep/Full/AutoArith.lean) arithmetic normal forms: `(a-b).toNat` under `b ≤ a`, `toInt` of nonnegatives, intCast step rule. Closes 5, 6; 7 documented with M2.
-- **M9** counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane).
+- **M9** counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane). Done (L16): `unfold` of the defining equations, then `decide +kernel`; `unroll_solo` deleted.
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
@@ -354,11 +354,11 @@ Request: TLogic record so fsym drives FTTriple/FTTotalTriple (no FTotalTriple ru
 <a id="row-9"></a>
 ### #9 engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)
 
-Status: **open**. Requester: arena lane.
+Status: **closed**. Requester: arena lane.
 
 Note: umbrella of 9a-9h; closes with 9h
 
-Progress: open
+Progress: 9a-9h closed (9h by L16); the `within` macro's last use is tracked by its legacy-to-retire tactic entry
 
 Request: engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)
 
@@ -428,9 +428,9 @@ Request: `within` → planner: a `Within X P` goal is `fsym_entail`'s `EUpd P (X
 <a id="row-9h"></a>
 ### #9h unroll_solo: concrete counterexample runs
 
-Status: **open**. Requester: arena lane.
+Status: **closed**. Requester: arena lane.
 
-Progress: open
+Progress: DONE by L16, no engine change: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (as ListsPage does); ArenaObstruction and proof-tools/Unroll do so
 
 Request: `unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides
 

@@ -323,8 +323,8 @@ theorem FTriple.claim {β : Type} [External.Region β] (x : β) (k : AccessKind)
   · exact ⟨(), _, r, hrun, hh, hp, hs⟩
   · exact ⟨(), _, r, hrun, hh.readAt _ _ _ _ _, hp, hs.readAt _ _ _ _ _⟩
 
-/-- **A call through a table, then a continuation**: the form of a generated call site after
-`conc_norm` (the continuation is pushed into every arm). -/
+/-- **A call through a table, then a continuation**: the form of a generated call site whose
+continuation is pushed into every arm (by `bind_assoc`; `fsym_norm`'s `pullIndirect` pulls it out). -/
 theorem CTriple.tableCall {β : Type} {P : FAssn} {Q : α → FAssn} {S : β → FAssn}
     {t : Table Tgt A α} {f : Ptr} {a : A} {g : α → ConcM Tgt β} (h : CTriple P (t.call f a) Q)
     (hg : ∀ v, CTriple (Q v) (g v) S) :

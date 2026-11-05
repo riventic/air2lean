@@ -139,9 +139,9 @@
   {
    "id": "9",
    "title": "engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)",
-   "status": "open",
+   "status": "closed",
    "requester": "arena lane",
-   "progress": "open",
+   "progress": "9a-9h closed (9h by L16); the `within` macro's last use is tracked by its legacy-to-retire tactic entry",
    "request": "engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)",
    "workaround_sites": [],
    "deletion_plan": "",
@@ -220,9 +220,9 @@
   {
    "id": "9h",
    "title": "unroll_solo: concrete counterexample runs",
-   "status": "open",
+   "status": "closed",
    "requester": "arena lane",
-   "progress": "open",
+   "progress": "DONE by L16, no engine change: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (as ListsPage does); ArenaObstruction and proof-tools/Unroll do so",
    "request": "`unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1861,7 +1861,7 @@
   },
   {
    "id": "M9",
-   "text": "counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane)."
+   "text": "counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane). Done (L16): `unfold` of the defining equations, then `decide +kernel`; `unroll_solo` deleted."
   },
   {
    "id": "M10",

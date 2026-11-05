@@ -1,5 +1,5 @@
 import ZigLean.Conc.Unroll
-import ZigLean.Sep.Full.Unroll
+import ZigLean.Sep.Full.Conc
 import Proofs.Threads.Gen
 
 open Zig Threads
@@ -84,15 +84,18 @@ example : Witness.errOf (Sched.run ⟨.any, .available⟩ (fun _ => pure ()) 100
     (evenC 6) {}) = none := by
   unroll_sched 8
 
-/-! `unroll_solo`: the in-thread reading (`Sched.soloRun`) that `CTriple` speaks about. -/
+/-! The in-thread reading (`Sched.soloRun`) that `CTriple` speaks about: the group's defining
+equations (`unfold`) take the run past every recursive call it makes, then the kernel computes it. -/
 
 theorem even_six_solo : Witness.okVal ((Sched.soloRun 100 (evenC 6)).run {}) = some 1 := by
-  unroll_solo 8
+  iterate 7 unfold evenC oddC
+  decide +kernel
 
 /-- info: 'even_six_solo' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms even_six_solo
 
-/-- error: unroll_solo: the kernel does not compute the run with loops cut after 3 iterations to the goal's value (another result or error, out of fuel, or a loop that needs more iterations) -/
-#guard_msgs (whitespace := lax) in
+-- Rejected: unfolded 3 times, the run reaches the group's fixpoint, which the kernel does not compute.
 example : Witness.okVal ((Sched.soloRun 100 (evenC 6)).run {}) = some 1 := by
-  unroll_solo 3
+  fail_if_success (iterate 3 unfold evenC oddC; decide +kernel)
+  iterate 7 unfold evenC oddC
+  decide +kernel
