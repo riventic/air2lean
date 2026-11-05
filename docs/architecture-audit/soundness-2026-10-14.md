@@ -383,8 +383,8 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
 **Regressions** (`futex-primitive/Regression.lean`) **and remaining witnesses**
 (`futex-primitive/CurrentModel.lean`):
 
-* `unaligned_wake_einval` (regression): actual Linux private WAKE at address 4097 returns `-EINVAL` with an
-  empty queue, as a complete `Sched.runTrace` observation. The former return-zero witness is
+* `unaligned_wake_einval` (regression): actual Linux private WAKE at address 4097 returns
+  `-EINVAL` with an empty queue, as a complete `Sched.runTrace` observation. The former return-zero witness is
   replaced by this positive corrected expectation. The OS runtime controls also cover full
   unchanged state at depth zero, both accepted flag modes, timeout-copy precedence and aligned
   private WAKE without a word access. The raw WP rules expose immediate EINVAL; existing
@@ -405,8 +405,8 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
   other stays queued. Neither witness establishes two valid std join-handle owners or a false
   shipped client termination theorem.
 
-The last three assertions (and `cleartid_wakes_one`) observe the `CoN` call frontier and its actual continuation
-before scheduler completion. Their definitions retain the original input thread records rather
+Every assertion here except `unaligned_wake_einval` observes the `CoN` call frontier and its
+actual continuation before scheduler completion. Their definitions retain the original input thread records rather
 than rewriting them to force completion. The actual primitive still performs its effects,
 including `cloneExit`'s `markExited` update. Completing such a seeded run also invokes
 `Thread.checkJoinedByChild`, a separate handle-ownership obligation;

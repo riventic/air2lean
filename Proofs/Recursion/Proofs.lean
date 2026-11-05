@@ -4,6 +4,7 @@ import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Loop
 import ZigLean.Sep.Full.Slice
+import ZigLean.Sep.Full.Witness
 
 /-!
 # Proofs about `examples/recursion/recursion.zig`
@@ -250,6 +251,7 @@ theorem gcd_spec_aux :
 
 /-! ## Non-vacuity witnesses -/
 
+nonvacuity_witness fact_total := ⟨5, by decide, Witness.FAdmit.of_emp⟩
 nonvacuity_witness fact_ok := ⟨5, by decide, trivial⟩
 nonvacuity_witness fact_ok_aux := ⟨5, 5, rfl, by decide, trivial⟩
 nonvacuity_witness gcd_spec_aux := ⟨6, 4, 6, rfl, trivial⟩

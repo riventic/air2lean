@@ -7,7 +7,7 @@ import ZigLean.Conc.Sched
 
 Each theorem observes the actual definitions in `ZigLean/Os/Futex.lean` and
 `ZigLean/Os/Thread.lean` at a fixed state, as the corrected model must behave natively. The
-first observes `Sched.runTrace`; the others observe the actual call's `CoN` frontier and its
+first observes `Sched.runTrace`; the second observes the actual call's `CoN` frontier and its
 continuation, before the scheduler's separate child-handle completion check. They are not
 client proofs, native executions, valid std join ownership claims or whole-program termination
 claims. The open witnesses are in `CurrentModel.lean`.
@@ -57,13 +57,6 @@ private def twoRawWaiters : Mem := {
   waiters := #[(1, p), (2, p)]
 }
 
-private def observeExit (r : CoN Nat (Unit × Mem) 1) :
-    Option (Except Error (Array (ThreadId × Ptr) × Array ThreadId × Option (Array Byte))) :=
-  match r with
-  | .leaf r => r.map (·.map fun (_, m') =>
-      (m'.waiters, m'.woken, m'.blocks[0]?.map fun b => b.bytes.extract 0 4))
-  | .sync .. => none
-
 /-- `CHILD_CLEARTID` wakes at most one waiter (Linux `mm_release`: `FUTEX_WAKE` with count 1).
 With two raw waiters queued at `ctid`, the actual `cloneExit` has exactly two options, one for
 each waiter: each clears the word and wakes that waiter alone, and the other stays queued. -/
@@ -72,11 +65,16 @@ theorem cleartid_wakes_one :
       (Linux.cloneExit p : ConcM Nat Unit) 2 twoRawWaiters =
         .sync (.pick count) twoRawWaiters k ∧
       count twoRawWaiters = 2 ∧
-      observeExit (k 0 twoRawWaiters) =
+      (match k 0 twoRawWaiters with
+       | .leaf r => r.map (·.map fun (_, m') =>
+           (m'.waiters, m'.woken, m'.blocks[0]?.map fun b => b.bytes.extract 0 4))
+       | .sync .. => none) =
         some (.ok (#[(2, p)], #[1], some #[.int 0, .int 0, .int 0, .int 0])) ∧
-      observeExit (k 1 twoRawWaiters) =
+      (match k 1 twoRawWaiters with
+       | .leaf r => r.map (·.map fun (_, m') =>
+           (m'.waiters, m'.woken, m'.blocks[0]?.map fun b => b.bytes.extract 0 4))
+       | .sync .. => none) =
         some (.ok (#[(1, p)], #[2], some #[.int 0, .int 0, .int 0, .int 0])) := by
-  refine ⟨_, _, rfl, ?_⟩
-  decide +kernel
+  refine ⟨_, _, rfl, by decide +kernel, by decide +kernel, by decide +kernel⟩
 
 end AuditS6

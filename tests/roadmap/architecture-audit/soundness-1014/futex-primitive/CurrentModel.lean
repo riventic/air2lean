@@ -1,6 +1,4 @@
 import ZigLean.Os.Futex
-import ZigLean.Os.Thread
-import ZigLean.Conc.Sched
 
 /-!
 # Audit S6: remaining primitive mismatches (current-model witnesses)

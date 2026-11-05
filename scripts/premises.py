@@ -45,6 +45,14 @@ COMMAND_RE = re.compile(r"^" + ATTRS + MODIFIERS + r"([#A-Za-z_][A-Za-z_0-9]*)")
 ATTR_ONLY_RE = re.compile(r"^(?:@\[[^\]]*\]\s*)+$")
 IDENT = r"[A-Za-z_À-ɏͰ-Ͽἀ-῿][A-Za-z_0-9'!?À-ɏͰ-Ͽἀ-῿₀-ₜ]*"
 TOKEN_RE = re.compile(IDENT + r"(?:\." + IDENT + r")*")
+
+
+def name_tokens(text: str) -> set[str]:
+    """The identifiers of `text`. `_root_.x` names the root `x`: the prefix goes, so the name
+    resolves (a same-named local declaration can only add premises, never drop them)."""
+    return {token.removeprefix("_root_.") for token in TOKEN_RE.findall(text)}
+
+
 NAME_RE = re.compile(r"\s*(" + IDENT + r"(?:\." + IDENT + r")*)")
 CTOR_RE = re.compile(r"\|\s*(" + IDENT + r")")
 # `.ctor` with an expected type (`throw .unspecified`), not a field access on a term (nor on
@@ -331,7 +339,7 @@ def type_head(decl: Decl, allow_parameters: bool = False) -> str:
     if colon < 0 or (not allow_parameters and binders(text[:colon])):
         return ""
     match = TOKEN_RE.search(text[colon + 1:])
-    return match.group(0) if match else ""
+    return match.group(0).removeprefix("_root_.") if match else ""
 
 
 def instance_type(decl: Decl) -> frozenset:
@@ -390,7 +398,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
             names = {n for n, _ in binders(body)}
-            ambient_vars.append((len(scopes), names, set(TOKEN_RE.findall(body)) - names - {"variable"}))
+            ambient_vars.append((len(scopes), names, name_tokens(body) - names - {"variable"}))
         elif keyword in {"end", "end_if"}:
             if scopes:
                 scopes.pop()
@@ -414,12 +422,12 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 if match and match.group(1) not in {"where", "extends"}:
                     name = match.group(1)
             if name.startswith("_root_."):
-                full = name[len("_root_."):]
+                full = name.removeprefix("_root_.")
             else:
                 full = ".".join([*namespaces, name]) if name else ""
             conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
-            decl.tokens = set(TOKEN_RE.findall(body))
+            decl.tokens = name_tokens(body)
             # A used section variable carries its whole declared type, including concrete
             # generated target parameters absent from this theorem's explicit telescope.
             while ambient_vars:
@@ -803,7 +811,7 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     apply_rules(config, via, tokens, "closure")
     for premise, reasons in fallback_via.items():
         via.setdefault(premise, []).extend(reasons)
-    apply_rules(config, via, set(TOKEN_RE.findall(theorem.statement)), "statement")
+    apply_rules(config, via, name_tokens(theorem.statement), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):
         profile, reason = profile_premises(config, repo.files[rel])
