@@ -465,6 +465,9 @@ in `test_lean.py`.
   loop's increment) each break exactly their function's `_step` (the loop's: its iteration
   lemma); a hand-written caller fixture gets `_eq`; the Zig 0.15.2 slices goldens certify their
   expected functions and the fresh certificate checks.
+* The coverage lint: `Sem.outside?` classifies every `Op` constructor (no wildcard arm), and
+  `tests/roadmap/op-effects/test_op_table.py` checks it against the interpreter (see its
+  docstring).
 
 ### Cost
 

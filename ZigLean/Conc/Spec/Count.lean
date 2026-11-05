@@ -18,9 +18,6 @@ Two small libraries for the sync specs whose invariants count threads or merge v
 namespace Zig
 namespace Spec
 
-/-- `omega` after unfolding `Tid` (`omega` does not see through the abbreviation). -/
-macro "tomega" : tactic => `(tactic| ((try simp only [Tid] at *) <;> omega))
-
 /-! ## Thread maps -/
 
 theorem tset_all {β : Type} {Q : β → Prop} {f : Tid → β} {t : Tid} {c : β}

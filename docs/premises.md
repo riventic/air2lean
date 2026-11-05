@@ -410,7 +410,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
   (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
+- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex` (not in the OS rows `Os.*`, OSF-01/OSF-02, and not where the occurrence is the key layer's word `FutexKey`, `futexAddr` or `futexKeyOf`, e.g. `futexKeyOf_run`; `futexWait_futexAddr_eq` still derives THR-05).
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -420,11 +420,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: On macOS, `Thread.Mutex.DarwinImpl` stops at `os_unfair_lock_*`. The model is the
   lock's contract: an acquire `cmpxchg` 0→1 with a futex sleep, and a release `xchg` of 0
   with a wake, after an owner check (`Thread.mutexOwnerCheck`: an unlock by a thread that did
-  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
-  its DarwinImpl proofs only for a macOS translation (`if_decl`). The committed Linux
+  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/ThreadMutex.lean` elaborates
+  its DarwinImpl proofs only for a macOS translation (`when_defined`). The committed Linux
   translation selects `FutexImpl`, so no indexed theorem currently lists THR-06.
 - Derived from: tokens `osUnfairLock`, `DarwinImpl`.
-- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Lock.lean`.
+- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/ThreadMutex.lean`.
 
 <a id="thr-07"></a>
 ### THR-07 — Progress hints without fairness
@@ -865,7 +865,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   loops do not reduce in the kernel, so loop clients use runtime assertions,
   invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
   iterations (`unroll_sched`), whose result is the loop's result.
-- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
+- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
@@ -1269,9 +1269,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   returns `-EINVAL` without reading the futex word, changing its queue or spending a scheduling
   turn. This alignment validation adds no state effect after any timeout copy. Then
   `get_futex_key` (`Linux.futexKey`, shared without `FUTEX_PRIVATE`) returns `-EFAULT` for an
-  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). The
-  key forms at a live writable word and, for a private key, at
-  any address below a placed block's end. Any other address is refused (`.illegal`). macOS
+  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). A
+  private key forms at a live writable word and at any address below a placed block's end. A
+  shared key forms only at a live writable word of an anonymous block (a stack, a heap block or
+  an OS mapping, `Mem.anonAt`): on a file-backed page Linux keys by inode and page offset, and a
+  copy-on-write of a `MAP_PRIVATE` page changes the key. Any other address is refused
+  (`.illegal`). macOS
   WAIT returns `-EINVAL` for a null or unaligned address.
   The existing comparison and sleep path follows these checks on Linux. The kernel compares
   the `u32` at the address with the expected value as one atomic read of the newest message
