@@ -141,7 +141,7 @@ theorem semaphoreCounter_completes :
   refine ⟨.fresh, ?_⟩
   delta dispatch semaphoreCounter semWork semWork.loop4 Io_Semaphore_waitUncancelable
     Io_Semaphore_waitUncancelable.loop5 Io_Semaphore_post Io_Mutex_lockUncancelable
-    Io_Condition_waitUncancelable Io_Condition_wait Io_Condition_waitInner Io_Condition_signal
+    Io_Condition_signal
   iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
   decide +kernel
 
