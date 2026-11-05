@@ -3845,6 +3845,19 @@ partial def matchArgs (q p : Expr) : MetaM Bool := do
     for (x, y) in q.getAppArgs.zip p.getAppArgs do
       unless ← matchArgs x y do return false
     return true
+  -- a constructor of the pattern against a value that is not one (an existential's list
+  -- `[?w₀, ?w₁]` against the state's `([w₀, w₁].set 0 x).set (1#64).toNat y`, a store's post):
+  -- the value's head normal form, evaluated as far as the pattern's constructors reach, within
+  -- a budget (an evaluation that does not stop early, of bytes or a decoding, fails); not a
+  -- number: the solver's (ledger #atom-args-normal-form). The caller proves the match (`proveEq`)
+  if q.hasExprMVar then
+    if let .const c _ := q.getAppFn then
+      if (← getEnv).isConstructor c then
+        let ty ← whnfR (← inferType p)
+        unless ty.isConstOf ``Nat || ty.isConstOf ``Int || ty.isAppOfArity ``BitVec 1 do
+          if let some p' ← withBudget probeCaseBudget (some <$> whnfD p) then
+            if p'.getAppFn.isConstOf c && p'.getAppNumArgs == q.getAppNumArgs then
+              return ← matchArgs q p'
   return !q.hasExprMVar && !(← inferType q).isSort
 
 /-- The planner's state: the atoms of the resource and `EUpd P₀ (sepOf ats)`. -/

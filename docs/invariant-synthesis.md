@@ -592,9 +592,10 @@ Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (
   at an offset)". `fsym` forms such a pointer from an owned array (`FTotalTriple.arr_ptrProject`),
   so the invariant needs the array atom `arr p vs` with item updates, not separate `pts` cells.
   Under an invariant that owns `arr p [w₀, w₁]`, `fsym` walks the body (item `0` through `p`
-  itself by `FTotalTriple.arr_load_zero`/`arr_store_zero`), but the stored list stays
-  `([w₀, w₁].set 0 x).set (1#64).toNat y` and does not match the invariant's list: engine ledger
-  row #atom-args-normal-form.
+  itself by `FTotalTriple.arr_load_zero`/`arr_store_zero`), and the stored list
+  `([w₀, w₁].set 0 x).set (1#64).toNat y` matches the invariant's list `[?w₀, ?w₁]` (the planner
+  evaluates it to the pattern's constructors, `docs/proof-automation.md`; closed ledger row
+  #atom-args-normal-form). The generator does not emit it yet.
 * `tri` adds the counter to its cell (`acc.* += i`): "a cell that does not go up by a constant".
   A library sum `S` (`S n = 0 + 1 + … + (n - 1)`) makes the invariant linear, but the counter's
   step leaves `S x.toNat` beside `x.toNat = i.toNat + 1`, which the arithmetic does not relate:
@@ -611,7 +612,7 @@ What the slices do not have yet (next slices, sizes S < M < L):
 |---|---|---|
 | S2a | `@[fsym_inv]` (P09-E4), its own engine PR with a `sep-auto` regression: `fsym` applies `loop_measure` with a registered invariant and measure, and the generator emits the attribute. This deletes the step and loop lemmas (`inner_step`, `inner_loop`) | M |
 | S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
-| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; waits on #atom-args-normal-form), cell updates that depend on the counter (a library sum with the `fsym_arith` lemmas above, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing `outerI` and `cnt`; waits on #arith-atom-congruence) | M |
+| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; the engine side, #atom-args-normal-form, is closed), cell updates that depend on the counter (a library sum with the `fsym_arith` lemmas above, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing `outerI` and `cnt`; waits on #arith-atom-congruence) | M |
 | S2f | Houdini pruning through `Auto.runReport` (P09-E1): the generator states each loop's step triple over a candidate invariant, walks it, and drops and reports the candidate conjuncts that do not check | M |
 | S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |

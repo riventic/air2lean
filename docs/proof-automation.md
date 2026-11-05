@@ -356,7 +356,12 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
   state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
   `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
-  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
+  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). A constructor of an
+  existential's pattern (the list `[?w₀, ?w₁]` of an invariant's `arr p [w₀, w₁]`) is matched
+  against the state's value evaluated to its head constructor within a budget (two stores'
+  `([a, b].set 0 x).set (1#64).toNat y`: `?w₀ := x`, `?w₁ := y`; not a number, which is the
+  solver's), and the match is proved (`matchArgs`, `proveEq`; regression
+  `tests/roadmap/sep-auto/SepAuto/AtomArgs.lean`). Shares of one block and tag are joined, split and weakened (an
   allocator's own share and its grants' tagged shares of the same block stay apart; regression
   `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
