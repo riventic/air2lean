@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 172 rows, 71 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 174 rows, 73 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -29,7 +29,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
-| [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | - | - |
+| [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | `tests/roadmap/alloc-arena/ArenaObstruction.lean`, `tests/roadmap/proof-tools/Unroll.lean` | The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes. |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
@@ -60,6 +60,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [P09-E3](#row-p09-e3) | abduction report | P09 | - | - |
 | [P09-E4](#row-p09-e4) | @[fsym_inv] loop-invariant registry | P09 | `tests/roadmap/loop-tactics/nested/Proof.lean`, `tests/roadmap/loop-tactics/counted/Proof.lean` | The hand step and loop lemmas around the generated `F.loopN.inv`/`F.loopN.meas` (nested: `inner_step`, `inner_loop`; counted: `down_step`/`down_loop` and the same pair for `upNe`, `upLe`, `lenCount`, `readBound`: `loop_measure` applied by hand, the entry entailment and the exit repackaging). Delete when `air2lean-invgen` emits `@[fsym_inv]` on its definitions and `fsym` applies the loop rule itself, so the callers' walks need no `fsym [inner_loop]`/`fsym [F_loop]` argument (docs/invariant-synthesis.md, S2a); the mutants then name the callers' theorems. |
 | [P09-E5](#row-p09-e5) | @[fsym_upd] ghost-update registry keyed by heads, tried at returns | P09 | - | - |
+| [arith-atom-congruence](#row-arith-atom-congruence) | arithmetic congruence of library atoms (counter-dependent sums) | invariant-synthesis (P09, S2c′: `counted.tri`, `nested`'s outer loop) | `tests/roadmap/loop-tactics/nested/Proof.lean` | nested's hand outer invariant `outerI`, `outerPost`, `cnt`, `cnt_mono` and `outer_step`'s `rw [show x.toNat = s.i.toNat + 1 …, cnt]`: delete when `air2lean-invgen` emits counter-dependent cells over that library sum (S2c′) and summarizes the generated inner loop in the outer body, which needs this row. |
+| [atom-args-normal-form](#row-atom-args-normal-form) | an existential's witnesses against a state atom's unnormalized arguments (`List.set` of a literal list) | invariant-synthesis (P09, S2c′: `counted.pairAt`) | - | - |
 | [recursive-group-total](#row-recursive-group-total) | Generic total correctness of a recursive function group | L8b-1 tick coverage (Task 09); P03/stack | `Proofs/Pointers/Sep.lean` | Proofs/Pointers/Sep.lean (#617): the private `addDown_group`, which `addDown_total` applies, closes the postcondition by hand after fsym: `EUpd.of_imp`, two `sep_left_comm_eq` reorderings and `congrArg (BitVec.ofNat 64)` with `addDown_sum_step`, because fsym's frame planner cannot match `pts p 8 v` against `pts p 8 v'` when the values are equal only by arithmetic. Missing fsym capability: matching values that are equal by arithmetic (a kernel-checked value-congruence step in the frame planner, or an existential postcondition `∃ y, ⟪y.toNat = x.toNat + sumDown n.toNat⟫ ⋆ pts p 8 y` closed by `fsym_arith`). This capability is separate from this row's generic recursive-group rule (which is why no row of its own tracks it yet: open one when the engine work starts); delete that hand block from `addDown_group` and this site when it lands, and do not close this row while the site stays. |
 | [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | - | - |
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
@@ -212,7 +214,7 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M6** unification modulo reducible definitions and proof irrelevance (unifyKeyed). Closes 4.
 - **M7** one shared entry + quiet stop reason (Auto.run, stop flag, path conditions, unsplit side conditions, binder names). Closes 14–18.
 - **M8** (OWNED BY engine-arith agent, new module ZigLean/Sep/Full/AutoArith.lean) arithmetic normal forms: `(a-b).toNat` under `b ≤ a`, `toInt` of nonnegatives, intCast step rule. Closes 5, 6; 7 documented with M2.
-- **M9** counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane).
+- **M9** counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane). L16: `unroll_solo` deleted, runs by `unfold` of the defining equations, then `decide +kernel`; 9h stays open for name-independent unfolding.
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
@@ -363,7 +365,7 @@ Status: **open**. Requester: arena lane.
 
 Note: umbrella of 9a-9h; closes with 9h
 
-Progress: open
+Progress: arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)
 
 Request: engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)
 
@@ -435,9 +437,13 @@ Request: `within` → planner: a `Within X P` goal is `fsym_entail`'s `EUpd P (X
 
 Status: **open**. Requester: arena lane.
 
-Progress: open
+Progress: L16: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`; ListsPage rewrites by `Zig.loop.eq_1`). Remaining gap, why the row stays open: the unfold lists name generated definitions by hand (`heap_ArenaAllocator_alloc.loop21`, `heap_ArenaAllocator_deinit.loop9`), so a retranslation that renumbers loops needs the lists updated (it fails closed: the kernel gets stuck). Wanted: a name-independent way to unfold a run's loop-running definitions without a new tactic (e.g. a translator-emitted per-module equation set), which would also serve `unroll_sched`'s retirement
 
 Request: `unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaObstruction.lean`, `tests/roadmap/proof-tools/Unroll.lean`
+
+Deletion plan: The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes.
 
 <a id="row-10"></a>
 ### #10 Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join)
@@ -1395,6 +1401,28 @@ Status: **open**. Requester: P09.
 Progress: pending maintainer approval
 
 Request: `@[fsym_upd]` ghost-update registry keyed by heads, tried at returns; generalizes caller updates (9f); replaces #64–#67 workarounds with the bump-ledger family
+
+<a id="row-arith-atom-congruence"></a>
+### #arith-atom-congruence arithmetic congruence of library atoms (counter-dependent sums)
+
+Status: **open**. Requester: invariant-synthesis (P09, S2c′: `counted.tri`, `nested`'s outer loop).
+
+Progress: open; found by R1d (2026-11-05). The library sum design (not in the library yet: it lands with its first client) is checked up to this goal: `sumBelow` with `sumBelow (n + 1) = sumBelow n + n` and the non-recursive conditional `fsym_arith` rewrites `x < b → sumBelow b - sumBelow x = x + (sumBelow b - (sumBelow x + x))` and `b ≤ x → sumBelow b - sumBelow x = 0` closes the step's overflow side goals of `tri.loop5` under the invariant `v + (sumBelow n - sumBelow i) = v₀ + (sumBelow n - sumBelow i₀)`. (A recursive conditional unfold, `x < b → S x b = x + S (x + 1) b`, hits the maximum recursion depth: in a context whose facts are contradictory the discharger proves every side condition.)
+
+Request: **Congruence of the arithmetic's atoms, as `modCongr` does for remainders**: the counter's step leaves a fresh word `x` with the fact `x.toNat = s.i.toNat + 1`, and the invariant's atom `sumBelow x.toNat` is unrelated to `sumBelow (s.i.toNat + 1)` (which `fsym_arith` rewrites to `sumBelow s.i.toNat + s.i.toNat`), so `omega` leaves `v' + (sumBelow n - sumBelow x.toNat) = w + (sumBelow n - sumBelow i₀)`. Needed in `arithCore`: for an application `f a` of a `Nat`/`Int`-valued function in the target or the facts, an argument `a` that the facts equate to a term `b` (by `congrEq`), rewrite it to `f b` (or add `f a = f b`) before `omega`, so the `fsym_arith` lemmas of `f` apply.
+
+Workaround sites: `tests/roadmap/loop-tactics/nested/Proof.lean`
+
+Deletion plan: nested's hand outer invariant `outerI`, `outerPost`, `cnt`, `cnt_mono` and `outer_step`'s `rw [show x.toNat = s.i.toNat + 1 …, cnt]`: delete when `air2lean-invgen` emits counter-dependent cells over that library sum (S2c′) and summarizes the generated inner loop in the outer body, which needs this row.
+
+<a id="row-atom-args-normal-form"></a>
+### #atom-args-normal-form an existential's witnesses against a state atom's unnormalized arguments (`List.set` of a literal list)
+
+Status: **open**. Requester: invariant-synthesis (P09, S2c′: `counted.pairAt`).
+
+Progress: open; found by R1d (2026-11-05). The item rules through the array's own pointer (`FTotalTriple.arr_load_zero`/`arr_store_zero`, merged with this row) make `fsym` walk `pairAt.loop5`'s body (`acc[0] += 1; acc[1] += 2`) under an invariant owning `arr p [w₀, w₁]`. A concrete target list already matches (`docs/proof-tools.md`: `arr p [x, y, z]`, store at `p.elem 4 1`, post `arr p [x, w, z]`); tagging `List.set_cons_zero`/`List.set_cons_succ` `fsym_norm`/`fsym_arith` does not change the residual.
+
+Request: **Witnesses of an existential against an atom argument that needs normalizing**: `arr_store`'s post `arr p (vs.set i.toNat w)`, instantiated at a literal list and index, stays `arr p (([w₀, w₁].set 0 x).set (1#64).toNat y)` in the state, and the update into the invariant's `∃ w₀ w₁, ⟪…⟫ ⋆ up (arr p [w₀, w₁])` fails (`EUpd` residual): the witnesses `?w₀ ?w₁` are not found by unifying `[?w₀, ?w₁]` with that list. Needed: the walk puts the arguments of the state's atoms in `fsym_arith` normal form (literal `toNat`, `List.set` of a literal list at a literal index) before planning, or the planner unifies an existential's atom with a state atom up to that normal form.
 
 <a id="row-recursive-group-total"></a>
 ### #recursive-group-total Generic total correctness of a recursive function group
