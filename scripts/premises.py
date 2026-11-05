@@ -554,9 +554,10 @@ def load_repository(root: Path, config: dict) -> Repository:
                 errors.append(f"{lean.rel}: import {module} is unresolved and not an allowed generated import")
     names = {d.name for lean in files.values() for d in lean.decls if d.name}
     for lean in files.values():
-        # `when_defined X ... end_when` elaborates only when the selected translation declares X.
+        # `when_defined X ... end_when` elaborates only when the selected translation declares X,
+        # resolved like an identifier there (namespaces and opens, `ZigLean/VersionGate.lean`).
         lean.decls = [d for d in lean.decls
-                      if all(any((f"{p}.{c}" if p else c) in names for p in prefixes(d.namespaces))
+                      if all(any((f"{b}.{c}" if b else c) in names for b in scope_bases(d))
                              for c in d.conditions)]
     table: dict[str, list[Decl]] = {}
     ctors: dict[str, list[Decl]] = {}
@@ -580,18 +581,19 @@ def prefixes(parts: tuple[str, ...]) -> list[str]:
     return [".".join(parts[:i]) for i in range(len(parts), -1, -1)]
 
 
+def scope_bases(d: Decl) -> list[str]:
+    """The prefixes a name in `d` resolves under: its namespaces and its opens."""
+    bases = prefixes(d.namespaces)
+    for opened in d.opens:
+        bases += [f"{b}.{opened}" if b else opened for b in prefixes(d.namespaces)]
+    return bases
+
+
 def resolve(repo: Repository, decl: Decl) -> list[Decl]:
     """Declarations named by `decl`, resolved against its own file's imports."""
     if decl.targets is not None:
         return decl.targets
     visible = repo.visible(decl.file)
-
-    def scope_bases(d: Decl) -> list[str]:
-        bases = prefixes(d.namespaces)
-        for opened in d.opens:
-            bases += [f"{b}.{opened}" if b else opened for b in prefixes(d.namespaces)]
-        return bases
-
     bases = scope_bases(decl)
 
     def lookup(name: str, scope: Decl | None = None) -> list[Decl]:
