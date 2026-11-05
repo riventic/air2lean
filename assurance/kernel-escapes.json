@@ -9,11 +9,6 @@
     "ZigLean/Witness.lean": {
       "addDecl": 1,
       "reason": "nonvacuity_witness / liveness_witness add T.nonvacuous / T.returns through the checked addDecl (no debug option; leanchecker replays them); the extractor recomputes each companion's statement from T's type and accepts only an exact match."
-    },
-    "ZigLean/VC/Extract.lean": {
-      "addDecl": 3,
-      "modifyEnv": 1,
-      "reason": "VC extraction adds vc_f/vc_f_source/vc_f_sound through the checked addDecl (no debug option; leanchecker replays the results) and marks vc_f noncomputable."
     }
   }
 }
