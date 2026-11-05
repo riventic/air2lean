@@ -957,9 +957,9 @@ theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : 
     · exact absurd hh hn
   · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
 
-/-- A fork preserves every word's validity and history. The new thread's clock
-inherits its parent's bound, so a new thread in the live set has a parent in it (`hA`; every
-thread for the default live set); no thread-preservation summary is required. -/
+/-- A fork preserves every word's validity and history. The new thread's clock inherits its
+parent's bound, so the premise `hA` asks: if the new thread is in the live set, so is its parent
+(trivial for the default live set); no thread-preservation summary is required. -/
 theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
     (hw : W.Ok m A) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
@@ -1031,7 +1031,7 @@ theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m A)
     · by_cases hold : e ∈ m.footprint
       · rcases hw.wfp e hold hh with ⟨hk, hle⟩ | hle
         · exact .inl ⟨hk, hs.someLe hle⟩
-        · exact .inr (allLeOn_mono hs.threads (fun u _ => hs.clocks u) hle)
+        · exact .inr (hs.allLeOn hle)
       · exact absurd hh (hfp e he hold)
     · obtain ⟨v, hv⟩ := hw.val
       exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
@@ -2465,18 +2465,16 @@ theorem Extends.load {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n}
 
 /-- An atomic RMW at the word. -/
 theorem Extends.rmw {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    (hA : A t)
     {v old : BitVec n} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    (hA : A t) (hcs : m.clocks.size = m.threads.size)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     W.Extends m m' :=
   .of_push (hw.rmw_native hc ht hA hcs h).2.2.2.1
 
 /-- A strong `cmpxchg` at the word. -/
 theorem Extends.cas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
-    (hA : A t)
     {r : Option (BitVec n)} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    (hA : A t) (hcs : m.clocks.size = m.threads.size)
     (h : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
     W.Extends m m' := by
   rcases (hw.cas_native hc ht hA hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, -, he⟩
@@ -2485,9 +2483,8 @@ theorem Extends.cas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new 
 
 /-- A weak `cmpxchg` at the word. -/
 theorem Extends.weakCas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
-    (hA : A t)
     {r : Option (BitVec n)} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    (hA : A t) (hcs : m.clocks.size = m.threads.size)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
     W.Extends m m' := by
   rcases (hw.weakCas_native hc ht hA hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, he⟩

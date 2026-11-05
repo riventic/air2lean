@@ -52,9 +52,6 @@ def AllLeOn (A : ThreadId → Prop) (m : Mem) (c : VClock) : Prop :=
 theorem AllLe.on {m : Mem} {c : VClock} (h : AllLe m c) (A : ThreadId → Prop) : AllLeOn A m c :=
   fun u hu _ => h u hu
 
-theorem AllLeOn.all {m : Mem} {c : VClock} (h : AllLeOn (fun _ => True) m c) : AllLe m c :=
-  fun u hu => h u hu trivial
-
 /-- A smaller set. -/
 theorem AllLeOn.anti {A B : ThreadId → Prop} {m : Mem} {c : VClock} (h : AllLeOn A m c)
     (hB : ∀ u, B u → A u) : AllLeOn B m c :=
@@ -68,7 +65,7 @@ theorem allLeOn_mono {A : ThreadId → Prop} {m m' : Mem} {c : VClock} (ht : m'.
 theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : AllLe m c) : AllLe m' c := fun u hu =>
-  VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
+  allLeOn_mono ht hcl (h.on fun _ => True) u hu trivial
 
 theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)

@@ -42,7 +42,10 @@ threads those are); the invariant keeps that each waiter and the writer of each 
 may wait (`Inv.wx`, `Inv.wby`), so a client with one such thread discharges `hone` and `hhb`
 from the invariant. `FEvent.sx` are the ghost values of the threads that may set it: a setter (at
 `sw` or `sd`, `EPh.Setting`) has one (`Inv.sx`), so a client can tell which threads are in the
-setter's code. A step of
+setter's code. The roles also make the word's live set (`FEvent.Live`: a thread with a role, minus
+a setter that has set): a plain access to the word (a whole read of the struct) need only be
+below those threads, and every access to the word is by one of them (a peek takes a role). A step
+of
 the event's code changes the stepping thread's lock place only for a waiter's sleep (`w1`,
 `away`), so the event's steps keep the places of the other components of a protocol.
 **Gone setters.** A setter may run the set path after it left the lock's protocol (lock place
@@ -90,6 +93,10 @@ def EPh.Waiting (p : EPh) : Prop := p = .w0 ∨ p = .w1
 
 /-- A setter's place. -/
 def EPh.Setting (p : EPh) : Prop := p = .sw ∨ p = .sd
+
+/-- A waiter's place is not a setter's. -/
+theorem EPh.Waiting.not_setting {p : EPh} (h : p.Waiting) : ¬ p.Setting := by
+  rcases h with rfl | rfl <;> rintro (h | h) <;> cases h
 
 /-- **A place change of a step of the event's code that writes nothing** (`s`: the event is
 set): a setter at `sw` stays or is done (`sd`; its wake, and the invariant's `q` keeps that no
@@ -165,9 +172,12 @@ def Next (t : ThreadId) (g : γ) (p : EPh) (m m' : Mem) : Prop :=
      (v = 2 ∧ E.sx g ∧ ord.isRel = true ∧ E.ph g = .out ∧ p.Setting))
 
 /-- **The word's live set** (`Word.Ok`): a thread that may wait or may set (the protocol's roles),
-unless it is a setter that has set (`sw`, `sd`: it writes and reads the word no more; its wake
-is no access). A thread out of it does not access the word, so a plain access to it (a whole read
-of the struct the event is in) need not be below that thread. -/
+unless it is a setter that has set (`sw`, `sd`: it does not write or read the word there; its
+wake is no access). A thread out of it does not access the word, so a plain access to it (a whole
+read of the struct the event is in) need not be below that thread. A client step that puts a
+thread in the set (gives it a role, or moves a setter from `sd` back to `out`: `Inv.toOut`) has
+its rest show the word for the larger set (the plain accesses are below that thread). A thread
+without a role does not access the word (`wp_peek` takes one). -/
 def Live (g : γ) : Prop := (E.wx g ∨ E.sx g) ∧ ¬ (E.ph g).Setting
 
 /-- A step preserving the event's history preserves its set state. -/
@@ -257,10 +267,6 @@ theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hW : (E.W.hist
     obtain rfl : i = 0 := by omega
     exact VClock.le_refl _
 
-/-- A waiter's place is not a setter's. -/
-theorem _root_.Zig.Full.EPh.Waiting.not_setting {p : EPh} (h : p.Waiting) : ¬ p.Setting := by
-  rcases h with rfl | rfl <;> rintro (h | h) <;> cases h
-
 variable {E} in
 /-- **A waiter is live** (`Inv.wx`). -/
 theorem Inv.live {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hI : E.Inv L G m) {u : ThreadId}
@@ -314,7 +320,8 @@ in another primitive's futex wait does not step in the event's code), or `gone` 
 the lock for good stays `gone`), and its lock place `q`: only a waiter at `w1` goes `away`, while
 it sleeps; it holds no lock resource. Its writes and place changes are those of `Next`: the
 waiter's `waiting` and a setter's one release `is_set` (module doc, **Setters**). A thread steps on
-its own part (the stack blocks of the event's code: `wp_liftPart`) out of the lock's code. -/
+its own part (the stack blocks of the event's code: `wp_liftPart`) out of the lock's code. The
+rest keeps the word for the live set `Live` (`Word.Ok`). -/
 abbrev prim (L : FLock γ) : FPrim γ :=
   FPrim.ofWords L E.toFPlace .out (fun _ => False) (fun b g => cond b (E.wx g) (E.sx g))
     (· = E.W) (fun _ => E.Live) (E.Inv L)
@@ -416,14 +423,13 @@ theorem fp (hs : E.MStep t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) 
 clock; a new write access comes with a write of the word (`Word.actualRun_fpWrite`), so a step that
 keeps the word's history (`FEvent.Next`: a setter at `sw` or `sd`, a thread that may not write)
 adds only reads. A client that bounds the writes to a block (a whole read of it later) needs this. -/
-theorem fpNew (hs : E.MStep t m m') (hcs : m.clocks.size = m.threads.size) {e : FootprintEntry}
-    (he : e ∈ m'.footprint) :
+theorem fpNew (hs : E.MStep t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) :
     (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨ (e.tid = t ∧ VClock.le e.clock (m'.clocks[t]!) = true ∧
       (e.kind.isWrite = true → ∃ x, E.W.hist m' = (E.W.hist m).push x)) := by
   by_cases hm : e ∈ m.footprint
   · exact .inl ⟨e, hm, .refl e⟩
   cases hs with
-  | @op M hw hc _ hop _ =>
+  | @op M hw hc hcs hop _ =>
     have hst : FStepIn (fun _ => none) { m with current := t } m' :=
       Word.actualRun_fstep hw hc (fun _ _ _ => rfl) hop
     rcases hst.fp e he with h | ⟨htid, -⟩
@@ -1230,7 +1236,7 @@ theorem Inv.other {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.I
 writes and the futex queue at it stay (for a client's `FLock.Fits.stable`, whose `ok` excludes
 the threads in the event's code; module doc). -/
 theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h : Res}
-    (hI : E.Inv L G m) (hw : E.W.Ok m) (hap : E.W.ApartL L.toLockWord)
+    {B : ThreadId → Prop} (hI : E.Inv L G m) (hw : E.W.Ok m B) (hap : E.W.ApartL L.toLockWord)
     (hout : E.ph (G t) = .out) (hph : ∀ g q h, E.ph (L.set g q h) = E.ph g)
     (hwx : ∀ g q h, E.wx (L.set g q h) ↔ E.wx g) (hsx : ∀ g q h, E.sx (L.set g q h) ↔ E.sx g)
     (hs : L.Step t m m') :
@@ -1698,11 +1704,12 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
         P.inv (upd G₁ t (E.set g .out)) m') → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hE.liveWaiter hi hg)
+  have hlv := hE.liveWaiter hi hg
+  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hlv)
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hE.liveWaiter hi hg)) hct
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct
           hwL.csize ?_ (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl hacq)
@@ -1722,14 +1729,15 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
         P.inv (upd G₁ t (E.set g .out)) m') → Q (r, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadAsC α ord 4 E.W.ptr : CM Tgt σ α).run s) Q G m n :=
+  have hlv := hE.liveWaiter hi hg
   FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
-    (hlv := hE.liveWaiter hi hg)
+    (hlv := hlv)
     fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       h k hk G₁ m' b r (hop.current.trans hc₁) hd
         (hE.afterRead hg₁ hg hgo hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hE.liveWaiter hi hg)) hct
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct
           hwL.csize ?_ (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl hacq)
@@ -2178,7 +2186,7 @@ and counts no turns.
    the waiter's after its `wait`. A set that finds the event set already (0.15.2's peek,
    `Fits.doneSet`) writes nothing: a client with several setters shows which write is the first.
    To set or wait again, the client moves the thread from `sd` back to `out` by its own ghost
-   step (`Inv.toOut`). The setter is out of the lock's code, or it left the lock for
+   step (`Inv.toOut`), which puts it in the word's live set again (`FEvent.Live`). The setter is out of the lock's code, or it left the lock for
    good (`gone`: a task after its last access to the lock's resource, a detached thread). `set`
    ticks in no implementation (`Io.Event` and `Thread.ResetEvent`: a store and a futex wake), so
    the contract demands no caller resource, as `MutexImpl.unlock_wp`.

@@ -1492,8 +1492,7 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
 theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
   kfin g h := by show g.2.e = _; rw [h.2]
   kjoins g h := by show g.2.e = _; rw [h.2]
-  sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.wv.anti fun _ _ => trivial,
-    Rest.split (fun _ => Lo.wv_box) hu.rest⟩⟩
+  sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.wv.on _, Rest.split (fun _ => Lo.wv_box) hu.rest⟩⟩
   apart _ hW := hW ▸ apV
   lph _ _ := rfl
   lpart _ _ := rfl

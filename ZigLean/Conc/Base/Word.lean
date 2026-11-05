@@ -114,7 +114,8 @@ def Holds (m : Mem) (v : BitVec n) : Prop :=
 still access the word (a protocol chooses it; every thread by default). A plain access to the
 word (a whole read of the struct it is in) happened before every thread of `A`, so each thread of
 `A` accesses the word without a race, and a thread that never accesses it again need not be above
-it: an op at the word by `t` takes `A t` (`Ok.noRace`). -/
+it: the race check of an op at the word by `t` takes `A t` (`Ok.noRace`, `prep_ok`, the `*_noErr`
+lemmas), and so does an op that writes the word (`rmw_native`, `cas_native`). -/
 structure Ok (m : Mem) (A : ThreadId → Prop := fun _ => True) : Prop where
   blk : ∃ blk, m.blocks[W.b]? = some blk ∧ blk.live = true ∧ W.o + nb ≤ blk.bytes.size ∧
     (blk.addr + W.o) % nb = 0 ∧ blk.kind ≠ .constGlobal ∧
