@@ -768,28 +768,39 @@ body `B`, named by their part.
 * `B.inv` is the invariant at the start of an iteration, `B.meas` the measure (total correctness:
   it decreases at each repetition), `B.post` the assertion at the exit. Without `B.post` the
   exit is the invariant with `again r.1 = false`, which forgets the exit's label and the exit
-  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks the
-  name and the value's type (`FAssn`, `Nat`); one definition of each part per body.
+  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks, when
+  it is added, that `B` is a defined program over locals (`StateT σ m ε`: `MM σ ε`, `CM Tgt σ ε`),
+  that the definition has no universe parameters, explicit parameters with names of their own,
+  the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
+  for the measure). A name is one definition, so there is one of each part per body.
 * `fsym` applies the backend's loop rule with them (`FTotalTriple.loop_measure`, `FTriple.loop`
   in the partial logic, `FTTotalTriple.loop_measure` and `FTTriple.loop` in a thread,
   `CTriple.loop` in the concurrent backend) as a rule (`tryRule`, `loopInvRule?`): its
   precondition `B.inv … s₀` is planned in the state and the rest is the frame, which stays
   outside the loop; its premise, the step `∀ s, T (B.inv … s) ((B xs).run s) (fun r => if again
-  r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a goal of its
-  own (in the context of the loop), then the walk goes on after the loop from `B.post`.
+  r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a branch
+  of its own (in the context of the loop), then the walk goes on after the loop from `B.post`. The
+  body is inlined in the step as a generated call is (`unfoldCmd`: a generated program run from
+  a state, `StateT.run (B xs) s`).
 * The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
-  the body's arguments `xs`; one of the locals' type is the locals at loop entry `s₀` (the
-  generator's `s0`); every other one (the value at a pointer at entry, `v0`) is an unknown that
-  the plan of the precondition assigns. A plan that leaves one unknown does not apply the rule.
-* The body's definition is inlined in the step (`StateT.run (B xs) s` is no command a rule is
-  about), as a generated call is.
-* The step's side goals that the walk does not prove (arithmetic that needs a lemma about the
-  module's functions) are left to the caller, as a rule's are. A wrong invariant fails: its
-  entry has no plan, or the step's walk does not reach its post (regressions:
-  `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`, total, partial and in a thread, and a wrong
-  invariant that the step does not keep).
-* The caller's rule about the loop (`fsym [h]` with `h` a triple about the loop) is still taken
-  first: the registry is for a loop no rule is about.
+  the body's arguments `xs`; the one named `s0` is the locals at loop entry `s₀` (the
+  generator's name); every other one (the value at a pointer at entry, `v0`) is an unknown that
+  the plan of the precondition assigns.
+* An invariant that does not hold at the entry (no plan, or a plan that leaves an unknown) stops
+  the walk at the loop (report reason `invariant_not_established`, condition `loop_entry`). A
+  registration that does not fit the loop (no `B.meas` in a total logic, a parameter of `B.meas`
+  or `B.post` that `B.inv` does not have) is an error. The step's side goals that the walk does
+  not prove are left to the caller, as a rule's are; a wrong invariant that holds at the entry
+  fails there, at the step's next iteration (regressions:
+  `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`: total, partial, in a thread, concurrent without
+  an exit post, an invariant the step does not keep, one that the entry does not establish, and
+  rejected registrations).
+* The registry is for a loop that no rule applies to: the caller's and the library's rules about
+  the loop are tried first, again with the facts of the state's atoms (`moreFacts`) and the views
+  their preconditions wanted; a rule that applies with side goals it leaves is taken instead (a
+  rule whose side goal the facts refute is not).
+* Not covered: a sequential loop inside a concurrent function's `ConcM.liftMem` command (it
+  stops with no rule), and a proof over a variable `FLogic`.
 
 ## Recursive groups
 
@@ -908,7 +919,8 @@ The schema is versioned by `schemaVersion` (currently `1`):
   (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
 * `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
   `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
-  or `match_without_discriminant`.
+  `match_without_discriminant`, or `invariant_not_established` (a loop's registered invariant
+  at its entry, condition `loop_entry`, §Loops).
 
 The JSON structure and discriminator strings are the API. The expression text follows Lean's
 pretty printer and its local names; it is display text, not an expression serialization. The

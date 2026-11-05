@@ -130,23 +130,81 @@ def bad (p : Ptr) (n : BitVec 32) : MemM Unit := do
   | .ret => pure ()
   | _ => throw .panic
 
+section
+open Lean Meta Elab Tactic Zig.Full.Auto.Report
+
 set_option linter.unusedVariables false in
-/-- **A wrong invariant is rejected**: `fsym` does not prove the (false) claim of `bad` with it,
-since the walk of the step does not reach the invariant at the next iteration. -/
+/-- **A wrong invariant is rejected**: `fsym` does not prove the (false) claim of `bad` with it.
+It applies the loop rule (the invariant holds at the entry) and leaves goals: the walk of the step
+does not reach the invariant at the next iteration. The goal is inspected, never admitted. -/
 example (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 2 * n.toNat < 2 ^ 64) :
     True := by
-  fail_if_success
-    have : FTotalTriple (up (pts p 8 v)) (bad p n)
-        (fun _ => FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + 2 * n.toNat⟫ ⋆ up (pts p 8 w)) := by
-      unfold bad
-      fsym
+  run_tac withMainContext do
+    let ty ← elabTerm (← `(FTotalTriple (up (pts p 8 v)) (bad p n) (fun _ =>
+      FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + 2 * n.toNat⟫ ⋆ up (pts p 8 w)))) none
+    let g ← mkFreshExprSyntheticOpaqueMVar (← deltaExpand ty (· == ``bad))
+    let (gs, report) ← runReport g.mvarId!
+    unless !gs.isEmpty && report.residuals.all (·.origin.reason != "invariant_not_established") &&
+        ((← instantiateMVars g).find? (·.isConstOf ``FTotalTriple.loop_measure)).isSome do
+      throwError "the wrong invariant was not rejected by the walk of its step: {line report}"
   trivial
 
-/-- A registration that is not a loop body's invariant is rejected when it is added. -/
+/-- A body whose invariant does not hold at the entry (`*p` would be `v0 + 1` there). -/
+def early.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := bad.loop p n
+
+@[fsym_inv] def early.loop.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn :=
+  ⟪s.i.toNat ≤ n.toNat⟫ ⋆ (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + s.i.toNat + 1⟫ ⋆ up (pts p 8 v))
+
+@[fsym_inv] def early.loop.meas (n : BitVec 32) (s : Locals) : Nat :=
+  n.toNat - s.i.toNat
+
+/-- **An invariant that does not hold at the entry** is reported as such: one residual, the loop
+with `invariant_not_established` at `loop_entry`. -/
+example (p : Ptr) (n : BitVec 32) (v : BitVec 64) : True := by
+  run_tac withMainContext do
+    let ty ← elabTerm (← `(FTotalTriple (up (pts p 8 v))
+      ((Zig.loop (early.loop p n) again).run { i := 0 }) (fun _ => up (pts p 8 v)))) none
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let (gs, report) ← runReport g.mvarId!
+    unless gs.length == 1 && report.residuals.size == 1 &&
+        report.residuals[0]!.origin.reason == "invariant_not_established" &&
+        report.residuals[0]!.origin.condition == "loop_entry" do
+      throwError "the entry was not reported: {line report}"
+  trivial
+
+end
+
+/-- The loop concurrently: a body of `CM` over the locals `Nat` that counts down, its invariant
+for every target (`CTriple.loop`) and no registered exit post (the invariant at an exit). -/
+def cdown {Tgt : Type} : CM Tgt Nat Bool := do
+  callMC Zig.tick
+  let n ← get
+  if n == 0 then pure false
+  else
+    set (n - 1)
+    pure true
+
+set_option linter.unusedVariables false in
+@[fsym_inv] def cdown.inv (Tgt : Type) (s : Nat) : FAssn := plain
+
+theorem cdown_loop {Tgt : Type} (R : FAssn) (s : Nat) :
+    CTriple (Tgt := Tgt) (R ⋆ plain) ((Zig.loop cdown fun b : Bool => b).run s) (fun _ => R ⋆ plain) := by
+  fsym
+
+/-- Registrations that are not a loop body's invariant are rejected when they are added. -/
 def notALoop : Nat := 0
 
 /-- error: @[fsym_inv] SepAuto.LoopInv.notALoop.invariant: its name does not end in `inv`, `meas` or `post`; expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B` -/
 #guard_msgs in
 @[fsym_inv] def notALoop.invariant (s : Locals) : FAssn := emp
+
+/-- error: @[fsym_inv] SepAuto.LoopInv.fill.loop.post2: its name does not end in `inv`, `meas` or `post`; expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B` -/
+#guard_msgs in
+@[fsym_inv] def fill.loop.post2 (r : Exit × Locals) : FAssn := emp
+
+set_option linter.unusedVariables false in
+/-- error: @[fsym_inv] SepAuto.LoopInv.early.loop.post: its last parameter is not of type Exit × Locals; expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B` -/
+#guard_msgs in
+@[fsym_inv] def early.loop.post (s : Locals) : FAssn := emp
 
 end SepAuto.LoopInv

@@ -197,48 +197,48 @@ initialize registerBuiltinAttribute {
     fsymViewExt.add decl kind
 }
 
-/-- The part of a loop's registered invariant (`@[fsym_inv]`) that a definition `B.inv`, `B.meas`
-or `B.post` is, by its last name component. -/
-inductive LoopInvRole where
-  | inv
-  | meas
-  | post
-  deriving Inhabited, BEq, Repr
-
-/-- An `@[fsym_inv]` entry: the definition `decl` is the invariant, the measure or the exit post
-of the loops whose body is the definition `body` (`Zig.loop (body …) again`). -/
-structure LoopInvEntry where
-  body : Name
-  role : LoopInvRole
-  decl : Name
-  deriving Inhabited
-
 open Meta in
-/-- The entry of `decl` (`B.inv`, `B.meas` or `B.post` of a definition `B`), or an error that says
-why it is not one. Its last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post), the
-others are named; `fsym` matches them by name (`docs/proof-automation.md`, §Loops). -/
-def LoopInvEntry.ofDecl (decl : Name) : MetaM LoopInvEntry := do
+/-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
+`StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
+universe parameters whose parameters are explicit and named apart (`fsym` matches them by name with
+`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post) and whose
+value is an `FAssn` (a `Nat` for the measure). -/
+def checkLoopInv (decl : Name) : MetaM Unit := do
   let fail {α} (why : MessageData) : MetaM α :=
     throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
       a loop body `B`"
   let .str body last := decl | fail "not a name `B.inv`, `B.meas` or `B.post`"
-  let role? : Option LoopInvRole := match last with
-    | "inv" => some .inv | "meas" => some .meas | "post" => some .post | _ => none
-  let some role := role? | fail "its name does not end in `inv`, `meas` or `post`"
-  let some (.defnInfo _) := (← getEnv).find? body | fail m!"`{body}` is not a definition"
+  unless last == "inv" || last == "meas" || last == "post" do
+    fail "its name does not end in `inv`, `meas` or `post`"
+  let some (.defnInfo b) := (← getEnv).find? body
+    | fail m!"`{body}` is not a definition (declared before its invariant)"
   let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
+  unless d.levelParams.isEmpty do fail "a definition with universe parameters"
+  -- the locals `σ` and the exit `ε` of the body's program
+  let (σ, ε) ← forallTelescope b.type fun _ ty => do
+    let ty ← whnfR ty
+    unless ty.isAppOfArity ``StateT 3 do fail m!"`{body}` is not a program over locals"
+    return (ty.getArg! 0, ty.getArg! 2)
   forallTelescope d.type fun xs res => do
-    if xs.isEmpty then fail "no parameter for the loop's locals"
-    let want := if role == .meas then mkConst ``Nat else mkConst `Zig.Full.FAssn
+    let some s := xs.back? | fail "no parameter for the loop's locals"
+    let mut seen : NameSet := {}
+    for x in xs do
+      let l ← x.fvarId!.getDecl
+      unless l.binderInfo.isExplicit do fail m!"the parameter {l.userName} is not explicit"
+      if l.userName.hasMacroScopes || seen.contains l.userName then
+        fail m!"the parameter {l.userName} has no name of its own"
+      seen := seen.insert l.userName
+    let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
+    unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
+    let want := if last == "meas" then mkConst ``Nat else mkConst `Zig.Full.FAssn
     unless ← isDefEq res want do fail m!"its value is not of type {want}"
-  return { body, role, decl }
 
-/-- The loops' invariants (`@[fsym_inv]`), in declaration order: at a loop with no rule, `fsym`
-applies its backend's loop rule with them (`walkCore`). -/
-initialize fsymInvExt : SimpleScopedEnvExtension LoopInvEntry (Array LoopInvEntry) ←
+/-- The loops' invariants (`@[fsym_inv]`): at a loop with no rule, `fsym` applies its backend's
+loop rule with them (`walkCore`). -/
+initialize fsymInvExt : SimpleScopedEnvExtension Name NameSet ←
   registerSimpleScopedEnvExtension {
-    addEntry := fun s n => s.push n
-    initial := #[]
+    addEntry := fun s n => s.insert n
+    initial := {}
   }
 
 initialize registerBuiltinAttribute {
@@ -246,17 +246,15 @@ initialize registerBuiltinAttribute {
   descr := "a loop's invariant `B.inv`, measure `B.meas` or exit post `B.post` (loop body `B`) for \
     the full-state symbolic executor `fsym`"
   add := fun decl _ kind => do
-    let e ← (LoopInvEntry.ofDecl decl).run' {} {}
-    if let some e' := (fsymInvExt.getState (← getEnv)).find? fun e' => e'.body == e.body && e'.role == e.role then
-      throwError "@[fsym_inv] {decl}: the loop body `{e.body}` already has {e'.decl}"
-    fsymInvExt.add e kind
+    (checkLoopInv decl).run' {} {}
+    fsymInvExt.add decl kind
 }
 
 /-- The registered invariant, measure and exit post of the loop body `body` (`@[fsym_inv]`). -/
 def loopInvOf (env : Environment) (body : Name) : Option Name × Option Name × Option Name :=
-  let es := (fsymInvExt.getState env).filter (·.body == body)
-  let get (r : LoopInvRole) := (es.find? (·.role == r)).map (·.decl)
-  (get .inv, get .meas, get .post)
+  let s := fsymInvExt.getState env
+  let get (part : String) := let n := body.str part; if s.contains n then some n else none
+  (get "inv", get "meas", get "post")
 
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/
 def isFsymAtom (env : Environment) (c : Name) : Bool :=
