@@ -426,4 +426,56 @@ theorem wp_postP (I : SemImpl Tgt) (hLc : K.c = I.c) (io : Io) {G : ThreadId →
 
 end Post
 
+/-! ## The producer -/
+
+/-- A store of a `u32` that the thread owns. -/
+theorem st32 (p : Ptr) (v w : BitVec 32) :
+    FTTriple (up (pts p 4 v)) (Zig.store 4 p w) (fun _ => up (pts p 4 w)) :=
+  (FTTotalTriple.ofSeq (FTotalTriple.store (by decide) w)
+    (ThreadLocal.store (by rw [LawfulEnc.size_encode]; exact OwnsPtr.pts))).toPartial
+
+theorem msg0 : Msg 0 = (up (pts aPtr 4 (0 : BitVec 32)) ⋆ up (pts bPtr 4 (0 : BitVec 32))) := by
+  simp [Msg]
+theorem msg1 : Msg 1 = (up (pts aPtr 4 (3 : BitVec 32)) ⋆ up (pts bPtr 4 (0 : BitVec 32))) := by
+  simp [Msg]
+theorem msg2 : Msg 2 = (up (pts aPtr 4 (3 : BitVec 32)) ⋆ up (pts bPtr 4 (4 : BitVec 32))) := by
+  simp [Msg]
+
+/-- The producer's store of `a`, on its part. -/
+theorem st_a (rp : Res) :
+    FTTriple ((fun r => r = rp) ⋆ Msg 0) (Zig.store 4 (cPtr.add 24) (3 : BitVec 32))
+      (fun _ => (fun r => r = rp) ⋆ Msg 1) := by
+  rw [msg0, msg1]; exact FTTriple.frameL (FTTriple.frame (st32 aPtr 0 3))
+
+/-- The producer's store of `b`, on its part. -/
+theorem st_b (rp : Res) :
+    FTTriple ((fun r => r = rp) ⋆ Msg 1) (Zig.store 4 (cPtr.add 28) (4 : BitVec 32))
+      (fun _ => (fun r => r = rp) ⋆ Msg 2) := by
+  rw [msg1, msg2]; exact FTTriple.frameL (FTTriple.frameL (st32 bPtr 0 4))
+
+/-- **The producer**: it writes the message on its part, posts it (`wp_postP`) and ends. -/
+theorem producer_spec (I : SemImpl Tgt) (hLc : K.c = I.c) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    {rp rc : Res} (hp : rp.Plain) (hrc : Msg 0 rc) (hdj : FHeap.Disjoint rp.heap rc.heap)
+    (hi : (proto K).inv (upd G 1 (gO (rsum rp rc) { ph := .pr 0 })) m) (hc : m.current = 1) :
+    (proto K).WP 1 (producer I cPtr) (fun _ G' m' _ => m'.current = 1 ∧
+      (proto K).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d := by
+  have hF := (fitsS (K := K)).toC.toFits
+  unfold producer
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  refine WP.bind (FCond.wp_liftPartM hF (.inl rfl) hi hc (st_a rp) ⟨_, _, hdj, rfl, rfl, hrc⟩
+    fun _ m₁ r₁ _ hq hc₁ _ _ hi₁ => ?_)
+  obtain ⟨r₀, r₁', hd₁, he, h0, hm₁⟩ := hq
+  rw [h0] at hd₁ he; subst he
+  have hi₁' : (proto K).inv (upd G 1 (gO (rsum rp r₁') { ph := .pr 1 })) m₁ := inv_pr hi₁
+  refine WP.bind (FCond.wp_liftPartM hF (.inl rfl) hi₁' hc₁ (st_b rp) ⟨_, _, hd₁, rfl, rfl, hm₁⟩
+    fun _ m₂ r₂ _ hq hc₂ _ _ hi₂ => ?_)
+  obtain ⟨r₀, r₂', hd₂, he, h0, hm₂⟩ := hq
+  rw [h0] at hd₂ he; subst he
+  have hi₂' : (proto K).inv (upd G 1 (gO (rsum rp r₂') { ph := .pr 2 })) m₂ := inv_pr hi₂
+  refine WP.callC (WP.mono ?_ (wp_postP I hLc (⟨⟩ : Io) hp hm₂ hd₂ hi₂' hc₂))
+  rintro _ G' m' _ ⟨-, hc', hi'⟩
+  exact ⟨hc', inv_fin hi'⟩
+
 end Sync.Mailbox
