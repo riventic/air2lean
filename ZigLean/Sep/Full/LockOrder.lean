@@ -34,8 +34,9 @@ namespace FLock
 variable {γ : Type} {Tgt : Type} {P : Proto Tgt γ}
 
 /-- **The lock order's discharge**: if every futex of `A`'s nest is the word of one of the locks
-`B i` that fit the same protocol, a holder of `A` asleep at a nest futex sleeps at some `B i`'s,
-as its waiter, and that waiter is live (`B i`'s `Fits.live`). -/
+`B i` that fit the same protocol, a holder of `A` asleep at a nest futex sleeps at some `B i`'s
+key (a nest wait is private, `LockWord.NestKey`), as its waiter, and that waiter is live (`B i`'s
+`Fits.live`). -/
 theorem holdLive_inners {ι : Type} {A : FLock γ} {B : ι → FLock γ} {K : ι → FPrim γ}
     {U : ι → (ThreadId → γ) → Res → Mem → Prop} {ok : ι → γ → Prop}
     (hB : ∀ i, (B i).Fits (K i) P (U i) (ok i)) (hnest : ∀ p, A.nest p → ∃ i, p = (B i).ptr)
@@ -43,11 +44,12 @@ theorem holdLive_inners {ι : Type} {A : FLock γ} {B : ι → FLock γ} {K : ι
     (hinv : ∀ G rX m, A.Inv G rX m → UA G rX m → P.inv G m) :
     ∀ G rX m v, A.Inv G rX m → UA G rX m → A.ph (G v) = .holdsAway → P.Live v G m := by
   intro G rX m v hi hU hv hq hall
-  obtain ⟨p, hpm, -, hpn⟩ := hi.w.nestQ hv hq
+  obtain ⟨k, hkm, -, p, hpn, hpk⟩ := hi.w.nestQ hv hq
   obtain ⟨i, rfl⟩ := hnest p hpn
   obtain ⟨rY, hiB, hUB⟩ := ((hB i).inv G m).mp (hinv G rX m hi hU)
+  obtain rfl : k = (B i).key m := Option.some.inj (hpk.symm.trans hiB.w.blk.keyAt)
   have hw : (B i).ph (G v) = .wait := by
-    rcases hiB.w.fq _ hpm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
+    rcases hiB.w.fq _ hkm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
     · exact h
     · exact absurd rfl h
     · exact absurd rfl h
@@ -73,12 +75,12 @@ theorem Fits.noDeadlock {A : FLock γ} {K : FPrim γ} {U : (ThreadId → γ) →
   exact hA.holdLive G rX m v hiA hU hv hq hall
 
 /-- **The AB/BA state is not in the invariant** (`Fits.noDeadlock` for two threads): thread `0`
-holds `A` and sleeps at a futex `b` (another lock `B`'s word) while thread `1` sleeps at `A`'s.
+holds `A` and sleeps at a futex key `b` (another lock `B`'s word) while thread `1` sleeps at `A`'s.
 No protocol with `A`'s `Fits` has this state in its invariant, whatever `b` is. -/
 theorem Fits.not_ABBA {A : FLock γ} {K : FPrim γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-    {ok : γ → Prop} (hA : A.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {b : Ptr}
+    {ok : γ → Prop} (hA : A.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {b : FutexKey}
     (hsz : m.threads.size = 2) (h0 : A.ph (G 0) = .holdsAway)
-    (hq0 : (0, b) ∈ m.waiters) (hq1 : (1, A.ptr) ∈ m.waiters) : ¬ P.inv G m := fun hi => by
+    (hq0 : (0, b) ∈ m.waiters) (hq1 : (1, A.key m) ∈ m.waiters) : ¬ P.inv G m := fun hi => by
   have hq : ∀ u p, (u, p) ∈ m.waiters → m.waiters.any (·.1 == u) = true := fun u p h =>
     Array.any_eq_true'.mpr ⟨_, h, by simp⟩
   refine hA.noDeadlock hi h0 (hq _ _ hq0) fun u hu => .inr (.inl ?_)

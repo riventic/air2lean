@@ -98,7 +98,7 @@ theorem cmpxchgWeakAt_run_ne_none {n : Nat} (c : Nat) (succ fail : AtomicOrder) 
 namespace Thread
 
 /-- A futex wake at `p` where no thread waits wakes no thread: the memory stays as it is. -/
-theorem futexWake_run_idle {m : Mem} {p : Ptr} {n : Nat} {cs : List Nat}
+theorem futexWake_run_idle {m : Mem} {p : FutexKey} {n : Nat} {cs : List Nat}
     (hq : ∀ w ∈ m.waiters, w.2 ≠ p) :
     ((futexWake p n cs).run m).run = some (.ok ((), m)) := by
   have hf : m.waiters.filter (·.2 == p) = #[] := by
@@ -278,15 +278,17 @@ variable {W : Word 32 4}
 
 /-- **A futex wait at a valid word** of a thread that is not woken compares the word's newest
 value `v` with `e`: it sleeps exactly if they are equal. -/
-theorem Ok.futexWait_newest {m : Mem} {e v : BitVec 32} (hw : W.Ok m A)
+theorem Ok.futexWait_newest {m : Mem} {e v : BitVec 32} {sh : Bool} (hw : W.Ok m A)
     (ht : m.current < m.threads.size) (hwk : m.woken.contains m.current = false)
     (hv : W.Holds m v) (hA : A m.current := by trivial) :
-    ((Thread.futexWait W.ptr e).run m).run = some (.ok (decide (v = e),
+    ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (decide (v = e),
       if v = e then
-        { m.recordAt W.b W.o 4 .atomicRead with waiters := m.waiters.push (m.current, W.ptr) }
+        { m.recordAt W.b W.o 4 .atomicRead with
+          waiters := m.waiters.push (m.current, m.wordKey W.b W.o sh) }
       else m.recordAt W.b W.o 4 .atomicRead)) := by
   obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
   rw [holds_bytes hb] at hv
+  rw [Mem.wordKey_of hb]
   exact futexWait_run_go hwk ha (hw.noRace rfl ht hA) hv
 
 end futex

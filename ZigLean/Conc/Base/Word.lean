@@ -49,6 +49,10 @@ variable {n nb : Nat} (W : Word n nb)
 /-- The address of the word. -/
 def ptr : Ptr := ⟨some W.b, (W.o : Int)⟩
 
+/-- The private futex key of the word in `m` (`Mem.wordKey`): the key of a futex wait or wake at
+`ptr` while the word's block exists (`Mem.keyAt_wordKey`). It reads only the block's address. -/
+def key (m : Mem) : FutexKey := m.wordKey W.b W.o
+
 include W in
 theorem sz_eq : intSize n = nb := by
   rcases W.n_ok with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl
@@ -692,9 +696,9 @@ section futex
 variable {W : Word 32 4}
 
 /-- A futex wait at the word has no error. -/
-theorem Ok.futexWait_run {m : Mem} {e : BitVec 32} (hw : W.Ok m A)
+theorem Ok.futexWait_run {m : Mem} {e : BitVec 32} {sh : Bool} (hw : W.Ok m A)
     (ht : m.current < m.threads.size) (hA : A m.current := by trivial) :
-    ∃ b m', ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m')) := by
+    ∃ b m', ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (b, m')) := by
   by_cases hwk : m.woken.contains m.current = true
   · exact ⟨_, _, futexWait_run_woken hwk⟩
   · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access

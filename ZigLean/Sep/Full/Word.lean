@@ -110,12 +110,31 @@ theorem ApartL.ne {L : LockWord} (hap : W.ApartL L) : L.b ≠ W.b ∨ L.o ≠ W.
   · exact .inr (by omega)
   · exact .inr (by omega)
 
-/-- A 32-bit word apart from the lock's has another pointer. -/
-theorem ApartL.ptr_ne {W : Word 32 4} {L : LockWord} (hap : W.ApartL L) : W.ptr ≠ L.ptr := fun e => by
-  simp only [Word.ptr, LockWord.ptr, Ptr.mk.injEq, Option.some.injEq, Int.natCast_inj] at e
-  rcases hap.ne with h | h
-  · exact h e.1.symm
-  · exact h e.2.symm
+
+/-- The word's private futex key is `Word.key`. -/
+theorem Ok.keyAt {m : Mem} (hW : W.Ok m A) : m.keyAt W.ptr false = some (W.key m) := by
+  obtain ⟨blk, hb, -⟩ := hW.blk
+  exact Mem.keyAt_wordKey hb W.o false
+
+/-- The word's key stays in a memory with the same block addresses (`Mem.SameAddrs.wordKey`;
+`LockWord.key_of_addrs`). -/
+theorem Ok.key_of_addrs {m m' : Mem} (hW : W.Ok m A) (h : m.SameAddrs m') : W.key m' = W.key m := by
+  obtain ⟨blk, hb, -⟩ := hW.blk
+  exact h.wordKey hb W.o false
+
+/-- A word apart from the lock's has another futex key, in either domain, in a memory with the live
+layout: two live bytes have different keys (`Mem.keyAt_ne`, premise OSF-02). -/
+theorem ApartL.keyAt_ne {L : LockWord} {m : Mem} (hap : W.ApartL L) (hl : m.LiveLayout)
+    (hW : W.Ok m A) (hL : L.BlkOk m) (sh : Bool) : m.keyAt W.ptr sh ≠ some (L.key m) := by
+  rw [← hL.keyAt]
+  obtain ⟨blk, hb, hv, hs, -, -, ho⟩ := hW.blk
+  obtain ⟨blk', hb', hv', hs', -, -, ho'⟩ := hL
+  have := W.sz_pos
+  have hne : W.b ≠ L.b ∨ W.o ≠ L.o := by
+    rcases hap.ne with h | h
+    · exact .inl (Ne.symm h)
+    · exact .inr (Ne.symm h)
+  exact Mem.keyAt_ne hl hb hb' hv hv' (by omega) (by omega) hne sh false ho ho'
 
 theorem cellKey_norm (c : Cell) : cellKey c.norm = cellKey c := by
   obtain ⟨b, a, s, k⟩ := c
@@ -263,6 +282,21 @@ namespace FLock
 
 variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
+/-- The memory of the lock's invariant has the live layout (its `FOwned`). -/
+theorem Inv.layout {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) : m.LiveLayout := by
+  obtain ⟨_, ho, -⟩ := hi.rest
+  exact ho.conc.2.1
+
+/-- A word apart from the lock's has another futex key than the lock's word (`ApartL.keyAt_ne`). -/
+theorem Inv.keyAt_ne {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hW : W.Ok m A)
+    (hap : W.ApartL L.toLockWord) (sh : Bool) : m.keyAt W.ptr sh ≠ some (L.key m) :=
+  hap.keyAt_ne hi.layout hW hi.w.blk sh
+
+/-- A word apart from the lock's has another private key (`Inv.keyAt_ne`). -/
+theorem Inv.key_ne {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hW : W.Ok m A)
+    (hap : W.ApartL L.toLockWord) : W.key m ≠ L.key m := fun e =>
+  hi.keyAt_ne hW hap false (by rw [hW.keyAt, e])
+
 /-- A rest with the same bytes up to `Cell.norm` and the same knowledge and ghost state. -/
 theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G rX m)
     (hs : FHeap.Sim rX'.heap rX.heap) (hk : rX'.know = rX.know) (hg : rX'.gh = rX.gh) :
@@ -402,7 +436,7 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
 /-- The same memory, but `current`, the futex queue and the woken threads, with ghost values `G'`
 whose word invariant holds there and that have the same parts, resources and holders. -/
 theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m)
-    (c : ThreadId) (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId)
+    (c : ThreadId) (ws : Array (ThreadId × FutexKey)) (wk : Array ThreadId)
     (hw : L.WInv (L.pl G') { m with current := c, waiters := ws, woken := wk })
     (hpart : ∀ u, L.part (G' u) = L.part (G u)) (hheld : ∀ u, L.held (G' u) = L.held (G u))
     (hholds : ∀ u, (L.ph (G' u)).held = true ↔ (L.ph (G u)).held = true)
@@ -451,10 +485,10 @@ theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi 
 protocol's rest, apart from the lock's word). If it sleeps, the lock's invariant holds with `t` in
 the queue; else `t` goes to `out`. -/
 theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
-    {e : BitVec 32} {b : Bool} (hi : L.Inv G rX m) (hph : L.ph (G t) = .away) (hW : W.Ok m A)
+    {e : BitVec 32} {sh b : Bool} (hi : L.Inv G rX m) (hph : L.ph (G t) = .away) (hW : W.Ok m A)
     (hap : W.ApartL L.toLockWord) (hX : ∀ l, W.In l → rX.heap l ≠ none)
     (hq : m.waiters.any (·.1 == t) = false)
-    (h : ((Thread.futexWait W.ptr e).run { m with current := t }).run = some (.ok (b, m'))) :
+    (h : ((Thread.futexWait W.ptr e sh).run { m with current := t }).run = some (.ok (b, m'))) :
     if b then L.Inv G rX m' else
       (m'.current = t ∧ L.Inv (upd G t (L.set (G t) .out rnil)) rX m') := by
   have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
@@ -469,7 +503,7 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
     · exact .inl (Ne.symm h)
     · exact .inr (.inr h)
     · exact .inr (.inl h)
-  have hw := hi.w.waitOff (t := t) (by exact hph) hap.ptr_ne hoff hq h
+  have hw := hi.w.waitOff (t := t) (by exact hph) (hi.keyAt_ne hW hap sh) hoff hq h
   -- the relabel of `t` from `away` to `out`, at a memory with the same parts
   have hrel : ∀ M : Mem, L.Inv G rX M → M.current = t →
       L.WInv (upd (L.pl G) t .out) M → L.Inv (upd G t (L.set (G t) .out rnil)) rX M :=
@@ -497,17 +531,26 @@ theorem Inv.spuriousOff {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     L.Inv (upd G t (L.set (G t) .out rnil)) rX { m with current := t } :=
   (hi.cur t).toOut rfl (by rw [hph]; decide) (by rw [hph]; decide) (hi.w.spuriousOff (t := t) (by exact hph) hq).2
 
-/-- A futex wake by thread `t` at a shared word apart from the lock's: the lock's invariant
-holds. -/
-theorem Inv.wakeOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
-    {k : Nat} {cs : List Nat} (hi : L.Inv G rX m) (hap : W.ApartL L.toLockWord)
-    (h : ((Thread.futexWake W.ptr k cs).run { m with current := t }).run = some (.ok ((), m'))) :
+/-- A futex wake by thread `t` at a key other than the lock word's: the lock's invariant holds. -/
+theorem Inv.wakeOffKey {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {k : FutexKey}
+    {n : Nat} {cs : List Nat} (hi : L.Inv G rX m) (hk : k ≠ L.key m)
+    (h : ((Thread.futexWake k n cs).run { m with current := t }).run = some (.ok ((), m'))) :
     L.Inv G rX m' := by
-  have hw := hi.w.wakeOff hap.ptr_ne h
+  have hw := hi.w.wakeOff hk h
   have hm' := Proto.modify_ok h
   subst hm'
   exact hi.requeue t _ _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl) (fun _ h => h)
     (fun _ => Iff.rfl)
+
+/-- A futex wake by thread `t` at a shared word apart from the lock's (`futexWakeC`, at the word's
+private key in the memory of the wake): the lock's invariant holds. -/
+theorem Inv.wakeOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
+    {k : Nat} {cs : List Nat} (hi : L.Inv G rX m) (hW : W.Ok m A) (hap : W.ApartL L.toLockWord)
+    (h : ((Thread.futexWakePtr W.ptr k cs).run { m with current := t }).run =
+      some (.ok ((), m'))) :
+    L.Inv G rX m' := by
+  rw [Thread.futexWakePtr_eq (m := { m with current := t }) hW.keyAt] at h
+  exact hi.wakeOffKey (hi.key_ne hW hap) h
 
 end FLock
 
@@ -2053,8 +2096,8 @@ theorem amap_for_actor {m m' : Mem} {t : ThreadId} (hc : m.current = t)
 
 /-- The scheduler's futex compare/sleep records an access and changes only its queue or woken
 set. Unlike an atomic-load operation, it does not select an atomic-history message. -/
-theorem futexWait_fields {m m' : Mem} {p : Ptr} {e : BitVec 32} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+theorem futexWait_fields {m m' : Mem} {p : Ptr} {e : BitVec 32} {sh b : Bool}
+    (h : ((Thread.futexWait p e sh).run m).run = some (.ok (b, m'))) :
     m'.atomics = m.atomics ∧ m'.seen = m.seen ∧ m'.nextMsg = m.nextMsg := by
   rcases futexWait_eq h with ⟨_, rfl, rfl⟩ | ⟨_, bid, blk, o, v, _, _, _, hcase⟩
   · exact ⟨rfl, rfl, rfl⟩
@@ -3354,15 +3397,17 @@ variable {W : Word 32 4}
 
 /-- A completed scheduler futex wait either consumes a pending wake or performs the actual
 recorded atomic read. Only a matching value sleeps; the read preserves validity and history. -/
-theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m A)
-    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) :
+theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {sh b : Bool}
+    (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
     (m.woken.contains m.current = false ∧ ∃ M, W.Ok M A ∧
       M = m.recordAt W.b W.o 4 .atomicRead ∧ W.hist M = W.hist m ∧
       M.blocks = m.blocks ∧
-      ((W.Holds m e ∧ b = true ∧ m' = { M with waiters := M.waiters.push (t, W.ptr) }) ∨
+      ((W.Holds m e ∧ b = true ∧
+          m' = { M with waiters := M.waiters.push (t, m.wordKey W.b W.o sh) }) ∨
        (b = false ∧ m' = M))) := by
   rcases futexWait_eq h with hwk | ⟨hwk, bid, blk, o, v, ha, _, hv, hcase⟩
   · exact .inl hwk
@@ -3373,13 +3418,14 @@ theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Boo
   refine .inr ⟨hwk, _, hok, rfl, hh, rfl, ?_⟩
   rcases hcase with ⟨rfl, rfl, rfl⟩ | ⟨_, rfl, rfl⟩
   · subst hc
-    exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, rfl⟩
+    exact .inl ⟨(holds_bytes hb₀).mpr hv, rfl, by rw [Mem.wordKey_of hb₀]; rfl⟩
   · exact .inr ⟨rfl, rfl⟩
 
 /-- A futex wait at the word extends its writes (`Word.Extends`). -/
-theorem Extends.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m A)
-    (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) : W.Extends m m' := by
+theorem Extends.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {sh b : Bool}
+    (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (h : ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (b, m'))) : W.Extends m m' := by
   rcases hw.futexWait_native hc ht hcs h with
     ⟨-, -, rfl⟩ | ⟨-, M, -, -, hM, -, ⟨-, -, rfl⟩ | ⟨-, rfl⟩⟩
   · exact .congr rfl rfl
@@ -3387,7 +3433,7 @@ theorem Extends.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool}
   · exact .of_eq hM
 
 /-- A futex wake at any word extends this word's writes. -/
-theorem Extends.futexWake {p : Ptr} {k : Nat} {cs : List Nat} {t : ThreadId} {m m' : Mem}
+theorem Extends.futexWake {p : FutexKey} {k : Nat} {cs : List Nat} {t : ThreadId} {m m' : Mem}
     (h : ((Thread.futexWake p k cs).run { m with current := t }).run = some (.ok ((), m'))) :
     W.Extends m m' := by
   have hm' := Proto.modify_ok h

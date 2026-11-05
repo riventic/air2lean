@@ -10,9 +10,9 @@ product.
 * `LockWord.ApartL L K`: the two words do not overlap.
 * `WInv.otherStep`: a step of `K`'s code (`LockWord.Step`) by a thread `t` that is outside `L`'s
   code keeps `L`'s invariant with the same places. In `L`'s view `t` is `away`, or `holdsAway`
-  if it holds `L` and `K`'s word is in `L`'s nest (`LockWord.nest`): `K`'s futex wait may queue
-  `t` at `K`'s word (`Step.newQ`: only `t` joins the queue), and `L`'s queue admits exactly those
-  two places at another futex (`Queue`). A thread inside `L`'s code (`spin`, `wait`, `holds`,
+  if it holds `L` and `K`'s futex key is a key of `L`'s nest (`LockWord.NestKey`): `K`'s futex
+  wait may queue `t` at `K`'s key (`Step.newQ`: only `t` joins the queue), and `L`'s queue admits
+  exactly those two places at another key (`Queue`; `ApartL.key_ne`: the keys differ). A thread inside `L`'s code (`spin`, `wait`, `holds`,
   `wake`) does not run `K`'s code.
 * `Before.otherStep`, `Owns.otherStep`: `K`'s step keeps `L`'s newest message and so what the
   free `L` owns, for a resource without `K`'s word.
@@ -72,6 +72,18 @@ theorem ApartL.ptr_ne (h : L.ApartL K) : L.ptr ≠ K.ptr := fun e => by
   · exact h e.1
   · exact h e.2
 
+/-- Apart words have other futex keys in a memory with the live layout: two live bytes have
+different keys (`Mem.keyAt_ne`, premise OSF-02). -/
+theorem ApartL.key_ne {m : Mem} (h : L.ApartL K) (hl : m.LiveLayout) (hL : L.BlkOk m)
+    (hK : K.BlkOk m) : K.key m ≠ L.key m := fun e => by
+  have hkK := hK.keyAt
+  have hkL := hL.keyAt
+  obtain ⟨blk, hb, hv, hs, -, -, ho⟩ := hK
+  obtain ⟨blk', hb', hv', hs', -, -, ho'⟩ := hL
+  have hne : K.b ≠ L.b ∨ K.o ≠ L.o := h.ne.imp Ne.symm Ne.symm
+  exact Mem.keyAt_ne hl hb hb' hv hv' (by omega) (by omega) hne false false ho ho'
+    (hkK.trans (by rw [e]; exact hkL.symm))
+
 /-- A byte of `L`'s word is not a byte of `K`'s. -/
 theorem ApartL.not_in (h : L.ApartL K) {l : Zig.Loc} (hl : L.In l) : ¬ K.In l := by
   obtain ⟨b, x⟩ := l
@@ -99,18 +111,19 @@ theorem Before.otherStep {t : ThreadId} {m m' : Mem} {c : VClock} (hs : K.Step t
   exact ⟨i, l, (hs.otherLoc hap i l).mpr hl, hle⟩
 
 /-- **`K`'s step keeps `L`'s invariant** with the same places, at any place of `t`; a step that
-queues `t` (`K`'s futex wait) needs `t` at `away`, or at `holdsAway` with `K`'s word in `L`'s nest
-(module doc). -/
+queues `t` (`K`'s futex wait) needs `t` at `away`, or at `holdsAway` with `K`'s futex key a key of
+`L`'s nest (`NestKey`; module doc). `K`'s key is not `L`'s (`hkne`, `ApartL.key_ne`). -/
 theorem WInv.otherStep {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem} (hi : L.WInv P m)
-    (hs : K.Step t m m') (hap : L.ApartL K)
-    (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) → P t = .away ∨ (P t = .holdsAway ∧ L.nest K.ptr)) :
+    (hs : K.Step t m m') (hap : L.ApartL K) (hkne : K.key m ≠ L.key m)
+    (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
+      P t = .away ∨ (P t = .holdsAway ∧ L.NestKey m (K.key m))) :
     L.WInv P m' := by
   obtain ⟨hblk', hcur⟩ := BlkOk.otherStep hs hap hi.blk
   have hU32 : ∀ v, L.U32 m' v ↔ L.U32 m v := fun v => by unfold LockWord.U32; rw [hcur]
   have hloc := hs.otherLoc hap
-  have hpne := hap.ptr_ne.symm
-  -- A queue entry that is new is `t`'s at `K`'s word.
-  have hnew : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t ∧ w.2 = K.ptr := fun w hw hn =>
+  have hkL : L.key m' = L.key m := hi.blk.key_of_addrs hs.addrs
+  -- A queue entry that is new is `t`'s at `K`'s key.
+  have hnew : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t ∧ w.2 = K.key m := fun w hw hn =>
     ⟨hs.newQ w hw hn, Classical.byContradiction fun h2 => hn ((hs.waiters_mem w h2).mp hw)⟩
   refine ⟨by rw [hs.csize, hs.threads]; exact hi.csize, fun u hu => ?_, hblk', ?_, hi.one,
     ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩,
@@ -138,17 +151,18 @@ theorem WInv.otherStep {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem} (hi : 
   · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
     exact ⟨hs.someLe h1, fun u hu => VClock.le_trans (h2 u hu) (hs.clocks u)⟩
   · by_cases hold : w ∈ m.waiters
-    · exact hi.fq w hold
+    · exact hi.fq.of_key L hkL hs.addrs w hold
     · obtain ⟨h1, h2⟩ := hnew w hw hold
-      rw [h1, h2]
+      rw [h1, h2, hkL]
       rcases ht ⟨w, hw, hold⟩ with ht | ⟨ht, hn⟩
-      · exact .inr (.inl ⟨hpne, ht⟩)
-      · exact .inr (.inr ⟨hpne, ht, hn⟩)
-  · -- an entry at `L`'s word is an old one
-    have hw' : L.Waits m.waiters := by
+      · exact .inr (.inl ⟨hkne, ht⟩)
+      · exact .inr (.inr ⟨hkne, ht, NestKey.of_addrs L hs.addrs hn⟩)
+  · -- an entry at `L`'s key is an old one
+    have hw' : L.Waits m m.waiters := by
       obtain ⟨w, hwm, he⟩ := Array.any_eq_true'.mp hw
+      have he' : w.2 = L.key m := (beq_iff_eq.mp he).trans hkL
       exact Array.any_eq_true'.mpr
-        ⟨w, (hs.waiters_mem w (by rw [beq_iff_eq.mp he]; exact hpne.symm)).mp hwm, he⟩
+        ⟨w, (hs.waiters_mem w (by rw [he']; exact hkne.symm)).mp hwm, beq_iff_eq.mpr he'⟩
     obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hw'
     refine ⟨v, hs.threads ▸ hv, fun hvw => Array.any_eq_false'.mpr fun w hw hy => ?_, h1,
       fun hh => (hU32 _).mpr (h2 hh)⟩
@@ -230,9 +244,10 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
     (hi : L.Inv G (rsum (K.wordR m) rY) m) (hs : K.Step t m m') (hap : L.ApartL K)
     (hKb : K.BlkOk m) (hYoff : K.Off rY.heap.erase)
     (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
-      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.nest K.ptr)) :
+      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.toLockWord.NestKey m (K.key m))) :
     L.Inv G (rsum (K.wordR m') rY) m' := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hl : m.LiveLayout := ho.conc.2.1
   have hown : L.own G m' = L.own G m := by
     funext u; unfold FLock.own; rw [LockWord.joinedB_congr hs.threads]
   have hKbl : K.b < m.blocks.size := by
@@ -255,7 +270,7 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
       exact hKb.cell h2 h3)
     (fun l hl => by simp only [FHeap.union_apply, hLwK m l hl, hLK l hl, hYK l hl]; rfl)
   rw [← LockWord.wordR_otherStep hs hap, ← hperm m', ← hown] at ho'
-  refine ⟨hi.w.otherStep hs hap ht, ⟨rL, ho', hLoff,
+  refine ⟨hi.w.otherStep hs hap (hap.key_ne hl hi.w.blk hKb) ht, ⟨rL, ho', hLoff,
     FHeap.disjoint_union_right.mpr ⟨disj_cellsAt hLK, hXY.2⟩, fun hF' => ?_, hnF⟩, ?_, hi.pdisj,
     hi.idle, hi.res⟩
   · obtain ⟨h1, h2⟩ := hF hF'
@@ -274,7 +289,7 @@ theorem Inv.otherStep {G G' : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' :
     (hi : L.Inv G (rsum (K.wordR m) rY) m) (hs : K.Step t m m') (hap : L.ApartL K)
     (hKb : K.BlkOk m) (hYoff : K.Off rY.heap.erase)
     (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
-      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.nest K.ptr))
+      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.toLockWord.NestKey m (K.key m)))
     (hG : ∀ u, L.ph (G' u) = L.ph (G u) ∧ L.part (G' u) = L.part (G u) ∧
       L.held (G' u) = L.held (G u))
     (hR : ∀ r, L.R G r → L.R G' r) :
