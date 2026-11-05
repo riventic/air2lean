@@ -50,7 +50,7 @@ variable {P : FAssn}
   rw [mul_lit (decide_eq_true h)]; exact read_val (BitVec.toNat_mul_of_lt h)
 
 /-- A `Result` contract as a step rule: the frame `P` is kept, the summary is a fact. -/
-theorem result_step {α : Type} {x : Result α} {pre : Prop} {post : α → Prop}
+theorem result_step {α : Type} {P : FAssn} {x : Result α} {pre : Prop} {post : α → Prop}
     (contract : pre → ∃ v, x = pure v ∧ post v) (h : pre) :
     FTotalTriple P (StateT.lift x : MemM α) (fun v => ⟪post v⟫ ⋆ P) := by
   obtain ⟨v, rfl, hv⟩ := contract h
