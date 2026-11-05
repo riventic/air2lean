@@ -1833,19 +1833,19 @@
           "name": "overflow-bound-dropped",
           "path": "tests/roadmap/vcs/Extract.lean",
           "category": "other",
-          "anchor": "/-- The overflow bound dropped. -/"
+          "anchor": "-- The overflow bound dropped: the `add` precondition is left."
         },
         {
           "name": "cells-not-swapped",
           "path": "tests/roadmap/vcs/Extract.lean",
           "category": "other",
-          "anchor": "/-- The cells not swapped. -/"
+          "anchor": "-- The cells not swapped: the heap postcondition is left."
         },
         {
           "name": "provenance-premise-dropped",
           "path": "tests/roadmap/vcs/Extract.lean",
           "category": "other",
-          "anchor": "/-- The provenance premise dropped: pointers into blocks are not compared by address. -/"
+          "anchor": "-- The provenance premise dropped: pointers into blocks are not compared by address"
         }
       ],
       "note": "Extract.lean (CI) proves contracts of loop-free generated functions from the obligations fsym leaves (pinned fsym reports), refutes the single goal a wrong tardiness contract leaves, and pins loop requests and the recursive call; Memory.lean pins each kind of obligation with its fsym.report origin and refutes a reachable panic. The mutated contracts (a dropped overflow bound, unswapped cells, a dropped provenance premise) must fail inside fail_if_success."

@@ -2541,8 +2541,9 @@ jobs:
           python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native.json" \
             --committed "tests/roadmap/bitops-native/evidence/${{ matrix.zig }}.json"
 
-      # Check source-linked VCs against the pointer translation that check.sh built.
-      - name: Build optional verification conditions
+      # Build the modules the verification-condition fixtures (tests/roadmap/vcs) import, against
+      # the translations that check.sh built.
+      - name: Build verification condition dependencies
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
@@ -2561,7 +2562,7 @@ jobs:
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
       # Contracts of committed loop-free translations: their obligations are what fsym's walk
-      # leaves (pinned fsym reports); loops are left as invariant requests.
+      # leaves (pinned goals and reports); loops are left as invariant requests.
       - name: Generated-code verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |

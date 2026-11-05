@@ -74,6 +74,13 @@ example (p : Ptr) (v : BitVec 32) (fits : v.toNat + 1 < 2 ^ 32) :
     FTotalTriple (up (pts p 4 v)) (incr p) (fun _ => up (pts p 4 (v + 1))) := by
   fsym
 
+-- Signed `+` without runtime safety (`safe := false`, the plain AIR `add`) has the same step
+-- rule as the checked one: its side condition is the overflow bound.
+example (a b : BitVec 32) (h : a.saddOverflow b = false) :
+    FTotalTriple emp (StateT.lift (Zig.add true a b (safe := false)) : MemM (BitVec 32))
+      (fun v => ⟪v = a + b⟫) := by
+  fsym
+
 -- A returned Zig error is an obligation of the postcondition at that return, distinct from a
 -- safety panic.
 def check (b : Bool) : MemM (Except ErrName Unit) :=

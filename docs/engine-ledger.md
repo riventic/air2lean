@@ -490,6 +490,8 @@ Request: One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (use
 
 Status: **closed**. Requester: one-logic-vc.
 
+Note: vc_gen and its memVc were retired (L15); fsym.quiet and fsym.report stay, and tests/roadmap/vcs/Memory.lean now pins fsym's own reports
+
 Progress: fsym.quiet suppresses the human stop messages; memVc enables it only around Auto.run, so vc_gen refuses an unexecuted command with its own error and no duplicate fsym info (pinned by vcs/Memory.lean). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON
 
 Request: Quiet stop: at "no rule for the command" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason

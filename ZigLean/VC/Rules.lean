@@ -7,9 +7,10 @@ A `Result` operation inside generated memory code is a command `StateT.lift x`, 
 step rule of the symbolic executor `fsym` (`docs/proof-automation.md`). `result_step` makes a
 `Result` contract (`pre → ∃ v, x = pure v ∧ post v`) such a rule: its precondition is the rule's
 side condition, its summary a fact of the result. This file registers the primitive contracts
-that the rule library of `ZigLean/Sep/Full/AutoRules.lean` lacks; a proved contract of a
-generated function is given to the walk the same way (`docs/vcs.md`). The converse, a `Result`
-contract from the total triple of the lifted program, is `FTotalTriple.result_spec`
+that the rule library of `ZigLean/Sep/Full/AutoRules.lean` lacks. A proved contract of a
+generated function is given to the walk as the total triple of its lifted program
+(`fsym [f_total]`, `docs/vcs.md`); `result_step c` makes one from a `Result` contract `c`. The
+converse, a `Result` contract from that triple, is `FTotalTriple.result_spec`
 (`ZigLean/Sep/Full/Init.lean`).
 
 Every rule is an ordinary theorem; nothing here is trusted.
@@ -38,16 +39,18 @@ theorem mul_unsigned (a b : BitVec n) :
     a.toNat * b.toNat < 2 ^ n → ∃ v, Zig.mul false a b = pure v ∧ v = a * b := fun h =>
   ⟨a * b, by simp [Zig.mul_unsigned, Nat.not_le.mpr h], rfl⟩
 
-theorem add_signed (a b : BitVec n) :
-    a.saddOverflow b = false → ∃ v, Zig.add true a b = pure v ∧ v = a + b := fun h =>
+/-- Signed `+`, checked (`add_safe`) or plain (`safe := false`, the form without runtime safety):
+`safe` only decides the error of an overflow. -/
+theorem add_signed (a b : BitVec n) (safe : Bool) :
+    a.saddOverflow b = false → ∃ v, Zig.add true a b safe = pure v ∧ v = a + b := fun h =>
   ⟨a + b, by simp [Zig.add, h], rfl⟩
 
-theorem sub_signed (a b : BitVec n) :
-    a.ssubOverflow b = false → ∃ v, Zig.sub true a b = pure v ∧ v = a - b := fun h =>
+theorem sub_signed (a b : BitVec n) (safe : Bool) :
+    a.ssubOverflow b = false → ∃ v, Zig.sub true a b safe = pure v ∧ v = a - b := fun h =>
   ⟨a - b, by simp [Zig.sub, h], rfl⟩
 
-theorem mul_signed (a b : BitVec n) :
-    a.smulOverflow b = false → ∃ v, Zig.mul true a b = pure v ∧ v = a * b := fun h =>
+theorem mul_signed (a b : BitVec n) (safe : Bool) :
+    a.smulOverflow b = false → ∃ v, Zig.mul true a b safe = pure v ∧ v = a * b := fun h =>
   ⟨a * b, by simp [Zig.mul, h], rfl⟩
 
 /-- The range condition of `@intCast`, as in its definition. -/
@@ -80,17 +83,20 @@ theorem unwrapErr {α : Type} (e : Except ErrName α) :
     FTotalTriple P (StateT.lift (Zig.mul false a b) : MemM (BitVec n)) (fun v => ⟪v = a * b⟫ ⋆ P) :=
   result_step (mul_unsigned a b) h
 
-@[fsym] theorem add_signed_step (a b : BitVec n) (h : a.saddOverflow b = false) :
-    FTotalTriple P (StateT.lift (Zig.add true a b) : MemM (BitVec n)) (fun v => ⟪v = a + b⟫ ⋆ P) :=
-  result_step (add_signed a b) h
+@[fsym] theorem add_signed_step (a b : BitVec n) {safe : Bool} (h : a.saddOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.add true a b safe) : MemM (BitVec n))
+      (fun v => ⟪v = a + b⟫ ⋆ P) :=
+  result_step (add_signed a b safe) h
 
-@[fsym] theorem sub_signed_step (a b : BitVec n) (h : a.ssubOverflow b = false) :
-    FTotalTriple P (StateT.lift (Zig.sub true a b) : MemM (BitVec n)) (fun v => ⟪v = a - b⟫ ⋆ P) :=
-  result_step (sub_signed a b) h
+@[fsym] theorem sub_signed_step (a b : BitVec n) {safe : Bool} (h : a.ssubOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.sub true a b safe) : MemM (BitVec n))
+      (fun v => ⟪v = a - b⟫ ⋆ P) :=
+  result_step (sub_signed a b safe) h
 
-@[fsym] theorem mul_signed_step (a b : BitVec n) (h : a.smulOverflow b = false) :
-    FTotalTriple P (StateT.lift (Zig.mul true a b) : MemM (BitVec n)) (fun v => ⟪v = a * b⟫ ⋆ P) :=
-  result_step (mul_signed a b) h
+@[fsym] theorem mul_signed_step (a b : BitVec n) {safe : Bool} (h : a.smulOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.mul true a b safe) : MemM (BitVec n))
+      (fun v => ⟪v = a * b⟫ ⋆ P) :=
+  result_step (mul_signed a b safe) h
 
 /-- `@intCast` in range (`Zig.Full.Auto.intCast_widen_step` covers unsigned widening). -/
 @[fsym] theorem intCast_range_step (s₁ s₂ : Bool) (m : Nat) (a : BitVec n)

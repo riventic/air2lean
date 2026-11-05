@@ -14,7 +14,7 @@ statements and the closing of the obligations.
 
 namespace VCExtract
 
-open Zig Zig.Full FAssn VC
+open Zig Zig.Full FAssn
 
 /-! ## A contracted loop-free function receives complete obligations
 
@@ -67,19 +67,62 @@ theorem wrong_contract_false :
 
 /-! ## Compositional calls use proved contracts
 
-`fsym [tardiness_total]` executes the call of `tardiness` by its contract: its result is a fact
-(`x✝¹` below), not its body. Without bounds, the obligations of `weightedTardiness` are the
-overflow of its `add` and its `mul` (`rule_premise`) and its result at the return
-(`postcondition`). The `mul` bound is undecided, so it is split (`hc`). -/
+`fsym [tardiness_total]` executes the call of `tardiness` by its contract: its result is the
+fact `x✝¹` below, not its body. Without bounds, the obligations of `weightedTardiness` are the
+overflow of its `add` (the last goal) and of its `mul` (the second), each split off as the
+premise of its step rule (`hc✝`, `hc`), and its result at the return under either case of the
+`mul` bound (the first and the third). -/
 
 /--
-info: fsym-report {"residuals":[{"goal":{"head":"Eq","text":"(x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat"},"index":0,"origin":{"condition":"postcondition","judgment":"Zig.Full.FLogic.T","program":{"head":"Pure.pure","text":"pure (x✝² * x)"},"reason":"postcondition_not_proved","rule":{"head":"Zig.Full.Auto.ret","text":"Auto.ret"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp (pure (x✝² * x)) fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}},{"goal":{"head":"LT.lt","text":"x✝².toNat * x.toNat < 2 ^ 32"},"index":1,"origin":{"condition":"rule_premise","judgment":"Zig.Full.FLogic.T","program":{"head":"StateT.lift","text":"StateT.lift (mul false x✝² x)"},"reason":"side_condition_not_proved","rule":{"head":"Zig.VC.Prim.mul_unsigned_step","text":"@Prim.mul_unsigned_step"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp\n  (StateT.lift (mul false x✝² x) >>= fun x =>\n    (StateT.lift do\n        let e ←\n          (fun x => x.fst) <$> do\n              let p ← pure (x, default)\n              StateT.run (pure (Basic.weightedTardinessExit.ret p.fst)) p.snd\n        match e with\n          | Basic.weightedTardinessExit.ret v => pure v) >>=\n      pure)\n  fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}},{"goal":{"head":"Eq","text":"(x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat"},"index":2,"origin":{"condition":"postcondition","judgment":"Zig.Full.FLogic.T","program":{"head":"Pure.pure","text":"pure (x✝² * x)"},"reason":"postcondition_not_proved","rule":{"head":"Zig.Full.Auto.ret","text":"Auto.ret"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp (pure (x✝² * x)) fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}},{"goal":{"head":"LT.lt","text":"start.toNat + j.duration.toNat < 2 ^ 32"},"index":3,"origin":{"condition":"rule_premise","judgment":"Zig.Full.FLogic.T","program":{"head":"StateT.lift","text":"StateT.lift (add false start j.duration)"},"reason":"side_condition_not_proved","rule":{"head":"Zig.Full.Auto.add_step","text":"@Auto.add_step"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp\n  (StateT.lift (add false start j.duration) >>= fun x =>\n    (StateT.lift do\n        let e ←\n          (fun x => x.fst) <$> do\n              let p ← pure (x, default)\n              StateT.run\n                  (do\n                    let i4 ← pure j.due\n                    let i5 ← call (Basic.tardiness p.fst i4)\n                    let i6 ← pure j.weight\n                    let i7 ← liftM (intCast false false 32 i6 false)\n                    let i8 ← liftM (mul false i5 i7)\n                    pure (Basic.weightedTardinessExit.ret i8))\n                  p.snd\n        match e with\n          | Basic.weightedTardinessExit.ret v => pure v) >>=\n      pure)\n  fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}}],"schemaVersion":1,"status":"stopped"}
+error: unsolved goals
+j : Basic.Job
+start : BitVec 32
+hc✝ : start.toNat + j.duration.toNat < 2 ^ 32
+x✝⁴ : BitVec 32
+x✝³ : x✝⁴.toNat = start.toNat + j.duration.toNat
+x✝² : BitVec 32
+x✝¹ : x✝².toNat = x✝⁴.toNat - j.due.toNat
+x : BitVec 32
+x✝ : x.toNat = j.weight.toNat
+hc : x✝².toNat * x.toNat < 2 ^ 32
+⊢ (x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat
+
+case h
+j : Basic.Job
+start : BitVec 32
+hc✝ : start.toNat + j.duration.toNat < 2 ^ 32
+x✝⁴ : BitVec 32
+x✝³ : x✝⁴.toNat = start.toNat + j.duration.toNat
+x✝² : BitVec 32
+x✝¹ : x✝².toNat = x✝⁴.toNat - j.due.toNat
+x : BitVec 32
+x✝ : x.toNat = j.weight.toNat
+hc : ¬x✝².toNat * x.toNat < 2 ^ 32
+⊢ x✝².toNat * x.toNat < 2 ^ 32
+
+j : Basic.Job
+start : BitVec 32
+hc✝ : start.toNat + j.duration.toNat < 2 ^ 32
+x✝⁴ : BitVec 32
+x✝³ : x✝⁴.toNat = start.toNat + j.duration.toNat
+x✝² : BitVec 32
+x✝¹ : x✝².toNat = x✝⁴.toNat - j.due.toNat
+x : BitVec 32
+x✝ : x.toNat = j.weight.toNat
+hc : ¬x✝².toNat * x.toNat < 2 ^ 32
+⊢ (x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat
+
+case h
+j : Basic.Job
+start : BitVec 32
+hc : ¬start.toNat + j.duration.toNat < 2 ^ 32
+⊢ start.toNat + j.duration.toNat < 2 ^ 32
 -/
-#guard_msgs (drop error, all) in
+#guard_msgs in
 example (j : Basic.Job) (start : BitVec 32) :
     FTotalTriple emp (StateT.lift (Basic.weightedTardiness j start) : MemM (BitVec 32))
       (fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫) := by
-  set_option fsym.report true in fsym [tardiness_total]
+  fsym [tardiness_total]
 
 -- The same statement as `Proofs/Basic/Proofs.lean`'s `weightedTardiness_ok`, from its VCs.
 theorem weightedTardiness_contract (j : Basic.Job) (start : BitVec 32)
@@ -94,7 +137,32 @@ theorem weightedTardiness_contract (j : Basic.Job) (start : BitVec 32)
 /-! ## Error returns
 
 A returned Zig error is an obligation of the postcondition at its return, apart from the safety
-obligations. -/
+obligations: the walk of `parseDigit` leaves one goal per return, the two error returns (each
+under its branch condition `hc`) and the digit. -/
+
+/--
+error: unsolved goals
+c : BitVec 8
+hc : lt false c 48#8 = true
+⊢ Except.error "NotDigit" = if c.toNat < 48 ∨ 57 < c.toNat then Except.error "NotDigit" else Except.ok (c - 48)
+
+c : BitVec 8
+hc✝ : ¬lt false c 48#8 = true
+hc : gt false c 57#8 = true
+⊢ Except.error "NotDigit" = if c.toNat < 48 ∨ 57 < c.toNat then Except.error "NotDigit" else Except.ok (c - 48)
+
+c : BitVec 8
+hc✝ : ¬lt false c 48#8 = true
+hc : ¬gt false c 57#8 = true
+x : BitVec 8
+x✝ : x.toNat + (48#8).toNat = c.toNat
+⊢ Except.ok x = if c.toNat < 48 ∨ 57 < c.toNat then Except.error "NotDigit" else Except.ok (c - 48)
+-/
+#guard_msgs in
+example (c : BitVec 8) :
+    FTotalTriple emp (StateT.lift (Errors.parseDigit c) : MemM _)
+      (fun v => ⟪v = if c.toNat < 48 ∨ 57 < c.toNat then .error "NotDigit" else .ok (c - 48)⟫) := by
+  fsym
 
 theorem parseDigit_total (c : BitVec 8) :
     FTotalTriple emp (StateT.lift (Errors.parseDigit c) : MemM _)
@@ -163,31 +231,72 @@ theorem same_contract (p q : Ptr) :
 
 /-! Mutated contracts: each leaves an obligation that the walk cannot close. -/
 
-/-- The overflow bound dropped. -/
-example : True := by
-  fail_if_success
-    have : ∀ (p : Ptr) (delta : BitVec 32) (old : BitVec 64),
-        FTotalTriple (up (pts p 8 old)) (Pointers.addTo p delta)
-          (fun _ => up (pts p 8 (old + delta.setWidth 64))) := by
-      intros; fsym
-  trivial
+-- The overflow bound dropped: the `add` precondition is left.
+/--
+error: unsolved goals
+case h
+p : Ptr
+delta : BitVec 32
+x✝¹ x : BitVec 64
+x✝ : x.toNat = delta.toNat
+right✝ : 0 ≤ p.off
+w✝ : BlockId
+h✝ : p.block = some w✝
+hc : ¬x✝¹.toNat + x.toNat < 2 ^ 64
+⊢ x✝¹.toNat + x.toNat < 2 ^ 64
+-/
+#guard_msgs in
+example (p : Ptr) (delta : BitVec 32) (old : BitVec 64) :
+    FTotalTriple (up (pts p 8 old)) (Pointers.addTo p delta)
+      (fun _ => up (pts p 8 (old + delta.setWidth 64))) := by
+  fsym
 
-/-- The cells not swapped. -/
-example : True := by
-  fail_if_success
-    have : ∀ (p q : Ptr) (x y : BitVec 32),
-        FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (Pointers.swap p q)
-          (fun _ => up (pts p 4 x) ⋆ up (pts q 4 y)) := by
-      intros; fsym
-  trivial
+-- The cells not swapped: the heap postcondition is left.
+/--
+error: unsolved goals
+p q : Ptr
+x✝² x✝¹ : BitVec 32
+x✝ x : Unit
+right✝¹ : 0 ≤ q.off
+w✝¹ : BlockId
+h✝¹ : q.block = some w✝¹
+right✝ : 0 ≤ p.off
+w✝ : BlockId
+h✝ : p.block = some w✝
+⊢ EUpd (up (pts q 4 x✝²) ⋆ up (pts p 4 x✝¹)) (up (pts p 4 x✝²) ⋆ up (pts q 4 x✝¹))
+-/
+#guard_msgs in
+example (p q : Ptr) (x y : BitVec 32) :
+    FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (Pointers.swap p q)
+      (fun _ => up (pts p 4 x) ⋆ up (pts q 4 y)) := by
+  fsym
 
-/-- The provenance premise dropped: pointers into blocks are not compared by address. -/
-example : True := by
-  fail_if_success
-    have : ∀ p q : Ptr,
-        FTotalTriple emp (Pointers.same p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ emp) := by
-      intros; fsym
-  trivial
+-- The provenance premise dropped: pointers into blocks are not compared by address, so the
+-- comparison is left.
+/--
+info: fsym: no rule for the command
+  ptrEqAddr p q
+with the precondition
+  emp
+---
+error: unsolved goals
+p q : Ptr
+⊢ FLogic.total.T emp
+    (ptrEqAddr p q >>= fun x =>
+      (do
+          let e ←
+            (fun x => x.fst) <$> do
+                let p ← pure (x, default)
+                StateT.run (pure (Pointers.sameExit.ret p.fst)) p.snd
+          match e with
+            | Pointers.sameExit.ret v => pure v) >>=
+        pure)
+    fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ emp
+-/
+#guard_msgs in
+example (p q : Ptr) :
+    FTotalTriple emp (Pointers.same p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ emp) := by
+  fsym
 
 end Memory
 
@@ -202,8 +311,31 @@ info: fsym: no rule for the command
   StateT.lift (StateT.run (loop (Basic.sum.loop7 xs (len xs)) Basic.sum.again7) { total := 0#64, local3 := 0#64 })
 with the precondition
   emp
+---
+error: unsolved goals
+xs : Array (BitVec 32)
+⊢ FLogic.total.T emp
+    (StateT.lift
+        (StateT.run (loop (Basic.sum.loop7 xs (len xs)) Basic.sum.again7) { total := 0#64, local3 := 0#64 }) >>=
+      fun x =>
+      (StateT.lift do
+          let e ←
+            (fun x => x.fst) <$>
+                StateT.run
+                  (match x.fst with
+                  | Basic.sumExit.br6 => do
+                    let __do_lift ← get
+                    let i24 ← pure __do_lift.total
+                    pure (Basic.sumExit.ret i24)
+                  | e => pure e)
+                  x.snd
+          match e with
+            | Basic.sumExit.ret v => pure v
+            | x => throw Error.panic) >>=
+        pure)
+    fun x => ⟪True⟫
 -/
-#guard_msgs (drop error, all) in
+#guard_msgs in
 example (xs : Array (BitVec 32)) :
     FTotalTriple emp (StateT.lift (Basic.sum xs) : MemM (BitVec 64)) (fun _ => ⟪True⟫) := by
   fsym
@@ -214,8 +346,40 @@ info: fsym: no rule for the command
 with the precondition
   up (bytesAt x✝ A 8 BlockKind.stack (writeBytes (Array.replicate 8 Byte.undef) 0 (Enc.encode 0#64))) ⋆
     bauth b 8 BlockKind.stack Frac.one ⋆ plain
+---
+error: unsolved goals
+n : BitVec 32
+x✝ : Ptr
+A : Nat
+b : BlockId
+left✝¹ : x✝.block = some b
+left✝ : x✝.off = 0
+right✝¹ : A % 8 = 0
+x : Unit
+right✝ : 0 ≤ x✝.off
+h✝ : x✝.block = some b
+⊢ FLogic.partial.T
+    (up (bytesAt x✝ A 8 BlockKind.stack (writeBytes (Array.replicate 8 Byte.undef) 0 (Enc.encode 0#64))) ⋆
+      bauth b 8 BlockKind.stack Frac.one ⋆ plain)
+    (StateT.run (loop (Pointers.sumTo.loop6 n x✝) Pointers.sumTo.again6) { acc := x✝, i := 0#32 } >>= fun x =>
+      (do
+          let e ←
+            (fun x => x.fst) <$>
+                StateT.run
+                  (match x.fst with
+                  | Pointers.sumToExit.br5 => do
+                    let i19 ← liftM (load (BitVec 64) 8 x✝)
+                    pure (Pointers.sumToExit.ret i19)
+                  | e => pure e)
+                  x.snd
+          free x✝
+          match e with
+            | Pointers.sumToExit.ret v => pure v
+            | x => throw Error.panic) >>=
+        pure)
+    fun x => plain
 -/
-#guard_msgs (drop error, all) in
+#guard_msgs in
 example (n : BitVec 32) : FTriple plain (Pointers.sumTo n) (fun _ => plain) := by
   fsym
 
@@ -226,8 +390,17 @@ info: fsym: no rule for the command
   Pointers.addDown p n
 with the precondition
   up (pts p 8 x)
+---
+error: unsolved goals
+p : Ptr
+n : BitVec 32
+x : BitVec 64
+right✝ : 0 ≤ p.off
+w✝ : BlockId
+h✝ : p.block = some w✝
+⊢ FLogic.total.T (up (pts p 8 x)) (Pointers.addDown p n >>= pure) fun x_1 => up (pts p 8 x)
 -/
-#guard_msgs (drop error, all) in
+#guard_msgs in
 example (p : Ptr) (n : BitVec 32) (x : BitVec 64) :
     FTotalTriple (up (pts p 8 x)) (Pointers.addDown p n) (fun _ => up (pts p 8 x)) := by
   fsym
