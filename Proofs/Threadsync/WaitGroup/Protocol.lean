@@ -777,7 +777,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
                   · exact VClock.le_refl _
                   · exact hclk u
     intro e hfe hb hk hl ho
-    rcases hs.fpNew hcs hfe with ⟨e₀, he₀, hn⟩ | ⟨htid, hle, hw⟩
+    rcases hs.fpNew hfe with ⟨e₀, he₀, hn⟩ | ⟨htid, hle, hw⟩
     · have hp := narrows_box hn hl ho
       obtain ⟨-, hb₀, hk₀, -, -, hc⟩ := hn
       rcases hu.attr e₀ he₀ (hb₀ ▸ hb) (hk₀ ▸ hk) hp.1 hp.2 with h | ⟨u, hu12, h⟩ | ⟨j, hj, hsj, h⟩
