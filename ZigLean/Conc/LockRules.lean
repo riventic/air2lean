@@ -813,7 +813,7 @@ theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     rw [hown]; exact ho1.add (by rw [hst.threads]; exact ht) (hst.sub hoff hsub) hdj howns
   refine ⟨hst, hcM, hL, hR, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw3 (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
-    (fun hF' => ?_) (fun u hu => ?_) (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hp => ?_)
+    (fun hF' => ?_) (fun u hu => ?_) (by rw [hwM]; exact Lock.Queue.of_key L hst.key (fq_keep hi hnw hna)) (fun hU hp => ?_)
     hpt (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc])) (fun u hu => ?_)⟩
   · unfold upd; split
     · rename_i hu; subst hu; rw [L.part_set, L.held_set]
@@ -853,7 +853,7 @@ theorem Inv.acquire {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
         L.held_set, L.R_set]
       exact hR
     · exact absurd hu (hF u)
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ Lock.Waits.of_key L hst.key hp)
     refine ⟨v, by rw [hst.threads]; exact hv, hwM ▸ hq, ?_, fun hh => ?_⟩
     · rw [hphu]; split
       · rfl
@@ -910,7 +910,7 @@ theorem Inv.contend {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) L.valC (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
-    (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)) (fun hU _ => ?_)
+    (by rw [hwM]; exact Lock.Queue.of_key L hst.key (fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide))) (fun hU _ => ?_)
     (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
     (fun u hu => .inr ⟨hnF, (hholds u).mp hu⟩)⟩
   · unfold upd; split
@@ -986,7 +986,7 @@ theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   refine ⟨hst, hcM, hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) hw (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu hv => ?_) (fun u => ?_) ?_
     (fun hF' => ?_) (fun u hu => ?_)
-    (by rw [hwM]; exact fq_keep hi hnw hna) (fun hU hq => ?_) hng
+    (by rw [hwM]; exact Lock.Queue.of_key L hst.key (fq_keep hi hnw hna)) (fun hU hq => ?_) hng
     (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
     (fun u hu => .inr ⟨hnF, (hholds u).mp hu⟩)⟩
   · unfold upd; split
@@ -1009,7 +1009,7 @@ theorem Inv.rmwKeep {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
   · have hut : u ≠ t := fun e => by
       have := (hholds u).mp hu; rw [e] at this; exact hnh this
     rw [hGu u hut, L.R_set]; exact hi.res u ((hholds u).mp hu)
-  · obtain ⟨v, hv, hvq, h1, h2⟩ := hi.wit (hwM ▸ hq)
+  · obtain ⟨v, hv, hvq, h1, h2⟩ := hi.wit (hwM ▸ Lock.Waits.of_key L hst.key hq)
     refine ⟨v, by rw [hst.threads]; exact hv, hwM ▸ hvq, ?_, fun hh => ?_⟩
     · rw [hphu]; split
       · exact hpb
@@ -1071,7 +1071,7 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
     hi.rmw hl hb hst hbM haM hwM rfl (bs4 _) L.val0 (intOfBytes_rmw _) ho
     (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_) ?_ (fun u v hu _ => absurd hu (hnh u))
     (fun u => ?_) ?_ (fun _ => ?_) (fun u hu => absurd hu (hnh u))
-    (by rw [hwM]; exact fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide))
+    (by rw [hwM]; exact Lock.Queue.of_key L hst.key (fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide)))
     (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
     (fun u hu => absurd hu (hnh u))⟩
   · unfold upd; split
@@ -1111,7 +1111,7 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
           · rw [heb, hst.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
   · rcases hp with ⟨rfl, rfl, hc1⟩ | ⟨rfl, rfl⟩
     · -- `w = 1`: the old witness is not `t`
-      obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ hp')
+      obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hwM ▸ Lock.Waits.of_key L hst.key hp')
       have hvt : v ≠ t := fun e => by
         subst e
         have := ofNat_inj (by decide) L.c_lt (u32_eq hw (h2 hph))
@@ -1126,8 +1126,8 @@ theorem Inv.release {G : ThreadId → γ} {m₁ M : Mem} {t li : Nat} {l : ALoc}
 /-! ## The futex queue -/
 
 /-- A thread that is not in the futex queue is not the thread of a waiter. -/
-theorem ne_of_notQ {ws : Array (ThreadId × Ptr)} {t : ThreadId} (hq : ws.any (·.1 == t) = false)
-    {w : ThreadId × Ptr} (hw : w ∈ ws) : w.1 ≠ t := fun e => by
+theorem ne_of_notQ {ws : Array (ThreadId × FutexKey)} {t : ThreadId} (hq : ws.any (·.1 == t) = false)
+    {w : ThreadId × FutexKey} (hw : w ∈ ws) : w.1 ≠ t := fun e => by
   have : ws.any (·.1 == t) = true := Array.any_eq_true.mpr (by
     obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hw
     exact ⟨i, hi', by simp [e]⟩)
@@ -1243,7 +1243,7 @@ theorem Inv.wait {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {b : Bool} (h
     rw [this, ha₀] at ha
     cases ha
     -- the queued key is the word's
-    have hk : blk₀.key L.o false = L.key m := (Mem.wordKey_of hb₀ L.o false).symm
+    have hk : blk.key L.o false = L.key m := (Mem.wordKey_of hb₀ L.o false).symm
     refine ⟨hsM.trans (Step.same rfl rfl rfl rfl rfl rfl fun w hw => ?_) (.inr rfl), ?_⟩
     · simp only [Array.mem_push]
       exact ⟨fun h => h.resolve_right fun e => hw (by rw [e]; exact hk), .inl⟩
@@ -1254,7 +1254,7 @@ theorem Inv.wait {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {b : Bool} (h
     have hu0t : u0 ≠ t := fun e => by rw [e, hph] at hu0; cases hu0
     have hG : upd G t (L.set (G t) .wait Heap.empty) = G := by
       rw [← hph, ← hiM.idle t hnh]; exact upd_set_self G t
-    have := hiM.queue (c := t) (ws := M.waiters.push (t, blk₀.key L.o false)) (wk := M.woken)
+    have := hiM.queue (c := t) (ws := M.waiters.push (t, blk.key L.o false)) (wk := M.woken)
       (p := .wait) hnh hng (by decide) (by decide) (fun w hw => ?_) (fun _ => ?_)
     · rw [hG] at this; exact this
     · rw [hG]
