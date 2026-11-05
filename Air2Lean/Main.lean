@@ -43,16 +43,6 @@ def translator : Revision.Translator := translator_revision%
 /-- The runtime (`ZigLean`) this CLI was built against (`Air2Lean/Revision.lean`). -/
 def runtime : Revision.Translator := runtime_revision%
 
-/-- `translator` as recorded in the source-map sidecar and the module manifest. -/
-def revisionJson (t : Revision.Translator) : Lean.Json := Lean.Json.mkObj [("lean", .str t.lean),
-  ("revision", .str t.revision),
-  ("modules", .arr (t.modules.map fun (m, h) => .arr #[.str m, .str h]))]
-
-def translatorJson : Lean.Json := revisionJson translator
-
-/-- `runtime` as recorded in the source-map sidecar and the module manifest. -/
-def runtimeJson : Lean.Json := revisionJson runtime
-
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
     "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--canon-certificate] [--allocator-model std|translated]\n" ++
@@ -347,7 +337,7 @@ private def certificateMetadata (genModule : String) (modules : Array Lean.Json)
   unless ← script.pathExists do
     throw (IO.userError "AIR certificates require the air2lean Lean workspace and scripts/certificate-query.py")
   let input := Lean.Json.mkObj [("module", .str genModule), ("modules", .arr modules),
-    ("translator", translatorJson), ("runtime", runtimeJson)]
+    ("translator", Lean.toJson translator), ("runtime", Lean.toJson runtime)]
   let result ← IO.Process.output { cmd := "python3", args := #["-B", script.toString], cwd := some root }
     (some input.compress)
   unless result.exitCode == 0 do
@@ -426,6 +416,8 @@ private def run (args : List String) : IO UInt32 := do
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut canonSnapshots : Array (Nat × Func × Func) := #[]
+      -- Each function's fired Canon rewrites, for the AIR certificate's report.
+      let mut canonFired : Array (String × Array String) := #[]
       let mut err : Option String := none
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
@@ -443,15 +435,17 @@ private def run (args : List String) : IO UInt32 := do
                 let (offset, before, after) ← normalizeDebugTrace raw
                 let before ← withErrorTable before errorTable
                 let after ← withErrorTable after errorTable
-                pure (after, some (offset, before, after))
+                pure (after, some (offset, before, after), #[])
               else
-                pure (← withErrorTable (← normalize raw) errorTable, none)
-              : Except String (Func × Option (Nat × Func × Func)))
+                let (f, fired) ← normalizeTraced raw (track := a.airCertificate.isSome)
+                pure (← withErrorTable f errorTable, none, fired)
+              : Except String (Func × Option (Nat × Func × Func) × Array String))
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with
             | .error e => err := some s!"{path}: {e}"
-            | .ok (f, snapshot) =>
+            | .ok (f, snapshot, fired) =>
               if let some pair := snapshot then canonSnapshots := canonSnapshots.push pair
+              else canonFired := canonFired.push (f.name, fired)
               let f := if a.assumeNoLibc then { f with dialect := { f.dialect with noLibc := true } } else f
               let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
@@ -579,7 +573,7 @@ private def run (args : List String) : IO UInt32 := do
                     try certificateMetadata genModule modules catch error =>
                       throw (IO.userError (certificateFailure s!"compiler metadata: {error}"))
                   else pure (Lean.Json.mkObj [("fixpoint_groups", .arr #[])])
-                match Certificate.emit program a.ns parts genModule metadata with
+                match Certificate.emit program a.ns parts genModule metadata canonFired with
                 | .ok cert => pure (some (path, cert))
                 | .error error => throw (IO.userError (certificateFailure error))
               | _ => pure none
@@ -593,7 +587,8 @@ private def run (args : List String) : IO UInt32 := do
               let base := a.outPath.parent.getD "."
               ModuleSplit.write (base / stem) base mods
               let root := a.splitModules.getD ""
-              let manifest := ModuleSplit.manifest a.ns root metadata translatorJson runtimeJson mods
+              let manifest := ModuleSplit.manifest a.ns root metadata (Lean.toJson translator)
+                (Lean.toJson runtime) mods
               let manifestPath := ModuleSplit.manifestPath a.outPath
               try IO.FS.writeFile manifestPath (manifest.pretty ++ "\n") catch e =>
                 throw (IO.userError s!"writing module manifest {manifestPath}: {e}")
@@ -619,7 +614,7 @@ private def run (args : List String) : IO UInt32 := do
               let spawn := match a.spawnSemantics with | .available => "available" | .fallible => "fallible"
               let sidecar := Lean.Json.mkObj [("format", .str "air2lean-source-map-v3"),
                 ("namespace", .str a.ns), ("metadata", metadata),
-                ("translator", translatorJson), ("runtime", runtimeJson),
+                ("translator", Lean.toJson translator), ("runtime", Lean.toJson runtime),
                 ("options", Lean.Json.mkObj ([("spawn_policy", .str spawn),
                   ("models", if models.isEmpty then .null else ModelRegistry.report models)] ++
                   (match device with | none => [] | some c => [("device", c.report)]))),

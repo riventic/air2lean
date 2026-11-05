@@ -47,6 +47,8 @@ __pycache__/
 /coverage/0.16.0.json
 /coverage/0.17.0.json
 /docs/premise-index.md
+/docs/theorem-inventory.md
+/assurance/theorem-inventory.json
 /assurance/provenance/manifest.json
 /assurance/provenance/pins.json
 /assurance/provenance/receipt/
