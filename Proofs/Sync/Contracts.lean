@@ -1,4 +1,4 @@
-import Proofs.Sync.RwLockContract
+import Proofs.Sync.RwLock
 
 /-!
 # Reusable synchronization contracts (C14)
@@ -7,18 +7,13 @@ A contract is a `Prop` structure over the *operations* of a sync object, not ove
 client proof that takes a contract as a hypothesis never sees the std implementation: it receives
 only the operation as an abstract function.
 
-The mutex, semaphore and condition contracts are the full-state ones, for every implementation
-(`docs/interfaces.md`); each translated std object proves its contract once:
-
-| Contract | Operations | Proved by | Scope |
-|---|---|---|---|
-| `MutexImpl` (`ZigLean/Sep/Full/Mutex.lean`) | `Io.Mutex.lockUncancelable`, `unlock` | `Sync.ioMutex` (`Proofs/Sync/IoMutex.lean`) | every protocol with the lock (`FLock.Fits`), every thread count, any resource |
-| `SemImpl` (`ZigLean/Sep/Full/Sem.lean`) | `Io.Semaphore.waitUncancelable`, `post` | `Sync.ioSem` (`Proofs/Sync/IoSemaphore.lean`) | every protocol with the semaphore |
-| `CondImpl` (`ZigLean/Sep/Full/Cond.lean`) | `Io.Condition.waitUncancelable`, `signal` | `Sync.ioCond` (`Proofs/Sync/Cond.lean`) | any number of waiters |
-| `RwContract` (below) | `Io.RwLock.lockSharedUncancelable`, `unlockShared`, `lockUncancelable`, `unlock` | `rwLock` (from the existing `RwLockRead` specs) | only the restricted protocol of `Proofs/Sync/RwLock.lean`: reader 0, writer 1, the counter resource `NPts` |
-
-`RwContract` is the one contract left over the legacy thread protocol (`Proto.WP`); it goes with
-`Proofs/Sync/RwLock.lean` (`docs/legacy-retirement.md`).
+The mutex, semaphore and condition contracts are the full-state ones (`MutexImpl`, `SemImpl`,
+`CondImpl`, for every implementation; the table in `docs/rwlock-contracts.md` lists them and their
+proofs). This file keeps `RwContract`: the `Io.RwLock` operations `lockSharedUncancelable`,
+`unlockShared`, `lockUncancelable`, `unlock`, proved by `rwLock` from the existing `RwLockRead`
+specs, only for the restricted protocol of `Proofs/Sync/RwLock.lean` (reader 0, writer 1, the
+counter resource `NPts`). It is over the legacy thread protocol (`Proto.WP`) and goes with
+RwLock (`docs/legacy-retirement.md`).
 
 **Out of scope (stated, not claimed).**
 - *Fairness, termination and starvation freedom*: `RwContract` is partial correctness plus
@@ -35,7 +30,7 @@ The mutex, semaphore and condition contracts are the full-state ones, for every 
 - *Condition broadcast, timeouts and cancellation* are not covered.
 -/
 
-open Zig Zig.Conc Zig.Conc.Proto Sync
+open Zig Zig.Conc
 
 namespace Sync.Contracts
 

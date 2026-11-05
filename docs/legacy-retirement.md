@@ -54,7 +54,7 @@ replacement named below is on main, except where the row says it is not.
 **Hidden users** (not in `legacy_users`, because the scanner matches only direct imports of
 `LEGACY_MODULES` and the legacy names):
 
-- `Proofs/Sync/Contracts`. It imports RwLockContract and keeps only `RwContract`/`rwLock`
+- `Proofs/Sync/Contracts`. It imports RwLock and keeps only `RwContract`/`rwLock`
   (RwLock's specs), which has no user outside the file. L12 removed the legacy `MutexContract`,
   `SemContract` and `CondContract` (no users since L9 and #643); their full-state replacements
   are `MutexImpl` (`ioMutex`), `SemImpl` (`ioSem`) and `CondImpl` (`ioCond`).

@@ -110,8 +110,8 @@ translation files remain committed goldens; this is not a fresh Zig export.
 - C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol of
   `Proofs/Sync/RwLockContract.lean` (one fixed client: main reader, one writer, writer count
   at most 2). `cache_spec`/`cache_safe` and `mailbox_spec`/`mailbox_safe` are Lean model
-  clients proved only against the reusable `MutexContract`/`SemContract` of
-  `Proofs/Sync/Contracts.lean`; they have no Zig source or native/model differential. There is
+  clients proved only against the full-state contracts `MutexImpl`/`SemImpl`, for every
+  implementation; they have no Zig source or native/model differential. There is
   no reusable RwLock contract for arbitrary readers or resources, no Event/WaitGroup contract,
   and no fairness or native adequacy claim ([rwlock-contracts.md](rwlock-contracts.md)).
 
