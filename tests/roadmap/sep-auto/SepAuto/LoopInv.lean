@@ -260,4 +260,13 @@ error: @[fsym_inv] SepAuto.LoopInv.early.loop.post: its last parameter is not of
 #guard_msgs in
 @[fsym_inv] def early.loop.post (s : Locals) : FAssn := emp
 
+/-- (`fsym` binds the locals at the loop's entry by the name `s0`.) -/
+def misnamed.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := fill.loop p n
+
+set_option linter.unusedVariables false in
+/-- error: @[fsym_inv] SepAuto.LoopInv.misnamed.loop.inv: its parameter init of the locals' type is not named s0 (the locals at the loop's entry); expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B` -/
+#guard_msgs in
+@[fsym_inv] def misnamed.loop.inv (p : Ptr) (n : BitVec 32) (init : Locals) (s : Locals) : FAssn :=
+  emp
+
 end SepAuto.LoopInv

@@ -784,12 +784,15 @@ body `B`, named by their part.
   a state, `StateT.run (B xs) s`).
 * The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
   the body's arguments `xs`; the one named `s0` is the locals at loop entry `s₀` (the
-  generator's name); every other one (the value at a pointer at entry, `v0`) is an unknown that
-  the plan of the precondition assigns.
-* An invariant that does not hold at the entry (no plan, or a plan that leaves an unknown) stops
-  the walk at the loop (report reason `invariant_not_established`, condition `loop_entry`). A
-  registration that does not fit the loop (no `B.meas` in a total logic, a parameter of `B.meas`
-  or `B.post` that `B.inv` does not have) is an error. The step's side goals that the walk does
+  generator's name; the registration rejects another parameter of a locals structure's type);
+  every other one (the value at a pointer at entry, `v0`) is an unknown that the plan of the
+  precondition assigns. A fact of the precondition that only the whole plan determines (an
+  existential's witness fixed by a later atom) is proved by arithmetic once it is determined.
+* An invariant that does not hold at the entry (no plan, or a plan that leaves an unknown), after
+  the views and the rebase of a literal pointer for the atoms its plan wanted, stops the walk at
+  the loop (report reason `invariant_not_established`, condition `loop_entry`). A registration
+  that does not fit the loop (no `B.meas` in a total logic, a parameter of `B.meas` or `B.post`
+  that `B.inv` does not have or has with another type) is an error. The step's side goals that the walk does
   not prove are left to the caller, as a rule's are; a wrong invariant that holds at the entry
   fails there, at the step's next iteration (regressions:
   `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`: total, partial, in a thread, concurrent without
@@ -800,7 +803,8 @@ body `B`, named by their part.
   their preconditions wanted; a rule that applies with side goals it leaves is taken instead (a
   rule whose side goal the facts refute is not).
 * Not covered: a sequential loop inside a concurrent function's `ConcM.liftMem` command (it
-  stops with no rule), and a proof over a variable `FLogic`.
+  stops with no rule), and a proof over a variable `FLogic` (no loop rule: the loop stays a
+  residual).
 
 ## Recursive groups
 

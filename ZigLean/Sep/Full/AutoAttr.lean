@@ -201,8 +201,9 @@ open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
 `StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
 universe parameters whose parameters are explicit and named apart (`fsym` matches them by name with
-`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post) and whose
-value is an `FAssn` (a `Nat` for the measure). -/
+`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post), whose
+parameter of the locals at the loop's entry is named `s0` and whose value is an `FAssn` (a `Nat`
+for the measure). -/
 def checkLoopInv (decl : Name) : MetaM Unit := do
   let fail {α} (why : MessageData) : MetaM α :=
     throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
@@ -215,10 +216,14 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
   let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
   unless d.levelParams.isEmpty do fail "a definition with universe parameters"
   -- the locals `σ` and the exit `ε` of the body's program
-  let (σ, ε) ← forallTelescope b.type fun _ ty => do
+  -- (`none` when they depend on the body's parameters: `fsym` checks the types where it applies
+  -- the loop rule)
+  let types? ← forallTelescope b.type fun ys ty => do
     let ty ← whnfR ty
     unless ty.isAppOfArity ``StateT 3 do fail m!"`{body}` is not a program over locals"
-    return (ty.getArg! 0, ty.getArg! 2)
+    let (σ, ε) := (ty.getArg! 0, ty.getArg! 2)
+    let dep (e : Expr) := e.hasAnyFVar fun v => ys.any (·.fvarId! == v)
+    return if dep σ || dep ε then none else some (σ, ε)
   forallTelescope d.type fun xs res => do
     let some s := xs.back? | fail "no parameter for the loop's locals"
     let mut seen : NameSet := {}
@@ -228,8 +233,19 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
       if l.userName.hasMacroScopes || seen.contains l.userName then
         fail m!"the parameter {l.userName} has no name of its own"
       seen := seen.insert l.userName
-    let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
-    unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
+    if let some (σ, ε) := types? then
+      let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
+      unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
+      -- the locals at the entry: the parameter `s0` (`fsym` binds it by name), and no other of a
+      -- locals structure's type
+      let locStruct := σ.getAppFn.constName?.any (isStructure (← getEnv))
+      for x in xs.pop do
+        let l ← x.fvarId!.getDecl
+        let isLoc ← isDefEq l.type σ
+        if l.userName == `s0 && !isLoc then fail m!"its parameter s0 is not of type {σ}"
+        if l.userName != `s0 && isLoc && locStruct then
+          fail m!"its parameter {l.userName} of the locals' type is not named s0 (the locals at the \
+            loop's entry)"
     let want := if last == "meas" then mkConst ``Nat else mkConst `Zig.Full.FAssn
     unless ← isDefEq res want do fail m!"its value is not of type {want}"
 
