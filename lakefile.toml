@@ -134,3 +134,10 @@ supportInterpreter = true
 [[lean_exe]]
 name = "air2lean"
 root = "Air2Lean.Main"
+
+# The offline invariant generator (docs/invariant-synthesis.md): reads a translated module's
+# loops and writes their invariants and measures as plain definitions. Untrusted.
+[[lean_exe]]
+name = "air2lean-invgen"
+root = "Air2Lean.InvGenMain"
+supportInterpreter = true

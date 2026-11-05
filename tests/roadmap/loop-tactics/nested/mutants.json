@@ -1,0 +1,29 @@
+[
+ {
+  "name": "relation",
+  "old": "⟪v.toNat = v0.toNat + ",
+  "new": "⟪v.toNat = 1 + v0.toNat + ",
+  "in": [
+   "inner_step",
+   "inner_loop"
+  ]
+ },
+ {
+  "name": "bound",
+  "old": "s.j.toNat ≤ s.i.toNat ∧",
+  "new": "True ∧",
+  "in": [
+   "inner_step",
+   "inner_loop"
+  ]
+ },
+ {
+  "name": "measure",
+  "old": ": Nat :=\n  s.i.toNat - s.j.toNat\n",
+  "new": ": Nat :=\n  s.i.toNat\n",
+  "in": [
+   "inner_step",
+   "inner_loop"
+  ]
+ }
+]
