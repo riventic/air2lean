@@ -160,11 +160,12 @@ theorem mInit_fseq : mInit.FSeq := by decide +kernel
 
 set_option maxRecDepth 100000 in
 /-- The client's run in the caller's thread is illegal (O-E): the kernel runs the stock arena's
-`alloc`, `alloc`, `free`. -/
+`alloc`, `alloc`, `free`, once this file's `client` and `vt` are unfolded by name and the
+generated code by the `zig_run` set (`docs/proof-tools.md`). -/
 theorem client_illegal :
     Witness.errOf ((Sched.soloRun 1000 client).run mInit) = some .illegal := by
   unfold client vt
-  iterate 3 unfold heap_ArenaAllocator_alloc heap_ArenaAllocator_alloc.loop21 Zig.loop
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-- Every resource. -/
@@ -245,13 +246,12 @@ def resetClient : ConcM Tgt (Option Ptr × Option Ptr) := do
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 100000 in
 /-- The client's run: both allocations return byte 24 of the child's buffer (computed as
-`client_illegal` is; `reset` and `deinit` are unfolded too, so that their loops are). -/
+`client_illegal` is). -/
 theorem reset_client_run :
     (((Sched.soloRun 1000 resetClient).run mInit).run.map fun r => r.map (·.1)) =
       some (.ok (some ⟨some 0, 24⟩, some ⟨some 0, 24⟩)) := by
-  unfold resetClient vt heap_ArenaAllocator_reset heap_ArenaAllocator_deinit
-    heap_ArenaAllocator_deinit.loop9
-  iterate 3 unfold heap_ArenaAllocator_alloc heap_ArenaAllocator_alloc.loop21 Zig.loop
+  unfold resetClient vt
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-- A grant of `I` at `p` of 8 bytes, for the fee `φ`. -/

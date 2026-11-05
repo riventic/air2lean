@@ -1527,8 +1527,7 @@ programs with loops). -/
 theorem groupCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) (mem0 σ)) = some 3 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch groupCounter add Io_Mutex_lockUncancelable
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block

@@ -31,9 +31,10 @@ write, so the proof of `ResetEvent.futexSet_wp` went through for `futexSetR` ver
 
 The runs use the oracle that always picks option 0, and the kernel computes them
 (`decide +kernel`). A loop (`Zig.loop`, a `partial_fixpoint`) is not computed by the kernel: each
-proof unfolds the functions on the run's path that hold one (`delta`) and then every loop four
-times by its defining equation (`Zig.loop.eq_1`, one `simp` pass each), more than any loop of
-these runs takes, so the kernel never reaches a loop.
+proof unfolds this file's `dispatchW` and `taskW` by name, and then the generated code on the
+run's path with the `zig_run` set, each loop once per pass, more often than any loop of these
+runs takes, so the kernel never reaches a loop (`docs/proof-tools.md`, concrete runs of programs
+with loops).
 -/
 
 open Zig
@@ -153,20 +154,16 @@ the tasks' counter stores. -/
 theorem relaxedSet_races :
     Witness.errOf (Sched.run ⟨.any, .available⟩ (dispatchW futexSetR) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some .illegal := by
-  delta dispatchW taskW waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
-    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet
-    Thread_Mutex_lock Thread_Mutex_FutexImpl_lock Thread_Mutex_FutexImpl_lockSlow
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  delta dispatchW taskW
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-- **The double set races**: `main` reads the `Tally` while the second write is pending. -/
 theorem doubleSet_races :
     Witness.errOf (Sched.run ⟨.any, .available⟩ (dispatchW set2) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some .illegal := by
-  delta dispatchW taskW waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
-    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet
-    Thread_Mutex_lock Thread_Mutex_FutexImpl_lock Thread_Mutex_FutexImpl_lockSlow
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  delta dispatchW taskW
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-- Control for `futexSetR`: the copies of `finish` and `task` with the generated set are the
@@ -180,10 +177,8 @@ its second write. -/
 theorem oneSet_completes :
     Witness.okVal (Sched.run ⟨.any, .available⟩ (dispatchW setX) 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 .fresh)) = some 2 := by
-  delta dispatchW taskW waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
-    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet
-    Thread_Mutex_lock Thread_Mutex_FutexImpl_lock Thread_Mutex_FutexImpl_lockSlow
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  delta dispatchW taskW
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 open Zig.Conc Zig.Full

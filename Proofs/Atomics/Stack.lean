@@ -2127,8 +2127,7 @@ programs with loops). -/
 theorem stackPush_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch push
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-! ## Non-vacuity witnesses

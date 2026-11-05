@@ -29,9 +29,9 @@ A violation is one concrete run inside the theorems' premises:
   fee and the vtable (`vtR`), in the plain mode;
 * **the run** (`Sched.soloRun`, the reading of `Main.lean`'s theorems) is computed by the kernel
   (`decide +kernel`). A loop (`freeAll`, `sum`) is a `partial_fixpoint`, which the kernel does
-  not compute: its defining equation (`Zig.loop.eq_1`) unfolds it once per iteration the run
-  takes (two for a list of one node), and the kernel never reaches the loop left in the branch
-  that would repeat again.
+  not compute: the `zig_run` set unfolds the generated code and each loop once per pass, more
+  often than the run takes (two for a list of one node), and the kernel never reaches the loop
+  left in the branch that would repeat again (`docs/proof-tools.md`).
 
 The bugs stay bugs under address reuse (`*Reuse_unsafe`): under a placement that maps a second
 `push`'s page at the freed page's address, the stale pointer still names the freed block, so the
@@ -263,14 +263,14 @@ attribute [local instance] ext
 
 theorem doubleFree_run :
     isIllegal ((Sched.soloRun 100 (doubleFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unfold doubleFree freeAll
-  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  unfold doubleFree
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 theorem useAfterFree_run :
     isIllegal ((Sched.soloRun 100 (useAfterFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unfold useAfterFree freeAll sum
-  rw [Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 sum.loop6]
+  unfold useAfterFree
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 theorem forgetFree_run :
@@ -283,28 +283,27 @@ def σReuse : Placement := { propose := fun b => if b == 7 || b == 9 then some (
 
 theorem reuse_happens :
     reused ((Sched.soloRun 100 (pushFreePush ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
-  unfold pushFreePush freeAll
-  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  unfold pushFreePush
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 theorem doubleFreeReuse_run :
     isIllegal ((Sched.soloRun 100 (doubleFreeReuse ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
-  unfold doubleFreeReuse freeAll
-  rw [Zig.loop.eq_1, Zig.loop.eq_1]
+  unfold doubleFreeReuse
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 theorem useAfterFreeReuse_run :
     isIllegal ((Sched.soloRun 100 (useAfterFreeReuse ⟨ctx, vtp⟩)).run (mem0 σReuse)).run = true := by
-  unfold useAfterFreeReuse freeAll sum
-  rw [Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 (freeAll.loop5 _), Zig.loop.eq_1 sum.loop6]
+  unfold useAfterFreeReuse
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-- The right client returns `ok` from the same memory, with the node freed. -/
 theorem pushThenFree_returns :
     freedOk ((Sched.soloRun 100 (pushThenFree ⟨ctx, vtp⟩)).run (mem0 .fresh)).run = true := by
-  unfold pushThenFree buildThenFree build reverse freeAll
-  rw [Zig.loop.eq_1 reverse.loop6, Zig.loop.eq_1 reverse.loop6, Zig.loop.eq_1 (freeAll.loop5 _),
-    Zig.loop.eq_1 (freeAll.loop5 _)]
+  unfold pushThenFree buildThenFree build
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-! ## The refutations -/
