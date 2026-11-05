@@ -180,24 +180,26 @@ def Shape (Y : ThreadId → Ph) (m : Mem) : Prop :=
 /-- The client parts of the ghost values. -/
 abbrev xs (G : ThreadId → Gh) : ThreadId → Ph := fun u => (G u).2.ph
 
-/-- The rest of the invariant (module doc). -/
-structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
+/-- The memory's part of the rest of the invariant: the threads, `io`, the rest's cells, the
+block, the condition's words and the futex queue. -/
+structure UM (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   shape : Shape (xs G) m
   io : ReadShared IoR m
   rest : Rest rX m
   blk : BlkOk m
   ws : WS.Ok m
   we : WE.Ok m
-  cinv : C.Inv L G m
-  sinv : S.Inv G m
+  /-- A thread waits only at the mutex or at the epoch. -/
+  q : ∀ w ∈ m.waiters, w.2 = L.ptr ∨ w.2 = WE.ptr
+
+/-- The client's part of the rest of the invariant: the permit and the window (module doc). -/
+structure Lg (G : ThreadId → Gh) (m : Mem) : Prop where
   /-- At most one thread has the permit. -/
   one : (G 0).2.ph.holds = false ∨ (G 1).2.ph.holds = false
   /-- The permit's holder recorded the increments of both threads. -/
   tot : ∀ u k s, (G u).2.ph = .work k true s → s = sum (xs G)
   /-- Only the waiting role waits for a permit. -/
   wtx : ∀ u, (G u).2.sp = .wt → Wx (G u).2.ph
-  /-- A thread waits only at the mutex or at the epoch. -/
-  q : ∀ w ∈ m.waiters, w.2 = L.ptr ∨ w.2 = WE.ptr
   /-- Every epoch write happened before the mutex's holder (`FCond.ld_newest`). -/
   ehb : L.WordHB WE G m
   /-- A waiter at its load saved the newest epoch write. -/
@@ -213,6 +215,13 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   f4 : ∀ u i jr sn e, (G u).2.c = .reg i jr sn e → (WE.hist m).size = i + 2 → C.Sated m
   /-- After a post, every registered waiter is signalled. -/
   incS : ∀ v q n h, (G v).2.c = .inc q n h → C.Sated m
+
+/-- The rest of the invariant (module doc). -/
+structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
+  um : UM G rX m
+  cinv : C.Inv L G m
+  sinv : S.Inv G m
+  lg : Lg G m
 
 variable {Tgt : Type}
 
