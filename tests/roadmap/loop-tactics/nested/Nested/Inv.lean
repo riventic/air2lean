@@ -15,7 +15,7 @@ open Zig Zig.Full Zig.Full.FAssn
 /-- The invariant of `pairs.loop14`, a counted loop: `j` goes up by 1 while `j < i`.
 `s0` holds the locals at loop entry.
 `v0` is `*p0` there, which goes up by 1 per iteration. -/
-def pairs.inv14 (p0 : Zig.Ptr) (s0 : pairsLocals) (v0 : BitVec 64) (s : pairsLocals) : FAssn :=
+def pairs.loop14.inv (p0 : Zig.Ptr) (s0 : pairsLocals) (v0 : BitVec 64) (s : pairsLocals) : FAssn :=
   ⟪s.i = s0.i ∧
       s0.j.toNat ≤ s.j.toNat ∧
       s.j.toNat ≤ s.i.toNat ∧
@@ -24,7 +24,7 @@ def pairs.inv14 (p0 : Zig.Ptr) (s0 : pairsLocals) (v0 : BitVec 64) (s : pairsLoc
     plain
 
 /-- The measure of `pairs.loop14`: the iterations left. -/
-def pairs.meas14 (p0 : Zig.Ptr) (s : pairsLocals) : Nat :=
+def pairs.loop14.meas (p0 : Zig.Ptr) (s : pairsLocals) : Nat :=
   s.i.toNat - s.j.toNat
 
 end Nested

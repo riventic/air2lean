@@ -497,36 +497,45 @@ the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete
 `air2lean-invgen` (`Air2Lean/InvGen.lean`, executable `Air2Lean/InvGenMain.lean`, lake target
 `air2lean-invgen`) is the generator of decision 5: a compiled Lean program in this package, with
 no `syntax`, `macro`, `elab`, tactic or command. `air2lean-invgen MODULE NAMESPACE -o FILE`, run
-under `lake env`, imports the translated module and reads each loop `F.loopN` with its exit test
-`F.againN` as the elaborated term that `fsym` walks: a symbolic run over `bind`, `pure`, `get`,
-`modify`, `ite`, the lifted `Zig.load`/`Zig.store`/`Zig.add`, `Zig.lt`, `Zig.tick` and a `match`
-on a known exit gives each path of one iteration with its guard, its result and its changes to the
-locals and to the cells behind pointer parameters. It writes `Inv.lean`: a first line
+under `lake env`, imports the translated module, finds every `Zig.loop body again` in its
+definitions and reads the body as the elaborated term that `fsym` walks: a symbolic run over
+`bind`, `pure`, `get`, `modify`, `ite`, the lifted `Zig.load`/`Zig.store`/`Zig.add`, `Zig.lt`,
+`Zig.tick` and a `match` on a known exit gives each path of one iteration with its guard, its
+result, the adds it ran and its changes to the locals and to the cells behind pointer parameters.
+This reading only proposes; it is not a semantics anything relies on, and `fsym` checking inside
+the generator (Houdini pruning) is the S2c slice below. It writes `Inv.lean`: a first line
 `-- air2lean-invgen: {…}` recording the generator, the module and, per loop, the family or why the
-loop has none; then plain `def`s. Nothing it reads or concludes is trusted.
+loop has none; then plain `def`s. A module with no loop, or a loop body outside the given
+namespace, is an error. `scripts/invgen.py check|write` regenerates every committed `Inv.lean`
+(its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right after `gen`, so a
+retranslation regenerates the invariants with it.
 
 The slice's family is the **counted loop**: one repeating path, guarded by an unsigned `x < b`
-(`b` a local the loop does not write, or a loop parameter), that adds 1 to the local `x`, adds a
-constant `cₖ` to each cell `*pₖ` it writes (an unsigned word behind a loop parameter) and writes
-no other local; and exit paths, guarded by `¬ x < b`, that change nothing. For it the generator
-writes `F.invN params s0 v₀ … s` (the other locals pinned to the entry locals `s0`,
-`s0.x ≤ x ≤ b`, each cell `vₖ + cₖ * (x - s0.x)` and the no-overflow fact
+(`b` a local the loop does not write, a loop parameter or a literal), that adds 1 to the local
+`x`, adds a constant `cₖ` to each cell `*pₖ` it writes (an unsigned word behind a loop
+parameter), writes no other local and runs no add other than partial sums of these; and exit
+paths, guarded by `¬ x < b`, that touch no memory and no local. For the loop body `F.loopN` the
+generator writes `F.loopN.inv params s0 v₀ … s` (the other locals pinned to the entry locals
+`s0`, `s0.x ≤ x ≤ b`, each cell `vₖ + cₖ * (x - s0.x)` and the no-overflow fact
 `vₖ + cₖ * (b - s0.x) < 2 ^ w` of its checked adds, and `plain` when the body ticks) and
-`F.measN params s := b - x`. Every other loop gets no definition and the reason (a nested loop, a
-call, a signed test, a second guard, a cell that is only read, …): a proof that needs it does not
-build.
+`F.loopN.meas params s := b - x`. Every other loop gets no definition and the reason (a nested
+loop, a call, a signed test, a second test, a cell that is only read, an uncovered add, a literal
+that wraps, a parameter named like a generated binder, …): a proof that needs it does not build.
 
 First client: the inner loop `pairs.loop14` of `tests/roadmap/loop-tactics/nested` (the
 translated `while (j < i) : (j += 1) acc.* += 1`). Its hand-written `innerI` and measure are
-deleted; `Proof.lean` imports the committed `Nested/Inv.lean` and uses `pairs.inv14` and
-`pairs.meas14` with the same `fsym` walks, and the theorem it proves (`inner_loop`, and with it
-`pairs_total`) is unchanged. `nested/check.sh`:
+deleted; `Proof.lean` imports the committed `Nested/Inv.lean` and uses `pairs.loop14.inv` and
+`pairs.loop14.meas` with the same `fsym` walks, and the theorem it proves (`inner_loop`, and with
+it `pairs_total`) is unchanged. The hand step and loop lemmas around them (`inner_step`,
+`inner_loop`) remain until `@[fsym_inv]`; engine ledger row P09-E4 records their deletion.
+`nested/check.sh`:
 
-* regenerates `Inv.lean` from the committed translation and compares it byte for byte;
+* regenerates `Inv.lean` from the committed translation and compares it byte for byte
+  (`scripts/invgen.py check`);
 * checks the proof against it;
 * checks three seeded mutants of the generated file (a wrong cell relation, a dropped bound `x ≤ b`,
   a measure that does not decrease): each still elaborates, and the proof then fails with an
-  elaboration error.
+  elaboration error inside the inner loop's theorems.
 
 The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
 for it, and its invariant (`outerI`, with the quadratic `cnt`) stays hand-written.
@@ -536,8 +545,8 @@ What the slice does not have yet (next slices, sizes S < M < L):
 | Next | Content | Size |
 |---|---|---|
 | S2a | `@[fsym_inv]` (P09-E4), its own engine PR with a `sep-auto` regression: `fsym` applies `loop_measure` with a registered invariant and measure, and the generator emits the attribute. This deletes the step and loop lemmas (`inner_step`, `inner_loop`) | M |
-| S2b | the `invgen` step of `scripts/regen.py` (`pr` scope, CAS-cached) and input hashes in the record, checked by `scripts/gen-integrity.py`, so `scripts/regen.sh` reproduces every `Inv.lean` and staleness is found without the fixture check | S |
-| S2c | the counted family widened: down-counting (`x > b`, `x -= 1`), `x != b` and `x ≤ b` guards, slice-length bounds (`i < sl.len`), cell updates that depend on the counter (sums with library closed forms such as the outer loop's `cnt`), with Houdini pruning through `Auto.runReport` (P09-E1) so a candidate conjunct that does not check is dropped and reported | M |
+| S2b | input hashes and the semantic fingerprints of the read definitions in the record (`docs/stable-generation.md`), checked by `scripts/gen-integrity.py`, so a stale `Inv.lean` is found without regenerating it (the regeneration itself is the `invgen` step above) | S |
+| S2c | the counted family widened: down-counting (`x > b`, `x -= 1`), `x != b` and `x ≤ b` guards, slice-length and pointer-read bounds (`i < sl.len`), cells at offsets of a parameter, cell updates that depend on the counter (sums with library closed forms such as the outer loop's `cnt`), with Houdini pruning through `Auto.runReport` (P09-E1) so a candidate conjunct that does not check is dropped and reported | M |
 | S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 

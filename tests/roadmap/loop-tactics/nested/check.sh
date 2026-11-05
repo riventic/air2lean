@@ -4,13 +4,12 @@
 # compare them with the committed Nested/Inv.lean, and kernel-check the full-state nested-loop
 # proof (nested/Proof.lean). Seeded mutants of the generated invariant and measure must make the
 # proof fail: the generator is untrusted, and only the check accepts its output.
-# Needs a built translator and the full-state library (lake build air2lean
-# ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength); no Zig compiler.
+# Needs a built translator (lake build air2lean); builds the generator (scripts/invgen.py, by
+# lake exe) and the full-state library modules the proof imports itself; no Zig compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 python3 -B scripts/lean-deps.py --build tests/roadmap/loop-tactics/nested
-lake build air2lean-invgen
 dir=tests/roadmap/loop-tactics/nested
 python3 - "$dir" <<'PY'
 import hashlib, json, pathlib, sys
@@ -34,13 +33,16 @@ mkdir -p "$work/olean/Nested"
 export LEAN_PATH="$work/olean:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$dir" -o "$work/olean/Nested/Gen.olean" "$dir/Nested/Gen.lean"
 # The generated invariants, reproduced byte for byte from the committed translation.
-lake env "$repo_root/.lake/build/bin/air2lean-invgen" Nested.Gen Nested -o "$work/Inv.lean"
-cmp "$work/Inv.lean" "$dir/Nested/Inv.lean" ||
-  { echo "$dir/Nested/Inv.lean is stale: regenerate it with air2lean-invgen" >&2; exit 1; }
+python3 -B scripts/invgen.py check "$dir/Nested/Inv.lean"
 lake env lean -R "$dir" -o "$work/olean/Nested/Inv.olean" "$dir/Nested/Inv.lean"
 lake env lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
 # Negative controls: each seeded mutant of the generated file still elaborates, and the proof
-# then fails: a wrong cell relation, a dropped bound, a measure that does not decrease.
+# then fails in the inner loop's theorems (from `inner_step` up to `cnt_mono`, so an import or a
+# later error does not count): a wrong cell relation, a dropped bound, a measure that does not
+# decrease.
+first=$(grep -n '^theorem inner_step' "$dir/Proof.lean" | cut -d: -f1)
+last=$(grep -n '^theorem cnt_mono' "$dir/Proof.lean" | cut -d: -f1)
+[ -n "$first" ] && [ -n "$last" ] || { echo 'Proof.lean: inner_step or cnt_mono not found' >&2; exit 1; }
 for mutant in relation bound measure; do
   mdir="$work/mutant-$mutant"
   mkdir -p "$mdir/olean/Nested" "$mdir/src/Nested"
@@ -52,7 +54,7 @@ text = pathlib.Path(src).read_text()
 old, new = {
     "relation": ("⟪v.toNat = v0.toNat + ", "⟪v.toNat = 1 + v0.toNat + "),
     "bound": ("s.j.toNat ≤ s.i.toNat ∧", "True ∧"),
-    "measure": ("Nat :=\n  s.i.toNat - s.j.toNat\n", "Nat :=\n  s.i.toNat\n"),
+    "measure": (": Nat :=\n  s.i.toNat - s.j.toNat\n", ": Nat :=\n  s.i.toNat\n"),
 }[mutant]
 if text.count(old) != 1:
     sys.exit(f"mutant {mutant}: {old!r} does not occur exactly once in the generated file")
@@ -63,8 +65,9 @@ PY
   if LEAN_PATH="$mdir/olean:$LEAN_PATH" lake env lean -R "$dir" "$dir/Proof.lean" > "$mdir/log" 2>&1; then
     echo "mutant $mutant of the generated invariant was accepted" >&2; exit 1
   fi
-  grep -q "Proof.lean:[0-9]*:[0-9]*: error" "$mdir/log" ||
-    { echo "mutant $mutant: the proof failed without an elaboration error:" >&2; tail -n 5 "$mdir/log" >&2; exit 1; }
+  sed -n 's/^.*Proof\.lean:\([0-9]*\):[0-9]*: error.*$/\1/p' "$mdir/log" |
+    awk -v a="$first" -v b="$last" '$1 >= a && $1 < b { hit = 1 } END { exit !hit }' ||
+    { echo "mutant $mutant: no error in the inner loop's theorems:" >&2; tail -n 5 "$mdir/log" >&2; exit 1; }
   echo "mutant $mutant of the generated invariant rejected"
 done
 # The strength log of the proof (tests/roadmap/strength-log).

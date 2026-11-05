@@ -23,11 +23,14 @@ unsafe def main (argv : List String) : IO UInt32 := do
     return 2
   try
     initSearchPath (← findSysroot)
-    -- The `match` and structure tables are environment extensions: load them as `lean` does.
+    -- The `match` and structure tables are environment extensions. Loading them
+    -- (`loadExts := true`) requires initializer execution, as in `lean` itself: the imported
+    -- modules' initializers run here as they do when a proof imports the same module.
     enableInitializersExecution
     let env ← importModules #[{ module := module.toName }] {} (loadExts := true)
+    -- The default heartbeat limit: a run is bounded and deterministic, never timed.
     let ((text, skipped), _) ← (Air2Lean.InvGen.generate module.toName ns.toName).run'.toIO
-      { fileName := "<air2lean-invgen>", fileMap := default, maxHeartbeats := 0 } { env }
+      { fileName := "<air2lean-invgen>", fileMap := default } { env }
     for (loop, why) in skipped do
       IO.eprintln s!"air2lean-invgen: {loop}: no invariant: {why}"
     match out with
