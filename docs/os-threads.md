@@ -112,11 +112,12 @@ picks:
 2. `EINTR` at once: a signal or any spurious return (audit finding #2).
 3. with a timeout, `ETIMEDOUT` at once.
 
-macOS `__ulock_wait*` returns `--ull_nwaiters` after a wake, a spurious return or a mismatch
-(xnu-12377.121.6 `sys_ulock.c:826`): the other threads waiting at the key, a non-negative
-`c_int`. The model does not count them. The oracle picks the value at one more stop
-(`Darwin.ulockResult`; std only tests `status >= 0`). The `ENOMEM` and `EDOM` paths cannot be
-reached (`ZigLean/Os/Futex.lean` module doc).
+macOS `__ulock_wait*` returns `--ull_nwaiters` after a wake, a spurious return or a mismatch:
+the other threads waiting at the key, a non-negative `c_int`. For a word that is not resident it
+returns `-EFAULT`. The model tracks neither, so the oracle picks one of them at one more stop
+(`Darwin.ulockResult`). Std only tests `status >= 0`, and treats `EFAULT` as a spurious return.
+The sources, and why `ENOMEM` and `EDOM` are not modelled, are in the `ZigLean/Os/Futex.lean`
+module doc.
 
 **Wake** (`Os.futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at
 the address (`wakeSets`), with no FIFO order (audit finding #6). The woken threads go on at their

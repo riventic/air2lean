@@ -1277,15 +1277,19 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   the `u32` at the address with the expected value as one atomic read of the newest message
   of that word: an atomic-read footprint and a read-view update. A bad futex-word pointer is
   `.illegal` (stricter than `EFAULT`). A different value returns at once
-  (`EAGAIN`, `0` on macOS). An equal value either returns at once with `EINTR`, or with
+  (`EAGAIN` on Linux). An equal value either returns at once with `EINTR`, or with
   `ETIMEDOUT` if a timeout was given, or sleeps. An untimed sleeper waits in the queue until a
   wake or an interrupt; the scheduler reads the word again first and a changed word is a return
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
   `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. After a wake, a spurious
   return or a mismatch, `__ulock_wait*` returns `--ull_nwaiters` (xnu-12377.121.6
-  `sys_ulock.c:826`), which the model leaves to the oracle: one more stop, then any
-  non-negative `c_int`. Its `ENOMEM` (`:636`; `zalloc(Z_WAITOK)` of a non-exhaustible zone never
-  fails) and `EDOM` (`:646`; every admitted op is `COMPARE_AND_WAIT`) paths are unreachable.
+  `sys_ulock.c:826`), or `-EFAULT` for a word that is not resident (`:652–663`). The model
+  leaves both to the oracle: one more stop, then `-EFAULT` or any non-negative `c_int`. Its
+  `ENOMEM` path (`:636`) is unreachable, because `zalloc(Z_WAITOK)` never fails from a zone
+  that is not exhaustible. Its `EDOM` path (`:646`) needs another opcode at the key. That
+  happens only at a `std.Thread.Mutex` word (`os_unfair_lock`, the STD-06 hand rows), which is
+  a recorded model gap
+  ([S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)).
   Other commands, flags and `val2` are outside the model
   (`.unspecified`). The translator binds `os.linux.futex_4arg`
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/

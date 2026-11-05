@@ -268,20 +268,20 @@ def wakeCode : Option Nat → BitVec 32
 def wakeMax (op : BitVec 32) : Option Nat :=
   if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none
 
-/-- The return codes `s` of a wait that ended with `r` (`ulockResult`): any non-negative `c_int`
-after a wake, a spurious return or a mismatch, else `-EINTR` or `-ETIMEDOUT`. -/
+/-- The return codes `s` of a wait that ended with `r` (`ulockResult`): `-EFAULT` or any
+non-negative `c_int` after a wake, a spurious return or a mismatch, else `-EINTR` or
+`-ETIMEDOUT`. -/
 def WaitCode : WaitResult → BitVec 32 → Prop
-  | .woken, s | .mismatch, s => 0 ≤ s.toInt
+  | .woken, s | .mismatch, s => s = negErrno32 E.FAULT ∨ 0 ≤ s.toInt
   | .interrupted, s => s = negErrno32 E.INTR
   | .timedOut, s => s = negErrno32 E.TIMEDOUT
 
-/-- Each of the oracle's options is a non-negative `c_int`. -/
-theorem ofNat_nonneg {c : Nat} (h : c < ulockWaiters) : 0 ≤ (BitVec.ofNat 32 c).toInt := by
-  have hc : (BitVec.ofNat 32 c).toNat = c := by
-    simp only [BitVec.toNat_ofNat]; unfold ulockWaiters at h; omega
-  rw [BitVec.toInt_eq_toNat_cond, hc]
+/-- A waiter count of the oracle is a non-negative `c_int`. -/
+theorem waiters_toInt_nonneg {c : Nat} (h : c < ulockWaiters) :
+    0 ≤ (BitVec.ofNat 32 c).toInt := by
   unfold ulockWaiters at h
-  split <;> omega
+  rw [BitVec.toInt_eq_toNat_of_lt (by rw [BitVec.toNat_ofNat]; omega)]
+  exact Int.natCast_nonneg _
 
 end Darwin
 
@@ -399,8 +399,8 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
 open Os in
 /-- **A macOS wait's return code** (`Darwin.ulockResult`, OSF-01) by thread `t`: after a wake, a
 spurious return or a mismatch it stops with the ghost value `g` at the oracle's pick and goes on
-with a non-negative `c_int` (`--ull_nwaiters`, `Darwin.WaitCode`); `-EINTR` and `-ETIMEDOUT`
-return at once. At the pick `t` exists (`t < m₁.threads.size`). -/
+with `-EFAULT` or a non-negative `c_int` (`--ull_nwaiters`; `Darwin.WaitCode`); `-EINTR` and
+`-ETIMEDOUT` return at once. At the pick `t` exists (`t < m₁.threads.size`). -/
 theorem WP.ulockResult {r : WaitResult} {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
     (h : r = .woken ∨ r = .mismatch → ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
@@ -416,10 +416,10 @@ theorem WP.ulockResult {r : WaitResult} {Q : BitVec 32 → (ThreadId → γ) →
     refine WP.bind (WP.sync (fun k hk => ?_) hcost)
     obtain ⟨g, hg, hc⟩ := h (by simp) k hk
     refine ⟨g, hg, fun G₁ m₁ hg₁ hi₁ ht₁ c hcr => WP.pure' (hc G₁ m₁ hg₁ hi₁ ht₁ _ ?_)⟩
-    refine Darwin.ofNat_nonneg ?_
-    rcases hcr with hc | ⟨-, rfl⟩
-    · exact hc
-    · decide
+    have hc : c < Darwin.ulockWaiters + 1 := hcr.elim id fun ⟨h0, _⟩ => by simp [Darwin.ulockWaiters] at h0
+    split
+    · exact .inl rfl
+    · exact .inr (Darwin.waiters_toInt_nonneg (by omega))
 
 /-! ## Address validation -/
 

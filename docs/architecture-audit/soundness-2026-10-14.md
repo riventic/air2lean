@@ -37,7 +37,7 @@ now lies at the two ends of the pipeline:
 | S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): an inexact `@shrExact` gave `.overflow`, a safety panic, with and without safety. Without safety it is unchecked IB. With safety, Sema's `shrOverflow` check comes *after* the op, which LLVM emits as `lshr exact`: the check branches on poison, and ReleaseSafe deletes it and returns a value. | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`); native rows in `illegal-behavior/native/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
 | S5 | SOUNDNESS (reported 2026-10-16); model fidelity on analysis | The hand models of std's futex wake (`Thread.Futex.wake`, `Io.futexWake`; STD-05) wake exactly `min n k` of `k` waiters. Natively macOS wakes all of them for `n > 1` (`WAKE_ALL`), and Linux at most `2^31 − 1`. No false native statement was derived from it (§S5). | `futex-wake/WakeCount.lean` (kernel) |
-| S6 | SOUNDNESS (primitive fidelity), **open** | Linux numeric alignment now returns EINVAL before queue effects, and `CHILD_CLEARTID` wakes at most one waiter. A macOS WAIT returns the oracle's count of other waiters. The OS model still omits private/shared keys and compares provenance pointers rather than canonical addresses. These are checked state mismatches; no false shipped client theorem is claimed. Default-mode std futex calls bypass the OS rows ([finding 4](#s6-hand-rows), open). | `futex-primitive/Regression.lean`, `futex-primitive/CurrentModel.lean` (kernel; observation boundaries in §S6) |
+| S6 | SOUNDNESS (primitive fidelity), **open** | Linux numeric alignment now returns EINVAL before queue effects, and `CHILD_CLEARTID` wakes at most one waiter. A macOS WAIT returns the oracle's count of other waiters. The OS model still omits private/shared keys and compares provenance pointers rather than canonical addresses. These are checked state mismatches; no false shipped client theorem is claimed. Std's untimed futex calls bypass the OS rows ([finding 4](#s6-hand-rows), open). | `futex-primitive/Regression.lean`, `futex-primitive/CurrentModel.lean` (kernel; observation boundaries in §S6) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
 | F3 | FAIL-OPEN | Witnesses do not link claims to the program. Non-vacuity witnesses pick any `Mem.FSeq` memory, not `mem0`. No shipped `Proofs/` claim uses `FTriple.run_init*`/`FTotalTriple.run_init*`. The `CTriple` claims of `Proofs/Lists` (`Alloc`, `Append`, `Container`) have no witness, apart from two fixtures in `tests/roadmap/lists-fba`. | survey (§F3) |
@@ -371,7 +371,7 @@ rules for those rows, is in `ZigLean/Sep/Full/OsFutex.lean` and the lock, word, 
 rules next to them. Its regressions in `tests/roadmap/os-threads/Check.lean` check that
 `__ulock_wake` with `WAKE_ALL` wakes all three waiters, and the Linux clamp.
 
-**Status: open** (steps D and E). The hand rows bypass every OS row, not only the wake count:
+**Status: open** (steps D and E). The hand rows bypass the OS rows in more than the wake count:
 [S6, finding 4](#s6-hand-rows).
 
 ## S6. OS futex keys, validation and CHILD_CLEARTID (SOUNDNESS, open)
@@ -447,13 +447,17 @@ refusal. The regressions are in `Regression.lean`, and the runtime controls are 
   [`sys_ulock.c:826`](https://github.com/apple-oss-distributions/xnu/blob/ac9718fb1af618d5ce8678d0dc6e8a58f252216f/bsd/kern/sys_ulock.c#L826)
   returns `--ull_nwaiters`, the other threads still waiting at the key, which is non-negative
   (asserted at `:857`). Counterexample: two threads wait at a word, and a third wakes one of
-  them. The woken thread returns `1` natively, but the model could only return `0`. Now the
-  oracle picks any non-negative `c_int` at one more stop (`Darwin.ulockResult`). Std tests only
-  `status >= 0`, so no client theorem changed. `ENOMEM` (`:636`) cannot happen:
-  `zalloc_flags(Z_WAITOK)` from a non-exhaustible zone never fails (`osfmk/kern/zalloc.h`, the
-  `Z_WAITOK` text). `EDOM` (`:646`, `:1012`) needs a ulock op other than `COMPARE_AND_WAIT` at
-  the key, and the model makes every such op `.unspecified`. The regression is
-  `ulock_wait_nwaiters`.
+  them. The woken thread returns `1` natively, but the model could only return `0`. A word
+  that is not resident returns `-EFAULT` (the `copyin` at `:663` runs under a spinlock, which
+  makes any VM fault fail, `:652–657`). Now the oracle picks `-EFAULT` or any non-negative
+  `c_int` at one more stop (`Darwin.ulockResult`). Std tests only `status >= 0` and treats
+  `EFAULT` as a spurious return, so no client theorem changed. `ENOMEM` (`:636`) cannot happen:
+  `zalloc_flags(Z_WAITOK)` never fails from a zone that is not exhaustible
+  (`osfmk/kern/zalloc.h:383–390`), and the kalloc-type zone of `ull_zone` never is
+  (`zalloc.c:8795`, `:8805`). `EDOM` (`:646`, `:1012`) needs another opcode at the key. The rows
+  make every op other than `COMPARE_AND_WAIT` `.unspecified`, but `os_unfair_lock`'s
+  `UL_UNFAIR_LOCK` at a `std.Thread.Mutex` word on macOS stays a gap of the STD-06 hand rows
+  ([finding 4](#s6-hand-rows)). The regression is `ulock_wait_nwaiters`.
 * **Process-shared and 64-bit ulock (fail closed, unchanged).** These requests stay
   `.unspecified`, outside the process-local 32-bit model.
 * **Linux `access_ok` (fixed).** An address with bits 63 and 55 set, including an aligned
@@ -485,23 +489,28 @@ An elaboration or setup failure prints `FAILED` and returns nonzero, never `fixe
 No translated Thread S5 subcase or aggregate S5 status changes in this audit addition.
 
 <a id="s6-hand-rows"></a>
-### S6, finding 4: the default thread model bypasses the OS rows (SOUNDNESS scope, open)
+### S6, finding 4: std's untimed futex calls bypass the OS rows (SOUNDNESS scope, open)
 
 Reported 2026-11-05 (lane S6b) for a maintainer decision. Nothing is implemented yet.
 
-**Location.** Without `--thread-model translated`, std's futex calls bind to hand rows (STD-05,
+**Location.** Std's untimed futex calls bind to hand rows (STD-05,
 `Air2Lean/StdModels.lean:243–244` for 0.14.1/0.15.2 `Thread.Futex.wait`/`wake`, `:240–242` for
 0.16.0/0.17.0 `Io.futexWait`/`futexWaitUncancelable`/`futexWake`). Those rows emit the
 scheduler's sync ops directly (`threadFutexWaitC`/`threadFutexWakeC`, `ZigLean/Conc/Call.lean:248`,
-and `futexWaitC`/`futexWaitCancelableC`/`futexWakeC`). They never reach `Linux.futex_4arg`/
-`futex_3arg`, `Darwin.__ulock_*` or `Linux.cloneExit` (OSF-01/02, OST-02). The hand `.wait`
-needs a live in-bounds word (`Thread.futexWait`'s `access`, so a bad address is `.illegal`,
-which is conservative). The hand `.wake` checks nothing: no alignment, no `access_ok`, no key.
-It matches waiters by provenance pointer and wakes `min n k`. So every S5 and S6 correction
-holds only at the `--thread-model translated` cut points. It does not cover a default-mode
-program, whose proofs use the hand rows. This conflicts with CLAUDE.md's "Never hand-write a
-model of a std module": `Thread.Futex` and the futex part of `Io.Threaded` are std modules
-with a hand model in place of their translation.
+and `futexWaitC`/`futexWaitCancelableC`/`futexWakeC`). Only the OS *wait* rows are bound
+today: std's `Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated down to
+`Linux.futex_4arg` and `Darwin.__ulock_wait*` (`StdModels.lean:295–300`). The OS wake rows
+(`futex_3arg`, `__ulock_wake`) and `Linux.cloneExit` are bound by nothing yet. They wait for
+the planned `--thread-model translated` cut points (`docs/std-models.md` §Thread model), and
+std's join is the hand `joinC` (STD-02). The two paths share one queue: an OS-row timed waiter
+is woken by the hand `.wake`.
+
+The hand `.wait` needs a live in-bounds word (`Thread.futexWait`'s `access`), so a bad address
+is `.illegal`, which is conservative. The hand `.wake` checks nothing: no alignment, no
+`access_ok`, no key. It matches waiters by provenance pointer and wakes `min n k`. The STD-06
+`Thread.Mutex.DarwinImpl` rows model `os_unfair_lock` the same way, without the kernel. This
+conflicts with CLAUDE.md's "Never hand-write a model of a std module": `Thread.Futex`, the futex
+part of `Io.Threaded` and `os_unfair_lock` are modelled by hand in place of their translation.
 
 **Failure scenarios.**
 
@@ -512,22 +521,29 @@ with a hand model in place of their translation.
    asleep. A default-mode no-deadlock (strict) proof of a program with that many waiters covers
    a run that ends, while natively that thread sleeps for ever. Only the absent live-thread
    bound (§S5) separates this from a false shipped theorem.
-2. *The corrections never run in default mode.* `cleartid_wakes_one`, `ulock_wait_nwaiters`,
-   `unaligned_wake_einval`, `access_ok_efault` and S5's `native_wakes_all` are all statements
-   about the OS rows. A default-mode program never runs them: its join is the hand `joinC`
-   (STD-02), and its wake is the hand `.wake`. Only the queue key lives in the scheduler queue
-   that both paths share, so the planned canonical key also reaches the hand rows. Even then
-   they keep a key without validation and their own wake count. So S6's status covers the OS
-   rows, which means `--thread-model translated`, and it says so.
-3. *Each OS fix must be written twice.* macOS `WAKE_ALL` (S5) is fixed on the OS row
+2. *Most corrections do not reach translated programs.* The wake and exit regressions
+   (`cleartid_wakes_one`, `unaligned_wake_einval`, `access_ok_efault` for WAKE, S5's
+   `native_wakes_all`) are statements about rows that no translation reaches yet. Only the wait
+   corrections (`ulock_wait_nwaiters`, the WAIT validation) reach a translated timed wait. The
+   queue key lives in the scheduler queue that both paths share, so the planned canonical key
+   also reaches the hand rows. Even then the hand rows keep their own wake count and skip
+   validation. So S6's status covers the OS rows, and it says so.
+3. *EDOM at a mutex word* (unmodelled native outcome). On macOS 0.15.2, thread A blocks in
+   `m.lock()` of a `std.Thread.Mutex`, so the kernel's ull at the lock word has opcode
+   `UL_UNFAIR_LOCK`. Thread B calls `Thread.Futex.timedWait` on the same word (a type pun of
+   `m.impl.oul`). Natively B's `__ulock_wait2` returns `-EDOM` (`sys_ulock.c:646`, before the
+   compare), and std 0.15.2 reaches `else => unreachable`. In the model, A's wait is a hand
+   `.wait` without an opcode, so B only mismatches or sleeps. The program is pathological, but
+   the translator admits it.
+4. *Each OS fix must be written twice.* macOS `WAKE_ALL` (S5) is fixed on the OS row
    (`native_wakes_all`) but still wakes `min n k` in the hand row (`hand_leaves_one`). Each
    later OS change (keys, domains, return values) drifts in the same way unless someone copies
    it into the hand row. No check ties the two together.
 
 The pointer-keyed hand wake wakes a subset of the threads that the native numeric key would
 wake. That only adds outcomes, because a missed wake is matched by the waiter's spurious
-return (§S5, impact) and a strict proof then fails. So scenario 1 is the only unsound
-direction found so far.
+return (§S5, impact) and a strict proof then fails. So scenarios 1 and 3 are the only unsound
+directions found so far.
 
 **Proposed end state** (to agree with the maintainer):
 
@@ -545,6 +561,10 @@ direction found so far.
   the OS rows) proves that contract once per version and target. An implementation without that
   proof is rejected (fail closed). Today's hand op is not such a contract, because
   `hand_wakes_more` is outside the Linux behaviour.
+* **`os_unfair_lock` (STD-06): an OS row.** Model `os_unfair_lock_lock`/`unlock` as libc rows
+  over the same kernel queue, with the ulock opcode in the queue entry, so that a
+  `COMPARE_AND_WAIT` at a lock word returns `-EDOM` (scenario 3). Until then, the gap is
+  recorded in OSF-01.
 * **Rejected: keep the hand rows and prove them a refinement of the OS rows.** As stated today
   the refinement is false (scenario 1). After the hand row is fixed it would be a second copy of
   the OS semantics, which needs a re-proof after every OS change (scenario 3). It is right only

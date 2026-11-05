@@ -45,18 +45,25 @@ model: `.unspecified`.
 **macOS wait results** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A wait that returns without an
 error (a wake, a spurious return or a mismatch) returns `*retval = --ull_nwaiters`
 (`ulock_wait_cleanup`, :826): the number of other threads in a wait at the same key at that
-moment, a non-negative `c_int` (asserted at :857). The model does not track it: after the wait
-the oracle picks any value in `[0, 2^31)` (`ulockResult`, one more stop). That covers every
-native value. Two other error paths are unreachable here and so not modelled:
+moment, a non-negative `c_int` (asserted at :857). The word's `copyin` (:663) runs under the
+ull spinlock, which makes any VM fault fail (:652–657), so a live word that is not resident
+returns `-EFAULT` before the compare (std treats it as a spurious return). The model tracks
+neither: after the wait the oracle picks `-EFAULT` or any value in `[0, 2^31)`
+(`ulockResult`, one more stop). A bad pointer stays WAIT's conservative refusal (below). Other
+paths:
 
-* `ENOMEM` (:636) needs `ull_alloc`'s `zalloc_flags(ull_zone, Z_SET_NOT_EARLY)` to fail. It is a
-  `Z_WAITOK` allocation from a `KALLOC_TYPE_DEFINE` zone, which is not exhaustible, and
-  `osfmk/kern/zalloc.h` (`Z_WAITOK`, :383–390) states that such a `zalloc` never fails.
-* `EDOM` (:646; WAKE :1012) needs a waiter or waker at the same key with a different opcode.
-  Every ulock call that the model admits uses `COMPARE_AND_WAIT`, and any other op is
-  `.unspecified`.
-
-`EFAULT` from the word's `copyin` (:663) keeps WAIT's conservative refusal (below).
+* `ENOMEM` (:636) needs `ull_alloc`'s `zalloc_flags(ull_zone, Z_SET_NOT_EARLY)` to fail. That is
+  a `Z_WAITOK` allocation, which never fails from a zone that is not exhaustible
+  (`osfmk/kern/zalloc.h:383–390`). A zone is exhaustible only if `zone_set_exhaustible`
+  (`zalloc.c:8805`) lowered its `z_wired_max` from `~0u` (`zalloc.c:8795`,
+  `zalloc_internal.h:748–751`), and the kalloc-type zones of `KALLOC_TYPE_DEFINE`
+  (`osfmk/kern/kalloc.c`) never call it. So it is unreachable.
+* `EDOM` (:646; WAKE :1012) needs another opcode at the same key. Every ulock call of a row
+  uses `COMPARE_AND_WAIT`, and any other op is `.unspecified`. The one other opcode in a run
+  is `os_unfair_lock`'s `UL_UNFAIR_LOCK`, at a `std.Thread.Mutex` word on macOS, which the
+  STD-06 hand rows model without the kernel. A ulock wait at such a lock word while a thread
+  blocks in the lock is `-EDOM` natively but not in the model. That is a model gap (audit
+  soundness-2026-10-14 §S6, finding 4).
 
 **Address validation** happens before an interrupt, pick, word read or queue change. The
 address the kernel receives is the pointer's numeric address as a `usize` (`futexAddr`).
@@ -117,6 +124,7 @@ namespace Darwin.E
 def NOENT : Nat := 2
 def SRCH : Nat := 3
 def INTR : Nat := 4
+def FAULT : Nat := 14
 def INVAL : Nat := 22
 def AGAIN : Nat := 35
 def TIMEDOUT : Nat := 60
@@ -329,15 +337,17 @@ def ulockAddr (addr : Option Ptr) (aligned : Bool) : MemM (Option Ptr) := do
   let u := futexAddr (← ptrAddr p)
   return if u = 0 ∨ (aligned ∧ u % 4 ≠ 0) then none else some p
 
-/-- The non-negative results of a wait: the oracle's choice of a `c_int` in `[0, 2^31)`. -/
+/-- The number of non-negative `c_int`s, `[0, 2^31)`: the values of `--ull_nwaiters`. -/
 def ulockWaiters : Nat := 2 ^ 31
 
-/-- The return code of a wait that ended with `r` (module doc): for a wake, a spurious return or
-a mismatch, `--ull_nwaiters`, the number of other threads still in a wait at the key
-(`sys_ulock.c:826`), which the oracle picks among the non-negative `c_int`s (`ulockWaiters`);
-`-EINTR`; `-ETIMEDOUT`. -/
+/-- The return code of a wait that ended with `r` (module doc). After a wake, a spurious return or
+a mismatch the oracle picks option `0`, `-EFAULT` (a word that is not resident), or option
+`c + 1`, `--ull_nwaiters = c` (`sys_ulock.c:826`, any non-negative `c_int`). Else `-EINTR` or
+`-ETIMEDOUT`. -/
 def ulockResult : WaitResult → ConcM Tgt (BitVec 32)
-  | .woken | .mismatch => return BitVec.ofNat 32 (← pick fun _ => ulockWaiters)
+  | .woken | .mismatch => do
+    let c ← pick fun _ => ulockWaiters + 1
+    return if c = 0 then negErrno32 E.FAULT else BitVec.ofNat 32 (c - 1)
   | .interrupted => return negErrno32 E.INTR
   | .timedOut => return negErrno32 E.TIMEDOUT
 

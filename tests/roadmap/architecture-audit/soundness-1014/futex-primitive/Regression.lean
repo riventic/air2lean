@@ -100,17 +100,20 @@ private def ulockRet (x : CoN Nat (BitVec 32 × Mem) 3) (c : Nat) :
 private def three : Mem := { blocks := #[{ block 4096 8 with
   bytes := #[.int 3, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0] }] }
 
+/-- The mismatched wait of `0` at the word of value 3, after option `c` of its second pick. -/
+private def mismatch (c : Nat) : Option (Nat × Option (Except Error Int)) :=
+  ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three) c
+
 /-- `__ulock_wait2` returns `--ull_nwaiters` (xnu-12377.121.6 `sys_ulock.c:826`), the other
-waiters at the key, not always `0`: after a mismatch the oracle picks any of the `2^31`
-non-negative `c_int`s, here `0`, `5` and `2^31 - 1`. -/
+waiters at the key, not always `0`, or `-EFAULT` for a word that is not resident (:652–663):
+after a mismatch the oracle picks among `-EFAULT` and the `2^31` non-negative `c_int`s, here
+`-EFAULT`, `0`, `5` and `2^31 - 1`. -/
 theorem ulock_wait_nwaiters :
-    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three) 0 =
-      some (2 ^ 31, some (.ok 0)) ∧
-    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three) 5 =
-      some (2 ^ 31, some (.ok 5)) ∧
-    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three)
-      (2 ^ 31 - 1) = some (2 ^ 31, some (.ok (2 ^ 31 - 1))) :=
-  ⟨by decide +kernel, by decide +kernel, by decide +kernel⟩
+    mismatch 0 = some (2 ^ 31 + 1, some (.ok (-14))) ∧
+    mismatch 1 = some (2 ^ 31 + 1, some (.ok 0)) ∧
+    mismatch 6 = some (2 ^ 31 + 1, some (.ok 5)) ∧
+    mismatch (2 ^ 31) = some (2 ^ 31 + 1, some (.ok (2 ^ 31 - 1))) :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
 
 private def twoRawWaiters : Mem := {
   base with

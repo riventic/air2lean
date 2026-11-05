@@ -26,6 +26,7 @@ with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the r
 | `wp_casD` | `cmpxchg(0 → 1)`, acquire (`c = 1`) | `out` or `spin` | `holds`, or `wait` |
 | `wp_wake` | futex wake of 1 | `wake` | `out` |
 | `wp_osWait` | OS futex wait for `c` (`Os.futexWait`, OSF-01) | `spin` | `spin` |
+| `wp_ulockResult` | macOS wait's return code (`Os.Darwin.ulockResult`, OSF-01) | any | the same |
 | `wp_osWake` | OS futex wake of `w ≥ 1` or all (`Os.futexWake`, OSF-02) | `wake` | `out`, or `wake` (spurious `EINTR`) |
 -/
 
