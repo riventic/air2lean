@@ -162,8 +162,8 @@ theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
     (hs : L.Step t m m') (hl : L.Inv G rX m') : P.inv G m' := by
   have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hi hU hok hph hna hz hs
     (fun h1 h2 => absurd h1 h2)
-    { out := hi.idle t, keep := fun _ _ => rfl, acq := fun h1 h2 => by rw [h1] at h2; cases h2,
-      rel := fun h1 h2 => by rw [h1] at h2; cases h2 }
+    { out := hi.idle t, keep := fun _ _ => rfl, acq := fun h1 h2 => (by rw [h1] at h2; cases h2),
+      rel := fun h1 h2 => (by rw [h1] at h2; cases h2) }
     (by rw [upd_set_self]; exact hl)
   rwa [upd_set_self] at this
 

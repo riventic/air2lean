@@ -592,7 +592,7 @@ theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     (hw : L.WInv (upd (L.pl G) t .holds) m') :
     ∃ rL, L.FreeRes G rX m rL ∧ L.Inv (upd G t (L.set (G t) .holds rL)) rX m' := by
   obtain ⟨rL, hfr⟩ := hi.rest
-  obtain ⟨ho, hLoff, hLX, hFr, -⟩ := hfr
+  obtain ⟨ho, hLoff, hLX, hFr, -⟩ := id hfr
   obtain ⟨hR, hLown⟩ := hFr hF
   obtain ⟨ht, hjt⟩ := hi.ht hng
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
