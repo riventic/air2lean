@@ -8,6 +8,7 @@ of `AutoRules.lean` did not cover:
 
 * `intCast_widen_step`: an unsigned widening `@intCast` (it cannot fail; the result has the
   value of its operand);
+* `index_step`, `vindex_step`: an item of an array or vector value at an index below its size;
 * `ptrEqAddr_raw`: pointer `==` of two pointers without a block (`@ptrFromInt`, null): the
   addresses are the offsets (MM-4);
 * `storeBytes_region`, `storeEnc_region`: a store of raw bytes (`Zig.storeBytes`, which the
@@ -34,6 +35,12 @@ variable {P : FAssn}
   have ha := a.isLt
   have hp : 2 ^ n ≤ 2 ^ m := Nat.pow_le_pow_right (by decide) h
   exact read_val (by rw [BitVec.toNat_setWidth]; exact Nat.mod_eq_of_lt (by omega))
+
+/-- **An item of an array value** (`Zig.index`) at an index below its size (the item read with
+that bound, as `vindex_step`). -/
+@[fsym] theorem index_step {α : Type} (a : Array α) (i : usize) (h : i.toNat < a.size) :
+    FTotalTriple P (StateT.lift (Zig.index a i) : MemM α) (fun v => ⟪v = a[i.toNat]⟫ ⋆ P) :=
+  result_step (fun h' => ⟨a[i.toNat], Zig.index_lt a i h', rfl⟩) h
 
 /-- **An item of a vector value** (`Zig.vindex`) at an index below its length. -/
 @[fsym] theorem vindex_step {α : Type} {n : Nat} (a : Vector α n) (i : BitVec 64) (h : i.toNat < n) :
