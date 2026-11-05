@@ -268,4 +268,50 @@ run_meta budget_within_limit
 
 end Budget
 
+/-! ## Shared certificates (`omegaRaw`)
+
+Core `omega` builds its certificate as a tree: every step serializes its coefficient lists again,
+a constraint used twice is proved twice, and every call serializes its atoms and facts again.
+Unshared, the certificates of one walk reached 64M term nodes for 0.23M distinct ones
+(ArenaSpec's `loop66_c0`), which the elaborator held until the theorem was checked. `omegaRaw`
+hash-conses each certificate against the run's table (`RunCaches.omegaTerms`). -/
+
+section Shared
+open Lean Meta Zig.Full.Auto
+
+/-- **The certificates of a run are maximally shared**, each and together: hash-consing them
+again finds no duplicate node. The problem chains four facts over five atoms, so a certificate
+combines constraints in several steps over the same coefficient lists; the second goal of the
+run uses the same facts and atoms. (Core `omega` alone: 2576 nodes for 739 distinct ones on the
+first goal.) -/
+def omega_proofs_shared : MetaM Unit := do
+  let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
+  fsymRuns.modify (·.insert id (← RunCaches.new))
+  try
+    withOptions (·.set `fsym.run id) <|
+    withLocalDeclD `a (mkConst ``Nat) fun a => withLocalDeclD `b (mkConst ``Nat) fun b =>
+    withLocalDeclD `c (mkConst ``Nat) fun c => withLocalDeclD `d (mkConst ``Nat) fun d =>
+    withLocalDeclD `e (mkConst ``Nat) fun e => do
+    let le (x y : Expr) := mkAppM ``LE.le #[x, y]
+    let add (x y : Expr) := mkAppM ``HAdd.hAdd #[x, y]
+    let t1 ← le (← add a b) c
+    let t2 ← le (← add c d) e
+    let t3 ← le e (mkNatLit 10)
+    let t4 ← le (mkNatLit 1) b
+    let ty1 ← mkAppM ``LT.lt #[← add a d, mkNatLit 10]
+    let ty2 ← le (← add (← add a b) d) (mkNatLit 10)
+    withLocalDeclD `h1 t1 fun h1 => withLocalDeclD `h2 t2 fun h2 =>
+    withLocalDeclD `h3 t3 fun h3 => withLocalDeclD `h4 t4 fun h4 => do
+    let some p1 ← omegaRaw #[h1, h2, h3, h4] ty1 | throwError "omega_proofs_shared: no proof"
+    let some p2 ← omegaRaw #[h1, h2, h3, h4] ty2 | throwError "omega_proofs_shared: no proof"
+    for (what, x) in [("the first", p1), ("both", mkApp2 (mkConst ``Prod.mk) p1 p2)] do
+      let n ← x.numObjs
+      let m ← (ShareCommon.shareCommon' x).numObjs
+      unless n == m do throwError "omega_proofs_shared: {what}: {n} term nodes, {m} distinct"
+  finally fsymRuns.modify (·.erase id)
+
+run_meta omega_proofs_shared
+
+end Shared
+
 end SepAuto.Arith

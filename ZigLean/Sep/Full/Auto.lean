@@ -696,6 +696,8 @@ structure RunCaches where
   fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
   /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
   fuelOut : IO.Ref Bool
+  /-- The subterms of the run's `omega` certificates, each distinct term once (`omegaRaw`). -/
+  omegaTerms : IO.Ref (Std.HashMap Expr Expr)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -710,7 +712,7 @@ def RunCaches.new : IO RunCaches :=
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
            runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
-           fuelOut := ← IO.mkRef false }
+           fuelOut := ← IO.mkRef false, omegaTerms := ← IO.mkRef {} }
 
 /-- Restore the existing arithmetic search state with a failed speculative proof choice.
 The simp contexts are prepared before backtracking and are not part of this state. Off
@@ -820,7 +822,40 @@ def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : Meta
     (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
-/-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
+/-- `internTerms` (implementation): bottom up, each node of `e` once (`memo`, by address), its
+children replaced first, so that a lookup in `tbl` compares children by address. -/
+unsafe def internTermsImpl (tbl : IO.Ref (Std.HashMap Expr Expr)) (e : Expr) : IO Expr := do
+  let memo ← IO.mkRef (mkPtrMap (α := Expr) (β := Expr))
+  let rec visit (e : Expr) : IO Expr := do
+    if let some r := (← memo.get).find? e then return r
+    let e' ← match e with
+      | .app f a => pure (e.updateApp! (← visit f) (← visit a))
+      | .lam _ t b _ => pure (e.updateLambdaE! (← visit t) (← visit b))
+      | .forallE _ t b _ => pure (e.updateForallE! (← visit t) (← visit b))
+      | .letE _ t v b _ => pure (e.updateLetE! (← visit t) (← visit v) (← visit b))
+      | .mdata _ b => pure (e.updateMData! (← visit b))
+      | .proj _ _ b => pure (e.updateProj! (← visit b))
+      | _ => pure e
+    let r ← match (← tbl.get).get? e' with
+      | some r => pure r
+      | none => tbl.modify (·.insert e' e'); pure e'
+    memo.modify (·.insert e r)
+    return r
+  visit (ShareCommon.shareCommon' e)
+
+/-- `e` hash-consed against `tbl`: each subterm is replaced by the structurally equal term in
+`tbl`, and the new ones are added. Used across the `omega` certificates of a run (`omegaRaw`). -/
+@[implemented_by internTermsImpl]
+opaque internTerms (tbl : IO.Ref (Std.HashMap Expr Expr)) (e : Expr) : IO Expr
+
+/-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean.
+
+`omega`'s certificate is a tree: each step serializes its coefficient lists again, a constraint
+used twice is proved twice, and every call serializes its atoms and facts again. A walk's
+certificates therefore repeat a few subterms millions of times (ArenaSpec `loop66_c0`: 64M term
+nodes, 0.23M distinct, held until the theorem is checked). They are hash-consed against the run's
+table (`RunCaches.omegaTerms`), so the run's caches, the goals' assignments and the final term
+hold each distinct subterm once. -/
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let h0 ← IO.getNumHeartbeats
   let r ← omegaRaw' facts ty
@@ -843,7 +878,12 @@ where
       -- `omega`'s case splits on `/` and `%` by literals recurse deeply on a false goal
       withTheReader Core.Context (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
         Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
-    return some (← instantiateMVars m))
+    let pf ← internTerms (← caches).omegaTerms (← instantiateMVars m)
+    -- `omega`'s own goals hold its certificate unshared: the state before it, where the proof's
+    -- unknowns (of the facts) are declared, keeps only the shared copy
+    let decls := s.meta.mctx.decls
+    if (← getMVars pf).all decls.contains then s.restore
+    return some pf)
     fun _ => do s.restore; return none
 
 /-- A proposition `omega` reads: relations of natural numbers and integers under `¬ ∧ ∨ → ↔`. -/
