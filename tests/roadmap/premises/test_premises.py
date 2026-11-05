@@ -382,12 +382,12 @@ class FixtureTests(unittest.TestCase):
         self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
             def airAsm_8 : Nat := 8
             def enabled : Nat := 0
-            if_decl enabled in
+            when_defined enabled
             def chosen : Nat := 0
-            end_if
-            if_decl absent in
+            end_when
+            when_defined absent
             def chosen : Nat := airAsm_8
-            end_if
+            end_when
             theorem branch : chosen = chosen := rfl
             """
         self.assertNotIn("ASM-01", self.written()["branch"]["premises"])

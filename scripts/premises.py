@@ -37,8 +37,8 @@ CMD_KW = DECL_KW | {"namespace", "section", "end", "open", "variable", "universe
                     "notation", "infix", "infixl", "infixr", "prefix", "postfix", "import",
                     "register_simp_attr", "initialize", "builtin_initialize", "deriving", "export",
                     "declare_syntax_cat", "add_decl_doc", "termination_by",
-                    # Proofs/Threadsync/Variant.lean's block for one OS's translation.
-                    "if_decl", "end_if"}
+                    # ZigLean/VersionGate.lean's block for one translation (a version or an OS).
+                    "when_defined", "end_when"}
 MODIFIERS = r"(?:(?:private|protected|noncomputable|partial|unsafe|nonrec|scoped|local)\s+)*"
 ATTRS = r"(?:@\[[^\]]*\]\s*)*"
 COMMAND_RE = re.compile(r"^" + ATTRS + MODIFIERS + r"([#A-Za-z_][A-Za-z_0-9]*)")
@@ -380,7 +380,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 continue
         if items:
             items[-1][2].append(line)
-    scopes: list[list] = []  # [kind, name parts, opens, variable binders, if_decl condition]
+    scopes: list[list] = []  # [kind, name parts, opens, variable binders, when_defined condition]
     file_opens: list[str] = []
     file_vars: list[tuple[str, str]] = []
     ambient_vars: list[tuple[int, set[str], set[str]]] = []
@@ -393,13 +393,13 @@ def parse_file(path: Path, root: Path) -> LeanFile:
             scopes.append(["namespace", rest.split()[0].split("."), [], []])
         elif keyword in {"section", "mutual"}:
             scopes.append([keyword, [], [], []])
-        elif keyword == "if_decl":
+        elif keyword == "when_defined":
             scopes.append([keyword, [], [], [], rest.split()[0]])
         elif keyword == "variable":
             (scopes[-1][3] if scopes else file_vars).extend(binders(body))
             names = {n for n, _ in binders(body)}
             ambient_vars.append((len(scopes), names, name_tokens(body) - names - {"variable"}))
-        elif keyword in {"end", "end_if"}:
+        elif keyword in {"end", "end_when"}:
             if scopes:
                 scopes.pop()
                 ambient_vars = [v for v in ambient_vars if v[0] <= len(scopes)]
@@ -425,7 +425,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 full = name.removeprefix("_root_.")
             else:
                 full = ".".join([*namespaces, name]) if name else ""
-            conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
+            conditions = tuple(s[4] for s in scopes if s[0] == "when_defined")
             decl = Decl(full, keyword, lean, number, body, namespaces, opens, conditions)
             decl.tokens = name_tokens(body)
             # A used section variable carries its whole declared type, including concrete
@@ -554,7 +554,7 @@ def load_repository(root: Path, config: dict) -> Repository:
                 errors.append(f"{lean.rel}: import {module} is unresolved and not an allowed generated import")
     names = {d.name for lean in files.values() for d in lean.decls if d.name}
     for lean in files.values():
-        # `if_decl X in ... end_if` elaborates only when the selected translation declares X.
+        # `when_defined X ... end_when` elaborates only when the selected translation declares X.
         lean.decls = [d for d in lean.decls
                       if all(any((f"{p}.{c}" if p else c) in names for p in prefixes(d.namespaces))
                              for c in d.conditions)]

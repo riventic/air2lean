@@ -568,13 +568,6 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "tactic": "if_decl",
-      "kind": "command",
-      "module": "Proofs.Threadsync.Variant",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (wave 10; moved from Proofs.Threadsync.Lock)"
-    },
-    {
       "tactic": "liveness_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
@@ -599,12 +592,6 @@
       "tactic": "tame",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Tame",
-      "status": "legacy-to-retire"
-    },
-    {
-      "tactic": "tomega",
-      "kind": "syntax",
-      "module": "ZigLean.Conc.Spec.Count",
       "status": "legacy-to-retire"
     },
     {
@@ -863,18 +850,6 @@
       "path": "Proofs/Threadsync/WaitGroup.lean",
       "tactic": "unroll_sched",
       "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/Spec/Cond.lean",
-      "tactic": "tomega",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/Spec/WaitGroup.lean",
-      "tactic": "tomega",
-      "count": 2,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {

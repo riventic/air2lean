@@ -91,7 +91,7 @@ TACTIC_DECL = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:syntax|
 TACTIC_RULES = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:macro_rules|elab_rules)\b")
 TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\((?:(tactic|command)\|)?\s*([^\s$)\]]+)", re.M)
 # The syntax category of a declaration (before its `=>`) or of a rules block (`elab_rules : command`).
-# A command elaborator can add, hide or rewrite declarations (`if_decl … end_if` drops theorems when
+# A command elaborator can add, hide or rewrite declarations (`when_defined … end_when` drops theorems when
 # its condition fails), so new commands are gated like new tactics.
 CATEGORY = re.compile(r":\s*(tactic|command)\b")
 DECL_KIND = {"tactic": "syntax", "command": "command"}
