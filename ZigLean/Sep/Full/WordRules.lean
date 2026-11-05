@@ -705,7 +705,7 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL L
 /-- `FStepIn` of a change of the OS state only (an interrupt's delivery, `Os.takeInterrupt`). -/
 theorem _root_.Zig.FStepIn.os (m : Mem) (hF : Heap) (o : OsState) : FStepIn hF m { m with os := o } :=
   have h := FStepIn.refl m hF
-  ⟨h.current, h.threads, h.waiters, h.woken, h.groups, h.size, h.others, h.mine, h.blocks,
+  ⟨h.current, h.threads, h.waiters, h.woken, h.groups, h.size, h.others, h.mine, h.addrs,
     h.nextMsg, ⟨some, AMap.of_eq rfl rfl⟩, h.fp, h.fpc, h.const, h.cov⟩
 
 /-- **The untimed OS futex wait at the word** (`Os.futexWait`, OSF-01; the bits `e`) by thread

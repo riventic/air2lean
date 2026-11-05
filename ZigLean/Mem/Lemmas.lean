@@ -944,10 +944,11 @@ theorem Mem.wordKey_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : 
 
 /-! ### Block addresses stay
 
-A block never moves: a write or a `free` changes its bytes or `live` flag, and every `addr :=` of
-the model makes a new block (`Mem.afterAlloc`, a mapping, a moving `mremap`). So every step keeps
-the address of every block that exists (`Mem.SameAddrs`, `FStepIn.addrs`), and everything
-computed from addresses (`addrIn`, a futex key) stays across a step. -/
+A block never moves: a write, a `free`, an unmap or an in-place resize changes only its bytes,
+`live` flag or `kind`, and every `addr :=` of the model makes a new block (`Mem.afterAlloc`, a
+mapping, a moving `mremap`). So every thread step (`FStepIn.addrs`) keeps the address of every
+block that exists (`Mem.SameAddrs`), and everything computed from addresses (`addrIn`, a futex
+key) stays across it. -/
 
 /-- Every block of `m` exists in `m'` at the same address (`m'` may have more blocks). -/
 def Mem.SameAddrs (m m' : Mem) : Prop :=
