@@ -1296,15 +1296,14 @@ so a conditional rewrite whose side condition only a later fact proves did not a
 invariant). A fact used for its own side condition is sound (every fact is a hypothesis), and
 each fact stays beside its new form, which may have lost what it said about itself. Only the
 arithmetic facts relevant to `tgt`; one that fails to normalize stays as it was. The facts with
-their types, and whether a new form was added; the solver's facts (`caches.facts`) are then all
-of them. Only after `omega` failed: the normal form of every other use stays `normFacts`'. -/
+their types (a new form was added iff there are more of them). Only after `omega` failed: the
+normal form of every other use stays `normFacts`'. -/
 def renormFacts (facts : Array Expr) (tgt : Expr) (cases := true) :
-    MetaM (Array (Expr × Expr) × Bool) := do
+    MetaM (Array (Expr × Expr)) := do
   let (ctx, procs) ← arithSimpCtx
   let typed ← facts.mapM fun f => return (f, ← instantiateMVars (← inferType f))
   let rel : Std.HashSet Expr := (relevantFacts typed tgt).foldl (fun s (f, _) => s.insert f) {}
   let mut out := #[]
-  let mut changed := false
   for (f, ty) in typed do
     -- (the fact as it was stays: normalized against itself, `k % 8 = k` would become `True`)
     out := out.push (f, ty)
@@ -1313,10 +1312,9 @@ def renormFacts (facts : Array Expr) (tgt : Expr) (cases := true) :
     try
       let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
       unless r.expr == ty || r.expr.isTrue do
-        out := out.push (← mpResult r f, r.expr); changed := true
+        out := out.push (← mpResult r f, r.expr)
     catch _ => s.restore
-  if changed then (← caches).facts.set (out.map (·.1))
-  return (out, changed)
+  return out
 
 /-- **Congruence of atoms**: an atom of `omega` that applies a function the solver does not read
 (a library sum `tsum x.toNat g`, a caller's `f x.toNat`) to terms containing the side `l` of a
@@ -1507,24 +1505,27 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
     let h1 ← IO.getNumHeartbeats
     -- (a target that normalizes to `False`, `8 ∣ 1`, is refuted: the case facts only for a
     -- refutation of the context that the target asks for, `False` itself)
-    let ok ← omegaFacts all r.expr (cases := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse))
-      (budget := quick || budget)
+    let cs := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse)
+    let ok ← omegaFacts all r.expr (cases := cs) (budget := quick || budget)
     trace[fsym.prof] "omegaT {((← IO.getNumHeartbeats) - h1) / 1000} {ok.isSome}"
     if let some pf := ok then close pf; return true
     unless quick do
       if let some pf ← modCongr all r.expr cases then close pf; return true
     -- not in a probe: the relevant facts each against all the facts, and the congruence of atoms
     unless quick || budget do
-      let (typed, changed) ← renormFacts facts r.expr cases
+      let typed ← renormFacts facts r.expr cases
+      let changed := typed.size != facts.size
+      let facts' := typed.map (·.1)
+      -- (the solver's facts are then all of them, for the dischargers below)
+      if changed then (← caches).facts.set facts'
       let congr ← atomCongr typed r.expr cases
       if changed || !congr.isEmpty then
-        let facts' := typed.map (·.1)
         let extra' ← if changed then extraFacts facts' r.expr cases else pure extra
         let all' := facts' ++ extra' ++ congr
         trace[fsym.arith] "omega again {r.expr} from {← all'.mapM fun f => inferType f}"
-        -- (the case facts as for the first `omega`: none for a target that normalized to `False`)
-        if let some pf ← omegaFacts all' r.expr
-            (cases := cases && (!r.expr.isFalse || tgt0.consumeMData.isFalse)) then
+        -- (the case facts as for the first `omega`; a refutation of the context, a target
+        -- `False`, searches them within the probe's budget: this pass runs on every failed one)
+        if let some pf ← omegaFacts all' r.expr (cases := cs) (budget := r.expr.isFalse) then
           close pf; return true
     s.restore; return false
   catch ex =>

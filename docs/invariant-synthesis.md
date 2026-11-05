@@ -552,7 +552,8 @@ it `pairs_total`) is unchanged. The hand step and loop lemmas around them (`inne
   elaboration error inside the inner loop's theorems.
 
 The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
-for it, and its invariant (`outerI`, with the quadratic `cnt`) stays hand-written.
+for it, and its invariant (`outerI`, over the library sum `tsum`) stays hand-written (deletion
+plan: engine ledger row P09-E4).
 
 ### Implemented: the counted family widened (S2c)
 
