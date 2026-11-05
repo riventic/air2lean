@@ -85,6 +85,7 @@ CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
 GUARD = _load('air2lean_build_guard', 'scripts/build-guard.py')
+PEAKS = _load('air2lean_lean_peaks', 'scripts/lean-peaks.py')
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
@@ -391,19 +392,30 @@ def write_hints(units, stats):
             Path(written).unlink(missing_ok=True)
 
 
-def schedule(units, default_mib):
+def schedule(units, mem_mib, elastic=False):
     """(start order, memory requests in MiB): the longest units first by their last wall time, an
     unmeasured one before all; a request is the largest recent peak with a margin (MEM_MARGIN,
     at least MEM_FLOOR_MIB), scaled up by the ratio of Lean threads when this run has more than
-    the measured one, `default_mib` for an unmeasured unit. Only order and admission depend on
-    these measurements, never a unit's result."""
+    the measured one. An unmeasured unit requests `mem_mib`; in an elastic admission, where its
+    request is its limit and one that outgrows it runs again at PROCESS_MIB (`admitted`), it
+    requests the typical request of every unit this machine measured, selected or not
+    (lean-peaks.py `typical`, the quantile a Lean module never measured is charged by), at most
+    PROCESS_MIB. Only order and admission depend on these measurements, never a unit's result."""
     hints, threads = read_hints(), lean_threads()
+
+    def request(hint):
+        if not hint or not hint['peak_rss_kib']:
+            return None
+        return max(MEM_FLOOR_MIB, int(max(hint['peak_rss_kib']) / 1024 * MEM_MARGIN
+                                      * max(1, threads / hint['lean_threads'])))
+
     known = [hints.get(u['name']) for u in units]
     order = sorted(range(len(units)), key=lambda i: -(known[i]['elapsed_s'] if known[i] else float('inf')))
-    requests = [max(MEM_FLOOR_MIB, int(max(h['peak_rss_kib']) / 1024 * MEM_MARGIN
-                                       * max(1, threads / h['lean_threads'])))
-                if h and h['peak_rss_kib'] else default_mib for h in known]
-    return order, requests
+    unmeasured = mem_mib
+    if elastic:
+        typical = PEAKS.typical(filter(None, map(request, hints.values())))
+        unmeasured = min(GUARD.PROCESS_MIB, typical or GUARD.PROCESS_MIB)
+    return order, [request(h) or unmeasured for h in known]
 
 
 def report(units, statuses, stats, path, top=20):
@@ -525,7 +537,7 @@ def main(argv=None):
                     env['AIR2LEAN_FIXTURE_REPLAY_CACHE'] = str(scratch / 'kernel-replay.json')
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
             grant = elastic_grant()
-            order, requests = schedule(units, GUARD.PROCESS_MIB if grant else a.mem_mib)
+            order, requests = schedule(units, a.mem_mib, elastic=bool(grant))
             for job, request in zip(jobs, requests):
                 if grant:  # each unit admitted by build-guard, beside every other workload
                     job.argv = admitted(job.argv, request, grant)
