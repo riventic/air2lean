@@ -484,7 +484,7 @@ theorem inert (hi : WgInv L N s) {t : Tid} (ht : t < N) {c0 : WCtl WL} (h : s.ct
   have hidle : ∀ u, u ≠ t → isW (s.ctl u) = true → w = true := fun u _ hu => hwt (hi.waited u hu)
   constructor <;> dsimp only
   · exact tset_all (Q := fun c => WgPlace.ok c = true) hok fun u _ => hi.ok u
-  · intro u hu; rw [tset_ne _ _ (fun e => by subst e; tomega)]; exact hi.idle u hu
+  · intro u hu; rw [tset_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact hi.idle u hu
   · rw [hP]; have := hi.cnt; unfold WState.P at this ⊢; omega
   · intro a b ha hb
     by_cases hat : a = t <;> by_cases hbt : b = t
@@ -557,7 +557,7 @@ theorem places (hi : WgInv L N s) {t : Tid} (ht : t < N) {c0 c : WCtl WL} (h : s
   refine ⟨tset_all (Q := fun c => WgPlace.ok c = true) hok fun u _ => hi.ok u, fun u hu => ?_,
     fun a b ha hb => hi.one a b (hown a ▸ ha) (hown b ▸ hb), fun u hu => hi.waited u (hown u ▸ hu),
     fun hw u l => ?_⟩
-  · rw [tset_ne _ _ (fun e => by subst e; tomega)]; exact hi.idle u hu
+  · rw [tset_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact hi.idle u hu
   · by_cases hu : u = t
     · rw [hu, tset_self]; intro he
       obtain ⟨l0, hl0⟩ := hS l he

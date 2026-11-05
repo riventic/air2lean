@@ -60,7 +60,7 @@ theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hi : (proto Lo p
   · obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h
     have e : w.1 = 1 := by simpa using he
     rcases hu.q w hw with hq | hq | hq
-    · exact (fitsL (Lo := Lo) (prodOf := prodOf)).noWaits hL hall
+    · exact (fitsL (Lo := Lo) (prodOf := prodOf)).noWaits hL hu hall
         (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
     · obtain ⟨i, jr, e', h1, -⟩ := hu.cinv.q w hw hq
       have hw1 : ((G 1).2.c).waits = true := by
@@ -258,7 +258,7 @@ theorem U_prod {G : ThreadId → Gh} {rX : Res} {m : Mem} {a₀ a₁ : FLG} {x�
 /-- Two threads do not hold the mutex. -/
 theorem one_holder {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : (L Lo).Inv G rX m)
     (h0 : (G 0).1.ph = .holds) (h1 : (G 1).1.ph = .holds) : False := by
-  have := hL.w.one 0 1 h0 h1; cases this
+  have := hL.w.one 0 1 (LPh.held_of_holds h0) (LPh.held_of_holds h1); cases this
 
 /-- While the producer holds the mutex, `main`'s registration happened before it (`main` does
 not hold the mutex, and its release happened before the producer's lock). `hL` is the lock's
@@ -269,7 +269,7 @@ theorem U.reg_lk {G G' : ThreadId → Gh} {rX rX' : Res} {m : Mem} (hL : (L Lo).
   rcases hu.reg j hj with h | ⟨-, ⟨h0', -⟩ | ⟨k, l, hl, hle⟩⟩
   · exact h
   · exact (one_holder hL (h0.trans h0') hh).elim
-  · exact VClock.le_trans hle ((hL.w.rel k l hl).2 1 hh)
+  · exact VClock.le_trans hle ((hL.w.rel k l hl).2 1 (LPh.held_of_holds hh))
 
 /-- Past its lock, the producer saw every registration (`reg`). -/
 theorem U.reg_out {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m)

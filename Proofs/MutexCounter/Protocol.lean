@@ -674,7 +674,7 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
     · by_cases h1 : u = 1
       · subst h1; simp only [FLock.pl, upd_ne _ _ (by decide : (1 : ThreadId) ≠ 0)] at hu'
         rw [show (L Lo).ph (G₁ 1) = .gone from hfin.1] at hu'; cases hu'
-      · have := (hL'.w.live u (by rw [hu']; decide)).1
+      · have := (hL'.w.live u (LPh.ne_gone_of_held hu')).1
         rw [hs2'] at this; unfold ThreadId at *; omega
   have hall : ∀ u < m'.threads.size, VClock.le (m'.clocks[u]!) (m'.clocks[0]!) = true :=
     fun u hu' => by

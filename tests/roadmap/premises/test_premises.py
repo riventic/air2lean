@@ -382,18 +382,45 @@ class FixtureTests(unittest.TestCase):
         self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
             def airAsm_8 : Nat := 8
             def enabled : Nat := 0
-            if_decl enabled in
+            when_defined enabled
             def chosen : Nat := 0
-            end_if
-            if_decl absent in
+            end_when
+            when_defined absent
             def chosen : Nat := airAsm_8
-            end_if
+            end_when
             theorem branch : chosen = chosen := rfl
             """
         self.assertNotIn("ASM-01", self.written()["branch"]["premises"])
         self.fixture.files["Proofs/Choice/Proofs.lean"] = self.fixture.files[
             "Proofs/Choice/Proofs.lean"].replace("def enabled :", "def absent :")
         self.assertIn("ASM-01", self.written()["branch"]["premises"])
+
+    def test_condition_resolves_through_open_namespaces(self):
+        # Proofs/Lists/Append.lean: its gates are declarations of an opened namespace, one dotted.
+        self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
+            def airAsm_8 : Nat := 8
+            def plain : Nat := 0
+            namespace Tr
+            def gate : Nat := 0
+            def fn.loop4 : Nat := 0
+            end Tr
+            open Tr
+            when_defined plain
+            def chosen : Nat := 0
+            def picked : Nat := 0
+            end_when
+            when_defined gate
+            def chosen : Nat := airAsm_8
+            end_when
+            theorem first : chosen = chosen := rfl
+            when_defined fn.loop4
+            def picked : Nat := airAsm_8
+            end_when
+            theorem second : picked = picked := rfl
+            """
+        written = self.written()
+        self.assertIn("ASM-01", written["first"]["premises"])
+        self.assertIn("ASM-01", written["second"]["premises"])
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])

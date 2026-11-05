@@ -898,8 +898,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
           fun v q' n h'' hv => ?_⟩
         have hvt : v ≠ t := fun hvt => by subst hvt; rw [hct, hpw] at hv; cases hv
         rw [hG v hvt] at hv
-        exact absurd (hwL.one v t (hu.sig_holds (by rw [hv] <;> rfl))
-          (hu.sig_holds (by rw [hinc] <;> rfl))) hvt
+        exact absurd (hwL.one v t (LPh.held_of_holds (hu.sig_holds (by rw [hv] <;> rfl)))
+          (LPh.held_of_holds (hu.sig_holds (by rw [hinc] <;> rfl)))) hvt
   · -- incS
     have hr : ¬ ((G t).2.c).crit = true →
         (((G' 0).2.c).isReg = true → ((G 0).2.c).isReg = true) := fun hnc h1 => by
@@ -999,6 +999,7 @@ theorem fitsS : (S K).Fits (proto K) (U K) ok where
   role_l _ _ _ _ := Iff.rfl
   role_part _ _ _ := Iff.rfl
   ok_calm _ _ _ hp hq := ⟨fun _ => hq, fun _ => hp⟩
+  holdLive _ _ _ _ hi _ hv := FLock.holdLive_none (fun _ h => h) hi hv
   kstep := by
     intro t G rX m G' rX' m' hs hu
     rcases hs with ⟨hSI, hs | ⟨hC, hmv⟩⟩ | hs
