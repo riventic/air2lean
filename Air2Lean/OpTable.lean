@@ -1,13 +1,15 @@
 import Lean.Data.Json
 import Air2Lean.Air.Normalize
 import Air2Lean.Air.Effects
+import Air2Lean.Sem
 
 /-!
 # Op table
 
 `air2lean --print-op-table` prints, for every AIR tag the translator names, what `normalizeOp`
 decodes it to (by decoding a synthetic instruction, not by reading source), that op's effect
-class (`Op.effects`) and its emitter route (`Op.emitRoute`), and the reviewed rejection reasons.
+class (`Op.effects`), its emitter route (`Op.emitRoute`), why the AIR semantics does not
+interpret it (`Sem.outside?`, null when it does), and the reviewed rejection reasons.
 `scripts/coverage.py` reads the committed copy, `coverage/op-table.json`, instead of scanning
 Lean source; `tests/roadmap/op-effects` checks that the copy is current and that every tag in
 `normalizeOp` is in the table. Any other tag is rejected (`unknown AIR tag`).
@@ -48,6 +50,7 @@ def opTableJson : Json :=
       ("constructor", toJson (op.map (·.ctorName))),
       ("effect", toJson (op.map (·.effects.cls.name))),
       ("emit", toJson (op.map (·.emitRoute.name))),
+      ("sem_outside_reason", toJson (op.bind Sem.outside?)),
       ("runtime_reason", toJson (runtimeTagReason? tag)),
       ("exporter_reason", toJson (exporterTagReason? tag))]
   Json.mkObj [
