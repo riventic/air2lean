@@ -10,8 +10,7 @@ import ZigLean.Sep.Full.LockWord
 
 Concrete arguments for the premises of the base concurrency lemmas (`ZigLean/Conc/*.lean`,
 `ZigLean/Conc/Base/*.lean`) and of the lock-word states of the full-state logic
-(`docs/claim-strength.md`). The module reaches no legacy module (`docs/legacy-retirement.md`).
-The legacy thread-triple rules (`TTriple`, `ZigLean/Conc/Own.lean`) have none: their head is a
+(`docs/claim-strength.md`); it imports no legacy-layer module. The legacy thread-triple rules (`TTriple`, `ZigLean/Conc/Own.lean`) have none: their head is a
 reserved claim-head name, so no claim rests on them.
 -/
 
