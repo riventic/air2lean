@@ -917,6 +917,16 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · exact hu.q w h'
     · exact .inr rfl
 
+/-! ## The walks' ghost values -/
+
+/-- A thread out of the lock's code with part `r` at the places `x`. -/
+def gO (r : Res) (x : X) : Gh := (⟨.out, r, rnil⟩, x)
+
+theorem part_gO {r : Res} {x : X} : (L K).part (gO r x) = r := rfl
+
+/-- No thread at the start. -/
+def G0 : ThreadId → Gh := fun _ => (⟨.gone, rnil, rnil⟩, {})
+
 /-- **`U` after a move of the program places at the same memory** (the walks' ghost moves: `main`'s
 take, the producer's post): the condition's and the semaphore's places and the lock places stay;
 the shape, both invariants and the waiting role after it are the move's to show. -/
