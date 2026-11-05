@@ -231,62 +231,9 @@ def op_table(cache=None):
     return dict(data, tags=rows)
 
 
-# The interpreter (Air2Lean/Sem.lean, V01): the definitions whose top-level arms interpret an
-# `Op` constructor, and the list of the constructors without an arm, with reasons.
+# The AIR semantics (V01). The op table's `sem_outside_reason` is `Sem.outside?`: null for a
+# constructor that it interprets; tests/roadmap/op-effects checks it against the interpreter.
 SEM = 'Air2Lean/Sem.lean'
-SEM_INTERPRETERS = ('evalPure', 'evalMem', 'execInst')
-
-
-CTOR = r'(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))'
-
-
-def lean_code(text):
-    """`text` without Lean comments (`--` to the end of the line, `/- … -/` blocks)."""
-    return re.sub(r'/-.*?-/|--[^\n]*', '', text, flags=re.S)
-
-
-def op_constructors(text):
-    """The constructors of `inductive Op` (Air2Lean/Air/Op.lean)."""
-    body = lean_code(text.split('inductive Op where', 1)[1].split('\nstructure SwitchCase', 1)[0])
-    return {a or b for a, b in re.findall(r'^  \| ' + CTOR, body, re.M)}
-
-
-def sem_arm_bodies(text):
-    """[(constructor, body)] of the top-level (two-space-indented) arms of `SEM_INTERPRETERS`; an
-    arm with alternatives (`| .a .. | .b .. =>`) gives one entry per alternative."""
-    arms = []
-    for name in SEM_INTERPRETERS:
-        for arm in re.split(r'^  \| ', lean_code(lean_section(text, name)), flags=re.M)[1:]:
-            pattern, _, body = arm.partition('=>')
-            for alternative in pattern.split('|'):
-                if match := re.match(r'\s*\.' + CTOR, alternative):
-                    arms.append((match[1] or match[2], body.strip()))
-    return arms
-
-
-def sem_arms(text):
-    """`Op` constructors with a top-level arm in one of `SEM_INTERPRETERS`."""
-    return {name for name, _ in sem_arm_bodies(text)}
-
-
-def sem_outside(text):
-    """`Sem.outsideFragment` as [(constructor, reason)], in source order."""
-    return re.findall(r'\("([A-Za-z][A-Za-z0-9]*)",\s*"((?:[^"\\\n]|\\.)*)"\)', lean_code(lean_section(text, 'outsideFragment')))
-
-
-def sem_problems(text, constructors):
-    """Why the interpreter's arms and `outsideFragment` do not partition `constructors`."""
-    arms, outside = sem_arms(text), sem_outside(text)
-    names = Counter(name for name, _ in outside)
-    problems = [f'{name}: listed twice in outsideFragment' for name in sorted(n for n, k in names.items() if k > 1)]
-    # An arm that is only `stuck` interprets nothing: the constructor belongs in outsideFragment.
-    problems += [f'{name}: an arm that is only stuck' for name, body in sem_arm_bodies(text)
-                 if re.fullmatch(r'(?:StateT\.lift |liftR )?\(?stuck\)?', body)]
-    problems += [f'{name}: an arm and an outsideFragment entry' for name in sorted(arms & set(names))]
-    problems += [f'{name}: no interpreter arm and no outsideFragment entry' for name in sorted(constructors - arms - set(names))]
-    problems += [f'{name}: not an Op constructor' for name in sorted((arms | set(names)) - constructors)]
-    problems += [f'{name}: outsideFragment entry without a reason' for name, reason in outside if not reason.strip()]
-    return problems
 
 
 def table_reasons(table, field):
@@ -949,19 +896,14 @@ def generate(version, source, os_name='linux'):
     resolved = canon_resolved(cache.text(ROOT/'Air2Lean/Air/Canon.lean'))
     produced = producer_literals(source, cache)
     fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
-    sem_text = cache.text(ROOT/SEM)
-    # Fail closed: the column is only read from an interpreter that passes the coverage lint.
-    if problems := sem_problems(sem_text, op_constructors(cache.text(ROOT/'Air2Lean/Air/Op.lean'))):
-        raise ValueError(f'{SEM}: ' + '; '.join(problems))
-    sem_interpreted, sem_reasons = sem_arms(sem_text), dict(sem_outside(sem_text))
+    sem_reasons = {row['constructor']: row['sem_outside_reason'] for row in table['tags'].values() if row['constructor']}
     def semantics(ops, disposition):
-        # V01: a tag is interpreted when Sem.lean has an arm for each of its constructors.
+        # V01: a tag is interpreted when Sem.lean interprets each of its constructors.
         if not ops:
             status = 'resolved-in-canon' if disposition == 'resolved-in-canon' else 'not-decoded'
             return {'status': status, 'paths': [], 'reasons': []}
-        outside = [op for op in dict.fromkeys(ops) if op not in sem_interpreted]
-        return {'status': 'outside-fragment' if outside else 'interpreted', 'paths': [SEM],
-                'reasons': [f'{op}: {sem_reasons[op]}' for op in outside]}
+        reasons = [f'{op}: {sem_reasons[op]}' for op in dict.fromkeys(ops) if sem_reasons[op]]
+        return {'status': 'outside-fragment' if reasons else 'interpreted', 'paths': [SEM], 'reasons': reasons}
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
     @lru_cache(maxsize=None)
     def hits(symbol):

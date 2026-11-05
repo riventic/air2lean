@@ -26,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('coverage_inventory', ROOT / 'scripts/coverage.py')
 coverage = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coverage)
+spec = importlib.util.spec_from_file_location('proof_framework', ROOT / 'scripts/proof-framework.py')
+framework = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(framework)
 BINARY = None
 
 # (file, definition, rule): `no-wildcard` — no default arm at the definition's arm indentation;
@@ -46,6 +49,7 @@ CLASSIFIER_DEFS = [
     ('Air2Lean/Memory.lean', 'memoryOp', 'no-op-match'),
     ('Air2Lean/Memory.lean', 'Func.syncLocally', 'no-op-match'),
     ('Air2Lean/Emit.lean', 'emitScalar', 'no-wildcard'),
+    ('Air2Lean/Sem.lean', 'outside?', 'no-wildcard'),
     ('Air2Lean/Check.lean', 'isTerminating', 'no-op-match'),
 ]
 
@@ -83,7 +87,39 @@ def list_tags(text, name):
     return re.findall(r'"([^"\n]+)"', coverage.lean_section(text, name))
 
 
-op_constructors = coverage.op_constructors
+def op_constructors(text):
+    body = text.split('inductive Op where', 1)[1].split('\nstructure SwitchCase', 1)[0]
+    return {a or b for a, b in re.findall(r'^  \| (?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))', body, re.M)}
+
+
+# V01: the interpreter definitions whose top-level arms interpret an `Op` constructor.
+SEM_INTERPRETERS = ('evalPure', 'evalMem', 'execInst')
+STUCK = re.compile(r'(?:StateT\.lift |liftR )?\(?stuck\)?')
+
+
+def sem_arms(text):
+    """{constructor: [bodies]} of the top-level (two-space-indented) arms of `SEM_INTERPRETERS`,
+    comments removed; an arm with alternatives (`| .a .. | .b .. =>`) counts for each."""
+    arms = {}
+    for name in SEM_INTERPRETERS:
+        code = framework.strip_comments_and_strings(coverage.lean_section(text, name), keep_strings=True)
+        for arm in re.split(r'^  \| ', code, flags=re.M)[1:]:
+            pattern, _, body = arm.partition('=>')
+            for alternative in pattern.split('|'):
+                if match := re.match(r'\s*\.(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))', alternative):
+                    arms.setdefault(match[1] or match[2], []).append(body.strip())
+    return arms
+
+
+def sem_problems(text, interpreted):
+    """Where the interpreter's arms disagree with `interpreted`, the constructors that
+    `Sem.outside?` maps to `none`. An arm that is only `stuck` interprets nothing."""
+    arms = sem_arms(text)
+    problems = [f'{name}: an arm that is only stuck' for name, bodies in sorted(arms.items())
+                if any(STUCK.fullmatch(body) for body in bodies)]
+    problems += [f'{name}: an interpreter arm, but Sem.outside? gives a reason' for name in sorted(set(arms) - interpreted)]
+    problems += [f'{name}: Sem.outside? is none, but no interpreter arm' for name in sorted(interpreted - set(arms))]
+    return problems
 
 
 class SourceTests(unittest.TestCase):
@@ -111,28 +147,26 @@ class SourceTests(unittest.TestCase):
         self.assertGreater(len(ops), 80)
         self.assertEqual({r['constructor'] for r in self.table['tags'].values() if r['constructor']}, ops)
 
-    def test_every_op_constructor_is_interpreted_or_outside_the_fragment(self):
-        # V01 coverage lint: a constructor has a Sem arm or a reasoned outsideFragment entry.
-        ops = op_constructors((ROOT / 'Air2Lean/Air/Op.lean').read_text())
-        sem = (ROOT / coverage.SEM).read_text()
-        self.assertEqual(coverage.sem_problems(sem, ops), [])
-        self.assertGreater(len(coverage.sem_arms(sem)), 40)
+    def test_sem_arms_are_the_interpreted_constructors(self):
+        # V01 coverage lint: `Sem.outside?` (no wildcard, CLASSIFIER_DEFS) classifies every
+        # constructor; the ones it says the interpreter handles are exactly those with an arm.
+        rows = [r for r in self.table['tags'].values() if r['constructor']]
+        interpreted = {r['constructor'] for r in rows if r['sem_outside_reason'] is None}
+        self.assertTrue(all(r['sem_outside_reason'] is None or r['sem_outside_reason'].strip() for r in rows))
+        self.assertGreater(len(interpreted), 40)
+        self.assertEqual(sem_problems((ROOT / coverage.SEM).read_text(), interpreted), [])
 
     def test_sem_lint_detects_gaps(self):
         sem = ('def evalPure (f : Func) : Result Value :=\n  match i.op with\n  | .arith op => x\n'
                '  | .bit op => match t with\n    | .bool => y\n  -- | .shift a b => z\n'
                '  /- removed:\n  | .not a => z\n  -/\n  | .isNull a | .isNonNull a => w\n  | .neg a => stuck\n  | _ => stuck\n'
                'def evalMem := 0\ndef execInst :=\n  match _h : i.op with\n  | .«try» v b => z\n'
-               'def outsideFragment : List (String × String) := [\n  ("neg", "floats"),\n  ("bit", "x"),\n'
-               '  -- ("shift", "commented out"),\n  ("neg", "again"),\n  ("frob", "")\n]\n'
                'abbrev later := match op with\n  | .load p => x\n')
-        self.assertEqual(coverage.sem_arms(sem), {'arith', 'bit', 'isNull', 'isNonNull', 'neg', 'try'})
-        self.assertEqual(coverage.sem_problems(sem, {'arith', 'bit', 'try', 'neg', 'load', 'shift', 'not', 'isNull', 'isNonNull'}), [
-            'neg: listed twice in outsideFragment', 'neg: an arm that is only stuck',
-            'bit: an arm and an outsideFragment entry', 'neg: an arm and an outsideFragment entry',
-            'load: no interpreter arm and no outsideFragment entry', 'not: no interpreter arm and no outsideFragment entry',
-            'shift: no interpreter arm and no outsideFragment entry', 'frob: not an Op constructor',
-            'frob: outsideFragment entry without a reason'])
+        self.assertEqual(set(sem_arms(sem)), {'arith', 'bit', 'isNull', 'isNonNull', 'neg', 'try'})
+        self.assertEqual(sem_problems(sem, {'arith', 'bit', 'try', 'isNull', 'shift', 'not', 'load'}), [
+            'neg: an arm that is only stuck', 'isNonNull: an interpreter arm, but Sem.outside? gives a reason',
+            'neg: an interpreter arm, but Sem.outside? gives a reason', 'load: Sem.outside? is none, but no interpreter arm',
+            'not: Sem.outside? is none, but no interpreter arm', 'shift: Sem.outside? is none, but no interpreter arm'])
 
     def test_effect_classes(self):
         rows = self.table['tags']

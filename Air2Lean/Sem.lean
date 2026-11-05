@@ -867,76 +867,66 @@ decreasing_by simp_wf; simp only [sizeOf_toList]; omega
 
 end
 
-/-- The `Op` constructors without an arm in `evalPure`, `evalMem` or `execInst`, each with the
-reason it is outside the fragment (it is `stuck`); the stages are those of
-docs/research/V01-V02.md. Data for the coverage lint, not read by Lean: the op-table test
-(tests/roadmap/op-effects) and the L01 inventory fail unless every constructor has a top-level
-arm (one that is not only `stuck`) or an entry here, and not both, so a new `Op` constructor is
-unhandled until it gets one. An arm interprets its constructor for the fragment's value kinds
-only; other kinds are `stuck` too. -/
-def outsideFragment : List (String × String) := [
+/-- Why the interpreter has no arm for `op`'s constructor (it is `stuck`), or `none` when
+`evalPure`, `evalMem` or `execInst` has a top-level arm for it. The stages are those of
+docs/research/V01-V02.md. No wildcard arm, so a new `Op` constructor is unhandled until it is
+classified here. `air2lean --print-op-table` exports it (`sem_outside_reason`), and the
+op-table test (tests/roadmap/op-effects) checks that the `none` constructors are exactly those
+with an interpreter arm that is not only `stuck`. An arm interprets its constructor for the
+fragment's value kinds only; other kinds are `stuck` too. -/
+def outside? : Op → Option String
+  | .arg .. | .arith .. | .div .. | .minMax .. | .bit .. | .not .. | .cmp .. | .boolAnd ..
+  | .boolOr .. | .intCast .. | .trunc .. | .bitcast .. | .isNull .. | .isNonNull ..
+  | .optPayload .. | .wrapOptional .. | .isErr .. | .isNonErr .. | .errPayload .. | .errCode ..
+  | .wrapErrPayload .. | .wrapErr .. | .alloc | .fieldPtr .. | .load .. | .store ..
+  | .sliceLen .. | .sliceElemVal .. | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slicePtr ..
+  | .call .. | .block .. | .loop .. | .br .. | .«repeat» .. | .condBr .. | .switchBr ..
+  | .«try» .. | .ret .. | .unreach | .trap | .line .. | .dbg .. => none
   -- Floats (stage 5, `Zig.Float`, the FLT premises).
-  ("divFloat", "float division (stage 5)"),
-  ("sqrt", "float square root (stage 5)"),
-  ("libm", "float libm functions (stage 5)"),
-  ("mulAdd", "float fused multiply-add (stage 5)"),
-  ("floatConv", "float-to-float conversion (stage 5)"),
-  ("floatFromInt", "integer-to-float conversion (stage 5)"),
-  ("intFromFloat", "float-to-integer conversion (stage 5)"),
-  ("floatRound", "float rounding (stage 5)"),
-  ("neg", "float negation (stage 5)"),
-  ("abs", "float `@abs`; the checker rejects integer `abs` (stage 5)"),
+  | .divFloat .. => some "float division (stage 5)"
+  | .sqrt .. => some "float square root (stage 5)"
+  | .libm .. => some "float libm functions (stage 5)"
+  | .mulAdd .. => some "float fused multiply-add (stage 5)"
+  | .floatConv .. => some "float-to-float conversion (stage 5)"
+  | .floatFromInt .. => some "integer-to-float conversion (stage 5)"
+  | .intFromFloat .. => some "float-to-integer conversion (stage 5)"
+  | .floatRound .. => some "float rounding (stage 5)"
+  | .neg .. => some "float negation (stage 5)"
+  | .abs .. => some "float `@abs`; the checker rejects integer `abs` (stage 5)"
   -- Vectors (stage 5, lane-wise).
-  ("splat", "vectors (stage 5)"),
-  ("select", "vectors (stage 5)"),
-  ("shuffle", "vectors (stage 5)"),
-  ("reduce", "vectors (stage 5)"),
-  ("vectorStoreElem", "vectors (stage 5)"),
-  -- Integer operations (no stage yet: scalar arms over ZigLean's primitives).
-  ("shift", "integer shifts (not staged)"),
-  ("withOverflow", "overflow builtins return a tuple, an aggregate (stage 4)"),
-  ("shlWithOverflow", "overflow builtins return a tuple, an aggregate (stage 4)"),
-  ("countBits", "bit counting (not staged)"),
-  ("permuteBits", "bit permutation (not staged)"),
+  | .splat .. | .select .. | .shuffle .. | .reduce .. | .vectorStoreElem .. =>
+    some "vectors (stage 5)"
+  -- Integer operations.
+  | .shift .. => some "integer shifts (not staged)"
+  | .countBits .. => some "bit counting (not staged)"
+  | .permuteBits .. => some "bit permutation (not staged)"
+  | .withOverflow .. | .shlWithOverflow .. =>
+    some "overflow builtins return a tuple, an aggregate (stage 4)"
   -- Aggregates, enums and unions (stage 4).
-  ("structFieldVal", "aggregate values (stage 4)"),
-  ("aggregateInit", "aggregate values (stage 4)"),
-  ("arrayElemVal", "array values (stage 4)"),
-  ("retLoad", "a result returned through the return pointer, an aggregate (stage 4)"),
-  ("unionTag", "unions (stage 4)"),
-  ("unionInit", "unions (stage 4)"),
-  ("setUnionTag", "unions (stage 4)"),
-  ("isNamedEnum", "enums (stage 4)"),
-  ("tagName", "enum and union tag names (stage 4)"),
-  ("errorName", "error names need the compilation's error numbering (stage 4)"),
-  ("errorsLenLe", "error codes need the compilation's error numbering (stage 4)"),
+  | .structFieldVal .. | .aggregateInit .. => some "aggregate values (stage 4)"
+  | .arrayElemVal .. => some "array values (stage 4)"
+  | .retLoad .. => some "a result returned through the return pointer, an aggregate (stage 4)"
+  | .unionTag .. | .unionInit .. | .setUnionTag .. => some "unions (stage 4)"
+  | .isNamedEnum .. => some "enums (stage 4)"
+  | .tagName .. => some "enum and union tag names (stage 4)"
+  | .errorName .. => some "error names need the compilation's error numbering (stage 4)"
+  | .errorsLenLe .. => some "error codes need the compilation's error numbering (stage 4)"
   -- Optionals and error unions in memory (stage 4).
-  ("isNullPtr", "optionals in memory (stage 4)"),
-  ("optPayloadPtr", "optionals in memory (stage 4)"),
-  ("isErrPtr", "error unions in memory (stage 4)"),
-  ("errPayloadPtr", "error unions in memory (stage 4)"),
-  ("errCodePtr", "error unions in memory (stage 4)"),
-  ("tryPtr", "error unions in memory (stage 4)"),
+  | .isNullPtr .. | .optPayloadPtr .. => some "optionals in memory (stage 4)"
+  | .isErrPtr .. | .errPayloadPtr .. | .errCodePtr .. | .tryPtr .. =>
+    some "error unions in memory (stage 4)"
   -- Slicing, bulk memory and field-to-parent pointers (stage 4).
-  ("slice", "slicing (stage 4)"),
-  ("arrayToSlice", "slicing (stage 4)"),
-  ("sliceFieldPtr", "pointers into a slice's fields (stage 4)"),
-  ("fieldParentPtr", "`@fieldParentPtr` (stage 4)"),
-  ("memset", "bulk memory (stage 4)"),
-  ("memcpy", "bulk memory (stage 4)"),
-  -- Labeled switch loops (stage 4).
-  ("loopSwitchBr", "labeled switch loops (stage 4)"),
-  ("switchDispatch", "labeled switch loops (stage 4)"),
+  | .slice .. | .arrayToSlice .. => some "slicing (stage 4)"
+  | .sliceFieldPtr .. => some "pointers into a slice's fields (stage 4)"
+  | .fieldParentPtr .. => some "`@fieldParentPtr` (stage 4)"
+  | .memset .. | .memcpy .. => some "bulk memory (stage 4)"
+  | .loopSwitchBr .. | .switchDispatch .. => some "labeled switch loops (stage 4)"
   -- Concurrency (stage 6, `Zig.ConcM`).
-  ("atomicLoad", "atomics (stage 6)"),
-  ("atomicStore", "atomics (stage 6)"),
-  ("atomicRmw", "atomics (stage 6)"),
-  ("cmpxchg", "atomics (stage 6)"),
-  ("runtimeNavPtr", "thread-local globals (stage 6)"),
-  -- Assembly and the return-address oracle (no stage yet).
-  ("asm", "inline assembly: its meaning is the A01 effect contract (not staged)"),
-  ("retAddr", "`@returnAddress`: the return-address oracle `Zig.returnAddress` (not staged)")
-]
+  | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => some "atomics (stage 6)"
+  | .runtimeNavPtr .. => some "thread-local globals (stage 6)"
+  -- Assembly and the return-address oracle.
+  | .asm .. => some "inline assembly: its meaning is the A01 effect contract (not staged)"
+  | .retAddr => some "`@returnAddress`: the return-address oracle `Zig.returnAddress` (not staged)"
 
 /-- The exact prefixed body that `execLoop` invokes, also used by a certificate proving a
 single invocation. This does not add a function-entry tick to an extracted loop helper. -/
