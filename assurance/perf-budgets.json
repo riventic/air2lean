@@ -815,7 +815,14 @@
         "Proofs.Threadsync.Gen",
         "Proofs.Threadsync.Handoff",
         "Proofs.Threadsync.Mutex",
-        "Proofs.Threadsync.WaitGroup"
+        "Proofs.Threadsync.WaitGroup",
+        "Proofs.Threadsync.WaitGroup.Join",
+        "Proofs.Threadsync.WaitGroup.Main",
+        "Proofs.Threadsync.WaitGroup.Protocol",
+        "Proofs.Threadsync.WaitGroup.Read",
+        "Proofs.Threadsync.WaitGroup.Start",
+        "Proofs.Threadsync.WaitGroup.Task",
+        "Proofs.Threadsync.WaitGroup.Wait"
       ],
       "budget": {
         "recorded": {
