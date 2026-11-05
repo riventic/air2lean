@@ -57,6 +57,8 @@ inductive Sym where
   | add (a b : Sym)
   /-- A difference that does not wrap (`Zig.sub`: an underflow fails). -/
   | sub (a b : Sym)
+  /-- An unsigned widening (`Zig.intCast`). -/
+  | widen (a : Sym)
   /-- An unsigned `<` (`a > b` is `b < a`). -/
   | lt (a b : Sym)
   /-- An unsigned `≤` (`a ≥ b` is `b ≤ a`). -/
@@ -132,7 +134,10 @@ def bitVecWidth? (ty : Expr) : Option Nat :=
 
 def paramIdx? (ctx : Ctx) (e : Expr) : Option Nat :=
   match e.consumeMData with
-  | .fvar id => ctx.params.idxOf? id
+  | .fvar id => match ctx.env[id]? with
+    | some (.param i) => some i
+    | some _ => none
+    | none => ctx.params.idxOf? id
   | _ => none
 
 /-- The value of a pure term. -/
@@ -271,6 +276,12 @@ partial def execLift (ctx : Ctx) (st : St) (x : Expr) : MetaM Path := do
       unless args[1]!.isConstOf ``Bool.false do throwError "a signed {op}"
       let v := mk (← evalPure ctx st args[2]!) (← evalPure ctx st args[3]!)
       return { st := { st with checked := st.checked.push v }, res := v }
+  if x.isAppOfArity `Zig.intCast 6 then
+    let some n := natLit? args[0]! | throwError "a cast from an unknown width"
+    let some m := natLit? args[3]! | throwError "a cast to an unknown width"
+    unless args[1]!.isConstOf ``Bool.false && args[2]!.isConstOf ``Bool.false && n ≤ m do
+      throwError "a cast that is not an unsigned widening"
+    return { st, res := .widen (← evalPure ctx st args[4]!) }
   throwError "an unsupported lifted step: {x.getAppFn}"
 
 /-- Continue with `f` applied to the result `v`. -/
@@ -352,7 +363,8 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
   for cell in c.st.cells do
     if !cell.stored then cells := cells.push (cell, 0); continue
     let (base, k) := cell.val.split
-    unless base == .cell cell.param && 0 ≤ k do throwError "a cell that does not go up by a constant"
+    unless base == .cell cell.param && 0 ≤ k do
+      throwError "a cell that does not go up by a constant (its increment depends on a value)"
     cells := cells.push (cell, k.toNat)
   match b with
   | .local y => if y == x then throwError "a bound that is the counter"
