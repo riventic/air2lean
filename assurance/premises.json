@@ -262,6 +262,7 @@
     "ZigLean.Sep.Full.Lock": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.LockRules": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.LockOrder": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
+    "ZigLean.Sep.Full.LockPair": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Mutex": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.IoMutex": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Word": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
