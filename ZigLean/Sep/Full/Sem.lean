@@ -214,14 +214,16 @@ def Go (G : ThreadId → γ) (m : Mem) (t : ThreadId) (s : SPh) : Prop :=
 /-- The steps of the semaphore's own code by thread `t` (module doc): the entry of the waiter
 (in the waiting role, `wx`) into the condition's wait at count 0, and a step of the holder on the
 mutex's resource (a load or a store of the count; `FStepIn` with the mutex's word and the rest in
-its frame, which keeps the condition's cells) with a move in the semaphore's code (`Go`; the same
-memory for a move alone). -/
+its frame, which keeps the condition's cells, and the lock's invariant after it, which keeps the
+rest's cells up to `Cell.norm`, as after a step on a thread's own part) with a move in the
+semaphore's code (`Go`; the same memory for a move alone). -/
 inductive Move (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) :
     (ThreadId → γ) → Res → Mem → Prop
   | enter : L.ph (G t) = .holds → C.ph (G t) = .out → S.ph (G t) = .wt → S.wx (G t) →
       S.cnt G = 0 → Move t G rX m (upd G t (C.set (G t) .en)) rX m
   | hold {m' : Mem} (s : SPh) (h : Res) : L.ph (G t) = .holds → C.ph (G t) = .out →
       L.Inv G rX m → m.current = t → FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      (∃ G'', L.Inv G'' rX m') →
       (∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
         (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) →
       S.Go G m t s →
@@ -1086,7 +1088,7 @@ theorem Fits.move (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t
       (upd (upd G t g) t (S.set (L.set (upd G t g t) .holds (L.held g)) s)) rX m :=
     ⟨Inv.hold hS hsub.2 hsub.1 hht hcxt hL hfs hcells hgo,
       .inr ⟨condHold hS hsub.1.1 hsub.1 hL hht hcxt hfs hcells,
-        .hold s (L.held g) hht hcxt hL hc hfs hcells hgo⟩⟩
+        .hold s (L.held g) hht hcxt hL hc hfs ⟨_, hL⟩ hcells hgo⟩⟩
   rw [hg, upd_upd] at hst
   have hL' : L.Inv (upd G t (S.set g s)) rX m := by
     have := hL.relabel (t := t) (g := S.set g s) (by rw [lph_s hS, upd_self])
@@ -1249,7 +1251,7 @@ theorem Fits.wp_cnt (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : Ty
         (S.set (L.set (upd G t (L.set g .holds rL) t) .holds r) (S.ph g))) rX m' :=
     ⟨Inv.hold hS hsub.2 hsub.1 hht hcxt hL hfs hcells hgo,
       .inr ⟨condHold hS hsub.1.1 hsub.1 hL hht hcxt hfs hcells,
-        .hold _ r hht hcxt hL hc hfs hcells hgo⟩⟩
+        .hold _ r hht hcxt hL hc hfs ⟨_, hL'⟩ hcells hgo⟩⟩
   have hgg : S.set (L.set (upd G t (L.set g .holds rL) t) .holds r) (S.ph g) =
       L.set g .holds r := by
     rw [upd_self, L.set_set, ← sph_l hS g .holds r, S.set_self]
@@ -1285,7 +1287,7 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
   have hC₁ := condHold (s := .pst (C.S.hist m) (m.clocks[t]!)) (h := rL) hS hsub.1.1 hsub.1 hL
     hht hcxt hst hcells
   have hU₁ := hS.kstep _ _ _ _ _ _ _
-    (.inl ⟨hI₁, .inr ⟨hC₁, .hold _ rL hht hcxt hL hc hst hcells hgo⟩⟩) hU
+    (.inl ⟨hI₁, .inr ⟨hC₁, .hold _ rL hht hcxt hL hc hst ⟨_, hL'⟩ hcells hgo⟩⟩) hU
   rw [hgi] at hI₁ hC₁ hU₁
   have hIf : S.Inv (upd G t gf) m' :=
     Inv.atPst hI₁ hC₁ (fun u hu => by rw [upd_ne _ _ hu, upd_ne _ _ hu])
