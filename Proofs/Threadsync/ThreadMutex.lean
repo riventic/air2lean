@@ -50,7 +50,7 @@ namespace ThreadMutex
 variable {γ : Type} {L : FLock γ} {K : FPrim γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-if_decl Thread_Mutex_FutexImpl_lock in
+when_defined Thread_Mutex_FutexImpl_lock
 
 /-- `tryLock` by thread `t` at `out` (`g`): `true` and `t` holds the mutex, or `false` and `t` is
 at `spin`. -/
@@ -189,9 +189,9 @@ theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp :
     wp_xchgUnlockOn hP threadMutexW hS, wp_wakeOn hP,
     atomicRmwC_eq, threadFutexWakeC_eq, L.ph_set, L.set_set, hP.ok_set, threadMutexW]
 
-end_if
+end_when
 
-if_decl Thread_Mutex_DarwinImpl in
+when_defined Thread_Mutex_DarwinImpl
 
 /-- The loop invariant of `os_unfair_lock_lock`: thread `t` is at `out` (`g`, the first try) or at
 `spin` (after a futex wait). The protocol's invariant comes before the disjunction over `g₀`:
@@ -282,7 +282,7 @@ theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp :
     wp_xchgRel hP hc1, wp_wakeOn hP, threadFutexWakeC_eq,
     L.ph_set, L.set_set, hP.ok_set]
 
-end_if
+end_when
 
 end ThreadMutex
 
