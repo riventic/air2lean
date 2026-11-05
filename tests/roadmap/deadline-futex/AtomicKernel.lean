@@ -18,9 +18,10 @@ theorem begin_enqueue_after_read (s : Kernel) (choice : Nat) (p : Ptr)
     (hq : s.mem.waiters.any (·.1 == s.mem.current) = false)
     (hw : s.mem.woken.contains s.mem.current = false)
     (read : (readWord choice p).run s.mem = pure (expected, readMem))
-    (future : deadline.any (fun expiry => expiry.nanoseconds ≤ now.nanoseconds) = false) :
+    (future : deadline.any (fun expiry => expiry.nanoseconds ≤ now.nanoseconds) = false)
+    {k : FutexKey} (hk : readMem.keyAt p false = some k) :
     s.begin choice p expected deadline now = pure (none,
-      { mem := { readMem with waiters := readMem.waiters.push (readMem.current, p) },
+      { mem := { readMem with waiters := readMem.waiters.push (readMem.current, k) },
         registration := some ⟨readMem.current, p, deadline⟩ }) := by
   have notWoken : s.mem.current ∉ s.mem.woken := by
     intro member
@@ -28,7 +29,7 @@ theorem begin_enqueue_after_read (s : Kernel) (choice : Nat) (p : Ptr)
       Array.contains_iff_mem.mpr member
     rw [hw] at isWoken
     cases isWoken
-  simp [Kernel.begin, hr, hq, hw, notWoken, read, future]
+  simp [Kernel.begin, hr, hq, hw, notWoken, read, future, hk]
 
 /-- Cleanup does not undo the selected read's coherent seen floor. -/
 theorem release_seen (s : Kernel) (r : Registration) (h : s.registration = some r) :

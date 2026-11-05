@@ -107,11 +107,14 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
   have hfr := hu.einv.fresh.fstep hs (fun x h1 h2 => hcovE _ ⟨rfl, h1, h2⟩)
     (fun i l hl => (hu.ev.loc i l hl).1)
   have hmain := fd0 hu
+  have hkE : EV.key m' = EV.key m := hu.ev.key_of_addrs hs.addrs
+  obtain ⟨blk₀, hb₀, -⟩ := hu.blk
+  have hkL : L.key m' = L.key m := L.key_of_addrs hs.addrs hb₀
   have hI : E.Inv L (upd G 0 ((G 0).1, x₁)) m' :=
     hu.einv.frame (t := 0) (fun u hu => upd_ne _ _ hu)
       (by rw [upd_self]; exact he₁.trans he₀.symm) (by rw [upd_self]; rfl) hhE hs.waiters hclk
       (Nat.le_of_eq (by rw [hs.threads])) (fun h => by rw [upd_self]; exact hwxk h)
-      (fun h => absurd hmain (by rw [h.2]; decide)) hfr
+      (fun h => absurd hmain (by rw [h.2]; decide)) hfr hkE hkL
   have hnew : ∀ e ∈ m'.footprint, e.block = 0 → e.kind.isWrite = true →
       (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
       (∃ u, u < 3 ∧ (G u).2.ph.fd = false ∧ VClock.le e.clock (m'.clocks[u]!) = true) :=
@@ -121,7 +124,8 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
     rintro u (rfl | rfl) <;> unfold bnd <;> rw [hX _ (by decide)]
   refine ⟨Shape.congr hsh hs.threads (fun _ => rfl) (fun _ h => h), Rest.step (fun _ => wg_box)
     hu.rest rfl hY hcs, hbk', hw'.anti fun u h => ?_, hwE.anti fun u h => ?_, hI, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, fun w hw => hu.q w (by rw [← hs.waiters]; exact hw)⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    fun w hw => by rw [hkL, hkE]; exact hu.q w (by rw [← hs.waiters]; exact hw)⟩
   · by_cases e : u = 0
     · subst e; exact hmain
     · rwa [hX u e] at h
@@ -408,7 +412,7 @@ theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM
   obtain ⟨hwE, hhE⟩ := (hu.ev.anti hEl).fork_native (t := 0) ht0 hcs hf
     (fun _ => .inl (by show (upd (upd G k _) 0 (gO rM x₁) 0).2.ph.fd = false; rw [h0]; exact hfd₁))
   have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhE rfl hclk
-    (by simp) id id hu.einv.fresh
+    (by simp) id id hu.einv.fresh rfl rfl
   have hJ' := einv_out (einv_out hJ (t := k) (g := gO rP { ph := .lk }) (by rw [hGk]) rfl
       (fun h => by
         have h' : (G k).2.wk = true := h

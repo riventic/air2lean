@@ -95,7 +95,8 @@ theorem cinv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     C.Inv (L K) (upd G t g) m := by
   have hcg : C.ph g = .out := h₁
   have hct : C.ph (G t) = .out := h₀
-  refine hI.frame rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _) (fun _ => VClock.le_refl _)
+  refine hI.frame rfl rfl rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _)
+    (fun _ => VClock.le_refl _)
     (fun h => by rw [hcg, hct] at h; rcases h with h | h <;> cases h)
     (fun _ _ h => by rw [hcg] at h; cases h) (fun _ _ _ _ h => by rw [hcg] at h; cases h)
     (fun h => by obtain ⟨_, _, _, h'⟩ := hI.qd_reg h; rw [hct] at h'; cases h')
@@ -154,7 +155,7 @@ theorem U_move {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g₀ g
           have h' : ((upd G t g₀ t).2.s).isPst = true := h
           rw [upd_self, hs₀] at h'; cases h'
         · rw [upd_ne _ _ e]; have := hu.sinv.pst u h; rwa [upd_ne _ _ e] at this)
-      hhold (fun _ => VClock.le_refl _) (fun _ h => h) rfl hgone (fun _ hw => .inl hw) rfl
+      hhold (fun _ => VClock.le_refl _) (fun _ h => h) rfl hgone (fun _ hw => .inl hw) rfl rfl
   refine hu.congr (fun u i e h => by rwa [hcu] at h) (fun u i jr sn e h => by rwa [hcu] at h)
     (fun u q n h' h => by rwa [hcu] at h) rfl rfl shape hu.rest hu.blk hu.ws hu.we hI hS
     (fun u h => ?_) (fun c h => h.mono hhold (fun _ => VClock.le_refl _) (fun _ h => h) rfl hgone)
