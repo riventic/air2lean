@@ -387,6 +387,11 @@ theorem Ok.anti {m : Mem} {B : ThreadId → Prop} (hw : W.Ok m A) (hB : ∀ u, B
   ⟨hw.blk, hw.only, hw.loc, fun e he hh => (hw.wfp e he hh).imp_right (·.anti hB), hw.val,
     hw.plain⟩
 
+/-- A thread of the live set: the word for the live set of that thread alone (its op does not
+race; `Ok.noRace`). -/
+theorem Ok.single {m : Mem} {t : ThreadId} (hw : W.Ok m A) (ht : A t) : W.Ok m (· = t) :=
+  hw.anti fun u hu => by subst hu; exact ht
+
 /-- Two live sets of the word make their union one. -/
 theorem Ok.union {m : Mem} {B : ThreadId → Prop} (hA : W.Ok m A) (hB : W.Ok m B) :
     W.Ok m (fun u => A u ∨ B u) := by

@@ -164,6 +164,12 @@ def Next (t : ThreadId) (g : γ) (p : EPh) (m m' : Mem) : Prop :=
     ((v = 1 ∧ E.wx g ∧ E.ph g = .w0 ∧ p = .w1) ∨
      (v = 2 ∧ E.sx g ∧ ord.isRel = true ∧ E.ph g = .out ∧ p.Setting))
 
+/-- **The word's live set** (`Word.Ok`): a thread that may wait or may set (the protocol's roles),
+unless it is a setter that has set (`sw`, `sd`: it writes and reads the word no more; its wake
+is no access). A thread out of it does not access the word, so a plain access to it (a whole read
+of the struct the event is in) need not be below that thread. -/
+def Live (g : γ) : Prop := (E.wx g ∨ E.sx g) ∧ ¬ (E.ph g).Setting
+
 /-- A step preserving the event's history preserves its set state. -/
 theorem IsSet_of_hist_eq {m m' : Mem} (hh : E.W.hist m' = E.W.hist m)
     (hs : E.IsSet m) : E.IsSet m' := by
@@ -251,13 +257,25 @@ theorem Inv.start {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hW : (E.W.hist
     obtain rfl : i = 0 := by omega
     exact VClock.le_refl _
 
+/-- A waiter's place is not a setter's. -/
+theorem _root_.Zig.Full.EPh.Waiting.not_setting {p : EPh} (h : p.Waiting) : ¬ p.Setting := by
+  rcases h with rfl | rfl <;> rintro (h | h) <;> cases h
+
+variable {E} in
+/-- **A waiter is live** (`Inv.wx`). -/
+theorem Inv.live {L : FLock γ} {G : ThreadId → γ} {m : Mem} (hI : E.Inv L G m) {u : ThreadId}
+    (h : (E.ph (G u)).Waiting) : E.Live (G u) :=
+  ⟨.inl (hI.wx u h), h.not_setting⟩
+
 /-- A step of thread `t` in the event's code, as the protocol's rest sees it: no change, an op
 at the word (a read, or an RMW of the newest write), the futex wait's sleep, the return of a
-futex wait (woken, or at once), or a futex wake at the word. -/
+futex wait (woken, or at once), or a futex wake at the word. An op and the sleep's compare access
+the word: they come with the word for `t` alone (`t` is in the live set, so its access does not
+race; `Word.Ok.single`), and a step keeps the word for every live set (`MStep.word`). -/
 inductive MStep (t : ThreadId) (m : Mem) : Mem → Prop
   | same : MStep t m m
-  | op {m' : Mem} : E.W.Ok { m with current := t } →
-      t < m.clocks.size →
+  | op {m' : Mem} : E.W.Ok { m with current := t } (· = t) →
+      t < m.clocks.size → m.clocks.size = m.threads.size →
       ((∃ (c : Nat) (ord : AtomicOrder) (v : BitVec 32),
           ((atomicLoadAt c ord 4 E.W.ptr).run { m with current := t }).run =
             some (.ok (v, m'))) ∨
@@ -274,14 +292,13 @@ inductive MStep (t : ThreadId) (m : Mem) : Mem → Prop
           ((cmpxchgWeakAt c succ fail 4 E.W.ptr expected new).run { m with current := t }).run =
             some (.ok (r, m'))) ∨
         m' = ({ m with current := t } : Mem).recordAt E.W.b E.W.o 4 .atomicRead) →
-      E.W.Ok m' →
       (E.W.hist m' = E.W.hist m ∨ ∃ (ord : AtomicOrder) (v : BitVec 32),
         E.W.hist m' = (E.W.hist m).push (Word.rmwEnt m' t ord (E.newest m) v)) →
       MStep t m m'
-  | sleep {M : Mem} : E.W.Ok { m with current := t } →
-      t < m.clocks.size →
+  | sleep {M : Mem} : E.W.Ok { m with current := t } (· = t) →
+      t < m.clocks.size → m.clocks.size = m.threads.size →
       M = ({ m with current := t } : Mem).recordAt E.W.b E.W.o 4 .atomicRead →
-      E.W.hist M = E.W.hist m → E.W.Ok M →
+      E.W.hist M = E.W.hist m →
       MStep t m { M with waiters := M.waiters.push (t, E.W.ptr) }
   | woken : MStep t m { m with current := t, woken := m.woken.erase t }
   | resume : MStep t m { m with current := t }
@@ -300,7 +317,7 @@ waiter's `waiting` and a setter's one release `is_set` (module doc, **Setters**)
 its own part (the stack blocks of the event's code: `wp_liftPart`) out of the lock's code. -/
 abbrev prim (L : FLock γ) : FPrim γ :=
   FPrim.ofWords L E.toFPlace .out (fun _ => False) (fun b g => cond b (E.wx g) (E.sx g))
-    (· = E.W) (E.Inv L)
+    (· = E.W) (fun _ => E.Live) (E.Inv L)
     (fun _ t g p q h m m' => (((L.ph g = .out ∨ (L.ph g = .away ∧ E.ph g = .w1)) ∧
       (q = .out ∨ (q = .away ∧ p = .w1))) ∨ (L.ph g = .gone ∧ q = .gone)) ∧ h = rnil ∧
       E.MStep t m m' ∧ E.Next t g p m m')
@@ -322,11 +339,11 @@ variable {t : ThreadId} {m m' : Mem}
 
 theorem nextMsg (hs : E.MStep t m m') : m.nextMsg ≤ m'.nextMsg := by
   cases hs with
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     have hs : FStepIn (fun _ => none) { m with current := t } m' := by
       exact Word.actualRun_fstep hw hc (fun _ _ _ => rfl) hop
     exact hs.nextMsg
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst M
     exact Nat.le_refl _
   | wake c cs h => rw [Proto.modify_ok h]; exact Nat.le_refl _
@@ -337,12 +354,12 @@ theorem atomics (hs : E.MStep t m m') (hF : Heap)
     (hoff : ∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) :
     ∃ σ, AMap hF { m with current := t } { m' with current := t } σ := by
   cases hs with
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     have hs : FStepIn hF { m with current := t } m' := by
       exact Word.actualRun_fstep hw hc hoff hop
     obtain ⟨σ, ha⟩ := hs.atomics
     exact ⟨σ, ha.withCurrent (t := t) rfl⟩
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst M
     exact ⟨some, AMap.of_eq rfl rfl⟩
   | wake c cs h => rw [Proto.modify_ok h]; exact ⟨some, AMap.of_eq rfl rfl⟩
@@ -350,11 +367,11 @@ theorem atomics (hs : E.MStep t m m') (hF : Heap)
 
 theorem threads (hs : E.MStep t m m') : m'.threads = m.threads := by
   cases hs with
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     have hs : FStepIn (fun _ => none) { m with current := t } m' := by
       exact Word.actualRun_fstep hw hc (fun _ _ _ => rfl) hop
     exact hs.threads
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst M
     rfl
   | wake c cs h => rw [Proto.modify_ok h]
@@ -363,11 +380,11 @@ theorem threads (hs : E.MStep t m m') : m'.threads = m.threads := by
 theorem clocks (hs : E.MStep t m m') (u : Nat) :
     VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
   cases hs with
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     have hs : FStepIn (fun _ => none) { m with current := t } m' := by
       exact Word.actualRun_fstep hw hc (fun _ _ _ => rfl) hop
     exact hs.clock u
-  | @sleep M hw hc hr _ _ =>
+  | @sleep M hw hc _ hr _ =>
     subst M
     exact (Word.record_fstep (hF := fun _ => none) (k := .atomicRead)
       hw hc (fun _ _ _ => rfl)).clock u
@@ -376,9 +393,9 @@ theorem clocks (hs : E.MStep t m m') (u : Nat) :
 
 theorem cells (hs : E.MStep t m m') {l : Zig.Loc} (hl : ¬ E.W.In l) : m'.heap l = m.heap l := by
   cases hs with
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     exact (Word.actualRun_rest hw hc hop).heap l hl
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst M
     rfl
   | wake c cs h => rw [Proto.modify_ok h]; rfl
@@ -387,9 +404,9 @@ theorem cells (hs : E.MStep t m m') {l : Zig.Loc} (hl : ¬ E.W.In l) : m'.heap l
 theorem fp (hs : E.MStep t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) :
     e ∈ m.footprint ∨ (e.block = E.W.b ∧ e.off = E.W.o) := by
   cases hs with
-  | @op M hw _ hop _ _ =>
+  | @op M hw _ _ hop _ =>
     exact Word.actualRun_fpAt hw hop he
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     rw [hr] at he
     exact Word.record_fpAt (W := E.W) (m := { m with current := t }) he
   | wake c cs h => rw [Proto.modify_ok h] at he; exact .inl he
@@ -406,7 +423,7 @@ theorem fpNew (hs : E.MStep t m m') (hcs : m.clocks.size = m.threads.size) {e : 
   by_cases hm : e ∈ m.footprint
   · exact .inl ⟨e, hm, .refl e⟩
   cases hs with
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     have hst : FStepIn (fun _ => none) { m with current := t } m' :=
       Word.actualRun_fstep hw hc (fun _ _ _ => rfl) hop
     rcases hst.fp e he with h | ⟨htid, -⟩
@@ -414,10 +431,10 @@ theorem fpNew (hs : E.MStep t m m') (hcs : m.clocks.size = m.threads.size) {e : 
     rcases hst.fpc e he with h | hcl
     · exact .inl h
     refine .inr ⟨htid, hcl, fun hk => ?_⟩
-    rcases Word.actualRun_fpWrite hw (hcs ▸ hc : t < m.threads.size) hcs hop he hk with h | h
+    rcases Word.actualRun_fpWrite hw (hcs ▸ hc : t < m.threads.size) rfl hcs hop he hk with h | h
     · exact absurd h hm
     · exact h
-  | @sleep M hw hc hr _ _ =>
+  | @sleep M hw hc _ hr _ =>
     have hst : FStepIn (fun _ => none) { m with current := t } M := by
       rw [hr]; exact Word.record_fstep (k := .atomicRead) hw hc (fun _ _ _ => rfl)
     have he' : e ∈ M.footprint := he
@@ -438,9 +455,9 @@ theorem block (hs : E.MStep t m m') {b : BlockId} {blk : Block} (hb : m.blocks[b
     ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
       blk'.bytes.size = blk.bytes.size ∧ blk'.kind = blk.kind := by
   cases hs with
-  | @op M hw _ hop _ _ =>
+  | @op M hw _ _ hop _ =>
     exact Word.actualRun_block hw hop hb
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst M
     exact ⟨blk, hb, rfl, rfl, rfl⟩
   | wake c cs h => rw [Proto.modify_ok h]; exact ⟨blk, hb, rfl, rfl, rfl⟩
@@ -449,9 +466,9 @@ theorem block (hs : E.MStep t m m') {b : BlockId} {blk : Block} (hb : m.blocks[b
 theorem lockLoc (hs : E.MStep t m m') {L : LockWord} (hap : E.W.ApartL L) {i : Nat} {l : ALoc}
     (hl : L.Loc m i l) : L.Loc m' i l := by
   cases hs with
-  | @op M hw _ hop _ _ =>
+  | @op M hw _ _ hop _ =>
     exact Word.actualRun_lockLoc hw hop hap hl
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst M
     exact hl
   | wake c cs h => rw [Proto.modify_ok h]; exact hl
@@ -460,11 +477,11 @@ theorem lockLoc (hs : E.MStep t m m') {L : LockWord} (hap : E.W.ApartL L) {i : N
 theorem waiters (hs : E.MStep t m m') {w : ThreadId × Ptr} (hw : w ∈ m'.waiters) :
     w ∈ m.waiters ∨ w = (t, E.W.ptr) := by
   cases hs with
-  | @op M hv hc hop _ _ =>
+  | @op M hv hc _ hop _ =>
     have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
       exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
     exact .inl (hstep.waiters ▸ hw)
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     rw [hr] at hw
     rcases Array.mem_push.mp hw with hw | hw
     · exact .inl hw
@@ -478,11 +495,11 @@ theorem waiters_at (hs : E.MStep t m m') {p : Ptr} (hp : p ≠ E.W.ptr)
     (hone : ∀ w ∈ m.waiters, w.2 = p → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 ≠ E.W.ptr) :
     m'.waiters.filter (·.2 == p) = m.waiters.filter (·.2 == p) := by
   cases hs with
-  | @op M hv hc hop _ _ =>
+  | @op M hv hc _ hop _ =>
     have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
       exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
     rw [hstep.waiters]
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst hr
     apply Array.toList_inj.mp
     simp only [Array.toList_filter, Array.toList_push, List.filter_append, List.filter_cons,
@@ -496,11 +513,11 @@ theorem waiters_at (hs : E.MStep t m m') {p : Ptr} (hp : p ≠ E.W.ptr)
 theorem woken_ne (hs : E.MStep t m m') {u : ThreadId} (hu : u ≠ t)
     (h : m.woken.contains u = true) : m'.woken.contains u = true := by
   cases hs with
-  | @op M hv hc hop _ _ =>
+  | @op M hv hc _ hop _ =>
     have hstep : FStepIn (fun _ => none) { m with current := t } m' := by
       exact Word.actualRun_fstep hv hc (fun _ _ _ => rfl) hop
     rw [hstep.woken]; exact h
-  | @sleep M _ _ hr _ _ =>
+  | @sleep M _ _ _ hr _ =>
     subst hr
     exact h
   | woken => show (m.woken.erase t).contains u = true; rw [FLock.woken_erase hu]; exact h
@@ -511,13 +528,13 @@ theorem woken_ne (hs : E.MStep t m m') {u : ThreadId} (hu : u ≠ t)
     exact Array.mem_append_left _ h
   | _ => exact h
 
-theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
+theorem word {W' : Word 32 4} {B : ThreadId → Prop} (hs : E.MStep t m m') (hok : W'.Ok m B)
     (hap : W' = E.W ∨ E.W.b ≠ W'.b ∨ E.W.o + 4 ≤ W'.o ∨ W'.o + 4 ≤ E.W.o) :
-    W'.Ok m' ∧ (W'.hist m' = W'.hist m ∨ (W' = E.W ∧ ∃ x, W'.hist m' = (W'.hist m).push x)) := by
+    W'.Ok m' B ∧ (W'.hist m' = W'.hist m ∨ (W' = E.W ∧ ∃ x, W'.hist m' = (W'.hist m).push x)) := by
   have hmem : ∀ l, ¬ E.W.In l → m'.heap l = m.heap l := fun _ hl => hs.cells hl
   have hk : ∀ {m₁ : Mem}, m₁.blocks = m.blocks → m₁.atomics = m.atomics →
       m₁.footprint = m.footprint → m₁.threads = m.threads → m₁.clocks = m.clocks →
-      W'.Ok m₁ ∧ (W'.hist m₁ = W'.hist m ∨
+      W'.Ok m₁ B ∧ (W'.hist m₁ = W'.hist m ∨
         (W' = E.W ∧ ∃ x, W'.hist m₁ = (W'.hist m).push x)) :=
     fun hb ha hf ht hc => by
       obtain ⟨hw', hh⟩ := hok.fields_native hb ha hf ht
@@ -525,9 +542,11 @@ theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
       exact ⟨hw', .inl hh⟩
   cases hs with
   | same => exact hk rfl rfl rfl rfl rfl
-  | @op M hw hc hop hw' hh =>
+  | @op M hw hc hcs hop hh =>
     rcases hap with rfl | hap
-    · exact ⟨hw', hh.imp id fun ⟨ord, v, h⟩ =>
+    · obtain ⟨hv, -⟩ := hok.fields_native (m' := { m with current := t })
+        rfl rfl rfl rfl (fun _ => VClock.le_refl _)
+      exact ⟨Word.actualRun_okOf hw hv (hcs ▸ hc) hcs hop, hh.imp id fun ⟨ord, v, h⟩ =>
         ⟨rfl, Word.rmwEnt m' t ord (E.newest m) v, h⟩⟩
     · obtain ⟨hv, hvHist⟩ := hok.fields_native (m' := { m with current := t })
         rfl rfl rfl rfl (fun _ => VClock.le_refl _)
@@ -538,10 +557,12 @@ theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
         exact Word.actualRun_fstep hw hc hoff hop
       have hpres := Word.preserve_apart (W := E.W) hv hsteps hmem hap
       exact ⟨hpres.1, .inl (hpres.2.trans hvHist)⟩
-  | @sleep M hw hc hr hh hw' =>
-    have hM : W'.Ok M ∧ W'.hist M = W'.hist m := by
+  | @sleep M hw hc hcs hr hh =>
+    have hM : W'.Ok M B ∧ W'.hist M = W'.hist m := by
       rcases hap with rfl | hap
-      · exact ⟨hw', hh⟩
+      · obtain ⟨hv, -⟩ := hok.fields_native (m' := { m with current := t })
+          rfl rfl rfl rfl (fun _ => VClock.le_refl _)
+        exact ⟨Word.actualRun_okOf hw hv (hcs ▸ hc) hcs (.inr (.inr (.inr (.inr hr)))), hh⟩
       · obtain ⟨hv, hvHist⟩ := hok.fields_native (m' := { m with current := t })
           rfl rfl rfl rfl (fun _ => VClock.le_refl _)
         have hsteps : ∀ hF : Heap,
@@ -565,26 +586,26 @@ theorem word {W' : Word 32 4} (hs : E.MStep t m m') (hok : W'.Ok m)
 
 /-- `word` for a shared word of any width apart from the event's (a client's other word, e.g. a
 `WaitGroup`'s 64-bit state next to its event): it stays valid, with the same history. -/
-theorem wordApart {n' nb' : Nat} {V : Word n' nb'} (hs : E.MStep t m m') (hok : V.Ok m)
-    (hap : E.W.b ≠ V.b ∨ E.W.o + 4 ≤ V.o ∨ V.o + nb' ≤ E.W.o) :
-    V.Ok m' ∧ V.hist m' = V.hist m := by
+theorem wordApart {n' nb' : Nat} {V : Word n' nb'} {B : ThreadId → Prop} (hs : E.MStep t m m')
+    (hok : V.Ok m B) (hap : E.W.b ≠ V.b ∨ E.W.o + 4 ≤ V.o ∨ V.o + nb' ≤ E.W.o) :
+    V.Ok m' B ∧ V.hist m' = V.hist m := by
   have hmem : ∀ l, ¬ E.W.In l → m'.heap l = m.heap l := fun _ hl => hs.cells hl
   have hk : ∀ {m₁ : Mem}, m₁.blocks = m.blocks → m₁.atomics = m.atomics →
       m₁.footprint = m.footprint → m₁.threads = m.threads → m₁.clocks = m.clocks →
-      V.Ok m₁ ∧ V.hist m₁ = V.hist m :=
+      V.Ok m₁ B ∧ V.hist m₁ = V.hist m :=
     fun hb ha hf ht hc => hok.fields_native hb ha hf ht (fun u => by rw [hc]; exact VClock.le_refl _)
   obtain ⟨hv, hvHist⟩ := hok.fields_native (m' := { m with current := t })
     rfl rfl rfl rfl (fun _ => VClock.le_refl _)
   cases hs with
   | same => exact hk rfl rfl rfl rfl rfl
-  | @op M hw hc hop _ _ =>
+  | @op M hw hc _ hop _ =>
     have hsteps : ∀ hF : Heap,
         (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
         FStepIn hF { m with current := t } m' := fun hF hoff =>
       Word.actualRun_fstep hw hc hoff hop
     have hpres := Word.preserve_apart (W := E.W) hv hsteps hmem hap
     exact ⟨hpres.1, hpres.2.trans hvHist⟩
-  | @sleep M hw hc hr _ _ =>
+  | @sleep M hw hc _ hr _ =>
     have hsteps : ∀ hF : Heap,
         (∀ x, E.W.o ≤ x → x < E.W.o + 4 → hF (E.W.b, x) = none) →
         FStepIn hF { m with current := t } M := fun hF hoff => by
@@ -611,7 +632,8 @@ theorem rmwEnt_val {M : Mem} {t : ThreadId} {ord : AtomicOrder} {last : Word.Ent
     {v : BitVec 32} : (Word.rmwEnt M t ord last v).Val v := intOfBytes_rmw v
 
 /-- The word has a write. -/
-theorem hist_pos {W : Word 32 4} {m : Mem} (hw : W.Ok m) : 0 < (W.hist m).size := by
+theorem hist_pos {W : Word 32 4} {m : Mem} {A : ThreadId → Prop} (hw : W.Ok m A) :
+    0 < (W.hist m).size := by
   unfold Word.hist
   cases hf : m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
   | none => simp
@@ -1340,10 +1362,31 @@ theorem _root_.Zig.Full.FLock.Fits.atWord (hE : L.Fits (E.prim L) P U ok)
     {rY : Res} {m₁ m' : Mem} {t : ThreadId} (hgo : L.ph (G₁ t) = .out ∨ L.ph (G₁ t) = .gone)
     (hU : U G₁ (rsum (E.W.cellsR m₁) rY) m₁) (hwait : m'.waiters = m₁.waiters)
     (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m') :
-    E.Inv L G₁ m₁ ∧ (∀ w ∈ m₁.waiters, w.1 ≠ t) ∧ E.W.Ok m₁ :=
+    E.Inv L G₁ m₁ ∧ (∀ w ∈ m₁.waiters, w.1 ≠ t) ∧ E.W.Ok m₁ (fun u => E.Live (G₁ u)) :=
   let ⟨hI, hnq⟩ := hE.atOp hU (by rcases hgo with h | h <;> rw [h] <;> decide)
     (by rcases hgo with h | h <;> rw [h] <;> decide) hwait hL
   ⟨hI, hnq, ((hE.wRest rfl) _ _ _ hU).1⟩
+
+/-- **A waiter is live** (at `w0` or `w1`: it may wait, `Inv.wx`). -/
+theorem _root_.Zig.Full.FLock.Fits.liveWaiter (hE : L.Fits (E.prim L) P U ok)
+    {G : ThreadId → γ} {t : ThreadId} {g : γ} {m : Mem} (hi : P.inv (upd G t g) m)
+    (hg : (E.ph g).Waiting) : E.Live g := by
+  obtain ⟨rX, -, hU⟩ := (hE.inv _ _).mp hi
+  have := (hE.wInv _ _ _ hU).live (u := t) (by rw [upd_self]; exact hg)
+  rwa [upd_self] at this
+
+/-- A thread out of the event's code that may wait or set is live. -/
+theorem live_out {g : γ} (hg : E.ph g = .out) (hr : E.wx g ∨ E.sx g) : E.Live g :=
+  ⟨hr, fun h => by rcases h with h | h <;> rw [hg] at h <;> cases h⟩
+
+/-- The live set does not read the lock's place. -/
+theorem _root_.Zig.Full.FLock.Fits.live_l (hE : L.Fits (E.prim L) P U ok) {g : γ} {q : LPh}
+    {h : Res} : E.Live (L.set g q h) ↔ E.Live g := by
+  have hw := hE.role_l true g q h
+  have hs := hE.role_l false g q h
+  simp only [Bool.cond_true, Bool.cond_false] at hw hs
+  unfold Live
+  rw [hw, hs, show E.ph (L.set g q h) = E.ph g from hE.ph_l g q h]
 
 /-- A waiter's read at the word (`w0` or `w1`) of write `j` with the value `b`: `unset` (only
 at `w0`: it stays), `waiting` (it goes to `w1`), or `is_set` (it leaves; the event is set, and
@@ -1590,15 +1633,16 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
           P.inv (upd G₁ t (E.set g .out)) m') → Q (some r, s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgAsC succ fail 4 E.W.ptr exp new : CM Tgt σ (Option α)).run s) Q G m n := by
+  have hlv := hE.liveWaiter hi (.inl hg)
   refine FLock.wp_wordCasAs hE (hE.wRest rfl) (hE.wAp rfl) hi
-    (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
-    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA hS hL =>
+    (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv)) (hlv := hlv)
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY _ hw₀ hct hrun hA hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
-        (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct (by
+        (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct hwL.csize (by
           rw [FEvent.cur_eq hc₁]
           rcases hrun with ⟨c, r, hr⟩
-          exact .inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩))) hw'
+          exact .inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩)))
       ⟨fun hv _ hh _ _hR => ?_,
       fun j b r hne hd hj hv hfl hacq hh _hR => ?_⟩
   · rw [he] at hv; rw [hn] at hh
@@ -1624,14 +1668,15 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgC (n := 32) succ fail 4 E.W.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst he hn
-  refine FLock.wp_wordCas hE (hE.wRest rfl) (hE.wAp rfl) hi
-    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hw' hw₀ hct hrun hA hS hL =>
+  have hlv := hE.liveWaiter hi (.inl hg)
+  refine FLock.wp_wordCas hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hlv)
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY _ hw₀ hct hrun hA hS hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
-        (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct (by
+        (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct hwL.csize (by
           rw [FEvent.cur_eq hc₁]
           rcases hrun with ⟨c, r, hr⟩
-          exact .inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩))) hw'
+          exact .inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩)))
       ⟨fun hv _ hh _ _hR => ?_,
       fun j b hne hj hv hfl hacq hh _hR => ?_⟩
   · exact (h k hk G₁ m' (hop.current.trans hc₁)).1
@@ -1653,11 +1698,12 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
         P.inv (upd G₁ t (E.set g .out)) m') → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh hw' hw₀ hct hrun hA hS _hR hL =>
+  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hE.liveWaiter hi hg)
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hE.liveWaiter hi hg)) hct
+          hwL.csize ?_ (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl hacq)
 
@@ -1678,30 +1724,32 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     P.WP t ((atomicLoadAsC α ord 4 E.W.ptr : CM Tgt σ α).run s) Q G m n :=
   FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
-    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl hacq hh hw' hw₀ hct hrun hA hS _hR hL =>
+    (hlv := hE.liveWaiter hi hg)
+    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       h k hk G₁ m' b r (hop.current.trans hc₁) hd
         (hE.afterRead hg₁ hg hgo hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hE.liveWaiter hi hg)) hct
+          hwL.csize ?_ (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv hfl hacq)
 
 /-- A load at the word by a thread out of the event's code (`atomicLoadC`), out of the lock's code
-or gone from it. -/
+or gone from it, that may wait or set (live: `FEvent.Live`). -/
 theorem wp_peek (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
-    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone)
+    (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone) (hr : E.wx g ∨ E.sx g)
     (hi : P.inv (upd G t g) m)
     {Q : BitVec 32 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → P.inv (upd G₁ t g) m' →
       (b = 2 → E.IsSet m') → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv _ _ hh hw' hw₀ hct hrun hA hS _hR hL =>
+  FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := live_out (E := E) hg hr)
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv _ _ hh _ hw₀ hct hrun hA hS _hR hL =>
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
-
       let ⟨h1, h2⟩ := hE.afterPeek hg₁ hg hgo hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ live_out (E := E) hg hr)) hct
+          hwL.csize ?_ (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL hh hj hv
       h k hk G₁ m' b (hop.current.trans hc₁) h1 h2
@@ -1724,13 +1772,16 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
   FLock.wp_wordRmwAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU b hv => hdec b ((hE.wInv _ _ _ hU).val3
       (by have := hist_pos ((hE.wRest rfl) _ _ _ hU).1; omega) hv))
-    fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hwL hY hd hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
+    (hlv := live_out (E := E) hg (.inr hsx))
+    fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hwL hY hd hv _ hh _ _ hw₀ hct hrun hA hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
       obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hrel hct hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inr ⟨_, _, hh'⟩)
+        refine .op (by
+          rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ live_out (E := E) hg (.inr hsx))) hct
+          hwL.csize ?_ (.inr ⟨_, _, hh'⟩)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩))) hA hS hL hv hh'
       exact h k hk G₁ m' o r (hop.current.trans hc₁) ((hE.wInv _ _ _ hU).val3
@@ -1747,14 +1798,16 @@ theorem wp_xchg (hE : L.Fits (E.prim L) P U ok) {signed : Bool}
       (o ≠ 1 ∧ P.inv (upd G₁ t (E.set g .sd)) m') → Q (o, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .xchg signed ord 4 E.W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n :=
-  FLock.wp_wordRmw hE (hE.wRest rfl) (hE.wAp rfl) hi
-    fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hwL hY hv _ hh _ hw' hw₀ hct hrun hA hS _hR hL => by
+  FLock.wp_wordRmw hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := live_out (E := E) hg (.inr hsx))
+    fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hwL hY hv _ hh _ _ hw₀ hct hrun hA hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
         rw [hh, ← hv2]; rfl
       obtain ⟨hs, h1⟩ := hE.afterXchg hg₁ hg hgo hsx hrel hct hU hwL hY (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inr ⟨_, _, hh'⟩)
+        refine .op (by
+          rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ live_out (E := E) hg (.inr hsx))) hct
+          hwL.csize ?_ (.inr ⟨_, _, hh'⟩)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, hr⟩; exact .inr (.inl ⟨c, _, _, _, _, _, hr⟩))) hA hS hL hv hh'
       exact h k hk G₁ m' o (hop.current.trans hc₁) hs h1
@@ -1811,11 +1864,11 @@ theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (hwL : L.WInv (L.pl G₁) m₁)
     (hY : ∀ l, E.W.In l → rY.heap l = none) (_ : m₁.woken.contains t = false)
     (_ : m₁.waiters.any (·.1 == t) = false)
-    (hw₀ : E.W.Ok { m₁ with current := t }) (hct : t < m₁.clocks.size)
+    (hw₀ : E.W.Ok { m₁ with current := t } (fun u => E.Live (G₁ u))) (hct : t < m₁.clocks.size)
     (hrecord : M = ({ m₁ with current := t } : Mem).recordAt E.W.b E.W.o 4 .atomicRead)
     (hf : M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg)
-    (hh : E.W.hist M = E.W.hist m₁) (hok₂ : E.W.Ok M) (hbl : M.blocks = m₁.blocks)
-    (hU32 : E.W.Holds m₁ e) :
+    (hh : E.W.hist M = E.W.hist m₁) (_ : E.W.Ok M (fun u => E.Live (G₁ u)))
+    (hbl : M.blocks = m₁.blocks) (hU32 : E.W.Holds m₁ e) :
     U G₁ (rsum (E.W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, E.W.ptr) } := by
   have hop : FStepIn (fun _ => none) { m₁ with current := t } M := by
     rw [hrecord]
@@ -1828,7 +1881,8 @@ theorem waitSleep (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
   have hv : (E.newest m₁).Val (1 : BitVec 32) := by rw [he] at hU32; exact hw₁.holds_last.mp hU32
   have hst := hE.wStep (G := G₁) (rY := rY) (m := m₁) (t := t) (p := .w1) (q := .away)
     (h := rnil) rfl ⟨.inl ⟨.inr ⟨by rw [hg₁, L.ph_set], by rw [hg₁]; exact hga⟩, .inr ⟨rfl, rfl⟩⟩,
-      rfl, .sleep hw₀ hct hrecord hh hok₂, .inl ⟨hh, by rw [hg₁, hga]; trivial⟩⟩ hU hwL hY
+      rfl, .sleep (hw₀.single (hI.live (by rw [hg₁, hga]; exact .inr rfl))) hct hwL.csize hrecord hh,
+      .inl ⟨hh, by rw [hg₁, hga]; trivial⟩⟩ hU hwL hY
   rw [hg₁, hgq, ← hg₁, upd_same, Word.cellsR_congr (W := E.W) (show
     ({ M with waiters := M.waiters.push (t, E.W.ptr) } : Mem).blocks = m₁.blocks from hbl)] at hst
   exact hst (hI.sleep (by rw [hg₁]; exact hga) hop.clock hop.waiters
@@ -1873,22 +1927,23 @@ theorem waitBack (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L.ph
     (hY : ∀ l, E.W.In l → rY.heap l = none) (_ : m₁.waiters.any (·.1 == t) = false)
     (hf : M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg)
     (hM : M = { m₁ with current := t, woken := m₁.woken.erase t } ∨ M = { m₁ with current := t } ∨
-      (E.W.Ok { m₁ with current := t } ∧ t < m₁.clocks.size ∧
+      (E.W.Ok { m₁ with current := t } (fun u => E.Live (G₁ u)) ∧ t < m₁.clocks.size ∧
         M = ({ m₁ with current := t } : Mem).recordAt E.W.b E.W.o 4 .atomicRead ∧
-        E.W.hist M = E.W.hist m₁ ∧ E.W.Ok M ∧ M.blocks = m₁.blocks)) :
+        E.W.hist M = E.W.hist m₁ ∧ E.W.Ok M (fun u => E.Live (G₁ u)) ∧ M.blocks = m₁.blocks)) :
     U (upd G₁ t g) (rsum (E.W.cellsR m₁) rY) M := by
+  have hga : E.ph (L.set g .away rnil) = .w1 := by rw [hE.ph_l]; exact hg
   have hms : E.MStep t m₁ M := by
-    rcases hM with rfl | rfl | ⟨hw₀, hct, hr, hh, hok, _⟩
+    rcases hM with rfl | rfl | ⟨hw₀, hct, hr, hh, -, _⟩
     · exact .woken
     · exact .resume
-    · exact .op hw₀ hct (.inr (.inr (.inr (.inr hr)))) hok (.inl hh)
+    · exact .op (hw₀.single ((hE.wInv _ _ _ hU).live (by rw [hg₁, hga]; exact .inr rfl))) hct
+        hwL.csize (.inr (.inr (.inr (.inr hr)))) (.inl hh)
   have hwait : M.waiters = m₁.waiters := by
     rcases hM with rfl | rfl | ⟨_, _, hr, _, _, _⟩
     · rfl
     · rfl
     · rw [hr]; rfl
   have hclk := hms.clocks
-  have hga : E.ph (L.set g .away rnil) = .w1 := by rw [hE.ph_l]; exact hg
   have hgq : ∀ q, L.set (E.set (L.set g .away rnil) .w1) q rnil = L.set g q rnil := fun q => by
     rw [set_of hga, L.set_set]
   have hgo' : L.set g .out rnil = g := by
@@ -1936,6 +1991,7 @@ theorem wp_wait (hE : L.Fits (E.prim L) P U ok) {ε : Type} {w : Nat}
     P.WP t ((futexWaitC io E.W.ptr e : CM Tgt σ Unit).run s) Q G m n :=
   FLock.wp_wordWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hi (waitAway hE hg hgo G · m)
     (waitLive hE hg hlive) (waitSleep hE he hg) (waitBack hE hg hgo (hE.heldOut hgo hi)) h
+    (hlv := hE.live_l.mpr (hE.liveWaiter hi (.inr hg)))
 
 /-- **The waiter's untimed OS futex wait** (`Os.futexWait`, OSF-01; std's translated
 `Thread.Futex.wait`) at the word with the value `waiting`, at `w1`, the current thread: it goes on
@@ -1951,10 +2007,12 @@ theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWait E.W.ptr e false : ConcM Tgt Os.WaitResult) Q G m n :=
   FLock.wp_wordOsWait hE (hE.wRest rfl) (hE.wAp rfl) hgo hc hi (waitOs hE hgo)
-    (fun G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hh hw' hw₀ hct hrun hA hS hL =>
+    (hlv := hE.liveWaiter hi (.inr hg)) (hlva := hE.live_l.mpr (hE.liveWaiter hi (.inr hg)))
+    (fun G₁ rY m₁ m' hg₁ hc₁ hU hwL hY hh _ hw₀ hct hrun hA hS hL =>
       waitCompare hE hg hgo G₁ rY m₁ m' hg₁
         hU hwL hY hh (by
-        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀) hct ?_ hw' (.inl hh)
+        refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hE.liveWaiter hi (.inr hg)))
+          hct hwL.csize ?_ (.inl hh)
         rw [FEvent.cur_eq hc₁]
         exact (by rcases hrun with ⟨c, v, hr⟩; exact .inl ⟨c, _, _, hr⟩)) hA hS hL) (waitAway hE hg hgo) (waitLive hE hg hlive) (waitSleep hE he hg)
     (waitBack hE hg hgo (hE.heldOut hgo hi)) h
@@ -1988,7 +2046,7 @@ private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' :
     (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hs : FStepIn (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).heap.erase m m')
     (hcW : ∀ l, E.W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
-    (hw' : E.W.Ok m') (hh : E.W.hist m' = E.W.hist m)
+    (hw' : E.W.Ok m' (fun u => E.Live (upd G t g u))) (hh : E.W.hist m' = E.W.hist m)
     (hL' : L.Inv (upd G t (L.setPart g r')) (rsum (E.W.cellsR m') rY) m') :
     P.inv (upd G t (L.setPart g r')) m' := by
   have hw := ((hE.wRest rfl) _ _ _ hU).1
