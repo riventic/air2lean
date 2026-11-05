@@ -90,6 +90,19 @@ theorem BlkStep.addrs {m m' : Mem} (h : W.BlkStep m m') : m.SameAddrs m' := fun 
     exact ⟨blk', h1, h2⟩
   · exact ⟨blk, by rw [h.other b e]; exact hb, rfl⟩
 
+/-- A step that keeps the word keeps the futex keys of its block: a cell of the word holds the
+block's address (`Mem.wordKey_of_heap`). -/
+theorem Keep.wordKey {m m' : Mem} (hk : W.Keep m m') (hw : W.Ok m) (hnb : 0 < nb) (o : Nat)
+    (sh : Bool) : m'.wordKey W.b o sh = m.wordKey W.b o sh := by
+  obtain ⟨blk, hblk, hl, hs, -, -, hlo⟩ := hw.blk
+  exact Mem.wordKey_of_heap ((Mem.heap_of hblk W.o).trans (dif_pos ⟨hl, by omega, hlo⟩))
+    (hk.cells W.o (Nat.le_refl _) (by omega)) _ _
+
+/-- A step that keeps the word keeps its futex key (`Keep.wordKey`). -/
+theorem Keep.key {m m' : Mem} (hk : W.Keep m m') (hw : W.Ok m) (hnb : 0 < nb) :
+    W.key m' = W.key m :=
+  hk.wordKey hw hnb _ _
+
 theorem BlkStep.trans {m₁ m₂ m₃ : Mem} (h₁ : W.BlkStep m₁ m₂) (h₂ : W.BlkStep m₂ m₃) :
     W.BlkStep m₁ m₃ := by
   refine ⟨h₂.size.trans h₁.size, fun b hb => (h₂.other b hb).trans (h₁.other b hb), fun blk hb => ?_⟩
