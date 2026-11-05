@@ -792,9 +792,6 @@
       "path": "Proofs/Sync/RwLockSnapshotPair.lean"
     },
     {
-      "path": "Proofs/Sync/SemCounter.lean"
-    },
-    {
       "path": "Proofs/Sync/Semaphore.lean"
     },
     {
@@ -913,12 +910,6 @@
     },
     {
       "path": "Proofs/Sync/RwLockSnapshotPair.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Sync/SemCounter.lean",
       "tactic": "unroll_sched",
       "count": 1,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
