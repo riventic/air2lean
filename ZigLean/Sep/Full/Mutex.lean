@@ -22,7 +22,8 @@ the lock) and counts no turns
 `FLock.Inv` and a rest `U` that every step of the lock's code (`LockWord.Step`, a futex-word lock's
 step: only the word's bytes, atomic accesses to them, the futex queue) keeps. The places of a
 thread inside the lock's code (`spin`, `wait`, `wake`) are the implementation's; a client sees
-`out` and `holds` (and `gone`, `away`), and the protocol's `U` must be stable under every lock step,
+`out` and `holds` (and `gone`, `away`, `holdsAway`), and the protocol's `U` must be stable under
+every lock step of a thread in the lock's code (not `gone`, `away` or `holdsAway`),
 so a client proof holds for each implementation of the family. A client takes the implementation
 of its program (`Io.Mutex` of 0.16.0: `IoMutexCode.impl`, `ZigLean/Sep/Full/IoMutex.lean`, once for
 every program, instantiated by `Proofs/Iogroup/Lock.lean` and `Proofs/Sync/IoMutex.lean`;
