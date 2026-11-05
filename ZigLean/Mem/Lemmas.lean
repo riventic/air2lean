@@ -217,6 +217,16 @@ theorem Mem.wordKey_of_access {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {bl
   obtain ⟨-, hb, -⟩ := access_eq h
   rw [Mem.wordKey_of hb]
 
+/-- The key a futex wait queues is the key of its pointer (`Mem.keyAt`). -/
+theorem Mem.keyAt_of_access {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} (h : m.access p n al = pure (b, blk, o)) (sh : Bool) :
+    m.keyAt p sh = some (blk.key o sh) := by
+  obtain ⟨hpb, hb, -, h0, -, -, rfl⟩ := access_eq h
+  obtain ⟨pb, po⟩ := p
+  simp only at hpb h0 ⊢
+  subst hpb
+  rw [Mem.keyAt_block hb, Block.key, Int.toNat_of_nonneg h0]
+
 /-- The total key reads only the block's address. -/
 theorem Mem.wordKey_of_addr {m m' : Mem} {b : BlockId}
     (h : (m'.blocks[b]?).map (·.addr) = (m.blocks[b]?).map (·.addr)) (o : Nat) (sh : Bool) :
