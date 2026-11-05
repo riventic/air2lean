@@ -7,7 +7,7 @@ import ZigLean.Conc.Sched
 
 Each theorem observes the actual definitions in `ZigLean/Os/Futex.lean` and
 `ZigLean/Os/Thread.lean` at a fixed state, as the corrected model must behave natively. The
-first observes `Sched.runTrace`; the others observe the actual call's `CoN` frontier and its
+first observes `Sched.runTrace`; the second observes the actual call's `CoN` frontier and its
 continuation, before the scheduler's separate child-handle completion check. They are not
 client proofs, native executions, valid std join ownership claims or whole-program termination
 claims. The open witnesses are in `CurrentModel.lean`.
