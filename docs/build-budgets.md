@@ -213,8 +213,12 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   the largest. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard report (full-build.sh:
   `<logs>/lean-processes`).
 - **Fixture units.** In an elastic admission each fixture-check unit is a part charged its
-  measured peak (scripts/fixture-checks.py `schedule`; 11000 MiB unmeasured), with the units'
-  guard's jobs and Lean threads.
+  measured peak (scripts/fixture-checks.py `schedule`), with the units' guard's jobs and Lean
+  threads. A unit never measured is charged by the same rule as a Lean module never measured
+  (lean-peaks.py `typical`): the 95th-percentile request of the measured units (4136 MiB over
+  the remote host's 76 units of 2026-11-05; 11000 MiB only when no unit is measured). A unit
+  that outgrows it costs one retry at 11000 MiB. Before, every unmeasured unit was charged
+  11000 MiB and made an 11-slot queue head, as unmeasured modules did.
 - **Waiting.** A part waits for slots like any guard, up to 8 h (`PART_TIMEOUT`, the full
   build's own `--timeout`), and so do the full build's phases: on a busy host its processes
   wait, they do not fail.

@@ -117,6 +117,22 @@ class NoReuse(unittest.TestCase):
             fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
         self.assertIn("not recorded", err.getvalue())
 
+    def test_a_unit_never_measured_is_charged_the_measured_units_typical_request(self):
+        # The rule of a Lean module never measured (lean-peaks.py `typical`), not the declared
+        # bound: an 11000 MiB charge made every new unit an 11-slot queue head.
+        units = [{"name": "u%02d" % k} for k in range(1, 21)] + [{"name": "new"}]
+        hints = {u["name"]: {"elapsed_s": 1, "lean_threads": 1, "peak_rss_kib": [(100 * k) << 10]}
+                 for k, u in enumerate(units[:-1], 1)}
+        (self.temp / "schedule.json").write_text(json.dumps(hints))
+        with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}):
+            requests = fc.schedule(units, 11000, guess=True)[1]
+            self.assertEqual(requests[:-1], [max(fc.MEM_FLOOR_MIB, int(150 * k)) for k in range(1, 21)])
+            self.assertEqual(requests[-1], 2850)  # the 95th percentile (nearest rank), not the largest
+            self.assertEqual(fc.schedule(units, 11000)[1][-1], 11000)  # no guess: no limit backs it
+            self.assertEqual(fc.schedule(units, 2000, guess=True)[1][-1], 2000)  # at most the bound
+            (self.temp / "schedule.json").write_text("{}")
+            self.assertEqual(fc.schedule(units, 11000, guess=True)[1], [11000] * 21)  # nothing measured
+
     def test_a_unit_in_an_elastic_guard_is_a_sub_admission_charged_its_request(self):
         grant = {"lock": "/l/build.lock", "elastic": {"id": "e"}}
         with mock.patch.dict(os.environ, {fc.GUARD.INHERIT: json.dumps(grant)}):
