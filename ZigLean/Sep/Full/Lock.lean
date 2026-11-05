@@ -362,7 +362,7 @@ variable {L}
 theorem holdLive_none {Tgt : Type} {P : Proto Tgt γ} (hn : ∀ p, ¬ L.nest p) {G : ThreadId → γ}
     {rX : Res} {m : Mem} {v : ThreadId} (hi : L.Inv G rX m) (hv : L.ph (G v) = .holdsAway) :
     P.Live v G m := fun hq _ => by
-  obtain ⟨p, -, -, hp⟩ := hi.w.nestQ hv hq
+  obtain ⟨-, -, -, p, hp, -⟩ := hi.w.nestQ hv hq
   exact hn p hp
 
 /-- The same ghost value for `t` (`set_self`). -/

@@ -360,6 +360,9 @@ theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp
   -- the step's facts
   have hs : FStepIn rY.heap.erase m m' := hA _ fun x h1 h2 => by
     simp [FHeap.erase, hY (WG.b, x) ⟨rfl, h1, h2⟩]
+  have hkE : EV.key m' = EV.key m := hu.ev.key_of_addrs hs.addrs
+  obtain ⟨blk₀, hb₀, -⟩ := hu.blk
+  have hkL : L.key m' = L.key m := L.key_of_addrs hs.addrs hb₀
   obtain ⟨rB, hB, -, hrX⟩ := hu.rest
   have hgB : rY.gh = rB.gh := by
     have := congrArg Res.gh hrX; simpa [cellsAt, Word.cellsR] using this
@@ -450,7 +453,7 @@ theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp
     · rwa [hG u e] at h
   · -- the event: its word stays; `t` stays out of its code
     have hI := hu.einv.frame (t := t) (G' := G) (fun _ _ => rfl) rfl rfl hhE hs.waiters hclk
-      (Nat.le_of_eq (by rw [hs.threads])) id id hfr
+      (Nat.le_of_eq (by rw [hs.threads])) id id hfr hkE hkL
     refine hI.relabel (fun u hu => upd_ne _ _ hu) (by rw [hGt, hg]; rfl)
       (fun h => absurd (by rw [hGt]; rfl) h) (fun h => ?_) (fun h => ?_)
     · have h' : (G t).2.wk = true := h; rw [hg] at h'; cases h'
@@ -535,7 +538,7 @@ theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp
     rcases ht12 with rfl | rfl
     · rw [hfdt] at h1; cases h1
     · rw [hfdt] at h2; cases h2
-  · intro w hw; rw [hs.waiters] at hw; exact hu.q w hw
+  · intro w hw; rw [hs.waiters] at hw; rw [hkL, hkE]; exact hu.q w hw
 
 /-- **`U` after the setter's end**: `t` (not `main`, past its finish) moves to `fin` at the same
 memory, keeping its lock place, finish clock and roles, with the event set (`sfin`). `sto`'s clock
