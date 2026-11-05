@@ -45,6 +45,7 @@ class GuardTests(unittest.TestCase):
         self.addCleanup(environment.stop)
         os.environ.pop("AIR2LEAN_GUARD_PRIORITY", None)
         os.environ.pop("AIR2LEAN_GUARD_IDLE_MINUTES", None)
+        os.environ.pop("AIR2LEAN_LOCK_WAIT", None)  # the tests' guards that wait say so
 
     def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
         self.fixture_counter += 1
@@ -240,6 +241,16 @@ fixture_pause()
         source = "import time\nend = time.monotonic() + 6\nwhile time.monotonic() < end: pass"
         result, report, _ = self.run_guard(source, "--idle-minutes", "0.05", "--timeout", "10")
         self.assertEqual((result.returncode, report["outcome"]), (0, "success"), result.stderr)
+
+    def test_the_lock_wait_comes_from_the_option_the_environment_or_is_none(self):
+        args = ["--cwd", str(self.root), "--report", "r", "--log", "l", "--", "true"]
+        self.assertEqual(guard.parse_args(args).lock_wait, 0)
+        os.environ["AIR2LEAN_LOCK_WAIT"] = "21600"
+        self.assertEqual(guard.parse_args(args).lock_wait, 21600)
+        self.assertEqual(guard.parse_args(["--lock-wait", "5", *args]).lock_wait, 5)
+        os.environ["AIR2LEAN_LOCK_WAIT"] = "soon"
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            guard.parse_args(args)
 
     def test_idle_limit_comes_from_the_environment_or_is_off(self):
         os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "0.02"

@@ -18,7 +18,10 @@ python3 scripts/build-guard.py \
 The default lock is `$HOME/.cache/air2lean/build.lock`; `--lock` overrides
 `AIR2LEAN_BUILD_LOCK`. Lock files are never removed, so waiting coordinators retain
 the same flock inodes. A workload that is not admitted fails with exit 75 without starting a
-child. `--lock-wait SECONDS` permits bounded waiting. A nested guard in the same checkout
+child. `--lock-wait SECONDS` permits bounded waiting; without it a guard waits
+`AIR2LEAN_LOCK_WAIT` seconds (the scripts' common setting; the remote host's jobs set it), else
+none, so a guard a script starts without the option (the proof-receipt audit) waits like the
+script's others instead of failing at the first busy moment. A nested guard in the same checkout
 also fails or waits (one build per workspace): wrap a whole workload once. Advisory locking
 coordinates participating callers; unguarded builds are outside its control. Existing
 `zig-patch/build.sh` already uses `-j1` for its compiler bootstrap.

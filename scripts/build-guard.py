@@ -410,7 +410,8 @@ def parse_args(argv):
     p.add_argument("--jobs", type=int, default=1,
                    help="parallel jobs the workload may run (AIR2LEAN_JOBS, leaf Zig compilers)")
     p.add_argument("--lean-threads", type=int, default=1, help="LEAN_NUM_THREADS of the workload")
-    p.add_argument("--lock-wait", type=float, default=0)
+    p.add_argument("--lock-wait", type=non_negative, default=None,
+                   help="seconds to wait for admission (AIR2LEAN_LOCK_WAIT, else 0: fail at once)")
     p.add_argument("--mem-budget-mib", type=positive, default=None,
                    help="memory budget of all guarded workloads (AIR2LEAN_BUILD_MEM_MIB, else 75%% of RAM)")
     p.add_argument("--exclusive", action="store_true",
@@ -468,8 +469,8 @@ def parse_args(argv):
     a.quiet = False  # `lean_process`: no guard chatter on a Lean process's stderr
     if not 1 <= a.jobs <= 256 or not 1 <= a.lean_threads <= 256:
         p.error("--jobs and --lean-threads must be between 1 and 256")
-    if not 0 <= a.lock_wait < float("inf") or not 0 <= a.log_bytes <= 16 * 1024 * 1024:
-        p.error("invalid lock wait or log size (maximum 16 MiB)")
+    if not 0 <= a.log_bytes <= 16 * 1024 * 1024:  # --lock-wait: non_negative
+        p.error("invalid log size (maximum 16 MiB)")
     if len(json.dumps(a.command).encode()) > 32 * 1024 or len(a.profile) > 128:
         p.error("command/profile exceeds evidence limits")
     if len(a.input) > 32 or len(a.output) > 32 or len(a.tool) > 32 or len(a.zig_name) > 32:
@@ -491,6 +492,11 @@ def parse_args(argv):
             a.idle_minutes = non_negative(os.environ.get("AIR2LEAN_GUARD_IDLE_MINUTES") or 0)
         except (argparse.ArgumentTypeError, ValueError) as error:
             p.error(f"AIR2LEAN_GUARD_IDLE_MINUTES {error}")
+    if a.lock_wait is None:
+        try:
+            a.lock_wait = non_negative(os.environ.get("AIR2LEAN_LOCK_WAIT") or 0)
+        except (argparse.ArgumentTypeError, ValueError) as error:
+            p.error(f"AIR2LEAN_LOCK_WAIT {error}")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
     a.report = a.report and a.report.resolve()
