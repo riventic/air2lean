@@ -805,6 +805,35 @@ condition includes all `n + 1` frames, and a budgeted start-memory witness suppl
 `MemM` code, not an AIR/native certificate: `Certificate.fragment` still refuses recursive
 memory functions, and P03/native stack and producer integration remain open.
 
+## Kernel-run witnesses (`zig_run`)
+
+A theorem that one concrete run completes (`…_completes`, a counterexample run) is computed by
+the kernel (`decide +kernel`). The kernel does not unfold `Zig.loop` or a `partial_fixpoint`
+group, so the proof first rewrites them by their defining equations. It does that with one simp
+set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
+
+```lean
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
+```
+
+* **Contents.** Every executable declaration of generated code: each function, each extracted
+  loop body (`f.loop<id>`), each member of a recursive group, and `dispatch`. Also `Zig.loop`
+  (`ZigLean/Simp.lean`) and the library models that hold a loop (`Zig.osUnfairLockC`,
+  `ZigLean/Conc/Call.lean`). A new model with a `Zig.loop` or a `partial_fixpoint` gets
+  `@[zig_run]` where it is defined.
+* **Emission rule.** The translator ends each declaration group with
+  `attribute [zig_run] <the group's executable declarations>` and `dispatch` with
+  `attribute [zig_run] dispatch` (`runAttribute`, `Air2Lean/Emit.lean`). This is default
+  generation, so every translation (every Zig version and target) tags its own declarations and
+  one proof covers all of them.
+* **Use.** `singlePass` unfolds every visible occurrence once per pass. `iterate n` needs `n` at
+  least the call depth to the deepest loop plus the iterations of the run's longest loop.
+  `unfoldPartialApp` unfolds `dispatch`, which `Sched.run` takes unapplied.
+* **Kernel-run witnesses only.** The rewrites unfold loops and recursive groups without end. Use
+  the set only under `singlePass`. Never add its members to `zig_unfold` or another set, and never
+  pass it to `fsym` or to a simp call without `singlePass`.
+
 ## Extending it
 
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with

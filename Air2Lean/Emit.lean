@@ -4822,6 +4822,12 @@ structure EmitParts where
   /-- Each function's certificate shape (`CertShape`). -/
   shapes : Array (String × CertShape) := #[]
 
+/-- The `zig_run` simp set (`ZigLean/SimpAttr.lean`, docs/proof-automation.md) gets every
+executable declaration: each function, each extracted loop body and `dispatch`. A kernel-run
+witness unfolds the run's path with this one set, so it names no generated declaration. -/
+def runAttribute (names : Array String) : List String :=
+  if names.isEmpty then [] else [s!"attribute [zig_run] {" ".intercalate names.toList}"]
+
 /-- The modules the header imports. -/
 def EmitParts.headerImports (parts : EmitParts) : List String :=
   parts.header.filterMap fun line => (line.dropPrefix? "import ").map (·.toString)
@@ -4994,6 +5000,7 @@ def emitProgramParts (program : Program) (prefix_ : String)
       else String.intercalate "\n\n" defs
     let text := String.intercalate "\n\n"
       (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ declarations ++
+        runAttribute (executable.flatMap (·.members.map (·.name))) ++
         (if proofApi then (members.toList.zip parts).map fun (f, p) =>
           emitProofApi f p recursiveIds.contains else []))
     (names, callees, text)
@@ -5005,7 +5012,7 @@ def emitProgramParts (program : Program) (prefix_ : String)
       (errorTable.map emitErrorTable).toList ++ globalsStr ++ tgtStr
     groups
     declGroups
-    dispatch := dispatchStr
+    dispatch := dispatchStr ++ runAttribute (if dispatchStr.isEmpty then #[] else #["dispatch"])
     -- The spawn targets and the `Io.async` tasks: `dispatch` calls each by name.
     dispatchTargets := if dispatchStr.isEmpty then #[] else
       targets.map (·.1) ++ futures.map (·.1)
