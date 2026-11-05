@@ -122,6 +122,12 @@ theorem Ok.keyAt {m : Mem} (hW : W.Ok m A) : m.keyAt W.ptr false = some (W.key m
   obtain ⟨blk, hb, -⟩ := hW.blk
   exact Mem.keyAt_wordKey hb W.o false
 
+/-- The word's key stays in a memory with the same block addresses (`Mem.SameAddrs.wordKey`;
+`LockWord.key_of_addrs`). -/
+theorem Ok.key_of_addrs {m m' : Mem} (hW : W.Ok m A) (h : m.SameAddrs m') : W.key m' = W.key m := by
+  obtain ⟨blk, hb, -⟩ := hW.blk
+  exact h.wordKey hb W.o false
+
 /-- A word apart from the lock's has another futex key, in either domain, in a memory with the live
 layout: two live bytes have different keys (`Mem.keyAt_ne`, premise OSF-02). -/
 theorem ApartL.keyAt_ne {L : LockWord} {m : Mem} (hap : W.ApartL L) (hl : m.LiveLayout)
