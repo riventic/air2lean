@@ -2,6 +2,7 @@ import Proofs.Threadsync.WaitGroup.Task
 import Proofs.Threadsync.WaitGroup.Read
 import Proofs.Threadsync.WaitGroup.Join
 import ZigLean.Sep.Full.AutoWP
+import ZigLean.Conc.RunResult
 
 /-!
 # `threadsync.waitGroup` over all schedules
@@ -20,8 +21,8 @@ the contracts of the sync objects (`MutexImpl`, `EventImpl`): this program's `Th
 steps are in `Proofs/Threadsync/WaitGroup/`: the protocol (`Protocol`), its start (`Start`),
 `main`'s `startMany` and spawns (`Main`), its wait (`Wait`), its read of the `Tally` (`Read`),
 its joins (`Join`) and the tasks (`Task`). This file walks `main` of the generated code (`fsym`)
-and states the results. A run that the kernel computes (`waitGroup_completes`) names the Linux
-translation's loops and is in `tests/roadmap/sync-contracts/Runtime.lean`.
+and states the results, with one run that the kernel computes (`waitGroup_completes`) in every
+translation.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Threadsync
@@ -60,5 +61,20 @@ read included), no deadlock at a futex, no panic, under every schedule. -/
 theorem waitGroup_safe [Zig.Os.HasEnv] (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
     e ≠ .stackOverflow → (Sched.run env dispatch fuel o waitGroup (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
+
+/-- **One schedule completes**: under the oracle that always picks option 0, the
+`std.Thread.WaitGroup` client returns 2 within fuel 1000, from `mem0` with the translation's spawn
+policy, in the example OS environment (`Os.Env.example`; the run reads no clock). The kernel
+computes the run once the loops on its path are unfolded by their defining equation
+(`docs/proof-tools.md`, concrete runs of programs with loops). -/
+theorem waitGroup_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
+      (@waitGroup ⟨Os.Env.example⟩) (mem0 σ)) = some 2 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch task waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
+    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet Thread_Mutex_lock
+    Zig.osUnfairLockC
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 end Threadsync.WG
