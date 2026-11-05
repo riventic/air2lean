@@ -125,15 +125,19 @@ class NoReuse(unittest.TestCase):
                  for k, u in enumerate(units[:-1], 1)}
         (self.temp / "schedule.json").write_text(json.dumps(hints))
         with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}):
-            requests = fc.schedule(units, 11000, guess=True)[1]
-            self.assertEqual(requests[:-1], [max(fc.MEM_FLOOR_MIB, int(150 * k)) for k in range(1, 21)])
-            self.assertEqual(requests[-1], 2850)  # the 95th percentile (nearest rank), not the largest
+            requests = fc.schedule(units, 5000, elastic=True)[1]
+            self.assertEqual(requests[:-1], [max(fc.MEM_FLOOR_MIB, int(100 * k * fc.MEM_MARGIN))
+                                             for k in range(1, 21)])
+            # The 95th percentile (nearest rank: the 19th of 20), not the largest.
+            self.assertEqual(requests[-1], int(1900 * fc.MEM_MARGIN))
             # Of every unit measured, not only those selected (--only): the guess is the machine's.
-            self.assertEqual(fc.schedule([units[0], units[-1]], 11000, guess=True)[1], [fc.MEM_FLOOR_MIB, 2850])
-            self.assertEqual(fc.schedule(units, 11000)[1][-1], 11000)  # no guess: no limit backs it
-            self.assertEqual(fc.schedule(units, 2000, guess=True)[1][-1], 2000)  # at most the bound
+            self.assertEqual(fc.schedule([units[0], units[-1]], 5000, elastic=True)[1],
+                             [requests[0], requests[-1]])
+            self.assertEqual(fc.schedule(units, 5000)[1][-1], 5000)  # not elastic: no limit backs it
+            with mock.patch.object(fc.GUARD, "PROCESS_MIB", 2000):
+                self.assertEqual(fc.schedule(units, 5000, elastic=True)[1][-1], 2000)  # at most the bound
             (self.temp / "schedule.json").write_text("{}")
-            self.assertEqual(fc.schedule(units, 11000, guess=True)[1], [11000] * 21)  # nothing measured
+            self.assertEqual(fc.schedule(units, 5000, elastic=True)[1], [fc.GUARD.PROCESS_MIB] * 21)  # none measured
 
     def test_a_unit_in_an_elastic_guard_is_a_sub_admission_charged_its_request(self):
         grant = {"lock": "/l/build.lock", "elastic": {"id": "e"}}

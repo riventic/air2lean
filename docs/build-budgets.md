@@ -218,8 +218,9 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   (lean-peaks.py `typical`): the 95th-percentile request of every unit the machine measured,
   selected or not (a request already holds the unit's margin, MEM_MARGIN, since its peak is
   sampled; 4136 MiB over the remote host's 76 units of 2026-11-05; 11000 MiB only when no unit
-  is measured). A unit that outgrows it costs one retry at 11000 MiB. Before, every unmeasured unit was charged
-  11000 MiB and made an 11-slot queue head, as unmeasured modules did.
+  is measured). A unit that outgrows it costs one retry at 11000 MiB. Before, every unmeasured
+  unit was charged 11000 MiB and made an 11-slot queue head, as unmeasured modules did. Outside
+  an elastic admission no limit backs a request, and an unmeasured unit requests `--mem-mib`.
 - **Waiting.** A part waits for slots like any guard, up to 8 h (`PART_TIMEOUT`, the full
   build's own `--timeout`), and so do the full build's phases: on a busy host its processes
   wait, they do not fail.
