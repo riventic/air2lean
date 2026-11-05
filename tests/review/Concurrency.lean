@@ -100,7 +100,7 @@ private def catchTests : IO Unit := do
   let waited : ConcM Unit Nat := tryCatch
     (do let p ← ConcM.liftMem (alloc .heap 4 4)
         ConcM.liftMem (store 4 p (1#32))
-        let _ ← ConcM.sync (.wait p 0)
+        let _ ← ConcM.sync (.wait p 0 false)
         throw .panic)
     (fun _ => pure 7)
   check "catch after successful futex wait" (run 10 waited) (some (.ok 7))
@@ -128,7 +128,7 @@ private def catchTests : IO Unit := do
     (run 10 (tryCatch (do let _ ← ConcM.sync (.join 99); pure 0) (fun _ => pure 7)))
     (some (.error .illegal))
   check "scheduler invalid wait is fatal"
-    (run 10 (tryCatch (do let _ ← ConcM.sync (.wait ⟨none, 0⟩ 0); pure 0) (fun _ => pure 7)))
+    (run 10 (tryCatch (do let _ ← ConcM.sync (.wait ⟨none, 0⟩ 0 false); pure 0) (fun _ => pure 7)))
     (some (.error .illegal))
 
 private def joinTests : IO Unit := do
@@ -165,16 +165,21 @@ private def joinTests : IO Unit := do
 
 /-- Audit #6: a futex wake wakes the waiters that the oracle picks, not the earliest ones. -/
 private def wakeTests : IO Unit := do
+  -- `p` is the start of a block at address 4096: its private key is `k`.
   let p : Ptr := ⟨some 0, 0⟩
-  let m : Mem := { waiters := #[(1, p), (2, p), (3, ⟨some 1, 0⟩)] }
+  let k : FutexKey := ⟨false, 4096⟩
+  let k' : FutexKey := ⟨false, 8192⟩
+  let blk : Block :=
+    { bytes := Array.replicate 4 (.int 0), align := 4, kind := .heap, live := true, addr := 4096 }
+  let m : Mem := { blocks := #[blk], waiters := #[(1, k), (2, k), (3, k')] }
   let woken := fun (n : Nat) (cs : List Nat) =>
-    (((Thread.futexWake p n cs).run m).run).map fun r => r.map fun (_, m') => (m'.woken, m'.waiters)
-  check "wake picks the first waiter" (woken 1 [0]) (some (.ok (#[1], #[(2, p), (3, ⟨some 1, 0⟩)])))
-  check "wake picks a later waiter" (woken 1 [1]) (some (.ok (#[2], #[(1, p), (3, ⟨some 1, 0⟩)])))
-  check "wake of two in either order" (woken 2 [1, 0]) (some (.ok (#[2, 1], #[(3, ⟨some 1, 0⟩)])))
+    (((Thread.futexWake k n cs).run m).run).map fun r => r.map fun (_, m') => (m'.woken, m'.waiters)
+  check "wake picks the first waiter" (woken 1 [0]) (some (.ok (#[1], #[(2, k), (3, k')])))
+  check "wake picks a later waiter" (woken 1 [1]) (some (.ok (#[2], #[(1, k), (3, k')])))
+  check "wake of two in either order" (woken 2 [1, 0]) (some (.ok (#[2, 1], #[(3, k')])))
   check "a wake never wakes a waiter at another futex" (woken 5 [2, 2, 2])
-    (some (.ok (#[1, 2], #[(3, ⟨some 1, 0⟩)])))
-  -- The scheduler asks the oracle for one choice per woken waiter: 2 options, then 1.
+    (some (.ok (#[1, 2], #[(3, k')])))
+  -- The scheduler asks the oracle for one choice per woken waiter at `p`'s key: 2 options, then 1.
   let s : Sched.State Unit Unit := { main := .done, kids := #[], mem := m, step := 0, trace := #[] }
   check "wake choices" ((s.chooseWake (fun _ => 1) p 2).1, (s.chooseWake (fun _ => 1) p 2).2.trace)
     ([1, 0], #[2, 1])
@@ -188,7 +193,7 @@ private def futexReadTests : IO Unit := do
     ConcM.liftMem (store 4 p (0#32))
     let tid ← spawnT p
     if joinFirst then ConcM.sync (.join tid)
-    let _ ← ConcM.sync (.wait p 5)
+    let _ ← ConcM.sync (.wait p 5 false)
     unless joinFirst do ConcM.sync (.join tid)
     pure 7
   let run := fun (o : Nat) (joinFirst : Bool) =>

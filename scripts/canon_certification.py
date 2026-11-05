@@ -1,8 +1,9 @@
-"""Check native debug-ID bindings and audit the generic semantics theorem separately.
+"""Check native debug-ID bindings and audit the generic semantics theorems separately.
 
 gen-integrity supplies every actual translation. Its compact native reports remain
-TRU-02 evidence: they are never per-case kernel proofs. The generic CanonSem theorem
-is checked once through the existing fresh Assurance replay, without a success cache.
+TRU-02 evidence: they are never per-case kernel proofs. The generic Canon theorems
+(`CanonSem`: debug-definition IDs; `Renumber`: instruction-ID renaming) are checked once
+through the existing fresh Assurance replay, without a success cache.
 """
 import hashlib
 import json
@@ -14,9 +15,15 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 PARSE_JSON = runpy.run_path(str(Path(__file__).with_name("normalize-generated.py")))["parse_json"]
-MODULE = "Air2Lean.CanonSem"
-GENERIC_ROOTS = frozenset(f"Air2Lean.DebugIds.{name}" for name in (
-    "execFunc_mapDebugArray", "erase_mapDebugArray", "execFunc_of_body_erase_eq", "execFunc_erase"))
+# Each generic module with the theorem roots the certificates rely on.
+GENERIC_ROOTS = {
+    "Air2Lean.CanonSem": frozenset(f"Air2Lean.DebugIds.{name}" for name in (
+        "execFunc_mapDebugArray", "erase_mapDebugArray", "execFunc_of_body_erase_eq", "execFunc_erase")),
+    "Air2Lean.Renumber": frozenset(f"Air2Lean.Renumber.{name}" for name in (
+        "execFunc_rename", "run_cellFree", "runOn_cellFree", "zipRen_inj",
+        "execFunc_rename_run", "execFunc_rename_runOn")),
+}
+MODULES = tuple(GENERIC_ROOTS)
 
 
 def native_binding(data):
@@ -36,60 +43,68 @@ def native_binding(data):
     return report
 
 
-def generic_artifact():
-    path = ROOT / ".lake/build/lib/lean/Air2Lean/CanonSem.olean"
+def generic_artifact(module):
+    path = ROOT / ".lake/build/lib/lean" / (module.replace(".", "/") + ".olean")
     with path.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
     return dict(olean=str(path.resolve()), olean_sha256=digest)
 
 
-def check_audit(report, artifact):
-    """Require the actual generic roots and their freshly replayed CanonSem artifact."""
+def generic_artifacts():
+    return {module: generic_artifact(module) for module in MODULES}
+
+
+def check_audit(report, artifacts):
+    """Require the actual generic roots and the freshly replayed artifact of every generic module."""
     replay = report.get("kernel_replay", {})
     freshness = report.get("freshness", {})
     if (report.get("status") != "pass" or report.get("violations") != []
-            or report.get("modules") != [MODULE] or replay.get("status") != "pass"
+            or report.get("modules") != list(MODULES) or replay.get("status") != "pass"
             or replay.get("rejected") != [] or replay.get("reused") != []
             or freshness.get("lake_trace_check", {}).get("status") != "up-to-date"):
         raise ValueError("generic canonicalization audit did not freshly accept its complete scope")
     theorems = report.get("theorems", [])
-    if any(theorem.get("allowed") is not True or theorem.get("module") != MODULE for theorem in theorems):
+    if any(theorem.get("allowed") is not True or theorem.get("module") not in GENERIC_ROOTS
+           for theorem in theorems):
         raise ValueError("generic canonicalization audit contains a rejected or out-of-scope theorem")
-    for name in sorted(GENERIC_ROOTS):
-        roots = [theorem for theorem in theorems if theorem.get("name") == name]
-        nodes = [node for node in report.get("nodes", []) if node.get("name") == name]
-        if (len(roots) != 1 or roots[0].get("module") != MODULE
-                or len(nodes) != 1 or nodes[0].get("module") != MODULE
-                or nodes[0].get("kind") != "theorem"):
-            raise ValueError(f"missing actual generic canonicalization root: {name}")
-    artifacts = [row for row in freshness.get("artifacts", []) if row.get("module") == MODULE]
-    if len(artifacts) != 1:
-        raise ValueError("generic canonicalization replay did not bind its actual artifact")
-    recorded = Path(artifacts[0].get("olean", ""))
-    if not recorded.is_absolute():
-        recorded = ROOT / recorded
-    if (recorded.resolve() != Path(artifact["olean"])
-            or artifacts[0].get("olean_sha256") != artifact["olean_sha256"]):
-        raise ValueError("generic canonicalization replay did not bind its actual artifact")
+    for module, names in GENERIC_ROOTS.items():
+        for name in sorted(names):
+            roots = [theorem for theorem in theorems if theorem.get("name") == name]
+            nodes = [node for node in report.get("nodes", []) if node.get("name") == name]
+            if (len(roots) != 1 or roots[0].get("module") != module
+                    or len(nodes) != 1 or nodes[0].get("module") != module
+                    or nodes[0].get("kind") != "theorem"):
+                raise ValueError(f"missing actual generic canonicalization root: {name}")
+    for module in MODULES:
+        rows = [row for row in freshness.get("artifacts", []) if row.get("module") == module]
+        if len(rows) != 1:
+            raise ValueError("generic canonicalization replay did not bind its actual artifact")
+        recorded = Path(rows[0].get("olean", ""))
+        if not recorded.is_absolute():
+            recorded = ROOT / recorded
+        if (recorded.resolve() != Path(artifacts[module]["olean"])
+                or rows[0].get("olean_sha256") != artifacts[module]["olean_sha256"]):
+            raise ValueError("generic canonicalization replay did not bind its actual artifact")
 
 
 def audit_certificates(work):
-    artifact = generic_artifact()
+    artifacts = generic_artifacts()
     environment = dict(os.environ)
     environment["AIR2LEAN_REPLAY_JOBS"] = environment.get("AIR2LEAN_JOBS", "1")
     path = work / "audit.json"
-    arguments = [str(ROOT / "scripts/assumptions.sh"), "--no-build", "--module", MODULE,
+    arguments = [str(ROOT / "scripts/assumptions.sh"), "--no-build",
+                 *(argument for module in MODULES for argument in ("--module", module)),
                  "--output", str(path)]
     start = time.monotonic()
-    # No --replay-cache: the generic artifact and its non-toolchain closure replay now.
+    # No --replay-cache: the generic artifacts and their non-toolchain closure replay now.
     result = subprocess.run(arguments, cwd=ROOT, env=environment, capture_output=True,
                             text=True, timeout=7200)
     if result.returncode != 0:
         raise ValueError("generic canonicalization Assurance audit failed\n" + result.stdout + result.stderr)
-    check_audit(json.loads(path.read_text()), artifact)
-    if generic_artifact() != artifact:
+    check_audit(json.loads(path.read_text()), artifacts)
+    if generic_artifacts() != artifacts:
         raise ValueError("generic canonicalization artifact changed during its audit")
-    print(f"canonicalization: generic CanonSem fresh Assurance audit/replay "
+    print(f"canonicalization: generic CanonSem/Renumber fresh Assurance audit/replay "
           f"{time.monotonic() - start:.3f}s", flush=True)
 
 
@@ -136,4 +151,4 @@ def certify(translator, indexed_cases):
         raise ValueError("selected cases did not change any actual debug definition ID")
     audit_certificates(translator.work)
     print(f"canonicalization: {cases} TRU-02 native bindings, {functions} functions; "
-          "generic CanonSem kernel replay checked separately", flush=True)
+          "generic CanonSem/Renumber kernel replay checked separately", flush=True)

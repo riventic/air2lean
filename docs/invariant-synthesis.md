@@ -1,7 +1,8 @@
 # Invariant synthesis (P09)
 
-Status: design, approved as part of the end state by the maintainer on 2026-10-14. Nothing here is
-implemented yet. Register entry: `assurance/register/P09.md`. Spike:
+Status: design, approved as part of the end state by the maintainer on 2026-10-14. The first
+generator slice (counted loops, stage S2) is implemented: see "Implemented: counted loops" below.
+Register entry: `assurance/register/P09.md`. Spike:
 `tests/roadmap/invariant-synthesis/Vacuity.lean` (kernel-checked, not in CI).
 
 ## Goal
@@ -490,6 +491,197 @@ Each stage is a permanent part of the end state, and none adds a shim.
 
 P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
 the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
+
+P09-E4's engine part is implemented (`docs/proof-automation.md`, §Loops): `@[fsym_inv]` registers
+`B.inv`, `B.meas` and the exit post `B.post` of a loop body `B`. The exit post is registered
+because the invariant alone forgets the exit's label and test, which a translated caller matches
+on, and `fsym` infers no strongest post at a loop's exits (P09-E2).
+
+### Implemented: counted loops (S2, first slice)
+
+`air2lean-invgen` (`Air2Lean/InvGen.lean`, executable `Air2Lean/InvGenMain.lean`, lake target
+`air2lean-invgen`) is the generator of decision 5: a compiled Lean program in this package, with
+no `syntax`, `macro`, `elab`, tactic or command. `air2lean-invgen MODULE NAMESPACE --source SRC -o FILE`, run
+under `lake env`, imports the translated module (and `ZigLean.Sep.Full.AutoAll`, for the
+pruning walks of S2f), finds every `Zig.loop body again` in its
+definitions and reads the body as the elaborated term that `fsym` walks: a symbolic run over
+`bind`, `pure`, `get`, `modify`, `ite`, the lifted `Zig.load`/`Zig.store`/`Zig.add`/`Zig.sub`/
+`Zig.intCast`, the unsigned comparisons and `!=`, `Zig.tick` and a `match` on a known exit gives
+each path of one iteration with its guard, its result, the adds and subtractions it ran and its
+changes to the locals and to the cells behind pointer parameters. This reading only proposes; it
+is not a semantics anything relies on, and `fsym` decides inside the generator which of its
+candidate facts stay (Houdini pruning, S2f below). It writes `Inv.lean`: a first line
+`-- air2lean-invgen: {…}` recording the generator's revision (its Lean version and the SHA-256 of
+each of its modules, as `translator_revision%` records the translator's), the inputs it read (the
+translated module's source, `--source`, with its SHA-256), the module, its namespace and, per
+loop, the family or why the loop has none; then plain `def`s. A module with no loop, or a loop
+body outside the given namespace, is an error. `scripts/invgen.py check|write` regenerates every
+committed `Inv.lean` (its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right
+after `gen`, so a retranslation regenerates the invariants with it.
+The record also holds the SHA-256 of the rest of the file. `scripts/gen-integrity.py invgen`
+(preflight, also without a translator) checks each target's record against the checkout without
+running Lean: a changed generator module, toolchain or input makes the file stale, a hand edit
+below the record or a record of another module (or of another generator) fails, and so does a
+record outside the targets. (The record's `loops` summary, with the pruning decisions, is not
+hashed: an edit there changes no definition.) The `invgen` regen step still always runs the
+generator: a runtime (`ZigLean`) change can change how an unchanged translation elaborates and
+which candidates `fsym` prunes, which the record does not hash (hashing the runtime would mark
+every `Inv.lean` stale at every runtime change). So a library change can make a committed
+`Inv.lean` stale without `gen-integrity.py invgen` noticing; `scripts/invgen.py check` (the
+`invgen` regen step, and each fixture's `check.sh`) finds it.
+
+The slice's family is the **counted loop** (widened in S2c, below): one repeating path, guarded by an unsigned `x < b`
+(`b` a local the loop does not write, a loop parameter or a literal), that adds 1 to the local
+`x`, adds a constant `cₖ` to each cell `*pₖ` it writes (an unsigned word behind a loop
+parameter), writes no other local and runs no add other than partial sums of these; and exit
+paths, guarded by `¬ x < b`, that touch no memory and no local. For the loop body `F.loopN` the
+generator writes `F.loopN.inv params s0 v₀ … s` (the other locals pinned to the entry locals
+`s0`, `s0.x ≤ x ≤ b`, each cell `vₖ + cₖ * (x - s0.x)` and the no-overflow fact
+`vₖ + cₖ * (b - s0.x) < 2 ^ w` of its checked adds, and `plain` when the body ticks) and
+`F.loopN.meas params s := b - x`. The invariant needs `s0.x ≤ b` at entry: the client
+establishes it (a loop entered past its bound is not an instance). Every other loop gets no definition and the reason (a nested
+loop, a call, a signed test, a second test, a cell at an offset, an increment that is not a
+constant, an uncovered add, a literal that wraps, a parameter named like a generated binder, …): a
+proof that needs it does not build.
+
+First client: the inner loop `pairs.loop14` of `tests/roadmap/loop-tactics/nested` (the
+translated `while (j < i) : (j += 1) acc.* += 1`). Its hand-written `innerI` and measure are
+deleted; `Proof.lean` imports the committed `Nested/Inv.lean` and uses `pairs.loop14.inv` and
+`pairs.loop14.meas` with the same `fsym` walks, and the theorem it proves (`inner_loop`, and with
+it `pairs_total`) is unchanged. The hand step and loop lemmas around them (`inner_step`,
+`inner_loop`) remain until `@[fsym_inv]`; engine ledger row P09-E4 records their deletion.
+`nested/check.sh`:
+
+* regenerates `Inv.lean` from the committed translation and compares it byte for byte
+  (`lake exe air2lean-invgen`, as `scripts/invgen.py check` does);
+* checks the proof against it;
+* checks three seeded mutants of the generated file (a wrong cell relation, a dropped bound `x ≤ b`,
+  a measure that does not decrease): each still elaborates, and the proof then fails with an
+  elaboration error inside the inner loop's theorems.
+
+The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
+for it, and its invariant (`outerI`, over the library sum `tsum`) stays hand-written (deletion
+plan: engine ledger row P09-E4).
+
+### Implemented: the counted family widened (S2c)
+
+The counter may go up or down by 1 (`Zig.add`/`Zig.sub`), under any unsigned test of it that
+moves towards the bound: `x < b` and `x <= b` going up, `x > b` and `x >= b` going down, and
+`x != b` either way, with the counter on either side of the test and either branch of an order
+test repeating (`¬ x < b` repeating is `x >= b`; `==` is outside the family, as are a `>= 0` and a
+`<= maxInt` test, which hold until the step wraps). As in S2, the invariant holds at entry only for
+a counter that starts on the repeating side of its exit value or at it; the client proves that.
+The bound may also be the length of a slice parameter (`p.len`) or a cell the loop only reads
+(`*p`, read in every iteration); a read-only cell is owned at its entry value `vₖ`, and a measure
+with it as bound takes `vₖ`. The invariant bounds the counter between its entry value and the
+value it exits at; for `<=` and `>=` that value is one past the bound, so the invariant carries the
+fact that the counter's step there does not wrap (`b + 1 < 2 ^ w`, resp. `1 ≤ b`): `upLe(n)` with
+`n` the largest `u32` panics, and its proof must exclude it. Each written cell is
+`vₖ + cₖ * d` (`d` the iterations so far: `x - x₀` going up, `x₀ - x` going down) with the
+no-overflow fact `vₖ + cₖ * n < 2 ^ w` (`n` all iterations); the measure is the iterations left.
+
+Client: `tests/roadmap/loop-tactics/counted`, the retained Zig 0.17.0 AIR of `counted.zig`, one
+exported function per shape (`down`: `i > 0`, `i -= 1`, `acc.* += 3`; `upNe`; `upLe`; `lenCount`
+over `xs.len`; `readBound` over `lim.*`). `Proof.lean` proves each loop's body step and loop
+(`F_step`, `F_loop`, the pattern of `nested`, until `@[fsym_inv]`) and the function's total
+triple (`F_total`, by `fsym [F_loop]`) with the generated invariant and measure and no hand
+invariant. No other loop in the corpus has these shapes in the full-state logic: the translated
+counted loops of `Proofs/` (`sum`, `find`, `sumDigits`, `advance`, `totalWeightedTardiness`,
+`dot`) are pure-layer loops (`Zig.loop_spec` over `M`, not `MM` over memory) whose invariants are
+prefix sums over array items, and `Proofs/Slices/Sep.lean`'s `reverse` swaps items (S2e).
+`check.sh` (shared with `nested` through `../invgen-fixture.sh`) regenerates and compares the
+translation and `Inv.lean`, checks the proof, and runs the seeded mutants of `mutants.json`
+(`../invgen_mutants.py`): a wrong down-counting relation, a dropped `x ≤ b` under `!=`, a dropped
+no-wrap fact of a `<=` counter, a measure that does not decrease over a slice length and a
+dropped read-only cell each fail inside their loop's theorems.
+
+Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (fail closed):
+
+* `pairAt` writes `acc[1]` through `Zig.ptrProject p (·.elem 8 1)`: "a pointer projection (a cell
+  at an offset)". `fsym` forms such a pointer from an owned array (`FTotalTriple.arr_ptrProject`),
+  so the invariant needs the array atom `arr p vs` with item updates, not separate `pts` cells.
+  Under an invariant that owns `arr p [w₀, w₁]`, `fsym` walks the body (item `0` through `p`
+  itself by `FTotalTriple.arr_load_zero`/`arr_store_zero`), but the stored list stays
+  `([w₀, w₁].set 0 x).set (1#64).toNat y` and does not match the invariant's list: engine ledger
+  row #atom-args-normal-form.
+* `tri` adds the counter to its cell (`acc.* += i`): "a cell that does not go up by a constant".
+  The library sum `tsum n g` (`ZigLean/Sep/Full/TSum.lean`, `g u` over `u < n`) makes the
+  invariant linear, `v + (tsum n g - tsum i g) = v₀ + (tsum n g - tsum i₀ g)` with `g = fun u => u`,
+  and `fsym` walks its step: the arithmetic relates `tsum x.toNat g` to `tsum (i.toNat + 1) g`
+  by the congruence of atoms (`docs/proof-automation.md`, closed ledger row
+  #arith-atom-congruence). The generator does not emit it yet; `nested`'s hand outer invariant
+  `outerI` has this form and `fsym` walks it without glue.
+
+### Implemented: Houdini pruning (S2f)
+
+The reading proposes candidate facts, and `fsym` decides which of them stay (`houdini` in
+`Air2Lean/InvGen.lean`). Every candidate holds at loop entry (`s = s0`, each cell at its entry
+value) or is an entry obligation of the family that the client discharges:
+
+* the pinned locals;
+* the counter on either side of its entry value (`x₀ ≤ x` and `x ≤ x₀`);
+* the counter on the repeating side of its exit value (the family's entry condition);
+* the no-wrap and no-overflow facts (constraints on the entry values only, so no walk can drop
+  them);
+* each written cell counted both up and down from its entry value (`v = vₖ + cₖ * (x - x₀)`
+  and `v = vₖ + cₖ * (x₀ - x)`; a cell that goes up by `0` keeps both, so it gets only the one
+  of the reading's direction).
+
+So the reading no longer chooses the side of the counter or the direction of a cell's count;
+the checker does. Pruning works in four steps:
+
+1. The generator writes a check (`Cand.check`): each kept candidate as a definition
+   `F.loopN.candᵢ`, the invariant over them, the measure, and one iteration's step triple. From
+   the invariant, a repeating iteration ends in the invariant with a smaller measure, and an
+   exiting one ends in the invariant (in the counted family, an exit changes no local and no
+   memory).
+2. It elaborates the check with `Lean.Elab.process` in its own environment, with the opens of
+   the generated file. `InvGenMain` imports the translated module and
+   `ZigLean.Sep.Full.AutoAll`, so the step's proof is `unfold …; fsym` with `fsym.report` on:
+   `Auto.runReport`, the single entry point.
+3. It reads the report (P09-E1). A residual whose origin is the postcondition and whose goal is
+   a candidate's definition names that candidate: a candidate named as a definition stays folded
+   when `fsym` cannot prove it, while an inlined conjunct comes back split, over fresh names, and
+   could not be traced to its candidate. The walk drops those candidates.
+4. It repeats until a walk leaves no residual. That walk is a proof of the step with the kept
+   candidates, kernel-checked inside the generator.
+
+The following mean no invariant (fail closed), and the loop is recorded with the reason:
+
+* a residual that no candidate explains (the measure, an overflow, a missed atom);
+* any error besides those residuals' unsolved goals (an ill-typed candidate is such an error,
+  never a pruned fact);
+* a walk that does not give exactly one report.
+
+Each walk drops at least one candidate, so the fixpoint takes at most one walk per candidate,
+plus one. Each loop runs with its own heartbeat budget.
+
+The output is the definitions with the kept facts written out, in the S2c text. The proofs of
+the fixtures, which are the kernel checks that count, are unchanged. Every pruning decision is
+in the record: each loop's entry in `loops` lists, under `pruned`, the dropped fact, the walk
+that dropped it and its residual goal there. On every loop of `counted` and on `nested`'s inner
+loop, the first walk drops the wrong side of the counter and the wrong direction of the cell's
+count, and the second walk proves the step: about 20 s for both targets, with `fsym` in Lean's
+interpreter. Two seeded mutants of `counted/mutants.json` check the pruning against the proof:
+
+* `houdini-pruned-kept` puts the pruned `s0.i ≤ s.i` back into `down`'s invariant;
+* `houdini-kept-dropped` drops the kept `s.i ≤ s0.i`, which the proof needs.
+
+Each fails inside `down_step`. A generated invariant is only as strong as the candidates. A loop
+whose proof needs a fact that is not a candidate gets an invariant that is too weak, and its
+proof fails.
+
+What the slices do not have yet (next slices, sizes S < M < L):
+
+| Next | Content | Size |
+|---|---|---|
+| S2a | `@[fsym_inv]` (P09-E4), its own engine PR with a `sep-auto` regression: `fsym` applies `loop_measure` with a registered invariant and measure, and the generator emits the attribute. This deletes the step and loop lemmas (`inner_step`, `inner_loop`) | M |
+| S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
+| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; waits on #atom-args-normal-form), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
+| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
+| S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
+
+S3 to S6 follow the staging table above.
 
 The arena lane does not rewrite the arena invariant by hand in the meantime (coordinator,
 2026-10-14). Its work after #337, moving the macro steps into general `fsym` rules, is a

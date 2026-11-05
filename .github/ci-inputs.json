@@ -41,6 +41,10 @@
       "reuse": false,
       "note": "produces the generated-files artifact that every row installs: it runs in every CI run"
     },
+    "theorem-inventory": {
+      "reuse": false,
+      "note": "produces the generated-theorem-inventory artifact for the generated branch; every Lean build of the recorded runs runs in every CI run"
+    },
     "provenance": {
       "reuse": false,
       "note": "produces the generated-provenance artifact for the generated branch; binds HEAD (proof receipts)"

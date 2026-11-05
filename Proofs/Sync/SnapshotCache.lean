@@ -175,7 +175,8 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 /-! ## The protocol has the lock -/
 
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hok : ok (G t)) (_ : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .away) (hu : U G rX m)
+    (hok : ok (G t)) (_ : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .away)
+    (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m)
     (hs : L.Step t m m')
     (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) rX m' := by
@@ -639,7 +640,8 @@ theorem snapshot_ok {G : ThreadId → Gh} {m : Mem} {rp hL : Res}
     · rfl
     · exfalso
       have hh := hU.mid 1 (by rw [h10]; exact hm)
-      exact absurd (hiL.w.one 1 0 hh (by show L.ph (upd G 0 _ 0) = _; rw [upd_self]; rfl))
+      exact absurd (hiL.w.one 1 0 (LPh.held_of_holds hh)
+          (LPh.held_of_holds (by show L.ph (upd G 0 _ 0) = _; rw [upd_self]; rfl)))
         (by decide)
   · obtain ⟨-, ⟨-, h0, -⟩ | ⟨-, -, -, h1, -⟩⟩ := hU.shape
     · change (upd G 0 _ 0).2 = _ at h0; rw [upd_self] at h0; cases h0

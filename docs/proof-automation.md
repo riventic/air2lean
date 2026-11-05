@@ -69,7 +69,8 @@ calls with 20 to 30 facts.
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
   `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
-  `EUpd X Y` of one atom (§Views).
+  `EUpd X Y` of one atom (§Views), `@[fsym_inv]` a loop's invariant, measure and exit post
+  (§Loops).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -537,8 +538,10 @@ backend):
   lemmas about `U` and its shape, no per-field rule.
   `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
   caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
-  `Fits.wp_readAll` (over `FLock.Inv.loadAll`) is the read by the only thread that has not left
-  the lock: its bytes may span the protocol's rest, the lock's word and the free lock's resource.
+  The read by the only thread that has not left the lock (the whole `Tally` of
+  `Proofs/Threadsync/WaitGroup/Read.lean`) is `Fits.wp_loadWith` with `FLock.Inv.loadMem` (over
+  `FLock.Inv.loadAll`): its bytes may span the protocol's rest, the lock's word and the free lock's
+  resource; it takes them from the live block and needs only that the complete rest holds each.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
@@ -715,7 +718,21 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `minAtom`, `maxAtom`), so no split is explored for it. A case probe is not retried with a
    subset of the facts it failed with (`detProbe`; an undecided `min 4096 (2 ^ k)` of the page
    allocator's `alloc` was probed again for every side goal: 100k heartbeats, now 89k);
-5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
+5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`;
+6. unless the call is a probe, `omega` runs again with the relevant facts each normalized against
+   all the facts (`renormFacts`: a hypothesis is normalized once, against the facts before it, so
+   a conditional rewrite whose side condition a later fact proves applies only now: the loop test
+   `i < n` after an invariant's `tsum n g - tsum i g`) and with the **congruence of atoms**
+   (`atomCongr`): an atom that applies a function the solver does not read (a library sum
+   `tsum x.toNat g`, a caller's `f x.toNat`) to a term containing the side `l` of an equation
+   `l = r` of the facts, `l` itself an atom (`x.toNat = i.toNat + 1`, a counter's step), equals
+   the atom with `r` for `l`, in normal form (`tsum (i.toNat + 1) g` is
+   `tsum i.toNat g + g i.toNat`). Each fact rewrites an atom at most once, an equation to a
+   non-atom first, an alias (`y.toNat = x.toNat`) only else, so the rewrites end; at `Nat` and
+   `Int`; not in a probe. The library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`) has the
+   non-recursive normal forms for a counter-dependent invariant (`tsumSubLt` where the term is not
+   `0`, `tsum_sub_of_le`; a bound `n + 1` by `tsumSucc`, a numeral bound kept). Regression: `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean`
+   (the side goals of `counted.tri`'s step; ledger #arith-atom-congruence).
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
 atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
@@ -767,6 +784,59 @@ solved at the context's depth as before, where `omega` may assign them. The inte
 term. The kernel checks every theorem as before. The regression test `omega_proofs_shared`
 (`tests/roadmap/sep-auto/SepAuto/Arith.lean`) type-checks shared proofs, finds no duplicate node
 in them and no goal of `omega` kept, and proves a problem with an unknown.
+
+## Loops
+
+A loop `(Zig.loop (B xs) again).run s₀` that no rule is about is proved by its **registered
+invariant** (`@[fsym_inv]`, P09-E4, `docs/invariant-synthesis.md`): definitions next to the loop
+body `B`, named by their part.
+
+```lean
+@[fsym_inv] def fill.loop.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn := …
+@[fsym_inv] def fill.loop.meas (n : BitVec 32) (s : Locals) : Nat := n.toNat - s.i.toNat
+@[fsym_inv] def fill.loop.post (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (r : Exit × Locals) : FAssn := …
+```
+
+* `B.inv` is the invariant at the start of an iteration, `B.meas` the measure (total correctness:
+  it decreases at each repetition), `B.post` the assertion at the exit. Without `B.post` the
+  exit is the invariant with `again r.1 = false`, which forgets the exit's label and the exit
+  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks, when
+  it is added, that `B` is a defined program over locals (`StateT σ m ε`: `MM σ ε`, `CM Tgt σ ε`),
+  that the definition has no universe parameters, explicit parameters with names of their own,
+  the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
+  for the measure). A name is one definition, so there is one of each part per body.
+* `fsym` applies the backend's loop rule with them (`FTotalTriple.loop_measure`, `FTriple.loop`
+  in the partial logic, `FTTotalTriple.loop_measure` and `FTTriple.loop` in a thread,
+  `CTriple.loop` in the concurrent backend) as a rule (`tryRule`, `loopInvRule?`): its
+  precondition `B.inv … s₀` is planned in the state and the rest is the frame, which stays
+  outside the loop; its premise, the step `∀ s, T (B.inv … s) ((B xs).run s) (fun r => if again
+  r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a branch
+  of its own (in the context of the loop), then the walk goes on after the loop from `B.post`. The
+  body is inlined in the step as a generated call is (`unfoldCmd`: a generated program run from
+  a state, `StateT.run (B xs) s`).
+* The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
+  the body's arguments `xs`; the one named `s0` is the locals at loop entry `s₀` (the
+  generator's name; the registration rejects another parameter of a locals structure's type);
+  every other one (the value at a pointer at entry, `v0`) is an unknown that the plan of the
+  precondition assigns. A fact of the precondition that only the whole plan determines (an
+  existential's witness fixed by a later atom) is proved by arithmetic once it is determined.
+* An invariant that does not hold at the entry (no plan, or a plan that leaves an unknown), after
+  the views and the rebase of a literal pointer for the atoms its plan wanted, stops the walk at
+  the loop (report reason `invariant_not_established`, condition `loop_entry`). A registration
+  that does not fit the loop (no `B.meas` in a total logic, a parameter of `B.meas` or `B.post`
+  that `B.inv` does not have or has with another type) is an error. The step's side goals that the walk does
+  not prove are left to the caller, as a rule's are; a wrong invariant that holds at the entry
+  fails there, at the step's next iteration (regressions:
+  `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`: total, partial, in a thread, concurrent without
+  an exit post, an invariant the step does not keep, one that the entry does not establish, and
+  rejected registrations).
+* The registry is for a loop that no rule applies to: the caller's and the library's rules about
+  the loop are tried first, again with the facts of the state's atoms (`moreFacts`) and the views
+  their preconditions wanted; a rule that applies with side goals it leaves is taken instead (a
+  rule whose side goal the facts refute is not).
+* Not covered: a sequential loop inside a concurrent function's `ConcM.liftMem` command (it
+  stops with no rule), and a proof over a variable `FLogic` (no loop rule: the loop stays a
+  residual).
 
 ## Recursive groups
 
@@ -829,6 +899,8 @@ memory functions, and P03/native stack and producer integration remain open.
   A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
   the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
   `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
+* A loop: its invariant, measure and exit post as `@[fsym_inv] def B.inv`/`B.meas`/`B.post` next
+  to the body `B` (§Loops), not a lemma about the loop passed as `fsym [h]`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
@@ -855,8 +927,7 @@ memory functions, and P03/native stack and producer integration remain open.
 followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
 fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
 A reporting call suppresses the ordinary
-human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
-enabling a report.
+human-readable stop messages.
 
 Reporting currently formats origins during the walk. That work consumes heartbeats, including
 inside speculative rule probes, so enabling it can change where a finite-budget probe stops.
@@ -884,7 +955,8 @@ The schema is versioned by `schemaVersion` (currently `1`):
   (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
 * `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
   `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
-  or `match_without_discriminant`.
+  `match_without_discriminant`, or `invariant_not_established` (a loop's registered invariant
+  at its entry, condition `loop_entry`, §Loops).
 
 The JSON structure and discriminator strings are the API. The expression text follows Lean's
 pretty printer and its local names; it is display text, not an expression serialization. The

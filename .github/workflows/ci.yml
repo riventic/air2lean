@@ -35,7 +35,7 @@ jobs:
   # identical bytes required, and handed to every row and to preflight as the artifact
   # `generated-files`. Only a push-to-main run's artifact is what
   # .github/workflows/generated.yml publishes on the `generated` branch for this main commit;
-  # nothing is regenerated there (scripts/generated.py PRODUCERS names this job and `provenance`).
+  # nothing is regenerated there (scripts/generated.py PRODUCERS names this job, `provenance` and `theorem-inventory`).
   generated:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -185,6 +185,86 @@ jobs:
         with:
           name: generated-provenance
           path: ${{ runner.temp }}/generated-provenance
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Checkout unchanged by verification
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
+          python3 scripts/ci-reuse.py check-restricted
+
+
+  # The theorem inventory (assurance/theorem-inventory.json, docs/theorem-inventory.md): the runs
+  # planned from assurance/theorem-list.json, each a guarded Lean build of the theorem modules over
+  # the translation it checks (committed, or a golden swapped in), recorded and rendered twice on
+  # this tree, identical up to the runs' own timing, then checked in full. Uploaded as
+  # `generated-theorem-inventory` for the `generated` branch; no other job reads it.
+  theorem-inventory:
+    needs: [lake]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ci.md#1-input-hash-result-reuse ("reuse": false: this part always runs).
+      - name: Reuse a recorded result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_ROW: ${{ toJSON(matrix) }}
+        run: python3 scripts/ci-reuse.py decide --job theorem-inventory --row "$AIR2LEAN_ROW"
+
+      - name: Install elan
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          url=$(zig-patch/toml-get.sh '[ci.elan]' url)
+          sha256=$(zig-patch/toml-get.sh '[ci.elan]' sha256)
+          curl -fL --output elan.tar.gz "$url"
+          echo "$sha256  elan.tar.gz" | sha256sum -c -
+          tar -xzf elan.tar.gz
+          chmod +x elan-init
+          ./elan-init --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Download the Lake build
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lake-root
+          path: ${{ runner.temp }}/lake-root
+
+      - name: Unpack the Lake build
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: tar --zstd -xf "$RUNNER_TEMP/lake-root/lake-root.tar.zst"
+
+      - name: Regenerate the theorem inventory twice
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          export AIR2LEAN_BUILD_LOCK="$RUNNER_TEMP/air2lean-build.lock"
+          python3 scripts/generated.py produce --group theorem-inventory --out "$RUNNER_TEMP/generated-theorem-inventory"
+
+      - name: Theorem inventory regressions and full check
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          python3 -B tests/roadmap/theorem-inventory/test_inventory.py
+          python3 -B scripts/theorem-inventory.py check
+
+      - name: Upload the theorem inventory
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-theorem-inventory
+          path: ${{ runner.temp }}/generated-theorem-inventory
           if-no-files-found: error
           retention-days: 7
 
@@ -733,14 +813,14 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         run: python3 -B -m unittest discover -s tests/roadmap/tutorials -v
 
-      # Offline, over the committed Gen.lean files whose hashes it compares: every listed
-      # theorem has a current recorded check per translation, and no document labels a
-      # single-step or single-schedule theorem as holding under every schedule.
+      # Offline, over the committed list: every listed theorem exists, and no document labels a
+      # single-step or single-schedule theorem as holding under every schedule. The recorded check
+      # results are generated and checked by the `theorem-inventory` job.
       - name: Theorem inventory scope and check results
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' }}
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/theorem-inventory/test_inventory.py
-          python3 -B scripts/theorem-inventory.py check
+          python3 -B scripts/theorem-inventory.py check --list
 
       # V03: independent (non-Lean) structural validation of every committed golden AIR file,
       # then the stage trust report: each stage's class, premises, checkers and CI-run tests.
@@ -777,11 +857,6 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.py -v
           python3 -B scripts/mutation-map.py check
           python3 -B tests/roadmap/mutation-map/mutants.py
-
-      # P02: the report script surfaces Lean errors and open obligations (no Lean is run).
-      - name: Verification condition report script regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
-        run: python3 -B -m unittest discover -s tests/roadmap/vcs -p 'test_*.py' -v
 
       # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
       - name: Build-mode qualification records
@@ -1036,7 +1111,7 @@ jobs:
       # the translator rejects).
       - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe libdir-spoof
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe libdir-spoof S6-futex-primitive
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR
@@ -1144,7 +1219,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Unroll Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
+          lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Conc Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
           lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
 
       - name: Allocator vocabulary (regions, ownership facts, normalization)
@@ -1318,13 +1393,6 @@ jobs:
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
 
-      - name: Generic sync specifications (futex, mutex, event, wait group, condition)
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/thread-specs"
-          lake build ZigLean.Conc.Spec.Sys ZigLean.Conc.Spec.Futex ZigLean.Conc.Spec.FutexToy ZigLean.Conc.Spec.Mutex ZigLean.Conc.Spec.MutexToy ZigLean.Conc.Spec.IoMutex ZigLean.Conc.Spec.Event ZigLean.Conc.Spec.Count ZigLean.Conc.Spec.WaitGroup ZigLean.Conc.Spec.Cond 2>&1 | tee "$RUNNER_TEMP/thread-specs/build.log"
-
       # Generated loops and recursion in the full-state logic (Full/Loop + fsym); the loop and
       # range scenarios of the retired templates are sep-auto regressions (Total, Arith).
       - name: Generated loop, nested-loop and recursion proofs
@@ -1337,6 +1405,8 @@ jobs:
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
+          # Retained AIR of one loop per counted shape, with generated invariants (P09).
+          bash tests/roadmap/loop-tactics/counted/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Counted.log"
 
       # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
       # every Mem.FSeqPlain memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
@@ -2546,24 +2616,17 @@ jobs:
           python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native.json" \
             --committed "tests/roadmap/bitops-native/evidence/${{ matrix.zig }}.json"
 
-      # Check source-linked VCs against the pointer translation that check.sh built.
-      - name: Build optional verification conditions
+      # Build the modules the verification-condition fixtures (tests/roadmap/vcs) import, against
+      # the translations that check.sh built.
+      - name: Build verification condition dependencies
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           mkdir -p "$RUNNER_TEMP/vcs"
-          lake build ZigLean.VC ZigLean.VecMem ZigLean.Sep.Full.Strength Proofs.Pointers.Gen Proofs.Basic.Gen \
+          lake build ZigLean.Sep.Full.AutoAll ZigLean.Sep.Full.Strength Proofs.Pointers.Gen Proofs.Basic.Gen \
             Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
-
-      - name: Result verification condition regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          lake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Result.log"
 
       - name: Memory verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
@@ -2573,9 +2636,9 @@ jobs:
           cd "$tree"
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
-      # Reflect committed loop-free translations into the VC AST and walk memory contracts;
-      # loops must request invariants.
-      - name: Automatic verification condition extraction regressions
+      # Contracts of committed loop-free translations: their obligations are what fsym's walk
+      # leaves (pinned goals and reports); loops are left as invariant requests.
+      - name: Generated-code verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
@@ -2584,18 +2647,6 @@ jobs:
           lake env lean -R tests/roadmap/vcs -o "$RUNNER_TEMP/vcs/Extract.olean" tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
           # The strength log of its memory contracts (tests/roadmap/strength-log).
           LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
-
-      - name: Verification condition report regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          python3 -B scripts/vc-report.py --json \
-            --import Proofs.Basic.Gen --import Proofs.Pointers.Gen --import Proofs.Errors.Gen \
-            --namespace Basic --namespace Pointers --namespace Errors \
-            tests/roadmap/vcs/Extract.lean > "$RUNNER_TEMP/vcs/report.json"
-          diff -u tests/roadmap/vcs/report.json "$RUNNER_TEMP/vcs/report.json"
 
       # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
       # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
@@ -2684,7 +2735,7 @@ jobs:
           python3 scripts/check-tree.py create .lake/check-tree/0.15.2-darwin \
             --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-darwin.lean
           cd .lake/check-tree/0.15.2-darwin
-          lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff
+          lake build Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Mutex Proofs.Threadsync.WaitGroup Proofs.Threadsync.Handoff
           # The cross-target tutorial holds for this translation too, and the Linux constant fails.
           lake env lean tutorials/cross-target/Main.lean
           lake env lean tutorials/cross-target/Solution.lean
@@ -2702,7 +2753,7 @@ jobs:
           python3 scripts/check-tree.py create .lake/check-tree/0.15.2-linux-aarch64 \
             --replace Proofs/Threadsync/Gen.lean=tests/golden/0.15.2/threadsync/Gen-linux-aarch64.lean
           cd .lake/check-tree/0.15.2-linux-aarch64
-          lake build Proofs.Threadsync.Lock Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Handoff Proofs.Threadsync.Mutex
+          lake build Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Handoff Proofs.Threadsync.Mutex
 
       # 0.17.0 translates `Io.Event` to the same code and names as 0.16.0 (tests/golden/0.17.0/
       # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too. It inlines
@@ -3680,7 +3731,7 @@ jobs:
   # cancelled job fails it too). The split into rows must not let a missing job pass a merge.
   all-checks:
     if: always()
-    needs: [generated, provenance, preflight, lake, zig-air, test, macos, aarch64-linux, build-modes-aarch64-linux, bitops-native-arm]
+    needs: [generated, provenance, theorem-inventory, preflight, lake, zig-air, test, macos, aarch64-linux, build-modes-aarch64-linux, bitops-native-arm]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

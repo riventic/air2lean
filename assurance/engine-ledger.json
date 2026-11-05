@@ -51,7 +51,7 @@
    "progress": "Enroll complete golden families through existing retranslation cases; Threadsync and Sync use no per-case selector.",
    "request": "Every supported golden family becomes an unconditional case family, built side by side with disjoint generated APIs.",
    "workaround_sites": ["examples/threadsync/all-cases", "examples/sync/all-cases"],
-   "deletion_plan": "When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined/if_decl with their remaining users. Preserve complete output/import coverage and exact retranslation checks."
+   "deletion_plan": "When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined with its remaining users. Preserve complete output/import coverage and exact retranslation checks."
   },
   {
    "id": "1",
@@ -141,7 +141,7 @@
    "title": "engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)",
    "status": "open",
    "requester": "arena lane",
-   "progress": "open",
+   "progress": "arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)",
    "request": "engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)",
    "workaround_sites": [],
    "deletion_plan": "",
@@ -222,10 +222,10 @@
    "title": "unroll_solo: concrete counterexample runs",
    "status": "open",
    "requester": "arena lane",
-   "progress": "open",
+   "progress": "L16: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`; ListsPage rewrites by `Zig.loop.eq_1`). Remaining gap, why the row stays open: the unfold lists name generated definitions by hand (`heap_ArenaAllocator_alloc.loop21`, `heap_ArenaAllocator_deinit.loop9`), so a retranslation that renumbers loops needs the lists updated (it fails closed: the kernel gets stuck). Wanted: a name-independent way to unfold a run's loop-running definitions without a new tactic (e.g. a translator-emitted per-module equation set), which would also serve `unroll_sched`'s retirement",
    "request": "`unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": ["tests/roadmap/alloc-arena/ArenaObstruction.lean", "tests/roadmap/proof-tools/Unroll.lean"],
+   "deletion_plan": "The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes."
   },
   {
    "id": "10",
@@ -274,21 +274,22 @@
    "title": "One fsym entry for other front ends",
    "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry",
+   "progress": "Auto.run is the shared entry of evalFsym (and was memVc's until vc_gen was retired), including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry",
    "request": "One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId)` = what `evalFsym` does after elaborating its args (intros, `reduceProjs` of hyps, `withRunCaches`, `arithSimpCtx`, `walk … 400`); `evalFsym` calls it. `vc_gen` (ZigLean/VC/Extract.lean `memVc`) then calls it instead of re-doing `withRunCaches`/`arithSimpCtx`/`walk` and missing intros/reduceProjs",
    "workaround_sites": [],
    "deletion_plan": "",
-   "note": "ZigLean/VC/Extract.lean now calls Auto.run; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity"
+   "note": "vc_gen (ZigLean/VC/Extract.lean) called Auto.run until it was retired (L15): memory VCs are now fsym's residuals directly; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity"
   },
   {
    "id": "15",
    "title": "Quiet stop",
    "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "fsym.quiet suppresses the human stop messages; memVc enables it only around Auto.run, so vc_gen refuses an unexecuted command with its own error and no duplicate fsym info (pinned by vcs/Memory.lean). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON",
+   "progress": "Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON; a reporting walk emits no human stop message. The fsym.quiet option was removed",
    "request": "Quiet stop: at \"no rule for the command\" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason",
    "workaround_sites": [],
-   "deletion_plan": ""
+   "deletion_plan": "",
+   "note": "vc_gen and its memVc were retired (L15), and tests/roadmap/vcs/Memory.lean now pins fsym's own reports. fsym.quiet then had no caller outside its test and was removed (L19): a reporting walk emits no human stop message, and tests/roadmap/sep-auto/SepAuto/Report.lean captures the stop messages it checks"
   },
   {
    "id": "16",
@@ -306,7 +307,7 @@
    "status": "open",
    "requester": "one-logic-vc",
    "progress": "open",
-   "request": "(nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (vc_gen clears `hc`, equivalent). A mode that leaves `φ` unsplit gives one obligation and one walk",
+   "request": "(nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (equivalent to `⊢ φ`). A mode that leaves `φ` unsplit gives one obligation and one walk",
    "workaround_sites": [],
    "deletion_plan": ""
   },
@@ -925,9 +926,9 @@
   {
    "id": "69d",
    "title": "Conc/Spec/MutexToy: witness of the legacy MutexSpec",
-   "status": "open",
+   "status": "closed",
    "requester": "sync lane",
-   "progress": "plan recorded PR2",
+   "progress": "DONE (L21): deleted with ZigLean/Conc/Spec and MutexSpec. Its relaxed-unlock counterexample against MutexImpl is row mutex-impl-relaxed-witness.",
    "request": "`Conc/Spec/MutexToy`: witness/counterexample of legacy `MutexSpec` (legacy-to-retire). PLAN: delete together with MutexSpec (docs/proof-framework.md row); restate relaxed-unlock counterexample against MutexImpl if wanted",
    "workaround_sites": [],
    "deletion_plan": "delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted.",
@@ -960,9 +961,9 @@
    "status": "open",
    "requester": "os lane",
    "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
-   "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed",
+   "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the full-state futex rules (the `Io` futex slots as `CTriple` rules when those land, docs/thread-specs.md), then the module is absorbed",
    "workaround_sites": [],
-   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
+   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module."
   },
   {
    "id": "72",
@@ -1009,11 +1010,10 @@
    "title": "Read of a read-shared io prefix in a protocol: hand copies of wp_io",
    "status": "open",
    "requester": "critic run 15 (coordinator)",
-   "progress": "PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule; SemCounter's copy is gone with its migration (PR648, `wp_readRest`). LEFT: the copy in the legacy-layer file RwLock (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`.",
+   "progress": "PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule; SemCounter's copy is gone with its migration (PR648, `wp_readRest`). WaitGroup (#640) uses `FLock.Fits.wp_hold`; its legacy holder copies `wp_cntLoad`/`wp_cntStore` are gone. LEFT: the copy in the legacy-layer file RwLock (`ZigLean.Conc` logic, legacy_users), and the legacy holder copy Semaphore `wp_cnt`.",
    "request": "**`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).",
    "workaround_sites": [
     "Proofs/Sync/RwLock.lean",
-    "Proofs/Threadsync/WaitGroup.lean",
     "Proofs/Sync/Semaphore.lean"
    ],
    "deletion_plan": "when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone."
@@ -1224,10 +1224,10 @@
    "title": "@[fsym_inv] loop-invariant registry",
    "status": "open",
    "requester": "P09",
-   "progress": "pending maintainer approval",
+   "progress": "Approved by the maintainer 2026-11-05 (this engine case only: no new tactic, no new judgment). Engine done (lane E4): the `@[fsym_inv]` registry of `B.inv`/`B.meas`/`B.post` (ZigLean/Sep/Full/AutoAttr.lean) and the loop case of `walkCore` (`loopInvRule?` in Auto.lean): at a loop no rule is about, the backend's loop rule (`FTotalTriple.loop_measure`, `FTriple.loop`, the thread forms, `CTriple.loop`) applied by `tryRule` with the registered definitions, unknowns planned at entry, frame inferred, the body's step walked as a goal of its own (regression tests/roadmap/sep-auto/SepAuto/LoopInv.lean; docs/proof-automation.md, §Loops). The exit post is registered too (`B.post`): without one the exit is the invariant with `again r.1 = false`, which forgets the exit's label and test (the strongest post at the exits is P09-E2). Open: the generator emits `attribute [fsym_inv]` and a `B.post`, and the workaround sites' hand lemmas are deleted.",
    "request": "`@[fsym_inv]` loop-invariant registry: apply the backend's loop rule with a registered invariant and measure; parameters by the planner, frame inferred",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": ["tests/roadmap/loop-tactics/nested/Proof.lean", "tests/roadmap/loop-tactics/counted/Proof.lean"],
+   "deletion_plan": "The hand step and loop lemmas around the generated `F.loopN.inv`/`F.loopN.meas` (nested: `inner_step`, `inner_loop`; counted: `down_step`/`down_loop` and the same pair for `upNe`, `upLe`, `lenCount`, `readBound`: `loop_measure` applied by hand, the entry entailment and the exit repackaging). Delete when `air2lean-invgen` emits `@[fsym_inv]` on its definitions and `fsym` applies the loop rule itself, so the callers' walks need no `fsym [inner_loop]`/`fsym [F_loop]` argument (docs/invariant-synthesis.md, S2a); the mutants then name the callers' theorems. Nested's hand outer loop (`outerI`, `outerPost`, `outer_step`, `outer_loop`; `fsym` walks its step since #arith-atom-congruence): delete when the generator also emits the counter-dependent outer invariant over `tsum` with a summary of the generated inner loop (S2c′) and `@[fsym_inv]` applies its loop rule."
   },
   {
    "id": "P09-E5",
@@ -1236,6 +1236,26 @@
    "requester": "P09",
    "progress": "pending maintainer approval",
    "request": "`@[fsym_upd]` ghost-update registry keyed by heads, tried at returns; generalizes caller updates (9f); replaces #64–#67 workarounds with the bump-ledger family",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "arith-atom-congruence",
+   "title": "arithmetic congruence of library atoms (counter-dependent sums)",
+   "status": "closed",
+   "requester": "invariant-synthesis (P09, S2c′: `counted.tri`, `nested`'s outer loop)",
+   "progress": "DONE (E5, 2026-11-05): `arithCore` runs `omega` again, unless a probe, with the relevant facts each normalized against all the facts (`renormFacts`: a conditional rewrite whose side condition a later fact proves, `tsum_sub_of_lt` under the loop test) and the congruence of atoms (`atomCongr`: an atom `f t` of a function the solver does not read, a constant or a local, with `t` containing the side `l` of a fact `l = r` that is itself an atom, equals `f t[r/l]` in `fsym_arith` normal form; one step per equation, at `Nat`/`Int`). The library sum is `Zig.Full.tsum` (`ZigLean/Sep/Full/TSum.lean`, imported by `AutoAll`) with `tsum_zero`, `tsumSucc` (a bound `n + 1`, not a numeral) and the non-recursive differences `tsumSubLt` (`tsum_sub_of_lt` where the term `g x` is not `0`, whose right side would normalize back) and `tsum_sub_of_le`. Regression `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean` (the side goals of `tri.loop5`'s step; negatives: a step of two, a bound, a missing loop test). Clients: `tri.loop5`'s step walks by bare `fsym` under `v + (tsum n id - tsum i id) = v₀ + (tsum n id - tsum i₀ id)` (checked in a scratch walk over counted's translation, not committed: the generator lane emits it); nested's outer loop is stated over `tsum` and `outer_step` is a bare `fsym [inner_loop]` (`cnt`, `cnt_mono` and the hand rewrite deleted; its hand invariant `outerI` stays until the generator emits it, S2c′ in docs/invariant-synthesis.md). Found by R1d (2026-11-05). The difference forms are non-recursive because a recursive conditional unfold (`x < b → S x b = x + S (x + 1) b`) hits the maximum recursion depth: in a context whose facts are contradictory the discharger proves every side condition.",
+   "request": "**Congruence of the arithmetic's atoms, as `modCongr` does for remainders**: the counter's step leaves a fresh word `x` with the fact `x.toNat = s.i.toNat + 1`, and the invariant's atom `sumBelow x.toNat` is unrelated to `sumBelow (s.i.toNat + 1)` (which `fsym_arith` rewrites to `sumBelow s.i.toNat + s.i.toNat`), so `omega` leaves `v' + (sumBelow n - sumBelow x.toNat) = w + (sumBelow n - sumBelow i₀)`. Needed in `arithCore`: for an application `f a` of a `Nat`/`Int`-valued function in the target or the facts, an argument `a` that the facts equate to a term `b` (by `congrEq`), rewrite it to `f b` (or add `f a = f b`) before `omega`, so the `fsym_arith` lemmas of `f` apply.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "atom-args-normal-form",
+   "title": "an existential's witnesses against a state atom's unnormalized arguments (`List.set` of a literal list)",
+   "status": "open",
+   "requester": "invariant-synthesis (P09, S2c′: `counted.pairAt`)",
+   "progress": "open; found by R1d (2026-11-05). The item rules through the array's own pointer (`FTotalTriple.arr_load_zero`/`arr_store_zero`, merged with this row) make `fsym` walk `pairAt.loop5`'s body (`acc[0] += 1; acc[1] += 2`) under an invariant owning `arr p [w₀, w₁]`. A concrete target list already matches (`docs/proof-tools.md`: `arr p [x, y, z]`, store at `p.elem 4 1`, post `arr p [x, w, z]`); tagging `List.set_cons_zero`/`List.set_cons_succ` `fsym_norm`/`fsym_arith` does not change the residual.",
+   "request": "**Witnesses of an existential against an atom argument that needs normalizing**: `arr_store`'s post `arr p (vs.set i.toNat w)`, instantiated at a literal list and index, stays `arr p (([w₀, w₁].set 0 x).set (1#64).toNat y)` in the state, and the update into the invariant's `∃ w₀ w₁, ⟪…⟫ ⋆ up (arr p [w₀, w₁])` fails (`EUpd` residual): the witnesses `?w₀ ?w₁` are not found by unifying `[?w₀, ?w₁]` with that list. Needed: the walk puts the arguments of the state's atoms in `fsym_arith` normal form (literal `toNat`, `List.set` of a literal list at a literal index) before planning, or the planner unifies an existential's atom with a state atom up to that normal form.",
    "workaround_sites": [],
    "deletion_plan": ""
   },
@@ -1501,6 +1521,17 @@
    "note": "Coordinator decision 2026-11-04 (approved as fix steps 1-2, same class as #599's SigStep tightening: stronger for clients, implementations prove more, no statement weakened). The per-client bound (at most one epoch write per registration) is each client's proof, starting with SemCounter."
   },
   {
+   "id": "lock-stable-inv",
+   "title": "A lock step's U-stability may use the lock's invariant before the step",
+   "status": "closed",
+   "requester": "L8p two-lock product (LockPair.lean), review of #683; maintainer decision 2026-11-05",
+   "progress": "CLOSED in #667: `FLock.Fits.stable` takes `L.Inv G rX m` (the state before the step) beside `U G rX m`, and so do `Fits.ofLock`/`ofLockAll`'s `stable` argument. `Fits.step`/`Fits.stay` take it, and every rule that applies them passes the lock invariant it already has. `FSem.Fits`/`FCond.Fits` extend `FLock.Fits`, so they inherit it. Clients that do not need it ignore the binder.",
+   "request": "In a two-lock product the client's `U` for lock A must stay over a step of lock B's code, and that needs B's facts such as `B.BlkOk m` (the other lock's blocks), which live in `B.Inv`, not in `U`. Without the hypothesis the product's `U` would have to repeat `B.BlkOk` and every step kind (lock, primitive, part tick, stop) would have to re-prove it, duplicating `FLock.Inv`.",
+   "workaround_sites": [],
+   "deletion_plan": "Closed: no workaround; the hypothesis is part of the final `Fits` contract.",
+   "note": "Maintainer decision 2026-11-05: the client gets more (the lock's invariant), and no rule or statement it relies on is weakened; every library site that applies `stable` has the pre-state invariant."
+  },
+  {
    "id": "cond-window-multi-waiter",
    "title": "The condition's epoch window with two or more registered waiters",
    "status": "open",
@@ -1694,7 +1725,7 @@
    "title": "Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic",
    "status": "open",
    "requester": "L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03)",
-   "progress": "Maintainer decision 2026-11-03: (1) the lock-word atomic rules get the stepping thread's existence without a non-gone lock place, and `FEvent`'s set path admits a lock-gone setter; (2) the L10/L11 implementation gate is released: `SemImpl` (L10) and `RwLockImpl` are built like `MutexImpl`/`CondImpl`. Step 1a (branch claude/l11-safe-exists): the concurrent logic itself hands the existence to every resumption, once and generically: `Proto.Safe`'s and `PausedOk`'s resumption and `WP.sync`/`WP.syncC`'s continuation get `t < m₁.threads.size`, which the scheduler discharges (`go_spec`, `go_some`: main is thread 0, kid i is thread i + 1, `SInv.size`). This supersedes the per-protocol premise `Full.Runs P t g` of PR #579's first version. Step 1b (PR #579): the derived stop rules the lock and word rules use pass that fact on (`WP.pickC_exists`, of which `WP.pickC` is the corollary without it; `WP.osFutexWait`, `WP.osFutexWake`); the word rules (`wp_word*`) and `FLock.Fits.pick` lose their lock-place premise, `FLock.Fits.atStop` takes the existence, and `FEvent`'s set path (`wp_peek`, `wp_xchg`, `wp_xchgAs`, `wp_wake`, `wp_osWake`, `EventImpl.set_wp`) admits a setter at `out` or `gone` of the lock (`Inv.swex` keeps a setter at `sw` existing for `Fits.liveSet`). `WP.futexWaitC`/`WP.futexWakeC` keep their statements: no rule over them needs the fact yet.",
+   "progress": "Maintainer decision 2026-11-03: (1) the lock-word atomic rules get the stepping thread's existence without a non-gone lock place, and `FEvent`'s set path admits a lock-gone setter; (2) the L10/L11 implementation gate is released: `SemImpl` (L10) and `RwLockImpl` are built like `MutexImpl`/`CondImpl`. Step 1a (branch claude/l11-safe-exists): the concurrent logic itself hands the existence to every resumption, once and generically: `Proto.Safe`'s and `PausedOk`'s resumption and `WP.sync`/`WP.syncC`'s continuation get `t < m₁.threads.size`, which the scheduler discharges (`go_spec`, `go_some`: main is thread 0, kid i is thread i + 1, `SInv.size`). This supersedes the per-protocol premise `Full.Runs P t g` of PR #579's first version. Step 1b (PR #579): the derived stop rules the lock and word rules use pass that fact on (`WP.pickC_exists`, of which `WP.pickC` is the corollary without it; `WP.osFutexWait`, `WP.osFutexWake`); the word rules (`wp_word*`) and `FLock.Fits.pick` lose their lock-place premise, `FLock.Fits.atStop` takes the existence, and `FEvent`'s set path (`wp_peek`, `wp_xchg`, `wp_xchgAs`, `wp_wake`, `wp_osWake`, `EventImpl.set_wp`) admits a setter at `out` or `gone` of the lock (`Inv.swex` keeps a setter at `sw` existing for `Fits.liveSet`). `WP.futexWaitC`/`WP.futexWakeC` keep their statements: no rule over them needs the fact yet. WaitGroup (#640): on fsym over `MutexImpl` and `EventImpl` with its statements unchanged; the whole `Tally` read is `FLock.Inv.loadMem` (over `Inv.loadAll`) by the only non-gone thread; `Proofs/Threadsync/WaitGroup.lean` left `legacy_users`. LEFT: `RwLockImpl` and the three RwLock files.",
    "request": "WaitGroup's last `finish` sets the ResetEvent after its `fetchSub` left the lock's protocol (lock place `gone`). The word rules required `L.ph g != .gone` only to get `t < m.threads.size` at the scheduler's resumption; the scheduler cannot supply liveness (`Thread.detach` sets `joined` on a running thread), only existence, which `Safe` now states at every resumption. Then: a general FLock plain-read rule spanning the rest, the lock word and the free lock resource, by the only non-gone thread (WaitGroup's waiter reads the result after the event); WaitGroup on fsym with ThreadMutex and ResetEvent `EventImpl`; `RwLockImpl` over L10's `SemImpl`; the three RwLock files on it.",
    "workaround_sites": [],
    "deletion_plan": "Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged.",
@@ -1739,9 +1770,9 @@
    "status": "open",
    "requester": "L10p (/review of PR648, 2026-11-05)",
    "progress": "open",
-   "request": "Each client of the full-state sync contracts proves its own copy of the same lemma family, which differs only in the layout (the block, the words in the rest, the `io` prefix). Copies: `Proofs/SemCounter/Mem.lean` (`res_eq`, `Rest.split`/`step`/`congr`, `blk_ofG`, `blk_of`, `heap_blk`, `cell_eq`, `cells_same`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `box_notL`, `io_notL`, `BlkOk.lstep`, `Shape.congr`) and `Proofs/SemCounter/Start.lean` (`word_init`, `heap_ne_l`/`heap_ne_r`/`erase_ne_r`, `clk_fork`, `cinv_out`, `split_at`, `box_split`, `sep_box`, `upd0_1`/`upd1_0`) against `Proofs/Handoff/Protocol.lean` (same names), `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean` and `Proofs/Handoff/Ops.lean`; `blk_of` also in `Proofs/MutexCounter/Protocol.lean`. `Proofs/SemCounter/Start.lean`'s `hb_fork` and `sinv_grow` are generic over `FLock`/`FSem` (`sinv_grow` repeats `FSem.Inv.mono` with a growing thread array). A next client would copy them again.",
-   "workaround_sites": ["Proofs/SemCounter/Mem.lean", "Proofs/SemCounter/Start.lean", "Proofs/Handoff/Protocol.lean", "Proofs/Handoff/Start.lean", "Proofs/Handoff/Steps.lean", "Proofs/Handoff/Ops.lean", "Proofs/MutexCounter/Protocol.lean", "Proofs/Sync/Mailbox/Protocol.lean", "Proofs/Sync/Mailbox/Steps.lean", "Proofs/Sync/Mailbox/Start.lean"],
-   "deletion_plan": "Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, replace Handoff's `le_nil` by `VClock.le_default` (as SemCounter does) and `upd0_1`/`upd1_0` by `upd_ne`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row.",
+   "request": "Each client of the full-state sync contracts proves its own copy of the same lemma family, which differs only in the layout (the block, the words in the rest, the `io` prefix). Copies: `Proofs/SemCounter/Mem.lean` (`res_eq`, `Rest.split`/`step`/`congr`, `blk_ofG`, `blk_of`, `heap_blk`, `cell_eq`, `cells_same`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `box_notL`, `io_notL`, `BlkOk.lstep`, `Shape.congr`) and `Proofs/SemCounter/Start.lean` (`word_init`, `heap_ne_l`/`heap_ne_r`/`erase_ne_r`, `clk_fork`, `cinv_out`, `split_at`, `box_split`, `sep_box`, `upd0_1`/`upd1_0`) against `Proofs/Handoff/Protocol.lean` (same names), `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean` and `Proofs/Handoff/Ops.lean`; `blk_of` also in `Proofs/MutexCounter/Protocol.lean`. `Proofs/SemCounter/Start.lean`'s `hb_fork` and `sinv_grow` are generic over `FLock`/`FSem` (`sinv_grow` repeats `FSem.Inv.mono` with a growing thread array). WaitGroup (#640) copies the rest family (`Rest.split`/`step`/`congr`, `res_eq`, `heap_blk`, `BlkOk.of_block`, `word_init`, `newest`/`newest_push` next to `FEvent.newest`) in `Proofs/Threadsync/WaitGroup/Protocol.lean`, the start glue (`heap_ne_*`, `split_at`, `spawners`, `inv_cur`, `projI`, `wp_free`) in `Proofs/Threadsync/WaitGroup/Start.lean`, `clk_fork` and `einv_out` (Handoff's `einv_out`, generic over `FEvent`) in `Proofs/Threadsync/WaitGroup/Main.lean` and `ewait_ok` (Handoff's, generic over `FEvent.Inv` with one waiter) in `Proofs/Threadsync/WaitGroup/Wait.lean`. A next client would copy them again.",
+   "workaround_sites": ["Proofs/SemCounter/Mem.lean", "Proofs/SemCounter/Start.lean", "Proofs/Handoff/Protocol.lean", "Proofs/Handoff/Start.lean", "Proofs/Handoff/Steps.lean", "Proofs/Handoff/Ops.lean", "Proofs/MutexCounter/Protocol.lean", "Proofs/Sync/Mailbox/Protocol.lean", "Proofs/Sync/Mailbox/Steps.lean", "Proofs/Sync/Mailbox/Start.lean", "Proofs/Threadsync/WaitGroup/Protocol.lean", "Proofs/Threadsync/WaitGroup/Start.lean", "Proofs/Threadsync/WaitGroup/Main.lean", "Proofs/Threadsync/WaitGroup/Wait.lean"],
+   "deletion_plan": "Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `einv_out`, `ewait_ok` (next to `FEvent.Inv.toOut`), `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, replace Handoff's `le_nil` by `VClock.le_default` (as SemCounter does) and `upd0_1`/`upd1_0` by `upd_ne`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row.",
    "note": "Not a soundness issue: every copy is kernel-checked. Recorded instead of done in PR648 because the change rewrites the merged Handoff and MutexCounter proofs."
   },
   {
@@ -1820,6 +1851,74 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Not a soundness gap: a thread outside the live set cannot access the word (every access rule takes the live-set premise); the gap is what can be proved."
+  },
+  {
+   "id": "run-witness-loop-names",
+   "title": "Kernel run witnesses name the functions on the run's path to its loops, and the path differs between Zig versions and targets",
+   "status": "open",
+   "requester": "L17 (retiring unroll_sched)",
+   "progress": "open",
+   "request": "Kernel run witnesses name the functions on the run's path to its loops, and that path differs between the translations `lake build Proofs` runs against (docs/proof-tools.md, concrete runs of programs with loops). The names are AIR loop ids (`f.loop<id>`) and anonymous-instance hashes, which a new compiler or std patch can change. `Sync.Handoff.handoff_completes` (Proofs/Sync/Handoff.lean) has no list at all: it reaches `Io.Condition`'s wait loops, which 0.16.0 holds in `Io_Condition_waitInner` and its body `loop23` (absent in 0.17.0) and 0.17.0 in `Io_Condition_waitUncancelable` and its body `loop22` (absent in 0.16.0), and `lake build Proofs` runs against the 0.17.0 sync translation (`0.17.0-linux-goldens`). It keeps `unroll_sched`, which finds the loops itself. Needed: a version-neutral way to reach a run's loops. Candidate: the opt-in `--proof-api` (docs/generated-code.md, stable proof interface) already emits `<B>_unfold` and `<B>_loop<k>_step` lemmas under names from the source identity and the loop's pre-order position, never AIR ids; tagging them with one simp set declared in ZigLean (with the model functions that hold a loop, `Zig.osUnfairLockC`) would make every witness `simp only [<set>, Zig.loop.eq_1]` with no names. Rejected: `when_defined` (legacy-to-retire) and `first | delta <0.16.0 names> | delta <0.17.0 names>` (version glue that the next release breaks again). Possible but weaker: moving the theorem out of `Proofs` into a 0.16.0-pinned fixture, as `mailbox_completes` moved to tests/roadmap/sync-contracts/Runtime.lean; it keeps the theorem but drops its 0.17.0 run.",
+   "workaround_sites": [
+    "Proofs/Sync/Handoff.lean",
+    "Proofs/Sync/Mutex.lean",
+    "Proofs/Threadsync/Mutex.lean",
+    "Proofs/Threadsync/Handoff.lean",
+    "Proofs/Iogroup/Counter.lean",
+    "Proofs/Atomics/Stack.lean",
+    "Proofs/Threads/Counter.lean",
+    "Proofs/Sync/SemCounter.lean",
+    "Proofs/Threadsync/WaitGroup.lean",
+    "tests/roadmap/sync-contracts/EventSet.lean",
+    "tests/roadmap/sync-contracts/Runtime.lean"
+   ],
+   "deletion_plan": "When the mechanism lands, every listed witness uses it: Sync/Handoff drops `unroll_sched` (then the tactic goes with its last use, docs/legacy-retirement.md section 5) and the others drop their hand-written `delta` lists.",
+   "note": "The hand-written lists in `Proofs/` hold today for every translation that builds their files (checked with the theorem-inventory swap builds: 0.17.0 sync, 0.15.2 darwin and aarch64 threadsync, 0.15.2 atomics and threads)."
+  },
+  {
+   "id": "waitgroup-impl-contract",
+   "title": "No generic wait-group contract (`WaitGroupImpl`) on the full-state logic",
+   "status": "open",
+   "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
+   "progress": "open",
+   "request": "The retired `WaitGroupSpec` was stated for every client (its instance was a hand transcription of `Io.Threaded`'s private `WaitGroup`). On the full-state logic, the same algorithm (0.15.2's generated `Thread.WaitGroup`) is proved only inside one program (`Proofs/Threadsync/WaitGroup.lean`, `waitGroup_spec`/`waitGroup_safe`), as a client of `MutexImpl` and `EventImpl`. Needed: a `WaitGroupImpl` contract (start/finish/wait for every protocol that has the group: the waiter sees every finisher's writes, every token taken, no deadlock) with 0.15.2's `Thread.WaitGroup` proved against it once for every program, the threadsync program a client. 0.16.0 and 0.17.0 have no public `WaitGroup`; `Io.Threaded`'s pool counter joins this when `Io.Threaded` is translated (`IoSpec`).",
+   "workaround_sites": [],
+   "deletion_plan": "Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, \"What has no replacement yet\")."
+  },
+  {
+   "id": "mutex-impl-relaxed-witness",
+   "title": "No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock`",
+   "status": "open",
+   "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
+   "progress": "open",
+   "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
+   "workaround_sites": [],
+   "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
+  },
+  {
+   "id": "guard-lifeline-mirror",
+   "title": "build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661",
+   "status": "open",
+   "requester": "P1c (elastic build-guard admission, PR #661)",
+   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).",
+   "request": "PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.",
+   "workaround_sites": [
+    "scripts/build-guard.py",
+    "tests/roadmap/build-budgets/test_guard.py",
+    "docs/build-budgets.md"
+   ],
+   "deletion_plan": "Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running build-guard process (`ps -eo pid,args | grep build-guard.py`), its checkout (the script path when absolute, else the process's working directory: `readlink /proc/PID/cwd` on arc, `lsof -a -p PID -d cwd -Fn` on the Mac) contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row."
+  },
+  {
+   "id": "fstepin-addrs",
+   "title": "FStepIn does not keep the blocks' addresses, so a futex key of another block is lost across a frame step",
+   "status": "closed",
+   "requester": "S6e (audit finding S6, futex keys, #668); maintainer decision 2026-11-05: option A",
+   "progress": "closed by PR #681: `FStepIn.addrs : m.SameAddrs m'` (ZigLean/Conc/Clock.lean) replaces the field `blocks` (now the theorem `FStepIn.blocks`), with the library lemmas `Mem.SameAddrs.refl/trans/of_blocks/of_push/of_set/size/addrIn_eq` and `Mem.sameAddrs_write` (ZigLean/Mem/Lemmas.lean)",
+   "request": "With the futex queue keyed by `FutexKey` (#668), a lock word's invariant names keys: its own (`Mem.wordKey`), and in `LockWord.nest` the keys of other blocks' words (a nested lock's word). `FStepIn` kept only `m.blocks.size ≤ m'.blocks.size`. The word's own key still transports through its cells (the step keeps the word's bytes and block), but a key of another block does not. Counterexample: a frame step by the lock's owner that replaces block `b'` (another lock's word, not in the frame) by a block at another address satisfies every old `FStepIn` field, and `LockWord.nest k` read in `m` (`m.keyAt ⟨b', o⟩ false = some k`) is false in `m'`; so `WInv` is not stable under a frame step and the FLock rules cannot be proved. The model never does this (a block never moves; every `addr :=` is a new block: `Mem.afterAlloc`, a mapping, a moving `mremap`), so the step relation can say it. Needed: a field `addrs : m.SameAddrs m'` of `FStepIn`, discharged at every producer by general lemmas.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Rejected: option B, a field `a : Nat` (the word's address) in `LockWord` with a memory-independent key. It is a per-object special case that FCond, FSem and FEvent would each repeat, and every LockWord construction would supply the address. Option A strengthens what every client of `FStepIn` gets and weakens nothing."
   }
  ],
  "mechanisms": [
@@ -1861,7 +1960,7 @@
   },
   {
    "id": "M9",
-   "text": "counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane)."
+   "text": "counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane). L16: `unroll_solo` deleted, runs by `unfold` of the defining equations, then `decide +kernel`; 9h stays open for name-independent unfolding."
   },
   {
    "id": "M10",

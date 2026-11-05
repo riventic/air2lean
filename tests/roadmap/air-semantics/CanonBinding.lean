@@ -92,5 +92,19 @@ def main : IO Unit := do
     { after with globals := after.globals.modify 0 (fun g => { g with init := some (.int 0 999999) }) })]
   -- A genuine batch must fail if just one item is wrong, even after valid items.
   reject "one bad item" (CanonBinding.snapshots.push (offset, before, { after with name := "wrong" }))
+  -- `renumber` (`CanonCertificate.renumberBound`, generic theorem `Renumber.execFunc_rename`):
+  -- an injective renaming of the whole function binds; anything else keeps `renumber` trusted.
+  let pre := CanonBinding.sample "renumber-controls" (CanonBinding.leaf 65)
+  let shifted := Renumber.renFunc (· + 7) pre
+  unless CanonCertificate.renumberBound pre shifted do
+    throw (IO.userError "native renumber binding rejected an injective renaming")
+  IO.println "native-renumber-binding: injective renaming bound"
+  let unbound (label : String) (canonical : Func) : IO Unit :=
+    if CanonCertificate.renumberBound pre canonical then
+      throw (IO.userError s!"native renumber binding accepted {label}")
+    else IO.println s!"native-renumber-binding: {label} rejected"
+  unbound "collapsed IDs" (Renumber.renFunc (· / 2) pre)
+  unbound "wrong operand" { shifted with body := shifted.body.modify 1 (fun i => { i with op := .arg 1 }) }
+  unbound "wrong function metadata" { shifted with ret := 1 }
   let report ← IO.ofExcept (CanonCertificate.emit CanonBinding.snapshots)
   IO.print report

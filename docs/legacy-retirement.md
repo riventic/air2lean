@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-11-05, after #648, #643 and L13's Sep/{Total,Loop}): 15 `legacy_users` left**, mapped in the "Dependency map" below.
+**Status (2026-11-05, after #640 (WaitGroup) and the deletion of Threadsync/Lock): 13 `legacy_users` left**, mapped in the "Dependency map" below.
 The numbered sections are the 2026-10-14 plan, and their tables still list files that are gone.
 `assurance/proof-framework.json` is the current list.
 
@@ -23,14 +23,17 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11 (RwLockContract); `Witnesses/Sep` deleted (L8) | #340, #435 |
 | L8 tick-cost model | done: emitted step ticks, `Full/Cost`, Lists/Bounded restated, Lists/Cost, Sep/{Cost,Bounded,Alloc}, `ZigLean/Sep.lean`, Witnesses/Sep deleted | #568, #580, #562 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
-| L10, L11, L12 | open | |
+| L12 Sync/Lock, Threadsync/Lock, Conc/Witness | open: the legacy `MutexContract`, `SemContract`, `CondContract` removed from `Proofs/Sync/Contracts`; Threadsync/Lock deleted (its last importer WaitGroup is on `MutexImpl`, #640); Sync/Lock and Conc/Witness wait for their importers (Semaphore via RwLock, RwLockContract) | #653, #640, L11i |
+| L10, L11 | open | |
 | L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
+| L15 VC layer | done: `vc_gen`, `#vc_extract(_all)`, the `vc_contract` registry, the `ResultProgram` AST and `scripts/vc-report.py` deleted; P02's VCs are `fsym`'s residual goals (`docs/vcs.md`) | #657 |
+| L21 `Conc/Spec` | done: `ZigLean/Conc/Spec/` deleted with its 5 judgments; the replacements and open items are in `docs/thread-specs.md` | #677 |
 
 Stage D-a (section 4) is done.
 
-### Dependency map of the 15 remaining users (2026-11-05, after #648, #643 and L13)
+### Dependency map of the remaining users (2026-11-05, after #648, #643, L13, #640 and Threadsync/Lock)
 
-`legacy_users` has 15 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
+One row per `legacy_users` entry (the count is in the status line above). "Reason" is what `scripts/proof-framework.py` matches. Every
 replacement named below is on main, except where the row says it is not.
 
 | file | reason | legacy items it uses | full-state replacement | waits for |
@@ -38,13 +41,11 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/RwLockSnapshotPair | names `TTriple` | `TTriple.{alloc,storeAt,load}` under `WP.liftM_owned`; RwLock's protocol (`RwContract`) | `FOwned` + fsym WP mode; an `RwLockImpl` contract (none on main) | RwLock |
 | Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's protocol and `E.Spec` (`acquire_shared`, `read_with_facts`) | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
 | Proofs/Sync/RwLock | names `TTriple` | legacy `Lock`/`Proto` protocol, Conc/Word `Word.Op`/`Keep`, WeakWord, `TTriple.load/store`, local `Sem.Spec` (the semaphore as an abstract part `E`) | `FLock`/`MutexImpl` for its inner `Io.Mutex`; **`SemImpl` (#575, open)** for its semaphore; `RwLockImpl` (none) | #575 SemImpl |
-| Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl` | L10i (#575) |
-| Proofs/Threadsync/WaitGroup | names `TTriple` | Threadsync/Lock, Conc/Word, legacy `Lock`/`Proto` | `EventImpl` (Full/Event) + `MutexImpl` (Threadsync/ThreadMutex) | L10i; #572 blocker 1 (plain 24-byte read over the mutex word vs `FLock` `LiveLe`), #579 |
-| Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
-| Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | WaitGroup |
+| Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl`: `Proofs/Sync/IoSemaphore.ioSem` | its importer RwLock (`Sync.Sem.{wait,post}_spec`, `spec₀`); `Contracts.semaphore` removed, L12 |
+| Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumer Semaphore, which waits for RwLock (`Contracts.mutex` removed, L12) |
 | ZigLean/Conc/Witness | imports Conc/Own | `TLive` | `CLive` (Full/Witness) | RwLockContract |
-| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord |
-| ZigLean/Conc/LockRules | imports Conc/Lock | legacy `Lock` rules | Full/LockRules, Full/LockSteps | Sync/Lock, Threadsync/Lock, Conc/Word |
+| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WeakWord |
+| ZigLean/Conc/LockRules | imports Conc/Lock | legacy `Lock` rules | Full/LockRules, Full/LockSteps | Sync/Lock, Conc/Word |
 | ZigLean/Conc/Lock | imports Conc/Csl | `Lock`, `Fits`, `FitsOn`, `Step` | `FLock` (Full/Lock, Full/LockWord) | LockRules |
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
 | ZigLean/Conc/Own | imports Sep/Block | `TTriple` | `FTriple`/`FOwned` | Csl, Witness |
@@ -54,16 +55,17 @@ replacement named below is on main, except where the row says it is not.
 **Hidden users** (not in `legacy_users`, because the scanner matches only direct imports of
 `LEGACY_MODULES` and the legacy names):
 
-- `Proofs/Sync/Contracts`. It imports RwLockContract. `MutexContract`/`mutex` use Sync/Lock's
-  `MutexOps.lock_specOn`; `RwContract`/`rwLock` use RwLock. `SemContract` has no user since
-  Mailbox's migration (#643).
-  `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
-  full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
+- `Proofs/Sync/Contracts`. It imports RwLock and keeps only `RwContract`/`rwLock`
+  (RwLock's specs), which has no user outside the file. L12 removed the legacy `MutexContract`,
+  `SemContract` and `CondContract` (no users since L9 and #643); their full-state replacements
+  are `MutexImpl` (`ioMutex`), `SemImpl` (`ioSem`) and `CondImpl` (`ioCond`).
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
-- `ZigLean/Witnesses/Conc` imports Conc/Word and Conc/Total. No module imports it. Stage D-d
-  deletes it as a whole. It also holds non-vacuity witnesses of surviving base lemmas (Proto,
-  TimedBody, `Word.enc_val`; premises THR-08, SEM-02 in `assurance/premises.json`); at D-d they
-  move to a base witness module.
+- `ZigLean/Witnesses/Conc` is the base concurrency witness module (L12): it imports
+  `Conc/Base/Word` instead of Conc/Word and witnesses the full-state `LockWord.States` instead of
+  the legacy `Lock.States`, so it reaches no module of the legacy layer (`LEGACY_MODULES`). It
+  stays: its non-vacuity witnesses of the base lemmas (Proto, Total, TimedBody, `Word.enc_val`)
+  keep their premise citations (THR-08, SEM-02 in `assurance/premises.json`). Its `Total`
+  witnesses go with Conc/Total at D-d.
 - **Conc/Word split (L8j).** Full/Word used to import Conc/Word, so every full-state concurrency
   module transitively imported Conc/LockRules → Conc/Lock → Csl → Own → Sep/Block → Sep/Triple.
   The split resolves this:
@@ -86,14 +88,13 @@ replacement named below is on main, except where the row says it is not.
 
 **Retirement order** (each step needs only the steps before it):
 
-1. Semaphore: SemImpl (#575, L10i); SemCounter done (#648), Mailbox done (#643). WaitGroup: L10i, #572/#579.
+1. Semaphore: SemImpl (#575, L10i); SemCounter done (#648), Mailbox done (#643). WaitGroup done (#640).
 2. RwLock (needs SemImpl, plus a new `RwLockImpl` contract with `Io.RwLock` as its instance), then
    RwLockContract and RwLockSnapshotPair as clients of `RwLockImpl` (for every implementation),
-   and `Contracts.{RwContract,SemContract}`.
-3. Sync/Lock: after Semaphore and `Contracts.mutex`. Threadsync/Lock: after WaitGroup.
+   and `Contracts.RwContract`; then Semaphore (its only importer is RwLock).
+3. Sync/Lock: after Semaphore (`Contracts.mutex` is gone, L12). Threadsync/Lock: deleted (WaitGroup done, #640).
    Conc/Witness: after RwLockContract.
-4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore, WaitGroup and
-   WeakWord are gone.
+4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore and WeakWord are gone.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
 6. Sep/{Block,Triple}: stage D-e (Sep/{Loop,Total} are deleted, L13).
 
@@ -101,8 +102,8 @@ replacement named below is on main, except where the row says it is not.
 clients now, #648, #643). The RwLock cluster waits for an `RwLockImpl` over `SemImpl`.
 `Io.RwLock`'s writer waits on an `Io.Semaphore`, and its last reader
 posts. A separate semaphore spec for RwLock would duplicate #575's contract, which
-CLAUDE.md rules out ("one mechanism"). Sync/Lock and Threadsync/Lock each wait for an L10i
-file. The Conc library chain waits for those.
+CLAUDE.md rules out ("one mechanism"). Sync/Lock waits for an L10i file (Semaphore). The Conc
+library chain waits for those.
 
 Goal: ONE proof framework on main. Delete the legacy layer after migrating its users.
 Sources: origin/main d2072ce1e (`assurance/proof-framework.json`: 96 `legacy_users`), the READY-PENDING
@@ -137,11 +138,11 @@ Findings about the ratchet itself (lane L1):
   `assurance/proof-framework.json`, 2026-10-20): 41 judgments (Sep.Triple `Triple`, Sep.Total
   `Returns/TotalTriple/TotalTripleIn`, Sep.Bounded `TotalTripleWithin`, Sep.Cost `Mem.SameAllocs`, Sep.AllocSpec
   `AllocInv/AllocSpec/Logic`, Conc.Own `TTriple`, Conc.TlsLemmas `TTripleIn`, Conc.Word `BlkStep/Keep/KeepK`, Conc.Lock
-  `Lock/Fits/FitsOn/Step`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas
+  `Lock/Fits/FitsOn/Step`, Conc.Spec.* (5 specs, deleted L21), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas
   `Grows`, LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests: futures `CancelSpec`,
   asm-wrappers `Spec`, claims.Fixture `FWrapped`, sep-full `FTripleCell/FTripleExact`) and 22 tactic entries
-  (Automation `sep_frame/sep_normalize`, Wrappers `sep_from/tame_prim`, Full.Conc `conc_norm`, Full.Tame `tame`,
-  Full.Extent `within`, Full.Unroll `unroll_solo`, Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
+  (Automation `sep_frame/sep_normalize`, Wrappers `sep_from/tame_prim`, Full.Conc `conc_norm` (deleted, L16), Full.Tame
+  `tame` (deleted, L16), Full.Extent `within`, Full.Unroll `unroll_solo` (deleted, L16), Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
   `tomega`, VC.Extract (3), VersionGate `when_defined`, Threadsync.Variant `if_decl`, AllocFba 3, Assurance/audit
   commands 3). Section 5 assigns them.
 
@@ -205,7 +206,7 @@ Group 1 (start now, independent)
 | file | what | uses | blocker | eff | class |
 | --- | --- | --- | --- | --- | --- |
 | ZigLean/Sep/Full/Ghost.lean | ghost-resource FTriple rules | none (listed through `import Full.Triple`) | TOOL false positive | S | library |
-| ZigLean/Sep/Full/Tame.lean | `Tame` (program keeps layout), `tame` tactic | none (same false positive); `tame` tactic entry is legacy-to-retire | TOOL | S | library |
+| ZigLean/Sep/Full/Tame.lean | `Tame` (program keeps layout) | none (same false positive); the `tame` tactic is deleted (L16) | TOOL | S | library |
 | ZigLean/Sep/Full/Logic.lean | `FLogic`, `FReturns`, FTotalTriple | `Sep.Total` import + `TotalTriple` until fold-delete-bridge; false positive after | TOOL (after fold chain) | S | library |
 Work: strip `import` lines in the name scan; extend `LEGACY_MODULES` to the Conc cluster (maintainer approval, adds 10
 entries, section 1); re-run `--write`. Also decisions memo (section 7).
@@ -318,7 +319,7 @@ the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, 
 | ZigLean/Sep/Witness.lean (74) | `Admit`/`Live` witnesses for `Triple` | Total | S | library (delete) |
 | ZigLean/Conc/Witness.lean (72) | `TLive` for TTriple | Conc.Own, Sep.Witness | S | library (delete; FTTAdmit/FTTLive exist in Full/Witness) |
 | ZigLean/Witnesses/Sep.lean (229) | witnesses for Lists/Sep and Cost theorems | Sep, Witness, Cost | S | tool (delete) |
-| ZigLean/Witnesses/Conc.lean (151) | witnesses for TTriple theorems | Conc.Witness | S | tool (delete) |
+| ZigLean/Witnesses/Conc.lean (151) | witnesses for TTriple theorems | Conc.Witness | S | tool (delete; since L12 it stays as the legacy-free base witness module, see "Hidden users") |
 | tests/roadmap/claims/Fixture.lean (271) | claim-strength classifier fixtures over `Triple`, `TotalTripleWithin`, `EventuallyReturns`, `TTriple`, `Wrapped` | Witness, Bounded, Own | M | test |
 | tools/Assurance.lean (342) | imports every claim head so a module cannot shadow it | Triple, Total, Bounded, Own | M | tool |
 End state for Fixture and Assurance (long-term, no loss of the anti-spoofing property): `claim-heads.json` keeps the legacy head names as
@@ -443,7 +444,7 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | --- | --- | --- | --- |
 | Proofs/Sync/RwLock.lean (4707) | `rwLockRead` result in {2,12,22}, safe; `Sem.Spec` legacy judgment | L | proof |
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
-| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | proof |
+| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | done: client of `MutexImpl` (`threadMutex`) and `EventImpl` (`resetEvent`) (`Proofs/Threadsync/WaitGroup/*`), `waitGroup_spec`/`waitGroup_safe` verbatim; the whole `Tally` read by `FLock.Inv.loadMem`; completes by kernel evaluation (`waitGroup_completes`, in every 0.15.2 translation) (#640, #675) |
 
 Remaining shared-prefix and holder proof copies are tracked in [engine ledger #76](engine-ledger.md).
 
@@ -457,7 +458,7 @@ Consumers to move first (invisible to the ratchet today, listed by L1): Conc/{De
 spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs (`unroll_sched` tactic, legacy `Lock/Fits/Step`).
 Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migrated sync proofs (Handoff, Counter) use it with FOwned. Recommended: the maintainer re-statuses
 `Proto.WP` as `target` (it is the all-schedules adequacy engine under `CTriple`, with fsym WP mode as its backend), and retires only `TTriple`, `Owned`, `TlsLemmas`, `Conc.Lock`, the Conc specs
-(`MutexSpec` ...) and `Conc.Total`. Without this decision L12 has no end state.
+(`MutexSpec` ...; deleted, L21) and `Conc.Total`. Without this decision L12 has no end state.
 
 ### L13. Final deletion (see section 4)
 | file | role at the end |
@@ -483,7 +484,7 @@ so guaranteed-return still needs `FTotalTriple` or `FTTotalTriple`.
 Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
 Stage D-b (after L6): delete Sep/AllocSpec* (Wrap, Wrappers, Dispatch, AllocSpec), Automation, Step; `sep_*`, `sep_from`, `tame_prim`, `sep_frame/normalize` tactic entries go.
 Stage D-c (after L5, L7, L8): delete Sep/{Alloc,Owned,RawAlloc,Remap,Sentinel,SentinelRealloc,ArenaClient,Cost,Bounded,Witness}, Witnesses/Sep.
-Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Word,WeakWord,Unroll,Total,Spec/*,TimedBudget}, Witnesses/Conc
+Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules,Word,WeakWord,Unroll,Total,Spec/*,TimedBudget} (not Witnesses/Conc: it stays, see "Hidden users")
 (its witnesses of base lemmas move to a base witness module; Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
 Stage D-e = the **final PR** (needs the strength log):
 1. Run every `tests/roadmap/strength-log/*.lean` (the legacy statements, written out) and `Full/Strength.lean`; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
@@ -496,7 +497,7 @@ Stage D-e = the **final PR** (needs the strength log):
 * Conc.* (`TTriple`, `TTripleIn`, `TLive`, `Lock*`, `Spec.*`, `Total`, `TimedBudget`, `Clock.StepIn`, `Lemmas.Grows`, `WP`): L12 + D-WP; `Conc.Total`/`TimedBudget` also need the L8 tick mechanism.
 * Proofs.Sync.{Semaphore,RwLock} local `Fits/Sem/Step/Sem.Spec`: vanish with L10/L11.
 * Tests: `CancelSpec` (futures), `asm-wrappers Interp.Spec`, `FTripleCell/FTripleExact` (sep-full CX files), `Wrapped/FWrapped` (Fixture, L7): pure-result or counterexample fixtures; re-status as target when they are `FTriple` instances, or rewrite (needs maintainer approval for any status change).
-* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `blkat_alloc` (Conc.Lemmas) is gone: its uses are term proofs over `BlkAt.alloc`/`BlkAt.afterAlloc` (L14). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, `Threadsync.Variant` `if_decl`, `VersionGate` `when_defined`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
+* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `blkat_alloc` (Conc.Lemmas) is gone: its uses are term proofs over `BlkAt.alloc`/`BlkAt.afterAlloc` (L14). `tomega` (Spec.Count) is gone: its uses are `Nat` library lemmas (L18). `if_decl` (Threadsync.Variant) is gone: its blocks are `when_defined` blocks, the one translation gate, which retires with engine-ledger #case-family-enrollment (L18). `unroll_sched` (Conc.Unroll): the `completes` run witnesses unfold the loops on the run's path by `Zig.loop.eq_1` and let the kernel compute the run (`docs/proof-tools.md`; L17). Its uses left: Proofs/Sync/Handoff.lean (ledger `run-witness-loop-names`), Proofs/Sync/{RwLock,RwLockSnapshotPair}.lean (#637), Proofs/Threadsync/WaitGroup.lean (#640) and its own test tests/roadmap/proof-tools/Unroll.lean. The elab, its `tactics` entry and that test go with the last of them, and so does the library part of Conc.Unroll (Proofs/Sync/SnapshotCache.lean imports the module without using the tactic: drop that import with the elab). `within` was approved only "gone before landing" and remains; `unroll_solo`, `conc_norm` and `tame` are deleted (L16). The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, Full `within`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
 
 ## 6. Execution order and critical path
 

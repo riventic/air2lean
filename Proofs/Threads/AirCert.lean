@@ -22,6 +22,23 @@ Outside the certificate fragment:
 * `threads.race`: a concurrent function (`Zig.ConcM`)
 * `threads.swapFlag`: a concurrent function (`Zig.ConcM`)
 * `threads.xchgRace`: a concurrent function (`Zig.ConcM`)
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
+
+* `atomic.Value(threads.Phase).init` trusted-Canon: none
+* `atomic.Value(u32).init` trusted-Canon: none
+* `threads.bump` trusted-Canon: forwardReadOnlyCopies
+* `threads.claim` trusted-Canon: forwardReadOnlyCopies
+* `threads.claimOnce` trusted-Canon: forwardReadOnlyCopies
+* `threads.disjoint` trusted-Canon: forwardReadOnlyCopies
+* `threads.parallelCounter` trusted-Canon: forwardReadOnlyCopies, itemReads
+* `threads.race` trusted-Canon: forwardReadOnlyCopies
+* `threads.swapFlag` trusted-Canon: forwardReadOnlyCopies
+* `threads.writeFlag` trusted-Canon: forwardReadOnlyCopies
+* `threads.xchgRace` trusted-Canon: forwardReadOnlyCopies
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

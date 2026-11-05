@@ -20,8 +20,8 @@ audit finding #14). A bad pointer that passed address validation (no live block,
 treats `EFAULT` as an OS bug). If the word is not `expected`, the call returns `mismatch`
 (`EAGAIN`). Otherwise the oracle picks one of:
 
-* `0`, sleep: an untimed wait stops at the scheduler's `wait p expected`, which compares the word
-  again and sleeps until a wake at `p` (if the word changed in between, the thread goes on: a
+* `0`, sleep: an untimed wait stops at the scheduler's `wait p expected shared`, which compares
+  the word again and sleeps until a wake at `p`'s key (if the word changed in between, the thread goes on: a
   spurious return with `0`, which Linux allows). A timed wait joins the queue and stops at a
   `yield` instead: it stays runnable, so the scheduler can resume it at any later turn — a wake
   in between makes it return `woken`, else it leaves the queue and returns `timedOut`. A timed
@@ -32,10 +32,11 @@ treats `EFAULT` as an OS bug). If the word is not `expected`, the call returns `
 A sleeper that a `tgkill`/`pthread_kill` (`ZigLean/Os/Thread.lean`, OSG-01) woke returns
 `interrupted`. A wake gives no happens-before edge: std reads the word again with an acquire.
 
-**Wake** (`futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at `p`
-(audit finding #6: no FIFO order), which go on; the call returns their number. No memory access
-(a private futex is keyed by its address). macOS `__ulock_wake` also has the option `EINTR`
-with nobody woken (std retries).
+**Wake** (`futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at the
+pointer's key (audit finding #6: no FIFO order), which go on; the call returns their number. No
+memory access: the key (`FutexKey`, the domain and the `usize` address, `Mem.keyAt`) is resolved
+in the waking step, at the memory of the pick, as the kernel forms it inside the call. macOS
+`__ulock_wake` also has the option `EINTR` with nobody woken (std retries).
 
 The return conventions are the ABI's: a Linux wrapper returns the raw `usize` (`-errno` on
 failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` return `-errno` as
@@ -72,20 +73,27 @@ address the kernel receives is the pointer's numeric address as a `usize` (`fute
   `get_futex_key` (Linux v6.16 `kernel/futex/core.c:521–628`, `Linux.futexKey`):
   - an address that is not a multiple of four returns `-EINVAL`;
   - then `access_ok` and the key. A private key needs a user address. A shared key (no
-    `FUTEX_PRIVATE_FLAG`) needs a writable page: `get_user_pages_fast`, for anonymous memory a
-    key of the address space and the address, distinct from the private key.
+    `FUTEX_PRIVATE_FLAG`) needs the page: `get_user_pages_fast`. On an anonymous page the key is
+    the address space and the address, distinct from the private key. On a file-backed page it
+    is the inode and the page offset, which changes when a write copies a `MAP_PRIVATE` page
+    (copy-on-write): a waiter at a `.data` page that was never written is not woken by a shared
+    wake after the first write.
 
-  The model forms the key only where it knows that the kernel forms it: at a live writable word
-  of the model (`Mem.wordAt`), and, for a private key, at any address below the end of a block
-  that the run placed (`Mem.userBelow`, premise SEM-07). It returns `-EFAULT` only where no
+  The model forms the key only where it knows the key: a private key at a live writable word of
+  the model (`Mem.wordAt`) or at any address below the end of a block that the run placed
+  (`Mem.userBelow`, premise SEM-07), and a shared key only at a live writable word of an
+  anonymous block (`Mem.anonAt`: a stack, a heap block or an OS mapping; a global or an
+  allocator's block, whose buffer may be a global, is refused). It returns `-EFAULT` only where no
   `access_ok` passes: at an address with bits 63 and 55 set. That is a kernel address on x86_64,
   also with LAM (whose `untagged_addr` keeps an address with bit 63 set), and on aarch64, also
   under the tagged-address ABI (whose `untagged_addr` sign-extends bit 55). Any other address
   would need native mapping or address-space knowledge that the model leaves open, for example
-  the read-only file-backed (inode) key of a shared request on a `const` global, an address above
-  every block, or a tagged aarch64 address. That is a conservative `.illegal` refusal: the model
-  says `.illegal` where native code returns `-EFAULT` or forms a key. Once the key forms, the
-  queue still matches waiters by pointer, not by key (audit S6, premise OSF-02).
+  the file-backed (inode) key of a shared request on a global, an address above every block, or
+  a tagged aarch64 address. That is a conservative `.illegal` refusal: the model says `.illegal`
+  where native code returns `-EFAULT` or forms a key. The key is the domain (shared or private)
+  and the `usize` address (`FutexKey`); the queue matches waiters by key, so a private WAKE never
+  wakes a shared waiter, and two pointers at one numeric address reach the same waiters (premise
+  OSF-02).
 * **macOS** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A WAIT with a null or unaligned address
   returns `-EINVAL`. A WAKE with a null address returns `-EINVAL`, and an unaligned WAKE looks up
   its key and finds no waiter. The key is the task and the address (`ULK_UADDR`). A live
@@ -167,8 +175,11 @@ def takeInterrupt : MemM Bool := do
     pure true
   else pure false
 
-/-- A timed sleeper joins the queue at `p`. -/
-def enqueue (p : Ptr) : MemM Unit := modify fun m => { m with waiters := m.waiters.push (m.current, p) }
+/-- A timed sleeper joins the queue at `p`'s key in the domain `shared` (`Mem.keyAt`; `.illegal`
+if `p`'s block does not exist, which a word read before rules out). -/
+def enqueue (p : Ptr) (shared : Bool) : MemM Unit := do
+  let k ← futexKeyOf p shared
+  modify fun m => { m with waiters := m.waiters.push (m.current, k) }
 
 /-- A timed sleeper resumes: an interrupt, a wake, or else the timeout; it leaves the queue. -/
 def timedResume : MemM WaitResult := do
@@ -179,9 +190,10 @@ def timedResume : MemM WaitResult := do
   set { m with woken := m.woken.erase me, waiters := m.waiters.filter (·.1 != me) }
   pure (if intr then .interrupted else if woke then .woken else .timedOut)
 
-/-- A futex wait at `p` for `e` (module doc). An interrupt pending at the call was delivered
-before it (the signal handler ran first). -/
-def futexWait (p : Ptr) (e : BitVec 32) (timed : Bool) : ConcM Tgt WaitResult := do
+/-- A futex wait at `p` for `e` in the domain `shared` (module doc). An interrupt pending at the
+call was delivered before it (the signal handler ran first). -/
+def futexWait (p : Ptr) (e : BitVec 32) (timed : Bool) (shared : Bool := false) :
+    ConcM Tgt WaitResult := do
   let _ ← ConcM.liftMem takeInterrupt
   let c ← pick (waitCount p e timed)
   let v ← ConcM.liftMem (futexWord p)
@@ -189,11 +201,11 @@ def futexWait (p : Ptr) (e : BitVec 32) (timed : Bool) : ConcM Tgt WaitResult :=
   match c with
   | 0 =>
     if timed then
-      ConcM.liftMem (enqueue p)
+      ConcM.liftMem (enqueue p shared)
       ConcM.sync .yield
       ConcM.liftMem timedResume
     else
-      ConcM.sync (.wait p e)
+      ConcM.sync (.wait p e shared)
       return (if ← ConcM.liftMem takeInterrupt then .interrupted else .woken)
   | 1 => return .interrupted
   | _ => return .timedOut
@@ -204,35 +216,45 @@ def sublistsLen {α : Type} : Nat → List α → List (List α)
   | _ + 1, [] => []
   | k + 1, x :: xs => (sublistsLen k xs).map (x :: ·) ++ sublistsLen (k + 1) xs
 
-/-- The threads queued at `p`, in queue order. -/
-def _root_.Zig.Mem.waitersAt (m : Mem) (p : Ptr) : List ThreadId :=
-  (m.waiters.toList.filter (·.2 == p)).map (·.1)
+/-- The threads queued at the key `k`, in queue order. -/
+def _root_.Zig.Mem.waitersAt (m : Mem) (k : FutexKey) : List ThreadId :=
+  (m.waiters.toList.filter (·.2 == k)).map (·.1)
 
-/-- The sets of threads that a wake of up to `n` waiters at `p` (`none`: all) can wake: every
-subset of `min n k` of the `k` queued threads. -/
-def wakeSets (m : Mem) (p : Ptr) (n : Option Nat) : List (List ThreadId) :=
-  let ws := m.waitersAt p
+/-- The sets of threads that a wake of up to `n` waiters at the key `k` (`none`: all) can wake:
+every subset of `min n c` of the `c` queued threads. -/
+def wakeSets (m : Mem) (k : FutexKey) (n : Option Nat) : List (List ThreadId) :=
+  let ws := m.waitersAt k
   sublistsLen ((n.map (Nat.min · ws.length)).getD ws.length) ws
 
-/-- The number of options of a wake. -/
-def wakeCount (p : Ptr) (n : Option Nat) (m : Mem) : Nat := (wakeSets m p n).length
+/-- The number of options of a wake at the key `k`. -/
+def wakeCount (k : FutexKey) (n : Option Nat) (m : Mem) : Nat := (wakeSets m k n).length
+
+/-- `wakeCount` at `p`'s key in the domain `shared` (`Mem.keyAt`); `0` if `p`'s block does not
+exist. -/
+def wakeCountAt (p : Ptr) (shared : Bool) (n : Option Nat) (m : Mem) : Nat :=
+  match m.keyAt p shared with
+  | some k => wakeCount k n m
+  | none => 0
 
 /-- The threads `ts` leave the queue and go on at their next turn. -/
 def wakeThreads (ts : List ThreadId) : MemM Unit := modify fun m =>
   { m with waiters := m.waiters.filter (fun w => !ts.contains w.1), woken := m.woken ++ ts.toArray }
 
-/-- Wake option `c` of up to `n` waiters at `p`: the number woken, or `none` (nobody woken) past
-the last option. -/
-def wakeAt (c : Nat) (p : Ptr) (n : Option Nat) : MemM (Option Nat) := do
-  let some ts := (wakeSets (← get) p n)[c]? | return none
+/-- Wake option `c` of up to `n` waiters at the key `k`: the number woken, or `none` (nobody
+woken) past the last option. -/
+def wakeAt (c : Nat) (k : FutexKey) (n : Option Nat) : MemM (Option Nat) := do
+  let some ts := (wakeSets (← get) k n)[c]? | return none
   wakeThreads ts
   return some ts.length
 
-/-- A futex wake of up to `n` waiters at `p` (`none`: all of them; module doc). With `spurious`,
-there is one more option, `none`: `EINTR`, nobody woken. -/
-def futexWake (p : Ptr) (n : Option Nat) (spurious : Bool := false) : ConcM Tgt (Option Nat) := do
-  let c ← pick fun m => wakeCount p n m + (if spurious then 1 else 0)
-  ConcM.liftMem (wakeAt c p n)
+/-- A futex wake of up to `n` waiters at `p`'s key in the domain `shared` (`none`: all of them;
+module doc). With `spurious`, there is one more option, `none`: `EINTR`, nobody woken. The key is
+resolved in the waking step, at the memory where the oracle picks (`Mem.keyAt`; `.illegal` if
+`p`'s block does not exist, which the row's address check before rules out). -/
+def futexWake (p : Ptr) (shared : Bool) (n : Option Nat) (spurious : Bool := false) :
+    ConcM Tgt (Option Nat) := do
+  let c ← pick fun m => wakeCountAt p shared n m + (if spurious then 1 else 0)
+  ConcM.liftMem (do wakeAt c (← futexKeyOf p shared) n)
 
 /-! ## `struct timespec` -/
 
@@ -247,9 +269,6 @@ def readTimespec (p : Ptr) : MemM (Option Nat) := do
 
 /-! ## Address validation (module doc) -/
 
-/-- The address that the kernel receives for a pointer with numeric address `a`: its `usize`. -/
-def futexAddr (a : Int) : Nat := (a % 2 ^ 64).toNat
-
 /-- `p` is a live writable `u32` of the model: four live bytes of one live block that is not
 read-only, at an address that is a multiple of four (`Mem.accessW`). Natively it is a mapped,
 writable user word (premise SEM-07). -/
@@ -257,6 +276,14 @@ def _root_.Zig.Mem.wordAt (m : Mem) (p : Ptr) : Bool :=
   match (m.accessW p 4 4).run with
   | some (.ok _) => true
   | _ => false
+
+/-- `p` points into a block whose pages are anonymous memory natively (`BlockKind.anon`). -/
+def _root_.Zig.Mem.anonAt (m : Mem) (p : Ptr) : Bool :=
+  match p.block with
+  | some b => match m.blocks[b]? with
+    | some blk => blk.kind.anon
+    | none => false
+  | none => false
 
 /-- The address `e - 1` is below the end of a block that the run placed, live or not: natively a
 user address (premise SEM-07), so `access_ok` passes for every address below `e`. -/
@@ -274,7 +301,7 @@ needs knowledge that the model leaves open (module doc). No state change. -/
 def futexKey (p : Ptr) (a : Int) (shared : Bool) : MemM (Option (BitVec 64)) := do
   let m ← get
   let u := futexAddr a
-  if m.wordAt p || (!shared && m.userBelow (u + 4)) then return none
+  if (m.wordAt p && (!shared || m.anonAt p)) || (!shared && m.userBelow (u + 4)) then return none
   if 2 ^ 63 ≤ u && u.testBit 55 then return some (negErrno E.FAULT)
   throw .illegal
 
@@ -296,7 +323,7 @@ def futex_4arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) (timeout :
   let a ← ConcM.liftMem (ptrAddr uaddr)
   if a % 4 ≠ 0 then return negErrno E.INVAL
   if let some e ← ConcM.liftMem (futexKey uaddr a (futex_op = FUTEX_WAIT)) then return e
-  match ← futexWait uaddr val timeout.isSome with
+  match ← futexWait uaddr val timeout.isSome (futex_op = FUTEX_WAIT) with
   | .woken => return 0
   | .mismatch => return negErrno E.AGAIN
   | .interrupted => return negErrno E.INTR
@@ -314,7 +341,7 @@ def futex_3arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) : ConcM Tg
   let a ← ConcM.liftMem (ptrAddr uaddr)
   if a % 4 ≠ 0 then return negErrno E.INVAL
   if let some e ← ConcM.liftMem (futexKey uaddr a (futex_op = FUTEX_WAKE)) then return e
-  let r ← futexWake uaddr (some (wakeLimit val))
+  let r ← futexWake uaddr (futex_op = FUTEX_WAKE) (some (wakeLimit val))
   return BitVec.ofNat 64 (r.getD 0)
 
 end Linux
@@ -390,7 +417,7 @@ def __ulock_wake (op : BitVec 32) (addr : Option Ptr) (val : BitVec 64) : ConcM 
       val ≠ 0 then
     throw .unspecified
   let some p ← ConcM.liftMem (ulockAddr addr false) | return negErrno32 E.INVAL
-  match ← futexWake p (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
+  match ← futexWake p false (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
       (spurious := true) with
   | none => return negErrno32 E.INTR
   | some 0 => return negErrno32 E.NOENT

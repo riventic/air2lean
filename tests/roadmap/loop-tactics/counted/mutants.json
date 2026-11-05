@@ -1,0 +1,63 @@
+[
+ {
+  "name": "down-relation",
+  "old": "3 * (s0.i.toNat - s.i.toNat)",
+  "new": "3 * (s.i.toNat - s0.i.toNat)",
+  "in": [
+   "down_step",
+   "down_loop"
+  ]
+ },
+ {
+  "name": "ne-bound",
+  "old": "s.i.toNat ≤ p1.toNat ∧",
+  "new": "True ∧",
+  "in": [
+   "upNe_step",
+   "upNe_loop"
+  ]
+ },
+ {
+  "name": "le-counter-fits",
+  "old": "p1.toNat + 1 < 2 ^ 32 ∧",
+  "new": "True ∧",
+  "in": [
+   "upLe_step",
+   "upLe_loop"
+  ]
+ },
+ {
+  "name": "len-measure",
+  "old": ": Nat :=\n  p1.len.toNat - s.i.toNat\n",
+  "new": ": Nat :=\n  p1.len.toNat\n",
+  "in": [
+   "lenCount_step",
+   "lenCount_loop"
+  ]
+ },
+ {
+  "name": "read-cell",
+  "old": "up (pts p1 4 v0) ⋆\n    ",
+  "new": "",
+  "in": [
+   "readBound_step",
+   "readBound_loop"
+  ]
+ },
+ {
+  "name": "houdini-pruned-kept",
+  "old": "⟪s.i.toNat ≤ s0.i.toNat ∧",
+  "new": "⟪s.i.toNat ≤ s0.i.toNat ∧ s0.i.toNat ≤ s.i.toNat ∧",
+  "in": [
+   "down_step"
+  ]
+ },
+ {
+  "name": "houdini-kept-dropped",
+  "old": "⟪s.i.toNat ≤ s0.i.toNat ∧\n      ",
+  "new": "⟪",
+  "in": [
+   "down_step"
+  ]
+ }
+]

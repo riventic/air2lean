@@ -222,7 +222,8 @@ theorem UM.lstep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId}
       · exact .inl ⟨hk, hs.someLe h''⟩
       · exact .inr (hs.allLe h'')
     · exact absurd hr (io_notL ho')
-  · by_cases hl : w.2 = L.ptr
+  · rw [hs.key, hu.we.key_of_addrs hs.addrs]
+    by_cases hl : w.2 = L.key m
     · exact .inl hl
     · exact hu.q w ((hs.waiters_mem w hl).mp hw)
 
@@ -242,7 +243,11 @@ theorem UM_frame_native {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {hF
     (hrest : Rest rX' m') (hbk : BlkOk m') (hwS : WS.Ok m') (hwE : WE.Ok m')
     (hX : xs G' = xs G) : UM G' rX' m' := by
   refine ⟨by rw [hX]; unfold Shape at *; rw [hs.threads]; exact hu.shape, fun e he hr => ?_,
-    hrest, hbk, hwS, hwE, fun w hw => by rw [hs.waiters] at hw; exact hu.q w hw⟩
+    hrest, hbk, hwS, hwE, fun w hw => by
+      obtain ⟨_, hb₀, -⟩ := hu.blk
+      rw [hs.waiters] at hw
+      rw [L.key_of_addrs hs.addrs hb₀, hu.we.key_of_addrs hs.addrs]
+      exact hu.q w hw⟩
   rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
   · obtain ⟨-, hb, hk, ho, hl, hc⟩ := hn
     rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,

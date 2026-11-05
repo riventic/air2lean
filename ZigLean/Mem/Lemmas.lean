@@ -126,6 +126,122 @@ theorem access_eq {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o
       · simp only [throw, throwThe, MonadExceptOf.throw, ExceptT.mk, pure, ExceptT.pure] at h
         cases h
 
+/-! ### Futex keys (`FutexKey`, `Mem.keyAt`)
+
+The generic facts that a protocol needs about the key of its word: the key of a pointer into an
+existing block, its stability while the block keeps its address, the key of a word that an
+access resolves (`Block.key`), and when two addresses give different keys (`futexAddr_inj`; for
+two live words, `Mem.keyAt_ne` in `ZigLean/Sep/Full/Disjoint.lean`). -/
+
+/-- The key of a pointer into block `b`. -/
+theorem Mem.keyAt_block {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk)
+    (o : Int) (sh : Bool) : m.keyAt ⟨some b, o⟩ sh = some ⟨sh, futexAddr (blk.addr + o)⟩ := by
+  simp [Mem.keyAt, addrIn, h]
+
+/-- The key reads only the blocks' addresses. -/
+theorem Mem.keyAt_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) (p : Ptr) (sh : Bool) :
+    m'.keyAt p sh = m.keyAt p sh := by
+  rw [Mem.keyAt, h, ← Mem.keyAt]
+
+/-- A block that keeps its address keeps the keys into it. -/
+theorem Mem.keyAt_of_addr {m m' : Mem} {b : BlockId} {blk blk' : Block}
+    (h : m.blocks[b]? = some blk) (h' : m'.blocks[b]? = some blk') (ha : blk'.addr = blk.addr)
+    (o : Int) (sh : Bool) : m'.keyAt ⟨some b, o⟩ sh = m.keyAt ⟨some b, o⟩ sh := by
+  rw [Mem.keyAt_block h, Mem.keyAt_block h', ha]
+
+/-- The key of a word that `Mem.access` resolves is its block's `Block.key`. -/
+theorem Mem.keyAt_of_access {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} (h : m.access p n al = pure (b, blk, o)) (sh : Bool) :
+    m.keyAt p sh = some (blk.key o sh) := by
+  obtain ⟨hp, hb, -, h0, -, -, rfl⟩ := access_eq h
+  obtain ⟨pb, po⟩ := p
+  simp only at hp h0; subst hp
+  rw [Mem.keyAt_block hb, Block.key, Int.toNat_of_nonneg h0]
+
+/-- `futexKeyOf` reads the key and keeps the memory. -/
+theorem futexKeyOf_run {m : Mem} {p : Ptr} {sh : Bool} {k : FutexKey}
+    (h : m.keyAt p sh = some k) : (futexKeyOf p sh).run m = pure (k, m) := by
+  simp [futexKeyOf, h, zig_unfold, get, getThe, MonadStateOf.get, StateT.get, ExceptT.pure,
+    ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
+
+/-- `ptrAddr` is `addrIn` in the state monad: the address and the same memory, or `.illegal`
+without a block. -/
+theorem ptrAddr_run_addrIn (p : Ptr) (m : Mem) : (ptrAddr p).run m = match addrIn m.blocks p with
+    | some v => pure (v, m) | none => throw .illegal := by
+  obtain ⟨pb, po⟩ := p
+  cases pb with
+  | none => rfl
+  | some b =>
+    cases hb : m.blocks[b]? <;>
+      simp [ptrAddr, addrIn, hb, zig_unfold, get, getThe, MonadStateOf.get, StateT.get,
+        ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, throw, throwThe,
+        MonadExceptOf.throw]
+
+/-- The key that an OS row forms from the address `a` that `ptrAddr` gave is `Mem.keyAt`. -/
+theorem Mem.keyAt_of_ptrAddr {m m' : Mem} {p : Ptr} {a : Int}
+    (h : (ptrAddr p).run m = pure (a, m')) (sh : Bool) : m.keyAt p sh = some ⟨sh, futexAddr a⟩ := by
+  unfold Mem.keyAt
+  rw [ptrAddr_run_addrIn] at h
+  split at h
+  · rename_i v hv
+    rw [hv]
+    have := congrArg ExceptT.run h
+    simp [zig_unfold, ExceptT.run] at this
+    rw [this.1]; rfl
+  · have := congrArg ExceptT.run h
+    simp [zig_unfold, ExceptT.run, throw, throwThe, MonadExceptOf.throw, ExceptT.mk,
+      ExceptT.pure] at this
+
+/-- Two addresses in `[0, 2 ^ 64)` with the same `usize` are equal. -/
+theorem futexAddr_inj {a a' : Int} (h0 : 0 ≤ a) (h1 : a < 2 ^ 64) (h0' : 0 ≤ a')
+    (h1' : a' < 2 ^ 64) (h : futexAddr a = futexAddr a') : a = a' := by
+  unfold futexAddr at h
+  rw [Int.emod_eq_of_lt h0 h1, Int.emod_eq_of_lt h0' h1'] at h
+  omega
+
+/-- The total key of an existing block's word is its `Block.key`. -/
+theorem Mem.wordKey_of {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk)
+    (o : Nat) (sh : Bool) : m.wordKey b o sh = blk.key o sh := by
+  simp [Mem.wordKey, Block.key, h]
+
+/-- The key of a pointer into an existing block is its word's total key. -/
+theorem Mem.keyAt_wordKey {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk)
+    (o : Nat) (sh : Bool) : m.keyAt ⟨some b, (o : Int)⟩ sh = some (m.wordKey b o sh) := by
+  rw [Mem.keyAt_block h, Mem.wordKey_of h, Block.key]
+
+/-- The total key reads only the block's address. -/
+theorem Mem.wordKey_of_addr {m m' : Mem} {b : BlockId}
+    (h : (m'.blocks[b]?).map (·.addr) = (m.blocks[b]?).map (·.addr)) (o : Nat) (sh : Bool) :
+    m'.wordKey b o sh = m.wordKey b o sh := by
+  simp only [Mem.wordKey, h]
+
+theorem Mem.wordKey_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) (b : BlockId) (o : Nat)
+    (sh : Bool) : m'.wordKey b o sh = m.wordKey b o sh :=
+  Mem.wordKey_of_addr (by rw [h]) o sh
+
+/-- Two words of one block at different offsets less than `2 ^ 64` apart have different keys:
+their addresses differ by less than `2 ^ 64`, so their `usize`s differ. -/
+theorem Mem.wordKey_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho : o < o' + 2 ^ 64)
+    (ho' : o' < o + 2 ^ 64) (sh sh' : Bool) : m.wordKey b o sh ≠ m.wordKey b o' sh' := by
+  simp only [Mem.wordKey, futexAddr, ne_eq, FutexKey.mk.injEq, not_and]
+  intro _ e
+  generalize ((m.blocks[b]?).map (·.addr)).getD 0 = A at e
+  have h1 := Int.toNat_of_nonneg (Int.emod_nonneg (A + o) (by omega : (2 : Int) ^ 64 ≠ 0))
+  have h2 := Int.toNat_of_nonneg (Int.emod_nonneg (A + o') (by omega : (2 : Int) ^ 64 ≠ 0))
+  rw [e] at h1
+  omega
+
+/-- A pointer into block `b` at another offset than a word of `b` has another key
+(`Mem.wordKey_ne_off`), or none. -/
+theorem Mem.keyAt_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho : o < o' + 2 ^ 64)
+    (ho' : o' < o + 2 ^ 64) (sh sh' : Bool) :
+    m.keyAt ⟨some b, (o : Int)⟩ sh ≠ some (m.wordKey b o' sh') := by
+  cases hb : m.blocks[b]? with
+  | none => simp [Mem.keyAt, addrIn, hb]
+  | some blk =>
+    rw [Mem.keyAt_wordKey hb]
+    exact fun e => Mem.wordKey_ne_off h ho ho' sh sh' (Option.some.inj e)
+
 /-- A successful access starts at or above its block's first live offset. -/
 theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
@@ -803,6 +919,93 @@ def Mem.write (m : Mem) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) 
 `SingleThread`. -/
 theorem singleThread_write {m : Mem} (h : m.SingleThread) (b : BlockId) (blk : Block) (o : Nat)
     (bs : Array Byte) : (m.write b blk o bs).SingleThread := h
+
+/-- A write keeps every block's address, so every futex key (`Mem.wordKey`). -/
+theorem Mem.wordKey_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) (b' : BlockId) (o' : Nat) (sh : Bool) :
+    (m.write b blk o bs).wordKey b' o' sh = m.wordKey b' o' sh := by
+  refine Mem.wordKey_of_addr ?_ o' sh
+  simp only [Mem.write, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  split
+  · subst b'; rw [hb]; simp [(Array.getElem?_eq_some_iff.mp hb).1]
+  · rfl
+
+/-! ### Block addresses stay
+
+A block never moves: a write, a `free`, an unmap or an in-place resize changes only its bytes,
+`live` flag or `kind`, and every `addr :=` of the model makes a new block (`Mem.afterAlloc`, a
+mapping, a moving `mremap`). So every thread step (`FStepIn.addrs`) keeps the address of every
+block that exists (`Mem.SameAddrs`), and everything computed from addresses (`addrIn`, a futex
+key) stays across it. -/
+
+/-- Every block of `m` exists in `m'` at the same address (`m'` may have more blocks). -/
+def Mem.SameAddrs (m m' : Mem) : Prop :=
+  ∀ (b : BlockId) (blk : Block), m.blocks[b]? = some blk →
+    ∃ blk' : Block, m'.blocks[b]? = some blk' ∧ blk'.addr = blk.addr
+
+theorem Mem.SameAddrs.refl (m : Mem) : m.SameAddrs m := fun _ blk hb => ⟨blk, hb, rfl⟩
+
+theorem Mem.SameAddrs.trans {m m' m'' : Mem} (h : m.SameAddrs m') (h' : m'.SameAddrs m'') :
+    m.SameAddrs m'' := fun b blk hb => by
+  obtain ⟨blk₁, hb₁, e₁⟩ := h b blk hb
+  obtain ⟨blk₂, hb₂, e₂⟩ := h' b blk₁ hb₁
+  exact ⟨blk₂, hb₂, e₂.trans e₁⟩
+
+theorem Mem.SameAddrs.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m.SameAddrs m' :=
+  fun _ blk hb => ⟨blk, h ▸ hb, rfl⟩
+
+/-- No block disappears. -/
+theorem Mem.SameAddrs.size {m m' : Mem} (h : m.SameAddrs m') : m.blocks.size ≤ m'.blocks.size := by
+  rcases Nat.eq_zero_or_pos m.blocks.size with h0 | hpos
+  · omega
+  · obtain ⟨_, hb', -⟩ := h _ _ (Array.getElem?_eq_getElem (Nat.sub_lt hpos Nat.one_pos))
+    have := (Array.getElem?_eq_some_iff.mp hb').1
+    omega
+
+/-- A new block at the end. -/
+theorem Mem.SameAddrs.of_push {m m' : Mem} {x : Block} (h : m'.blocks = m.blocks.push x) :
+    m.SameAddrs m' := fun b blk hb => by
+  refine ⟨blk, ?_, rfl⟩
+  rw [h, Array.getElem?_push_lt (Array.getElem?_eq_some_iff.mp hb).1]
+  exact (Array.getElem?_eq_getElem _).symm.trans hb
+
+/-- Block `b` replaced by one at its address (a write, a `free`, an in-place resize). -/
+theorem Mem.SameAddrs.of_set {m m' : Mem} {b : BlockId} {nb : Block}
+    (h : m'.blocks = m.blocks.set! b nb) (ha : ∀ blk, m.blocks[b]? = some blk → nb.addr = blk.addr) :
+    m.SameAddrs m' := fun b' blk hb => by
+  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  split
+  · subst b'
+    exact ⟨nb, by simp [(Array.getElem?_eq_some_iff.mp hb).1], ha blk hb⟩
+  · exact ⟨blk, hb, rfl⟩
+
+/-- A write keeps every block's address. -/
+theorem Mem.sameAddrs_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) : m.SameAddrs (m.write b blk o bs) :=
+  .of_set rfl fun _ h => by rw [hb] at h; cases h; rfl
+
+/-- An address computed in `m` is the same in `m'`. -/
+theorem Mem.SameAddrs.addrIn_eq {m m' : Mem} (h : m.SameAddrs m') {p : Ptr} {a : Int}
+    (ha : addrIn m.blocks p = some a) : addrIn m'.blocks p = some a := by
+  obtain ⟨_ | b, po⟩ := p
+  · exact ha
+  · simp only [addrIn, Option.map_eq_some_iff] at ha ⊢
+    obtain ⟨blk, hb, rfl⟩ := ha
+    obtain ⟨blk', hb', e⟩ := h b blk hb
+    exact ⟨blk', hb', by rw [e]⟩
+
+/-- A futex key read in `m` is the same in `m'` (it reads only the blocks' addresses). -/
+theorem Mem.keyAt_of_addrs {m m' : Mem} (h : m.SameAddrs m') {p : Ptr} {sh : Bool}
+    {k : FutexKey} (hk : m.keyAt p sh = some k) : m'.keyAt p sh = some k := by
+  simp only [Mem.keyAt, Option.map_eq_some_iff] at hk ⊢
+  obtain ⟨a, ha, rfl⟩ := hk
+  exact ⟨a, h.addrIn_eq ha, rfl⟩
+
+/-- The key of a word of a block of `m` is the same in `m'`. -/
+theorem Mem.SameAddrs.wordKey {m m' : Mem} (h : m.SameAddrs m') {b : BlockId} {blk : Block}
+    (hb : m.blocks[b]? = some blk) (o : Nat) (sh : Bool) : m'.wordKey b o sh = m.wordKey b o sh := by
+  obtain ⟨blk', hb', e⟩ := h b blk hb
+  exact Mem.wordKey_of_addr (by rw [hb, hb']; simp [e]) o sh
 
 /-- `.access` only looks at `blocks`, never at `current`/`clocks`/`threads`/`footprint`, so a
 race-free `recordAccess` (`Mem.recordAt`) never changes what a further access sees. -/

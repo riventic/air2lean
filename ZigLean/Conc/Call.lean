@@ -123,9 +123,10 @@ instance : Enc Io where
   decode bs := do
     if (← handleOfBytes 16 bs) = .io then pure ⟨⟩ else throw .unspecified
 
-/-- `Io.futexWaitUncancelable(T, ptr, expected)`: the `u32` bits of `expected`. -/
+/-- `Io.futexWaitUncancelable(T, ptr, expected)`: the `u32` bits of `expected`, at a private key
+(`Io.Threaded`'s futexes are private). -/
 def futexWaitC {α : Type} {n : Nat} [Packed α n] (_ : Io) (p : Ptr) (expected : α) : CM Tgt σ Unit :=
-  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p ((Packed.toBits expected).setWidth 32))))
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p ((Packed.toBits expected).setWidth 32) false)))
 
 /-- The option of the oracle with which a cancelation request that arrived during a blocking
 cancelation point is delivered there (`error.Canceled`); option 1 leaves it pending for the next
@@ -157,7 +158,7 @@ def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
     futexWaitC io p expected
     lateCancelC
 
-/-- `Io.futexWake(T, ptr, max_waiters)`. -/
+/-- `Io.futexWake(T, ptr, max_waiters)`, at `ptr`'s private key (`Thread.futexWakePtr`). -/
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 
@@ -244,11 +245,12 @@ translated `Thread.Mutex.FutexImpl.unlock` (`Air2Lean.ownerCheckedUnlocks`): the
 offset 0 of `p`. -/
 def mutexOwnerCheck (p : Ptr) : ConcM Tgt Unit := ConcM.liftMem (Thread.mutexOwnerCheck p)
 
-/-- `Thread.Futex.wait(ptr, expect)`: the futex wait of the model (no `Io`). -/
+/-- `Thread.Futex.wait(ptr, expect)`: the futex wait of the model (no `Io`), at a private key
+(`FUTEX_PRIVATE_FLAG`; a process-local ulock on macOS). -/
 def threadFutexWaitC (p : Ptr) (expected : BitVec 32) : CM Tgt σ Unit :=
-  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p expected)))
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p expected false)))
 
-/-- `Thread.Futex.wake(ptr, max_waiters)`. -/
+/-- `Thread.Futex.wake(ptr, max_waiters)`, at `ptr`'s private key (`Thread.futexWakePtr`). -/
 def threadFutexWakeC (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 

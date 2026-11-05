@@ -814,9 +814,15 @@
         "Proofs.Threadsync.Deadline",
         "Proofs.Threadsync.Gen",
         "Proofs.Threadsync.Handoff",
-        "Proofs.Threadsync.Lock",
         "Proofs.Threadsync.Mutex",
-        "Proofs.Threadsync.WaitGroup"
+        "Proofs.Threadsync.WaitGroup",
+        "Proofs.Threadsync.WaitGroup.Join",
+        "Proofs.Threadsync.WaitGroup.Main",
+        "Proofs.Threadsync.WaitGroup.Protocol",
+        "Proofs.Threadsync.WaitGroup.Read",
+        "Proofs.Threadsync.WaitGroup.Start",
+        "Proofs.Threadsync.WaitGroup.Task",
+        "Proofs.Threadsync.WaitGroup.Wait"
       ],
       "budget": {
         "recorded": {
@@ -914,11 +920,6 @@
             "baseline_seconds": 27.9649,
             "baseline_ratio": 3.779,
             "max_ratio": 7.558
-          },
-          "Proofs.Threadsync.Lock": {
-            "baseline_seconds": 4.0299,
-            "baseline_ratio": 0.545,
-            "max_ratio": 1.545
           },
           "Proofs.Threadsync.Mutex": {
             "baseline_seconds": 8.7796,

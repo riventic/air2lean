@@ -60,7 +60,8 @@ stale pointer names the dead block, not the live one at its address.
 | `ptrFromAddr` (`@ptrFromInt`) | the block whose range covers the address | ambiguous when two blocks cover it (below) |
 | `Mem.growFree` (in-place growth) | the grown range is clear of every other live block | growth succeeds or fails with the placement |
 | `fixedBufferNext` | padding from the buffer's base address | only the padding; the block address comes from `alloc` |
-| footprint, futex waiters, `Io.Group` table | block id and offset (`Ptr`) | unaffected: keyed by provenance |
+| footprint, `Io.Group` table | block id and offset (`Ptr`) | unaffected: keyed by provenance |
+| futex waiters | the futex key: numeric address and domain (`FutexKey`, `Mem.keyAt`) | a word placed at a freed word's address has its key, so a wake there reaches the freed word's waiters, as on Linux; protocols keep their words live, so their keys stay apart (`Mem.keyAt_ne`) |
 
 | Lemma | Address use | Status |
 | --- | --- | --- |

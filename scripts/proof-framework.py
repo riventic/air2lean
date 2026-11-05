@@ -23,7 +23,7 @@ lists what exists today, so that nothing parallel is added:
 * `legacy_users`: every Lean file that uses the legacy separation logic (imports a module of
   `LEGACY_MODULES` or names a legacy triple, `LEGACY_NAMES`), by path;
 * `tactic_uses`: per file and per tactic, how often a tactic of `tactics` with kind `syntax` and
-  status `legacy-to-retire` (`unroll_sched`, `vc_gen`, …) occurs in the code (`scan_uses`: a word
+  status `legacy-to-retire` (`unroll_sched`, `tomega`, …) occurs in the code (`scan_uses`: a word
   match outside comments and strings; a local variable of the same name counts, a conservative
   over-approximation). Declaring a tactic is gated above, using it needs its own entry, so a new
   file cannot build on a tactic to retire without a reviewed addition. A count that rises is a
@@ -91,7 +91,7 @@ TACTIC_DECL = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:syntax|
 TACTIC_RULES = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:macro_rules|elab_rules)\b")
 TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\((?:(tactic|command)\|)?\s*([^\s$)\]]+)", re.M)
 # The syntax category of a declaration (before its `=>`) or of a rules block (`elab_rules : command`).
-# A command elaborator can add, hide or rewrite declarations (`if_decl … end_if` drops theorems when
+# A command elaborator can add, hide or rewrite declarations (`when_defined … end_when` drops theorems when
 # its condition fails), so new commands are gated like new tactics.
 CATEGORY = re.compile(r":\s*(tactic|command)\b")
 DECL_KIND = {"tactic": "syntax", "command": "command"}
@@ -394,9 +394,9 @@ def default_status(entry):
     if "name" in entry:
         if entry["name"].split(".")[-1] in TARGET_JUDGMENTS:
             return "target"
-        # Structural candidates: the legacy layer's and the hand-written sync specs' are to retire.
-        legacy = LEGACY_MODULES.match(entry["module"]) or entry["module"].startswith("ZigLean.Conc.Spec.")
-        return "legacy-to-retire" if legacy or entry["name"].endswith(SUFFIXES) else "target"
+        # Structural candidates: the legacy layer's, and parallel judgments by name, are to retire.
+        legacy = LEGACY_MODULES.match(entry["module"]) or entry["name"].endswith(SUFFIXES)
+        return "legacy-to-retire" if legacy else "target"
     # A tactic or registry that is not `fsym`'s is a candidate for a parallel automation; the
     # review of its approval sets `target` when it belongs to the framework.
     return "target" if TARGET_AUTOMATION.match(entry.get("tactic") or entry["registry"]) else "legacy-to-retire"

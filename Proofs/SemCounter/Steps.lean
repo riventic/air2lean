@@ -38,7 +38,7 @@ theorem lt2 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) (hI : S.
 the threads. -/
 theorem hb_same {G G' : ThreadId → Gh} {m : Mem} (hph : ∀ u, (G' u).1.ph = (G u).1.ph)
     {c : VClock} (h : L.HB G m c) : L.HB G' m c :=
-  h.mono (fun u hu => .inl ((hph u).trans hu)) (fun _ => VClock.le_refl _) (fun _ h => h) rfl
+  h.mono (fun u hu => .inl ((congrArg LPh.held (hph u)).trans hu)) (fun _ => VClock.le_refl _) (fun _ h => h) rfl
     (fun u hg => by
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)
@@ -48,7 +48,7 @@ every thread's lock place. -/
 theorem hb_fstep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
     (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hph : ∀ u, (G' u).1.ph = (G u).1.ph)
     {c : VClock} (h : L.HB G m c) : L.HB G' m' c :=
-  h.mono (fun u hu => .inl ((hph u).trans hu)) hs.clock (hL.before_fstep hs) hs.threads
+  h.mono (fun u hu => .inl ((congrArg LPh.held (hph u)).trans hu)) hs.clock (hL.before_fstep hs) hs.threads
     (fun u hg => by
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)
@@ -86,7 +86,7 @@ theorem Lg.congr {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (hg : L.ph (G t) ≠ .gone) (hna : L.ph (G t) ≠ .away)
-    (hu : U G rX m) (hs : L.Step t m m')
+    (hz : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m) (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t (L.set (G t) p h) u).2 = (G u).2 := fun u =>
@@ -94,22 +94,22 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   have hst : (S.ph (G t)).isPst = false := by
     rcases hok.2 with e | e <;> (show (G t).2.sp.isPst = false; rw [e]; rfl)
   refine ⟨hu.um.lstep hs (funext fun u => congrArg X.ph (hX u)),
-    hu.cinv.lstep hu.um.ws hu.um.we apS apE hok.1 hna (fun _ _ _ => rfl) hs,
-    hu.sinv.lstep hu.um.ws apS (fun _ _ _ => rfl) (fun _ _ _ => rfl) hst hg hs hrel,
+    hu.cinv.lstep hu.um.ws hu.um.we apS apE (weKey_ne m) hok.1 hna (fun _ _ _ => rfl) hs,
+    hu.sinv.lstep hu.um.ws apS (fun _ _ _ => rfl) (fun _ _ _ => rfl) hst hg hz hs hrel,
     hu.lg.congr (fun u => congrArg X.ph (hX u)) (fun u => congrArg X.c (hX u))
       (hu.um.ws.lockStep hs apS).2 (hu.um.we.lockStep hs apE).2
       (fun u h' => by rw [hX u] at h' ⊢; exact hu.lg.wtx u h')
-      (hu.lg.ehb.lstep hu.um.we apE hg hs hrel)⟩
+      (hu.lg.ehb.lstep hu.um.we apE hg hz hs hrel)⟩
 
 /-- A stop keeps `U`: it reads no current thread. -/
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U G rX m) :
     U G rX { m with current := t } :=
   ⟨hu.um.atStop t,
-    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
+    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
       (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.sinv.mono (m' := { m with current := t }) (fun _ => rfl) (fun _ => rfl) rfl hu.sinv.pst
       (fun _ h => .inl h) (fun _ => VClock.le_refl _) (fun _ h => h) rfl (fun _ h => h)
-      (fun _ h => .inl h) rfl,
+      (fun _ h => .inl h) rfl rfl,
     ⟨hu.lg.one, hu.lg.tot, hu.lg.wtx, hu.lg.ehb, hu.lg.f0, hu.lg.rc, hu.lg.f2, hu.lg.f3, hu.lg.f4,
       hu.lg.incS⟩⟩
 
@@ -160,7 +160,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
       (fun l hl => frame_rest (rest_box hu.um.rest (fun _ => box_live hu.um) (we_box hl)))
       (fun l _ => rfl)
   have hci : C.Inv L (upd G t (L.setPart (G t) r)) m.ticked :=
-    hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id hS hE (by rw [hfs.waiters])
+    hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id hS hE rfl rfl (by rw [hfs.waiters])
       (fun w hw _ => .inl (by rw [hfs.waiters] at hw; exact hw))
       (fun _ _ _ h => by rw [hfs.woken]; exact h) (Nat.le_of_eq (by rw [hfs.threads])) hfs.clock
   have hcl : m.ticked = { m with ticks := m.ticks + 1 } := rfl
@@ -400,14 +400,16 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rw [hG u e]; exact ⟨rfl, rfl⟩
   have hcu : ∀ u, u ≠ t → (G' u).2.c = (G u).2.c := fun u e => by rw [hG u e]
   -- the lock places: only a waiter's changes, between `out` and `away`
-  have hlq : (G t).1.ph = .holds → q = (G t).1.ph := fun hh => by
-    rcases hq with ⟨rfl, -⟩ | ⟨h1, -⟩
-    · rfl
-    · rcases h1 with h1 | ⟨h1, -⟩ <;>
-        (have h1' : (G t).1.ph = _ := h1; rw [hh] at h1'; cases h1')
-  have hhold : ∀ u, L.ph (G u) = .holds → L.ph (G' u) = .holds := fun u hu' => by
+  have hheld : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true := fun u hu' => by
     by_cases e : u = t
-    · subst e; show (G' u).1.ph = .holds; rw [hLt, hlq hu']; exact hu'
+    · subst e
+      have hu'' : ((G u).1.ph).held = true := hu'
+      show ((G' u).1.ph).held = true
+      rw [hLt]
+      rcases hq with ⟨rfl, -⟩ | ⟨h1, -⟩
+      · exact hu''
+      · rcases h1 with h1 | ⟨h1, -⟩ <;>
+          (have h1' : (G u).1.ph = _ := h1; rw [h1'] at hu''; cases hu'')
     · rw [hG u e]; exact hu'
   have hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone := fun u hg => by
     by_cases e : u = t
@@ -419,7 +421,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · rcases h1 with h1 | ⟨h1, -⟩ <;> rw [h1] <;> decide
     · rwa [hG u e] at hg
   have hhb : ∀ c, L.HB G m c → L.HB G' m' c := fun _ hc =>
-    hc.mono (fun u hu' => .inl (hhold u hu')) hclk hbef hth hgone
+    hc.mono (fun u hu' => .inl (hheld u hu')) hclk hbef hth hgone
   -- the state's and the epoch's writes
   obtain ⟨hwS, hSh⟩ := hwd _ (.inl rfl) hu.um.ws
   obtain ⟨hwE, hEh⟩ := hwd _ (.inr rfl) hu.um.we
@@ -429,7 +431,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   have hEp' : WE.hist m' = WE.hist m ∨ ∃ q n h', (G t).2.c = .inc q n h' ∧ p = .wk n q h' := hEp
   -- two threads in the signal code are one (both hold the mutex)
   have hsig1 : ∀ u v, ((G u).2.c).sig = true → ((G v).2.c).sig = true → u = v := fun u v h1 h2 =>
-    hWI.one u v (sig_holds hu.cinv hu.sinv h1) (sig_holds hu.cinv hu.sinv h2)
+    hWI.one u v (LPh.held_of_holds (sig_holds hu.cinv hu.sinv h1))
+      (LPh.held_of_holds (sig_holds hu.cinv hu.sinv h2))
   -- no thread in the critical code while one is in the signal code
   have hcp : ∀ u v, ((G u).2.c).crit = true → ((G v).2.c).sig = true → False := fun u v h1 h2 =>
     hu.sinv.cp u v h1 (sig_pst hu.cinv h2)
@@ -483,7 +486,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
         · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
       · have := hr.2.2; omega
-    · rcases hs.waiters hw with h' | rfl
+    · rw [hs.key hu.um.we, hWI.blk.key_of_addrs hs.addrs]
+      rcases hs.waiters hw with h' | rfl
       · exact hu.um.q w h'
       · exact .inr rfl
   refine ⟨hum, hI, hsi, ⟨by rw [(hph 0).1, (hph 1).1]; exact hu.lg.one, fun u k s h' => ?_,
@@ -497,7 +501,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- ehb: the new epoch write is the holder's
     rcases hEw with e | ⟨⟨q₀, n₀, h₀, e⟩, -, x, hx, e'⟩
     · exact .inl e
-    · refine .inr ⟨x, e', FLock.HB.of_holder (t := t) (hhold t ?_) (by rw [hx]; exact VClock.le_refl _)⟩
+    · refine .inr ⟨x, e', FLock.HB.of_holder (t := t) (hheld t (LPh.held_of_holds ?_))
+      (by rw [hx]; exact VClock.le_refl _)⟩
       exact sig_holds hu.cinv hu.sinv (by rw [e]; rfl)
   · -- f0
     by_cases et : u = t
@@ -722,7 +727,8 @@ theorem fits : S.Fits (proto semOf) U ok where
     role_l := fun _ _ _ _ => Iff.rfl
     role_part := fun _ _ _ => Iff.rfl
     ok_calm := fun _ _ _ hp hq => ⟨fun _ => hq, fun _ => hp⟩
-    kstep := kstep }
+    kstep := kstep
+    holdLive := fun _ _ _ _ hi _ hv => FLock.holdLive_none (fun _ h => h) hi hv }
 
 end SemCounter
 end Zig

@@ -410,7 +410,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
   (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
+- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex` (not in the OS rows `Os.*`, OSF-01/OSF-02, and not where the occurrence is the key layer's word `FutexKey`, `futexAddr` or `futexKeyOf`, e.g. `futexKeyOf_run`; `futexWait_futexAddr_eq` still derives THR-05).
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -420,11 +420,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: On macOS, `Thread.Mutex.DarwinImpl` stops at `os_unfair_lock_*`. The model is the
   lock's contract: an acquire `cmpxchg` 0→1 with a futex sleep, and a release `xchg` of 0
   with a wake, after an owner check (`Thread.mutexOwnerCheck`: an unlock by a thread that did
-  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
-  its DarwinImpl proofs only for a macOS translation (`if_decl`). The committed Linux
+  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/ThreadMutex.lean` elaborates
+  its DarwinImpl proofs only for a macOS translation (`when_defined`). The committed Linux
   translation selects `FutexImpl`, so no indexed theorem currently lists THR-06.
 - Derived from: tokens `osUnfairLock`, `DarwinImpl`.
-- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Lock.lean`.
+- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/ThreadMutex.lean`.
 
 <a id="thr-07"></a>
 ### THR-07 — Progress hints without fairness
@@ -863,9 +863,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: `Zig.loop` is a `partial_fixpoint`. Divergence is `none`. `Triple` and loop
   rules constrain only completed results, so a diverging program satisfies them. Finite
   loops do not reduce in the kernel, so loop clients use runtime assertions,
-  invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
-  iterations (`unroll_sched`), whose result is the loop's result.
-- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
+  invariant-based proofs, or a concrete scheduler run whose loops are unfolded by their
+  defining equation (`Zig.loop.eq_1`) before the kernel computes it.
+- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
@@ -1269,9 +1269,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   returns `-EINVAL` without reading the futex word, changing its queue or spending a scheduling
   turn. This alignment validation adds no state effect after any timeout copy. Then
   `get_futex_key` (`Linux.futexKey`, shared without `FUTEX_PRIVATE`) returns `-EFAULT` for an
-  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). The
-  key forms at a live writable word and, for a private key, at
-  any address below a placed block's end. Any other address is refused (`.illegal`). macOS
+  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). A
+  private key forms at a live writable word and at any address below a placed block's end. A
+  shared key forms only at a live writable word of an anonymous block (a stack, a heap block or
+  an OS mapping, `Mem.anonAt`): on a file-backed page Linux keys by inode and page offset, and a
+  copy-on-write of a `MAP_PRIVATE` page changes the key. Any other address is refused
+  (`.illegal`). macOS
   WAIT returns `-EINVAL` for a null or unaligned address.
   The existing comparison and sleep path follows these checks on Linux. The kernel compares
   the `u32` at the address with the expected value as one atomic read of the newest message
@@ -1317,10 +1320,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal
-  ([S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open)),
-  never a caller assumption authorizing a zero result for a native error. The queue still
-  matches waiters by provenance pointer rather than by the canonical numeric key and domain;
-  that part of S6 is open. No caller alignment or address-domain premise is added.
+  ([S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)),
+  never a caller assumption authorizing a zero result for a native error. The queue matches
+  waiters by the key (`FutexKey`: the domain and the `usize` of the numeric address,
+  `Mem.keyAt`), as `get_futex_key`; two live words of a memory with the live layout have
+  different keys (`Mem.keyAt_ne`). No caller alignment or address-domain premise is added.
 - Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
   rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
@@ -1361,9 +1365,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   thread's `freeAndExit` is outside the model.
 - Model gap: `Os.Linux.cloneExit` wakes at most one waiter at `ctid` (the oracle's choice; the
   regression `cleartid_wakes_one` of
-  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open)).
-  Its wake still matches waiters by provenance pointer rather than by the shared-domain numeric
-  key; that part of S6 is open.
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)).
+  Its wake matches waiters by the shared-domain key of `ctid`'s numeric address (`FutexKey`).
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
   `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
 - Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Linux v6.16

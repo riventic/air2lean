@@ -62,6 +62,21 @@ def setUpModule():
                  ('-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false',
                   'commit', '-q', '-m', 'copy')):
         subprocess.run(['git', '-C', str(TEMPLATE), *args], check=True, capture_output=True)
+    # `scripts/generated.py materialize` fetches the fixtures of the newest published ancestor of
+    # main, which the tree has legitimately aged past (shared Lean/toolchain drift): every case
+    # below assumes a fixture that is a fresh export of this very tree. Locally that precondition
+    # is checked and the module skipped (regenerate with `scripts/generated.py --heavy regen`); in
+    # CI the `provenance` job regenerates them, so the cases always run there and an aged fixture
+    # fails them.
+    if not os.environ.get('CI'):
+        for fixture in ('provenance', 'provenance-gap'):
+            done = subprocess.run([sys.executable, str(TEMPLATE / 'scripts/provenance-evidence.py'),
+                                   '--fixture', fixture, 'check', '--strict'], capture_output=True, text=True,
+                                  env=ENV, cwd=TEMPLATE)
+            status = json.loads(done.stdout)['status'] if done.stdout.strip() else 'unreadable'
+            if status != 'current':
+                raise unittest.SkipTest('%s fixture is %s for this tree, not a fresh export (regenerate: '
+                                        'scripts/generated.py --heavy regen)' % (fixture, status))
 
 
 def tearDownModule():

@@ -65,7 +65,7 @@ theorem wakePick_nodup : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat},
     exact hji ((h.getElem_inj (hi := hj) (hj := hi)).mp hje)
 
 /-- A wake at `p` with nobody queued there wakes nobody, whatever its count. -/
-theorem futexWake_none {p : Ptr} {m : Mem} (h0 : m.waitersAt p = []) (n n' : Nat)
+theorem futexWake_none {p : FutexKey} {m : Mem} (h0 : m.waitersAt p = []) (n n' : Nat)
     (cs : List Nat) : (futexWake p n cs).run m = (futexWake p n' cs).run m := by
   have : ∀ k, wakeSet m.waiters p k cs = #[] := fun k => by
     unfold wakeSet
@@ -104,7 +104,7 @@ theorem exists_wakePick : ∀ {ys l : List ThreadId}, ys.Sublist l →
 /-- **Every option of an OS wake is a scheduler wake** (`Thread.futexWake`, the `wake` sync op's
 part) of `wakeSize n k` threads with some choices `cs`: the OS model wakes the same threads, in
 the same order, as the scheduler can. -/
-theorem wakeAt_futexWake {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem} {j : Nat}
+theorem wakeAt_futexWake {c : Nat} {p : FutexKey} {n : Option Nat} {m m' : Mem} {j : Nat}
     (h : ((wakeAt c p n).run m).run = some (.ok (some j, m'))) :
     ∃ cs, ((Thread.futexWake p (wakeSize n (m.waitersAt p).length) cs).run m).run =
       some (.ok ((), m')) := by
@@ -122,7 +122,7 @@ theorem wakeAt_futexWake {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem} {j : 
     simp [Thread.futexWake, Thread.wakeSet, zig_unfold, ExceptT.run, hcs]
 
 /-- A wake option past the last set (`EINTR` of `__ulock_wake`) wakes nobody. -/
-theorem wakeAt_none {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem}
+theorem wakeAt_none {c : Nat} {p : FutexKey} {n : Option Nat} {m m' : Mem}
     (h : ((wakeAt c p n).run m).run = some (.ok (none, m'))) : m' = m := by
   unfold wakeAt at h
   cases hs : (wakeSets m p n)[c]? with
@@ -130,15 +130,21 @@ theorem wakeAt_none {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem}
   | some ts => simp [wakeThreads, zig_unfold, ExceptT.run, hs] at h
 
 /-- `wakeAt` never throws. -/
-theorem wakeAt_run (c : Nat) (p : Ptr) (n : Option Nat) (m : Mem) :
+theorem wakeAt_run (c : Nat) (p : FutexKey) (n : Option Nat) (m : Mem) :
     ∃ r m', ((wakeAt c p n).run m).run = some (.ok (r, m')) := by
   unfold wakeAt
   cases hs : (wakeSets m p n)[c]? with
   | none => exact ⟨none, m, by simp [zig_unfold, ExceptT.run, hs]⟩
   | some ts => exact ⟨some ts.length, _, by simp [wakeThreads, zig_unfold, ExceptT.run, hs]; rfl⟩
 
+/-- With `p`'s key `k` in the domain `sh`, the waking step of `futexWake` is `wakeAt` at `k`. -/
+theorem wakeAt_keyOf {c : Nat} {p : Ptr} {sh : Bool} {k : FutexKey} {w : Option Nat} {m : Mem}
+    (h : m.keyAt p sh = some k) :
+    (do wakeAt c (← futexKeyOf p sh) w : MemM (Option Nat)).run m = (wakeAt c k w).run m := by
+  simp only [StateT.run_bind, futexKeyOf_run h, pure_bind]
+
 /-- The option of a wake that woke `j` threads woke `wakeSize n k` of the `k` queued ones. -/
-theorem wakeAt_some {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem} {j : Nat}
+theorem wakeAt_some {c : Nat} {p : FutexKey} {n : Option Nat} {m m' : Mem} {j : Nat}
     (h : ((wakeAt c p n).run m).run = some (.ok (some j, m'))) :
     j = wakeSize n (m.waitersAt p).length := by
   unfold wakeAt at h
@@ -150,7 +156,7 @@ theorem wakeAt_some {c : Nat} {p : Ptr} {n : Option Nat} {m m' : Mem} {j : Nat}
 
 /-- **A wake of every waiter** (`none`: macOS `WAKE_ALL`) that woke `j` threads woke all `k` of
 them: nobody is left in the queue at `p`. -/
-theorem wakeAt_all {c : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
+theorem wakeAt_all {c : Nat} {p : FutexKey} {m m' : Mem} {j : Nat}
     (h : ((wakeAt c p none).run m).run = some (.ok (some j, m'))) :
     j = (m.waitersAt p).length ∧ m'.waitersAt p = [] := by
   refine ⟨by rw [wakeAt_some h]; rfl, ?_⟩
@@ -177,7 +183,7 @@ theorem wakeAt_all {c : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
 
 /-- A finite wake count covering the queue wakes every waiter at `p`. This counts queue
 entries; relating their number to a native-thread bound is a separate validity obligation. -/
-theorem wakeAt_all_of_le {c n : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
+theorem wakeAt_all_of_le {c n : Nat} {p : FutexKey} {m m' : Mem} {j : Nat}
     (h : ((wakeAt c p (some n)).run m).run = some (.ok (some j, m')))
     (hn : (m.waitersAt p).length ≤ n) :
     j = (m.waitersAt p).length ∧ m'.waitersAt p = [] := by
@@ -188,7 +194,7 @@ theorem wakeAt_all_of_le {c n : Nat} {p : Ptr} {m m' : Mem} {j : Nat}
 
 /-- An OS wake of up to `n ≥ 1` (or all) waiters takes the run of a scheduler wake of at least
 one (`WInv.wake`, `FEvent.Inv.wake`, …): with nobody queued, every count wakes nobody. -/
-theorem futexWake_pos {p : Ptr} {n : Option Nat} (hn : ∀ k, n = some k → 1 ≤ k) {m m' : Mem}
+theorem futexWake_pos {p : FutexKey} {n : Option Nat} (hn : ∀ k, n = some k → 1 ≤ k) {m m' : Mem}
     {cs : List Nat}
     (h : ((Thread.futexWake p (wakeSize n (m.waitersAt p).length) cs).run m).run =
       some (.ok ((), m'))) :
@@ -289,29 +295,34 @@ namespace Proto
 variable {Tgt γ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat}
 
 open Os in
-/-- **An OS futex wake** (`Os.futexWake`, OSF-02) by thread `t`: it stops with the ghost value `g`
-at the oracle's pick; in the same turn it wakes `wakeSize w k` of the `k` threads queued at `p`,
-the same threads as a scheduler wake with some choices `cs` (`wakeAt_futexWake`), or, with
-`spurious`, nobody (`EINTR`). At the pick `t` exists (`t < m₁.threads.size`). -/
-theorem WP.osFutexWake {p : Ptr} {w : Option Nat} {spurious : Bool}
+/-- **An OS futex wake** (`Os.futexWake`, OSF-02) at `p` in the domain `sh` by thread `t`: it
+stops with the ghost value `g` at the oracle's pick; in the same turn it resolves `p`'s key `pk`
+at the memory `m₁` of the pick (the block exists: `m₁.keyAt p sh = some pk`) and wakes
+`wakeSize w k` of the `k` threads queued at `pk`, the same threads as a scheduler wake with some
+choices `cs` (`wakeAt_futexWake`), or, with `spurious`, nobody (`EINTR`). At the pick `t` exists
+(`t < m₁.threads.size`). -/
+theorem WP.osFutexWake {p : Ptr} {sh : Bool} {w : Option Nat} {spurious : Bool}
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      t < m₁.threads.size →
-      (∀ cs m', ((Thread.futexWake p (wakeSize w (m₁.waitersAt p).length) cs).run
+      t < m₁.threads.size → ∃ pk, m₁.keyAt p sh = some pk ∧
+      (∀ cs m', ((Thread.futexWake pk (wakeSize w (m₁.waitersAt pk).length) cs).run
           { m₁ with current := t }).run = some (.ok ((), m')) →
-        Q (some (wakeSize w (m₁.waitersAt p).length)) G₁ m' k) ∧
+        Q (some (wakeSize w (m₁.waitersAt pk).length)) G₁ m' k) ∧
       (spurious = true → Q none G₁ { m₁ with current := t } k))
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWake p w spurious : ConcM Tgt (Option Nat)) Q G m n := by
+    P.WP t (Os.futexWake p sh w spurious : ConcM Tgt (Option Nat)) Q G m n := by
   unfold Os.futexWake Os.pick
   refine WP.bind (WP.sync (fun k hk => ?_) hcost)
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hcr => ?_⟩
-  obtain ⟨hw, hsp⟩ := hc G₁ m₁ hg hi₁ ht
+  obtain ⟨pk, hpk, hw, hsp⟩ := hc G₁ m₁ hg hi₁ ht
+  have hpk' : ({ m₁ with current := t } : Mem).keyAt p sh = some pk := hpk
+  simp only [wakeCountAt, hpk'] at hcr
   refine WP.liftMem (fun e he => ?_) (fun r m' hr => ?_) fun hn => ?_
-  · obtain ⟨r, m', hr⟩ := wakeAt_run c p w { m₁ with current := t }
-    rw [hr] at he; cases he
-  · cases r with
+  · obtain ⟨r, m', hr⟩ := wakeAt_run c pk w { m₁ with current := t }
+    rw [wakeAt_keyOf hpk', hr] at he; cases he
+  · rw [wakeAt_keyOf hpk'] at hr
+    cases r with
     | none =>
       have := wakeAt_none hr; subst this
       refine ⟨rfl, hsp ?_⟩
@@ -322,7 +333,7 @@ theorem WP.osFutexWake {p : Ptr} {w : Option Nat} {spurious : Bool}
         simp only [Bool.false_eq_true, ↓reduceIte, Nat.add_zero] at hcr
         rcases hcr with hc | ⟨hc0, -⟩
         · simp [zig_unfold, ExceptT.run, wakeThreads, List.getElem?_eq_getElem hc] at hr
-        · exact absurd hc0 (Nat.ne_of_gt (wakeCount_pos p w _))
+        · exact absurd hc0 (Nat.ne_of_gt (wakeCount_pos pk w _))
       · rfl
     | some j =>
       have hj := wakeAt_some hr
@@ -330,17 +341,17 @@ theorem WP.osFutexWake {p : Ptr} {w : Option Nat} {spurious : Bool}
       have hthr : m'.threads = m₁.threads := (wakeAt_frame hr).2.2.2.2
       subst hj
       exact ⟨by rw [hthr], hw cs m' hcs⟩
-  · obtain ⟨r, m', hr⟩ := wakeAt_run c p w { m₁ with current := t }
-    rw [hr] at hn; cases hn
+  · obtain ⟨r, m', hr⟩ := wakeAt_run c pk w { m₁ with current := t }
+    rw [wakeAt_keyOf hpk', hr] at hn; cases hn
 
 open Os in
-/-- **An untimed OS futex wait** (`Os.futexWait p e false`, OSF-01) by thread `t`. A pending
-interrupt is delivered first (the memory `m₀`); the thread stops with the ghost value `g` at
-the oracle's pick; in the same turn the kernel reads the word (`futexWord`, an atomic relaxed read
-of its newest message, the memory `m₂`): `mismatch` if it is not `e`, else `EINTR`
-(`interrupted`) or a sleep at the scheduler's `wait p e`, after which a pending interrupt makes it
-`interrupted`, else `woken`. At each stop `t` exists (`t < m₁.threads.size`). -/
-theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
+/-- **An untimed OS futex wait** (`Os.futexWait p e false sh`, OSF-01) by thread `t` in the
+domain `sh`. A pending interrupt is delivered first (the memory `m₀`); the thread stops with the
+ghost value `g` at the oracle's pick; in the same turn the kernel reads the word (`futexWord`, an
+atomic relaxed read of its newest message, the memory `m₂`): `mismatch` if it is not `e`, else
+`EINTR` (`interrupted`) or a sleep at the scheduler's `wait p e sh`, after which a pending
+interrupt makes it `interrupted`, else `woken`. At each stop `t` exists (`t < m₁.threads.size`). -/
+theorem WP.osFutexWait {p : Ptr} {e : BitVec 32} {sh : Bool}
     {Q : WaitResult → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ b₀ m₀, (Os.takeInterrupt.run m).run = some (.ok (b₀, m₀)) →
       ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m₀ ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
@@ -352,13 +363,13 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
         (v ≠ e → Q .mismatch G₁ m₂ k) ∧
         (v = e → Q .interrupted G₁ m₂ k ∧
           ∀ k', k = k' + 1 → ∃ g', P.inv (upd G₁ t g') m₂ ∧ ∀ G₂ m₃, G₂ t = g' → P.inv G₂ m₃ →
-            t < m₃.threads.size → P.Step t (.wait p e) G₂ m₃ fun _ G₄ m₄ =>
+            t < m₃.threads.size → P.Step t (.wait p e sh) G₂ m₃ fun _ G₄ m₄ =>
               Q (if m₄.os.interrupts.contains m₄.current then .interrupted else .woken) G₄
                 (if m₄.os.interrupts.contains m₄.current then
                   { m₄ with os := { m₄.os with interrupts := m₄.os.interrupts.erase m₄.current } }
                   else m₄) k'))
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult) Q G m n := by
+    P.WP t (Os.futexWait p e false sh : ConcM Tgt WaitResult) Q G m n := by
   unfold Os.futexWait Os.pick
   refine WP.bind (WP.liftMem (fun er he => by rw [takeInterrupt_run] at he; cases he)
     (fun b₀ m₀ h₀ => ⟨?_, ?_⟩) fun hn => by rw [takeInterrupt_run] at hn; cases hn)
@@ -468,10 +479,14 @@ theorem _root_.Zig.Mem.wordAt_ptrAddr {m : Mem} {p : Ptr} (h : m.wordAt p = true
     exact ⟨_, Full.ptrAddr_run hblk off, by omega⟩
   · cases h
 
-/-- `get_futex_key` at a live writable word forms the key, for both domains. -/
-theorem Linux.futexKey_wordAt {p : Ptr} {a : Int} {s : Bool} {m : Mem} (h : m.wordAt p = true) :
+/-- `get_futex_key` at a live writable word forms the key: a private key at every such word, a
+shared one at a word of an anonymous block (`Mem.anonAt`). -/
+theorem Linux.futexKey_wordAt {p : Ptr} {a : Int} {s : Bool} {m : Mem} (h : m.wordAt p = true)
+    (hs : s = true → m.anonAt p = true) :
     (Linux.futexKey p a s).run m = pure (none, m) := by
-  simp [Linux.futexKey, h, zig_unfold]
+  cases s
+  · simp [Linux.futexKey, h, zig_unfold]
+  · simp [Linux.futexKey, h, hs rfl, zig_unfold]
 
 /-- `get_futex_key` reads only: it forms the key, returns an error code, or refuses. -/
 theorem Linux.futexKey_cases (p : Ptr) (a : Int) (s : Bool) (m : Mem) :
@@ -518,7 +533,7 @@ untimed OS wait, with `futex_4arg`'s return code. Validation spends no schedulin
         (∀ er, ((Linux.futexKey p a (op = Linux.FUTEX_WAIT)).run m).run = some (.error er) →
           P.ErrOk er) ∧
         ∀ r, (Linux.futexKey p a (op = Linux.FUTEX_WAIT)).run m = pure (r, m) →
-          (r = none → P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
+          (r = none → P.WP t (Os.futexWait p e false (op = Linux.FUTEX_WAIT) : ConcM Tgt WaitResult)
             (fun r => Q (Linux.waitCode r)) G m n) ∧
           (∀ c, r = some c → Q c G m n)) ∧
       (a % 4 ≠ 0 → Q (negErrno Linux.E.INVAL) G m n)) :
@@ -553,8 +568,8 @@ waiters, with the number woken. -/
           P.ErrOk er) ∧
         ∀ r, (Linux.futexKey p a (op = Linux.FUTEX_WAKE)).run m = pure (r, m) →
           (r = none →
-            P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
-              (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) ∧
+            P.WP t (Os.futexWake p (op = Linux.FUTEX_WAKE) (some (Linux.wakeLimit v))
+              false : ConcM Tgt (Option Nat)) (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) ∧
           (∀ c, r = some c → Q c G m n)) ∧
       (a % 4 ≠ 0 → Q (negErrno Linux.E.INVAL) G m n)) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
@@ -574,39 +589,46 @@ waiters, with the number woken. -/
     exact WP.pure' ((h a ha).2 hal)
 
 /-- The successful wait specialization, at a live writable word (`Mem.wordAt`: an aligned
-address, and the key forms in both domains). The automatic argument is an applicability guard:
-`fsym` must prove it before selecting this case. -/
+address, and the private key forms), of an anonymous block for a shared wait (`Mem.anonAt`).
+The automatic arguments are applicability guards: `fsym` must prove them before selecting this
+case. -/
 @[fsym] theorem WP.futex_4arg_of_aligned {p : Ptr} {op e : BitVec 32}
     (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
-    (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
+    (hanon : decide (op = Linux.FUTEX_WAIT) = true → m.anonAt p = true := by
+      first | assumption | exact fun h => absurd h (by decide) | decide)
+    (h : P.WP t (Os.futexWait p e false (op = Linux.FUTEX_WAIT) : ConcM Tgt WaitResult)
       (fun r => Q (Linux.waitCode r)) G m n) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
   obtain ⟨a, ha, hal⟩ := Mem.wordAt_ptrAddr hword
   refine WP.futex_4arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
   have he := Full.ptrAddr_value_eq ha hr
   subst a'
-  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAIT) hword
+  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAIT) hword hanon
   refine ⟨fun _ => ⟨fun er he => (MemM.noErr_of_run hk er he).elim, fun r hr => ?_⟩,
     fun hn => (hn hal).elim⟩
   obtain rfl : r = none := by
     simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run (hr.symm.trans hk)
   exact ⟨fun _ => h, fun _ hc => by cases hc⟩
 
-/-- The successful wake specialization, at a live writable word; no word access. -/
+/-- The successful wake specialization, at a live writable word, of an anonymous block for a
+shared wake; no word access. The wake is at the word's key in the request's domain, resolved
+when it wakes (`Os.futexWake`). -/
 @[fsym] theorem WP.futex_3arg_of_aligned {p : Ptr} {op v : BitVec 32}
     (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
-    (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
-      (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
+    (hanon : decide (op = Linux.FUTEX_WAKE) = true → m.anonAt p = true := by
+      first | assumption | exact fun h => absurd h (by decide) | decide)
+    (h : P.WP t (Os.futexWake p (op = Linux.FUTEX_WAKE) (some (Linux.wakeLimit v)) false :
+      ConcM Tgt (Option Nat)) (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
   obtain ⟨a, ha, hal⟩ := Mem.wordAt_ptrAddr hword
   refine WP.futex_3arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
   have he := Full.ptrAddr_value_eq ha hr
   subst a'
-  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAKE) hword
+  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAKE) hword hanon
   refine ⟨fun _ => ⟨fun er he => (MemM.noErr_of_run hk er he).elim, fun r hr => ?_⟩,
     fun hn => (hn hal).elim⟩
   obtain rfl : r = none := by
@@ -665,13 +687,14 @@ its return code (`Darwin.ulockResult`, `WP.ulockResult`). -/
 
 /-- libc `__ulock_wake(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = _ }, ptr, 0)`
 (OSF-02, std's `Thread.Futex.wake` on macOS, which sets `WAKE_ALL` for more than one waiter): the
-OS wake of one waiter or of all, with a spurious `EINTR`, at a live writable word. -/
+OS wake of one waiter or of all, with a spurious `EINTR`, at a live writable word, at its
+(private, `ULK_UADDR`) key, resolved when it wakes (`Os.futexWake`). -/
 @[fsym] theorem WP.ulock_wake {op : BitVec 32} {p : Ptr}
     (hop : op = Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ∨
       op = Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Darwin.UL_WAKE_ALL)
     {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
-    (h : P.WP t (Os.futexWake p (Darwin.wakeMax op) true : ConcM Tgt (Option Nat))
+    (h : P.WP t (Os.futexWake p false (Darwin.wakeMax op) true : ConcM Tgt (Option Nat))
       (fun r => Q (Darwin.wakeCode r)) G m n) :
     P.WP t (Darwin.__ulock_wake op (some p) 0 : ConcM Tgt (BitVec 32)) Q G m n := by
   unfold Darwin.__ulock_wake
