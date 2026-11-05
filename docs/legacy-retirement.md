@@ -481,7 +481,8 @@ the strength log unfolds is
         ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
           m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq
 
-(`TotalTriple` is the same without `R m`, `Returns` the same without `hQ` and its conjuncts). The
+(`TotalTriple` is the same without `R m`; `Returns` is the same without `R m` and concludes only
+`∃ v m', c.run m = pure (v, m')`). The
 claim heads `Zig.TotalTriple` and `Zig.Returns` stay reserved names in
 `assurance/claim-heads.json`: a theorem whose head has either name supports no claim, so
 guaranteed-return still needs `FTotalTriple` or `FTTotalTriple`. The loop rules are

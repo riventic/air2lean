@@ -72,7 +72,7 @@ container deallocation through the interface, and a general ADT library remain o
 bounded P04 contribution.
 
 `FTotalTriple P c Q` (`ZigLean/Sep/Full/Logic.lean`) is `FTriple P c Q ∧ FReturns P c`:
-`FReturns` requires an explicit `c.run m = pure (v, m')` witness for every full-state
+`FReturns` requires an explicit `c.run m = pure (v, m')` witness for every `Mem.FSeq`
 memory that holds `P` with some frame. Divergence and safety panics cannot satisfy this
 equality. An unsatisfiable precondition remains vacuous, as with ordinary Hoare logic. Zig
 error-union values such as `OutOfMemory` remain return values. `FTotalTriple.toPartial`

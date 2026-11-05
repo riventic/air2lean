@@ -56,7 +56,7 @@ theorem swap_sep (p q : Ptr) (x y : BitVec 32) :
   fsym
 ```
 
-`fsym` ([proof-automation.md](proof-automation.md)) walks the generated code: it finds the cell of each load and store in the precondition and frames the rest. A proof in the full-state logic supplies the statement (and, for a loop, the invariant). The rest of this page describes the legacy `Triple` layer, which is being migrated to the full-state logic and deleted (CLAUDE.md, "One proof framework").
+`fsym` ([proof-automation.md](proof-automation.md)) walks the generated code: it finds the cell of each load and store in the precondition and frames the rest. A proof in the full-state logic supplies the statement (and, for a loop, the invariant). The Triples section above describes the legacy `Triple` layer, which is being migrated to the full-state logic and deleted (CLAUDE.md, "One proof framework"); the loop rules below are the full-state ones.
 
 Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b).toNat` is `(a.toNat + b.toNat) % 2 ^ w` with the power as a number. State the facts that `simp` needs in that form.
 
