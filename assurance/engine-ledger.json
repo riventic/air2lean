@@ -1226,8 +1226,8 @@
    "requester": "P09",
    "progress": "pending maintainer approval",
    "request": "`@[fsym_inv]` loop-invariant registry: apply the backend's loop rule with a registered invariant and measure; parameters by the planner, frame inferred",
-   "workaround_sites": ["tests/roadmap/loop-tactics/nested/Proof.lean"],
-   "deletion_plan": "The hand step and loop lemmas around the generated `pairs.loop14.inv`/`pairs.loop14.meas` (`inner_step`, `inner_loop`: `loop_measure` applied by hand, the entry entailment and the exit repackaging). Delete when `air2lean-invgen` emits `@[fsym_inv]` on its definitions and `fsym` applies the loop rule itself, so the outer body's walk needs no `fsym [inner_loop]` argument (docs/invariant-synthesis.md, S2a)."
+   "workaround_sites": ["tests/roadmap/loop-tactics/nested/Proof.lean", "tests/roadmap/loop-tactics/counted/Proof.lean"],
+   "deletion_plan": "The hand step and loop lemmas around the generated `F.loopN.inv`/`F.loopN.meas` (nested: `inner_step`, `inner_loop`; counted: `down_step`/`down_loop` and the same pair for `upNe`, `upLe`, `lenCount`, `readBound`: `loop_measure` applied by hand, the entry entailment and the exit repackaging). Delete when `air2lean-invgen` emits `@[fsym_inv]` on its definitions and `fsym` applies the loop rule itself, so the callers' walks need no `fsym [inner_loop]`/`fsym [F_loop]` argument (docs/invariant-synthesis.md, S2a); the mutants then name the callers' theorems."
   },
   {
    "id": "P09-E5",
