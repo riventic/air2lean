@@ -1240,6 +1240,28 @@
    "deletion_plan": ""
   },
   {
+   "id": "arith-atom-congruence",
+   "title": "arithmetic congruence of library atoms (counter-dependent sums)",
+   "status": "open",
+   "requester": "invariant-synthesis (P09, S2c′: `counted.tri`, `nested`'s outer loop)",
+   "progress": "open; found by R1d (2026-11-05). The library sum design (not in the library yet: it lands with its first client) is checked up to this goal: `sumBelow` with `sumBelow (n + 1) = sumBelow n + n` and the non-recursive conditional `fsym_arith` rewrites `x < b → sumBelow b - sumBelow x = x + (sumBelow b - (sumBelow x + x))` and `b ≤ x → sumBelow b - sumBelow x = 0` closes the step's overflow side goals of `tri.loop5` under the invariant `v + (sumBelow n - sumBelow i) = v₀ + (sumBelow n - sumBelow i₀)`. (A recursive conditional unfold, `x < b → S x b = x + S (x + 1) b`, hits the maximum recursion depth: in a context whose facts are contradictory the discharger proves every side condition.)",
+   "request": "**Congruence of the arithmetic's atoms, as `modCongr` does for remainders**: the counter's step leaves a fresh word `x` with the fact `x.toNat = s.i.toNat + 1`, and the invariant's atom `sumBelow x.toNat` is unrelated to `sumBelow (s.i.toNat + 1)` (which `fsym_arith` rewrites to `sumBelow s.i.toNat + s.i.toNat`), so `omega` leaves `v' + (sumBelow n - sumBelow x.toNat) = w + (sumBelow n - sumBelow i₀)`. Needed in `arithCore`: for an application `f a` of a `Nat`/`Int`-valued function in the target or the facts, an argument `a` that the facts equate to a term `b` (by `congrEq`), rewrite it to `f b` (or add `f a = f b`) before `omega`, so the `fsym_arith` lemmas of `f` apply.",
+   "workaround_sites": [
+    "tests/roadmap/loop-tactics/nested/Proof.lean"
+   ],
+   "deletion_plan": "nested's hand outer invariant `outerI`, `outerPost`, `cnt`, `cnt_mono` and `outer_step`'s `rw [show x.toNat = s.i.toNat + 1 …, cnt]`: delete when `air2lean-invgen` emits counter-dependent cells over that library sum (S2c′) and summarizes the generated inner loop in the outer body, which needs this row."
+  },
+  {
+   "id": "atom-args-normal-form",
+   "title": "an existential's witnesses against a state atom's unnormalized arguments (`List.set` of a literal list)",
+   "status": "open",
+   "requester": "invariant-synthesis (P09, S2c′: `counted.pairAt`)",
+   "progress": "open; found by R1d (2026-11-05). The item rules through the array's own pointer (`FTotalTriple.arr_load_zero`/`arr_store_zero`, merged with this row) make `fsym` walk `pairAt.loop5`'s body (`acc[0] += 1; acc[1] += 2`) under an invariant owning `arr p [w₀, w₁]`. A concrete target list already matches (`docs/proof-tools.md`: `arr p [x, y, z]`, store at `p.elem 4 1`, post `arr p [x, w, z]`); tagging `List.set_cons_zero`/`List.set_cons_succ` `fsym_norm`/`fsym_arith` does not change the residual.",
+   "request": "**Witnesses of an existential against an atom argument that needs normalizing**: `arr_store`'s post `arr p (vs.set i.toNat w)`, instantiated at a literal list and index, stays `arr p (([w₀, w₁].set 0 x).set (1#64).toNat y)` in the state, and the update into the invariant's `∃ w₀ w₁, ⟪…⟫ ⋆ up (arr p [w₀, w₁])` fails (`EUpd` residual): the witnesses `?w₀ ?w₁` are not found by unifying `[?w₀, ?w₁]` with that list. Needed: the walk puts the arguments of the state's atoms in `fsym_arith` normal form (literal `toNat`, `List.set` of a literal list at a literal index) before planning, or the planner unifies an existential's atom with a state atom up to that normal form.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "recursive-group-total",
    "title": "Generic total correctness of a recursive function group",
    "status": "open",
@@ -1874,6 +1896,20 @@
    "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
    "workaround_sites": [],
    "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
+  },
+  {
+   "id": "guard-lifeline-mirror",
+   "title": "build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661",
+   "status": "open",
+   "requester": "P1c (elastic build-guard admission, PR #661)",
+   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).",
+   "request": "PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.",
+   "workaround_sites": [
+    "scripts/build-guard.py",
+    "tests/roadmap/build-budgets/test_guard.py",
+    "docs/build-budgets.md"
+   ],
+   "deletion_plan": "Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running build-guard process (`ps -eo pid,args | grep build-guard.py`), its checkout (the script path when absolute, else the process's working directory: `readlink /proc/PID/cwd` on arc, `lsof -a -p PID -d cwd -Fn` on the Mac) contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row."
   },
   {
    "id": "fstepin-addrs",
