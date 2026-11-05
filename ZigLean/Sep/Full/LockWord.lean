@@ -64,6 +64,22 @@ variable (L : LockWord)
 /-- The address of the word. -/
 def ptr : Ptr := ⟨some L.b, (L.o : Int)⟩
 
+/-- The futex key of the word in `m` (`Mem.wordKey`, private): the key of the lock's futex waits
+and wakes (`Mem.keyAt_wordKey`). It reads only the block's address, so every memory with the same
+block addresses has it (`LockWord.key_of_addrs`). -/
+def key (m : Mem) : FutexKey := m.wordKey L.b L.o
+
+/-- A futex key of the lock's `nest` in `m`: the key of a pointer of the nest, in either domain. -/
+def NestKey (m : Mem) (k : FutexKey) : Prop := ∃ p sh, L.nest p ∧ m.keyAt p sh = some k
+
+theorem key_of_addrs {m m' : Mem} (h : m.SameAddrs m') : L.key m' = L.key m :=
+  Mem.wordKey_of_addr (h L.b) L.o false
+
+theorem NestKey.of_addrs {m m' : Mem} {k : FutexKey} (h : m.SameAddrs m') (hk : L.NestKey m k) :
+    L.NestKey m' k := by
+  obtain ⟨p, sh, hn, hp⟩ := hk
+  exact ⟨p, sh, hn, (Mem.keyAt_of_addrs h p sh).trans hp⟩
+
 /-- The values of the word: `0`, `1`, `c`. -/
 def Val (w : Nat) : Prop := w = 0 ∨ w = 1 ∨ w = L.c
 
@@ -139,14 +155,27 @@ theorem Free.not {P : ThreadId → LPh} (h : Free P) {u : ThreadId} (hu : (P u).
     False :=
   h u hu
 
-/-- A thread waits at the word in the futex queue `ws`. -/
-def Waits (ws : Array (ThreadId × Ptr)) : Prop := ws.any (·.2 == L.ptr) = true
+/-- A thread waits at the word's key in `m` (`LockWord.key`) in the futex queue `ws`. -/
+def Waits (m : Mem) (ws : Array (ThreadId × FutexKey)) : Prop := ws.any (·.2 == L.key m) = true
 
-/-- The futex queue `ws`: a thread at the word is at `lock`'s futex wait; a thread at another
-futex is `away`, or `holdsAway` at a futex of the lock's `nest`. -/
-def Queue (P : ThreadId → LPh) (ws : Array (ThreadId × Ptr)) : Prop :=
-  ∀ w ∈ ws, (w.2 = L.ptr ∧ P w.1 = .wait) ∨ (w.2 ≠ L.ptr ∧ P w.1 = .away) ∨
-    (w.2 ≠ L.ptr ∧ P w.1 = .holdsAway ∧ L.nest w.2)
+/-- The futex queue `ws` with the word's key in `m`: a thread at the word's key is at `lock`'s
+futex wait; a thread at another key is `away`, or `holdsAway` at a key of the lock's `nest`. -/
+def Queue (P : ThreadId → LPh) (m : Mem) (ws : Array (ThreadId × FutexKey)) : Prop :=
+  ∀ w ∈ ws, (w.2 = L.key m ∧ P w.1 = .wait) ∨ (w.2 ≠ L.key m ∧ P w.1 = .away) ∨
+    (w.2 ≠ L.key m ∧ P w.1 = .holdsAway ∧ L.NestKey m w.2)
+
+/-- The queue in a memory with the same block addresses. -/
+theorem Queue.of_addrs {P : ThreadId → LPh} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
+    (h : m.SameAddrs m') (hq : L.Queue P m ws) : L.Queue P m' ws := fun w hw => by
+  rw [L.key_of_addrs h]
+  rcases hq w hw with hq | hq | ⟨h1, h2, h3⟩
+  · exact .inl hq
+  · exact .inr (.inl hq)
+  · exact .inr (.inr ⟨h1, h2, NestKey.of_addrs L h h3⟩)
+
+theorem Waits.of_addrs {m m' : Mem} {ws : Array (ThreadId × FutexKey)} (h : m.SameAddrs m')
+    (hw : L.Waits m' ws) : L.Waits m ws := by
+  unfold LockWord.Waits at hw; rw [L.key_of_addrs h] at hw; exact hw
 
 /-- The word's block: live, with the word inside, aligned, writable, mapped at the word. -/
 def BlkOk (m : Mem) : Prop :=
@@ -173,11 +202,11 @@ structure WInv (P : ThreadId → LPh) (m : Mem) : Prop where
   /-- The release clock of the newest message happened before a thread, and before the holder. -/
   rel : ∀ i l, L.Loc m i l → SomeLe m (l.msgs.back!).relClock ∧
     ∀ u, (P u).held = true → VClock.le (l.msgs.back!).relClock (m.clocks[u]!) = true
-  fq : L.Queue P m.waiters
+  fq : L.Queue P m m.waiters
   /-- A thread at the word has a witness in the lock's code: a busy thread that is not asleep at
   the word. A thread at `spin`, `wake` or `holds` is never in the queue (`fq`); a holder at
   `holdsAway` may sleep at a futex of the `nest` (`FLock.Fits.holdLive`). -/
-  wit : L.Waits m.waiters → ∃ v, v < m.threads.size ∧
+  wit : L.Waits m m.waiters → ∃ v, v < m.threads.size ∧
     (P v = .wait → m.waiters.any (·.1 == v) = false) ∧
     (P v).busy = true ∧ ((P v).held = true → L.U32 m (BitVec.ofNat 32 L.c))
   /-- The holder made the most recent successful acquire of the word (`ALoc.holder`), for the
@@ -202,9 +231,9 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   bsize : m'.blocks.size = m.blocks.size
   blocks : m'.blocks = m.blocks ∨ ∃ blk bs, m.blocks[L.b]? = some blk ∧ blk.live = true ∧
     bs.size = 4 ∧ L.o + 4 ≤ blk.bytes.size ∧ m'.blocks = (m.write L.b blk L.o bs).blocks
-  /-- The queue entries at other futexes stay exactly (in order and number): the lock's futex
-  wait adds an entry at the word, its wake removes entries at the word. -/
-  waiters : m'.waiters.filter (·.2 != L.ptr) = m.waiters.filter (·.2 != L.ptr)
+  /-- The queue entries at other futex keys stay exactly (in order and number): the lock's futex
+  wait adds an entry at the word's key, its wake removes entries at the word's key. -/
+  waiters : m'.waiters.filter (·.2 != L.key m) = m.waiters.filter (·.2 != L.key m)
   /-- Another thread's pending wake stays: the lock's futex wake only adds entries, and only
   `t`'s own futex wait consumes one (`t`'s). -/
   woken : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true
@@ -235,6 +264,17 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
 section
 
 variable {L}
+
+/-- A lock step keeps every block's address, so every futex key (`Mem.keyAt_of_addrs`). -/
+theorem Step.addrs {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : m.SameAddrs m' := by
+  rcases hs.blocks with h | ⟨blk, bs, hb, -, -, -, h⟩
+  · exact Mem.SameAddrs.of_blocks h
+  · exact (Mem.sameAddrs_write (o := L.o) (bs := bs) hb).trans
+      (Mem.SameAddrs.of_blocks (m := m.write L.b blk L.o bs) h)
+
+/-- A lock step keeps the word's futex key. -/
+theorem Step.key {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : L.key m' = L.key m :=
+  L.key_of_addrs hs.addrs
 
 /-- A record introduced by a lock step is a record of the lock word. This follows
 from the actual array effect, without a layout or well-formedness premise. -/
@@ -376,7 +416,7 @@ threads' pending wakes. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
-    (hw : m'.waiters.filter (·.2 != L.ptr) = m.waiters.filter (·.2 != L.ptr))
+    (hw : m'.waiters.filter (·.2 != L.key m) = m.waiters.filter (·.2 != L.key m))
     (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩)
     (hs : m'.seen = m.seen := by first | rfl | assumption)
     (hn : m.nextMsg ≤ m'.nextMsg := by first | exact Nat.le_refl _ | assumption)
@@ -391,8 +431,8 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
 
 /-- A queue entry at another futex is in the queue after a lock step iff it was before (from the
 exact `waiters` equality, which also keeps their order and multiplicity). -/
-theorem Step.waiters_mem {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') (w : ThreadId × Ptr)
-    (hw : w.2 ≠ L.ptr) : w ∈ m'.waiters ↔ w ∈ m.waiters := by
+theorem Step.waiters_mem {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
+    (w : ThreadId × FutexKey) (hw : w.2 ≠ L.key m) : w ∈ m'.waiters ↔ w ∈ m.waiters := by
   simpa only [Array.mem_filter, bne_iff_ne.mpr hw, and_true, eq_iff_iff]
     using congrArg (w ∈ ·) hs.waiters
 
@@ -425,8 +465,9 @@ theorem WInv.current {P : ThreadId → LPh} {m : Mem} (hi : L.WInv P m) (t : Thr
   hi.same t m.seen m.nextMsg m.woken
 
 /-- The queue with fewer threads, whose places stay. -/
-theorem Queue.mono {P P' : ThreadId → LPh} {ws ws' : Array (ThreadId × Ptr)} (hq : L.Queue P ws)
-    (hsub : ∀ w ∈ ws', w ∈ ws) (hph : ∀ w ∈ ws', P' w.1 = P w.1) : L.Queue P' ws' := fun w hw => by
+theorem Queue.mono {P P' : ThreadId → LPh} {m : Mem} {ws ws' : Array (ThreadId × FutexKey)}
+    (hq : L.Queue P m ws) (hsub : ∀ w ∈ ws', w ∈ ws) (hph : ∀ w ∈ ws', P' w.1 = P w.1) :
+    L.Queue P' m ws' := fun w hw => by
   rw [hph w hw]; exact hq w (hsub w hw)
 
 theorem joinedB_congr {m m' : Mem} (h : m'.threads = m.threads) : joinedB m' = joinedB m := by
