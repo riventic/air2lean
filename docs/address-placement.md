@@ -86,8 +86,6 @@ liveness and provenance: an access, `free` and `@ptrFromInt`'s provenance recove
   that reuses addresses has room). Only the globals at program start take the first fit.
 * `Mem.top` scans every block, so allocation under `Placement.fresh` is linear in the number of
   blocks so far (runtime cost only).
-* VC extraction (`vc_gen`) has a pointer `==` contract only for provenance-free pointers
-  (`Zig.VC.ptrEqAddr_raw`); comparing pointers into blocks needs a proof by hand.
 * A zero-size object may overlap another block in a native layout; the model's `addrFree`
   does not separate them, so `@ptrFromInt` of such an address can be ambiguous (`.unspecified`
   under `.strict` provenance).

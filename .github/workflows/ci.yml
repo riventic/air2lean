@@ -778,11 +778,6 @@ jobs:
           python3 -B scripts/mutation-map.py check
           python3 -B tests/roadmap/mutation-map/mutants.py
 
-      # P02: the report script surfaces Lean errors and open obligations (no Lean is run).
-      - name: Verification condition report script regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
-        run: python3 -B -m unittest discover -s tests/roadmap/vcs -p 'test_*.py' -v
-
       # Each optimize mode x backend pair has a qualification record (docs/build-modes.md).
       - name: Build-mode qualification records
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'docs' }}
@@ -2546,24 +2541,17 @@ jobs:
           python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native.json" \
             --committed "tests/roadmap/bitops-native/evidence/${{ matrix.zig }}.json"
 
-      # Check source-linked VCs against the pointer translation that check.sh built.
-      - name: Build optional verification conditions
+      # Build the modules the verification-condition fixtures (tests/roadmap/vcs) import, against
+      # the translations that check.sh built.
+      - name: Build verification condition dependencies
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           mkdir -p "$RUNNER_TEMP/vcs"
-          lake build ZigLean.VC ZigLean.VecMem ZigLean.Sep.Full.Strength Proofs.Pointers.Gen Proofs.Basic.Gen \
+          lake build ZigLean.Sep.Full.AutoAll ZigLean.Sep.Full.Strength Proofs.Pointers.Gen Proofs.Basic.Gen \
             Proofs.Errors.Gen 2>&1 | tee "$RUNNER_TEMP/vcs/build.log"
-
-      - name: Result verification condition regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          lake env lean tests/roadmap/vcs/Result.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Result.log"
 
       - name: Memory verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
@@ -2573,9 +2561,9 @@ jobs:
           cd "$tree"
           lake env lean tests/roadmap/vcs/Memory.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Memory.log"
 
-      # Reflect committed loop-free translations into the VC AST and walk memory contracts;
-      # loops must request invariants.
-      - name: Automatic verification condition extraction regressions
+      # Contracts of committed loop-free translations: their obligations are what fsym's walk
+      # leaves (pinned goals and reports); loops are left as invariant requests.
+      - name: Generated-code verification condition regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
         run: |
           set -euo pipefail
@@ -2584,18 +2572,6 @@ jobs:
           lake env lean -R tests/roadmap/vcs -o "$RUNNER_TEMP/vcs/Extract.olean" tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
           # The strength log of its memory contracts (tests/roadmap/strength-log).
           LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
-
-      - name: Verification condition report regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
-          cd "$tree"
-          python3 -B scripts/vc-report.py --json \
-            --import Proofs.Basic.Gen --import Proofs.Pointers.Gen --import Proofs.Errors.Gen \
-            --namespace Basic --namespace Pointers --namespace Errors \
-            tests/roadmap/vcs/Extract.lean > "$RUNNER_TEMP/vcs/report.json"
-          diff -u tests/roadmap/vcs/report.json "$RUNNER_TEMP/vcs/report.json"
 
       # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.0 is not
       # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
