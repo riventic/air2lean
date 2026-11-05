@@ -662,7 +662,7 @@ fixture_pause()
         code, evidence = self.attempt(*budget, "--lock-wait", "1", cwd=self.worktree("late"))
         self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # no new admission meanwhile
         normal, err = self.start_waiter("normal", order, *budget)
-        self.assertIn("0 merge and 1 exclusive guard(s) queued", err.read_text())
+        self.assertIn("0 merge, 1 exclusive and 0 lifeline guard(s) queued", err.read_text())
         self.assertIsNone(holder.poll())  # the running workload is not preempted
         self.assertIsNone(exclusive.poll())
         holder.send_signal(signal.SIGTERM)
@@ -1437,11 +1437,43 @@ os._exit(0)
         # Behind a merge guard (which needs no running workload to end), ahead of an exclusive one
         # (which waits for the elastic workload, so for its lifeline).
         self.assertTrue(first.ticket.endswith("-" + guard.LEAF))
+        self.assertEqual(sorted(os.listdir(self.tickets)), [merge.ticket, exclusive.ticket])  # older guards drain behind these
         self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
         merge.leave_queue()
         self.assertTrue(first.my_turn() and not exclusive.my_turn())
         first.release()
         self.assertTrue(take(second))
+
+    def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):
+        # The remote host, 2026-11-05: an unmeasured part (11 slots) took its workload's lifeline
+        # while running workloads held 20 of 28 slots; as a drain ticket it kept every normal guard
+        # waiting (8 to 19 minutes, 4.7 of 24 GB in use).
+        budget, order = ("--mem-budget-mib", "28672"), self.root / "order"
+        holder, _ = self.start_holder(*budget, "--rss-mib", "20480", "--timeout", "20", cwd=self.worktree("holder"))
+        part = self.sub_args(f'open({str(order)!r}, "a").write("lifeline\\n")',
+                             "--charge-mib", "11000", "--rss-mib", "11000", "--lock-wait", "20")
+        args, _, log = self.command("import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % part,
+                                    "--elastic", *budget, "--rss-mib", "1024", "--timeout", "20", "--lock-wait", "5")
+        elastic = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, elastic)
+        lifelines, heads = (Path(str(self.root / "shared.lock") + ".d") / name for name in ("lifeline-tickets", "heads"))
+        deadline = time.monotonic() + 5
+        while not (guard.held_entries(lifelines) and guard.held_entries(heads)) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(guard.held_entries(heads), "the lifeline never became the queue head")
+        self.assertFalse(guard.held_entries(self.tickets))  # no drain ticket
+        # A 1-slot normal guard runs beside the lifeline's unmet reservation (7 free, 11 needed).
+        code, evidence = self.attempt(*budget, "--rss-mib", "1024", "--lock-wait", "3", cwd=self.worktree("small"))
+        self.assertEqual(code, 0)
+        self.assertTrue(evidence["admission"]["backfilled"])
+        # A later normal guard (17 slots) waits; once the holder ends, the lifeline goes first.
+        late, _ = self.start_waiter("late", order, *budget, "--rss-mib", "17408")
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        elastic.communicate(timeout=12)
+        self.assertEqual(elastic.returncode, 0, log.read_text())
+        self.finish(late)
+        self.assertEqual(order.read_text().split(), ["lifeline", "late"])
 
     def test_the_elastic_plan_nests_and_falls_back_to_one_plain_admission(self):
         lock = self.root / "shared.lock"

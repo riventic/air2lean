@@ -78,13 +78,16 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
   goes back between them and to other workloads. Bounds: the bases of the admitted elastic
   workloads (`<lock>.d/elastic/`, under `<lock>.d/register`) leave PROCESS_MIB of the budget free,
-  and a part takes its workload's lifeline (`<lock>.d/lifeline/<workload>`, a ticket in the
-  lifeline lane, served behind the merge tickets, which wait for no running workload, and ahead
-  of every exclusive one, which waits for the elastic workload) only while none of that
-  workload's parts runs. So every elastic workload progresses: some part of it runs, or its
-  lifeline comes up and finds PROCESS_MIB that no base holds once the running workloads it waits
-  for end (each bounded by its --timeout); an elastic guard with no room waits outside the queue
-  and holds nothing. Where the budget has no such room, or inside a guard that is not elastic,
+  and a part takes its workload's lifeline (`<lock>.d/lifeline/<workload>`) only while none of
+  that workload's parts runs. The lifeline reserves, it does not drain: its ticket
+  (`<lock>.d/lifeline-tickets/`, apart from the drain tickets) is served behind the merge
+  tickets, which wait for no running workload, and ahead of every exclusive one, which waits for
+  the elastic workload; with only lifelines queued, the first leads the normal lane as its queue
+  head (a normal head gives the queue back to it) and normal guards backfill beside its
+  reservation. So every elastic workload progresses: some part of it runs, or its lifeline
+  comes up and finds PROCESS_MIB that no base holds once the ramp has passed and the running
+  workloads it waits for end (each bounded by its --timeout); an elastic guard with no room waits
+  outside the queue and holds nothing. Where the budget has no such room, or inside a guard that is not elastic,
   `elastic_plan` (`--elastic-plan BASE`) tells the scripts to run one plain admission instead.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
 is only a bound when every heavy workload of the machine goes through the same lock.
@@ -851,6 +854,9 @@ class Admission:
         # merge priority adds nothing to it.
         self.priority = "exclusive" if a.exclusive else a.priority
         self.tickets = self.directory / "merge"
+        # Lifeline tickets (LEAF) live apart: guards of checkouts before them read every ticket in
+        # `merge/` as a drain ticket, and a lifeline reserves, it does not drain (`my_turn`).
+        self.lifeline_tickets = self.directory / "lifeline-tickets"
         self.ticket = None
         self.heads = self.directory / "heads"
         self.head = None  # (entry name, handle, content) while this guard is the waiting queue head
@@ -1004,28 +1010,34 @@ class Admission:
         oldest first (`held_entries`), the lifelines moved ahead of the first exclusive ticket: an
         exclusive guard waits for every running workload, an elastic one included, which may need
         its lifeline to end; a merge guard does not, so lifelines stay behind those before it."""
-        names = list(held_entries(self.tickets))
-        lifelines = [name for name in names if name.endswith("-" + LEAF)]
-        others = [name for name in names if name not in lifelines]
-        cut = next((i for i, name in enumerate(others) if name.endswith("-exclusive")), len(others))
-        return others[:cut] + lifelines + others[cut:]
+        drains = list(held_entries(self.tickets))
+        cut = next((i for i, name in enumerate(drains) if name.endswith("-exclusive")), len(drains))
+        return drains[:cut] + list(held_entries(self.lifeline_tickets)) + drains[cut:]
+
+    def ticket_path(self, name):
+        return (self.lifeline_tickets if name.endswith("-" + LEAF) else self.tickets) / name
 
     def join_queue(self):
         """Take a ticket named by the arrival time and the lane (`publish_entry`)."""
         name = entry_name(self.priority)
-        publish_entry(self.tickets, name, {}, self.open)
+        publish_entry(self.ticket_path(name).parent, name, {}, self.open)
         self.ticket = name
 
     def leave_queue(self):
         if self.ticket:
-            (self.tickets / self.ticket).unlink(missing_ok=True)
+            self.ticket_path(self.ticket).unlink(missing_ok=True)
             self.ticket = None
 
-    def my_turn(self):
-        """Ticket holders go in arrival order and ahead of normal guards: a normal guard's turn
-        comes when no ticket is queued."""
+    def my_turn(self, lead=True):
+        """Ticket holders go in arrival order and ahead of normal guards: a normal guard leads (takes
+        the queue, as its head) only when no ticket is queued. A lifeline reserves, it does not
+        drain: while only lifelines are queued, the first leads the normal lane as its head, and a
+        normal guard may still backfill beside its reservation (`lead` False). Behind a merge or
+        exclusive ticket it may not."""
         queued = self.queued_tickets()
-        return not queued or queued[0] == self.ticket
+        if self.ticket or lead:
+            return not queued or queued[0] == self.ticket
+        return all(name.endswith("-" + LEAF) for name in queued)
 
     def reservation(self, waited):
         """Slots the waiting queue head keeps after `waited` seconds: a share of its weight that
@@ -1090,8 +1102,9 @@ class Admission:
     def take_lifeline(self):
         """Whether this sub-admission now holds its elastic workload's lifeline (taken without
         blocking, only while no part of that workload runs): at most one part of each elastic
-        workload waits in the lifeline lane, ahead of every other guard, so a workload none of
-        whose parts runs always progresses (module docstring). A running part ends on its own.
+        workload queues with a lifeline ticket: it leads the normal lane, behind the merge tickets
+        and ahead of the exclusive ones, so a workload none of whose parts runs always progresses
+        (module docstring). A running part ends on its own.
         Tried at most once per ATTEMPT_EVERY: parts run for seconds, so a faster reaction buys
         nothing."""
         if not self.a.sub_admission or self.priority == LEAF or not self.enclosing \
@@ -1127,7 +1140,7 @@ class Admission:
         if self.priority != "normal" or not self.attempt_due():
             return False
         reservations = head_reservations(self.heads)
-        if not reservations or not self.my_turn():
+        if not reservations or not self.my_turn(lead=False):
             return False
         want = self.weight + sum(unmet for unmet, _ in reservations)
         head_need = max(need for _, need in reservations)
@@ -1212,9 +1225,10 @@ class Admission:
             return
         queued = self.queued_tickets()
         exclusive = sum(name.endswith("-exclusive") for name in queued)
+        lifelines = sum(name.endswith("-" + LEAF) for name in queued)
         print(f"build-guard: waiting for admission, {self.priority} priority, {self.weight} slot(s), "
-              f"{len(queued) - exclusive} merge and {exclusive} exclusive guard(s) queued: {self.a.cwd}",
-              file=sys.stderr, flush=True)
+              f"{len(queued) - exclusive - lifelines} merge, {exclusive} exclusive and {lifelines} "
+              f"lifeline guard(s) queued: {self.a.cwd}", file=sys.stderr, flush=True)
 
     def acquire(self, cancelled):
         """None once every lock is held; "cancelled" or "lock_busy" (--lock-wait exceeded)."""
@@ -1258,7 +1272,7 @@ class Admission:
         slots = [] if self.a.exclusive else [self.open("slot-%03d" % i) for i in range(self.capacity)]
         self.take_lifeline()
         # Its workspace too only at once, with everything else. A sub-admission that takes its
-        # workload's lifeline meanwhile queues in the lifeline lane instead (below).
+        # workload's lifeline meanwhile queues with a lifeline ticket instead (below).
         while self.priority == "background":
             if self.try_background(workspace, queue, main, slots, register):
                 return None
@@ -1277,11 +1291,12 @@ class Admission:
                     return refused
             if self.priority != "normal" and not self.ticket:
                 self.join_queue()
-            while not self.my_turn():
+            while not self.my_turn(lead=False):
                 if refused := wait():
                     return refused
-            # The queue holder (the head) collects; a guard waiting behind it may backfill.
-            while not try_flock(queue, fcntl.LOCK_EX):
+            # The queue holder (the head) collects; a guard waiting behind it may backfill. A
+            # normal guard leaves the queue to a lifeline, which leads the normal lane.
+            while not (self.my_turn() and try_flock(queue, fcntl.LOCK_EX)):
                 if cancelled[0]:
                     return "cancelled"
                 if self.backfill(main, slots, register):
@@ -1330,8 +1345,9 @@ class Admission:
                     return None
                 if refused := wait():
                     return refused
-            # A ticket older than this guard's is queued, and this guard runs nothing yet: it gives
-            # back what it collected so far and goes behind it. Running workloads are not touched.
+            # A ticket older than this guard's (any ticket, for a normal guard) is queued, and this
+            # guard runs nothing yet: it gives back what it collected so far and goes behind it.
+            # Running workloads are not touched.
             self.clear_head()
             for handle in (main, queue, *slots):
                 fcntl.flock(handle, fcntl.LOCK_UN)
