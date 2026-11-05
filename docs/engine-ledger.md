@@ -479,7 +479,7 @@ Request: optPayload: after `optPayload_step` the fact `s.p = some x` plus precon
 
 Status: **closed**. Requester: one-logic-vc.
 
-Note: ZigLean/VC/Extract.lean now calls Auto.run; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity
+Note: vc_gen (ZigLean/VC/Extract.lean) called Auto.run until it was retired (L15): memory VCs are now fsym's residuals directly; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity
 
 Progress: Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry
 
@@ -510,7 +510,7 @@ Status: **open**. Requester: one-logic-vc.
 
 Progress: open
 
-Request: (nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (vc_gen clears `hc`, equivalent). A mode that leaves `φ` unsplit gives one obligation and one walk
+Request: (nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (equivalent to `⊢ φ`). A mode that leaves `φ` unsplit gives one obligation and one walk
 
 <a id="row-18"></a>
 ### #18 Binder names

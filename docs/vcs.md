@@ -1,157 +1,88 @@
-# Loop-free verification conditions
+# Verification conditions
 
-`import ZigLean.VC` provides verification conditions (VCs) for loop-free generated functions and a
-per-function report (`scripts/vc-report.py`). It does not add a translation-preservation theorem.
-There are two kinds of contracts, and one engine for each:
+Requirement P02 asks for compositional verification conditions (VCs) for safety, functional results,
+memory effects and error returns. Unsolved obligations must be exposed, and no invariant may be
+invented. The one proof framework (`docs/proof-framework.md`) provides them. There is no VC
+engine, AST or command of its own. A contract is a total (or partial) triple in the full-state
+separation logic (`docs/sep-full-state.md`). Its VCs are the goals that the walk of the
+symbolic executor `fsym` (`docs/proof-automation.md`) leaves over the generated body.
 
-* a **`Result` contract** `∃ v, f xs = pure v ∧ post v` of a pure function: `f`'s body is
-  reflected into the typed proof AST `ResultProgram` (`ZigLean/VC/Result.lean`), whose `vc`
-  computes the obligations and whose `sound` theorem proves the contract from them;
-* a **memory contract** `FTotalTriple pre (f xs) post` or `FTriple pre (f xs) post` of a `MemM`
-  function, in the full-state separation logic (`docs/sep-full-state.md`): its obligations are
-  the goals that the walk of the symbolic executor `fsym` (`docs/proof-automation.md`) leaves.
+## Contracts
 
-## Memory VCs are the walk of `fsym` (decision)
+* A **memory contract** of a generated `MemM` function is `FTotalTriple pre (f xs) post` (total)
+  or `FTriple pre (f xs) post` (partial).
+* A **`Result` contract** of a pure generated function is `∃ v, f xs = pure v ∧ post v`. It is the
+  total triple of its lifted program, `FTotalTriple emp (StateT.lift (f xs)) (fun v => ⟪post v⟫)`:
+  `FTotalTriple.result_spec` (`ZigLean/Sep/Full/Init.lean`) turns the triple into the contract.
+  `fsym` inlines a pure generated function under `StateT.lift`, so the walk is the same as for
+  memory code.
 
-The one proof framework (`docs/proof-framework.md`) has one automation for memory programs,
-`fsym`. A memory VC generator of its own (the earlier `MemProgram` AST over the legacy `Triple`,
-with its own load/store/call rules and its own soundness theorem) would be a second engine with
-a second rule set, and it could not split the heap: a load or store needed ownership of the whole
-current heap. So `vc_gen` on a full-state triple is a mode of `fsym`, not a parallel engine:
+A proof states the contract and runs `fsym`. The goals it leaves are the VCs, and closing them
+proves the contract. Each closing step of the walk is a kernel-checked proof, so the goals left
+are the complete open obligations. The walk discharges what its arithmetic and planner prove:
+overflow from a hypothesis, ownership, frames and the heap postcondition. A wrong contract leaves a
+goal that is false.
 
-1. it makes the checks of extraction (below): a generated loop yields its invariant request and
-   recursion is refused, with the same messages as `#vc_extract`;
-2. it runs `fsym`'s walk (`Zig.Full.Auto.walk`) with the library's `@[fsym]` rules, plus every
-   `@[vc_contract]` theorem as a user step rule (a memory contract `∀ xs, FTotalTriple pre (g xs)
-   post` directly, a `Result` contract through `result_step`, `ZigLean/VC/Rules.lean`);
-3. it tags each goal the walk leaves by where it sits in the proof term that the walk built:
-   a fact of the postcondition at a return (`imp_lift`) is `result_i`, or `error_i` when the
-   returned value is a Zig error; a side condition of a step rule or contract is `memory_i` when
-   the rule consumes a resource (its precondition is not a variable) or the contract is a
-   memory contract, otherwise `safety_i`; an entailment `EUpd` that the planner did not close is
-   `memory_i` (the heap postcondition); a reachable `throw` becomes the goal `False` (`safety_i`).
-   A side condition `φ` that the walk split on (`hc : ¬φ ⊢ φ`) is reported without `hc`, which
-   is equivalent.
+## Kinds of obligations
 
-A command that no rule executes (or a walk that runs out of its step budget) is refused
-(`vc_gen: the walk stopped at the command …`); nothing is assumed. Every closing step is a kernel-checked proof, so the
-goals left are the complete open obligations: closing them proves the contract. The walk
-discharges what its arithmetic and planner prove (overflow from a hypothesis, ownership, frames,
-the heap postcondition); a wrong contract leaves a goal that is false. Memory VCs are total with
-`FTotalTriple` and partial with `FTriple`.
+`set_option fsym.report true in fsym` emits one `fsym-report {json}` line (schema version 1,
+`ZigLean/Sep/Full/AutoReport.lean`). It lists every residual goal with its origin: the judgment and
+command at that point, the rule, and why the goal was left. The kinds of P02 are origins:
 
-`ensures result heap` (`ZigLean/VC/Rules.lean`) is the postcondition `⟪result v⟫ ⋆ heap v`:
-`vc_gen` unfolds it, so the result is a fact and the heap an assertion.
+| kind | goal | origin (`condition`, `reason`) |
+| --- | --- | --- |
+| safety | a primitive's or a callee's precondition (overflow, a range, a checked unwrap) | `rule_premise`, `side_condition_not_proved` |
+| safety | a reachable panic: the triple of its `throw` on its path, which no rule proves | `reachability`, `panic_not_refuted` |
+| memory | ownership: a command no rule executes from the precondition | `program`, `no_rule` |
+| memory | the heap postcondition (`EUpd P Q`) | `postcondition`, `postcondition_not_proved` |
+| result | a fact of the postcondition at a return | `postcondition`, `postcondition_not_proved` |
+| error | a returned Zig error (`Except.error e = …`) against the postcondition | `postcondition`, `postcondition_not_proved` |
+| loop | the loop itself: an invariant and a variant are required | `program`, `no_rule` |
 
-The memory programs that the earlier AST refused are now walked by the rule library: two cells
-(`swap p q`, the planner splits the heap), pointer formation, pointer `==` without provenance
-(`ptrEqAddr_raw`), and stores of bytes. A NaN constant is stored as its exact bytes with
-`Zig.storeBytes` (`docs/architecture-audit/nan-bits.md`) and a float vector's store writes its
-bytes, whatever a NaN lane's bits are, so neither has a typed `pts` result: `storeBytes_region`
-and `storeEnc_region` (`ZigLean/Sep/Full/AutoPrim.lean`) write the bytes into an owned
-`region` (`writeBytes`), the latter for any encoding, without `LawfulEnc`.
+Without the option the goals are the same, and `fsym` prints a human stop message at a command no
+rule executes.
 
-The theorems of the removed AST (`MemProgram.sound`, `verify`, `sound_of`, `triple_intro`,
-`annotatedLoop`) have no successor: each memory contract is now proved by `fsym`'s rules. A loop
-is proved with the loop rules of `ZigLean/Sep/Full/Loop.lean` (`FTotalTriple.loop_ghost`,
-`FTriple.loop`) and registered as a contract.
+## Calls
 
-## `Result` VCs
+A call of another generated function is compositional through its proved contract: `fsym [c]`
+uses the contract `c` as a step rule before inlining the callee. A memory contract
+`∀ xs, FTotalTriple pre (g xs) post` is such a rule directly. A `Result` contract becomes one with
+`Zig.VC.result_step` (`ZigLean/VC/Rules.lean`): its precondition is a side goal and its summary a
+fact. Without a contract, a non-recursive callee is inlined, so its obligations appear in the
+caller's.
 
-`ResultProgram` accepts return, unsigned checked addition, unsigned widening, safety
-guards/panics, bind, Boolean branches, and checked modular calls. Its VC computes a proposition
-from the requested postcondition. Primitive safety requirements remain visible even when that
-postcondition is `True`. The soundness theorem supplies a successful result equality with `pure`
-and the requested result property. Returned Zig errors are ordinary error-union values.
+## Loops and recursion
 
-Bind generates the first program's VC with the continuation's VC as its postcondition. It
-therefore keeps every accepted operation's requirements, without guessing intermediate values or
-user invariants. `obligation pre program post` is the implication from the user precondition to
-this generated condition. An unsolved condition is a proof obligation, not a counterexample or a
-verified result.
-
-## Automatic extraction
-
-`#vc_extract Ns.f` reflects a generated loop-free `Zig.Result` function into this AST, without
-changing the translator or its output. It unfolds `f` once through its `eq_def`, normalizes the
-generated locals/exit plumbing with a fixed `simp only` set (`Zig.VC.Extract.normLemmas`), and
-maps the result constructor by constructor: `pure`, bind, `if b then` on a `Bool`, `throw`,
-unsigned `Zig.add`, unsigned widening `Zig.intCast`. Every other operation, including a call to
-another generated function, becomes a checked modular call only through a theorem tagged
-`@[vc_contract]` (`∀ xs, pre → ∃ v, g xs = pure v ∧ post v`, `pre →` optional; the first
-registered matching contract is used). `ZigLean/VC/Rules.lean` tags primitive contracts for
-unsigned `sub`/`mul`/`divTrunc`, signed `add`/`sub`/`mul`, ranged `intCast`, `index`,
-`optPayload`, `unwrapPayload` and `unwrapErr`; their preconditions are exactly the non-failure
-conditions, and those that `fsym`'s library lacks are also `@[fsym]` step rules (`result_step`).
-It adds three declarations:
-
-- `Ns.vc_f : ∀ xs, ResultProgram α`;
-- `Ns.vc_f_source : ∀ xs, (vc_f xs).eval = f xs`, the `simp` normalization proof composed with
-  definitional unfolding of `eval`, checked by the kernel;
-- `Ns.vc_f_sound`, the unchanged `ResultProgram.sound` transported along that equality
-  (`sound_of`).
-
-For a loop-free `Zig.MemM` function, `#vc_extract` makes the same checks and reports `walk`: its
-VCs come from a contract (above).
-
-Extraction fails closed. A generated loop body `Ns.f.loop<i>` (AIR instruction `%i`, nested
-loops included) yields the request "invariant + variant required for loop `Ns.f.loop<i>` at AIR
-instruction %i", which points at `FTotalTriple.loop_ghost inv post` (the measure carried by
-`inv s n`) or `FTriple.loop inv post` for a memory loop and `Zig.loop_spec` for a `Result` loop;
-no invariant is guessed. A self-recursive function, an unrecognized operation, an unreduced exit
-`match`, or a call without a contract is refused with its reason. A proved loop or recursive
-function becomes usable by callers once its contract is tagged `@[vc_contract]`.
-`#vc_extract_all Ns` reports every generated function of `Ns` (extracted, walk, loop request or
-refused) without failing on one of them.
-
-## Obligations
-
-`vc_gen` applies to `∃ v, f xs = pure v ∧ post v`, `FTotalTriple pre (f xs) post` or
-`FTriple pre (f xs) post`. For a `Result` contract it uses `vc_f_source` when present and
-otherwise extracts on the fly, then splits the generated VC with one introduction rule per
-constructor (`ZigLean/VC/Rules.lean`); for a memory contract it walks (above). Each remaining
-goal is tagged by kind: `safety_i` (overflow, widening, guards, reachable panics, primitive and
-callee preconditions), `memory_i` (ownership, memory callee preconditions, heap
-postconditions), `result_i` (functional result) or `error_i` (a returned `Except.error`). In a
-`Result` VC, path conditions (`branch<k>`) and call results (`value<k>`, `summary<k>`) are
-hypotheses; in a memory VC, the facts the walk collected are. Nothing else is solved in a `Result`
-VC, so its goals are the complete obligations of the contract; closing them proves it through
-`sound`. A wrong contract leaves a false goal. `Result` VCs give total correctness (an actual
-`pure` result).
-
-`vc_gen?` also logs the obligations with their hypotheses and one `vc-report {json}` line.
-`scripts/vc-report.py` collects those lines:
-
-```sh
-python3 scripts/vc-report.py --import Proofs.Basic.Gen --namespace Basic
-python3 scripts/vc-report.py tests/roadmap/vcs/Extract.lean      # vc_gen? reports
-python3 scripts/vc-report.py --json ...                           # machine-readable
-```
-
-The first form runs `#vc_extract_all` in a temporary file; the second checks a contract file.
-Both need the imported modules built and return Lean's exit status.
-
-`tests/roadmap/vcs/Extract.lean` extracts committed translations of `examples/basic`,
-`examples/errors` and `examples/pointers`. It proves `Basic.tardiness` (safety and result
-obligations) and, through its tagged contract, `Basic.weightedTardiness` (the statement of
-`weightedTardiness_ok`); `Errors.parseDigit` (error-return obligations) and `Errors.digitOrZero`
-(callee contract plus checked unwraps); and the memory contracts of `Pointers.addTo` (framed),
-`Pointers.swap p q` (two cells), `Pointers.swap p p` and `Pointers.same` (with `ensures`), each
-with its strength example: the legacy statement on every `Mem.FSeq` memory, from
-`FTotalTriple.toTotal_on` (`ZigLean/Sep/Full/Strength.lean`). A wrong `tardiness` contract leaves
-exactly one goal, which is refuted. `Basic.sum` and `Pointers.sumTo` produce loop requests and
-`Pointers.addDown` is refused as recursive. `tests/roadmap/vcs/report.json` is the expected
-`--json` report for these namespaces and that file.
-
-Limits: a memory command needs an `@[fsym]` rule or a `@[vc_contract]`; generated `match`
-dispatch on tagged unions, stack allocation, packed fields, `memset`/`memmove` and allocator calls
-are walked only as far as the rule library covers them (`docs/proof-automation.md`).
+`fsym` guesses no invariant. A generated loop that no supplied rule executes stops the walk. The
+loop's triple is then the residual (`program`, `no_rule`): the request for its invariant and variant.
+It is proved with the loop rules of `ZigLean/Sep/Full/Loop.lean` (`FTotalTriple.loop_ghost inv
+post`, the measure carried by `inv s n`; `FTriple.loop inv post`) and then given to callers as a
+contract. A recursive function is proved by `FTotalTriple.rec_group` with its measure
+(`docs/proof-automation.md`). Without it, the walk stops at a command it cannot execute.
 
 ## Regressions
 
-Regressions distinguish generated condition rejection from a concrete modeled overflow execution.
-They check boundary arithmetic, wrong results, both branch paths, heap postconditions, ownership,
-returned errors versus safety panics, stores of bytes, and refusal of unproved call summaries
-and raw loops. Once the modules and `Proofs.Pointers.Gen`, `Proofs.Basic.Gen` and
-`Proofs.Errors.Gen` are built, check each file with `lake env lean tests/roadmap/vcs/<name>.lean`
-(`Result`, `Memory`, `Extract`).
+`tests/roadmap/vcs/Extract.lean` states contracts of the committed translations of
+`examples/basic`, `examples/errors` and `examples/pointers` (`Proofs/*/Gen.lean`):
+
+* `Basic.tardiness` (safety and result obligations, pinned by its `fsym` report) and, through its
+  contract, `Basic.weightedTardiness` (the statement of `weightedTardiness_ok`);
+* a wrong `tardiness` contract, which leaves exactly one goal, and that goal is refuted;
+* `Errors.parseDigit` (error returns) and `Errors.digitOrZero` (callee contract plus checked
+  unwraps);
+* the memory contracts of `Pointers.addTo` (framed), `Pointers.swap p q` (two cells),
+  `Pointers.swap p p` and `Pointers.same`, each with its strength example in
+  `tests/roadmap/strength-log/Vcs.lean`;
+* `Basic.sum` and `Pointers.sumTo`, which leave their loops as requests.
+
+`tests/roadmap/vcs/Memory.lean` pins the kinds on small functions written as the translator
+writes them:
+
+* ownership is not assumed;
+* a fabricated heap postcondition and an overflow are left;
+* a returned error and a reachable panic are separate goals;
+* a raw loop is left;
+* stores of bytes (`docs/architecture-audit/nan-bits.md`) are walked.
+
+Once `ZigLean.Sep.Full.AutoAll` and `Proofs.{Basic,Errors,Pointers}.Gen` are built, check each
+file with `lake env lean tests/roadmap/vcs/<name>.lean`.

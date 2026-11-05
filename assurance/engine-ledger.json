@@ -278,7 +278,7 @@
    "request": "One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId)` = what `evalFsym` does after elaborating its args (intros, `reduceProjs` of hyps, `withRunCaches`, `arithSimpCtx`, `walk … 400`); `evalFsym` calls it. `vc_gen` (ZigLean/VC/Extract.lean `memVc`) then calls it instead of re-doing `withRunCaches`/`arithSimpCtx`/`walk` and missing intros/reduceProjs",
    "workaround_sites": [],
    "deletion_plan": "",
-   "note": "ZigLean/VC/Extract.lean now calls Auto.run; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity"
+   "note": "vc_gen (ZigLean/VC/Extract.lean) called Auto.run until it was retired (L15): memory VCs are now fsym's residuals directly; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity"
   },
   {
    "id": "15",
@@ -306,7 +306,7 @@
    "status": "open",
    "requester": "one-logic-vc",
    "progress": "open",
-   "request": "(nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (vc_gen clears `hc`, equivalent). A mode that leaves `φ` unsplit gives one obligation and one walk",
+   "request": "(nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (equivalent to `⊢ φ`). A mode that leaves `φ` unsplit gives one obligation and one walk",
    "workaround_sites": [],
    "deletion_plan": ""
   },

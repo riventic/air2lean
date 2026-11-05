@@ -44,7 +44,7 @@ proof framework").
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
-  status `legacy-to-retire` (`unroll_sched`, `blkat_alloc`, `vc_gen`, …), found as a word match in
+  status `legacy-to-retire` (`unroll_sched`, `blkat_alloc`, …), found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
   gates building new proofs on it, so a new file cannot import `ZigLean.Conc.Unroll` and call
   `unroll_sched` without a reviewed addition. A new file or a rising count fails, also against the
@@ -86,7 +86,7 @@ postcondition, which neither an implication nor the model's own result alone sta
 | `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` | native `@[fsym]` rules (no lifting) |
 | `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
-| `vc_gen(?)` | `VC/Extract` | retargeted onto `FTriple` (Plan A, D3) |
+| `vc_gen(?)`, `#vc_extract(_all)`, `@[vc_contract]` | `VC/Extract`, `VC/ContractAttr` (deleted, L15) | `fsym`: the VCs are its residual goals, `fsym.report` their origins; a `Result` contract through `FTotalTriple.result_spec` ([vcs.md](vcs.md)) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |
 | `blkat_alloc`, `tomega`, `zig_range` | `Conc/Lemmas`, `Conc/Spec/Count`, `Range` | `fsym_arith` and `@[fsym_provider]` facts |
 | module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
