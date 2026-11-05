@@ -320,7 +320,7 @@ the last of these users deletes `Sep/Alloc` (and its `ZigLean/Sep.lean` import, 
 | ZigLean/Sep/Witness.lean (74) | `Admit`/`Live` witnesses for `Triple` | Total | S | library (delete) |
 | ZigLean/Conc/Witness.lean (72) | `TLive` for TTriple | Conc.Own, Sep.Witness | S | library (delete; FTTAdmit/FTTLive exist in Full/Witness) |
 | ZigLean/Witnesses/Sep.lean (229) | witnesses for Lists/Sep and Cost theorems | Sep, Witness, Cost | S | tool (delete) |
-| ZigLean/Witnesses/Conc.lean (151) | witnesses for TTriple theorems | Conc.Witness | S | tool (delete) |
+| ZigLean/Witnesses/Conc.lean (151) | witnesses for TTriple theorems | Conc.Witness | S | tool (delete; since L12 it stays as the legacy-free base witness module, see "Hidden users") |
 | tests/roadmap/claims/Fixture.lean (271) | claim-strength classifier fixtures over `Triple`, `TotalTripleWithin`, `EventuallyReturns`, `TTriple`, `Wrapped` | Witness, Bounded, Own | M | test |
 | tools/Assurance.lean (342) | imports every claim head so a module cannot shadow it | Triple, Total, Bounded, Own | M | tool |
 End state for Fixture and Assurance (long-term, no loss of the anti-spoofing property): `claim-heads.json` keeps the legacy head names as
