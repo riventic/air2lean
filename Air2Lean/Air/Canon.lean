@@ -906,17 +906,35 @@ def sinkPastChecks (f : RawFunc) : RawFunc :=
   let tyOf (v : Val) : Option TyId := match v with | .inst id => tys[id]? | v => v.constTy?
   { f with body := sinkBody (nullableFormation f tyOf) f.body }
 
-/-- The rewrites (module doc), retaining the actual snapshots of the final debug step. -/
-def canonicalizeTraced (f : RawFunc) : Except String RenumberTrace := do
-  let f ← versionTags f
+/-- `canonicalize`'s run on one function: the final debug step's snapshots, and the rewrites
+that fired. The certificate report names them as trusted (`trusted-Canon`, docs/air-semantics.md
+§Canonicalization). -/
+structure CanonTrace extends RenumberTrace where
+  /-- The rewrites (module doc) whose output differs from their input in any `RawFunc` field,
+  by their function names, in pipeline order. -/
+  fired : Array String
+
+/-- The rewrites (module doc), retaining the actual snapshots of the final debug step and the
+rewrites that fired. A rewrite is compared as a whole `RawFunc`, so any change it makes counts. -/
+def canonicalizeTraced (f : RawFunc) : Except String CanonTrace := do
+  let pass (name : String) (g : RawFunc → Except String RawFunc) (s : RawFunc × Array String) :
+      Except String (RawFunc × Array String) := do
+    let f ← g s.1
+    pure (f, if f == s.1 then s.2 else s.2.push name)
+  let s ← pass "versionTags" versionTags (f, #[])
+  validateRefs s.1
+  let s ← pass "argRanks" argRanks s
+  let s ← pass "errTraces" errTraces s
+  let s ← pass "dropDeadAllocPlaceholders" (pure ∘ dropDeadAllocPlaceholders) s
+  let s ← pass "dropDeadRuntimeLanePtrs" (pure ∘ dropDeadRuntimeLanePtrs) s
+  let s ← pass "forwardReadOnlyCopies" (pure ∘ forwardReadOnlyCopies) s
+  let s ← pass "itemReads" (pure ∘ itemReads) s
+  let s ← pass "dropTrueChecks" (pure ∘ dropTrueChecks) s
+  let (f, fired) ← pass "sinkPastChecks" (pure ∘ sinkPastChecks) s
   validateRefs f
-  let f ← argRanks f
-  let f ← errTraces f
-  let f := dropTrueChecks (itemReads (forwardReadOnlyCopies
-    (dropDeadRuntimeLanePtrs (dropDeadAllocPlaceholders f))))
-  let f := sinkPastChecks f
-  validateRefs f
-  pure (renumberTraced f)
+  let trace := renumberTraced f
+  pure { toRenumberTrace := trace,
+         fired := if trace.afterDebug == f then fired else fired.push "renumber" }
 
 /-- The ordinary and certificate paths share the complete canonicalization pipeline. -/
 def canonicalize (f : RawFunc) : Except String RawFunc := do

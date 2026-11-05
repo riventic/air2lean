@@ -10,9 +10,9 @@ namespace Air2Lean.CanonCertificate
 
 -- Derive a complete structural comparison, including every operation and Func field.
 -- These instances are local implementation details, not imported typeclass defaults.
-deriving instance BEq for Op, SwitchCase, Inst, Global, Func
-attribute [-instance] instBEqOp instBEqSwitchCase instBEqInst instBEqGlobal instBEqFunc
-attribute [local instance] instBEqOp instBEqSwitchCase instBEqInst instBEqGlobal instBEqFunc
+deriving instance BEq for Op, SwitchCase, Inst, Func
+attribute [-instance] instBEqOp instBEqSwitchCase instBEqInst instBEqFunc
+attribute [local instance] instBEqOp instBEqSwitchCase instBEqInst instBEqFunc
 
 /-- Complete structural native comparison, without exporting a default Func instance. -/
 def sameFunction (before after : Func) : Bool := before == after

@@ -426,6 +426,8 @@ private def run (args : List String) : IO UInt32 := do
       let mut profiles : Array BuildProfile := #[]
       let mut funcs : Array Func := #[]
       let mut canonSnapshots : Array (Nat × Func × Func) := #[]
+      -- Each function's fired Canon rewrites, for the AIR certificate's report.
+      let mut canonFired : Array (String × Array String) := #[]
       let mut err : Option String := none
       for (path, contents) in jsonPaths.zip rewrittenTexts do
         if err.isNone then
@@ -443,15 +445,17 @@ private def run (args : List String) : IO UInt32 := do
                 let (offset, before, after) ← normalizeDebugTrace raw
                 let before ← withErrorTable before errorTable
                 let after ← withErrorTable after errorTable
-                pure (after, some (offset, before, after))
+                pure (after, some (offset, before, after), #[])
               else
-                pure (← withErrorTable (← normalize raw) errorTable, none)
-              : Except String (Func × Option (Nat × Func × Func)))
+                let (f, fired) ← normalizeTraced raw
+                pure (← withErrorTable f errorTable, none, fired)
+              : Except String (Func × Option (Nat × Func × Func) × Array String))
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with
             | .error e => err := some s!"{path}: {e}"
-            | .ok (f, snapshot) =>
+            | .ok (f, snapshot, fired) =>
               if let some pair := snapshot then canonSnapshots := canonSnapshots.push pair
+              else canonFired := canonFired.push (f.name, fired)
               let f := if a.assumeNoLibc then { f with dialect := { f.dialect with noLibc := true } } else f
               let (checkedOne, checkNs) ← timed fun _ => check f device
               times := { times with check := times.check + checkNs }
@@ -579,7 +583,7 @@ private def run (args : List String) : IO UInt32 := do
                     try certificateMetadata genModule modules catch error =>
                       throw (IO.userError (certificateFailure s!"compiler metadata: {error}"))
                   else pure (Lean.Json.mkObj [("fixpoint_groups", .arr #[])])
-                match Certificate.emit program a.ns parts genModule metadata with
+                match Certificate.emit program a.ns parts genModule metadata canonFired with
                 | .ok cert => pure (some (path, cert))
                 | .error error => throw (IO.userError (certificateFailure error))
               | _ => pure none
