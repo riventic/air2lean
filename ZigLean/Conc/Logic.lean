@@ -144,12 +144,12 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
       (P.strict = true → ∃ m', ((Thread.join tid).run { m with current := t }).run =
         some (.ok ((), m'))) ∧ ∀ m',
       ((Thread.join tid).run { m with current := t }).run = some (.ok ((), m')) → K () G m')
-  | .wait p e, K => (P.strict = true → P.Live t G m) ∧ (m.waiters.any (·.1 == t) = false →
+  | .wait p e sh, K => (P.strict = true → P.Live t G m) ∧ (m.waiters.any (·.1 == t) = false →
       (P.strict = true → ∃ b m',
-        ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
-      (∀ e', ((Thread.futexWait p e).run { m with current := t }).run = some (.error e') →
+        ((Thread.futexWait p e sh).run { m with current := t }).run = some (.ok (b, m'))) ∧
+      (∀ e', ((Thread.futexWait p e sh).run { m with current := t }).run = some (.error e') →
         e'.nativeStops) ∧
-      ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
+      ∀ b m', ((Thread.futexWait p e sh).run { m with current := t }).run = some (.ok (b, m')) →
         if b then P.inv G m' ∧ K () G { m with current := t } else K () G m')
   | .wake p n, K => ∀ cs m',
       ((Thread.futexWake p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
@@ -163,7 +163,7 @@ progress, so a cost proof fails closed at them. -/
 def ChargeOk (cr : γ → Nat) : SyncOp Tgt → Nat → Nat → Prop
   | .spawn tgt, old, new =>
       1 ≤ new ∧ ∃ k, (∀ g₀, P.init tgt g₀ → 1 ≤ cr g₀ ∧ cr g₀ ≤ k) ∧ new + k + 1 ≤ old
-  | .wait _ _, _, _ | .gate, _, _ | .spawnGated _, _, _ => False
+  | .wait .., _, _ | .gate, _, _ | .spawnGated _, _, _ => False
   | _, old, new => 1 ≤ new ∧ new + 1 ≤ old
 
 /-- Thread `t`, which resumed with the ghost values `G`, stops at `op` with the ghost value `g`
@@ -598,7 +598,7 @@ theorem set_ok {x : Mem} {m m' : Mem} {a : PUnit}
 end MemM
 
 /-- A futex wake does not throw, and keeps the threads. -/
-theorem futexWake_ok (p : Ptr) (n : Nat) (cs : List Nat) (m : Mem) :
+theorem futexWake_ok (p : FutexKey) (n : Nat) (cs : List Nat) (m : Mem) :
     ∃ m', ((Thread.futexWake p n cs).run m).run = some (.ok ((), m')) ∧ m'.threads = m.threads :=
   ⟨_, rfl, rfl⟩
 
@@ -622,7 +622,7 @@ theorem chooseMany_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} 
     obtain ⟨-, rfl⟩ := hx
     exact ⟨st, tr, rfl⟩
 
-theorem chooseWake_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} {p : Ptr} {n : Nat}
+theorem chooseWake_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} {p : FutexKey} {n : Nat}
     {cs : List Nat} (h : s.chooseWake o p n = (cs, s')) :
     ∃ st tr, s' = { s with step := st, trace := tr } := chooseMany_eq h
 
@@ -646,14 +646,15 @@ theorem recordAccess_keeps {b o l : Nat} {k : AccessKind} {m m' : Mem} {x : Unit
 /-- What a futex wait did: a woken thread goes on (it leaves `woken`); else the kernel read the
 `u32` `v` at `p` with a recorded atomic read (memory `m₁`), and the thread sleeps (it joins
 `waiters`) if `v = e`. -/
-theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+theorem futexWait_ok {p : Ptr} {e : BitVec 32} {sh : Bool} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e sh).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
     (m.woken.contains m.current = false ∧ ∃ bid blk o v m₁, m.access p 4 4 = pure (bid, blk, o) ∧
       ((recordAccess bid o 4 .atomicRead).run m).run = some (.ok ((), m₁)) ∧
       (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v) ∧
-      ((v = e ∧ b = true ∧ m' = { m₁ with waiters := m₁.waiters.push (m₁.current, p) }) ∨
+      ((v = e ∧ b = true ∧
+          m' = { m₁ with waiters := m₁.waiters.push (m₁.current, blk.key o sh) }) ∨
        (v ≠ e ∧ b = false ∧ m' = m₁))) := by
   unfold Thread.futexWait at h
   obtain ⟨a, m₀, hg, h₁⟩ := MemM.bind_ok h
@@ -684,8 +685,8 @@ theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
       exact .inr ⟨he, rfl, rfl⟩
 
 /-- A futex wait keeps the threads. -/
-theorem futexWait_threads {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
+theorem futexWait_threads {p : Ptr} {e : BitVec 32} {sh : Bool} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e sh).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
   rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, m₁, -, hr, -, ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩⟩
   · rfl
   · exact (recordAccess_keeps hr).1
@@ -776,7 +777,7 @@ def TurnPost {α β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem
         p.op = .spawnGated tgt) ∧ P.init tgt (G₂ (s.kids.size + 1))) ∧
     ((ov = none ∧ ∃ p' g, ts = .paused p' ∧ P.inv (upd G₂ t g) s'.mem ∧ P.PausedOk t Q g p' ∧
        ((P.Charged t p'.op G₂ g ∧ p'.depth + 1 = p.depth) ∨
-        (p'.op = p.op ∧ ∃ ptr e, p.op = .wait ptr e))) ∨
+        (p'.op = p.op ∧ ∃ ptr e sh, p.op = .wait ptr e sh))) ∨
      (∃ b d, ts = .done ∧ ov = some b ∧ Q b G₂ s'.mem d))
 
 /-- `settle` with no new kid. -/
@@ -875,9 +876,9 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
     obtain ⟨m₁, hw, hth⟩ := futexWake_ok ptr n cs { s.mem with current := t }
     simp only [Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_turnPost h (hstep cs m₁ hw) hsz rfl rfl (congrArg Array.size hth)
-  | wait ptr e =>
+  | wait ptr e sh =>
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem] at h
-    match hw : ((Thread.futexWait ptr e).run { s.mem with current := t }).run with
+    match hw : ((Thread.futexWait ptr e sh).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error _) => simp [hw] at h
     | some (.ok (b, m₁)) =>
@@ -894,7 +895,7 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
         · simp only [Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl, rfl⟩ := h
           refine ⟨G, fun _ _ => rfl, rfl, by rw [hth, hsz], .inl rfl,
-            .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK.1, hp, .inr ⟨rfl, _, _, rfl⟩⟩⟩
+            .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK.1, hp, .inr ⟨rfl, _, _, _, rfl⟩⟩⟩
       | false =>
         simp only [Bool.false_eq_true, ↓reduceIte] at h hK
         exact settle_turnPost h hK hsz rfl rfl hth
@@ -1017,11 +1018,11 @@ theorem turn_err {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.
     obtain ⟨m₁, hw, -⟩ := futexWake_ok ptr n cs { s.mem with current := t }
     simp only [Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_err (hstep cs m₁ hw) hQ h
-  | wait ptr e' =>
+  | wait ptr e' sh =>
     have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
       simpa [Sched.canGo] using hgo
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem] at h
-    match hw : ((Thread.futexWait ptr e').run { s.mem with current := t }).run with
+    match hw : ((Thread.futexWait ptr e' sh).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error e₁) =>
       simp only [hw, Except.error.injEq, Option.some.injEq] at h
@@ -1237,19 +1238,19 @@ theorem paused_info {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) →
     (hp : P.PausedOk t Q g p) (hg : G t = g) (hi : P.inv G m) (ht : t < m.threads.size) :
     (∀ tid, p.op = .join tid → P.rank t < P.rank tid ∧ tid < m.threads.size ∧ P.joins (G t) ∧
       m.isGated tid = false) ∧
-      (∀ ptr e, p.op = .wait ptr e → P.Live t G m) ∧ (p.op = .gate → 0 < t ∧ P.joins (G t)) := by
+      (∀ ptr e sh, p.op = .wait ptr e sh → P.Live t G m) ∧ (p.op = .gate → 0 < t ∧ P.joins (G t)) := by
   obtain ⟨d, op, k⟩ := p
   have hs := hp G m hg hi ht
   cases op with
   | join tid' =>
     exact ⟨fun tid h => (by cases h; exact ⟨(hs.1 hstr).1, (hs.1 hstr).2.1,
-      (hs.1 hstr).2.2.1, gated_of_joinValid (hs.1 hstr).2.2.2⟩), fun _ _ h => (by cases h),
+      (hs.1 hstr).2.2.1, gated_of_joinValid (hs.1 hstr).2.2.2⟩), fun _ _ _ h => (by cases h),
       fun h => (by cases h)⟩
-  | wait ptr' e' =>
-    exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h; exact hs.1 hstr), fun h => (by cases h)⟩
-  | gate => exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ => hs.1 hstr⟩
+  | wait ptr' e' sh' =>
+    exact ⟨fun _ h => (by cases h), fun _ _ _ h => (by cases h; exact hs.1 hstr), fun h => (by cases h)⟩
+  | gate => exact ⟨fun _ h => (by cases h), fun _ _ _ h => (by cases h), fun _ => hs.1 hstr⟩
   | yield | choose | pick | spawn | asyncChoice | spawnGated | wake =>
-    exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun h => (by cases h)⟩
+    exact ⟨fun _ h => (by cases h), fun _ _ _ h => (by cases h), fun h => (by cases h)⟩
 
 /-- A waiting thread that can go on is in `ready`. -/
 theorem ready_of_main {α : Type} {s : Sched.State Tgt α} {p : Sched.Paused Tgt α}
@@ -1286,9 +1287,9 @@ theorem stuck_info {α β : Type} {s : Sched.State Tgt α} {t : ThreadId}
     exact .inl ⟨tid, h1, h2, h3, by
       simp only [Sched.canGo, Bool.or_eq_false_iff, Bool.not_eq_false'] at hc
       exact hc.2, h4⟩
-  | wait ptr e =>
+  | wait ptr e sh =>
     simp only [Sched.canGo, Bool.not_eq_false'] at hc
-    exact .inr (.inl ⟨hc, hw ptr e rfl⟩)
+    exact .inr (.inl ⟨hc, hw ptr e sh rfl⟩)
   | gate =>
     simp only [Sched.canGo, Bool.not_eq_false'] at hc
     exact .inr (.inr ⟨hc, hg rfl⟩)

@@ -36,7 +36,7 @@ private def p : Ptr := ⟨some 0, 0⟩
 private def base : Mem := { blocks := #[block 4096 8] }
 
 private def observeWake (call : ConcM Nat (BitVec 64)) (m : Mem) :
-    Option (Except Error (Int × Array (ThreadId × Ptr) × Array ThreadId)) :=
+    Option (Except Error (Int × Array (ThreadId × FutexKey) × Array ThreadId)) :=
   (Sched.runTrace env noKids 20 (fun _ => 0) call m).1.map
     (·.map fun (v, m') => (v.toInt, m'.waiters, m'.woken))
 
@@ -136,7 +136,7 @@ private def twoRawWaiters : Mem := {
   threads := #[{ spawner := 0, joined := true },
     { spawner := 0, joined := false }, { spawner := 0, joined := false }]
   clocks := #[#[0, 0, 0], #[0, 0, 0], #[0, 0, 0]]
-  waiters := #[(1, p), (2, p)]
+  waiters := #[(1, ⟨true, 4096⟩), (2, ⟨true, 4096⟩)]
 }
 
 /-- `CHILD_CLEARTID` wakes at most one waiter (Linux `mm_release`: `FUTEX_WAKE` with count 1).
@@ -151,12 +151,69 @@ theorem cleartid_wakes_one :
        | .leaf r => r.map (·.map fun (_, m') =>
            (m'.waiters, m'.woken, m'.blocks[0]?.map fun b => b.bytes.extract 0 4))
        | .sync .. => none) =
-        some (.ok (#[(2, p)], #[1], some #[.int 0, .int 0, .int 0, .int 0])) ∧
+        some (.ok (#[(2, ⟨true, 4096⟩)], #[1], some #[.int 0, .int 0, .int 0, .int 0])) ∧
       (match k 1 twoRawWaiters with
        | .leaf r => r.map (·.map fun (_, m') =>
            (m'.waiters, m'.woken, m'.blocks[0]?.map fun b => b.bytes.extract 0 4))
        | .sync .. => none) =
-        some (.ok (#[(1, p)], #[2], some #[.int 0, .int 0, .int 0, .int 0])) := by
+        some (.ok (#[(1, ⟨true, 4096⟩)], #[2], some #[.int 0, .int 0, .int 0, .int 0])) := by
   refine ⟨_, _, rfl, by decide +kernel, by decide +kernel, by decide +kernel⟩
+
+/-! ## Canonical keys: the domain and the numeric address (formerly `CurrentModel.lean`) -/
+
+/-- The futex stop that option 0 of a call's first pick reaches: its pointer, value and domain. -/
+private def waitStop {α : Type} : CoN Nat α 3 → Option (Ptr × BitVec 32 × Bool)
+  | .sync (.pick _) m k =>
+    match k (0 : Nat) m with
+    | .sync (.wait q e sh) _ _ => some (q, e, sh)
+    | _ => none
+  | _ => none
+
+/-- The result of a WAKE row after option 0 of its pick: the value, the queue and the woken. -/
+private def wakeObs : CoN Nat (BitVec 64 × Mem) 2 →
+    Option (Except Error (Int × Array (ThreadId × FutexKey) × Array ThreadId))
+  | .sync (.pick _) m k =>
+    match k (0 : Nat) m with
+    | .leaf r => r.map (·.map fun (v, m') => (v.toInt, m'.waiters, m'.woken))
+    | .sync .. => none
+  | _ => none
+
+private def oneWaiting (k : FutexKey) : Mem := {
+  base with
+  threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }]
+  clocks := #[#[0, 0], #[0, 0]]
+  waiters := #[(1, k)]
+}
+
+/-- **Private and shared keys differ** (core.c `get_futex_key`: a shared key on anonymous memory
+has `FUT_OFF_MMSHARED` in its offset). A shared and a private WAIT at `p` stop in their own
+domains, and the actual private WAKE at `p` leaves a waiter of the shared key queued and returns
+`0`, while it wakes a waiter of the private key and returns `1`. The former witness
+`private_wakes_shared` woke the shared waiter. -/
+theorem private_wake_skips_shared :
+    waitStop ((Linux.futex_4arg p 0 0 none : ConcM Nat (BitVec 64)) 3 base) = some (p, 0, true) ∧
+    waitStop ((Linux.futex_4arg p 0x80 0 none : ConcM Nat (BitVec 64)) 3 base) =
+      some (p, 0, false) ∧
+    wakeObs ((Linux.futex_3arg p 0x81 1 : ConcM Nat (BitVec 64)) 2 (oneWaiting ⟨true, 4096⟩)) =
+      some (.ok (0, #[(1, ⟨true, 4096⟩)], #[])) ∧
+    wakeObs ((Linux.futex_3arg p 0x81 1 : ConcM Nat (BitVec 64)) 2 (oneWaiting ⟨false, 4096⟩)) =
+      some (.ok (1, #[], #[1])) :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
+
+private def adjacent : Mem := {
+  oneWaiting ⟨false, 4100⟩ with
+  blocks := #[block 4096 4, block 4100 4]
+}
+
+/-- **The key is the numeric address**: two live blocks at 4096 and 4100 give distinct provenance
+pointers for one-past A and start B, both at address 4100. The waiter that waited at start B is
+queued at key 4100, and the actual private WAKE through one-past A wakes it and returns `1`. The
+former witness `equal_address_ptr_miss` matched by provenance pointer and returned `0`. -/
+theorem equal_address_wakes :
+    (ptrAddr ⟨some 0, 4⟩).run adjacent = (ptrAddr ⟨some 1, 0⟩).run adjacent ∧
+    adjacent.keyAt ⟨some 1, 0⟩ false = some ⟨false, 4100⟩ ∧
+    wakeObs ((Linux.futex_3arg ⟨some 0, 4⟩ 0x81 1 : ConcM Nat (BitVec 64)) 2 adjacent) =
+      some (.ok (1, #[], #[1])) :=
+  ⟨rfl, rfl, by decide +kernel⟩
 
 end AuditS6

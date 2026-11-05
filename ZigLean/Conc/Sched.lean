@@ -154,9 +154,10 @@ def State.chooseMany (s : State Tgt α) (o : Nat → Nat) : List Nat → List Na
     let (xs, s) := s.chooseMany o cs
     (x :: xs, s)
 
-/-- The waiters that a wake of up to `n` waiters at `p` wakes: one choice for each, among the
-waiters at `p` not picked yet (`Thread.wakeSet`). -/
-def State.chooseWake (s : State Tgt α) (o : Nat → Nat) (p : Ptr) (n : Nat) : List Nat × State Tgt α :=
+/-- The waiters that a wake of up to `n` waiters at the key `p` wakes: one choice for each, among
+the waiters at `p` not picked yet (`Thread.wakeSet`). -/
+def State.chooseWake (s : State Tgt α) (o : Nat → Nat) (p : FutexKey) (n : Nat) :
+    List Nat × State Tgt α :=
   let k := Thread.waitersAt s.mem.waiters p
   s.chooseMany o ((List.range (Nat.min n k)).map (k - ·))
 
@@ -204,8 +205,8 @@ def turnTrace {β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel 
     (do
       let ((), s) ← s.onMem (Thread.join tid)
       settle t s (k () s.mem), s.trace)
-  | ⟨d, .wait ptr e, k⟩ =>
-    match s.onMem (Thread.futexWait ptr e) with
+  | ⟨d, .wait ptr e sh, k⟩ =>
+    match s.onMem (Thread.futexWait ptr e sh) with
     | .error err => (.error err, s.trace)
     | .ok (false, s₁) => (settle t s₁ (k () s₁.mem), s.trace)
     | .ok (true, s₁) =>
@@ -213,12 +214,12 @@ def turnTrace {β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel 
       -- goes on with the memory before the wait (the thread is not in the queue).
       let (c, s₂) := s.choose o 2
       if c = spuriousWake then (settle t s₂ (k () s₂.mem), s₂.trace)
-      else (.ok (.paused ⟨d, .wait ptr e, k⟩, none, { s₁ with step := s₂.step, trace := s₂.trace }),
+      else (.ok (.paused ⟨d, .wait ptr e sh, k⟩, none, { s₁ with step := s₂.step, trace := s₂.trace }),
         s₂.trace)
-  | ⟨_, .wake ptr n, k⟩ =>
-    let (cs, s) := s.chooseWake o ptr n
+  | ⟨_, .wake key n, k⟩ =>
+    let (cs, s) := s.chooseWake o key n
     (do
-      let ((), s) ← s.onMem (Thread.futexWake ptr n cs)
+      let ((), s) ← s.onMem (Thread.futexWake key n cs)
       settle t s (k () s.mem), s.trace)
 
 /-- The semantic result of one turn; `turnTrace` also retains its oracle choices. -/
