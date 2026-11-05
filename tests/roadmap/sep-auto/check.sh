@@ -23,8 +23,7 @@
 # hold while an unrelated live thread has not acquired the publication; WPOsFutex: the OS futex
 # rows of std's Thread.Futex at a lock's word, by the rows' rules and the lock's OS wait and wake
 # rules; LockQueue: a lock step queues only its own thread, `LockWord.Step.newQ`) and total stack
-# pushes
-# of a thread with a stack budget
+# pushes of a thread with a stack budget
 # (Stack: the token rules, a thread, the start, rejected pushes without room) and step ticks
 # (Ticks: memory/concurrent loops, straight-line ticks, thread locality, WP segments, one credit).
 # Its large user is

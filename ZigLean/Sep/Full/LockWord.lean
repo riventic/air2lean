@@ -375,13 +375,14 @@ theorem ShapesStep.trans {m₁ m₂ m₃ : Mem} (h₁ : L.ShapesStep m₁ m₂) 
     have := ha₂ L.shape (by rw [e₁]; simp)
     rcases this rfl with h | h <;> simp [LockWord.shape] at h <;> omega
 
-/-- No new queue entry: the new queue `ws'` is within the old one `ws` (`Step.newQ`). -/
-theorem newQ_of_sub {t : ThreadId} {ws ws' : Array (ThreadId × Ptr)} (h : ∀ w ∈ ws', w ∈ ws) :
-    ∀ w ∈ ws', w ∉ ws → w.1 = t :=
+/-- No new queue entry: the new queue `ws'` is within the old one `ws` (`Step.newQ`). Generic in
+the queue's key. -/
+theorem newQ_of_sub {α : Type} {t : ThreadId} {ws ws' : Array (ThreadId × α)}
+    (h : ∀ w ∈ ws', w ∈ ws) : ∀ w ∈ ws', w ∉ ws → w.1 = t :=
   fun w hw hn => absurd (h w hw) hn
 
 /-- The one new queue entry is `t`'s (`Step.newQ` of a futex wait by `t`). -/
-theorem newQ_push {t : ThreadId} {p : Ptr} {ws : Array (ThreadId × Ptr)} :
+theorem newQ_push {α : Type} {t : ThreadId} {p : α} {ws : Array (ThreadId × α)} :
     ∀ w ∈ ws.push (t, p), w ∉ ws → w.1 = t := fun w hw hn => by
   rcases Array.mem_push.mp hw with hw | rfl
   · exact absurd hw hn
