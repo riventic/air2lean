@@ -31,10 +31,16 @@ open Conc Proto
 
 /-- The cells at bytes `W` are apart from a heap without them. -/
 theorem disj_cellsAt {W : Zig.Loc → Prop} [DecidablePred W] {h : FHeap} {m : Mem}
-    (hW : ∀ l, W l → h l = none) : FHeap.Disjoint h (cellsAt W m).heap := fun l => by
-  by_cases hl : W l
-  · exact .inl (hW l hl)
-  · exact .inr (cellsAt_none hl)
+    (hW : ∀ l, W l → h l = none) : FHeap.Disjoint h (cellsAt W m).heap := fun l =>
+  (Decidable.em (W l)).imp (hW l) cellsAt_none
+
+/-- The cells at bytes `W` depend only on those bytes. -/
+theorem cellsAt_congr {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem}
+    (h : ∀ l, W l → m'.heap l = m.heap l) : cellsAt W m' = cellsAt W m := by
+  simp only [cellsAt, Res.mk.injEq, and_true]
+  funext l; split
+  · rename_i hl; rw [h l hl]
+  · rfl
 
 namespace LockWord
 
@@ -113,11 +119,8 @@ theorem WInv.otherStep {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem} (hi : 
     · exact hi.loc.only l hold hb h1 h2
     · obtain ⟨hbl, ho, hlen⟩ : l.block = K.b ∧ l.off = K.o ∧ l.len = 4 := by
         simpa only [ALoc.shape, LockWord.shape, Prod.mk.injEq] using hshape
-      rw [hbl] at hb
-      rw [ho] at h1
-      rw [ho, hlen] at h2
       rcases hap with h | h | h
-      · exact absurd hb.symm h
+      · exact absurd (hb.symm.trans hbl) h
       · omega
       · omega
   · obtain ⟨h1, h2, h3, h4, h5⟩ := hi.loc.ok i l ((hloc i l).mp hl)
@@ -173,11 +176,8 @@ theorem Owns.otherStep {P P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {h 
 
 /-- `K`'s step keeps `L`'s word's cells. -/
 theorem wordR_otherStep {t : ThreadId} {m m' : Mem} (hs : K.Step t m m') (hap : L.ApartL K) :
-    L.wordR m' = L.wordR m := by
-  simp only [LockWord.wordR, cellsAt, Res.mk.injEq, and_true]
-  funext l; split
-  · rename_i hl; rw [hs.heap (hap.not_in hl)]
-  · rfl
+    L.wordR m' = L.wordR m :=
+  cellsAt_congr fun _ hl => hs.heap (hap.not_in hl)
 
 end LockWord
 
@@ -185,26 +185,38 @@ namespace FLock
 
 variable {γ : Type} {L : FLock γ}
 
+/-- **New ghost values at the same memory**: the word's invariant at the new places, the same
+parts and resources, the same holders, no thread back from `gone`, and the resource assertion
+keeps holding. -/
+theorem Inv.reghost {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m)
+    (hw : L.WInv (L.pl G') m)
+    (hpart : ∀ u, L.part (G' u) = L.part (G u)) (hheld : ∀ u, L.held (G' u) = L.held (G u))
+    (hholds : ∀ u, (L.ph (G' u)).held = true ↔ (L.ph (G u)).held = true)
+    (hg : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone)
+    (hR : ∀ r, L.R G r → L.R G' r) : L.Inv G' rX m := by
+  have hown : L.own G' m = L.own G m := by
+    funext u; unfold FLock.own; rw [hpart u, hheld u]
+  have hfree := free_iff_of (L := L) hholds
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine ⟨hw, ⟨rL, hown ▸ ho, hLoff, hLX, fun hF' => ?_,
+    fun h => hnF fun h' => h (hfree.mpr h')⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
+    fun u hu => ?_⟩
+  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
+    exact ⟨hR rL h1, h2.weaken hg⟩
+  · rw [hpart u, hheld u]; exact hi.pdisj u
+  · rw [hheld u]; exact hi.idle u (held_false_of_iff (hholds u) hu)
+  · rw [hheld u]; exact hR _ (hi.res u ((hholds u).mp hu))
+
 /-- New ghost values that `L` does not tell apart from the old ones: the same places, parts and
 resources, and the resource assertion keeps holding (e.g. another lock's step changed only its
 own coordinates of the ghost values). -/
 theorem Inv.congrG {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m)
     (hG : ∀ u, L.ph (G' u) = L.ph (G u) ∧ L.part (G' u) = L.part (G u) ∧
       L.held (G' u) = L.held (G u))
-    (hR : ∀ r, L.R G r → L.R G' r) : L.Inv G' rX m := by
+    (hR : ∀ r, L.R G r → L.R G' r) : L.Inv G' rX m :=
   have hpl : L.pl G' = L.pl G := funext fun u => (hG u).1
-  have hown : L.own G' m = L.own G m := by
-    funext u; unfold FLock.own; rw [(hG u).2.1, (hG u).2.2]
-  have hfree : L.Free G' ↔ L.Free G := by unfold FLock.Free; rw [hpl]
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  refine ⟨hpl ▸ hi.w, ⟨rL, hown ▸ ho, hLoff, hLX, fun hF' => ?_,
-    fun h => hnF fun h' => h (hfree.mpr h')⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
-    fun u hu => ?_⟩
-  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    exact ⟨hR rL h1, hpl ▸ h2⟩
-  · rw [(hG u).2.1, (hG u).2.2]; exact hi.pdisj u
-  · rw [(hG u).1] at hu; rw [(hG u).2.2]; exact hi.idle u hu
-  · rw [(hG u).1] at hu; rw [(hG u).2.2]; exact hR _ (hi.res u hu)
+  hi.reghost (hpl ▸ hi.w) (fun u => (hG u).2.1) (fun u => (hG u).2.2)
+    (fun u => by rw [(hG u).1]) (fun u h => by rwa [(hG u).1] at h) hR
 
 section
 
@@ -218,8 +230,8 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
       L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.nest K.ptr)) :
     L.Inv G (rsum (K.wordR m') rY) m' := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  have hjb := LockWord.joinedB_congr hs.threads
-  have hown : L.own G m' = L.own G m := by funext u; unfold FLock.own; rw [hjb]
+  have hown : L.own G m' = L.own G m := by
+    funext u; unfold FLock.own; rw [LockWord.joinedB_congr hs.threads]
   have hKbl : K.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hKb; exact (Array.getElem?_eq_some_iff.mp hb).1
   -- `rL` and `rY` have no byte of `K`'s word: the rest has it, apart from `rL`.
@@ -228,7 +240,7 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
     (hXY.1 l).resolve_right (LockWord.wordR_some hKb hl)
   have hYK : ∀ l, K.In l → rY.heap l = none := LockWord.off_erase.mp hYoff
   have hLwK : ∀ (n : Mem) l, K.In l → (L.wordR n).heap l = none := fun n l hl =>
-    cellsAt_none fun h => hap.not_in h hl
+    cellsAt_none (hap.symm.not_in hl)
   -- Bring `K`'s word to the front, step it, and put it back.
   have hperm : ∀ n : Mem, rsum (L.wordR n) (rsum rL (rsum (K.wordR n) rY)) =
       rsum (K.wordR n) (rsum (L.wordR n) (rsum rL rY)) := fun n => by
@@ -248,7 +260,7 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
   · refine LockWord.off_erase.mpr fun l hl => ?_
     have h := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at h ⊢
-    exact ⟨cellsAt_none fun h' => hap.not_in hl h', h.2⟩
+    exact ⟨cellsAt_none (hap.not_in hl), h.2⟩
 
 /-- **`K`'s step keeps `L`'s invariant**, for a thread `t` outside `L`'s code
 (`LockWord.WInv.otherStep`). `K`'s word is in `L`'s rest (`rsum (K.wordR m) rY`); its cells are
@@ -274,44 +286,22 @@ theorem Inv.reheld {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {p 
     (hi : L.Inv G rX m) (hph : (L.ph (G t)).held = true) (hp : p.held = true)
     (hq : m.waiters.any (·.1 == t) = false) :
     L.Inv (upd G t (L.set (G t) p (L.held (G t)))) rX m := by
-  have hown : L.own (upd G t (L.set (G t) p (L.held (G t)))) m = L.own G m := by
-    funext u; unfold FLock.own
+  have hpl := pl_upd_set (L := L) G t p (L.held (G t))
+  have hpu : ∀ u, L.part (upd G t (L.set (G t) p (L.held (G t))) u) = L.part (G u) ∧
+      L.held (upd G t (L.set (G t) p (L.held (G t))) u) = L.held (G u) := fun u => by
     by_cases h : u = t
-    · subst h; rw [upd_self, L.part_set, L.held_set]
-    · rw [upd_ne _ _ h]
-  have hphu : ∀ u, L.ph (upd G t (L.set (G t) p (L.held (G t))) u) =
-      if u = t then p else L.ph (G u) := fun u => by
-    unfold upd; split
-    · exact L.ph_set _ _ _
-    · rfl
-  have hholds : ∀ u, (L.ph (upd G t (L.set (G t) p (L.held (G t))) u)).held = true ↔
-      (L.ph (G u)).held = true := by
-    intro u; rw [hphu]; split
-    · rename_i h; subst h; rw [hp, hph]
-    · exact Iff.rfl
-  have hfree := free_iff_of (L := L) hholds
-  have hgw : ∀ u, L.ph (upd G t (L.set (G t) p (L.held (G t))) u) ≠ .gone →
-      L.ph (G u) ≠ .gone := fun u h => by
-    rw [hphu] at h; split at h
-    · rename_i e; subst e; exact LPh.ne_gone_of_held hph
-    · exact h
-  have hR : ∀ r, L.R G r → L.R (upd G t (L.set (G t) p (L.held (G t)))) r :=
-    fun r h => (L.R_set G t p _ r).mpr h
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  refine ⟨by rw [pl_upd_set]; exact hi.w.reheld hph hp hq, ⟨rL, hown ▸ ho, hLoff, hLX,
-    fun hF' => ?_, fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_,
-    fun u hu => ?_, fun u hu => ?_⟩
-  · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    exact ⟨hR rL h1, h2.weaken hgw⟩
-  · by_cases h : u = t
-    · subst h; rw [upd_self, L.part_set, L.held_set]; exact hi.pdisj u
-    · rw [upd_ne _ _ h]; exact hi.pdisj u
-  · by_cases h : u = t
-    · subst h; rw [upd_self, L.ph_set, hp] at hu; cases hu
-    · rw [upd_ne _ _ h] at hu ⊢; exact hi.idle u hu
-  · by_cases h : u = t
-    · subst h; rw [upd_self, L.held_set]; exact hR _ (hi.res u hph)
-    · rw [upd_ne _ _ h] at hu ⊢; exact hR _ (hi.res u hu)
+    · subst h; rw [upd_self, L.part_set, L.held_set]; exact ⟨rfl, rfl⟩
+    · rw [upd_ne _ _ h]; exact ⟨rfl, rfl⟩
+  have hholds : ∀ u, (L.ph (upd G t (L.set (G t) p (L.held (G t))) u)).held =
+      (L.ph (G u)).held := fun u => by
+    show (L.pl _ u).held = (L.pl G u).held
+    rw [hpl]; exact LockWord.held_upd (P := L.pl G) hph hp u
+  refine hi.reghost (by rw [hpl]; exact hi.w.reheld hph hp hq) (fun u => (hpu u).1)
+    (fun u => (hpu u).2) (fun u => by rw [hholds u]) (fun u h => ?_)
+    (fun r h => (L.R_set G t p _ r).mpr h)
+  by_cases e : u = t
+  · subst e; exact LPh.ne_gone_of_held hph
+  · rwa [upd_ne _ _ e] at h
 
 /-- **The nap**: the holder `t` goes from `holds` to `holdsAway`, before the futex wait of an
 object of the lock's nest (`LockWord.WInv.nap`). No memory step. -/
