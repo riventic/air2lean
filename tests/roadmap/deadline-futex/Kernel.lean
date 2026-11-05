@@ -11,6 +11,7 @@ theorem wake_legacy (s : Kernel) (p : Ptr) (n : Nat) {k : FutexKey}
     ((Thread.futexWake k n []).run s.mem).run = some (.ok ((), (s.wake p n).mem)) := by
   unfold Kernel.wake
   rw [hk]
+  dsimp only
   split
   · simp_all
   · rename_i heq
@@ -62,7 +63,11 @@ theorem release_frame (s : Kernel) (r : Registration)
 
 theorem wake_no_acquire (s : Kernel) (p : Ptr) (n : Nat) :
     (s.wake p n).mem.clocks = s.mem.clocks ∧
-    (s.wake p n).mem.footprint = s.mem.footprint := ⟨rfl, rfl⟩
+    (s.wake p n).mem.footprint = s.mem.footprint := by
+  unfold Kernel.wake
+  split
+  · exact ⟨rfl, rfl⟩
+  · exact ⟨rfl, rfl⟩
 
 /-- Expiry does not suppress an already enabled boundary wake. -/
 theorem boundary_alternatives (s : Kernel) (r : Registration) (now : Time.Timestamp)
