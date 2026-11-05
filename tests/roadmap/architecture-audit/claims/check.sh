@@ -14,13 +14,13 @@ python3 -B "$here/test_exposure.py" "$@"
 bash "$here/kernel-replay.sh" AuditClaims.Vacuous AuditClaims.Shadow AuditClaims.AsmTotal AuditClaims.ShadowWithin
 # The rejection must be the forged theorem's, not a missing olean or a load error.
 for fixture in Unchecked:unchecked_total Universal:unchecked_universal; do
-  module=AuditClaims.${fixture%%:*}
+  module=AuditClaims.${fixture%%:*} decl=AuditClaims.${fixture#*:}
   if replay=$(bash "$here/kernel-replay.sh" "$module" 2>&1); then
     echo "error: leanchecker accepted $module" >&2
     exit 1
   fi
-  if ! grep -qF "while replaying declaration 'AuditClaims.${fixture#*:}'" <<<"$replay"; then
-    echo "error: leanchecker rejected $module, but not at AuditClaims.${fixture#*:}:" >&2
+  if ! grep -qF "while replaying declaration '$decl'" <<<"$replay"; then
+    echo "error: leanchecker rejected $module, but not at $decl:" >&2
     echo "$replay" >&2
     exit 1
   fi
