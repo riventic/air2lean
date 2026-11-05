@@ -144,7 +144,7 @@ The generic contracts that will replace the hand futex under this proof (`FutexS
 
 ### A shared atomic word
 
-A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition` or a `Thread.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Base/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic (`Word.Ok`), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant. The native steps over full-state resources are in `ZigLean/Sep/Full/Word.lean`; the legacy `Word.Op` producers and step records in the table are in `ZigLean/Conc/Word.lean`.
+A word of a sync object that no thread owns: the state and the epoch of an `Io.Condition` or a `Thread.Condition`, the state of an `Io.Event` or a `Thread.ResetEvent`, the `u64` state of a `Thread.WaitGroup` (`ZigLean/Conc/Base/Word.lean`; `Word n nb`: `n` bits in `nb` bytes, 32 or 64). Each access to it is atomic, or a plain access (a whole read of the struct it is in) that happened before every thread of the word's live set, the threads that may still access it (`Word.Ok m A`, chosen by the protocol; every thread by default), so its ops do not race, and an RMW reads the newest message. A proof keeps facts on the word's writes (`Word.hist`: bytes, clock, release clock of each message, oldest first) in its invariant. The native steps over full-state resources are in `ZigLean/Sep/Full/Word.lean`; the legacy `Word.Op` producers and step records in the table are in `ZigLean/Conc/Word.lean`.
 
 | Part | What |
 |---|---|
