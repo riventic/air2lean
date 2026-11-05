@@ -1,6 +1,7 @@
 import Proofs.Threadsync.WaitGroup.Wait
 import ZigLean.ResultRun
 import ZigLean.Sep.Full.LockSteps
+import ZigLean.Witness
 
 /-!
 # `main`'s read of the whole `Tally` in `waitGroup`'s protocol
@@ -26,13 +27,22 @@ theorem gone6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
     · exact hu.lg 1 h1
     · exact hu.lg 2 h2
 
+/-- At `main`'s places from `run` on (rank `≥ 3`), the threads are the shape's third case. -/
+theorem shape3 {G : ThreadId → Gh} {m : Mem} (h : Shape (fun u => (G u).2) m)
+    (h3 : 3 ≤ (G 0).2.ph.rank) :
+    m.threads[0]? = some { spawner := 0, joined := true } ∧ m.threads.size = 3 ∧
+    m.threads[1]? = some { spawner := 0, joined := decide ((G 0).2.ph = .j1) } ∧
+    m.threads[2]? = some { spawner := 0, joined := false } ∧
+    (G 1).2.ph.isTask = true ∧ (G 2).2.ph.isTask = true := by
+  obtain ⟨h00, -, -, ⟨-, h1, -⟩ | ⟨-, h2, -⟩ | ⟨a, -, c, d, f, k⟩⟩ := h
+  · exfalso; dsimp only at h1; omega
+  · exfalso; dsimp only at h2; rw [h2] at h3; exact absurd h3 (by decide)
+  · exact ⟨h00, a, f, k, c, d⟩
+
 /-- `main` after its wait: three threads. -/
 theorem size6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
-    (h6 : 6 ≤ (G 0).2.ph.rank) : m.threads.size = 3 := by
-  obtain ⟨-, -, -, ⟨-, h, -⟩ | ⟨-, h, -⟩ | ⟨h, -⟩⟩ := hu.shape
-  · change (G 0).2.ph.rank ≤ 1 at h; omega
-  · change (G 0).2.ph = .sp1 at h; rw [h] at h6; exact absurd h6 (by decide)
-  · exact h
+    (h6 : 6 ≤ (G 0).2.ph.rank) : m.threads.size = 3 :=
+  (shape3 hu.shape (by omega)).2.1
 
 /-- `main` after its wait is the only thread of the words' live sets. -/
 theorem live6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
@@ -53,6 +63,13 @@ theorem live6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
   · rfl
   · exact absurd hl (hfd 1 (.inl rfl))
   · exact absurd hl (hfd 2 (.inr rfl))
+
+/-- `main` after its wait, out of the lock's code: no thread holds the mutex. -/
+theorem free6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
+    (h6 : 6 ≤ (G 0).2.ph.rank) (hm : (G 0).1.ph = .out) : L.Free G := fun u => by
+  by_cases h0 : u = 0
+  · subst h0; show (G 0).1.ph ≠ .holds; rw [hm]; decide
+  · show (G u).1.ph ≠ .holds; rw [gone6 hu h6 u h0]; decide
 
 /-- The `Tally`'s decode, from the values of its four words. -/
 theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
@@ -77,6 +94,10 @@ theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
     rfl
   case hn => rfl
 
+nonvacuity_witness tally_decode :=
+  ⟨Array.replicate 24 (.int 0), 0, 0, 0, 0, by with_unfolding_all rfl, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, by with_unfolding_all rfl, trivial⟩
+
 /-- `main` after its wait: the `Tally` (block 0) decodes, and its counter is 2 (both tasks
 stored it). -/
 theorem tally_val {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : L.Inv G rX m) (hu : U G rX m)
@@ -92,12 +113,8 @@ theorem tally_val {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : L.Inv G rX m)
   rw [show L.b = 0 from rfl, show L.o = 16 from rfl, hb] at hU
   simp only [Option.map_some, Option.getD_some] at hU
   -- the counter: the free lock's resource
-  have hfree : L.Free G := fun u => by
-    by_cases h0 : u = 0
-    · subst h0; show (G 0).1.ph ≠ .holds; rw [hm]; decide
-    · show (G u).1.ph ≠ .holds; rw [gone6 hu h6 u h0]; decide
-  obtain ⟨rL, ho, hLoff, -, hF, -⟩ := hL.rest
-  obtain ⟨hR, -⟩ := hF hfree
+  obtain ⟨rL, ho, hF, hin⟩ := hL.lockResIn
+  have hR := hF (free6 hu h6 hm)
   obtain ⟨h1, h2, -⟩ := hu.done h6
   have hc2 : (G 1).2.cnt + (G 2).2.cnt = 2 := by
     unfold X.cnt; rw [if_pos (by unfold Ph.fd at h1; revert h1; cases (G 1).2.ph <;> simp [Ph.stored]),
@@ -105,20 +122,8 @@ theorem tally_val {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : L.Inv G rX m)
   change up (pts (bPtr.add 20) 4 (BitVec.ofNat 32 ((G 1).2.cnt + (G 2).2.cnt))) rL at hR
   rw [hc2] at hR
   obtain ⟨A, S, K, bs, ⟨-, hbs, hdv, -⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hR
-  -- a byte of the counter is the lock resource's in the complete rest (not the word's)
-  have hsub : ∀ l fc, rL.heap l = some fc → ∃ fc',
-      (rsum (L.wordR m) (rsum rL rX)).heap l = some fc' ∧ fc'.cell.norm = fc.cell.norm := by
-    intro l fc h
-    have hnw : ¬ L.In l := fun hin => by
-      obtain ⟨b', x⟩ := l
-      obtain ⟨h1, h2, h3⟩ := hin
-      have := hLoff x h2 h3
-      simp only at h1; subst h1
-      simp [FHeap.erase, h] at this
-    refine ⟨fc, ?_, rfl⟩
-    simp only [FHeap.union_apply, LockWord.wordR, cellsAt_none hnw, Option.none_or, h,
-      Option.some_or]
-  obtain ⟨blk', hb'', hx⟩ := ho.rest_bytes hbytes rfl hsub (by rw [hbs]; decide)
+  obtain ⟨blk', hb'', hx⟩ :=
+    ho.rest_bytes hbytes rfl (fun l fc h => ⟨fc, hin l fc h, rfl⟩) (by rw [hbs]; decide)
   rw [hb] at hb''; cases hb''
   have hd : (intOfBytes 32 (blk.bytes.extract 20 24)).run = some (.ok (BitVec.ofNat 32 2)) := by
     have e : blk.bytes.extract 20 24 = bs := by
@@ -150,13 +155,6 @@ theorem U_read {G : ThreadId → Gh} {rX : Res} {m : Mem} {o n : Nat} (hu : U G 
   · exact .inl ⟨e, he, .refl e⟩
   · simp [AccessKind.isWrite] at hk
 
-/-- `main` after its wait, out of the lock's code: no thread holds the mutex. -/
-theorem free6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
-    (h6 : 6 ≤ (G 0).2.ph.rank) (hm : (G 0).1.ph = .out) : L.Free G := fun u => by
-  by_cases h0 : u = 0
-  · subst h0; show (G 0).1.ph ≠ .holds; rw [hm]; decide
-  · show (G u).1.ph ≠ .holds; rw [gone6 hu h6 u h0]; decide
-
 /-- The `Tally`'s bytes are live (`BlkOk`). -/
 theorem heap0 {m : Mem} (hb : BlkOk m) {x : Nat} (hx : x < 24) : m.heap (0, x) ≠ none := by
   obtain ⟨blk, h1, hl, hsz, hk⟩ := hb
@@ -173,8 +171,6 @@ theorem wp_read {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res} {w : Bool}
     (h : ∀ v m', v.n = 2 → m'.current = 0 →
       proto.inv (upd G 0 (gO rM { ph := .rdd, wk := w })) m' → Q v G m' d) :
     proto.WP 0 (ConcM.liftMem (load Tally 8 bPtr) : ConcM Tgt Tally) Q G m d := by
-  have h10 : (1 : ThreadId) ≠ 0 := by decide
-  have h20 : (2 : ThreadId) ≠ 0 := by decide
   obtain ⟨rX, hL, hu⟩ := id hi
   have hg0 : upd G 0 (gO rM { ph := .rd, wk := w }) 0 = gO rM { ph := .rd, wk := w } :=
     upd_self _ _ _
@@ -229,8 +225,8 @@ theorem wp_read {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res} {w : Bool}
       fun _ => ?_
     obtain ⟨rX'', -, hu''⟩ := id hi'
     obtain ⟨a, b, c, d', f, k⟩ := hu''.done h6
-    rw [upd_ne _ _ h10] at a c
-    rw [upd_ne _ _ h20] at b d'
+    rw [upd_ne _ _ (by decide : (1 : ThreadId) ≠ 0)] at a c
+    rw [upd_ne _ _ (by decide : (2 : ThreadId) ≠ 0)] at b d'
     refine ⟨a, b, c, d', f, fun u hu0 hx => ?_⟩
     have := k u (by rw [upd_ne _ _ hu0]; exact hx)
     rwa [upd_ne _ _ hu0] at this

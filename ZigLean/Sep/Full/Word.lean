@@ -292,6 +292,20 @@ theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m
     · exact cellsAt_none hin
   simp only [rsum, FHeap.union_apply, hl, hwr, hrL, Option.none_or]
 
+/-- The free lock's resource is in the lock's complete rest (apart from the word's cells): the
+`rL` counterpart of `Inv.restIn`. -/
+theorem Inv.lockResIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) :
+    ∃ rL, FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧ (L.Free G → L.R G rL) ∧
+      ∀ l fc, rL.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc := by
+  obtain ⟨rL, ho, hLoff, -, hF, -⟩ := hi.rest
+  refine ⟨rL, ho, fun h => (hF h).1, fun l fc hl => ?_⟩
+  have hwr : (L.wordR m).heap l = none := by
+    by_cases hin : L.In l
+    · have := LockWord.off_erase.mp hLoff l hin
+      simp [hl] at this
+    · exact cellsAt_none hin
+  simp only [rsum, FHeap.union_apply, hl, hwr, Option.none_or, Option.some_or]
+
 /-- A byte of the rest is the memory's, up to `Cell.norm`. -/
 theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
     {fc : FCell} (hl : rX.heap l = some fc) : (m.heap l).map Cell.norm = some fc.cell.norm := by

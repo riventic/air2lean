@@ -1,4 +1,4 @@
-import Proofs.Threadsync.WaitGroup.Wait
+import Proofs.Threadsync.WaitGroup.Read
 
 /-!
 # `main`'s joins in `waitGroup`'s protocol
@@ -18,18 +18,6 @@ After its read of the `Tally` (`rdd`), `main` joins task 1 and then task 2. Both
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
 
 namespace Threadsync.WG
-
-/-- At `main`'s places from `run` on (rank `≥ 3`), the threads are the shape's third case. -/
-theorem shape3 {G : ThreadId → Gh} {m : Mem} (h : Shape (fun u => (G u).2) m)
-    (h3 : 3 ≤ (G 0).2.ph.rank) :
-    m.threads[0]? = some { spawner := 0, joined := true } ∧ m.threads.size = 3 ∧
-    m.threads[1]? = some { spawner := 0, joined := decide ((G 0).2.ph = .j1) } ∧
-    m.threads[2]? = some { spawner := 0, joined := false } ∧
-    (G 1).2.ph.isTask = true ∧ (G 2).2.ph.isTask = true := by
-  obtain ⟨h00, -, -, ⟨-, h1, -⟩ | ⟨-, h2, -⟩ | ⟨a, -, c, d, f, k⟩⟩ := h
-  · exfalso; dsimp only at h1; omega
-  · exfalso; dsimp only at h2; rw [h2] at h3; exact absurd h3 (by decide)
-  · exact ⟨h00, a, f, k, c, d⟩
 
 /-- **`main`'s join of task 1** at `rdd`: it takes the task's part, and task 1 is joined at
 `j1`. -/
@@ -56,7 +44,6 @@ theorem wp_join1 {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
   obtain ⟨rec, hrec, -, hm'⟩ := join_eq hj
   obtain rfl : rec = _ := Option.some.inj (hrec.symm.trans hr1')
   have hcur : m'.current = 0 := by rw [hm']
-  have hcs : m₁.clocks.size = 3 := by rw [hL.w.csize, hs3]
   have hth : m'.threads = m₁.threads.set! 1 { spawner := 0, joined := true } := by rw [hm']
   have hclk : ∀ u : ThreadId, VClock.le (m₁.clocks[u]!) (m'.clocks[u]!) = true := fun u => by
     rw [hm']; show VClock.le _ ((m₁.clocks.set! 0 _)[u]!) = true
@@ -124,13 +111,11 @@ theorem wp_join2 {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     · rw [if_neg (by decide)]; exact h00
     · rw [if_neg (by decide)]; exact hr1
     · rw [if_pos rfl, if_pos (by rw [hs3]; decide)]
-  have hrec' : ∀ i (hi : i < m'.threads.size), m'.threads[i] = { spawner := 0, joined := true } :=
-    fun i hi => Option.some.inj ((Array.getElem?_eq_getElem hi).symm.trans (hall i hi))
   refine h k G₁ m' hk (by rw [hm']; exact hu.blk) (fun b k' => freeRaces_of_joined ?_
     fun u hu' => .inr ⟨_, hall u hu', hcur.symm, rfl, rfl⟩) fun r hr _ => ?_
   · rw [hm']; show (m₁.clocks.set! 0 _).size = (m₁.threads.set! 2 _).size
     rw [Array.size_set!, Array.size_set!, hL.w.csize]
   · obtain ⟨i, hi', rfl⟩ := Array.mem_iff_getElem.mp hr
-    rw [hrec' i hi']
+    rw [Option.some.inj ((Array.getElem?_eq_getElem hi').symm.trans (hall i hi'))]
 
 end Threadsync.WG

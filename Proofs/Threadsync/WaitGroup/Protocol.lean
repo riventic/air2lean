@@ -29,7 +29,7 @@ sets the event. This file is the protocol, as a client of the generic contracts 
 - **The set**: the setter read 3, so `main` added and both tasks finished, and both finish clocks
   are below the setter's clock (`sto`); each `is_set` write is the setter's and above both finish
   clocks (`isw`).
-- **`main`'s read of the whole `Tally`** (`FLock.Fits.wp_readAll`): every write access to block 0
+- **`main`'s read of the whole `Tally`** (`FLock.Fits.wp_loadWith` with `FLock.Inv.loadMem`): every write access to block 0
   is below `main`'s clock, a task's bound (`bnd`: its clock, its finish clock once it finished) or
   an `is_set` write (`attr`; an event step's write access is a write of the word:
   `FEvent.MStep.fpNew`). After `main`'s wait both tasks finished below `main`'s clock and each

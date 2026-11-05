@@ -16,7 +16,8 @@ once for every protocol, lock and primitive; a protocol discharges only its own 
 - **A read by the only thread that has not left the lock** (`Fits.wp_readAll`: a whole struct
   with the lock's word and the counter it protects, read after every other thread finished with
   the lock): the bytes may lie in the protocol's rest, the word's cells and the free lock's
-  resource. The lock's invariant is kept by `Inv.recordAll`.
+  resource. The lock's invariant is kept by `Inv.recordAll`. A read of the memory's own value
+  (not one fixed for every memory) uses `Fits.wp_loadWith` with `Inv.loadMem`.
 - **A step that redistributes the holder's resource** (`Fits.wp_holdParts`): a thread triple on
   the caller's part together with the protected resource. Its separating post gives a new caller
   part and protected resource, whose complete sum is the triple's post-resource, including
