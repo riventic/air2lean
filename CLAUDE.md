@@ -58,8 +58,8 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
   Do not add a new judgment (`…Triple`, `…Returns`, `…Within`, `Stops`, `Halts`, …), tactic
   (`syntax`/`macro`/`elab … : tactic`), proof template or automation, and do not add to the legacy
-  layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates, `vc_gen`
-  targets), which is being migrated and deleted. If `fsym` cannot do something, stop and report
+  layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates), which is
+  being migrated and deleted. If `fsym` cannot do something, stop and report
   the exact missing rule or engine feature instead of building around it.
 - **The allow-list is the gate.** `assurance/proof-framework.json` lists every judgment and
   tactic and every file that still uses the legacy layer; `scripts/proof-framework.py` (preflight,
