@@ -539,6 +539,9 @@ backend):
   caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
   `Fits.wp_readAll` (over `FLock.Inv.loadAll`) is the read by the only thread that has not left
   the lock: its bytes may span the protocol's rest, the lock's word and the free lock's resource.
+  Its value is fixed for every memory; a read whose value is the memory's own (the whole `Tally`
+  of `Proofs/Threadsync/WaitGroup/Read.lean`) uses `Fits.wp_loadWith` with `FLock.Inv.loadMem`,
+  which takes the bytes from the live block and needs only that the complete rest holds each.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
@@ -837,8 +840,7 @@ memory functions, and P03/native stack and producer integration remain open.
 followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
 fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
 A reporting call suppresses the ordinary
-human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
-enabling a report.
+human-readable stop messages.
 
 Reporting currently formats origins during the walk. That work consumes heartbeats, including
 inside speculative rule probes, so enabling it can change where a finite-budget probe stops.

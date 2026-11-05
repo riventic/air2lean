@@ -36,12 +36,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "CondContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "CondImpl",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
@@ -327,12 +321,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "MutexContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "MutexImpl",
       "module": "ZigLean.Sep.Full.Mutex",
       "status": "target",
@@ -412,12 +400,6 @@
       "name": "Sem.Spec",
       "module": "Proofs.Sync.RwLock",
       "status": "legacy-to-retire"
-    },
-    {
-      "name": "SemContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "SemImpl",
@@ -524,34 +506,6 @@
   ],
   "tactics": [
     {
-      "tactic": "#audit_unchecked_theorem",
-      "kind": "command",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "#audit_unchecked_universal",
-      "kind": "command",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Universal",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "#vc_extract",
-      "kind": "command",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "#vc_extract_all",
-      "kind": "command",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
       "tactic": "conc_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Conc",
@@ -586,13 +540,6 @@
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
-      "tactic": "if_decl",
-      "kind": "command",
-      "module": "Proofs.Threadsync.Variant",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (wave 10; moved from Proofs.Threadsync.Lock)"
-    },
-    {
       "tactic": "liveness_witness",
       "kind": "command",
       "module": "ZigLean.Witness",
@@ -620,12 +567,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "tactic": "tomega",
-      "kind": "syntax",
-      "module": "ZigLean.Conc.Spec.Count",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "unroll_sched",
       "kind": "syntax",
       "module": "ZigLean.Conc.Unroll",
@@ -637,12 +578,6 @@
       "module": "ZigLean.Sep.Full.Unroll",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "vc_gen",
-      "kind": "syntax",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "when_defined",
@@ -738,13 +673,6 @@
       "approved": "coordinator 2026-10-16 (registry gate seed)"
     },
     {
-      "registry": "vc_contract",
-      "kind": "attribute",
-      "module": "ZigLean.VC.ContractAttr",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-16 (registry gate seed)"
-    },
-    {
       "registry": "zig_unfold",
       "kind": "simp-set",
       "module": "ZigLean.SimpAttr",
@@ -768,13 +696,6 @@
     },
     {
       "path": "Proofs/Sync/Semaphore.lean"
-    },
-    {
-      "path": "Proofs/Threadsync/Lock.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "Proofs/Threadsync/WaitGroup.lean"
     },
     {
       "path": "ZigLean/Conc/Csl.lean"
@@ -878,24 +799,6 @@
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
-      "path": "Proofs/Threadsync/WaitGroup.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/Spec/Cond.lean",
-      "tactic": "tomega",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/Spec/WaitGroup.lean",
-      "tactic": "tomega",
-      "count": 2,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
       "path": "ZigLean/Conc/TimedBudget.lean",
       "tactic": "within",
       "count": 7,
@@ -959,18 +862,6 @@
       "path": "tests/roadmap/proof-tools/Unroll.lean",
       "tactic": "unroll_solo",
       "count": 2,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/vcs/Extract.lean",
-      "tactic": "vc_gen",
-      "count": 7,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/vcs/Memory.lean",
-      "tactic": "vc_gen",
-      "count": 9,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     }
   ]

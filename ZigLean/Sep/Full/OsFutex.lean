@@ -468,10 +468,14 @@ theorem _root_.Zig.Mem.wordAt_ptrAddr {m : Mem} {p : Ptr} (h : m.wordAt p = true
     exact ⟨_, Full.ptrAddr_run hblk off, by omega⟩
   · cases h
 
-/-- `get_futex_key` at a live writable word forms the key, for both domains. -/
-theorem Linux.futexKey_wordAt {p : Ptr} {a : Int} {s : Bool} {m : Mem} (h : m.wordAt p = true) :
+/-- `get_futex_key` at a live writable word forms the key: a private key at every such word, a
+shared one at a word of an anonymous block (`Mem.anonAt`). -/
+theorem Linux.futexKey_wordAt {p : Ptr} {a : Int} {s : Bool} {m : Mem} (h : m.wordAt p = true)
+    (hs : s = true → m.anonAt p = true) :
     (Linux.futexKey p a s).run m = pure (none, m) := by
-  simp [Linux.futexKey, h, zig_unfold]
+  cases s
+  · simp [Linux.futexKey, h, zig_unfold]
+  · simp [Linux.futexKey, h, hs rfl, zig_unfold]
 
 /-- `get_futex_key` reads only: it forms the key, returns an error code, or refuses. -/
 theorem Linux.futexKey_cases (p : Ptr) (a : Int) (s : Bool) (m : Mem) :
@@ -574,12 +578,15 @@ waiters, with the number woken. -/
     exact WP.pure' ((h a ha).2 hal)
 
 /-- The successful wait specialization, at a live writable word (`Mem.wordAt`: an aligned
-address, and the key forms in both domains). The automatic argument is an applicability guard:
-`fsym` must prove it before selecting this case. -/
+address, and the private key forms), of an anonymous block for a shared wait (`Mem.anonAt`).
+The automatic arguments are applicability guards: `fsym` must prove them before selecting this
+case. -/
 @[fsym] theorem WP.futex_4arg_of_aligned {p : Ptr} {op e : BitVec 32}
     (hop : op = Linux.FUTEX_WAIT ∨ op = Linux.FUTEX_WAIT ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
+    (hanon : decide (op = Linux.FUTEX_WAIT) = true → m.anonAt p = true := by
+      first | assumption | exact fun h => absurd h (by decide) | decide)
     (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
       (fun r => Q (Linux.waitCode r)) G m n) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
@@ -587,18 +594,21 @@ address, and the key forms in both domains). The automatic argument is an applic
   refine WP.futex_4arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
   have he := Full.ptrAddr_value_eq ha hr
   subst a'
-  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAIT) hword
+  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAIT) hword hanon
   refine ⟨fun _ => ⟨fun er he => (MemM.noErr_of_run hk er he).elim, fun r hr => ?_⟩,
     fun hn => (hn hal).elim⟩
   obtain rfl : r = none := by
     simpa [zig_unfold, ExceptT.run] using congrArg ExceptT.run (hr.symm.trans hk)
   exact ⟨fun _ => h, fun _ hc => by cases hc⟩
 
-/-- The successful wake specialization, at a live writable word; no word access. -/
+/-- The successful wake specialization, at a live writable word, of an anonymous block for a
+shared wake; no word access. -/
 @[fsym] theorem WP.futex_3arg_of_aligned {p : Ptr} {op v : BitVec 32}
     (hop : op = Linux.FUTEX_WAKE ∨ op = Linux.FUTEX_WAKE ||| Linux.FUTEX_PRIVATE)
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
+    (hanon : decide (op = Linux.FUTEX_WAKE) = true → m.anonAt p = true := by
+      first | assumption | exact fun h => absurd h (by decide) | decide)
     (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
       (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
@@ -606,7 +616,7 @@ address, and the key forms in both domains). The automatic argument is an applic
   refine WP.futex_3arg hop (fun er he => (MemM.noErr_of_run ha er he).elim) fun a' hr => ?_
   have he := Full.ptrAddr_value_eq ha hr
   subst a'
-  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAKE) hword
+  have hk := Linux.futexKey_wordAt (a := a) (s := op = Linux.FUTEX_WAKE) hword hanon
   refine ⟨fun _ => ⟨fun er he => (MemM.noErr_of_run hk er he).elim, fun r hr => ?_⟩,
     fun hn => (hn hal).elim⟩
   obtain rfl : r = none := by

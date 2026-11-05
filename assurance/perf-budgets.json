@@ -814,7 +814,6 @@
         "Proofs.Threadsync.Deadline",
         "Proofs.Threadsync.Gen",
         "Proofs.Threadsync.Handoff",
-        "Proofs.Threadsync.Lock",
         "Proofs.Threadsync.Mutex",
         "Proofs.Threadsync.WaitGroup"
       ],
@@ -914,11 +913,6 @@
             "baseline_seconds": 27.9649,
             "baseline_ratio": 3.779,
             "max_ratio": 7.558
-          },
-          "Proofs.Threadsync.Lock": {
-            "baseline_seconds": 4.0299,
-            "baseline_ratio": 0.545,
-            "max_ratio": 1.545
           },
           "Proofs.Threadsync.Mutex": {
             "baseline_seconds": 8.7796,

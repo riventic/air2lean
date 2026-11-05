@@ -277,6 +277,14 @@ theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G 
   simp only [FHeap.union_apply]
   cases (L.wordR m).heap l <;> cases rL.heap l <;> simp_all
 
+/-- The word's cells are apart from a resource off the word. -/
+theorem wordR_none {r : Res} {m : Mem} (hoff : L.Off r.heap.erase) {l : Zig.Loc} {fc : FCell}
+    (hl : r.heap l = some fc) : (L.wordR m).heap l = none := by
+  by_cases hin : L.In l
+  · have := LockWord.off_erase.mp hoff l hin
+    simp [hl] at this
+  · exact cellsAt_none hin
+
 /-- The protocol's rest is in the lock's complete rest (with the word's cells and the free lock's
 resource). -/
 theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) :
@@ -285,12 +293,16 @@ theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m
   obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
   refine ⟨rL, ho, fun l fc hl => ?_⟩
   have hrL : rL.heap l = none := (hLX l).resolve_right (by simp [hl])
-  have hwr : (L.wordR m).heap l = none := by
-    by_cases hin : L.In l
-    · have := LockWord.off_erase.mp hi.xoff l hin
-      simp [hl] at this
-    · exact cellsAt_none hin
-  simp only [rsum, FHeap.union_apply, hl, hwr, hrL, Option.none_or]
+  simp only [rsum, FHeap.union_apply, hl, wordR_none hi.xoff hl, hrL, Option.none_or]
+
+/-- The free lock's resource is in the lock's complete rest (apart from the word's cells): the
+`rL` counterpart of `Inv.restIn`. -/
+theorem Inv.lockResIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) :
+    ∃ rL, FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧ (L.Free G → L.R G rL) ∧
+      ∀ l fc, rL.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc := by
+  obtain ⟨rL, ho, hLoff, -, hF, -⟩ := hi.rest
+  refine ⟨rL, ho, fun h => (hF h).1, fun l fc hl => ?_⟩
+  simp only [rsum, FHeap.union_apply, hl, wordR_none hLoff hl, Option.none_or, Option.some_or]
 
 /-- A byte of the rest is the memory's, up to `Cell.norm`. -/
 theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
@@ -393,7 +405,7 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
     (c : ThreadId) (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId)
     (hw : L.WInv (L.pl G') { m with current := c, waiters := ws, woken := wk })
     (hpart : ∀ u, L.part (G' u) = L.part (G u)) (hheld : ∀ u, L.held (G' u) = L.held (G u))
-    (hholds : ∀ u, L.ph (G' u) = .holds ↔ L.ph (G u) = .holds)
+    (hholds : ∀ u, (L.ph (G' u)).held = true ↔ (L.ph (G u)).held = true)
     (hg : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) (hR : ∀ r, L.R G r ↔ L.R G' r) :
     L.Inv G' rX { m with current := c, waiters := ws, woken := wk } := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
@@ -402,7 +414,7 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
   have hfree := free_iff_of (L := L) hholds
   refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, fun h => hnF fun h' => h (hfree.mpr h')⟩,
     hi.xoff, fun u => by rw [hpart, hheld]; exact hi.pdisj u,
-    fun u hu => by rw [hheld]; exact hi.idle u ((not_congr (hholds u)).mp hu),
+    fun u hu => by rw [hheld]; exact hi.idle u (held_false_of_iff (hholds u) hu),
     fun u hu => by rw [hheld]; exact (hR _).mp (hi.res u ((hholds u).mp hu))⟩
   · rw [hown]
     have : LockWord.wordR L.toLockWord { m with current := c, waiters := ws, woken := wk } =
@@ -415,7 +427,7 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
 /-- Thread `t`, which does not hold the lock, goes to `out` at a stop (`current := t`) where the
 word's invariant holds with `t` at `out`. -/
 theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
-    (hc : m.current = t) (hnh : L.ph (G t) ≠ .holds) (hng : L.ph (G t) ≠ .gone)
+    (hc : m.current = t) (hnh : (L.ph (G t)).held = false) (hng : L.ph (G t) ≠ .gone)
     (hw : L.WInv (upd (L.pl G) t .out) m) :
     L.Inv (upd G t (L.set (G t) .out rnil)) rX m := by
   have hupd : ∀ u, L.ph (upd G t (L.set (G t) .out rnil) u) = if u = t then .out else L.ph (G u) :=
@@ -430,7 +442,7 @@ theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi 
       unfold upd; split
       · rename_i e; subst e; rw [L.held_set, hi.idle _ hnh]
       · rfl)
-    (fun u => by rw [hupd]; split <;> simp_all)
+    (fun u => by rw [hupd]; split <;> simp_all [LPh.held])
     (fun u hu => by rw [hupd] at hu; split at hu <;> simp_all)
     (fun r => by rw [L.R_set])
   exact this
@@ -446,7 +458,7 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
     if b then L.Inv G rX m' else
       (m'.current = t ∧ L.Inv (upd G t (L.set (G t) .out rnil)) rX m') := by
   have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
-  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hnh : (L.ph (G t)).held = false := by rw [hph]; rfl
   obtain ⟨ht, -⟩ := hi.ht hng
   obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hW.access
   have hWb : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb₀).1
@@ -902,11 +914,12 @@ theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
           · exact .inl (by omega)
         · exact .inr (by omega)
 
-/-- Validity and history under unchanged memory-model data and growing clocks. This proves
-the word's fields directly rather than constructing a legacy preservation summary. -/
-theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
+/-- Validity and history under unchanged memory-model data, as many threads (their records may
+change: a join) and growing clocks. This proves the word's fields directly rather than
+constructing a legacy preservation summary. -/
+theorem Ok.fields_size {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
-    (ht : m'.threads = m.threads)
+    (ht : m'.threads.size = m.threads.size)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
     W.Ok m' A ∧ W.hist m' = W.hist m := by
   have hl : ∀ i l, W.Loc m' i l ↔ W.Loc m i l := by
@@ -917,15 +930,23 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks
   · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l ((hl i l).mp h)
     exact ⟨h1, h2, h3, by rw [h4, curBytes_congr hb], h5⟩
   · rw [hf] at he
-    rcases hw.wfp e he hh with ⟨hk, hle⟩ | hle
-    · exact .inl ⟨hk, Conc.someLe_mono ht (fun u _ => hcl u) hle⟩
-    · exact .inr (Conc.allLeOn_mono ht (fun u _ => hcl u) hle)
+    rcases hw.wfp e he hh with ⟨hk, u, hu, hle⟩ | hle
+    · exact .inl ⟨hk, u, ht ▸ hu, VClock.le_trans hle (hcl u)⟩
+    · exact .inr fun u hu ha => VClock.le_trans (hle u (ht ▸ hu) ha) (hcl u)
   · obtain ⟨v, hv⟩ := hw.val
     refine ⟨v, ?_⟩
     unfold Holds at hv ⊢
     rw [curBytes_congr hb]
     exact hv
   · exact (hw.plain i l ((hl i l).mp h)).of_fp fun e he => .inl (hf ▸ he)
+
+/-- `Ok.fields_size` with the same threads. -/
+theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
+    (ht : m'.threads = m.threads)
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    W.Ok m' A ∧ W.hist m' = W.hist m :=
+  hw.fields_size hb ha hf (congrArg Array.size ht) hcl
 
 /-- Recording an access apart from the word preserves its validity and history.
 The footprint and clocks are checked directly, for every access kind and word width. -/
@@ -956,6 +977,33 @@ theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : 
           rfl (fun u _ => hcl u) ha)
     · exact absurd hh hn
   · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
+
+/-- **A read by the only thread of the live set** (`hA`) preserves the word's validity and
+history, wherever it reads (a whole struct read over the word): its record happened before every
+thread of the live set (the reader's own new clock), and it writes nothing. -/
+theorem Ok.record_sole_native {m : Mem} {t : ThreadId} {b o len : Nat} {k : AccessKind}
+    (hw : W.Ok m A) (hc : m.current = t) (hcs : t < m.clocks.size)
+    (hA : ∀ u < m.threads.size, A u → u = t) (hk : k.isWrite = false) :
+    W.Ok (m.recordAt b o len k) A ∧ W.hist (m.recordAt b o len k) = W.hist m := by
+  subst hc
+  have hcl := Conc.recordAt_le m b o len k
+  refine ⟨⟨hw.blk, hw.only, fun i l hl => hw.loc i l hl, fun e he hh => ?_, hw.val,
+    fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · rcases hw.wfp e he hh with ⟨hk', hs⟩ | ha
+      · exact .inl ⟨hk', Conc.someLe_mono (m := m) (m' := m.recordAt b o len k)
+          rfl (fun u _ => hcl u) hs⟩
+      · exact .inr (Conc.allLeOn_mono (m := m) (m' := m.recordAt b o len k)
+          rfl (fun u _ => hcl u) ha)
+    · refine .inr fun u hu ha => ?_
+      obtain rfl := hA u hu ha
+      show VClock.le _ ((m.recordAt b o len k).clocks[m.current]!) = true
+      rw [Zig.recordAt_clock hcs]; exact VClock.le_refl _
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · right; cases k <;> simp_all [plainHit, AccessKind.isWrite]
 
 /-- A fork preserves every word's validity and history. The new thread's clock inherits its
 parent's bound, so the premise `hA` asks: if the new thread is in the live set, so is its parent

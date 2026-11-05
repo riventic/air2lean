@@ -382,18 +382,45 @@ class FixtureTests(unittest.TestCase):
         self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
             def airAsm_8 : Nat := 8
             def enabled : Nat := 0
-            if_decl enabled in
+            when_defined enabled
             def chosen : Nat := 0
-            end_if
-            if_decl absent in
+            end_when
+            when_defined absent
             def chosen : Nat := airAsm_8
-            end_if
+            end_when
             theorem branch : chosen = chosen := rfl
             """
         self.assertNotIn("ASM-01", self.written()["branch"]["premises"])
         self.fixture.files["Proofs/Choice/Proofs.lean"] = self.fixture.files[
             "Proofs/Choice/Proofs.lean"].replace("def enabled :", "def absent :")
         self.assertIn("ASM-01", self.written()["branch"]["premises"])
+
+    def test_condition_resolves_through_open_namespaces(self):
+        # Proofs/Lists/Append.lean: its gates are declarations of an opened namespace, one dotted.
+        self.fixture.files["Proofs/Choice/Proofs.lean"] = """\
+            def airAsm_8 : Nat := 8
+            def plain : Nat := 0
+            namespace Tr
+            def gate : Nat := 0
+            def fn.loop4 : Nat := 0
+            end Tr
+            open Tr
+            when_defined plain
+            def chosen : Nat := 0
+            def picked : Nat := 0
+            end_when
+            when_defined gate
+            def chosen : Nat := airAsm_8
+            end_when
+            theorem first : chosen = chosen := rfl
+            when_defined fn.loop4
+            def picked : Nat := airAsm_8
+            end_when
+            theorem second : picked = picked := rfl
+            """
+        written = self.written()
+        self.assertIn("ASM-01", written["first"]["premises"])
+        self.assertIn("ASM-01", written["second"]["premises"])
 
     def test_profile_header_and_gate_import(self):
         self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE + textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
@@ -1204,7 +1231,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("OSK-01", self.premises_of("Proofs/Threadsync/Deadline.lean", "Threadsync.dinit_eq"))
         # Linux selects FutexImpl. The Darwin attribution comes only from the conservative
         # runtime-source fallback, rather than elaborating the inactive DarwinImpl block.
-        lock = self.entries[("Proofs/Threadsync/Lock.lean", "Threadsync.ThreadMutexOps.lock_spec")]
+        lock = self.entries[("Proofs/Threadsync/ThreadMutex.lean", "Threadsync.ThreadMutex.lock_wp")]
         self.assertIn("THR-05", lock["premises"])
         self.assertIn("THR-06", lock["premises"])
         self.assertTrue(lock["via"]["THR-06"])
@@ -1308,6 +1335,43 @@ class StripCommentsTests(unittest.TestCase):
             text = (ROOT / name).read_text(encoding="utf-8", errors="replace")
             with self.subTest(file=name):
                 self.assertEqual(premises.strip_comments(text), strip_comments_reference(text))
+
+
+class ClosureRuleTests(unittest.TestCase):
+    """The committed closure rules over sample closure tokens (no repository scan)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config = premises.load_config(ROOT / "assurance/premises.json")
+
+    def premises_of(self, token):
+        via = {}
+        premises.apply_rules(self.config, via, [token], "closure")
+        return set(via)
+
+    def test_thr05_skips_the_futex_key_layer(self):
+        # The key layer (`Mem.Basic`: the key type and its address) is not the futex model: the
+        # modules that fall back to `Mem.Basic`'s tokens must not derive THR-05.
+        for token in ["Zig.FutexKey", "Zig.instDecidableEqFutexKey", "Zig.futexAddr",
+                      "Zig.futexKeyOf", "Zig.futexKeyOf.match_1", "Zig.futexKeyOf_run",
+                      "Zig.futexKeyOf'", "Zig.FutexKey.ne_of_shared"]:
+            with self.subTest(token=token):
+                self.assertNotIn("THR-05", self.premises_of(token))
+
+    def test_thr05_keeps_the_futex_model(self):
+        # Only an occurrence that is a key-layer word is skipped: a name that merely starts
+        # with one, or a futex-model name that also mentions one, keeps THR-05.
+        for token in ["Zig.Thread.futexWait", "Zig.Thread.futexWakePtr", "Zig.futexWaitC",
+                      "Zig.Conc.futexAddressWake", "Zig.Conc.FutexKeyedWait", "Zig.futexAddrα",
+                      "Zig.Thread.futexWait_futexAddr_eq", "Zig.Conc.futexWake.FutexKey.ne",
+                      "Zig.Conc.Proto.WP.futexKey"]:
+            with self.subTest(token=token):
+                self.assertIn("THR-05", self.premises_of(token))
+
+    def test_os_futex_rows_are_osf(self):
+        found = self.premises_of("Zig.Os.futexWake")
+        self.assertIn("OSF-02", found)
+        self.assertNotIn("THR-05", found)
 
 
 if __name__ == "__main__":
