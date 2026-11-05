@@ -354,6 +354,10 @@ class InventoryTests(unittest.TestCase):
             self.assertEqual(coverage.disposition_problems(report), [])
             self.assertEqual(coverage.l14_problems(report), [])
             self.assertTrue(all(row['proofs']['status'] == 'symbol-index-only-not-proof-coverage' for row in report['tags']))
+            # V01: the semantics column says whether Sem.lean interprets the tag's constructors.
+            add = next(row for row in report['tags'] if row['tag'] == 'add')
+            self.assertEqual(add['semantics'], {'status': 'interpreted', 'paths': [coverage.SEM], 'reasons': []})
+            self.assertEqual(new['semantics'], {'status': 'not-decoded', 'paths': [], 'reasons': []})
             snapshot = source/'inventory.json'
             command = [sys.executable, str(ROOT/'scripts/coverage.py')]
             arguments = ['--version', 'synthetic-no-goldens', '--source', str(source), '--inventory', str(snapshot)]

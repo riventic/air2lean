@@ -34,6 +34,8 @@
 #   generated modules                     gen-integrity.py check, after the full build
 #                                         (scripts/full-build.sh, which first checks the
 #                                         precompiled fsym libraries; skipped by --no-translator)
+#   generated loop invariants             gen-integrity.py invgen (the records' hashes), and
+#                                         invgen.py check after the full build (likewise)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail
@@ -83,6 +85,7 @@ fi
 if [ "${GITHUB_ACTIONS:-}" != true ]; then
   check 'case family enrollment history' python3 -B scripts/gen-integrity.py enrollment
 fi
+check 'generated loop invariant records' python3 -B scripts/gen-integrity.py invgen
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate
@@ -123,6 +126,7 @@ if [ "$translator" = 1 ]; then
   check 'proof-fixture package: module names and mutant verdicts' \
     python3 -B -m unittest discover -s tests/roadmap/fixtures-lake -p 'test_*.py'
   check 'generated modules are fresh translations' python3 -B scripts/gen-integrity.py check
+  check 'generated loop invariants are fresh' python3 -B scripts/invgen.py check
 fi
 
 if [ "${#failed[@]}" -gt 0 ]; then

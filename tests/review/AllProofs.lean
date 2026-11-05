@@ -38,7 +38,6 @@ import Proofs.Threads.Disjoint
 import Proofs.Threads.Proofs
 import Proofs.Threadsync.Deadline
 import Proofs.Threadsync.Handoff
-import Proofs.Threadsync.Lock
 import Proofs.Threadsync.Mutex
 import Proofs.Threadsync.WaitGroup
 import Proofs.Variants.Proofs
