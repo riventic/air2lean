@@ -30,9 +30,9 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 
 Stage D-a (section 4) is done.
 
-### Dependency map of the 14 remaining users (2026-11-05, after #648, #643, L13 and #640)
+### Dependency map of the 13 remaining users (2026-11-05, after #648, #643, L13, #640 and Threadsync/Lock)
 
-`legacy_users` has 14 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
+`legacy_users` has 13 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
 replacement named below is on main, except where the row says it is not.
 
 | file | reason | legacy items it uses | full-state replacement | waits for |
