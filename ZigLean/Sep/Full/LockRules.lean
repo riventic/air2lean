@@ -374,7 +374,7 @@ theorem wp_futexWaitOn (hP : L.Fits K P U ok) {ε : Type} {w : Nat} [Packed ε w
   have hph : L.pl G₁ t = .wait := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   have hok₁ : ok (G₁ t) := by rw [hg₁]; exact hok
   have hng : L.ph (G₁ t) ≠ .gone := by rw [hg₁, hg]; decide
-  have hwo := hiL.w.wait_ok (e := BitVec.ofNat 32 L.c) (hiL.ht hng).1 hng
+  have hwo := hiL.w.wait_ok (e := BitVec.ofNat 32 L.c) (sh := false) (hiL.ht hng).1 hng
   refine ⟨fun _ => hP.live hiL hU (by rw [hg₁]; exact hg), fun hq => ⟨fun _ => hwo,
     fun _ he => Zig.Conc.Proto.noErr_of_ok hwo he, fun b m' hw => ?_⟩⟩
   obtain ⟨hst, hb⟩ := hiL.w.wait hph hq hw
@@ -714,7 +714,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   have hph : L.pl G₂ t = .wait := by show L.ph (G₂ t) = _; rw [hg₂, hgw]
   have hok₃ : ok (G₂ t) := by rw [hg₂]; exact hokw
   have hng₃ : L.ph (G₂ t) ≠ .gone := by rw [hg₂, hgw]; decide
-  have hwo := hiL₃.w.wait_ok (e := BitVec.ofNat 32 L.c) ht₃ hng₃
+  have hwo := hiL₃.w.wait_ok (e := BitVec.ofNat 32 L.c) (sh := false) ht₃ hng₃
   -- after the wait, at `spin`: the interrupt's delivery keeps the invariant
   have hend : ∀ m₄, m₄.current = t → P.inv (upd G₂ t g) m₄ →
       Q (if m₄.os.interrupts.contains m₄.current then .interrupted else .woken) G₂
