@@ -692,9 +692,9 @@ section futex
 variable {W : Word 32 4}
 
 /-- A futex wait at the word has no error. -/
-theorem Ok.futexWait_run {m : Mem} {e : BitVec 32} (hw : W.Ok m A)
+theorem Ok.futexWait_run {m : Mem} {e : BitVec 32} {sh : Bool} (hw : W.Ok m A)
     (ht : m.current < m.threads.size) (hA : A m.current := by trivial) :
-    ∃ b m', ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m')) := by
+    ∃ b m', ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (b, m')) := by
   by_cases hwk : m.woken.contains m.current = true
   · exact ⟨_, _, futexWait_run_woken hwk⟩
   · obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
