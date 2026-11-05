@@ -24,7 +24,7 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L8 tick-cost model | done: emitted step ticks, `Full/Cost`, Lists/Bounded restated, Lists/Cost, Sep/{Cost,Bounded,Alloc}, `ZigLean/Sep.lean`, Witnesses/Sep deleted | #568, #580, #562 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L10, L11, L12 | open | |
-| L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #PRNUM |
+| L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
 
 Stage D-a (section 4) is done.
 
@@ -469,7 +469,7 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 | ZigLean/Sep.lean (12) | umbrella: shrink with every deleted module, delete last |
 | tests/roadmap/strength-log/*.lean | off `legacy_users` (#497 and part 2): each legacy statement is written out as the body of the legacy definition (`TotalTripleIn Mem.FSeqPlain P c Q`, `Triple P c Q`) and proved by `Full/Strength` as before, so no file imports `Sep/{Triple,Total}`; the files stay until the final PR |
 
-**L13 step 1 (2026-11-05, #PRNUM): Sep/Total and Sep/Loop deleted** (`legacy_users` 17 → 15), with the
+**L13 step 1 (2026-11-05, #655): Sep/Total and Sep/Loop deleted** (`legacy_users` 17 → 15), with the
 judgment entries `TotalTriple`, `TotalTripleIn` and `Returns`. No Lean file imported Sep/Total, and
 only Sep/Total imported Sep/Loop. Decision 4 (keep them compiled until the final PR) served the
 strength check; that check no longer needs them, because the strength log writes each legacy
