@@ -5345,7 +5345,9 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
           unless determined do
             trace[fsym] "rule {rule}: no plan for its precondition"
             rollback; return none
-          preLeft := left
+          -- (determined only by the rest of the plan, e.g. an existential's witness that a later
+          -- atom fixed: proved by arithmetic now, if the facts show them)
+          preLeft ← left.filterM fun m => return !(← arith m)
         R ← instantiateMVars fr
         planned := some (← instantiateMVars hE)
     synthInstArgs args

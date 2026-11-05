@@ -92,6 +92,51 @@ theorem fill_thread (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 
   unfold fill
   fsym
 
+/-- `while (i > 0) : (i -= 1) { *p += 1; }` -/
+def drain.loop (p : Ptr) : MM Locals Exit := do
+  let i ← pure ((← get).i)
+  if Zig.gt false i (0 : BitVec 32) then (do
+    let v ← Zig.load (BitVec 64) 8 p
+    let v' ← Zig.add false v (1 : BitVec 64)
+    Zig.store (α := BitVec 64) 8 p v'
+    let i' ← Zig.sub false ((← get).i) (1 : BitVec 32)
+    modify (fun s => { s with i := i' })
+    pure .rep)
+  else (do
+    pure .brk)
+
+/-- The invariant from the locals `s0` at the entry: `*p` went up by the iterations so far. -/
+@[fsym_inv] def drain.loop.inv (p : Ptr) (s0 : Locals) (v0 : BitVec 64) (s : Locals) : FAssn :=
+  ⟪s.i.toNat ≤ s0.i.toNat ∧ v0.toNat + s0.i.toNat < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)⟫ ⋆ up (pts p 8 v))
+
+@[fsym_inv] def drain.loop.meas (s : Locals) : Nat :=
+  s.i.toNat
+
+@[fsym_inv] def drain.loop.post (p : Ptr) (s0 : Locals) (v0 : BitVec 64) (r : Exit × Locals) :
+    FAssn :=
+  ⟪r.1 = .brk⟫ ⋆ (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + s0.i.toNat⟫ ⋆ up (pts p 8 v))
+
+def drain (p : Ptr) (n : BitVec 32) : MemM Unit := do
+  let e ← ((do
+    modify (fun s => { s with i := n })
+    match ← ((do
+      Zig.loop (drain.loop p) again) : MM Locals Exit) with
+    | .brk => (do
+      pure .ret)
+    | e => pure e) : MM Locals Exit).run' (default : Locals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+/-- **An entry fact that only the whole plan determines**: the witness of `*p` at the entry is
+fixed by the cell, after the planner has kept the fact `v = v + (n - n)`; it is proved then. -/
+theorem drain_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + n.toNat < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 v)) (drain p n)
+      (fun _ => FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + n.toNat⟫ ⋆ up (pts p 8 w)) := by
+  unfold drain
+  fsym
+
 /-- The same body under another name … -/
 def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := do
   let i ← pure ((← get).i)
