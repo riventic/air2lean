@@ -295,19 +295,16 @@ theorem mutexCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩)
       (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 ```
 
-1. Each `simp` pass rewrites with the `zig_run` set ([proof-automation.md](proof-automation.md),
-   kernel-run witnesses): every executable declaration of the generated code (`dispatch`, the
-   functions, the loop bodies `f.loopN`, the members of a recursive group by `f.eq_def`), the
-   ZigLean models that hold a loop (`Zig.osUnfairLockC`, the macOS lock) and `Zig.loop` by its
-   defining equation. A pass unfolds a plain definition as far as the term goes but rewrites each
-   loop and recursive call once, and the code a loop's rewrite exposes waits for the next pass;
-   pick `n` from the run's deepest nesting of loop iterations and recursive calls, checked on
-   the deepest translation. A hand-written definition on the path (a test's `dispatchW`, a client over an
-   interface) is unfolded by name first (`delta`, `unfold`).
+1. Each `simp` pass rewrites with the `zig_run` set: the generated code, the ZigLean models that
+   hold a loop and `Zig.loop`, each by its defining equation (contents, emission rule and how to
+   pick `n`: [proof-automation.md](proof-automation.md), kernel-run witnesses). The code a loop's
+   rewrite exposes waits for the next pass, so check `n` on the deepest translation. A
+   hand-written definition on the path (a test's `dispatchW`, a client over an interface) is
+   unfolded by name first (`delta`, `unfold`).
 2. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
    A wrong value, a run out of fuel, or a reached loop that is not unfolded or needs more
    iterations leaves the goal unproved.
@@ -316,8 +313,7 @@ theorem mutexCounter_completes :
 builds of [theorem-inventory.md](theorem-inventory.md)). The run's path differs between them (a
 macOS `std.Thread.Mutex` enters `Zig.osUnfairLockC`'s loop on every lock, a Linux one only when
 contended), and std functions may have other names or not exist. The proof names no generated
-declaration: each translation tags its own, so one proof covers every translation whose run
-needs at most its `n` passes.
+declaration, so it covers every translation whose run needs at most its `n` passes.
 
 ### `unroll_sched` (legacy-to-retire)
 
