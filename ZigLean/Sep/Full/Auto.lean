@@ -2887,21 +2887,19 @@ def boolFactCtx : MetaM Simp.Context := do
   (← caches).boolCtx.set (some c)
   return c
 
-/-- `k` on each goal of `gs`, under the run's substitutions of that goal's branch
-(`caches.branchSubsts`; a goal without them starts from the substitutions at the call), and the
-goals it leaves, each with the substitutions it was left with. A split's branches are split
-before either is walked (`wpEntry`, `wpSplit`), and a branch's substitution of a local of the
-context they share must not reach a sibling: the sibling's caller terms would take the other
-branch's value (`refreshUser`), its facts the other branch's locals (`liveFVar?`). -/
+/-- `k` on each goal of `gs` under the substitutions of that goal's branch (`caches.branchSubsts`,
+taken out; a goal without them starts from those at the call); the goals `k` leaves keep the
+substitutions they were left with. -/
 def eachBranch {α : Type} (gs : List α) (goal : α → MVarId) (k : α → TacticM (List MVarId)) :
     TacticM (List MVarId) := do
   let c ← caches
   let m0 ← c.substs.get
   gs.flatMapM fun a => do
-    c.substs.set (((← c.branchSubsts.get).get? (goal a)).getD m0)
+    let m? ← c.branchSubsts.modifyGet fun b => (b.get? (goal a), b.erase (goal a))
+    c.substs.set (m?.getD m0)
     let out ← k a
     let m ← c.substs.get
-    c.branchSubsts.modify fun b => out.foldl (fun b g' => if b.contains g' then b else b.insert g' m) b
+    c.branchSubsts.modify fun b => out.foldl (·.insertIfNew · m) b
     return out
 
 /-- Substitute the local of the equation `h : l = r` (`substEq`) and record the substitution
@@ -7074,7 +7072,9 @@ private def wpHypCtxBase (extra : Array Syntax) : TacticM Simp.Context := do
       -- Boolean tests of generated code as propositions, and the logic left after them
       ``bne_iff_ne, ``beq_iff_eq, ``ne_eq, ``eq_self_iff_true, ``Bool.false_eq_true,
       ``ite_true, ``ite_false, ``and_true, ``true_and, ``and_false, ``false_and, ``or_false,
-      ``false_or, ``not_false_eq_true, ``not_true_eq_false] do
+      ``false_or, ``not_false_eq_true, ``not_true_eq_false,
+      -- a `repeat` loop's test (`loop body id`: the post `if id r.1 …` of `WP.loop`)
+      ``id_eq] do
     thms ← thms.addConst n
   let ctx ← Simp.mkContext (simpTheorems := #[thms]) (congrTheorems := ← getSimpCongrTheorems)
   (← caches).wpHyp.set (some ctx)
@@ -7754,7 +7754,8 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
     let ly ← wpGoal y.mvarId! user extra fuel noCases
     -- (a first part left with unknowns that the second part fixed: again, `L.ph (g' ?r) = .holds`
     -- before `L.part (g' ?r) = L.part (G t)`)
-    let lx ← if unknowns && !lx.isEmpty then lx.flatMapM (wpGoal · user extra fuel noCases) else pure lx
+    let lx ← if unknowns && !lx.isEmpty then eachBranch lx id (wpGoal · user extra fuel noCases)
+      else pure lx
     return lx ++ ly
   if t.isConstOf ``True then g.assign (mkConst ``True.intro); return []
   -- a disjunction (a post over branches that end in different states): a side that is proved

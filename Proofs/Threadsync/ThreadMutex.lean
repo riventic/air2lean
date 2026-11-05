@@ -216,7 +216,7 @@ theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Thread_Mutex_lockLocals) => 0) s)
       else lockPostD P L t g D r G' m' d') G m d := by
   unfold osUnfairLockTry
-  fsym [wp_casD hP hc1, wp_waitD hP, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD, id]
+  fsym [wp_casD hP hc1, wp_waitD hP, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD]
 
 /-- The unticked native macOS lock preserves every actual caller-part assertion as a
 spatial frame beside its returned protected resource. No mode/payment admission is needed. -/
