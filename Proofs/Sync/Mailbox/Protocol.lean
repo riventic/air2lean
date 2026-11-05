@@ -438,7 +438,8 @@ theorem U.congr {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U K G
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (hng : (L K).ph (G t) ≠ .gone) (hna : (L K).ph (G t) ≠ .away)
-    (hz : (L K).ph (G t) ≠ .holdsAway) (hu : U K G rX m) (hs : (L K).Step t m m')
+    (hz : (L K).ph (G t) ≠ .holdsAway) (_ : (L K).Inv G rX m) (hu : U K G rX m)
+    (hs : (L K).Step t m m')
     (hrel : (L K).ph (G t) = .holds → p ≠ .holds → (L K).Before m' (m.clocks[t]!)) :
     U K (upd G t ((L K).set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t ((L K).set (G t) p h) u).2 = (G u).2 :=

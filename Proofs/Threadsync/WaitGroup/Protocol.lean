@@ -517,7 +517,7 @@ theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk m) (hs : L.Step t m 
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (hng : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .away)
-    (_ : L.ph (G t) ≠ .holdsAway) (hu : U G rX m) (hs : L.Step t m m')
+    (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m) (hs : L.Step t m m')
     (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t (L.set (G t) p h) u).2 = (G u).2 := fun u =>
