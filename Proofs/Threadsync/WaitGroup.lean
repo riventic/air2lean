@@ -517,7 +517,7 @@ theorem wp_rmw {n nb : Nat} {W : Word n nb} (hW : Sh W) {σ : Type} {s : σ} {t 
   have hic := inv_cur hi₁ t
   obtain ⟨htl, hr⟩ := ht G₁ m₁ hg₁ hi₁
   have hwc := hW.ok _ _ hic hr
-  refine WP.callMC (fun e he => (hwc.rmw_noErr htl (hcs_of hic) hcr e he).elim)
+  refine WP.callMC (fun e he => (hwc.rmw_noErr htl trivial (hcs_of hic) hcr e he).elim)
     fun old m' hr' => ?_
   obtain ⟨hv, hw', hop, hU, hh, hacq⟩ := hwc.rmw rfl htl (hcs_of hic) hr'
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
@@ -542,7 +542,7 @@ theorem wp_load {n nb : Nat} {W : Word n nb} (hW : Sh W) {σ : Type} {s : σ} {t
   have hic := inv_cur hi₁ t
   obtain ⟨htl, hr⟩ := ht G₁ m₁ hg₁ hi₁
   have hwc := hW.ok _ _ hic hr
-  refine WP.callMC (fun e he => (hwc.load_noErr htl (hcs_of hic) hcr e he).elim) fun v m' hr' => ?_
+  refine WP.callMC (fun e he => (hwc.load_noErr htl trivial (hcs_of hic) hcr e he).elim) fun v m' hr' => ?_
   obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hwc.load rfl htl (hcs_of hic) hr'
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
   rw [hh₁] at hj hv hfl hacq hh
@@ -574,7 +574,7 @@ theorem wp_cas {n nb : Nat} {W : Word n nb} (hW : Sh W) {σ : Type} {s : σ} {t 
   obtain ⟨htl, hr⟩ := ht G₁ m₁ hg₁ hi₁
   have hwc := hW.ok _ _ hic hr
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
-  refine WP.callMC (fun e he => (hwc.cas_noErr (fail := fail) (new := new) htl (hcs_of hic) hcr
+  refine WP.callMC (fun e he => (hwc.cas_noErr (fail := fail) (new := new) htl trivial (hcs_of hic) hcr
     e he).elim) fun r m' hr' => ?_
   obtain ⟨hw', hop, hcase⟩ := hwc.cas rfl htl (hcs_of hic) hr'
   have hH := h k hk G₁ m₁ m' hg₁ hi₁ hr hw' (op_of_cur hop) (linv_op hW hic hr hop)
@@ -1756,7 +1756,7 @@ theorem word_init {n nb : Nat} {W : Word n nb} {m : Mem} {blk : Block} (hW : W.b
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, by omega, hal, by rw [hk]; simp⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
-    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
+    fun e he hh => .inr ((hfp e he hh).on _), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
 

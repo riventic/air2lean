@@ -690,13 +690,13 @@ theorem U_stepIn {G G₀ G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : Thre
     (fun i l hl => (hi.w.loc.ok i l hl).1)
     (hu.rest.congr hcs) (blk_of hi' hu.rest) hwS hwE hwV hhS hhE hhV hX hph
 
-/-- Transport an own-part step using native word validity and exact history. -/
+/-- Transport an own-part step that keeps the word's cells (up to `Cell.norm`). -/
 theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {W : Word 32 4} (hW3 : W = Lo.WS ∨ W = Lo.WE ∨ W = Lo.WV)
     (hu : U Lo G (rsum (W.cellsR m) rY) m) (hi : (L Lo).Inv G (rsum (W.cellsR m) rY) m)
     (hY : ∀ l, W.In l → rY.heap l = none)
     (hs : FStepIn (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase m m')
-    (hw' : W.Ok m') (hh : W.hist m' = W.hist m)
+    (hcW : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
     (hi' : (L Lo).Inv (upd G t g) (rsum (W.cellsR m') rY) m')
     (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
     U Lo (upd G t g) (rsum (W.cellsR m') rY) m' := by
@@ -718,22 +718,22 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
   have facts : ∀ W', (W' = Lo.WS ∨ W' = Lo.WE ∨ W' = Lo.WV) →
       W'.Ok m' ∧ W'.hist m' = W'.hist m := by
     intro W' hW'
-    rcases three_apart hW3 hW' with rfl | hap
-    · exact ⟨hw', hh⟩
-    · have hw : W'.Ok m := by
-        rcases hW' with rfl | rfl | rfl
-        · exact hu.ws
-        · exact hu.we
-        · exact hu.wv
-      have hcover : ∀ l, W'.In l →
-          (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase l ≠ none :=
-        fun l hl => frame_rest
-          (rest_box hu.rest (fun _ => box_live hu) (three_box hW' l hl))
-      have hnorm : ∀ l, W'.In l →
-          (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
-        intro l hl
+    have hw : W'.Ok m := by
+      rcases hW' with rfl | rfl | rfl
+      · exact hu.ws
+      · exact hu.we
+      · exact hu.wv
+    have hcover : ∀ l, W'.In l →
+        (rsum ((L Lo).wordR m) (rsum (W.cellsR m) rY)).heap.erase l ≠ none :=
+      fun l hl => frame_rest
+        (rest_box hu.rest (fun _ => box_live hu) (three_box hW' l hl))
+    have hnorm : ∀ l, W'.In l →
+        (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+      rcases three_apart hW3 hW' with rfl | hap
+      · exact hcW
+      · intro l hl
         rw [hcs l (three_box hW' l hl) (hap l hl)]
-      exact ⟨hw.fstep hs hcover hnorm, Word.hist_fstep hw hs hcover hnorm⟩
+    exact ⟨hw.fstep hs hcover hnorm, Word.hist_fstep hw hs hcover hnorm⟩
   obtain ⟨hwS, hhS⟩ := facts _ (.inl rfl)
   obtain ⟨hwE, hhE⟩ := facts _ (.inr (.inl rfl))
   obtain ⟨hwV, hhV⟩ := facts _ (.inr (.inr rfl))
@@ -1426,7 +1426,7 @@ theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Re
     U Lo (upd G t ((L Lo).setPart (G t) r)) rX m := by
   obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => Lo.ws_box) hu.rest
   subst rX
-  exact U_own_native (.inl rfl) hu hi hY (FStepIn.refl _ _) hu.ws rfl hi' rfl rfl
+  exact U_own_native (.inl rfl) hu hi hY (FStepIn.refl _ _) (fun _ _ => rfl) hi' rfl rfl
 
 /-- The composite tick obligation reuses native framed invariant transport. Ticks stay visible
 in the exact memory; this proof preserves the observation because its actual fields ignore
@@ -1437,7 +1437,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
   obtain ⟨_, _, hi, r, _, rfl, rfl, rfl, hi'⟩ := hs
   obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => Lo.ws_box) hu.rest
   subst hrX
-  exact U_own_native (.inl rfl) hu hi hY (FStepIn.ticked _ _) hu.ws.ticked rfl hi' rfl rfl
+  exact U_own_native (.inl rfl) hu hi hY (FStepIn.ticked _ _) (fun _ _ => rfl) hi' rfl rfl
 
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
 theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
@@ -1447,7 +1447,7 @@ theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
 /-- **The protocol has the condition** (the lock's laws as for `fitsL`); the window: the epoch
 has at most two writes (`ep2`). -/
 theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
-  win _ _ m hu _ _ _ _ _ _ := by
+  win _ _ m hu _ _ _ _ _ _ _ := by
     have : ((C Lo).Ep.hist m).size ≤ 2 := hu.ep2
     omega
   toFits := { fitsL with
@@ -1480,19 +1480,19 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, hW, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, -, -, hL, rfl⟩⟩
       · refine cstep G rY m m' t p q h W hW hn hq hu hY hs hEp (fun sh c q n h' e1 e2 => ?_) hI
         rw [e1, e2] at hsg
         obtain ⟨-, x, e⟩ := hsg
         rw [e, Array.size_push]
-      · exact U_own_native (hW.imp id .inl) hu hi hY hs hw' hh hL rfl rfl
+      · exact U_own_native (hW.imp id .inl) hu hi hY hs hcW hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
 theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := { fitsL with
   kfin g h := by show g.2.e = _; rw [h.2]
   kjoins g h := by show g.2.e = _; rw [h.2]
-  sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.wv, Rest.split (fun _ => Lo.wv_box) hu.rest⟩⟩
+  sub _ _ _ hu := ⟨hu.einv, fun _ hW => hW ▸ ⟨hu.wv.on _, Rest.split (fun _ => Lo.wv_box) hu.rest⟩⟩
   apart _ hW := hW ▸ apV
   lph _ _ := rfl
   lpart _ _ := rfl
@@ -1516,9 +1516,9 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
     intro t G rX m G' rX' m' hs hu
     rcases hs with hs | hs
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
-      ⟨p, q, h, ⟨hlq, rfl, hs, -⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, hw', hh, hL, rfl⟩⟩
+      ⟨p, q, h, ⟨hlq, rfl, hs, -⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, -, -, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hlq hu hY hs hI
-      · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hw' hh hL rfl rfl
+      · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hcW hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 end Handoff

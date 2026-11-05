@@ -136,7 +136,7 @@ theorem wp_load {ord : AtomicOrder} (hi : P.inv (upd G t g) m) (hW : WAt P W t g
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨hw, htl, hcs⟩ := hW G₁ m₁ hg₁ hi₁
   have hwc := ok_cur hw t
-  refine WP.callMC (fun e he => (hwc.load_noErr htl hcs hcr e he).elim) fun v m' hr => ?_
+  refine WP.callMC (fun e he => (hwc.load_noErr htl trivial hcs hcr e he).elim) fun v m' hr => ?_
   obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hwc.load rfl htl hcs hr
   rw [hist_cur] at hj hv hfl hacq hh
   exact ⟨by rw [hop.threads], h k hk G₁ m₁ m' v j hg₁ hi₁ hj hv hfl hacq hh hw' (op_cur hop)⟩
@@ -158,7 +158,7 @@ theorem wp_rmw {op : RmwOp} {signed : Bool} {ord : AtomicOrder} {v : BitVec n}
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨hw, htl, hcs⟩ := hW G₁ m₁ hg₁ hi₁
   have hwc := ok_cur hw t
-  refine WP.callMC (fun e he => (hwc.rmw_noErr htl hcs hcr e he).elim) fun old m' hr => ?_
+  refine WP.callMC (fun e he => (hwc.rmw_noErr htl trivial hcs hcr e he).elim) fun old m' hr => ?_
   obtain ⟨hv, hw', hop, hU, hh, hacq⟩ := hwc.rmw rfl htl hcs hr
   rw [hist_cur] at hv hh hacq
   exact ⟨by rw [hop.threads], h k hk G₁ m₁ m' old hg₁ hi₁ hv hU hh hacq hw' (op_cur hop)⟩
@@ -184,7 +184,7 @@ theorem wp_cas {succ fail : AtomicOrder} {exp new : BitVec n}
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨hw, htl, hcs⟩ := hW G₁ m₁ hg₁ hi₁
   have hwc := ok_cur hw t
-  refine WP.callMC (fun e he => (hwc.cas_noErr (fail := fail) (new := new) htl hcs hcr e he).elim)
+  refine WP.callMC (fun e he => (hwc.cas_noErr (fail := fail) (new := new) htl trivial hcs hcr e he).elim)
     fun r m' hr => ?_
   obtain ⟨hw', hop, ⟨rfl, hv, hU, hh, hacq⟩ | ⟨j, old, rfl, hne, hj, hv, hfl, hacq, hh⟩⟩ :=
     hwc.cas rfl htl hcs hr
@@ -244,7 +244,7 @@ theorem wp_rmwAs {α : Type} [Packed α 32] {W : Word 32 4} {op : RmwOp} {ord : 
   refine WP.bind (WP.pickC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ c hcr => ?_⟩)
   obtain ⟨hw, htl, hcs⟩ := hW G₁ m₁ hg₁ hi₁
   have hwc := ok_cur hw t
-  refine WP.callMC (fun e he => (atomicRmwAs_noErr (hwc.rmw_noErr htl hcs hcr)
+  refine WP.callMC (fun e he => (atomicRmwAs_noErr (hwc.rmw_noErr htl trivial hcs hcr)
     (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
   · obtain ⟨hv, -⟩ := hwc.rmw rfl htl hcs hr
     rw [hist_cur] at hv
@@ -275,7 +275,7 @@ theorem wp_casAs {α : Type} [Packed α 32] {W : Word 32 4} {succ fail : AtomicO
   obtain ⟨hw, htl, hcs⟩ := hW G₁ m₁ hg₁ hi₁
   have hwc := ok_cur hw t
   refine WP.callMC (fun e he => (cmpxchgAs_noErr (hwc.cas_noErr (fail := fail)
-    (new := Packed.toBits new) htl hcs hcr) (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
+    (new := Packed.toBits new) htl trivial hcs hcr) (fun b m' hr => ?_) e he).elim) fun r m' hr => ?_
   · obtain ⟨-, -, ⟨he, -⟩ | ⟨j, old, he, -, hj, hv, -⟩⟩ := hwc.cas rfl htl hcs hr
     · cases he
     · cases he

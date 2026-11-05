@@ -234,7 +234,8 @@ theorem main_spec (n : Nat) : proto.WP 0 mainRun QM G0 ({} : Mem) n := by
   rotate_left
   · rw [hg₁] at g0; cases g0
   rw [hg₁] at g0; cases g0
-  obtain ⟨hc, hth₄, hcur₄⟩ := Detach.fork_eq hf
+  have hcur₄ : m₄.current = 0 := congrArg Mem.current (fork_eq hf).2
+  obtain ⟨hc, hth₄⟩ := fork_threads hf
   rw [hs₃] at hc
   subst hc
   have hsplit : (fun u => (G₁ u).res) 0 =

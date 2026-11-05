@@ -42,7 +42,7 @@ theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
   rw [StateT.run'_eq]
   refine WP.map ?_
   simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (FEvent.wp_peek hE hgx hgo hi fun k hk G₁ m₁ b hc₁ hi₁ hb2 => ?_)
+  refine WP.bind (FEvent.wp_peek hE hgx hgo (.inr hsx) hi fun k hk G₁ m₁ b hc₁ hi₁ hb2 => ?_)
   by_cases hb : b = 2
   · subst hb
     simp only [show ((2 : BitVec 32) == 2) = true from rfl, ↓reduceIte, StateT.run_pure, pure_bind]

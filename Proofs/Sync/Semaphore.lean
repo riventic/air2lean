@@ -586,7 +586,7 @@ theorem wp_load (hP : S.Fits P U) {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {
   have hic := hP.cur t t m₁.woken hi₁
   have htl : t < m₁.threads.size := alive hP hi₁ hg₁ hgone
   have hwc := wd_ok hW (hP.split hic).2.1
-  refine WP.callMC (fun e he => (hwc.load_noErr htl (hcs hP hic) hcr e he).elim) fun v m' hr => ?_
+  refine WP.callMC (fun e he => (hwc.load_noErr htl trivial (hcs hP hic) hcr e he).elim) fun v m' hr => ?_
   obtain ⟨j, hj, hv, hfl, hacq, hh, hw', hop⟩ := hwc.load rfl htl (hcs hP hic) hr
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
   rw [hh₁] at hj hv hfl hacq hh
@@ -612,7 +612,7 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
   have hic := hP.cur t t m₁.woken hi₁
   have htl : t < m₁.threads.size := alive hP hi₁ hg₁ hgone
   have hwc := wd_ok hW (hP.split hic).2.1
-  refine WP.callMC (fun e he => (atomicLoadAs_noErr (hwc.load_noErr htl (hcs hP hic) hcr)
+  refine WP.callMC (fun e he => (atomicLoadAs_noErr (hwc.load_noErr htl trivial (hcs hP hic) hcr)
     (fun b _ _ => hdec b) e he).elim) fun r m' hr => ?_
   obtain ⟨b, hb, hd⟩ := atomicLoadAs_ok hr
   obtain ⟨j, hj, hv, hfl, -, hh, hw', hop⟩ := hwc.load rfl htl (hcs hP hic) hb
@@ -640,7 +640,7 @@ theorem wp_rmw (hP : S.Fits P U) {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {s
   have hic := hP.cur t t m₁.woken hi₁
   have htl : t < m₁.threads.size := alive hP hi₁ hg₁ hgone
   have hwc := wd_ok hW (hP.split hic).2.1
-  refine WP.callMC (fun e he => (hwc.rmw_noErr htl (hcs hP hic) hcr e he).elim)
+  refine WP.callMC (fun e he => (hwc.rmw_noErr htl trivial (hcs hP hic) hcr e he).elim)
     fun old m' hr => ?_
   obtain ⟨hv, hw', hop, hU, hh, -⟩ := hwc.rmw rfl htl (hcs hP hic) hr
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
@@ -670,7 +670,7 @@ theorem wp_rmwAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
   have htl : t < m₁.threads.size := alive hP hi₁ hg₁ hgone
   have hwc := wd_ok hW (hP.split hic).2.1
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
-  refine WP.callMC (fun e he => (atomicRmwAs_noErr (hwc.rmw_noErr htl (hcs hP hic) hcr)
+  refine WP.callMC (fun e he => (atomicRmwAs_noErr (hwc.rmw_noErr htl trivial (hcs hP hic) hcr)
     (fun b _ _ => hdec b) e he).elim) fun r m' hr => ?_
   obtain ⟨old, hb, hd⟩ := atomicRmwAs_ok hr
   obtain ⟨hv, hw', hop, hU, hh, -⟩ := hwc.rmw rfl htl (hcs hP hic) hb
@@ -705,7 +705,7 @@ theorem wp_casAs {α : Type} [Packed α 32] (hP : S.Fits P U) {W : Word 32 4}
   have hwc := wd_ok hW (hP.split hic).2.1
   have hh₁ : W.hist { m₁ with current := t } = W.hist m₁ := Word.hist_congr rfl rfl
   refine WP.callMC (fun e he => (cmpxchgAs_noErr (hwc.cas_noErr (fail := fail)
-    (new := Packed.toBits new) htl (hcs hP hic) hcr) (fun b _ _ => hdec b) e he).elim)
+    (new := Packed.toBits new) htl trivial (hcs hP hic) hcr) (fun b _ _ => hdec b) e he).elim)
     fun r m' hr => ?_
   rcases cmpxchgAs_ok hr with ⟨rfl, ho⟩ | ⟨b, v, rfl, ho, hd⟩
   · obtain ⟨hw', hop, ⟨-, hv, hU, hh, hacq⟩ | ⟨j, old, he, -⟩⟩ := hwc.cas rfl htl (hcs hP hic) ho
@@ -2924,7 +2924,7 @@ theorem word_init {n nb : Nat} {W : Word n nb} {m : Mem} {b : BlockId} {blk : Bl
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hfit, hal, by rw [hk]; simp⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
-    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
+    fun e he hh => .inr ((hfp e he hh).on _), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
 

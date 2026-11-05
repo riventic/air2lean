@@ -44,10 +44,28 @@ def AllLe (m : Mem) (c : VClock) : Prop :=
 def SomeLe (m : Mem) (c : VClock) : Prop :=
   ∃ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
 
+/-- The clock `c` happened before every thread of the set `A` (a protocol's threads that may still
+access a word: `Word.Ok`). With every thread in `A` it is `AllLe`. -/
+def AllLeOn (A : ThreadId → Prop) (m : Mem) (c : VClock) : Prop :=
+  ∀ u < m.threads.size, A u → VClock.le c (m.clocks[u]!) = true
+
+theorem AllLe.on {m : Mem} {c : VClock} (h : AllLe m c) (A : ThreadId → Prop) : AllLeOn A m c :=
+  fun u hu _ => h u hu
+
+/-- A smaller set. -/
+theorem AllLeOn.anti {A B : ThreadId → Prop} {m : Mem} {c : VClock} (h : AllLeOn A m c)
+    (hB : ∀ u, B u → A u) : AllLeOn B m c :=
+  fun u hu hb => h u hu (hB u hb)
+
+theorem allLeOn_mono {A : ThreadId → Prop} {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
+    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (h : AllLeOn A m c) : AllLeOn A m' c := fun u hu ha =>
+  VClock.le_trans (h u (ht ▸ hu) ha) (hcl u (ht ▸ hu))
+
 theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : AllLe m c) : AllLe m' c := fun u hu =>
-  VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
+  allLeOn_mono ht hcl (h.on fun _ => True) u hu trivial
 
 theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
