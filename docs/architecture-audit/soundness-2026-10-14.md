@@ -405,8 +405,8 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
   other stays queued. Neither witness establishes two valid std join-handle owners or a false
   shipped client termination theorem.
 
-The two remaining key assertions, the former `cleartid_over_wake` and `cleartid_wakes_one`
-observe the `CoN` call frontier and its actual continuation before scheduler completion. Their definitions retain the original input thread records rather
+Every assertion here except `unaligned_wake_einval` observes the `CoN` call frontier and its
+actual continuation before scheduler completion. Their definitions retain the original input thread records rather
 than rewriting them to force completion. The actual primitive still performs its effects,
 including `cloneExit`'s `markExited` update. Completing such a seeded run also invokes
 `Thread.checkJoinedByChild`, a separate handle-ownership obligation;
