@@ -382,18 +382,30 @@ theorem LDMono.alloc {m m' : Mem} {kind : BlockKind} {size align : Nat} {nb : Bl
   LDMono.push (fun _ => by rw [ha, hs]; exact (Mem.allocOk_fit hroom).2)
     (fun _ => by rw [ha, hs]; exact Mem.allocOk_le hroom) h
 
-/-- **Two words in different live blocks have different futex keys** (`Mem.keyAt`, premise
-OSF-02): live bytes of two live blocks lie at different numeric addresses (`Mem.LiveDisjoint`),
-whatever their domains. Two words of one block need no layout (`Mem.keyAt_ne_same`). -/
-theorem _root_.Zig.Mem.keyAt_ne {m : Mem} (hl : m.LiveDisjoint) {b b' : BlockId} {blk blk' : Block}
-    (hbb : b ≠ b') (hb : m.blocks[b]? = some blk) (hb' : m.blocks[b']? = some blk')
-    (hv : blk.live = true) (hv' : blk'.live = true) {o o' : Nat} (ho : blk.kind.mappedLo ≤ o)
-    (hs : o < blk.bytes.size) (ho' : blk'.kind.mappedLo ≤ o') (hs' : o' < blk'.bytes.size)
-    (sh sh' : Bool) : m.keyAt ⟨some b, o⟩ sh ≠ m.keyAt ⟨some b', o'⟩ sh' := by
-  have hne := hl.addr_ne hbb hb hb' hv hv' hs hs' ho ho'
-  simp only [Mem.keyAt, hb, hb', Option.map_some, ne_eq, Option.some.injEq, FutexKey.mk.injEq,
-    not_and]
-  intro _; omega
+/-- **Two live bytes at different places have different futex keys** (`Mem.keyAt`, premise
+OSF-02), whatever their domains: byte `o` of live block `b` and byte `o'` of live block `b'`,
+in different blocks or at different offsets, lie at different addresses (`Mem.LiveDisjoint`)
+below `2 ^ 63` (`Mem.LiveBounded`), so their `usize`s differ. So a protocol tells its word's
+waiters from the waiters at any other live word. -/
+theorem _root_.Zig.Mem.keyAt_ne {m : Mem} (hl : m.LiveLayout) {b b' : BlockId} {blk blk' : Block}
+    (hb : m.blocks[b]? = some blk) (hb' : m.blocks[b']? = some blk') (hv : blk.live = true)
+    (hv' : blk'.live = true) {o o' : Nat} (hs : o < blk.bytes.size) (hs' : o' < blk'.bytes.size)
+    (hne : b ≠ b' ∨ o ≠ o') (sh sh' : Bool) (ho : blk.kind.mappedLo ≤ o := by simp)
+    (ho' : blk'.kind.mappedLo ≤ o' := by simp) :
+    m.keyAt ⟨some b, o⟩ sh ≠ m.keyAt ⟨some b', o'⟩ sh' := by
+  have hB := hl.2 b blk hb hv
+  have hB' := hl.2 b' blk' hb' hv'
+  have hA : blk.addr + o ≠ blk'.addr + o' := by
+    by_cases e : b = b'
+    · subst e; rw [hb] at hb'; cases hb'; rcases hne with h | h
+      · exact absurd rfl h
+      · omega
+    · exact hl.1.addr_ne e hb hb' hv hv' hs hs' ho ho'
+  rw [Mem.keyAt_block hb, Mem.keyAt_block hb']
+  simp only [ne_eq, Option.some.injEq, FutexKey.mk.injEq, not_and]
+  intro _ h
+  have := futexAddr_inj (by omega) (by omega) (by omega) (by omega) h
+  omega
 
 end Full
 end Zig
