@@ -942,6 +942,39 @@ theorem Mem.wordKey_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : 
   · subst b'; rw [hb]; simp [(Array.getElem?_eq_some_iff.mp hb).1]
   · rfl
 
+/-- Two memories whose blocks have the same addresses: every futex key is the same in both
+(`Mem.keyAt_of_addrs`, `Mem.wordKey_of_addr`). -/
+def Mem.SameAddrs (m m' : Mem) : Prop :=
+  ∀ b : BlockId, (m'.blocks[b]?).map (·.addr) = (m.blocks[b]?).map (·.addr)
+
+/-- Every key reads only the blocks' addresses. -/
+theorem Mem.keyAt_of_addrs {m m' : Mem} (h : m.SameAddrs m') (p : Ptr) (sh : Bool) :
+    m'.keyAt p sh = m.keyAt p sh := by
+  obtain ⟨pb, po⟩ := p
+  cases pb with
+  | none => rfl
+  | some b =>
+    have e : ∀ bs : Array Block, (bs[b]?).map (fun blk => blk.addr + po) =
+        ((bs[b]?).map (·.addr)).map (· + po) := fun bs => by cases bs[b]? <;> rfl
+    simp only [Mem.keyAt, addrIn]
+    rw [e, e, h b]
+
+theorem Mem.SameAddrs.refl (m : Mem) : m.SameAddrs m := fun _ => rfl
+
+theorem Mem.SameAddrs.trans {m m' m'' : Mem} (h : m.SameAddrs m') (h' : m'.SameAddrs m'') :
+    m.SameAddrs m'' := fun b => (h' b).trans (h b)
+
+theorem Mem.SameAddrs.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m.SameAddrs m' :=
+  fun _ => by rw [h]
+
+/-- A write keeps every block's address. -/
+theorem Mem.sameAddrs_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) : m.SameAddrs (m.write b blk o bs) := fun b' => by
+  simp only [Mem.write, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  split
+  · subst b'; rw [hb]; simp [(Array.getElem?_eq_some_iff.mp hb).1]
+  · rfl
+
 /-- `.access` only looks at `blocks`, never at `current`/`clocks`/`threads`/`footprint`, so a
 race-free `recordAccess` (`Mem.recordAt`) never changes what a further access sees. -/
 theorem access_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} {q : Ptr}
