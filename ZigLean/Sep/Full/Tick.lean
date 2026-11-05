@@ -224,7 +224,7 @@ theorem FTotalTriple.tick_part_unmetered (r₀ : Res) (hu : 0 < r₀.gh.ac.frag 
 changes; this summary does not assert the primitive-only `Mem.Aux`. -/
 theorem _root_.Zig.FStepIn.ticked (m : Mem) (hF : Heap) : FStepIn hF m m.ticked :=
   .of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-    Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩
+    Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (.of_blocks rfl)
     (fun _ _ h => h) (fun _ he hn => absurd he hn) (fun _ h => h)
 
 /-- **A step is local**: it reads no record and touches no byte. -/
