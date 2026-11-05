@@ -1337,5 +1337,42 @@ class StripCommentsTests(unittest.TestCase):
                 self.assertEqual(premises.strip_comments(text), strip_comments_reference(text))
 
 
+class ClosureRuleTests(unittest.TestCase):
+    """The committed closure rules over sample closure tokens (no repository scan)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config = premises.load_config(ROOT / "assurance/premises.json")
+
+    def premises_of(self, token):
+        via = {}
+        premises.apply_rules(self.config, via, [token], "closure")
+        return set(via)
+
+    def test_thr05_skips_the_futex_key_layer(self):
+        # The key layer (`Mem.Basic`: the key type and its address) is not the futex model: the
+        # modules that fall back to `Mem.Basic`'s tokens must not derive THR-05.
+        for token in ["Zig.FutexKey", "Zig.instDecidableEqFutexKey", "Zig.futexAddr",
+                      "Zig.futexKeyOf", "Zig.futexKeyOf.match_1", "Zig.futexKeyOf_run",
+                      "Zig.futexKeyOf'", "Zig.FutexKey.ne_of_shared"]:
+            with self.subTest(token=token):
+                self.assertNotIn("THR-05", self.premises_of(token))
+
+    def test_thr05_keeps_the_futex_model(self):
+        # Only an occurrence that is a key-layer word is skipped: a name that merely starts
+        # with one, or a futex-model name that also mentions one, keeps THR-05.
+        for token in ["Zig.Thread.futexWait", "Zig.Thread.futexWakePtr", "Zig.futexWaitC",
+                      "Zig.Conc.futexAddressWake", "Zig.Conc.FutexKeyedWait", "Zig.futexAddrα",
+                      "Zig.Thread.futexWait_futexAddr_eq", "Zig.Conc.futexWake.FutexKey.ne",
+                      "Zig.Conc.Proto.WP.futexKey"]:
+            with self.subTest(token=token):
+                self.assertIn("THR-05", self.premises_of(token))
+
+    def test_os_futex_rows_are_osf(self):
+        found = self.premises_of("Zig.Os.futexWake")
+        self.assertIn("OSF-02", found)
+        self.assertNotIn("THR-05", found)
+
+
 if __name__ == "__main__":
     unittest.main()
