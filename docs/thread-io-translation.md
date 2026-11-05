@@ -3,7 +3,8 @@
 Status: design and feasibility spike, Zig 0.16.0, `x86_64-linux` and `aarch64-macos`, as written
 on 2026-10-09 (approved: OS primitives as the only trusted base). The branch names below record
 where each piece was then; most have since merged. The phases it plans are implemented in
-[os-threads.md](os-threads.md) (T2) and [thread-specs.md](thread-specs.md) (T3).
+[os-threads.md](os-threads.md) (T2). T3's specs (section 4.1) were built as `ZigLean/Conc/Spec/`
+and retired in L21: the full-state contracts replace them ([thread-specs.md](thread-specs.md)).
 
 **Principle (user decision, 2026-10-08).** Only base OS primitives get trusted models. Std code
 above them is translated from its AIR and proved. The allocator track does this already: OSM-01
@@ -223,6 +224,11 @@ legacy.
 ## 4. Proof plan: generic specs, translated implementations, clients via the specs
 
 ### 4.1 Specs (`ZigLean/Sep/` style, parallel to P3 `AllocSpec`)
+
+Status: the `FutexSpec`, `MutexSpec`, `EventSpec`, `WaitGroupSpec` and `CondSpec` below were
+built in `ZigLean/Conc/Spec/` and retired in L21. Their full-state replacements (`MutexImpl`,
+`EventImpl`, `CondImpl`, the model futex's rules) and the open items are in
+[thread-specs.md](thread-specs.md). `IoSpec` is still a plan.
 
 * **`FutexSpec`.** The contract of the two vtable-free functions `Threaded.Thread.futexWaitInner`
   and `futexWake`. They are proved once from OSF-01/02 per target.
