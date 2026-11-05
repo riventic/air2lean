@@ -116,6 +116,10 @@
    "peak_mib": 948,
    "sha256": "49939b463cedb1f9ea5f1c0a2ecbc3d5bb14ca29c3ac1225d63da1ab1b27e57c"
   },
+  "Air2Lean/OpTable.lean": {
+   "peak_mib": 916,
+   "sha256": "ddb36e34f02140c0df584ab2fa27222414ee732b616670fedeeb6a86dff2ebb9"
+  },
   "Air2Lean/Program.lean": {
    "peak_mib": 956,
    "sha256": "e000f1b38ef583b886ec27aec5f474d5c21c43ae8ba4340cb677b25531cbe372"
@@ -131,6 +135,10 @@
   "Air2Lean/Revision.lean": {
    "peak_mib": 726,
    "sha256": "0acaedff2f4f779659020b49c29c085f95e96991469e5839f356d7ec47fc1eec"
+  },
+  "Air2Lean/Sem.lean": {
+   "peak_mib": 1860,
+   "sha256": "4dab08967609ad269a6d006d2f296a45185f25e5bcd1bd62ff565ded2cc277b9"
   },
   "Air2Lean/SemAttr.lean": {
    "peak_mib": 1588,
@@ -336,9 +344,17 @@
    "peak_mib": 1765,
    "sha256": "ec2f5f1eccb22b96ef9b99f90dd6137bb857d8c78737f1cac195ead405a55de6"
   },
+  "Proofs/Handoff/Steps.lean": {
+   "peak_mib": 1766,
+   "sha256": "e14bda755555181cda8de5da1e5cac12023dc886b2df5ac5f142a5d2fc582fce"
+  },
   "Proofs/Iogroup/AirCert.lean": {
    "peak_mib": 2905,
    "sha256": "01fd8808c10fe49168f1a64d65c4d309984e2b303d3646abac62201c7fda25ff"
+  },
+  "Proofs/Iogroup/Counter.lean": {
+   "peak_mib": 2402,
+   "sha256": "e577688b841daeac9b3b977cccef6485edef89e0dc2fc0c2347b5ba4d7493b93"
   },
   "Proofs/Iogroup/Gen.lean": {
    "peak_mib": 868,
@@ -395,6 +411,10 @@
   "Proofs/Lists/Policy.lean": {
    "peak_mib": 1729,
    "sha256": "9612a37544ffb9408eeed8adf4707c33a480680b9bccc675eebc4e13bd14a64a"
+  },
+  "Proofs/MutexCounter/Protocol.lean": {
+   "peak_mib": 1830,
+   "sha256": "d9a42689f23cf521b6d9b812ac4c87d964f8aad7043a1c2d8f3c340e7d7bc911"
   },
   "Proofs/Options/AirCert.lean": {
    "peak_mib": 2024,
@@ -456,9 +476,21 @@
    "peak_mib": 1725,
    "sha256": "2959da36c7c9a5030e7bd38790a79df826de64d4b44cbacf52534dc9f63ae9f7"
   },
+  "Proofs/SemCounter/Ops.lean": {
+   "peak_mib": 1722,
+   "sha256": "c36164cc9cd0bdfd7270ec92a73efbbf553aabfe2ad037d2b0614e63e19a24ad"
+  },
   "Proofs/SemCounter/Protocol.lean": {
    "peak_mib": 1708,
    "sha256": "59c915b3ba7b6715b4fb64fc93edb2a4890baf1dbe6916ac5fb7af311ead1180"
+  },
+  "Proofs/SemCounter/Start.lean": {
+   "peak_mib": 1816,
+   "sha256": "e0fc820ae93f3dce65639594a1e083676a385a479271ccc317b922fa40956e0f"
+  },
+  "Proofs/SemCounter/Steps.lean": {
+   "peak_mib": 1773,
+   "sha256": "e84c415d19da85a6490f6588f3c18e04812015df56a29320f4161240175df399"
   },
   "Proofs/Slices/Gen.lean": {
    "peak_mib": 881,
@@ -477,8 +509,12 @@
    "sha256": "aea70dca286ca9f99183cf3fd260fb4c13e08e59b5c74ab309effb3667b47f3b"
   },
   "Proofs/Sync/Cond.lean": {
-   "peak_mib": 1879,
+   "peak_mib": 1887,
    "sha256": "92d5bf7f423c46dca566f8c8ef3f779ec7b314a19d1883f5633f844bf0c3d5df"
+  },
+  "Proofs/Sync/Contracts.lean": {
+   "peak_mib": 1738,
+   "sha256": "9e126b4bb67f4f00155dfb4924a50c69a06d399031bd302fc07758c0e125a438"
   },
   "Proofs/Sync/Event.lean": {
    "peak_mib": 1803,
@@ -501,7 +537,7 @@
    "sha256": "3bfc7c9d4fabebb36f42efd71ea2c11e9ba996abde95ba99e3d6053edebea71e"
   },
   "Proofs/Sync/Handoff.lean": {
-   "peak_mib": 2863,
+   "peak_mib": 2871,
    "sha256": "1933c7f543de4cb43f6708049e54adc5cfacaf6ceaef215264621c9ac7c2b8f6"
   },
   "Proofs/Sync/IoMutex.lean": {
@@ -524,9 +560,17 @@
    "peak_mib": 1747,
    "sha256": "b3a4787040bf9df8da12a516f61f2ceb25e77cf91ff1effc3491979aece13bf5"
   },
+  "Proofs/Sync/Mailbox/Protocol.lean": {
+   "peak_mib": 1824,
+   "sha256": "3d507d1729d2688d13bc33bb0e10818f04edd5607026f0516ffaa61f122390e8"
+  },
   "Proofs/Sync/Mailbox/Start.lean": {
    "peak_mib": 1771,
    "sha256": "683318180797b9638b0ccd5b94b82374ab7bd835f5f112ba5ec04137bbeb0445"
+  },
+  "Proofs/Sync/Mailbox/Steps.lean": {
+   "peak_mib": 1742,
+   "sha256": "c660a50655535b7d1130904b7e77d0ab78232c5fee03e80efd5d07fc67c279d1"
   },
   "Proofs/Sync/Mutex.lean": {
    "peak_mib": 2383,
@@ -537,7 +581,7 @@
    "sha256": "a59c50342d614e64de8749fd42cb2d614a0bd93efe88792a2242feb81b19f3cd"
   },
   "Proofs/Sync/Proofs.lean": {
-   "peak_mib": 1833,
+   "peak_mib": 1843,
    "sha256": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef"
   },
   "Proofs/Sync/RwLock.lean": {
@@ -553,12 +597,16 @@
    "sha256": "de41db9f67b612f6fd1d23afda16bc184679ff432285875662544c1f67f0e2d9"
   },
   "Proofs/Sync/SemCounter.lean": {
-   "peak_mib": 4987,
+   "peak_mib": 5015,
    "sha256": "93d02de1c95bd27c21f09967c9aaf8e90a28e97cd8cc8722e306311e197f8551"
   },
   "Proofs/Sync/Semaphore.lean": {
    "peak_mib": 1978,
    "sha256": "a94b8f05f1ec1965971c825cf726baf91603ea687dc8c7db07f2b2799f1fdac2"
+  },
+  "Proofs/Sync/SnapshotCache.lean": {
+   "peak_mib": 2012,
+   "sha256": "9438b1d983b8683489fdc12ff216b45158013675716a16b6cba0cb5c94885591"
   },
   "Proofs/Threads/AirCert.lean": {
    "peak_mib": 4400,
@@ -585,7 +633,7 @@
    "sha256": "288ae8f77d8eb80a7105bf0dc92f704810d4a54264dfe7273b48d62501a89633"
   },
   "Proofs/Threadsync/Cond.lean": {
-   "peak_mib": 1857,
+   "peak_mib": 1904,
    "sha256": "02ce2857c8f39950b3fcedfffb4031cf9e780568976fa2563e69b7a19dec167c"
   },
   "Proofs/Threadsync/Deadline.lean": {
@@ -613,12 +661,24 @@
    "sha256": "cb7e484521f4b901d06e883a42ce8d4730537fd98a58ac483502006cd74db183"
   },
   "Proofs/Threadsync/Handoff.lean": {
-   "peak_mib": 2654,
+   "peak_mib": 2673,
    "sha256": "bf21c1638daa9db99773b9603e62d34c55d5e7cc03126e4e863fac831acf0a9a"
   },
   "Proofs/Threadsync/Mutex.lean": {
    "peak_mib": 2033,
    "sha256": "2eee20820c70af6177c1b98ba337873aed9255ac2200fb1c37e7113a16c0a9c7"
+  },
+  "Proofs/Threadsync/ThreadMutex.lean": {
+   "peak_mib": 1788,
+   "sha256": "3ca1f1ec3aac38cce631cde316b14790b552b0999ac411c9a6a1beb9d27d0633"
+  },
+  "Proofs/Threadsync/Variant.lean": {
+   "peak_mib": 814,
+   "sha256": "20189521d5edf339517077cda5a478641bfc6b26e7922ae799832a123bcd6a1c"
+  },
+  "Proofs/Threadsync/WaitGroup.lean": {
+   "peak_mib": 2585,
+   "sha256": "f60ea9c692162ce63d6ccadd733c5ce69d28dad176ac0642095f7d7b4c78d48b"
   },
   "Proofs/Variants/AirCert.lean": {
    "peak_mib": 1641,
@@ -679,6 +739,10 @@
   "ZigLean/Conc/Base/Heap.lean": {
    "peak_mib": 680,
    "sha256": "e8f3bdfea4b1e478b3c1066b19e8f69af15c0291c2181dac31ca5a07cd89023b"
+  },
+  "ZigLean/Conc/Base/Lock.lean": {
+   "peak_mib": 706,
+   "sha256": "55d1df95f90f44b8e60703ba5c49f763beec7fcfd0956dc084ad6f2b2cd6a310"
   },
   "ZigLean/Conc/Base/Threads.lean": {
    "peak_mib": 688,
@@ -944,6 +1008,10 @@
    "peak_mib": 524,
    "sha256": "381605fe81954d627d62d1df8cb2fd323bcabee47ffb3933bd5573f0953831f6"
   },
+  "ZigLean/Mem/Basic.lean": {
+   "peak_mib": 605,
+   "sha256": "78f7576c5a689fc25dc552cfd9fa9dedd05f8a7c3d042705415f07b6aa38abb3"
+  },
   "ZigLean/Mem/ConstPtr.lean": {
    "peak_mib": 708,
    "sha256": "145200bad3d8717205c461ce9ae4d4d74fd31e4df97c6a7c6302bdb40a05e2e2"
@@ -963,6 +1031,10 @@
   "ZigLean/Mem/ErrWidthLemmas.lean": {
    "peak_mib": 1684,
    "sha256": "b3fc2def38eeda809de6233c1c086816cc7075645ff5a05e7f7d69f4fc55c0dc"
+  },
+  "ZigLean/Mem/Lemmas.lean": {
+   "peak_mib": 1315,
+   "sha256": "a7163eeed83975df7c8ab45742d7128554dc668a7979ed3452e0646b11bd9bcc"
   },
   "ZigLean/Mem/Noalias.lean": {
    "peak_mib": 501,
@@ -1027,6 +1099,10 @@
   "ZigLean/Os/Env.lean": {
    "peak_mib": 513,
    "sha256": "e3a29b78fb99e31c78ca2aea5325d9cc9216315acf11aaf1a1346094d314353f"
+  },
+  "ZigLean/Os/Futex.lean": {
+   "peak_mib": 528,
+   "sha256": "fdb1b3ec522356d658a8db24a3c875a8b440a1d116c728cb1ba3d17b1eff65a7"
   },
   "ZigLean/Os/Malloc.lean": {
    "peak_mib": 502,
@@ -1144,6 +1220,10 @@
    "peak_mib": 2578,
    "sha256": "8bd4836d7767c31f83b257a33aa6af22cc2db644126f99a997b02ba549e3f9e2"
   },
+  "ZigLean/Sep/Full/AutoAll.lean": {
+   "peak_mib": 1697,
+   "sha256": "a0ef457546401de3a7aa1f9a576f69d49491f897a323194ccfcb697843390c22"
+  },
   "ZigLean/Sep/Full/AutoArith.lean": {
    "peak_mib": 1659,
    "sha256": "cadc652ac9e0cb2c4e19a4e9e311336f1dfa765e18e020dd3d6b8ac0f2d51e9f"
@@ -1159,6 +1239,18 @@
   "ZigLean/Sep/Full/AutoConc.lean": {
    "peak_mib": 1712,
    "sha256": "09920faf15bd2a9482c5bee2d38dec6df099cc5f5de0f0c20cc0f5495c497ea4"
+  },
+  "ZigLean/Sep/Full/AutoPrim.lean": {
+   "peak_mib": 1662,
+   "sha256": "e7db6495ddb348d285d17f399665b6dee144d846360d764820316a5597d349ac"
+  },
+  "ZigLean/Sep/Full/AutoReport.lean": {
+   "peak_mib": 1627,
+   "sha256": "27c9ad28da4802da1a8cf25653bc79271a3c3b08ea754d4273f767ac55a28d52"
+  },
+  "ZigLean/Sep/Full/AutoRules.lean": {
+   "peak_mib": 1973,
+   "sha256": "87c1ca143e77d9396199cf74df5bafa9f6a093f426fae870af0b8a3bd1f3ea4e"
   },
   "ZigLean/Sep/Full/AutoThread.lean": {
    "peak_mib": 1667,
@@ -1180,8 +1272,12 @@
    "peak_mib": 793,
    "sha256": "667a7a7e76eaf163870c360a2fae5ad03927f4841f3c92f70d9a939de7d199b0"
   },
+  "ZigLean/Sep/Full/Cond.lean": {
+   "peak_mib": 1842,
+   "sha256": "8b94f1a2f6dd17be5fdd9a948f6f29abb54cbba8a59bea05272232d203158e84"
+  },
   "ZigLean/Sep/Full/CondEpoch.lean": {
-   "peak_mib": 1719,
+   "peak_mib": 1732,
    "sha256": "a6c09ed43ebfb5abd59f5fa92cde7a0cbb19f49796c2c43d69f2687597a82b34"
   },
   "ZigLean/Sep/Full/CondInv.lean": {
@@ -1196,9 +1292,17 @@
    "peak_mib": 1700,
    "sha256": "608b74b02c77804dceaf0cb4ab423eff14aead1cb331787d47644adea62a0304"
   },
+  "ZigLean/Sep/Full/Disjoint.lean": {
+   "peak_mib": 715,
+   "sha256": "3f9ab60394c03b821bb9ee93c923dad4f60edea97d662c02a33dc116445cb5ba"
+  },
   "ZigLean/Sep/Full/Dispatch.lean": {
    "peak_mib": 1727,
    "sha256": "3c1218945903ab39190d0702d60e29e31c517c21dfbd0318043d2915f743e582"
+  },
+  "ZigLean/Sep/Full/Event.lean": {
+   "peak_mib": 1875,
+   "sha256": "8ca8dae468e148a95276b33991b3c26c0634f068e80c66ee580c1f73a589928b"
   },
   "ZigLean/Sep/Full/Extent.lean": {
    "peak_mib": 828,
@@ -1212,6 +1316,10 @@
    "peak_mib": 813,
    "sha256": "5e3d07140a62087700ddc826a59ed479ebb51d538d575742d5092d470b750ea8"
   },
+  "ZigLean/Sep/Full/Init.lean": {
+   "peak_mib": 1720,
+   "sha256": "e8173733eb6ba0aaf531230f926eeaa9fd4e76a5eabae90cdef07ff18ad028f1"
+  },
   "ZigLean/Sep/Full/IoMutex.lean": {
    "peak_mib": 1732,
    "sha256": "30dab72f72e1c0d6d4c57af4d9896110c625675e75b2e4fccd1f9b27994c1da6"
@@ -1219,6 +1327,22 @@
   "ZigLean/Sep/Full/Local.lean": {
    "peak_mib": 1665,
    "sha256": "f61dd0236d4f2ed70a3b43fc818d7dfdab5f3e2fb4a99b73d96e7e6274d6f9fc"
+  },
+  "ZigLean/Sep/Full/Lock.lean": {
+   "peak_mib": 1803,
+   "sha256": "09f590b74ce95222fe2012f2a5d84cdba79655546bcfed0590d140cdf038b89c"
+  },
+  "ZigLean/Sep/Full/LockRules.lean": {
+   "peak_mib": 1731,
+   "sha256": "2c1aab6cd7f291c399aabbf0e7e01cece22a558361f7228959d32d23b25e31d7"
+  },
+  "ZigLean/Sep/Full/LockSteps.lean": {
+   "peak_mib": 1700,
+   "sha256": "f5d5a0a2af22cbdebdbf4dc5e540b4e0c52644a16ab1eee262791d4a66ccf129"
+  },
+  "ZigLean/Sep/Full/LockWord.lean": {
+   "peak_mib": 960,
+   "sha256": "7108946c6e3294d678c243b3c9c0697509b4de6a48e65ce2e629ee845ed6c776"
   },
   "ZigLean/Sep/Full/Logic.lean": {
    "peak_mib": 712,
@@ -1247,6 +1371,10 @@
   "ZigLean/Sep/Full/Ops.lean": {
    "peak_mib": 812,
    "sha256": "ee47a510b295ceec3f08b33b7ffbc7b0c78ab4cecb0fc821439b974b60cdb824"
+  },
+  "ZigLean/Sep/Full/OsFutex.lean": {
+   "peak_mib": 1711,
+   "sha256": "16fca99e1c0e373161f8926e94956181d24ad49ee47a7aa6779712c3f832cd78"
   },
   "ZigLean/Sep/Full/OwnedBound.lean": {
    "peak_mib": 1644,
@@ -1280,6 +1408,10 @@
    "peak_mib": 552,
    "sha256": "78c5c90782b8e2b97b246fd7d0a29ed7c0756f0099d0d6e7c1236cddaee0ca07"
   },
+  "ZigLean/Sep/Full/Slice.lean": {
+   "peak_mib": 1667,
+   "sha256": "4241b5e91fa4dac389bdbdfe9e3e80c07e9b9f6540036d31852b50f653490840"
+  },
   "ZigLean/Sep/Full/Stack.lean": {
    "peak_mib": 1713,
    "sha256": "84d5a10a41b5fe43e57cda143ee55566d6902107f6d087f771ac2855db49ebe5"
@@ -1296,6 +1428,10 @@
    "peak_mib": 1746,
    "sha256": "75766904b6ed0fa3d551037b7c9f5e7ebdad2a0df9f299e2a872cf32135195bb"
   },
+  "ZigLean/Sep/Full/TSum.lean": {
+   "peak_mib": 522,
+   "sha256": "ff656d0d0d135292394cdf7315810b2db9c46f59777a7867808e01d258c86c9a"
+  },
   "ZigLean/Sep/Full/Tame.lean": {
    "peak_mib": 757,
    "sha256": "fe97cb8ed3f5e7ea9b5b1d2a6bf73bfd04544fe9d56c437fc4b43ee634cb4876"
@@ -1307,6 +1443,10 @@
   "ZigLean/Sep/Full/ThreadCall.lean": {
    "peak_mib": 1668,
    "sha256": "413cbc2238e88fb63fb89f48d563078847f74f81a29b2954b802c14929290f60"
+  },
+  "ZigLean/Sep/Full/ThreadFacts.lean": {
+   "peak_mib": 1693,
+   "sha256": "8f994189f5100ec846f582f3eaa1350257f1bcb5ce721825df3560bdd32ac437"
   },
   "ZigLean/Sep/Full/ThreadLoop.lean": {
    "peak_mib": 711,
@@ -1360,9 +1500,17 @@
    "peak_mib": 1669,
    "sha256": "fcefd1be2aef4f42dc23abe631a93b997522114217b944c31f3da7d05ff83239"
   },
+  "ZigLean/Sep/Full/Word.lean": {
+   "peak_mib": 1970,
+   "sha256": "79b0da041ee7940d64f7af2762abb9d7282ffcd49b504bd4bbf66ce98a6b9155"
+  },
   "ZigLean/Sep/Full/WordNewest.lean": {
    "peak_mib": 1713,
    "sha256": "9255816af46b8d464b11d11ad0101eb3a7e28d105dbadb79c70d83f3290172db"
+  },
+  "ZigLean/Sep/Full/WordRules.lean": {
+   "peak_mib": 1865,
+   "sha256": "33104213b4ad512258259f0c62f0811becb4eec737835ad4bb4ca8d3b4266a46"
   },
   "ZigLean/Sep/Full/Wrappers.lean": {
    "peak_mib": 1680,
@@ -1411,6 +1559,10 @@
   "ZigLean/Witness.lean": {
    "peak_mib": 1617,
    "sha256": "d75549142d30551d03c51388876fc7e142856efc6ed1a46047809403087f50d7"
+  },
+  "ZigLean/Witnesses/Conc.lean": {
+   "peak_mib": 1694,
+   "sha256": "7311f2811321c586a14b4a01870a84ed3aa06b3865f1d117dc146267dc74ede2"
   },
   "ZigLean/Witnesses/Mem.lean": {
    "peak_mib": 1624,
@@ -1543,6 +1695,10 @@
   "tests/golden/0.17.0/sync/Gen.lean": {
    "peak_mib": 906,
    "sha256": "ac6de3d01c96c9515ba8fb0bfaef4dc20159dcad20cbd093c3a6aebec908fb79"
+  },
+  "tests/review/AllProofs.lean": {
+   "peak_mib": 1880,
+   "sha256": "20327b394fabb9f8ef47d4a2917d7cee46a45b3f01f65b4ac27b69dd14031cfb"
   },
   "tests/review/Concurrency.lean": {
    "peak_mib": 693,
@@ -1780,6 +1936,14 @@
    "peak_mib": 797,
    "sha256": "fe675316351bd6abafd799c8619bd8aad8f0712ce9e7979ff0e729b95ca77559"
   },
+  "tests/roadmap/architecture-audit/claims/AuditClaims/Unchecked.lean": {
+   "peak_mib": 1635,
+   "sha256": "6d1ff86cf7646328429fbd01a8e9382b328897f26615d5c9efbeab9c5e07dccc"
+  },
+  "tests/roadmap/architecture-audit/claims/AuditClaims/Universal.lean": {
+   "peak_mib": 1628,
+   "sha256": "825d2bf9c4921f1cce2659cecb713cf015e6bf00b9269b89eb16d92d725323b9"
+  },
   "tests/roadmap/architecture-audit/claims/AuditClaims/Vacuous.lean": {
    "peak_mib": 1678,
    "sha256": "c1b723634a22ba1e2f3a53e17e8287cf6b643426dc1d80372aff3d49293e053f"
@@ -1795,6 +1959,10 @@
   "tests/roadmap/architecture-audit/soundness-1014/futex-primitive/CurrentModel.lean": {
    "peak_mib": 508,
    "sha256": "6b1e968c284b622326d3ee894496f0fbfbaf7c6c7e1e05be2894bde5e984529c"
+  },
+  "tests/roadmap/architecture-audit/soundness-1014/futex-primitive/Regression.lean": {
+   "peak_mib": 522,
+   "sha256": "85011fca7a800cf797609f7ebcbb5304b0b1dec327049ad1aa3c940ab713975d"
   },
   "tests/roadmap/architecture-audit/soundness-1014/futex-wake/WakeCount.lean": {
    "peak_mib": 1645,
@@ -2001,7 +2169,7 @@
    "sha256": "cb1c8cedf0b95947385711d81468619c3becefb5db5a20bd7cf703b839e2c332"
   },
   "tests/roadmap/detached-threads/Runtime.lean": {
-   "peak_mib": 1700,
+   "peak_mib": 1707,
    "sha256": "f312f51c069f2dbeb5640139781da385b31ecb604ec23be9afab853edcf3b605"
   },
   "tests/roadmap/diagnostics/Collector.lean": {
@@ -2553,7 +2721,7 @@
    "sha256": "44303f60cbae0b3083134285c66c05eadee91542c9de0f3d0ca78c535373fd5f"
   },
   "tests/roadmap/rwlock-contracts/Runtime.lean": {
-   "peak_mib": 1797,
+   "peak_mib": 1799,
    "sha256": "a9ab705321f960ecfe17e07de65251bb122349bee2654d513ab4621bc60bccf5"
   },
   "tests/roadmap/sc-order/Sc.lean": {
@@ -2620,9 +2788,17 @@
    "peak_mib": 1743,
    "sha256": "407b1dadf8205642379afd7e208774bec10f9b3c9eb81af31f433eb891f5e42a"
   },
+  "tests/roadmap/sep-auto/SepAuto/ReadRest.lean": {
+   "peak_mib": 1690,
+   "sha256": "aeba0329ef3633ebe76794db6328da1e6f57f3f6462d46483ca1a2c812aec6e3"
+  },
   "tests/roadmap/sep-auto/SepAuto/Region.lean": {
    "peak_mib": 1969,
    "sha256": "e70e74ff5134be44c2b9c8a0d911a37820f8cf52f86ca81d604bf5734d0bbc56"
+  },
+  "tests/roadmap/sep-auto/SepAuto/Report.lean": {
+   "peak_mib": 1879,
+   "sha256": "da36b480679fcdd24d1469f385134226bcd60c15ac6075df7363edef7e574adf"
   },
   "tests/roadmap/sep-auto/SepAuto/Stack.lean": {
    "peak_mib": 1805,
@@ -2667,6 +2843,10 @@
   "tests/roadmap/sep-auto/SepAuto/WPCond.lean": {
    "peak_mib": 1748,
    "sha256": "83aa109a3707aecae8e66e8470236e113fc86d2ba65f28a6926dc35e5a2189ee"
+  },
+  "tests/roadmap/sep-auto/SepAuto/WPHold.lean": {
+   "peak_mib": 1781,
+   "sha256": "61b29f0002ab78a027d8a297f25a629566c0997386c57434cfaf6b2e2b76d87a"
   },
   "tests/roadmap/sep-auto/SepAuto/WPMutex.lean": {
    "peak_mib": 1778,
@@ -2816,6 +2996,14 @@
    "peak_mib": 1719,
    "sha256": "2c7644e2071c5aff2cb009e8d6c25b66cc602e699f90ef80baa68fbabd6181f9"
   },
+  "tests/roadmap/sync-contracts/EventSet.lean": {
+   "peak_mib": 2243,
+   "sha256": "ec3908a2a7a0ba656a8f344738ce0f1c4cca88f0d43dcd5520fa94edf3708d5d"
+  },
+  "tests/roadmap/sync-contracts/Runtime.lean": {
+   "peak_mib": 2552,
+   "sha256": "fbe3153f6febcec4622d288feea4f3b12eb9926b0268caefad6918a5a269b831"
+  },
   "tests/roadmap/thread-locals/ThreadLocals/Gen.lean": {
    "peak_mib": 818,
    "sha256": "43e8a04647f163b607c862796fd4b28194dddaa6280512c492a4110c821821f3"
@@ -2871,6 +3059,14 @@
   "tests/roadmap/union-bases/UnionBases/Gen.lean": {
    "peak_mib": 868,
    "sha256": "e059f54856f49c482a0cbce4ccbd90e0ea69bc2ae9557d9e02c47d9bf7ab9f1a"
+  },
+  "tests/roadmap/vcs/Extract.lean": {
+   "peak_mib": 1780,
+   "sha256": "24b6c34af6deaa5a315e2d522485bd7cd6db9cc500ea633d59bb5730ce4b0fad"
+  },
+  "tests/roadmap/vcs/Memory.lean": {
+   "peak_mib": 1738,
+   "sha256": "24424973f68ce76f988d21b516655354afb139a305c7c47ccbcc44ac9c08bcac"
   },
   "tests/roadmap/vector-layouts/Checker.lean": {
    "peak_mib": 1632,
@@ -2957,11 +3153,11 @@
    "sha256": "ec3afc510e87fbeb8dd325ff22af4c48625234302e7d652dfa0b5ec986bbdcb0"
   },
   "tutorials/concurrent-clients/Main.lean": {
-   "peak_mib": 1726,
+   "peak_mib": 1738,
    "sha256": "01607c337743c9d6ccd163f86a0d871be2a47ec5637c3ff4e844b5d1328830e0"
   },
   "tutorials/concurrent-clients/Solution.lean": {
-   "peak_mib": 1723,
+   "peak_mib": 1736,
    "sha256": "22fe66b5df6852fb59f37347c5988ce979d81d63208d1e5a9bae1dc85b88600c"
   },
   "tutorials/cross-target/Main.lean": {
@@ -2973,7 +3169,7 @@
    "sha256": "dd8ce0fcd481851955ef25a7a9604cf0f092e5ab80dd3cb942fbefa449dd7cd4"
   },
   "tutorials/cross-target/Solution.lean": {
-   "peak_mib": 1728,
+   "peak_mib": 1732,
    "sha256": "bddf6567849a7609d52e4fc3506e23f30e2e9ce6f77ce59a5adcf074fa322cda"
   },
   "tutorials/external-contracts/Main.lean": {
@@ -3017,6 +3213,6 @@
    "sha256": "5708b54daf5ac248c2fd09d6570633503e3092c4ffd52b9e6506edd1df8697c0"
   }
  },
- "note": "Generated by `python3 -B scripts/lean-peaks.py write` from the measured peaks of this machine's builds (build-guard --lean-processes, docs/build-budgets.md#elastic-workloads); never edit it by hand. peak_mib is the largest measured peak of the elaboration of the module whose source has this sha256; a module whose source changed is charged the declared bound until it is measured again.",
+ "note": "Generated by `python3 -B scripts/lean-peaks.py write` from the measured peaks of this machine's builds (build-guard --lean-processes, docs/build-budgets.md#elastic-workloads); never edit it by hand. peak_mib is the largest measured peak of the elaboration of the module whose source has this sha256; a module whose source changed since is charged 1.3 x this peak as a guess (a retry at the declared bound if it outgrows it) until it is measured again.",
  "schema": 1
 }
