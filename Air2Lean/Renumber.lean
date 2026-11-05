@@ -527,12 +527,10 @@ theorem mok_lift {α : Type} {P : α → Prop} {x : Result α} (h : ROk P x) : M
   have e : (pure (a, m) : Result (α × Zig.Mem)).run = some (.ok (a, m)) := rfl
   rw [e] at hk; cases hk; exact h a ha
 
-/-- In an environment whose operands hold values without cell names, `evalMem`'s value has
-none. -/
-theorem evalMem_cf (f : Func) (E : Env) (i : Inst)
-    (h : ∀ v ∈ topVals i.op, ROk (cellFree · = true) (operand f E v)) :
+/-- When `evalPure`'s value has no cell names, neither has `evalMem`'s: its own arms load and
+build integers, `bool`s and pointers. -/
+theorem evalMem_cf (f : Func) (E : Env) (i : Inst) (hp : ROk (cellFree · = true) (evalPure f E i)) :
     MOk (cellFree · = true) (evalMem f E i) := by
-  have hp := evalPure_cf f E i h
   obtain ⟨id, ty, op⟩ := i
   cases op <;> simp only [evalMem, loadAs] <;>
   repeat' (first
@@ -555,6 +553,9 @@ theorem RegOk.cons {f : Func} {i : Inst} {rest : List Inst} (h : RegOk f (i :: r
   ⟨fun a ha => by have := h a ha; simp only [regBody, Bool.and_eq_true] at this; exact this.1,
    fun a ha => by have := h a ha; simp only [regBody, Bool.and_eq_true] at this; exact this.2⟩
 
+theorem regUse_of_regInst {a : InstId} {i : Inst} (h : regInst a i = true) : regUse a i.op = true := by
+  rw [regInst, Bool.and_eq_true] at h; exact h.1
+
 theorem InvEnv.set {f : Func} {env : Env} (h : InvEnv f env) (j : InstId) (t : TyId) {v : Value}
     (hv : cellFree v = true) : InvEnv f (env.set j t v) := by
   intro k t' w hk
@@ -565,7 +566,14 @@ theorem InvEnv.set {f : Func} {env : Env} (h : InvEnv f env) (j : InstId) (t : T
 
 theorem topVals_clear {a : InstId} {op : Op} (h : regUse a op = true) (hl : ∀ p, op ≠ .load p)
     (hs : ∀ p v, op ≠ .store p v) : ∀ v ∈ topVals op, clearOf a v = true := by
-  cases op <;> simp_all [regUse, topVals]
+  cases op
+  case call cv args =>
+    simp only [regUse, Bool.and_eq_true, List.all_eq_true] at h
+    simp only [topVals, List.mem_cons]
+    rintro v (rfl | hv)
+    · exact h.1
+    · exact h.2 v hv
+  all_goals simp_all [regUse, topVals]
 
 /-- An operand that no register local reaches holds the same value in both environments, without
 cell names. -/
@@ -584,7 +592,7 @@ theorem operand_clear (ρ : InstId → InstId) {f : Func} {env : Env} (hinv : In
         · exact h
         · have := hc j hr; simp [clearOf] at this
       simp only [Option.map_some, renV_of_cellFree ρ hw]
-      exact ⟨rfl, rok_pure hw⟩
+      exact ⟨by trivial, rok_pure hw⟩
   all_goals refine ⟨rfl, ?_⟩
   all_goals simp only [operand]
   all_goals repeat' (first
@@ -628,9 +636,33 @@ theorem rok_cellRead (t : Ty) (v : Option Value) : ROk (cellFree · = true) (cel
     · exact rok_pure (cellFree_of_valOk t v ‹_›)
     · exact rok_stuck
 
+/-- `execInst`'s last arm: every operation without an arm of its own is `evalMem`'s. -/
+theorem execInst_default {c : Ctx} {id : InstId} {ty : TyId} {op : Op} {rest : List Inst} {env : Env}
+    (h1 : ∀ index, op ≠ .arg index) (h2 : ∀ b, op ≠ .block b) (h3 : ∀ b, op ≠ .loop b)
+    (h4 : ∀ t v, op ≠ .br t v) (h5 : ∀ t, op ≠ .«repeat» t) (h6 : ∀ v, op ≠ .ret v)
+    (h7 : op ≠ .unreach) (h8 : op ≠ .trap) (h9 : ∀ v t e, op ≠ .condBr v t e)
+    (h10 : ∀ v cs e, op ≠ .switchBr v cs e) (h11 : op ≠ .alloc) (h12 : ∀ p, op ≠ .load p)
+    (h13 : ∀ p v, op ≠ .store p v) (h14 : ∀ n r s args, op ≠ .call (.func n r s) args)
+    (h15 : ∀ n, op ≠ .line n) (h16 : ∀ n v, op ≠ .dbg n v) (h17 : ∀ v b, op ≠ .«try» v b)
+    (h18 : ∀ k idx, op ≠ .sliceElemVal (.inst k) idx) :
+    execInst c ⟨id, ty, op⟩ rest env =
+      liftMem (evalMem c.func env ⟨id, ty, op⟩) >>= fun v => execBody c rest (env.set id ty v) := by
+  cases op
+  case call cv args =>
+    cases cv <;> first | exact (h14 _ _ _ _ rfl).elim | (rw [execInst] <;> rfl)
+  case sliceElemVal sv idx =>
+    cases sv <;> first | exact (h18 _ _ rfl).elim | (rw [execInst] <;> rfl)
+  all_goals first
+    | exact (h1 _ rfl).elim | exact (h2 _ rfl).elim | exact (h3 _ rfl).elim
+    | exact (h4 _ _ rfl).elim | exact (h5 _ rfl).elim | exact (h6 _ rfl).elim | exact (h7 rfl).elim
+    | exact (h8 rfl).elim | exact (h9 _ _ _ rfl).elim | exact (h10 _ _ _ rfl).elim
+    | exact (h11 rfl).elim | exact (h12 _ rfl).elim | exact (h13 _ _ rfl).elim
+    | exact (h15 _ rfl).elim | exact (h16 _ _ rfl).elim | exact (h17 _ _ rfl).elim
+    | (rw [execInst] <;> rfl)
+
 section Flow
 
-variable {c : Ctx} (hcf : c.call.CellFree) (hargs : c.args.all cellFree = true)
+variable {c : Ctx} (hcf : Oracle.CellFree c.call) (hargs : c.args.all cellFree = true)
   (hview : ∀ k, c.view k = none)
 include hcf hargs hview
 
@@ -640,9 +672,9 @@ theorem execBody_flow : ∀ l env, InvEnv c.func env → RegOk c.func l → Ok e
   apply execBody.induct c
     (motive2 := fun i rest env => InvEnv c.func env → RegOk c.func (i :: rest) →
       Ok exitFree (execInst c i rest env))
-    (motive3 := fun _ _ _ cs el env => InvEnv c.func env →
+    (motive3 := fun s _ x cs el env => InvEnv c.func env →
       (∀ a, regAlloc c.func a = true → regCases a cs = true ∧ regBody a el.toList = true) →
-      Ok exitFree (execSwitch c _ _ cs el env))
+      Ok exitFree (execSwitch c s x cs el env))
     (motive4 := fun id body env => InvEnv c.func env → RegOk c.func body.toList →
       Ok (fun e => Exit.again id e = false ∧ exitFree e) (execLoop c id body env))
   case case1 => intro env _ _; simp only [execBody]; exact ok_stuck
@@ -698,9 +730,8 @@ theorem execBody_flow : ∀ l env, InvEnv c.func env → RegOk c.func l → Ok e
   case case7 =>
     intro i rest env t v hop hinv hreg
     obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
-    have ho := operands_clear id hinv (fun a ha => by
-      have := (RegOk.cons hreg).1 a ha; simp only [regInst] at this; simpa using this)
-      (by simp) (by simp)
+    have ho := operands_clear (fun x => x) hinv (op := .br t v)
+      (fun a ha => regUse_of_regInst ((RegOk.cons hreg).1 a ha)) (by simp) (by simp)
     simp only [topVals, List.forall_mem_cons, List.not_mem_nil, false_implies, implies_true,
       and_true] at ho
     simp only [execInst]
@@ -712,9 +743,8 @@ theorem execBody_flow : ∀ l env, InvEnv c.func env → RegOk c.func l → Ok e
   case case9 =>
     intro i rest env v hop hinv hreg
     obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
-    have ho := operands_clear id hinv (fun a ha => by
-      have := (RegOk.cons hreg).1 a ha; simp only [regInst] at this; simpa using this)
-      (by simp) (by simp)
+    have ho := operands_clear (fun x => x) hinv (op := .ret v)
+      (fun a ha => regUse_of_regInst ((RegOk.cons hreg).1 a ha)) (by simp) (by simp)
     simp only [topVals, List.forall_mem_cons, List.not_mem_nil, false_implies, implies_true,
       and_true] at ho
     simp only [execInst]
@@ -763,9 +793,7 @@ theorem execBody_flow : ∀ l env, InvEnv c.func env → RegOk c.func l → Ok e
     intro i rest env hop hr hne _ _
     obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
     simp only [execInst, hr, Bool.false_eq_true, ite_false]
-    split
-    · exact absurd ‹_› (hne _ _ _ ‹_› ‹_›)
-    · exact ok_stuck
+    exact ok_stuck
   case case17 =>
     intro i rest env p hop ih hinv hreg
     obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
@@ -774,8 +802,75 @@ theorem execBody_flow : ∀ l env, InvEnv c.func env → RegOk c.func l → Ok e
     refine ok_bind fun w => ?_
     split
     · exact ok_bind fun _ => ok_lift (rok_cellRead _ _)
-    · exact ok_liftMem (evalMem_cf _ _ _ (by simp [topVals]; exact fun _ _ => sorry))
-  all_goals sorry
+    · exact ok_liftMem (evalMem_cf _ _ _ rok_stuck)
+  case case18 =>
+    intro i rest env p v hop ih hinv hreg
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    simp only [execInst]
+    exact ok_bind fun _ => ih (hinv.set _ _ rfl) (RegOk.cons hreg).2
+  case case19 =>
+    intro i rest env name nr sp args hop e he _ _
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    simp only [execInst, he]; exact ok_throw
+  case case20 =>
+    intro i rest env name nr sp args hop hn ih hinv hreg
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    have ho := operands_clear (fun x => x) hinv (op := .call (.func name nr sp) args)
+      (fun a ha => regUse_of_regInst ((RegOk.cons hreg).1 a ha)) (by simp) (by simp)
+    simp only [execInst, hn]
+    refine ok_bind' (ok_lift (rok_mapM args.toList fun v hv =>
+      (ho v (List.mem_cons_of_mem _ hv)).2)) fun vs hvs => ?_
+    exact ok_bind' (ok_liftMem (hcf name vs hvs)) fun v hv => ih v (hinv.set _ _ hv) (RegOk.cons hreg).2
+  case case21 =>
+    intro i rest env n hop ih hinv hreg
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    simp only [execInst]; exact ih hinv (RegOk.cons hreg).2
+  case case22 =>
+    intro i rest env n v hop ih hinv hreg
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    simp only [execInst]; exact ih hinv (RegOk.cons hreg).2
+  case case23 =>
+    intro i rest env v eb hop ihr ihe hinv hreg
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    obtain ⟨h1, h2⟩ := RegOk.cons hreg
+    have ho := operands_clear (fun x => x) hinv (op := .«try» v eb)
+      (fun a ha => regUse_of_regInst (h1 a ha)) (by simp) (by simp)
+    simp only [regInst, Bool.and_eq_true] at h1
+    simp only [execInst]
+    refine ok_bind' (Q := (cellFree · = true)) (ok_lift ?_) fun w hw => ?_
+    · unfold errUnionOperand
+      split
+      · exact (ho v (by simp [topVals])).2
+      · exact rok_stuck
+    · split
+      · exact ihr _ (hinv.set _ _ hw) h2
+      · exact ihe hinv fun a ha => (h1 a ha).2
+      · exact ok_stuck
+  case case24 =>
+    intro i rest env k idx hop items hv _ _ _
+    simp [hview] at hv
+  case case25 =>
+    intro i rest env k idx hop hv ih hinv hreg
+    obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
+    have ho := operands_clear (fun x => x) hinv (op := .sliceElemVal (.inst k) idx)
+      (fun a ha => regUse_of_regInst ((RegOk.cons hreg).1 a ha)) (by simp) (by simp)
+    simp only [execInst, hv]
+    exact ok_bind' (ok_liftMem (evalMem_cf _ _ _ (evalPure_cf _ _ _ fun v hv => (ho v hv).2)))
+      fun v hv => ih v (hinv.set _ _ hv) (RegOk.cons hreg).2
+  case case26 =>
+    intro i rest env h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 h14 h15 h16 h17 h18 ih hinv hreg
+    obtain ⟨id, ty, op⟩ := i
+    have ho := operands_clear (fun x => x) hinv (op := op)
+      (fun a ha => regUse_of_regInst ((RegOk.cons hreg).1 a ha)) (fun p e => h12 p e)
+      (fun p v e => h13 p v e)
+    rw [execInst_default (fun index e => h1 index e) (fun b e => h2 b e) (fun b e => h3 b e)
+      (fun t v e => h4 t v e) (fun t e => h5 t e) (fun v e => h6 v e) (fun e => h7 e) (fun e => h8 e)
+      (fun v t el e => h9 v t el e) (fun v cs el e => h10 v cs el e) (fun e => h11 e)
+      (fun p e => h12 p e) (fun p v e => h13 p v e) (fun n r s a e => h14 n r s a e)
+      (fun n e => h15 n e) (fun n v e => h16 n v e) (fun v b e => h17 v b e)
+      (fun k idx e => h18 k idx e)]
+    exact ok_bind' (ok_liftMem (evalMem_cf _ _ _ (evalPure_cf _ _ _ fun v hv => (ho v hv).2)))
+      fun v hv => ih v (hinv.set _ _ hv) (RegOk.cons hreg).2
 
 end Flow
 
