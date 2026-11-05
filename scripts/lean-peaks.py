@@ -89,34 +89,24 @@ def read_table(workspace: Path) -> dict:
             and isinstance(v.get('peak_mib'), int) and v['peak_mib'] > 0}
 
 
-def known_peak_kib(store: Path, workspace: Path, module: str, sha: str | None) -> int | None:
-    """The measured peak of `module` with source `sha` (KiB), or None: unmeasured or stale."""
-    if sha is None:
-        return None
-    entry = read_store(store).get(module)
+def charge_peak_kib(store: Path, workspace: Path, module: str, sha: str | None) -> int | None:
+    """The peak (KiB) the Lean process of `module` with source `sha` is charged by (1.3 x): the
+    measurement of that source (this machine's, else the committed one), else that of an earlier
+    source (this machine's, else the committed row `table` keeps), else, for a module never
+    measured, the TYPICAL quantile (nearest rank) of the committed table's peaks. None for an
+    empty table: the declared bound. A guess is safe because the charge is the process's limit:
+    a module that outgrows it costs one retry at the declared bound."""
+    measured, committed = read_store(store), read_table(workspace)
+    entry, row = measured.get(module), committed.get(module)
+    entry_kib = max(entry['peaks_kib']) if entry else None
+    row_kib = row['peak_mib'] * 1024 if row else None
     if entry and entry['sha256'] == sha:
-        return max(entry['peaks_kib'])
-    row = read_table(workspace).get(module)
+        return entry_kib
     if row and row['sha256'] == sha:
-        return row['peak_mib'] * 1024
-    return None
-
-
-def prior_peak_kib(store: Path, workspace: Path, module: str) -> int | None:
-    """The measured peak of an earlier source of `module` (KiB): this machine's, else the
-    committed row's; None for a module never measured. A guess for its changed source, safe
-    because the charge is the process's limit: a module that grew costs one retry."""
-    entry = read_store(store).get(module)
-    if entry:
-        return max(entry['peaks_kib'])
-    row = read_table(workspace).get(module)
-    return row['peak_mib'] * 1024 if row else None
-
-
-def typical_peak_kib(workspace: Path) -> int | None:
-    """The TYPICAL quantile (nearest rank) of the committed table's peaks (KiB): the guess for a
-    module never measured, safe for the same reason as `prior_peak_kib`; None for an empty table."""
-    peaks = sorted(row['peak_mib'] for row in read_table(workspace).values())
+        return row_kib
+    if entry or row:
+        return entry_kib or row_kib
+    peaks = sorted(row['peak_mib'] for row in committed.values())
     return peaks[math.ceil(TYPICAL * len(peaks)) - 1] * 1024 if peaks else None
 
 
@@ -165,7 +155,7 @@ def sources(workspace: Path) -> dict:
 def table(store: Path, workspace: Path) -> dict:
     """The regenerated table: for each tracked module, this machine's measurement of its
     current source, else the committed one if its source is unchanged, else the latest
-    measurement of an earlier source (with that source's sha256: the prior `prior_peak_kib`
+    measurement of an earlier source (with that source's sha256: the prior `charge_peak_kib`
     guesses from until the module is measured again)."""
     measured, committed = read_store(store), read_table(workspace)
     modules = {}

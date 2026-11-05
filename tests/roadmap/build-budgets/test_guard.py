@@ -1585,23 +1585,21 @@ os._exit(0)
 
     def test_a_module_never_measured_is_charged_the_tables_typical_peak(self):
         # The committed table's 95th-percentile peak (nearest rank) is 800 MiB: below its largest
-        # row, above its median. Two modules without a row: one fits 1.3 x 800 MiB, one (1100 MiB)
-        # outgrows it and is run once more at PROCESS_MIB.
+        # row, above its median. Two modules without a row: one fits 1.3 x 800 MiB, one (1500 MiB
+        # of incompressible pages, held over three samples) outgrows it and runs again at PROCESS_MIB.
         toolchain = self.fake_toolchain()
         (toolchain / "bin" / "lean").write_text(
-            f"#!{sys.executable}\nimport sys, time\n"
-            "block = bytearray(int(open(sys.argv[1]).read()) << 20); time.sleep(2.5)\n")
+            f"#!{sys.executable}\nimport os, sys, time\n"
+            "block = os.urandom(1 << 20) * int(open(sys.argv[1]).read()); time.sleep(3)\n")
         rows = [100] * 18 + [800, 9000]
-        (self.root / "assurance").mkdir()
-        (self.root / "assurance" / "lean-peaks.json").write_text(json.dumps(
+        (self.root / peaks.TABLE).parent.mkdir()
+        (self.root / peaks.TABLE).write_text(json.dumps(
             {"modules": {f"M{i}.lean": {"peak_mib": mib, "sha256": "x"} for i, mib in enumerate(rows)}}))
-        self.assertEqual(peaks.typical_peak_kib(self.root), 800 * 1024)
         (self.root / "Small.lean").write_text("1")
-        (self.root / "Big.lean").write_text("1100")
+        (self.root / "Big.lean").write_text("1500")
         reports = self.root / "lean-reports"
         reports.mkdir()
         os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
-        os.environ.pop("AIR2LEAN_LEAN_UNMEASURED_MIB", None)  # not a seeding run
         source = ("import os, subprocess, sys; sys.exit(max(subprocess.run([os.environ['LEAN'], m]).returncode "
                   "for m in ('Small.lean', 'Big.lean')))")
         args, report_path, log = self.command(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
@@ -1636,15 +1634,14 @@ class LeanPeaksTests(unittest.TestCase):
         subprocess.run(["git", "add", "A.lean", "B.lean"], cwd=self.ws, check=True)
 
     def test_a_measurement_belongs_to_one_source(self):
-        self.assertIsNone(peaks.known_peak_kib(self.store, self.ws, "A.lean", "s1"))
+        self.assertIsNone(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"))  # no table
         for kib in (100, 300, 200, 50):
             peaks.record(self.store, "A.lean", "s1", kib)
-        self.assertEqual(peaks.known_peak_kib(self.store, self.ws, "A.lean", "s1"), 300)  # the last 3
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"), 300)  # the last 3
         peaks.record(self.store, "A.lean", "s1", 10)
-        self.assertEqual(peaks.known_peak_kib(self.store, self.ws, "A.lean", "s1"), 200)
-        self.assertIsNone(peaks.known_peak_kib(self.store, self.ws, "A.lean", "s2"))  # stale
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"), 200)
         peaks.record(self.store, "A.lean", "s2", 70)
-        self.assertEqual(peaks.read_store(self.store)["A.lean"]["peaks_kib"], [70])
+        self.assertEqual(peaks.read_store(self.store)["A.lean"]["peaks_kib"], [70])  # s1's are stale
 
     def test_the_table_is_regenerated_from_the_store_and_keeps_unchanged_rows(self):
         sha = lambda name: hashlib.sha256((self.ws / name).read_bytes()).hexdigest()
@@ -1656,25 +1653,22 @@ class LeanPeaksTests(unittest.TestCase):
         table = peaks.table(self.store, self.ws)
         self.assertEqual(table["modules"], {"A.lean": {"peak_mib": 3, "sha256": sha("A.lean")},
                                             "B.lean": {"peak_mib": 7, "sha256": sha("B.lean")}})
-        self.assertEqual(peaks.known_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
         # A changed source: not measured, but its earlier peak stays as the prior of its guess,
-        # this machine's before the committed row's; a module never measured has none.
+        # this machine's before the committed row's.
         (self.ws / "B.lean").write_text("changed")
-        self.assertIsNone(peaks.known_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")))
         self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], old["modules"]["B.lean"])
-        self.assertEqual(peaks.prior_peak_kib(self.store, self.ws, "B.lean"), 7 * 1024)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
         peaks.record(self.store, "B.lean", "earlier", 5 * 1024)
-        self.assertEqual(peaks.prior_peak_kib(self.store, self.ws, "B.lean"), 5 * 1024)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 5 * 1024)
         self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], {"peak_mib": 5, "sha256": "earlier"})
-        self.assertIsNone(peaks.prior_peak_kib(self.store, self.ws, "New.lean"))
 
     def test_a_module_never_measured_is_guessed_from_the_tables_95th_percentile(self):
-        self.assertIsNone(peaks.typical_peak_kib(self.ws))  # no table: the declared bound
         (self.ws / "assurance").mkdir()
         for count, rank in ((1, 0), (19, 18), (20, 18), (100, 94)):  # nearest rank, ceil(0.95 n)
             rows = {f"M{i}.lean": {"peak_mib": i + 1, "sha256": "x"} for i in range(count)}
             (self.ws / peaks.TABLE).write_text(json.dumps({"modules": rows}))
-            self.assertEqual(peaks.typical_peak_kib(self.ws), (rank + 1) * 1024)
+            self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "New.lean", "s"), (rank + 1) * 1024)
 
 
 if __name__ == "__main__":

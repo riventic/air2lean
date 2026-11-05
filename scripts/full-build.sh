@@ -35,8 +35,8 @@
 # admission of --rss-mib (default 4096 MiB: Lake, the scripts, the assurance extractor's build),
 # held for all phases. Every Lean elaboration of the Lake phases (root, diff, files and the
 # proof-fixture package) takes a sub-admission of its own while it runs, charged 1.3 x its
-# module's measured peak (scripts/lean-peaks.py) and stopped and run again at 11000 MiB if it
-# outgrows that; an unmeasured or changed module is charged 11000 MiB. So does each fixture-check
+# module's measured peak (scripts/lean-peaks.py: a guess for a changed or new module) and stopped
+# and run again at 11000 MiB if it outgrows that. So does each fixture-check
 # unit (its measured peak, scripts/fixture-checks.py). Lake runs up to --lean-threads Lean
 # processes at once (default min(8, cores)), each on one Lean thread; the slots they hold, not the
 # thread count, bound the memory, and other workloads are admitted beside them. A budget without

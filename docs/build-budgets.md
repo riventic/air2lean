@@ -175,7 +175,8 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   and the guard of a process is silent unless it fails (Lake keeps a process's output in its
   traces and replays it). Server, worker, `--run`, `--stdin` and `--deps` runs go straight to the
   real `lean`. Each process runs on one Lean thread, charged
-  1.3 x its module's measured peak (Measured peaks below for a module not measured). Lake runs up to
+  1.3 x its module's measured peak (a guess for a changed or new module: Measured peaks, below).
+  Lake runs up to
   `--lean-threads` of them at once (full-build.sh: min(8, cores)), and the slots they hold, not
   the thread count, bound their memory. The assurance tools refuse a `LEAN_SYSROOT` overlay, so
   only builds use it: the root, tests/diff and standalone-file phases and the proof-fixture
@@ -191,18 +192,18 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   keeps, with that source's SHA-256, until the module is measured again): a guess, safe because
   the charge is the process's limit, so a module that grew costs one retry at 11000 MiB. A module
   never measured is charged 1.3 x the table's 95th-percentile peak (nearest rank;
-  `typical_peak_kib`), computed from the committed table on each charge, not a constant (2000 MiB
+  `charge_peak_kib`), computed from the committed table on each charge, not a constant (2000 MiB
   over the 803 rows of 2026-11-05, so a 2600 MiB charge; 11000 MiB only for an empty table). The
-  same guess: about one new module in twenty outgrows it and costs one retry at 11000 MiB.
+  same kind of guess: a new module that outgrows it (about one in twenty, if new modules are like
+  the measured ones) costs one retry at 11000 MiB.
   Before, every changed or new module was charged 11000 MiB, and `write` dropped a changed
   module's row: after one main merge (2026-11-05) 49 rows went and 223 of 977 tracked modules had
   none, so the remote host's after-run met one 11-slot queue head after another, with lane jobs
   waiting beside them on a host 86% free; with rows kept, the 174 modules never measured still
   made such heads (an unmeasured cross-target tutorial file while two lane jobs waited, 83%
   free). A refresh is an ordinary PR after a build on the remote host. `lean-peaks.py top` lists
-  the largest. A seeding run (a cold build to measure every module) may set
-  `AIR2LEAN_LEAN_UNMEASURED_MIB` instead: a guess that is too low costs a retry at 11000 MiB. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard
-  report (full-build.sh: `<logs>/lean-processes`).
+  the largest. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard report (full-build.sh:
+  `<logs>/lean-processes`).
 - **Fixture units.** In an elastic admission each fixture-check unit is a part charged its
   measured peak (scripts/fixture-checks.py `schedule`; 11000 MiB unmeasured), with the units'
   guard's jobs and Lean threads.

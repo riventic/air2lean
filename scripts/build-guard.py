@@ -74,9 +74,8 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   wrong measurement costs a retry, never the host. Enclosing guards leave a running part's
   subtree out of their sums (its pid in `<lock>.d/leaves/`). With --lean-processes SYSROOT every
   Lean elaboration of the workload is such a part, charged 1.3 x its module's measured peak
-  (scripts/lean-peaks.py; a changed one its earlier peak, one never measured the table's 95th
-  percentile), through
-  a sysroot whose `bin/lean` runs it as `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
+  (scripts/lean-peaks.py; a guess for a changed or new module), through a sysroot whose
+  `bin/lean` runs it as `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
   goes back between them and to other workloads. Bounds: the bases of the admitted elastic
   workloads (`<lock>.d/elastic/`, under `<lock>.d/register`) leave PROCESS_MIB of the budget free,
   and a part takes its workload's lifeline (`<lock>.d/lifeline/<workload>`) only while none of
@@ -725,7 +724,12 @@ def history_charge(runs, declared_mib):
              if run.get("outcome") == "success" and isinstance(run.get("peak_mib"), (int, float))]
     if len(peaks) < 2:
         return declared_mib, "fewer than 2 recent successes"
-    return min(declared_mib, max(SLOT_MIB, math.ceil(CHARGE_MARGIN * max(peaks)))), None
+    return margin_charge(max(peaks), declared_mib), None
+
+
+def margin_charge(peak_mib, declared_mib):
+    """CHARGE_MARGIN x a measured peak: at least one slot, at most the declared bound."""
+    return min(declared_mib, max(SLOT_MIB, math.ceil(CHARGE_MARGIN * peak_mib)))
 
 
 def read_runs(handle):
@@ -1838,11 +1842,9 @@ def lean_processes_env(sysroot, lock):
 
 def lean_process(lean, args):
     """One Lean elaboration of a --lean-processes workload (its sysroot's `bin/lean`): a
-    sub-admission charged by the module's measured peak (scripts/lean-peaks.py: this machine's
-    measurements of the same source, else the committed table, else the peak of an earlier
-    source, else the table's 95th-percentile peak or, for a seeding run,
-    AIR2LEAN_LEAN_UNMEASURED_MIB; PROCESS_MIB for an empty table), stopped there and run again at
-    PROCESS_MIB if it outgrows it. One Lean thread, so the peaks are comparable. Its exact peak
+    sub-admission charged by the module's measured peak (scripts/lean-peaks.py `charge_peak_kib`:
+    a guess for a changed or new module), stopped there and run again at PROCESS_MIB if it
+    outgrows it. One Lean thread, so the peaks are comparable. Its exact peak
     (`peak_process_rss_kib`) is recorded for the next charge, its report written to
     AIR2LEAN_LEAN_REPORTS when set (scripts/full-build.sh: the build's logs). Outside an elastic
     admission (a sub-admission's own Lake) it is the toolchain's lean."""
@@ -1857,18 +1859,8 @@ def lean_process(lean, args):
     module = path.relative_to(workspace).as_posix() if path.is_relative_to(workspace) else str(path)
     sha = digest(path) if path.is_file() else None
     store = peaks.store_of(Path(grant["lock"]))
-    # A changed source is charged by its earlier source's peak, a module never measured by the
-    # table's typical one: a guess too low only costs a retry at PROCESS_MIB.
-    peak = peaks.known_peak_kib(store, workspace, module, sha) or peaks.prior_peak_kib(store, workspace, module)
-    seeding = os.environ.get("AIR2LEAN_LEAN_UNMEASURED_MIB")
-    if peak is None and seeding:  # a seeding run may guess otherwise, for the same reason
-        try:
-            charge = positive(seeding)
-        except (argparse.ArgumentTypeError, ValueError):
-            charge = PROCESS_MIB
-    else:
-        peak = peak or peaks.typical_peak_kib(workspace)
-        charge = PROCESS_MIB if peak is None else max(SLOT_MIB, math.ceil(CHARGE_MARGIN * peak / 1024))
+    peak = peaks.charge_peak_kib(store, workspace, module, sha)
+    charge = PROCESS_MIB if peak is None else margin_charge(peak / 1024, PROCESS_MIB)
     reports = os.environ.get("AIR2LEAN_LEAN_REPORTS")
     report_path = Path(reports) / ("%s.%d.json" % (module.replace("/", "__"), os.getpid())) if reports else None
     a = parse_args([*part_options(charge, grant["lock"], 1),
