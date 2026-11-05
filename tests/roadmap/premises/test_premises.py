@@ -1314,6 +1314,41 @@ def strip_comments_reference(text: str) -> str:
     return "".join(out)
 
 
+class ClosureRuleTests(unittest.TestCase):
+    """The committed closure rules over sample closure tokens (no repository scan)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rules = premises.load_config(ROOT / "assurance/premises.json")["rules"]
+
+    def premises_of(self, token):
+        via = {}
+        premises.apply_rules({"rules": self.rules}, via, [token], "closure")
+        return set(via)
+
+    def test_thr05_skips_the_futex_key_layer(self):
+        # The key layer (`Mem.Basic`: the key type and its address) is not the futex model: the
+        # modules that fall back to `Mem.Basic`'s tokens must not derive THR-05/STD-05.
+        for token in ["Zig.FutexKey", "Zig.instDecidableEqFutexKey", "Zig.futexAddr",
+                      "Zig.futexKeyOf", "Zig.futexKeyOf.match_1", "Zig.futexKeyOf_run",
+                      "Zig.FutexKey.ne_of_shared"]:
+            with self.subTest(token=token):
+                self.assertNotIn("THR-05", self.premises_of(token))
+
+    def test_thr05_keeps_the_futex_model(self):
+        # The exclusion is of whole key-layer names: a futex-model name that only starts with
+        # one of them keeps THR-05.
+        for token in ["Zig.Thread.futexWait", "Zig.Thread.futexWakePtr", "Zig.futexWaitC",
+                      "Zig.Conc.futexAddressWake", "Zig.Conc.FutexKeyedWait"]:
+            with self.subTest(token=token):
+                self.assertIn("THR-05", self.premises_of(token))
+
+    def test_os_futex_rows_are_osf(self):
+        found = self.premises_of("Zig.Os.futexWake")
+        self.assertIn("OSF-02", found)
+        self.assertNotIn("THR-05", found)
+
+
 class StripCommentsTests(unittest.TestCase):
     """The fast `strip_comments` equals the character-at-a-time definition on every tracked Lean
     file and on edge cases (nested and unclosed comments, delimiters at the ends, strings with
