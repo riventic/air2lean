@@ -1315,6 +1315,13 @@ def futexKeyOf (p : Ptr) (shared : Bool) : MemM FutexKey := do
   let some k := (← get).keyAt p shared | throw .illegal
   pure k
 
+/-- The futex key of the word at offset `o` of block `b` in the domain `shared`, as a total
+function of the memory: `Mem.keyAt` of `⟨some b, o⟩` where block `b` exists
+(`Mem.keyAt_wordKey`). A protocol's queue invariant names its word's waiters by this key; it
+reads only the block's address, so it stays while the block does (`Mem.wordKey_of_addr`). -/
+def Mem.wordKey (m : Mem) (b : BlockId) (o : Nat) (shared : Bool := false) : FutexKey :=
+  ⟨shared, futexAddr (((m.blocks[b]?).map (·.addr)).getD 0 + (o : Int))⟩
+
 /-- The pointer to address `n`: inside or one past the block whose address range covers `n`, at
 the matching offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A dead block still
 counts (its `addr` does not change on `free`), so the pointer this returns can still be a

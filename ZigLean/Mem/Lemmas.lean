@@ -199,6 +199,38 @@ theorem futexAddr_inj {a a' : Int} (h0 : 0 ≤ a) (h1 : a < 2 ^ 64) (h0' : 0 ≤
   rw [Int.emod_eq_of_lt h0 h1, Int.emod_eq_of_lt h0' h1'] at h
   omega
 
+/-- The total key of an existing block's word is its `Block.key`. -/
+theorem Mem.wordKey_of {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk)
+    (o : Nat) (sh : Bool) : m.wordKey b o sh = blk.key o sh := by
+  simp [Mem.wordKey, Block.key, h]
+
+/-- The key of a pointer into an existing block is its word's total key. -/
+theorem Mem.keyAt_wordKey {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]? = some blk)
+    (o : Nat) (sh : Bool) : m.keyAt ⟨some b, (o : Int)⟩ sh = some (m.wordKey b o sh) := by
+  rw [Mem.keyAt_block h, Mem.wordKey_of h, Block.key]
+
+/-- The key a futex wait queues (`Thread.futexWait`, `Block.key` of the accessed word) is the
+total key of the word. -/
+theorem Mem.wordKey_of_access {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} (h : m.access p n al = pure (b, blk, o)) (sh : Bool) :
+    blk.key o sh = m.wordKey b o sh := by
+  obtain ⟨-, hb, -⟩ := access_eq h
+  rw [Mem.wordKey_of hb]
+
+/-- The total key reads only the block's address. -/
+theorem Mem.wordKey_of_addr {m m' : Mem} {b : BlockId}
+    (h : (m'.blocks[b]?).map (·.addr) = (m.blocks[b]?).map (·.addr)) (o : Nat) (sh : Bool) :
+    m'.wordKey b o sh = m.wordKey b o sh := by
+  simp only [Mem.wordKey, h]
+
+theorem Mem.wordKey_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) (b : BlockId) (o : Nat)
+    (sh : Bool) : m'.wordKey b o sh = m.wordKey b o sh :=
+  Mem.wordKey_of_addr (by rw [h]) o sh
+
+/-- Keys in different domains differ (Linux: `FUT_OFF_MMSHARED`). -/
+theorem FutexKey.ne_of_shared {k k' : FutexKey} (h : k.shared ≠ k'.shared) : k ≠ k' :=
+  fun e => h (e ▸ rfl)
+
 /-- A successful access starts at or above its block's first live offset. -/
 theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
     (h : m.access p n a = pure (b, blk, o)) : blk.kind.mappedLo ≤ o := by
@@ -876,6 +908,16 @@ def Mem.write (m : Mem) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) 
 `SingleThread`. -/
 theorem singleThread_write {m : Mem} (h : m.SingleThread) (b : BlockId) (blk : Block) (o : Nat)
     (bs : Array Byte) : (m.write b blk o bs).SingleThread := h
+
+/-- A write keeps every block's address, so every futex key (`Mem.wordKey`). -/
+theorem Mem.wordKey_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) (b' : BlockId) (o' : Nat) (sh : Bool) :
+    (m.write b blk o bs).wordKey b' o' sh = m.wordKey b' o' sh := by
+  refine Mem.wordKey_of_addr ?_ o' sh
+  simp only [Mem.write, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  split
+  · subst b'; rw [hb]; simp [(Array.getElem?_eq_some_iff.mp hb).1]
+  · rfl
 
 /-- `.access` only looks at `blocks`, never at `current`/`clocks`/`threads`/`footprint`, so a
 race-free `recordAccess` (`Mem.recordAt`) never changes what a further access sees. -/
