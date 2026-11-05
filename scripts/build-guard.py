@@ -780,8 +780,9 @@ def backstop_mib():
 
 def held_entries(directory):
     """{name: JSON content} of the entries of a registry directory (tickets, queue heads, waiting,
-    overcommitted, elastic and leaf workloads), oldest first by name. Their guards hold their flocks (also against their own
-    later opens), so an entry nobody holds belongs to a dead guard: it is removed."""
+    overcommitted, elastic and leaf workloads), oldest first by name. Their guards hold their
+    flocks (also against their own later opens), so an entry nobody holds belongs to a dead guard:
+    it is removed."""
     try:
         names = sorted(name for name in os.listdir(directory) if not name.startswith("."))
     except FileNotFoundError:
@@ -814,9 +815,15 @@ def publish_entry(directory, name, content, handle_of):
     return handle
 
 
-def entry_name(*suffix):
-    """A registry entry's name: its arrival time (`held_entries`' order), its pid, then `suffix`."""
-    return "-".join(("%020d" % time.time_ns(), str(os.getpid()), *suffix))
+def entry_name(*suffix, at=None):
+    """A registry entry's name: its arrival time (`held_entries`' order; `at` ns instead), its
+    pid, then `suffix`."""
+    return "-".join(("%020d" % (time.time_ns() if at is None else at), str(os.getpid()), *suffix))
+
+
+def is_lifeline(name):
+    """Whether a ticket's name is a lifeline's (or its mirror's in `merge/`)."""
+    return name.endswith("-" + LEAF)
 
 
 def try_flock(handle, mode):
@@ -1022,7 +1029,7 @@ class Admission:
 
     def drain_tickets(self):
         """The merge and exclusive tickets (`<lock>.d/merge/` but a lifeline's mirror)."""
-        return [name for name in held_entries(self.tickets) if not name.endswith("-" + LEAF)]
+        return [name for name in held_entries(self.tickets) if not is_lifeline(name)]
 
     @property
     def ticket_dir(self):
@@ -1033,11 +1040,17 @@ class Admission:
         name = entry_name(self.priority)
         publish_entry(self.ticket_dir, name, {}, self.open)
         self.ticket = name
+        self.mirror_lifeline()
 
     def leave_queue(self):
         if self.ticket:
             (self.ticket_dir / self.ticket).unlink(missing_ok=True)
             self.ticket = None
+        self.mirror_lifeline()
+
+    def hold_queue(self, held):
+        """Record whether this guard holds the queue (as the head), and sync its mirror."""
+        self.holds_queue = held
         self.mirror_lifeline()
 
     def mirror_lifeline(self):
@@ -1048,7 +1061,7 @@ class Admission:
         those guards backfill beside its reservation again. Delete this once no such checkout runs."""
         wanted = self.priority == LEAF and self.ticket and not self.holds_queue
         if wanted and self.mirror is None:
-            name = "-".join(("%020d" % 0, str(os.getpid()), LEAF))
+            name = entry_name(LEAF, at=0)
             self.mirror = (name, publish_entry(self.tickets, name, {}, lambda path: path.open("a")))
         elif not wanted and self.mirror:
             name, handle = self.mirror
@@ -1070,26 +1083,14 @@ class Admission:
         lifeline leads the normal lane. So a lifeline waits for finitely many heads, each admitted
         in bounded time, and a large normal guard is not sent back by every later lifeline."""
         queued = self.queued_tickets()
-        if not queued or self.ticket:
-            return not queued or queued[0] == self.ticket
-        if not all(name.endswith("-" + LEAF) for name in queued):  # a drain ticket
-            return False
-        bases = self.elastic_bases()
-        return bool(self.waiting) and all(self.waiting[0] < name for name in queued) \
-            and bases is not None and self.weight + bases <= self.capacity
-
-    def take_queue(self, queue):
-        """Whether this guard now holds the queue, in its turn (`my_turn`). A ticket holder waits
-        for its turn without the queue; a normal guard probes the queue first (busy while a head
-        holds it, so no directory scan then) and gives it back if it is not its turn."""
-        if self.ticket:
-            return self.my_turn() and try_flock(queue, fcntl.LOCK_EX)
-        if not try_flock(queue, fcntl.LOCK_EX):
-            return False
-        if self.my_turn():
+        if not queued:
             return True
-        fcntl.flock(queue, fcntl.LOCK_UN)
-        return False
+        if self.ticket:
+            return queued[0] == self.ticket
+        if not all(map(is_lifeline, queued)):  # a drain ticket
+            return False
+        return bool(self.waiting) and all(self.waiting[0] < name for name in queued) \
+            and (bases := self.elastic_bases()) is not None and self.weight + bases <= self.capacity
 
     def reservation(self, waited):
         """Slots the waiting queue head keeps after `waited` seconds: a share of its weight that
@@ -1172,7 +1173,6 @@ class Admission:
         self.leave_queue()
         self.priority = LEAF
         self.join_queue()
-        self.mirror_lifeline()
         return True
 
     def publish_leaf(self):
@@ -1276,7 +1276,7 @@ class Admission:
             return
         queued = self.queued_tickets()
         exclusive = sum(name.endswith("-exclusive") for name in queued)
-        lifelines = sum(name.endswith("-" + LEAF) for name in queued)
+        lifelines = sum(map(is_lifeline, queued))
         print(f"build-guard: waiting for admission, {self.priority} priority, {self.weight} slot(s), "
               f"{len(queued) - exclusive - lifelines} merge, {exclusive} exclusive and {lifelines} "
               f"lifeline guard(s) queued: {self.a.cwd}", file=sys.stderr, flush=True)
@@ -1343,7 +1343,7 @@ class Admission:
             if self.priority != "normal" and not self.ticket:
                 self.join_queue()
             # The queue holder (the head) collects; a guard waiting behind it may backfill.
-            while not self.take_queue(queue):
+            while not (self.my_turn() and try_flock(queue, fcntl.LOCK_EX)):
                 if cancelled[0]:
                     return "cancelled"
                 if self.backfill(main, slots, register):
@@ -1351,8 +1351,7 @@ class Admission:
                 if refused := wait():
                     return refused
             head_since = time.monotonic()  # its reservation grows with its wait as the head
-            self.holds_queue = True
-            self.mirror_lifeline()  # older guards may backfill beside it again
+            self.hold_queue(True)  # older guards may backfill beside it again
             if not self.a.exclusive and (refused := take(main, fcntl.LOCK_SH)):
                 return refused
             # Only the queue holder collects. Short of its weight it keeps its reservation (growing
@@ -1400,8 +1399,7 @@ class Admission:
             self.clear_head()
             for handle in (main, queue, *slots):
                 fcntl.flock(handle, fcntl.LOCK_UN)
-            self.holds_queue = False
-            self.mirror_lifeline()
+            self.hold_queue(False)
 
     def release(self):
         self.leave_queue()

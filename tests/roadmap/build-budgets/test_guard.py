@@ -1447,8 +1447,7 @@ os._exit(0)
         self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
         merge.leave_queue()
         self.assertTrue(first.my_turn() and not exclusive.my_turn())
-        first.holds_queue = True  # its head: the mirror goes, older guards backfill beside it
-        first.mirror_lifeline()
+        first.hold_queue(True)  # its head: the mirror goes, older guards backfill beside it
         self.assertEqual(os.listdir(self.tickets), [exclusive.ticket])
         first.release()
         self.assertTrue(take(second))
