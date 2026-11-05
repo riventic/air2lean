@@ -12,9 +12,7 @@ runs execute the compiled model instead. They are bounded evidence that the mode
 complete (they are not fuel-exhausted vacuous runs); they do not replace the theorems. No
 `native_decide`, no axioms.
 
-One mailbox run is also computed by the kernel (`mailbox_completes`). It names the 0.16.0
-translation's functions and loops on the run's path, so it is here with the 0.16.0 runs and not
-in `Proofs` (built against every version's translation).
+One mailbox run is also computed by the kernel (`mailbox_completes`), with the 0.16.0 runs here.
 -/
 
 open Zig Sync

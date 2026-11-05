@@ -117,8 +117,8 @@ invariant: the client below calls the arena's entries (`vt`) from the memory rig
 (`mInit`), so an `FAllocSpec` invariant whose `own` held there would give the client a triple
 (`client_ct`, composed from the spec's `alloc` and `free` triples), while the kernel computes its
 run to `.illegal` (`client_illegal`). The kernel does not compute a `partial_fixpoint` (the arena's
-`alloc` group, `Zig.loop`); `unfold` first rewrites each one the run reaches by its defining
-equation, once per call or iteration. A run that reaches one not unfolded far enough gets stuck,
+`alloc` group, `Zig.loop`); the `zig_run` simp set first rewrites each one the run reaches by its
+defining equation, once per pass. A run that reaches one not unfolded far enough gets stuck,
 so `decide` fails rather than proving anything. -/
 
 /-- The stock arena's four entries. -/

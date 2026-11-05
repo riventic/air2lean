@@ -261,7 +261,7 @@ reverse/sum are done in Proofs/Lists/Linked (full-state). push/freeAll need an A
 Done (chore/l4-controls): the refutations are of the tutorial client's two properties (`NoIllegal`, `NoLeak`, `Proofs/Lists/Client.lean`), each by one run inside
 their premises (the translated `PageAllocator`, the program's start memory holding the precondition), evaluated by the kernel
 once `writeBytes` shared its unchanged list suffix (engine ledger #77); `tests/roadmap/alloc-translated/ListsPage.lean`, checked by its check.sh.
-The loop runs unfold `Zig.loop` by its defining equation (`Zig.loop.eq_1`) before the kernel runs them; no `unroll_solo`.
+The loop runs unfold the generated code and `Zig.loop` with the `zig_run` simp set before the kernel runs them; no `unroll_solo`.
 **Deletable after L4:** Sep/AddrReuse, Sep/Mmap, Sep/Try, Sep/TryAlias, Sep/Discard (prune Sep.lean; drop CI lines 1845, 1870).
 
 ### L5. Hand-written allocator models, D2 (M-L, 3 agents in parallel). Blocker D2.

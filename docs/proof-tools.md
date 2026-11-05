@@ -303,9 +303,10 @@ theorem mutexCounter_completes :
    kernel-run witnesses): every executable declaration of the generated code (`dispatch`, the
    functions, the loop bodies `f.loopN`, the members of a recursive group by `f.eq_def`), the
    ZigLean models that hold a loop (`Zig.osUnfairLockC`, the macOS lock) and `Zig.loop` by its
-   defining equation. A pass rewrites each loop once, so `iterate n` reaches every loop the run
-   enters and unrolls it; pick `n` at least the run's deepest nesting of calls and loop
-   iterations. A hand-written definition on the path (a test's `dispatchW`, a client over an
+   defining equation. A pass unfolds a plain definition as far as the term goes but rewrites each
+   loop and recursive call once, and the code a loop's rewrite exposes waits for the next pass;
+   pick `n` from the run's deepest nesting of loop iterations and recursive calls, checked on
+   the deepest translation. A hand-written definition on the path (a test's `dispatchW`, a client over an
    interface) is unfolded by name first (`delta`, `unfold`).
 2. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
    A wrong value, a run out of fuel, or a reached loop that is not unfolded or needs more
@@ -315,7 +316,8 @@ theorem mutexCounter_completes :
 builds of [theorem-inventory.md](theorem-inventory.md)). The run's path differs between them (a
 macOS `std.Thread.Mutex` enters `Zig.osUnfairLockC`'s loop on every lock, a Linux one only when
 contended), and std functions may have other names or not exist. The proof names no generated
-declaration: each translation tags its own, so one proof covers every translation.
+declaration: each translation tags its own, so one proof covers every translation whose run
+needs at most its `n` passes.
 
 ### `unroll_sched` (legacy-to-retire)
 
@@ -370,7 +372,7 @@ A concrete in-thread reading of a concurrent function, the run that `CTriple` sp
 passes rewrite each generated definition, `partial_fixpoint` group and `Zig.loop` by its
 defining equation, once per call or iteration the run makes, and `decide +kernel` computes the
 result. A run that reaches a definition not unfolded far enough gets stuck there and is
-rejected. Only the test's own definitions are named (`unfold client vt`).
+rejected. Only the hand-written client is named (`unfold client vt`).
 `AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s `alloc`, `alloc`,
 `free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete memory is
 decidable), as do the refuted clients of `AllocTranslated.ListsPage`.
