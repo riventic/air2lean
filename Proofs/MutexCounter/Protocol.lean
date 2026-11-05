@@ -132,7 +132,8 @@ theorem io_notL {e : FootprintEntry} (h : e.off = (L Lo).o) : ¬ IoR Lo e := fun
   have := Lo.ok; simp [L, FLock.prod] at h; omega
 
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (_ : (L Lo).ph (G t) ≠ .gone) (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
+    (_ : (L Lo).ph (G t) ≠ .gone) (_ : (L Lo).ph (G t) ≠ .holdsAway) (hu : U Lo G rX m)
+    (hs : (L Lo).Step t m m')
     (_ : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
     U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   obtain ⟨hsh, hio, hrest⟩ := hu

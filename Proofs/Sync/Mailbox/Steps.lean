@@ -121,14 +121,16 @@ theorem U_move {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g₀ g
     by_cases e : u = t
     · subst e; rw [upd_self, upd_self, hs₀, hs₁]
     · rw [upd_ne _ _ e, upd_ne _ _ e]
-  have hhold : ∀ u, (L K).ph (upd G t g₀ u) = .holds → (L K).ph (upd G t g₁ u) = .holds ∨
+  have hhold : ∀ u, ((L K).ph (upd G t g₀ u)).held = true →
+      ((L K).ph (upd G t g₁ u)).held = true ∨
       ∀ c, VClock.le c (m.clocks[u]!) = true → (L K).Before m c := fun u h => by
     by_cases e : u = t
     · subst e
       rw [upd_self] at h ⊢
+      have h' : (g₀.1.ph).held = true := h
       rcases hl with hl | ⟨hl, -⟩
-      · exact .inl (by show g₁.1.ph = _; rw [hl]; exact h)
-      · exact absurd (h.symm.trans hl) (by decide)
+      · exact .inl (by show (g₁.1.ph).held = _; rw [hl]; exact h')
+      · rw [hl] at h'; cases h'
     · rw [upd_ne _ _ e] at h ⊢; exact .inl h
   have hgone : ∀ u, (L K).ph (upd G t g₁ u) ≠ .gone → (L K).ph (upd G t g₀ u) ≠ .gone :=
     fun u h => by

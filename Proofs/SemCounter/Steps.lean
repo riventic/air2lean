@@ -38,7 +38,7 @@ theorem lt2 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) (hI : S.
 the threads. -/
 theorem hb_same {G G' : ThreadId → Gh} {m : Mem} (hph : ∀ u, (G' u).1.ph = (G u).1.ph)
     {c : VClock} (h : L.HB G m c) : L.HB G' m c :=
-  h.mono (fun u hu => .inl ((hph u).trans hu)) (fun _ => VClock.le_refl _) (fun _ h => h) rfl
+  h.mono (fun u hu => .inl (by show ((G' u).1.ph).held = true; rw [hph u]; exact hu)) (fun _ => VClock.le_refl _) (fun _ h => h) rfl
     (fun u hg => by
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)
@@ -48,7 +48,7 @@ every thread's lock place. -/
 theorem hb_fstep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
     (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hph : ∀ u, (G' u).1.ph = (G u).1.ph)
     {c : VClock} (h : L.HB G m c) : L.HB G' m' c :=
-  h.mono (fun u hu => .inl ((hph u).trans hu)) hs.clock (hL.before_fstep hs) hs.threads
+  h.mono (fun u hu => .inl (by show ((G' u).1.ph).held = true; rw [hph u]; exact hu)) hs.clock (hL.before_fstep hs) hs.threads
     (fun u hg => by
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)
@@ -86,7 +86,7 @@ theorem Lg.congr {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (hg : L.ph (G t) ≠ .gone) (hna : L.ph (G t) ≠ .away)
-    (hu : U G rX m) (hs : L.Step t m m')
+    (hz : L.ph (G t) ≠ .holdsAway) (hu : U G rX m) (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
     U (upd G t (L.set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t (L.set (G t) p h) u).2 = (G u).2 := fun u =>
@@ -95,11 +95,11 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     rcases hok.2 with e | e <;> (show (G t).2.sp.isPst = false; rw [e]; rfl)
   refine ⟨hu.um.lstep hs (funext fun u => congrArg X.ph (hX u)),
     hu.cinv.lstep hu.um.ws hu.um.we apS apE hok.1 hna (fun _ _ _ => rfl) hs,
-    hu.sinv.lstep hu.um.ws apS (fun _ _ _ => rfl) (fun _ _ _ => rfl) hst hg hs hrel,
+    hu.sinv.lstep hu.um.ws apS (fun _ _ _ => rfl) (fun _ _ _ => rfl) hst hg hz hs hrel,
     hu.lg.congr (fun u => congrArg X.ph (hX u)) (fun u => congrArg X.c (hX u))
       (hu.um.ws.lockStep hs apS).2 (hu.um.we.lockStep hs apE).2
       (fun u h' => by rw [hX u] at h' ⊢; exact hu.lg.wtx u h')
-      (hu.lg.ehb.lstep hu.um.we apE hg hs hrel)⟩
+      (hu.lg.ehb.lstep hu.um.we apE hg hz hs hrel)⟩
 
 /-- A stop keeps `U`: it reads no current thread. -/
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U G rX m) :
@@ -409,6 +409,17 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     by_cases e : u = t
     · subst e; show (G' u).1.ph = .holds; rw [hLt, hlq hu']; exact hu'
     · rw [hG u e]; exact hu'
+  have hheld : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true := fun u hu' => by
+    by_cases e : u = t
+    · subst e
+      have hu'' : ((G u).1.ph).held = true := hu'
+      show ((G' u).1.ph).held = true
+      rw [hLt]
+      rcases hq with ⟨rfl, -⟩ | ⟨h1, -⟩
+      · exact hu''
+      · rcases h1 with h1 | ⟨h1, -⟩ <;>
+          (have h1' : (G u).1.ph = _ := h1; rw [h1'] at hu''; cases hu'')
+    · rw [hG u e]; exact hu'
   have hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone := fun u hg => by
     by_cases e : u = t
     · subst e
@@ -419,7 +430,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · rcases h1 with h1 | ⟨h1, -⟩ <;> rw [h1] <;> decide
     · rwa [hG u e] at hg
   have hhb : ∀ c, L.HB G m c → L.HB G' m' c := fun _ hc =>
-    hc.mono (fun u hu' => .inl (hhold u hu')) hclk hbef hth hgone
+    hc.mono (fun u hu' => .inl (hheld u hu')) hclk hbef hth hgone
   -- the state's and the epoch's writes
   obtain ⟨hwS, hSh⟩ := hwd _ (.inl rfl) hu.um.ws
   obtain ⟨hwE, hEh⟩ := hwd _ (.inr rfl) hu.um.we
@@ -498,7 +509,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- ehb: the new epoch write is the holder's
     rcases hEw with e | ⟨⟨q₀, n₀, h₀, e⟩, -, x, hx, e'⟩
     · exact .inl e
-    · refine .inr ⟨x, e', FLock.HB.of_holder (t := t) (hhold t ?_) (by rw [hx]; exact VClock.le_refl _)⟩
+    · refine .inr ⟨x, e', FLock.HB.of_holder (t := t) (LPh.held_of_holds (hhold t ?_))
+      (by rw [hx]; exact VClock.le_refl _)⟩
       exact sig_holds hu.cinv hu.sinv (by rw [e]; rfl)
   · -- f0
     by_cases et : u = t
