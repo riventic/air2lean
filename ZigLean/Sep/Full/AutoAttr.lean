@@ -197,39 +197,61 @@ initialize registerBuiltinAttribute {
     fsymViewExt.add decl kind
 }
 
+/-- The parts of a loop body `B` that `@[fsym_inv]` registers: `B.inv`, `B.meas` and `B.post`. -/
+def loopInvParts : List String := ["inv", "meas", "post"]
+
+/-- The parameter of `B.inv` (and `B.meas`, `B.post`) that is the locals at the loop's entry. -/
+def loopEntryParam : Name := `s0
+
 open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
 `StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
 universe parameters whose parameters are explicit and named apart (`fsym` matches them by name with
-`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post) and whose
-value is an `FAssn` (a `Nat` for the measure). -/
+`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post), whose
+parameter of the locals at the loop's entry is named `s0` and whose value is an `FAssn` (a `Nat`
+for the measure). -/
 def checkLoopInv (decl : Name) : MetaM Unit := do
   let fail {α} (why : MessageData) : MetaM α :=
     throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
       a loop body `B`"
   let .str body last := decl | fail "not a name `B.inv`, `B.meas` or `B.post`"
-  unless last == "inv" || last == "meas" || last == "post" do
-    fail "its name does not end in `inv`, `meas` or `post`"
+  unless last ∈ loopInvParts do fail "its name does not end in `inv`, `meas` or `post`"
   let some (.defnInfo b) := (← getEnv).find? body
     | fail m!"`{body}` is not a definition (declared before its invariant)"
   let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
   unless d.levelParams.isEmpty do fail "a definition with universe parameters"
   -- the locals `σ` and the exit `ε` of the body's program
-  let (σ, ε) ← forallTelescope b.type fun _ ty => do
+  -- (`none` when they depend on the body's parameters: `fsym` checks the types where it applies
+  -- the loop rule)
+  let types? ← forallTelescope b.type fun ys ty => do
     let ty ← whnfR ty
     unless ty.isAppOfArity ``StateT 3 do fail m!"`{body}` is not a program over locals"
-    return (ty.getArg! 0, ty.getArg! 2)
+    let (σ, ε) := (ty.getArg! 0, ty.getArg! 2)
+    let dep (e : Expr) := e.hasAnyFVar fun v => ys.any (·.fvarId! == v)
+    return if dep σ || dep ε then none else some (σ, ε)
   forallTelescope d.type fun xs res => do
     let some s := xs.back? | fail "no parameter for the loop's locals"
+    if let some (σ, ε) := types? then
+      let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
+      unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
+    let locStruct := types?.any fun (σ, _) => σ.getAppFn.constName?.any (isStructure (← getEnv))
     let mut seen : NameSet := {}
-    for x in xs do
-      let l ← x.fvarId!.getDecl
+    for h : i in [0:xs.size] do
+      let l ← xs[i].fvarId!.getDecl
       unless l.binderInfo.isExplicit do fail m!"the parameter {l.userName} is not explicit"
       if l.userName.hasMacroScopes || seen.contains l.userName then
         fail m!"the parameter {l.userName} has no name of its own"
       seen := seen.insert l.userName
-    let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
-    unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
+      -- the locals at the entry: the parameter `s0` (`fsym` binds it by name), and no other of a
+      -- locals structure's type
+      if let some (σ, _) := types? then
+        if i + 1 < xs.size then
+          let isLoc ← isDefEq l.type σ
+          if l.userName == loopEntryParam && !isLoc then
+            fail m!"its parameter {loopEntryParam} is not of type {σ}"
+          if l.userName != loopEntryParam && isLoc && locStruct then
+            fail m!"its parameter {l.userName} of the locals' type is not named {loopEntryParam} \
+              (the locals at the loop's entry)"
     let want := if last == "meas" then mkConst ``Nat else mkConst `Zig.Full.FAssn
     unless ← isDefEq res want do fail m!"its value is not of type {want}"
 

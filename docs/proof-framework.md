@@ -84,8 +84,9 @@ postcondition, which neither an implication nor the model's own result alone sta
 | --- | --- | --- |
 | `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
 | `sep_normalize`, `sep_frame` | `Sep/Automation` (deleted, L6 D-b) | `fsym` (frame inference is the planner) |
-| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` | native `@[fsym]` rules (no lifting) |
-| `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
+| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` (`tame` deleted, L16) | native `@[fsym]` rules (no lifting) |
+| `conc_norm` | `Full/Conc` (`conc_norm` deleted, L16) | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
+| `unroll_solo` | `Full/Unroll` (module deleted, L16) | the partial fixpoints' defining equations (`unfold`), then `decide +kernel` |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
 | `vc_gen(?)`, `#vc_extract(_all)`, `@[vc_contract]` | `VC/Extract`, `VC/ContractAttr` (deleted, L15) | `fsym`: the VCs are its residual goals, `fsym.report` their origins; a `Result` contract through `FTotalTriple.result_spec` ([vcs.md](vcs.md)) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |

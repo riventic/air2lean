@@ -27,7 +27,8 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
   judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
-  the lock's code (`LockWord.Step`) by a thread with `ok`, neither `gone` nor `away`, keeps `U`
+  the lock's code (`LockWord.Step`) by a thread with `ok`, not `gone`, `away` or `holdsAway`, keeps
+  `U`
   with the same `rX`. The primitive `K` (`FPrim`) is data: a thread's place in its code
   (`FPlace`), its roles, what the rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
   and every step, and the primitive's place is a part of the ghost value independent of the
@@ -306,9 +307,17 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g
   /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
   before the newest message of the word. The thread runs the lock's code, so it has not ended
-  and is not inside another object's futex wait (`away`). -/
-  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away → U G rX m →
-    L.Step t m m' →
+  and is not away in another object's code, without the lock (`away`) or holding it
+  (`holdsAway`). A holder's nap and unnap (`holds` ↔ `holdsAway`, `LockWord.WInv.nap`/`unnap`)
+  are not such steps: no lock code runs and the word does not change. Their `U`-stability is a
+  hypothesis of the nap and unnap rules (`Fits.nap`/`Fits.unnap`, planned with the two-lock
+  product), discharged by each nesting protocol for its own `U`; a protocol that never nests
+  (empty `nest`) proves nothing for them (decision on #667). The client may use the lock's
+  invariant before the step (`L.Inv G rX m`), e.g. in a two-lock product the stepping lock's
+  `BlkOk`, which the other lock's invariant inside `U` needs. Every rule that applies `stable`
+  has it (ledger #lock-stable-inv). -/
+  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
+    L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     U (upd G t (L.set (G t) p h)) rX m'
   /-- A stop of any thread (`current := t`, a thread that exists) keeps `U`: a thread without `ok`
@@ -367,7 +376,8 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g)
     (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
-      U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+      L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
+      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
@@ -403,15 +413,15 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
 theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
-    (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
-      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+    (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → L.ph (G t) ≠ .holdsAway → L.Inv G rX m →
+      U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
     (hn : ∀ p, ¬ L.nest p := by exact fun _ h => h) :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ hg _ => stable G rX m m' t p h hg) atStop tick hn
+    (fun G rX m m' t p h _ hg _ hz => stable G rX m m' t p h hg hz) atStop tick hn
 
 /-! ## Basic facts -/
 
@@ -1658,21 +1668,21 @@ holding the lock happened before every later holder (`HB.le`), and the fact stay
 that keep the holders, the word's releases and the threads (`HB.mono`). -/
 
 variable (L) in
-/-- The clock `c` happened before the lock's holder, before the release clock of the newest
-message of the lock's word, or before every thread that has not ended. -/
+/-- The clock `c` happened before the lock's holder (awake or at another object's futex wait:
+`held`, so the fact survives `WInv.nap`), before the release clock of the newest message of the
+lock's word, or before every thread that has not ended. -/
 def HB (G : ThreadId → γ) (m : Mem) (c : VClock) : Prop :=
-  (∃ u, L.ph (G u) = .holds ∧ VClock.le c (m.clocks[u]!) = true) ∨ L.Before m c ∨
+  (∃ u, (L.ph (G u)).held = true ∧ VClock.le c (m.clocks[u]!) = true) ∨ L.Before m c ∨
     LockWord.LiveLe (L.pl G) m c
 
 /-- A clock that happened before the lock's holder `t` (with the word's invariant). -/
 theorem HB.le {G : ThreadId → γ} {m : Mem} {c : VClock} (hw : L.WInv (L.pl G) m)
-    (h : L.HB G m c) {t : ThreadId} (ht : L.ph (G t) = .holds) :
+    (h : L.HB G m c) {t : ThreadId} (ht : (L.ph (G t)).held = true) :
     VClock.le c (m.clocks[t]!) = true := by
   rcases h with ⟨u, hu, hle⟩ | ⟨i, l, hl, hle⟩ | hlive
-  · obtain rfl := hw.one u t (LPh.held_of_holds hu) (LPh.held_of_holds ht); exact hle
-  · exact VClock.le_trans hle ((hw.rel i l hl).2 t (LPh.held_of_holds ht))
-  · exact hlive t (hw.live t (by show L.ph (G t) ≠ .gone; rw [ht]; decide)).1
-      (by show L.ph (G t) ≠ .gone; rw [ht]; decide)
+  · obtain rfl := hw.one u t hu ht; exact hle
+  · exact VClock.le_trans hle ((hw.rel i l hl).2 t ht)
+  · exact hlive t (hw.live t (LPh.ne_gone_of_held ht)).1 (LPh.ne_gone_of_held ht)
 
 /-- The word's releases stay over a step that has the lock's word in its frame. -/
 theorem Inv.before_fstep {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
@@ -1691,7 +1701,7 @@ theorem Inv.before_fstep {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hL : L.I
 /-- **`HB` stays** over a step that keeps the holders (or releases with the release fact), grows
 the clocks, keeps the word's newest release and the threads that have not ended. -/
 theorem HB.mono {G G' : ThreadId → γ} {m m' : Mem} {c : VClock} (h : L.HB G m c)
-    (hhold : ∀ u, L.ph (G u) = .holds → L.ph (G' u) = .holds ∨
+    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true ∨
       ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c)
     (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hbef : ∀ c, L.Before m c → L.Before m' c) (ht : m'.threads = m.threads)
@@ -1706,21 +1716,23 @@ theorem HB.mono {G G' : ThreadId → γ} {m m' : Mem} {c : VClock} (h : L.HB G m
 
 /-- A clock that happened before thread `t`, which holds the lock. -/
 theorem HB.of_holder {G : ThreadId → γ} {m : Mem} {c : VClock} {t : ThreadId}
-    (ht : L.ph (G t) = .holds) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=
+    (ht : (L.ph (G t)).held = true) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=
   .inl ⟨t, ht, hle⟩
 
-/-- **A holder over a step of the lock's code** by `t` to any place `q` (`Fits.stable`): it still
-holds, or (at a release: `t` held the lock and `q` does not) its clock happened before the newest
-message of the word (`hrel`). The `hhold` of `HB.mono`. -/
+/-- **A holder over a step of the lock's code** by `t` (which runs the lock's code, so it is not
+at `holdsAway`) to any place `q` (`Fits.stable`): it still holds, or (at a release: `t` held the
+lock and `q` is not `holds`) its clock happened before the newest message of the word (`hrel`).
+The `hhold` of `HB.mono`. -/
 theorem lstep_hold {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {h : Res}
+    (hz : L.ph (G t) ≠ .holdsAway)
     (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) (u : ThreadId)
-    (hu : L.ph (G u) = .holds) : L.ph (upd G t (L.set (G t) q h) u) = .holds ∨
+    (hu : (L.ph (G u)).held = true) : (L.ph (upd G t (L.set (G t) q h) u)).held = true ∨
       ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c := by
   by_cases e : u = t
   · subst e
     by_cases hq : q = .holds
-    · exact .inl (by rw [upd_self, L.ph_set, hq])
-    · exact .inr fun c hc => L.before_le (hrel hu hq) hc
+    · exact .inl (by rw [upd_self, L.ph_set, hq]; rfl)
+    · exact .inr fun c hc => L.before_le (hrel (LPh.holds_of_held hu hz) hq) hc
   · exact .inl (by rw [upd_ne _ _ e]; exact hu)
 
 /-- **A thread that has not ended over a step of the lock's code** by `t` (not `gone`) to any
@@ -1735,10 +1747,10 @@ theorem lstep_live {G : ThreadId → γ} {t : ThreadId} {q : LPh} {h : Res}
 /-- **`HB` stays over a step of the lock's code** by `t` to any place `q` (`Fits.stable`):
 `lstep_hold`, `lstep_live`. -/
 theorem HB.lstep {G : ThreadId → γ} {m m' : Mem} {c : VClock} {t : ThreadId} {q : LPh} {h : Res}
-    (hc : L.HB G m c) (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
+    (hc : L.HB G m c) (hg : L.ph (G t) ≠ .gone) (hz : L.ph (G t) ≠ .holdsAway) (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
     L.HB (upd G t (L.set (G t) q h)) m' c :=
-  hc.mono (lstep_hold hrel) hs.clocks hs.before hs.threads (lstep_live hg)
+  hc.mono (lstep_hold hz hrel) hs.clocks hs.before hs.threads (lstep_live hg)
 
 end FLock
 

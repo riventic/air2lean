@@ -45,7 +45,8 @@ theorem cnt_mono {a b : Nat} (h : a ≤ b) : cnt a ≤ cnt b := by
   | refl => exact Nat.le_refl _
   | step _ ih => exact Nat.le_trans ih (Nat.le_add_left _ _)
 
-/-- Outer loop: `i` counts up to `n`; `*p = v + cnt i`; the steps run in the plain mode. -/
+/-- Outer loop: `i` counts up to `n`; `*p = v + cnt i`; the steps run in the plain mode. Hand-written
+until the generator covers counter-dependent sums (ledger #arith-atom-congruence). -/
 def outerI (p : Ptr) (n : BitVec 32) (v : Nat) (s : pairsLocals) : FAssn :=
   ⟪s.i.toNat ≤ n.toNat ∧ v + cnt n.toNat < 2 ^ 64⟫ ⋆ (acc p (v + cnt s.i.toNat) ⋆ plain)
 

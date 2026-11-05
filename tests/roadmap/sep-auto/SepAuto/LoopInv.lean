@@ -92,18 +92,53 @@ theorem fill_thread (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 
   unfold fill
   fsym
 
-/-- The same body under another name … -/
-def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := do
+/-- `while (i > 0) : (i -= 1) { *p += 1; }` -/
+def drain.loop (p : Ptr) : MM Locals Exit := do
   let i ← pure ((← get).i)
-  if Zig.lt false i n then (do
+  if Zig.gt false i (0 : BitVec 32) then (do
     let v ← Zig.load (BitVec 64) 8 p
     let v' ← Zig.add false v (1 : BitVec 64)
     Zig.store (α := BitVec 64) 8 p v'
-    let i' ← Zig.add false ((← get).i) (1 : BitVec 32)
+    let i' ← Zig.sub false ((← get).i) (1 : BitVec 32)
     modify (fun s => { s with i := i' })
     pure .rep)
   else (do
     pure .brk)
+
+/-- The invariant from the locals `s0` at the entry: `*p` went up by the iterations so far. -/
+@[fsym_inv] def drain.loop.inv (p : Ptr) (s0 : Locals) (v0 : BitVec 64) (s : Locals) : FAssn :=
+  ⟪s.i.toNat ≤ s0.i.toNat ∧ v0.toNat + s0.i.toNat < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)⟫ ⋆ up (pts p 8 v))
+
+@[fsym_inv] def drain.loop.meas (s : Locals) : Nat :=
+  s.i.toNat
+
+@[fsym_inv] def drain.loop.post (p : Ptr) (s0 : Locals) (v0 : BitVec 64) (r : Exit × Locals) :
+    FAssn :=
+  ⟪r.1 = .brk⟫ ⋆ (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + s0.i.toNat⟫ ⋆ up (pts p 8 v))
+
+def drain (p : Ptr) (n : BitVec 32) : MemM Unit := do
+  let e ← ((do
+    modify (fun s => { s with i := n })
+    match ← ((do
+      Zig.loop (drain.loop p) again) : MM Locals Exit) with
+    | .brk => (do
+      pure .ret)
+    | e => pure e) : MM Locals Exit).run' (default : Locals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+/-- **An entry fact that only the whole plan determines**: the witness of `*p` at the entry is
+fixed by the cell, after the planner has kept the fact `v = v + (n - n)`; it is proved then. -/
+theorem drain_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + n.toNat < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 v)) (drain p n)
+      (fun _ => FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + n.toNat⟫ ⋆ up (pts p 8 w)) := by
+  unfold drain
+  fsym
+
+/-- The same body under another name … -/
+def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := fill.loop p n
 
 /-- … whose registered invariant is wrong: it holds at the entry, but the step does not keep it
 (`*p` goes up by 1 per iteration, not by 2). -/
@@ -214,5 +249,14 @@ error: @[fsym_inv] SepAuto.LoopInv.early.loop.post: its last parameter is not of
 -/
 #guard_msgs in
 @[fsym_inv] def early.loop.post (s : Locals) : FAssn := emp
+
+/-- (`fsym` binds the locals at the loop's entry by the name `s0`.) -/
+def misnamed.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := fill.loop p n
+
+set_option linter.unusedVariables false in
+/-- error: @[fsym_inv] SepAuto.LoopInv.misnamed.loop.inv: its parameter init of the locals' type is not named s0 (the locals at the loop's entry); expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B` -/
+#guard_msgs in
+@[fsym_inv] def misnamed.loop.inv (p : Ptr) (n : BitVec 32) (init : Locals) (s : Locals) : FAssn :=
+  emp
 
 end SepAuto.LoopInv

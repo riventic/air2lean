@@ -3,7 +3,7 @@ import ZigLean.Os.Mmap
 import ZigLean.Mem.Null
 
 /-!
-# More `Tame` programs, and the `tame` tactic
+# More `Tame` programs
 
 `Tame c` (`ZigLean/Sep/Full/Triple.lean`): `c` keeps the atomic layout and every block's address,
 and keeps live blocks apart (`LDMono`): the facts of a run that a rule proved on `Holds` needs.
@@ -12,9 +12,6 @@ This file adds the control flow of normalized generated code (`throw`, `if`, `ma
 `Os.munmap` and `Os.mremap` keep every address and keep live blocks apart (`munmap_mono`,
 `mremap_mono`; the full-state OS mapping rules read `LDMono` from them) but are not `Tame`:
 ending bytes retires the atomic locations over them (`Mem.retire`).
-
-`tame` proves `Tame c` for a `MemM` program built from these, after the generated function is
-normalized to its `MemM` program (`fsym_norm`, with the lemmas of `ZigLean/Sep/AllocSpec/Norm.lean`).
 -/
 
 namespace Zig
@@ -369,47 +366,6 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
       have := le_alignUp len.toNat os.pageSize
       omega
 end Tame
-
-/-- `Tame` goals of normalized generated code. Callees are taken from the hypotheses
-(`have := …` the callee's `Tame` lemma first). -/
-macro "tame" : tactic => `(tactic| set_option maxRecDepth 8192 in repeat' (first
-  | (guard_target = ∀ _, _; intro)
-  | with_reducible exact Tame.pure' _
-  | with_reducible exact Tame.throw _
-  | with_reducible exact Tame.lift _
-  | with_reducible exact Tame.liftM _
-  | with_reducible exact Tame.get
-  | with_reducible exact Tame.load _ _ _
-  | with_reducible exact Tame.store _ _ _
-  | with_reducible exact Tame.loadBytes _ _ _ _
-  | with_reducible exact Tame.storeBytes _ _ _ _
-  | with_reducible exact Tame.alloc _ _ _ (by decide)
-  | with_reducible exact Tame.free _
-  | with_reducible exact Tame.ptrAddr _
-  | with_reducible exact Tame.ptrFromAddr _
-  | with_reducible exact Tame.recordAccess _ _ _ _
-  | with_reducible exact Tame.returnAddress
-  | with_reducible exact Tame.ptrLe _ _
-  | with_reducible exact Tame.ptrEqAddr _ _
-  | with_reducible exact Tame.checkAlign _ _
-  | with_reducible exact Tame.checkSliceEnd _ _ _ _
-  | with_reducible exact Tame.checkIndex _ _
-  | with_reducible exact Tame.checkSentinelIndex _ _
-  | with_reducible exact Tame.memcpy _ _ _ _ _ _ _
-  | with_reducible exact Tame.ptrProject _ _
-  | with_reducible exact Tame.memset _ _ _ _
-  | with_reducible exact Tame.memmove _ _ _ _ _ _
-  | with_reducible exact Tame.arbitraryWord
-  | with_reducible exact Tame.mmap _ _ _ _ _ _ _
-  | with_reducible apply_assumption
-  | with_reducible apply Tame.map
-  | with_reducible apply Tame.ite
-  | with_reducible apply Tame.elim
-  | with_reducible apply Tame.bind
-  | split
-  | exact Tame.memset _ _ _ _
-  | exact Tame.memmove _ _ _ _ _ _))
-
 
 end Full
 end Zig
