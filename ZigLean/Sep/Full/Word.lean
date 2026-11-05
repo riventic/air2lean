@@ -88,11 +88,11 @@ abbrev cellsR (m : Mem) : Res := cellsAt W.In m
 /-- The lock's word and `W` do not overlap. -/
 def ApartL (L : LockWord) : Prop := L.b ≠ W.b ∨ L.o + 4 ≤ W.o ∨ W.o + nb ≤ L.o
 
-variable {W}
+variable {W} {A : ThreadId → Prop}
 
 /-- A typed shared word's invariant gives actual numeric alignment, for every supported
 word width rather than a particular event or condition implementation. -/
-theorem Ok.ptrAddr_aligned {m : Mem} (h : W.Ok m) :
+theorem Ok.ptrAddr_aligned {m : Mem} (h : W.Ok m A) :
     ∃ a, (Zig.ptrAddr W.ptr).run m = pure (a, m) ∧ a % (nb : Int) = 0 := by
   obtain ⟨blk, hb, -, -, ha, -, -⟩ := h.blk
   exact Full.ptrAddr_aligned hb ha
@@ -125,7 +125,7 @@ theorem keys_toList (m : Mem) : (keys m).toList = shapes m := by
   simp [keys, shapes, ALoc.shape]
 
 /-- The bytes of the word are live in a memory where it is `Ok`. -/
-theorem Ok.cellIn {m : Mem} (hw : W.Ok m) {l : Zig.Loc} (hl : W.In l) : m.heap l ≠ none := by
+theorem Ok.cellIn {m : Mem} (hw : W.Ok m A) {l : Zig.Loc} (hl : W.In l) : m.heap l ≠ none := by
   obtain ⟨b, x⟩ := l
   obtain ⟨h1, h2, h3⟩ := hl
   simp only at h1 h2 h3; subst h1
@@ -158,10 +158,10 @@ theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
 
 /-- A native step whose frame contains the word preserves its validity when
 the word's heap cells agree up to normalization. -/
-theorem Ok.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
+theorem Ok.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m A)
     (hs : FStepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none)
     (hcells : ∀ l, W.In l →
-      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) : W.Ok m' := by
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) : W.Ok m' A := by
   have hsz0 := W.sz_pos
   have hkeys : ∀ x, W.o ≤ x → x < W.o + nb →
       (m'.heap (W.b, x)).map cellKey = (m.heap (W.b, x)).map cellKey := by
@@ -191,8 +191,8 @@ theorem Ok.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
     · rcases hw.wfp e₀ he₀ (hits_narrows hn hh) with ⟨ha, u, hu, hle⟩ | ha
       · exact .inl ⟨by rw [hn.2.2.1]; exact ha, u, by rw [hs.threads]; exact hu,
           VClock.le_trans (VClock.le_trans hn.clock hle) (hs.clock u)⟩
-      · exact .inr fun u hu =>
-          VClock.le_trans (VClock.le_trans hn.clock (ha u (hs.threads ▸ hu))) (hs.clock u)
+      · exact .inr fun u hu hA =>
+          VClock.le_trans (VClock.le_trans hn.clock (ha u (hs.threads ▸ hu) hA)) (hs.clock u)
     · exact absurd (touches_of hh fun x h1 h2 => hwF (W.b, x) ⟨rfl, h1, h2⟩) hnt
   · obtain ⟨v, hv⟩ := hw.val
     exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
@@ -201,7 +201,7 @@ theorem Ok.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
 
 /-- An atomic-location map framed by a valid word preserves its complete history
 when its normalized cells agree, including the initial plain singleton history. -/
-theorem hist_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (hw : W.Ok m)
+theorem hist_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (hw : W.Ok m A)
     (ha : AMap hF m m' σ) (hwF : ∀ l, W.In l → hF l ≠ none)
     (hcells : ∀ l, W.In l →
       (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
@@ -227,7 +227,7 @@ theorem hist_amap {m m' : Mem} {hF : Heap} {σ : Nat → Option Nat} (hw : W.Ok 
 
 /-- A native framed step preserves the word's exact history, including the
 plain singleton history before an atomic location exists. -/
-theorem hist_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
+theorem hist_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m A)
     (hs : FStepIn hF m m') (hwF : ∀ l, W.In l → hF l ≠ none)
     (hcells : ∀ l, W.In l →
       (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
@@ -261,7 +261,7 @@ open FAssn Conc Proto
 
 namespace FLock
 
-variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb}
+variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 /-- A rest with the same bytes up to `Cell.norm` and the same knowledge and ghost state. -/
 theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G rX m)
@@ -311,7 +311,7 @@ theorem Inv.cellsN {G : ThreadId → γ} {rY : Res} {m₀ m : Mem}
 resources. The lock's framed location may move to its mapped index. -/
 theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     (hi : L.Inv G (rsum (W.cellsR m) rY) m) (hWY : ∀ l, W.In l → rY.heap l = none)
-    (hw : W.Ok m) (hr : RestStep W.In m m')
+    (hw : W.Ok m A) (hr : RestStep W.In m m')
     (hs : ∀ hF, (∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) → FStepIn hF m m')
     (hap : W.ApartL L.toLockWord) : L.Inv G (rsum (W.cellsR m') rY) m' := by
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hr.threads
@@ -439,7 +439,7 @@ theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi 
 protocol's rest, apart from the lock's word). If it sleeps, the lock's invariant holds with `t` in
 the queue; else `t` goes to `out`. -/
 theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
-    {e : BitVec 32} {b : Bool} (hi : L.Inv G rX m) (hph : L.ph (G t) = .away) (hW : W.Ok m)
+    {e : BitVec 32} {b : Bool} (hi : L.Inv G rX m) (hph : L.ph (G t) = .away) (hW : W.Ok m A)
     (hap : W.ApartL L.toLockWord) (hX : ∀ l, W.In l → rX.heap l ≠ none)
     (hq : m.waiters.any (·.1 == t) = false)
     (h : ((Thread.futexWait W.ptr e).run { m with current := t }).run = some (.ok (b, m'))) :
@@ -581,7 +581,7 @@ theorem get_push_lt {h : Array Entry} {x : Entry} {k : Nat} (hk : k < h.size) :
 theorem get_push_eq {h : Array Entry} {x : Entry} : (h.push x)[h.size]! = x := by
   rw [getElem!_pos _ _ (by simp)]; simp
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 variable (W) in
 /-- Thread `u`'s floor at the word (module doc): the position of the message of the word's
@@ -724,7 +724,7 @@ theorem ownPos_lt {m : Mem} {i : Nat} {l : ALoc} (hl : W.Loc m i l)
 
 /-- Actual preparation at a valid word either keeps its location or creates its singleton
 history. Its shape and floors do not require fresh ids; freshness, when present, is preserved. -/
-theorem prepare {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem prepare {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
     ∃ l, W.Loc m' li l ∧ l.len = nb ∧ 0 < l.msgs.size ∧ l.Chain ∧ (W.Fresh m → W.Fresh m') ∧
@@ -770,7 +770,7 @@ theorem prepare {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
       exact this.trans (hold.symm.trans (hpos u))
 
 /-- Preparation preserves every floor and freshness without an operation-transport judgment. -/
-theorem prepare_seen {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem prepare_seen {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     (hf : W.Fresh m) (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
     ∃ l, W.Loc m' li l ∧ l.len = nb ∧ 0 < l.msgs.size ∧ l.Chain ∧ W.Fresh m' ∧
@@ -791,7 +791,7 @@ theorem loc_notIn {m : Mem} {i : Nat} {l : ALoc} {hF : Heap} (hl : W.Loc m i l)
 
 /-- The actual preparation carries the existing atomic-location map. Recording the access
 does not change atomic locations or views, so it composes with the actual `locIdx` map. -/
-theorem prepare_amap {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
+theorem prepare_amap {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : W.Ok m A)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
@@ -803,7 +803,7 @@ theorem prepare_amap {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : 
 
 /-- Recording an access at the valid word is a native full-state step of every disjoint frame.
 Its existing non-constant block discharges the recorded access's constant-write condition. -/
-theorem record_fstep {m : Mem} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
+theorem record_fstep {m : Mem} {k : AccessKind} {hF : Heap} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) :
     FStepIn hF m (m.recordAt W.b W.o nb k) := by
@@ -816,7 +816,7 @@ theorem record_fstep {m : Mem} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
   exact FStepIn.recordAt_of hc hoff (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => hnot)
 
 /-- Actual preparation composes the native recorded-access and location-index steps. -/
-theorem prepare_fstep {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : W.Ok m)
+theorem prepare_fstep {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
@@ -839,7 +839,7 @@ theorem record_rest_of {m : Mem} {k : AccessKind} (hc : m.current < m.clocks.siz
   · exact .inr ⟨fun _ h1 h2 => ⟨rfl, h1, h2⟩, hb⟩
 
 /-- The actual recorded access at a valid word preserves its resource rest. -/
-theorem record_rest {m : Mem} {k : AccessKind} (hw : W.Ok m)
+theorem record_rest {m : Mem} {k : AccessKind} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size) : RestStep W.In m (m.recordAt W.b W.o nb k) := by
   obtain ⟨blk, hb, _, _, _, hk, _⟩ := hw.blk
   refine record_rest_of hc (Array.getElem?_eq_some_iff.mp hb).1 (fun _ => ?_)
@@ -850,7 +850,7 @@ theorem record_rest {m : Mem} {k : AccessKind} (hw : W.Ok m)
 
 /-- Actual preparation keeps the resource rest. A fresh location is appended only at the
 word; a previously existing location and its complete record stay unchanged. -/
-theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size) (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m₁))) :
     RestStep W.In m m₁ := by
@@ -904,11 +904,11 @@ theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
 
 /-- Validity and history under unchanged memory-model data and growing clocks. This proves
 the word's fields directly rather than constructing a legacy preservation summary. -/
-theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
+theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
     (ht : m'.threads = m.threads)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
-    W.Ok m' ∧ W.hist m' = W.hist m := by
+    W.Ok m' A ∧ W.hist m' = W.hist m := by
   have hl : ∀ i l, W.Loc m' i l ↔ W.Loc m i l := by
     intro i l; unfold Loc; rw [ha]
   refine ⟨⟨by rw [hb]; exact hw.blk, fun l h hb' h1 h2 =>
@@ -919,7 +919,7 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
   · rw [hf] at he
     rcases hw.wfp e he hh with ⟨hk, hle⟩ | hle
     · exact .inl ⟨hk, Conc.someLe_mono ht (fun u _ => hcl u) hle⟩
-    · exact .inr (Conc.allLe_mono ht (fun u _ => hcl u) hle)
+    · exact .inr (Conc.allLeOn_mono ht (fun u _ => hcl u) hle)
   · obtain ⟨v, hv⟩ := hw.val
     refine ⟨v, ?_⟩
     unfold Holds at hv ⊢
@@ -929,9 +929,9 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m) (hb : m'.blocks = m.blocks)
 
 /-- Recording an access apart from the word preserves its validity and history.
 The footprint and clocks are checked directly, for every access kind and word width. -/
-theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : W.Ok m A)
     (hnw : b ≠ W.b ∨ o + len ≤ W.o ∨ W.o + nb ≤ o) :
-    W.Ok (m.recordAt b o len k) ∧ W.hist (m.recordAt b o len k) = W.hist m := by
+    W.Ok (m.recordAt b o len k) A ∧ W.hist (m.recordAt b o len k) = W.hist m := by
   have hfp : ∀ e ∈ (m.recordAt b o len k).footprint,
       e ∈ m.footprint ∨ ¬ W.Hits e := by
     intro e he
@@ -952,17 +952,19 @@ theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : 
     · rcases hw.wfp e he hh with ⟨hk, hs⟩ | ha
       · exact .inl ⟨hk, Conc.someLe_mono (m := m) (m' := m.recordAt b o len k)
           rfl (fun u _ => hcl u) hs⟩
-      · exact .inr (Conc.allLe_mono (m := m) (m' := m.recordAt b o len k)
+      · exact .inr (Conc.allLeOn_mono (m := m) (m' := m.recordAt b o len k)
           rfl (fun u _ => hcl u) ha)
     · exact absurd hh hn
   · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
 
 /-- A fork preserves every word's validity and history. The new thread's clock
-inherits its parent's bound; no thread-preservation summary is required. -/
+inherits its parent's bound, so a new thread in the live set has a parent in it (`hA`; every
+thread for the default live set); no thread-preservation summary is required. -/
 theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
-    (hw : W.Ok m) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
-    W.Ok m' ∧ W.hist m' = W.hist m := by
+    (hw : W.Ok m A) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
+    (hA : A m.threads.size → A t := by exact fun _ => trivial) :
+    W.Ok m' A ∧ W.hist m' = W.hist m := by
   rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨rfl, rfl⟩ := hf
@@ -974,19 +976,19 @@ theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
   · exact .inl ⟨ha, u, by simpa only [Array.size_push] using Nat.lt_succ_of_lt hu,
       VClock.le_trans hle (hcl u (by rw [hcs]; exact hu))⟩
   · refine .inr ?_
-    intro u hu
+    intro u hu hu₁
     simp only [Array.size_push] at hu
     by_cases hu' : u < m.threads.size
-    · exact VClock.le_trans (hall u hu') (hcl u (by rw [hcs]; exact hu'))
+    · exact VClock.le_trans (hall u hu' hu₁) (hcl u (by rw [hcs]; exact hu'))
     · have heq : u = m.threads.size := by omega
       subst u
       rw [← hcs]
-      exact VClock.le_trans (hall t ht) hcn
+      exact VClock.le_trans (hall t ht (hA hu₁)) hcn
 
 /-- A lock step preserves the validity and exact history of any apart word. The
 proof uses its native array effect and frame facts, without a preservation packet. -/
-theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
-    (hs : L.Step t m m') (hap : W.ApartL L) : W.Ok m' ∧ W.hist m' = W.hist m := by
+theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m A)
+    (hs : L.Step t m m') (hap : W.ApartL L) : W.Ok m' A ∧ W.hist m' = W.hist m := by
   have hnot : ∀ l, W.In l → ¬ L.In l := by
     rintro ⟨b, x⟩ ⟨hb, h1, h2⟩ ⟨hb', h3, h4⟩
     rcases hap with h | h | h
@@ -1010,7 +1012,7 @@ theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
       · exact h hb
       · omega
       · omega
-  have hw' : W.Ok m' := by
+  have hw' : W.Ok m' A := by
     refine ⟨hb', fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun e he hh => ?_, ?_,
       fun i l hl => ?_⟩
     · rcases hs.atomic_mem hl with hold | hshape
@@ -1029,7 +1031,7 @@ theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
     · by_cases hold : e ∈ m.footprint
       · rcases hw.wfp e hold hh with ⟨hk, hle⟩ | hle
         · exact .inl ⟨hk, hs.someLe hle⟩
-        · exact .inr (hs.allLe hle)
+        · exact .inr (allLeOn_mono hs.threads (fun u _ => hs.clocks u) hle)
       · exact absurd hh (hfp e he hold)
     · obtain ⟨v, hv⟩ := hw.val
       exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
@@ -1045,7 +1047,7 @@ theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
       · omega
     simp [FHeap.erase, Word.cellsR, cellsAt_none hn]
   obtain ⟨σ, ha⟩ := hs.atomics (W.cellsR m).heap.erase hoff
-  have hw₀ : W.Ok { m with current := t } :=
+  have hw₀ : W.Ok { m with current := t } A :=
     (hw.fields_native (m' := { m with current := t }) rfl rfl rfl rfl
       (fun _ => VClock.le_refl _)).1
   have hh := hist_amap (m := { m with current := t }) (m' := { m' with current := t })
@@ -1059,14 +1061,14 @@ theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
 /-- A permitted load of an actual message preserves validity and gives the original reader's
 floor and acquire facts. The preparation is the existing native relation. -/
 theorem Ok.read_native {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder}
-    (hw₁ : W.Ok m₁) (hl : W.Loc m₁ li l) (hc : m.current = t)
+    (hw₁ : W.Ok m₁ A) (hl : W.Loc m₁ li l) (hc : m.current = t)
     (hs : FStepIn (fun _ => none) m m₁) (hct : t < m₁.clocks.size)
     (hlt : pos < l.msgs.size) (hfl : floorPos m₁ li ≤ pos) :
     Floor (W.hist m₁) (m.clocks[t]!) pos ∧
       (ord.isAcq = true → VClock.le (W.hist m₁)[pos]!.relClock
         ((loadM m₁ li ord (l.msgs[pos]!)).clocks[t]!) = true) ∧
       W.hist (loadM m₁ li ord (l.msgs[pos]!)) = W.hist m₁ ∧
-      W.Ok (loadM m₁ li ord (l.msgs[pos]!)) := by
+      W.Ok (loadM m₁ li ord (l.msgs[pos]!)) A := by
   have hl0 := (loc_get hl).2.2
   have hc₁ : m₁.current = t := hs.current.trans hc
   have hcs₁ : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
@@ -1103,12 +1105,12 @@ theorem Ok.read_native {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicO
 /-- All completed loads expose their actual value, floor, acquire, history and validity facts
 without a legacy operation premise or conclusion. -/
 theorem Ok.load_native {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
     (hcs : m.clocks.size = m.threads.size)
     (h : ((atomicLoadAt c ord nb W.ptr : MemM (BitVec n)).run m).run = some (.ok (v, m'))) :
     ∃ j, j < (W.hist m).size ∧ (W.hist m)[j]!.Val v ∧ Floor (W.hist m) (m.clocks[t]!) j ∧
       (ord.isAcq = true → VClock.le (W.hist m)[j]!.relClock (m'.clocks[t]!) = true) ∧
-      W.hist m' = W.hist m ∧ W.Ok m' := by
+      W.hist m' = W.hist m ∧ W.Ok m' A := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hpos, hv, rfl⟩ := atomicLoadAt_ok h
   obtain ⟨blk₀, _, _, _, hacc₀, _⟩ := hw.access
   rw [W.sz_eq, hacc₀] at hacc
@@ -1171,7 +1173,7 @@ theorem write_rest {m m' : Mem} {blk : Block} {bs : Array Byte} {hF : Heap}
 
 /-- Every completed load preserves the full resource rest, for every order and selector. -/
 theorem atomicLoad_rest {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (h : ((atomicLoadAt c ord nb W.ptr : MemM (BitVec n)).run m).run = some (.ok (v, m'))) :
     RestStep W.In m m' := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
@@ -1186,7 +1188,7 @@ theorem atomicLoad_rest {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n
   exact hr.trans (loadM_rest hr.live hl hlen (hs.cur hc) ord _)
 
 /-- Native preparation supplies a nonempty message chain and every selected value decoder. -/
-theorem Ok.opts_native {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem Ok.opts_native {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (hk : k.isAtomic = true)
     (hl : ((locIdx W.b W.o (intSize n)).run (m.recordAt W.b W.o (intSize n) k)).run =
@@ -1202,11 +1204,11 @@ theorem Ok.opts_native {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
     rw [getElem!_pos l.msgs _ hp]; exact hval pos hp⟩
 
 /-- All admitted load selectors are error-free, using native preparation validity. -/
-theorem Ok.load_noErr_native {m : Mem} {c : Nat} {ord : AtomicOrder} (hw : W.Ok m)
-    (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+theorem Ok.load_noErr_native {m : Mem} {c : Nat} {ord : AtomicOrder} (hw : W.Ok m A)
+    (ht : m.current < m.threads.size) (hA : A m.current) (hcs : m.clocks.size = m.threads.size)
     (hcr : c < loadCount n ord nb W.ptr m ∨ loadCount n ord nb W.ptr m = 0 ∧ c = 0)
     (e : Error) : ((atomicLoadAt (n := n) c ord nb W.ptr).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, ha, _, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  obtain ⟨blk, ha, _, hnr, hloc⟩ := hw.prep_ok ht hA (k := .atomicRead) rfl
   refine atomicLoadAt_noErr (loadPrep_noErr (by simpa using ha) (by simpa using hnr)
     (by simpa using hloc)) (fun li opts m₁ hp => ?_) e
   obtain ⟨b, blk', o, ha', _, hl, rfl⟩ := loadPrep_ok hp
@@ -1222,11 +1224,11 @@ theorem Ok.load_noErr_native {m : Mem} {c : Nat} {ord : AtomicOrder} (hw : W.Ok 
 
 /-- All admitted RMW selectors and signed operations are error-free natively. -/
 theorem Ok.rmw_noErr_native {m : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
-    {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m A) (ht : m.current < m.threads.size)
+    (hA : A m.current) (hcs : m.clocks.size = m.threads.size)
     (hcr : c < rmwCount n ord nb W.ptr m ∨ rmwCount n ord nb W.ptr m = 0 ∧ c = 0)
     (e : Error) : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicWrite) rfl
+  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht hA (k := .atomicWrite) rfl
   refine atomicRmwAt_noErr (loadPrep_noErr (by simpa using haw) (by simpa using hnr)
     (by simpa using hloc)) (fun li opts m₁ hp => ?_) e
   obtain ⟨b, blk', o, ha', _, hl, rfl⟩ := loadPrep_ok hp
@@ -1242,11 +1244,11 @@ theorem Ok.rmw_noErr_native {m : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
 
 /-- All admitted strong-CAS selectors are error-free, including the write marking step. -/
 theorem Ok.cas_noErr_native {m : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {exp new : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    {exp new : BitVec n} (hw : W.Ok m A) (ht : m.current < m.threads.size)
+    (hA : A m.current) (hcs : m.clocks.size = m.threads.size)
     (hcr : c < casCount n succ nb W.ptr exp m ∨ casCount n succ nb W.ptr exp m = 0 ∧ c = 0)
     (e : Error) : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht hA (k := .atomicRead) rfl
   have hprep : ∀ e, ((casPrep n nb W.ptr exp).run m).run ≠ some (.error e) :=
     casPrep_noErr haw hnr hloc
   refine cmpxchgAt_noErr hprep (fun li opts m₁ hp => ?_)
@@ -1267,18 +1269,19 @@ theorem Ok.cas_noErr_native {m : Mem} {c : Nat} {succ fail : AtomicOrder}
     have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hcs]; exact ht)
       (fun _ _ _ => rfl) hl
     obtain ⟨blk₁, _, ha₁, hnr₁, _⟩ := hw₁.prep_ok
-      (by rw [hs.current, hs.threads]; exact ht) (k := .atomicWrite) rfl
+      (by rw [hs.current, hs.threads]; exact ht) (by rw [hs.current]; exact hA)
+      (k := .atomicWrite) rfl
     rw [casMarkWrite_run ha₁ hnr₁] at he
     cases he
 
 /-- Weak-CAS selectors, including all spurious failures, are error-free natively. -/
 theorem Ok.weakCas_noErr_native {m : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {exp new : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    {exp new : BitVec n} (hw : W.Ok m A) (ht : m.current < m.threads.size)
+    (hA : A m.current) (hcs : m.clocks.size = m.threads.size)
     (hcr : c < weakCasCount n succ nb W.ptr exp m ∨
       weakCasCount n succ nb W.ptr exp m = 0 ∧ c = 0)
     (e : Error) : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  obtain ⟨blk, _, haw, hnr, hloc⟩ := hw.prep_ok ht hA (k := .atomicRead) rfl
   have hprep : ∀ e, ((weakCasPrep n nb W.ptr exp).run m).run ≠ some (.error e) :=
     weakCasPrep_noErr (casPrep_noErr haw hnr hloc)
   refine cmpxchgWeakAt_noErr hprep (fun li opts m₁ hp => ?_)
@@ -1304,14 +1307,15 @@ theorem Ok.weakCas_noErr_native {m : Mem} {c : Nat} {succ fail : AtomicOrder}
     have hs := prepare_fstep (hF := fun _ => none) hw (by rw [hcs]; exact ht)
       (fun _ _ _ => rfl) hl
     obtain ⟨blk₁, _, ha₁, hnr₁, _⟩ := hw₁.prep_ok
-      (by rw [hs.current, hs.threads]; exact ht) (k := .atomicWrite) rfl
+      (by rw [hs.current, hs.threads]; exact ht) (by rw [hs.current]; exact hA)
+      (k := .atomicWrite) rfl
     rw [casMarkWrite_run ha₁ hnr₁] at he
     cases he
 
 /-- A completed load is a native full-state step of every disjoint frame, at every order.
 Its actual preparation and read supply the whole relation, not only its map projection. -/
 theorem atomicLoad_fstep {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n} {hF : Heap}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
     FStepIn hF m m' := by
@@ -1329,7 +1333,7 @@ theorem atomicLoad_fstep {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec 
 /-- A completed load carries the frame's atomic locations and views. This is obtained from
 its actual preparation and read, for every memory order, without an `Op` transport premise. -/
 theorem atomicLoad_amap {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n} {hF : Heap}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
@@ -1410,10 +1414,10 @@ theorem loc_set {m : Mem} {i : Nat} {l l' : ALoc} (hl : W.Loc m i l) (hb : l'.bl
 /-- A newest-message RMW preserves validity and appends its actual result entry. The proof
 uses the primitive's updates and native clock transport, without an operation summary. -/
 theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new : BitVec n}
-    (hw : W.Ok m₁) (hl : W.Loc m₁ li l) (hc : m₁.current = t) (ht : t < m₁.threads.size)
-    (hcs : m₁.clocks.size = m₁.threads.size) (hrec : W.Rec m₁ t)
+    (hw : W.Ok m₁ A) (hl : W.Loc m₁ li l) (hc : m₁.current = t) (ht : t < m₁.threads.size)
+    (hA : A t) (hcs : m₁.clocks.size = m₁.threads.size) (hrec : W.Rec m₁ t)
     (hM : M = rmwM m₁ li (l.msgs.size - 1) ord (l.msgs[l.msgs.size - 1]!) new) :
-    W.Ok M ∧ W.Holds M new ∧
+    W.Ok M A ∧ W.Holds M new ∧
       W.hist M = (W.hist m₁).push (rmwEnt M t ord (W.hist m₁)[(W.hist m₁).size - 1]! new) ∧
       (ord.isAcq = true →
         VClock.le (W.hist m₁)[(W.hist m₁).size - 1]!.relClock (M.clocks[t]!) = true) := by
@@ -1493,7 +1497,7 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
   · have he' : e ∈ m₁.footprint := hMf ▸ he
     rcases hw.wfp e he' hh with ⟨ha', hle⟩ | hle
     · exact .inl ⟨ha', Conc.someLe_mono hs.threads (fun u _ => hs.clock u) hle⟩
-    · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u) hle)
+    · exact .inr (Conc.allLeOn_mono hs.threads (fun u _ => hs.clock u) hle)
   · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl'
     intro e he hh
     have he' : e ∈ m₁.footprint := hMf ▸ he
@@ -1504,7 +1508,7 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
     · rw [plainHit_atomic ha'] at hh; cases hh
     · have hle' := hs.clock m₁.current
       rw [hMc] at hle'
-      exact VClock.le_trans (hle _ ht) hle'
+      exact VClock.le_trans (hle _ ht hA) hle'
   · rw [hist_loc hl', hist_loc hl, Array.mapIdx_push]
     congr 1
     have hk : (l.msgs.mapIdx ent).size - 1 = l.msgs.size - 1 := by simp
@@ -1521,10 +1525,10 @@ theorem Ok.rmwAt_native {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrde
 
 /-- A completed RMW reads the newest value and appends the actual signed/unsigned result. -/
 theorem Ok.rmw_native {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    {v old : BitVec n} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
+    (hA : A t) (hcs : m.clocks.size = m.threads.size)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
-    (W.hist m)[(W.hist m).size - 1]!.Val old ∧ W.Ok m' ∧
+    (W.hist m)[(W.hist m).size - 1]!.Val old ∧ W.Ok m' A ∧
       W.Holds m' (op.apply signed old v) ∧
       W.hist m' = (W.hist m).push
         (rmwEnt m' t ord (W.hist m)[(W.hist m).size - 1]! (op.apply signed old v)) ∧
@@ -1545,17 +1549,17 @@ theorem Ok.rmw_native {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord
   rw [hl0] at hpl hold hm'
   rw [hpl] at hold hm'
   obtain ⟨hw', hU, hh, hacq⟩ := hw₁.rmwAt_native hl (hs.current.trans hc)
-    (by rw [hs.threads]; exact ht) (by rw [hs.size, hs.threads]; exact hcs) hrec hm'
+    (by rw [hs.threads]; exact ht) hA (by rw [hs.size, hs.threads]; exact hcs) hrec hm'
   have hsz := hist_size hl
   refine ⟨?_, hw', hU, by rw [hh, hh₁], by rw [← hh₁]; exact hacq⟩
   rw [← hh₁, hsz]; exact val_of hl (by omega) hold
 
 /-- Strong CAS has the original newest-write success and mismatching-read failure facts. -/
 theorem Ok.cas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
-    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    {r : Option (BitVec n)} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
+    (hA : A t) (hcs : m.clocks.size = m.threads.size)
     (h : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
-    W.Ok m' ∧
+    W.Ok m' A ∧
     ((r = none ∧ (W.hist m)[(W.hist m).size - 1]!.Val exp ∧ W.Holds m' new ∧
       W.hist m' = (W.hist m).push (rmwEnt m' t succ (W.hist m)[(W.hist m).size - 1]! new) ∧
       (succ.isAcq = true →
@@ -1587,7 +1591,7 @@ theorem Ok.cas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp ne
     obtain ⟨hw₂, hh₂⟩ := hw₁.record_native hc₁ ht₁ hcs₁ (k := .atomicWrite) rfl
     have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
     obtain ⟨hw', hU, hh, hacq⟩ := hw₂.rmwAt_native (M := m') (ord := succ) (new := new)
-      hl₂ hc₁ ht₁ (by simpa [Mem.recordAt] using hcs₁) (rec_recordAt hc₁ hct) hm'
+      hl₂ hc₁ ht₁ hA (by simpa [Mem.recordAt] using hcs₁) (rec_recordAt hc₁ hct) hm'
     refine ⟨hw', .inl ⟨rfl, ?_, hU,
       by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
     rw [← hh₁, hsz]; exact val_of hl (by omega) hold
@@ -1603,10 +1607,10 @@ theorem Ok.cas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp ne
 /-- Weak CAS retains both successful newest writes and failures that may read the expected
 value. The latter includes the matching-value spurious branch. -/
 theorem Ok.weakCas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
-    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
+    {r : Option (BitVec n)} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
+    (hA : A t) (hcs : m.clocks.size = m.threads.size)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
-    W.Ok m' ∧
+    W.Ok m' A ∧
     ((r = none ∧ (W.hist m)[(W.hist m).size - 1]!.Val exp ∧ W.Holds m' new ∧
       W.hist m' = (W.hist m).push (rmwEnt m' t succ (W.hist m)[(W.hist m).size - 1]! new) ∧
       (succ.isAcq = true →
@@ -1639,7 +1643,7 @@ theorem Ok.weakCas_native {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {ex
     obtain ⟨hw₂, hh₂⟩ := hw₁.record_native hc₁ ht₁ hcs₁ (k := .atomicWrite) rfl
     have hl₂ : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
     obtain ⟨hw', hU, hh, hacq⟩ := hw₂.rmwAt_native (M := m') (ord := succ) (new := new)
-      hl₂ hc₁ ht₁ (by simpa [Mem.recordAt] using hcs₁) (rec_recordAt hc₁ hct) hm'
+      hl₂ hc₁ ht₁ hA (by simpa [Mem.recordAt] using hcs₁) (rec_recordAt hc₁ hct) hm'
     refine ⟨hw', .inl ⟨rfl, ?_, hU,
       by rw [hh, hh₂, hh₁], by rw [← hh₁]; exact hacq⟩⟩
     rw [← hh₁, hsz]; exact val_of hl (by omega) hold
@@ -1668,7 +1672,7 @@ theorem rmwM_amap {m : Mem} {li pos : Nat} {l : ALoc} {hF : Heap}
 /-- Every completed RMW operation and signedness is a native full-state step, using actual
 preparation and the newest-message write. -/
 theorem atomicRmw_fstep {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} {hF : Heap} (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    {v old : BitVec n} {hF : Heap} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     FStepIn hF m m' := by
@@ -1689,7 +1693,7 @@ theorem atomicRmw_fstep {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord
 
 /-- Every completed signed or unsigned RMW preserves the resource rest. -/
 theorem atomicRmw_rest {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    {v old : BitVec n} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     RestStep W.In m m' := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
@@ -1710,7 +1714,7 @@ theorem atomicRmw_rest {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord 
 
 /-- Every completed RMW operation uses actual preparation and the actual newest-message write. -/
 theorem atomicRmw_amap {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} {hF : Heap} (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    {v old : BitVec n} {hF : Heap} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
@@ -1793,7 +1797,7 @@ theorem casRmw_rest {m : Mem} {li c pos : Nat} {l : ALoc} {blk : Block}
 /-- Both branches of a completed strong CAS are native full-state steps of a disjoint frame. -/
 theorem cmpxchg_fstep {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     FStepIn hF m m' := by
@@ -1815,7 +1819,7 @@ theorem cmpxchg_fstep {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- Both strong-CAS branches preserve the resource rest. -/
 theorem cmpxchg_rest {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     RestStep W.In m m' := by
@@ -1837,7 +1841,7 @@ theorem cmpxchg_rest {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 /-- Both branches of a completed strong CAS carry the actual disjoint-frame map. -/
 theorem cmpxchg_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
@@ -1848,7 +1852,7 @@ theorem cmpxchg_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 steps. The success branch uses the same newest-message write as strong CAS. -/
 theorem cmpxchgWeak_fstep {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     FStepIn hF m m' := by
@@ -1871,7 +1875,7 @@ theorem cmpxchgWeak_fstep {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- Weak-CAS success, mismatch and matching-value spurious failure preserve the resource rest. -/
 theorem cmpxchgWeak_rest {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     RestStep W.In m m' := by
@@ -1894,7 +1898,7 @@ theorem cmpxchgWeak_rest {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 /-- Weak CAS carries the same map for success, mismatches and matching-value spurious failures. -/
 theorem cmpxchgWeak_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} {hF : Heap}
-    (hw : W.Ok m) (hc : m.current < m.clocks.size)
+    (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
@@ -1903,7 +1907,7 @@ theorem cmpxchgWeak_amap {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- Actual primitive runs at a valid word preserve every disjoint full-state frame.
 The alternatives retain every width, order, signedness and strong/weak CAS result. -/
-theorem actualRun_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
+theorem actualRun_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size)
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (hop :
@@ -1932,6 +1936,60 @@ theorem actualRun_fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m)
   · exact cmpxchgWeak_fstep hw hc hoff hr
   · rw [hr]
     exact record_fstep (k := .atomicRead) hw hc hoff
+
+/-- **An actual primitive run at the word keeps the word** for a live set of the stepping thread:
+an op of a live thread does not race. -/
+theorem actualRun_ok {m m' : Mem} (hw : W.Ok m A) (ht : m.current < m.threads.size)
+    (hA : A m.current) (hcs : m.clocks.size = m.threads.size)
+    (hop :
+      (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
+        ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
+      (∃ (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOrder)
+          (v old : BitVec n),
+        ((atomicRmwAt c op signed ord nb W.ptr v).run m).run =
+          some (.ok (old, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      m' = m.recordAt W.b W.o nb .atomicRead) :
+    W.Ok m' A := by
+  rcases hop with ⟨c, ord, v, hr⟩ | ⟨c, op, signed, ord, v, old, hr⟩ |
+    ⟨c, succ, fail, expected, new, r, hr⟩ |
+    ⟨c, succ, fail, expected, new, r, hr⟩ | hr
+  · obtain ⟨-, -, -, -, -, -, hw'⟩ := hw.load_native rfl ht hcs hr; exact hw'
+  · exact (hw.rmw_native rfl ht hA hcs hr).2.1
+  · exact (hw.cas_native rfl ht hA hcs hr).1
+  · exact (hw.weakCas_native rfl ht hA hcs hr).1
+  · rw [hr]; exact (hw.record_native rfl ht hcs rfl).1
+
+/-- `actualRun_ok` for every live set `B`, given the word for the singleton live set of the
+stepping thread (its op does not race): the step adds no plain access, so a thread of `B` that
+is not the stepper keeps its bound. -/
+theorem actualRun_okOf {m m' : Mem} {B : ThreadId → Prop} (hw : W.Ok m (· = m.current))
+    (hB : W.Ok m B) (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hop :
+      (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
+        ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
+      (∃ (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOrder)
+          (v old : BitVec n),
+        ((atomicRmwAt c op signed ord nb W.ptr v).run m).run =
+          some (.ok (old, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      m' = m.recordAt W.b W.o nb .atomicRead) :
+    W.Ok m' B :=
+  (actualRun_ok (hB.union hw) ht (.inr rfl) hcs hop).anti fun _ => .inl
 
 /-- Normalize a whole family of actual disjoint-frame maps to the explicitly named actor.
 The counter fact follows at the empty frame; no destination `current` fact is needed. -/
@@ -2007,7 +2065,7 @@ theorem loadM_seen_val {m : Mem} {i j : Nat} {l : ALoc} {v : BitVec n}
 
 /-- A completed load at the word satisfies the floor property for its actual selected message. -/
 theorem atomicLoad_seen {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m) (hf : W.Fresh m)
+    (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
       m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
@@ -2025,7 +2083,7 @@ theorem atomicLoad_seen {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n
 /-- The actual selected message of a load is the reader's new floor. The witness uses the
 resulting history, so it composes with any existing rule that preserves that history. -/
 theorem atomicLoad_read_seen {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m) (hf : W.Fresh m)
+    (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
       ∃ j < (W.hist m').size, (W.hist m')[j]!.Val v ∧ W.ownPos m' m.current = j := by
@@ -2172,7 +2230,7 @@ theorem rmwM_read_seen {m : Mem} {i c pos : Nat} {l : ALoc} (hl : W.Loc m i l)
 
 /-- Every completed RMW operation and signedness uses the same floor/freshness rule. -/
 theorem atomicRmw_seen {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    {v old : BitVec n} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
       m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
@@ -2193,7 +2251,7 @@ theorem atomicRmw_seen {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord 
 /-- Every completed RMW leaves its caller at the new last write, for every operation, order
 and signedness. -/
 theorem atomicRmw_write_seen {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    {v old : BitVec n} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     W.ownPos m' m.current = (W.hist m').size - 1 := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
@@ -2226,7 +2284,7 @@ theorem casRmw_seen {m : Mem} {i c pos : Nat} {l : ALoc} {expected new : BitVec 
 /-- Strong CAS preserves freshness and nondecreasing floors in both its successful RMW and
 its failure-order read branch. -/
 theorem cmpxchg_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m) (hf : W.Fresh m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
       m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
@@ -2254,7 +2312,7 @@ theorem cmpxchg_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- A failed strong CAS reads the message at its resulting floor, at its failure order. -/
 theorem cmpxchg_read_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    {expected new old : BitVec n} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
       some (.ok (some old, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
@@ -2278,7 +2336,7 @@ theorem cmpxchg_read_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- A successful strong CAS leaves the caller at its new last message. -/
 theorem cmpxchg_write_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    {expected new : BitVec n} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
       some (.ok (none, m'))) :
     W.ownPos m' m.current = (W.hist m').size - 1 := by
@@ -2300,7 +2358,7 @@ theorem cmpxchg_write_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 /-- Weak CAS includes every matching-value spurious failure. Each permitted branch uses the
 same preparation, read and RMW facts as strong CAS. -/
 theorem cmpxchgWeak_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m) (hf : W.Fresh m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
       m.nextMsg ≤ m'.nextMsg ∧ m'.current = m.current := by
@@ -2327,7 +2385,7 @@ theorem cmpxchgWeak_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- The same actual-message fact includes matching-value spurious weak-CAS failures. -/
 theorem cmpxchgWeak_read_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new old : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    {expected new old : BitVec n} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
       some (.ok (some old, m'))) :
     W.Fresh m' ∧ (∀ u, W.ownPos m u ≤ W.ownPos m' u) ∧
@@ -2352,7 +2410,7 @@ theorem cmpxchgWeak_read_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- A successful weak CAS has the same newest-write floor as a successful strong CAS. -/
 theorem cmpxchgWeak_write_seen {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} (hw : W.Ok m) (hf : W.Fresh m)
+    {expected new : BitVec n} (hw : W.Ok m A) (hf : W.Fresh m)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
       some (.ok (none, m'))) :
     W.ownPos m' m.current = (W.hist m').size - 1 := by
@@ -2378,26 +2436,27 @@ The instances of `Extends` for the native steps: a snapshot of the writes stays 
 each of them (`Prefix.extend`). -/
 
 /-- A framed step of any thread. -/
-theorem Extends.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m) (hs : FStepIn hF m m')
+theorem Extends.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m A) (hs : FStepIn hF m m')
     (hwF : ∀ l, W.In l → hF l ≠ none)
     (hcells : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) :
     W.Extends m m' :=
   .of_eq (hist_fstep hw hs hwF hcells)
 
 /-- A step of the lock's code (the word apart from the lock's). -/
-theorem Extends.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m)
+theorem Extends.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m A)
     (hs : L.Step t m m') (hap : W.ApartL L) : W.Extends m m' :=
   .of_eq (hw.lockStep hs hap).2
 
 /-- A fork. -/
-theorem Extends.fork {m m' : Mem} {t c : ThreadId} {gt : Bool} (hw : W.Ok m)
+theorem Extends.fork {m m' : Mem} {t c : ThreadId} {gt : Bool} (hw : W.Ok m A)
     (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     W.Extends m m' :=
-  .of_eq (hw.fork_native ht hcs hf).2
+  .of_eq ((hw.anti (B := fun _ => False) fun _ => False.elim).fork_native ht hcs hf
+    False.elim).2
 
 /-- An atomic load at the word. -/
-theorem Extends.load {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m)
+theorem Extends.load {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m A)
     (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (h : ((atomicLoadAt c ord nb W.ptr : MemM (BitVec n)).run m).run = some (.ok (v, m'))) :
     W.Extends m m' :=
@@ -2406,29 +2465,32 @@ theorem Extends.load {m m' : Mem} {t c : Nat} {ord : AtomicOrder} {v : BitVec n}
 
 /-- An atomic RMW at the word. -/
 theorem Extends.rmw {m m' : Mem} {t c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v old : BitVec n} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hA : A t)
+    {v old : BitVec n} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
     (hcs : m.clocks.size = m.threads.size)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     W.Extends m m' :=
-  .of_push (hw.rmw_native hc ht hcs h).2.2.2.1
+  .of_push (hw.rmw_native hc ht hA hcs h).2.2.2.1
 
 /-- A strong `cmpxchg` at the word. -/
 theorem Extends.cas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
-    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hA : A t)
+    {r : Option (BitVec n)} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
     (hcs : m.clocks.size = m.threads.size)
     (h : ((cmpxchgAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
     W.Extends m m' := by
-  rcases (hw.cas_native hc ht hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, -, he⟩
+  rcases (hw.cas_native hc ht hA hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, -, he⟩
   · exact .of_push he
   · exact .of_eq he
 
 /-- A weak `cmpxchg` at the word. -/
 theorem Extends.weakCas {m m' : Mem} {t c : Nat} {succ fail : AtomicOrder} {exp new : BitVec n}
-    {r : Option (BitVec n)} (hw : W.Ok m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hA : A t)
+    {r : Option (BitVec n)} (hw : W.Ok m A) (hc : m.current = t) (ht : t < m.threads.size)
     (hcs : m.clocks.size = m.threads.size)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run = some (.ok (r, m'))) :
     W.Extends m m' := by
-  rcases (hw.weakCas_native hc ht hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, he⟩
+  rcases (hw.weakCas_native hc ht hA hcs h).2 with ⟨-, -, -, he, -⟩ | ⟨-, -, -, -, -, -, -, he⟩
   · exact .of_push he
   · exact .of_eq he
 
@@ -2454,11 +2516,11 @@ namespace Zig.Conc.Word
 
 open Proto Full
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 /-- The actual valid-word preparation is exactly the found case or the append
 case, including its returned index and complete destination memory. -/
-theorem prepare_run_eq {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem prepare_run_eq {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
     (li, m') = match m.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
@@ -2525,11 +2587,11 @@ namespace Zig.Conc.Word
 
 open Proto Full
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 /-- Valid-word preparation retains every existing first-address match, at its
 original index with its complete original atomic record. -/
-theorem prepare_first {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m)
+theorem prepare_first {m m' : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     (hk : k.isAtomic = true)
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m')))
     {b o i : Nat} {l : ALoc}
@@ -2623,7 +2685,7 @@ namespace Zig.Conc.Word
 
 open Proto Full
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 /-- Actual preparation retains the complete block array. -/
 theorem prepare_blocks {m m' : Mem} {li : Nat} {k : AccessKind}
@@ -2664,7 +2726,7 @@ theorem rmwM_lockLoc {m : Mem} {li pos : Nat} {active : ALoc} {wordBlk : Block}
 
 /-- Every actual load preserves every old block's required fields. -/
 theorem atomicLoad_block {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m)
+    (hw : W.Ok m A)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m')))
     {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
     ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2681,7 +2743,7 @@ theorem atomicLoad_block {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec 
 /-- Loads retain every old first-address record, even without an apartness
 premise on the queried lock. -/
 theorem atomicLoad_lockLoc {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m)
+    (hw : W.Ok m A)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m')))
     {L : LockWord} {i : Nat} {l : ALoc} (hL : L.Loc m i l) : L.Loc m' i l := by
   obtain ⟨b₀, blk₀, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
@@ -2696,7 +2758,7 @@ theorem atomicLoad_lockLoc {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVe
 /-- An actual signed or unsigned RMW supplies arbitrary block preservation and
 exact apart-lock location preservation from one preparation and newest-message proof. -/
 theorem atomicRmw_block_lockLoc {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
-    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m)
+    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     (∀ {b : BlockId} {blk : Block}, m.blocks[b]? = some blk →
       ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2730,7 +2792,7 @@ theorem atomicRmw_block_lockLoc {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bo
 /-- Every actual signed or unsigned RMW preserves every old block's required
 fields through its actual bounded word write. -/
 theorem atomicRmw_block {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
-    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m)
+    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m')))
     {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
     ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2740,7 +2802,7 @@ theorem atomicRmw_block {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
 /-- Every actual signed or unsigned RMW retains an apart lock's exact old
 first-address record and its original index. -/
 theorem atomicRmw_lockLoc {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
-    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m)
+    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m')))
     {L : LockWord} (hap : W.ApartL L) {i : Nat} {l : ALoc} (hL : L.Loc m i l) :
     L.Loc m' i l := by
@@ -2749,7 +2811,7 @@ theorem atomicRmw_lockLoc {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
 /-- Both strong-CAS branches supply block fields and exact apart-lock locations
 from a single actual preparation and newest-message proof. -/
 theorem cmpxchg_block_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     (∀ {b : BlockId} {blk : Block}, m.blocks[b]? = some blk →
       ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2795,7 +2857,7 @@ theorem cmpxchg_block_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- Strong CAS preserves arbitrary old block fields in both its actual branches. -/
 theorem cmpxchg_block {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
     ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2805,7 +2867,7 @@ theorem cmpxchg_block {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 /-- Strong CAS retains an apart lock's exact old first-address record in its
 newest-message success and failure-order read branches. -/
 theorem cmpxchg_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {L : LockWord} (hap : W.ApartL L) {i : Nat} {l : ALoc} (hL : L.Loc m i l) :
     L.Loc m' i l := by
@@ -2814,7 +2876,7 @@ theorem cmpxchg_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 /-- Weak-CAS success, mismatch and matching-value spurious failure share the
 same preparation proof for block fields and exact apart-lock locations. -/
 theorem cmpxchgWeak_block_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m'))) :
     (∀ {b : BlockId} {blk : Block}, m.blocks[b]? = some blk →
       ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2861,7 +2923,7 @@ theorem cmpxchgWeak_block_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrde
 
 /-- Weak-CAS block preservation includes matching-value spurious failures. -/
 theorem cmpxchgWeak_block {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) :
     ∃ blk', m'.blocks[b]? = some blk' ∧ blk'.live = blk.live ∧
@@ -2871,7 +2933,7 @@ theorem cmpxchgWeak_block {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 /-- Weak CAS retains the same complete apart record at the same index on
 success, mismatch and matching-value spurious failure. -/
 theorem cmpxchgWeak_lockLoc {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {L : LockWord} (hap : W.ApartL L) {i : Nat} {l : ALoc} (hL : L.Loc m i l) :
     L.Loc m' i l := by
@@ -2911,7 +2973,7 @@ namespace Zig.Conc.Word
 
 open Proto
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 /-- The actual recorded access has the exact word address, not just a subrange. -/
 theorem record_fpAt {m : Mem} {k : AccessKind} {e : FootprintEntry}
@@ -2930,7 +2992,7 @@ theorem prepare_fpAt {m m' : Mem} {li : Nat} {k : AccessKind} {e : FootprintEntr
   exact record_fpAt he
 
 theorem atomicLoad_fpAt {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n}
-    (hw : W.Ok m)
+    (hw : W.Ok m A)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
     e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
@@ -2943,7 +3005,7 @@ theorem atomicLoad_fpAt {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n
   exact prepare_fpAt hp he
 
 theorem atomicRmw_fpAt {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
-    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m)
+    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
     e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
@@ -2956,7 +3018,7 @@ theorem atomicRmw_fpAt {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
   exact prepare_fpAt hp he
 
 theorem cmpxchg_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
     e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
@@ -2975,7 +3037,7 @@ theorem cmpxchg_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- A matching-value spurious weak failure is still the actual failure-order read. -/
 theorem cmpxchgWeak_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
-    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m)
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
     e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
@@ -2995,7 +3057,7 @@ theorem cmpxchgWeak_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
 
 /-- Every actual primitive run at a valid word preserves the resource rest.
 The alternatives include all widths, orders, signedness and strong/weak CAS results. -/
-theorem actualRun_rest {m m' : Mem} (hw : W.Ok m)
+theorem actualRun_rest {m m' : Mem} (hw : W.Ok m A)
     (hc : m.current < m.clocks.size)
     (hop :
       (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
@@ -3025,7 +3087,7 @@ theorem actualRun_rest {m m' : Mem} (hw : W.Ok m)
     exact record_rest (k := .atomicRead) hw hc
 
 /-- A new footprint entry of any actual primitive run is at the exact word address. -/
-theorem actualRun_fpAt {m m' : Mem} (hw : W.Ok m)
+theorem actualRun_fpAt {m m' : Mem} (hw : W.Ok m A)
     (hop :
       (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
         ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
@@ -3054,9 +3116,86 @@ theorem actualRun_fpAt {m m' : Mem} (hw : W.Ok m)
   · rw [hr] at he
     exact record_fpAt (W := W) he
 
+/-- The footprint after a location preparation of a recorded atomic read has only reads as new
+entries. -/
+theorem prepRead_fp {m m₁ : Mem} {li : Nat} {e : FootprintEntry}
+    (hp : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb .atomicRead)).run = some (.ok (li, m₁)))
+    (he : e ∈ m₁.footprint) : e ∈ m.footprint ∨ e.kind = .atomicRead := by
+  obtain ⟨a, s, next, rfl⟩ := locIdx_updates hp
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · exact .inr rfl
+
+/-- **A new write access of an actual primitive run at a valid word is a write of the word**: the
+word's history gets a new write (an RMW, a successful compare-exchange). A load, a failed
+compare-exchange and the futex compare's record add only reads. -/
+theorem actualRun_fpWrite {m m' : Mem} (hw : W.Ok m A) (ht : m.current < m.threads.size)
+    (hA : A m.current) (hcs : m.clocks.size = m.threads.size)
+    (hop :
+      (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
+        ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
+      (∃ (c : Nat) (op : RmwOp) (signed : Bool) (ord : AtomicOrder)
+          (v old : BitVec n),
+        ((atomicRmwAt c op signed ord nb W.ptr v).run m).run =
+          some (.ok (old, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      (∃ (c : Nat) (succ fail : AtomicOrder) (expected new : BitVec n)
+          (r : Option (BitVec n)),
+        ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
+          some (.ok (r, m'))) ∨
+      m' = m.recordAt W.b W.o nb .atomicRead)
+    {e : FootprintEntry} (he : e ∈ m'.footprint) (hk : e.kind.isWrite = true) :
+    e ∈ m.footprint ∨ ∃ x, W.hist m' = (W.hist m).push x := by
+  have hread : e ∈ m.footprint ∨ e.kind = .atomicRead → e ∈ m.footprint := fun h =>
+    h.resolve_right fun h' => by rw [h'] at hk; cases hk
+  rcases hop with ⟨c, ord, v, hr⟩ | ⟨c, op, signed, ord, v, old, hr⟩ |
+    ⟨c, succ, fail, expected, new, r, hr⟩ |
+    ⟨c, succ, fail, expected, new, r, hr⟩ | hr
+  · obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok hr
+    obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
+    rw [W.sz_eq, ha] at hacc
+    rw [W.sz_eq] at hp
+    cases hacc
+    rw [loadM_footprint] at he
+    exact .inl (hread (prepRead_fp hp he))
+  · obtain ⟨-, -, -, hh, -⟩ := hw.rmw_native rfl ht hA hcs hr
+    exact .inr ⟨_, hh⟩
+  · obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, _, _, hcase⟩ := cmpxchgAt_ok hr
+    obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+    rw [W.sz_eq, ha] at hacc
+    rw [W.sz_eq] at hp
+    cases hacc
+    rcases hcase with ⟨_, rfl, _, _⟩ | ⟨_, _, hm⟩
+    · rcases (hw.cas_native rfl ht hA hcs hr).2 with ⟨-, -, -, hh, -⟩ | ⟨_, _, h, -⟩
+      · exact .inr ⟨_, hh⟩
+      · cases h
+    · rw [hm, loadM_footprint] at he
+      exact .inl (hread (prepRead_fp hp he))
+  · obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, _, _, hcase⟩ :=
+      cmpxchgWeakAt_ok hr
+    obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+    rw [W.sz_eq, ha] at hacc
+    rw [W.sz_eq] at hp
+    cases hacc
+    rcases hcase with ⟨_, _, rfl, _, _⟩ | ⟨_, _, hm⟩
+    · rcases (hw.weakCas_native rfl ht hA hcs hr).2 with ⟨-, -, -, hh, -⟩ | ⟨_, _, h, -⟩
+      · exact .inr ⟨_, hh⟩
+      · cases h
+    · rw [hm, loadM_footprint] at he
+      exact .inl (hread (prepRead_fp hp he))
+  · rw [hr] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · cases hk
+
 /-- Every actual primitive run preserves each old block's live flag, byte-array
 size and kind. The queried block need not be live. -/
-theorem actualRun_block {m m' : Mem} (hw : W.Ok m)
+theorem actualRun_block {m m' : Mem} (hw : W.Ok m A)
     (hop :
       (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
         ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
@@ -3088,7 +3227,7 @@ theorem actualRun_block {m m' : Mem} (hw : W.Ok m)
 
 /-- Every actual primitive run retains an apart lock's complete first-address
 record at the same index, including all history and metadata. -/
-theorem actualRun_lockLoc {m m' : Mem} (hw : W.Ok m)
+theorem actualRun_lockLoc {m m' : Mem} (hw : W.Ok m A)
     (hop :
       (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
         ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m'))) ∨
@@ -3124,19 +3263,19 @@ namespace Zig.Conc.Word
 
 open Full Proto
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 
 /-- Native framing preserves every valid apart word and its exact history.
 The caller supplies native steps for all frames disjoint from the active word,
 and the actual resource step supplies unchanged cells outside that word. -/
 theorem preserve_apart {n' nb' : Nat} {V : Word n' nb'} {m m' : Mem}
-    (hv : V.Ok m)
+    (hv : V.Ok m A)
     (hs : ∀ hF : Heap,
       (∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none) → FStepIn hF m m')
     (hcells : ∀ l, ¬ W.In l → m'.heap l = m.heap l)
     (hap : W.b ≠ V.b ∨ W.o + nb ≤ V.o ∨ V.o + nb' ≤ W.o) :
-    V.Ok m' ∧ V.hist m' = V.hist m := by
+    V.Ok m' A ∧ V.hist m' = V.hist m := by
   have hd : ∀ l, V.In l → ¬ W.In l := fun _ => notIn_apart hap
   let hF : Heap := fun l => if V.In l then m.heap l else none
   have hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none := by
@@ -3170,12 +3309,12 @@ variable {W : Word 32 4}
 
 /-- A completed scheduler futex wait either consumes a pending wake or performs the actual
 recorded atomic read. Only a matching value sleeps; the read preserves validity and history. -/
-theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m)
+theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m A)
     (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
-    (m.woken.contains m.current = false ∧ ∃ M, W.Ok M ∧
+    (m.woken.contains m.current = false ∧ ∃ M, W.Ok M A ∧
       M = m.recordAt W.b W.o 4 .atomicRead ∧ W.hist M = W.hist m ∧
       M.blocks = m.blocks ∧
       ((W.Holds m e ∧ b = true ∧ m' = { M with waiters := M.waiters.push (t, W.ptr) }) ∨
@@ -3193,7 +3332,7 @@ theorem Ok.futexWait_native {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Boo
   · exact .inr ⟨rfl, rfl⟩
 
 /-- A futex wait at the word extends its writes (`Word.Extends`). -/
-theorem Extends.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m)
+theorem Extends.futexWait {m m' : Mem} {t : ThreadId} {e : BitVec 32} {b : Bool} (hw : W.Ok m A)
     (hc : m.current = t) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (h : ((Thread.futexWait W.ptr e).run m).run = some (.ok (b, m'))) : W.Extends m m' := by
   rcases hw.futexWait_native hc ht hcs h with
@@ -3230,7 +3369,7 @@ word's writes or pushes one that happened before the holder (`WordHB.step`, `HB.
 the lock's word invariant, a load by the holder then reads the newest write (`WordHB.last`, the
 load's floor `Word.Floor`). -/
 
-variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb}
+variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 variable (L W) in
 /-- Every write of the word `W` happened before the lock's holder, its newest release or every
@@ -3267,7 +3406,7 @@ theorem WordHB.step {G G' : ThreadId → γ} {m m' : Mem} (h : L.WordHB W G m)
 /-- `WordHB` stays over a step of the lock's code (`Fits.stable`, `HB.lstep`) at a word apart from
 the lock's: it keeps the word's writes (`Word.Ok.lockStep`). -/
 theorem WordHB.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {h : Res}
-    (hE : L.WordHB W G m) (hwE : W.Ok m) (hapE : W.ApartL L.toLockWord)
+    (hE : L.WordHB W G m) (hwE : W.Ok m A) (hapE : W.ApartL L.toLockWord)
     (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
     L.WordHB W (upd G t (L.set (G t) q h)) m' :=
