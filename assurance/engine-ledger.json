@@ -1501,6 +1501,17 @@
    "note": "Coordinator decision 2026-11-04 (approved as fix steps 1-2, same class as #599's SigStep tightening: stronger for clients, implementations prove more, no statement weakened). The per-client bound (at most one epoch write per registration) is each client's proof, starting with SemCounter."
   },
   {
+   "id": "lock-stable-inv",
+   "title": "A lock step's U-stability may use the lock's invariant before the step",
+   "status": "closed",
+   "requester": "L8p two-lock product (LockPair.lean), review of #683; maintainer decision 2026-11-05",
+   "progress": "CLOSED in #667: `FLock.Fits.stable` takes `L.Inv G rX m` (the state before the step) beside `U G rX m`, and so do `Fits.ofLock`/`ofLockAll`'s `stable` argument. `Fits.step`/`Fits.stay` take it, and every rule that applies them passes the lock invariant it already has. `FSem.Fits`/`FCond.Fits` extend `FLock.Fits`, so they inherit it. Clients that do not need it ignore the binder.",
+   "request": "In a two-lock product the client's `U` for lock A must stay over a step of lock B's code, and that needs B's facts such as `B.BlkOk m` (the other lock's blocks), which live in `B.Inv`, not in `U`. Without the hypothesis the product's `U` would have to repeat `B.BlkOk` and every step kind (lock, primitive, part tick, stop) would have to re-prove it, duplicating `FLock.Inv`.",
+   "workaround_sites": [],
+   "deletion_plan": "Closed: no workaround; the hypothesis is part of the final `Fits` contract.",
+   "note": "Maintainer decision 2026-11-05: the client gets more (the lock's invariant), and no rule or statement it relies on is weakened; every library site that applies `stable` has the pre-state invariant."
+  },
+  {
    "id": "cond-window-multi-waiter",
    "title": "The condition's epoch window with two or more registered waiters",
    "status": "open",
