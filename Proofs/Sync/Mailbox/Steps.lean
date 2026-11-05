@@ -243,7 +243,7 @@ theorem wait_live (G₁ : ThreadId → Gh) (m₁ : Mem)
   · obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h
     have e1 : w.1 = 1 := by simpa using he
     rcases hu.q w hw with hq | hq
-    · exact (fitsL (K := K)).noWaits hL hall (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
+    · exact (fitsL (K := K)).noWaits hL hu hall (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
     · obtain ⟨i', jr', e', h1, -⟩ := hu.cinv.q w hw hq
       have hw1 : ((G₁ w.1).2.c).waits = true := by
         show (C.ph (G₁ w.1)).waits = true; rw [h1]; rfl

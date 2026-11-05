@@ -1294,26 +1294,26 @@ variable {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem 
 /-- A sleeping waiter of a set event is not in a deadlock: a setter at `sw` runs. -/
 theorem _root_.Zig.Full.FLock.Fits.liveSet (hE : L.Fits (E.prim L) P U ok) {G : ThreadId → γ}
     {rX : Res}
-    {m : Mem} {t : ThreadId} (hI : E.Inv L G m) (hL : L.Inv G rX m) (ht : E.ph (G t) = .w1)
-    (hs : E.IsSet m) : P.Live t G m := by
+    {m : Mem} {t : ThreadId} (hI : E.Inv L G m) (hL : L.Inv G rX m) (hU : U G rX m)
+    (ht : E.ph (G t) = .w1) (hs : E.IsSet m) : P.Live t G m := by
   intro hin hall
   obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp hin
   have e : w.1 = t := by simpa using he
   have hp : w.2 = E.W.ptr := by
     rcases hI.qw w hw (by rw [e]; exact ht) with h | h
     · exact h
-    · exact absurd (Array.any_eq_true'.mpr ⟨w, hw, by simp [h]⟩) (hE.noWaits hL hall)
+    · exact absurd (Array.any_eq_true'.mpr ⟨w, hw, by simp [h]⟩) (hE.noWaits hL hU hall)
   rcases (hI.q w hw hp).2 with h1 | ⟨u, hu⟩
   · have := val_eq h1 hs; cases this
   · -- the setter is out of the lock's code or left it (`gone`): not in the futex queue
-    have hlo : L.ph (G u) ≠ .wait ∧ L.ph (G u) ≠ .away := by
+    have hlo : L.ph (G u) ≠ .wait ∧ L.ph (G u) ≠ .away ∧ L.ph (G u) ≠ .holdsAway := by
       rcases hI.lp u (by rw [hu]; decide) with h | ⟨-, h⟩ | ⟨h, -⟩
       · rw [h]; decide
       · rw [h]; decide
       · rw [hu] at h; cases h
     rcases hall u (hI.swex u hu) with h | h | h
     · rw [hE.kfin _ h] at hu; cases hu
-    · have := hL.w.notQ (t := u) hlo.1 hlo.2
+    · have := hL.w.notQ (t := u) hlo.1 hlo.2.1 hlo.2.2
       rw [this] at h; cases h
     · rw [hE.kjoins _ h] at hu; cases hu
 
@@ -1340,6 +1340,7 @@ theorem _root_.Zig.Full.FLock.Fits.atWord (hE : L.Fits (E.prim L) P U ok)
     (hL : L.Inv G₁ (rsum (E.W.cellsR m') rY) m') :
     E.Inv L G₁ m₁ ∧ (∀ w ∈ m₁.waiters, w.1 ≠ t) ∧ E.W.Ok m₁ (fun u => E.Live (G₁ u)) :=
   let ⟨hI, hnq⟩ := hE.atOp hU (by rcases hgo with h | h <;> rw [h] <;> decide)
+    (by rcases hgo with h | h <;> rw [h] <;> decide)
     (by rcases hgo with h | h <;> rw [h] <;> decide) hwait hL
   ⟨hI, hnq, ((hE.wRest rfl) _ _ _ hU).1⟩
 
@@ -1835,7 +1836,7 @@ theorem waitLive (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1)
   have hga : E.ph (L.set g .away rnil) = .w1 := by rw [hE.ph_l]; exact hg
   by_cases hs : E.IsSet m₁
   · obtain ⟨rX, hL, hU⟩ := (hE.inv _ _).mp hi₁
-    exact hE.liveSet (hE.wInv _ _ _ hU) hL (by rw [hg₁]; exact hga) hs
+    exact hE.liveSet (hE.wInv _ _ _ hU) hL hU (by rw [hg₁]; exact hga) hs
   · exact hlive G₁ m₁ (by rw [hg₁]; exact hga) (by rw [hg₁, L.ph_set]) hi₁ hs
 
 /-- The waiter at `w1` sleeps: the word held `waiting`. -/

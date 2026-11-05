@@ -639,7 +639,8 @@ theorem snapshot_ok {G : ThreadId → Gh} {m : Mem} {rp hL : Res}
     · rfl
     · exfalso
       have hh := hU.mid 1 (by rw [h10]; exact hm)
-      exact absurd (hiL.w.one 1 0 hh (by show L.ph (upd G 0 _ 0) = _; rw [upd_self]; rfl))
+      exact absurd (hiL.w.one 1 0 (LPh.held_of_holds hh)
+          (LPh.held_of_holds (by show L.ph (upd G 0 _ 0) = _; rw [upd_self]; rfl)))
         (by decide)
   · obtain ⟨-, ⟨-, h0, -⟩ | ⟨-, -, -, h1, -⟩⟩ := hU.shape
     · change (upd G 0 _ 0).2 = _ at h0; rw [upd_self] at h0; cases h0
