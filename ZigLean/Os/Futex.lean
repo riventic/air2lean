@@ -247,9 +247,6 @@ def readTimespec (p : Ptr) : MemM (Option Nat) := do
 
 /-! ## Address validation (module doc) -/
 
-/-- The address that the kernel receives for a pointer with numeric address `a`: its `usize`. -/
-def futexAddr (a : Int) : Nat := (a % 2 ^ 64).toNat
-
 /-- `p` is a live writable `u32` of the model: four live bytes of one live block that is not
 read-only, at an address that is a multiple of four (`Mem.accessW`). Natively it is a mapped,
 writable user word (premise SEM-07). -/

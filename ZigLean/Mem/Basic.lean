@@ -479,6 +479,25 @@ structure StackState where
   native : Option NativeStack := none
   deriving Repr, Inhabited
 
+/-- The key of a futex (premise OSF-02): its domain and the numeric address of the word. Linux's
+`union futex_key` (v6.16 `kernel/futex/core.c`, `get_futex_key`) of a private futex is the
+address space and the address; a shared futex on anonymous memory has the same address space and
+address but `FUT_OFF_MMSHARED` in its offset, so the two never match. xnu's `ULK_UADDR` key is
+the task and the address (process-local, `shared = false`). A process has one address space, so
+the model keeps only the domain and the address.
+
+The address is the pointer's numeric address (`ptrAddr`), not reduced to a `usize`: a thread
+waits at a live word, whose address is below `2 ^ 63` in every reachable memory
+(`Mem.LiveBounded`), and an OS row forms its key from the `usize` that the kernel receives
+(`futexAddr`), so every key is the native key's address. Two words of one block at different
+offsets have different keys without any bound on the block (`Mem.keyAt_ne_same`). -/
+structure FutexKey where
+  /-- A shared (not `FUTEX_PRIVATE_FLAG`) key. -/
+  shared : Bool
+  /-- The numeric address of the word. -/
+  addr : Int
+  deriving DecidableEq, Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The address of every new block (`Mem.newAddr`). -/
@@ -1269,6 +1288,21 @@ def ptrAddr (p : Ptr) : MemM Int := do
     match (← get).blocks[b]? with
     | some blk => pure (blk.addr + p.off)
     | none => throw .illegal
+
+/-- The address that the kernel receives for a pointer with numeric address `a`: its `usize`. -/
+def futexAddr (a : Int) : Nat := (a % 2 ^ 64).toNat
+
+/-- The futex key of `p` in the domain `shared` (`FutexKey`): `ptrAddr` without the state
+monad; `none` if `p`'s block does not exist (`ptrAddr` throws). -/
+def Mem.keyAt (m : Mem) (p : Ptr) (shared : Bool) : Option FutexKey :=
+  match p.block with
+  | none => some ⟨shared, p.off⟩
+  | some b => m.blocks[b]?.map fun blk => ⟨shared, blk.addr + p.off⟩
+
+/-- `Mem.keyAt` in the state monad: `.illegal` if `p`'s block does not exist. -/
+def futexKeyOf (p : Ptr) (shared : Bool) : MemM FutexKey := do
+  let some k := (← get).keyAt p shared | throw .illegal
+  pure k
 
 /-- The pointer to address `n`: inside or one past the block whose address range covers `n`, at
 the matching offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A dead block still

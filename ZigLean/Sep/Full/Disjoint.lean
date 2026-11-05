@@ -382,6 +382,18 @@ theorem LDMono.alloc {m m' : Mem} {kind : BlockKind} {size align : Nat} {nb : Bl
   LDMono.push (fun _ => by rw [ha, hs]; exact (Mem.allocOk_fit hroom).2)
     (fun _ => by rw [ha, hs]; exact Mem.allocOk_le hroom) h
 
+/-- **Two words in different live blocks have different futex keys** (`Mem.keyAt`, premise
+OSF-02): live bytes of two live blocks lie at different numeric addresses (`Mem.LiveDisjoint`),
+whatever their domains. Two words of one block need no layout (`Mem.keyAt_ne_same`). -/
+theorem _root_.Zig.Mem.keyAt_ne {m : Mem} (hl : m.LiveDisjoint) {b b' : BlockId} {blk blk' : Block}
+    (hbb : b ≠ b') (hb : m.blocks[b]? = some blk) (hb' : m.blocks[b']? = some blk')
+    (hv : blk.live = true) (hv' : blk'.live = true) {o o' : Nat} (ho : blk.kind.mappedLo ≤ o)
+    (hs : o < blk.bytes.size) (ho' : blk'.kind.mappedLo ≤ o') (hs' : o' < blk'.bytes.size)
+    (sh sh' : Bool) : m.keyAt ⟨some b, o⟩ sh ≠ m.keyAt ⟨some b', o'⟩ sh' := by
+  have hne := hl.addr_ne hbb hb hb' hv hv' hs hs' ho ho'
+  simp only [Mem.keyAt, hb, hb', Option.map_some, ne_eq, Option.some.injEq, FutexKey.mk.injEq,
+    not_and]
+  intro _; omega
 
 end Full
 end Zig

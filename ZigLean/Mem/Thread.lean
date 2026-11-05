@@ -720,6 +720,11 @@ The scheduler (`ZigLean/Conc/Sched.lean`) calls these at a `wait`/`wake` sync op
 `Mem` (`Mem.waiters`, `Mem.woken`), as the thread table is: so the invariant of a proof over all
 schedules (`ZigLean/Conc/Logic.lean`) can name it. -/
 
+/-- The futex key of the word at offset `o` of `blk` in the domain `shared`: its numeric address
+(`Mem.keyAt` of a pointer into a block, `Mem.keyAt_of_access`). -/
+def wordKey (blk : Block) (o : Nat) (shared : Bool) : FutexKey :=
+  ⟨shared, blk.addr + (o : Int)⟩
+
 /-- A futex wait of the current thread at `p` for the value `e`: `true` if the thread sleeps
 (it is added to `waiters`). A woken thread goes on. Else the kernel compares the `u32` at `p`,
 the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. The
@@ -851,6 +856,71 @@ theorem mem_wakeSet_of_all {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {c
   obtain ⟨v, hv⟩ := wakeSet_nonempty (cs := cs) hn hw
   obtain ⟨w, hw', hp, rfl⟩ := mem_wakeSet hv
   rw [← hall w hw' hp]; exact hv
+
+/-! ### Futex keys (`FutexKey`, `Mem.keyAt`)
+
+The generic facts that a protocol needs about the key of its word: the key of a pointer into an
+existing block, its stability while the block keeps its address, the key of a word that a wait
+reads (`wordKey`), and when two words have different keys (`Mem.keyAt_ne_same`, and
+`Mem.keyAt_ne` for two blocks in `ZigLean/Sep/Full/Disjoint.lean`). -/
+
+/-- The key of a pointer into block `b`. -/
+theorem _root_.Zig.Mem.keyAt_block {m : Mem} {b : BlockId} {blk : Block}
+    (h : m.blocks[b]? = some blk) (o : Int) (sh : Bool) :
+    m.keyAt ⟨some b, o⟩ sh = some ⟨sh, blk.addr + o⟩ := by
+  simp [Mem.keyAt, h]
+
+/-- Two words of one block at different offsets have different keys, in any domains. -/
+theorem _root_.Zig.Mem.keyAt_ne_same {m : Mem} {b : BlockId} {o o' : Int} (h : o ≠ o')
+    (sh sh' : Bool) (hb : b < m.blocks.size) :
+    m.keyAt ⟨some b, o⟩ sh ≠ m.keyAt ⟨some b, o'⟩ sh' := by
+  rw [Mem.keyAt_block (Array.getElem?_eq_getElem hb), Mem.keyAt_block (Array.getElem?_eq_getElem hb)]
+  simp only [ne_eq, Option.some.injEq, FutexKey.mk.injEq, not_and]
+  intro _; omega
+
+/-- The key reads only the blocks' addresses. -/
+theorem _root_.Zig.Mem.keyAt_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) (p : Ptr)
+    (sh : Bool) : m'.keyAt p sh = m.keyAt p sh := by
+  unfold Mem.keyAt; rw [h]
+
+/-- A block that keeps its address keeps the keys into it. -/
+theorem _root_.Zig.Mem.keyAt_of_addr {m m' : Mem} {b : BlockId} {blk blk' : Block}
+    (h : m.blocks[b]? = some blk) (h' : m'.blocks[b]? = some blk') (ha : blk'.addr = blk.addr)
+    (o : Int) (sh : Bool) : m'.keyAt ⟨some b, o⟩ sh = m.keyAt ⟨some b, o⟩ sh := by
+  rw [Mem.keyAt_block h, Mem.keyAt_block h', ha]
+
+/-- The key of a word that `Mem.access` resolves is `wordKey`. -/
+theorem _root_.Zig.Mem.keyAt_of_access {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block}
+    {o : Nat} (h : m.access p n al = pure (b, blk, o)) (sh : Bool) :
+    m.keyAt p sh = some (wordKey blk o sh) := by
+  obtain ⟨pb, po⟩ := p
+  unfold Mem.access at h
+  cases pb with
+  | none => cases h
+  | some b' =>
+    simp only at h
+    cases hb : m.blocks[b']? with
+    | none => rw [hb] at h; cases h
+    | some blk' =>
+      rw [hb] at h
+      simp only at h
+      split at h
+      · rename_i hc
+        cases h
+        simp only [Mem.keyAt, hb, Option.map_some, wordKey, Int.toNat_of_nonneg hc.2.1]
+      · cases h
+
+/-- `futexKeyOf` reads the key without changing the memory. -/
+theorem _root_.Zig.futexKeyOf_run {m : Mem} {p : Ptr} {sh : Bool} {k : FutexKey}
+    (h : m.keyAt p sh = some k) : ((futexKeyOf p sh).run m).run = some (.ok (k, m)) := by
+  simp [futexKeyOf, h]; rfl
+
+/-- An address in `[0, 2 ^ 64)` is its own `usize` (`futexAddr`): the key that an OS row forms
+from the `usize` the kernel receives is the address's key. -/
+theorem _root_.Zig.futexAddr_of_lt {a : Int} (h0 : 0 ≤ a) (h1 : a < 2 ^ 64) :
+    (futexAddr a : Int) = a := by
+  unfold futexAddr
+  rw [Int.emod_eq_of_lt h0 h1, Int.toNat_of_nonneg h0]
 
 end Thread
 end Zig
