@@ -1307,10 +1307,9 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
 /-- **The waiter's take of a permit** at the store of the count (count not 0, `hnz`), from the
 semaphore's wait (`wt`): its part gains a resource `r` with `T Y` from the pool (`hpool`), the count
 goes down by one to `gx Y`'s (`hcnt`, `hR`), and the waiter moves to `pst` with its snapshot and
-the client's rest's move (`hU`). `gx` and `T` are indexed by the client parts at the take,
-`Y = S.xs (upd G t g)`: the take is a step of a known state, so the moved resource and the new
-ghost value may depend on what the other threads did before it. The premises `hcnt`, `hpool`,
-`hU` are `SemImpl`'s wait's; the step's triple is on the count alone, which is not 0. -/
+the client's rest's move (`hU`), with `Y = S.xs (upd G t g)` the client parts at the take
+(`SemImpl`). The premises `hcnt`, `hpool`, `hU` are `SemImpl`'s wait's; the step's triple is on
+the count alone, which is not 0. -/
 theorem Fits.wp_take (hS : L.Fits S.prim P U ok) (hcost : P.cost = none) {α : Type}
     {x : MemM α} {G : ThreadId → γ} {t : ThreadId} {g : γ} {gx : (ThreadId → X) → γ} {rL : Res}
     {m : Mem} {d : Nat}
