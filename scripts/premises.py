@@ -52,6 +52,7 @@ def name_tokens(text: str) -> set[str]:
     resolves (a same-named local declaration can only add premises, never drop them)."""
     return {token.removeprefix("_root_.") for token in TOKEN_RE.findall(text)}
 
+
 NAME_RE = re.compile(r"\s*(" + IDENT + r"(?:\." + IDENT + r")*)")
 CTOR_RE = re.compile(r"\|\s*(" + IDENT + r")")
 # `.ctor` with an expected type (`throw .unspecified`), not a field access on a term (nor on
@@ -338,7 +339,7 @@ def type_head(decl: Decl, allow_parameters: bool = False) -> str:
     if colon < 0 or (not allow_parameters and binders(text[:colon])):
         return ""
     match = TOKEN_RE.search(text[colon + 1:])
-    return match.group(0) if match else ""
+    return match.group(0).removeprefix("_root_.") if match else ""
 
 
 def instance_type(decl: Decl) -> frozenset:
@@ -421,7 +422,7 @@ def parse_file(path: Path, root: Path) -> LeanFile:
                 if match and match.group(1) not in {"where", "extends"}:
                     name = match.group(1)
             if name.startswith("_root_."):
-                full = name[len("_root_."):]
+                full = name.removeprefix("_root_.")
             else:
                 full = ".".join([*namespaces, name]) if name else ""
             conditions = tuple(s[4] for s in scopes if s[0] == "if_decl")
