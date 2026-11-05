@@ -1,5 +1,5 @@
 import Proofs.Sync.Mailbox.Start
-import Proofs.Sync.Mailbox.Run
+import Proofs.Sync.IoSemaphore
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.Local
@@ -19,8 +19,9 @@ The proof is in the full-state concurrent separation logic (`docs/sep-threads.md
 code takes the semaphore as a `SemImpl` (`ZigLean/Sep/Full/Sem.lean`) and its proof uses only that
 contract: `dispatch_spec` and `main_spec` hold for every implementation `I` and every value of its
 mutex (`Cfg`). The results instantiate it with the translated std semaphore (`Sync.ioSem`,
-`Proofs/Sync/IoSemaphore.lean`; `stdMain`, `stdDispatch` and the kernel-computed run
-`mailbox_completes`: `Proofs/Sync/Mailbox/Run.lean`).
+`Proofs/Sync/IoSemaphore.lean`; `stdMain`, `stdDispatch`). A run that the kernel computes
+(`mailbox_completes`) depends on the translation's loops and is with the 0.16.0 runs in
+`tests/roadmap/sync-contracts/Runtime.lean`.
 
 **Ownership transfer.** The message cells move: `main` → producer (at the spawn), producer → the
 free permit (`post`: the pool holds `Msg 2` while the permit is available), free permit → `main`
@@ -98,6 +99,12 @@ theorem main_spec (I : SemImpl Tgt) (hLc : K.c = I.c) (σ : Placement) (io : Io)
 end Proofs
 
 /-! ## The results, for the translated `Io.Semaphore` -/
+
+/-- The mailbox client with the translated std semaphore. -/
+abbrev stdMain := mailMain ioSem
+
+/-- The spawn targets with the translated std semaphore. -/
+abbrev stdDispatch := dispatch ioSem
 
 /-- The std semaphore's mutex value. -/
 def stdK : Cfg := ⟨ioSem.c, .inr (.inl rfl)⟩
