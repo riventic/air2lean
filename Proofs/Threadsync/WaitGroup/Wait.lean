@@ -278,7 +278,7 @@ theorem ewait_live (G₁ : ThreadId → Gh) (m₁ : Mem) (hw : E.ph (G₁ 0) = .
       obtain ⟨w, hw', he⟩ := Array.any_eq_true'.mp h
       have e : w.1 = u := by simpa using he
       rcases hu.q w hw' with hq | hq
-      · exact fitsL.noWaits hL hall (Array.any_eq_true'.mpr ⟨w, hw', by simp [hq]⟩)
+      · exact fitsL.noWaits hL hu hall (Array.any_eq_true'.mpr ⟨w, hw', by simp [hq]⟩)
       · have h1 := (hu.einv.q w hw' hq).1
         have := (hu.wk0 w.1 (hu.einv.wx w.1 (.inr h1))).1
         rw [e] at this; rcases hu12 with rfl | rfl <;> cases this
