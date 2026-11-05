@@ -511,12 +511,13 @@ loop, the family or why the loop has none; then plain `def`s. A module with no l
 body outside the given namespace, is an error. `scripts/invgen.py check|write` regenerates every
 committed `Inv.lean` (its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right
 after `gen`, so a retranslation regenerates the invariants with it.
-`scripts/gen-integrity.py invgen` (preflight, also without a translator) checks every record
-against the checkout without running Lean: a changed generator module, toolchain or input makes
-the file stale. In write mode the `invgen` step runs the generator only then; in check mode it
-always reruns it, because a runtime (`ZigLean`) change can change how an unchanged translation
-elaborates, which the record does not hash (hashing the runtime would mark every `Inv.lean` stale
-at every runtime change).
+The record also holds the SHA-256 of the rest of the file. `scripts/gen-integrity.py invgen`
+(preflight, also without a translator) checks each target's record against the checkout without
+running Lean: a changed generator module, toolchain or input makes the file stale, a hand edit or a
+record of another module fails, and so does a record outside the targets. The `invgen` regen step
+still always runs the generator: a runtime (`ZigLean`) change can change how an unchanged
+translation elaborates, which the record does not hash (hashing the runtime would mark every
+`Inv.lean` stale at every runtime change).
 
 The slice's family is the **counted loop**: one repeating path, guarded by an unsigned `x < b`
 (`b` a local the loop does not write, a loop parameter or a literal), that adds 1 to the local

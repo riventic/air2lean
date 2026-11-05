@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
@@ -529,42 +530,71 @@ class InvgenRecordTests(unittest.TestCase):
         (self.root / "Fx/Fx").mkdir(parents=True)
         (self.root / "Fx/Fx/Gen.lean").write_text("-- translation\n")
         self.write_record()
+        self.tracked = ["Fx/Fx/Gen.lean", "Fx/Fx/Inv.lean"]
         for patch in (mock.patch.object(gi, "ROOT", self.root),
-                      mock.patch.object(gi, "git_files", return_value=["Fx/Fx/Gen.lean", "Fx/Fx/Inv.lean"])):
+                      mock.patch.object(gi, "git_files", side_effect=lambda *_: self.tracked)):
             patch.start()
             self.addCleanup(patch.stop)
+
+    TARGETS = [("Fx/Fx/Inv.lean", "Fx", "Fx.Gen", "Fx")]
+    REVISION = staticmethod(runpy.run_path(str(ROOT / "scripts/semantic-fingerprints.py"))["translator_revision"])
 
     def digest(self, rel):
         return hashlib.sha256((self.root / rel).read_bytes()).hexdigest()
 
-    def write_record(self, revision=None):
-        lean, modules = "4.34.0", [["Air2Lean.InvGen", self.digest("Air2Lean/InvGen.lean")]]
-        listing = lean + "\n" + "".join(f"{m} {h}\n" for m, h in modules)
-        generator = {"lean": lean, "modules": modules,
-                     "revision": revision or hashlib.sha256(listing.encode()).hexdigest()}
+    def write_record(self, path="Fx/Fx/Inv.lean", revision=None, body="import Fx.Gen\n", **changes):
+        generator = {"lean": "4.34.0", "modules": [["Air2Lean.InvGen", self.digest("Air2Lean/InvGen.lean")]]}
+        generator["revision"] = revision or self.REVISION(generator)
         record = {"version": 2, "generator": generator, "inputs": [["Fx/Fx/Gen.lean", self.digest("Fx/Fx/Gen.lean")]],
-                  "module": "Fx.Gen", "namespace": "Fx", "loops": []}
-        (self.root / "Fx/Fx/Inv.lean").write_text(f"-- air2lean-invgen: {json.dumps(record)}\nimport Fx.Gen\n")
+                  "module": "Fx.Gen", "namespace": "Fx", "loops": [],
+                  "output": hashlib.sha256(body.encode()).hexdigest(), **changes}
+        (self.root / path).write_text(f"-- air2lean-invgen: {json.dumps(record)}\n{body}")
+
+    def errors(self):
+        return gi.invgen_errors(self.TARGETS)
 
     def test_current_record_passes_and_other_files_are_ignored(self):
-        self.assertEqual(gi.invgen_errors(), [])
+        self.assertEqual(self.errors(), [])
 
     def test_changed_input_generator_or_toolchain_is_stale(self):
         (self.root / "Fx/Fx/Gen.lean").write_text("-- changed translation\n")
         (self.root / "Air2Lean/InvGen.lean").write_text("-- changed generator\n")
         (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.35.0\n")
-        error, = gi.invgen_errors()
+        error, = self.errors()
         self.assertIn("Fx/Fx/Inv.lean is stale", error)
-        for what in ("Lean 4.34.0, toolchain 4.35.0", "generator module Air2Lean.InvGen", "input Fx/Fx/Gen.lean"):
+        for what in ("Lean 4.34.0 (lean-toolchain leanprover/lean4:v4.35.0)", "generator module Air2Lean.InvGen",
+                     "input Fx/Fx/Gen.lean"):
             self.assertIn(what, error)
 
-    def test_inconsistent_or_old_record_fails_closed(self):
-        self.write_record(revision="0" * 64)
-        error, = gi.invgen_errors()
-        self.assertIn("unreadable air2lean-invgen record", error)
-        (self.root / "Fx/Fx/Inv.lean").write_text('-- air2lean-invgen: {"version":1,"module":"Fx.Gen"}\n')
-        error, = gi.invgen_errors()
-        self.assertIn("unreadable air2lean-invgen record", error)
+    def test_hand_edit_below_the_record_fails(self):
+        with open(self.root / "Fx/Fx/Inv.lean", "a") as f:
+            f.write("def handWritten := 1\n")
+        error, = self.errors()
+        self.assertIn("not the generator's output", error)
+
+    def test_inconsistent_old_foreign_or_missing_record_fails_closed(self):
+        for changes, why in (({"revision": "0" * 64}, "consistent generator revision"),
+                             ({"inputs": [[1, "x"]]}, "not the record of Fx.Gen"),
+                             ({"inputs": [["/etc/hosts", "x"]]}, "not the record of Fx.Gen"),
+                             ({"namespace": "Other"}, "not the record of Fx.Gen"),
+                             ({"version": 1}, "not a version 2 record")):
+            self.write_record(**changes)
+            error, = self.errors()
+            self.assertIn("no valid air2lean-invgen record", error)
+            self.assertIn(why, error)
+        (self.root / "Fx/Fx/Inv.lean").write_text("import Fx.Gen\n")
+        error, = self.errors()
+        self.assertIn("no air2lean-invgen record on its first line", error)
+        (self.root / "Fx/Fx/Inv.lean").unlink()
+        error, = self.errors()
+        self.assertIn("Fx/Fx/Inv.lean: no valid air2lean-invgen record", error)
+
+    def test_record_outside_the_targets_fails(self):
+        self.write_record()
+        self.write_record(path="Fx/Fx/Other.lean")
+        self.tracked = self.tracked + ["Fx/Fx/Other.lean", "Fx/Fx/Deleted.lean"]
+        error, = self.errors()
+        self.assertIn("Fx/Fx/Other.lean: an air2lean-invgen record that is not a target", error)
 
 
 @unittest.skipUnless(os.access(ROOT / ".lake/build/bin/air2lean", os.X_OK), "translator not built")

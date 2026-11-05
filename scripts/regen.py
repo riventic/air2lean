@@ -147,11 +147,9 @@ def step_gen(check):
 
 
 def step_invgen(check):
-    """Generated loop invariants (`Inv.lean`) from the translated modules `gen` wrote. `write` runs
-    the generator only when a record's hashes are stale (`gen-integrity.py invgen`); `check`
-    always reruns it, as it also sees a runtime change in how a translated module elaborates."""
-    if not check and ok([PY, '-B', 'scripts/gen-integrity.py', 'invgen']):
-        return
+    """Generated loop invariants (`Inv.lean`) from the translated modules `gen` wrote. Always a
+    generator run: unlike the records' hashes (`gen-integrity.py invgen`), it also sees a runtime
+    change in how an unchanged translation elaborates, and `write` repairs what `check` finds."""
     guarded('invgen', [PY, '-B', 'scripts/invgen.py', 'check' if check else 'write'], env=lake_env(),
             timeout=3600)
 
