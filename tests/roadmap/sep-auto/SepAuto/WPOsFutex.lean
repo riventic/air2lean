@@ -31,7 +31,8 @@ theorem linux_wait (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId)
     P.WP t (Linux.futex_4arg L.ptr 0x80 (BitVec.ofNat 32 L.c) none)
       (fun r G' m' d' => (∃ w : WaitResult, w ≠ .timedOut ∧ r = Linux.waitCode w) ∧ d' < d ∧
         m'.current = t ∧ P.inv (upd G' t g) m') G m d := by
-  fsym [hP.ptrAddr_aligned, wp_osWait hP rfl hg hok hi]
+  have hw := hP.wordAt hi
+  fsym [wp_osWait hP rfl hg hok hi]
 
 /-- Linux: `unlock`'s wake of one waiter at the word (`futex_3arg(WAKE | PRIVATE, 1)`), by the
 thread at `wake`: it goes on at `out`. -/
@@ -41,8 +42,8 @@ theorem linux_wake (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId)
     P.WP t (Linux.futex_3arg L.ptr 0x81 1)
       (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t (L.set g .out rnil)) m')
       G m d := by
-  fsym [hP.ptrAddr_aligned,
-    wp_osWake hP (w := some (Linux.wakeLimit 1))
+  have hw := hP.wordAt hi
+  fsym [wp_osWake hP (w := some (Linux.wakeLimit 1))
       (fun k hk => by cases hk; exact Linux.wakeLimit_pos 1) hg hok hi]
 
 /-- macOS: the OS wait for `c` at the word, by a thread at `spin`: it goes on at `spin`. -/
@@ -53,6 +54,7 @@ theorem darwin_wait (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId
       (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m') G m d := by
   have he : (BitVec.ofNat 64 L.c).setWidth 32 = BitVec.ofNat 32 L.c := by
     apply BitVec.eq_of_toNat_eq; simp
+  have hw := hP.wordAt hi
   fsym [wp_osWait hP he hg hok hi]
 
 /-- macOS: `wake(p, n)` with `n > 1` sets `WAKE_ALL` (`__ulock_wake(… | WAKE_ALL, 0)`): by the
@@ -64,6 +66,7 @@ theorem darwin_wakeAll (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : Threa
       (fun r G' m' d' => d' < d ∧ m'.current = t ∧
         (P.inv (upd G' t (L.set g .out rnil)) m' ∨
          r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
+  have hw := hP.wordAt hi
   fsym [wp_osWake hP (w := none) (fun k hk => by cases hk) hg hok hi]
 
 /-- Linux: an event's waiter at `w1` waits for `waiting` (1) at the event's word, by the word
@@ -78,8 +81,8 @@ theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.co
   -- workaround (ledger #current-thread-subst): `fsym` substitutes `hc` away after elaborating the
   -- rule term, so the rule takes the current thread itself
   subst hc
-  fsym [hE.wordPtrAddr_aligned (hE.wRest rfl),
-    FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
+  have hw := hE.wordWordAt (hE.wRest rfl) hi
+  fsym [FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
 
 /-- macOS: an event's setter at `sw` wakes every waiter (`__ulock_wake(… | WAKE_ALL, 0)`,
 `FEvent.wp_osWake`, over `wp_wordOsWake`): the event is set and it is done (`sd`), or after a
@@ -91,13 +94,14 @@ theorem event_wakeAll (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P
       (fun r G' m' d' => d' < d ∧ m'.current = t ∧
         (E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m' ∨
          r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
+  have hw := hE.wordWordAt (hE.wRest rfl) hi
   fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg (.inl hgo) hi]
 
 /-- A retained address run must not make the walker commit to the unaligned case before
 checking its guard. The address and protocol are arbitrary. -/
 theorem aligned_wake_selection (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (p : Ptr) (a : Int)
-    (ha : (Zig.ptrAddr p).run m = pure (a, m)) (hal : a % 4 = 0)
+    (ha : (Zig.ptrAddr p).run m = pure (a, m)) (hal : a % 4 = 0) (hw : m.wordAt p = true)
     (Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop)
     (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit 1)) false : ConcM Tgt (Option Nat))
       (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m d) :

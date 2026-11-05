@@ -87,6 +87,14 @@ theorem Fits.ptrAddr_aligned (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : M
   obtain ⟨rX, hL, -⟩ := (hP.inv _ _).mp hi
   exact hL.w.blk.ptrAddr_aligned
 
+/-- A protocol's lock invariant makes the word a live writable word (`Mem.wordAt`), which the
+futex rows' address validation needs. -/
+theorem Fits.wordAt (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (hi : P.inv G m) :
+    m.wordAt L.ptr = true := by
+  obtain ⟨rX, hL, -⟩ := (hP.inv _ _).mp hi
+  obtain ⟨blk, hb, hl, hs, ha, hk, hlo⟩ := hL.w.blk
+  exact Mem.wordAt_of hb hl hs ha hk hlo
+
 /-- If every thread has ended, sleeps at a futex or waits at a join, no thread waits at the
 word. -/
 theorem Fits.noWaits (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m : Mem}

@@ -78,6 +78,14 @@ theorem Fits.wordPtrAddr_aligned {W : Word 32 4} (hP : L.Fits K P U ok) (hW : W.
   obtain ⟨rX, -, hU⟩ := (hP.inv _ _).mp hi
   exact (hW _ _ _ hU).1.ptrAddr_aligned
 
+/-- Any shared word kept in a protocol's rest is a live writable word (`Mem.wordAt`), which the
+futex rows' address validation needs. -/
+theorem Fits.wordWordAt {W : Word 32 4} (hP : L.Fits K P U ok) (hW : W.InRest U)
+    {G : ThreadId → γ} {m : Mem} (hi : P.inv G m) : m.wordAt W.ptr = true := by
+  obtain ⟨rX, -, hU⟩ := (hP.inv _ _).mp hi
+  obtain ⟨blk, hb, hl, hs, ha, hk, hlo⟩ := (hW _ _ _ hU).1.blk
+  exact Mem.wordAt_of hb hl hs ha hk hlo
+
 /-- The invariant at a stop of `t` (`current := t`, a thread that exists), with the word's cells
 in the rest. -/
 theorem Fits.stopW (hP : L.Fits K P U ok) (hW : W.InRest U) {G₁ : ThreadId → γ} {m₁ : Mem}
