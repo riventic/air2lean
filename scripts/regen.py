@@ -326,46 +326,51 @@ def run_is_current(inv_mod, run_record):
             and all(inv_mod.module_evidence_matches(ROOT, run_record, mod, build.swaps) for mod in built))
 
 
+def planned_run_is_current(inv_mod, run_record, planned):
+    """A recorded run is kept only for the same build the list plans now, with current hashes."""
+    try:
+        build = inv_mod.parse_build_command(ROOT, run_record.get('command'), lake=inv_mod.producer_path(run_record))
+    except inv_mod.Error:
+        return False
+    return (build.swaps == planned['swaps'] and set(planned['modules']) <= set(run_record.get('modules', []))
+            and run_is_current(inv_mod, run_record))
+
+
 def step_inventory(check):
-    """Re-record every theorem-inventory run whose recorded hashes no longer match, then write."""
+    """The theorem inventory (assurance/theorem-inventory.json, docs/theorem-inventory.md): whole-tree
+    generated files, never committed (assurance/generated.json). The runs are planned from the
+    committed list (theorem-inventory.py `plan`); a run whose recorded hashes still match is kept,
+    the others are rebuilt (guarded) and recorded, then the document is rendered and checked."""
     inv_mod = load('theorem_inventory', 'theorem-inventory.py')
-    inventory = inv_mod.load(ROOT)
-    stale = [rid for rid, r in sorted(inventory.get('runs', {}).items()) if not run_is_current(inv_mod, r)]
     if check:
-        if stale:
-            raise Failed('stale theorem-inventory runs: ' + ', '.join(stale))
         run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
         return
-    # Reject unsupported producers/commands before dispatching any stale run, even if its
-    # hashes are stale for another reason. Never replay arbitrary historical argv.
-    plans = {}
-    for rid in stale:
-        try:
-            record = inventory['runs'][rid]
-            plans[rid] = inv_mod.parse_build_command(
-                ROOT, record.get('command'), lake=inv_mod.producer_path(record)).existing(ROOT)
-        except inv_mod.Error as error:
-            raise Failed(f'theorem-inventory run {rid}: refusing replay: {error}') from error
+    listed = inv_mod.load_list(ROOT)
+    try:
+        previous = inv_mod.load(ROOT).get('runs', {})
+    except (inv_mod.Error, OSError, ValueError):
+        previous = {}  # missing, or generated from another list: every run is rebuilt
+    planned = inv_mod.plan(ROOT, listed)
+    kept = {rid: record for rid, record in previous.items()
+            if rid in planned and planned_run_is_current(inv_mod, record, planned[rid])}
+    stale = [rid for rid in planned if rid not in kept]
+    inv_mod.write_inventory(ROOT, {**listed, 'runs': kept})
     try:
         lake = inv_mod.selected_lake(ROOT) if stale else None
     except inv_mod.Error as error:
-        raise Failed(f'theorem-inventory: cannot select Lake for renewal: {error}') from error
+        raise Failed(f'theorem-inventory: cannot select Lake for the runs: {error}') from error
     for rid in stale:
-        record = inventory['runs'][rid]
-        log('re-recording theorem-inventory run %s' % rid)
-        plan = plans[rid]
-        # A renewal rebuilds a run's proof set cold, up to the whole tree: the full build's
-        # per-process limit (scripts/full-build.sh), since one-thread Proofs.Sync builds peak at 5.3 GB
-        # and up to 6.9 GB within the accepted variance (assurance/perf-budgets.json, `sync`).
-        report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
-                                  tools=[lake] if plan.kind == 'swap' else [], rss_mib=11000)
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
-             '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
-    if not ok([PY, '-B', 'scripts/theorem-inventory.py', 'check']):
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'write'])
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
-
-
+        log('recording theorem-inventory run %s' % rid)
+        command = inv_mod.plan_command(planned[rid], lake, PY)
+        # A run rebuilds its proof set cold, up to the whole tree: the full build's per-process
+        # limit (scripts/full-build.sh), since one-thread Proofs.Sync builds peak 5.3 GB and up to
+        # 6.9 GB within accepted variance (assurance/perf-budgets.json, `sync`).
+        report, logfile = guarded('inventory-' + rid, command.renewal(lake, python=PY), env=lake_env(),
+                                  tools=[lake] if command.kind == 'swap' else [], rss_mib=11000)
+        run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', planned[rid]['zig'],
+             '--target', planned[rid]['target'], '--guard-report', report, '--guard-log', logfile])
+    run([PY, '-B', 'scripts/theorem-inventory.py', 'write'])
+    run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
 
 
 def provenance_current():
@@ -440,13 +445,13 @@ STEPS = [
     ('assurance-statements', 'pr', ['tests/roadmap/coverage-report/statement-binding.json'], step_assurance_statements),
     ('audit-exposure', 'pr', ['tests/roadmap/architecture-audit/claims/exposure-report.json'],
      step_audit_exposure),
-    ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
+    ('inventory', 'tree', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
     ('provenance', 'tree', ['assurance/provenance-gap/{manifest,pins}.json, receipt/',
                             'assurance/provenance/{manifest,pins}.json, receipt/'], None),
 ]
 # The `tree` steps are exactly the generators of assurance/generated.json (one source of truth):
 # whole-tree files are never committed; CI produces them and publishes them on `generated`.
-TREE_GROUPS = {'coverage': ['coverage'], 'premises': ['premise-index'],
+TREE_GROUPS = {'coverage': ['coverage'], 'premises': ['premise-index'], 'inventory': ['theorem-inventory'],
                'provenance': ['provenance', 'provenance-gap']}
 GENERATED = load('generated', 'generated.py')
 assert sorted(g for groups in TREE_GROUPS.values() for g in groups) == sorted(
