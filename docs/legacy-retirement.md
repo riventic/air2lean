@@ -24,6 +24,7 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L8 tick-cost model | done: emitted step ticks, `Full/Cost`, Lists/Bounded restated, Lists/Cost, Sep/{Cost,Bounded,Alloc}, `ZigLean/Sep.lean`, Witnesses/Sep deleted | #568, #580, #562 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
 | L10, L11, L12, L13 | open | |
+| L15 VC layer | done: `vc_gen`, `#vc_extract(_all)`, the `vc_contract` registry, the `ResultProgram` AST and `scripts/vc-report.py` deleted; P02's VCs are `fsym`'s residual goals (`docs/vcs.md`) | #657 |
 
 Stage D-a (section 4) is done.
 

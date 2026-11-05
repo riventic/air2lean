@@ -75,7 +75,7 @@ overflow of its `add` and its `mul` (`rule_premise`) and its result at the retur
 /--
 info: fsym-report {"residuals":[{"goal":{"head":"Eq","text":"(x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat"},"index":0,"origin":{"condition":"postcondition","judgment":"Zig.Full.FLogic.T","program":{"head":"Pure.pure","text":"pure (x✝² * x)"},"reason":"postcondition_not_proved","rule":{"head":"Zig.Full.Auto.ret","text":"Auto.ret"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp (pure (x✝² * x)) fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}},{"goal":{"head":"LT.lt","text":"x✝².toNat * x.toNat < 2 ^ 32"},"index":1,"origin":{"condition":"rule_premise","judgment":"Zig.Full.FLogic.T","program":{"head":"StateT.lift","text":"StateT.lift (mul false x✝² x)"},"reason":"side_condition_not_proved","rule":{"head":"Zig.VC.Prim.mul_unsigned_step","text":"@Prim.mul_unsigned_step"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp\n  (StateT.lift (mul false x✝² x) >>= fun x =>\n    (StateT.lift do\n        let e ←\n          (fun x => x.fst) <$> do\n              let p ← pure (x, default)\n              StateT.run (pure (Basic.weightedTardinessExit.ret p.fst)) p.snd\n        match e with\n          | Basic.weightedTardinessExit.ret v => pure v) >>=\n      pure)\n  fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}},{"goal":{"head":"Eq","text":"(x✝² * x).toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat"},"index":2,"origin":{"condition":"postcondition","judgment":"Zig.Full.FLogic.T","program":{"head":"Pure.pure","text":"pure (x✝² * x)"},"reason":"postcondition_not_proved","rule":{"head":"Zig.Full.Auto.ret","text":"Auto.ret"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp (pure (x✝² * x)) fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}},{"goal":{"head":"LT.lt","text":"start.toNat + j.duration.toNat < 2 ^ 32"},"index":3,"origin":{"condition":"rule_premise","judgment":"Zig.Full.FLogic.T","program":{"head":"StateT.lift","text":"StateT.lift (add false start j.duration)"},"reason":"side_condition_not_proved","rule":{"head":"Zig.Full.Auto.add_step","text":"@Auto.add_step"},"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp\n  (StateT.lift (add false start j.duration) >>= fun x =>\n    (StateT.lift do\n        let e ←\n          (fun x => x.fst) <$> do\n              let p ← pure (x, default)\n              StateT.run\n                  (do\n                    let i4 ← pure j.due\n                    let i5 ← call (Basic.tardiness p.fst i4)\n                    let i6 ← pure j.weight\n                    let i7 ← liftM (intCast false false 32 i6 false)\n                    let i8 ← liftM (mul false i5 i7)\n                    pure (Basic.weightedTardinessExit.ret i8))\n                  p.snd\n        match e with\n          | Basic.weightedTardinessExit.ret v => pure v) >>=\n      pure)\n  fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫"}}}],"schemaVersion":1,"status":"stopped"}
 -/
-#guard_msgs (drop error) in
+#guard_msgs (drop error, all) in
 example (j : Basic.Job) (start : BitVec 32) :
     FTotalTriple emp (StateT.lift (Basic.weightedTardiness j start) : MemM (BitVec 32))
       (fun r => ⟪r.toNat = (start.toNat + j.duration.toNat - j.due.toNat) * j.weight.toNat⟫) := by
@@ -100,21 +100,23 @@ theorem parseDigit_total (c : BitVec 8) :
     FTotalTriple emp (StateT.lift (Errors.parseDigit c) : MemM _)
       (fun v => ⟪v = if c.toNat < 48 ∨ 57 < c.toNat then .error "NotDigit" else .ok (c - 48)⟫) := by
   fsym
-  all_goals (simp_all [Zig.lt, Zig.gt, BitVec.ult]; try bv_omega)
+  all_goals
+    simp_all [Zig.lt, Zig.gt, BitVec.ult]
+    try (simp only [show ¬(c.toNat < 48 ∨ 57 < c.toNat) by omega, ↓reduceIte]; congr 1; bv_omega)
 
 theorem parseDigit_contract (c : BitVec 8) :
     ∃ v, Errors.parseDigit c = pure v ∧
       v = if c.toNat < 48 ∨ 57 < c.toNat then .error "NotDigit" else .ok (c - 48) :=
   (parseDigit_total c).result_spec
 
--- `catch 0`: the callee's error return is consumed through the checked unwrap primitives.
+-- `catch 0`: the callee's error return, from its contract, is consumed through the checked
+-- unwrap primitives, whose preconditions are safety obligations.
 theorem digitOrZero_contract (c : BitVec 8) :
     ∃ v, Errors.digitOrZero c = pure v ∧
       v = if c.toNat < 48 ∨ 57 < c.toNat then 0 else c - 48 := by
   refine FTotalTriple.result_spec ?_
-  set_option fsym.report true in fsym [parseDigit_total]
-  all_goals trace_state
-  all_goals sorry
+  fsym [parseDigit_total]
+  all_goals (by_cases h : c.toNat < 48 ∨ 57 < c.toNat <;> simp_all [Zig.isNonErr, Zig.isErr] <;> omega)
 
 /-! ## Memory effects
 
@@ -162,26 +164,29 @@ theorem same_contract (p q : Ptr) :
 /-! Mutated contracts: each leaves an obligation that the walk cannot close. -/
 
 /-- The overflow bound dropped. -/
-example (p : Ptr) (delta : BitVec 32) (old : BitVec 64) : True := by
+example : True := by
   fail_if_success
-    have : FTotalTriple (up (pts p 8 old)) (Pointers.addTo p delta)
-        (fun _ => up (pts p 8 (old + delta.setWidth 64))) := by
-      fsym
+    have : ∀ (p : Ptr) (delta : BitVec 32) (old : BitVec 64),
+        FTotalTriple (up (pts p 8 old)) (Pointers.addTo p delta)
+          (fun _ => up (pts p 8 (old + delta.setWidth 64))) := by
+      intros; fsym
   trivial
 
 /-- The cells not swapped. -/
-example (p q : Ptr) (x y : BitVec 32) : True := by
+example : True := by
   fail_if_success
-    have : FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (Pointers.swap p q)
-        (fun _ => up (pts p 4 x) ⋆ up (pts q 4 y)) := by
-      fsym
+    have : ∀ (p q : Ptr) (x y : BitVec 32),
+        FTotalTriple (up (pts p 4 x) ⋆ up (pts q 4 y)) (Pointers.swap p q)
+          (fun _ => up (pts p 4 x) ⋆ up (pts q 4 y)) := by
+      intros; fsym
   trivial
 
 /-- The provenance premise dropped: pointers into blocks are not compared by address. -/
-example (p q : Ptr) : True := by
+example : True := by
   fail_if_success
-    have : FTotalTriple emp (Pointers.same p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ emp) := by
-      fsym
+    have : ∀ p q : Ptr,
+        FTotalTriple emp (Pointers.same p q) (fun r => ⟪r = decide (p.off = q.off)⟫ ⋆ emp) := by
+      intros; fsym
   trivial
 
 end Memory
@@ -192,12 +197,25 @@ The walk guesses no invariant: it stops at a generated loop, which is left as th
 proved with the loop rules of `ZigLean/Sep/Full/Loop.lean` (`FTotalTriple.loop_ghost`,
 `FTriple.loop`) and then given to callers as a contract. -/
 
-#guard_msgs (drop error) in
+/--
+info: fsym: no rule for the command
+  StateT.lift (StateT.run (loop (Basic.sum.loop7 xs (len xs)) Basic.sum.again7) { total := 0#64, local3 := 0#64 })
+with the precondition
+  emp
+-/
+#guard_msgs (drop error, all) in
 example (xs : Array (BitVec 32)) :
     FTotalTriple emp (StateT.lift (Basic.sum xs) : MemM (BitVec 64)) (fun _ => ⟪True⟫) := by
   fsym
 
-#guard_msgs (drop error) in
+/--
+info: fsym: no rule for the command
+  StateT.run (loop (Pointers.sumTo.loop6 n x✝) Pointers.sumTo.again6) { acc := x✝, i := 0#32 }
+with the precondition
+  up (bytesAt x✝ A 8 BlockKind.stack (writeBytes (Array.replicate 8 Byte.undef) 0 (Enc.encode 0#64))) ⋆
+    bauth b 8 BlockKind.stack Frac.one ⋆ plain
+-/
+#guard_msgs (drop error, all) in
 example (n : BitVec 32) : FTriple plain (Pointers.sumTo n) (fun _ => plain) := by
   fsym
 
@@ -209,7 +227,7 @@ info: fsym: no rule for the command
 with the precondition
   up (pts p 8 x)
 -/
-#guard_msgs (drop error) in
+#guard_msgs (drop error, all) in
 example (p : Ptr) (n : BitVec 32) (x : BitVec 64) :
     FTotalTriple (up (pts p 8 x)) (Pointers.addDown p n) (fun _ => up (pts p 8 x)) := by
   fsym

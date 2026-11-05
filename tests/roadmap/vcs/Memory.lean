@@ -108,7 +108,8 @@ example (b : Bool) : FTotalTriple emp (guarded b) (fun _ => emp) := by
 example : ¬ FTotalTriple emp (throw .panic : MemM Unit) (fun _ => emp) := by
   intro ht
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ := Witness.FAdmit.of_emp
-  exact absurd (ht.1 m r rF hh hp hs : Error.panic = .stackOverflow) (by decide)
+  have h : Error.panic = .stackOverflow := ht.1 m r rF hh hp hs
+  cases h
 
 -- A raw loop needs an explicit invariant and variant; none is guessed: the loop is left.
 def spin (p : Ptr) : MemM Unit := do
