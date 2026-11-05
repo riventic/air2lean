@@ -133,23 +133,23 @@ theorem Fits.step (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
 theorem Transfer.none {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
     (hnh : (L.ph (G t)).held = false) (hp : p.held = false) : L.Transfer G rX m m' t p rnil := by
   unfold Transfer
-  exact ⟨fun _ => rfl, fun h => nomatch hnh.symm.trans h, fun _ h => nomatch hp.symm.trans h,
-    fun h => nomatch hnh.symm.trans h⟩
+  exact ⟨fun _ => rfl, fun h => (nomatch hnh.symm.trans h), fun _ h => (nomatch hp.symm.trans h),
+    fun h => (nomatch hnh.symm.trans h)⟩
 
 /-- A step that keeps `t`'s place keeps its resource. -/
 theorem Transfer.stay {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     (hi : L.Inv G rX m) : L.Transfer G rX m m' t (L.ph (G t)) (L.held (G t)) := by
   unfold Transfer
-  exact ⟨hi.idle t, fun _ _ => rfl, fun h1 h2 => nomatch h1.symm.trans h2,
-    fun h1 h2 => nomatch h1.symm.trans h2⟩
+  exact ⟨hi.idle t, fun _ _ => rfl, fun h1 h2 => (nomatch h1.symm.trans h2),
+    fun h1 h2 => (nomatch h1.symm.trans h2)⟩
 
 /-- An acquire of the free lock moves its resource before the step (`Inv.acq`). -/
 theorem Transfer.acquire {G : ThreadId → γ} {rX rL : Res} {m m' : Mem} {t : ThreadId}
     (hnh : (L.ph (G t)).held = false) (hF : L.Free G) (hfr : L.FreeRes G rX m rL) :
     L.Transfer G rX m m' t .holds rL := by
   unfold Transfer
-  exact ⟨fun h => nomatch h, fun h => nomatch hnh.symm.trans h, fun _ _ => ⟨hF, hfr⟩,
-    fun h => nomatch hnh.symm.trans h⟩
+  exact ⟨fun h => (nomatch h), fun h => (nomatch hnh.symm.trans h), fun _ _ => ⟨hF, hfr⟩,
+    fun h => (nomatch hnh.symm.trans h)⟩
 
 /-- A release makes the held resource the free one after the step (`Inv.rel`). -/
 theorem Transfer.release {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
@@ -157,8 +157,8 @@ theorem Transfer.release {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : Thre
     (hfr : L.FreeRes (upd G t (L.set (G t) p rnil)) rX m' (L.held (G t))) :
     L.Transfer G rX m m' t p rnil := by
   unfold Transfer
-  exact ⟨fun _ => rfl, fun _ h => nomatch hp.symm.trans h,
-    fun h => nomatch (LPh.held_of_holds hph).symm.trans h, fun _ _ => hfr⟩
+  exact ⟨fun _ => rfl, fun _ h => (nomatch hp.symm.trans h),
+    fun h => (nomatch (LPh.held_of_holds hph).symm.trans h), fun _ _ => hfr⟩
 
 /-- A lock step with the same ghost values keeps the protocol's invariant. -/
 theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
