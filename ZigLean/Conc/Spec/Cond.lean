@@ -654,7 +654,7 @@ theorem next (hi : CInv N s) {t : Tid} (ht : t < N) {c : CCtl CL}
     CInv N s' where
   mtx := hmtx
   ok := by rw [hctl]; exact tset_all (Q := fun c => CPlace.ok c = true) hok fun u _ => hi.ok u
-  idle u hu := by rw [hctl, tset_ne _ _ (fun e => by subst e; tomega)]; exact hi.idle u hu
+  idle u hu := by rw [hctl, tset_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact hi.idle u hu
   qwf := hqwf
   qep := hqep
   eload u := by
