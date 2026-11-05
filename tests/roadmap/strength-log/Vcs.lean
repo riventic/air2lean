@@ -14,7 +14,7 @@ its definition unfolded, word for word, so the log does not use the legacy layer
 
 namespace StrengthLog.Vcs
 
-open Zig Assn VC VCExtract
+open Zig Assn VCExtract
 open Zig.Full FAssn
 
 example (p : Ptr) (delta : BitVec 32) (old : BitVec 64)
@@ -38,7 +38,7 @@ example (p : Ptr) (old : BitVec 32) :
         m'.heap = hQ ∪ hF ∧ pts p 4 old hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on (swapSelf_contract p old) fun _ => SizeFree.pts _ _ _
 
--- The legacy `ensures result heap` was `fun v h => result v ∧ heap v h`.
+-- The legacy postcondition of a result and a heap was `fun v h => result v ∧ heap v h`.
 example (p q : Ptr) :
     ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → ⌜p.block = none ∧ q.block = none⌝ hP →
       m.Seq → m.FSeqPlain → ∃ v m' hQ, (Pointers.same p q).run m = pure (v, m') ∧
