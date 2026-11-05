@@ -34,7 +34,8 @@
 #   generated modules                     gen-integrity.py check, after the full build
 #                                         (scripts/full-build.sh, which first checks the
 #                                         precompiled fsym libraries; skipped by --no-translator)
-#   generated loop invariants             invgen.py check, after the full build (likewise)
+#   generated loop invariants             gen-integrity.py invgen (the records' hashes), and
+#                                         invgen.py check after the full build (likewise)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail
@@ -84,6 +85,7 @@ fi
 if [ "${GITHUB_ACTIONS:-}" != true ]; then
   check 'case family enrollment history' python3 -B scripts/gen-integrity.py enrollment
 fi
+check 'generated loop invariant records' python3 -B scripts/gen-integrity.py invgen
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate

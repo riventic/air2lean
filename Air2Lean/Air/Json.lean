@@ -110,6 +110,8 @@ structure RawCase where
 
 end
 
+deriving instance BEq for RawAsmOperand, RawAsm, RawInst, RawCase
+
 structure RawFunc where
   schema : Nat
   /-- `zig_version`, parsed once; `none` for a version outside `ZigVersion.all`, which
@@ -140,6 +142,7 @@ structure RawFunc where
   uncheckedIb : Array String := #[]
   /-- `--allocator-model` of this parse (`AllocatorModel`). -/
   allocatorModel : AllocatorModel := .std
+  deriving BEq
 
 /-- `some j` if `j`'s object has a non-null value at `k`, `none` if the key is absent (or
 `null`). -/
