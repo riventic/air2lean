@@ -580,7 +580,7 @@ theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     · rfl
   refine ⟨rL, hR, by rw [hpt]; exact hw, ⟨rnil, ?_, LockWord.off_erase.mpr fun _ _ => rfl,
     FHeap.Disjoint.symm (FHeap.disjoint_empty _), fun hF' => (by
-      have h := hF' t; unfold pl at h; rw [hphu, if_pos rfl] at h; cases h),
+      have h := hF'.held t; unfold pl at h; rw [hphu, if_pos rfl] at h; cases h),
     fun _ => rfl⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
   · rw [rnil_rsum, own_upd hjb hjt, L.part_set, L.held_set]
     have : rsum (L.own G m t) rL = rsum (L.part (G t)) rL := by
@@ -664,7 +664,7 @@ theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p 
         ne_eq] at h ⊢
       cases e : (L.part (G t)).heap l <;> simp_all
   refine ⟨by rw [hpt]; exact hw, ⟨(L.held (G t)), ?_, hHoff, hHX, fun _ => ⟨?_, by rw [hpt]; exact hrel _ hown hHoff⟩,
-    fun h => absurd (fun u => hnh u) h⟩, hi.xoff, fun u => ?_, fun u _ => ?_,
+    fun h => absurd (LockWord.Free.of_held hnh) h⟩, hi.xoff, fun u => ?_, fun u _ => ?_,
     fun u hu => by rw [hnh u] at hu; cases hu⟩
   · rw [own_upd hjb hjt, L.part_set, L.held_set, rsum_rnil]; exact ho2
   · rw [L.R_set]; exact hi.res t hph₁
@@ -746,7 +746,7 @@ theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
     fun u hu => ?_⟩
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    exact ⟨hRk (hfree.mp hF' t) rL h1, by rw [hpl]; exact h2⟩
+    exact ⟨hRk ((hfree.mp hF').held t) rL h1, by rw [hpl]; exact h2⟩
   · by_cases e : u = t
     · subst e; rw [upd_self]; exact hdisj
     · rw [upd_ne _ _ e]; exact hi.pdisj u
@@ -987,7 +987,7 @@ private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m'
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
   · rw [own_upd hjb hjt, hr']; exact ho2
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    have htn : (L.ph (G t)).held = false := hfree.mp hF' t
+    have htn : (L.ph (G t)).held = false := (hfree.mp hF').held t
     have hsub : ∀ l, rL.heap.erase l ≠ none →
         (rsum (L.wordR m) (rsum rL rX)).heap.erase l ≠ none := by
       intro l hl
@@ -1442,7 +1442,7 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
     (hblk : L.BlkOk m) (h0 : L.U32 m 0) (hat : ∀ l ∈ m.atomics, l.block ≠ L.b)
     (hq : m.waiters = #[]) (hall : AllLe m (m.clocks[t]!)) :
     L.Inv G rX m := by
-  have hfree : L.Free G := fun u => by
+  have hfree : L.Free G := LockWord.Free.of_held fun u => by
     show (L.ph (G u)).held = false; rcases hph u with ⟨h, -⟩ | h <;> rw [h] <;> rfl
   have hownE : L.own G m = upd own t (L.part (G t)) := by
     funext u; unfold upd

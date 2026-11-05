@@ -124,7 +124,7 @@ def Hits (e : FootprintEntry) : Prop :=
   e.block = L.b ∧ ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ L.o ≤ x ∧ x < L.o + 4
 
 /-- No thread holds the lock (awake or at another object's futex wait). -/
-def Free (P : ThreadId → LPh) : Prop := ∀ u, (P u).held = false
+def Free (P : ThreadId → LPh) : Prop := ∀ u, (P u).held = true → False
 
 theorem _root_.Zig.Conc.LPh.held_of_holds {p : LPh} (h : p = .holds) : p.held = true := by
   rw [h]; rfl
@@ -132,12 +132,18 @@ theorem _root_.Zig.Conc.LPh.held_of_holds {p : LPh} (h : p = .holds) : p.held = 
 theorem _root_.Zig.Conc.LPh.held_iff {p : LPh} : p.held = true ↔ p = .holds ∨ p = .holdsAway := by
   cases p <;> simp [LPh.held]
 
-theorem Free.ne {P : ThreadId → LPh} (h : Free P) (u : ThreadId) : P u ≠ .holds := fun e => by
-  have := h u; rw [e] at this; cases this
+theorem Free.ne {P : ThreadId → LPh} (h : Free P) (u : ThreadId) : P u ≠ .holds := fun e =>
+  h u (by rw [e]; rfl)
+
+theorem Free.held {P : ThreadId → LPh} (h : Free P) (u : ThreadId) : (P u).held = false :=
+  Bool.eq_false_iff.mpr (h u)
+
+theorem Free.of_held {P : ThreadId → LPh} (h : ∀ u, (P u).held = false) : Free P := fun u hu => by
+  rw [h u] at hu; cases hu
 
 theorem Free.not {P : ThreadId → LPh} (h : Free P) {u : ThreadId} (hu : (P u).held = true) :
-    False := by
-  rw [h u] at hu; cases hu
+    False :=
+  h u hu
 
 /-- A thread waits at the word in the futex queue `ws`. -/
 def Waits (ws : Array (ThreadId × Ptr)) : Prop := ws.any (·.2 == L.ptr) = true
@@ -1654,11 +1660,8 @@ theorem WInv.rmwStep {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
 theorem not_free_iff {P : ThreadId → LPh} : ¬ Free P ↔ ∃ u, (P u).held = true := by
   unfold LockWord.Free
   constructor
-  · intro h; exact Classical.byContradiction fun hn => h fun u => by
-      cases hu : (P u).held
-      · rfl
-      · exact absurd ⟨u, hu⟩ hn
-  · rintro ⟨u, hu⟩ h; rw [h u] at hu; cases hu
+  · intro h; exact Classical.byContradiction fun hn => h fun u hu => hn ⟨u, hu⟩
+  · rintro ⟨u, hu⟩ h; exact h u hu
 
 /-- A thread that is not in the futex queue is not the thread of a waiter. -/
 theorem ne_of_notQ {ws : Array (ThreadId × Ptr)} {t : ThreadId} (hq : ws.any (·.1 == t) = false)
@@ -1734,7 +1737,7 @@ theorem WInv.acquire {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
     split at hu
     · rename_i h; subst h; exact hpt
     · exact hu
-  · refine ⟨fun h => absurd h hw0, fun h => by have := h t; rw [upd_self] at this; cases this⟩
+  · refine ⟨fun h => absurd h hw0, fun h => (h t (by rw [upd_self]; rfl)).elim⟩
   · rw [hphu] at hu hv
     split at hu
     · split at hv
@@ -1924,7 +1927,7 @@ theorem WInv.release {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
       rw [back_push, hrelM]; exact VClock.le_merge_right _ _⟩
   refine ⟨hst, hcM, hbf,
     hi.rmw hl hb hst hbM haM rfl (bs4 _) L.val0 (intOfBytes_rmw _)
-    hg ⟨fun _ => hnh, fun _ => rfl⟩ (fun u v hu _ => (hnh' u hu).elim) ?_
+    hg ⟨fun _ => hnh', fun _ => rfl⟩ (fun u v hu _ => (hnh' u hu).elim) ?_
     (by rw [hwM]; exact hfq)
     (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
     (fun u hu => (hnh' u hu).elim), fun h ho hoff => ?_⟩
