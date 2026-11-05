@@ -313,9 +313,9 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   hypothesis of the nap and unnap rules (`Fits.nap`/`Fits.unnap`, planned with the two-lock
   product), discharged by each nesting protocol for its own `U`; a protocol that never nests
   (empty `nest`) proves nothing for them (decision on #667). The client may use the lock's
-  invariant before the step (`L.Inv G rX m`), e.g. another lock's `BlkOk` in a two-lock product:
-  every rule that applies `stable` has it (maintainer decision 2026-11-05,
-  ledger #lock-stable-inv). -/
+  invariant before the step (`L.Inv G rX m`), e.g. in a two-lock product the stepping lock's
+  `BlkOk`, which the other lock's invariant inside `U` needs. Every rule that applies `stable`
+  has it (ledger #lock-stable-inv). -/
   stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
     L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
