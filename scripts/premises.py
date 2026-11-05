@@ -583,10 +583,8 @@ def prefixes(parts: tuple[str, ...]) -> list[str]:
 
 def scope_bases(d: Decl) -> list[str]:
     """The prefixes a name in `d` resolves under: its namespaces and its opens."""
-    bases = prefixes(d.namespaces)
-    for opened in d.opens:
-        bases += [f"{b}.{opened}" if b else opened for b in prefixes(d.namespaces)]
-    return bases
+    ns = prefixes(d.namespaces)
+    return ns + [f"{b}.{o}" if b else o for o in d.opens for b in ns]
 
 
 def resolve(repo: Repository, decl: Decl) -> list[Decl]:
