@@ -137,6 +137,12 @@ theorem wakeAt_run (c : Nat) (p : FutexKey) (n : Option Nat) (m : Mem) :
   | none => exact ⟨none, m, by simp [zig_unfold, ExceptT.run, hs]⟩
   | some ts => exact ⟨some ts.length, _, by simp [wakeThreads, zig_unfold, ExceptT.run, hs]; rfl⟩
 
+/-- With `p`'s key `k` in the domain `sh`, the waking step of `futexWake` is `wakeAt` at `k`. -/
+theorem wakeAt_keyOf {c : Nat} {p : Ptr} {sh : Bool} {k : FutexKey} {w : Option Nat} {m : Mem}
+    (h : m.keyAt p sh = some k) :
+    (do wakeAt c (← futexKeyOf p sh) w : MemM (Option Nat)).run m = (wakeAt c k w).run m := by
+  simp only [StateT.run_bind, futexKeyOf_run h, pure_bind]
+
 /-- The option of a wake that woke `j` threads woke `wakeSize n k` of the `k` queued ones. -/
 theorem wakeAt_some {c : Nat} {p : FutexKey} {n : Option Nat} {m m' : Mem} {j : Nat}
     (h : ((wakeAt c p n).run m).run = some (.ok (some j, m'))) :
@@ -289,13 +295,6 @@ namespace Proto
 variable {Tgt γ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat}
 
 open Os in
-/-- With `p`'s key `k` in the domain `sh`, the waking step of `Os.futexWake` is `wakeAt` at `k`. -/
-theorem Os.wakeAt_keyOf {c : Nat} {p : Ptr} {sh : Bool} {k : FutexKey} {w : Option Nat} {m : Mem}
-    (h : m.keyAt p sh = some k) :
-    (do wakeAt c (← futexKeyOf p sh) w : MemM (Option Nat)).run m = (wakeAt c k w).run m := by
-  simp only [StateT.run_bind, futexKeyOf_run h, pure_bind]
-
-open Os in
 /-- **An OS futex wake** (`Os.futexWake`, OSF-02) at `p` in the domain `sh` by thread `t`: it
 stops with the ghost value `g` at the oracle's pick; in the same turn it resolves `p`'s key `pk`
 at the memory `m₁` of the pick (the block exists: `m₁.keyAt p sh = some pk`) and wakes
@@ -318,7 +317,7 @@ theorem WP.osFutexWake {p : Ptr} {sh : Bool} {w : Option Nat} {spurious : Bool}
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hcr => ?_⟩
   obtain ⟨pk, hpk, hw, hsp⟩ := hc G₁ m₁ hg hi₁ ht
   have hpk' : ({ m₁ with current := t } : Mem).keyAt p sh = some pk := hpk
-  simp only [wakeCountAt, hpk, hpk'] at hcr
+  simp only [wakeCountAt, hpk'] at hcr
   refine WP.liftMem (fun e he => ?_) (fun r m' hr => ?_) fun hn => ?_
   · obtain ⟨r, m', hr⟩ := wakeAt_run c pk w { m₁ with current := t }
     rw [wakeAt_keyOf hpk', hr] at he; cases he
