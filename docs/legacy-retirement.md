@@ -444,7 +444,7 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | --- | --- | --- | --- |
 | Proofs/Sync/RwLock.lean (4707) | `rwLockRead` result in {2,12,22}, safe; `Sem.Spec` legacy judgment | L | proof |
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
-| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | done: client of `MutexImpl` (`threadMutex`) and `EventImpl` (`resetEvent`) (`Proofs/Threadsync/WaitGroup/*`), `waitGroup_spec`/`waitGroup_safe` verbatim; the whole `Tally` read by `FLock.Inv.loadMem`; completes by kernel evaluation in `tests/roadmap/sync-contracts/Runtime.lean` (it names the Linux translation's loops) (#640) |
+| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | done: client of `MutexImpl` (`threadMutex`) and `EventImpl` (`resetEvent`) (`Proofs/Threadsync/WaitGroup/*`), `waitGroup_spec`/`waitGroup_safe` verbatim; the whole `Tally` read by `FLock.Inv.loadMem`; completes by kernel evaluation (`waitGroup_completes`, in every 0.15.2 translation) (#640, #675) |
 
 Remaining shared-prefix and holder proof copies are tracked in [engine ledger #76](engine-ledger.md).
 
