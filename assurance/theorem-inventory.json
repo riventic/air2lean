@@ -573,14 +573,14 @@
       "module": "Proofs.Sync.SnapshotCache",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): every completed run returns 10; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against the mutex contract `MutexImpl` only, for every implementation (no unfolding of the std code): every completed run returns 10; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.SnapshotCache.cache_safe",
       "module": "Proofs.Sync.SnapshotCache",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against `MutexContract` only (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against the mutex contract `MutexImpl` only, for every implementation (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.Mailbox.mailbox_spec",
