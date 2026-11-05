@@ -726,10 +726,11 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `tsum x.toNat g`, a caller's `f x.toNat`) to a term containing the side `l` of an equation
    `l = r` of the facts, `l` itself an atom (`x.toNat = i.toNat + 1`, a counter's step), equals
    the atom with `r` for `l`, in normal form (`tsum (i.toNat + 1) g` is
-   `tsum i.toNat g + g i.toNat`). Each equation is used once per atom (no chains), at `Nat` and
-   `Int`. The library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`) has the non-recursive normal forms
-   for a counter-dependent invariant (`tsum_sub_of_lt`, `tsum_sub_of_le`; a bound `n + 1` by
-   `tsumSucc`, a numeral bound kept). Regression: `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean`
+   `tsum i.toNat g + g i.toNat`). Each fact rewrites an atom at most once, an equation to a
+   non-atom first, an alias (`y.toNat = x.toNat`) only else, so the rewrites end; at `Nat` and
+   `Int`; not in a probe. The library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`) has the
+   non-recursive normal forms for a counter-dependent invariant (`tsumSubLt` where the term is not
+   `0`, `tsum_sub_of_le`; a bound `n + 1` by `tsumSucc`, a numeral bound kept). Regression: `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean`
    (the side goals of `counted.tri`'s step; ledger #arith-atom-congruence).
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared

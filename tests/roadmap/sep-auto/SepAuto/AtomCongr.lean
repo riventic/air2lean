@@ -55,6 +55,17 @@ theorem any_function (f : Nat → Nat) (i x : BitVec 32) (hx : x.toNat = i.toNat
     (hf : f (i.toNat + 1) = 7) : f x.toNat = 7 := by
   fsym_arith
 
+/-- An alias before the counter's step (`y = x`, then `x = i + 1`): the alias does not hide it. -/
+theorem alias_step (i x y : BitVec 32) (hy : y.toNat = x.toNat) (hx : x.toNat = i.toNat + 1) :
+    tsum y.toNat (fun u => u) = tsum i.toNat (fun u => u) + i.toNat := by
+  fsym_arith
+
+/-- A term `g x` that is `0` gets no difference step (its right side would normalize back to the
+left one), and the solver ends. -/
+theorem zero_term (n : Nat) (h : 1 < n) (v : Nat)
+    (hv : v + (tsum n (fun _ => 0) - tsum 1 (fun _ => 0)) = 5) : v ≤ 5 := by
+  fsym_arith
+
 /-- A numeral bound is not unfolded (`tsumSucc` only rewrites a bound written `n + 1`). -/
 theorem numeral_bound (g : Nat → Nat) (h : tsum 5000 g = 7) : tsum 5000 g + 1 = 8 := by
   fsym_arith
