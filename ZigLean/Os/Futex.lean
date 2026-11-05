@@ -72,20 +72,25 @@ address the kernel receives is the pointer's numeric address as a `usize` (`fute
   `get_futex_key` (Linux v6.16 `kernel/futex/core.c:521–628`, `Linux.futexKey`):
   - an address that is not a multiple of four returns `-EINVAL`;
   - then `access_ok` and the key. A private key needs a user address. A shared key (no
-    `FUTEX_PRIVATE_FLAG`) needs a writable page: `get_user_pages_fast`, for anonymous memory a
-    key of the address space and the address, distinct from the private key.
+    `FUTEX_PRIVATE_FLAG`) needs the page: `get_user_pages_fast`. On an anonymous page the key is
+    the address space and the address, distinct from the private key. On a file-backed page it
+    is the inode and the page offset, which changes when a write copies a `MAP_PRIVATE` page
+    (copy-on-write): a waiter at a `.data` page that was never written is not woken by a shared
+    wake after the first write.
 
-  The model forms the key only where it knows that the kernel forms it: at a live writable word
-  of the model (`Mem.wordAt`), and, for a private key, at any address below the end of a block
-  that the run placed (`Mem.userBelow`, premise SEM-07). It returns `-EFAULT` only where no
+  The model forms the key only where it knows the key: a private key at a live writable word of
+  the model (`Mem.wordAt`) or at any address below the end of a block that the run placed
+  (`Mem.userBelow`, premise SEM-07), and a shared key only at a live writable word of an
+  anonymous block (`Mem.anonAt`: a stack, a heap block or an OS mapping; a global or an
+  allocator's block, whose buffer may be a global, is refused). It returns `-EFAULT` only where no
   `access_ok` passes: at an address with bits 63 and 55 set. That is a kernel address on x86_64,
   also with LAM (whose `untagged_addr` keeps an address with bit 63 set), and on aarch64, also
   under the tagged-address ABI (whose `untagged_addr` sign-extends bit 55). Any other address
   would need native mapping or address-space knowledge that the model leaves open, for example
-  the read-only file-backed (inode) key of a shared request on a `const` global, an address above
-  every block, or a tagged aarch64 address. That is a conservative `.illegal` refusal: the model
-  says `.illegal` where native code returns `-EFAULT` or forms a key. Once the key forms, the
-  queue still matches waiters by pointer, not by key (audit S6, premise OSF-02).
+  the file-backed (inode) key of a shared request on a global, an address above every block, or
+  a tagged aarch64 address. That is a conservative `.illegal` refusal: the model says `.illegal`
+  where native code returns `-EFAULT` or forms a key. Once the key forms, the queue still
+  matches waiters by pointer, not by key (audit S6, premise OSF-02).
 * **macOS** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A WAIT with a null or unaligned address
   returns `-EINVAL`. A WAKE with a null address returns `-EINVAL`, and an unaligned WAKE looks up
   its key and finds no waiter. The key is the task and the address (`ULK_UADDR`). A live
@@ -247,9 +252,6 @@ def readTimespec (p : Ptr) : MemM (Option Nat) := do
 
 /-! ## Address validation (module doc) -/
 
-/-- The address that the kernel receives for a pointer with numeric address `a`: its `usize`. -/
-def futexAddr (a : Int) : Nat := (a % 2 ^ 64).toNat
-
 /-- `p` is a live writable `u32` of the model: four live bytes of one live block that is not
 read-only, at an address that is a multiple of four (`Mem.accessW`). Natively it is a mapped,
 writable user word (premise SEM-07). -/
@@ -257,6 +259,14 @@ def _root_.Zig.Mem.wordAt (m : Mem) (p : Ptr) : Bool :=
   match (m.accessW p 4 4).run with
   | some (.ok _) => true
   | _ => false
+
+/-- `p` points into a block whose pages are anonymous memory natively (`BlockKind.anon`). -/
+def _root_.Zig.Mem.anonAt (m : Mem) (p : Ptr) : Bool :=
+  match p.block with
+  | some b => match m.blocks[b]? with
+    | some blk => blk.kind.anon
+    | none => false
+  | none => false
 
 /-- The address `e - 1` is below the end of a block that the run placed, live or not: natively a
 user address (premise SEM-07), so `access_ok` passes for every address below `e`. -/
@@ -274,7 +284,7 @@ needs knowledge that the model leaves open (module doc). No state change. -/
 def futexKey (p : Ptr) (a : Int) (shared : Bool) : MemM (Option (BitVec 64)) := do
   let m ← get
   let u := futexAddr a
-  if m.wordAt p || (!shared && m.userBelow (u + 4)) then return none
+  if (m.wordAt p && (!shared || m.anonAt p)) || (!shared && m.userBelow (u + 4)) then return none
   if 2 ^ 63 ≤ u && u.testBit 55 then return some (negErrno E.FAULT)
   throw .illegal
 
