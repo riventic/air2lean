@@ -140,8 +140,8 @@ MUTANTS = {
     # D02: a recorded check result goes stale when an imported proof source changes.
     'theorem-inventory-stale-proof-accepted': (
         'scripts/theorem-inventory.py',
-        '                return sources.get(mod) == sha256(root / module_path(mod))\n',
-        '                return True\n', THEOREMS, 'ti',
+        "            return run.get('sources', {}).get(module) == _sha256(source, info.st_mtime_ns, info.st_size)\n",
+        '            return True\n', THEOREMS, 'ti',
         ('FixtureTests.test_edited_proof_or_translation_is_stale',)),
     # D02: a document must not say "every schedule" of a single-schedule theorem.
     'theorem-inventory-narrow-claim-accepted': (

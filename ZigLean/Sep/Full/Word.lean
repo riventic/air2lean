@@ -405,7 +405,7 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
     (c : ThreadId) (ws : Array (ThreadId × Ptr)) (wk : Array ThreadId)
     (hw : L.WInv (L.pl G') { m with current := c, waiters := ws, woken := wk })
     (hpart : ∀ u, L.part (G' u) = L.part (G u)) (hheld : ∀ u, L.held (G' u) = L.held (G u))
-    (hholds : ∀ u, L.ph (G' u) = .holds ↔ L.ph (G u) = .holds)
+    (hholds : ∀ u, (L.ph (G' u)).held = true ↔ (L.ph (G u)).held = true)
     (hg : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) (hR : ∀ r, L.R G r ↔ L.R G' r) :
     L.Inv G' rX { m with current := c, waiters := ws, woken := wk } := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
@@ -414,7 +414,7 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
   have hfree := free_iff_of (L := L) hholds
   refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, fun h => hnF fun h' => h (hfree.mpr h')⟩,
     hi.xoff, fun u => by rw [hpart, hheld]; exact hi.pdisj u,
-    fun u hu => by rw [hheld]; exact hi.idle u ((not_congr (hholds u)).mp hu),
+    fun u hu => by rw [hheld]; exact hi.idle u (held_false_of_iff (hholds u) hu),
     fun u hu => by rw [hheld]; exact (hR _).mp (hi.res u ((hholds u).mp hu))⟩
   · rw [hown]
     have : LockWord.wordR L.toLockWord { m with current := c, waiters := ws, woken := wk } =
@@ -427,7 +427,7 @@ theorem Inv.requeue {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G 
 /-- Thread `t`, which does not hold the lock, goes to `out` at a stop (`current := t`) where the
 word's invariant holds with `t` at `out`. -/
 theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
-    (hc : m.current = t) (hnh : L.ph (G t) ≠ .holds) (hng : L.ph (G t) ≠ .gone)
+    (hc : m.current = t) (hnh : (L.ph (G t)).held = false) (hng : L.ph (G t) ≠ .gone)
     (hw : L.WInv (upd (L.pl G) t .out) m) :
     L.Inv (upd G t (L.set (G t) .out rnil)) rX m := by
   have hupd : ∀ u, L.ph (upd G t (L.set (G t) .out rnil) u) = if u = t then .out else L.ph (G u) :=
@@ -442,7 +442,7 @@ theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi 
       unfold upd; split
       · rename_i e; subst e; rw [L.held_set, hi.idle _ hnh]
       · rfl)
-    (fun u => by rw [hupd]; split <;> simp_all)
+    (fun u => by rw [hupd]; split <;> simp_all [LPh.held])
     (fun u hu => by rw [hupd] at hu; split at hu <;> simp_all)
     (fun r => by rw [L.R_set])
   exact this
@@ -458,7 +458,7 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
     if b then L.Inv G rX m' else
       (m'.current = t ∧ L.Inv (upd G t (L.set (G t) .out rnil)) rX m') := by
   have hng : L.ph (G t) ≠ .gone := by rw [hph]; decide
-  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
+  have hnh : (L.ph (G t)).held = false := by rw [hph]; rfl
   obtain ⟨ht, -⟩ := hi.ht hng
   obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hW.access
   have hWb : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb₀).1
