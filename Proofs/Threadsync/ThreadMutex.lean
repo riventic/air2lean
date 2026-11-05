@@ -197,7 +197,7 @@ if_decl Thread_Mutex_DarwinImpl in
 `spin` (after a futex wait). -/
 def lockInvD (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
     (_ : Thread_Mutex_lockLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
-  d ≤ D ∧ ∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m
+  d ≤ D ∧ ∃ g₀, P.inv (upd G t g₀) m ∧ (g₀ = g ∨ g₀ = L.set g .spin rnil)
 
 /-- The loop ends when thread `t` holds the mutex. -/
 def lockPostD (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
@@ -213,39 +213,8 @@ theorem loopD_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hc1 : L.c = 1
       if id r.1 then lockInvD P L t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Thread_Mutex_lockLocals) => 0) s)
       else lockPostD P L t g D r G' m' d') G m d := by
-  obtain ⟨hD, g₀, hg₀, hi⟩ := h
-  have hset : ∀ q h, L.set g₀ q h = L.set g q h := by
-    intro q h; rcases hg₀ with rfl | rfl
-    · rfl
-    · exact L.set_set _ _ _ _ _
-  have hph : L.ph g₀ = .out ∨ L.ph g₀ = .spin := by
-    rcases hg₀ with rfl | rfl
-    · exact .inl hg
-    · exact .inr (L.ph_set _ _ _)
-  have hok₀ : ok g₀ := by
-    rcases hg₀ with rfl | rfl
-    · exact hok
-    · exact (hP.ok_set _ _ _).mpr hok
   unfold osUnfairLockTry
-  -- Hand walk until engine-ledger row `fsym-unknown-fvar-mutex-loop` is fixed (its deletion plan
-  -- restores the one `fsym` call).
-  simp only [StateT.run_bind, pure_bind, bind_assoc]
-  refine WP.bind (wp_casD hP hc1 hph hok₀ hi fun k hk G₁ m₁ r hc₁ hcase => ?_)
-  rcases hcase with ⟨rfl, rL, hi₁⟩ | ⟨rfl, hi₁⟩
-  · simp only [StateT.run_pure]
-    refine WP.pure' ?_
-    simp only [id, Bool.false_eq_true, ↓reduceIte]
-    rw [hset] at hi₁
-    exact ⟨rfl, by omega, hc₁, rL, hi₁⟩
-  · simp only [StateT.run_bind, bind_assoc, pure_bind]
-    rw [hset] at hi₁
-    refine WP.bind (wp_waitD hP (g := L.set g .wait rnil) (L.ph_set _ _ _)
-      ((hP.ok_set _ _ _).mpr hok) hi₁ fun k₂ hk₂ G₂ m₂ hc₂ hi₂ => ?_)
-    simp only [StateT.run_pure, pure_bind]
-    refine WP.pure' ?_
-    simp only [id, ↓reduceIte]
-    rw [L.set_set] at hi₂
-    exact ⟨⟨by omega, _, .inr rfl, hi₂⟩, .inl (by omega)⟩
+  fsym [wp_casD hP hc1, wp_waitD hP, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD, id]
 
 /-- The unticked native macOS lock preserves every actual caller-part assertion as a
 spatial frame beside its returned protected resource. No mode/payment admission is needed. -/

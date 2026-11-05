@@ -663,8 +663,10 @@ structure RunCaches where
   /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value,
   and a local that a substitution reverted and introduced again, by the new local, and a
   hypothesis replaced at a reduced type (`replaceHyp`), by the new local cast back
-  (`refreshUser` relates a caller's term to the context after them, `liveFVar?` a fact). -/
-  substs : IO.Ref (Std.HashMap FVarId Expr)
+  (`refreshUser` relates a caller's term to the context after them, `liveFVar?` a fact). Every
+  value recorded for a local, oldest first: the branches of a split each substitute the locals
+  of the context they share (`substValue?`). -/
+  substs : IO.Ref (Std.HashMap FVarId (Array Expr))
   /-- The heads of the assertions that the caller's updates produce (`fsym [u]`, `u : EUpd X Y`):
   a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`), except
   in a return's last attempt, when no update applies (`updUnfold`). -/
@@ -2883,6 +2885,26 @@ def boolFactCtx : MetaM Simp.Context := do
   (← caches).boolCtx.set (some c)
   return c
 
+/-- Record the substitution `fs` of a run (`caches.substs`), next to the values recorded before. -/
+def recordSubsts (fs : FVarSubst) : CoreM Unit := do
+  (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k ((m.getD k #[]).push v)) m
+
+/-- A recorded value `v` belongs to the context `lctx`: each of its locals is in `lctx`, or an
+eliminated one with such a value (at most `fuel` steps). -/
+partial def substValid (substs : Std.HashMap FVarId (Array Expr)) (lctx : LocalContext)
+    (fuel : Nat) (v : Expr) : Bool :=
+  !v.hasAnyFVar fun x => !lctx.contains x &&
+    (fuel == 0 || !(substs.getD x #[]).any (substValid substs lctx (fuel - 1)))
+
+/-- The value of the eliminated local `f` in the context `lctx`: of the values recorded for it,
+the newest that belongs to `lctx` (`substValid`), else the newest. The branches of a split may be
+walked after both are split (`wpSplit`), each substituting locals of the context they share by
+locals of its own: the other branch's value is not one of this context. -/
+def substValue? (substs : Std.HashMap FVarId (Array Expr)) (lctx : LocalContext) (f : FVarId) :
+    Option Expr :=
+  let vs := substs.getD f #[]
+  if vs.size ≤ 1 then vs.back? else vs.findRev? (substValid substs lctx 16) <|> vs.back?
+
 /-- Substitute the local of the equation `h : l = r` (`substEq`) and record the substitution
 (`caches.substs`): a caller's term that names an eliminated local takes its value
 (`refreshUser`). `none` if `h` substitutes nothing (no local side, a `let`, a dependency). -/
@@ -2896,7 +2918,7 @@ def substRecorded (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarI
         rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
     -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
     pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
-  (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
+  recordSubsts fs
   return some g'
 
 /-- The local that a recorded substitution's value `e` renames its local to: a local, or a
@@ -2917,7 +2939,7 @@ def liveFVar? (g : MVarId) (f : FVarId) : MetaM (Option FVarId) := g.withContext
   let mut f := f
   for _ in [0:substs.size + 1] do
     if lctx.contains f then return some f
-    let some f' := (substs.get? f).bind substLocal? | return none
+    let some f' := (substValue? substs lctx f).bind substLocal? | return none
     f := f'
   return none
 
@@ -2940,7 +2962,7 @@ def replaceHyp (g : MVarId) (h : FVarId) (r : Simp.Result) : MetaM (FVarId × MV
   if let some pf := r.proof? then
     if h' != h then
       let back ← eqCast pf (mkFVar h') (mp := false)
-      (← caches).substs.modify (·.insert h back)
+      recordSubsts (FVarSubst.insert {} h back)
   return (h', g')
 
 /-- `reduceProjsEq` on the propositions `hs` of `g`, each changed one replaced (`replaceHyp`):
@@ -3017,7 +3039,7 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
   try
     let gs ← g.cases x
     let some sg := gs[0]? | return none
-    (← caches).substs.modify fun m => sg.subst.map.foldl (fun m k v => m.insert k v) m
+    recordSubsts sg.subst
     let (g, changed) ← reduceProjsHyps sg.mvarId (← sg.mvarId.withContext getPropHyps)
     return some (← destructAll g changed)
   catch ex =>
@@ -3059,12 +3081,15 @@ partial def destruct (g : MVarId) (h : FVarId) : TacticM MVarId := g.withContext
     if let some g' ← etaProj g l r then return g'
     return g
   -- a fact of a user structure (`NodeFacts N A sz`): its fields next to it (the fact stays, as
-  -- the hypothesis of a lemma), each once
+  -- the hypothesis of a lemma), each once. A field's split may substitute a local that the fact
+  -- mentions, which reintroduces the fact as a new local: the next field is a projection of that
+  -- one (`liveFVar?`)
   if let .const c _ := ty.getAppFn then
     let env ← getEnv
     if isStructure env c && (← isProp ty) && !(← isLibrary c) && (← isClass? ty).isNone then
       let mut g := g
       for fn in getStructureFields env c do
+        let some h ← liveFVar? g h | return g
         let pf ← g.withContext (mkProjection (mkFVar h) fn)
         let fty ← instantiateMVars (← g.withContext (inferType pf))
         if ← g.withContext ((← getLCtx).anyM fun d => return d.type == fty) then continue
@@ -3341,7 +3366,7 @@ def refreshSubsts (e : Expr) : MetaM Expr := do
   let mut e := e
   for _ in [0:16] do
     let e' := e.replace fun x => match x with
-      | .fvar f => if lctx.contains f then none else substs.get? f
+      | .fvar f => if lctx.contains f then none else substValue? substs lctx f
       | _ => none
     if e' == e then break
     e := e'
