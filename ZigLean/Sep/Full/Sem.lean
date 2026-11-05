@@ -51,7 +51,8 @@ Any number of threads may wait and post: the condition is the multi-waiter one
   steps (`FCond.prim`) and the semaphore's own steps (`Move`: the waiter's entry into the
   condition at count 0, only in the client's waiting role `wx`, so that a thread the client
   counts on to post, such as a permit's holder, never sleeps there; the holder's step on the
-  mutex's resource, a load or store of the count, with its move in the semaphore's code, `Go`),
+  mutex's resource, a load or store of the count, with the lock's invariant after it and its move
+  in the semaphore's code, `Go`),
   each with both invariants after it. A protocol with the semaphore is `S.Fits P U ok`:
   `FLock.Fits` with the semaphore as its primitive, its `ok` out of `pst`, and the condition's
   window (`Fits.win`, PR397 ruling 6264821278, maintainer decision 6625654179: the protocol's
@@ -214,9 +215,8 @@ def Go (G : ThreadId → γ) (m : Mem) (t : ThreadId) (s : SPh) : Prop :=
 /-- The steps of the semaphore's own code by thread `t` (module doc): the entry of the waiter
 (in the waiting role, `wx`) into the condition's wait at count 0, and a step of the holder on the
 mutex's resource (a load or a store of the count; `FStepIn` with the mutex's word and the rest in
-its frame, which keeps the condition's cells, and the lock's invariant after it, which keeps the
-rest's cells up to `Cell.norm`, as after a step on a thread's own part) with a move in the
-semaphore's code (`Go`; the same memory for a move alone). -/
+its frame, which keeps the condition's cells; the lock's invariant after it, as after a step on a
+thread's own part) with a move in the semaphore's code (`Go`; the same memory for a move alone). -/
 inductive Move (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) :
     (ThreadId → γ) → Res → Mem → Prop
   | enter : L.ph (G t) = .holds → C.ph (G t) = .out → S.ph (G t) = .wt → S.wx (G t) →
