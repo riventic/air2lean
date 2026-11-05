@@ -2939,9 +2939,10 @@ theorem WInv.xchg_noErr {P : ThreadId → LPh} {m : Mem} {c : Nat} {ord : Atomic
   exact ⟨v, hv⟩
 
 /-- The futex wait at the word does not throw. -/
-theorem WInv.wait_ok {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {e : BitVec 32}
+theorem WInv.wait_ok {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {e : BitVec 32} {sh : Bool}
     (hi : L.WInv P m) (ht : t < m.threads.size) (hg : P t ≠ .gone) :
-    ∃ b m', ((Thread.futexWait L.ptr e).run { m with current := t }).run = some (.ok (b, m')) := by
+    ∃ b m', ((Thread.futexWait L.ptr e sh).run { m with current := t }).run =
+      some (.ok (b, m')) := by
   by_cases hw : ({ m with current := t } : Mem).woken.contains ({ m with current := t } : Mem).current = true
   · exact ⟨_, _, futexWait_run_woken hw⟩
   · obtain ⟨blk, hb, -, -, ha, -⟩ := hi.blk.access
