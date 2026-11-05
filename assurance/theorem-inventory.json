@@ -587,14 +587,14 @@
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.Mailbox.mailbox_safe",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against `SemContract` only: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     }
   ],
   "runs": {
@@ -1238,16 +1238,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "9c8f788bf78a5e5c64de2f6081fb249ac8503396",
+        "head": "1bbd01e81a518c102c8a0e5d141de620dffe67bb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-05T12:43:35.415681+00:00",
-      "elapsed_seconds": 34.149,
+      "started_utc": "2026-11-05T13:13:04.397233+00:00",
+      "elapsed_seconds": 0.508,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "1e5fa5a6e16b87bd849216eff4a26bc9e63d6f55bfa46bea414b2bd3b4efab49",
+      "log_sha256": "d9cb29d9ac7d0cd7096ff396d73dda91a12205daf523f0aee599c9e65639960c",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1324,6 +1324,10 @@
         "Proofs.Sync.IoSemaphore",
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mailbox",
+        "Proofs.Sync.Mailbox.Code",
+        "Proofs.Sync.Mailbox.Protocol",
+        "Proofs.Sync.Mailbox.Start",
+        "Proofs.Sync.Mailbox.Steps",
         "Proofs.Sync.Mutex",
         "Proofs.Sync.MutexCases",
         "Proofs.Sync.Proofs",
@@ -1556,7 +1560,11 @@
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
         "Proofs.Sync.IoSemaphore": "05d0559f922021d90918650faf6de667450ce00d58f86f20b27e523a0e614543",
         "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
-        "Proofs.Sync.Mailbox": "e7e1b942fa045edadd2e8df7a05b1c8e396678ee5fb9ea576b09b810cd586f9a",
+        "Proofs.Sync.Mailbox": "5d73850688d7d5d8bb2ff5984179cb0da7e3f9cc60f5f4a9863e844924f074fe",
+        "Proofs.Sync.Mailbox.Code": "b3a4787040bf9df8da12a516f61f2ceb25e77cf91ff1effc3491979aece13bf5",
+        "Proofs.Sync.Mailbox.Protocol": "3d507d1729d2688d13bc33bb0e10818f04edd5607026f0516ffaa61f122390e8",
+        "Proofs.Sync.Mailbox.Start": "683318180797b9638b0ccd5b94b82374ab7bd835f5f112ba5ec04137bbeb0445",
+        "Proofs.Sync.Mailbox.Steps": "c660a50655535b7d1130904b7e77d0ab78232c5fee03e80efd5d07fc67c279d1",
         "Proofs.Sync.Mutex": "c45c7ae7e9c6ec0b9869e64c71ca3f69ff67ce9dbf738101ecbb32f3b0a81759",
         "Proofs.Sync.MutexCases": "a59c50342d614e64de8749fd42cb2d614a0bd93efe88792a2242feb81b19f3cd",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
@@ -1689,22 +1697,28 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "80f47eb30d07f2d55016d14967ee7cacf6c1634f",
+        "head": "1bbd01e81a518c102c8a0e5d141de620dffe67bb",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-05T11:46:12.518290+00:00",
-      "elapsed_seconds": 0.238,
+      "started_utc": "2026-11-05T13:13:02.948570+00:00",
+      "elapsed_seconds": 0.275,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "d7fd6018409a290d49a6b5e17ad1f48883a3b1cc8ecf7185bcae1de9f770b058",
+      "log_sha256": "0c864cb2c99e9af7b9eb892e1bd4de5637ae72608d71feb920f07d40a2d65a22",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
+        "Proofs.Sync.Cond",
         "Proofs.Sync.Contracts",
         "Proofs.Sync.IoMutex",
+        "Proofs.Sync.IoSemaphore",
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mailbox",
+        "Proofs.Sync.Mailbox.Code",
+        "Proofs.Sync.Mailbox.Protocol",
+        "Proofs.Sync.Mailbox.Start",
+        "Proofs.Sync.Mailbox.Steps",
         "Proofs.Sync.Proofs",
         "Proofs.Sync.RwLock",
         "Proofs.Sync.RwLockContract",
@@ -1719,10 +1733,16 @@
         }
       },
       "sources": {
+        "Proofs.Sync.Cond": "92d5bf7f423c46dca566f8c8ef3f779ec7b314a19d1883f5633f844bf0c3d5df",
         "Proofs.Sync.Contracts": "9e126b4bb67f4f00155dfb4924a50c69a06d399031bd302fc07758c0e125a438",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
+        "Proofs.Sync.IoSemaphore": "05d0559f922021d90918650faf6de667450ce00d58f86f20b27e523a0e614543",
         "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
-        "Proofs.Sync.Mailbox": "e7e1b942fa045edadd2e8df7a05b1c8e396678ee5fb9ea576b09b810cd586f9a",
+        "Proofs.Sync.Mailbox": "5d73850688d7d5d8bb2ff5984179cb0da7e3f9cc60f5f4a9863e844924f074fe",
+        "Proofs.Sync.Mailbox.Code": "b3a4787040bf9df8da12a516f61f2ceb25e77cf91ff1effc3491979aece13bf5",
+        "Proofs.Sync.Mailbox.Protocol": "3d507d1729d2688d13bc33bb0e10818f04edd5607026f0516ffaa61f122390e8",
+        "Proofs.Sync.Mailbox.Start": "683318180797b9638b0ccd5b94b82374ab7bd835f5f112ba5ec04137bbeb0445",
+        "Proofs.Sync.Mailbox.Steps": "c660a50655535b7d1130904b7e77d0ab78232c5fee03e80efd5d07fc67c279d1",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
         "Proofs.Sync.RwLock": "2a29c8ced08f5e5a4c5b7c425fac908ffd64d4b7db96bb94d8d304c786acabc3",
         "Proofs.Sync.RwLockContract": "79dd6badbee13a589bacfc92a064fcbc49537a6794eebeeb363a14debc1ac019",
@@ -1773,16 +1793,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "9c8f788bf78a5e5c64de2f6081fb249ac8503396",
-        "tracked_dirty": false
+        "head": "1bbd01e81a518c102c8a0e5d141de620dffe67bb",
+        "tracked_dirty": true
       },
-      "started_utc": "2026-11-05T12:42:43.195362+00:00",
-      "elapsed_seconds": 49.843,
+      "started_utc": "2026-11-05T13:12:49.561241+00:00",
+      "elapsed_seconds": 12.332,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "f133e5ef4d6d9741f4f7ff3d9d50d54f140fce4d71257fdfff99fd1419f4cbe1",
+      "log_sha256": "cf0b475a84b43321695d89f2fce02ec27ddbba8c120454d6b453f646dbc95a51",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1811,6 +1831,10 @@
         "Proofs.Sync.IoSemaphore",
         "Proofs.Sync.Lock",
         "Proofs.Sync.Mailbox",
+        "Proofs.Sync.Mailbox.Code",
+        "Proofs.Sync.Mailbox.Protocol",
+        "Proofs.Sync.Mailbox.Start",
+        "Proofs.Sync.Mailbox.Steps",
         "Proofs.Sync.Mutex",
         "Proofs.Sync.Proofs",
         "Proofs.Sync.RwLock",
@@ -1859,7 +1883,11 @@
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
         "Proofs.Sync.IoSemaphore": "05d0559f922021d90918650faf6de667450ce00d58f86f20b27e523a0e614543",
         "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
-        "Proofs.Sync.Mailbox": "e7e1b942fa045edadd2e8df7a05b1c8e396678ee5fb9ea576b09b810cd586f9a",
+        "Proofs.Sync.Mailbox": "5d73850688d7d5d8bb2ff5984179cb0da7e3f9cc60f5f4a9863e844924f074fe",
+        "Proofs.Sync.Mailbox.Code": "b3a4787040bf9df8da12a516f61f2ceb25e77cf91ff1effc3491979aece13bf5",
+        "Proofs.Sync.Mailbox.Protocol": "3d507d1729d2688d13bc33bb0e10818f04edd5607026f0516ffaa61f122390e8",
+        "Proofs.Sync.Mailbox.Start": "683318180797b9638b0ccd5b94b82374ab7bd835f5f112ba5ec04137bbeb0445",
+        "Proofs.Sync.Mailbox.Steps": "c660a50655535b7d1130904b7e77d0ab78232c5fee03e80efd5d07fc67c279d1",
         "Proofs.Sync.Mutex": "c45c7ae7e9c6ec0b9869e64c71ca3f69ff67ce9dbf738101ecbb32f3b0a81759",
         "Proofs.Sync.Proofs": "33a558068e0e5cbe3dfe2e98d727096b5fbba7e6dab8ee3446e6292452f031ef",
         "Proofs.Sync.RwLock": "2a29c8ced08f5e5a4c5b7c425fac908ffd64d4b7db96bb94d8d304c786acabc3",

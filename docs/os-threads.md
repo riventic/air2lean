@@ -102,8 +102,8 @@ futex waits) take no environment.
 **Wait** (`Os.futexWait`). One `pick`, then in the same turn the kernel's compare: an atomic read
 of the newest message of the `u32` (`atomicLoadAt 0 .relaxed`). It records an atomic-read
 footprint, so a racing plain write is `.illegal`, and an `observe` (audit finding #14). A bad
-pointer is `.illegal`. A different value returns `mismatch` (`EAGAIN`; macOS `0`). Otherwise the
-oracle picks:
+pointer is `.illegal`. A different value returns `mismatch` (`EAGAIN`). Otherwise the oracle
+picks:
 
 1. sleep. An untimed wait stops at the scheduler's `wait p e`, which compares again and sleeps
    until a wake. A changed word goes on, which is a return with `0`, as Linux allows. A timed
@@ -111,6 +111,13 @@ oracle picks:
    returns `woken` if a wake reached it, else `timedOut`. A timed wait never deadlocks.
 2. `EINTR` at once: a signal or any spurious return (audit finding #2).
 3. with a timeout, `ETIMEDOUT` at once.
+
+macOS `__ulock_wait*` returns `--ull_nwaiters` after a wake, a spurious return or a mismatch:
+the other threads waiting at the key, a non-negative `c_int`. For a word that is not resident it
+returns `-EFAULT`. The model tracks neither, so the oracle picks one of them at one more stop
+(`Darwin.ulockResult`). Std only tests `status >= 0`, and treats `EFAULT` as a spurious return.
+The sources, and why `ENOMEM` and `EDOM` are not modelled, are in the `ZigLean/Os/Futex.lean`
+module doc.
 
 **Wake** (`Os.futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at
 the address (`wakeSets`), with no FIFO order (audit finding #6). The woken threads go on at their
@@ -253,7 +260,6 @@ The following are missing:
 * `sigaction`, `sigprocmask` and `sigaltstack`: no memory effect for std's use, but they need rows
   before translated code can call them.
 * `posix_memalign` (`c_allocator` for alignments above 16).
-* `__ulock_wait*`'s non-negative waiter count, which is always `0`.
 
 The models use the merged C02 (TLS: `tlsEnter` in the dispatcher) and C07 (`pthread_detach` is
 `Thread.detach`) definitions. The interrupt bit (OSG-01) is the OS mechanism under std's
