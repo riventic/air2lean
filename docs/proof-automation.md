@@ -750,6 +750,20 @@ obligation without a budget, or a query of a type nested inside one past the bud
 The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
+**`omega`'s certificates are shared** (`omegaRaw`). Core `omega` builds a tree: every step
+serializes its coefficient lists again, a constraint used twice is proved twice, and every call
+serializes its atoms and facts again. Unshared, the certificates of one ArenaSpec walk
+(`loop66_c0`) reached 64M term nodes for 0.23M distinct ones, and the elaborator held them until
+the theorem was checked (5.9–6.3 GB at one thread). Each certificate is therefore hash-consed
+against the run's table (`RunCaches.omegaTerms`): a subterm becomes the alpha-equivalent one already
+in the table (equal up to binder names and annotations, which the kernel ignores). `omega` runs
+one metavariable depth deeper, so it can assign only its own unknowns, and those unknowns (whose
+assignments hold the unshared copy) are dropped once the proof is instantiated. A proof that
+still mentions one is treated as no proof. The interning is an `unsafe` meta-level function
+(`internTermsImpl`, by pointer); it only rebuilds `Expr` values and never appears in a proof
+term. The kernel checks the result as before (regression test: `omega_proofs_shared`,
+`tests/roadmap/sep-auto/SepAuto/Arith.lean`).
+
 ## Recursive groups
 
 `FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
