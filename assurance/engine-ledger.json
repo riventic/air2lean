@@ -1921,6 +1921,17 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Rejected: option B, a field `a : Nat` (the word's address) in `LockWord` with a memory-independent key. It is a per-object special case that FCond, FSem and FEvent would each repeat, and every LockWord construction would supply the address. Option A strengthens what every client of `FStepIn` gets and weakens nothing."
+  },
+  {
+   "id": "two-lock-product",
+   "title": "The generic two-lock product over FLock (lock nesting) is not built yet",
+   "status": "open",
+   "requester": "L8q/L8r lock-order work (Step 2), #693; parked by the coordinator 2026-11-05",
+   "progress": "PARTLY DONE. Landed: `Fits.stable` gets the step's `FLock.Transfer` (decision (a), #696); `Holds.regroup`, `FOwned.move` (ThreadOwned.lean) and `FLock.Pair`/`Pair.symm`/`part_ba`/`Pair.otherInv` (LockPair.lean, #693). PARKED (coordinator, 2026-11-05: finish open work, start nothing new): (1) the product invariant: one lock's rest is the other's word, the other's resource (free or held) and a common rest, with the `Off` facts and their mirror; at A's acquire B's `FOwned` is rebuilt from `Transfer`'s `A.FreeRes G rX m h` by moving each B-held resource into its holder's part (`FOwned.move`), because `Res.know`/`gh` do not cancel, so an existential free resource in `U` cannot be matched to `A.Inv`'s witness; per-witness forms of `Inv.restIn`/`lockResIn` (Word.lean) help; (2) the FLock version of `Sem.Inv.partTick`; (3) `waitNest` at FLock level; (4) a two-mutex client fixture over `MutexImpl`, generic over every `MutexImpl`; (5) the product API on #637 (RwLockImpl).",
+   "request": "A thread that holds one lock while it runs another lock's code (a lock order, RwLockImpl's writer, hand-over-hand) needs both locks' invariants at once over one ghost value, with each lock's held resource placed in the other lock's rest, proved once for every pair of `FLock`s and every `MutexImpl`.",
+   "workaround_sites": [],
+   "deletion_plan": "Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree.",
+   "note": "Not unsound: no client relies on a two-lock product yet; a nesting client today proves its own `U` (`Fits.nap`/`unnap` hypotheses)."
   }
  ],
  "mechanisms": [

@@ -18,6 +18,9 @@ product.
   free `L` owns, for a resource without `K`'s word.
 * `FLock.Inv.otherStep`: the same for the lock over full-state resources, with `K`'s word in
   `L`'s rest; its cells are the new ones after the step.
+* `FLock.Pair A B`: two locks over one ghost value (apart words, each lock's `set` keeps the other's
+  place, held resource and `R`, a shared part); `Pair.otherInv` is `Inv.otherStep` for it. The
+  product invariant over a pair is not built yet (ledger #two-lock-product).
 * `FLock.Inv.nap`/`unnap` and `FLock.Fits.nap`/`unnap`: the holder of `L` goes to `holdsAway`
   before `K`'s code may put it to sleep, and back to `holds` after it. No memory step. The
   protocol's `U` must be stable under this relabel: a hypothesis of `Fits.nap`/`unnap` that each
