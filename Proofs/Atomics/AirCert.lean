@@ -23,6 +23,21 @@ Outside the certificate fragment:
 * `atomics.stackPush`: a concurrent function (`Zig.ConcM`)
 * `atomics.twoPlusTwoW`: a concurrent function (`Zig.ConcM`)
 * `atomics.ww`: a concurrent function (`Zig.ConcM`)
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `atomic.Value(u32).init` trusted-Canon: renumber
+* `atomics.mpRelAcq` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.mpRelaxed` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.mpWriter` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.mpWriterRelaxed` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.push` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.sb` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.sbRelaxed` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.stackPush` trusted-Canon: forwardReadOnlyCopies, itemReads, renumber
+* `atomics.twoPlusTwoW` trusted-Canon: forwardReadOnlyCopies, renumber
+* `atomics.ww` trusted-Canon: forwardReadOnlyCopies, renumber
 -/
 
 end Atomics.AirCert

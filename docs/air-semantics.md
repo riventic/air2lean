@@ -294,6 +294,13 @@ Certifying the remaining rewrites would let a certificate embed the decoded **ra
 compare it with `decode` of the golden JSON, removing those rewrites from the trusted base for
 that function. The certificates below cover only the final debug-definition-ID rewrite.
 
+Each certificate's report names, for every function of the program, the rewrites that fired on
+it, as a line ``* `<fn>` trusted-Canon: <passes>`` (or `none`), in pipeline order. `Raw.canonicalizeTraced`
+compares each rewrite's whole `RawFunc` output with its input, so any change counts, and
+`renumber` is listed whenever it moves an ID. Until the rewrites above are proved, these are the
+Canon rewrites a certified function trusts; a function the translator gives no trace fails the
+certificate closed.
+
 #### Live-ID and memory boundaries
 
 The earlier proposed live-renumbering statement used the same arbitrary oracle:
@@ -456,7 +463,8 @@ in `test_lean.py`.
 
 * `tests/roadmap/air-semantics/test_cli.py`: the certificate flag leaves `Gen.lean`
   byte-identical; each committed certificate equals a fresh one; the certified set is the
-  expected one and every other function is listed; flag misuse is rejected; no `sorry`,
+  expected one and every other function is listed; every function has exactly one
+  `trusted-Canon` line of known rewrites in pipeline order; flag misuse is rejected; no `sorry`,
   `admit` or `native_decide`; a certified memory function with calls has `_sound`.
 * `lake build Proofs/<Ex>/AirCert` for every committed certificate.
 * `tests/roadmap/air-semantics/test_lean.py`: the round trip (`RoundTrip.lean`: every
@@ -487,7 +495,8 @@ instruction. Each theorem unfolds only its own function.
 
 ### Trusted base of a certificate
 
-* the exporter and the compiler (V03); JSON parsing, `Canon.lean` and `Normalize.lean`;
+* the exporter and the compiler (V03); JSON parsing, `Canon.lean` (the rewrites on the
+  function's `trusted-Canon` line) and `Normalize.lean`;
 * `printFunc`, checked by the round trip (it prints every field, so equal prints are equal
   values);
 * `Sem` itself and ZigLean's primitives and memory model, shared with the generated code

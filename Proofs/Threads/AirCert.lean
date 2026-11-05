@@ -22,6 +22,21 @@ Outside the certificate fragment:
 * `threads.race`: a concurrent function (`Zig.ConcM`)
 * `threads.swapFlag`: a concurrent function (`Zig.ConcM`)
 * `threads.xchgRace`: a concurrent function (`Zig.ConcM`)
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `atomic.Value(threads.Phase).init` trusted-Canon: renumber
+* `atomic.Value(u32).init` trusted-Canon: renumber
+* `threads.bump` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.claim` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.claimOnce` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.disjoint` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.parallelCounter` trusted-Canon: forwardReadOnlyCopies, itemReads, renumber
+* `threads.race` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.swapFlag` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.writeFlag` trusted-Canon: forwardReadOnlyCopies, renumber
+* `threads.xchgRace` trusted-Canon: forwardReadOnlyCopies, renumber
 -/
 
 def source_0 : _root_.Air2Lean.Func :=
