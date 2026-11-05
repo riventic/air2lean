@@ -37,7 +37,7 @@ their outputs cannot be published. Only CI pushes to main supply publication, en
 by the publication workflow and reader. No guessed parent or empty baseline is used.
 
 Enrollment markers are transitional (engine-ledger #case-family-enrollment): remove
-them when the last golden family is enrolled, together with when_defined/if_decl.
+them when the last golden family is enrolled, together with when_defined.
 The first family is exactly Threadsync's real 0.15.2 Linux, Darwin and Linux-aarch64
 goldens; no 0.16/0.17 Threadsync case is invented. This generation coverage does not
 claim case contract instances, native/receipt binding, a wrong-version receipt
