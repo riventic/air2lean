@@ -340,7 +340,8 @@ theorem otherInv (hp : L.Pair B) {G : ThreadId → γ} {rY : Res} {t : ThreadId}
     (hi : L.Inv G (rsum (B.wordR m) rY) m) (hs : B.Step t m m') (hKb : B.BlkOk m)
     (hYoff : B.Off rY.heap.erase)
     (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
-      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.nest B.ptr)) (p : LPh) (h : Res) :
+      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.toLockWord.NestKey m (B.key m)))
+    (p : LPh) (h : Res) :
     L.Inv (upd G t (B.set (G t) p h)) (rsum (B.wordR m') rY) m' :=
   hi.otherStep hs hp.apart hKb hYoff ht
     (fun u => by
