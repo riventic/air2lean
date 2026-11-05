@@ -33,18 +33,21 @@ namespace FLock
 
 variable {γ : Type} {Tgt : Type} {P : Proto Tgt γ}
 
-/-- **The lock order's discharge**: if every futex of `A`'s nest is the word of one of the locks
-`B i` that fit the same protocol, a holder of `A` asleep at a nest futex sleeps at some `B i`'s,
-as its waiter, and that waiter is live (`B i`'s `Fits.live`). -/
+/-- **The lock order's discharge**: if every futex key of `A`'s nest (`NestKey`) is the key of the
+word of one of the locks `B i` that fit the same protocol, a holder of `A` asleep at a nest futex
+sleeps at some `B i`'s, as its waiter, and that waiter is live (`B i`'s `Fits.live`). The premise
+is on keys, not pointers: a nest pointer waited on in the shared domain has another key than its
+lock's (`FutexKey.ne_of_shared`), and no lock's queue accounts for it. -/
 theorem holdLive_inners {ι : Type} {A : FLock γ} {B : ι → FLock γ} {K : ι → FPrim γ}
     {U : ι → (ThreadId → γ) → Res → Mem → Prop} {ok : ι → γ → Prop}
-    (hB : ∀ i, (B i).Fits (K i) P (U i) (ok i)) (hnest : ∀ p, A.nest p → ∃ i, p = (B i).ptr)
+    (hB : ∀ i, (B i).Fits (K i) P (U i) (ok i))
+    (hnest : ∀ m k, A.NestKey m k → ∃ i, k = (B i).key m)
     {UA : (ThreadId → γ) → Res → Mem → Prop}
     (hinv : ∀ G rX m, A.Inv G rX m → UA G rX m → P.inv G m) :
     ∀ G rX m v, A.Inv G rX m → UA G rX m → A.ph (G v) = .holdsAway → P.Live v G m := by
   intro G rX m v hi hU hv hq hall
   obtain ⟨p, hpm, -, hpn⟩ := hi.w.nestQ hv hq
-  obtain ⟨i, rfl⟩ := hnest p hpn
+  obtain ⟨i, rfl⟩ := hnest m p hpn
   obtain ⟨rY, hiB, hUB⟩ := ((hB i).inv G m).mp (hinv G rX m hi hU)
   have hw : (B i).ph (G v) = .wait := by
     rcases hiB.w.fq _ hpm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
@@ -55,11 +58,11 @@ theorem holdLive_inners {ι : Type} {A : FLock γ} {B : ι → FLock γ} {K : ι
 
 /-- **The lock order's discharge for one inner lock** `B` (`holdLive_inners`). -/
 theorem holdLive_inner {A B : FLock γ} {K : FPrim γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-    {ok : γ → Prop} (hB : B.Fits K P U ok) (hnest : ∀ p, A.nest p → p = B.ptr)
+    {ok : γ → Prop} (hB : B.Fits K P U ok) (hnest : ∀ m k, A.NestKey m k → k = B.key m)
     {UA : (ThreadId → γ) → Res → Mem → Prop}
     (hinv : ∀ G rX m, A.Inv G rX m → UA G rX m → P.inv G m) :
     ∀ G rX m v, A.Inv G rX m → UA G rX m → A.ph (G v) = .holdsAway → P.Live v G m :=
-  holdLive_inners (ι := Unit) (fun _ => hB) (fun p h => ⟨(), hnest p h⟩) hinv
+  holdLive_inners (ι := Unit) (fun _ => hB) (fun m k h => ⟨(), hnest m k h⟩) hinv
 
 /-- **No deadlock at a nested lock**: in a protocol with `A`'s `Fits`, a holder of `A` that sleeps
 at another object's futex is not in a state where every thread has ended, sleeps or waits at a
@@ -73,12 +76,12 @@ theorem Fits.noDeadlock {A : FLock γ} {K : FPrim γ} {U : (ThreadId → γ) →
   exact hA.holdLive G rX m v hiA hU hv hq hall
 
 /-- **The AB/BA state is not in the invariant** (`Fits.noDeadlock` for two threads): thread `0`
-holds `A` and sleeps at a futex `b` (another lock `B`'s word) while thread `1` sleeps at `A`'s.
+holds `A` and sleeps at a futex key `b` (another lock `B`'s word) while thread `1` sleeps at `A`'s.
 No protocol with `A`'s `Fits` has this state in its invariant, whatever `b` is. -/
 theorem Fits.not_ABBA {A : FLock γ} {K : FPrim γ} {U : (ThreadId → γ) → Res → Mem → Prop}
-    {ok : γ → Prop} (hA : A.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {b : Ptr}
+    {ok : γ → Prop} (hA : A.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {b : FutexKey}
     (hsz : m.threads.size = 2) (h0 : A.ph (G 0) = .holdsAway)
-    (hq0 : (0, b) ∈ m.waiters) (hq1 : (1, A.ptr) ∈ m.waiters) : ¬ P.inv G m := fun hi => by
+    (hq0 : (0, b) ∈ m.waiters) (hq1 : (1, A.key m) ∈ m.waiters) : ¬ P.inv G m := fun hi => by
   have hq : ∀ u p, (u, p) ∈ m.waiters → m.waiters.any (·.1 == u) = true := fun u p h =>
     Array.any_eq_true'.mpr ⟨_, h, by simp⟩
   refine hA.noDeadlock hi h0 (hq _ _ hq0) fun u hu => .inr (.inl ?_)
