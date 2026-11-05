@@ -27,9 +27,9 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 
 Stage D-a (section 4) is done.
 
-### Dependency map of the 17 remaining users (2026-11-05, after #648 and #643)
+### Dependency map of the 16 remaining users (2026-11-05, after #648, #643 and #640)
 
-`legacy_users` has 17 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
+`legacy_users` has 16 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
 replacement named below is on main, except where the row says it is not.
 
 | file | reason | legacy items it uses | full-state replacement | waits for |
@@ -38,11 +38,10 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's protocol and `E.Spec` (`acquire_shared`, `read_with_facts`) | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
 | Proofs/Sync/RwLock | names `TTriple` | legacy `Lock`/`Proto` protocol, Conc/Word `Word.Op`/`Keep`, WeakWord, `TTriple.load/store`, local `Sem.Spec` (the semaphore as an abstract part `E`) | `FLock`/`MutexImpl` for its inner `Io.Mutex`; **`SemImpl` (#575, open)** for its semaphore; `RwLockImpl` (none) | #575 SemImpl |
 | Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl` | L10i (#575) |
-| Proofs/Threadsync/WaitGroup | names `TTriple` | Threadsync/Lock, Conc/Word, legacy `Lock`/`Proto` | `EventImpl` (Full/Event) + `MutexImpl` (Threadsync/ThreadMutex) | L10i; #572 blocker 1 (plain 24-byte read over the mutex word vs `FLock` `LiveLe`), #579 |
 | Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
-| Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | WaitGroup |
+| Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | nothing: WaitGroup no longer imports it (#640); only `tests/review/AllProofs.lean` does |
 | ZigLean/Conc/Witness | imports Conc/Own | `TLive` | `CLive` (Full/Witness) | RwLockContract |
-| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord |
+| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WeakWord |
 | ZigLean/Conc/LockRules | imports Conc/Lock | legacy `Lock` rules | Full/LockRules, Full/LockSteps | Sync/Lock, Threadsync/Lock, Conc/Word |
 | ZigLean/Conc/Lock | imports Conc/Csl | `Lock`, `Fits`, `FitsOn`, `Step` | `FLock` (Full/Lock, Full/LockWord) | LockRules |
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
@@ -85,14 +84,13 @@ replacement named below is on main, except where the row says it is not.
 
 **Retirement order** (each step needs only the steps before it):
 
-1. Semaphore: SemImpl (#575, L10i); SemCounter done (#648), Mailbox done (#643). WaitGroup: L10i, #572/#579.
+1. Semaphore: SemImpl (#575, L10i); SemCounter done (#648), Mailbox done (#643). WaitGroup done (#640).
 2. RwLock (needs SemImpl, plus a new `RwLockImpl` contract with `Io.RwLock` as its instance), then
    RwLockContract and RwLockSnapshotPair as clients of `RwLockImpl` (for every implementation),
    and `Contracts.{RwContract,SemContract}`.
-3. Sync/Lock: after Semaphore and `Contracts.mutex`. Threadsync/Lock: after WaitGroup.
+3. Sync/Lock: after Semaphore and `Contracts.mutex`. Threadsync/Lock: now (WaitGroup done, #640).
    Conc/Witness: after RwLockContract.
-4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore, WaitGroup and
-   WeakWord are gone.
+4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore and WeakWord are gone.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
 6. Sep/{Block,Triple,Loop,Total}: stage D-e.
 
@@ -442,7 +440,7 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | --- | --- | --- | --- |
 | Proofs/Sync/RwLock.lean (4707) | `rwLockRead` result in {2,12,22}, safe; `Sem.Spec` legacy judgment | L | proof |
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
-| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | proof |
+| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | done: client of `MutexImpl` (`threadMutex`) and `EventImpl` (`resetEvent`) (`Proofs/Threadsync/WaitGroup/*`), `waitGroup_spec`/`waitGroup_safe` verbatim; the whole `Tally` read by `FLock.Inv.loadMem`; completes by kernel evaluation in `tests/roadmap/sync-contracts/Runtime.lean` (it names the Linux translation's loops) (#640) |
 
 Remaining shared-prefix and holder proof copies are tracked in [engine ledger #76](engine-ledger.md).
 

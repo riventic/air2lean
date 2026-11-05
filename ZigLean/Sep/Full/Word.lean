@@ -966,6 +966,33 @@ theorem Ok.record_apart_native {m : Mem} {b o len : Nat} {k : AccessKind} (hw : 
     · exact absurd hh hn
   · exact (hfp e he).imp id fun hn => Bool.eq_false_iff.mpr fun hp => hn (hits_of_plain hp)
 
+/-- **A read by the only thread of the live set** (`hA`) preserves the word's validity and
+history, wherever it reads (a whole struct read over the word): its record happened before every
+thread of the live set (the reader's own new clock), and it writes nothing. -/
+theorem Ok.record_sole_native {m : Mem} {t : ThreadId} {b o len : Nat} {k : AccessKind}
+    (hw : W.Ok m A) (hc : m.current = t) (hcs : t < m.clocks.size)
+    (hA : ∀ u < m.threads.size, A u → u = t) (hk : k.isWrite = false) :
+    W.Ok (m.recordAt b o len k) A ∧ W.hist (m.recordAt b o len k) = W.hist m := by
+  subst hc
+  have hcl := Conc.recordAt_le m b o len k
+  refine ⟨⟨hw.blk, hw.only, fun i l hl => hw.loc i l hl, fun e he hh => ?_, hw.val,
+    fun i l hl => (hw.plain i l hl).of_fp fun e he => ?_⟩, hist_congr rfl rfl⟩
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · rcases hw.wfp e he hh with ⟨hk', hs⟩ | ha
+      · exact .inl ⟨hk', Conc.someLe_mono (m := m) (m' := m.recordAt b o len k)
+          rfl (fun u _ => hcl u) hs⟩
+      · exact .inr (Conc.allLeOn_mono (m := m) (m' := m.recordAt b o len k)
+          rfl (fun u _ => hcl u) ha)
+    · refine .inr fun u hu ha => ?_
+      obtain rfl := hA u hu ha
+      show VClock.le _ ((m.recordAt b o len k).clocks[m.current]!) = true
+      rw [Zig.recordAt_clock hcs]; exact VClock.le_refl _
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · right; cases k <;> simp_all [plainHit, AccessKind.isWrite]
+
 /-- A fork preserves every word's validity and history. The new thread's clock inherits its
 parent's bound, so the premise `hA` asks: if the new thread is in the live set, so is its parent
 (trivial for the default live set); no thread-preservation summary is required. -/
