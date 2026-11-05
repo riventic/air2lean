@@ -234,7 +234,8 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
     if let some (σ, ε) := types? then
       let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
       unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
-    let locStruct := types?.any fun (σ, _) => σ.getAppFn.constName?.any (isStructure (← getEnv))
+    let env ← getEnv
+    let locStruct := types?.any fun (σ, _) => σ.getAppFn.constName?.any (isStructure env)
     let mut seen : NameSet := {}
     for h : i in [0:xs.size] do
       let l ← xs[i].fvarId!.getDecl
