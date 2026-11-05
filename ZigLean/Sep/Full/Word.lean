@@ -3446,14 +3446,6 @@ theorem Extends.futexWake {p : FutexKey} {k : Nat} {cs : List Nat} {t : ThreadId
   subst hm'
   exact .congr rfl rfl
 
-/-- A futex wake at any pointer extends this word's writes. -/
-theorem Extends.futexWakePtr {p : Ptr} {k : Nat} {cs : List Nat} {t : ThreadId} {m m' : Mem}
-    (h : ((Thread.futexWakePtr p k cs).run { m with current := t }).run = some (.ok ((), m'))) :
-    W.Extends m m' := by
-  have hm' := Proto.modify_ok h
-  subst hm'
-  split <;> exact .congr rfl rfl
-
 end futex_native
 
 end Word

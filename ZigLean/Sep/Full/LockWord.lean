@@ -69,8 +69,10 @@ and wakes (`Mem.keyAt_wordKey`). It reads only the block's address, so every mem
 block addresses has it (`LockWord.key_of_addrs`). -/
 def key (m : Mem) : FutexKey := m.wordKey L.b L.o
 
-/-- A futex key of the lock's `nest` in `m`: the key of a pointer of the nest, in either domain. -/
-def NestKey (m : Mem) (k : FutexKey) : Prop := ∃ p sh, L.nest p ∧ m.keyAt p sh = some k
+/-- A futex key of the lock's `nest` in `m`: the private key of a pointer of the nest. A holder
+sleeps at a nest futex only in the private domain (`WInv.waitNest`), the domain of every lock's
+word (`key`), so a nest of inner locks' words has exactly their keys (`FLock.holdLive_inners`). -/
+def NestKey (m : Mem) (k : FutexKey) : Prop := ∃ p, L.nest p ∧ m.keyAt p false = some k
 
 /-- The word's key stays while its block does, at its address (`FStepIn.addrs`). -/
 theorem key_of_addrs {m m' : Mem} (h : m.SameAddrs m') {blk : Block}
@@ -79,8 +81,8 @@ theorem key_of_addrs {m m' : Mem} (h : m.SameAddrs m') {blk : Block}
 
 theorem NestKey.of_addrs {m m' : Mem} {k : FutexKey} (h : m.SameAddrs m') (hk : L.NestKey m k) :
     L.NestKey m' k := by
-  obtain ⟨p, sh, hn, hp⟩ := hk
-  exact ⟨p, sh, hn, Mem.keyAt_of_addrs h hp⟩
+  obtain ⟨p, hn, hp⟩ := hk
+  exact ⟨p, hn, Mem.keyAt_of_addrs h hp⟩
 
 /-- The values of the word: `0`, `1`, `c`. -/
 def Val (w : Nat) : Prop := w = 0 ∨ w = 1 ∨ w = L.c
@@ -2296,25 +2298,26 @@ theorem WInv.waitOff {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Ptr
   · exact ⟨rfl, hout _ _ hiM rfl⟩
 
 /-- A futex wait of a holder `t` at `holdsAway` at a futex `p` of the lock's `nest` (an inner
-lock's word, a semaphore's condition), whose key and bytes are not the word's: the invariant holds
-with the same places, with `t` in the queue if it sleeps. -/
+lock's word, a semaphore's condition), in the private domain, whose key and bytes are not the
+word's: the invariant holds with the same places, with `t` in the queue if it sleeps. A shared
+wait at a nest futex has no rule: its key is no lock word's (`NestKey`), fail closed. -/
 theorem WInv.waitNest {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Ptr} {e : BitVec 32}
-    {sh b : Bool} (hi : L.WInv P m) (hph : P t = .holdsAway) (hp : m.keyAt p sh ≠ some (L.key m))
+    {b : Bool} (hi : L.WInv P m) (hph : P t = .holdsAway) (hp : m.keyAt p false ≠ some (L.key m))
     (hn : L.nest p)
     (hoff : ∀ bid blk o, m.access p 4 4 = pure (bid, blk, o) → bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o)
-    (h : ((Thread.futexWait p e sh).run { m with current := t }).run = some (.ok (b, m'))) :
+    (h : ((Thread.futexWait p e false).run { m with current := t }).run = some (.ok (b, m'))) :
     L.WInv P m' := by
   rcases futexWait_eq h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, -, -, hc⟩
   · exact hi.requeue hi.fq hi.wit
   have ha' : m.access p 4 4 = pure (bid, blk, o) := ha
-  have hk : blk.key o sh ≠ L.key m := fun e => hp (by rw [Mem.keyAt_of_access ha' sh, e])
+  have hk : blk.key o false ≠ L.key m := fun e => hp (by rw [Mem.keyAt_of_access ha' false, e])
   have hiM : L.WInv P (({ m with current := t } : Mem).recordAt bid o 4 .atomicRead) :=
     (hi.current t).readK (by decide) (hoff bid blk o ha')
   rcases hc with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
   · refine hiM.requeue (fun w hw => ?_) fun hw => ?_
     · rcases Array.mem_push.mp hw with hw | rfl
       · exact hiM.fq w hw
-      · exact .inr (.inr ⟨hk, hph, p, sh, hn, Mem.keyAt_of_access ha' sh⟩)
+      · exact .inr (.inr ⟨hk, hph, p, hn, Mem.keyAt_of_access ha' false⟩)
     · have hw' : L.Waits m m.waiters := by
         unfold LockWord.Waits at hw ⊢
         rw [Array.any_push] at hw
@@ -2325,7 +2328,7 @@ theorem WInv.waitNest {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Pt
       refine ⟨v, hv, fun hvw => ?_, h1, h2⟩
       have hvt : v ≠ t := fun e => by rw [e, hph] at hvw; cases hvw
       have hvq' : m.waiters.any (·.1 == v) = false := hvq hvw
-      show (m.waiters.push (t, blk.key o sh)).any (·.1 == v) = false
+      show (m.waiters.push (t, blk.key o false)).any (·.1 == v) = false
       rw [Array.any_push, hvq']; simp [Ne.symm hvt]
   · exact hiM.requeue hiM.fq hiM.wit
 
