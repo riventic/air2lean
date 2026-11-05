@@ -9,8 +9,8 @@ The invariant generator as an executable (`lake build air2lean-invgen`):
 It imports the translated `MODULE`, whose source is `--source FILE` (a path relative to the
 repository root), and the library `ZigLean.Sep.Full.AutoAll`, whose `fsym` prunes the candidate
 invariants (both on the lookup path of `LEAN_PATH`: run it under `lake env` after
-`lake build ZigLean.Sep.Full.AutoAll`). It reads the module's loops, and writes the generated invariants and measures (`Air2Lean.InvGen.generate`) to `-o FILE`
-(default: stdout). The first line records the generator's revision (`translator_revision%`: this
+`lake build ZigLean.Sep.Full.AutoAll`). It reads the module's loops, and writes the generated
+invariants and measures (`Air2Lean.InvGen.generate`) to `-o FILE` (default: stdout). The first line records the generator's revision (`translator_revision%`: this
 file and the `Air2Lean` modules it imports) and the source's SHA-256, which
 `scripts/gen-integrity.py invgen` checks against the checkout: the caller builds `MODULE`'s olean
 from that source (`scripts/invgen.py` compiles it fresh), since only the source is hashed. Each loop it cannot handle is named

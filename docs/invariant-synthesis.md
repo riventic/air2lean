@@ -518,10 +518,12 @@ The record also holds the SHA-256 of the rest of the file. `scripts/gen-integrit
 running Lean: a changed generator module, toolchain or input makes the file stale, a hand edit
 below the record or a record of another module (or of another generator) fails, and so does a
 record outside the targets. (The record's `loops` summary, with the pruning decisions, is not
-hashed: an edit there changes no definition.) The `invgen` regen step
-still always runs the generator: a runtime (`ZigLean`) change can change how an unchanged
-translation elaborates and which candidates `fsym` prunes, which the record does not hash (hashing the runtime would mark every
-`Inv.lean` stale at every runtime change).
+hashed: an edit there changes no definition.) The `invgen` regen step still always runs the
+generator: a runtime (`ZigLean`) change can change how an unchanged translation elaborates and
+which candidates `fsym` prunes, which the record does not hash (hashing the runtime would mark
+every `Inv.lean` stale at every runtime change). So a library change can make a committed
+`Inv.lean` stale without `gen-integrity.py invgen` noticing; `scripts/invgen.py check` (the
+`invgen` regen step, and each fixture's `check.sh`) finds it.
 
 The slice's family is the **counted loop** (widened in S2c, below): one repeating path, guarded by an unsigned `x < b`
 (`b` a local the loop does not write, a loop parameter or a literal), that adds 1 to the local
@@ -606,15 +608,16 @@ Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (
 
 The reading proposes candidate facts, and `fsym` decides which of them stay (`houdini` in
 `Air2Lean/InvGen.lean`). Every candidate holds at loop entry (`s = s0`, each cell at its entry
-value), under the family's entry condition (the counter on the repeating side of its exit value).
-The candidates are:
+value) or is an entry obligation of the family that the client discharges:
 
 * the pinned locals;
 * the counter on either side of its entry value (`x₀ ≤ x` and `x ≤ x₀`);
-* the counter on the repeating side of its exit value;
-* the no-wrap and no-overflow facts;
+* the counter on the repeating side of its exit value (the family's entry condition);
+* the no-wrap and no-overflow facts (constraints on the entry values only, so no walk can drop
+  them);
 * each written cell counted both up and down from its entry value (`v = vₖ + cₖ * (x - x₀)`
-  and `v = vₖ + cₖ * (x₀ - x)`).
+  and `v = vₖ + cₖ * (x₀ - x)`; a cell that goes up by `0` keeps both, so it gets only the one
+  of the reading's direction).
 
 So the reading no longer chooses the side of the counter or the direction of a cell's count;
 the checker does. Pruning works in four steps:
@@ -624,25 +627,31 @@ the checker does. Pruning works in four steps:
    the invariant, a repeating iteration ends in the invariant with a smaller measure, and an
    exiting one ends in the invariant (in the counted family, an exit changes no local and no
    memory).
-2. It elaborates the check with `Lean.Elab.process` in its own environment. `InvGenMain` imports
-   the translated module and `ZigLean.Sep.Full.AutoAll`, so the step's proof is `unfold …; fsym`
-   with `fsym.report` on: `Auto.runReport`, the single entry point.
-3. It reads the report (P09-E1). A residual of the postcondition whose goal is a candidate's
-   definition names that candidate: a candidate named as a definition stays folded when `fsym`
-   cannot prove it, while an inlined conjunct comes back split, over fresh names, and could not
-   be traced to its candidate. The walk drops those candidates.
+2. It elaborates the check with `Lean.Elab.process` in its own environment, with the opens of
+   the generated file. `InvGenMain` imports the translated module and
+   `ZigLean.Sep.Full.AutoAll`, so the step's proof is `unfold …; fsym` with `fsym.report` on:
+   `Auto.runReport`, the single entry point.
+3. It reads the report (P09-E1). A residual whose origin is the postcondition and whose goal is
+   a candidate's definition names that candidate: a candidate named as a definition stays folded
+   when `fsym` cannot prove it, while an inlined conjunct comes back split, over fresh names, and
+   could not be traced to its candidate. The walk drops those candidates.
 4. It repeats until a walk leaves no residual. That walk is a proof of the step with the kept
    candidates, kernel-checked inside the generator.
 
-A residual that no candidate explains (the measure, an overflow, a missed atom), or a check that
-does not elaborate, means no invariant: the loop is recorded with that reason (fail closed).
+The following mean no invariant (fail closed), and the loop is recorded with the reason:
+
+* a residual that no candidate explains (the measure, an overflow, a missed atom);
+* any error besides those residuals' unsolved goals (an ill-typed candidate is such an error,
+  never a pruned fact);
+* a walk that does not give exactly one report.
+
 Each walk drops at least one candidate, so the fixpoint takes at most one walk per candidate,
-plus one.
+plus one. Each loop runs with its own heartbeat budget.
 
 The output is the definitions with the kept facts written out, in the S2c text. The proofs of
 the fixtures, which are the kernel checks that count, are unchanged. Every pruning decision is
 in the record: each loop's entry in `loops` lists, under `pruned`, the dropped fact, the walk
-that dropped it and the residual's reason. On every loop of `counted` and on `nested`'s inner
+that dropped it and its residual goal there. On every loop of `counted` and on `nested`'s inner
 loop, the first walk drops the wrong side of the counter and the wrong direction of the cell's
 count, and the second walk proves the step: about 20 s for both targets, with `fsym` in Lean's
 interpreter. Two seeded mutants of `counted/mutants.json` check the pruning against the proof:

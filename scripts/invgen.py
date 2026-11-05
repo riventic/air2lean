@@ -50,8 +50,6 @@ def generate(root, module, namespace, work):
     lean_path = [work / 'olean']
     log = work / 'compile.log'
     subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', src], cwd=ROOT, check=True)
-    # The library the generator imports for its pruning walks (Air2Lean/InvGenMain.lean).
-    subprocess.run(['lake', 'build', '-q', LIBRARY], cwd=ROOT, check=True)
     error = compile_unit(src, root, work / 'olean' / (rel + '.olean'), lean_path, log)
     if error:
         sys.exit(log.read_text()[-4000:] + error)
@@ -71,6 +69,8 @@ def main(argv=None):
     if unknown:
         parser.error('not a target of scripts/invgen.py: ' + ', '.join(unknown))
     stale = []
+    # The library the generator imports for its pruning walks (Air2Lean/InvGenMain.lean).
+    subprocess.run(['lake', 'build', '-q', LIBRARY], cwd=ROOT, check=True)
     for path, root, module, namespace in [known[p] for p in args.paths] or TARGETS:
         with tempfile.TemporaryDirectory(prefix='air2lean-invgen.') as work:
             fresh = generate(root, module, namespace, Path(work))

@@ -468,12 +468,16 @@ def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String :=
         else s!"(FAssn.ex fun v : {ty} => ⟪{" ∧ ".intercalate (fs.map fact)}⟫ ⋆ {atom})"
   return if atoms.isEmpty then "⟪True⟫" else " ⋆\n    ".intercalate atoms.toList
 
-/-- The generated definitions with the kept facts. -/
-def Cand.output (c : Cand) (keep : Array Bool) : String :=
+/-- The definitions `name.inv` and `name.meas` with the kept facts, each written by `fact`. -/
+def Cand.defs (c : Cand) (keep : Array Bool) (fact : Nat → String) : String :=
   s!"{c.doc}def {c.name}.inv {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) : FAssn :=\n  \
-    {c.body keep (c.facts[·]!.text)}\n\n\
+    {c.body keep fact}\n\n\
     /-- The measure of `{c.name}`: the iterations left. -/\n\
     def {c.name}.meas {c.binders}{c.measEntry}(s : {c.loc}) : Nat :=\n  {c.meas}\n"
+
+/-- The generated definitions with the kept facts. -/
+def Cand.output (c : Cand) (keep : Array Bool) : String :=
+  c.defs keep (c.facts[·]!.text)
 
 /-- The check of the kept facts: each one a definition `name.candᵢ` (so that a residual goal
 names it), the invariant over them, the measure, and the step triple of one iteration, walked by
@@ -490,77 +494,82 @@ def Cand.check (c : Cand) (keep : Array Bool) : String := Id.run do
   let use (i : Nat) := s!"{c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
   let inv (s : String) := s!"{c.name}.inv {c.args}s0 {c.vargs}{s}"
   let meas (s : String) := s!"{c.name}.meas {c.args}{c.measArgs}{s}"
-  return s!"{defs}def {c.name}.inv {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) : FAssn :=\n  \
-    {c.body keep use}\n\n\
-    def {c.name}.meas {c.binders}{c.measEntry}(s : {c.loc}) : Nat :=\n  {c.meas}\n\n\
+  return s!"{defs}{c.defs keep use}\n\
     set_option fsym.report true in\n\
     theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
       FTotalTriple ({inv "s"}) (({c.name} {c.args}).run s)\n      \
       (fun r => if {c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {inv "r.2"}) := by\n  \
       unfold {c.name} {c.name}.inv {c.name}.meas\n  fsym\n"
 
+/-- The prefix of `fsym`'s report message (`Zig.Full.Auto.Report.line`). -/
+def reportPrefix : String := "fsym-report "
+
 /-- One `fsym` walk of the step with the kept facts (`Cand.check`, elaborated in the current
-environment, which imports the library): the kept facts it does not re-establish, read off its
-report (P09-E1: a residual of the postcondition whose goal is a candidate's definition), or why
-the walk is no proof of the step (a residual that no candidate explains, such as the measure or
-an overflow, or a check that does not elaborate). The walk is not trusted: the generated
-definitions are checked by the proofs that use them. -/
-def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Except String (Array Nat)) := do
-  let text := s!"namespace {ns}\nopen Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto\n\
+environment, which imports the library, with the opens of the generated file): each kept fact
+that it does not re-establish, with its residual goal, read off its report (P09-E1: a residual of
+the postcondition whose goal is a candidate's definition). It throws why the walk is no proof of
+the step: a residual that no candidate explains (the measure, an overflow), an error other than
+the unsolved goals of those residuals (a check that does not elaborate: a candidate whose text is
+ill-typed is an error here, never a pruned fact), or not exactly one report. The walk is not
+trusted: the generated definitions are checked by the proofs that use them. -/
+def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Array (Nat × String)) := do
+  let text := s!"namespace {ns}\nopen Zig Zig.Full Zig.Full.FAssn\n\
     set_option linter.unusedVariables false\n\n{c.check keep}\nend {ns}\n"
   let opts := ({} : Options).setBool `Elab.async false
   let (_, msgs) ← Lean.Elab.process text (← getEnv) opts (some "<air2lean-invgen check>")
-  let mut report := none
+  let mut reports := #[]
   let mut errors := #[]
   for m in msgs.toList do
     let s ← m.data.toString
-    if s.startsWith "fsym-report " then report := (Json.parse (toString (s.drop 12))).toOption
+    if s.startsWith reportPrefix then reports := reports.push (toString (s.drop reportPrefix.length))
     else if m.severity == .error then errors := errors.push s
-  let some r := report | return .error s!"the step check did not run `fsym`: {errors.getD 0 "no report"}"
-  let .ok residuals := r.getObjValAs? (Array Json) "residuals" | return .error "an `fsym` report without residuals"
-  if residuals.isEmpty then
-    return if errors.isEmpty then .ok #[] else .error s!"the step check failed: {errors[0]!}"
+  let #[report] := reports
+    | throwError "the step check gave {reports.size} `fsym` reports, not one: {errors.getD 0 ""}"
+  let .ok residuals := (Json.parse report).bind (·.getObjValAs? (Array Json) "residuals")
+    | throwError "an `fsym` report without residuals: {report}"
+  -- Each residual leaves the step theorem with unsolved goals; any other error is fatal.
+  if let some e := errors.find? fun e => residuals.isEmpty || !e.startsWith "unsolved goals" then
+    throwError "the step check failed: {e}"
   let pre := s!"{ns}.{c.name}.cand"
   let mut drop := #[]
   for res in residuals do
     let goal := res.getObjValD "goal"
-    let reason := ((res.getObjValD "origin").getObjValAs? String "reason").toOption.getD ""
-    let i? := (goal.getObjValAs? String "head").toOption.bind fun h =>
-      if h.startsWith pre then (toString (h.drop pre.length)).toNat? else none
+    let origin := res.getObjValD "origin"
+    let field (j : Json) (k : String) := (j.getObjValAs? String k).toOption.getD ""
+    let goalText := field goal "text"
+    let i? := if (field goal "head").startsWith pre then (toString ((field goal "head").drop pre.length)).toNat? else none
     match i? with
     | some i =>
-      if reason == "postcondition_not_proved" && keep[i]?.getD false then
-        unless drop.contains i do drop := drop.push i
+      if field origin "reason" == "postcondition_not_proved" && field origin "condition" == "postcondition" &&
+          keep[i]?.getD false then
+        unless drop.any (·.1 == i) do drop := drop.push (i, goalText)
         continue
     | none => pure ()
-    let goalText := (goal.getObjValAs? String "text").toOption.getD ""
-    return .error s!"a residual of the step that no candidate explains: `{goalText}` ({reason})"
-  return .ok drop
+    throwError "a residual of the step that no candidate explains: `{goalText}` \
+      ({field origin "reason"}, {field origin "condition"})"
+  return drop
 
 /-- Houdini pruning (Flanagan and Leino, `docs/invariant-synthesis.md`): walk the step with the
 kept facts and drop those that the walk does not re-establish, until a walk drops none; its last
-walk is a proof of the step. Returns the kept facts and each pruning decision (the fact and the
-walk that dropped it). Each walk drops at least one fact, so there are at most `facts + 1`. -/
-def houdini (ns : Name) (c : Cand) : MetaM (Except String (Array Bool × Array Json)) := do
+walk is a proof of the step. Returns the kept facts and each pruning decision (the fact, the walk
+that dropped it and its residual goal there). Each walk drops at least one fact, so there are at
+most `facts + 1`. -/
+def houdini (ns : Name) (c : Cand) : MetaM (Array Bool × Array Json) := do
   let mut keep := Array.replicate c.facts.size true
   let mut pruned := #[]
   for n in [1:c.facts.size + 2] do
-    match ← walk ns c keep with
-    | .error e => return .error e
-    | .ok drop =>
-      if drop.isEmpty then return .ok (keep, pruned)
-      for i in drop do
-        keep := keep.set! i false
-        pruned := pruned.push (Json.mkObj [("fact", c.facts[i]!.text), ("walk", n),
-          ("residual", "postcondition_not_proved")])
-  return .error "Houdini pruning reached no fixpoint"
+    let drop ← walk ns c keep
+    if drop.isEmpty then return (keep, pruned)
+    for (i, goal) in drop do
+      keep := keep.set! i false
+      pruned := pruned.push (Json.mkObj [("fact", c.facts[i]!.text), ("walk", n), ("residual", goal)])
+  throwError "Houdini pruning reached no fixpoint"
 
 /-- The candidate invariant and measure of the loop `body` (the definition run by `Zig.loop`) with
-exit test `again`, or why there are none. -/
-def candLoop (ns body again : Name) : MetaM (Except String Cand) := do
-  try
+exit test `again`; throws why there are none. -/
+def candLoop (ns body again : Name) : MetaM Cand := do
     let some (.defnInfo d) := (← getEnv).find? body | throwError "not a definition"
-    let text ← lambdaTelescope d.value fun xs code => do
+    lambdaTelescope d.value fun xs code => do
       let ty ← inferType code
       unless ty.isAppOfArity `Zig.MM 2 do throwError "not a loop body of `Zig.MM`"
       let some structName := (ty.getArg! 0).constName? | throwError "locals that are not a structure"
@@ -649,8 +658,11 @@ def candLoop (ns body again : Name) : MetaM (Except String Cand) := do
           continue
         facts := facts.push { text := s!"v{k}.toNat + {scaled inc total} < 2 ^ {cell.width}" }
         -- The cell's value after the iterations so far, counted up or down from `X0`: both are
-        -- candidates (true at entry), Houdini keeps the one of the counter's direction.
-        for d in (if inc == 0 then #[s!"{X} - {X0}"] else #[s!"{X} - {X0}", s!"{X0} - {X}"]) do
+        -- candidates (true at entry), Houdini keeps the one of the counter's direction (a cell
+        -- that goes up by 0 keeps both, so it gets the one of the reading's direction only).
+        let up := s!"{X} - {X0}"
+        let down := s!"{X0} - {X}"
+        for d in (if inc != 0 then #[up, down] else if c.down then #[down] else #[up]) do
           facts := facts.push { text := s!"v.toNat = v{k}.toNat + {scaled inc d}", cell? := some (k, ty) }
         owned := owned.push (.written k ty s!"up (pts {p} {cell.align} v)")
         doc := doc.push s!"\n`v{k}` is `*{p}` there, which goes up by {inc} per iteration."
@@ -661,19 +673,17 @@ def candLoop (ns body again : Name) : MetaM (Except String Cand) := do
         facts, owned, meas := left,
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
           by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
-    pure (.ok text)
-  catch ex => pure (.error (← ex.toMessageData.toString))
 
 /-- The invariant `body.inv` and measure `body.meas` of the loop `body` with exit test `again`
 (`candLoop`, pruned by `houdini`) as source text with the pruning decisions, or why there are
-none. -/
-def genLoop (ns body again : Name) : MetaM (Except String (String × Array Json)) := do
-  let c ← match ← candLoop ns body again with
-    | .ok c => pure c
-    | .error e => return .error e
-  match ← houdini ns c with
-  | .ok (keep, pruned) => return .ok (c.output keep, pruned)
-  | .error e => return .error e
+none. Each loop has its own heartbeat budget: the walks of the loops before it do not count. -/
+def genLoop (ns body again : Name) : MetaM (Except String (String × Array Json)) :=
+  withCurrHeartbeats do
+    try
+      let c ← candLoop ns body again
+      let (keep, pruned) ← houdini ns c
+      return .ok (c.output keep, pruned)
+    catch ex => return .error (← ex.toMessageData.toString)
 
 /-- The loops that `e` runs: each `Zig.loop (body …) again` as the body's definition and the
 exit test, read off the term (no naming convention). A loop whose body is not an applied
