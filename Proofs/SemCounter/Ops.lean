@@ -386,5 +386,56 @@ theorem wp_post (I : SemImpl Tgt) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p) (t 
         rw [upd_self, upd_self]; rfl
     rw [hsum]; exact hrT
 
+/-! ## The increment of `n` -/
+
+/-- Both threads did at most two increments each. -/
+theorem Shape.sum_le {Y : ThreadId → Ph} {m : Mem} (h : Shape Y m) : sum Y ≤ 4 := by
+  have hw : ∀ p : Ph, (∃ k ≤ 2, ∃ b s, p = .work k b s) → p.count ≤ 2 := by
+    rintro p ⟨k, hk, b, s, rfl⟩; exact hk
+  obtain ⟨-, ⟨-, hy0, hyu⟩ | ⟨-, -, hm, hk, -⟩⟩ := h
+  · unfold sum; rw [hy0, hyu 1 (by decide)]; decide
+  · unfold sum
+    have h0 : (Y 0).count ≤ 2 := by
+      rcases hm with e | e
+      · rw [e]; decide
+      · exact hw _ e
+    have h1 : (Y 1).count ≤ 2 := by
+      rcases hk with e | e
+      · rw [e]; decide
+      · exact hw _ e
+    omega
+
+/-- **A step of the permit's holder on its own part** (`FCond.wp_liftPart`): it owns `n` with the
+value it recorded at the take (at most 4), next to its part `rp`; its part after the step is the
+step's post. -/
+theorem wp_ownN {α : Type} {x : MemM α} {Qa : α → FAssn}
+    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    {t : ThreadId} {rp r : Res} {k s : Nat}
+    (hi : (proto semOf).inv (upd G t (gW (rsum rp r) k true s)) m) (hc : m.current = t)
+    (hr : up (pts nPtr 4 (BitVec.ofNat 32 s)) r) (hdj : FHeap.Disjoint rp.heap r.heap)
+    (htt : FTTriple (⟪s ≤ 4⟫ ⋆ ((fun x => x = rp) ⋆ up (pts nPtr 4 (BitVec.ofNat 32 s)))) x Qa)
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      (proto semOf).inv (upd G t (gW r' k true s)) m' → Q a G m' d) :
+    (proto semOf).WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
+  have hs : s ≤ 4 := by
+    obtain ⟨rX, -, hu⟩ := id hi
+    rw [hu.lg.tot t k s (by rw [upd_self]; rfl)]
+    exact hu.um.shape.sum_le
+  exact FCond.wp_liftPart (fits (semOf := semOf)).toC.toFits (.inl rfl) hi hc htt
+    (Full.sep_lift.mpr ⟨hs, rp, r, hdj, rfl, rfl, hr⟩)
+    (fun a m' r' hx hq hc' _ _ hi' => h a m' r' hx hq hc' hi')
+
+/-- **`post` after the increment** (`wp_post`): the holder's part is `rp` and `n`, one increment
+further. -/
+theorem wp_postN (I : SemImpl Tgt) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p) (t : ThreadId)
+    {k s : Nat} (hk : k < 2) {rp r' : Res} (hpl : rp.Plain)
+    (hr' : ((fun x => x = rp) ⋆ up (pts nPtr 4 (BitVec.ofNat 32 (s + 1)))) r')
+    (io : Io) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : (proto semOf).inv (upd G t (gW r' k true s)) m) (hc : m.current = t) :
+    (proto semOf).WP t (I.post p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      (proto semOf).inv (upd G' t (gW rp (k + 1) false 0)) m') G m d := by
+  obtain ⟨_, rT, hdj, rfl, rfl, hrT⟩ := hr'
+  exact wp_post I hLc hp t hk hpl hdj hrT io G m d hi hc
+
 end SemCounter
 end Zig
