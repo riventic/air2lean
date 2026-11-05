@@ -1,4 +1,4 @@
-import Air2Lean.Sem
+import Air2Lean.SemView
 
 /-!
 # Renaming instruction IDs preserves the AIR interpreter (Canon `renumber`, V02)
@@ -235,17 +235,14 @@ theorem cellFree_of_argsOk (f : Func) : ∀ ts args, argsOk f ts args = true →
 
 /-! ## Results without cell names -/
 
-/-- Every value `x` returns names no register cell. -/
-def ROk {α : Type} (P : α → Prop) (x : Result α) : Prop := ∀ a, x.run = some (.ok a) → P a
-
-/-- Every value `x` returns, from any memory, names no register cell. -/
-def MOk {α : Type} (P : α → Prop) (x : MemM α) : Prop := ∀ m r, (x.run m).run = some (.ok r) → P r.1
+/-! A result predicate is `SemView`'s `OkR` (every value returned satisfies it); a `MemM`
+computation's is `OkR` of its run from every memory, `∀ m, OkR (P ∘ Prod.fst) (x.run m)`. -/
 
 /-- The oracle contract: on arguments without register-cell names, a call's value names no
 register cell either. The semantics' own oracles satisfy it (`run_cellFree`); it is what an
 external call model must also satisfy for `execFunc_rename` to apply to it. -/
 def Oracle.CellFree (o : Oracle) : Prop :=
-  ∀ name vs, vs.all cellFree = true → MOk (fun v => cellFree v = true) (o name vs)
+  ∀ name vs, vs.all cellFree = true → ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) ((o name vs).run m)
 
 /-- An exit's value names no register cell. -/
 def exitFree : Exit → Prop
@@ -447,41 +444,41 @@ theorem evalMem_congr (ρ : InstId → InstId) (f : Func) (E₁ E₂ : Env) (id�
 /-! ## Values without cell names -/
 
 theorem rok_bind {α β : Type} {P : β → Prop} {x : Result α} {k : α → Result β}
-    (h : ∀ a, x.run = some (.ok a) → ROk P (k a)) : ROk P (x >>= k) := by
+    (h : ∀ a, x.run = some (.ok a) → OkR P (k a)) : OkR P (x >>= k) := by
   intro r hr
   obtain ⟨a, ha, hk⟩ := Result.bind_ok hr
   exact h a ha r hk
 
-theorem rok_pure {α : Type} {P : α → Prop} {a : α} (h : P a) : ROk P (pure a) := by
+theorem rok_pure {α : Type} {P : α → Prop} {a : α} (h : P a) : OkR P (pure a) := by
   intro r hr
   have e : (pure a : Result α).run = some (.ok a) := rfl
   rw [e] at hr; cases hr; exact h
 
-theorem rok_stuck {α : Type} {P : α → Prop} : ROk P (stuck : Result α) := fun _ h => by cases h
+theorem rok_stuck {α : Type} {P : α → Prop} : OkR P (stuck : Result α) := fun _ h => by cases h
 
-theorem rok_throw {α : Type} {P : α → Prop} {e : Zig.Error} : ROk P (throw e : Result α) :=
+theorem rok_throw {α : Type} {P : α → Prop} {e : Zig.Error} : OkR P (throw e : Result α) :=
   fun _ h => by cases h
 
-theorem rok_optGet {w : Value} (h : cellFree w = true) : ROk (cellFree · = true) w.optGet := by
+theorem rok_optGet {w : Value} (h : cellFree w = true) : OkR (cellFree · = true) w.optGet := by
   cases w <;> first | exact rok_stuck | exact rok_throw | exact rok_pure h
 
-theorem rok_errGet {w : Value} (h : cellFree w = true) : ROk (cellFree · = true) w.errGet := by
+theorem rok_errGet {w : Value} (h : cellFree w = true) : OkR (cellFree · = true) w.errGet := by
   cases w <;> first | exact rok_stuck | exact rok_throw | exact rok_pure h
 
-theorem rok_errGetErr (w : Value) : ROk (cellFree · = true) w.errGetErr := by
+theorem rok_errGetErr (w : Value) : OkR (cellFree · = true) w.errGetErr := by
   cases w <;> first | exact rok_stuck | exact rok_throw | exact rok_pure rfl
 
-theorem rok_errWrap (w : Value) : ROk (cellFree · = true) w.errWrap := by
+theorem rok_errWrap (w : Value) : OkR (cellFree · = true) w.errWrap := by
   cases w <;> first | exact rok_stuck | exact rok_pure rfl
 
-theorem rok_constVal (f : Func) (v : Val) : ROk (cellFree · = true) (constVal f v) := by
+theorem rok_constVal (f : Func) (v : Val) : OkR (cellFree · = true) (constVal f v) := by
   cases v <;> simp only [constVal] <;> (try split) <;> first | exact rok_stuck | exact rok_pure rfl
 
 /-- In an environment whose operands hold values without cell names, `evalPure`'s value has
 none. -/
 theorem evalPure_cf (f : Func) (E : Env) (i : Inst)
-    (h : ∀ v ∈ topVals i.op, ROk (cellFree · = true) (operand f E v)) :
-    ROk (cellFree · = true) (evalPure f E i) := by
+    (h : ∀ v ∈ topVals i.op, OkR (cellFree · = true) (operand f E v)) :
+    OkR (cellFree · = true) (evalPure f E i) := by
   obtain ⟨id, ty, op⟩ := i
   cases op <;> simp only [topVals, List.forall_mem_cons, List.not_mem_nil, false_implies,
     implies_true, and_true] at h <;> simp only [evalPure, intBin] <;>
@@ -495,19 +492,21 @@ theorem evalPure_cf (f : Func) (E : Env) (i : Inst)
     | exact rok_pure (by simp only [cellFree]; exact h _ ‹_›))
 
 theorem mok_bind {α β : Type} {P : β → Prop} {x : MemM α} {k : α → MemM β}
-    (h : ∀ a, MOk P (k a)) : MOk P (x >>= k) := by
+    (h : ∀ a m, OkR (P ∘ Prod.fst) ((k a).run m)) : ∀ m, OkR (P ∘ Prod.fst) ((x >>= k).run m) := by
   intro m r hr
   rw [StateT.run_bind] at hr
   obtain ⟨p, _, hk⟩ := Result.bind_ok hr
   exact h p.1 _ _ hk
 
-theorem mok_pure {α : Type} {P : α → Prop} {a : α} (h : P a) : MOk P (pure a) := by
+theorem mok_pure {α : Type} {P : α → Prop} {a : α} (h : P a) :
+    ∀ m, OkR (P ∘ Prod.fst) ((pure a : MemM α).run m) := by
   intro m r hr
   simp only [StateT.run_pure] at hr
   have e : (pure (a, m) : Result (α × Zig.Mem)).run = some (.ok (a, m)) := rfl
   rw [e] at hr; cases hr; exact h
 
-theorem mok_lift {α : Type} {P : α → Prop} {x : Result α} (h : ROk P x) : MOk P (StateT.lift x) := by
+theorem mok_lift {α : Type} {P : α → Prop} {x : Result α} (h : OkR P x) :
+    ∀ m, OkR (P ∘ Prod.fst) ((StateT.lift x : MemM α).run m) := by
   intro m r hr
   simp only [StateT.run_lift] at hr
   obtain ⟨a, ha, hk⟩ := Result.bind_ok hr
@@ -516,8 +515,8 @@ theorem mok_lift {α : Type} {P : α → Prop} {x : Result α} (h : ROk P x) : M
 
 /-- When `evalPure`'s value has no cell names, neither has `evalMem`'s: its own arms load and
 build integers, `bool`s and pointers. -/
-theorem evalMem_cf (f : Func) (E : Env) (i : Inst) (hp : ROk (cellFree · = true) (evalPure f E i)) :
-    MOk (cellFree · = true) (evalMem f E i) := by
+theorem evalMem_cf (f : Func) (E : Env) (i : Inst) (hp : OkR (cellFree · = true) (evalPure f E i)) :
+    ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) ((evalMem f E i).run m) := by
   obtain ⟨id, ty, op⟩ := i
   cases op <;> simp only [evalMem, loadAs] <;>
   repeat' (first
@@ -572,7 +571,7 @@ theorem topVals_clear {a : InstId} {op : Op} (h : regUse a op = true) (hl : ∀ 
 
 /-- A constant operand's value has no cell names. -/
 theorem rok_operand_const (f : Func) (env : Env) (v : Val) (hv : ∀ j, v ≠ .inst j) :
-    ROk (cellFree · = true) (operand f env v) := by
+    OkR (cellFree · = true) (operand f env v) := by
   cases v
   case inst j => exact absurd rfl (hv j)
   all_goals simp only [operand]
@@ -587,7 +586,7 @@ theorem rok_operand_const (f : Func) (env : Env) (v : Val) (hv : ∀ j, v ≠ .i
 cell names. -/
 theorem operand_clear (ρ : InstId → InstId) {f : Func} {env : Env} (hinv : InvEnv f env) (v : Val)
     (hc : ∀ a, regAlloc f a = true → clearOf a v = true) :
-    operand f (renVals ρ env) v = operand f env v ∧ ROk (cellFree · = true) (operand f env v) := by
+    operand f (renVals ρ env) v = operand f env v ∧ OkR (cellFree · = true) (operand f env v) := by
   cases v
   case inst j =>
     simp only [operand, renVals]
@@ -607,12 +606,12 @@ theorem operands_clear (ρ : InstId → InstId) {f : Func} {env : Env} (hinv : I
     (hreg : ∀ a, regAlloc f a = true → regUse a op = true) (hl : ∀ p, op ≠ .load p)
     (hs : ∀ p v, op ≠ .store p v) :
     ∀ v ∈ topVals op, operand f (renVals ρ env) v = operand f env v ∧
-      ROk (cellFree · = true) (operand f env v) :=
+      OkR (cellFree · = true) (operand f env v) :=
   fun v hv => operand_clear ρ hinv v fun a ha => topVals_clear (hreg a ha) hl hs v hv
 
 theorem rok_mapM {f : Func} {env : Env} :
-    ∀ (l : List Val), (∀ v ∈ l, ROk (cellFree · = true) (operand f env v)) →
-      ROk (fun vs => vs.all cellFree = true) (l.mapM (operand f env))
+    ∀ (l : List Val), (∀ v ∈ l, OkR (cellFree · = true) (operand f env v)) →
+      OkR (fun vs => vs.all cellFree = true) (l.mapM (operand f env))
   | [], _ => rok_pure rfl
   | v :: l, h => by
     simp only [List.mapM_cons]
@@ -622,14 +621,15 @@ theorem rok_mapM {f : Func} {env : Env} :
     simp only [List.all_cons, Bool.and_eq_true]
     exact ⟨h v (by simp) a ha, rok_mapM l (fun w hw => h w (by simp [hw])) as has⟩
 
-theorem ok_liftMem {α : Type} {P : α → Prop} {x : MemM α} (h : MOk P x) : Ok P (liftMem x) := by
+theorem ok_liftMem {α : Type} {P : α → Prop} {x : MemM α} (h : ∀ m, OkR (P ∘ Prod.fst) (x.run m)) :
+    Ok P (liftMem x) := by
   intro s m r hr
   simp only [liftMem, StateT.run_lift, StateT.run_bind, StateT.run_pure] at hr
   obtain ⟨p, hp, hk⟩ := Result.bind_ok hr
   have e : (pure ((p.1, s), p.2) : Result ((α × Frame) × Zig.Mem)).run = some (.ok ((p.1, s), p.2)) := rfl
   rw [e] at hk; cases hk; exact h m p hp
 
-theorem rok_cellRead (t : Ty) (v : Option Value) : ROk (cellFree · = true) (cellRead t v) := by
+theorem rok_cellRead (t : Ty) (v : Option Value) : OkR (cellFree · = true) (cellRead t v) := by
   cases v with
   | none => exact rok_throw
   | some v =>
@@ -924,9 +924,9 @@ theorem iteration_ren (ρ : InstId → InstId) (c : Ctx) {α : Type} (body : SM 
 /-! ## Operands of the renamed run -/
 
 theorem rok_of_run {α : Type} {P : α → Prop} {x : Result α} {a : α} (hx : x.run = some (.ok a))
-    (h : P a) : ROk P x := fun b hb => by rw [hx] at hb; cases hb; exact h
+    (h : P a) : OkR P x := fun b hb => by rw [hx] at hb; cases hb; exact h
 
-theorem map_renV_of_rok {ρ : InstId → InstId} {x : Result Value} (h : ROk (cellFree · = true) x) :
+theorem map_renV_of_rok {ρ : InstId → InstId} {x : Result Value} (h : OkR (cellFree · = true) x) :
     renV ρ <$> x = x := by
   apply ExceptT.ext
   rw [ExceptT.run_map]
@@ -1115,7 +1115,7 @@ theorem again_ren (hρ : Inj ρ) (id : InstId) : ∀ e, Exit.again (ρ id) (renE
 /-- `execInst`'s last arm, renamed: the memory step of a clear instruction, then the rest. -/
 theorem sim_default {cG c : Ctx} {f' f : Func} {env : Env} {id : InstId} {ty : TyId} {i' i : Inst}
     {L rest : List Inst} (hρ : Inj ρ) (hev : evalMem f' (renEnv ρ env) i' = evalMem f env i)
-    (hok : MOk (cellFree · = true) (evalMem f env i))
+    (hok : ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) ((evalMem f env i).run m))
     (ih : ∀ v, cellFree v = true →
       Sim ρ (renExit ρ) (execBody cG L (renEnv ρ (env.set id ty v))) (execBody c rest (env.set id ty v))) :
     Sim ρ (renExit ρ) (liftMem (evalMem f' (renEnv ρ env) i') >>= fun v => execBody cG L ((renEnv ρ env).set (ρ id) ty v))
@@ -1412,7 +1412,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
     have hc : ∀ u ∈ topVals op, ∀ a, regAlloc c.func a = true → clearOf a u = true :=
       fun u hu a ha => topVals_clear (regUse_of_regInst ((RegOk.cons hreg).1 a ha))
         (fun p e => h12 p e) (fun p v e => h13 p v e) u hu
-    have hok : MOk (cellFree · = true) (evalMem c.func env ⟨id, ty, op⟩) :=
+    have hok : ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) ((evalMem c.func env ⟨id, ty, op⟩).run m) :=
       evalMem_cf _ _ _ (evalPure_cf _ _ _ fun u hu => (operand_clear ρ hinv u (hc u hu)).2)
     have ih' : ∀ v, cellFree v = true → Sim ρ (renExit ρ)
         (execBody (renCtx ρ c) (renBody ρ rest) (renEnv ρ (env.set id ty v)))
@@ -1450,8 +1450,9 @@ end Sim
 /-! ## Functions and programs -/
 
 theorem mok_bind' {α β : Type} {P : β → Prop} {Q : α → Prop} {x : MemM α} {k : α → MemM β}
-    (hx : ∀ m r, (x.run m).run = some (.ok r) → Q r.1) (h : ∀ a, Q a → MOk P (k a)) :
-    MOk P (x >>= k) := by
+    (hx : ∀ m r, (x.run m).run = some (.ok r) → Q r.1)
+    (h : ∀ a, Q a → ∀ m, OkR (P ∘ Prod.fst) ((k a).run m)) :
+    ∀ m, OkR (P ∘ Prod.fst) ((x >>= k).run m) := by
   intro m r hr
   rw [StateT.run_bind] at hr
   obtain ⟨p, hp, hk⟩ := Result.bind_ok hr
@@ -1459,17 +1460,18 @@ theorem mok_bind' {α β : Type} {P : β → Prop} {Q : α → Prop} {x : MemM �
 
 /-- A function's value names no register cell, under every oracle that keeps the contract. -/
 theorem execFunc_cellFree (prog : Prog) {o : Oracle} (ho : Oracle.CellFree o) (f : Func)
-    (args : List Value) : MOk (cellFree · = true) (execFunc prog o f args) := by
+    (args : List Value) :
+    ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) ((execFunc prog o f args).run m) := by
   by_cases h : argsOk f f.params.toList args = true
   · have hflow := execBody_flow (c := ⟨prog, f, args, o, fun _ => none⟩) ho
       (cellFree_of_argsOk f _ _ h) (fun _ => rfl) f.body.toList (fun _ => none)
       (fun _ _ _ h => by cases h) (fun _ ha => ha) {}
-    have hk : MOk (cellFree · = true) (do
+    have hk : ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) (StateT.run (do
         let (e, frame) ← (execBody ⟨prog, f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
         frame.blocks.forM Zig.free
         match e with
         | .ret v => pure v
-        | _ => StateT.lift stuck : MemM Value) :=
+        | _ => StateT.lift stuck : MemM Value) m) :=
       mok_bind' (Q := fun p => exitFree p.1) (fun m r hr => hflow m r hr) fun ⟨e, _⟩ he =>
         mok_bind fun _ => by
           cases e
@@ -1549,8 +1551,8 @@ theorem run_cellFree (p : Prog) : Oracle.CellFree (run p) := by
     apply admissible_flatOrder
     intro r hr; cases hr
   · intro o ho name vs _
-    show MOk (cellFree · = true)
-      (match p.lookup name with | some f => execFunc p o f vs | none => StateT.lift stuck)
+    show ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) (StateT.run
+      (match p.lookup name with | some f => execFunc p o f vs | none => StateT.lift stuck) m)
     split
     · exact execFunc_cellFree p ho _ vs
     · exact mok_lift rok_stuck
@@ -1574,9 +1576,9 @@ theorem runOn_cellFree (p : Prog) (names : List String) : Oracle.CellFree (runOn
     apply admissible_flatOrder
     intro r hr; cases hr
   · intro o ho name vs _
-    show MOk (cellFree · = true) (if names.contains name then
+    show ∀ m, OkR ((cellFree · = true) ∘ Prod.fst) (StateT.run (if names.contains name then
       match p.lookup name with | some f => execFunc p o f vs | none => StateT.lift stuck
-      else StateT.lift stuck)
+      else StateT.lift stuck) m)
     split
     · split
       · exact execFunc_cellFree p ho _ vs
