@@ -1314,6 +1314,18 @@ model argument, standards references and necessity/advancing-read controls.
   futex and atomic ops do not touch block addresses). So `known` facts are stable under the rely
   and can live in any thread's ghost value or in `Proto.inv`. This is the Iris notion of a
   persistent proposition.
+* **Block addresses stay across every thread step** (maintainer decision 2026-11-05, audit
+  finding S6, ledger row `fstepin-addrs`): the step-level form of `KMono`'s address facts above.
+  The thread step relation `FStepIn` has the field `addrs : m.SameAddrs m'`: every block of `m`,
+  also one of the frame, exists in `m'` at the same address. The model never moves a block: a
+  write, `free`, an unmap or an in-place resize changes only bytes, `live` or `kind`, and every
+  `addr :=` is a new block (`Mem.afterAlloc`, a mapping, a moving `mremap`). So everything read
+  from addresses, `addrIn` and the futex keys, is stable under every `FStepIn` of the rely
+  (`Mem.SameAddrs.addrIn_eq`). Counterexample to the old relation (only
+  `m.blocks.size ≤ m'.blocks.size`): a frame step that moves block `b'` (a nested lock's word,
+  outside the frame) satisfies every other field, and a lock invariant that names `b'`'s futex key
+  (`LockWord.nest`) is false after it. Rejected alternative: a word-address field in each
+  protocol object (`LockWord`, `FCond`, `FSem`, `FEvent` would each repeat it).
 * **Shared atomic words** (`Conc/Base/Word.lean`: `Word.Ok` requires "no other location overlaps").
   This is the constraint `(o, n)` for a word that no thread owns. The full-state version keeps the word in the
   protocol invariant as `apts` contents with tag `some (o, n)`.
