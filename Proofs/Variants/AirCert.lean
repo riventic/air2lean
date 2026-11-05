@@ -24,6 +24,22 @@ Outside the certificate fragment:
 * `variants.scale`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.severity`: a parameter that is not an integer, bool, plain pointer or slice
 * `variants.totalArea`: a slice parameter whose items are not integers or `bool`
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `variants.advance` trusted-Canon: renumber
+* `variants.area` trusted-Canon: renumber
+* `variants.codeOf` trusted-Canon: renumber
+* `variants.isRound` trusted-Canon: renumber
+* `variants.isUrgent` trusted-Canon: renumber
+* `variants.lightOf` trusted-Canon: renumber
+* `variants.next` trusted-Canon: renumber
+* `variants.prioValue` trusted-Canon: renumber
+* `variants.radius` trusted-Canon: renumber
+* `variants.scale` trusted-Canon: renumber
+* `variants.severity` trusted-Canon: renumber
+* `variants.totalArea` trusted-Canon: renumber
 -/
 
 end Variants.AirCert

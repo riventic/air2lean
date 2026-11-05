@@ -282,18 +282,49 @@ are not restated: with a translated allocator, "no leak" is a postcondition that
 (`docs/alloc-spec.md`); `freeAll_cost`'s loop-step count is `freeAll_exact`. Build with
 `lake build ZigLean.Sep.Full.Cost Proofs.Lists.Bounded Proofs.Lists.Alloc`.
 
-## Concrete runs of programs with loops (`unroll_sched`)
+## Concrete runs of programs with loops
 
 `Zig.loop` is a `partial_fixpoint`: the least fixpoint of its unfolding, which the kernel does
-not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. Import
-`ZigLean.Conc.Unroll` (an optional module) for a kernel-checked run of a concurrent program
-with loops under one schedule:
+not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. A kernel-checked run
+of a concurrent program with loops under one schedule unfolds the loops first
+(`Proofs/Sync/Mutex.lean`):
 
 ```lean
-theorem parallelCounter_completes :
-    Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1)
-      (mem0 .fresh)) = some 4 := by
-  unroll_sched 10
+theorem mutexCounter_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩)
+      (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch mutexCounter work work.loop4 Io_Mutex_lockUncancelable
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
+```
+
+1. `delta` unfolds every function on the run's path from the goal to each `Zig.loop` the run
+   reaches: the generated functions, the loop bodies `f.loopN` that call them, and ZigLean model
+   functions that hold a loop (`Zig.osUnfairLockC`, the macOS lock). It unfolds again inside
+   what it unfolds, so the order of the names does not matter.
+2. Each `simp` pass rewrites every `Zig.loop` once by its defining equation (`Zig.loop.eq_1`), so
+   `iterate n` unrolls each loop `n` times. Pick `n` at least the body runs of any loop of the run.
+3. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
+   A wrong value, a run out of fuel, or a reached loop that is not unfolded or needs more
+   iterations leaves the goal unproved.
+
+`lake build Proofs` also runs against the translations of other Zig versions and targets (the swap
+builds of [theorem-inventory.md](theorem-inventory.md)). The run's path differs between them (a
+macOS `std.Thread.Mutex` enters `Zig.osUnfairLockC`'s loop on every lock, a Linux one only when
+contended), and std functions may have other names or not exist. The list covers the path in
+every translation and names only functions all of them have. Where no such list exists, the
+witness keeps `unroll_sched` (ledger `run-witness-loop-names`).
+
+### `unroll_sched` (legacy-to-retire)
+
+`ZigLean.Conc.Unroll` (an optional module) is the earlier tactic for the same goals, being
+retired (`docs/legacy-retirement.md`, section 5; `Proofs/Sync/Handoff.lean`):
+
+```lean
+theorem handoff_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 :=
+  ⟨.fresh, by unroll_sched 10⟩
 ```
 
 `unroll_sched k` accepts a goal `g (Sched.run env dispatch fuel o main m₀) = v` with concrete
@@ -333,9 +364,7 @@ is `fixN F k` (`F` applied `k` times to `⊥`) at `approx` and the fixpoint at `
 (`fixN_le_fix`, `monotone_fixSel`); `k` bounds the nested unfoldings of the group. A definition
 met again inside its own expansion (a recursion through a dispatch table) stays uncut there.
 
-The `completes` companions of the concurrent all-schedules theorems
-([theorem-inventory.md](theorem-inventory.md)) use it: one concrete schedule (the oracle that
-always picks option 0), fuel 1000, `mem0`. `tests/roadmap/proof-tools/Unroll.lean` checks a
+`tests/roadmap/proof-tools/Unroll.lean` checks a
 run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
 goal without a run, and a mutual `partial_fixpoint` group (`even_six`, rejected when cut too
 early). Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run

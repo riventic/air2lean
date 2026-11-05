@@ -4,7 +4,7 @@ import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.LockSteps
 import ZigLean.Conc.Share
 import ZigLean.Conc.SpawnLemmas
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Witness
 import ZigLean.Sep.Full.AutoWP
 
@@ -1520,11 +1520,15 @@ theorem groupCounter_safe (env : Env) {σ : Placement} {fuel : Nat} {o : Nat →
   proto.run_safe env (fun _ => rfl) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2.1) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Group` counter returns 3 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops). -/
 theorem groupCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) (mem0 σ)) = some 3 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (groupCounter ⟨⟩) (mem0 σ)) = some 3 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch groupCounter add Io_Mutex_lockUncancelable
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 /-- **Join before free, under every schedule.** Three tasks read-share `io` (bytes 0..16 of block
 0, `ZigLean/Conc/Share.lean`'s `ReadShared`); `main` frees the block only with every task joined
