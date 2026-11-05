@@ -111,8 +111,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [10](#row-10) | Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join) | not engine (library Full/Arr); note only |
 | [11](#row-11) | CTriple backend on top of FTTriple (T-ctriple | open (after #1); exact request below (2026-10-12, approved design R2, docs/sep-threads.md §T-ctriple) |
 | [12](#row-12) | Precondition planning: region atoms before size-dependent atoms | READY #250 |
-| [14](#row-14) | One fsym entry for other front ends | Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry |
-| [15](#row-15) | Quiet stop | fsym.quiet suppresses the human stop messages; memVc enables it only around Auto.run, so vc_gen refuses an unexecuted command with its own error and no duplicate fsym info (pinned by vcs/Memory.lean). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON |
+| [14](#row-14) | One fsym entry for other front ends | Auto.run is the shared entry of evalFsym (and was memVc's until vc_gen was retired), including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry |
+| [15](#row-15) | Quiet stop | fsym.quiet suppresses the human stop messages (its consumer, vc_gen's memVc, was retired; tests/roadmap/sep-auto/SepAuto/Report.lean still checks it). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON |
 | [19](#row-19) | (same shape as 9b, second user) Pair facts from the memory | open |
 | [20](#row-20) | Split a match on a symbolic Except result | DONE codex/fsym-wp (agent 13: a body's match on a variable as the command is split) |
 | [20a](#row-20a) | Atoms equal up to arithmetic | READY #250 (allocSentinel + realloc drafts close) |
@@ -481,7 +481,7 @@ Status: **closed**. Requester: one-logic-vc.
 
 Note: vc_gen (ZigLean/VC/Extract.lean) called Auto.run until it was retired (L15): memory VCs are now fsym's residuals directly; tests/roadmap/sep-auto/SepAuto/Report.lean checks ordinary/reporting proof and residual identity
 
-Progress: Auto.run is the shared entry for evalFsym and memVc, including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry
+Progress: Auto.run is the shared entry of evalFsym (and was memVc's until vc_gen was retired), including introductions, context preparation, run caches and the orphan-proof check; runReport adds residual attribution to that entry
 
 Request: One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (user : Array Expr) (extra : Array Syntax) : TacticM (List MVarId)` = what `evalFsym` does after elaborating its args (intros, `reduceProjs` of hyps, `withRunCaches`, `arithSimpCtx`, `walk … 400`); `evalFsym` calls it. `vc_gen` (ZigLean/VC/Extract.lean `memVc`) then calls it instead of re-doing `withRunCaches`/`arithSimpCtx`/`walk` and missing intros/reduceProjs
 
@@ -490,9 +490,9 @@ Request: One fsym entry for other front ends: expose `Zig.Full.Auto.run (g) (use
 
 Status: **closed**. Requester: one-logic-vc.
 
-Note: vc_gen and its memVc were retired (L15); fsym.quiet and fsym.report stay, and tests/roadmap/vcs/Memory.lean now pins fsym's own reports
+Note: vc_gen and its memVc were retired (L15), and tests/roadmap/vcs/Memory.lean now pins fsym's own reports. fsym.quiet has no caller left outside its test: removing it is an engine follow-up
 
-Progress: fsym.quiet suppresses the human stop messages; memVc enables it only around Auto.run, so vc_gen refuses an unexecuted command with its own error and no duplicate fsym info (pinned by vcs/Memory.lean). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON
+Progress: fsym.quiet suppresses the human stop messages (its consumer, vc_gen's memVc, was retired; tests/roadmap/sep-auto/SepAuto/Report.lean still checks it). Auto.runReport returns stop reasons without emitting a report message, and fsym.report emits schema-versioned JSON
 
 Request: Quiet stop: at "no rule for the command" the walk `logInfo`s and returns the `FLogic.T` goal; `vc_gen` detects that goal and refuses with its own error, so the info is duplicated (pinned in tests/roadmap/vcs/Memory.lean). A flag or a returned stop reason
 
