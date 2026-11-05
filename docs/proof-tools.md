@@ -295,36 +295,36 @@ theorem mutexCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩)
       (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch mutexCounter work work.loop4 Io_Mutex_lockUncancelable
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 ```
 
-1. `delta` unfolds every function on the run's path from the goal to each `Zig.loop` the run
-   reaches: the generated functions, the loop bodies `f.loopN` that call them, and ZigLean model
-   functions that hold a loop (`Zig.osUnfairLockC`, the macOS lock). It unfolds again inside
-   what it unfolds, so the order of the names does not matter.
-2. Each `simp` pass rewrites every `Zig.loop` once by its defining equation (`Zig.loop.eq_1`), so
-   `iterate n` unrolls each loop `n` times. Pick `n` at least the body runs of any loop of the run.
-3. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
+1. Each `simp` pass rewrites with the `zig_run` set ([proof-automation.md](proof-automation.md),
+   kernel-run witnesses): every executable declaration of the generated code (`dispatch`, the
+   functions, the loop bodies `f.loopN`, the members of a recursive group by `f.eq_def`), the
+   ZigLean models that hold a loop (`Zig.osUnfairLockC`, the macOS lock) and `Zig.loop` by its
+   defining equation. A pass rewrites each loop once, so `iterate n` reaches every loop the run
+   enters and unrolls it; pick `n` at least the run's deepest nesting of calls and loop
+   iterations. A hand-written definition on the path (a test's `dispatchW`, a client over an
+   interface) is unfolded by name first (`delta`, `unfold`).
+2. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
    A wrong value, a run out of fuel, or a reached loop that is not unfolded or needs more
    iterations leaves the goal unproved.
 
 `lake build Proofs` also runs against the translations of other Zig versions and targets (the swap
 builds of [theorem-inventory.md](theorem-inventory.md)). The run's path differs between them (a
 macOS `std.Thread.Mutex` enters `Zig.osUnfairLockC`'s loop on every lock, a Linux one only when
-contended), and std functions may have other names or not exist. The list covers the path in
-every translation and names only functions all of them have. Where no such list exists, the
-witness keeps `unroll_sched` (ledger `run-witness-loop-names`).
+contended), and std functions may have other names or not exist. The proof names no generated
+declaration: each translation tags its own, so one proof covers every translation.
 
 ### `unroll_sched` (legacy-to-retire)
 
 `ZigLean.Conc.Unroll` (an optional module) is the earlier tactic for the same goals, being
-retired (`docs/legacy-retirement.md`, section 5; `Proofs/Sync/Handoff.lean`):
+retired (`docs/legacy-retirement.md`, section 5). Its last proof uses are the two RwLock run
+witnesses (`Proofs/Sync/RwLock.lean`, `Proofs/Sync/RwLockSnapshotPair.lean`):
 
 ```lean
-theorem handoff_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 :=
+theorem rwLockRead_completes : … :=
   ⟨.fresh, by unroll_sched 10⟩
 ```
 
@@ -366,13 +366,11 @@ Build with `lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Conc Proofs.Threads.
 `lake env lean tests/roadmap/proof-tools/Unroll.lean`.
 
 A concrete in-thread reading of a concurrent function, the run that `CTriple` speaks about
-(`(Sched.soloRun fuel x).run m`), needs no cut and no tactic of its own: `unfold` rewrites each
-`partial_fixpoint` definition and `Zig.loop` by its defining equation, once per call or iteration
-the run makes, and `decide +kernel` computes the result. A run that reaches a definition not
-unfolded far enough gets stuck there and is rejected. The definitions are named by hand, the
-generated loop bodies among them (`heap_ArenaAllocator_alloc.loop21`), so a translation that
-renumbers them needs the list updated (engine ledger 9h).
+(`(Sched.soloRun fuel x).run m`), needs no cut and no tactic of its own: the same `zig_run`
+passes rewrite each generated definition, `partial_fixpoint` group and `Zig.loop` by its
+defining equation, once per call or iteration the run makes, and `decide +kernel` computes the
+result. A run that reaches a definition not unfolded far enough gets stuck there and is
+rejected. Only the test's own definitions are named (`unfold client vt`).
 `AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s `alloc`, `alloc`,
 `free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete memory is
-decidable); `AllocTranslated.ListsPage` rewrites its loops by the same equations
-(`rw [Zig.loop.eq_1 …]`).
+decidable), as do the refuted clients of `AllocTranslated.ListsPage`.

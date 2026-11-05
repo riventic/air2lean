@@ -1,6 +1,7 @@
 import Proofs.Handoff.Ops
 import Proofs.Sync.Cond
 import Proofs.Sync.Event
+import ZigLean.Conc.RunResult
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.LockSteps
 
