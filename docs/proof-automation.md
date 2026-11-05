@@ -718,7 +718,21 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `minAtom`, `maxAtom`), so no split is explored for it. A case probe is not retried with a
    subset of the facts it failed with (`detProbe`; an undecided `min 4096 (2 ^ k)` of the page
    allocator's `alloc` was probed again for every side goal: 100k heartbeats, now 89k);
-5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
+5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`;
+6. unless the call is a probe, `omega` runs again with the relevant facts each normalized against
+   all the facts (`renormFacts`: a hypothesis is normalized once, against the facts before it, so
+   a conditional rewrite whose side condition a later fact proves applies only now: the loop test
+   `i < n` after an invariant's `tsum n g - tsum i g`) and with the **congruence of atoms**
+   (`atomCongr`): an atom that applies a function the solver does not read (a library sum
+   `tsum x.toNat g`, a caller's `f x.toNat`) to a term containing the side `l` of an equation
+   `l = r` of the facts, `l` itself an atom (`x.toNat = i.toNat + 1`, a counter's step), equals
+   the atom with `r` for `l`, in normal form (`tsum (i.toNat + 1) g` is
+   `tsum i.toNat g + g i.toNat`). Each fact rewrites an atom at most once, an equation to a
+   non-atom first, an alias (`y.toNat = x.toNat`) only else, so the rewrites end; at `Nat` and
+   `Int`; not in a probe. The library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`) has the
+   non-recursive normal forms for a counter-dependent invariant (`tsumSubLt` where the term is not
+   `0`, `tsum_sub_of_le`; a bound `n + 1` by `tsumSucc`, a numeral bound kept). Regression: `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean`
+   (the side goals of `counted.tri`'s step; ledger #arith-atom-congruence).
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
 atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
