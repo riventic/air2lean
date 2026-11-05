@@ -218,7 +218,8 @@ structure Lg (G : ThreadId → Gh) (m : Mem) : Prop where
 
 /-- The rest of the invariant (module doc). A conjunction, not a structure: `fsym` splits a fact
 of a user structure into its fields, and a field that is again a user structure whose split
-substitutes a local (`UM`'s `rest`: `rX = …`) leaves a stale local (engine ledger). -/
+substitutes a local (`UM`'s `rest`: `rX = …`) leaves a stale local
+(ledger #fsym-split-nested-struct-subst). -/
 abbrev U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop :=
   UM G rX m ∧ C.Inv L G m ∧ S.Inv G m ∧ Lg G m
 

@@ -1,6 +1,7 @@
 import Proofs.SemCounter.Start
 import Proofs.Sync.IoSemaphore
 import ZigLean.Sep.Full.AutoWP
+import ZigLean.Conc.RunResult
 
 /-!
 # `semaphoreCounter` over all schedules
@@ -9,7 +10,8 @@ import ZigLean.Sep.Full.AutoWP
 between `wait` and `post` of an `Io.Semaphore` with one permit (translated from Zig 0.16.0's std
 code; the futex under it is the model). The result is 4 under every schedule
 (`semaphoreCounter_spec`), and no schedule gives an error (`semaphoreCounter_safe`): no data race
-on `n`, and no deadlock.
+on `n`, and no deadlock. One schedule completes with 4 (`semaphoreCounter_completes`, computed by
+the kernel).
 
 The proof is in the full-state concurrent separation logic (`docs/sep-threads.md`) and uses only
 the semaphore's contract (`SemImpl`): this program's `Io.Semaphore` is `Sync.ioSem`. The
@@ -127,5 +129,20 @@ under every schedule. -/
 theorem semaphoreCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     e ≠ .stackOverflow → (Sched.run env dispatch fuel o (semaphoreCounter io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
+
+/-- One schedule completes: under the oracle that always picks option 0, the semaphore counter returns 4 within
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run
+(`decide +kernel`). A loop (`Zig.loop`, a `partial_fixpoint`) is not computed by the kernel: the
+proof unfolds the functions on the run's path that hold one (`delta`) and then every loop four
+times by its defining equation (`Zig.loop.eq_1`), more than any loop of this run takes, as in
+`tests/roadmap/sync-contracts/EventSet.lean`. -/
+theorem semaphoreCounter_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (semaphoreCounter ⟨⟩) (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  delta dispatch semaphoreCounter semWork semWork.loop4 Io_Semaphore_waitUncancelable
+    Io_Semaphore_waitUncancelable.loop5 Io_Semaphore_post Io_Mutex_lockUncancelable
+    Io_Condition_waitUncancelable Io_Condition_wait Io_Condition_waitInner Io_Condition_signal
+  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  decide +kernel
 
 end Sync.SemCounter
