@@ -1755,6 +1755,28 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a premise."
+  },
+  {
+   "id": "word-ok-live-set",
+   "title": "Word.Ok asks every plain access to happen before every thread, so a whole-struct read next to a futex word breaks it",
+   "status": "closed",
+   "requester": "L11e/L11f (WaitGroup over FEvent, #640 comment 6643815474; coordinator decision: option (A))",
+   "progress": "closed by PR646, which gives Word.Ok a live set",
+   "request": "`Word.Ok.wfp` required each plain access to a word's bytes (a footprint entry) to be at or below the clock of every thread (`AllLe`). Counterexample: in the WaitGroup proof (Zig 0.15.2's code, Proofs/Threadsync/WaitGroup), main loads the whole 24-byte `Tally` after its wait, one plain read covering the counter word (bytes 0..8) and the event word (bytes 8..12). The read's entry carries main's clock, whose main component is above every task's clock (main's add, wait and read come after the tasks' last synchronization), and the tasks stay in `m.threads`, also after their joins (a memory has no ended flag). So from the read on, `WG.Ok` and `EV.Ok` are false in every later memory, while `FPrim.ofWords.Sub` and `Word.InRest` ask `W.Ok` in every state of the protocol's rest: no rest holds after the read, and main's theorem is unprovable although the program is race-free (only threads that may still access the word must be above the plain access). The lock word does not have this: `LockWord.WInv.wfp` already uses a live set (`LiveLe`). Needed: `Word.Ok m A` with a protocol-supplied live set `A` (`AllLeOn A`); every word rule whose op by thread t accesses the word takes `A t` (a futex wake is no access); the default `fun _ => True` keeps the statements of the word lemmas, and the contracts (MutexImpl, CondImpl, SemImpl, EventImpl) and their clients keep theirs (FEvent's rules take the live-set premise and discharge it).",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "FEvent's live set is `FEvent.Live`: a thread that may wait or set, unless a setter that has set (`sw`, `sd`). A setter at `sw` still wakes, but a futex wake records no access, so it needs no clock below a plain access (counterexample to keeping it until it leaves the event's code: main's cas writes waiting, the setter's xchg reads waiting and goes to sw, main's futex compare reads is_set and returns, main reads the whole struct while the setter is still at sw)."
+  },
+  {
+   "id": "fevent-live-exit",
+   "title": "A thread with FEvent's waiter role stays in the event word's live set after its last access",
+   "status": "open",
+   "requester": "L11f review of PR646 (pass 2, cross-file angle)",
+   "progress": "open",
+   "request": "`FEvent.Live g := (wx g ∨ sx g) ∧ ¬ (ph g).Setting` takes the live set from the roles, and the invariant keeps the waiter role (`Inv.wx`, `Inv.wby`; `Inv.toOut` asks `E.wx (G t) → E.wx g`), so a waiter that returned to `out` stays live for good. Scenario: a worker waits and main sets; the worker returns and ends; main joins it and then reads the struct that holds the event with a plain read (or reinitializes it). The read's clock is main's after the join, not below the worker's, so `E.W.Ok m (Live ∘ G)` is false from then on although the program is race-free. WaitGroup (#640) is not affected: its only waiter is main, the reader. Needed: a way out of the live set for a thread that will not access the word again (a protocol-chosen exit, kept by `Inv.wby` through another witness of each `waiting` write), proved generically in `FEvent`.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Not a soundness gap: a thread outside the live set cannot access the word (every access rule takes the live-set premise); the gap is what can be proved."
   }
  ],
  "mechanisms": [

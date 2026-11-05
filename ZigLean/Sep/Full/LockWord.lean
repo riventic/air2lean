@@ -99,9 +99,10 @@ structure LocOk (m : Mem) : Prop where
   plain : ∀ i l, L.Loc m i l → PlainLe m L.b L.o 4 l.lastClock
 
 /-- The clock `c` happened before every thread that has not ended (`gone`) at the places `P`: a
-thread that ended does not access the word or the resource again. -/
-def LiveLe (P : ThreadId → LPh) (m : Mem) (c : VClock) : Prop :=
-  ∀ u < m.threads.size, P u ≠ .gone → VClock.le c (m.clocks[u]!) = true
+thread that ended does not access the word or the resource again (the lock word's live set,
+`AllLeOn`). -/
+abbrev LiveLe (P : ThreadId → LPh) (m : Mem) (c : VClock) : Prop :=
+  AllLeOn (fun u => P u ≠ .gone) m c
 
 /-- The clock `c` happened before the release clock of the newest message of the word. -/
 def Before (m : Mem) (c : VClock) : Prop :=
@@ -309,13 +310,12 @@ variable {L}
 
 theorem LiveLe.mono {P : ThreadId → LPh} {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (h : LiveLe P m c) : LiveLe P m' c := fun u hu hg =>
-  VClock.le_trans (h u (ht ▸ hu) hg) (hcl u (ht ▸ hu))
+    (h : LiveLe P m c) : LiveLe P m' c := allLeOn_mono ht hcl h
 
 /-- Fewer threads that have not ended. -/
 theorem LiveLe.weaken {P P' : ThreadId → LPh} {m : Mem} {c : VClock}
     (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (h : LiveLe P m c) : LiveLe P' m c :=
-  fun u hu hu' => h u hu (hg u hu')
+  AllLeOn.anti h hg
 
 theorem Owns.weaken {P P' : ThreadId → LPh} {m : Mem} {h : Heap}
     (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.Owns P m h) : L.Owns P' m h :=
@@ -716,9 +716,11 @@ theorem WInv.fork {P : ThreadId → LPh} {m m' : Mem} {t c : ThreadId} {gt : Boo
     simp only [Array.size_push] at hu
     by_cases hu' : u < m.threads.size
     · have hu'' : u ≠ m.threads.size := Nat.ne_of_lt hu'
-      exact VClock.le_trans (h u hu' (by rw [← hphu u hu'']; exact hg)) (hcl u (hcs ▸ hu'))
+      exact VClock.le_trans (h u hu' (by show P u ≠ .gone; rw [← hphu u hu'']; exact hg))
+        (hcl u (hcs ▸ hu'))
     · have : u = m.threads.size := by omega
-      subst this; rw [← hcs]; exact VClock.le_trans (h t ht (by rw [hout]; decide)) hcn
+      subst this; rw [← hcs]
+      exact VClock.le_trans (h t ht (by show P t ≠ .gone; rw [hout]; decide)) hcn
   have hsome : ∀ {c : VClock}, SomeLe m c → SomeLe { m with
       current := t,
       clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
@@ -872,10 +874,14 @@ theorem Step.allLe {t : ThreadId} {m m' : Mem} {c : VClock} (hs : L.Step t m m')
     (h : AllLe m c) : AllLe m' c :=
   allLe_mono hs.threads (fun u _ => hs.clocks u) h
 
+theorem Step.allLeOn {A : ThreadId → Prop} {t : ThreadId} {m m' : Mem} {c : VClock}
+    (hs : L.Step t m m') (h : AllLeOn A m c) : AllLeOn A m' c :=
+  allLeOn_mono hs.threads (fun u _ => hs.clocks u) h
+
 theorem Step.liveLe {P P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {c : VClock}
     (hs : L.Step t m m') (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone)
     (h : LiveLe P m c) : LiveLe P' m' c :=
-  (LiveLe.mono hs.threads (fun u _ => hs.clocks u) h).weaken hg
+  (hs.allLeOn h).anti hg
 
 theorem Step.someLe {t : ThreadId} {m m' : Mem} {c : VClock} (hs : L.Step t m m')
     (h : SomeLe m c) : SomeLe m' c :=
