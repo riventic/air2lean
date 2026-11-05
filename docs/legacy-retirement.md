@@ -43,7 +43,7 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
 | Proofs/Threadsync/Lock | imports Conc/LockRules | legacy `Lock.Fits`, LockRules | `Proofs/Threadsync/ThreadMutex` (`FLock`) | WaitGroup |
 | ZigLean/Conc/Witness | imports Conc/Own | `TLive` | `CLive` (Full/Witness) | RwLockContract |
-| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord |
+| ZigLean/Conc/Word | imports Conc/LockRules | `Lock`, `Lock.Step`, `Lock.Inv.wordOp`, `LocsKeep`; defines the old Word-contract family `Op` (its producers `Ok.record`/`prep`/`rmwAt`/`rmw`/`read`/`load`/`cas`/`futexWait`, and Full/Word's old `Op` roots) | Full/Word, Full/WordRules, Full/WordNewest over the base vocabulary `Conc/Base/Word` | RwLock, Semaphore, WaitGroup, WeakWord (no longer Witnesses/Conc, L12) |
 | ZigLean/Conc/LockRules | imports Conc/Lock | legacy `Lock` rules | Full/LockRules, Full/LockSteps | Sync/Lock, Threadsync/Lock, Conc/Word |
 | ZigLean/Conc/Lock | imports Conc/Csl | `Lock`, `Fits`, `FitsOn`, `Step` | `FLock` (Full/Lock, Full/LockWord) | LockRules |
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
@@ -60,10 +60,11 @@ replacement named below is on main, except where the row says it is not.
   `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
   full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
-- `ZigLean/Witnesses/Conc` imports Conc/Word and Conc/Total. No module imports it. Stage D-d
-  deletes it as a whole. It also holds non-vacuity witnesses of surviving base lemmas (Proto,
-  TimedBody, `Word.enc_val`; premises THR-08, SEM-02 in `assurance/premises.json`); at D-d they
-  move to a base witness module.
+- `ZigLean/Witnesses/Conc` is the base concurrency witness module (L12): it imports
+  `Conc/Base/Word` instead of Conc/Word and witnesses the full-state `LockWord.States` instead of
+  the legacy `Lock.States`, so it reaches no legacy module. It stays: its non-vacuity witnesses of
+  the base lemmas (Proto, Total, TimedBody, `Word.enc_val`) keep their premise citations
+  (THR-08, SEM-02 in `assurance/premises.json`).
 - **Conc/Word split (L8j).** Full/Word used to import Conc/Word, so every full-state concurrency
   module transitively imported Conc/LockRules → Conc/Lock → Csl → Own → Sep/Block → Sep/Triple.
   The split resolves this:
