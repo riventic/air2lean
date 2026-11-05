@@ -1,10 +1,13 @@
 import Proofs.Sync.Proofs
+import Proofs.Sync.Mailbox.Run
 
 /-!
 # Contract-client runtime witnesses (C14)
 
 `Proofs/Sync/SnapshotCache.lean` and `Proofs/Sync/Mailbox.lean` prove their clients for every
-fuel and every oracle. The std operations they call contain `Zig.loop`, a `partial_fixpoint`
+fuel and every oracle. The mailbox runs here with the translated std semaphore
+(`Mailbox.stdMain`, `Mailbox.stdDispatch`: the code over `Sync.ioSem`,
+`Proofs/Sync/Mailbox/Run.lean`). The std operations they call contain `Zig.loop`, a `partial_fixpoint`
 that the kernel does not unfold, so these finite runs execute the compiled model instead. They
 are bounded evidence that the model clients complete (they are not fuel-exhausted vacuous
 runs); they do not replace the theorems. No `native_decide`, no axioms.

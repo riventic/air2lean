@@ -37,7 +37,7 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/RwLockSnapshotPair | names `TTriple` | `TTriple.{alloc,storeAt,load}` under `WP.liftM_owned`; RwLock's protocol (`RwContract`) | `FOwned` + fsym WP mode; an `RwLockImpl` contract (none on main) | RwLock |
 | Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's protocol and `E.Spec` (`acquire_shared`, `read_with_facts`) | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
 | Proofs/Sync/RwLock | names `TTriple` | legacy `Lock`/`Proto` protocol, Conc/Word `Word.Op`/`Keep`, WeakWord, `TTriple.load/store`, local `Sem.Spec` (the semaphore as an abstract part `E`) | `FLock`/`MutexImpl` for its inner `Io.Mutex`; **`SemImpl` (#575, open)** for its semaphore; `RwLockImpl` (none) | #575 SemImpl |
-| Proofs/Sync/Mailbox | names `TTriple` | `SemContract` (Proofs/Sync/Contracts), `TTriple.{store,alloc,storeAt,load}` | **`SemImpl` (#575, open)**; `FOwned` | #575 SemImpl |
+| ~~Proofs/Sync/Mailbox~~ | done (#643): off `legacy_users` and off `unroll_sched` | — | `SemImpl` (`I.wait_wp`/`I.post_wp`, generic in `I`; `Sync.ioSem`), `FOwned`, fsym WP mode (`Proofs/Sync/Mailbox/{Code,Protocol,Steps,Start,Run}.lean`); `mailbox_completes` by kernel evaluation | — |
 | Proofs/Sync/SemCounter | names `TTriple` | Semaphore's kit | `SemImpl` (#575) | L10i |
 | Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl` | L10i (#575) |
 | Proofs/Threadsync/WaitGroup | names `TTriple` | Threadsync/Lock, Conc/Word, legacy `Lock`/`Proto` | `EventImpl` (Full/Event) + `MutexImpl` (Threadsync/ThreadMutex) | L10i; #572 blocker 1 (plain 24-byte read over the mutex word vs `FLock` `LiveLe`), #579 |
@@ -56,7 +56,8 @@ replacement named below is on main, except where the row says it is not.
 `LEGACY_MODULES` and the legacy names):
 
 - `Proofs/Sync/Contracts`. It imports RwLockContract. `MutexContract`/`mutex` use Sync/Lock's
-  `MutexOps.lock_specOn`; `RwContract`/`rwLock` use RwLock. Only Mailbox uses `SemContract`.
+  `MutexOps.lock_specOn`; `RwContract`/`rwLock` use RwLock. `SemContract` has no user since
+  Mailbox's migration (#643).
   `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
   full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
@@ -433,7 +434,7 @@ L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCo
 | --- | --- | --- | --- |
 | Proofs/Sync/Semaphore.lean (2916) | `Sem.wait_spec`/`post_spec` of translated Io.Semaphore; `Sem.Fits` | L | proof |
 | Proofs/Sync/SemCounter.lean (1482) | `semaphoreCounter` = 4 under every schedule | M | proof |
-| Proofs/Sync/Mailbox.lean (1173) | producer/consumer over `SemContract`, result 34 | M | proof |
+| Proofs/Sync/Mailbox.lean (1173) | done (#643): `mailbox_spec`/`mailbox_safe` (result 34, no error) verbatim over `SemImpl` (every implementation; `Sync.ioSem`), full-state + fsym; `mailbox_completes` by `decide +kernel` (no `unroll_sched`) | — | done |
 
 L10's remaining semaphore migration and native contract blocker are tracked by ledger `l10-native-lock-step-contract`.
 
