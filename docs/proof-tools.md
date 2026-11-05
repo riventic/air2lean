@@ -352,13 +352,6 @@ value, a run out of fuel, an error, or a loop that needs more than `k` runs of i
 the goal unproved, with the message `unroll_sched: the kernel does not compute the run …`.
 `k` bounds each loop's body runs per entry, so a loop entered again gets `k` more.
 
-`unroll_solo k` (module `ZigLean.Sep.Full.Unroll`) does the same for the in-thread reading of a
-concurrent function that `CTriple` speaks about: a goal `g ((Sched.soloRun fuel x).run m) = v`
-(`Sched.soloRun_apply_le`, from `soloTree_le`: a reading with a result is the reading of every
-tree above). `AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s
-`alloc`, `alloc`, `free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete
-memory is decidable).
-
 A `partial_fixpoint` definition or mutual group (a recursive call group of generated code,
 `Lean.Order.fix F h`) is cut the same way: it becomes `Unroll.fixSel k s (fun s => F) h`, which
 is `fixN F k` (`F` applied `k` times to `⊥`) at `approx` and the fixpoint at `exact`
@@ -368,5 +361,18 @@ met again inside its own expansion (a recursion through a dispatch table) stays 
 `tests/roadmap/proof-tools/Unroll.lean` checks a
 run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
 goal without a run, and a mutual `partial_fixpoint` group (`even_six`, rejected when cut too
-early). Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run
+early; `even_six_solo`, its in-thread reading by `unfold`, rejected when unfolded too few times).
+Build with `lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Conc Proofs.Threads.Gen`, then run
 `lake env lean tests/roadmap/proof-tools/Unroll.lean`.
+
+A concrete in-thread reading of a concurrent function, the run that `CTriple` speaks about
+(`(Sched.soloRun fuel x).run m`), needs no cut and no tactic of its own: `unfold` rewrites each
+`partial_fixpoint` definition and `Zig.loop` by its defining equation, once per call or iteration
+the run makes, and `decide +kernel` computes the result. A run that reaches a definition not
+unfolded far enough gets stuck there and is rejected. The definitions are named by hand, the
+generated loop bodies among them (`heap_ArenaAllocator_alloc.loop21`), so a translation that
+renumbers them needs the list updated (engine ledger 9h).
+`AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s `alloc`, `alloc`,
+`free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete memory is
+decidable); `AllocTranslated.ListsPage` rewrites its loops by the same equations
+(`rw [Zig.loop.eq_1 …]`).

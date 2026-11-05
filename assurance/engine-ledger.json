@@ -141,7 +141,7 @@
    "title": "engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)",
    "status": "open",
    "requester": "arena lane",
-   "progress": "open",
+   "progress": "arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)",
    "request": "engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)",
    "workaround_sites": [],
    "deletion_plan": "",
@@ -222,10 +222,10 @@
    "title": "unroll_solo: concrete counterexample runs",
    "status": "open",
    "requester": "arena lane",
-   "progress": "open",
+   "progress": "L16: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`; ListsPage rewrites by `Zig.loop.eq_1`). Remaining gap, why the row stays open: the unfold lists name generated definitions by hand (`heap_ArenaAllocator_alloc.loop21`, `heap_ArenaAllocator_deinit.loop9`), so a retranslation that renumbers loops needs the lists updated (it fails closed: the kernel gets stuck). Wanted: a name-independent way to unfold a run's loop-running definitions without a new tactic (e.g. a translator-emitted per-module equation set), which would also serve `unroll_sched`'s retirement",
    "request": "`unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": ["tests/roadmap/alloc-arena/ArenaObstruction.lean", "tests/roadmap/proof-tools/Unroll.lean"],
+   "deletion_plan": "The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes."
   },
   {
    "id": "10",
@@ -1948,7 +1948,7 @@
   },
   {
    "id": "M9",
-   "text": "counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane)."
+   "text": "counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane). L16: `unroll_solo` deleted, runs by `unfold` of the defining equations, then `decide +kernel`; 9h stays open for name-independent unfolding."
   },
   {
    "id": "M10",
