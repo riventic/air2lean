@@ -496,7 +496,7 @@ the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete
 
 `air2lean-invgen` (`Air2Lean/InvGen.lean`, executable `Air2Lean/InvGenMain.lean`, lake target
 `air2lean-invgen`) is the generator of decision 5: a compiled Lean program in this package, with
-no `syntax`, `macro`, `elab`, tactic or command. `air2lean-invgen MODULE NAMESPACE -o FILE`, run
+no `syntax`, `macro`, `elab`, tactic or command. `air2lean-invgen MODULE NAMESPACE --source SRC -o FILE`, run
 under `lake env`, imports the translated module, finds every `Zig.loop body again` in its
 definitions and reads the body as the elaborated term that `fsym` walks: a symbolic run over
 `bind`, `pure`, `get`, `modify`, `ite`, the lifted `Zig.load`/`Zig.store`/`Zig.add`, `Zig.lt`,
@@ -504,11 +504,19 @@ definitions and reads the body as the elaborated term that `fsym` walks: a symbo
 result, the adds it ran and its changes to the locals and to the cells behind pointer parameters.
 This reading only proposes; it is not a semantics anything relies on, and `fsym` checking inside
 the generator (Houdini pruning) is the S2c slice below. It writes `Inv.lean`: a first line
-`-- air2lean-invgen: {…}` recording the generator, the module and, per loop, the family or why the
-loop has none; then plain `def`s. A module with no loop, or a loop body outside the given
-namespace, is an error. `scripts/invgen.py check|write` regenerates every committed `Inv.lean`
-(its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right after `gen`, so a
-retranslation regenerates the invariants with it.
+`-- air2lean-invgen: {…}` recording the generator's revision (its Lean version and the SHA-256 of
+each of its modules, as `translator_revision%` records the translator's), the inputs it read (the
+translated module's source, `--source`, with its SHA-256), the module, its namespace and, per
+loop, the family or why the loop has none; then plain `def`s. A module with no loop, or a loop
+body outside the given namespace, is an error. `scripts/invgen.py check|write` regenerates every
+committed `Inv.lean` (its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right
+after `gen`, so a retranslation regenerates the invariants with it.
+`scripts/gen-integrity.py invgen` (preflight, also without a translator) checks every record
+against the checkout without running Lean: a changed generator module, toolchain or input makes
+the file stale. In write mode the `invgen` step runs the generator only then; in check mode it
+always reruns it, because a runtime (`ZigLean`) change can change how an unchanged translation
+elaborates, which the record does not hash (hashing the runtime would mark every `Inv.lean` stale
+at every runtime change).
 
 The slice's family is the **counted loop**: one repeating path, guarded by an unsigned `x < b`
 (`b` a local the loop does not write, a loop parameter or a literal), that adds 1 to the local
@@ -546,7 +554,7 @@ What the slice does not have yet (next slices, sizes S < M < L):
 | Next | Content | Size |
 |---|---|---|
 | S2a | `@[fsym_inv]` (P09-E4), its own engine PR with a `sep-auto` regression: `fsym` applies `loop_measure` with a registered invariant and measure, and the generator emits the attribute. This deletes the step and loop lemmas (`inner_step`, `inner_loop`) | M |
-| S2b | input hashes and the semantic fingerprints of the read definitions in the record (`docs/stable-generation.md`), checked by `scripts/gen-integrity.py`, so a stale `Inv.lean` is found without regenerating it (the regeneration itself is the `invgen` step above) | S |
+| S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
 | S2c | the counted family widened: down-counting (`x > b`, `x -= 1`), `x != b` and `x ≤ b` guards, slice-length and pointer-read bounds (`i < sl.len`), cells at offsets of a parameter, cell updates that depend on the counter (sums with library closed forms such as the outer loop's `cnt`), with Houdini pruning through `Auto.runReport` (P09-E1) so a candidate conjunct that does not check is dropped and reported | M |
 | S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |

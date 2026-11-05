@@ -31,11 +31,21 @@ for `exact` cases; for `body` and `golden` cases the fresh body after the commit
 profile record, which these checks compare only for its float semantics (a record that names
 other ones than the translation is replaced by the fresh one). A module whose cases disagree is not written.
 
+`invgen` checks the generated loop invariants (`Inv.lean`, scripts/invgen.py) without a
+translator or Lean: every tracked `.lean` file whose first line is an `-- air2lean-invgen:` record
+must name the generator revision of the checkout (its Lean version and the SHA-256 of each of its
+modules, `translator_revision%`) and the current SHA-256 of each input it read (the translated
+module's source). The generator is deterministic, so equal hashes mean the file is current;
+otherwise `scripts/invgen.py write` regenerates it. A runtime change that changes how a translated
+module elaborates is not an input here: `scripts/invgen.py check` (preflight, regen in check mode)
+reruns the generator.
+
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
        gen-integrity.py certify [--translator PATH] [--only SUBSTRING] [--work-dir PATH]
        gen-integrity.py list   (each case and its inputs; no translation)
+       gen-integrity.py invgen (the records of the generated loop invariants; no translation)
 
 `certify` checks every case's private debug-ID certificate, binds both complete actual
 normalized functions and every per-function proof root, and freshly replays the batch
@@ -294,6 +304,46 @@ def git_files(*patterns):
     out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *patterns],
                          check=True, capture_output=True).stdout
     return [p for p in out.decode().split("\0") if p]
+
+
+INVGEN_PREFIX = b"-- air2lean-invgen: "
+
+
+def sha256_file(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def invgen_errors():
+    """The `invgen` command: each tracked generated-invariants record against the checkout."""
+    valid_revision = runpy.run_path(str(Path(__file__).with_name("semantic-fingerprints.py")))["valid_translator"]
+    toolchain = (ROOT / "lean-toolchain").read_text().strip().rpartition(":v")[2]
+    errors = []
+    for path in git_files("*.lean"):
+        with open(ROOT / path, "rb") as f:
+            first = f.readline()
+        if not first.startswith(INVGEN_PREFIX):
+            continue
+        try:
+            record = json.loads(first[len(INVGEN_PREFIX):])
+            generator, inputs = record["generator"], record["inputs"]
+            if record["version"] != 2 or not valid_revision(generator) or not inputs or \
+                    not all(isinstance(i, list) and len(i) == 2 for i in inputs):
+                raise ValueError("not a version 2 record with a consistent generator revision and inputs")
+        except (ValueError, KeyError, TypeError) as error:
+            errors.append(f"{path}: unreadable air2lean-invgen record ({error}); regenerate with scripts/invgen.py write")
+            continue
+        stale = [] if generator["lean"] == toolchain else [f"Lean {generator['lean']}, toolchain {toolchain}"]
+        for module, digest in generator["modules"]:
+            source = ROOT / (module.replace(".", "/") + ".lean")
+            if not source.is_file() or sha256_file(source) != digest:
+                stale.append(f"generator module {module}")
+        for name, digest in inputs:
+            source = ROOT / name
+            if not source.is_file() or sha256_file(source) != digest:
+                stale.append(f"input {name}")
+        if stale:
+            errors.append(f"{path} is stale ({'; '.join(stale)} changed); regenerate with scripts/invgen.py write")
+    return errors
 
 
 def tracked_generated():
@@ -802,7 +852,7 @@ def run_attest(translator, cases, paths):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "write", "attest", "certify", "list",
+    parser.add_argument("command", choices=("check", "write", "attest", "certify", "list", "invgen",
                                             "case-coverage", "case-check", "case-targets", "enrollment"))
     parser.add_argument("paths", nargs="*", help="attest: generated files (default: every tracked one)")
     parser.add_argument("--translator", default=os.environ.get("AIR2LEAN_TRANSLATOR",
@@ -846,6 +896,8 @@ def run(args, cases):
             for path in sorted(case_aggregates(c.path for c in cases if c.namespaced)):
                 print(path[:-5].replace("/", "."))
         return errors
+    if args.command == "invgen":
+        return invgen_errors()
     if args.command == "list":
         for case in cases:
             dirs = ",".join(str(d.relative_to(ROOT)) for d in case.dirs)

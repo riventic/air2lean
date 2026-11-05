@@ -2,6 +2,7 @@
 """Generated-module integrity gate: synthetic fail-closed fixtures and, when the translator is
 built, the real repository (every committed generated module is a fresh translation)."""
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -513,6 +514,57 @@ class SyntheticTests(unittest.TestCase):
         self.assertFails("Proofs/Demo/Gen.lean: not a fresh translation", "attest")
         (self.fx.root / "Proofs/Demo/Gen.lean").write_text("import ZigLean\ndef handWritten := 1\n")
         self.assertFails("Proofs/Demo/Gen.lean: not a fresh translation", "attest")
+
+
+class InvgenRecordTests(unittest.TestCase):
+    """`invgen`: an `Inv.lean` record against the checkout's generator and inputs."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.34.0\n")
+        (self.root / "Air2Lean").mkdir()
+        (self.root / "Air2Lean/InvGen.lean").write_text("-- generator\n")
+        (self.root / "Fx/Fx").mkdir(parents=True)
+        (self.root / "Fx/Fx/Gen.lean").write_text("-- translation\n")
+        self.write_record()
+        for patch in (mock.patch.object(gi, "ROOT", self.root),
+                      mock.patch.object(gi, "git_files", return_value=["Fx/Fx/Gen.lean", "Fx/Fx/Inv.lean"])):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def digest(self, rel):
+        return hashlib.sha256((self.root / rel).read_bytes()).hexdigest()
+
+    def write_record(self, revision=None):
+        lean, modules = "4.34.0", [["Air2Lean.InvGen", self.digest("Air2Lean/InvGen.lean")]]
+        listing = lean + "\n" + "".join(f"{m} {h}\n" for m, h in modules)
+        generator = {"lean": lean, "modules": modules,
+                     "revision": revision or hashlib.sha256(listing.encode()).hexdigest()}
+        record = {"version": 2, "generator": generator, "inputs": [["Fx/Fx/Gen.lean", self.digest("Fx/Fx/Gen.lean")]],
+                  "module": "Fx.Gen", "namespace": "Fx", "loops": []}
+        (self.root / "Fx/Fx/Inv.lean").write_text(f"-- air2lean-invgen: {json.dumps(record)}\nimport Fx.Gen\n")
+
+    def test_current_record_passes_and_other_files_are_ignored(self):
+        self.assertEqual(gi.invgen_errors(), [])
+
+    def test_changed_input_generator_or_toolchain_is_stale(self):
+        (self.root / "Fx/Fx/Gen.lean").write_text("-- changed translation\n")
+        (self.root / "Air2Lean/InvGen.lean").write_text("-- changed generator\n")
+        (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.35.0\n")
+        error, = gi.invgen_errors()
+        self.assertIn("Fx/Fx/Inv.lean is stale", error)
+        for what in ("Lean 4.34.0, toolchain 4.35.0", "generator module Air2Lean.InvGen", "input Fx/Fx/Gen.lean"):
+            self.assertIn(what, error)
+
+    def test_inconsistent_or_old_record_fails_closed(self):
+        self.write_record(revision="0" * 64)
+        error, = gi.invgen_errors()
+        self.assertIn("unreadable air2lean-invgen record", error)
+        (self.root / "Fx/Fx/Inv.lean").write_text('-- air2lean-invgen: {"version":1,"module":"Fx.Gen"}\n')
+        error, = gi.invgen_errors()
+        self.assertIn("unreadable air2lean-invgen record", error)
 
 
 @unittest.skipUnless(os.access(ROOT / ".lake/build/bin/air2lean", os.X_OK), "translator not built")

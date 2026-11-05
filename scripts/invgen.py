@@ -10,7 +10,8 @@ given paths), the translated module is compiled into a scratch directory and `ai
 from it; `write` replaces the stale ones. The translated modules must be current first
 (`scripts/gen-integrity.py`): scripts/regen.py runs this as its `invgen` step, right after `gen`,
 and a fixture check repeats the comparison for the file it proves against. Lean runs unguarded here: callers
-run it under scripts/build-guard.py.
+run it under scripts/build-guard.py. `scripts/gen-integrity.py invgen` checks the files' records
+(generator revision, source hashes) without running Lean.
 """
 import argparse
 import subprocess
@@ -39,7 +40,7 @@ def generate(root, module, namespace, work):
     if error:
         sys.exit(log.read_text()[-4000:] + error)
     out = work / 'Inv.lean'
-    subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '-o', str(out)],
+    subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '--source', src, '-o', str(out)],
                    cwd=ROOT, env=with_lean_path(lean_path), check=True)
     return out.read_bytes()
 

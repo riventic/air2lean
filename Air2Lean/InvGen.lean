@@ -399,8 +399,11 @@ def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
   return out.qsort (fun a b => a.1.toString < b.1.toString)
 
 /-- The generated file for `module` (whose translated names are in `ns`), and the loops it has no
-invariant for, with the reason. -/
-def generate (module ns : Name) : MetaM (String × Array (String × String)) := do
+invariant for, with the reason. The record on its first line holds `generator` (the generator's
+revision record) and `inputs` (the files read, as `[path, sha256]`) as given: with them,
+`scripts/gen-integrity.py invgen` finds a stale file without running the generator. -/
+def generate (module ns : Name) (generator inputs : Json) :
+    MetaM (String × Array (String × String)) := do
   let mut loops := #[]
   let mut defs := #[]
   let mut skipped := #[]
@@ -414,8 +417,8 @@ def generate (module ns : Name) : MetaM (String × Array (String × String)) := 
       loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
       skipped := skipped.push (loop, why)
   let record := Json.mkObj [
-    ("generator", "air2lean-invgen"), ("version", (1 : Nat)), ("module", module.toString),
-    ("loops", Json.arr loops)]
+    ("version", (2 : Nat)), ("generator", generator), ("inputs", inputs),
+    ("module", module.toString), ("namespace", ns.toString), ("loops", Json.arr loops)]
   return (·, skipped) <| s!"-- air2lean-invgen: {record.compress}\n\
     import {module}\n\
     import ZigLean.Sep.Full.Ghost\n\n\
