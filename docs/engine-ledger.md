@@ -29,7 +29,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
-| [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | - | - |
+| [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | `tests/roadmap/alloc-arena/ArenaObstruction.lean`, `tests/roadmap/proof-tools/Unroll.lean` | The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes. |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
@@ -212,7 +212,7 @@ Planning units of the engine lane (one PR each, regressions from every requester
 - **M6** unification modulo reducible definitions and proof irrelevance (unifyKeyed). Closes 4.
 - **M7** one shared entry + quiet stop reason (Auto.run, stop flag, path conditions, unsplit side conditions, binder names). Closes 14–18.
 - **M8** (OWNED BY engine-arith agent, new module ZigLean/Sep/Full/AutoArith.lean) arithmetic normal forms: `(a-b).toNat` under `b ≤ a`, `toInt` of nonnegatives, intCast step rule. Closes 5, 6; 7 documented with M2.
-- **M9** counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane).
+- **M9** counterexample runs (`unroll_solo` → term-level expand/decide). Closes 9h (decide with arena lane). L16: `unroll_solo` deleted, runs by `unfold` of the defining equations, then `decide +kernel`; 9h stays open for name-independent unfolding.
 - **M10** (coordinator 2026-10-12, CLAUDE.md #216 "build generic, prove individual items") ONE fsym dispatch rule set for calls through any vtable/interface value under a registered contract (Allocator, Io, Random, Writer, user vtables, callbacks). Coordinate with the interface-contract lane (docs/interfaces.md, handoff codex__alloc-param.md — neither existed yet at 2026-10-12 evening). Today: CAllocSpec.dispatch + indirectWalk (Auto.lean) are allocator-shaped; M10 generalizes them to a contract registry. Providers (Active/Live) are stated generically over tags/blocks (no allocator-specific provider kinds).
 
 ## Rows
@@ -363,7 +363,7 @@ Status: **open**. Requester: arena lane.
 
 Note: umbrella of 9a-9h; closes with 9h
 
-Progress: open
+Progress: arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)
 
 Request: engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)
 
@@ -435,9 +435,13 @@ Request: `within` → planner: a `Within X P` goal is `fsym_entail`'s `EUpd P (X
 
 Status: **open**. Requester: arena lane.
 
-Progress: open
+Progress: L16: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`; ListsPage rewrites by `Zig.loop.eq_1`). Remaining gap, why the row stays open: the unfold lists name generated definitions by hand (`heap_ArenaAllocator_alloc.loop21`, `heap_ArenaAllocator_deinit.loop9`), so a retranslation that renumbers loops needs the lists updated (it fails closed: the kernel gets stuck). Wanted: a name-independent way to unfold a run's loop-running definitions without a new tactic (e.g. a translator-emitted per-module equation set), which would also serve `unroll_sched`'s retirement
 
 Request: `unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides
+
+Workaround sites: `tests/roadmap/alloc-arena/ArenaObstruction.lean`, `tests/roadmap/proof-tools/Unroll.lean`
+
+Deletion plan: The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes.
 
 <a id="row-10"></a>
 ### #10 Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join)

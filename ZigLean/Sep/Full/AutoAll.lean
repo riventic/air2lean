@@ -37,6 +37,5 @@ start memory (`Init`), the full-state witnesses of claims (`Witness`), the step 
 
 A module of the library that declares a rule is imported here (directly or through another);
 `tests/roadmap/one-logic/check.sh` fails otherwise, so a proof never misses a rule because of
-its imports. Tooling built on `fsym` (`unroll_solo` in `Full/Unroll`) is not part of the
-umbrella.
+its imports.
 -/
