@@ -280,6 +280,59 @@ theorem Inv.otherStep {G G' : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' :
 
 end
 
+/-- **Two locks over one ghost value** (a two-lock product): their words are apart, a thread's
+place and held resource in one lock are coordinates the other lock's `set` keeps (and its
+resource does not read), and both locks see the same part of a thread (its stack and other own
+data). The part is shared because each lock's `part` is a ghost coordinate of its own
+(`FLock.part_set`, `setPart_self`), so it cannot contain the other lock's held resource. The
+nest order (which lock is inner) is not part of the pair: `Pair.symm`. -/
+structure Pair (A B : FLock γ) : Prop where
+  apart : A.ApartL B.toLockWord
+  ph_ab : ∀ g p h, B.ph (A.set g p h) = B.ph g
+  held_ab : ∀ g p h, B.held (A.set g p h) = B.held g
+  R_ab : ∀ G t p h r, B.R (upd G t (A.set (G t) p h)) r ↔ B.R G r
+  ph_ba : ∀ g p h, A.ph (B.set g p h) = A.ph g
+  held_ba : ∀ g p h, A.held (B.set g p h) = A.held g
+  R_ba : ∀ G t p h r, A.R (upd G t (B.set (G t) p h)) r ↔ A.R G r
+  part : ∀ g, A.part g = B.part g
+  setPart : ∀ g r, A.setPart g r = B.setPart g r
+
+namespace Pair
+
+variable {B : FLock γ}
+
+theorem symm (hp : L.Pair B) : B.Pair L where
+  apart := hp.apart.symm
+  ph_ab := hp.ph_ba
+  held_ab := hp.held_ba
+  R_ab := hp.R_ba
+  ph_ba := hp.ph_ab
+  held_ba := hp.held_ab
+  R_ba := hp.R_ab
+  part g := (hp.part g).symm
+  setPart g r := (hp.setPart g r).symm
+
+/-- `B`'s `set` keeps `L`'s part (the shared part). -/
+theorem part_ba (hp : L.Pair B) (g : γ) (p : LPh) (h : Res) : L.part (B.set g p h) = L.part g := by
+  rw [hp.part, hp.part, B.part_set]
+
+/-- **A step of `B`'s code keeps `L`'s invariant** (`Inv.otherStep`), with `t`'s new place and
+held resource in `B`: `L` does not read them. -/
+theorem otherInv (hp : L.Pair B) {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
+    (hi : L.Inv G (rsum (B.wordR m) rY) m) (hs : B.Step t m m') (hKb : B.BlkOk m)
+    (hYoff : B.Off rY.heap.erase)
+    (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
+      L.ph (G t) = .away ∨ (L.ph (G t) = .holdsAway ∧ L.nest B.ptr)) (p : LPh) (h : Res) :
+    L.Inv (upd G t (B.set (G t) p h)) (rsum (B.wordR m') rY) m' :=
+  hi.otherStep hs hp.apart hKb hYoff ht
+    (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self]; exact ⟨hp.ph_ba _ _ _, hp.part_ba _ _ _, hp.held_ba _ _ _⟩
+      · rw [upd_ne _ _ e]; exact ⟨rfl, rfl, rfl⟩)
+    (fun r hr => (hp.R_ba G t p h r).mpr hr)
+
+end Pair
+
 /-- A holder `t` that is not in the futex queue changes between the holding places (`holds`,
 `holdsAway`) and keeps its part and its resource (`LockWord.WInv.reheld`). No memory step. -/
 theorem Inv.reheld {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {p : LPh}
