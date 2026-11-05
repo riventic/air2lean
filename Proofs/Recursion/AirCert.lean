@@ -13,6 +13,14 @@ open Air2Lean Air2Lean.Sem
 Outside the certificate fragment:
 
 (none)
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `recursion.fact` trusted-Canon: renumber
+* `recursion.gcd` trusted-Canon: renumber
+* `recursion.isEven` trusted-Canon: renumber
+* `recursion.isOdd` trusted-Canon: renumber
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

@@ -139,7 +139,7 @@ The translated `Io.Mutex` (0.16.0) and `Thread.Mutex` (0.15.2, `FutexImpl`) own 
 
 A proof file over all schedules can set `attribute [local irreducible] Proto.WP`: the rules need `WP` only as a name, and when a type check unfolds `WP`, it runs the program (`Proofs/Threadsync/Mutex.lean`).
 
-The generic contracts that will replace the hand futex under this proof (`FutexSpec`, `MutexSpec`, `EventSpec`, with the `Io.Mutex` algorithm proved over every futex that satisfies `FutexSpec`) are proof-only modules in `ZigLean/Conc/Spec/`: [thread-specs.md](thread-specs.md).
+The sync contracts are full-state (`MutexImpl`, `EventImpl`, `CondImpl`), over the model futex that each OS futex row is proved against (`ZigLean/Sep/Full/OsFutex.lean`). [thread-specs.md](thread-specs.md) maps the retired `Conc/Spec` contracts (`FutexSpec`, `MutexSpec`, …) to them.
 
 ### A shared atomic word
 

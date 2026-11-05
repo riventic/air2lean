@@ -142,7 +142,7 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - Every executing CI part runs in a restricted checkout that withholds undeclared files, and the
   nightly run executes everything unrestricted (docs/ci.md#restricted-checkout).
 - **Whole-tree generated files are never committed in PRs** (`assurance/generated.json`: coverage
-  inventories, premise index, provenance manifests, pins and receipts). CI produces them on the
+  inventories, theorem inventory, premise index, provenance manifests, pins and receipts). CI produces them on the
   merged tree and publishes them on the `generated` branch (docs/ci.md#whole-tree-generated-files);
   `scripts/generated.py materialize` (or `fetch`/`regen`) puts them in a checkout.
 - Run heavy builds through `scripts/build-guard.py`. Regenerate the other generated files (theorem
