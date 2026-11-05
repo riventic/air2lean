@@ -1405,6 +1405,8 @@ jobs:
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
+          # Retained AIR of one loop per counted shape, with generated invariants (P09).
+          bash tests/roadmap/loop-tactics/counted/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Counted.log"
 
       # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
       # every Mem.FSeqPlain memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.

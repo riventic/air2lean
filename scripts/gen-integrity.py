@@ -176,6 +176,8 @@ FIXTURES = [
      ["--namespace", "Futures", "--prefix", "futures."], "exact"),
     ("tests/roadmap/loop-tactics/nested/Nested/Gen.lean", "tests/roadmap/loop-tactics/nested/air",
      ["--namespace", "Nested", "--prefix", "nested."], "exact"),
+    ("tests/roadmap/loop-tactics/counted/Counted/Gen.lean", "tests/roadmap/loop-tactics/counted/air",
+     ["--namespace", "Counted", "--prefix", "counted."], "exact"),
     ("tests/roadmap/thread-locals/ThreadLocals/Gen.lean", "tests/roadmap/thread-locals/air/0.16.0",
      ["--namespace", "ThreadLocals", "--prefix", "thread_locals."], "exact"),
     ("tests/roadmap/vector-layouts/Lanes/Gen.lean", "tests/roadmap/vector-layouts/air/0.16.0",
