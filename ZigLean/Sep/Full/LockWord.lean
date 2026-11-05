@@ -402,7 +402,7 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hk : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true :=
       by first | exact fun _ _ h => h | assumption)
     (hq : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t :=
-      by first | exact newQ_of_sub fun _ h => h | assumption) : L.Step t m m' :=
+      by first | exact fun _ hw hn => absurd hw hn | assumption) : L.Step t m m' :=
   ⟨ht, fun e he => .inl (hf ▸ he), hg, by rw [hc], fun _ _ => by rw [hc],
     by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw, hk,
     fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold LockWord.Loc; rw [ha]; exact hl, hle⟩, .inl ha,
