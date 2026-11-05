@@ -1,16 +1,31 @@
+import ZigLean.Sep.Full.AutoAttr
+
 /-!
-# Sums over threads and over writes
+# Sums over threads, over writes and over a loop's counter
 
 A small library for the invariants of the full-state logic that count: `tsum N g` is the sum of
-`g u` over `u < N` (threads, or the writes of a word). The counting invariant of the
-multi-waiter condition (`ZigLean/Sep/Full/CondInv.lean`) uses it for the number of registered
-waiters and of pending claims, and for the signals posted after a write.
+`g u` over `u < N` (threads, the writes of a word, or the values of a loop's counter). The
+counting invariant of the multi-waiter condition (`ZigLean/Sep/Full/CondInv.lean`) uses it for the
+number of registered waiters and of pending claims, and for the signals posted after a write.
 
 * `tsum_upd`: how a sum changes when one point changes.
 * `tsum_ext`: a sum over a support bound does not depend on the bound.
 * `tsum_tag`: a sum over writes is at most a sum over threads, when each write with a positive
   weight has its own thread (a thread names at most one write, its tag).
 * `le_add_tsum_up`: a sequence grows by at most the sum of its increases.
+
+**In the arithmetic of `fsym`** (`fsym_arith`, `docs/proof-automation.md`), a sum is an atom of
+`omega` with these normal forms, so a loop whose cell adds a value of its counter (`acc += i`) has a
+linear invariant `v + (tsum n g - tsum i g) = v₀ + (tsum n g - tsum i₀ g)`:
+
+* `tsum 0 g = 0`, and `tsum (n + 1) g = tsum n g + g n` for a bound written `n + 1` (`tsumSucc`;
+  not for a numeral bound, which would unfold to that many terms);
+* the terms between two bounds: `tsum b g - tsum x g = g x + (tsum b g - (tsum x g + g x))` where
+  `x < b`, and `0` where `b ≤ x` (`tsum_sub_of_lt`, `tsum_sub_of_le`; non-recursive, so a
+  rewrite never unfolds the sum further).
+
+A counter's step `x.toNat = i.toNat + 1` relates `tsum x.toNat g` to `tsum (i.toNat + 1) g` by the
+solver's congruence of atoms (ledger #arith-atom-congruence).
 
 This is the home of the sum. The legacy `Zig.Spec.tsum` of the retired `Conc/Spec` layer
 (`docs/thread-specs.md`) was the same definition.
@@ -22,10 +37,41 @@ namespace Full
 /-- The sum of `g u` over `u < N`. -/
 def tsum (N : Nat) (g : Nat → Nat) : Nat := ((List.range N).map g).sum
 
-@[simp] theorem tsum_zero (g : Nat → Nat) : tsum 0 g = 0 := rfl
+@[simp, fsym_arith] theorem tsum_zero (g : Nat → Nat) : tsum 0 g = 0 := rfl
 
 theorem tsum_succ (N : Nat) (g : Nat → Nat) : tsum (N + 1) g = tsum N g + g N := by
   simp [tsum, List.range_succ, List.sum_append]
+
+open Lean Meta Simp in
+/-- `tsum (n + 1) g` is `tsum n g + g n` (`tsum_succ`) where the bound is written `n + 1`; a
+numeral bound `N` (which `tsum_succ` as a simp lemma also matches) stays: it would unfold to `N`
+terms. -/
+simproc [fsym_arith] tsumSucc (tsum _ _) := fun e => do
+  unless e.isAppOfArity ``tsum 2 do return .continue
+  let N := e.getArg! 0
+  unless N.isAppOfArity ``HAdd.hAdd 6 && (N.getArg! 5).nat? == some 1 do return .continue
+  let (n, g) := (N.getArg! 4, e.getArg! 1)
+  let r ← mkAppM ``HAdd.hAdd #[mkApp2 (mkConst ``tsum) n g, (mkApp g n).headBeta]
+  let pf ← mkExpectedTypeHint (mkApp2 (mkConst ``tsum_succ) n g) (← mkEq e r)
+  return .visit { expr := r, proof? := some pf }
+
+theorem tsum_mono {a b : Nat} (g : Nat → Nat) (h : a ≤ b) : tsum a g ≤ tsum b g := by
+  induction h with
+  | refl => exact Nat.le_refl _
+  | step _ ih => rw [tsum_succ]; exact Nat.le_trans ih (Nat.le_add_right _ _)
+
+/-- The terms `x ≤ u < b`: `g x` and the terms `x + 1 ≤ u < b`. -/
+@[fsym_arith] theorem tsum_sub_of_lt {x b : Nat} {g : Nat → Nat} (h : x < b) :
+    tsum b g - tsum x g = g x + (tsum b g - (tsum x g + g x)) := by
+  have := tsum_mono g (show x + 1 ≤ b from h)
+  rw [tsum_succ] at this
+  omega
+
+/-- No terms `x ≤ u < b` where `b ≤ x`. -/
+@[fsym_arith] theorem tsum_sub_of_le {x b : Nat} {g : Nat → Nat} (h : b ≤ x) :
+    tsum b g - tsum x g = 0 := by
+  have := tsum_mono g h
+  omega
 
 theorem tsum_congr {N : Nat} {g h : Nat → Nat} (e : ∀ u, u < N → g u = h u) :
     tsum N g = tsum N h := by

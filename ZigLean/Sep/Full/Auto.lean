@@ -1289,6 +1289,72 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     return out
   r
 
+/-- The facts relevant to `tgt` normalized again, each against all the facts. A hypothesis is
+normalized against the facts before it, once, when it enters the context (`normFacts`, cached),
+so a conditional rewrite whose side condition only a later fact proves did not apply to it
+(`tsum b g - tsum x g` with `x < b`, `tsum_sub_of_lt`: the loop test `x < b` comes after the
+invariant). A fact used for its own side condition is sound: every fact is a hypothesis. -/
+def renormFacts (facts : Array Expr) (tgt : Expr) (cases := true) : MetaM (Array Expr) := do
+  let (ctx, procs) ← arithSimpCtx
+  let typed ← facts.mapM fun f => return (f, ← instantiateMVars (← inferType f))
+  let rel : Std.HashSet Expr := (relevantFacts typed tgt).foldl (fun s (f, _) => s.insert f) {}
+  (← caches).facts.set facts
+  typed.mapM fun (f, ty) => do
+    unless rel.contains f do return f
+    let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
+    if r.expr == ty then return f
+    match r.proof? with
+    | some pf => mkEqMP pf f
+    | none => mkExpectedTypeHint f r.expr
+
+/-- **Congruence of atoms**: an atom of `omega` that applies a function the solver does not read
+(a library sum `tsum x.toNat g`) to terms containing the side `l` of a fact `l = r` (`l` itself an
+atom: a word's value, `x.toNat = i.toNat + 1`) equals the atom with `r` for `l`, in normal form
+(`tsum (i.toNat + 1) g` is `tsum i.toNat g + g i.toNat`, `fsym_arith`). These equations, for
+`omega`, which reads `tsum x.toNat g` and `tsum i.toNat g` as unrelated atoms (ledger
+#arith-atom-congruence). Each equation of the facts is used once for an atom, in the facts'
+order (one step: `x = y` and `y = i + 1` give `f x = f y`, not `f x = f (i + 1)`), and only at
+`Nat` and `Int`. -/
+def atomCongr (facts : Array Expr) (tgt : Expr) (cases := true) : MetaM (Array Expr) := do
+  -- the equations `l = r` whose side `l` is an atom, as `(l, r, proof of l = r)`
+  let isAtom (e : Expr) : Bool := let s := arithAtoms e; s.size == 1 && s.contains e
+  let mut eqs : Array (Expr × Expr × Expr) := #[]
+  let mut ats := arithAtoms tgt
+  for f in facts do
+    let ty ← instantiateMVars (← inferType f)
+    ats := arithAtoms ty ats
+    let some (T, l, r) := ty.eq? | continue
+    unless T.isConstOf ``Nat || T.isConstOf ``Int do continue
+    if isAtom l then eqs := eqs.push (l, r, f)
+    if isAtom r then eqs := eqs.push (r, l, ← mkEqSymm f)
+  if eqs.isEmpty then return #[]
+  let (ctx, procs) ← arithSimpCtx
+  let mut out := #[]
+  for t in ats do
+    -- (a constant's application or a local function's: a caller's `f : Nat → Nat`)
+    unless (t.getAppFn.isConst || t.getAppFn.isFVar) && t.getAppNumArgs > 0 && !t.hasLooseBVars &&
+      !t.hasExprMVar do continue
+    let T ← whnfR (← inferType t)
+    unless T.isConstOf ``Nat || T.isConstOf ``Int do continue
+    let mut cur := t
+    let mut pf? : Option Expr := none
+    for (l, r, h) in eqs do
+      if cur == l || (cur.find? (· == l)).isNone then continue
+      let mot ← withLocalDeclD `z (← inferType l) fun z => do
+        mkLambdaFVars #[z] (cur.replace fun y => if y == l then some z else none)
+      -- (a dependent position, a width `BitVec w`, does not take another term)
+      unless ← isTypeCorrect mot do continue
+      let cur' := (mkApp mot r).headBeta
+      let e ← mkExpectedTypeHint (← mkCongrArg mot h) (← mkEq cur cur')
+      pf? := some (← match pf? with | some p => mkEqTrans p e | none => pure e)
+      cur := cur'
+    let some pf := pf? | continue
+    let (res, _) ← fsimp cur ctx procs (discharge? := some (omegaDisch cases))
+    if res.expr == t then continue
+    let pf ← match res.proof? with | some p => mkEqTrans pf p | none => pure pf
+    out := out.push (← mkExpectedTypeHint pf (← mkEq t res.expr))
+  return out
+
 /-- `e` with the reducible aliases of `Nat` and `Int` (`ThreadId`) as those types: `omega` reads
 an order or a numeral only at `Nat` or `Int` itself (`t < m.threads.size` of a `t : ThreadId`). -/
 def numAliases (e : Expr) : MetaM Expr :=
@@ -1368,8 +1434,9 @@ def assumptionR (g : MVarId) : MetaM Bool := g.withContext do
 (values of words and pointers as natural numbers, no wrap-around where it cannot happen, user
 definitions of values unfolded), the target in normal form, facts about symbolic powers of two
 and masks (`extraFacts`), then `omega`; unless `quick`, also the congruence of remainders
-(`modCongr`). Without `cases`, no search through the case facts (`omegaFacts`); a probe (`quick`
-or `budget`) searches them within `probeCaseBudget`. -/
+(`modCongr`), and `omega` again with the relevant facts each normalized against all the facts
+(`renormFacts`) and the congruence of atoms (`atomCongr`). Without `cases`, no search through the
+case facts (`omegaFacts`); a probe (`quick` or `budget`) searches them within `probeCaseBudget`. -/
 def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : TacticM Bool :=
     g.withContext do
   if ← assumptionR g then return true
@@ -1414,6 +1481,14 @@ def arithCore (g : MVarId) (quick := false) (cases := true) (budget := false) : 
     if let some pf := ok then close pf; return true
     unless quick do
       if let some pf ← modCongr all r.expr cases then close pf; return true
+      -- the relevant facts each against all the facts, and the congruence of atoms
+      let facts' ← renormFacts facts r.expr cases
+      (← caches).facts.set facts'
+      let congr ← atomCongr facts' r.expr cases
+      if facts' != facts || !congr.isEmpty then
+        let all' := facts' ++ (← extraFacts facts' r.expr cases) ++ congr
+        trace[fsym.arith] "omega again {r.expr} from {← all'.mapM fun f => inferType f}"
+        if let some pf ← omegaFacts all' r.expr cases (budget := budget) then close pf; return true
     s.restore; return false
   catch ex =>
     trace[fsym.arith] "exception {ex.toMessageData}"
