@@ -4,10 +4,13 @@ open Zig Zig.TimedSched
 
 namespace DeadlineKernelTests
 
-/-- The new queue wake is exactly the existing memory wake, with the same ordering. -/
-theorem wake_legacy (s : Kernel) (p : Ptr) (n : Nat) :
-    ((Thread.futexWake p n []).run s.mem).run = some (.ok ((), (s.wake p n).mem)) := by
+/-- The new queue wake is exactly the existing memory wake at `p`'s private key, with the same
+ordering. -/
+theorem wake_legacy (s : Kernel) (p : Ptr) (n : Nat) {k : FutexKey}
+    (hk : s.mem.keyAt p false = some k) :
+    ((Thread.futexWake k n []).run s.mem).run = some (.ok ((), (s.wake p n).mem)) := by
   unfold Kernel.wake
+  rw [hk]
   split
   · simp_all
   · rename_i heq
@@ -16,6 +19,12 @@ theorem wake_legacy (s : Kernel) (p : Ptr) (n : Nat) :
   · rename_i heq
     simp [Thread.futexWake, modify, modifyGet, MonadStateOf.modifyGet, StateT.modifyGet,
       StateT.run, ExceptT.run, pure, ExceptT.pure, ExceptT.mk] at heq
+
+/-- A wake at a pointer without a block wakes nobody (no registration has its key). -/
+theorem wake_noKey (s : Kernel) (p : Ptr) (n : Nat) (hk : s.mem.keyAt p false = none) :
+    s.wake p n = s := by
+  unfold Kernel.wake
+  rw [hk]
 
 /-- Cleanup is an actual function over the Mem queue, not an assumed relation. -/
 theorem release_registration (s : Kernel) (r : Registration)
@@ -39,7 +48,7 @@ theorem release_owner (s : Kernel) (r : Registration)
     simpa using hx
 
 theorem release_other_waiter (s : Kernel) (r : Registration)
-    (h : s.registration = some r) (w : ThreadId × Ptr) (owner : w.1 ≠ r.owner) :
+    (h : s.registration = some r) (w : ThreadId × FutexKey) (owner : w.1 ≠ r.owner) :
     w ∈ s.release.mem.waiters ↔ w ∈ s.mem.waiters := by
   simp [Kernel.release, h, Array.mem_filter, owner]
 

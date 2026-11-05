@@ -70,6 +70,8 @@ def word (v : BitVec 32) : ConcM Tgt Ptr := lift do
   pure p
 
 def p0 : Ptr := ⟨some 0, 0⟩
+/-- The private futex key of `p0` in a memory whose block 0 is at address 4096 (`Mem.keyAt`). -/
+def k0 : FutexKey := ⟨false, 4096⟩
 
 def seqLoad (p : Ptr) : ConcM Tgt (BitVec 32) := do
   let c ← pick (loadCount 32 .seqCst 4 p)
@@ -142,7 +144,7 @@ private def p : Ptr := ⟨some 0, 0⟩
 private def mem : Mem := {
   blocks := #[{ bytes := #[.int 1, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0]
                 align := 4, kind := .heap, live := true, addr := 4096 }]
-  waiters := #[(1, p.add 1)]
+  waiters := #[(1, ⟨false, 4097⟩)]
   woken := #[2]
   os := { interrupts := #[0] }
 }
@@ -240,17 +242,17 @@ end LinuxAlignment
 /-! ## OSF-02: futex wake -/
 
 -- The wake subset is the oracle's: with two waiters, a wake of one has two options.
-def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
-#guard wakeCount p0 (some 1) twoWaiters == 2
-#guard wakeCount p0 (some 5) twoWaiters == 1
-#guard wakeCount p0 none twoWaiters == 1
-#guard ((wakeAt 0 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+def twoWaiters : Mem := { waiters := #[(1, k0), (2, k0), (3, ⟨false, 8192⟩)] }
+#guard wakeCount k0 (some 1) twoWaiters == 2
+#guard wakeCount k0 (some 5) twoWaiters == 1
+#guard wakeCount k0 none twoWaiters == 1
+#guard ((wakeAt 0 k0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
   some (.ok (some 1, #[1]))
-#guard ((wakeAt 1 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+#guard ((wakeAt 1 k0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
   some (.ok (some 1, #[2]))
-#guard ((wakeAt 2 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+#guard ((wakeAt 2 k0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
   some (.ok (none, #[]))
-#guard ((wakeAt 0 p0 none).run twoWaiters).run.map (·.map fun (n, m) => (n, m.waiters.size)) ==
+#guard ((wakeAt 0 k0 none).run twoWaiters).run.map (·.map fun (n, m) => (n, m.waiters.size)) ==
   some (.ok (some 2, 1))
 -- Linux FUTEX_WAKE with nobody waiting wakes 0; `val = 0` still wakes one (kernel `nr_wake`).
 #guard outcomes noKids (do let p ← word 0; Linux.futex_3arg p 0x81 1) hex64 == ["0"]
@@ -266,20 +268,20 @@ def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
 def threeWaiters : Mem := {
   blocks := #[{ bytes := Array.replicate 4 (.int 0), align := 4, kind := .heap, live := true,
                 addr := 4096 }]
-  waiters := #[(1, p0), (2, p0), (3, p0)] }
-example : ∀ c < wakeCount p0 none threeWaiters,
-    ((wakeAt c p0 none).run threeWaiters).run.map (·.map fun (n, m) => (n, m.waitersAt p0)) =
+  waiters := #[(1, k0), (2, k0), (3, k0)] }
+example : ∀ c < wakeCount k0 none threeWaiters,
+    ((wakeAt c k0 none).run threeWaiters).run.map (·.map fun (n, m) => (n, m.waitersAt k0)) =
       some (.ok (some 3, [])) := by decide +kernel
 example : ∀ a < 3, ∀ b < 2,
-    ((Thread.futexWake p0 2 [a, b]).run threeWaiters).run.map
-      (·.map fun (_, m) => (m.waitersAt p0).length) = some (.ok 1) := by decide +kernel
+    ((Thread.futexWake k0 2 [a, b]).run threeWaiters).run.map
+      (·.map fun (_, m) => (m.waitersAt k0).length) = some (.ok 1) := by decide +kernel
 #guard outcomes noKids (do
     let r ← Darwin.__ulock_wake 0x01000101 (some p0) 0
-    pure (r, ((← lift get).waitersAt p0).length)) (fun (r, k) => s!"{r.toInt} {k}")
+    pure (r, ((← lift get).waitersAt k0).length)) (fun (r, k) => s!"{r.toInt} {k}")
     (m0 := threeWaiters) == ["-4 3", "0 0"]
 #guard outcomes noKids (do
-    ConcM.sync (.wake p0 2)
-    pure ((← lift get).waitersAt p0).length) toString (m0 := threeWaiters) == ["1"]
+    ConcM.sync (.wake k0 2)
+    pure ((← lift get).waitersAt k0).length) toString (m0 := threeWaiters) == ["1"]
 -- Linux: `nr_wake` is an `int`, so at most 2^31 − 1 threads wake; a `u32` count above it reads
 -- as negative and wakes one, which is why std clamps with `@min(n, maxInt(i32))` (the library
 -- theorem `Os.Linux.wakeLimit_le` covers every `val`). The hand model's `.wake p 0xffffffff`
@@ -508,7 +510,7 @@ def sysctl (name : String) : MemM (BitVec 32 × BitVec 32 × BitVec 64) := do
 
 -- A signal wakes a sleeper, which then returns EINTR; otherwise it is pending.
 def sleeper : Mem := { threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }],
-                       clocks := #[#[], #[]], waiters := #[(1, p0)] }
+                       clocks := #[#[], #[]], waiters := #[(1, k0)] }
 #guard ((interrupt 1).run sleeper).run.map (·.map fun (_, m) => (m.waiters.size, m.woken, m.os.interrupts)) ==
   some (.ok (0, #[1], #[1]))
 #guard ((interrupt 0).run sleeper).run.map (·.map fun (_, m) => (m.waiters.size, m.woken, m.os.interrupts)) ==
