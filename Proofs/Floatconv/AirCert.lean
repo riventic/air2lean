@@ -24,18 +24,20 @@ Outside the certificate fragment:
 * `floatconv.toU64`: a parameter that is not an integer, bool, plain pointer or slice
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `floatconv.bits32` trusted-Canon: renumber
-* `floatconv.f16ToF128` trusted-Canon: renumber
-* `floatconv.f64ToF16` trusted-Canon: renumber
-* `floatconv.f80ToF64` trusted-Canon: renumber
-* `floatconv.fromI64` trusted-Canon: renumber
-* `floatconv.fromU128` trusted-Canon: renumber
-* `floatconv.ofBits64` trusted-Canon: renumber
-* `floatconv.toByte` trusted-Canon: renumber
-* `floatconv.toI32` trusted-Canon: renumber
-* `floatconv.toU64` trusted-Canon: renumber
+* `floatconv.bits32` trusted-Canon: none
+* `floatconv.f16ToF128` trusted-Canon: none
+* `floatconv.f64ToF16` trusted-Canon: none
+* `floatconv.f80ToF64` trusted-Canon: none
+* `floatconv.fromI64` trusted-Canon: none
+* `floatconv.fromU128` trusted-Canon: none
+* `floatconv.ofBits64` trusted-Canon: none
+* `floatconv.toByte` trusted-Canon: none
+* `floatconv.toI32` trusted-Canon: none
+* `floatconv.toU64` trusted-Canon: none
 -/
 
 end Floatconv.AirCert

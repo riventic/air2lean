@@ -3,7 +3,8 @@
 # loops' invariants and measures (air2lean-invgen), kernel-check counted/Proof.lean, which walks
 # each loop with its generated invariant, and its seeded mutants (mutants.json: a wrong cell
 # relation, a dropped bound, a dropped no-overflow fact of the counter, a measure that does not
-# decrease and a dropped read-only cell must each fail their loop's theorems), all through
+# decrease, a dropped read-only cell, a candidate Houdini pruned put back and one it kept dropped
+# must each fail their loop's theorems), all through
 # ../invgen-fixture.sh. Needs a built translator (lake build air2lean); no Zig compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)

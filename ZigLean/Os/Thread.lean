@@ -177,15 +177,17 @@ def clone (env : Env) (t : Tgt) (stack : BitVec 64) (flags : BitVec 32) (ptid : 
 thread's native stack goes back to its mapping first (`releaseStack`), so the release store
 orders it before the joiner's `munmap`. The one pick chooses both the store's slot (`c / w`) and
 which waiter the wake of at most one wakes (`c % w`, among the `w ≥ 1` options of
-`wakeCount ctid (some 1)`, read in the memory the pick counted; neither `releaseStack` nor the
-store changes the queue): Linux's `mm_release` calls `FUTEX_WAKE` with count 1. -/
+`wakeCount` at `ctid`'s shared key with count 1, read in the memory the pick counted; neither
+`releaseStack` nor the store changes the queue): Linux's `mm_release` calls `FUTEX_WAKE` without
+`FUTEX_PRIVATE_FLAG` with count 1. -/
 def cloneExit (ctid : Ptr) : ConcM Tgt Unit := do
-  let c ← pick fun m => wakeCount ctid (some 1) m * storeCount 32 .release 4 ctid m
+  let c ← pick fun m => wakeCountAt ctid true (some 1) m * storeCount 32 .release 4 ctid m
   ConcM.liftMem do
-    let w := wakeCount ctid (some 1) (← get)
+    let k ← futexKeyOf ctid true
+    let w := wakeCount k (some 1) (← get)
     releaseStack
     atomicStoreAt (c / w) .release 4 ctid (0 : BitVec 32)
-    let _ ← wakeAt (c % w) ctid (some 1)
+    let _ ← wakeAt (c % w) k (some 1)
     markExited
 
 /-- The dispatcher of a `clone` target: the entry function, then the exit (module doc). -/

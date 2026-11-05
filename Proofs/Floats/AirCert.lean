@@ -21,15 +21,17 @@ Outside the certificate fragment:
 * `floats.lerp`: a parameter that is not an integer, bool, plain pointer or slice
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `floats.celsius` trusted-Canon: renumber
-* `floats.clamp` trusted-Canon: renumber
-* `floats.dot` trusted-Canon: renumber
-* `floats.fitness` trusted-Canon: renumber
-* `floats.hypot2` trusted-Canon: renumber
-* `floats.isNan` trusted-Canon: renumber
-* `floats.lerp` trusted-Canon: renumber
+* `floats.celsius` trusted-Canon: none
+* `floats.clamp` trusted-Canon: none
+* `floats.dot` trusted-Canon: none
+* `floats.fitness` trusted-Canon: none
+* `floats.hypot2` trusted-Canon: none
+* `floats.isNan` trusted-Canon: none
+* `floats.lerp` trusted-Canon: none
 -/
 
 end Floats.AirCert

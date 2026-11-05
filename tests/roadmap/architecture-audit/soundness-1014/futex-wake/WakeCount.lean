@@ -22,7 +22,7 @@ open Zig Zig.Os
 
 namespace AuditS5
 
-def p0 : Ptr := ⟨some 0, 0⟩
+def p0 : FutexKey := ⟨false, 4096⟩
 
 /-- Three threads asleep at `p0`. -/
 def three : Mem := { waiters := #[(1, p0), (2, p0), (3, p0)] }
@@ -56,10 +56,10 @@ theorem full_request_empty_choices : 2 ∈ Thread.wakePick 3 [1, 1, 2] [] :=
   Thread.mem_wakePick_of_length_le (by decide) (by decide)
 
 /-- Only the three entries at `p0` count toward the sufficient request. -/
-def mixedWaiters : Array (ThreadId × Ptr) :=
-  #[(1, p0), (1, p0), (2, p0), (3, ⟨some 1, 0⟩)]
+def mixedWaiters : Array (ThreadId × FutexKey) :=
+  #[(1, p0), (1, p0), (2, p0), (3, ⟨false, 8192⟩)]
 
-/-- Coverage holds for every oracle and uses the actual pointer-filtered count. -/
+/-- Coverage holds for every oracle and uses the actual key-filtered count. -/
 theorem full_request_filtered (cs : List Nat) :
     2 ∈ Thread.wakeSet mixedWaiters p0 3 cs :=
   Thread.mem_wakeSet_of_count (w := (2, p0)) (by decide) (by simp [mixedWaiters]) rfl

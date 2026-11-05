@@ -1386,7 +1386,7 @@ Request: abduction report: at "no plan for its precondition", return the missing
 
 Status: **open**. Requester: P09.
 
-Progress: pending maintainer approval
+Progress: Approved by the maintainer 2026-11-05 (this engine case only: no new tactic, no new judgment). Engine done (lane E4): the `@[fsym_inv]` registry of `B.inv`/`B.meas`/`B.post` (ZigLean/Sep/Full/AutoAttr.lean) and the loop case of `walkCore` (`loopInvRule?` in Auto.lean): at a loop no rule is about, the backend's loop rule (`FTotalTriple.loop_measure`, `FTriple.loop`, the thread forms, `CTriple.loop`) applied by `tryRule` with the registered definitions, unknowns planned at entry, frame inferred, the body's step walked as a goal of its own (regression tests/roadmap/sep-auto/SepAuto/LoopInv.lean; docs/proof-automation.md, §Loops). The exit post is registered too (`B.post`): without one the exit is the invariant with `again r.1 = false`, which forgets the exit's label and test (the strongest post at the exits is P09-E2). Open: the generator emits `attribute [fsym_inv]` and a `B.post`, and the workaround sites' hand lemmas are deleted.
 
 Request: `@[fsym_inv]` loop-invariant registry: apply the backend's loop rule with a registered invariant and measure; parameters by the planner, frame inferred
 

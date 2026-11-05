@@ -1111,7 +1111,7 @@ jobs:
       # the translator rejects).
       - name: Soundness audit 2026-10-14 counterexamples (fixed cases)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe libdir-spoof
+        run: bash tests/roadmap/architecture-audit/soundness-1014/check.sh --require-fixed posix-spoof unsafe-panic shr-unsafe libdir-spoof S6-futex-primitive
 
       # The sidecar flag must leave the committed Proofs/<Ex>/Gen.lean byte-identical.
       - name: Source maps and semantic fingerprints on golden AIR

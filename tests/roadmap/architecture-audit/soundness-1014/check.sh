@@ -57,18 +57,12 @@ fi
 lean_case S5-futex-wake-count futex-wake/WakeCount.lean
 if wanted S6-futex-primitive; then
   # The corrected cases are positive regressions: one that fails to elaborate never means fixed.
+  # The std hand rows' scope (finding 4, `#s6-hand-rows`) is S5-futex-wake-count's case.
   if ! lake env lean "$here/futex-primitive/Regression.lean"; then
     echo "S6-futex-primitive: FAILED -- a corrected-model regression did not elaborate" >&2
     exit 1
   fi
-  # The open witnesses must still elaborate while open: setup failure never means fixed.
-  if lake env lean "$here/futex-primitive/CurrentModel.lean"; then
-    echo "S6-futex-primitive: address validation and CHILD_CLEARTID fixed; S6 open -- two key witnesses elaborate"
-    open=1
-  else
-    echo "S6-futex-primitive: FAILED -- the remaining witnesses did not elaborate" >&2
-    exit 1
-  fi
+  echo "S6-futex-primitive: fixed (OS rows) -- keys, address validation and CHILD_CLEARTID regressions elaborate"
 fi
 translator=()
 for name in unsafe-panic shr-unsafe posix-spoof libdir-spoof; do wanted "$name" && translator+=("$name"); done

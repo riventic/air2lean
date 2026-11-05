@@ -43,5 +43,21 @@
    "readBound_step",
    "readBound_loop"
   ]
+ },
+ {
+  "name": "houdini-pruned-kept",
+  "old": "⟪s.i.toNat ≤ s0.i.toNat ∧",
+  "new": "⟪s.i.toNat ≤ s0.i.toNat ∧ s0.i.toNat ≤ s.i.toNat ∧",
+  "in": [
+   "down_step"
+  ]
+ },
+ {
+  "name": "houdini-kept-dropped",
+  "old": "⟪s.i.toNat ≤ s0.i.toNat ∧\n      ",
+  "new": "⟪",
+  "in": [
+   "down_step"
+  ]
  }
 ]

@@ -269,16 +269,17 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
       let e' := (Packed.toBits e).setWidth 32
       (P.strict = true → P.Live t G₁ m₁) ∧ (m₁.waiters.any (·.1 == t) = false →
         (P.strict = true → ∃ b m',
-          ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
-        (∀ e₁, ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.error e₁) →
+          ((Thread.futexWait p e' false).run { m₁ with current := t }).run = some (.ok (b, m'))) ∧
+        (∀ e₁, ((Thread.futexWait p e' false).run { m₁ with current := t }).run = some (.error e₁) →
           e₁.nativeStops) ∧
-        ∀ b m', ((Thread.futexWait p e').run { m₁ with current := t }).run = some (.ok (b, m')) →
+        ∀ b m', ((Thread.futexWait p e' false).run { m₁ with current := t }).run =
+            some (.ok (b, m')) →
           if b then P.inv G₁ m' ∧ Q ((), s) G₁ { m₁ with current := t } k
           else Q ((), s) G₁ m' k))
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWaitC io p e : CM Tgt σ Unit).run s) Q G m n := by
   show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt)
-    (.wait p ((Packed.toBits e).setWidth 32))) >>= fun a => pure (a, s)) Q G m n
+    (.wait p ((Packed.toBits e).setWidth 32) false)) >>= fun a => pure (a, s)) Q G m n
   refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hc⟩ := h k hk
   refine ⟨g, hi, fun G₁ m₁ hg hi₁ _ => ⟨(hc G₁ m₁ hg hi₁).1, fun hq =>
@@ -288,12 +289,12 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
   · exact WP.pure' this
   · exact ⟨this.1, WP.pure' this.2⟩
 
-/-- A futex wake (`futexWakeC`): the thread stops with the ghost value `g`; `Q` holds after the
-wake. -/
+/-- A futex wake (`futexWakeC`) at `p`'s private key, resolved in the memory of the wake
+(`Thread.futexWakePtr`): the thread stops with the ghost value `g`; `Q` holds after the wake. -/
 theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
     {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∀ cs m', ((Thread.futexWake p c.toNat cs).run { m₁ with current := t }).run =
+      ∀ cs m', ((Thread.futexWakePtr p c.toNat cs).run { m₁ with current := t }).run =
         some (.ok ((), m')) → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io p c : CM Tgt σ Unit).run s) Q G m n := by
@@ -1548,10 +1549,10 @@ theorem free_native {p : Ptr} {m : Mem} :
 
 /-- A futex wait whose word at `p` decodes as a `u32` (`hd`) throws only `.illegal` (a bad access
 or a race): the error premise of `Step.wait`. -/
-theorem futexWait_native {p : Ptr} {e : BitVec 32} {m : Mem}
+theorem futexWait_native {p : Ptr} {e : BitVec 32} {sh : Bool} {m : Mem}
     (hd : ∀ b blk o, m.access p 4 4 = pure (b, blk, o) →
       ∃ v, (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v)) :
-    ∀ e', ((Thread.futexWait p e).run m).run = some (.error e') → e'.nativeStops := by
+    ∀ e', ((Thread.futexWait p e sh).run m).run = some (.error e') → e'.nativeStops := by
   intro e' he
   unfold Thread.futexWait at he
   rcases MemM.bind_err he with h | ⟨a, m₀, hg, h₁⟩
@@ -1864,15 +1865,15 @@ theorem cmpxchgAs_ok {α : Type} {n : Nat} [Packed α n] {c : Nat} {succ fail : 
 
 /-- What a futex wait did (`futexWait_ok`), with the recorded atomic read of the word spelled
 out: no race, and the memory `m.recordAt b o 4 .atomicRead`. -/
-theorem futexWait_eq {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+theorem futexWait_eq {p : Ptr} {e : BitVec 32} {sh : Bool} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e sh).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
     (m.woken.contains m.current = false ∧ ∃ bid blk o v, m.access p 4 4 = pure (bid, blk, o) ∧
       NoRace m bid o 4 .atomicRead ∧
       (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v) ∧
       ((v = e ∧ b = true ∧ m' = { m.recordAt bid o 4 .atomicRead with
-          waiters := m.waiters.push (m.current, p) }) ∨
+          waiters := m.waiters.push (m.current, blk.key o sh) }) ∨
        (v ≠ e ∧ b = false ∧ m' = m.recordAt bid o 4 .atomicRead))) := by
   rcases futexWait_ok h with hw | ⟨hw, bid, blk, o, v, m₁, ha, hr, hv, hc⟩
   · exact .inl hw
@@ -1880,9 +1881,9 @@ theorem futexWait_eq {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
   exact .inr ⟨hw, bid, blk, o, v, ha, hnr, hv, hc⟩
 
 /-- A futex wait of a woken thread goes on; it leaves `woken`. -/
-theorem futexWait_run_woken {p : Ptr} {e : BitVec 32} {m : Mem}
+theorem futexWait_run_woken {p : Ptr} {e : BitVec 32} {sh : Bool} {m : Mem}
     (hw : m.woken.contains m.current = true) :
-    ((Thread.futexWait p e).run m).run =
+    ((Thread.futexWait p e sh).run m).run =
       some (.ok (false, { m with woken := m.woken.erase m.current })) := by
   unfold Thread.futexWait
   simp only [hw, ↓reduceIte, StateT.run_bind, StateT.run_get, pure_bind]
@@ -1891,12 +1892,12 @@ theorem futexWait_run_woken {p : Ptr} {e : BitVec 32} {m : Mem}
 
 /-- A futex wait of a thread that is not woken: the kernel reads `v` (a recorded atomic read
 that does not race); the thread sleeps if `v = e`. -/
-theorem futexWait_run_go {p : Ptr} {e : BitVec 32} {m : Mem} {bid : BlockId} {blk : Block}
+theorem futexWait_run_go {p : Ptr} {e : BitVec 32} {sh : Bool} {m : Mem} {bid : BlockId} {blk : Block}
     {o : Nat} {v : BitVec 32} (hw : m.woken.contains m.current = false)
     (ha : m.access p 4 4 = pure (bid, blk, o)) (hnr : NoRace m bid o 4 .atomicRead)
     (hv : intOfBytes 32 (blk.bytes.extract o (o + 4)) = pure v) :
-    ((Thread.futexWait p e).run m).run = some (.ok (decide (v = e),
-      if v = e then { m.recordAt bid o 4 .atomicRead with waiters := m.waiters.push (m.current, p) }
+    ((Thread.futexWait p e sh).run m).run = some (.ok (decide (v = e),
+      if v = e then { m.recordAt bid o 4 .atomicRead with waiters := m.waiters.push (m.current, blk.key o sh) }
       else m.recordAt bid o 4 .atomicRead)) := by
   unfold Thread.futexWait
   have hrec := recordAccess_run hnr
@@ -2780,9 +2781,9 @@ theorem Decodes.of_curBytes {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {p : Ptr}
 
 /-- A futex wait on a word whose bytes in `m` encode a `u32` throws only errors at which the
 native program stops. -/
-theorem futexWait_native_of_curBytes {p : Ptr} {e : BitVec 32} {m : Mem} {v : BitVec 32}
+theorem futexWait_native_of_curBytes {p : Ptr} {e : BitVec 32} {sh : Bool} {m : Mem} {v : BitVec 32}
     (h : ∀ b, p.block = some b → curBytes m b p.off.toNat 4 = Enc.encode v) :
-    ∀ e', ((Thread.futexWait p e).run m).run = some (.error e') → e'.nativeStops :=
+    ∀ e', ((Thread.futexWait p e sh).run m).run = some (.error e') → e'.nativeStops :=
   futexWait_native fun b blk o ha => by
     obtain ⟨hpb, rfl, hc⟩ := curBytes_of_access ha
     rw [← hc, h b hpb]
