@@ -926,9 +926,9 @@
   {
    "id": "69d",
    "title": "Conc/Spec/MutexToy: witness of the legacy MutexSpec",
-   "status": "open",
+   "status": "closed",
    "requester": "sync lane",
-   "progress": "plan recorded PR2",
+   "progress": "DONE (L21): deleted with ZigLean/Conc/Spec and MutexSpec. The relaxed-unlock counterexample is not restated against MutexImpl; docs/thread-specs.md lists it under \"What has no replacement yet\".",
    "request": "`Conc/Spec/MutexToy`: witness/counterexample of legacy `MutexSpec` (legacy-to-retire). PLAN: delete together with MutexSpec (docs/proof-framework.md row); restate relaxed-unlock counterexample against MutexImpl if wanted",
    "workaround_sites": [],
    "deletion_plan": "delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted.",

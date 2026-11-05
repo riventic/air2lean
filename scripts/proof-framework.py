@@ -394,8 +394,8 @@ def default_status(entry):
     if "name" in entry:
         if entry["name"].split(".")[-1] in TARGET_JUDGMENTS:
             return "target"
-        # Structural candidates: the legacy layer's and the hand-written sync specs' are to retire.
-        legacy = LEGACY_MODULES.match(entry["module"]) or entry["module"].startswith("ZigLean.Conc.Spec.")
+        # Structural candidates: the legacy layer's are to retire.
+        legacy = LEGACY_MODULES.match(entry["module"])
         return "legacy-to-retire" if legacy or entry["name"].endswith(SUFFIXES) else "target"
     # A tactic or registry that is not `fsym`'s is a candidate for a parallel automation; the
     # review of its approval sets `target` when it belongs to the framework.
