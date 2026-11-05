@@ -197,6 +197,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [fsym-split-nested-struct-subst](#row-fsym-split-nested-struct-subst) | fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local | closed by the branch claude/fsym-fvar: `destruct`'s structure branch takes each field from the fact as the previous field's substitution reintroduced it (`liveFVar?`). `Zig.SemCounter.U` is a structure again. Regression: SepAuto.Facts `nested_struct_subst`. |
 | [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | closed by the branch claude/fsym-fvar: each branch of a split is walked with the substitutions of its own branch (`eachBranch`); the second branch's substitution of `g₀` had replaced the first's. The row's original call elaborates (checked); `loopD_body` is the shorter call without the `hset`/`hph`/`hok₀` glue, swap-built against the darwin translation. Regression: SepAuto.WP `sibling_values`. |
 | [word-ok-live-set](#row-word-ok-live-set) | Word.Ok asks every plain access to happen before every thread, so a whole-struct read next to a futex word breaks it | closed by PR646, which gives Word.Ok a live set |
+| [fstepin-addrs](#row-fstepin-addrs) | FStepIn does not keep the blocks' addresses, so a futex key of another block is lost across a frame step | closed by PR #681: `FStepIn.addrs : m.SameAddrs m'` (ZigLean/Conc/Clock.lean) replaces the field `blocks` (now the theorem `FStepIn.blocks`), with the library lemmas `Mem.SameAddrs.refl/trans/of_blocks/of_push/of_set/size/addrIn_eq` and `Mem.sameAddrs_write` (ZigLean/Mem/Lemmas.lean) |
 
 ## Shared mechanisms
 
@@ -2042,3 +2043,14 @@ Progress: open
 Request: The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.
 
 Deletion plan: Closes when the witness is in tests and checked by its fixture's check script.
+
+<a id="row-fstepin-addrs"></a>
+### #fstepin-addrs FStepIn does not keep the blocks' addresses, so a futex key of another block is lost across a frame step
+
+Status: **closed**. Requester: S6e (audit finding S6, futex keys, #668); maintainer decision 2026-11-05: option A.
+
+Note: Rejected: option B, a field `a : Nat` (the word's address) in `LockWord` with a memory-independent key. It is a per-object special case that FCond, FSem and FEvent would each repeat, and every LockWord construction would supply the address. Option A strengthens what every client of `FStepIn` gets and weakens nothing.
+
+Progress: closed by PR #681: `FStepIn.addrs : m.SameAddrs m'` (ZigLean/Conc/Clock.lean) replaces the field `blocks` (now the theorem `FStepIn.blocks`), with the library lemmas `Mem.SameAddrs.refl/trans/of_blocks/of_push/of_set/size/addrIn_eq` and `Mem.sameAddrs_write` (ZigLean/Mem/Lemmas.lean)
+
+Request: With the futex queue keyed by `FutexKey` (#668), a lock word's invariant names keys: its own (`Mem.wordKey`), and in `LockWord.nest` the keys of other blocks' words (a nested lock's word). `FStepIn` kept only `m.blocks.size ≤ m'.blocks.size`. The word's own key still transports through its cells (the step keeps the word's bytes and block), but a key of another block does not. Counterexample: a frame step by the lock's owner that replaces block `b'` (another lock's word, not in the frame) by a block at another address satisfies every old `FStepIn` field, and `LockWord.nest k` read in `m` (`m.keyAt ⟨b', o⟩ false = some k`) is false in `m'`; so `WInv` is not stable under a frame step and the FLock rules cannot be proved. The model never does this (a block never moves; every `addr :=` is a new block: `Mem.afterAlloc`, a mapping, a moving `mremap`), so the step relation can say it. Needed: a field `addrs : m.SameAddrs m'` of `FStepIn`, discharged at every producer by general lemmas.
