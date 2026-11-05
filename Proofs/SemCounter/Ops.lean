@@ -27,7 +27,7 @@ open Conc Conc.Proto Full Full.FAssn
 recorded value `s`. -/
 def gW (r : Res) (k : Nat) (b : Bool) (s : Nat) : Gh := (⟨.out, r, rnil⟩, { ph := .work k b s })
 
-/-- The cell of `n` with the value `s`. -/
+/-- The cell of `n` with the increments of both threads (`sum Y`). -/
 def Tn (Y : ThreadId → Ph) : FAssn := up (pts nPtr 4 (BitVec.ofNat 32 (sum Y)))
 
 /-- The client parts after two updates of `t` with the same client part. -/

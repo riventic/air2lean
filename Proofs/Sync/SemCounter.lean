@@ -102,6 +102,8 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
 
 /-! ## `main` -/
 
+/-- `main`: the `SemCounter`'s start, the spawn, `semWork`, the join, the load of `n` (4) and the
+free. -/
 theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
     proto.WP 0 (semaphoreCounter io) QM G0 { mem0 σ with current := 0 } d := by
   cases io

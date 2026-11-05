@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 162 rows, 67 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 163 rows, 68 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -85,6 +85,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 | [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 | [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
+| [client-glue-copies](#row-client-glue-copies) | Sync clients copy the memory glue of their protocol's rest (cells of the words in the rest, the block, start and fork facts) | L10p (/review of PR648, 2026-11-05) | `Proofs/SemCounter/Mem.lean`, `Proofs/SemCounter/Start.lean`, `Proofs/Handoff/Protocol.lean`, `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean` | Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `le_nil`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row. |
 | [fsym-split-nested-struct-subst](#row-fsym-split-nested-struct-subst) | fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local | L10p (SemCounter over SemImpl, PR648, 2026-11-05) | `Proofs/SemCounter/Protocol.lean` | Transitional: once the split keeps nested structure fields with substituted locals in the current local context, make `Zig.SemCounter.U` a structure with the fields `um`, `cinv`, `sinv`, `lg` (as `Proofs/Handoff/Protocol.lean`'s `U`), delete the projection theorems `U.um`/`U.cinv`/`U.sinv`/`U.lg`, rebuild `Proofs.Sync.SemCounter`, and close this row. |
 | [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row. |
 | [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
@@ -1877,6 +1878,21 @@ Request: Row `literal-pointer-rebase` (#604) restates a command's literal pointe
 Workaround sites: `ZigLean/Sep/Full/Auto.lean`
 
 Deletion plan: Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.
+
+<a id="row-client-glue-copies"></a>
+### #client-glue-copies Sync clients copy the memory glue of their protocol's rest (cells of the words in the rest, the block, start and fork facts)
+
+Status: **open**. Requester: L10p (/review of PR648, 2026-11-05).
+
+Note: Not a soundness issue: every copy is kernel-checked. Recorded instead of done in PR648 because the change rewrites the merged Handoff and MutexCounter proofs.
+
+Progress: open
+
+Request: Each client of the full-state sync contracts proves its own copy of the same lemma family, which differs only in the layout (the block, the words in the rest, the `io` prefix). Copies: `Proofs/SemCounter/Mem.lean` (`res_eq`, `Rest.split`/`step`/`congr`, `blk_ofG`, `blk_of`, `heap_blk`, `cell_eq`, `cells_same`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `box_notL`, `io_notL`, `BlkOk.lstep`, `Shape.congr`) and `Proofs/SemCounter/Start.lean` (`word_init`, `le_nil`, `heap_ne_l`/`heap_ne_r`/`erase_ne_r`, `clk_fork`, `cinv_out`, `split_at`, `box_split`, `sep_box`) against `Proofs/Handoff/Protocol.lean` (same names), `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean` and `Proofs/Handoff/Ops.lean`; `blk_of` also in `Proofs/MutexCounter/Protocol.lean`. `Proofs/SemCounter/Start.lean`'s `hb_fork` and `sinv_grow` are generic over `FLock`/`FSem` (`sinv_grow` repeats `FSem.Inv.mono` with a growing thread array). A next client would copy them again.
+
+Workaround sites: `Proofs/SemCounter/Mem.lean`, `Proofs/SemCounter/Start.lean`, `Proofs/Handoff/Protocol.lean`, `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`
+
+Deletion plan: Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `le_nil`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row.
 
 <a id="row-fsym-split-nested-struct-subst"></a>
 ### #fsym-split-nested-struct-subst fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local

@@ -39,7 +39,6 @@ theorem le_nil (c : VClock) : VClock.le #[] c = true := by
   intro i _
   simp
 
-theorem off_add (k : Nat) : (cPtr.add k).off.toNat = k := by simp [cPtr, Ptr.add]
 theorem o16 : (cPtr.add 16).off.toNat = 16 := by simp [cPtr, Ptr.add]
 theorem o24 : (cPtr.add 24).off.toNat = 24 := by simp [cPtr, Ptr.add]
 theorem o28 : (cPtr.add 28).off.toNat = 28 := by simp [cPtr, Ptr.add]

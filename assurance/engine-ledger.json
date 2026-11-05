@@ -1734,6 +1734,17 @@
    "note": "Recorded with the L6 D-b PR, which lands the coordinator's decision on #604."
   },
   {
+   "id": "client-glue-copies",
+   "title": "Sync clients copy the memory glue of their protocol's rest (cells of the words in the rest, the block, start and fork facts)",
+   "status": "open",
+   "requester": "L10p (/review of PR648, 2026-11-05)",
+   "progress": "open",
+   "request": "Each client of the full-state sync contracts proves its own copy of the same lemma family, which differs only in the layout (the block, the words in the rest, the `io` prefix). Copies: `Proofs/SemCounter/Mem.lean` (`res_eq`, `Rest.split`/`step`/`congr`, `blk_ofG`, `blk_of`, `heap_blk`, `cell_eq`, `cells_same`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `box_notL`, `io_notL`, `BlkOk.lstep`, `Shape.congr`) and `Proofs/SemCounter/Start.lean` (`word_init`, `le_nil`, `heap_ne_l`/`heap_ne_r`/`erase_ne_r`, `clk_fork`, `cinv_out`, `split_at`, `box_split`, `sep_box`) against `Proofs/Handoff/Protocol.lean` (same names), `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean` and `Proofs/Handoff/Ops.lean`; `blk_of` also in `Proofs/MutexCounter/Protocol.lean`. `Proofs/SemCounter/Start.lean`'s `hb_fork` and `sinv_grow` are generic over `FLock`/`FSem` (`sinv_grow` repeats `FSem.Inv.mono` with a growing thread array). A next client would copy them again.",
+   "workaround_sites": ["Proofs/SemCounter/Mem.lean", "Proofs/SemCounter/Start.lean", "Proofs/Handoff/Protocol.lean", "Proofs/Handoff/Start.lean", "Proofs/Handoff/Steps.lean", "Proofs/Handoff/Ops.lean", "Proofs/MutexCounter/Protocol.lean"],
+   "deletion_plan": "Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `le_nil`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row.",
+   "note": "Not a soundness issue: every copy is kernel-checked. Recorded instead of done in PR648 because the change rewrites the merged Handoff and MutexCounter proofs."
+  },
+  {
    "id": "fsym-split-nested-struct-subst",
    "title": "fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local",
    "status": "open",
