@@ -53,15 +53,15 @@ theorem hb_fstep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} (hL : L.Inv G 
       show (G u).1.ph ≠ .gone
       rw [← hph u]; exact hg)
 
-/-- **`Lg` over a step that keeps every thread's place in the program and in the condition's code
-and the condition's writes**, with `wtx` and `ehb` after it given. -/
-theorem Lg.congr {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
-    (hph : ∀ u, (G' u).2.ph = (G u).2.ph) (hc : ∀ u, (G' u).2.c = (G u).2.c)
-    (hS : WS.hist m' = WS.hist m) (hE : WE.hist m' = WE.hist m)
+/-- **`Lg` over a step that keeps every thread's place in the condition's code and the
+condition's writes**, with the permit's facts, `wtx` and `ehb` after it given. -/
+theorem Lg.relabel {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
+    (hc : ∀ u, (G' u).2.c = (G u).2.c) (hS : WS.hist m' = WS.hist m) (hE : WE.hist m' = WE.hist m)
+    (one : (G' 0).2.ph.holds = false ∨ (G' 1).2.ph.holds = false)
+    (tot : ∀ u k s, (G' u).2.ph = .work k true s → s = sum (xs G'))
     (wtx : ∀ u, (G' u).2.sp = .wt → Wx (G' u).2.ph) (ehb : L.WordHB WE G' m') : Lg G' m' := by
-  have hX : xs G' = xs G := funext hph
   have hsat : C.Sated m' ↔ C.Sated m := FCond.Sated.congr (C := C) hS
-  refine ⟨by rw [hph 0, hph 1]; exact hl.one, fun u k s h => ?_, wtx, ehb,
+  exact ⟨one, tot, wtx, ehb,
     fun u i e h => by rw [hc u] at h; rw [hE]; exact hl.f0 u i e h,
     fun u v hr hc' => by rw [hc u] at hr; rw [hc v] at hc'; exact hl.rc u v hr hc',
     fun u i jr sn e h => by rw [hc u] at h; rw [hE]; exact hl.f2 u i jr sn e h,
@@ -70,7 +70,16 @@ theorem Lg.congr {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
     fun u i jr sn e h hs => by
       rw [hc u] at h; rw [hE] at hs; exact hsat.mpr (hl.f4 u i jr sn e h hs),
     fun v q n h hv => by rw [hc v] at hv; exact hsat.mpr (hl.incS v q n h hv)⟩
-  rw [hph u] at h; rw [hX]; exact hl.tot u k s h
+
+/-- **`Lg` over a step that keeps every thread's place in the program and in the condition's code
+and the condition's writes**, with `wtx` and `ehb` after it given. -/
+theorem Lg.congr {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
+    (hph : ∀ u, (G' u).2.ph = (G u).2.ph) (hc : ∀ u, (G' u).2.c = (G u).2.c)
+    (hS : WS.hist m' = WS.hist m) (hE : WE.hist m' = WE.hist m)
+    (wtx : ∀ u, (G' u).2.sp = .wt → Wx (G' u).2.ph) (ehb : L.WordHB WE G' m') : Lg G' m' :=
+  hl.relabel hc hS hE (by rw [hph 0, hph 1]; exact hl.one)
+    (fun u k s h => by
+      rw [hph u] at h; rw [show xs G' = xs G from funext hph]; exact hl.tot u k s h) wtx ehb
 
 /-! ## The lock's steps and the stops -/
 
