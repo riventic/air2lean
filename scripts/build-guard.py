@@ -65,11 +65,41 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   run in `preempted_run`, the log its output. Never overcommitted: macOS (no MemAvailable), a
   cgroup-limited process (a container's --memory: MemAvailable does not show it), --lock-wait 0
   (a preempted run could not wait), --exclusive and --no-overcommit.
+- Elastic workloads (--elastic; scripts/full-build.sh, scripts/fixture-checks.sh). A long
+  workload made of many parts (Lean processes, fixture units) holds only a small base
+  (--rss-mib) for itself, and each part holds slots of its own while it runs: a guard started in
+  it with --sub-admission, charged --charge-mib (its measured need), which is also its limit and
+  takes no excess (its declared bound is the retry's). A part over its charge is stopped and run again at
+  its declared --rss-mib (at most PROCESS_MIB, 11000: under the 12 GiB per-process watchdog), so a
+  wrong measurement costs a retry, never the host. Enclosing guards leave a running part's
+  subtree out of their sums (its pid in `<lock>.d/leaves/`). With --lean-processes SYSROOT every
+  Lean elaboration of the workload is such a part, charged 1.3 x its module's measured peak
+  (scripts/lean-peaks.py; a guess for a changed or new module), through a sysroot whose
+  `bin/lean` runs it as `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
+  goes back between them and to other workloads. Bounds: the bases of the admitted elastic
+  workloads (`<lock>.d/elastic/`, under `<lock>.d/register`) leave PROCESS_MIB of the budget free,
+  and a part takes its workload's lifeline (`<lock>.d/lifeline/<workload>`) only while none of
+  that workload's parts runs. The lifeline reserves, it does not drain: its ticket
+  (`<lock>.d/lifeline-tickets/`, apart from the drain tickets) is served behind the merge
+  tickets, which wait for no running workload, and ahead of every exclusive one, which waits for
+  the elastic workload. Behind no drain ticket the first lifeline leads the normal lane as its
+  queue head, except for the normal guards that began to wait before it and fit beside the
+  elastic bases (`Admission.my_turn`): those are admitted while every elastic workload waits, so
+  each comes first once. Normal guards backfill beside its reservation as beside any head. A
+  lifeline whose turn it is mirrors its ticket in `merge/` while a guard of an older checkout
+  may keep the queue from it (`Admission.mirror_lifeline`). So every elastic workload
+  progresses: some part of it runs, or its lifeline comes up and finds PROCESS_MIB that no base
+  holds once its ramp has passed and the running workloads, backfilled ones included, end (each
+  bounded by its --timeout); an elastic guard with no room waits outside the queue and holds
+  nothing. Where the budget has no such
+  room, or inside a guard that is not elastic, `elastic_plan` (`--elastic-plan BASE`) tells the
+  scripts to run one plain admission instead.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
 is only a bound when every heavy workload of the machine goes through the same lock.
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""
 
 import argparse
+import contextlib
 import datetime
 import fcntl
 import hashlib
@@ -80,6 +110,7 @@ import os
 from pathlib import Path
 import platform
 import selectors
+import shlex
 import shutil
 import signal
 import stat
@@ -370,8 +401,9 @@ def parse_args(argv):
     p.add_argument("--cwd", type=Path, default=Path.cwd())
     p.add_argument("--lock", type=Path, default=Path(os.environ.get(
         "AIR2LEAN_BUILD_LOCK", str(Path.home() / ".cache/air2lean/build.lock"))))
-    p.add_argument("--report", type=Path, required=True)
-    p.add_argument("--log", type=Path, required=True)
+    p.add_argument("--report", type=Path, help="JSON report (required unless --sub-admission)")
+    p.add_argument("--log", type=Path, help="the workload's output (required unless --sub-admission: "
+                                            "its stdout passes through, its stderr is inherited)")
     p.add_argument("--timeout", type=positive, default=900)
     p.add_argument("--idle-minutes", type=non_negative, default=None,
                    help="stop the workload as hung after this many minutes without progress: no "
@@ -387,7 +419,8 @@ def parse_args(argv):
     p.add_argument("--jobs", type=int, default=1,
                    help="parallel jobs the workload may run (AIR2LEAN_JOBS, leaf Zig compilers)")
     p.add_argument("--lean-threads", type=int, default=1, help="LEAN_NUM_THREADS of the workload")
-    p.add_argument("--lock-wait", type=float, default=0)
+    p.add_argument("--lock-wait", type=non_negative, default=None,
+                   help="seconds to wait for admission (AIR2LEAN_LOCK_WAIT, else 0: fail at once)")
     p.add_argument("--mem-budget-mib", type=positive, default=None,
                    help="memory budget of all guarded workloads (AIR2LEAN_BUILD_MEM_MIB, else 75%% of RAM)")
     p.add_argument("--exclusive", action="store_true",
@@ -403,6 +436,20 @@ def parse_args(argv):
     p.add_argument("--priority", choices=PRIORITIES, default=None,
                    help="admission lane (AIR2LEAN_GUARD_PRIORITY, else normal); merge is only for the "
                         "coordinator's integration gate; background waits until nothing else does")
+    p.add_argument("--elastic", action="store_true",
+                   help="its descendants may take sub-admissions of their own (--sub-admission, "
+                        "--lean-processes); its own --rss-mib then bounds only the rest of the workload")
+    p.add_argument("--sub-admission", action="store_true",
+                   help="inside an --elastic workload: hold slots of its own for this part of it, "
+                        "charged --charge-mib, declared --rss-mib (at most PROCESS_MIB)")
+    p.add_argument("--charge-mib", type=positive, default=None,
+                   help="with --sub-admission: the measured need, held and enforced; a run stopped at it "
+                        "runs again at --rss-mib")
+    p.add_argument("--lean-processes", metavar="SYSROOT", type=Path, default=None,
+                   help="inside an --elastic workload: every Lean elaboration of the workload (Lake's, and "
+                        "`$LEAN FILE` under `lake env`) takes a sub-admission charged by its module's "
+                        "measured peak (scripts/lean-peaks.py); SYSROOT is the toolchain's "
+                        "(`lean --print-prefix`)")
     p.add_argument("--log-bytes", type=int, default=1024 * 1024)
     p.add_argument("--profile", default="manual")
     p.add_argument("--phase", choices=("build", "parse", "normalize", "check", "emit", "proof"), default="build")
@@ -417,10 +464,22 @@ def parse_args(argv):
         a.command = a.command[1:]
     if not a.command:
         p.error("a command is required after --")
+    if not a.sub_admission and (a.report is None or a.log is None):
+        p.error("--report and --log are required (unless --sub-admission)")
+    if (a.charge_mib is not None) != a.sub_admission:
+        p.error("--sub-admission and --charge-mib go together")
+    if a.sub_admission and (a.elastic or a.exclusive or a.shared_workspace or a.lean_processes):
+        p.error("--sub-admission takes no --elastic, --exclusive, --shared-workspace or --lean-processes: "
+                "it is one part of an elastic workload")
+    if a.sub_admission and a.rss_mib > PROCESS_MIB:  # the elastic bound leaves PROCESS_MIB free, no more
+        p.error(f"a --sub-admission's --rss-mib is at most {PROCESS_MIB}")
+    if a.log is None:  # the collected stdout is passed on whole (a Lean process's messages): the cap
+        a.log_bytes = 16 * 1024 * 1024
+    a.quiet = False  # `lean_process`: no guard chatter on a Lean process's stderr
     if not 1 <= a.jobs <= 256 or not 1 <= a.lean_threads <= 256:
         p.error("--jobs and --lean-threads must be between 1 and 256")
-    if not 0 <= a.lock_wait < float("inf") or not 0 <= a.log_bytes <= 16 * 1024 * 1024:
-        p.error("invalid lock wait or log size (maximum 16 MiB)")
+    if not 0 <= a.log_bytes <= 16 * 1024 * 1024:  # --lock-wait: non_negative
+        p.error("invalid log size (maximum 16 MiB)")
     if len(json.dumps(a.command).encode()) > 32 * 1024 or len(a.profile) > 128:
         p.error("command/profile exceeds evidence limits")
     if len(a.input) > 32 or len(a.output) > 32 or len(a.tool) > 32 or len(a.zig_name) > 32:
@@ -442,13 +501,20 @@ def parse_args(argv):
             a.idle_minutes = non_negative(os.environ.get("AIR2LEAN_GUARD_IDLE_MINUTES") or 0)
         except (argparse.ArgumentTypeError, ValueError) as error:
             p.error(f"AIR2LEAN_GUARD_IDLE_MINUTES {error}")
+    if a.lock_wait is None:
+        try:
+            a.lock_wait = non_negative(os.environ.get("AIR2LEAN_LOCK_WAIT") or 0)
+        except (argparse.ArgumentTypeError, ValueError) as error:
+            p.error(f"AIR2LEAN_LOCK_WAIT {error}")
     a.cwd = a.cwd.resolve()
     a.lock = a.lock.expanduser().resolve()
-    a.report = a.report.resolve()
-    a.log = a.log.resolve()
-    if a.report == a.log or a.lock in (a.report, a.log):
+    a.report = a.report and a.report.resolve()
+    a.log = a.log and a.log.resolve()
+    if a.charge_mib is not None:
+        a.charge_mib = min(a.charge_mib, a.rss_mib)
+    paths = tuple(path for path in (a.lock, a.report, a.log) if path)
+    if len(set(paths)) < len(paths):
         p.error("lock, report and log must be distinct files")
-    paths = (a.lock, a.report, a.log)
     for i, path in enumerate(paths):
         if path.exists() and not stat.S_ISREG(path.stat().st_mode):
             p.error("lock, report and log must be regular files")
@@ -564,6 +630,28 @@ def free_mib(lock=None, budget_mib=None):
     return max(0, free) * SLOT_MIB
 
 
+def elastic_plan(base_mib, lock=None, budget_mib=None):
+    """("elastic", base) or ("plain", limit): how a workload that wants an elastic base of
+    base_mib runs here (scripts/full-build.sh, scripts/fixture-checks.sh). Inside an enclosing
+    admission (INHERIT) it must nest: in an elastic one, elastic with its base within the grant;
+    in a plain one, plain with the grant's whole limit. On its own, elastic with a base that
+    leaves PROCESS_MIB of the budget beside it; on a budget too small for that, plain at
+    min(PROCESS_MIB, budget): one admission, as before elastic workloads."""
+    lock = (lock or default_lock()).expanduser().resolve()
+    grant = read_grant()
+    if grant is not None and grant.get("lock") == str(lock) \
+            and isinstance(grant.get("rss_mib"), (int, float)) and not isinstance(grant["rss_mib"], bool) \
+            and grant["rss_mib"] > 0:
+        if grant.get("elastic"):
+            return "elastic", int(min(base_mib, grant["rss_mib"]))
+        return "plain", int(grant["rss_mib"])
+    budget = budget_mib or default_budget_mib()
+    room = int(budget // SLOT_MIB) - math.ceil(PROCESS_MIB / SLOT_MIB)
+    if room < 1:
+        return "plain", int(min(PROCESS_MIB, budget))
+    return "elastic", int(min(base_mib, room * SLOT_MIB))
+
+
 def lake_cache_env():
     """Lake's artifact cache settings of scripts/cas.py run when AIR2LEAN_CAS_DIR is set, else
     none, so every Lake of one guarded workload runs in the same mode. In one checkout Lake can
@@ -577,10 +665,16 @@ def lake_cache_env():
     path = Path(__file__).with_name("cas.py")
     if not path.is_file():
         return {}
-    spec = importlib.util.spec_from_file_location("air2lean_cas", path)
-    cas = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(cas)
-    return cas.lake_env()
+    return load_sibling("cas.py").lake_env()
+
+
+def load_sibling(name):
+    """The script `name` beside this one, as a module (a hyphenated name cannot be imported)."""
+    path = Path(__file__).with_name(name)
+    spec = importlib.util.spec_from_file_location("air2lean_" + path.stem.replace("-", "_"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def workspace(cwd):
@@ -603,8 +697,14 @@ DECLARED_BOUND = 1.5    # declared limits of the running workloads <= bound x bu
 PREEMPT_HOLDOFF = 5     # seconds between two preemptions under one lock
 BACKFILL_RAMP = 900     # seconds after which the queue head reserves all its slots (--backfill-ramp)
 ATTEMPT_EVERY = 1.0    # seconds between two backfill (or background) attempts of one waiting guard
+IN_LINE_FRESH = 3.0    # seconds an entry in line (`first_in_line`) counts after its guard's last refresh
 UNSAFE_OUTCOMES = ("rss_limit", "preempted")
 KILLED = 128 + signal.SIGKILL  # exit code of a workload SIGKILLed from outside (the OOM killer)
+# Elastic workloads (module docstring). PROCESS_MIB is the declared bound of one sub-admitted
+# part: one Lean process stays below the 12 GiB per-process watchdog with it.
+PROCESS_MIB = 11000
+LEAF = "leaf"  # the ticket lane of a sub-admission that holds its elastic workload's lifeline
+PART_TIMEOUT = 28800  # a part's --timeout and --lock-wait: the full build's own --timeout
 
 
 def command_key(a, workspace):
@@ -626,7 +726,12 @@ def history_charge(runs, declared_mib):
              if run.get("outcome") == "success" and isinstance(run.get("peak_mib"), (int, float))]
     if len(peaks) < 2:
         return declared_mib, "fewer than 2 recent successes"
-    return min(declared_mib, max(SLOT_MIB, math.ceil(CHARGE_MARGIN * max(peaks)))), None
+    return margin_charge(max(peaks), declared_mib), None
+
+
+def margin_charge(peak_mib, declared_mib):
+    """CHARGE_MARGIN x a measured peak: at least one slot, at most the declared bound."""
+    return min(declared_mib, max(SLOT_MIB, math.ceil(CHARGE_MARGIN * peak_mib)))
 
 
 def read_runs(handle):
@@ -682,9 +787,10 @@ def backstop_mib():
 
 
 def held_entries(directory):
-    """{name: JSON content} of the entries of a registry directory (merge tickets, overcommitted
-    workloads), oldest first by name. Their guards hold their flocks (also against their own
-    later opens), so an entry nobody holds belongs to a dead guard: it is removed."""
+    """{name: JSON content} of the entries of a registry directory (tickets, queue heads, waiting,
+    overcommitted, elastic and leaf workloads), oldest first by name. Their guards hold their
+    flocks (also against their own later opens), so an entry nobody holds belongs to a dead guard:
+    it is removed."""
     try:
         names = sorted(name for name in os.listdir(directory) if not name.startswith("."))
     except FileNotFoundError:
@@ -717,9 +823,15 @@ def publish_entry(directory, name, content, handle_of):
     return handle
 
 
-def entry_name(*suffix):
-    """A registry entry's name: its arrival time (`held_entries`' order), its pid, then `suffix`."""
-    return "-".join(("%020d" % time.time_ns(), str(os.getpid()), *suffix))
+def entry_name(*suffix, at=None):
+    """A registry entry's name: its arrival time (`held_entries`' order; `at` ns instead), its
+    pid, then `suffix`."""
+    return "-".join(("%020d" % (time.time_ns() if at is None else at), str(os.getpid()), *suffix))
+
+
+def is_lifeline(name):
+    """Whether a ticket's name is a lifeline's (or its mirror's in `merge/`)."""
+    return name.endswith("-" + LEAF)
 
 
 def try_flock(handle, mode):
@@ -761,15 +873,33 @@ class Admission:
         # merge priority adds nothing to it.
         self.priority = "exclusive" if a.exclusive else a.priority
         self.tickets = self.directory / "merge"
+        # Lifeline tickets (LEAF) live apart: guards of checkouts before them read every ticket in
+        # `merge/` as a drain ticket, and a lifeline reserves, it does not drain (`my_turn`).
+        self.lifeline_tickets = self.directory / "lifeline-tickets"
         self.ticket = None
+        self.mirror = None  # (entry name, handle) of a lifeline's ticket mirrored in `merge/`
+        self.holds_queue = False  # while it collects as the queue head
         self.heads = self.directory / "heads"
         self.head = None  # (entry name, handle, content) while this guard is the waiting queue head
         self.waiters = self.directory / "waiting"
         self.waiting = None  # (entry name, handle) while this guard waits for admission (not background)
+        self.lined_up = self.directory / "queued"
+        self.in_line = None  # (entry name, handle) while it waits in the queue loop (`line_up`)
         self.backfilled = False
         self.next_attempt = 0.0
         self.waited = False
         self.handles = []
+        # Elastic workloads: an --elastic guard's entry in `elastic/` (its base, for the bound), the
+        # enclosing grant (the elastic admission of a sub-admission, the admission an inheriting
+        # guard runs in), the lifeline a sub-admission may lock (held while its priority is LEAF)
+        # and its entry in `leaves/` while it runs.
+        self.elastic = self.directory / "elastic"
+        self.elastic_entry = None
+        self.enclosing = None
+        self.lifeline_handle = None
+        self.next_lifeline = 0.0
+        self.leaves = self.directory / "leaves"
+        self.leaf_entry = None
 
     def slots(self, mib):
         return min(self.capacity, max(1, math.ceil(mib / SLOT_MIB)))
@@ -816,6 +946,8 @@ class Admission:
         """Why this guard holds its declared slots whatever its history says, else None."""
         if self.a.exclusive:
             return "--exclusive"
+        if self.a.elastic:
+            return "--elastic (its base bounds the elastic workloads)"
         if self.a.no_overcommit:
             return "--no-overcommit"
         if not self.a.lock_wait:
@@ -827,7 +959,12 @@ class Admission:
         return None
 
     def plan(self):
-        """Charge the command's measured need when its history allows (module docstring)."""
+        """Charge the command's measured need when its history allows (module docstring). A
+        sub-admission's charge is also its limit, so it overcommits nothing, on every system."""
+        if self.a.sub_admission:
+            self.charge_mib = self.a.charge_mib
+            self.weight = self.slots(self.charge_mib)
+            return
         if refused := self.overcommit_refused():
             self.why_declared = refused
             return
@@ -892,26 +1029,83 @@ class Admission:
         return True
 
     def queued_tickets(self):
-        """Names of the tickets of the merge and exclusive guards waiting for admission, oldest
-        first (`held_entries`)."""
-        return list(held_entries(self.tickets))
+        """Names of the tickets of the merge, exclusive and lifeline guards waiting for admission,
+        oldest first (`held_entries`), the lifelines moved ahead of the first exclusive ticket: an
+        exclusive guard waits for every running workload, an elastic one included, which may need
+        its lifeline to end; a merge guard does not, so lifelines stay behind those before it."""
+        drains = self.drain_tickets()
+        cut = next((i for i, name in enumerate(drains) if name.endswith("-exclusive")), len(drains))
+        return drains[:cut] + list(held_entries(self.lifeline_tickets)) + drains[cut:]
+
+    def drain_tickets(self):
+        """The merge and exclusive tickets (`<lock>.d/merge/` but a lifeline's mirror)."""
+        return [name for name in held_entries(self.tickets) if not is_lifeline(name)]
+
+    @property
+    def ticket_dir(self):
+        return self.lifeline_tickets if self.priority == LEAF else self.tickets
 
     def join_queue(self):
         """Take a ticket named by the arrival time and the lane (`publish_entry`)."""
         name = entry_name(self.priority)
-        publish_entry(self.tickets, name, {}, self.open)
+        publish_entry(self.ticket_dir, name, {}, self.open)
         self.ticket = name
+        self.mirror_lifeline()
 
     def leave_queue(self):
         if self.ticket:
-            (self.tickets / self.ticket).unlink(missing_ok=True)
+            (self.ticket_dir / self.ticket).unlink(missing_ok=True)
             self.ticket = None
+        self.mirror_lifeline()
+
+    def hold_queue(self, held):
+        """Record whether this guard holds the queue (as the head), and sync its mirror."""
+        self.holds_queue = held
+        self.mirror_lifeline()
+
+    def mirror_lifeline(self):
+        """Guards of checkouts before lifeline tickets do not see them, so one of them may keep the
+        queue from a lifeline. A queued lifeline whose turn it is (`my_turn`), while it does not
+        hold the queue and no queue head that knows lifelines publishes its reservation
+        (`lifeline_aware`), mirrors its ticket in `<lock>.d/merge/`. The mirror is named for time
+        0 (first in name order) and ignored by `drain_tickets`; those guards read it as the oldest
+        drain ticket and give the queue back. It is withdrawn as soon as that no longer holds, so
+        they drain only while one of them stands in the lifeline's way, never while it waits for a
+        head that may lead. A workaround for those checkouts only: ledger `guard-lifeline-mirror`
+        records when it is deleted."""
+        wanted = self.priority == LEAF and self.ticket and not self.holds_queue and self.my_turn() \
+            and not any(entry.get("lifeline_aware") for entry in held_entries(self.heads).values())
+        if wanted and self.mirror is None:
+            name = entry_name(LEAF, at=0)
+            self.mirror = (name, publish_entry(self.tickets, name, {}, lambda path: path.open("a")))
+        elif not wanted and self.mirror:
+            name, handle = self.mirror
+            (self.tickets / name).unlink(missing_ok=True)
+            handle.close()
+            self.mirror = None
+
+    def elastic_bases(self):
+        """The slots the admitted elastic workloads' bases hold; None for an entry of another shape."""
+        bases = [entry.get("slots") for entry in held_entries(self.elastic).values()]
+        return sum(bases) if all(type(base) is int and base >= 0 for base in bases) else None
 
     def my_turn(self):
-        """Ticket holders go in arrival order and ahead of normal guards: a normal guard's turn
-        comes when no ticket is queued."""
+        """Whether this guard may hold the queue now. Ticket holders go in arrival order and ahead
+        of normal guards. A lifeline reserves, it does not drain: behind no drain ticket a normal
+        guard holds the queue (as its head, `backfill` beside it stays open) only ahead of the
+        lifelines queued after it began to wait, and only if it can be admitted while every elastic
+        workload waits for its lifeline (its weight fits beside their bases); else the first
+        lifeline leads the normal lane. So a lifeline waits for finitely many heads, each admitted
+        in bounded time, and a large normal guard is not sent back by every later lifeline."""
         queued = self.queued_tickets()
-        return not queued or queued[0] == self.ticket
+        if not queued:
+            return True
+        if self.ticket:
+            return queued[0] == self.ticket
+        if not all(map(is_lifeline, queued)):  # a drain ticket
+            return False
+        return bool(self.waiting) and all(self.waiting[0] < name for name in queued) \
+            and (bases := self.elastic_bases()) is not None and self.weight + bases <= self.capacity
 
     def reservation(self, waited):
         """Slots the waiting queue head keeps after `waited` seconds: a share of its weight that
@@ -924,7 +1118,7 @@ class Admission:
         """As the waiting queue head, publish the slots it reserves but does not hold yet (unmet)
         and those it still lacks (need). A new entry, then the old one goes: a reader may count
         both, never neither."""
-        content = {"pid": os.getpid(), "unmet": unmet, "need": need}
+        content = {"pid": os.getpid(), "unmet": unmet, "need": need, "lifeline_aware": True}
         if self.head and self.head[2] == content:
             return
         name = entry_name()
@@ -941,8 +1135,11 @@ class Admission:
 
     def admit_overcommitted(self):
         """Under `<lock>.d/register`: register this workload's excess if it stays within the
-        bound; else fall back to the declared slots (False: collect them first)."""
-        if self.weight == self.declared:
+        bound; else fall back to the declared slots (False: collect them first). An elastic guard
+        instead registers its base if the bound on the elastic bases allows (False: not now)."""
+        if self.a.elastic:
+            return self.register_elastic()
+        if self.weight == self.declared or self.a.sub_admission:  # its charge is its limit: no excess
             return True
         if self.within_bound():
             self.register()
@@ -950,6 +1147,55 @@ class Admission:
         self.weight = self.declared
         self.why_declared = f"declared limits would exceed {DECLARED_BOUND} x budget"
         return False
+
+    def elastic_room(self):
+        """The slots the admitted elastic workloads leave besides the largest sub-admission
+        (PROCESS_MIB): an entry of another shape leaves none (fail closed)."""
+        bases = self.elastic_bases()
+        return 0 if bases is None else self.capacity - self.slots(PROCESS_MIB) - bases
+
+    def register_elastic(self):
+        """Under `<lock>.d/register`: whether this elastic guard's base fits beside the others
+        (`elastic_room`); if so, register it while it runs. A sub-admission then always finds
+        PROCESS_MIB of slots that no elastic base holds, so the parts of the running elastic
+        workloads end and give their bases back (module docstring)."""
+        if self.weight > self.elastic_room():
+            return False
+        self.elastic_entry = entry_name()
+        publish_entry(self.elastic, self.elastic_entry, {"pid": os.getpid(), "slots": self.weight}, self.open)
+        return True
+
+    def take_lifeline(self):
+        """Whether this sub-admission now holds its elastic workload's lifeline (taken without
+        blocking, only while no part of that workload runs): at most one part of each elastic
+        workload queues with a lifeline ticket: it leads the normal lane, behind the merge tickets
+        and ahead of the exclusive ones, so a workload none of whose parts runs always progresses
+        (module docstring). A running part ends on its own.
+        Tried at most once per ATTEMPT_EVERY: parts run for seconds, so a faster reaction buys
+        nothing."""
+        if not self.a.sub_admission or self.priority == LEAF or not self.enclosing \
+                or time.monotonic() < self.next_lifeline:
+            return self.priority == LEAF
+        self.next_lifeline = time.monotonic() + ATTEMPT_EVERY
+        workload = self.enclosing["elastic"]["id"]
+        if any(entry.get("elastic") == workload for entry in held_entries(self.leaves).values()):
+            return False
+        if self.lifeline_handle is None:  # one descriptor, kept until release
+            (self.directory / "lifeline").mkdir(exist_ok=True)
+            self.lifeline_handle = self.open(Path("lifeline") / workload)
+        if not try_flock(self.lifeline_handle, fcntl.LOCK_EX):
+            return False
+        self.leave_queue()
+        self.priority = LEAF
+        self.join_queue()
+        return True
+
+    def publish_leaf(self):
+        """While this sub-admission runs: its pid, so the enclosing guards leave its subtree out
+        of their sums (it holds and enforces its own charge)."""
+        self.leaf_entry = entry_name()
+        publish_entry(self.leaves, self.leaf_entry, {"pid": os.getpid(), "elastic": self.enclosing["elastic"]["id"]},
+                      self.open)
 
     def backfill(self, main, slots, register):
         """Whether this normal guard, waiting behind the queue head, ran ahead of it: it takes
@@ -960,7 +1206,7 @@ class Admission:
         if self.priority != "normal" or not self.attempt_due():
             return False
         reservations = head_reservations(self.heads)
-        if not reservations or not self.my_turn():
+        if not reservations or self.drain_tickets():
             return False
         want = self.weight + sum(unmet for unmet, _ in reservations)
         head_need = max(need for _, need in reservations)
@@ -1009,6 +1255,62 @@ class Admission:
             handle.close()
             self.waiting = None
 
+    def line_up(self, turn):
+        """Keep this normal guard's place in line while it waits in the queue loop: an entry in
+        `<lock>.d/queued/` named for when it entered the loop, its mtime refreshed while it is in
+        its turn or held up only by drain tickets, which hold up every normal guard alike
+        (`first_in_line`). A ticket holder has none (its ticket orders it)."""
+        if self.ticket:
+            self.leave_line()
+            return
+        name = self.in_line[0] if self.in_line else entry_name()
+        path = self.lined_up / name
+        fresh = turn or bool(self.drain_tickets())
+        if self.in_line is None or not path.exists():  # new, or removed under it: its place again
+            if self.in_line:
+                self.in_line[1].close()
+            self.in_line = (name, publish_entry(self.lined_up, name, {"pid": os.getpid()},
+                                                lambda path: path.open("a")))
+        with contextlib.suppress(FileNotFoundError):
+            os.utime(path, None if fresh else (0, 0))
+
+    def leave_line(self):
+        if self.in_line:
+            name, handle = self.in_line
+            (self.lined_up / name).unlink(missing_ok=True)
+            handle.close()
+            self.in_line = None
+
+    def first_in_line(self):
+        """Whether no normal guard that entered the queue loop before this one is still in line
+        and in its turn (its entry refreshed within IN_LINE_FRESH). Normal guards take the queue
+        in that order, not by whoever polls the free queue lock first: the parts of an elastic
+        workload, several waiting at any time and each followed by the next, won that race again
+        and again (remote host, 2026-11-05: three lane jobs waited behind a full build's parts
+        with 86% of the memory free). A guard that is not in its turn (`my_turn`: behind a ticket,
+        or too large beside the elastic bases while a lifeline waits), or stopped while alive,
+        stops refreshing and holds up nobody: it falls back to the race. Freshness is measured
+        against its own entry, just refreshed (`line_up`): one clock, the file system's."""
+        mine = self.in_line[0]
+        try:
+            now = (self.lined_up / mine).stat().st_mtime
+        except FileNotFoundError:
+            return True  # its entry is published again at its next attempt
+        for name in held_entries(self.lined_up):
+            if name >= mine:
+                return True
+            with contextlib.suppress(FileNotFoundError):
+                if now - (self.lined_up / name).stat().st_mtime < IN_LINE_FRESH:
+                    return False
+        return True
+
+    def takes_queue(self, queue):
+        """Whether this guard takes the queue now (as its head): in its turn (`my_turn`) and, a
+        normal guard, first in line (`first_in_line`)."""
+        turn = self.my_turn()
+        self.line_up(turn)
+        return turn and (bool(self.ticket) or self.first_in_line()) and try_flock(queue, fcntl.LOCK_EX)
+
     def try_background(self, workspace, queue, main, slots, register):
         """Whether this background guard was admitted now (module docstring): only while no other
         guard waits (no ticket, no head, no waiting entry), and only with its workspace and all its
@@ -1018,6 +1320,8 @@ class Admission:
         mode = fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX
         taken = []
         for handle, how in ((workspace, mode), (queue, fcntl.LOCK_EX), (main, fcntl.LOCK_SH)):
+            if handle is None:  # a sub-admission: its elastic guard holds the workspace
+                continue
             if not try_flock(handle, how):
                 break
             taken.append(handle)
@@ -1039,17 +1343,20 @@ class Admission:
         return False
 
     def announce(self):
+        if self.a.quiet:  # a Lean process: its stderr goes into Lake's build log
+            return
         queued = self.queued_tickets()
         exclusive = sum(name.endswith("-exclusive") for name in queued)
+        lifelines = sum(map(is_lifeline, queued))
         print(f"build-guard: waiting for admission, {self.priority} priority, {self.weight} slot(s), "
-              f"{len(queued) - exclusive} merge and {exclusive} exclusive guard(s) queued: {self.a.cwd}",
-              file=sys.stderr, flush=True)
+              f"{len(queued) - exclusive - lifelines} merge, {exclusive} exclusive and {lifelines} "
+              f"lifeline guard(s) queued: {self.a.cwd}", file=sys.stderr, flush=True)
 
     def acquire(self, cancelled):
         """None once every lock is held; "cancelled" or "lock_busy" (--lock-wait exceeded)."""
         deadline = time.monotonic() + self.a.lock_wait
 
-        def wait():
+        def wait(publish=True):
             if cancelled[0]:
                 return "cancelled"
             if time.monotonic() >= deadline:
@@ -1057,7 +1364,9 @@ class Admission:
             if not self.waited:
                 self.waited = True
                 self.announce()
-            if self.priority != "background":
+            self.take_lifeline()  # a sub-admission queues with a lifeline ticket once it holds it
+            self.mirror_lifeline()  # what the lifeline waits for changes while it waits
+            if publish and self.priority != "background":
                 self.publish_waiting()  # until its admission ends the wait (`run`)
             time.sleep(min(0.05, self.a.lock_wait))
             return "cancelled" if cancelled[0] else None
@@ -1074,29 +1383,40 @@ class Admission:
         self.a.lock.parent.mkdir(parents=True, exist_ok=True)
         self.directory.mkdir(exist_ok=True)
         self.plan()
+        if self.a.elastic and self.weight > self.capacity - self.slots(PROCESS_MIB):
+            return "elastic_too_large"
+        # A sub-admission's workspace is held by the elastic guard it belongs to.
         digest = hashlib.sha256(str(self.workspace).encode()).hexdigest()[:16]
-        workspace = self.open("ws-" + digest)
+        workspace = None if self.a.sub_admission else self.open("ws-" + digest)
         # `register`: the short lock under which an admission checks the declared bound and
         # registers (the queue head and backfilling guards admit outside each other's queue lock).
         queue, main, register = self.open("queue"), self.open(None), self.open("register")
         # An exclusive guard collects `<lock>` itself instead of slots: nothing else runs then.
         slots = [] if self.a.exclusive else [self.open("slot-%03d" % i) for i in range(self.capacity)]
-        if self.priority == "background":  # its workspace too only at once, with everything else
-            while not self.try_background(workspace, queue, main, slots, register):
-                if refused := wait():
-                    return refused
-            return None
+        self.take_lifeline()
+        # Its workspace too only at once, with everything else. A sub-admission that takes its
+        # workload's lifeline meanwhile queues with a lifeline ticket instead (below).
+        while self.priority == "background":
+            if self.try_background(workspace, queue, main, slots, register):
+                return None
+            if refused := wait():
+                return refused
         # The workspace first: waiting for one's own checkout must not hold up the queue.
-        if refused := take(workspace, fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX):
+        if workspace and (refused := take(workspace, fcntl.LOCK_SH if self.a.shared_workspace else fcntl.LOCK_EX)):
             return refused
-        if self.priority != "normal":
-            self.join_queue()
         while True:
-            while not self.my_turn():
-                if refused := wait():
+            # An elastic guard without room beside the admitted elastic bases waits before it
+            # queues, with no ticket and unannounced: it holds up no other guard.
+            while self.a.elastic and self.weight > self.elastic_room():
+                self.leave_queue()
+                self.clear_waiting()
+                self.leave_line()
+                if refused := wait(publish=False):
                     return refused
+            if self.priority != "normal" and not self.ticket:
+                self.join_queue()
             # The queue holder (the head) collects; a guard waiting behind it may backfill.
-            while not try_flock(queue, fcntl.LOCK_EX):
+            while not self.takes_queue(queue):
                 if cancelled[0]:
                     return "cancelled"
                 if self.backfill(main, slots, register):
@@ -1104,6 +1424,7 @@ class Admission:
                 if refused := wait():
                     return refused
             head_since = time.monotonic()  # its reservation grows with its wait as the head
+            self.hold_queue(True)  # older guards may backfill beside it again
             if not self.a.exclusive and (refused := take(main, fcntl.LOCK_SH)):
                 return refused
             # Only the queue holder collects. Short of its weight it keeps its reservation (growing
@@ -1127,6 +1448,8 @@ class Admission:
                             admitted = self.admit_overcommitted()
                         finally:
                             fcntl.flock(register, fcntl.LOCK_UN)
+                        if not admitted and self.a.elastic:
+                            break  # another elastic base came first: give everything back, wait outside
                         if not admitted:
                             continue  # collect the declared slots
                     else:
@@ -1143,26 +1466,43 @@ class Admission:
                     return None
                 if refused := wait():
                     return refused
-            # A ticket older than this guard's is queued, and this guard runs nothing yet: it gives
-            # back what it collected so far and goes behind it. Running workloads are not touched.
+            # Its turn has passed (`my_turn`: an older ticket, or for a normal guard a lifeline it
+            # must let lead) and this guard runs nothing yet: it gives back what it collected so far
+            # and goes behind it. Running workloads are not touched.
             self.clear_head()
             for handle in (main, queue, *slots):
                 fcntl.flock(handle, fcntl.LOCK_UN)
+            self.hold_queue(False)
 
     def release(self):
         self.leave_queue()
         self.clear_head()
         self.clear_waiting()
+        self.leave_line()
         self.unregister()
+        for directory, name in ((self.leaves, self.leaf_entry), (self.elastic, self.elastic_entry),
+                                (self.directory / "lifeline", self.elastic_entry)):
+            if name:  # an elastic guard's lifeline: its parts have ended with its workload
+                (directory / name).unlink(missing_ok=True)
+        self.leaf_entry = self.elastic_entry = self.lifeline_handle = None
         for handle in self.handles:
             handle.close()
         self.handles = []
 
     def grant(self):
-        """What a guard nested in this workload may inherit (INHERIT, `inherited`)."""
+        """What a guard nested in this workload may inherit (INHERIT, `inherited`), and, in an
+        elastic workload, the elastic admission its sub-admissions belong to (`enclosing_elastic`):
+        an --elastic guard's own, passed on by the guards that inherit it. A sub-admission passes
+        none on: its parts run within its own charge."""
+        elastic = None
+        if self.elastic_entry:
+            elastic = {"id": self.elastic_entry}
+        elif self.enclosing and not self.a.sub_admission:
+            elastic = self.enclosing.get("elastic")
         return {"pid": os.getpid(), "lock": str(self.a.lock), "workspace": str(self.workspace),
                 "rss_mib": self.a.rss_mib, "exclusive": self.a.exclusive,
-                "shared_workspace": self.a.shared_workspace}
+                "shared_workspace": self.a.shared_workspace, "elastic": elastic,
+                "budget_mib": self.a.mem_budget_mib}
 
 
 # A guard's workload runs with INHERIT set to its admission (`Admission.grant`). A guard started
@@ -1173,6 +1513,16 @@ class Admission:
 # writes its own report. A nested guard of the same workspace that cannot inherit would wait for
 # the workspace lock its ancestor holds: it fails instead (`inheritance_refused`, exit 75).
 INHERIT = "AIR2LEAN_GUARD_ADMISSION"
+
+
+def read_grant():
+    """The enclosing guard's admission (INHERIT) as a dict, else None (absent or malformed). Its
+    readers check the fields they rely on."""
+    try:
+        grant = json.loads(os.environ.get(INHERIT) or "null")
+    except ValueError:
+        return None
+    return grant if isinstance(grant, dict) else None
 
 
 def ancestors(pid=None):
@@ -1187,11 +1537,8 @@ def ancestors(pid=None):
 def inherited(lock):
     """(grant, None) when the enclosing guard's admission covers this guard, (None, reason) when
     an enclosing guard of the same lock and workspace does not, (None, None) without one."""
-    try:
-        grant = json.loads(os.environ.get(INHERIT) or "null")
-    except ValueError:
-        grant = None
-    if not isinstance(grant, dict) or grant.get("lock") != str(lock.a.lock) \
+    grant = read_grant()
+    if grant is None or grant.get("lock") != str(lock.a.lock) \
             or grant.get("workspace") != str(lock.workspace):
         return None, None
     try:
@@ -1205,11 +1552,53 @@ def inherited(lock):
         return None, "--exclusive inside a shared admission"
     if not lock.a.shared_workspace and grant.get("shared_workspace"):
         return None, "an exclusive workspace inside a shared-workspace admission"
+    if (lock.a.elastic or lock.a.lean_processes) and not grant.get("elastic"):
+        return None, "--elastic or --lean-processes inside an admission that is not elastic"
     return grant, None
 
 
-def run(a, preempted=None):
-    """One guarded run; `preempted`: the record of the run the backstop stopped before it."""
+def enclosing_elastic(lock):
+    """(grant, None) when a sub-admission belongs to the enclosing guard's elastic admission (the
+    same lock and workspace, and the granting guard is its ancestor), else (None, why not)."""
+    grant = read_grant()
+    if grant is None or grant.get("lock") != str(lock.a.lock) \
+            or not isinstance(grant.get("elastic"), dict) or not isinstance(grant["elastic"].get("id"), str):
+        return None, "no enclosing --elastic admission of this lock"
+    if grant.get("workspace") != str(lock.workspace):
+        return None, "another workspace than the enclosing --elastic admission's"
+    try:
+        if not isinstance(grant.get("pid"), int) or grant["pid"] not in ancestors():
+            return None, "the enclosing --elastic guard is not an ancestor"
+    except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
+        return None, "the enclosing guard could not be confirmed (ps failed)"
+    return grant, None
+
+
+def leaf_roots(directory):
+    """The pids of the running sub-admissions of a lock (`Admission.publish_leaf`)."""
+    return {entry.get("pid") for entry in held_entries(directory / "leaves").values()}
+
+
+def outside_leaves(rows, owned, roots):
+    """The owned processes no running sub-admission covers: a sub-admission's guard and its
+    descendants are bounded by its own charge, so an enclosing guard leaves them out of its sum.
+    A sub-admission publishes its pid before it starts its workload and the roots are read after
+    the process table, so a process of a sub-admission is never counted twice."""
+    children = {}
+    for pid in owned:
+        children.setdefault(rows[pid]["parent"], []).append(pid)
+    covered, pending = set(), [pid for pid in roots if pid in owned]
+    while pending:
+        pid = pending.pop()
+        if pid not in covered:
+            covered.add(pid)
+            pending.extend(children.get(pid, []))
+    return owned - covered
+
+
+def run(a, retry_of=None):
+    """One guarded run; `retry_of`: (report key, record) of the run before it that was stopped
+    (`guarded`): `preempted_run` by the backstop, `stopped_run` at a sub-admission's charge."""
     cancelled = [None]
     def cancel(sig, _frame):
         cancelled[0] = sig
@@ -1231,71 +1620,107 @@ def run(a, preempted=None):
               "lock": str(a.lock), "log": str(a.log), "outcome": "setup_error", "exit_code": 70,
               "child_status": None, "peak_sampled_rss_kib": 0, "samples": 0, "failed_samples": 0,
               "output_bytes": 0, "log_truncated": False, "drain_incomplete": False}
-    if preempted:
-        report["preempted_run"] = preempted
+    if retry_of:
+        report[retry_of[0]] = retry_of[1]
     started = time.monotonic()
+    say = (lambda text: None) if a.quiet else \
+        (lambda text: print("build-guard: " + text, file=sys.stderr, flush=True))
     try:
         names = {"zig", "zig-air", "zig-unlocked", *a.zig_name}
         command = sequential_command(a.command, names)
         lock = Admission(a)
         report["admission"] = lock.evidence()
         lock_start = time.monotonic()
-        grant, reason = inherited(lock)
+        if a.sub_admission:
+            grant, reason = enclosing_elastic(lock)
+            if grant and grant.get("budget_mib") != a.mem_budget_mib:
+                # Its slots come from the pool its elastic workload was admitted from.
+                if not isinstance(grant.get("budget_mib"), (int, float)) or grant["budget_mib"] <= 0:
+                    grant, reason = None, "the enclosing --elastic admission names no budget"
+                else:
+                    a.mem_budget_mib = grant["budget_mib"]
+                    lock = Admission(a)
+                    report["admission"] = lock.evidence()
+            lock.enclosing = grant
+        else:
+            grant, reason = inherited(lock)
+            lock.enclosing = grant
+            if not reason and a.lean_processes and not (a.elastic or grant):
+                reason = "--lean-processes needs an --elastic admission"
         if reason:
-            print(f"build-guard: cannot run inside the enclosing guard's admission: {reason}",
-                  file=sys.stderr, flush=True)
+            say(f"cannot run inside the enclosing guard's admission: {reason}")
             report.update(outcome="inheritance_refused", exit_code=75, error=reason)
             return report
-        if grant:
+        if grant and a.sub_admission:
+            report["admission"]["elastic"] = grant["elastic"]
+        elif grant:
             report["admission"]["inherited_from"] = grant
-        refused = None if grant else lock.acquire(cancelled)
+        refused = None if grant and not a.sub_admission else lock.acquire(cancelled)
         lock.clear_waiting()  # admitted or refused, it waits no longer
+        lock.leave_line()
         if refused == "cancelled":
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
+            return report
+        if refused == "elastic_too_large":
+            error = (f"an --elastic base of {lock.weight} slot(s) leaves less than one sub-admission "
+                     f"({PROCESS_MIB} MiB) of the {lock.capacity}-slot budget")
+            say(error)
+            report.update(outcome="elastic_too_large", exit_code=75, error=error)
             return report
         if refused:
             report.update(outcome="lock_busy", exit_code=75)
             return report
         report["lock_wait_seconds"] = round(time.monotonic() - lock_start, 3)
         if lock.waited:
-            print(f"build-guard: admitted after {report['lock_wait_seconds']} s, {lock.priority} priority",
-                  file=sys.stderr, flush=True)
-        # Execution fingerprints belong to the acquired-lock state, not the
-        # state before a different worktree's build finished.
+            say(f"admitted after {report['lock_wait_seconds']} s, {lock.priority} priority")
         report["command"] = command
-        fingerprints = {}
-        report["guard"] = file_evidence(__file__, fingerprints)
-        report["revision"] = revision(a.cwd)
-        report["inputs"] = [file_evidence(a.cwd / path, fingerprints) for path in a.input]
-        tools = [command[0], sys.executable, "ps", *a.tool]
-        report["tools"] = [file_evidence(path, fingerprints) if (path := executable(tool, a.cwd)) else
-                           {"requested": tool, "unavailable": True} for tool in tools]
-        for path in ("lean-toolchain", "zig-patch/versions.toml"):
-            if (a.cwd / path).is_file():
-                report.setdefault("pins", []).append(file_evidence(a.cwd / path, fingerprints))
+        if a.report and not a.quiet:  # a Lean process: its full build records them
+            # Execution fingerprints belong to the acquired-lock state, not the
+            # state before a different worktree's build finished.
+            fingerprints = {}
+            report["guard"] = file_evidence(__file__, fingerprints)
+            report["revision"] = revision(a.cwd)
+            report["inputs"] = [file_evidence(a.cwd / path, fingerprints) for path in a.input]
+            tools = [command[0], sys.executable, "ps", *a.tool]
+            report["tools"] = [file_evidence(path, fingerprints) if (path := executable(tool, a.cwd)) else
+                               {"requested": tool, "unavailable": True} for tool in tools]
+            for path in ("lean-toolchain", "zig-patch/versions.toml"):
+                if (a.cwd / path).is_file():
+                    report.setdefault("pins", []).append(file_evidence(a.cwd / path, fingerprints))
         if cancelled[0]:
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
             return report
-        a.log.parent.mkdir(parents=True, exist_ok=True)
-        # After a preemption the log keeps the stopped run's output (`main`).
-        with a.log.open("ab" if preempted else "wb") as output:
+        if a.log:
+            a.log.parent.mkdir(parents=True, exist_ok=True)
+        # After a preemption or a stop at the charge the log keeps the stopped run's output (`main`).
+        # Without --log (a sub-admission) its stdout is collected, its stderr inherited, and the
+        # stdout passed on once it ends: a run stopped at its charge prints nothing.
+        with a.log.open("ab" if retry_of else "wb") if a.log else tempfile.TemporaryFile() as output:
             # scripts/par.py sizes its worker pool by AIR2LEAN_JOBS and AIR2LEAN_MEM_MIB.
             # AIR2LEAN_GUARD_MODE tells a timing workload whether it runs alone (--exclusive).
+            # A sub-admission's environment already has the Lake cache settings of its workload.
             overrides = {"LEAN_NUM_THREADS": str(a.lean_threads), "ELAN_NO_OVERRIDE_NOTICE": "1",
                          "AIR2LEAN_JOBS": str(a.jobs), "AIR2LEAN_MEM_MIB": str(int(a.rss_mib)),
                          "AIR2LEAN_GUARD_MODE": "exclusive" if a.exclusive else "shared",
-                         INHERIT: json.dumps(lock.grant(), sort_keys=True), **lake_cache_env()}
+                         INHERIT: json.dumps(lock.grant(), sort_keys=True),
+                         **({} if a.sub_admission else lake_cache_env()),
+                         **(lean_processes_env(a.lean_processes, a.lock) if a.lean_processes else {})}
             env = os.environ | overrides
             report["environment_overrides"] = overrides
+            if a.sub_admission:
+                lock.publish_leaf()  # before its workload starts (`outside_leaves`)
             try:
                 child = subprocess.Popen(command, cwd=a.cwd, env=env, stdout=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT, start_new_session=True)
+                                         stderr=subprocess.STDOUT if a.log else None, start_new_session=True)
             except OSError as error:
                 report.update(outcome="spawn_error", exit_code=127, error=str(error)[:256])
                 return report
             report["drain_incomplete"] = True
             tree = Tree(child.pid)
             sampler = Sampler(a.ps_timeout, a.sample_stale)
+            limit_mib = a.charge_mib if a.sub_admission else a.rss_mib
+            report["budget"]["limit_mib"] = limit_mib
+            elastic_tree = bool(json.loads(overrides[INHERIT]).get("elastic"))
             os.set_blocking(child.stdout.fileno(), False)
             selector.register(child.stdout, selectors.EVENT_READ)
             build_start = time.monotonic()
@@ -1314,12 +1739,15 @@ def run(a, preempted=None):
                     next_sample = time.monotonic() + a.interval
                     if rows is not None:
                         owned = tree.owned(rows)
-                        rss = sum(rows[pid]["rss_kib"] for pid in owned)
+                        # Only an elastic workload (or a guard inside one) has parts in its tree;
+                        # each part enforces its own limit and --jobs.
+                        own = outside_leaves(rows, owned, leaf_roots(lock.directory)) if elastic_tree else owned
+                        rss = sum(rows[pid]["rss_kib"] for pid in own)
                         report["samples"] += 1
                         report["peak_sampled_rss_kib"] = max(report["peak_sampled_rss_kib"], rss)
-                        if not reason and rss > a.rss_mib * 1024:
+                        if not reason and rss > limit_mib * 1024:
                             reason, code = "rss_limit", 125
-                        if not reason and parallel_zig(rows, owned, names, a.jobs):
+                        if not reason and parallel_zig(rows, own, names, a.jobs):
                             reason, code = "parallel_zig", 126
                         if not reason and progress and progress.hung(rows, owned, report["output_bytes"],
                                                                      time.monotonic()):
@@ -1359,8 +1787,16 @@ def run(a, preempted=None):
             report.update(outcome=reason, exit_code=code, child_status=peek_status(child),
                           workload_seconds=round(time.monotonic() - build_start, 3),
                           log_truncated=report["output_bytes"] > a.log_bytes or report["drain_incomplete"])
-        report["log_sha256"] = digest(a.log)
-        report["log_bytes"] = a.log.stat().st_size
+            if not a.log and not retries_at_declared(a, report):
+                output.seek(0)
+                try:
+                    shutil.copyfileobj(output, sys.stdout.buffer)
+                    sys.stdout.flush()
+                except OSError:  # its reader is gone (Lake was stopped): nothing to pass on
+                    pass
+        if a.log:
+            report["log_sha256"] = digest(a.log)
+            report["log_bytes"] = a.log.stat().st_size
         report["outputs"] = [file_evidence(a.cwd / path) for path in a.output]
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         report.update(outcome="guard_error", exit_code=70, error=str(error)[:256])
@@ -1374,6 +1810,17 @@ def run(a, preempted=None):
                 report.update(outcome="cleanup_failed", exit_code=70)
                 report.setdefault("error", str(error)[:256])
             finally:
+                # The kernel's high-water mark of the child's own tree (exact, unlike the sampled
+                # sum): for a sub-admission of one Lean process, that process's peak.
+                if child.returncode is None:
+                    try:
+                        pid, status, usage = os.wait4(child.pid, os.WNOHANG)
+                    except ChildProcessError:
+                        pid = 0
+                    if pid:
+                        child.returncode = os.waitstatus_to_exitcode(status)
+                        report["peak_process_rss_kib"] = (usage.ru_maxrss // 1024 if platform.system() == "Darwin"
+                                                          else usage.ru_maxrss)
                 try:
                     report["child_status"] = child.wait(timeout=5)
                 except subprocess.TimeoutExpired:
@@ -1382,11 +1829,12 @@ def run(a, preempted=None):
         selector.close()
         if lock is not None:
             report["admission"].update(lock.evidence())
-            if child is not None and "inherited_from" not in report["admission"]:
+            # A sub-admission is charged by its caller's measurement: it records no history.
+            if child is not None and "inherited_from" not in report["admission"] and not a.sub_admission:
                 try:
                     lock.record(report)
                 except OSError as error:
-                    print(f"build-guard: warning: run history not recorded: {error}", file=sys.stderr, flush=True)
+                    say(f"warning: run history not recorded: {error}")
             lock.release()
         if cancelled[0] and report["outcome"] == "preempted":  # a cancellation during the teardown
             report.update(outcome="cancelled", exit_code=128 + cancelled[0])
@@ -1394,24 +1842,153 @@ def run(a, preempted=None):
             signal.signal(sig, handler)
         report["log_truncated"] = report["output_bytes"] > a.log_bytes or report["drain_incomplete"]
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
-        atomic_report(a.report, report)
+        if a.report:
+            atomic_report(a.report, report)
+    return report
+
+
+def retries_at_declared(a, report):
+    """Whether a sub-admission stopped at its charge runs again at its declared --rss-mib."""
+    return a.sub_admission and report["outcome"] == "rss_limit" and a.charge_mib < a.rss_mib
+
+
+def lean_processes_env(sysroot, lock):
+    """The environment of a --lean-processes workload: Lake takes its Lean from a sysroot whose
+    `bin/lean` runs every elaboration of a .lean file as `build-guard.py --lean-process` (each its
+    own sub-admission, `lean_process`) and anything else as the toolchain's lean. Lake supports
+    this: LAKE_OVERRIDE_LEAN makes it use LEAN_SYSROOT, and the sysroot's paths are not part of
+    any Lake trace (Lake passes `-I`/`-L` as untraced arguments, its Lean trace is the githash
+    `lean --githash` reports), so the same modules are up to date with or without it. Lake's own
+    `lake env` puts the toolchain's bin first on PATH, so a script runs `$LEAN FILE` there
+    (scripts/lean-deps.py). Modes that stream (the server and its workers, `--run`, `--stdin`,
+    `--deps`) run the toolchain's lean directly. The sysroot is links to the toolchain's entries
+    besides that script, under `<lock>.d/lean-sysroot/`, keyed by the toolchain (and its bin
+    entries), the script's text, the guard and Python."""
+    real = Path(sysroot).resolve()
+    if not (real / "bin" / "lean").is_file():
+        raise ValueError(f"--lean-processes {sysroot}: no bin/lean (expected `lean --print-prefix`)")
+    if "lean-sysroot" in real.parts:  # its bin/lean would be this script: it would run itself
+        raise ValueError(f"--lean-processes {sysroot}: a --lean-processes sysroot, not the toolchain's")
+    lean, guard = shlex.quote(str(real / "bin" / "lean")), shlex.quote(str(Path(__file__).resolve()))
+    text = ("#!/bin/sh\n# scripts/build-guard.py --lean-processes: an elaboration of a .lean file is "
+            "admitted on its own.\nfor arg do\n  case $arg in\n    --server|--worker|--run|--stdin|--deps*) "
+            "exec %s \"$@\" ;;\n  esac\ndone\nfor arg do\n  case $arg in\n    *.lean) exec %s -B %s "
+            "--lean-process %s \"$@\" ;;\n  esac\ndone\nexec %s \"$@\"\n"
+            % (lean, shlex.quote(sys.executable), guard, lean, lean))
+    entries = sorted(entry.name for entry in (real / "bin").iterdir())
+    key = hashlib.sha256("\0".join([str(real), text, *entries]).encode()).hexdigest()[:16]
+    root = Path(str(lock) + ".d") / "lean-sysroot" / key
+    if not (root / "bin" / "lean").is_file():
+        root.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(dir=root.parent, prefix=".staging-"))
+        try:
+            for entry in real.iterdir():
+                if entry.name != "bin":
+                    (staging / entry.name).symlink_to(entry)
+            (staging / "bin").mkdir()
+            for name in entries:
+                if name != "lean":
+                    (staging / "bin" / name).symlink_to(real / "bin" / name)
+            script = staging / "bin" / "lean"
+            script.write_text(text)
+            script.chmod(0o755)
+            os.rename(staging, root)  # a concurrent guard that came first: its equal copy stays
+        except OSError:
+            if not (root / "bin" / "lean").is_file():
+                raise
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+    path = os.environ.get("PATH", "")
+    return {"LAKE_OVERRIDE_LEAN": "true", "LEAN_SYSROOT": str(root), "LEAN": str(root / "bin" / "lean"),
+            "PATH": str(root / "bin") + (os.pathsep + path if path else "")}
+
+
+def lean_process(lean, args):
+    """One Lean elaboration of a --lean-processes workload (its sysroot's `bin/lean`): a
+    sub-admission charged by the module's measured peak (scripts/lean-peaks.py `charge_peak_kib`:
+    a guess for a changed or new module), stopped there and run again at PROCESS_MIB if it
+    outgrows it. One Lean thread, so the peaks are comparable. Its exact peak
+    (`peak_process_rss_kib`) is recorded for the next charge, its report written to
+    AIR2LEAN_LEAN_REPORTS when set (scripts/full-build.sh: the build's logs). Outside an elastic
+    admission (a sub-admission's own Lake) it is the toolchain's lean."""
+    source = next((arg for arg in args if arg.endswith(".lean")), None)
+    grant = read_grant()
+    if source is None or grant is None or not grant.get("elastic") \
+            or not isinstance(grant.get("workspace"), str) or not isinstance(grant.get("lock"), str):
+        os.execv(lean, [lean, *args])
+    peaks = load_sibling("lean-peaks.py")
+    path = Path(source).resolve()
+    workspace = Path(grant["workspace"])
+    module = path.relative_to(workspace).as_posix() if path.is_relative_to(workspace) else str(path)
+    sha = digest(path) if path.is_file() else None
+    store = peaks.store_of(Path(grant["lock"]))
+    peak = peaks.charge_peak_kib(store, workspace, module, sha)
+    charge = PROCESS_MIB if peak is None else margin_charge(peak / 1024, PROCESS_MIB)
+    reports = os.environ.get("AIR2LEAN_LEAN_REPORTS")
+    report_path = Path(reports) / ("%s.%d.json" % (module.replace("/", "__"), os.getpid())) if reports else None
+    a = parse_args([*part_options(charge, grant["lock"], 1),
+                    *(["--report", str(report_path)] if report_path else []), "--", lean, *args])
+    # Its stderr is Lean's, which Lake keeps in the module's build log and replays on every later
+    # build: the guard says nothing there unless it fails the elaboration itself.
+    a.quiet = True
+    report = guarded(a)
+    if report["outcome"] not in ("success", "child_failed"):
+        print(f"build-guard: this Lean process was not run to its end: {report['outcome']} "
+              f"{report.get('error') or ''}".rstrip(), file=sys.stderr, flush=True)
+    if report["outcome"] == "success" and sha:
+        try:
+            peaks.record(store, module, sha, report.get("peak_process_rss_kib"))
+        except OSError:
+            pass  # a lost measurement: the next run of the module is charged as before
+    return report["exit_code"]
+
+
+def part_options(charge_mib, lock, interval):
+    """The guard options of a part of an elastic workload (a Lean process, a fixture unit): a
+    sub-admission charged charge_mib, run again at PROCESS_MIB if it outgrows that, sampled every
+    `interval` seconds. Its wait and run are bounded by PART_TIMEOUT, the enclosing workload's
+    --timeout: the elastic bounds admit it in the end."""
+    return ["--sub-admission", "--charge-mib", str(charge_mib), "--rss-mib", str(PROCESS_MIB),
+            "--lock", str(lock), "--interval", str(interval), "--timeout", str(PART_TIMEOUT),
+            "--lock-wait", str(PART_TIMEOUT)]
+
+
+def guarded(a):
+    """run(a), and once more holding its declared --rss-mib when it ran below that and ran out of
+    memory: the backstop preempted it (an overcommitted workload, module docstring) or it outgrew
+    its charge (a sub-admission). Within what is left of --lock-wait and --timeout, so the
+    caller's bounds still hold."""
+    report = run(a)
+    stopped = retries_at_declared(a, report)
+    if stopped or report["outcome"] == "preempted":
+        if not a.quiet:
+            why = (f"over its charge of {int(a.charge_mib)} MiB" if stopped else
+                   "preempted (memory low, the youngest overcommitted workload)")
+            print(f"build-guard: {why}; running it again at --rss-mib {int(a.rss_mib)}",
+                  file=sys.stderr, flush=True)
+        if stopped:
+            a.charge_mib = a.rss_mib
+        else:
+            a.no_overcommit = True
+        a.lock_wait = max(0.0, a.lock_wait - report.get("lock_wait_seconds", 0))
+        a.timeout = max(1.0, a.timeout - report.get("workload_seconds", 0))
+        first = {key: report.get(key) for key in (
+            "started_utc", "lock_wait_seconds", "workload_seconds", "peak_sampled_rss_kib", "admission")}
+        report = run(a, ("stopped_run" if stopped else "preempted_run", first))
     return report
 
 
 def main():
+    if sys.argv[1:2] == ["--lean-process"]:  # the Lean of --lean-processes (`lean_processes_env`)
+        return lean_process(sys.argv[2], sys.argv[3:])
+    if sys.argv[1:2] == ["--elastic-plan"] and len(sys.argv) == 3:  # scripts/full-build.sh, fixture-checks.sh
+        print(*elastic_plan(positive(sys.argv[2])))
+        return 0
     a = parse_args(sys.argv[1:])
-    report = run(a)
-    if report["outcome"] == "preempted":
-        # The backstop stopped it: run it again holding its declared slots (module docstring),
-        # within what is left of --lock-wait and --timeout, so the caller's bounds still hold.
-        print("build-guard: preempted (memory low, the youngest overcommitted workload); "
-              "running it again at --rss-mib", file=sys.stderr, flush=True)
-        a.no_overcommit = True
-        a.lock_wait = max(0.0, a.lock_wait - report.get("lock_wait_seconds", 0))
-        a.timeout = max(1.0, a.timeout - report.get("workload_seconds", 0))
-        report = run(a, preempted={key: report.get(key) for key in (
-            "started_utc", "lock_wait_seconds", "workload_seconds", "peak_sampled_rss_kib", "admission")})
-    print(json.dumps({key: report[key] for key in ("outcome", "exit_code", "elapsed_seconds", "peak_sampled_rss_kib")}))
+    report = guarded(a)
+    summary = json.dumps({key: report[key] for key in ("outcome", "exit_code", "elapsed_seconds", "peak_sampled_rss_kib")})
+    # A sub-admission's stdout is its workload's (`run`).
+    print(summary, file=sys.stderr if a.sub_admission else sys.stdout)
     return report["exit_code"]
 
 
