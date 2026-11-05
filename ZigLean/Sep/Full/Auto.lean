@@ -6587,7 +6587,7 @@ def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
     let xs := body.getAppArgs
     let σ ← inferType s₀
     -- `B.inv`'s parameters: the body's arguments, the locals at entry `s0` and the unknowns
-    let names := (← inferType (mkConst invN)).getForallBinderNames.pop
+    let names := (← inferType (mkConst invN)).getForallBinderNames.toArray.pop
     let pre := (← forallMetaTelescope (← inferType (mkConst invN))).1.pop
     unless xs.size ≤ pre.size do fail m!"`{invN}` does not take the body's {xs.size} arguments"
     for h : i in [0:pre.size] do
@@ -6599,7 +6599,7 @@ def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
           fail m!"`{invN}`'s parameter s0 is not of the loop's locals{indentExpr s₀}"
     -- `B.meas`, `B.post` at `B.inv`'s parameters of the same names
     let atParams (c : Name) : TacticM Expr := do
-      let args ← ((← inferType (mkConst c)).getForallBinderNames.pop).mapM fun y => do
+      let args ← ((← inferType (mkConst c)).getForallBinderNames.toArray.pop).mapM fun y => do
         let some i := names.idxOf? y | fail m!"`{c}`'s parameter {y} is not one of `{invN}`'s"
         return pre[i]!
       return mkAppN (mkConst c) args
