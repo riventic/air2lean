@@ -1848,7 +1848,7 @@
           "anchor": "-- The provenance premise dropped: pointers into blocks are not compared by address"
         }
       ],
-      "note": "Extract.lean (CI) proves contracts of loop-free generated functions from the obligations fsym leaves (pinned fsym reports), refutes the single goal a wrong tardiness contract leaves, and pins loop requests and the recursive call; Memory.lean pins each kind of obligation with its fsym.report origin and refutes a reachable panic. The mutated contracts (a dropped overflow bound, unswapped cells, a dropped provenance premise) must fail inside fail_if_success."
+      "note": "Extract.lean (CI) proves contracts of loop-free generated functions from the obligations fsym leaves (the open ones pinned exactly), refutes the single goal a wrong tardiness contract leaves, and pins loop requests and the recursive call; Memory.lean pins each kind of obligation with its fsym.report origin and refutes a reachable panic. Each mutated contract (a dropped overflow bound, unswapped cells, a dropped provenance premise) is pinned with the exact obligation it leaves."
     },
     "P03": {
       "categories": [],

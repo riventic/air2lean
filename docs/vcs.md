@@ -43,8 +43,10 @@ origin and, where two kinds share one, from the command (`program`) or the goal:
 
 Other origins are stops of the walk itself rather than obligations of the contract
 (`fuel_exhausted`, `match_without_discriminant`, `indirect_targets_not_literal`), or obligations
-inside a supplied rule (`update_premise`, `rule_continuation`). Without the option the goals are
-the same, and `fsym` prints a human stop message at a command no rule executes.
+inside a supplied rule (`update_premise`, `rule_continuation`). Without the option `fsym` leaves
+the same goals, unless a finite heartbeat budget stops the two runs at different points
+(rendering the report costs heartbeats, `docs/proof-automation.md`), and it prints a human stop
+message at a command no rule executes.
 
 ## Calls
 

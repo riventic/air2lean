@@ -271,8 +271,9 @@ example (p q : Ptr) (x y : BitVec 32) :
       (fun _ => up (pts p 4 x) ⋆ up (pts q 4 y)) := by
   fsym
 
--- The provenance premise dropped: pointers into blocks are not compared by address, so the
--- comparison is left.
+-- The provenance premise dropped: pointers into blocks are not compared by address, and with
+-- no block facts in the precondition (`FTotalTriple.ptrEqAddr_live` needs them) the comparison
+-- is left.
 /--
 info: fsym: no rule for the command
   ptrEqAddr p q
