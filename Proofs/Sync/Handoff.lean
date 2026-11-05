@@ -159,7 +159,8 @@ theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Condition` handoff returns 7 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). It keeps the
+legacy tactic (ledger #run-witness-loop-names). -/
 theorem handoff_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 :=
   ⟨.fresh, by unroll_sched 10⟩

@@ -19,6 +19,18 @@ Outside the certificate fragment:
 * `iogroup.add`: a concurrent function (`Zig.ConcM`)
 * `iogroup.groupConcurrent`: a concurrent function (`Zig.ConcM`)
 * `iogroup.groupCounter`: a concurrent function (`Zig.ConcM`)
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `Io.Mutex.lock` trusted-Canon: forwardReadOnlyCopies, renumber
+* `Io.Mutex.lockUncancelable` trusted-Canon: forwardReadOnlyCopies, renumber
+* `Io.Mutex.tryLock` trusted-Canon: forwardReadOnlyCopies, renumber
+* `Io.Mutex.unlock` trusted-Canon: forwardReadOnlyCopies, renumber
+* `debug.assert` trusted-Canon: renumber
+* `iogroup.add` trusted-Canon: forwardReadOnlyCopies, renumber
+* `iogroup.groupConcurrent` trusted-Canon: renumber
+* `iogroup.groupCounter` trusted-Canon: renumber
 -/
 
 def source_0 : _root_.Air2Lean.Func :=
