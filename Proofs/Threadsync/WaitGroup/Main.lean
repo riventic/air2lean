@@ -209,4 +209,98 @@ theorem U_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {x₁ : X} {ord 
         intro e; subst e; rw [hX0, hsx₁] at hx; cases hx
       rw [hX u e] at hx ⊢; exact k u hx
 
+/-- **`main`'s next place** `g` keeps the threads' shape: at the same stage of the spawns, and
+joined (task 1) exactly at `j1`. -/
+theorem shape_main {G : ThreadId → Gh} {m : Mem} {g : Gh} (h : Shape (fun u => (G u).2) m)
+    (hm : g.2.ph.isMain = true) (h1 : (G 0).2.ph.rank ≤ 1 → g.2.ph.rank ≤ 1)
+    (h2 : (G 0).2.ph = .sp1 → g.2.ph = .sp1)
+    (h3 : 3 ≤ (G 0).2.ph.rank → 3 ≤ g.2.ph.rank ∧ ((G 0).2.ph = .j1 ↔ g.2.ph = .j1)) :
+    Shape (fun u => (upd G 0 g u).2) m := by
+  obtain ⟨h00, -, hn, hc⟩ := h
+  have hX : ∀ u, u ≠ 0 → upd G 0 g u = G u := fun u h => upd_ne _ _ h
+  refine ⟨h00, by dsimp only; rw [upd_self]; exact hm, fun u hu => ?_, ?_⟩
+  · dsimp only; rw [hX u (by unfold ThreadId at *; omega)]; exact hn u hu
+  dsimp only at hc ⊢
+  simp only [upd_self, hX 1 (by decide), hX 2 (by decide)]
+  rcases hc with ⟨a, b, c, d⟩ | ⟨a, b, c, d, f⟩ | ⟨a, b, c, d, f, k⟩
+  · exact .inl ⟨a, h1 b, c, d⟩
+  · exact .inr (.inl ⟨a, h2 b, c, d, f⟩)
+  · obtain ⟨b', hj⟩ := h3 b
+    refine .inr (.inr ⟨a, b', c, d, ?_, k⟩)
+    rw [show decide (g.2.ph = .j1) = decide ((G 0).2.ph = .j1) from decide_eq_decide.mpr hj.symm]
+    exact f
+
+/-- **The protocol's invariant after `main`'s RMW at the group's state** (`U_mainRmw`, the lock's
+invariant relabelled: the counter does not read `main`'s place). -/
+theorem inv_mainRmw {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {rM : Res} {x₀ x₁ : X}
+    {ord : AtomicOrder} {new : BitVec 64} (hg : G 0 = gO rM x₀)
+    (hu : U G (rsum (WG.cellsR m) rY) m) (hY : ∀ l, WG.In l → rY.heap l = none)
+    (hc : m.current = 0)
+    (hhW : WG.hist m' = (WG.hist m).push (Word.rmwEnt m' 0 ord (newest WG m) new))
+    (hrel : ord.isRel = false) (hH : WG.Holds m' (BitVec.ofNat 64 (wgv x₁ (G 1).2 (G 2).2)))
+    (hw' : WG.Ok m' (fun u => WLive (G u)))
+    (hA : ∀ hF : Heap, (∀ x, WG.o ≤ x → x < WG.o + 8 → hF (WG.b, x) = none) → FStepIn hF m m')
+    (hL : L.Inv G (rsum (WG.cellsR m') rY) m')
+    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hfd₁ : x₁.ph.fd = false)
+    (hwx : x₀.ph.wa = true → x₁.ph.wa = true) (hm : x₁.ph.isMain = true)
+    (h1 : x₀.ph.rank ≤ 1 → x₁.ph.rank ≤ 1) (h2 : x₀.ph = .sp1 → x₁.ph = .sp1)
+    (h3 : 3 ≤ x₀.ph.rank → 3 ≤ x₁.ph.rank ∧ (x₀.ph = .j1 ↔ x₁.ph = .j1))
+    (hlast3 : x₁.ph = .ev → (G 1).2.ph.fd = true → (G 2).2.ph.fd = true →
+      ∃ u, (G u).2.sx = true)
+    (hdone : 6 ≤ x₁.ph.rank → (G 1).2.ph.fd = true ∧ (G 2).2.ph.fd = true ∧
+      VClock.le (G 1).2.fc (m'.clocks[0]!) = true ∧ VClock.le (G 2).2.fc (m'.clocks[0]!) = true ∧
+      (∀ j < (EV.hist m).size, IsSetW m j →
+        VClock.le (EV.hist m)[j]!.clock (m'.clocks[0]!) = true) ∧
+      ∀ u, (G u).2.sx = true → (G u).2.e.Setting ∨ (G u).2.ph = .fin) :
+    proto.inv (upd G 0 (gO rM x₁)) m' := by
+  have e : gO rM x₁ = ((G 0).1, x₁) := by rw [hg]; rfl
+  have hx₀ : (G 0).2 = x₀ := by rw [hg]; rfl
+  refine ⟨_, hL.relabel (t := 0) (by rw [hg]; rfl) (by rw [hg]; rfl) (by rw [hg]; rfl)
+    fun _ hR => R_upd0 hR, ?_⟩
+  rw [e]
+  exact U_mainRmw hu hY hc hhW hrel hH hw' hA hL (by rw [hx₀]; exact he₀) he₁ hsx₁ hfd₁
+    (by rw [hx₀]; exact hwx)
+    (shape_main hu.shape (by exact hm) (by rw [hx₀]; exact h1) (by rw [hx₀]; exact h2)
+      (by rw [hx₀]; exact h3))
+    hlast3 hdone
+
+/-! ## `startMany` -/
+
+/-- Before `main`'s spawns the tasks have no place. -/
+theorem none12 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
+    (h : (G 0).2.ph.rank ≤ 1) : (G 1).2 = {} ∧ (G 2).2 = {} := by
+  obtain ⟨-, -, -, ⟨-, -, h1, h2⟩ | ⟨-, h0, -⟩ | ⟨-, h0, -⟩⟩ := hu.shape
+  · exact ⟨h1, h2⟩
+  · have h0' : (G 0).2.ph = .sp1 := h0; rw [h0'] at h; simp [Ph.rank] at h
+  · have h0' : 3 ≤ (G 0).2.ph.rank := h0; omega
+
+/-- **`startMany(2)`'s `add(4)`** at `pre`: the group's state was 0; `main` to `sm`. -/
+theorem wp_smRmw {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM : Res}
+    (hi : proto.inv (upd G 0 (gO rM { ph := .pre })) m)
+    {Q : BitVec 64 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = 0 →
+      proto.inv (upd G₁ 0 (gO rM { ph := .sm })) m' → Q ((0 : BitVec 64), s) G₁ m' k) :
+    proto.WP 0 ((atomicRmwC .add false .relaxed 8 bPtr (4 : BitVec 64) : CM Tgt σ (BitVec 64)).run s)
+      Q G m n := by
+  refine FLock.wp_wordRmw fitsE wg_inRest apG hi (hlv := rfl) ?_
+  intro k hk G₁ rY m₁ m' old hg₁ hc₁ hU _ hY hv hH hh _ hw' _ _ _ hA _ _ hL
+  have hx₀ : (G₁ 0).2 = { ph := .pre } := by rw [hg₁]; rfl
+  obtain ⟨h1, h2⟩ := none12 hU (by rw [hx₀]; decide)
+  have h0 : old = 0 := val_eq hv (by
+    have := hU.gv; rw [hx₀] at this; exact this)
+  subst h0
+  refine h k hk G₁ m' ((hA (fun _ => none) (fun _ _ _ => rfl)).current.trans hc₁) ?_
+  refine inv_mainRmw hg₁ hU hY hc₁ hh rfl ?_ hw' hA hL rfl rfl rfl rfl (fun h => h) rfl
+    (fun _ => by decide) (fun h => by cases h) (fun h => by simp [Ph.rank] at h)
+    (fun h => by cases h) (fun h => by simp [Ph.rank] at h)
+  rw [h1, h2]; exact hH
+
+/-- **`main`'s `startMany(2)`** at `pre`: to `sm`. -/
+theorem wp_startMany {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res}
+    (hi : proto.inv (upd G 0 (gO rM { ph := .pre })) m) :
+    proto.WP 0 (Thread_WaitGroup_startMany bPtr 2) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
+      proto.inv (upd G' 0 (gO rM { ph := .sm })) m') G m d := by
+  unfold Thread_WaitGroup_startMany
+  fsym [wp_smRmw, debug_assert]
+
 end Threadsync.WG
