@@ -467,10 +467,10 @@ in `test_lean.py`.
   expected functions and the fresh certificate checks.
 * `tests/roadmap/op-effects/test_op_table.py` (the coverage lint): every `Op` constructor has a
   top-level arm in `evalPure`, `evalMem` or `execInst`, or an entry with a reason in
-  `Sem.outsideFragment`, and not both; a new constructor fails until it has one. Today 45 of 97
-  constructors have an arm, which covers 89 of the 177 decoded tags. The L01 inventory's
-  `semantics` column is read from the same source (`interpreted`, `outside-fragment` with the
-  reason, `not-decoded`). An arm counts by name: it interprets the fragment's value kinds only.
+  `Sem.outsideFragment`, and not both; a new constructor fails until it has one, and an arm
+  that is only `stuck` does not count. The L01 inventory's `semantics` column is read from the
+  same source ([coverage.md](coverage.md)). An arm counts by name: it interprets the
+  fragment's value kinds only.
 
 ### Cost
 

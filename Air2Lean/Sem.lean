@@ -869,10 +869,11 @@ end
 
 /-- The `Op` constructors without an arm in `evalPure`, `evalMem` or `execInst`, each with the
 reason it is outside the fragment (it is `stuck`); the stages are those of
-docs/research/V01-V02.md. The op-table test (tests/roadmap/op-effects) fails unless every
-constructor has a top-level arm or an entry here, and not both: a new `Op` constructor is unhandled
-until it gets one. An arm interprets its constructor for the fragment's value kinds only; other
-kinds are `stuck` too. -/
+docs/research/V01-V02.md. Data for the coverage lint, not read by Lean: the op-table test
+(tests/roadmap/op-effects) and the L01 inventory fail unless every constructor has a top-level
+arm (one that is not only `stuck`) or an entry here, and not both, so a new `Op` constructor is
+unhandled until it gets one. An arm interprets its constructor for the fragment's value kinds
+only; other kinds are `stuck` too. -/
 def outsideFragment : List (String × String) := [
   -- Floats (stage 5, `Zig.Float`, the FLT premises).
   ("divFloat", "float division (stage 5)"),
@@ -891,12 +892,12 @@ def outsideFragment : List (String × String) := [
   ("shuffle", "vectors (stage 5)"),
   ("reduce", "vectors (stage 5)"),
   ("vectorStoreElem", "vectors (stage 5)"),
-  -- Integer operations not yet interpreted.
-  ("shift", "integer shifts (not yet interpreted)"),
+  -- Integer operations (no stage yet: scalar arms over ZigLean's primitives).
+  ("shift", "integer shifts (not staged)"),
   ("withOverflow", "overflow builtins return a tuple, an aggregate (stage 4)"),
   ("shlWithOverflow", "overflow builtins return a tuple, an aggregate (stage 4)"),
-  ("countBits", "bit counting (not yet interpreted)"),
-  ("permuteBits", "bit permutation (not yet interpreted)"),
+  ("countBits", "bit counting (not staged)"),
+  ("permuteBits", "bit permutation (not staged)"),
   -- Aggregates, enums and unions (stage 4).
   ("structFieldVal", "aggregate values (stage 4)"),
   ("aggregateInit", "aggregate values (stage 4)"),
@@ -932,9 +933,9 @@ def outsideFragment : List (String × String) := [
   ("atomicRmw", "atomics (stage 6)"),
   ("cmpxchg", "atomics (stage 6)"),
   ("runtimeNavPtr", "thread-local globals (stage 6)"),
-  -- External code (no stage yet).
+  -- Assembly and the return-address oracle (no stage yet).
   ("asm", "inline assembly: its meaning is the A01 effect contract (not staged)"),
-  ("retAddr", "`@returnAddress`, a native code address (not staged)")
+  ("retAddr", "`@returnAddress`: the return-address oracle `Zig.returnAddress` (not staged)")
 ]
 
 /-- The exact prefixed body that `execLoop` invokes, also used by a certificate proving a

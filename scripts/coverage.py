@@ -237,22 +237,51 @@ SEM = 'Air2Lean/Sem.lean'
 SEM_INTERPRETERS = ('evalPure', 'evalMem', 'execInst')
 
 
+CTOR = r'(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))'
+
+
+def lean_code(text):
+    """`text` without Lean comments (`--` to the end of the line, `/- … -/` blocks)."""
+    return re.sub(r'/-.*?-/|--[^\n]*', '', text, flags=re.S)
+
+
+def op_constructors(text):
+    """The constructors of `inductive Op` (Air2Lean/Air/Op.lean)."""
+    body = lean_code(text.split('inductive Op where', 1)[1].split('\nstructure SwitchCase', 1)[0])
+    return {a or b for a, b in re.findall(r'^  \| ' + CTOR, body, re.M)}
+
+
+def sem_arm_bodies(text):
+    """[(constructor, body)] of the top-level (two-space-indented) arms of `SEM_INTERPRETERS`; an
+    arm with alternatives (`| .a .. | .b .. =>`) gives one entry per alternative."""
+    arms = []
+    for name in SEM_INTERPRETERS:
+        for arm in re.split(r'^  \| ', lean_code(lean_section(text, name)), flags=re.M)[1:]:
+            pattern, _, body = arm.partition('=>')
+            for alternative in pattern.split('|'):
+                if match := re.match(r'\s*\.' + CTOR, alternative):
+                    arms.append((match[1] or match[2], body.strip()))
+    return arms
+
+
 def sem_arms(text):
-    """`Op` constructors with a top-level (two-space-indented) arm in one of `SEM_INTERPRETERS`."""
-    return {a or b for name in SEM_INTERPRETERS
-            for a, b in re.findall(r'^  \| \.(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))', lean_section(text, name), re.M)}
+    """`Op` constructors with a top-level arm in one of `SEM_INTERPRETERS`."""
+    return {name for name, _ in sem_arm_bodies(text)}
 
 
 def sem_outside(text):
     """`Sem.outsideFragment` as [(constructor, reason)], in source order."""
-    return re.findall(r'\("([A-Za-z][A-Za-z0-9]*)",\s*"((?:[^"\\\n]|\\.)*)"\)', lean_section(text, 'outsideFragment'))
+    return re.findall(r'\("([A-Za-z][A-Za-z0-9]*)",\s*"((?:[^"\\\n]|\\.)*)"\)', lean_code(lean_section(text, 'outsideFragment')))
 
 
 def sem_problems(text, constructors):
     """Why the interpreter's arms and `outsideFragment` do not partition `constructors`."""
     arms, outside = sem_arms(text), sem_outside(text)
-    names = [name for name, _ in outside]
-    problems = [f'{name}: listed twice in outsideFragment' for name in sorted({n for n in names if names.count(n) > 1})]
+    names = Counter(name for name, _ in outside)
+    problems = [f'{name}: listed twice in outsideFragment' for name in sorted(n for n, k in names.items() if k > 1)]
+    # An arm that is only `stuck` interprets nothing: the constructor belongs in outsideFragment.
+    problems += [f'{name}: an arm that is only stuck' for name, body in sem_arm_bodies(text)
+                 if re.fullmatch(r'(?:StateT\.lift |liftR )?\(?stuck\)?', body)]
     problems += [f'{name}: an arm and an outsideFragment entry' for name in sorted(arms & set(names))]
     problems += [f'{name}: no interpreter arm and no outsideFragment entry' for name in sorted(constructors - arms - set(names))]
     problems += [f'{name}: not an Op constructor' for name in sorted((arms | set(names)) - constructors)]
@@ -763,7 +792,9 @@ def lean_section(text, name):
     match = re.search(r'^(?:(?:private|partial|noncomputable) )*def ' + re.escape(name) + r'(?![^\s])', text, re.M)
     if not match:
         raise ValueError(f'missing Lean definition {name}')
-    end = re.compile(r'^(?:/--|@\[|end\b|mutual\b|theorem |(?:(?:private|partial|noncomputable) )*def )', re.M).search(text, match.end())
+    end = re.compile(r'^(?:/--|@\[|#|(?:end|mutual|namespace|section|open|attribute|set_option)\b|'
+                     r'(?:(?:private|protected|partial|noncomputable|unsafe) )*'
+                     r'(?:def|theorem|lemma|abbrev|instance|structure|inductive|class|example|opaque|axiom)\b)', re.M).search(text, match.end())
     return text[match.start():end.start() if end else len(text)]
 
 
@@ -919,14 +950,18 @@ def generate(version, source, os_name='linux'):
     produced = producer_literals(source, cache)
     fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
     sem_text = cache.text(ROOT/SEM)
+    # Fail closed: the column is only read from an interpreter that passes the coverage lint.
+    if problems := sem_problems(sem_text, op_constructors(cache.text(ROOT/'Air2Lean/Air/Op.lean'))):
+        raise ValueError(f'{SEM}: ' + '; '.join(problems))
     sem_interpreted, sem_reasons = sem_arms(sem_text), dict(sem_outside(sem_text))
-    def semantics(ops):
+    def semantics(ops, disposition):
         # V01: a tag is interpreted when Sem.lean has an arm for each of its constructors.
         if not ops:
-            return {'status': 'not-decoded', 'paths': [], 'reasons': []}
-        outside = [op for op in ops if op not in sem_interpreted]
+            status = 'resolved-in-canon' if disposition == 'resolved-in-canon' else 'not-decoded'
+            return {'status': status, 'paths': [], 'reasons': []}
+        outside = [op for op in dict.fromkeys(ops) if op not in sem_interpreted]
         return {'status': 'outside-fragment' if outside else 'interpreted', 'paths': [SEM],
-                'reasons': [f'{op}: {sem_reasons.get(op, "no interpreter arm")}' for op in outside]}
+                'reasons': [f'{op}: {sem_reasons[op]}' for op in outside]}
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
     @lru_cache(maxsize=None)
     def hits(symbol):
@@ -997,7 +1032,7 @@ def generate(version, source, os_name='linux'):
                      'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'canon-resolved' if disposition == 'resolved-in-canon' else 'unknown-tag-rejection', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
-                     'semantics': semantics(ops),
+                     'semantics': semantics(ops, disposition),
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},
                      'tests': {'status': 'compiler-fixture-presence-only', 'paths': sorted(test_tags.get(tag, []))},
                      'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits(op)))},

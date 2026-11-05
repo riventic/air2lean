@@ -83,9 +83,7 @@ def list_tags(text, name):
     return re.findall(r'"([^"\n]+)"', coverage.lean_section(text, name))
 
 
-def op_constructors(text):
-    body = text.split('inductive Op where', 1)[1].split('\nstructure SwitchCase', 1)[0]
-    return {a or b for a, b in re.findall(r'^  \| (?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))', body, re.M)}
+op_constructors = coverage.op_constructors
 
 
 class SourceTests(unittest.TestCase):
@@ -122,14 +120,18 @@ class SourceTests(unittest.TestCase):
 
     def test_sem_lint_detects_gaps(self):
         sem = ('def evalPure (f : Func) : Result Value :=\n  match i.op with\n  | .arith op => x\n'
-               '  | .bit op => match t with\n    | .bool => y\n  | _ => stuck\n'
+               '  | .bit op => match t with\n    | .bool => y\n  -- | .shift a b => z\n'
+               '  /- removed:\n  | .not a => z\n  -/\n  | .isNull a | .isNonNull a => w\n  | .neg a => stuck\n  | _ => stuck\n'
                'def evalMem := 0\ndef execInst :=\n  match _h : i.op with\n  | .«try» v b => z\n'
                'def outsideFragment : List (String × String) := [\n  ("neg", "floats"),\n  ("bit", "x"),\n'
-               '  ("neg", "again"),\n  ("frob", "")\n]\n')
-        self.assertEqual(coverage.sem_arms(sem), {'arith', 'bit', 'try'})
-        self.assertEqual(coverage.sem_problems(sem, {'arith', 'bit', 'try', 'neg', 'load'}), [
-            'neg: listed twice in outsideFragment', 'bit: an arm and an outsideFragment entry',
-            'load: no interpreter arm and no outsideFragment entry', 'frob: not an Op constructor',
+               '  -- ("shift", "commented out"),\n  ("neg", "again"),\n  ("frob", "")\n]\n'
+               'abbrev later := match op with\n  | .load p => x\n')
+        self.assertEqual(coverage.sem_arms(sem), {'arith', 'bit', 'isNull', 'isNonNull', 'neg', 'try'})
+        self.assertEqual(coverage.sem_problems(sem, {'arith', 'bit', 'try', 'neg', 'load', 'shift', 'not', 'isNull', 'isNonNull'}), [
+            'neg: listed twice in outsideFragment', 'neg: an arm that is only stuck',
+            'bit: an arm and an outsideFragment entry', 'neg: an arm and an outsideFragment entry',
+            'load: no interpreter arm and no outsideFragment entry', 'not: no interpreter arm and no outsideFragment entry',
+            'shift: no interpreter arm and no outsideFragment entry', 'frob: not an Op constructor',
             'frob: outsideFragment entry without a reason'])
 
     def test_effect_classes(self):
