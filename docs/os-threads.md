@@ -170,7 +170,8 @@ macOS `pthread_create` maps the stack itself; a child's locals are placed like a
 
 **Linux exit and join.** The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`.
 After `entry` returns, `cloneExit` does `CHILD_CLEARTID` in one turn: a release store of `0` to
-`ctid` that carries the thread's final clock, a wake of every waiter at `ctid`, and the end of
+`ctid` that carries the thread's final clock, a wake of at most one waiter at `ctid` (the
+oracle's choice; Linux's `mm_release` wakes with count 1), and the end of
 the join obligation (`ThreadRec.joined`). The exit is no join edge (`ThreadRec.released`): the
 end of a block that the child accessed races unless the parent's join loop ordered it
 (`Mem.freeRaces`). The thread then ends, in the same turn. Std's

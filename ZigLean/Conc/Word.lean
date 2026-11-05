@@ -171,7 +171,7 @@ theorem Ok.keepK {m m' : Mem} (hw : W.Ok m) (hk : W.KeepK m m') : W.Ok m' := by
   · rcases hk.fp e he with ⟨e₀, he₀, hn⟩ | h
     · rcases hw.wfp e₀ he₀ (hits_narrows hn hh) with ⟨ha, u, hu, hle⟩ | ha
       · exact .inl ⟨by rw [hn.2.2.1]; exact ha, hk.some _ ⟨u, hu, VClock.le_trans hn.clock hle⟩⟩
-      · exact .inr (hk.all _ fun u hu => VClock.le_trans hn.clock (ha u hu))
+      · exact .inr ((hk.all _ fun u hu => VClock.le_trans hn.clock (ha u hu trivial)).on _)
     · exact absurd hh h
   · obtain ⟨v, hv⟩ := hw.val; exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
   · obtain ⟨j, hj⟩ := (hk.loc l).mp ⟨i, hl⟩
@@ -604,7 +604,8 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
       rw [hMc]; by_cases hu' : u = m₁.current
       · subst hu'; exact hct₂
       · rw [hcl₂ u hu']; exact VClock.le_refl _
-    · refine .inr fun u hu => VClock.le_trans (hle u (by rw [hMe] at hu; simpa [observeM, ht₂] using hu)) ?_
+    · refine .inr fun u hu _ =>
+        VClock.le_trans (hle u (by rw [hMe] at hu; simpa [observeM, ht₂] using hu) trivial) ?_
       rw [hMc]; by_cases hu' : u = m₁.current
       · subst hu'; exact hct₂
       · rw [hcl₂ u hu']; exact VClock.le_refl _
@@ -615,7 +616,7 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
     rw [hlc]
     rcases hw.wfp e he' (hits_of_plain hh) with ⟨ha', -⟩ | hle
     · rw [plainHit_atomic ha'] at hh; cases hh
-    · exact VClock.le_trans (hle _ ht) hct₂
+    · exact VClock.le_trans (hle _ ht trivial) hct₂
   · rw [hMe]; simp [observeM, hc₂]
   · rw [hMe]; simp [observeM, ht₂]
   · rw [hMe]; simp [observeM, hw₂]

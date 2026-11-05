@@ -1345,10 +1345,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   edge from it; `pthread_detach` releases the obligation. A join or detach by a thread that does
   not own the handle, of a consumed handle, or a second one, is `.illegal`. A detached Linux
   thread's `freeAndExit` is outside the model.
-- Model gap: the current `Os.Linux.cloneExit` still wakes every waiter at `ctid`, which is more
-  than this premise grants. This is the open finding
-  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open),
-  and the Task 19 primitive fix closes it.
+- Model gap: `Os.Linux.cloneExit` wakes at most one waiter at `ctid` (the oracle's choice; the
+  regression `cleartid_wakes_one` of
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open)).
+  Its wake still matches waiters by provenance pointer rather than by the shared-domain numeric
+  key; that part of S6 is open.
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
   `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
 - Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Linux v6.16
