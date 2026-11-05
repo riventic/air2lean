@@ -303,15 +303,6 @@ theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.th
       · rw [Array.getElem?_eq_getElem hi] at h1; rw [Option.some.inj h1]
       · rw [Array.getElem?_eq_getElem hi] at h2; rw [Option.some.inj h2]
 
-/-- **A task's end** (`QKid`): it is `gone` at `fin`, out of the event's code, and spawned no
-thread. -/
-theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {u : ThreadId} (hu : 0 < u) {rp : Res}
-    (hi : proto.inv (upd G u (⟨.gone, rp, rnil⟩, { ph := .fin })) m) :
-    proto.QKid u () G m d := by
-  refine ⟨_, hi, ⟨rfl, rfl, rfl⟩, fun _ => ?_⟩
-  obtain ⟨rX, -, hU⟩ := hi
-  exact joinedAll_of_main (spawners hU.shape) hu
-
 /-- **`main`'s free of the `Tally`**, which races with no access (`hfr`: every other thread is
 joined, `freeRaces_of_joined`). -/
 theorem wp_free {G : ThreadId → Gh} {m : Mem} {n : Nat} (hb : BlkOk m)

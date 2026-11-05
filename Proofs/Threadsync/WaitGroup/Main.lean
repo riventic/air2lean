@@ -5,7 +5,8 @@ import ZigLean.Sep.Full.LockSteps
 # `main`'s steps in `waitGroup`'s protocol
 
 Once for every version: `main`'s RMWs at the group's state (`startMany`'s `add(4)` and the wait's
-`add(1)`, `U_mainRmw`), its spawns, its event wait, its read of the whole `Tally` and its joins.
+`add(1)`, `U_mainRmw`) and its spawns. Its event wait is in `Wait`, its read of the whole `Tally`
+in `Read` and its joins in `Join`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
@@ -14,9 +15,6 @@ namespace Threadsync.WG
 
 /-! ## A step at the group's state -/
 
-theorem val_eq {n : Nat} {x : Word.Entry} {a b : BitVec n} (ha : x.Val a) (hb : x.Val b) :
-    a = b := by
-  unfold Word.Entry.Val at ha hb; rw [ha] at hb; cases hb; rfl
 
 /-- `main` never finishes. -/
 theorem fd0 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m) : (G 0).2.ph.fd = false := by
@@ -289,7 +287,7 @@ theorem wp_smRmw {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
   intro k hk G₁ rY m₁ m' old hg₁ hc₁ hU _ hY hv hH hh _ hw' _ _ _ hA _ _ hL
   have hx₀ : (G₁ 0).2 = { ph := .pre } := by rw [hg₁]; rfl
   obtain ⟨h1, h2⟩ := none12 hU (by rw [hx₀]; decide)
-  have h0 : old = 0 := val_eq hv (by
+  have h0 : old = 0 := Word.Entry.val_inj hv (by
     have := hU.gv; rw [hx₀] at this; exact this)
   subst h0
   refine h k hk G₁ m' ((hA (fun _ => none) (fun _ _ _ => rfl)).current.trans hc₁) ?_
@@ -308,19 +306,13 @@ theorem wp_startMany {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res}
 
 /-! ## The spawns -/
 
-theorem le_nil (c : VClock) : VClock.le #[] c = true := by
-  unfold VClock.le VClock.get
-  simp only [Array.all_eq_true]
-  intro i _
-  simp
-
 /-- A fork by `t` moves no thread's clock back. -/
 theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : ThreadId) :
     VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
       (VClock.bump (cs[t]!) t))[u]!) = true := by
   by_cases hu : u < cs.size
   · exact (Conc.fork_clocks ht).1 u hu
-  · rw [getElem!_neg cs u hu]; exact le_nil _
+  · rw [getElem!_neg cs u hu]; exact VClock.le_default _
 
 /-- A task's bound grows with its clock, at the same finish (and finish clock). -/
 theorem bnd_le {G G' : ThreadId → Gh} {m m' : Mem} {u : ThreadId}

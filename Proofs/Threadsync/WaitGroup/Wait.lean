@@ -202,7 +202,7 @@ theorem wp_waRmw {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
   have hcur : m'.current = 0 := (hA (fun _ => none) (fun _ _ _ => rfl)).current.trans hc₁
   have hgv := hU.gv
   rw [hx₀] at hgv
-  have hold := val_eq hv hgv
+  have hold := Word.Entry.val_inj hv hgv
   have hnsx : ∀ u, (G₁ u).2.sx = false := fun u => by
     cases e : (G₁ u).2.sx
     · rfl

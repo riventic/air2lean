@@ -150,8 +150,9 @@ def E : FEvent Gh where
   sx_set _ _ := Iff.rfl
 
 /-- **The group's state's live set** (`Word.Ok`): the threads that may still access it, `main` and
-each task before its finish. A task does not access the `Tally` after its finish, so `main`'s whole
-read after its wait need be below `main` alone. -/
+each task before its finish. A task does not access the group's state (bytes 0..8) after its
+finish (the setter's `is_set` write is the event's), so `main`'s whole read after its wait need be
+below `main` alone there. -/
 def WLive (g : Gh) : Prop := g.2.ph.fd = false
 
 /-- **The event's word's live set**: the group's (`main`, from its `add(1)` on the waiter, and each
@@ -362,9 +363,6 @@ theorem Rest.congr {rX : Res} {m m' : Mem} (h : Rest rX m)
 /-- The words are in the protocol's rest (`Word.InRest`). -/
 theorem wg_inRest : WG.InRest U WLive :=
   fun _ _ _ hu => ⟨hu.wg, Rest.split (fun _ => wg_box) hu.rest⟩
-
-theorem ev_inRest : EV.InRest U ELive :=
-  fun _ _ _ hu => ⟨hu.ev, Rest.split (fun _ => ev_box) hu.rest⟩
 
 /-- The words are apart from the mutex's word. -/
 theorem apG : WG.ApartL L.toLockWord := .inr (.inr (by simp [WG, L, FLock.prod]))
@@ -626,7 +624,6 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · subst e; rw [hXt]
     · rw [hG u e]
   have hclk := hs.clocks
-  have hcs : m.clocks.size = m.threads.size := hwL.csize
   obtain ⟨hwG, hhG⟩ := hs.wordApart hu.wg (.inr (.inr (by decide)))
   obtain ⟨hwE, hhE⟩ := hs.word hu.ev (.inl rfl)
   -- the stepping thread's roles
@@ -707,8 +704,6 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       rcases hhE with e | ⟨-, x, e⟩
       · rw [e]; exact ⟨hj, rfl⟩
       · rw [e]; exact ⟨by simp; omega, Word.get_push_lt hj⟩
-  have hsetS : (EV.hist m').size = (EV.hist m).size ∨ ∃ x, EV.hist m' = (EV.hist m).push x :=
-    hhE.imp (fun e => by rw [e]) fun ⟨_, x, e⟩ => ⟨x, e⟩
   have hnewj : ∀ j < (EV.hist m').size, (EV.hist m).size ≤ j → ∃ x,
       EV.hist m' = (EV.hist m).push x ∧ j = (EV.hist m).size ∧ (EV.hist m')[j]! = x := fun j hj hle => by
     rcases hhE with e | ⟨-, x, e⟩
@@ -880,17 +875,6 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 theorem fitsL : L.Fits (FPrim.empty Gh) proto U ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
-
-/-- The frame of a native step on the caller's part covers the event's cells. -/
-theorem frame_ev {G : ThreadId → Gh} {rY : Res} {m : Mem}
-    (hu : U G (rsum (EV.cellsR m) rY) m) {x : Nat} (h1 : EV.o ≤ x) (h2 : x < EV.o + 4) :
-    (rsum (L.wordR m) (rsum (EV.cellsR m) rY)).heap.erase (EV.b, x) ≠ none := by
-  have hc := hu.ev.cellIn (l := (EV.b, x)) ⟨rfl, h1, h2⟩
-  simp only [FHeap.erase, FHeap.union_apply, Word.cellsR, ne_eq, Option.map_eq_none_iff,
-    Option.or_eq_none_iff, not_and]
-  intro _
-  rw [cellsAt_of (W := EV.In) ⟨rfl, h1, h2⟩]
-  intro h; exact absurd (Option.map_eq_none_iff.mp h) hc
 
 /-! ## A native step on the caller's part, next to the event -/
 

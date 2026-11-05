@@ -264,11 +264,6 @@ lock, with its clock after the RMW. -/
 def gF (rp : Res) (c : VClock) (b : Bool) : Gh :=
   (⟨.gone, rp, rnil⟩, { ph := if b then .st else .fin, fc := c, sx := b })
 
-theorem gS_eq (rp : Res) (c : VClock) : gS rp c = gF rp c true := rfl
-theorem gN_eq (rp : Res) (c : VClock) : gN rp c = gF rp c false := rfl
-
-theorem val_eq64 {x : Word.Entry} {a b : BitVec 64} (ha : x.Val a) (hb : x.Val b) : a = b := by
-  unfold Word.Entry.Val at ha hb; rw [ha] at hb; cases hb; rfl
 
 /-- The group's values at a finish: `4 + A - 2 * B` (`A`: `main` added, `B`: the other task
 finished), then two less; it read 3 iff both. -/
@@ -359,7 +354,7 @@ theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp
       · rw [hft]; unfold X.fdn; cases (G 2).2.ph.fd <;> simp
       · exact absurd rfl hne
   have hold : old = BitVec.ofNat 64 (4 + A - 2 * B) := by
-    rw [← hW0]; exact val_eq64 hv hu.gv
+    rw [← hW0]; exact Word.Entry.val_inj hv hu.gv
   obtain ⟨hsub, h3, hcases⟩ := wg_arith hA1 hB1
   -- the step's facts
   have hs : FStepIn rY.heap.erase m m' := hA _ fun x h1 h2 => by
