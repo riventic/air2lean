@@ -1840,6 +1840,20 @@
    "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
    "workaround_sites": [],
    "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
+  },
+  {
+   "id": "guard-lifeline-mirror",
+   "title": "build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661",
+   "status": "open",
+   "requester": "P1c (elastic build-guard admission, PR #661)",
+   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).",
+   "request": "PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.",
+   "workaround_sites": [
+    "scripts/build-guard.py",
+    "tests/roadmap/build-budgets/test_guard.py",
+    "docs/build-budgets.md"
+   ],
+   "deletion_plan": "Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running `scripts/build-guard.py` process (`ps -eo args`), its checkout contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row."
   }
  ],
  "mechanisms": [

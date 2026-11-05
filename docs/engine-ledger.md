@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 169 rows, 70 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 170 rows, 71 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -91,6 +91,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [fevent-live-exit](#row-fevent-live-exit) | A thread with FEvent's waiter role stays in the event word's live set after its last access | L11f review of PR646 (pass 2, cross-file angle) | - | - |
 | [waitgroup-impl-contract](#row-waitgroup-impl-contract) | No generic wait-group contract (`WaitGroupImpl`) on the full-state logic | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, "What has no replacement yet"). |
 | [mutex-impl-relaxed-witness](#row-mutex-impl-relaxed-witness) | No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock` | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when the witness is in tests and checked by its fixture's check script. |
+| [guard-lifeline-mirror](#row-guard-lifeline-mirror) | build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661 | P1c (elastic build-guard admission, PR #661) | `scripts/build-guard.py`, `tests/roadmap/build-budgets/test_guard.py`, `docs/build-budgets.md` | Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running `scripts/build-guard.py` process (`ps -eo args`), its checkout contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row. |
 
 ## Closed rows
 
@@ -2012,3 +2013,16 @@ Progress: open
 Request: The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.
 
 Deletion plan: Closes when the witness is in tests and checked by its fixture's check script.
+
+<a id="row-guard-lifeline-mirror"></a>
+### #guard-lifeline-mirror build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661
+
+Status: **open**. Requester: P1c (elastic build-guard admission, PR #661).
+
+Progress: open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).
+
+Request: PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.
+
+Workaround sites: `scripts/build-guard.py`, `tests/roadmap/build-budgets/test_guard.py`, `docs/build-budgets.md`
+
+Deletion plan: Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running `scripts/build-guard.py` process (`ps -eo args`), its checkout contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row.

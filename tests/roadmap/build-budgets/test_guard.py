@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -1582,6 +1583,40 @@ os._exit(0)
         result, report, _ = self.run_guard("pass", "--lean-processes", str(toolchain))
         self.assertEqual((result.returncode, report["outcome"]), (75, "inheritance_refused"))
 
+    def test_a_module_never_measured_is_charged_the_tables_typical_peak(self):
+        # The committed table's 95th-percentile peak (nearest rank) is 800 MiB: below its largest
+        # row, above its median. Two modules without a row: one fits 1.3 x 800 MiB, one (1100 MiB)
+        # outgrows it and is run once more at PROCESS_MIB.
+        toolchain = self.fake_toolchain()
+        (toolchain / "bin" / "lean").write_text(
+            f"#!{sys.executable}\nimport sys, time\n"
+            "block = bytearray(int(open(sys.argv[1]).read()) << 20); time.sleep(2.5)\n")
+        rows = [100] * 18 + [800, 9000]
+        (self.root / "assurance").mkdir()
+        (self.root / "assurance" / "lean-peaks.json").write_text(json.dumps(
+            {"modules": {f"M{i}.lean": {"peak_mib": mib, "sha256": "x"} for i, mib in enumerate(rows)}}))
+        self.assertEqual(peaks.typical_peak_kib(self.root), 800 * 1024)
+        (self.root / "Small.lean").write_text("1")
+        (self.root / "Big.lean").write_text("1100")
+        reports = self.root / "lean-reports"
+        reports.mkdir()
+        os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
+        os.environ.pop("AIR2LEAN_LEAN_UNMEASURED_MIB", None)  # not a seeding run
+        source = ("import os, subprocess, sys; sys.exit(max(subprocess.run([os.environ['LEAN'], m]).returncode "
+                  "for m in ('Small.lean', 'Big.lean')))")
+        args, report_path, log = self.command(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                              "--timeout", "30", "--lean-processes", str(toolchain))
+        result = subprocess.run(args, capture_output=True, text=True, timeout=40)
+        self.assertEqual(result.returncode, 0, log.read_text() + result.stderr)
+        parts = {path.name.split(".")[0]: json.loads(path.read_text()) for path in reports.iterdir()}
+        charge = math.ceil(guard.CHARGE_MARGIN * 800)
+        small, big = parts["Small"], parts["Big"]
+        self.assertEqual((small["outcome"], small["admission"]["charge_mib"]), ("success", charge))
+        self.assertNotIn("stopped_run", small)
+        self.assertEqual((big["outcome"], big["admission"]["charge_mib"]), ("success", guard.PROCESS_MIB))
+        self.assertEqual(big["stopped_run"]["admission"]["charge_mib"], charge)
+        self.assertGreater(big["peak_process_rss_kib"], charge * 1024)
+
 
 peaks_spec = importlib.util.spec_from_file_location("lean_peaks", ROOT / "scripts/lean-peaks.py")
 peaks = importlib.util.module_from_spec(peaks_spec)
@@ -1632,6 +1667,14 @@ class LeanPeaksTests(unittest.TestCase):
         self.assertEqual(peaks.prior_peak_kib(self.store, self.ws, "B.lean"), 5 * 1024)
         self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], {"peak_mib": 5, "sha256": "earlier"})
         self.assertIsNone(peaks.prior_peak_kib(self.store, self.ws, "New.lean"))
+
+    def test_a_module_never_measured_is_guessed_from_the_tables_95th_percentile(self):
+        self.assertIsNone(peaks.typical_peak_kib(self.ws))  # no table: the declared bound
+        (self.ws / "assurance").mkdir()
+        for count, rank in ((1, 0), (19, 18), (20, 18), (100, 94)):  # nearest rank, ceil(0.95 n)
+            rows = {f"M{i}.lean": {"peak_mib": i + 1, "sha256": "x"} for i in range(count)}
+            (self.ws / peaks.TABLE).write_text(json.dumps({"modules": rows}))
+            self.assertEqual(peaks.typical_peak_kib(self.ws), (rank + 1) * 1024)
 
 
 if __name__ == "__main__":

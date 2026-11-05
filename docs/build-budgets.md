@@ -175,7 +175,7 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   and the guard of a process is silent unless it fails (Lake keeps a process's output in its
   traces and replays it). Server, worker, `--run`, `--stdin` and `--deps` runs go straight to the
   real `lean`. Each process runs on one Lean thread, charged
-  1.3 x its module's measured peak, or 11000 MiB if unmeasured. Lake runs up to
+  1.3 x its module's measured peak (Measured peaks below for a module not measured). Lake runs up to
   `--lean-threads` of them at once (full-build.sh: min(8, cores)), and the slots they hold, not
   the thread count, bound their memory. The assurance tools refuse a `LEAN_SYSROOT` overlay, so
   only builds use it: the root, tests/diff and standalone-file phases and the proof-fixture
@@ -190,13 +190,18 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   module whose source changed is charged 1.3 x the peak of its earlier source (the row `write`
   keeps, with that source's SHA-256, until the module is measured again): a guess, safe because
   the charge is the process's limit, so a module that grew costs one retry at 11000 MiB. A module
-  never measured is charged 11000 MiB. Before, every changed module was charged 11000 MiB, and
-  `write` dropped its row: after one main merge (2026-11-05) 49 rows went and 223 of 977 tracked
-  modules had none, so the remote host's after-run met one 11-slot queue head after another,
-  with lane jobs waiting beside them on a host 86% free. A refresh is an ordinary PR
-  after a build on the remote host. `lean-peaks.py top` lists the largest. A seeding run (a cold
-  build to measure every module) may set `AIR2LEAN_LEAN_UNMEASURED_MIB` lower: a guess that is
-  too low costs a retry at 11000 MiB. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard
+  never measured is charged 1.3 x the table's 95th-percentile peak (nearest rank;
+  `typical_peak_kib`), computed from the committed table on each charge, not a constant (2000 MiB
+  over the 803 rows of 2026-11-05, so a 2600 MiB charge; 11000 MiB only for an empty table). The
+  same guess: about one new module in twenty outgrows it and costs one retry at 11000 MiB.
+  Before, every changed or new module was charged 11000 MiB, and `write` dropped a changed
+  module's row: after one main merge (2026-11-05) 49 rows went and 223 of 977 tracked modules had
+  none, so the remote host's after-run met one 11-slot queue head after another, with lane jobs
+  waiting beside them on a host 86% free; with rows kept, the 174 modules never measured still
+  made such heads (an unmeasured cross-target tutorial file while two lane jobs waited, 83%
+  free). A refresh is an ordinary PR after a build on the remote host. `lean-peaks.py top` lists
+  the largest. A seeding run (a cold build to measure every module) may set
+  `AIR2LEAN_LEAN_UNMEASURED_MIB` instead: a guess that is too low costs a retry at 11000 MiB. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard
   report (full-build.sh: `<logs>/lean-processes`).
 - **Fixture units.** In an elastic admission each fixture-check unit is a part charged its
   measured peak (scripts/fixture-checks.py `schedule`; 11000 MiB unmeasured), with the units'
@@ -231,7 +236,8 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   mirror, and it is withdrawn as soon as that no longer holds. So older guards drain only while
   one of them stands in the lifeline's way, never while the lifeline waits for a head that may
   lead (the first version of the mirror did, and made two lane jobs wait beside 10 free slots on
-  the remote host). The mirror goes once no checkout before PR #661 runs a guard. A part
+  the remote host). The mirror is a workaround for those older checkouts only: it goes once
+  none of them runs a guard (ledger `guard-lifeline-mirror`: the date and the check). A part
   of a running workload waits like a normal guard: the
   workload yields memory to lane jobs between its processes. A background workload (the health
   run) gets one part at a time ahead of others through its lifeline; its other parts wait for an
