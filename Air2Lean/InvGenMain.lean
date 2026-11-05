@@ -19,7 +19,7 @@ on stderr with the reason; it gets no definition. An error is printed on stderr,
 open Lean Meta
 
 /-- The generator's revision record. -/
-def generatorRecord : Json := (translator_revision%).toJson
+def generatorRecord : Json := toJson translator_revision%
 
 unsafe def main (argv : List String) : IO UInt32 := do
   let (module, ns, source, out) := match argv with
