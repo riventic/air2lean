@@ -400,15 +400,6 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · rw [hG u e]; exact ⟨rfl, rfl⟩
   have hcu : ∀ u, u ≠ t → (G' u).2.c = (G u).2.c := fun u e => by rw [hG u e]
   -- the lock places: only a waiter's changes, between `out` and `away`
-  have hlq : (G t).1.ph = .holds → q = (G t).1.ph := fun hh => by
-    rcases hq with ⟨rfl, -⟩ | ⟨h1, -⟩
-    · rfl
-    · rcases h1 with h1 | ⟨h1, -⟩ <;>
-        (have h1' : (G t).1.ph = _ := h1; rw [hh] at h1'; cases h1')
-  have hhold : ∀ u, L.ph (G u) = .holds → L.ph (G' u) = .holds := fun u hu' => by
-    by_cases e : u = t
-    · subst e; show (G' u).1.ph = .holds; rw [hLt, hlq hu']; exact hu'
-    · rw [hG u e]; exact hu'
   have hheld : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true := fun u hu' => by
     by_cases e : u = t
     · subst e
@@ -509,7 +500,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- ehb: the new epoch write is the holder's
     rcases hEw with e | ⟨⟨q₀, n₀, h₀, e⟩, -, x, hx, e'⟩
     · exact .inl e
-    · refine .inr ⟨x, e', FLock.HB.of_holder (t := t) (LPh.held_of_holds (hhold t ?_))
+    · refine .inr ⟨x, e', FLock.HB.of_holder (t := t) (hheld t (LPh.held_of_holds ?_))
       (by rw [hx]; exact VClock.le_refl _)⟩
       exact sig_holds hu.cinv hu.sinv (by rw [e]; rfl)
   · -- f0

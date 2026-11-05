@@ -27,7 +27,8 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
   judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
-  the lock's code (`LockWord.Step`) by a thread with `ok`, neither `gone` nor `away`, keeps `U`
+  the lock's code (`LockWord.Step`) by a thread with `ok`, not `gone`, `away` or `holdsAway`, keeps
+  `U`
   with the same `rX`. The primitive `K` (`FPrim`) is data: a thread's place in its code
   (`FPlace`), its roles, what the rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
   and every step, and the primitive's place is a part of the ghost value independent of the
@@ -306,7 +307,12 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g
   /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
   before the newest message of the word. The thread runs the lock's code, so it has not ended
-  and is not inside another object's futex wait (`away`, `holdsAway`). -/
+  and is not away in another object's code, without the lock (`away`) or holding it
+  (`holdsAway`). A holder's nap and unnap (`holds` ↔ `holdsAway`, `LockWord.WInv.nap`/`unnap`)
+  are not such steps: no lock code runs and the word does not change. Their `U`-stability is a
+  hypothesis of the nap and unnap rules (`Fits.nap`/`Fits.unnap`, planned with the two-lock
+  product), discharged by each nesting protocol for its own `U`; a protocol that never nests
+  (empty `nest`) proves nothing for them (decision on #667). -/
   stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
     L.ph (G t) ≠ .holdsAway → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
@@ -1723,9 +1729,7 @@ theorem lstep_hold {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {
   · subst e
     by_cases hq : q = .holds
     · exact .inl (by rw [upd_self, L.ph_set, hq]; rfl)
-    · have hh : L.ph (G u) = .holds := by
-        revert hu hz; cases L.ph (G u) <;> intros <;> first | rfl | contradiction
-      exact .inr fun c hc => L.before_le (hrel hh hq) hc
+    · exact .inr fun c hc => L.before_le (hrel (LPh.holds_of_held hu hz) hq) hc
   · exact .inl (by rw [upd_ne _ _ e]; exact hu)
 
 /-- **A thread that has not ended over a step of the lock's code** by `t` (not `gone`) to any
