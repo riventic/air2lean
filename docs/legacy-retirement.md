@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-11-05, after #648 and #643): 17 `legacy_users` left**, mapped in the "Dependency map" below.
+**Status (2026-11-05, after #648, #643 and L13's Sep/{Total,Loop}): 15 `legacy_users` left**, mapped in the "Dependency map" below.
 The numbered sections are the 2026-10-14 plan, and their tables still list files that are gone.
 `assurance/proof-framework.json` is the current list.
 
@@ -23,13 +23,14 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L7 witness and claims tooling | claims fixture, `tools/Assurance`, `Sep/Witness` and `Witnesses/Conc` done; `Conc/Witness` waits for L11 (RwLockContract); `Witnesses/Sep` deleted (L8) | #340, #435 |
 | L8 tick-cost model | done: emitted step ticks, `Full/Cost`, Lists/Bounded restated, Lists/Cost, Sep/{Cost,Bounded,Alloc}, `ZigLean/Sep.lean`, Witnesses/Sep deleted | #568, #580, #562 |
 | L9 mutex clients | done; `Sync/RwLockContract` moved to L11 | #341, #346, #349 |
-| L10, L11, L12, L13 | open | |
+| L10, L11, L12 | open | |
+| L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
 
 Stage D-a (section 4) is done.
 
-### Dependency map of the 17 remaining users (2026-11-05, after #648 and #643)
+### Dependency map of the 15 remaining users (2026-11-05, after #648, #643 and L13)
 
-`legacy_users` has 17 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
+`legacy_users` has 15 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
 replacement named below is on main, except where the row says it is not.
 
 | file | reason | legacy items it uses | full-state replacement | waits for |
@@ -48,7 +49,7 @@ replacement named below is on main, except where the row says it is not.
 | ZigLean/Conc/Csl | imports Conc/Own | `Owned`, `WP.liftM_owned` | `FOwned` (Full/ThreadOwned), `Proto.WP` (target, D-WP) | Conc/Lock |
 | ZigLean/Conc/Own | imports Sep/Block | `TTriple` | `FTriple`/`FOwned` | Csl, Witness |
 | ZigLean/Sep/Block | imports Sep/Triple | `Triple.alloc`, `Triple.free` (`Mem.SameThreads` is base vocabulary, Sep/Base/Block) | `FTriple.alloc'`/`allocStack'` (Full/Block) | Conc/Own (`TTriple.alloc/free`); then D-e |
-| ZigLean/Sep/Triple, Loop, Total | names `Triple` / imports | `Triple`, `TotalTriple`, loop rules | `FTriple`/`FTotalTriple` | D-e (decision 4). No other module imports them; once Conc/Own is gone they are an island. |
+| ZigLean/Sep/Triple | names `Triple` | `Triple` | `FTriple` | D-e (decision 4). Its only importer is Sep/Block (imported by Conc/Own); once Conc/Own is gone it is an island. Sep/Total and Sep/Loop are deleted (L13, below). |
 
 **Hidden users** (not in `legacy_users`, because the scanner matches only direct imports of
 `LEGACY_MODULES` and the legacy names):
@@ -94,7 +95,7 @@ replacement named below is on main, except where the row says it is not.
 4. Conc/Word: split (above). Its legacy part goes once RwLock, Semaphore, WaitGroup and
    WeakWord are gone.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
-6. Sep/{Block,Triple,Loop,Total}: stage D-e.
+6. Sep/{Block,Triple}: stage D-e (Sep/{Loop,Total} are deleted, L13).
 
 **Nothing in the cluster could be retired before #575** (merged; SemCounter and Mailbox are its
 clients now, #648, #643). The RwLock cluster waits for an `RwLockImpl` over `SemImpl`.
@@ -468,6 +469,15 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 | ZigLean/Sep.lean (12) | umbrella: shrink with every deleted module, delete last |
 | tests/roadmap/strength-log/*.lean | off `legacy_users` (#497 and part 2): each legacy statement is written out as the body of the legacy definition (`TotalTripleIn Mem.FSeqPlain P c Q`, `Triple P c Q`) and proved by `Full/Strength` as before, so no file imports `Sep/{Triple,Total}`; the files stay until the final PR |
 
+**L13 step 1 (2026-11-05, #655): Sep/Total and Sep/Loop deleted** (`legacy_users` 17 → 15), with the
+judgment entries `TotalTriple`, `TotalTripleIn` and `Returns`. No Lean file imported Sep/Total, and
+only Sep/Total imported Sep/Loop. Decision 4 (keep them compiled until the final PR) served the
+strength check; that check no longer needs them, because the strength log writes each legacy
+statement out (#497) and `Full/Strength` imports neither. The definitions the strength log
+unfolds are last present in `ZigLean/Sep/Total.lean` at 6672f4058. The claim heads
+`Zig.TotalTriple` and `Zig.Returns` stay reserved names ([claim-strength.md](claim-strength.md)),
+so guaranteed-return still needs `FTotalTriple` or `FTTotalTriple`.
+
 ## 4. Final deletion PR (stages)
 
 Stage D-a (after L4): delete Sep/{Try,TryAlias,Discard,Mmap,AddrReuse}. Done (#353, #365).
@@ -477,7 +487,7 @@ Stage D-d (after L9-L12): delete Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,L
 (its witnesses of base lemmas move to a base witness module; Transfer is already deleted; Detach and Share stay, off the legacy layer, L12).
 Stage D-e = the **final PR** (needs the strength log):
 1. Run every `tests/roadmap/strength-log/*.lean` (the legacy statements, written out) and `Full/Strength.lean`; attach the output and the per-theorem precondition-delta table (D1) to the PR body.
-2. Delete `tests/roadmap/strength-log/`, `Full/Strength.lean` (`toTriple_on`, `toTotal_on`), `Sep/{Triple,Total,Loop,Block}.lean`, `Sep.lean`; check `Full/Init` lost its dependency on `Sep.Total`.
+2. Delete `tests/roadmap/strength-log/`, `Full/Strength.lean` (`toTriple_on`, `toTotal_on`), `Sep/{Triple,Block}.lean` (Sep/{Total,Loop} and `Sep.lean` are already deleted).
 3. `assurance/proof-framework.json`: `legacy_users: []`, no `legacy-to-retire` judgment or tactic entries; `scripts/proof-framework.py` regexes and `test_proof_framework.py` reduced to the target set; `claim-heads.json` legacy heads become reserved names.
 4. Acceptance (Plan A): (a) ratchet list empty and the extended regex finds nothing; (b) `git grep -wE "Triple|TotalTriple|TotalTripleIn|TTriple|TTripleIn|TotalTripleWithin|Returns"` outside `ZigLean/Sep/Base` (and docs) is empty; (c) full build of default targets + `Proofs` + `AssuranceTools`, no raised `maxHeartbeats` (`git grep maxHeartbeats` unchanged vs main); (d) `scripts/claims.py` shows no strength loss against the recorded inventory (re-record `docs/theorem-inventory.md`, `assurance/claim-heads.json`); (e) strength log attached; (f) `assurance/premises.json`, `docs/premises.md`, `assurance/register/{L04,M05,P01,P06,M01,M04}.md` updated, `scripts/register.py generate`; (g) ci.yml `lake build` lines and the `check.sh`/`mutant.sh` files of section 1 point at surviving modules; (h) docs mention no deleted module (`docs/sep-full-state.md`, `alloc-spec.md`, `proof-framework.md` migration table becomes history); (i) `scripts/regen.sh --pr`, `preflight.sh`, native Docker rows (x86_64 Rosetta, aarch64) of the parts touched (alloc-arena, alloc-fba, sync fixtures, thread-locals).
 
@@ -529,7 +539,7 @@ Handoff notes: nothing in the repo was edited. Branch order assumptions: fold-de
 1. Extend LEGACY_MODULES to the Conc cluster (honest gate; +10 visible users). Fix the import-line false positives at the same time (L1).
 2. Proto.WP -> target (the migrated Handoff/Counter proofs use it; WP mode is in fsym).
 3. Tick-cost model: owned by a design agent now (ticks as the memory-authority mode of the generic ACell counter, as in the stack lane's PR3 design); design note first, then implementation lane L8.
-4. Keep Full/Strength + Sep/{Triple,Total,Loop,Block} compiled until the final PR (only check that migrated statements are not weaker).
+4. Keep Full/Strength + Sep/{Triple,Total,Loop,Block} compiled until the final PR (only check that migrated statements are not weaker). (Sep/{Total,Loop} deleted early, L13 step 1.)
 5. claims.py: reserved-names mechanism for legacy claim heads, approved (L7).
 Start now: L1, L2, tick design. L3 (Sep/Base split, keystone) starts after merge waves 7 (csl) and 8 (fold) land, to avoid conflicts with queued branches. Group 2 after L3.
 

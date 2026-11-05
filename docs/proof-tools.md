@@ -3,36 +3,10 @@
 For the full-state logic (`ZigLean/Sep/Full`), the general symbolic executor `fsym` walks
 generated code from an invariant alone: [proof-automation.md](proof-automation.md).
 
-Import `ZigLean.Sep.Automation` for `sep_normalize` and `sep_frame`, and
-`ZigLean.Sep.Total` for total-correctness rules. These are optional modules;
-existing generated-code imports and `Triple` keep their current meaning. The legacy
-symbolic-execution tactics of P01 are retired ([below](#symbolic-execution-steps-p01)).
-
-`sep_normalize` rewrites assertion expressions with associativity, commutativity,
-and the `emp` unit. It also accepts ordinary Lean locations, for example
-`sep_normalize at hp ⊢`. The resulting simp proofs use proved assertion equalities;
-the tactic does not extend the trusted kernel or execute a decision procedure.
-
-`sep_frame rule` closes a `Triple` goal by inferring the unused atoms in the
-goal's precondition, applying `Triple.frame`, and checking both consequences by
-normalization. With `open Zig Assn`, for example:
-
-```lean
-example (P Q R : Assn) (c : MemM Unit)
-    (rule : Triple P c (fun _ => Q)) :
-    Triple (R ∗ P) c (fun _ => Q ∗ R) := by
-  sep_frame rule
-```
-
-Separating atoms are opaque; candidate matching uses definitional equality.
-Repeated atoms are counted separately. A missing atom, a changed command, or an
-incorrect postcondition causes failure. Final proof checking uses Lean's standard
-simp ordering, which can fail to align definitionally equal wrapper atoms or
-atoms differing only in implicit typeclass instances. In those cases, first
-rewrite wrappers explicitly or apply the separation equalities directly. This
-is AC/unit simplification and syntactic frame inference. It does not split byte
-ranges or arrays, choose existential witnesses, discharge arithmetic, or synthesize
-loop invariants. It is a bounded part of P01.
+The legacy tactics `sep_normalize` and `sep_frame` (`Sep/Automation`) and the legacy
+total-correctness rules (`Sep/Total`, `Sep/Loop`) are deleted; `fsym` normalizes and frames
+full-state assertions. The legacy symbolic-execution tactics of P01 are retired
+([below](#symbolic-execution-steps-p01)).
 
 Whole-array ownership is `ZigLean/Sep/Full/Arr.lean` (imported by `ZigLean.Sep.Full.AutoAll`).
 `arr_split hp hk hs` splits `arr p xs` into `arr p (xs.take k)` and
@@ -97,22 +71,14 @@ with `lake build Proofs.Lists.Container` and
 container deallocation through the interface, and a general ADT library remain outside this
 bounded P04 contribution.
 
-`TotalTriple P c Q` requires an explicit `c.run m = pure (v, m')` witness for
-every admissible sequential input and disjoint frame, along with ownership of
-`Q v` and preservation of the frame. Divergence and safety panics cannot satisfy
-this equality. An unsatisfiable precondition remains vacuous, as with ordinary
-Hoare logic. Zig error-union values such as `OutOfMemory` remain return values.
-
-`TotalTriple.toPartial` projects ordinary partial correctness. Conversely,
-`TotalTriple.of_partial` additionally requires `Returns P c`; partial correctness
-alone never establishes termination. The API includes consequence, frame, return,
-bind, existential/pure-precondition rules, load/store, array store, and
-`TotalTriple.loop_ghost`. The loop rule requires a natural-number measure that
-strictly decreases on each repeat, through the existing `loop_sep_ghost` theorem.
-It does not provide concurrency termination or a general recursive-call rule.
-This is an honest total/partial interface and a bounded contribution to P05.
-Reports classify theorems over these interfaces by their kernel types, not by labels
-(`docs/claim-strength.md`).
+`FTotalTriple P c Q` (`ZigLean/Sep/Full/Logic.lean`) is `FTriple P c Q ∧ FReturns P c`:
+`FReturns` requires an explicit `c.run m = pure (v, m')` witness for every `Mem.FSeq`
+memory that holds `P` with some frame. Divergence and safety panics cannot satisfy this
+equality. An unsatisfiable precondition remains vacuous, as with ordinary Hoare logic. Zig
+error-union values such as `OutOfMemory` remain return values. `FTotalTriple.toPartial`
+projects partial correctness; partial correctness alone never establishes termination. The total
+loop rules are in [Loops, recursion and range conversions](#loops-recursion-and-range-conversions). Reports classify theorems over these interfaces by their kernel types, not by
+labels (`docs/claim-strength.md`).
 
 The scenarios of the retired `Normalize`, `Clients` and `Total` regressions (AC normalization,
 unit/duplicate handling, rejected framing, total bind, rejection of divergence/panics, partial

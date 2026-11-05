@@ -392,11 +392,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Returns",
-      "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "ReturnsWithin",
       "module": "ZigLean.Conc.Total",
       "status": "legacy-to-retire"
@@ -492,17 +487,6 @@
       "module": "ZigLean.Sep.Full.ThreadStep",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "TotalTriple",
-      "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire"
-    },
-    {
-      "name": "TotalTripleIn",
-      "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     },
     {
       "name": "Triple",
@@ -821,12 +805,6 @@
     },
     {
       "path": "ZigLean/Sep/Block.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Loop.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Total.lean"
     },
     {
       "path": "ZigLean/Sep/Triple.lean"
