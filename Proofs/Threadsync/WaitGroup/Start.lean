@@ -195,6 +195,8 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     · exact .inr (hXu u h)
   have hsx : ∀ u, (upd G0 0 (gO rM { ph := .pre }) u).2.sx = false := fun u => by
     rcases hX u with h | h <;> rw [h]
+  have hwk : ∀ u, (upd G0 0 (gO rM { ph := .pre }) u).2.wk = false := fun u => by
+    rcases hX u with h | h <;> rw [h]
   have hfd : ∀ u, (upd G0 0 (gO rM { ph := .pre }) u).2.ph.fd = false := fun u => by
     rcases hX u with h | h <;> rw [h] <;> rfl
   have hwa : ∀ u, (upd G0 0 (gO rM { ph := .pre }) u).2.ph.wa = false := fun u => by
@@ -250,6 +252,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
       fun u h => absurd h (by rw [hfd u]; decide),
       fun u hu => by rw [hGu u (by unfold ThreadId at *; omega)]; rfl,
       fun u h => absurd h (by rw [hwa u]; decide),
+      fun u h => absurd h (by rw [hwk u]; decide),
       fun u _ h => absurd h (by rw [hsx u]; decide),
       fun e hfe hb _ hlen hoff => .inl (hown0 e hfe hb ⟨e.off, Nat.le_refl _, by omega, hoff⟩),
       fun h => absurd h (by rw [hX0]; decide),
