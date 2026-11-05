@@ -44,8 +44,8 @@ theorem semWaitLoop_body (hS : S.Fits P U ok) (hcost : P.cost = none)
     (hokg : ok g)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
-      S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
-      C.nreg (upd G₁ t g) T < 65535)
+      S.cnt (upd G₁ t g) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ t g u) = .out) →
+      C.nreg (upd G₁ t g) n < 65535)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       S.cnt G₁ = 0 → P.Live t G₁ m₁)
@@ -90,8 +90,8 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
       U (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum (L.part g) r))
         .holds h₂) (.pst sh sc))) rX m)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
-      S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
-      C.nreg (upd G₁ t g) T < 65535)
+      S.cnt (upd G₁ t g) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ t g u) = .out) →
+      C.nreg (upd G₁ t g) n < 65535)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       S.cnt G₁ = 0 → P.Live t G₁ m₁)
@@ -147,8 +147,8 @@ theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
         (.pst sh sc))) rX m)
     (hroom : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G₁ rL m₁,
       P.inv (upd G₁ t (L.set (S.set (L.setPart g rᵢ) .wt) .holds rL)) m₁ →
-      S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
-      C.nreg (upd G₁ t g) T < 65535)
+      S.cnt (upd G₁ t g) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ t g u) = .out) →
+      C.nreg (upd G₁ t g) n < 65535)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       S.cnt G₁ = 0 → P.Live t G₁ m₁)

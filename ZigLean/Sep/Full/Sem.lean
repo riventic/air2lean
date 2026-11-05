@@ -1465,8 +1465,8 @@ theorem wp_cwait (ci : CondImpl Tgt) (hS : S.Fits P U ok) (hcost : P.cost = none
     (hgx : C.ph g = .out) (hwx : S.wx g) (hokg : ok g) (hpre : ci.wait_pre t (L.part g))
     (hpost : ∀ r', ci.wait_post t (L.part g) r' → r' = L.part g)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
-      S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
-      C.nreg (upd G₁ t g) T < 65535)
+      S.cnt (upd G₁ t g) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ t g u) = .out) →
+      C.nreg (upd G₁ t g) n < 65535)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       S.cnt G₁ = 0 → P.Live t G₁ m₁)
@@ -1585,7 +1585,8 @@ either op out of the mutex's, the condition's and the semaphore's code, and retu
   `T Y` moves from the pool into its part (`hpool`: the pool's split); the client's rest allows
   the move at the store of the count, with the moved resource `r` and the count before it not 0
   (`hU`, with both invariants after it; the thread goes to `pst` with a snapshot). `gx` and `T`
-  are indexed by the client parts at the take, `Y = S.xs (upd G t g)`, which the post returns:
+  are indexed by the client parts at the take, `Y = S.xs (upd G t g)` with the take's state `G`
+  (the one the premises quantify, not the call's), which the post returns:
   what the pool holds, and so what the waiter takes, may depend on the other threads' steps
   between the call and the take (a counter that the pool owns has their increments). At count 0 it
   waits at the condition: fewer than `65535` waiters are registered at its entry (`hroom`, the
@@ -1651,8 +1652,8 @@ structure SemImpl (Tgt : Type) where
         (.pst sh sc))) rX m) →
     (∀ rᵢ, wait_during t (L.part g) rᵢ → ∀ G₁ rL m₁,
       P.inv (upd G₁ t (L.set (S.set (L.setPart g rᵢ) .wt) .holds rL)) m₁ →
-      S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
-      C.nreg (upd G₁ t g) T < 65535) →
+      S.cnt (upd G₁ t g) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ t g u) = .out) →
+      C.nreg (upd G₁ t g) n < 65535) →
     (∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       S.cnt G₁ = 0 → P.Live t G₁ m₁) →
@@ -1716,8 +1717,8 @@ theorem wait_wp (I : SemImpl Tgt) {γ X : Type} {L : FLock γ} {C : FCond γ} {S
       U (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum (L.part g) r))
         .holds h₂) (.pst sh sc))) rX m)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
-      S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
-      C.nreg (upd G₁ t g) T < 65535)
+      S.cnt (upd G₁ t g) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ t g u) = .out) →
+      C.nreg (upd G₁ t g) n < 65535)
     (hlive : ∀ G₁ m₁, (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) → L.ph (G₁ t) = .away →
       P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 → (∀ v, (C.ph (G₁ v)).sig = false) →
       S.cnt G₁ = 0 → P.Live t G₁ m₁)
