@@ -42,6 +42,29 @@ failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` r
 a `c_int`. Arguments that std never passes (other futex commands, flags, `val2`) are outside the
 model: `.unspecified`.
 
+**macOS wait results** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A wait that returns without an
+error (a wake, a spurious return or a mismatch) returns `*retval = --ull_nwaiters`
+(`ulock_wait_cleanup`, :826): the number of other threads in a wait at the same key at that
+moment, a non-negative `c_int` (asserted at :857). The word's `copyin` (:663) runs under the
+ull spinlock, which makes any VM fault fail (:652–657), so a live word that is not resident
+returns `-EFAULT` before the compare (std treats it as a spurious return). The model tracks
+neither: after the wait the oracle picks `-EFAULT` or any value in `[0, 2^31)`
+(`ulockResult`, one more stop). A bad pointer stays WAIT's conservative refusal (below). Other
+paths:
+
+* `ENOMEM` (:636) needs `ull_alloc`'s `zalloc_flags(ull_zone, Z_SET_NOT_EARLY)` to fail. That is
+  a `Z_WAITOK` allocation, which never fails from a zone that is not exhaustible
+  (`osfmk/kern/zalloc.h:383–390`). A zone is exhaustible only if `zone_set_exhaustible`
+  (`zalloc.c:8805`) lowered its `z_wired_max` from `~0u` (`zalloc.c:8795`,
+  `zalloc_internal.h:748–751`), and the kalloc-type zones of `KALLOC_TYPE_DEFINE`
+  (`osfmk/kern/kalloc.c`) never call it. So it is unreachable.
+* `EDOM` (:646; WAKE :1012) needs another opcode at the same key. Every ulock call of a row
+  uses `COMPARE_AND_WAIT`, and any other op is `.unspecified`. The one other opcode in a run
+  is `os_unfair_lock`'s `UL_UNFAIR_LOCK`, at a `std.Thread.Mutex` word on macOS, which the
+  STD-06 hand rows model without the kernel. A ulock wait at such a lock word while a thread
+  blocks in the lock is `-EDOM` natively but not in the model. That is a model gap (audit
+  soundness-2026-10-14 §S6, finding 4).
+
 **Address validation** happens before an interrupt, pick, word read or queue change. The
 address the kernel receives is the pointer's numeric address as a `usize` (`futexAddr`).
 
@@ -101,6 +124,7 @@ namespace Darwin.E
 def NOENT : Nat := 2
 def SRCH : Nat := 3
 def INTR : Nat := 4
+def FAULT : Nat := 14
 def INVAL : Nat := 22
 def AGAIN : Nat := 35
 def TIMEDOUT : Nat := 60
@@ -313,17 +337,36 @@ def ulockAddr (addr : Option Ptr) (aligned : Bool) : MemM (Option Ptr) := do
   let u := futexAddr (← ptrAddr p)
   return if u = 0 ∨ (aligned ∧ u % 4 ≠ 0) then none else some p
 
-/-- The shared part of `__ulock_wait2`/`__ulock_wait`: a non-negative result (`0`) for a wake, a
-spurious return or a mismatch; `-EINTR`, `-ETIMEDOUT`; `-EINVAL` for a null or unaligned address
-(module doc). -/
+/-- The number of non-negative `c_int`s, `[0, 2^31)`: the values of `--ull_nwaiters`. -/
+def ulockWaiters : Nat := 2 ^ 31
+
+/-- Option `c` of a wait's result pick: `0` is `-EFAULT`, `c + 1` is `--ull_nwaiters = c`. -/
+def ulockCode (c : Nat) : BitVec 32 := if c = 0 then negErrno32 E.FAULT else BitVec.ofNat 32 (c - 1)
+
+/-- The return code of a wait that ended with `r` (module doc). After a wake, a spurious return or
+a mismatch the oracle picks option `0`, `-EFAULT` (a word that is not resident), or option
+`c + 1`, `--ull_nwaiters = c` (`sys_ulock.c:826`, any non-negative `c_int`). Else `-EINTR` or
+`-ETIMEDOUT`. -/
+def ulockResult : WaitResult → ConcM Tgt (BitVec 32)
+  | .woken | .mismatch => return ulockCode (← pick fun _ => ulockWaiters + 1)
+  | .interrupted => return negErrno32 E.INTR
+  | .timedOut => return negErrno32 E.TIMEDOUT
+
+/-- The return codes `s` of a wait that ended with `r` (`ulockResult`): `-EFAULT` or any
+non-negative `c_int` after a wake, a spurious return or a mismatch, else `-EINTR` or
+`-ETIMEDOUT`. -/
+def WaitCode : WaitResult → BitVec 32 → Prop
+  | .woken, s | .mismatch, s => s = negErrno32 E.FAULT ∨ 0 ≤ s.toInt
+  | .interrupted, s => s = negErrno32 E.INTR
+  | .timedOut, s => s = negErrno32 E.TIMEDOUT
+
+/-- The shared part of `__ulock_wait2`/`__ulock_wait`: the wait's `ulockResult`, or `-EINVAL`
+for a null or unaligned address (module doc). -/
 def ulockWait (op : BitVec 32) (addr : Option Ptr) (value : BitVec 64) (timed : Bool) :
     ConcM Tgt (BitVec 32) := do
   if op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ∨ 2 ^ 32 ≤ value.toNat then throw .unspecified
   let some p ← ConcM.liftMem (ulockAddr addr true) | return negErrno32 E.INVAL
-  match ← futexWait p (value.setWidth 32) timed with
-  | .woken | .mismatch => return 0
-  | .interrupted => return negErrno32 E.INTR
-  | .timedOut => return negErrno32 E.TIMEDOUT
+  ulockResult (← futexWait p (value.setWidth 32) timed)
 
 /-- `__ulock_wait2(op: UL, addr: ?*const anyopaque, val: u64, timeout_ns: u64, val2: u64) c_int`
 (macOS ≥ 11): `timeout_ns = 0` waits without a timeout; `val2` must be `0`. -/
