@@ -43,7 +43,8 @@ this is a reading of the generated term, not a second semantics. Nothing it conc
 
 The reading proposes candidate facts, and `fsym` decides which of them stay (Houdini pruning,
 `houdini`): each candidate is true at loop entry (the counter on either side of its entry value,
-a written cell counted up or down from it), the generator walks the step triple of one iteration
+a written cell counted up or down from it) or an entry obligation of the family (the counter on
+the repeating side of its exit value, the no-wrap and no-overflow facts), the generator walks the step triple of one iteration
 over them with `fsym` in its own environment, drops the candidates that the walk's report names
 as residuals, and repeats until a walk proves the step. The file's record lists each dropped
 candidate with the walk that dropped it.
@@ -484,22 +485,28 @@ names it), the invariant over them, the measure, and the step triple of one iter
 `fsym` with its report on: from the invariant, a repeating iteration ends in it with a smaller
 measure, an exiting one in it. (The exit post is the invariant: in the counted family an exit
 changes no local and no memory.) -/
-def Cand.check (c : Cand) (keep : Array Bool) : String := Id.run do
+def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) : String := Id.run do
   let mut defs := ""
   for h : i in [0:c.facts.size] do
     if !keep[i]! then continue
     let v := match c.facts[i].cell? with | some (_, ty) => s!"(v : {ty}) " | none => ""
     defs := defs ++ s!"def {c.name}.cand{i} {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) {v}: Prop :=\n  \
       {c.facts[i].text}\n\n"
-  let use (i : Nat) := s!"{c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
-  let inv (s : String) := s!"{c.name}.inv {c.args}s0 {c.vargs}{s}"
-  let meas (s : String) := s!"{c.name}.meas {c.args}{c.measArgs}{s}"
+  -- The uses are qualified from the root: under the parameters' binders, a parameter named like
+  -- the body's first component (`p0.loop5 (p0 : …)`) would capture a relative name.
+  let q (n : String) := s!"_root_.{ns}.{n}"
+  let use (i : Nat) := s!"{q c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
+  let inv (s : String) := s!"{q c.name}.inv {c.args}s0 {c.vargs}{s}"
+  let meas (s : String) := s!"{q c.name}.meas {c.args}{c.measArgs}{s}"
   return s!"{defs}{c.defs keep use}\n\
     set_option fsym.report true in\n\
     theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
-      FTotalTriple ({inv "s"}) (({c.name} {c.args}).run s)\n      \
-      (fun r => if {c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {inv "r.2"}) := by\n  \
-      unfold {c.name} {c.name}.inv {c.name}.meas\n  fsym\n"
+      FTotalTriple ({inv "s"}) (({q c.name} {c.args}).run s)\n      \
+      (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {inv "r.2"}) := by\n  \
+      unfold {q c.name} {q c.name}.inv {q c.name}.meas\n  fsym\n"
+
+/-- The opens of the generated file, which the pruning walks elaborate under too. -/
+def opens : String := "open Zig Zig.Full Zig.Full.FAssn"
 
 /-- The prefix of `fsym`'s report message (`Zig.Full.Auto.Report.line`). -/
 def reportPrefix : String := "fsym-report "
@@ -513,8 +520,8 @@ the unsolved goals of those residuals (a check that does not elaborate: a candid
 ill-typed is an error here, never a pruned fact), or not exactly one report. The walk is not
 trusted: the generated definitions are checked by the proofs that use them. -/
 def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Array (Nat × String)) := do
-  let text := s!"namespace {ns}\nopen Zig Zig.Full Zig.Full.FAssn\n\
-    set_option linter.unusedVariables false\n\n{c.check keep}\nend {ns}\n"
+  let text := s!"namespace {ns}\n{opens}\n\
+    set_option linter.unusedVariables false\n\n{c.check ns keep}\nend {ns}\n"
   let opts := ({} : Options).setBool `Elab.async false
   let (_, msgs) ← Lean.Elab.process text (← getEnv) opts (some "<air2lean-invgen check>")
   let mut reports := #[]
@@ -537,14 +544,13 @@ def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Array (Nat × Strin
     let origin := res.getObjValD "origin"
     let field (j : Json) (k : String) := (j.getObjValAs? String k).toOption.getD ""
     let goalText := field goal "text"
-    let i? := if (field goal "head").startsWith pre then (toString ((field goal "head").drop pre.length)).toNat? else none
-    match i? with
-    | some i =>
+    let head := field goal "head"
+    let i? := if head.startsWith pre then (toString (head.drop pre.length)).toNat? else none
+    if let some i := i? then
       if field origin "reason" == "postcondition_not_proved" && field origin "condition" == "postcondition" &&
           keep[i]?.getD false then
         unless drop.any (·.1 == i) do drop := drop.push (i, goalText)
         continue
-    | none => pure ()
     throwError "a residual of the step that no candidate explains: `{goalText}` \
       ({field origin "reason"}, {field origin "condition"})"
   return drop
@@ -678,12 +684,13 @@ def candLoop (ns body again : Name) : MetaM Cand := do
 (`candLoop`, pruned by `houdini`) as source text with the pruning decisions, or why there are
 none. Each loop has its own heartbeat budget: the walks of the loops before it do not count. -/
 def genLoop (ns body again : Name) : MetaM (Except String (String × Array Json)) :=
-  withCurrHeartbeats do
-    try
+  -- (a heartbeat or recursion limit, too, only costs this loop its invariant)
+  withCurrHeartbeats <| tryCatchRuntimeEx
+    (do
       let c ← candLoop ns body again
       let (keep, pruned) ← houdini ns c
-      return .ok (c.output keep, pruned)
-    catch ex => return .error (← ex.toMessageData.toString)
+      return .ok (c.output keep, pruned))
+    fun ex => return .error (← ex.toMessageData.toString)
 
 /-- The loops that `e` runs: each `Zig.loop (body …) again` as the body's definition and the
 exit test, read off the term (no naming convention). A loop whose body is not an applied
@@ -714,8 +721,10 @@ def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
 invariant for, with the reason. The record on its first line holds `generator` (the generator's
 revision record) and `inputs` (the files read, as `[path, sha256]`) as given, and `output`, the
 SHA-256 of the rest of the file: with them, `scripts/gen-integrity.py invgen` finds a stale or
-hand-edited file without running the generator. Each loop's entry in `loops` names its family and
-the facts Houdini pruned (`pruned`), or why it has no invariant (`none`). The current environment
+hand-edited file without running the generator, except one made stale by a library change that
+changes the pruning (the library is not hashed; `scripts/invgen.py check` finds it). Each loop's
+entry in `loops` names its family and the facts Houdini pruned (`pruned`), or why it has no
+invariant (`none`). The current environment
 must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
 def generate (module ns : Name) (generator inputs : Json) :
     MetaM (String × Array (String × String)) := do
@@ -739,7 +748,7 @@ def generate (module ns : Name) (generator inputs : Json) :
     -/\n\n\
     set_option linter.unusedVariables false\n\n\
     namespace {ns}\n\
-    open Zig Zig.Full Zig.Full.FAssn\n\n\
+    {opens}\n\n\
     {"\n".intercalate defs.toList}\n\
     end {ns}\n"
   let record := Json.mkObj [
