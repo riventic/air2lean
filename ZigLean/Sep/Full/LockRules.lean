@@ -10,7 +10,8 @@ lock `L : FLock γ` (`ZigLean/Sep/Full/Lock.lean`), proved once for every protoc
 lock (`FLock.Fits`, with any primitive next to it). Each rule is a stop (the pick of the op, or the futex op) and
 then the op; it gives the protocol's invariant with the thread's new place. The word's part of
 each op is `ZigLean/Sep/Full/LockWord.lean` (`WInv.cas`, `WInv.xchgLock`, …); the resource moves
-with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the rest).
+with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the rest), and each
+rule tells the protocol which resource moved (`FLock.Transfer`, a premise of `Fits.stable`).
 
 | Rule | Op | Place before | Place after |
 |---|---|---|---|
@@ -130,30 +131,34 @@ theorem Fits.step (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
 
 /-- A step of `t`'s code to a place without the lock moves no resource. -/
 theorem Transfer.none {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
-    (hnh : (L.ph (G t)).held = false) (hp : p.held = false) : L.Transfer G rX m m' t p rnil where
-  out _ := rfl
-  keep h := by rw [hnh] at h; cases h
-  acq _ h := by rw [hp] at h; cases h
-  rel h := by rw [hnh] at h; cases h
+    (hnh : (L.ph (G t)).held = false) (hp : p.held = false) : L.Transfer G rX m m' t p rnil := by
+  unfold Transfer
+  exact ⟨fun _ => rfl, fun h => nomatch hnh.symm.trans h, fun _ h => nomatch hp.symm.trans h,
+    fun h => nomatch hnh.symm.trans h⟩
 
-/-- An acquire moves the free lock's resource before the step (`Inv.acq`). -/
+/-- A step that keeps `t`'s place keeps its resource. -/
+theorem Transfer.stay {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
+    (hi : L.Inv G rX m) : L.Transfer G rX m m' t (L.ph (G t)) (L.held (G t)) := by
+  unfold Transfer
+  exact ⟨hi.idle t, fun _ _ => rfl, fun h1 h2 => nomatch h1.symm.trans h2,
+    fun h1 h2 => nomatch h1.symm.trans h2⟩
+
+/-- An acquire of the free lock moves its resource before the step (`Inv.acq`). -/
 theorem Transfer.acquire {G : ThreadId → γ} {rX rL : Res} {m m' : Mem} {t : ThreadId}
-    (hnh : (L.ph (G t)).held = false) (hfr : L.FreeRes G rX m rL) :
-    L.Transfer G rX m m' t .holds rL where
-  out h := nomatch h
-  keep h := by rw [hnh] at h; cases h
-  acq _ _ := hfr
-  rel h := by rw [hnh] at h; cases h
+    (hnh : (L.ph (G t)).held = false) (hF : L.Free G) (hfr : L.FreeRes G rX m rL) :
+    L.Transfer G rX m m' t .holds rL := by
+  unfold Transfer
+  exact ⟨fun h => nomatch h, fun h => nomatch hnh.symm.trans h, fun _ _ => ⟨hF, hfr⟩,
+    fun h => nomatch hnh.symm.trans h⟩
 
 /-- A release makes the held resource the free one after the step (`Inv.rel`). -/
 theorem Transfer.release {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
     (hph : L.ph (G t) = .holds) (hp : p.held = false)
     (hfr : L.FreeRes (upd G t (L.set (G t) p rnil)) rX m' (L.held (G t))) :
-    L.Transfer G rX m m' t p rnil where
-  out _ := rfl
-  keep _ h := by rw [hp] at h; cases h
-  acq h := by rw [hph] at h; cases h
-  rel _ _ := hfr
+    L.Transfer G rX m m' t p rnil := by
+  unfold Transfer
+  exact ⟨fun _ => rfl, fun _ h => nomatch hp.symm.trans h,
+    fun h => nomatch (LPh.held_of_holds hph).symm.trans h, fun _ _ => hfr⟩
 
 /-- A lock step with the same ghost values keeps the protocol's invariant. -/
 theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
@@ -162,8 +167,7 @@ theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
     (hs : L.Step t m m') (hl : L.Inv G rX m') : P.inv G m' := by
   have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hi hU hok hph hna hz hs
     (fun h1 h2 => absurd h1 h2)
-    { out := hi.idle t, keep := fun _ _ => rfl, acq := fun h1 h2 => (by rw [h1] at h2; cases h2),
-      rel := fun h1 h2 => (by rw [h1] at h2; cases h2) }
+    (.stay hi)
     (by rw [upd_set_self]; exact hl)
   rwa [upd_set_self] at this
 
@@ -298,7 +302,7 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
   rcases hcase with ⟨rfl, hF, hw, hacq⟩ | ⟨rfl, hw⟩ | ⟨rfl, hw⟩
   · obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw
     refine .inl ⟨rfl, rL, ?_⟩
-    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.acquire hnh hfr) hl
+    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.acquire hnh hF hfr) hl
     rwa [hg₁] at this
   · refine .inr (.inl ⟨rfl, ?_⟩)
     have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.none hnh rfl)
@@ -330,7 +334,7 @@ theorem Fits.stepAcq (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} 
   subst hg₁
   obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw
   exact ⟨rL, hP.step hiL hU hok hng hna (LPh.ne_holdsAway_of_not_held hnh) hst
-    (fun h => by rw [h] at hnh; cases hnh) (.acquire hnh hfr) hl⟩
+    (fun h => by rw [h] at hnh; cases hnh) (.acquire hnh hF hfr) hl⟩
 
 /-- A release of the holder `t` as the protocol's invariant. -/
 theorem Fits.stepRel (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}

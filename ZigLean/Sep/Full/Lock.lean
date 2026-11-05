@@ -272,7 +272,8 @@ def Free (G : ThreadId → γ) : Prop := LockWord.Free (L.pl G)
 
 /-- **`rL` is the free lock's resource** in the invariant's rest (`Inv.rest`): the threads' parts
 and the rest `wordR ⋆ rL ⋆ rX` (`FOwned`), `rL` off the word and apart from `rX`, with `R` and
-`LockWord.Owns` while the lock is free and `rnil` while a thread holds it. -/
+`LockWord.Owns` while the lock is free, and `rnil` while a thread holds it (so `rL` is the lock's
+resource only when the lock is free). -/
 abbrev FreeRes (G : ThreadId → γ) (rX : Res) (m : Mem) (rL : Res) : Prop :=
   FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧
     L.Off rL.heap.erase ∧ FHeap.Disjoint rL.heap rX.heap ∧
@@ -299,17 +300,18 @@ def PartTick (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem)
     G' = upd G t (L.setPart (G t) r) ∧ rX' = rX ∧ m' = m.ticked ∧ L.Inv G' rX' m'
 
 /-- **The resource a step of the lock's code moves**, when `t` goes to the place `p` with the held
-resource `h` (`Fits.stable`; ledger #lock-stable-inv): without the lock afterwards `t` holds
-nothing (`out`), a holder that stays one keeps its resource (`keep`), at an acquire `h` is the free
-lock's resource before the step (`acq`, from `Inv.acq`), and at a release the free lock's resource
-after the step is the one `t` held (`rel`, from `Inv.rel`). -/
-structure Transfer (G : ThreadId → γ) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res) :
-    Prop where
-  out : p.held = false → h = rnil
-  keep : (L.ph (G t)).held = true → p.held = true → h = L.held (G t)
-  acq : (L.ph (G t)).held = false → p.held = true → L.FreeRes G rX m h
-  rel : (L.ph (G t)).held = true → p.held = false →
-    L.FreeRes (upd G t (L.set (G t) p h)) rX m' (L.held (G t))
+resource `h` (a premise of `Fits.stable`; ledger #lock-stable-inv), in four cases: without the
+lock afterwards `t` holds nothing; a holder that stays one keeps its resource; at an acquire the
+lock was free and `h` is its resource before the step (`Inv.acq`); at a release the free lock's
+resource after the step is the one `t` held (`Inv.rel`). The rules build it with `Transfer.none`,
+`stay`, `acquire` and `release` (`LockRules.lean`). -/
+def Transfer (G : ThreadId → γ) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res) :
+    Prop :=
+  (p.held = false → h = rnil) ∧
+  ((L.ph (G t)).held = true → p.held = true → h = L.held (G t)) ∧
+  ((L.ph (G t)).held = false → p.held = true → L.Free G ∧ L.FreeRes G rX m h) ∧
+  ((L.ph (G t)).held = true → p.held = false →
+    L.FreeRes (upd G t (L.set (G t) p h)) rX m' (L.held (G t)))
 
 
 /-- **A protocol with the lock `L` keeps the primitive `K`** (module doc), where only a thread with
@@ -336,9 +338,12 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   `BlkOk`, which the other lock's invariant inside `U` needs. Every rule that applies `stable`
   has it (ledger #lock-stable-inv).
 
-  The client also gets the resource the step moves (`Transfer`: at an acquire `h` is the free
-  resource before the step, at a release the free resource after it is the one `t` held), which
-  every rule has from `Inv.acq`/`Inv.rel` (maintainer decision 2026-11-05, option (a) on #693).
+  The client also gets the resource the step moves (`Transfer`: `rnil` without the lock, the old
+  one for a holder that stays one, at an acquire the free resource before the step, at a release
+  the free resource after it is the one `t` held). Every rule has it: at once for a step that
+  neither holds the lock before nor after it, from `Inv.idle` for a step that keeps the place,
+  from `Inv.acq`/`Inv.rel` for an acquire or a release (maintainer
+  decision 2026-11-05, option (a) on #693).
   Without it `h` is arbitrary, and a two-lock product's `U` cannot say where lock A's held
   resource lies in lock B's rest, which B's invariant needs after a critical-section step.
   Counterexample: at A's acquire take `h := {d ↦ w}` with `d` outside B's rest; the coupling is
