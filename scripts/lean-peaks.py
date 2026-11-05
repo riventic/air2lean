@@ -31,6 +31,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLE = Path('assurance/lean-peaks.json')
@@ -61,9 +62,9 @@ def _read(handle) -> dict:
 
 
 def read_store(store: Path) -> dict:
+    """The store's entries. It is replaced whole (`record`), so a reader needs no lock."""
     try:
         with store.open() as handle:
-            fcntl.flock(handle, fcntl.LOCK_SH)
             return _read(handle)
     except FileNotFoundError:
         return {}
@@ -100,21 +101,28 @@ def record(store: Path, module: str, sha: str, peak_kib: int) -> None:
     if not isinstance(peak_kib, int) or peak_kib <= 0:
         return
     store.parent.mkdir(parents=True, exist_ok=True)
-    with store.open('a+') as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        handle.seek(0)
-        data = _read(handle)
+    # Writers take turns on a lock file beside the store and replace it whole: a stopped writer
+    # leaves the old store, never a torn one.
+    with open(str(store) + '.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        data = read_store(store)
         old = data.get(module)
         peaks = old['peaks_kib'] if old and old['sha256'] == sha else []
         data[module] = {'sha256': sha, 'peaks_kib': ([peak_kib] + peaks)[:RUNS]}
-        handle.seek(0)
-        handle.truncate()
-        json.dump(data, handle, sort_keys=True)
+        with tempfile.NamedTemporaryFile('w', dir=store.parent, prefix='.lean-peaks-',
+                                         delete=False) as handle:
+            json.dump(data, handle, sort_keys=True)
+        os.replace(handle.name, store)
+
+
+def store_of(lock: Path) -> Path:
+    """The store beside build-guard's lock (resolved, as the guard resolves its --lock)."""
+    return Path(str(Path(lock).expanduser().resolve()) + '.d') / 'lean-peaks.json'
 
 
 def default_store() -> Path:
-    lock = Path(os.environ.get('AIR2LEAN_BUILD_LOCK', str(Path.home() / '.cache/air2lean/build.lock')))
-    return Path(str(lock.expanduser()) + '.d') / 'lean-peaks.json'
+    return store_of(Path(os.environ.get('AIR2LEAN_BUILD_LOCK',
+                                        str(Path.home() / '.cache/air2lean/build.lock'))))
 
 
 def sources(workspace: Path) -> dict:
@@ -149,7 +157,7 @@ def main(argv: list[str]) -> int:
     store = default_store()
     if '--lock' in args:
         i = args.index('--lock')
-        store = Path(str(Path(args[i + 1]).expanduser().resolve()) + '.d') / 'lean-peaks.json'
+        store = store_of(Path(args[i + 1]))
         del args[i:i + 2]
     if args[:1] == ['write'] and len(args) == 1:
         data = table(store, ROOT)

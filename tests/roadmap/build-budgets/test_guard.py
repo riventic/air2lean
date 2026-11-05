@@ -1361,7 +1361,7 @@ os._exit(0)
 
     def test_a_sub_admission_needs_an_enclosing_elastic_admission(self):
         report = self.root / "inner.json"
-        inner = self.sub_args("print('ran')", report=report)
+        inner = self.sub_args("print('ran')", "--charge-mib", "64", "--rss-mib", "64", report=report)
         result = subprocess.run(inner, capture_output=True, text=True, timeout=12)
         self.assertEqual(result.returncode, 75)
         self.assertEqual(json.loads(report.read_text())["outcome"], "inheritance_refused")
@@ -1387,7 +1387,7 @@ os._exit(0)
         code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "3072", cwd=self.worktree("big"))
         self.assertEqual((code, evidence["outcome"]), (75, "elastic_too_large"))
 
-    def test_the_lifeline_goes_ahead_of_every_ticket(self):
+    def test_the_lifeline_goes_ahead_of_every_exclusive_ticket(self):
         def admission(*options):
             a = guard.parse_args(["--lock", str(self.root / "shared.lock"), "--cwd", str(self.root),
                                   *ELASTIC_BUDGET, *options, "--", "true"])
@@ -1395,21 +1395,48 @@ os._exit(0)
             lock.directory.mkdir(exist_ok=True)
             self.addCleanup(lock.release)
             return lock
-        merge = admission("--report", str(self.root / "r"), "--log", str(self.root / "l"), "--priority", "merge")
+        logs = ("--report", str(self.root / "r"), "--log", str(self.root / "l"))
+        merge = admission(*logs, "--priority", "merge")
         merge.join_queue()
-        first, second, running = (admission("--sub-admission") for _ in range(3))
+        exclusive = admission(*logs, "--exclusive")
+        exclusive.join_queue()
+        first, second, running = (admission("--sub-admission", "--charge-mib", "1024", "--rss-mib", "1024")
+                                  for _ in range(3))
         for part in (first, second, running):
-            part.parent = {"elastic": {"id": "elastic-1"}}
+            part.enclosing = {"elastic": {"id": "elastic-1"}}
+        def take(part):  # now, not after its next attempt time (ATTEMPT_EVERY)
+            part.next_lifeline = 0
+            return part.take_lifeline()
         running.publish_leaf()  # while a part of the workload runs, nobody needs the lifeline
-        self.assertFalse(first.take_lifeline())
+        self.assertFalse(take(first))
         running.release()
-        self.assertTrue(first.take_lifeline())
-        self.assertFalse(second.take_lifeline())  # one lifeline per elastic workload
+        self.assertTrue(take(first))
+        self.assertFalse(take(second))  # one lifeline per elastic workload
         self.assertEqual(second.priority, "normal")
-        self.assertEqual(merge.queued_tickets(), [first.ticket, merge.ticket])
-        self.assertTrue(first.ticket.endswith("-leaf") and first.my_turn() and not merge.my_turn())
+        # Behind a merge guard (which needs no running workload to end), ahead of an exclusive one
+        # (which waits for the elastic workload, so for its lifeline).
+        self.assertTrue(first.ticket.endswith("-" + guard.LEAF))
+        self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
+        merge.leave_queue()
+        self.assertTrue(first.my_turn() and not exclusive.my_turn())
         first.release()
-        self.assertTrue(second.take_lifeline())
+        self.assertTrue(take(second))
+
+    def test_the_elastic_plan_nests_and_falls_back_to_one_plain_admission(self):
+        lock = self.root / "shared.lock"
+        grant = lambda **fields: json.dumps({"lock": str(lock.resolve()), **fields})
+        for inherit, budget, expected in (
+                (None, 64000, ("elastic", 4096)),
+                (None, 13312, ("elastic", 2048)),       # 13 slots: 2 beside one 11000 MiB process
+                (None, 11264, ("plain", 11000)),        # no room: one admission, as before
+                (None, 8000, ("plain", 8000)),
+                (grant(rss_mib=2048, elastic={"id": "e"}), 64000, ("elastic", 2048)),
+                (grant(rss_mib=16000), 64000, ("plain", 16000)),  # a plain enclosing admission
+                (grant(rss_mib=True), 64000, ("elastic", 4096)),  # malformed: none
+                ("not json", 64000, ("elastic", 4096))):
+            with self.subTest(inherit=inherit, budget=budget), \
+                 mock.patch.dict(os.environ, {guard.INHERIT: inherit or ""}):
+                self.assertEqual(guard.elastic_plan(4096, lock, budget), expected)
 
     def fake_toolchain(self):
         toolchain = self.root / "toolchain"

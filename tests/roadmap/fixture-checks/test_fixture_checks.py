@@ -117,18 +117,22 @@ class NoReuse(unittest.TestCase):
             fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
         self.assertIn("not recorded", err.getvalue())
 
-    def test_the_default_guard_stays_within_the_budget_and_an_enclosing_admission(self):
-        # A nested guard above its enclosing admission is refused (build-guard.py `inherited`);
-        # one above the machine's budget would take every slot and still exceed it.
-        for budget, grant, expected in (
-                ("64000", None, fc.GUARD_RSS_MIB), ("64000", {"rss_mib": 2048}, 2048),
-                ("64000", {"rss_mib": 3000.0}, 3000), ("64000", {"rss_mib": 64000}, fc.GUARD_RSS_MIB),
-                ("64000", {"rss_mib": True}, fc.GUARD_RSS_MIB), ("64000", "not json", fc.GUARD_RSS_MIB),
-                ("3000", None, 3000), ("3000", {"rss_mib": 2048}, 2048)):
-            value = grant if isinstance(grant, str) else json.dumps(grant)
-            with self.subTest(budget=budget, grant=grant), \
-                 mock.patch.dict(os.environ, {fc.GUARD.INHERIT: value, "AIR2LEAN_BUILD_MEM_MIB": budget}):
-                self.assertEqual(fc.guard_rss_mib(), expected)
+    def test_a_unit_in_an_elastic_guard_is_a_sub_admission_charged_its_request(self):
+        grant = {"lock": "/l/build.lock", "elastic": {"id": "e"}}
+        with mock.patch.dict(os.environ, {fc.GUARD.INHERIT: json.dumps(grant)}):
+            self.assertEqual(fc.elastic_grant(), grant)
+        for value in (json.dumps({"lock": "/l/build.lock"}), "not json", ""):  # plain, malformed, none
+            with mock.patch.dict(os.environ, {fc.GUARD.INHERIT: value}):
+                self.assertIsNone(fc.elastic_grant())
+        with mock.patch.dict(os.environ, {"AIR2LEAN_JOBS": "8", "LEAN_NUM_THREADS": "2"}):
+            argv = fc.admitted(["bash", "-c", "check"], 3474, grant)
+        options = argv[argv.index("--sub-admission"):argv.index("--")]
+        pairs = dict(zip(options[1::2], options[2::2]))
+        self.assertEqual((pairs["--charge-mib"], pairs["--rss-mib"], pairs["--lock"]),
+                         ("3474", str(fc.GUARD.PROCESS_MIB), "/l/build.lock"))
+        # The units' jobs and Lean threads, which the sub-admission's guard sets again.
+        self.assertEqual((pairs["--jobs"], pairs["--lean-threads"]), ("8", "2"))
+        self.assertEqual(argv[argv.index("--") + 1:], ["bash", "-c", "check"])
 
     def test_there_is_no_selection_by_key(self):
         # `--base REF` chose the units by the key's files; it is rejected, not ignored.

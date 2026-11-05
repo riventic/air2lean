@@ -321,19 +321,24 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
     if todo:
         logs = pathlib.Path(tempfile.mkdtemp(prefix="air2lean-lean-files."))
         names = {f: f"{i}-{par.safe_name(f)[-100:]}" for i, f in enumerate(todo)}
+        # $LEAN: the Lean of a --lean-processes guard (build-guard.py `lean_processes_env`), which
+        # `lake env` would put behind the toolchain's own bin on PATH.
+        lean = os.environ.get("LEAN") or "lean"
         with open(os.devnull, "wb") as null:
-            statuses = par.run([par.Job(names[f], ["lake", "env", "lean", f], cwd=str(ROOT)) for f in todo],
+            statuses = par.run([par.Job(names[f], ["lake", "env", lean, f], cwd=str(ROOT)) for f in todo],
                                par.workers(jobs, mem_mib, len(todo)), out=null, err=null, log_dir=logs,
                                stats=stats)
         store.mkdir(parents=True, exist_ok=True)
         for f, status in zip(todo, statuses):
-            if (status != 0) == (f in reject):
+            # A negative control is rejected by Lean (exit 1), not stopped by a signal or a guard.
+            if (status == 1 if f in reject else status == 0):
                 (store / keys[f]).touch()
                 continue
             log = logs / (names[f] + ".log")
             tail = log.read_text(errors="replace").strip().splitlines()[:12] if log.is_file() else []
-            errors.append(f"{f}: " + ("checks, but is listed under reject" if f in reject
-                                      else "does not check") + "".join("\n    " + l for l in tail))
+            why = ("does not check" if f not in reject else "checks, but is listed under reject"
+                   if status == 0 else f"exited {status}, not rejected by Lean (listed under reject)")
+            errors.append(f"{f}: {why}" + "".join("\n    " + l for l in tail))
         shutil.rmtree(logs, ignore_errors=True)
     print(f"lean-deps: {len(files)} standalone Lean files, {len(todo)} elaborated, "
           f"{len(files) - len(todo)} unchanged since their last pass")

@@ -10,8 +10,10 @@
 # docs/build-budgets.md#elastic-workloads), each unit's Lake with up to --lean-threads Lean
 # processes (default 1), the longest first, each unit a sub-admission charged its measured peak
 # (scripts/fixture-checks.py `schedule`), and each Lean process of the proof-fixture package's
-# build one charged its module's (scripts/lean-peaks.py). Every unit
-# runs on every invocation; no result is reused (scripts/fixture-checks.py). Each unit's wall
+# build one charged its module's (scripts/lean-peaks.py). Without room for that (a small budget,
+# inside a plain admission) the guard is plain, at most 11000 MiB or the enclosing limit, and the
+# units' requests share it. Every unit runs on every invocation; no result is reused
+# (scripts/fixture-checks.py). Each unit's wall
 # time, peak RSS and time by process kind go to DIR/units.json; the longest are printed. The
 # guard waits up to AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock.
 set -euo pipefail
@@ -25,20 +27,22 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --lean-threads) threads=${2:?--lean-threads needs a number}; shift 2 ;;
     --only) args+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
-    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "fixture-checks: unknown argument $1" >&2; exit 2 ;;
   esac
 done
-# At most the guard budget and an enclosing admission (fixture-checks.py guard_rss_mib).
-[ -n "$rss" ] || rss=$(python3 -B scripts/fixture-checks.py --guard-rss-mib)
+# The guard's mode and limit (build-guard.py `elastic_plan`).
+read -r mode rss < <(python3 -B scripts/build-guard.py --elastic-plan "${rss:-4096}")
+elastic=()
+[ "$mode" = plain ] || elastic=(--elastic)
 [ -n "$logs" ] || logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-fixture-checks.XXXXXX")
 mkdir -p "$logs"
 
 python3 -B scripts/fixture-checks.py --prepare ${args[@]+"${args[@]}"}
 start=$SECONDS
-if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" --elastic \
+if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$PWD" ${elastic[@]+"${elastic[@]}"} \
     --lean-threads "$threads" --jobs "$jobs" --rss-mib "$rss" --report "$logs/fixtures.json" --log "$logs/fixtures.log" \
-    --timeout 7200 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- \
+    --timeout 28800 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- \
     python3 -B scripts/fixture-checks.py --logs "$logs/units" --report "$logs/units.json" \
     ${args[@]+"${args[@]}"}; then
   grep '^fixture-checks' "$logs/fixtures.log" >&2 || true

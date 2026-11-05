@@ -151,19 +151,27 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
 
 - **Base.** `--elastic --rss-mib B` holds B (full-build.sh and fixture-checks.sh: 4096 MiB) for
   the part of the workload that is not a sub-admission: Lake itself, the scripts, the assurance
-  extractor's build. Its guard enforces B on that part only.
+  extractor's build, the canon phase (about 2 GB). Its guard enforces B on that part only.
+- **Plain fallback.** `build-guard.py --elastic-plan B` prints how the two scripts run: elastic
+  with base B (at most an enclosing elastic grant's), or one plain admission where the budget
+  leaves no room for a base beside one 11000 MiB process (at most 11000 MiB, one Lean thread) or
+  inside a guard that is not elastic (its whole limit).
 - **Parts.** A guard in it with `--sub-admission` holds slots of its own while it runs, charged
-  `--charge-mib` (else by its command's history, the usage-aware charge below), which is also its
-  limit; `--rss-mib` is its declared bound, at most 11000 (`PROCESS_MIB`, under the 12 GiB
+  `--charge-mib` (its measured need), which is also its limit with no excess; `--rss-mib` is its
+  declared bound, at most 11000 (`PROCESS_MIB`, under the 12 GiB
   per-process watchdog). A part over its charge is stopped and run again once at that bound
   (`stopped_run` in its report; for a part without `--log` the stopped run's output is
   dropped). The enclosing guards leave a running part's processes out of their sums.
 - **Lean processes.** `--lean-processes SYSROOT` (SYSROOT: `lean --print-prefix`) makes every
   Lean elaboration of the workload a part: Lake takes its Lean from a sysroot of links to the
   toolchain whose `bin/lean` runs each elaboration of a `.lean` file as
-  `build-guard.py --lean-process` (`LAKE_OVERRIDE_LEAN`, `LEAN_SYSROOT`, and first on `PATH` for
-  `lake env lean`). Lake traces no sysroot path (its Lean trace is the githash), so the same
-  modules are up to date with or without it. Each process runs on one Lean thread, charged
+  `build-guard.py --lean-process` (`LAKE_OVERRIDE_LEAN`, `LEAN_SYSROOT`, `LEAN`). `lake env`
+  puts the toolchain's own `bin` first on `PATH`, so a script elaborates a file with
+  `lake env "$LEAN" FILE` (scripts/lean-deps.py), not `lake env lean`. Lake traces no sysroot
+  path (its Lean trace is the githash), so the same modules are up to date with or without it,
+  and the guard of a process is silent unless it fails (Lake keeps a process's output in its
+  traces and replays it). Server, worker, `--run`, `--stdin` and `--deps` runs go straight to the
+  real `lean`. Each process runs on one Lean thread, charged
   1.3 x its module's measured peak, or 11000 MiB if unmeasured. Lake runs up to
   `--lean-threads` of them at once (full-build.sh: min(8, cores)), and the slots they hold, not
   the thread count, bound their memory. The assurance tools refuse a `LEAN_SYSROOT` overlay, so
@@ -171,24 +179,32 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   package's build in fixture-checks.
 - **Measured peaks** (`scripts/lean-peaks.py`). Each successful elaboration records the
   kernel's high-water mark of its Lean process (`peak_process_rss_kib`, exact, not sampled) for
-  its module's path and source SHA-256, the last 3, in `<lock>.d/lean-peaks.json` on the machine.
-  `assurance/lean-peaks.json` seeds a machine that has not measured a module yet. It is
-  generated (`python3 -B scripts/lean-peaks.py write`, from the store and the table before it;
-  never hand-edited), and an entry whose source changed is dropped, so that module is charged
-  11000 MiB until measured again. `lean-peaks.py top` lists the largest. A seeding run (a cold
+  its module's path and source SHA-256, the last 3, in `<lock>.d/lean-peaks.json` on the machine
+  (replaced whole on each record). `assurance/lean-peaks.json` seeds a machine that has not
+  measured a module yet. It is generated (`python3 -B scripts/lean-peaks.py write`, from the
+  store and the table before it; never hand-edited). It is measurement data, not a derived file:
+  `scripts/regen.sh` does not rewrite it (every run would differ) and no check fails on it. An
+  entry whose source changed is ignored when read and dropped by the next `write`, so that
+  module is charged 11000 MiB until measured again; a refresh is an ordinary PR after a build on
+  the remote host. `lean-peaks.py top` lists the largest. A seeding run (a cold
   build to measure every module) may set `AIR2LEAN_LEAN_UNMEASURED_MIB` lower: a guess that is
   too low costs a retry at 11000 MiB. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard
   report (full-build.sh: `<logs>/lean-processes`).
-- **Fixture units and canon.** In an elastic admission each fixture-check unit is a part charged
-  its measured peak (scripts/fixture-checks.py `schedule`; 11000 MiB unmeasured), and the canon
-  phase is a part charged by its recent runs.
+- **Fixture units.** In an elastic admission each fixture-check unit is a part charged its
+  measured peak (scripts/fixture-checks.py `schedule`; 11000 MiB unmeasured), with the units'
+  guard's jobs and Lean threads.
+- **Waiting.** A part waits for slots like any guard, up to 8 h (`PART_TIMEOUT`, the full
+  build's own `--timeout`), and so do the full build's phases: on a busy host its processes
+  wait, they do not fail.
 - **No deadlock.** The bases of the admitted elastic workloads leave 11000 MiB of the budget
   free (`<lock>.d/elastic/`, checked under `<lock>.d/register`; an elastic guard without room
   waits outside the queue, holding nothing, and a base too large ever to fit fails with
   `elastic_too_large`). A part of a workload none of whose parts runs takes the workload's
-  lifeline: a ticket served ahead of every merge and exclusive ticket. So each elastic workload
-  always has a part running or next in line, and that part finds 11000 MiB that no base holds
-  once the running workloads end. A part of a running workload waits like a normal guard: the
+  lifeline: a ticket served behind the merge tickets (a merge guard waits for no running
+  workload, so it is admitted and ends) and ahead of every exclusive ticket (which waits for
+  every running workload, the elastic one too). So each elastic workload always has a part
+  running or coming up, and that part finds 11000 MiB that no base holds once the running
+  workloads end. A part of a running workload waits like a normal guard: the
   workload yields memory to lane jobs between its processes. A background workload (the health
   run) gets one part at a time ahead of others through its lifeline; its other parts wait for an
   idle moment as before.
