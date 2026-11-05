@@ -729,6 +729,21 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
     exact ⟨hP.stay hU₃ hok₃ hng₃ (by rw [hg₂, hgw]; decide) hst (hiL₃.lstay hst hb),
       hend _ hcu' this⟩
 
+/-- **A macOS wait's return code** (`Darwin.ulockResult`, OSF-01) by thread `t` with the ghost
+value `g`: it keeps `g` over the oracle's stop and goes on with one of the wait's return codes
+(`Darwin.WaitCode`). -/
+theorem wp_ulockResult (hP : L.Fits K P U ok) {r : Os.WaitResult} {t : ThreadId}
+    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hc : m.current = t)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ d, d ≤ n → ∀ s G₁ m', Os.Darwin.WaitCode r s → m'.current = t →
+      P.inv (upd G₁ t g) m' → Q s G₁ m' d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n := by
+  refine WP.ulockResult (fun _ k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht s hs => ?_⟩)
+    (fun _ s hs => h n (Nat.le_refl _) s G m hs hc hi) hcost
+  exact h k (by omega) s G₁ _ hs rfl
+    (by rw [← hg₁, upd_same]; exact (hP.curT t hi₁ ht).2.2)
+
 /-- **`unlock`'s OS futex wake** (`Os.futexWake`, OSF-02) of up to `w ≥ 1` waiters (or all) at the
 lock's word, by thread `t` at `wake` (`g`): after a wake it goes on at `out`; after a spurious
 `EINTR` (macOS; nobody woken) it is still at `wake` (std wakes again). -/

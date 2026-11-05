@@ -25,8 +25,9 @@ other rules (`LockRules.lean`, `WordRules.lean`, `Event.lean`, `Cond.lean`).
   delivered again.
 * **Rows** (`@[fsym]`): `WP.futex_4arg`, `WP.futex_3arg`, `WP.ulock_wait2`, `WP.ulock_wake` reduce
   a row with std's arguments to the generic op, with the row's return code of each result
-  (`Linux.waitCode`, `Darwin.waitCode`, `Darwin.wakeCode`), after the row's address validation
-  (`WP.futexKey`; the specializations take the guard `m.wordAt p = true`).
+  (`Linux.waitCode`, `Darwin.wakeCode`; macOS's wait result is one more oracle stop,
+  `WP.ulockResult`), after the row's address validation (`WP.futexKey`; the specializations take
+  the guard `m.wordAt p = true`).
 
 **The wake count** (audit soundness-2026-10-14 §S5). The scheduler's `wake p n` of the hand
 models wakes `min n k` of `k` waiters. Natively std's `wake(p, n)` on macOS sets `WAKE_ALL` for
@@ -257,12 +258,6 @@ end Linux
 
 namespace Darwin
 
-/-- `__ulock_wait2`'s result for a wait's result (`Darwin.ulockWait`'s match). -/
-def waitCode : WaitResult → BitVec 32
-  | .woken | .mismatch => 0
-  | .interrupted => negErrno32 E.INTR
-  | .timedOut => negErrno32 E.TIMEDOUT
-
 /-- `__ulock_wake`'s result for a wake's result. -/
 def wakeCode : Option Nat → BitVec 32
   | none => negErrno32 E.INTR
@@ -272,6 +267,21 @@ def wakeCode : Option Nat → BitVec 32
 /-- `__ulock_wake`'s waiters: one, or all with `WAKE_ALL`. -/
 def wakeMax (op : BitVec 32) : Option Nat :=
   if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none
+
+/-- The return codes `s` of a wait that ended with `r` (`ulockResult`): any non-negative `c_int`
+after a wake, a spurious return or a mismatch, else `-EINTR` or `-ETIMEDOUT`. -/
+def WaitCode : WaitResult → BitVec 32 → Prop
+  | .woken, s | .mismatch, s => 0 ≤ s.toInt
+  | .interrupted, s => s = negErrno32 E.INTR
+  | .timedOut, s => s = negErrno32 E.TIMEDOUT
+
+/-- Each of the oracle's options is a non-negative `c_int`. -/
+theorem ofNat_nonneg {c : Nat} (h : c < ulockWaiters) : 0 ≤ (BitVec.ofNat 32 c).toInt := by
+  have hc : (BitVec.ofNat 32 c).toNat = c := by
+    simp only [BitVec.toNat_ofNat]; unfold ulockWaiters at h; omega
+  rw [BitVec.toInt_eq_toNat_cond, hc]
+  unfold ulockWaiters at h
+  split <;> omega
 
 end Darwin
 
@@ -385,6 +395,31 @@ theorem WP.osFutexWait {p : Ptr} {e : BitVec 32}
       · cases hc
     · simp only [hv, ne_eq, not_false_eq_true, ↓reduceIte]
       exact WP.pure' (hne hv)
+
+open Os in
+/-- **A macOS wait's return code** (`Darwin.ulockResult`, OSF-01) by thread `t`: after a wake, a
+spurious return or a mismatch it stops with the ghost value `g` at the oracle's pick and goes on
+with a non-negative `c_int` (`--ull_nwaiters`, `Darwin.WaitCode`); `-EINTR` and `-ETIMEDOUT`
+return at once. At the pick `t` exists (`t < m₁.threads.size`). -/
+theorem WP.ulockResult {r : WaitResult} {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : r = .woken ∨ r = .mismatch → ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
+        ∀ s, Darwin.WaitCode r s → Q s G₁ { m₁ with current := t } k)
+    (he : r = .interrupted ∨ r = .timedOut → ∀ s, Darwin.WaitCode r s → Q s G m n)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n := by
+  cases r
+  case interrupted => exact WP.pure' (he (.inl rfl) _ rfl)
+  case timedOut => exact WP.pure' (he (.inr rfl) _ rfl)
+  all_goals
+    unfold Darwin.ulockResult Os.pick
+    refine WP.bind (WP.sync (fun k hk => ?_) hcost)
+    obtain ⟨g, hg, hc⟩ := h (by simp) k hk
+    refine ⟨g, hg, fun G₁ m₁ hg₁ hi₁ ht₁ c hcr => WP.pure' (hc G₁ m₁ hg₁ hi₁ ht₁ _ ?_)⟩
+    refine Darwin.ofNat_nonneg ?_
+    rcases hcr with hc | ⟨-, rfl⟩
+    · exact hc
+    · decide
 
 /-! ## Address validation -/
 
@@ -594,14 +629,14 @@ Both address guards must close before `fsym` can select the error case. -/
   exact ⟨fun hz => (hal hz).elim, fun _ => h⟩
 
 /-- libc `__ulock_wait2(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true }, ptr, val, 0, 0)` (OSF-01,
-std's untimed `Thread.Futex.wait` on macOS) at a live writable word: the untimed OS wait, with
-`__ulock_wait2`'s return code. -/
+std's untimed `Thread.Futex.wait` on macOS) at a live writable word: the untimed OS wait, then
+its return code (`Darwin.ulockResult`, `WP.ulockResult`). -/
 @[fsym] theorem WP.ulock_wait2 {op : BitVec 32} {p : Ptr} {v : BitVec 64}
     (hop : op = Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO) (hv : v.toNat < 2 ^ 32)
     {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
     (h : P.WP t (Os.futexWait p (v.setWidth 32) false : ConcM Tgt WaitResult)
-      (fun r => Q (Darwin.waitCode r)) G m n) :
+      (fun r => P.WP t (Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q) G m n) :
     P.WP t (Darwin.__ulock_wait2 op (some p) v 0 0 : ConcM Tgt (BitVec 32)) Q G m n := by
   unfold Darwin.__ulock_wait2 Darwin.ulockWait
   have hc : ¬ (op ≠ Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ∨ 2 ^ 32 ≤ v.toNat) := by
@@ -614,8 +649,7 @@ std's untimed `Thread.Futex.wait` on macOS) at a live writable word: the untimed
     (fun hn => by rw [hk] at hn; cases hn))
   rw [hk] at he
   cases he
-  refine ⟨rfl, WP.bind (WP.mono (fun r _ _ _ hq => ?_) h)⟩
-  cases r <;> exact WP.pure' hq
+  exact ⟨rfl, WP.bind h⟩
 
 /-- libc `__ulock_wake(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = _ }, ptr, 0)`
 (OSF-02, std's `Thread.Futex.wake` on macOS, which sets `WAKE_ALL` for more than one waiter): the

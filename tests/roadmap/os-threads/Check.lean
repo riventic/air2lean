@@ -114,10 +114,12 @@ def racyKid : Tgt → ConcM Tgt Unit := fun _ => lift (store 4 p0 (1 : BitVec 32
     let r ← Linux.futex_4arg p 0x80 7 none
     ConcM.sync (.join t)
     pure r) hex64).contains "Zig.Error.illegal"
--- macOS: woken/mismatch are 0, a spurious return -EINTR, a timeout -ETIMEDOUT.
+-- macOS: woken/mismatch return the oracle's non-negative `--ull_nwaiters` (the first three
+-- schedules: 0, 1, 2), a spurious return -EINTR, a timeout -ETIMEDOUT.
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 5 0) hex32 ==
   ["-4", "-60"]
-#guard outcomes noKids (do let p ← word 3; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0) hex32 == ["0"]
+#guard outcomes noKids (do let p ← word 3; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0) hex32
+  (cap := 3) == ["0", "1", "2"]
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 1) hex32 ==
   ["Zig.Error.unspecified"]
 -- macOS address validation (S6, `sys_ulock.c`): a null or unaligned WAIT and a null WAKE are

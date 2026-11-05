@@ -42,6 +42,22 @@ failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` r
 a `c_int`. Arguments that std never passes (other futex commands, flags, `val2`) are outside the
 model: `.unspecified`.
 
+**macOS wait results** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A wait that returns without an
+error (a wake, a spurious return or a mismatch) returns `*retval = --ull_nwaiters`
+(`ulock_wait_cleanup`, :826): the number of other threads in a wait at the same key at that
+moment, a non-negative `c_int` (asserted at :857). The model does not track it: after the wait
+the oracle picks any value in `[0, 2^31)` (`ulockResult`, one more stop). That covers every
+native value. Two other error paths are unreachable here and so not modelled:
+
+* `ENOMEM` (:636) needs `ull_alloc`'s `zalloc_flags(ull_zone, Z_SET_NOT_EARLY)` to fail. It is a
+  `Z_WAITOK` allocation from a `KALLOC_TYPE_DEFINE` zone, which is not exhaustible, and
+  `osfmk/kern/zalloc.h` (`Z_WAITOK`, :383–390) states that such a `zalloc` never fails.
+* `EDOM` (:646; WAKE :1012) needs a waiter or waker at the same key with a different opcode.
+  Every ulock call that the model admits uses `COMPARE_AND_WAIT`, and any other op is
+  `.unspecified`.
+
+`EFAULT` from the word's `copyin` (:663) keeps WAIT's conservative refusal (below).
+
 **Address validation** happens before an interrupt, pick, word read or queue change. The
 address the kernel receives is the pointer's numeric address as a `usize` (`futexAddr`).
 
@@ -313,17 +329,25 @@ def ulockAddr (addr : Option Ptr) (aligned : Bool) : MemM (Option Ptr) := do
   let u := futexAddr (← ptrAddr p)
   return if u = 0 ∨ (aligned ∧ u % 4 ≠ 0) then none else some p
 
-/-- The shared part of `__ulock_wait2`/`__ulock_wait`: a non-negative result (`0`) for a wake, a
-spurious return or a mismatch; `-EINTR`, `-ETIMEDOUT`; `-EINVAL` for a null or unaligned address
-(module doc). -/
+/-- The non-negative results of a wait: the oracle's choice of a `c_int` in `[0, 2^31)`. -/
+def ulockWaiters : Nat := 2 ^ 31
+
+/-- The return code of a wait that ended with `r` (module doc): for a wake, a spurious return or
+a mismatch, `--ull_nwaiters`, the number of other threads still in a wait at the key
+(`sys_ulock.c:826`), which the oracle picks among the non-negative `c_int`s (`ulockWaiters`);
+`-EINTR`; `-ETIMEDOUT`. -/
+def ulockResult : WaitResult → ConcM Tgt (BitVec 32)
+  | .woken | .mismatch => return BitVec.ofNat 32 (← pick fun _ => ulockWaiters)
+  | .interrupted => return negErrno32 E.INTR
+  | .timedOut => return negErrno32 E.TIMEDOUT
+
+/-- The shared part of `__ulock_wait2`/`__ulock_wait`: the wait's `ulockResult`, or `-EINVAL`
+for a null or unaligned address (module doc). -/
 def ulockWait (op : BitVec 32) (addr : Option Ptr) (value : BitVec 64) (timed : Bool) :
     ConcM Tgt (BitVec 32) := do
   if op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ∨ 2 ^ 32 ≤ value.toNat then throw .unspecified
   let some p ← ConcM.liftMem (ulockAddr addr true) | return negErrno32 E.INVAL
-  match ← futexWait p (value.setWidth 32) timed with
-  | .woken | .mismatch => return 0
-  | .interrupted => return negErrno32 E.INTR
-  | .timedOut => return negErrno32 E.TIMEDOUT
+  ulockResult (← futexWait p (value.setWidth 32) timed)
 
 /-- `__ulock_wait2(op: UL, addr: ?*const anyopaque, val: u64, timeout_ns: u64, val2: u64) c_int`
 (macOS ≥ 11): `timeout_ns = 0` waits without a timeout; `val2` must be `0`. -/
