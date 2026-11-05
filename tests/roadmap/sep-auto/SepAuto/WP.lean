@@ -433,14 +433,15 @@ theorem forward_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     P.WP t (pure ()) (fun _ _ _ _ => ∀ r : BitVec 32, r.toNat = 1 → r = 1) G m n := by
   fsym [forward_to_one]
 
-/-- **Both branches of a disjunction substitute** (`wpEntry` splits both before walking either):
-in the first `b` is replaced by `a`, in the second `a` by `f b`, and each reintroduces `hs` as a
-local of its own. The caller's `hs` is, in each branch, that branch's local (`substValue?`). -/
-theorem sibling_substitutions {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
-    (G : ThreadId → γ) (m : Mem) (n : Nat) (s : Nat → Nat → Nat) (f : Nat → Nat) (a b : Nat)
-    (hab : a = b ∨ a = f b) (hs : ∀ q, s a q = s b q) (R : Nat → Prop) (hR : R (s b 0)) :
+/-- **Both branches of a disjunction substitute one local** (`wpEntry` splits both before walking
+either): `a` by `b` in the first, by `c` in the second. Each branch is walked with its own
+substitutions (`eachBranch`): the caller's `hk a` is `hk b` in the first branch, not the second
+branch's `hk c`. -/
+theorem sibling_values {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (s : Nat → Nat → Nat) (a b c : Nat)
+    (hab : b = a ∨ c = a) (hk : ∀ x, s x 0 = 0) (R : Nat → Prop) (hR : R 0) :
     P.WP t (pure ()) (fun _ _ _ _ => R (s a 0)) G m n := by
-  fsym [hs]
+  fsym [hk a]
 
 /-- Normalize an incoming fact with an earlier opaque Boolean equation before splitting. -/
 theorem incoming_boolean_fact {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)

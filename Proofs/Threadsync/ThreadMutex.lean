@@ -194,7 +194,9 @@ end_if
 if_decl Thread_Mutex_DarwinImpl in
 
 /-- The loop invariant of `os_unfair_lock_lock`: thread `t` is at `out` (`g`, the first try) or at
-`spin` (after a futex wait). -/
+`spin` (after a futex wait). The protocol's invariant comes before the disjunction over `g₀`:
+`fsym` picks the witness by the disjunction when it comes first (workaround for ledger
+#fsym-or-witness-order). -/
 def lockInvD (P : Proto Tgt γ) (L : FLock γ) (t : ThreadId) (g : γ) (D : Nat)
     (_ : Thread_Mutex_lockLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
   d ≤ D ∧ ∃ g₀, P.inv (upd G t g₀) m ∧ (g₀ = g ∨ g₀ = L.set g .spin rnil)

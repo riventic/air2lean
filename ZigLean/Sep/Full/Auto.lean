@@ -663,10 +663,11 @@ structure RunCaches where
   /-- The substitutions of the run (`destruct`): a local that a fact eliminated, by its value,
   and a local that a substitution reverted and introduced again, by the new local, and a
   hypothesis replaced at a reduced type (`replaceHyp`), by the new local cast back
-  (`refreshUser` relates a caller's term to the context after them, `liveFVar?` a fact). Every
-  value recorded for a local, oldest first: the branches of a split each substitute the locals
-  of the context they share (`substValue?`). -/
-  substs : IO.Ref (Std.HashMap FVarId (Array Expr))
+  (`refreshUser` relates a caller's term to the context after them, `liveFVar?` a fact). -/
+  substs : IO.Ref (Std.HashMap FVarId Expr)
+  /-- The substitutions of each goal's branch (`eachBranch`): the branches of a split are split
+  before either is walked, and each may substitute a local of the context they share. -/
+  branchSubsts : IO.Ref (Std.HashMap MVarId (Std.HashMap FVarId Expr))
   /-- The heads of the assertions that the caller's updates produce (`fsym [u]`, `u : EUpd X Y`):
   a postcondition's atom of such a head is the update's to close, not unfolded (`instQ`), except
   in a return's last attempt, when no update applies (`updUnfold`). -/
@@ -705,6 +706,7 @@ def RunCaches.new : IO RunCaches :=
            wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none,
            recBoundary := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
+           branchSubsts := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
            runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
@@ -2885,25 +2887,22 @@ def boolFactCtx : MetaM Simp.Context := do
   (← caches).boolCtx.set (some c)
   return c
 
-/-- Record the substitution `fs` of a run (`caches.substs`), next to the values recorded before. -/
-def recordSubsts (fs : FVarSubst) : CoreM Unit := do
-  (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k ((m.getD k #[]).push v)) m
-
-/-- A recorded value `v` belongs to the context `lctx`: each of its locals is in `lctx`, or an
-eliminated one with such a value (at most `fuel` steps). -/
-partial def substValid (substs : Std.HashMap FVarId (Array Expr)) (lctx : LocalContext)
-    (fuel : Nat) (v : Expr) : Bool :=
-  !v.hasAnyFVar fun x => !lctx.contains x &&
-    (fuel == 0 || !(substs.getD x #[]).any (substValid substs lctx (fuel - 1)))
-
-/-- The value of the eliminated local `f` in the context `lctx`: of the values recorded for it,
-the newest that belongs to `lctx` (`substValid`), else the newest. The branches of a split may be
-walked after both are split (`wpSplit`), each substituting locals of the context they share by
-locals of its own: the other branch's value is not one of this context. -/
-def substValue? (substs : Std.HashMap FVarId (Array Expr)) (lctx : LocalContext) (f : FVarId) :
-    Option Expr :=
-  let vs := substs.getD f #[]
-  if vs.size ≤ 1 then vs.back? else vs.findRev? (substValid substs lctx 16) <|> vs.back?
+/-- `k` on each goal of `gs`, under the run's substitutions of that goal's branch
+(`caches.branchSubsts`; a goal without them starts from the substitutions at the call), and the
+goals it leaves, each with the substitutions it was left with. A split's branches are split
+before either is walked (`wpEntry`, `wpSplit`), and a branch's substitution of a local of the
+context they share must not reach a sibling: the sibling's caller terms would take the other
+branch's value (`refreshUser`), its facts the other branch's locals (`liveFVar?`). -/
+def eachBranch {α : Type} (gs : List α) (goal : α → MVarId) (k : α → TacticM (List MVarId)) :
+    TacticM (List MVarId) := do
+  let c ← caches
+  let m0 ← c.substs.get
+  gs.flatMapM fun a => do
+    c.substs.set (((← c.branchSubsts.get).get? (goal a)).getD m0)
+    let out ← k a
+    let m ← c.substs.get
+    c.branchSubsts.modify fun b => out.foldl (fun b g' => if b.contains g' then b else b.insert g' m) b
+    return out
 
 /-- Substitute the local of the equation `h : l = r` (`substEq`) and record the substitution
 (`caches.substs`): a caller's term that names an eliminated local takes its value
@@ -2918,7 +2917,7 @@ def substRecorded (g : MVarId) (h : FVarId) (l r : Expr) : TacticM (Option MVarI
         rhs.hasAnyFVar (fun f => !lctx.contains f) || lhs != rhs then return fs
     -- (after `substEq` both sides are the kept term: the equation's value is its `rfl`)
     pure { fs with map := fs.map.insert h (← mkEqRefl lhs) }
-  recordSubsts fs
+  (← caches).substs.modify fun m => fs.map.foldl (fun m k v => m.insert k v) m
   return some g'
 
 /-- The local that a recorded substitution's value `e` renames its local to: a local, or a
@@ -2939,7 +2938,7 @@ def liveFVar? (g : MVarId) (f : FVarId) : MetaM (Option FVarId) := g.withContext
   let mut f := f
   for _ in [0:substs.size + 1] do
     if lctx.contains f then return some f
-    let some f' := (substValue? substs lctx f).bind substLocal? | return none
+    let some f' := (substs.get? f).bind substLocal? | return none
     f := f'
   return none
 
@@ -2962,7 +2961,7 @@ def replaceHyp (g : MVarId) (h : FVarId) (r : Simp.Result) : MetaM (FVarId × MV
   if let some pf := r.proof? then
     if h' != h then
       let back ← eqCast pf (mkFVar h') (mp := false)
-      recordSubsts (FVarSubst.insert {} h back)
+      (← caches).substs.modify (·.insert h back)
   return (h', g')
 
 /-- `reduceProjsEq` on the propositions `hs` of `g`, each changed one replaced (`replaceHyp`):
@@ -3039,7 +3038,7 @@ partial def etaProj (g : MVarId) (l r : Expr) : TacticM (Option MVarId) := g.wit
   try
     let gs ← g.cases x
     let some sg := gs[0]? | return none
-    recordSubsts sg.subst
+    (← caches).substs.modify fun m => sg.subst.map.foldl (fun m k v => m.insert k v) m
     let (g, changed) ← reduceProjsHyps sg.mvarId (← sg.mvarId.withContext getPropHyps)
     return some (← destructAll g changed)
   catch ex =>
@@ -3366,7 +3365,7 @@ def refreshSubsts (e : Expr) : MetaM Expr := do
   let mut e := e
   for _ in [0:16] do
     let e' := e.replace fun x => match x with
-      | .fvar f => if lctx.contains f then none else substValue? substs lctx f
+      | .fvar f => if lctx.contains f then none else substs.get? f
       | _ => none
     if e' == e then break
     e := e'
@@ -7510,28 +7509,26 @@ partial def wpSplit (g : MVarId) (h : FVarId) (keep := false) : TacticM (List MV
         return ← g'.withContext (wpSplit g' h')
   if ty.isAppOfArity ``Or 2 then
     let gs ← g.cases h
-    return ← gs.toList.flatMapM fun sg => wpSplit sg.mvarId sg.fields[0]!.fvarId!
+    return ← eachBranch gs.toList (·.mvarId) fun sg => wpSplit sg.mvarId sg.fields[0]!.fvarId!
   -- an assertion's `if` at a resource (the join of a segment's branches, `joinPosts`): by cases
   -- on its condition, the hypothesis the branch's assertion
   if ty.getAppFn.isConstOf ``ite && ty.getAppNumArgs ≥ 5 then
     let a := ty.getAppArgs
     let (c, inst, x, y) := (a[1]!, a[2]!, a[3]!, a[4]!)
     let (sp, sn) ← g.byCases c `hb
-    let mut out := []
-    for (sg, pos) in [(sp, true), (sn, false)] do
+    return ← eachBranch [(sp, true), (sn, false)] (·.1.mvarId) fun (sg, pos) => do
       let g' ← sg.mvarId.withContext do
         let mut eq ← mkAppOptM (if pos then ``if_pos else ``if_neg) #[c, inst, some (.fvar sg.fvarId), none, x, y]
         for r in a.extract 5 a.size do eq ← mkCongrFun eq r
         let tyNew := mkAppN (if pos then x else y) (a.extract 5 a.size) |>.headBeta
         let res ← sg.mvarId.replaceLocalDecl h tyNew eq
         pure (res.mvarId, res.fvarId)
-      out := out ++ (← wpHyp g'.1 g'.2 #[])
-    return out
+      wpHyp g'.1 g'.2 #[]
   if ty.isAppOfArity ``And 2 then
     let gs ← g.cases h
     let some sg := gs[0]? | return []
     let f1 := sg.fields[1]!.fvarId!
-    return ← (← wpSplit sg.mvarId sg.fields[0]!.fvarId!).flatMapM fun g' => do
+    return ← eachBranch (← wpSplit sg.mvarId sg.fields[0]!.fvarId!) id fun g' => do
       -- (a substitution of the first part renames the second: `liveFVar?`)
       let some f ← liveFVar? g' f1 | pure [g']
       wpSplit g' f
@@ -7703,7 +7700,7 @@ partial def wpHyp (g : MVarId) (h : FVarId) (extra : Array Syntax) : TacticM (Li
     | none => pure [g]
     | some original => wpSplit g original (keep := true)
   if equation?.isNone then return gs
-  gs.flatMapM fun g => do
+  eachBranch gs id fun g => do
     let (h, g) ← g.intro1P
     return [← destruct g h]
 
@@ -7731,7 +7728,7 @@ partial def wpGoal (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
       let gs ← g.cases h
       return ← gs.toList.flatMapM (wpGoal ·.mvarId user extra fuel noCases)
     if ← isProp ty then
-      return ← (← wpHyp g h extra).flatMapM (wpGoal · user extra fuel noCases)
+      return ← eachBranch (← wpHyp g h extra) id (wpGoal · user extra fuel noCases)
     return ← wpGoal g user extra fuel noCases
   if t.isAppOfArity ``Exists 2 then
     -- (an unreachable case needs no witness)
@@ -8135,7 +8132,7 @@ partial def wpWalk (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fuel
   -- (a protocol's start, before the spawn)
   if !x.isAppOf ``ConcM.liftMem then
     if let some gs ← wpForwardEx g extra then
-      return ← gs.flatMapM (wpWalk · user extra (fuel - 1))
+      return ← eachBranch gs id (wpWalk · user extra (fuel - 1))
   -- the caller's rules, then the registered ones
   for r in ← rules user x (wp := true) do
     if let some left ← reportLimit m!"the WP rule {r} on the command{indentExpr x}"
@@ -8165,9 +8162,9 @@ def wpEntry (g : MVarId) (user : Array Expr) (extra : Array Syntax) : TacticM (L
   for d in ← g.withContext getLCtx do
     if d.isImplementationDetail then continue
     unless ← g.withContext (isProp d.type) do continue
-    gs ← gs.flatMapM fun g => g.withContext do
+    gs ← eachBranch gs id fun g => g.withContext do
       if (← getLCtx).contains d.fvarId then wpSplit g d.fvarId (keep := true) else pure [g]
-  gs.flatMapM (wpWalk · user extra 400)
+  eachBranch gs id (wpWalk · user extra 400)
 
 /-- `fsym_entail`: close a goal `EUpd P Q` (a frame-preserving update into an assertion) with
 the planner of `fsym`; facts of `Q` it cannot prove are left as goals. A goal `Within X P` (`X`

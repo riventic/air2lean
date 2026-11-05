@@ -603,8 +603,8 @@ backend):
 * The caller's terms are related to each step's context: a local that a substitution eliminated
   (`m'.current = t` substitutes `t`) is replaced by its value (`refreshUser`). The branches of a
   disjunction are split before either is walked, and each may substitute the same local by a
-  value of its own (a reintroduced hypothesis): the value taken is the newest one whose locals are
-  in the branch's context (`substValue?`; regression `SepAuto.WP` `sibling_substitutions`).
+  value of its own: each branch is walked with the substitutions of its own branch
+  (`eachBranch`; regression `SepAuto.WP` `sibling_values`).
 
 ```lean
 theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
