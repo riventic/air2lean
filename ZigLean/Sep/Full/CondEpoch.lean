@@ -55,7 +55,7 @@ structure Calm (m : Mem) (w e : BitVec 32) : Prop where
   ev : C.Ep.Holds m e
   cs : m.clocks.size = m.threads.size
   wk : m.woken = #[]
-  q : ∀ x ∈ m.waiters, x.2 ≠ C.Ep.ptr
+  q : ∀ x ∈ m.waiters, x.2 ≠ C.Ep.key m
 
 /-- `wait`'s registration by `u`, before it unlocks the mutex: an acquire load of the epoch (the
 saved value `e`) and `waiters += 1` (relaxed), whose old `waiters` is below `65535` (the code's
@@ -79,14 +79,15 @@ def Signal (v : ThreadId) (m m' : Mem) : Prop :=
       some (.ok (none, m₂)) ∧
     ((atomicRmwAt (n := 32) 0 .add false .release 4 C.Ep.ptr 1).run m₂).run =
       some (.ok (x, m₃)) ∧
-    ((Thread.futexWake C.Ep.ptr 1 []).run m₃).run = some (.ok ((), m'))
+    ((Thread.futexWakePtr C.Ep.ptr 1 []).run m₃).run = some (.ok ((), m'))
 
 /-- `wait`'s loop by `u` with the saved epoch `e`: the futex wait returns without sleeping, an
 acquire load of the epoch, a relaxed load of the state `w`, which has `signals > 0`, and a weak
 acquire `cmpxchg` that takes the signal (`waiters -= 1`, `signals -= 1`). -/
 def Consume (u : ThreadId) (e : BitVec 32) (m m' : Mem) : Prop :=
   ∃ (x w : BitVec 32) (m₁ m₂ m₃ : Mem),
-    ((Thread.futexWait C.Ep.ptr e).run { m with current := u }).run = some (.ok (false, m₁)) ∧
+    ((Thread.futexWait C.Ep.ptr e false).run { m with current := u }).run =
+      some (.ok (false, m₁)) ∧
     ((atomicLoadAt (n := 32) 0 .acquire 4 C.Ep.ptr).run m₁).run = some (.ok (x, m₂)) ∧
     ((atomicLoadAt (n := 32) 0 .relaxed 4 C.S.ptr).run m₂).run = some (.ok (w, m₃)) ∧
     0 < w.toNat / 0x10000 ∧
@@ -121,7 +122,7 @@ theorem next {m' : Mem} {w' x' : BitVec 32} (hA : C.Calm m w x)
     (hs : FStepIn (fun _ => none) m m') (hS : C.S.Ok m') (hE : C.Ep.Ok m')
     (hsv : C.S.Holds m' w') (hev : C.Ep.Holds m' x') : C.Calm m' w' x' :=
   ⟨hS, hE, hsv, hev, by rw [hs.size, hs.threads]; exact hA.cs, by rw [hs.woken]; exact hA.wk,
-    by rw [hs.waiters]; exact hA.q⟩
+    by rw [hs.waiters, hA.ep.key_of_addrs hs.addrs]; exact hA.q⟩
 
 /-! ## The steps of the schedule -/
 
@@ -175,9 +176,9 @@ theorem casS (hA : C.Calm m w x) (succ fail : AtomicOrder) (new : BitVec 32) :
 
 /-- A futex wait at the epoch for a value it does not hold returns at once. -/
 theorem waitGo (hA : C.Calm m w x) {e : BitVec 32} (hne : x ≠ e) :
-    ∃ m', ((Thread.futexWait C.Ep.ptr e).run m).run = some (.ok (false, m')) ∧
+    ∃ m', ((Thread.futexWait C.Ep.ptr e false).run m).run = some (.ok (false, m')) ∧
       C.Calm m' w x ∧ m'.threads = m.threads ∧ m'.current = m.current := by
-  have h := hA.ep.futexWait_newest (e := e) ht (by rw [hA.wk]; simp) hA.ev
+  have h := hA.ep.futexWait_newest (e := e) (sh := false) ht (by rw [hA.wk]; simp) hA.ev
   rw [if_neg hne, decide_eq_false hne] at h
   refine ⟨_, h, ?_, rfl, rfl⟩
   obtain ⟨hE, hhE⟩ := hA.ep.record_native (k := .atomicRead) rfl ht hA.cs rfl
@@ -206,7 +207,9 @@ theorem signal (hA : C.Calm m w x) (hv : v < m.threads.size)
     (w + 0x10000)
   obtain ⟨m₃, h₃, hA₃, ht₃, -⟩ := hA₂.rmwE (by rw [ht₂, hc₂, ht₁, hc₁]; exact hv)
     .add false .release 1
-  exact ⟨m₃, ⟨w, x, m₁, m₂, m₃, h₁, hg, h₂, h₃, Thread.futexWake_run_idle hA₃.q⟩, hA₃, by rw [ht₃, ht₂, ht₁]⟩
+  have h₄ : ((Thread.futexWakePtr C.Ep.ptr 1 []).run m₃).run = some (.ok ((), m₃)) := by
+    rw [Thread.futexWakePtr_eq hA₃.ep.keyAt]; exact Thread.futexWake_run_idle hA₃.q
+  exact ⟨m₃, ⟨w, x, m₁, m₂, m₃, h₁, hg, h₂, h₃, h₄⟩, hA₃, by rw [ht₃, ht₂, ht₁]⟩
 
 theorem consume (hA : C.Calm m w x) (hu : u < m.threads.size) {e : BitVec 32} (hne : x ≠ e)
     (hg : 0 < w.toNat / 0x10000) :
@@ -254,9 +257,9 @@ signal by `v`, the state is `(1, 1)`: `t`'s signal is pending. The epoch holds `
 theorem epoch_aba {m : Mem} {t u v : ThreadId} {e : BitVec 32} (hA : C.Calm m 1 e)
     (ht : t < m.threads.size) (hu : u < m.threads.size) (hv : v < m.threads.size) :
     ∃ m₁ m₂ m₃, C.Rounds u v (2 ^ 32 - 1) m m₁ ∧ C.Signal v m₁ m₂ ∧
-      ((Thread.futexWait C.Ep.ptr e).run { m₂ with current := t }).run =
+      ((Thread.futexWait C.Ep.ptr e false).run { m₂ with current := t }).run =
         some (.ok (true, m₃)) ∧
-      (t, C.Ep.ptr) ∈ m₃.waiters ∧ C.S.Holds m₃ 0x10001 ∧ C.Ep.Holds m₃ e := by
+      (t, C.Ep.key m₃) ∈ m₃.waiters ∧ C.S.Holds m₃ 0x10001 ∧ C.Ep.Holds m₃ e := by
   obtain ⟨m₁, h₁, hA₁, ht₁⟩ := hA.rounds hu hv (2 ^ 32 - 1)
   obtain ⟨m₂, h₂, hA₂, ht₂⟩ := hA₁.signal (by rw [ht₁]; exact hv) (by decide)
   have he : e + BitVec.ofNat 32 (2 ^ 32 - 1) + 1 = e := by
@@ -266,10 +269,11 @@ theorem epoch_aba {m : Mem} {t u v : ThreadId} {e : BitVec 32} (hA : C.Calm m 1 
   have hs : (1 : BitVec 32) + 0x10000 = 0x10001 := by decide
   rw [he, hs] at hA₂
   have hA₃ := hA₂.cur t
-  have h := hA₃.ep.futexWait_newest (e := e) (show t < m₂.threads.size by rw [ht₂, ht₁]; exact ht)
+  have h := hA₃.ep.futexWait_newest (e := e) (sh := false)
+    (show t < m₂.threads.size by rw [ht₂, ht₁]; exact ht)
     (by rw [hA₃.wk]; simp) hA₃.ev
   rw [if_pos rfl, decide_eq_true rfl] at h
-  exact ⟨m₁, m₂, _, h₁, h₂, h, by simp, hA₃.sv, hA₃.ev⟩
+  exact ⟨m₁, m₂, _, h₁, h₂, h, Array.mem_push.mpr (.inr rfl), hA₃.sv, hA₃.ev⟩
 
 end FCond
 end Full
