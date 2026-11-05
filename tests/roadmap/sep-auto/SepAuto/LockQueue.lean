@@ -6,14 +6,17 @@ import ZigLean.Sep.Full.LockWord
 Two locks `A` and `B` at different words. A step of `B`'s code by thread `t` that puts another
 thread `u` in the futex queue at `B`'s word:
 
-- meets every other field of `LockWord.Step` (`queue_other_admitted`). Before `newQ`, `Step`
-  constrained only the entries at the other futexes (`Step.waiters`), so `Step` admitted this step;
-- breaks `A`'s invariant when `u` is at `A`'s place `out` (`queue_other_breaks`): `A`'s `Queue`
-  places a thread queued at another futex at `away` or `holdsAway`. So a lemma "a step of `B`
-  keeps `A`'s invariant" (the two-lock product) would be false;
-- is not a `Step` (`queue_other_rejected`): `newQ` says a new entry is the stepping thread's. The
-  futex wait of the lock's code queues only its caller (`WInv.wait`), so every implementation
-  meets it.
+- meets every field of `LockWord.Step` but `newQ` (`queue_other_admitted`: with `newQ` given, the
+  rest is `Step.same`). Without `newQ`, `Step` constrained only the entries at the other futexes
+  (`Step.waiters`), which this step keeps;
+- leaves `A`'s invariant false whenever `u` is at `A`'s place `out` (`queue_other_breaks`): `A`'s
+  `Queue` places a thread queued at another futex at `away` or `holdsAway`. So the two-lock
+  product's lemma "a step of `B` keeps `A`'s invariant" needs `newQ`;
+- is not a `Step` (`queue_other_rejected`).
+
+Every producer of `Step` in `LockWord.lean` meets `newQ`: the futex wait pushes only its caller
+(`newQ_push`, `WInv.wait`), the wake only removes entries and the other steps keep the queue
+(`newQ_of_sub`). A step that queues the stepping thread itself stays a `Step` (`queue_self`).
 -/
 
 open Zig Zig.Conc Zig.Full
@@ -24,7 +27,7 @@ namespace SepAuto.LockQueue
 def queued (B : LockWord) (u : ThreadId) (m : Mem) : Mem :=
   { m with waiters := m.waiters.push (u, B.ptr) }
 
-/-- **The step meets every field of `Step` but `newQ`**: given `newQ`, the step is a `Step`
+/-- **The step meets every field of `Step` but `newQ`**: given `newQ`, it is a `Step`
 (`Step.same`: threads, clocks, blocks, footprint, locations and the other futexes' entries
 stay). -/
 theorem queue_other_admitted (B : LockWord) (t u : ThreadId) (m : Mem)
@@ -38,7 +41,7 @@ theorem queue_other_admitted (B : LockWord) (t u : ThreadId) (m : Mem)
       simp)
     (hq := hq)
 
-/-- **`A`'s invariant fails after it** when `u` is at `A`'s place `out`. -/
+/-- **`A`'s invariant is false after it** when `u` is at `A`'s place `out`. -/
 theorem queue_other_breaks (A B : LockWord) (P : ThreadId → LPh) (u : ThreadId) (m : Mem)
     (hp : B.ptr ≠ A.ptr) (hu : P u = .out) : ¬ A.WInv P (queued B u m) := fun hw => by
   rcases hw.fq (u, B.ptr) (Array.mem_push.mpr (.inr rfl)) with ⟨h, -⟩ | ⟨-, h⟩ | ⟨-, h, -⟩
@@ -53,9 +56,6 @@ theorem queue_other_rejected (B : LockWord) (t u : ThreadId) (m : Mem) (hut : u 
 
 /-- A step that queues the stepping thread itself stays a `Step`. -/
 theorem queue_self (B : LockWord) (t : ThreadId) (m : Mem) : B.Step t m (queued B t m) :=
-  queue_other_admitted B t t m fun w hw hn => by
-    rcases Array.mem_push.mp hw with hw | rfl
-    · exact absurd hw hn
-    · rfl
+  queue_other_admitted B t t m LockWord.newQ_push
 
 end SepAuto.LockQueue
