@@ -22,6 +22,7 @@ premise, checker or test, or a check whose test CI does not run.
 | JSON decode and schema/profile validation | `unverified-assumption` | TRU-02, PRF-02 | — |
 | Canonicalization (reference validation, copy forwarding, renumbering) | `unverified-assumption` | TRU-02 | — |
 | Debug definition-ID mapping of reified normalized AIR | `kernel-checked` | TRU-01, SEM-06, SEM-01, SEM-02, SEM-03, TRU-04 | `scripts/assumptions.sh` / `tests/roadmap/gen-integrity/test_certification.py` |
+| Instruction-ID renumbering of reified normalized AIR | `kernel-checked` | TRU-01, SEM-06, SEM-01, SEM-02, SEM-03, TRU-04 | `Air2Lean/CanonCertificate.lean` / `tests/roadmap/air-semantics/test_cli.py` |
 | Per-version tag normalization | `unverified-assumption` | TRU-02 | — |
 | Whole-program checker | `unverified-assumption` | TRU-02, PRF-01, PRF-02 | — |
 | Lean emitter (Gen.lean) | `unverified-assumption` | TRU-02 | — |
@@ -40,6 +41,15 @@ One generic theorem proves that mapping only debug definition IDs in any reified
 - Components: `Air2Lean/CanonSem.lean`
 - Premises: [TRU-01](premises.md#tru-01), [SEM-06](premises.md#sem-06), [SEM-01](premises.md#sem-01), [SEM-02](premises.md#sem-02), [SEM-03](premises.md#sem-03), [TRU-04](premises.md#tru-04)
 - Check: generic debug-ID erasure and full execution equality, exact generic-module artifact binding and fresh independent kernel replay; native per-case comparisons are separate TRU-02 evidence: `scripts/assumptions.sh`, tested by `tests/roadmap/gen-integrity/test_certification.py` (CI: `python3 -I -B scripts/gen-integrity.py certify`, `python3 -I -B tests/roadmap/gen-integrity/test_certification.py`)
+- Further evidence (not a check of this stage): `tests/roadmap/air-semantics/RenumberOracle.lean`, `docs/air-semantics.md`
+
+### Instruction-ID renumbering of reified normalized AIR
+
+One generic theorem (Renumber.execFunc_rename) proves that renaming every instruction ID, operand and branch target of any reified normalized Func by any injective map preserves the complete Sem.execFunc result for every argument list, start memory and oracle that keeps the register-cell contract Oracle.CellFree; the program's own run and runOn keep it (run_cellFree, runOn_cellFree). The equality is vacuous when both executions are stuck. The kernel checks it in the translator build (it is imported by CanonCertificate). Per-function native comparisons (CanonCertificate.renumberBound: the canonical Func equals the decoded renumber input renamed by Renumber.zipRen of the zipped instruction IDs, with distinct targets, so the map is injective by Renumber.zipRen_inj) are binding evidence under TRU-02; where one fails, renumber stays in the function's trusted-Canon line.
+
+- Components: `Air2Lean/Renumber.lean`
+- Premises: [TRU-01](premises.md#tru-01), [SEM-06](premises.md#sem-06), [SEM-01](premises.md#sem-01), [SEM-02](premises.md#sem-02), [SEM-03](premises.md#sem-03), [TRU-04](premises.md#tru-04)
+- Check: generic renaming theorem kernel-checked in the translator build; the certificate report omits renumber exactly where the native binding holds: `Air2Lean/CanonCertificate.lean`, tested by `tests/roadmap/air-semantics/test_cli.py` (CI: `python3 -I -B tests/roadmap/air-semantics/test_cli.py`, `lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\.lean$##') Air2Lean.Main`)
 - Further evidence (not a check of this stage): `tests/roadmap/air-semantics/RenumberOracle.lean`, `docs/air-semantics.md`
 
 ### Theorems over generated modules and the ZigLean library
@@ -94,7 +104,7 @@ Decoding is unproved Lean code. Its rejection policy (V05) is regression-tested;
 
 ### Canonicalization (reference validation, copy forwarding, renumbering)
 
-The Raw pipeline's connection to normalized snapshots, live-ID and operand renumbering, reference validation, copy forwarding and the other rewrites remain unproved (V02 research). The separate debug-ID stage certifies only the stated mapping of reified Func values. Complete structural native comparisons bind actual before/after snapshots to that map as evidence, not a kernel proof of Raw, decoding, normalization or serialization.
+The Raw pipeline's connection to normalized snapshots, reference validation, copy forwarding and the other rewrites remain unproved (V02 research). The separate debug-ID and renumbering stages certify only their stated maps of reified Func values. Complete structural native comparisons bind actual before/after snapshots to those maps as evidence, not a kernel proof of Raw, decoding, normalization or serialization; where the renumbering comparison fails, `renumber` stays trusted.
 
 - Components: `Air2Lean/Air/Canon.lean`, `Air2Lean/CanonCertificate.lean`
 - Premises: [TRU-02](premises.md#tru-02)

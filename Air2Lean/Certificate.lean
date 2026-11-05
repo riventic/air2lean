@@ -1443,8 +1443,8 @@ def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas :
 declaration plan. Native effects/costs remain derived from `program`; declaration names,
 capture shapes and executable proof cliques come from the same emitter's `parts`.
 `genModule` defines these declarations in namespace `ns`. `canonFired` names each function's
-fired Canon rewrites (`Raw.CanonTrace.fired`); the report lists them as trusted-Canon, and a
-function without an entry fails the certificate closed. -/
+fired Canon rewrites (`Raw.CanonTrace.fired`, without a natively bound `renumber`); the report
+lists them as trusted-Canon, and a function without an entry fails the certificate closed. -/
 def emit (program : Program) (ns : String) (parts : EmitParts)
     (genModule : String) (metadata : Lean.Json)
     (canonFired : Array (String × Array String)) : Except String String := do
@@ -1488,7 +1488,8 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
   for (n, r) in out do lines := lines.push s!"* `{n}`: {r}"
   if out.isEmpty then lines := lines.push "(none)"
   lines := lines ++ #["", "The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate",
-    "is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):", ""]
+    "is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).",
+    "`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:", ""]
   let firedOf : Std.HashMap String (Array String) := .ofList canonFired.toList
   for f in funcs do
     let some fired := firedOf[f.name]? | throw s!"no Canon trace for {f.name}"
