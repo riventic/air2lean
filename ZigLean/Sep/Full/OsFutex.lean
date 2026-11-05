@@ -586,7 +586,7 @@ case. -/
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
     (hanon : decide (op = Linux.FUTEX_WAIT) = true → m.anonAt p = true := by
-      first | assumption | decide)
+      first | assumption | exact fun h => absurd h (by decide) | decide)
     (h : P.WP t (Os.futexWait p e false : ConcM Tgt WaitResult)
       (fun r => Q (Linux.waitCode r)) G m n) :
     P.WP t (Linux.futex_4arg p op e none : ConcM Tgt (BitVec 64)) Q G m n := by
@@ -608,7 +608,7 @@ shared wake; no word access. -/
     {Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
     (hanon : decide (op = Linux.FUTEX_WAKE) = true → m.anonAt p = true := by
-      first | assumption | decide)
+      first | assumption | exact fun h => absurd h (by decide) | decide)
     (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit v)) false : ConcM Tgt (Option Nat))
       (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m n) :
     P.WP t (Linux.futex_3arg p op v : ConcM Tgt (BitVec 64)) Q G m n := by
