@@ -613,6 +613,20 @@ def library_compiled_inputs(root: Path) -> list:
     return records
 
 
+def compiled_inputs_changes(old: list, new: list, limit: int = 10) -> str:
+    """The entries in which two `library_compiled_inputs` snapshots differ: path, old, new."""
+    def flat(records):
+        entries = {}
+        for selected, resolved, exists, files in records:
+            entries[selected] = f'resolved={resolved} exists={exists}'
+            entries.update((path, f'link={link!r} sha256={content or "-"}') for path, link, content in files)
+        return entries
+    before, after = flat(old), flat(new)
+    changes = [f'{path}: {before.get(path, "absent")} -> {after.get(path, "absent")}'
+               for path in sorted(before.keys() | after.keys()) if before.get(path) != after.get(path)]
+    return '; '.join(changes[:limit]) + (f'; and {len(changes) - limit} more' if len(changes) > limit else '')
+
+
 RUNTIME_RUN = "AIR2LEAN_TOOLCHAIN_RUNTIME_RUN"
 
 
@@ -1595,8 +1609,10 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
     cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)
 
     def validate_inputs():
-        if library_compiled_inputs(ROOT) != lake_inputs:
-            raise ValueError('canonical Lake compiled inputs changed during kernel replay')
+        current = library_compiled_inputs(ROOT)
+        if current != lake_inputs:
+            raise ValueError('canonical Lake compiled inputs changed during kernel replay: '
+                             + compiled_inputs_changes(lake_inputs, current))
         if compiled_units is not None:
             theorem_universe.verify_compilation(compiled_units)
 
