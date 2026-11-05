@@ -1267,17 +1267,28 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   retain the model's existing conservative refusal behavior. Next the kernel checks four-byte
   numeric-address alignment before `access_ok` and key/queue lookup. An unaligned address
   returns `-EINVAL` without reading the futex word, changing its queue or spending a scheduling
-  turn. This alignment validation adds no state effect after any timeout copy.
+  turn. This alignment validation adds no state effect after any timeout copy. Then
+  `get_futex_key` (`Linux.futexKey`, shared without `FUTEX_PRIVATE`) returns `-EFAULT` for an
+  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). The
+  key forms at a live writable word and, for a private key, at
+  any address below a placed block's end. Any other address is refused (`.illegal`). macOS
+  WAIT returns `-EINVAL` for a null or unaligned address.
   The existing comparison and sleep path follows these checks on Linux. The kernel compares
   the `u32` at the address with the expected value as one atomic read of the newest message
   of that word: an atomic-read footprint and a read-view update. A bad futex-word pointer is
   `.illegal` (stricter than `EFAULT`). A different value returns at once
-  (`EAGAIN`, `0` on macOS). An equal value either returns at once with `EINTR`, or with
+  (`EAGAIN` on Linux). An equal value either returns at once with `EINTR`, or with
   `ETIMEDOUT` if a timeout was given, or sleeps. An untimed sleeper waits in the queue until a
   wake or an interrupt; the scheduler reads the word again first and a changed word is a return
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
-  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
-  `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
+  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. After a wake, a spurious
+  return or a mismatch, `__ulock_wait*` returns `--ull_nwaiters` (xnu-12377.121.6
+  `sys_ulock.c:826`), or `-EFAULT` for a word that is not resident. The model leaves both to
+  the oracle: one more stop, then `-EFAULT` or any non-negative `c_int`. `ENOMEM` is
+  unreachable. `EDOM` at a `std.Thread.Mutex` word (the STD-06 hand rows) is a recorded model
+  gap ([S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)). The sources
+  are in the `ZigLean/Os/Futex.lean` module doc.
+  Other commands, flags and `val2` are outside the model
   (`.unspecified`). The translator binds `os.linux.futex_4arg`
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
   `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
@@ -1296,17 +1307,20 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Kind: trusted.
 - Statement: Supported Linux WAKE checks four-byte numeric-address alignment before
   `access_ok` and key/queue lookup. An unaligned address returns `-EINVAL` without a
-  futex-word access, wake selection, scheduling turn or state change. On the post-validation
-  wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
+  futex-word access, wake selection, scheduling turn or state change. The key follows as for
+  WAIT (OSF-01; no word access). macOS WAKE returns `-EINVAL` for a null address. On the
+  post-validation wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
   result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge.
-- Model gaps (OSF-01 and OSF-02): native Linux user-range/shared-key `EFAULT` paths and Darwin
-  address-validation/refusal cases remain explicitly open in
-  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open).
-  These include conservative model refusals; they are not caller assumptions authorizing a
-  zero result for a native error. No caller alignment or address-domain premise is added.
+- Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
+  xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
+  knowledge outside the model, it is a conservative `.illegal` refusal
+  ([S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open)),
+  never a caller assumption authorizing a zero result for a native error. The queue still
+  matches waiters by provenance pointer rather than by the canonical numeric key and domain;
+  that part of S6 is open. No caller alignment or address-domain premise is added.
 - Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
   rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.

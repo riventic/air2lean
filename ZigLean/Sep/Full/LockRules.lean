@@ -26,6 +26,7 @@ with `Inv.acq` (into the acquiring thread's part) and `Inv.rel` (back into the r
 | `wp_casD` | `cmpxchg(0 → 1)`, acquire (`c = 1`) | `out` or `spin` | `holds`, or `wait` |
 | `wp_wake` | futex wake of 1 | `wake` | `out` |
 | `wp_osWait` | OS futex wait for `c` (`Os.futexWait`, OSF-01) | `spin` | `spin` |
+| `wp_ulockResult` | macOS wait's return code (`Os.Darwin.ulockResult`, OSF-01) | any | the same |
 | `wp_osWake` | OS futex wake of `w ≥ 1` or all (`Os.futexWake`, OSF-02) | `wake` | `out`, or `wake` (spurious `EINTR`) |
 -/
 
@@ -79,13 +80,13 @@ variable {γ : Type} {L : FLock γ} {K : FPrim γ} {Tgt : Type} {P : Proto Tgt �
 
 /-! ## A protocol with the lock -/
 
-/-- A protocol's lock invariant supplies actual numeric alignment to the generic futex
-rules. The WP walker can forward this fact without opening the invariant in a client. -/
-theorem Fits.ptrAddr_aligned (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem}
-    (hi : P.inv G m) :
-    ∃ a, (Zig.ptrAddr L.ptr).run m = pure (a, m) ∧ a % 4 = 0 := by
+/-- A protocol's lock invariant makes the word a live writable word (`Mem.wordAt`), which the
+futex rows' address validation needs. -/
+theorem Fits.wordAt (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} (hi : P.inv G m) :
+    m.wordAt L.ptr = true := by
   obtain ⟨rX, hL, -⟩ := (hP.inv _ _).mp hi
-  exact hL.w.blk.ptrAddr_aligned
+  obtain ⟨blk, hb, hl, hs, ha, hk, hlo⟩ := hL.w.blk
+  exact Mem.wordAt_of hb hl hs ha hk hlo
 
 /-- If every thread has ended, sleeps at a futex or waits at a join, no thread waits at the
 word. A witness asleep at another object's futex while it holds the lock is ruled out by the
@@ -742,6 +743,18 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
     rw [hgs] at this
     exact ⟨hP.stay hU₃ hok₃ hng₃ (by rw [hg₂, hgw]; decide) hst (hiL₃.lstay hst hb),
       hend _ hcu' this⟩
+
+/-- **A macOS wait's return code** (`Darwin.ulockResult`, OSF-01) by thread `t` with the ghost
+value `g`: it keeps `g` over the oracle's stop and goes on with one of the wait's return codes
+(`Darwin.WaitCode`). -/
+theorem wp_ulockResult (hP : L.Fits K P U ok) {r : Os.WaitResult} {t : ThreadId}
+    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hc : m.current = t)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ d, d ≤ n → ∀ s G₁ m', Os.Darwin.WaitCode r s → m'.current = t →
+      P.inv (upd G₁ t g) m' → Q s G₁ m' d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n :=
+  WP.ulockResult_stay (fun _ _ hi₁ ht => let ⟨_, _, _, h'⟩ := hP.curT t hi₁ ht; h') hc hi h hcost
 
 /-- **`unlock`'s OS futex wake** (`Os.futexWake`, OSF-02) of up to `w ≥ 1` waiters (or all) at the
 lock's word, by thread `t` at `wake` (`g`): after a wake it goes on at `out`; after a spurious
