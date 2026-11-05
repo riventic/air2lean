@@ -35,14 +35,14 @@ private def compareRuns (ty : Expr)
   let g ← mkFreshExprSyntheticOpaqueMVar ty `original
   let s ← saveState
   -- Lean's backtracking deliberately keeps name generators and caches. Restart those too:
-  -- this comparison requires the two walks to begin in identical executor state.
+  -- this comparison requires the two walks to begin in identical executor state. (Restoring
+  -- `Core.State` also drops the ordinary walks' stop messages.)
   let core ← getThe Core.State
   let metaState ← getThe Meta.State
   let restart : TacticM Unit := do
     s.restore
     modifyThe Core.State fun _ => core
     modifyThe Meta.State fun _ => metaState
-  -- (`restart` also drops the ordinary walks' stop messages)
   let plain ← ordinary g.mvarId!
   let plainTypes ← targetTypes plain
   let plainTags ← plain.mapM (·.getTag)
