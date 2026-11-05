@@ -10,7 +10,8 @@ given paths), the translated module is compiled into a scratch directory and `ai
 from it; `write` replaces the stale ones. The translated modules must be current first
 (`scripts/gen-integrity.py`): scripts/regen.py runs this as its `invgen` step, right after `gen`,
 and a fixture check repeats the comparison for the file it proves against. Lean runs unguarded here: callers
-run it under scripts/build-guard.py.
+run it under scripts/build-guard.py. `scripts/gen-integrity.py invgen` checks the files' records
+(generator revision, source hashes) without running Lean.
 """
 import argparse
 import subprocess
@@ -18,20 +19,30 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from theorem_universe import ROOT, compile_unit, with_lean_path  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
 
 # (Inv.lean, fixture root, translated module, its namespace)
 TARGETS = [
     ('tests/roadmap/loop-tactics/nested/Nested/Inv.lean', 'tests/roadmap/loop-tactics/nested',
      'Nested.Gen', 'Nested'),
+    ('tests/roadmap/loop-tactics/counted/Counted/Inv.lean', 'tests/roadmap/loop-tactics/counted',
+     'Counted.Gen', 'Counted'),
 ]
+
+
+def source(root, module):
+    """The source of the translated `module` of the fixture at `root`: the generator's input
+    (`--source`), which `scripts/gen-integrity.py invgen` checks the record against."""
+    return f"{root}/{module.replace('.', '/')}.lean"
 
 
 def generate(root, module, namespace, work):
     """`air2lean-invgen`'s output for `module` (a module of the fixture at `root`), as bytes."""
+    # (here, not at the top: scripts/gen-integrity.py reads TARGETS and `source` without Lean)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from theorem_universe import compile_unit, with_lean_path
     rel = module.replace('.', '/')
-    src = f'{root}/{rel}.lean'
+    src = source(root, module)
     lean_path = [work / 'olean']
     log = work / 'compile.log'
     subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', src], cwd=ROOT, check=True)
@@ -39,7 +50,7 @@ def generate(root, module, namespace, work):
     if error:
         sys.exit(log.read_text()[-4000:] + error)
     out = work / 'Inv.lean'
-    subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '-o', str(out)],
+    subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '--source', src, '-o', str(out)],
                    cwd=ROOT, env=with_lean_path(lean_path), check=True)
     return out.read_bytes()
 

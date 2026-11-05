@@ -367,6 +367,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/null-pointers/air/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/null-pointers/air-reject/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
+    'tests/roadmap/loop-tactics/counted/air': 'tests/roadmap/loop-tactics/counted/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',

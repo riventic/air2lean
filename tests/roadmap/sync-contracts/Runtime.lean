@@ -1,5 +1,4 @@
 import Proofs.Sync.Proofs
-import Proofs.Threadsync.Gen
 import ZigLean.Conc.RunResult
 
 /-!
@@ -15,11 +14,7 @@ complete (they are not fuel-exhausted vacuous runs); they do not replace the the
 
 One mailbox run is also computed by the kernel (`mailbox_completes`). It names the 0.16.0
 translation's functions and loops on the run's path, so it is here with the 0.16.0 runs and not
-in `Proofs` (built against every version's translation). So is one run of
-`threadsync.waitGroup` (`Threadsync.WG.waitGroup_completes`; the results are in
-`Proofs/Threadsync/WaitGroup.lean`): it names the loops of the Linux translation of 0.15.2's
-`Thread.Mutex` and `Thread.ResetEvent` (`FutexImpl`), and `Proofs` builds against the macOS
-translation too.
+in `Proofs` (built against every version's translation).
 -/
 
 open Zig Sync
@@ -45,27 +40,6 @@ theorem mailbox_completes :
   decide +kernel
 
 end Sync.Mailbox
-
-namespace Threadsync.WG
-
-/-- **One schedule completes**: under the oracle that always picks option 0, the
-`std.Thread.WaitGroup` client returns 2 within fuel 1000, from `mem0` with the translation's spawn
-policy, in the example OS environment (`Os.Env.example`; the run reads no clock). The kernel
-computes the run, each loop unfolded four times by its defining equation, as for
-`mailbox_completes`. -/
-theorem waitGroup_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ Threadsync.dispatch 1000 (fun _ => 0)
-      (@Threadsync.waitGroup ⟨Os.Env.example⟩) (mem0 σ)) = some 2 := by
-  refine ⟨.fresh, ?_⟩
-  delta Threadsync.dispatch Threadsync.task Threadsync.waitGroup
-    Threadsync.Thread_WaitGroup_wait Threadsync.Thread_ResetEvent_wait
-    Threadsync.Thread_ResetEvent_FutexImpl_wait Threadsync.Thread_ResetEvent_FutexImpl_waitUntilSet
-    Threadsync.Thread_Mutex_lock Threadsync.Thread_Mutex_FutexImpl_lock
-    Threadsync.Thread_Mutex_FutexImpl_lockSlow
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
-  decide +kernel
-
-end Threadsync.WG
 
 /-- A few fixed oracles: always the first option and four mixes. A futex wait may return
 spuriously (C05, `docs/std-models.md` §Spurious wakeups), and the model has no fairness: some

@@ -747,7 +747,7 @@ structure Global where
   isExtern : Bool
   /-- `none`: the exporter did not have the initial value (`docs/air-json.md`). -/
   init : Option Val
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, BEq
 
 /-- An extern function that a body calls: one entry of the function file's `externs` table
 (`docs/air-json.md` §Extern calls). `params`/`ret` are type IDs of the calling function. -/
