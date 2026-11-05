@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.AutoRules
+import ZigLean.Sep.Full.AutoPrim
 
 /-!
 # Rules for the arithmetic and copies of growing slices
@@ -6,10 +6,10 @@ import ZigLean.Sep.Full.AutoRules
 Code that grows a buffer of items (`std.ArrayList`'s `ensureTotalCapacityPrecise` and its
 `growCapacity`) multiplies an item count by the item size with a checked `*`, grows a capacity
 with a saturating `+|`, forms the pointer to item `0` of a buffer that may have no bytes, and
-copies no items with `@memcpy` when the old buffer is empty. Four rules for `fsym`, for every
-width, item size and pointer:
+copies no items with `@memcpy` when the old buffer is empty. The checked `*` is the engine's
+`Auto.mul_step` (`AutoPrim.lean`); three rules for `fsym` here, for every width, item size and
+pointer:
 
-* `mul_step`: a checked unsigned `*` that does not overflow returns the product.
 * `addSat_false`: the value of an unsigned `+|` (an `fsym_arith` equation).
 * `ptrProject_elem_zero`: the pointer to item `0` is the pointer itself; formed for any pointer
   (MM-3), so it needs no ownership.
@@ -21,12 +21,6 @@ Proof-only: not reachable from `ZigLean.lean`.
 namespace Zig.Full
 
 open FAssn
-
-/-- An unsigned `*` that does not overflow (`mul_safe` or plain `mul`). -/
-@[fsym] theorem mul_step {w : Nat} {P : FAssn} {a b : BitVec w} {safe : Bool} (h : a.toNat * b.toNat < 2 ^ w) :
-    FTotalTriple P (StateT.lift (Zig.mul false a b safe) : MemM (BitVec w))
-      (fun r => ⟪r.toNat = a.toNat * b.toNat⟫ ⋆ P) := by
-  rw [Auto.mul_lit (decide_eq_true h)]; exact Auto.read_val (BitVec.toNat_mul_of_lt h)
 
 /-- Unsigned `+|`, as of the values. -/
 @[fsym_arith] theorem addSat_false {w : Nat} (a b : BitVec w) :

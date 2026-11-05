@@ -8,6 +8,14 @@ of `AutoRules.lean` did not cover:
 
 * `intCast_widen_step`: an unsigned widening `@intCast` (it cannot fail; the result has the
   value of its operand);
+* `mul_step`: a checked unsigned `*` that does not overflow (`r.toNat` is the product);
+* `add_signed_step`, `sub_signed_step`, `mul_signed_step`: signed `+`, `-`, `*` without signed
+  overflow, checked or plain (`safe` only decides the error of an overflow);
+* `index_step`, `unwrapPayload_step`, `unwrapErr_step`: an array item at an index below the
+  size, the payload of an error union that holds one, the error of one that holds an error;
+* `result_step`: a `Result` contract `pre → ∃ v, x = pure v ∧ post v` as the step rule of the
+  command `StateT.lift x` (a callee's contract for `fsym [result_step c]`, `docs/vcs.md`). Its
+  converse is `FTotalTriple.result_spec` (`Init.lean`);
 * `ptrEqAddr_raw`: pointer `==` of two pointers without a block (`@ptrFromInt`, null): the
   addresses are the offsets (MM-4);
 * `storeBytes_region`, `storeEnc_region`: a store of raw bytes (`Zig.storeBytes`, which the
@@ -34,6 +42,54 @@ variable {P : FAssn}
   have ha := a.isLt
   have hp : 2 ^ n ≤ 2 ^ m := Nat.pow_le_pow_right (by decide) h
   exact read_val (by rw [BitVec.toNat_setWidth]; exact Nat.mod_eq_of_lt (by omega))
+
+/-- An unsigned `*` that does not overflow (`mul_safe` or plain `mul`). -/
+@[fsym] theorem mul_step {w : Nat} {a b : BitVec w} {safe : Bool} (h : a.toNat * b.toNat < 2 ^ w) :
+    FTotalTriple P (StateT.lift (Zig.mul false a b safe) : MemM (BitVec w))
+      (fun r => ⟪r.toNat = a.toNat * b.toNat⟫ ⋆ P) := by
+  rw [mul_lit (decide_eq_true h)]; exact read_val (BitVec.toNat_mul_of_lt h)
+
+/-- A `Result` contract as a step rule: the frame `P` is kept, the summary is a fact. -/
+theorem result_step {α : Type} {x : Result α} {pre : Prop} {post : α → Prop}
+    (contract : pre → ∃ v, x = pure v ∧ post v) (h : pre) :
+    FTotalTriple P (StateT.lift x : MemM α) (fun v => ⟪post v⟫ ⋆ P) := by
+  obtain ⟨v, rfl, hv⟩ := contract h
+  exact (FTotalTriple.ret (Q := fun r => ⟪post r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+
+/-- Signed `+`, checked (`add_safe`) or plain (`safe := false`, the form without runtime safety),
+without signed overflow. -/
+@[fsym] theorem add_signed_step {n : Nat} (a b : BitVec n) {safe : Bool} (h : a.saddOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.add true a b safe) : MemM (BitVec n))
+      (fun v => ⟪v = a + b⟫ ⋆ P) :=
+  result_step (fun h => ⟨a + b, by simp [Zig.add, h], rfl⟩) h
+
+/-- Signed `-` without signed overflow, checked or plain. -/
+@[fsym] theorem sub_signed_step {n : Nat} (a b : BitVec n) {safe : Bool} (h : a.ssubOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.sub true a b safe) : MemM (BitVec n))
+      (fun v => ⟪v = a - b⟫ ⋆ P) :=
+  result_step (fun h => ⟨a - b, by simp [Zig.sub, h], rfl⟩) h
+
+/-- Signed `*` without signed overflow, checked or plain. -/
+@[fsym] theorem mul_signed_step {n : Nat} (a b : BitVec n) {safe : Bool} (h : a.smulOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.mul true a b safe) : MemM (BitVec n))
+      (fun v => ⟪v = a * b⟫ ⋆ P) :=
+  result_step (fun h => ⟨a * b, by simp [Zig.mul, h], rfl⟩) h
+
+/-- **An item of an array value** (`Zig.index`) at an index below its size. -/
+@[fsym] theorem index_step {α : Type} (a : Array α) (i : usize) (h : i.toNat < a.size) :
+    FTotalTriple P (StateT.lift (Zig.index a i) : MemM α)
+      (fun v => ⟪∃ h : i.toNat < a.size, v = a[i.toNat]⟫ ⋆ P) :=
+  result_step (fun h => ⟨a[i.toNat], Zig.index_lt a i h, h, rfl⟩) h
+
+/-- The payload of an error union that holds one (`try`, `catch unreachable`). -/
+@[fsym] theorem unwrapPayload_step {α : Type} (e : Except ErrName α) (h : Zig.isNonErr e = true) :
+    FTotalTriple P (StateT.lift (Zig.unwrapPayload e) : MemM α) (fun v => ⟪e = .ok v⟫ ⋆ P) :=
+  result_step (fun h => by cases e with | error => cases h | ok v => exact ⟨v, rfl, rfl⟩) h
+
+/-- The error of an error union that holds one (`catch |err|`). -/
+@[fsym] theorem unwrapErr_step {α : Type} (e : Except ErrName α) (h : Zig.isErr e = true) :
+    FTotalTriple P (StateT.lift (Zig.unwrapErr e) : MemM ErrName) (fun v => ⟪e = .error v⟫ ⋆ P) :=
+  result_step (fun h => by cases e with | error v => exact ⟨v, rfl, rfl⟩ | ok => cases h) h
 
 /-- **An item of a vector value** (`Zig.vindex`) at an index below its length. -/
 @[fsym] theorem vindex_step {α : Type} {n : Nat} (a : Vector α n) (i : BitVec 64) (h : i.toNat < n) :
