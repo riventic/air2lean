@@ -168,19 +168,20 @@ def Queue (P : ThreadId → LPh) (m : Mem) (ws : Array (ThreadId × FutexKey)) :
   ∀ w ∈ ws, (w.2 = L.key m ∧ P w.1 = .wait) ∨ (w.2 ≠ L.key m ∧ P w.1 = .away) ∨
     (w.2 ≠ L.key m ∧ P w.1 = .holdsAway ∧ L.NestKey m w.2)
 
-/-- The queue in a memory with the same block addresses. -/
-theorem Queue.of_addrs {P : ThreadId → LPh} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
-    (h : m.SameAddrs m') {blk : Block} (hb : m.blocks[L.b]? = some blk) (hq : L.Queue P m ws) :
+/-- The queue in a memory with the same block addresses and the same key of the word
+(`key_of_addrs`, `Step.key`). -/
+theorem Queue.of_key {P : ThreadId → LPh} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
+    (hk : L.key m' = L.key m) (h : m.SameAddrs m') (hq : L.Queue P m ws) :
     L.Queue P m' ws := fun w hw => by
-  rw [L.key_of_addrs h hb]
+  rw [hk]
   rcases hq w hw with hq | hq | ⟨h1, h2, h3⟩
   · exact .inl hq
   · exact .inr (.inl hq)
   · exact .inr (.inr ⟨h1, h2, NestKey.of_addrs L h h3⟩)
 
-theorem Waits.of_addrs {m m' : Mem} {ws : Array (ThreadId × FutexKey)} (h : m.SameAddrs m')
-    {blk : Block} (hb : m.blocks[L.b]? = some blk) (hw : L.Waits m' ws) : L.Waits m ws := by
-  unfold LockWord.Waits at hw; rw [L.key_of_addrs h hb] at hw; exact hw
+theorem Waits.of_key {m m' : Mem} {ws : Array (ThreadId × FutexKey)} (hk : L.key m' = L.key m)
+    (hw : L.Waits m' ws) : L.Waits m ws := by
+  unfold LockWord.Waits at hw; rw [hk] at hw; exact hw
 
 /-- The word's block: live, with the word inside, aligned, writable, mapped at the word. -/
 def BlkOk (m : Mem) : Prop :=
@@ -197,6 +198,13 @@ theorem BlkOk.ptrAddr_aligned {L : LockWord} {m : Mem} (h : L.BlkOk m) :
 theorem BlkOk.keyAt {L : LockWord} {m : Mem} (h : L.BlkOk m) : m.keyAt L.ptr false = some (L.key m) := by
   obtain ⟨blk, hb, -⟩ := h
   exact Mem.keyAt_wordKey hb L.o false
+
+/-- The word's key stays in a memory with the same block addresses (`key_of_addrs`;
+`Word.Ok.key_of_addrs`). -/
+theorem BlkOk.key_of_addrs {L : LockWord} {m m' : Mem} (h : L.BlkOk m) (ha : m.SameAddrs m') :
+    L.key m' = L.key m := by
+  obtain ⟨blk, hb, -⟩ := h
+  exact L.key_of_addrs ha hb
 
 /-- The invariant of the word at the places `P` (module doc). -/
 structure WInv (P : ThreadId → LPh) (m : Mem) : Prop where
@@ -296,16 +304,12 @@ theorem Step.key {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : L.key m' = L
 /-- A lock step keeps the queue's keys. -/
 theorem Queue.of_step {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem}
     {ws : Array (ThreadId × FutexKey)} (hs : L.Step t m m') (hq : L.Queue P m ws) :
-    L.Queue P m' ws := fun w hw => by
-  rw [hs.key]
-  rcases hq w hw with hq | hq | ⟨h1, h2, h3⟩
-  · exact .inl hq
-  · exact .inr (.inl hq)
-  · exact .inr (.inr ⟨h1, h2, NestKey.of_addrs L hs.addrs h3⟩)
+    L.Queue P m' ws :=
+  hq.of_key L hs.key hs.addrs
 
 theorem Waits.of_step {t : ThreadId} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
-    (hs : L.Step t m m') (hw : L.Waits m' ws) : L.Waits m ws := by
-  unfold LockWord.Waits at hw; rw [hs.key] at hw; exact hw
+    (hs : L.Step t m m') (hw : L.Waits m' ws) : L.Waits m ws :=
+  Waits.of_key L hs.key hw
 
 /-- A record introduced by a lock step is a record of the lock word. This follows
 from the actual array effect, without a layout or well-formedness premise. -/
@@ -723,7 +727,8 @@ theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv
   obtain ⟨blk₀, hb₀, -⟩ := hi.blk
   refine ⟨by rw [hs.size, hs.threads]; exact hi.csize, fun u hu => ?_, hblk', ?_, hi.one,
     ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩,
-    fun e he hh => ?_, fun i l hl => ?_, by rw [hs.waiters]; exact hi.fq.of_addrs L hs.addrs hb₀,
+    fun e he hh => ?_, fun i l hl => ?_, by rw [hs.waiters]; exact (hi.fq.of_key L
+      (L.key_of_addrs hs.addrs hb₀) hs.addrs),
     fun hp => ?_, fun u hu => ?_⟩
   · rw [hs.threads, hjb]; exact hi.live u hu
   · obtain ⟨w, hw, hu, hz⟩ := hi.word
@@ -750,7 +755,8 @@ theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv
     obtain ⟨h1, h2⟩ := hi.rel i₀ l hl₀
     refine ⟨someLe_mono hs.threads hcl h1, fun u hu => ?_⟩
     exact VClock.le_trans (h2 u hu) (hcl u (hi.live u (LPh.ne_gone_of_held hu)).1)
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (Waits.of_addrs L hs.addrs hb₀ (hs.waiters ▸ hp))
+  · obtain ⟨v, hv, hq, h1, h2⟩ :=
+      hi.wit (Waits.of_key L (L.key_of_addrs hs.addrs hb₀) (hs.waiters ▸ hp))
     exact ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
   · obtain ⟨i, l, hl, hw⟩ := hi.owner u hu
     obtain ⟨j, hl'⟩ := (hloc l).mpr ⟨i, hl⟩
@@ -1171,7 +1177,8 @@ theorem WInv.mono {P : ThreadId → LPh} {m m' : Mem} (hi : L.WInv P m) (ht : m'
   refine ⟨by rw [hcs, ht]; exact hi.csize, fun u hu => ?_, ?_, ?_, hi.one,
     ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_,
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp hpl⟩,
-    fun e he hh => ?_, fun i l hl => ?_, by rw [hw]; exact hi.fq.of_addrs L hadd hb₀,
+    fun e he hh => ?_, fun i l hl => ?_, by rw [hw]; exact (hi.fq.of_key L
+      (L.key_of_addrs hadd hb₀) hadd),
     fun hp => ?_, fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [ht, hjb]; exact hi.live u hu
   · obtain ⟨blk, h1, h2⟩ := hi.blk; exact ⟨blk, by rw [hb]; exact h1, h2⟩
@@ -1185,7 +1192,7 @@ theorem WInv.mono {P : ThreadId → LPh} {m m' : Mem} (hi : L.WInv P m) (ht : m'
     · exact hat hh
   · obtain ⟨h1, h2⟩ := hi.rel i l ((hloc i l).mp hl)
     exact ⟨hsome h1, fun u hu => VClock.le_trans (h2 u hu) (hcl u)⟩
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (Waits.of_addrs L hadd hb₀ (hw ▸ hp))
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (Waits.of_key L (L.key_of_addrs hadd hb₀) (hw ▸ hp))
     exact ⟨v, ht ▸ hv, hw ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
 /-- `Owns` over a memory with the same threads, blocks and atomic locations, clocks that are not

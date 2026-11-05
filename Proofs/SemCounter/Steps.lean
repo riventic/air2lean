@@ -486,7 +486,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
         · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
       · have := hr.2.2; omega
-    · rw [hs.key hu.um.we, hs.lockKey hWI.blk]
+    · rw [hs.key hu.um.we, hWI.blk.key_of_addrs hs.addrs]
       rcases hs.waiters hw with h' | rfl
       · exact hu.um.q w h'
       · exact .inr rfl

@@ -243,29 +243,8 @@ theorem Fits.projS (hP : S.Fits P U) {G : ThreadId → SGh X} {m : Mem} (hi : P.
 
 /-- The epoch and the mutex have different futex keys: their addresses differ by 8. -/
 theorem key_ne (m : Mem) : S.WE.key m ≠ S.L.key m := by
-  simp only [Word.key, Lock.key, Sem.WE, Lock.prod, Mem.wordKey, futexAddr, ne_eq,
-    FutexKey.mk.injEq, true_and]
-  intro e
-  generalize ((m.blocks[S.b]?).map (·.addr)).getD 0 = A at e
-  have h1 := Int.toNat_of_nonneg (Int.emod_nonneg (A + ↑(S.o + 16)) (by omega : (2 : Int) ^ 64 ≠ 0))
-  have h2 := Int.toNat_of_nonneg (Int.emod_nonneg (A + ↑(S.o + 8)) (by omega : (2 : Int) ^ 64 ≠ 0))
-  rw [e] at h1
-  omega
-
-/-- The same block addresses: the same futex key of the epoch. -/
-theorem Inv.keyE {G : ThreadId → SGh X} {m m' : Mem} (hi : S.Inv G m) (ha : m.SameAddrs m') :
-    S.WE.key m' = S.WE.key m :=
-  let ⟨_, hb, _⟩ := hi.we.blk; ha.wordKey hb _ _
-
-/-- The epoch's pointer has the epoch's futex key. -/
-theorem Inv.keyAtE {G : ThreadId → SGh X} {m : Mem} (hi : S.Inv G m) :
-    m.keyAt S.WE.ptr false = some (S.WE.key m) :=
-  let ⟨_, hb, _⟩ := hi.we.blk; Mem.keyAt_wordKey hb _ false
-
-/-- The same block addresses: the same futex key of the mutex. -/
-theorem Inv.keyL {G : ThreadId → SGh X} {m m' : Mem} (hi : S.Inv G m) (ha : m.SameAddrs m') :
-    S.L.key m' = S.L.key m :=
-  let ⟨_, hb, _⟩ := hi.we.blk; ha.wordKey hb _ _
+  simp only [Word.key, Lock.key, Sem.WE, Lock.prod]
+  exact Mem.wordKey_ne_off (by omega) (by omega) (by omega) _ _
 
 theorem apS : Word.Apart S.L S.WS := .inr (.inl (by simp [Sem.WS, Lock.prod]))
 theorem apE : Word.Apart S.L S.WE := .inr (.inl (by simp [Sem.WE, Lock.prod]))
@@ -429,7 +408,7 @@ theorem Inv.lockStep (G : ThreadId → SGh X) (m m' : Mem) (t : ThreadId) (p : L
     obtain ⟨a, b, c⟩ := hi.inc u hu v i jr sn e hv
     exact ⟨by rw [hhS]; exact a, by rw [hhE]; exact b, by rw [hhS]; exact VClock.le_trans c (hs.clocks u)⟩
   · rw [hsg] at hu hv; rw [hhE]; exact hi.wk u hu v i jr sn e hv
-  · have hE := hi.keyE hs.addrs
+  · have hE := hi.we.key_of_addrs hs.addrs
     have hw' := (hs.waiters w (by rw [he, hE]; exact key_ne m)).mp hw
     obtain ⟨i, jr, ee, h1, h2⟩ := hi.q w hw' (he.trans hE)
     refine ⟨i, jr, ee, by rw [hsg]; exact h1, ?_⟩
@@ -481,7 +460,8 @@ theorem Inv.congr {G : ThreadId → SGh X} {m m' : Mem} (hi : S.Inv G m) (ha : m
   · exact (hi.era u i jr sn e hu).mono hS hE hcl hhb (fun h => .inl (hpz h)) fun v _ _ hv => ⟨v, hv⟩
   · obtain ⟨a, b, c⟩ := hi.inc u hu v i jr sn e hv
     exact ⟨by rw [hS]; exact a, by rw [hE]; exact b, by rw [hS, hc]; exact c⟩
-  · rw [hwt] at hw; obtain ⟨i, jr, ee, h1, h2⟩ := hi.q w hw (he.trans (hi.keyE (.of_blocks hb)))
+  · rw [hwt] at hw
+    obtain ⟨i, jr, ee, h1, h2⟩ := hi.q w hw (he.trans (hi.we.key_of_addrs (.of_blocks hb)))
     exact ⟨i, jr, ee, h1, by rw [hE]; exact h2⟩
 
 /-- A step that changes only `current` and the woken threads. -/
@@ -846,7 +826,7 @@ theorem Inv.opKeep {W : Word 32 4} (hW : W = S.WS ∨ W = S.WE) {G : ThreadId �
     · exact ⟨(wd_ok hW' hi).keep (hk W' e hW'), Word.hist_keep (wd_ok hW' hi) (hk W' e hW')⟩
   refine hi.mono (hok _ (.inl rfl)).1 (hok _ (.inr rfl)).1 (hok _ (.inl rfl)).2 (hok _ (.inr rfl)).2
     hop.clocks (fun c ⟨i, l, hl, hle⟩ => ⟨i, l, (hop.locs.same _ _ ?_ i l).mpr hl, hle⟩)
-    (fun h => .inl (PZ.mono h fun x _ h2 => hop.cells _ ?_)) (hi.keyE hop.blocks.addrs)
+    (fun h => .inl (PZ.mono h fun x _ h2 => hop.cells _ ?_)) (hi.we.key_of_addrs hop.blocks.addrs)
     (fun w hw _ => .inl (by rw [hop.waiters] at hw; exact hw)) (allLe_keep hop.clocks (by rw [hop.threads]))
   · by_cases e : S.L.b = W.b
     · exact .inr (by simp only [Lock.prod]; omega)
@@ -1051,7 +1031,7 @@ theorem Inv.reg {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {i : Nat} {
   · by_cases e : u = t
     · subst e; rw [upd_self] at hu; cases hu
     · rw [hne u e] at hu; have := hcr u e; rw [hu] at this; cases this
-  · rw [hop.waiters] at hw; rw [hi.keyE hop.blocks.addrs] at he'
+  · rw [hop.waiters] at hw; rw [hi.we.key_of_addrs hop.blocks.addrs] at he'
     obtain ⟨i', jr', ee', h1, -⟩ := hi.q w hw he'
     exact absurd h1 (hnr _ _ _ _ _)
   · by_cases e : u = t
@@ -1116,7 +1096,7 @@ theorem Inv.consume {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {i jr :
   · by_cases e : u = t
     · subst e; rw [upd_self] at hu; cases hu
     · rw [hne u e] at hu; rw [hE]; exact hi.ld u i' _ hu
-  · rw [hop.waiters] at hw; rw [hi.keyE hop.blocks.addrs] at he
+  · rw [hop.waiters] at hw; rw [hi.we.key_of_addrs hop.blocks.addrs] at he
     obtain ⟨i', jr', ee', h1, -⟩ := hi.q w hw he
     exact absurd (by rw [hne _ (htq w hw he)]; exact h1) (hnr w.1 _ _ _ _)
   · by_cases e : u = t
@@ -1202,7 +1182,7 @@ theorem Inv.sig {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {ord : Atom
   · by_cases e : u = t
     · subst e; rw [upd_self] at hu; cases hu
     · rw [hne u e] at hu; exact (hnc u e _ hu rfl).elim
-  · rw [hop.waiters] at hw; rw [hi.keyE hop.blocks.addrs] at he
+  · rw [hop.waiters] at hw; rw [hi.we.key_of_addrs hop.blocks.addrs] at he
     obtain ⟨i', jr', ee', h1, h2⟩ := hi.q w hw he
     have hwt : w.1 ≠ t := fun e => by rw [e, hg] at h1; cases h1
     refine ⟨i', jr', ee', by rw [hne _ hwt]; exact h1, ?_⟩
@@ -1286,7 +1266,7 @@ theorem Inv.epoch {G : ThreadId → SGh X} {t : ThreadId} {m m' : Mem} {old : Bi
       obtain ⟨-, he1, -⟩ := hi.inc u hg v i jr sn e hv'
       rw [hsz, he1]
     · rw [hne u e] at hu; exact (hnc u e _ hu rfl).elim
-  · rw [hop.waiters] at hw; rw [hi.keyE hop.blocks.addrs] at he
+  · rw [hop.waiters] at hw; rw [hi.we.key_of_addrs hop.blocks.addrs] at he
     obtain ⟨i', jr', ee', h1, -⟩ := hi.q w hw he
     have hwt : w.1 ≠ t := fun e => by rw [e, hg] at h1; cases h1
     exact ⟨i', jr', ee', by rw [hne _ hwt]; exact h1, .inr ⟨t, by rw [upd_self]⟩⟩
@@ -1481,7 +1461,7 @@ theorem Fits.wakeE {cs : List Nat} (hP : S.Fits P U) {G : ThreadId → SGh X} {m
       some (.ok ((), m'))) :
     m'.current = t ∧ P.inv (upd G t (a, .none, x)) m' := by
   obtain ⟨hl, hs, -⟩ := hP.split hi
-  rw [Thread.futexWakePtr_eq (m := { m with current := t }) hs.keyAtE] at hw
+  rw [Thread.futexWakePtr_eq (m := { m with current := t }) hs.we.keyAt] at hw
   have hl' := hl.wakeOffKey (key_ne m) hw
   have hm' := Proto.modify_ok hw
   subst hm'
@@ -1934,7 +1914,7 @@ theorem wp_ewait (hP : S.Fits P U) {s : σ} {t : ThreadId} {G : ThreadId → SGh
     fun _ he => Zig.Conc.Proto.noErr_of_ok (he := he) (hs₀.we.futexWait_run ht), fun b m' hr => ?_⟩⟩
   have hoff := wd_off (.inr rfl) hl₁ hs₁
   have hl := hl₁.waitOff (t := t) (by change (G₁ t).1.ph = _; exact hph)
-    (by rw [hs₁.keyAtE]; exact fun e => key_ne m₁ (Option.some.inj e))
+    (by rw [hs₁.we.keyAt]; exact fun e => key_ne m₁ (Option.some.inj e))
     (Word.offWord hs₁.we hoff.1 hoff.2 apE) hq0 hr
   have hout : ∀ m₂ : Mem, m₂.current = t → S.L.Inv (upd G₁ t (S.L.set (G₁ t) .out Heap.empty)) m₂ →
       S.Inv G₁ m₂ → U G₁ m₂ → Q ((), s) G₁ m₂ k := fun m₂ hc hl₂ hs₂ hu₂ => by

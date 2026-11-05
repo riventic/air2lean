@@ -528,7 +528,7 @@ theorem cinv_frame {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} 
   hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
     (fun _ h => by show g.1.ph = _; rw [hph]; exact h)
     (fun h => by show (g.2.s).isPst = true; rw [hX]; exact h) hhS hhE
-    (hu.we.key_of_addrs hs.addrs) (let ⟨_, hb₀, _⟩ := hu.blk; (L K).key_of_addrs hs.addrs hb₀)
+    (hu.we.key_of_addrs hs.addrs) (hu.blk.key_of_addrs hs.addrs)
     (by rw [hs.waiters])
     (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
     (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock
@@ -937,7 +937,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       refine hsat (hr fun hc => ?_) (hu.incS v q' n h' h'')
       exact hu.crit_sig (u := t) (v := v) hc (by rw [h''] <;> rfl)
   · -- q
-    rw [hs.key hu.we, hs.lockKey hwL.blk]
+    rw [hs.key hu.we, hwL.blk.key_of_addrs hs.addrs]
     rcases hs.waiters hw with h' | rfl
     · exact hu.q w h'
     · exact .inr rfl

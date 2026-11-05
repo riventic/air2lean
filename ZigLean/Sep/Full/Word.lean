@@ -110,12 +110,6 @@ theorem ApartL.ne {L : LockWord} (hap : W.ApartL L) : L.b ≠ W.b ∨ L.o ≠ W.
   · exact .inr (by omega)
   · exact .inr (by omega)
 
-/-- A 32-bit word apart from the lock's has another pointer. -/
-theorem ApartL.ptr_ne {W : Word 32 4} {L : LockWord} (hap : W.ApartL L) : W.ptr ≠ L.ptr := fun e => by
-  simp only [Word.ptr, LockWord.ptr, Ptr.mk.injEq, Option.some.injEq, Int.natCast_inj] at e
-  rcases hap.ne with h | h
-  · exact h e.1.symm
-  · exact h e.2.symm
 
 /-- The word's private futex key is `Word.key`. -/
 theorem Ok.keyAt {m : Mem} (hW : W.Ok m A) : m.keyAt W.ptr false = some (W.key m) := by

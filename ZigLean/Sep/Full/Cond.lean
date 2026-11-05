@@ -359,11 +359,6 @@ theorem key {W' : Word 32 4} {A : ThreadId → Prop} (hs : C.MStep W t m m') (ho
     W'.key m' = W'.key m :=
   hok.key_of_addrs hs.addrs
 
-/-- A step keeps a lock word's futex key (`LockWord.key_of_addrs`). -/
-theorem lockKey (hs : C.MStep W t m m') {L : LockWord} (hb : L.BlkOk m) : L.key m' = L.key m :=
-  let ⟨_, hb, _⟩ := hb
-  L.key_of_addrs hs.addrs hb
-
 theorem waiters (hs : C.MStep W t m m') {w : ThreadId × FutexKey} (hw : w ∈ m'.waiters) :
     w ∈ m.waiters ∨ w = (t, C.Ep.key m) := by
   cases hs with
@@ -691,7 +686,8 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
           · rfl
           · exact absurd (hI.crit1 u t hc hcr) hu⟩)
         (fun _ => hI.ex t (by rw [hg₁, hg]; exact nofun))
-        (fun _ _ h => by rw [C.ph_set] at h; cases h) (hC.keyE hU hms.addrs) (hms.lockKey hwL.blk)
+        (fun _ _ h => by rw [C.ph_set] at h; cases h) (hC.keyE hU hms.addrs)
+        (hwL.blk.key_of_addrs hms.addrs)
       exact hI'
 
 /-- The `waiters` and `signals` of a state value with `s ≤ w < 65535` (the facts `wp_reg` gives
@@ -726,7 +722,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok)
     (by rw [hg]; exact ⟨rfl, _, hh⟩) hU hwL hY hms (.inl (hC.keepE hU hms)) hL ?_⟩
   exact hI.register (by rw [hg₁]; exact hg) (by rw [C.ph_set]) hh
     (by rw [hold]; exact FEvent.rmwEnt_val) (VClock.le_refl _) (hC.keepE hU hms) hop.waiters
-    hop.woken hop.threads (hC.keyE hU hms.addrs) (hms.lockKey hwL.blk) hop.clock
+    hop.woken hop.threads (hC.keyE hU hms.addrs) (hwL.blk.key_of_addrs hms.addrs) hop.clock
 
 /-- The waiter's `waiters += 1` on bits (`atomicRmwC`, `Thread.Condition`). -/
 theorem wp_reg (hC : L.Fits (C.prim L) P U ok) {i : Nat} {e : BitVec 32}
@@ -796,7 +792,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadS (hC : L.Fits (C.prim L) P U ok)
   have hI := hC.wInv _ _ _ hU
   have hE := hC.keepE hU hms
   have hk := hC.keyE hU hms.addrs
-  have hkL := hms.lockKey hwL.blk
+  have hkL := hwL.blk.key_of_addrs hms.addrs
   have hsv := (hI.sv j hj).2
   unfold sOf wOf at hsv
   rw [val_of hv] at hsv
@@ -895,7 +891,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterConsume (hC : L.Fits (C.prim L) P U ok)
       (by rw [val_of hxv]; exact hxv) (by unfold wOf; rw [val_of hxv, val_of hv]; exact hw1)
       (by unfold sOf; rw [val_of hxv, val_of hv]; exact hs1)
       (hC.keepE hU hms) hop.waiters hop.woken hop.threads (hC.keyE hU hms.addrs)
-      (hms.lockKey hwL.blk) hop.clock)
+      (hwL.blk.key_of_addrs hms.addrs) hop.clock)
 
 /-- The waiter's weak `cmpxchg((w, s) → (w - 1, s - 1))` (acquire) at `reg i jr true e` with
 `0 < s`, on bits (`Thread.Condition`): on success it is out; on failure it read a state value
@@ -1119,7 +1115,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSl (hC : L.Fits (C.prim L) P U ok)
   have hI := hC.wInv _ _ _ hU
   have hE := hC.keepE hU hms
   have hk := hC.keyE hU hms.addrs
-  have hkL := hms.lockKey hwL.blk
+  have hkL := hwL.blk.key_of_addrs hms.addrs
   have hgt : C.ph (G₁ t) = .sl sh c := by rw [hg₁]; exact hg
   have hsv := (hI.sv j hj).2
   unfold sOf wOf at hsv
@@ -1213,7 +1209,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterPost (hC : L.Fits (C.prim L) P U ok)
   have hI := hC.wInv _ _ _ hU
   have hE := hC.keepE hU hms
   have hk := hC.keyE hU hms.addrs
-  have hkL := hms.lockKey hwL.blk
+  have hkL := hwL.blk.key_of_addrs hms.addrs
   have hgt : C.ph (G₁ t) = .sl sh c := by rw [hg₁]; exact hg
   have hpre : C.S.Prefix sh m₁ := hI.snap t sh (by rw [hgt]; rfl)
   have hlp := hI.lp t (by rw [hgt]; rfl)
@@ -1322,7 +1318,7 @@ theorem wp_bump (hC : L.Fits (C.prim L) P U ok) {q nw : Nat} {sh : Array Word.En
         (by rw [hg]; exact ⟨rfl, rfl, rfl⟩) (by rw [hg]; exact True.intro) hU hwL hY hms (.inr ⟨_, _, _, hg, rfl⟩) hL
         (hI.bump (by rw [hg₁]; exact hg) (by rw [C.ph_set]) (by rw [hC.lph, hg₁])
           (fun h' => by rw [C.sx_set, ← hg₁]; exact h') rfl hv hh (hC.keepS hU hms) hop.waiters
-          hop.woken hop.threads (hC.keyE hU hms.addrs) (hms.lockKey hwL.blk) hop.clock))
+          hop.woken hop.threads (hC.keyE hU hms.addrs) (hwL.blk.key_of_addrs hms.addrs) hop.clock))
 
 /-- The signaller's wake of `c ≥ nw` waiters at the epoch, at `wk nw q h`: it is out, and its
 snapshot is a prefix of the state's writes. -/
@@ -1354,11 +1350,9 @@ theorem wp_wakeEp (hC : L.Fits (C.prim L) P U ok) {io : Io} {c : BitVec 32} {q n
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io C.Ep.ptr c : CM Tgt σ Unit).run s) Q G m n :=
   FLock.wp_wordWake hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hi
-    fun k hk G₁ rX m₁ cs m' hg₁ hU hwL hw hL => by
-      rw [Thread.futexWakePtr_eq (m := { m₁ with current := t })
-        ((hC.wRest (.inr rfl)) _ _ _ hU).1.keyAt] at hw
-      obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hwL hw hL
-      exact h k hk G₁ m' h1 h2 h3
+    fun k hk G₁ _ _ _ m' hg₁ hU hwL hw hL =>
+      let ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hwL hw hL
+      h k hk G₁ m' h1 h2 h3
 
 /-- **The signaller's OS futex wake at the epoch** (`Os.futexWake`, OSF-02; std's translated
 `Thread.Futex.wake`) of up to `w ≥ 1` waiters (or all), at `wk 1 q h` (`signal`'s one wake):
@@ -1435,7 +1429,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadC (hC : L.Fits (C.prim L) P U ok)
     · exact hh
   have := hC.backC hW hg₁ (CPh.Next.refl _) (SigStep.refl _ _ _) hU hwL hY hms (.inl hE) hL (by
     rw [C.set_self, ← hg₁, upd_same]
-    exact (hC.wInv _ _ _ hU).stay hS hE (hC.keyE hU hms.addrs) (hms.lockKey hwL.blk)
+    exact (hC.wInv _ _ _ hU).stay hS hE (hC.keyE hU hms.addrs) (hwL.blk.key_of_addrs hms.addrs)
       (by rw [hop.waiters])
       (fun w hw _ => by rw [hop.waiters] at hw; exact hw) (fun u _ hw => by rw [hop.woken]; exact hw)
       (by rw [hop.threads]; exact Nat.le_refl _) hop.clock)
@@ -1666,7 +1660,7 @@ theorem wp_loadEp (hC : L.Fits (C.prim L) P U ok) {i jr : Nat} {e : BitVec 32}
         (by rw [hg]; exact ⟨rfl, hI.ep_floor ht hfl⟩) (by rw [hg]; exact True.intro) hU hwL hY hms (.inl hh) hL
         (hI.reload ht (C.ph_set _ _) hj hv (hacq rfl) (hC.keepS hU hms) hh hop.waiters
           (fun u _ hw => by rw [hop.woken]; exact hw) hop.threads (hC.keyE hU hms.addrs)
-          (hms.lockKey hwL.blk) hop.clock))
+          (hwL.blk.key_of_addrs hms.addrs) hop.clock))
 
 /-- The invariant reconstruction shared by ordinary and cur-aware caller-part steps (`g` out
 of the lock's code or holding it): both words keep their writes (`Inv.other`: the places stay),
@@ -1706,7 +1700,7 @@ private theorem liftPartPost (hC : L.Fits (C.prim L) P U ok) {rY r' : Res} {m' :
       (by rw [upd_self, hC.ph_part]) (fun _ => by rw [upd_self, L.ph_setPart])
       (fun _ h => by rw [L.ph_setPart]; rwa [upd_self] at h)
       (fun h => by rw [upd_self] at h; exact (hC.role_part () _ _).mpr h) hhS hhE
-      (hwE.key_of_addrs hs.addrs) (let ⟨_, hb, _⟩ := hL.w.blk; L.key_of_addrs hs.addrs hb)
+      (hwE.key_of_addrs hs.addrs) (hL.w.blk.key_of_addrs hs.addrs)
       (by rw [hs.waiters]) (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
       (fun _ _ _ hw => by rw [hs.woken]; exact hw) (by rw [hs.threads]; exact Nat.le_refl _)
       hs.clock

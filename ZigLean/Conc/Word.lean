@@ -1103,7 +1103,8 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
   have hwi : L.WInv (L.pl G) m' := by
     refine ⟨by rw [hop.csize, hop.threads]; exact hi.w.csize, fun u hu => ?_, hblk', ?_, hi.w.one,
       ⟨fun l hl hb h1 h2 => ?_, fun i l hl => ?_, fun i l hl => ?_⟩, fun e he hh => ?_,
-      fun i l hl => ?_, by rw [hop.waiters]; exact hi.w.fq.of_addrs L.toLockWord hadd hb₀,
+      fun i l hl => ?_, by rw [hop.waiters]; exact (hi.w.fq.of_key L.toLockWord
+        (L.toLockWord.key_of_addrs hadd hb₀) hadd),
       fun hp => ?_,
       fun u hu => let ⟨i, l, hl, hw⟩ := hi.w.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
     · rw [hop.threads, hjb]; exact hi.w.live u hu
@@ -1128,7 +1129,8 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
       exact ⟨Conc.someLe_mono hop.threads hcl h1,
         fun u hu => VClock.le_trans (h2 u hu) (hop.clocks u)⟩
     · obtain ⟨v, hv, hq, h1, h2⟩ :=
-        hi.w.wit (LockWord.Waits.of_addrs L.toLockWord hadd hb₀ (hop.waiters ▸ hp))
+        hi.w.wit (LockWord.Waits.of_key L.toLockWord (L.toLockWord.key_of_addrs hadd hb₀)
+          (hop.waiters ▸ hp))
       exact ⟨v, hop.threads ▸ hv, hop.waiters ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   -- the rest as `cells W ⋆ (word ⋆ (rL ⋆ rY))`

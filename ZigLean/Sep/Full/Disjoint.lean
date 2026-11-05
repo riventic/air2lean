@@ -407,16 +407,5 @@ theorem _root_.Zig.Mem.keyAt_ne {m : Mem} (hl : m.LiveLayout) {b b' : BlockId} {
   have := futexAddr_inj (by omega) (by omega) (by omega) (by omega) h
   omega
 
-/-- `Mem.keyAt_ne` for the total keys (`Mem.wordKey`) of two live bytes. -/
-theorem _root_.Zig.Mem.wordKey_ne {m : Mem} (hl : m.LiveLayout) {b b' : BlockId} {blk blk' : Block}
-    (hb : m.blocks[b]? = some blk) (hb' : m.blocks[b']? = some blk') (hv : blk.live = true)
-    (hv' : blk'.live = true) {o o' : Nat} (hs : o < blk.bytes.size) (hs' : o' < blk'.bytes.size)
-    (hne : b ≠ b' ∨ o ≠ o') (sh sh' : Bool) (ho : blk.kind.mappedLo ≤ o := by simp)
-    (ho' : blk'.kind.mappedLo ≤ o' := by simp) :
-    m.wordKey b o sh ≠ m.wordKey b' o' sh' := fun e => by
-  have := Mem.keyAt_ne hl hb hb' hv hv' hs hs' hne sh sh' ho ho'
-  rw [Mem.keyAt_wordKey hb, Mem.keyAt_wordKey hb', e] at this
-  exact this rfl
-
 end Full
 end Zig

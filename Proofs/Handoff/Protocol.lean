@@ -125,18 +125,20 @@ abbrev L : FLock Gh := FLock.prod 0 Lo.mo (R Lo) Lo.c Lo.c_ok
 below the `Box`'s size, `Mem.wordKey_ne_off`). -/
 theorem weKey_ne (m : Mem) : Lo.WE.key m ≠ (L Lo).key m := by
   have := Lo.ok; have := Lo.fits
-  exact Mem.wordKey_ne_off (by show Lo.so + 4 ≠ Lo.mo; omega) (by show Lo.so + 4 < 2 ^ 64; omega)
-    (by show Lo.mo < 2 ^ 64; omega) false false
+  exact Mem.wordKey_ne_off (by show Lo.so + 4 ≠ Lo.mo; omega)
+    (by show Lo.so + 4 < Lo.mo + 2 ^ 64; omega)
+    (by show Lo.mo < Lo.so + 4 + 2 ^ 64; omega) false false
 
 theorem wvKey_ne (m : Mem) : Lo.WV.key m ≠ (L Lo).key m := by
   have := Lo.ok; have := Lo.fits
-  exact Mem.wordKey_ne_off (by show Lo.vo ≠ Lo.mo; omega) (by show Lo.vo < 2 ^ 64; omega)
-    (by show Lo.mo < 2 ^ 64; omega) false false
+  exact Mem.wordKey_ne_off (by show Lo.vo ≠ Lo.mo; omega)
+    (by show Lo.vo < Lo.mo + 2 ^ 64; omega) (by show Lo.mo < Lo.vo + 2 ^ 64; omega) false false
 
 theorem key_EV (m : Mem) : Lo.WE.key m ≠ Lo.WV.key m := by
   have := Lo.ok; have := Lo.fits
-  exact Mem.wordKey_ne_off (by show Lo.so + 4 ≠ Lo.vo; omega) (by show Lo.so + 4 < 2 ^ 64; omega)
-    (by show Lo.vo < 2 ^ 64; omega) false false
+  exact Mem.wordKey_ne_off (by show Lo.so + 4 ≠ Lo.vo; omega)
+    (by show Lo.so + 4 < Lo.vo + 2 ^ 64; omega)
+    (by show Lo.vo < Lo.so + 4 + 2 ^ 64; omega) false false
 
 /-- The condition: its place is `X.c`; the producer signals. -/
 def C : FCond Gh where
@@ -923,7 +925,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   have hkE : Lo.WE.key m' = Lo.WE.key m := hs.key hu.we
   have hkV : Lo.WV.key m' = Lo.WV.key m := hs.key hu.wv
   have hkL : (L Lo).key m' = (L Lo).key m :=
-    let ⟨_, hb₀, _⟩ := hu.blk; (L Lo).key_of_addrs hs.addrs hb₀
+    hu.blk.key_of_addrs hs.addrs
   have hwd := fun W' (hW' : Three Lo W') (h : W'.Ok m) =>
     hs.word h (three_word hW3 hW') (three_word (W := Lo.WE) (.inr (.inl rfl)) hW')
   have hok3 := fun W' (hW' : Three Lo W') (h : W'.Ok m) => (hwd W' hW' h).1
@@ -1283,7 +1285,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   have hkV : Lo.WV.key m' = Lo.WV.key m := hs.key
   have hkE : Lo.WE.key m' = Lo.WE.key m := hu.we.key_of_addrs hs.addrs
   have hkL : (L Lo).key m' = (L Lo).key m :=
-    let ⟨_, hb₀, _⟩ := hu.blk; (L Lo).key_of_addrs hs.addrs hb₀
+    hu.blk.key_of_addrs hs.addrs
   have hwd := fun W' (hW' : Three Lo W') (h : W'.Ok m) =>
     hs.word h (three_word (W := Lo.WV) (.inr (.inr rfl)) hW')
   have hok3 := fun W' (hW' : Three Lo W') (h : W'.Ok m) => (hwd W' hW' h).1

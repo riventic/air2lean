@@ -583,7 +583,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
       · subst e; rw [hcpt] at hu; exact hI.cp u v (hn.crit hu) hv
       · rw [hcph u e] at hu; exact hI.cp u v hu hv
     · -- tq
-      rw [hms.lockKey hwL.blk]
+      rw [hwL.blk.key_of_addrs hms.addrs]
       rcases hms.waiters hw with hw0 | rfl
       · by_cases e : w.1 = t
         · have hk2 := hk.2
@@ -708,7 +708,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
       (fun u hu => by rw [hlph]; exact hI.pst u hu) (fun u hu => .inl (by rw [hlph]; exact hu))
       hfs.clock (FLock.Inv.before_fstep hL0 hfs) hfs.threads (fun u hu => by rwa [hlph] at hu)
       (fun w hw => .inl (by rwa [hfs.waiters] at hw))
-      (let ⟨_, hb, _⟩ := hL0.w.blk; L.key_of_addrs hfs.addrs hb) (hY' C.S (.inl rfl))
+      (hL0.w.blk.key_of_addrs hfs.addrs) (hY' C.S (.inl rfl))
 
 /-- **A lock step of a thread out of `pst`** keeps the semaphore's invariant (for a client's
 `FLock.Fits.stable`, whose `ok` excludes `pst`; the component facts are the ones that
@@ -910,7 +910,7 @@ theorem condHold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
     (fun h' => by rw [hcp] at h'; exact absurd h' (by decide)) (fun h' => absurd hcp h')
     (fun sh c h' => by rw [hcp] at h'; cases h')
     ((hsub.2 C.Ep (.inr rfl)).1.key_of_addrs hfs.addrs)
-    (let ⟨_, hb, _⟩ := hL.w.blk; L.key_of_addrs hfs.addrs hb)
+    (hL.w.blk.key_of_addrs hfs.addrs)
 
 /-- **The waiter's entry into the condition at count 0 keeps the semaphore's invariant**
 (`Move.enter`). -/

@@ -1435,16 +1435,6 @@ theorem inv_ticked (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} (hi : (proto 
 theorem wmL {m : Mem} : m.keyAt WM.ptr false ≠ some ((L S).key m) :=
   Mem.keyAt_ne_off (b := 0) (o := 48) (o' := 32) (by decide) (by decide) (by decide) _ _
 
-/-- The same block addresses: the same futex key of the mutex word. -/
-theorem U.keyM {G : ThreadId → Gh S} {m m' : Mem} (hu : U G m) (ha : m.SameAddrs m') :
-    WM.key m' = WM.key m :=
-  let ⟨_, hb, _⟩ := hu.wm.blk; ha.wordKey hb _ _
-
-/-- The mutex word's pointer has the mutex word's futex key. -/
-theorem U.keyAtM {G : ThreadId → Gh S} {m : Mem} (hu : U G m) :
-    m.keyAt WM.ptr false = some (WM.key m) :=
-  let ⟨_, hb, _⟩ := hu.wm.blk; Mem.keyAt_wordKey hb _ false
-
 /-- A thread at `x` goes to `away` before a futex wait of the mutex. -/
 theorem inv_away (hE : E.Spec) {G : ThreadId → Gh S} {m : Mem} {t : ThreadId} {x : Ph} {sx : S}
     (hi : (proto E).inv (upd G t (gA x Heap.empty sx)) m) (hx : x.inSem = false) :
@@ -1509,7 +1499,8 @@ theorem wp_mwait (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
       by rw [hh]; exact hu₁.mlast, fun w hw hp => ?_, hu₁.lph, hu₁.parts, fun hc => ?_⟩,
       hE.frame _ _ m₁ M hi₁.2.2 (frame_op hop (.inr (.inr (by decide)))) (econd0 hu₁)⟩
     · unfold MQ; rw [hh]
-      exact hu₁.mq w (by rw [hop.waiters] at hw; exact hw) (hp.trans (hu₁.keyM hop.blocks.addrs))
+      exact hu₁.mq w (by rw [hop.waiters] at hw; exact hw)
+        (hp.trans (hu₁.wm.key_of_addrs hop.blocks.addrs))
     · obtain ⟨hn', hp, hs, hok⟩ := hu₁.car hc
       exact ⟨hn', hp, car_keep hp hs hok (by rw [hhS]; exact VClock.le_refl _) hfp
         (Nat.le_of_eq hop.bsize.symm) hcells hall⟩
@@ -1689,7 +1680,7 @@ theorem inv_mcalm (hE : E.Spec) {G : ThreadId → Gh S} {m m' : Mem} {t : Thread
   obtain ⟨hml, hmq, hone⟩ := calm (g' := gA (y.setM p) Heap.empty sx) hu
     (by rw [hg]; exact ⟨hyp.1, hyp.2.1⟩)
     (by show (y.setM p).mp ≠ _ ∧ (y.setM p).mp ≠ _; rw [Ph.mp_setM hy]; simp [hp.1, hp.2]) hh
-    (hu.keyM hop.blocks.addrs) hq
+    (hu.wm.key_of_addrs hop.blocks.addrs) hq
   exact inv_mstep hE hi hg hy (by
     cases y <;> simp_all [Ph.isMx, Ph.mp] <;> rename_i q <;> cases q <;> simp_all) hop hw' (by rw [hh]; exact hu.mhist) hml hmq hone
 
@@ -1732,7 +1723,7 @@ theorem mloop_body (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) {sx : S} 
   have ht01 : t = 0 ∨ t = 1 := mp_lt hu₁ (by rw [hgt, Ph.mp_setM hx]; simp)
   have hnw := noWM hu₁ ht01 (by rw [hgt, Ph.mp_setM hx]; simp)
   have hmq : ∀ (P : Prop), ∀ w ∈ m'.waiters, w.2 = WM.key m' → P := fun _ w hw hp =>
-    absurd (hp.trans (hu₁.keyM hop.blocks.addrs)) (hnw w (hop.waiters ▸ hw))
+    absurd (hp.trans (hu₁.wm.key_of_addrs hop.blocks.addrs)) (hnw w (hop.waiters ▸ hw))
   obtain ⟨r', hr', hrb⟩ := mdec hu₁ (hist_pos hu₁.wm) hv
   rw [hr'] at hd; cases hd
   have hp2 : ∀ p : MP, ((x.setM .spin).setM p).isMx := fun p => by simpa using hx
@@ -1841,7 +1832,8 @@ theorem mlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} (hx : x.isMx) (hxc : x.
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA (x.setM .holds) Heap.empty sx) hu₁ hh
       (rmwEnt_val WM) (by decide) (iff_of_false (by decide) fun h => h t ((hth t).mpr rfl))
     have := inv_mstep hE hi₁ hg₁ hx (.inl hxc) hop hw' hmh hml
-      (fun w hw hp => absurd (hp.trans (hu₁.keyM hop.blocks.addrs)) (hnw w (hop.waiters ▸ hw)))
+      (fun w hw hp => absurd (hp.trans (hu₁.wm.key_of_addrs hop.blocks.addrs))
+        (hnw w (hop.waiters ▸ hw)))
       (fun ⟨h0, h1⟩ => by
       rcases ht01 with rfl | rfl
       · exact absurd ((hth 1).mp h1) (by decide)
@@ -1973,7 +1965,7 @@ theorem wp_mwake (hE : E.Spec) {σ : Type} {s₀ : σ} {G : ThreadId → Gh S} {
     · exact .inr ⟨rfl, k', p, by rw [hg₁]; rw [upd_self] at hp; exact hp⟩
   have ht01 : t = 0 ∨ t = 1 := by rcases hux with ⟨h, -⟩ | ⟨h, -⟩ <;> simp [h]
   have hl := hi₁.1.wakeOff wmL hw
-  rw [Thread.futexWakePtr_eq (m := { m₁ with current := t }) hu₁.keyAtM] at hw
+  rw [Thread.futexWakePtr_eq (m := { m₁ with current := t }) hu₁.wm.keyAt] at hw
   have hm' := Proto.modify_ok hw
   generalize hwk : Thread.wakeSet m₁.waiters (WM.key m₁) (1 : BitVec 32).toNat cs = woke at hm'
   -- every thread at the mutex was woken: it is the other thread
@@ -2101,7 +2093,8 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA x.unl h sx) hu₁ hh hval (by decide)
       (iff_of_true rfl (hfree _ (by rw [hxk.1]; simp)))
     have := inv_mop hE hi₁ hMS (by rw [hg₁]; rfl) hop hw' hmh hml
-      (fun w hw hp => absurd (hp.trans (hu₁.keyM hop.blocks.addrs)) (hnw w (hop.waiters ▸ hw)))
+      (fun w hw hp => absurd (hp.trans (hu₁.wm.key_of_addrs hop.blocks.addrs))
+        (hnw w (hop.waiters ▸ hw)))
       (flags_unl hu₁.flags hux (by rw [hgt]; rfl))
     simp only [StateT.run_pure, pure_bind]
     refine WP.pure' ?_
@@ -2111,7 +2104,7 @@ theorem munlock_spec (hE : E.Spec) {t : ThreadId} {x : Ph} {h : Heap} {sx : S} {
     obtain ⟨hmh, hml⟩ := mpush (t := t) (g' := gA (x.setM .wake) h sx) hu₁ hh hval (by decide)
       (iff_of_true rfl (hfree _ (by rw [Ph.mp_setM hx']; simp)))
     have hiw := inv_mstep (p := .wake) hE hi₁ hg₁ hx' (.inr (.inr (.inr rfl))) hop hw' hmh hml (fun w hw hp => by
-        rw [hop.waiters] at hw; rw [hu₁.keyM hop.blocks.addrs] at hp
+        rw [hop.waiters] at hw; rw [hu₁.wm.key_of_addrs hop.blocks.addrs] at hp
         have hw1 := mq_wait hu₁ hw hp
         have hwt : w.1 ≠ t := fun e => by rw [e, hgt, hxh] at hw1; cases hw1
         have hup : ∀ u, u ≠ t → upd G₁ t (gA (x.setM .wake) h sx) u = G₁ u := fun u e => upd_ne _ _ e

@@ -219,10 +219,10 @@ theorem Mem.wordKey_of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) (b : Block
     (sh : Bool) : m'.wordKey b o sh = m.wordKey b o sh :=
   Mem.wordKey_of_addr (by rw [h]) o sh
 
-/-- Two words of one block at different offsets below `2 ^ 64` have different keys: their
-addresses differ by less than `2 ^ 64`, so their `usize`s differ. -/
-theorem Mem.wordKey_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho : o < 2 ^ 64)
-    (ho' : o' < 2 ^ 64) (sh sh' : Bool) : m.wordKey b o sh ≠ m.wordKey b o' sh' := by
+/-- Two words of one block at different offsets less than `2 ^ 64` apart have different keys:
+their addresses differ by less than `2 ^ 64`, so their `usize`s differ. -/
+theorem Mem.wordKey_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho : o < o' + 2 ^ 64)
+    (ho' : o' < o + 2 ^ 64) (sh sh' : Bool) : m.wordKey b o sh ≠ m.wordKey b o' sh' := by
   simp only [Mem.wordKey, futexAddr, ne_eq, FutexKey.mk.injEq, not_and]
   intro _ e
   generalize ((m.blocks[b]?).map (·.addr)).getD 0 = A at e
@@ -233,8 +233,8 @@ theorem Mem.wordKey_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (
 
 /-- A pointer into block `b` at another offset than a word of `b` has another key
 (`Mem.wordKey_ne_off`), or none. -/
-theorem Mem.keyAt_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho : o < 2 ^ 64)
-    (ho' : o' < 2 ^ 64) (sh sh' : Bool) :
+theorem Mem.keyAt_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho : o < o' + 2 ^ 64)
+    (ho' : o' < o + 2 ^ 64) (sh sh' : Bool) :
     m.keyAt ⟨some b, (o : Int)⟩ sh ≠ some (m.wordKey b o' sh') := by
   cases hb : m.blocks[b]? with
   | none => simp [Mem.keyAt, addrIn, hb]

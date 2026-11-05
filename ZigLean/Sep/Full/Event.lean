@@ -489,11 +489,6 @@ theorem key (hs : E.MStep t m m') : E.W.key m' = E.W.key m := by
   | wake c cs h => rw [Proto.modify_ok h]; rfl
   | _ => rfl
 
-/-- A step keeps a lock word's futex key (`LockWord.key_of_addrs`). -/
-theorem lockKey (hs : E.MStep t m m') {L : LockWord} (hb : L.BlkOk m) : L.key m' = L.key m :=
-  let ⟨_, hb, _⟩ := hb
-  L.key_of_addrs hs.addrs hb
-
 theorem lockLoc (hs : E.MStep t m m') {L : LockWord} (hap : E.W.ApartL L) {i : Nat} {l : ALoc}
     (hl : L.Loc m i l) : L.Loc m' i l := by
   cases hs with
@@ -1445,7 +1440,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterRead (hE : L.Fits (E.prim L) P U ok)
         exact ⟨fun h => absurd h hgn.1, fun h => absurd h hps⟩)
       (fun _ => .inl (hlo p)) (fun w hw e => absurd e (hnq w hw)) (wx_upd_set hg₁)
       (fun h => by rw [upd_self, E.ph_set] at h; exact (h.elim hps hpd).elim) (hS hI.fresh).1
-      hms.key (hms.lockKey hwL.blk)
+      hms.key (hwL.blk.key_of_addrs hms.addrs)
   rcases hI.val3 hj hv with rfl | rfl | rfl
   · -- `unset`: only at `w0`
     have hw0 : E.ph g = .w0 := by
@@ -1495,7 +1490,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterPeek (hE : L.Fits (E.prim L) P U ok)
       (by rw [upd_self, E.ph_set]; intro h; cases h) (by rw [hgt, upd_self, E.ph_set])
       (by rw [upd_self, E.ph_set]; intro h; exact absurd rfl h) (fun w hw e => absurd e (hnq w hw))
       (wx_upd_set hg₁) (by rw [upd_self, E.ph_set]; intro h; rcases h with h | h <;> cases h)
-      (hS hI.fresh).1 hms.key (hms.lockKey hwL.blk)
+      (hS hI.fresh).1 hms.key (hwL.blk.key_of_addrs hms.addrs)
   have := hE.backOut hg₁ hgo hU hwL hY hms (.inl ⟨hh, by rw [hgx]; trivial⟩) hL hI'
   rw [set_of hgx] at this
   refine ⟨this, fun hb => ?_⟩
@@ -1526,7 +1521,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterCasOk (hE : L.Fits (E.prim L) P U ok)
     hL (hI.casOk (fun u hu => upd_ne _ _ hu) (by rw [hg₁]; exact hg)
       (by rw [upd_self, E.ph_set]) (by rw [upd_self, hE.lph]; exact hgo) hv hh hop.waiters hnq
       (hist_pos hw₁) (Nat.le_of_eq (by rw [hop.threads])) hop.clock (wx_upd_set hg₁) (hS hI.fresh).1
-      hms.key (hms.lockKey hwL.blk))
+      hms.key (hwL.blk.key_of_addrs hms.addrs))
 
 /-- A setter's release `xchg(is_set)`, by a thread out of the event's code (`g`, out of the lock's
 code or gone from it), that read `o`: the event is set, and the setter is at `sw` if it read
@@ -1561,7 +1556,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterXchg (hE : L.Fits (E.prim L) P U ok)
       (by rw [upd_self, E.ph_set]; exact h1) (by rw [upd_self, hE.lph]; exact hgo) hrel hh
       hop.waiters hop.clock (Nat.le_of_eq (by rw [hop.threads]))
       (by rw [← hL.w.csize, hop.size]; exact hct) hnq (wx_upd_set hg₁)
-      (by rw [upd_self, E.sx_set]; exact hsx) (hS hI.fresh).1 hms.key (hms.lockKey hwL.blk)
+      (by rw [upd_self, E.sx_set]; exact hsx) (hS hI.fresh).1 hms.key
+      (hwL.blk.key_of_addrs hms.addrs)
   have hn : ∀ p, p.Setting → E.Next t g p m₁ m' := fun p hp =>
     .inr ⟨ord, 2, hh, .inr ⟨rfl, hsx, hrel, hgx, hp⟩⟩
   refine ⟨hset, ?_⟩
@@ -1839,11 +1835,9 @@ theorem wp_wake (hE : L.Fits (E.prim L) P U ok) {io : Io} {c : BitVec 32}
       P.inv (upd G₁ t (E.set g .sd)) m' → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io E.W.ptr c : CM Tgt σ Unit).run s) Q G m n :=
-  FLock.wp_wordWake hE (hE.wRest rfl) (hE.wAp rfl) hi fun k hk G₁ rX m₁ cs m' hg₁ hU hwL hw hL => by
-    rw [Thread.futexWakePtr_eq (m := { m₁ with current := t })
-      ((hE.wRest rfl) _ _ _ hU).1.keyAt] at hw
-    obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hwL hw hL
-    exact h k hk G₁ m' h1 h2 h3
+  FLock.wp_wordWake hE (hE.wRest rfl) (hE.wAp rfl) hi fun k hk G₁ _ _ _ m' hg₁ hU hwL hw hL =>
+    let ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hwL hw hL
+    h k hk G₁ m' h1 h2 h3
 
 /-! ### The waiter's futex wait at `w1`: its facts for `FLock.wp_wordWait`, `wp_wordOsWait` -/
 
@@ -1928,7 +1922,7 @@ theorem waitCompare (hE : L.Fits (E.prim L) P U ok) (hg : E.ph g = .w1) (hgo : L
     rw [set_of hg, ← hg₁, upd_same]
     exact hI.frame (t := t) (fun _ _ => rfl) rfl rfl hh hop.waiters hop.clock
       (Nat.le_of_eq (by rw [hop.threads])) id id
-      (hS hI.fresh).1 hms.key (hms.lockKey hwL.blk))
+      (hS hI.fresh).1 hms.key (hwL.blk.key_of_addrs hms.addrs))
   rwa [set_of hg, ← hg₁, upd_same] at this
 
 /-- An interrupt's delivery (`Os.takeInterrupt`) by the current thread `t`, out of the lock's code,
@@ -2091,7 +2085,7 @@ private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' :
       (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part false _ _).mpr h)
       ((hE.wInv _ _ _ hU).fresh.fstep hs hwF (fun i l hl => (hw.loc i l hl).1))
       (hw.key_of_addrs hs.addrs)
-      (let ⟨_, hb, _⟩ := hL.w.blk; L.key_of_addrs hs.addrs hb)
+      (hL.w.blk.key_of_addrs hs.addrs)
   have hU' := hE.wOwn (G := upd G t g) (t := t) (r := r') rfl
     (by rw [upd_self]; exact hgo) hU hL hY hc hs hcW hw' hh
     (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')

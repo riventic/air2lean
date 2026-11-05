@@ -881,7 +881,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- q
     intro w hw
     have hkE : EV.key m' = EV.key m := hs.key
-    have hkL : L.key m' = L.key m := hs.lockKey hwL.blk
+    have hkL : L.key m' = L.key m := hwL.blk.key_of_addrs hs.addrs
     rw [hkE, hkL]
     rcases hs.waiters hw with h' | rfl
     · exact hu.q w h'
