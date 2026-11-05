@@ -680,11 +680,6 @@ theorem wp_finRmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m :
   exact h k hk G₁ m' old (by rw [hs.current, hc₁])
     (inv_fin hg₁ hc₁ hU hY hv hh (hacq rfl) hw' hA hL)
 
-/-- A `debug.assert` whose condition holds is a pure step. -/
-theorem debugAssert_run {c : Bool} (h : c = true) (m : Mem) :
-    (StateT.lift (debug_assert c) : MemM Unit).run m = pure ((), m) := by
-  subst h; rfl
-
 variable [Zig.Os.HasEnv]
 
 theorem finish_spec {t : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res}
@@ -693,7 +688,7 @@ theorem finish_spec {t : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp
       ∃ g, proto.fin g ∧ proto.inv (upd G' t g) m') G m d := by
   unfold Thread_WaitGroup_finish
   fsym [WP.liftMem_pure (projI _ _) rfl, fitsL.wp_tick_plain, wp_finRmw,
-    WP.liftMem_pure (debugAssert_run _ _) rfl, wp_setT resetEvent rfl ⟨⟩]
+    debug_assert, wp_setT resetEvent rfl ⟨⟩]
 
 /-! ## A task -/
 
