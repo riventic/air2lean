@@ -65,6 +65,24 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   run in `preempted_run`, the log its output. Never overcommitted: macOS (no MemAvailable), a
   cgroup-limited process (a container's --memory: MemAvailable does not show it), --lock-wait 0
   (a preempted run could not wait), --exclusive and --no-overcommit.
+- Elastic workloads (--elastic; scripts/full-build.sh, scripts/fixture-checks.sh). A long
+  workload made of many parts (Lean processes, fixture units) holds only a small base
+  (--rss-mib) for itself, and each part holds slots of its own while it runs: a guard started in
+  it with --sub-admission, charged --charge-mib (its measured need; else its command's history,
+  `history_charge`), which is also its limit. A part over its charge is stopped and run again at
+  its declared --rss-mib (at most PROCESS_MIB, 11000: under the 12 GiB per-process watchdog), so a
+  wrong measurement costs a retry, never the host. Enclosing guards leave a running part's
+  subtree out of their sums (its pid in `<lock>.d/leaves/`). With --lean-processes SYSROOT every
+  Lean elaboration of the workload is such a part, charged 1.3 x its module's measured peak
+  (scripts/lean-peaks.py; PROCESS_MIB unmeasured), through a sysroot whose `bin/lean` runs it as
+  `build-guard.py --lean-process` (`lean_processes_env`). Parts queue like any guard, so memory
+  goes back between them and to other workloads. Bounds: the bases of the admitted elastic
+  workloads (`<lock>.d/elastic/`, under `<lock>.d/register`) leave PROCESS_MIB of the budget free,
+  and a part takes its workload's lifeline (`<lock>.d/lifeline/<workload>`, a ticket in the
+  lifeline lane, served ahead of every other ticket) only while none of that workload's parts
+  runs. So every elastic workload progresses: some part of it runs, or its lifeline is next and
+  finds PROCESS_MIB that no base holds once the running workloads it waits for end (each bounded by
+  its --timeout); an elastic guard with no room waits outside the queue and holds nothing.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
 is only a bound when every heavy workload of the machine goes through the same lock.
 --lock-wait bounds the whole admission; exit 75 (lock_busy) when it is exceeded."""

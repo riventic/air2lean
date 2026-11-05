@@ -790,12 +790,14 @@ default targets (`ZigLean`, `Air2Lean`, `air2lean`); the `ZigLean` root imports 
 full-state logic (`ZigLean.Sep.Full.*`) nor `Proofs`, so a check that runs `lake env lean` after
 it reads whatever oleans an earlier build left, possibly stale ones. The full build is every
 library and executable of `lakefile.toml` with every tracked module of `ZigLean/`, `Air2Lean/` and
-`Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads,
-11000 MiB by default) and through the shared artifact cache ([build-cache.md](build-cache.md)).
+`Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (an elastic admission:
+each Lean process holds its module's measured need while it runs,
+[build-budgets.md](build-budgets.md#elastic-workloads)) and through the shared artifact cache
+([build-cache.md](build-cache.md)).
 A third phase elaborates the **standalone Lean files** (`scripts/lean-deps.py --elaborate`): every
 tracked `.lean` file outside the libraries' directories that imports only Lean and modules of this
 package (the strength logs, the proof-client fixtures, the tutorials; `lean-deps.py --files` lists
-them), with `lake env lean`, three at a time inside the same guard. The libraries cannot import
+them), with `lake env lean`, each its own sub-admission inside the same guard. The libraries cannot import
 such files, so before this phase a break in one (a renamed module, #342 and the strength logs)
 was found only by the `check.sh` that happened to run it. The set is derived, not listed: a new
 file is covered by being committed. Two rules besides "it checks": an import of a package module
@@ -844,13 +846,10 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to eight at once inside their own guard (24000 MiB, at most the guard budget `AIR2LEAN_BUILD_MEM_MIB`
-and the admission of an enclosing guard: the full build's whole admission; `--jobs`, `--rss-mib`),
-each with up to two Lean processes (`--lean-threads`; the full build passes its own count, one
-11000 MiB process per thread), the longest first by
-the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
-unit's largest recent sampled peak, scaled up when the run has more Lean threads than the
-measured one) fit in 85% of the guard's limit; the measurements
+to eight at once inside their own elastic guard (`--jobs`; base `--rss-mib` 4096, at most an
+enclosing guard's), each with one Lean process (`--lean-threads`), the longest first by the last
+runs' wall times, each a sub-admission charged 1.5x the unit's largest recent sampled peak
+(11000 MiB unmeasured; [build-budgets.md](build-budgets.md#elastic-workloads)); the measurements
 (`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
 result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
