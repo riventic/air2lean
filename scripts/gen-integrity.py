@@ -349,6 +349,8 @@ def invgen_errors(targets=None):
             generator, [[name, digest]] = record["generator"], record["inputs"]
             if record["version"] != 2 or not valid_revision(generator):
                 raise ValueError("not a version 2 record with a consistent generator revision")
+            if not {"Air2Lean.InvGen", "Air2Lean.InvGenMain"} <= {m for m, _ in generator["modules"]}:
+                raise ValueError("a revision that is not the generator's (no Air2Lean.InvGen, Air2Lean.InvGenMain)")
             if (record["module"], record["namespace"], name) != (module, namespace, source):
                 raise ValueError(f"not the record of {module} (namespace {namespace}) read from {source}")
         except (OSError, ValueError, KeyError, TypeError) as error:
@@ -892,6 +894,8 @@ def main(argv=None):
         parser.error("--work-dir is only accepted by certify")
     if args.base is not None and args.command != "enrollment":
         parser.error("--base is only accepted by enrollment")
+    if args.only and args.command == "invgen":
+        parser.error("invgen checks every target of scripts/invgen.py")
     if args.only and (args.command.startswith("case-") or args.command == "enrollment"):
         parser.error("case-family coverage cannot select individual cases")
     try:

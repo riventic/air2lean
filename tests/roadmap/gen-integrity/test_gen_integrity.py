@@ -527,6 +527,7 @@ class InvgenRecordTests(unittest.TestCase):
         (self.root / "lean-toolchain").write_text("leanprover/lean4:v4.34.0\n")
         (self.root / "Air2Lean").mkdir()
         (self.root / "Air2Lean/InvGen.lean").write_text("-- generator\n")
+        (self.root / "Air2Lean/InvGenMain.lean").write_text("-- generator main\n")
         (self.root / "Fx/Fx").mkdir(parents=True)
         (self.root / "Fx/Fx/Gen.lean").write_text("-- translation\n")
         self.write_record()
@@ -542,8 +543,9 @@ class InvgenRecordTests(unittest.TestCase):
     def digest(self, rel):
         return hashlib.sha256((self.root / rel).read_bytes()).hexdigest()
 
-    def write_record(self, path="Fx/Fx/Inv.lean", revision=None, body="import Fx.Gen\n", **changes):
-        generator = {"lean": "4.34.0", "modules": [["Air2Lean.InvGen", self.digest("Air2Lean/InvGen.lean")]]}
+    def write_record(self, path="Fx/Fx/Inv.lean", revision=None, body="import Fx.Gen\n",
+                     modules=("Air2Lean.InvGen", "Air2Lean.InvGenMain"), **changes):
+        generator = {"lean": "4.34.0", "modules": [[m, self.digest(m.replace(".", "/") + ".lean")] for m in modules]}
         generator["revision"] = revision or self.REVISION(generator)
         record = {"version": 2, "generator": generator, "inputs": [["Fx/Fx/Gen.lean", self.digest("Fx/Fx/Gen.lean")]],
                   "module": "Fx.Gen", "namespace": "Fx", "loops": [],
@@ -577,7 +579,8 @@ class InvgenRecordTests(unittest.TestCase):
                              ({"inputs": [[1, "x"]]}, "not the record of Fx.Gen"),
                              ({"inputs": [["/etc/hosts", "x"]]}, "not the record of Fx.Gen"),
                              ({"namespace": "Other"}, "not the record of Fx.Gen"),
-                             ({"version": 1}, "not a version 2 record")):
+                             ({"version": 1}, "not a version 2 record"),
+                             ({"modules": ("Air2Lean.InvGen",)}, "not the generator's")):
             self.write_record(**changes)
             error, = self.errors()
             self.assertIn("no valid air2lean-invgen record", error)

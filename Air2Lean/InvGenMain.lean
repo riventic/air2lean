@@ -11,7 +11,8 @@ It imports the translated `MODULE` (on the lookup path of `LEAN_PATH`, so run it
 loops, and writes the generated invariants and measures (`Air2Lean.InvGen.generate`) to `-o FILE`
 (default: stdout). The first line records the generator's revision (`translator_revision%`: this
 file and the `Air2Lean` modules it imports) and the source's SHA-256, which
-`scripts/gen-integrity.py invgen` checks against the checkout. Each loop it cannot handle is named
+`scripts/gen-integrity.py invgen` checks against the checkout: the caller builds `MODULE`'s olean
+from that source (`scripts/invgen.py` compiles it fresh), since only the source is hashed. Each loop it cannot handle is named
 on stderr with the reason; it gets no definition. An error is printed on stderr, with exit code 1.
 -/
 

@@ -513,8 +513,10 @@ committed `Inv.lean` (its `TARGETS` table); it is the `invgen` step of `scripts/
 after `gen`, so a retranslation regenerates the invariants with it.
 The record also holds the SHA-256 of the rest of the file. `scripts/gen-integrity.py invgen`
 (preflight, also without a translator) checks each target's record against the checkout without
-running Lean: a changed generator module, toolchain or input makes the file stale, a hand edit or a
-record of another module fails, and so does a record outside the targets. The `invgen` regen step
+running Lean: a changed generator module, toolchain or input makes the file stale, a hand edit
+below the record or a record of another module (or of another generator) fails, and so does a
+record outside the targets. (The record's `loops` summary is not hashed: an edit there changes no
+definition.) The `invgen` regen step
 still always runs the generator: a runtime (`ZigLean`) change can change how an unchanged
 translation elaborates, which the record does not hash (hashing the runtime would mark every
 `Inv.lean` stale at every runtime change).
