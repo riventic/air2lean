@@ -429,7 +429,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   have hEp' : WE.hist m' = WE.hist m ∨ ∃ q n h', (G t).2.c = .inc q n h' ∧ p = .wk n q h' := hEp
   -- two threads in the signal code are one (both hold the mutex)
   have hsig1 : ∀ u v, ((G u).2.c).sig = true → ((G v).2.c).sig = true → u = v := fun u v h1 h2 =>
-    hWI.one u v (sig_holds hu.cinv hu.sinv h1) (sig_holds hu.cinv hu.sinv h2)
+    hWI.one u v (LPh.held_of_holds (sig_holds hu.cinv hu.sinv h1))
+      (LPh.held_of_holds (sig_holds hu.cinv hu.sinv h2))
   -- no thread in the critical code while one is in the signal code
   have hcp : ∀ u v, ((G u).2.c).crit = true → ((G v).2.c).sig = true → False := fun u v h1 h2 =>
     hu.sinv.cp u v h1 (sig_pst hu.cinv h2)
@@ -722,7 +723,8 @@ theorem fits : S.Fits (proto semOf) U ok where
     role_l := fun _ _ _ _ => Iff.rfl
     role_part := fun _ _ _ => Iff.rfl
     ok_calm := fun _ _ _ hp hq => ⟨fun _ => hq, fun _ => hp⟩
-    kstep := kstep }
+    kstep := kstep
+    holdLive := fun _ _ _ _ hi _ hv => FLock.holdLive_none (fun _ h => h) hi hv }
 
 end SemCounter
 end Zig
