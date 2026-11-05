@@ -75,11 +75,11 @@ without signed overflow. -/
       (fun v => ⟪v = a * b⟫ ⋆ P) :=
   result_step (fun h => ⟨a * b, by simp [Zig.mul, h], rfl⟩) h
 
-/-- **An item of an array value** (`Zig.index`) at an index below its size. -/
+/-- **An item of an array value** (`Zig.index`) at an index below its size (the item read with
+that bound, as `vindex_step`). -/
 @[fsym] theorem index_step {α : Type} (a : Array α) (i : usize) (h : i.toNat < a.size) :
-    FTotalTriple P (StateT.lift (Zig.index a i) : MemM α)
-      (fun v => ⟪∃ h : i.toNat < a.size, v = a[i.toNat]⟫ ⋆ P) :=
-  result_step (fun h => ⟨a[i.toNat], Zig.index_lt a i h, h, rfl⟩) h
+    FTotalTriple P (StateT.lift (Zig.index a i) : MemM α) (fun v => ⟪v = a[i.toNat]⟫ ⋆ P) :=
+  result_step (fun h' => ⟨a[i.toNat], Zig.index_lt a i h', rfl⟩) h
 
 /-- The payload of an error union that holds one (`try`, `catch unreachable`). -/
 @[fsym] theorem unwrapPayload_step {α : Type} (e : Except ErrName α) (h : Zig.isNonErr e = true) :

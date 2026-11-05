@@ -52,7 +52,7 @@ theorem mul_signed (P : FAssn) (a b : BitVec 32) (h : a.smulOverflow b = false) 
 /-- An array item at an index below the size. -/
 theorem index_lt (P : FAssn) (a : Array (BitVec 8)) (i : usize) (h : i.toNat < a.size) :
     FTotalTriple P (StateT.lift (Zig.index a i) : MemM (BitVec 8))
-      (fun r => ⟪∃ h : i.toNat < a.size, r = a[i.toNat]⟫ ⋆ P) := by
+      (fun r => ⟪r = a[i.toNat]⟫ ⋆ P) := by
   fsym
 
 /-- The payload and the error of an error union. -/
@@ -94,7 +94,7 @@ example (P : FAssn) (a b : BitVec 32) : True := by
 example (P : FAssn) (a : Array (BitVec 8)) (i : usize) (h : i.toNat ≤ a.size) : True := by
   fail_if_success
     have : FTotalTriple P (StateT.lift (Zig.index a i) : MemM (BitVec 8))
-        (fun r => ⟪∃ h : i.toNat < a.size, r = a[i.toNat]⟫ ⋆ P) := by
+        (fun r => ⟪r = a.getD i.toNat 0⟫ ⋆ P) := by
       fsym
   trivial
 
