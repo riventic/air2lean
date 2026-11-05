@@ -71,6 +71,20 @@ theorem private_key_shared_refusal :
       live := false }] } = some (.error .illegal) :=
   ⟨by decide +kernel, by decide +kernel⟩
 
+/-- A shared key on a file-backed page is the inode and page offset (core.c `get_futex_key`, the
+`!PageAnon` branch), and a write that copies a `MAP_PRIVATE` page changes it to the address
+space's key: a shared WAIT at a `.data` page that was never written, then a write and a shared
+WAKE, leaves the waiter asleep natively. The model knows the page only for an anonymous block,
+so a shared WAKE at a live writable word of a global is a conservative refusal (`.illegal`),
+never a wake; the same WAKE at a heap word, and a private WAKE at the global, form their keys. -/
+theorem shared_key_global_refusal :
+    observeWake (Linux.futex_3arg p 1 1) { blocks := #[{ block 4096 8 with kind := .global }] } =
+      some (.error .illegal) ∧
+    observeWake (Linux.futex_3arg p 1 1) base = some (.ok (0, #[], #[])) ∧
+    observeWake (Linux.futex_3arg p 0x81 1) { blocks := #[{ block 4096 8 with kind := .global }] } =
+      some (.ok (0, #[], #[])) :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel⟩
+
 /-- `__ulock_wait2`/`__ulock_wake` (xnu-12377.121.6 `bsd/kern/sys_ulock.c:571`, `:966`): a null
 or unaligned WAIT and a null WAKE return `-EINVAL` before any compare or queue effect. -/
 theorem ulock_null_einval :

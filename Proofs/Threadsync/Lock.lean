@@ -19,7 +19,7 @@ translation depends on the OS (`tests/golden/0.15.2/threadsync/Gen-darwin.lean`)
   (`Zig.osUnfairLockC`): a loop of an acquire `cmpxchg 0 → 1` with a futex wait while the word is
   `1`. `unlock` is a release `xchg 0` and a wake. The contended value is `1`.
 
-The code of the other translation does not exist, so `if_decl` (`Proofs/Threadsync/Variant.lean`)
+The code of the other translation does not exist, so `when_defined` (`ZigLean/VersionGate.lean`)
 checks the translation before it compiles the proofs that name it.
 -/
 
@@ -47,7 +47,7 @@ namespace ThreadMutexOps
 
 variable {γ : Type} {L : Lock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Mem → Prop}
 
-if_decl Thread_Mutex_FutexImpl_lock in
+when_defined Thread_Mutex_FutexImpl_lock
 
 /-- `tryLock` by thread `t` at `out` (`g`): `true` and `t` holds the mutex, or `false` and `t` is
 at `spin`. -/
@@ -279,9 +279,9 @@ theorem unlockL_spec (hP : L.Fits P U) (hc3 : L.c = 3) {p : Ptr} (hp : p = L.ptr
   exact WP.bind (WP.mono (fun _ _ _ _ hq => WP.pure' hq)
     (futexUnlock_spec hP hc3 hp t g hg G m d hi hcur))
 
-end_if
+end_when
 
-if_decl Thread_Mutex_DarwinImpl in
+when_defined Thread_Mutex_DarwinImpl
 
 /-- The loop invariant of `os_unfair_lock_lock`: thread `t` is at `out` (`g`, the first try) or at
 `spin` (after a futex wait). -/
@@ -383,7 +383,7 @@ theorem unlockD_spec (hP : L.Fits P U) (hc1 : L.c = 1) {p : Ptr} (hp : p = L.ptr
   rw [L.set_set] at hi₂
   exact WP.pure' (WP.pure' ⟨by omega, hc₂, hi₂⟩)
 
-end_if
+end_when
 
 /- The rules need `WP` only as a name: unfolding it runs the program. -/
 attribute [local irreducible] Proto.WP
