@@ -1120,7 +1120,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/proof-tools"
-          lake build ZigLean.Sep.Total ZigLean.Sep.Full.AutoAll Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
+          lake build ZigLean.Sep.Full.AutoAll Proofs.Slices.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/build.log"
 
       - name: Explicit array framing regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -1446,7 +1446,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.External.Callback ZigLean.Sep.Loop Proofs.Asm.Effects
+          lake build ZigLean ZigLean.External.Callback ZigLean.Mem.Run Proofs.Asm.Effects
           bash tests/roadmap/callbacks/check.sh
 
       # Open interfaces (docs/interfaces.md): a std.mem.Allocator or std.Random parameter's calls
