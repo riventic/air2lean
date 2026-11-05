@@ -872,7 +872,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### SEM-04 — Total-correctness statements
 
 - Kind: meaning.
-- Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
+- Statement: `FTotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
   than SEM-03 and only cover their stated finite clients. An `FTotalTriple` that holds `B`
   credits additionally bounds the steps (`Zig.tick`) of the run by `B`
@@ -882,8 +882,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Full.Cost`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
-- Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
+- Derived from: `ZigLean.Sep.Full.Logic`, `ZigLean.Sep.Full.Loop`, `ZigLean.Sep.Full.Cost`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
+- Sources: `ZigLean/Sep/Full/Logic.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
 ### SEM-05 — Model step and allocation counts are not time or memory measurements
