@@ -2,7 +2,7 @@ import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.AutoPrim
 
 /-!
-# `fsym` on the primitive `Result` commands of `AutoPrim.lean`
+# `fsym` on the primitive `Result` commands (`AutoRules.lean`, `AutoPrim.lean`)
 
 One step rule per command, whatever the runtime-safety flag: unsigned `*` (`mul_step`, its
 value as `r.toNat`, from which the closing solver also gets the word equation), signed `+`, `-`,

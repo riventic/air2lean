@@ -54,7 +54,7 @@ A call of another generated function is compositional through its proved contrac
 uses the contract `c` as a step rule before inlining the callee. The contract is the total triple
 of the callee (its lifted program for a pure function), `∀ xs, FTotalTriple pre (g xs) post`
 (`fsym [tardiness_total]` in `tests/roadmap/vcs/Extract.lean`). A `Result` contract
-`pre → ∃ v, g xs = pure v ∧ post v` becomes one with `Zig.Full.Auto.result_step` (`ZigLean/Sep/Full/AutoPrim.lean`):
+`pre → ∃ v, g xs = pure v ∧ post v` becomes one with `Zig.Full.Auto.result_step` (`ZigLean/Sep/Full/AutoRules.lean`):
 its precondition is a side goal and its summary a fact. Without a contract, a non-recursive callee
 is inlined, so its obligations appear in the caller's.
 

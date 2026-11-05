@@ -1,4 +1,4 @@
-import ZigLean.Sep.Full.AutoPrim
+import ZigLean.Sep.Full.AutoRules
 
 /-!
 # Rules for the arithmetic and copies of growing slices
@@ -7,7 +7,7 @@ Code that grows a buffer of items (`std.ArrayList`'s `ensureTotalCapacityPrecise
 `growCapacity`) multiplies an item count by the item size with a checked `*`, grows a capacity
 with a saturating `+|`, forms the pointer to item `0` of a buffer that may have no bytes, and
 copies no items with `@memcpy` when the old buffer is empty. The checked `*` is the engine's
-`Auto.mul_step` (`AutoPrim.lean`); three rules for `fsym` here, for every width, item size and
+`Auto.mul_step` (`AutoRules.lean`); three rules for `fsym` here, for every width, item size and
 pointer:
 
 * `addSat_false`: the value of an unsigned `+|` (an `fsym_arith` equation).
