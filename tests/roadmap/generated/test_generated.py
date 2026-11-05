@@ -67,6 +67,16 @@ class Comparison(unittest.TestCase):
             self.assertNotEqual(gen.comparable(data, 'r.json', a), gen.comparable(data, 'r.json', b))
             self.assertNotEqual(gen.comparable(data, 'other.json', a), gen.comparable(data, 'other.json', Path(temp, 'b.json')))
 
+    def test_a_star_names_every_key_of_a_map(self):
+        data = {'groups': [{'name': 'g', 'paths': ['r.json'], 'run_bound': {'r.json': ['runs.*.elapsed']}}]}
+        with tempfile.TemporaryDirectory() as temp:
+            a, b = Path(temp, 'a.json'), Path(temp, 'b.json')
+            a.write_text(json.dumps({'runs': {'x': {'elapsed': 1, 'ok': 1}, 'y': {'elapsed': 2, 'ok': 1}}}))
+            b.write_text(json.dumps({'runs': {'x': {'elapsed': 9, 'ok': 1}, 'y': {'ok': 1}}}))
+            self.assertEqual(gen.comparable(data, 'r.json', a), gen.comparable(data, 'r.json', b))
+            b.write_text(json.dumps({'runs': {'x': {'elapsed': 9, 'ok': 2}, 'y': {'ok': 1}}}))
+            self.assertNotEqual(gen.comparable(data, 'r.json', a), gen.comparable(data, 'r.json', b))
+
 
 class Workflow(unittest.TestCase):
     @classmethod
@@ -87,6 +97,14 @@ class Workflow(unittest.TestCase):
                                  event in ('push', 'pull_request', 'merge_group'))
                 self.assertTrue(self.rr.TM.condition(producer.get('if'), context))
                 self.assertTrue(self.rr.TM.condition(upload.get('if'), context))
+
+    def test_every_producer_is_a_job_that_uploads_its_artifact(self):
+        for job, artifact in gen.PRODUCERS.items():
+            with self.subTest(job=job):
+                uploads = [step['with']['name'] for step in self.ci['jobs'][job]['steps']
+                           if str(step.get('uses', '')).startswith('actions/upload-artifact')]
+                self.assertIn(artifact, uploads)
+        self.assertIn('theorem-inventory', self.ci['jobs']['all-checks']['needs'])
 
     def test_event_base_uses_pr_base_even_when_synchronize_before_is_red_or_unreachable(self):
         steps = self.ci['jobs']['generated']['steps']
@@ -285,6 +303,10 @@ class Branch(unittest.TestCase):
         passed; m4 a running one whose provenance job has not finished; m5 a green one. The first
         publish appends m1 and m3 and stops at m4; once m4's run ends with provenance red, m4 is
         skipped and m5 is published. A run of another workflow, event or repository never counts."""
+        # The fake registry has two groups: the producers are two jobs (the real third one,
+        # `theorem-inventory`, is checked by test_every_producer_is_a_job_that_uploads_its_artifact).
+        self.enterContext(mock.patch.object(gen, 'PRODUCERS', {'generated': 'generated-files',
+                                                               'provenance': 'generated-provenance'}))
         origin = self.scratch / 'origin.git'
         git(self.scratch, 'init', '-q', '--bare', str(origin))
         git(self.root, 'remote', 'add', 'origin', str(origin))

@@ -877,6 +877,70 @@ def Mem.write (m : Mem) (b : BlockId) (blk : Block) (o : Nat) (bs : Array Byte) 
 theorem singleThread_write {m : Mem} (h : m.SingleThread) (b : BlockId) (blk : Block) (o : Nat)
     (bs : Array Byte) : (m.write b blk o bs).SingleThread := h
 
+/-! ### Block addresses stay
+
+A block never moves: a write, a `free`, an unmap or an in-place resize changes only its bytes,
+`live` flag or `kind`, and every `addr :=` of the model makes a new block (`Mem.afterAlloc`, a
+mapping, a moving `mremap`). So every thread step (`FStepIn.addrs`) keeps the address of every
+block that exists (`Mem.SameAddrs`), and everything computed from addresses (`addrIn`, a futex
+key) stays across it. -/
+
+/-- Every block of `m` exists in `m'` at the same address (`m'` may have more blocks). -/
+def Mem.SameAddrs (m m' : Mem) : Prop :=
+  ∀ (b : BlockId) (blk : Block), m.blocks[b]? = some blk →
+    ∃ blk' : Block, m'.blocks[b]? = some blk' ∧ blk'.addr = blk.addr
+
+theorem Mem.SameAddrs.refl (m : Mem) : m.SameAddrs m := fun _ blk hb => ⟨blk, hb, rfl⟩
+
+theorem Mem.SameAddrs.trans {m m' m'' : Mem} (h : m.SameAddrs m') (h' : m'.SameAddrs m'') :
+    m.SameAddrs m'' := fun b blk hb => by
+  obtain ⟨blk₁, hb₁, e₁⟩ := h b blk hb
+  obtain ⟨blk₂, hb₂, e₂⟩ := h' b blk₁ hb₁
+  exact ⟨blk₂, hb₂, e₂.trans e₁⟩
+
+theorem Mem.SameAddrs.of_blocks {m m' : Mem} (h : m'.blocks = m.blocks) : m.SameAddrs m' :=
+  fun _ blk hb => ⟨blk, h ▸ hb, rfl⟩
+
+/-- No block disappears. -/
+theorem Mem.SameAddrs.size {m m' : Mem} (h : m.SameAddrs m') : m.blocks.size ≤ m'.blocks.size := by
+  rcases Nat.eq_zero_or_pos m.blocks.size with h0 | hpos
+  · omega
+  · obtain ⟨_, hb', -⟩ := h _ _ (Array.getElem?_eq_getElem (Nat.sub_lt hpos Nat.one_pos))
+    have := (Array.getElem?_eq_some_iff.mp hb').1
+    omega
+
+/-- A new block at the end. -/
+theorem Mem.SameAddrs.of_push {m m' : Mem} {x : Block} (h : m'.blocks = m.blocks.push x) :
+    m.SameAddrs m' := fun b blk hb => by
+  refine ⟨blk, ?_, rfl⟩
+  rw [h, Array.getElem?_push_lt (Array.getElem?_eq_some_iff.mp hb).1]
+  exact (Array.getElem?_eq_getElem _).symm.trans hb
+
+/-- Block `b` replaced by one at its address (a write, a `free`, an in-place resize). -/
+theorem Mem.SameAddrs.of_set {m m' : Mem} {b : BlockId} {nb : Block}
+    (h : m'.blocks = m.blocks.set! b nb) (ha : ∀ blk, m.blocks[b]? = some blk → nb.addr = blk.addr) :
+    m.SameAddrs m' := fun b' blk hb => by
+  rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  split
+  · subst b'
+    exact ⟨nb, by simp [(Array.getElem?_eq_some_iff.mp hb).1], ha blk hb⟩
+  · exact ⟨blk, hb, rfl⟩
+
+/-- A write keeps every block's address. -/
+theorem Mem.sameAddrs_write {m : Mem} {b : BlockId} {blk : Block} {o : Nat} {bs : Array Byte}
+    (hb : m.blocks[b]? = some blk) : m.SameAddrs (m.write b blk o bs) :=
+  .of_set rfl fun _ h => by rw [hb] at h; cases h; rfl
+
+/-- An address computed in `m` is the same in `m'`. -/
+theorem Mem.SameAddrs.addrIn_eq {m m' : Mem} (h : m.SameAddrs m') {p : Ptr} {a : Int}
+    (ha : addrIn m.blocks p = some a) : addrIn m'.blocks p = some a := by
+  obtain ⟨_ | b, po⟩ := p
+  · exact ha
+  · simp only [addrIn, Option.map_eq_some_iff] at ha ⊢
+    obtain ⟨blk, hb, rfl⟩ := ha
+    obtain ⟨blk', hb', e⟩ := h b blk hb
+    exact ⟨blk', hb', by rw [e]⟩
+
 /-- `.access` only looks at `blocks`, never at `current`/`clocks`/`threads`/`footprint`, so a
 race-free `recordAccess` (`Mem.recordAt`) never changes what a further access sees. -/
 theorem access_recordAt {m : Mem} {block off len : Nat} {kind : AccessKind} {q : Ptr}

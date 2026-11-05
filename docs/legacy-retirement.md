@@ -141,8 +141,8 @@ Findings about the ratchet itself (lane L1):
   `Lock/Fits/FitsOn/Step`, Conc.Spec.* (5 specs, deleted L21), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas
   `Grows`, LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests: futures `CancelSpec`,
   asm-wrappers `Spec`, claims.Fixture `FWrapped`, sep-full `FTripleCell/FTripleExact`) and 22 tactic entries
-  (Automation `sep_frame/sep_normalize`, Wrappers `sep_from/tame_prim`, Full.Conc `conc_norm`, Full.Tame `tame`,
-  Full.Extent `within`, Full.Unroll `unroll_solo`, Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
+  (Automation `sep_frame/sep_normalize`, Wrappers `sep_from/tame_prim`, Full.Conc `conc_norm` (deleted, L16), Full.Tame
+  `tame` (deleted, L16), Full.Extent `within`, Full.Unroll `unroll_solo` (deleted, L16), Conc.Unroll `unroll_sched`, Conc.Lemmas `blkat_alloc`, Spec.Count
   `tomega`, VC.Extract (3), VersionGate `when_defined`, Threadsync.Variant `if_decl`, AllocFba 3, Assurance/audit
   commands 3). Section 5 assigns them.
 
@@ -206,7 +206,7 @@ Group 1 (start now, independent)
 | file | what | uses | blocker | eff | class |
 | --- | --- | --- | --- | --- | --- |
 | ZigLean/Sep/Full/Ghost.lean | ghost-resource FTriple rules | none (listed through `import Full.Triple`) | TOOL false positive | S | library |
-| ZigLean/Sep/Full/Tame.lean | `Tame` (program keeps layout), `tame` tactic | none (same false positive); `tame` tactic entry is legacy-to-retire | TOOL | S | library |
+| ZigLean/Sep/Full/Tame.lean | `Tame` (program keeps layout) | none (same false positive); the `tame` tactic is deleted (L16) | TOOL | S | library |
 | ZigLean/Sep/Full/Logic.lean | `FLogic`, `FReturns`, FTotalTriple | `Sep.Total` import + `TotalTriple` until fold-delete-bridge; false positive after | TOOL (after fold chain) | S | library |
 Work: strip `import` lines in the name scan; extend `LEGACY_MODULES` to the Conc cluster (maintainer approval, adds 10
 entries, section 1); re-run `--write`. Also decisions memo (section 7).
@@ -444,7 +444,7 @@ L11 RwLock and WaitGroup (L, 1-2 agents, 3 weeks): need `RwLockImpl` (readers/wr
 | --- | --- | --- | --- |
 | Proofs/Sync/RwLock.lean (4707) | `rwLockRead` result in {2,12,22}, safe; `Sem.Spec` legacy judgment | L | proof |
 | Proofs/Sync/RwLockSnapshotPair.lean (224) | snapshot-pair client of the RwLock contract (0.16/0.17 tree) | M | proof |
-| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | done: client of `MutexImpl` (`threadMutex`) and `EventImpl` (`resetEvent`) (`Proofs/Threadsync/WaitGroup/*`), `waitGroup_spec`/`waitGroup_safe` verbatim; the whole `Tally` read by `FLock.Inv.loadMem`; completes by kernel evaluation in `tests/roadmap/sync-contracts/Runtime.lean` (it names the Linux translation's loops) (#640) |
+| Proofs/Threadsync/WaitGroup.lean (3561) | `waitGroup` result 2 under every schedule (Thread.WaitGroup + ResetEvent + Mutex, 0.15.2) | L | done: client of `MutexImpl` (`threadMutex`) and `EventImpl` (`resetEvent`) (`Proofs/Threadsync/WaitGroup/*`), `waitGroup_spec`/`waitGroup_safe` verbatim; the whole `Tally` read by `FLock.Inv.loadMem`; completes by kernel evaluation (`waitGroup_completes`, in every 0.15.2 translation) (#640, #675) |
 
 Remaining shared-prefix and holder proof copies are tracked in [engine ledger #76](engine-ledger.md).
 
@@ -497,7 +497,7 @@ Stage D-e = the **final PR** (needs the strength log):
 * Conc.* (`TTriple`, `TTripleIn`, `TLive`, `Lock*`, `Spec.*`, `Total`, `TimedBudget`, `Clock.StepIn`, `Lemmas.Grows`, `WP`): L12 + D-WP; `Conc.Total`/`TimedBudget` also need the L8 tick mechanism.
 * Proofs.Sync.{Semaphore,RwLock} local `Fits/Sem/Step/Sem.Spec`: vanish with L10/L11.
 * Tests: `CancelSpec` (futures), `asm-wrappers Interp.Spec`, `FTripleCell/FTripleExact` (sep-full CX files), `Wrapped/FWrapped` (Fixture, L7): pure-result or counterexample fixtures; re-status as target when they are `FTriple` instances, or rewrite (needs maintainer approval for any status change).
-* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `blkat_alloc` (Conc.Lemmas) is gone: its uses are term proofs over `BlkAt.alloc`/`BlkAt.afterAlloc` (L14). `tomega` (Spec.Count) is gone: its uses are `Nat` library lemmas (L18). `if_decl` (Threadsync.Variant) is gone: its blocks are `when_defined` blocks, the one translation gate, which retires with engine-ledger #case-family-enrollment (L18). `unroll_sched` (Conc.Unroll): the `completes` run witnesses unfold the loops on the run's path by `Zig.loop.eq_1` and let the kernel compute the run (`docs/proof-tools.md`; L17). Its uses left: Proofs/Sync/Handoff.lean (ledger `run-witness-loop-names`), Proofs/Sync/{RwLock,RwLockSnapshotPair}.lean (#637), Proofs/Threadsync/WaitGroup.lean (#640) and its own test tests/roadmap/proof-tools/Unroll.lean. The elab, its `tactics` entry and that test go with the last of them; the library part of Conc.Unroll stays while `unroll_solo` imports it (Proofs/Sync/SnapshotCache.lean imports the module without using the tactic: drop that import with the elab). `within`/`unroll_solo` were approved only "gone before landing" and remain. The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, Full `within`/`unroll_solo`/`tame`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
+* Tactics: the 12 AllocArena.Core `arena_*` macros are gone (general `@[fsym]` rules, #388). `blkat_alloc` (Conc.Lemmas) is gone: its uses are term proofs over `BlkAt.alloc`/`BlkAt.afterAlloc` (L14). `tomega` (Spec.Count) is gone: its uses are `Nat` library lemmas (L18). `if_decl` (Threadsync.Variant) is gone: its blocks are `when_defined` blocks, the one translation gate, which retires with engine-ledger #case-family-enrollment (L18). `unroll_sched` (Conc.Unroll): the `completes` run witnesses unfold the loops on the run's path by `Zig.loop.eq_1` and let the kernel compute the run (`docs/proof-tools.md`; L17). Its uses left: Proofs/Sync/Handoff.lean (ledger `run-witness-loop-names`), Proofs/Sync/{RwLock,RwLockSnapshotPair}.lean (#637), Proofs/Threadsync/WaitGroup.lean (#640) and its own test tests/roadmap/proof-tools/Unroll.lean. The elab, its `tactics` entry and that test go with the last of them, and so does the library part of Conc.Unroll (Proofs/Sync/SnapshotCache.lean imports the module without using the tactic: drop that import with the elab). `within` was approved only "gone before landing" and remains; `unroll_solo`, `conc_norm` and `tame` are deleted (L16). The module glue for pure/float/version-gated proofs (`Air2Lean.Sem` `mono_step/ok_step`, `Floatops` `fma_case/spec_case`, idle-loops `nn_step`, Full `within`) belongs to Codex task 17 (glue tactics, #439). None of it is in this plan's 80 files.
 
 ## 6. Execution order and critical path
 

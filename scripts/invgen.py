@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 TARGETS = [
     ('tests/roadmap/loop-tactics/nested/Nested/Inv.lean', 'tests/roadmap/loop-tactics/nested',
      'Nested.Gen', 'Nested'),
+    ('tests/roadmap/loop-tactics/counted/Counted/Inv.lean', 'tests/roadmap/loop-tactics/counted',
+     'Counted.Gen', 'Counted'),
 ]
 
 

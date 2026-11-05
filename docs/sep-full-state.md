@@ -186,7 +186,7 @@ does not promise it: a `FixedBufferAllocator` `free` leaves the grant's block li
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
 | `AtomicPtr` | `FTriple.atomicLoadUnorderedEnc`, `FTriple.cmpxchgPtr` | pointer-valued `aptsE`: the `unordered` load reads the value; a strong `cmpxchg` with the held value succeeds |
 | `Seq` | `Sched.run_solo`, `Sched.run_eq_seqRun`, `ThreadFreeC.*` | a one-thread scheduler run of a `ThreadFree` concurrent function is its sequential reading |
-| `Conc` | `CTriple.bind`, `liftMem`, `pick_bind`, `step`, `know_intro`, `forget`, `conc_norm` | full-state triples for a concurrent function called in one thread (`Sched.soloRun`, oracle `0`) |
+| `Conc` | `CTriple.bind`, `liftMem`, `pick_bind`, `step`, `know_intro`, `forget`, the `CNorm` lemmas (in `fsym_norm`) | full-state triples for a concurrent function called in one thread (`Sched.soloRun`, oracle `0`) |
 | `Atomic` | `apts_layout` | **O3**: a memory that holds a word as `apts` has no atomic location of another offset or size over it (`docs/alloc-page.md`'s `odd` memory holds no `apts` of the hint) |
 
 The prototype toy allocator (`Full/Toy.lean`: the shape of `PageAllocator.map`'s hint protocol,
@@ -1314,6 +1314,18 @@ model argument, standards references and necessity/advancing-read controls.
   futex and atomic ops do not touch block addresses). So `known` facts are stable under the rely
   and can live in any thread's ghost value or in `Proto.inv`. This is the Iris notion of a
   persistent proposition.
+* **Block addresses stay across every thread step** (maintainer decision 2026-11-05, audit
+  finding S6, ledger row `fstepin-addrs`): the step-level form of `KMono`'s address facts above.
+  The thread step relation `FStepIn` has the field `addrs : m.SameAddrs m'`: every block of `m`,
+  also one of the frame, exists in `m'` at the same address. The model never moves a block: a
+  write, `free`, an unmap or an in-place resize changes only bytes, `live` or `kind`, and every
+  `addr :=` is a new block (`Mem.afterAlloc`, a mapping, a moving `mremap`). So everything read
+  from addresses, `addrIn` and the futex keys, is stable under every `FStepIn` of the rely
+  (`Mem.SameAddrs.addrIn_eq`). Counterexample to the old relation (only
+  `m.blocks.size ≤ m'.blocks.size`): a frame step that moves block `b'` (a nested lock's word,
+  outside the frame) satisfies every other field, and a lock invariant that names `b'`'s futex key
+  (`LockWord.nest`) is false after it. Rejected alternative: a word-address field in each
+  protocol object (`LockWord`, `FCond`, `FSem`, `FEvent` would each repeat it).
 * **Shared atomic words** (`Conc/Base/Word.lean`: `Word.Ok` requires "no other location overlaps").
   This is the constraint `(o, n)` for a word that no thread owns. The full-state version keeps the word in the
   protocol invariant as `apts` contents with tag `some (o, n)`.
@@ -1363,7 +1375,7 @@ model argument, standards references and necessity/advancing-read controls.
       stay proof-only like the rest of `ZigLean/Sep`, so they are not added to `ZigLean.lean`.
    2. Done (`AllocSpec.lean`, `Tame.lean`): `FAllocSpec` over `FAllocInv` (next section).
       `FAllocSpec.ofTotal` turns a legacy total `AllocSpec` of a `VTame` vtable into a full one
-      (`AllocInv.toFull`). `tame` proves `Tame` for normalized generated code (`fsym_norm`), and the
+      (`AllocInv.toFull`). The `Tame` lemmas cover normalized generated code (`fsym_norm`), and the
       OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. (`FAllocSpec.ofTotal` is gone with
       block extents; the FixedBufferAllocator's `FBA.fallocSpec` is now a native full-state proof,
       `tests/roadmap/alloc-fba/AllocFba/Full.lean`, with the rules of `ZigLean/Sep/Full/Ops.lean`.) The page
