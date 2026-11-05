@@ -518,7 +518,8 @@ paths, guarded by `¬ x < b`, that touch no memory and no local. For the loop bo
 generator writes `F.loopN.inv params s0 v₀ … s` (the other locals pinned to the entry locals
 `s0`, `s0.x ≤ x ≤ b`, each cell `vₖ + cₖ * (x - s0.x)` and the no-overflow fact
 `vₖ + cₖ * (b - s0.x) < 2 ^ w` of its checked adds, and `plain` when the body ticks) and
-`F.loopN.meas params s := b - x`. Every other loop gets no definition and the reason (a nested
+`F.loopN.meas params s := b - x`. The invariant needs `s0.x ≤ b` at entry: the client
+establishes it (a loop entered past its bound is not an instance). Every other loop gets no definition and the reason (a nested
 loop, a call, a signed test, a second test, a cell that is only read, an uncovered add, a literal
 that wraps, a parameter named like a generated binder, …): a proof that needs it does not build.
 

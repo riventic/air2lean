@@ -379,13 +379,14 @@ def genLoop (ns body again : Name) : MetaM LoopOut := do
   return { loop := body, text := res }
 
 /-- The loops that `e` runs: each `Zig.loop (body …) again` as the body's definition and the
-exit test, read off the term (no naming convention). -/
+exit test, read off the term (no naming convention). A loop whose body is not an applied
+definition or whose test is not a constant is `(.anonymous, .anonymous)`. -/
 partial def loopApps (e : Expr) (acc : Array (Name × Name)) : Array (Name × Name) :=
   let acc :=
     if e.isAppOfArity `Zig.loop 7 then
       match e.getArg! 5 |>.getAppFn.constName?, e.getArg! 6 |>.constName? with
       | some b, some a => acc.push (b, a)
-      | _, _ => acc
+      | _, _ => acc.push (.anonymous, .anonymous)
     else acc
   match e with
   | .app f x => loopApps x (loopApps f acc)
@@ -404,6 +405,8 @@ def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
       for l in loopApps d.value #[] do
         if !out.contains l then out := out.push l
   if out.isEmpty then throwError "module {module} runs no `Zig.loop`"
+  if out.contains (.anonymous, .anonymous) then
+    throwError "module {module} runs a `Zig.loop` whose body is not an applied definition"
   if let some (b, _) := out.find? (!ns.isPrefixOf ·.1) then
     throwError "the loop body {b} is outside the namespace {ns}"
   return out.qsort (fun a b => a.1.toString < b.1.toString)
