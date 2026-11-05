@@ -12,7 +12,7 @@
 # First it materializes the whole-tree generated files (assurance/generated.json; not committed,
 # docs/ci.md#whole-tree-generated-files): `scripts/generated.py materialize` regenerates the
 # coverage inventories (pinned pristine compiler sources, scripts/cas.py) and the premise index,
-# and fetches the provenance fixtures from the `generated` branch when it is reachable (CI
+# and fetches the theorem inventory and the provenance fixtures from the `generated` branch when it is reachable (CI
 # regenerates and strictly checks them on the PR's tree; --pr skips that fetch).
 # --no-materialize uses the files already in the checkout (CI installs its own); --no-sources
 # regenerates only the premise index. With AIR2LEAN_CAS_DIR set, the translator build and the
@@ -22,7 +22,7 @@
 #   CI matrix, compatibility and pins     ci-matrix.py, ci-reuse.py check-workflow, compat.py,
 #                                         build-modes.py, perf-budgets.py (validate, heartbeats check)
 #   support and target matrices           support-matrix.py, target-matrix.py --strict
-#   premise index and theorem inventory   premises.py, tutorials.py lint, theorem-inventory.py, no-sorry.sh
+#   premise index and theorem list        premises.py, tutorials.py lint, theorem-inventory.py check --list, no-sorry.sh
 #   one proof framework (only shrinks)    proof-framework.py (base: --base or CI's base branch)
 #   fsym engine ledger                    engine-ledger.py (rows and view; every "ledger #N"
 #                                         citation names a row; a closed row is no workaround)
@@ -95,7 +95,10 @@ check 'support matrix' python3 scripts/support-matrix.py check
 check 'declared target matrix' python3 scripts/target-matrix.py check --strict
 check 'theorem premise index' python3 -B scripts/premises.py check
 check 'tutorial layout and premise lists' python3 -B scripts/tutorials.py lint
-check 'theorem inventory' python3 -B scripts/theorem-inventory.py check
+# The recorded results are a whole-tree generated file (group theorem-inventory, built and fully
+# checked by CI's `theorem-inventory` job and the main health run); a PR's tree is not the tree of
+# the copy `materialize` fetches, so only the committed list is checked here.
+check 'theorem list (scopes, claims, tables)' python3 -B scripts/theorem-inventory.py check --list
 check 'sorry/admit/native_decide and kernel escape hatches' scripts/no-sorry.sh
 check 'one proof framework: no new judgment, tactic or legacy-logic user' python3 -B scripts/proof-framework.py
 check 'one proof framework: ratchet regressions' python3 -B -m unittest discover -s tests/roadmap/proof-framework -p 'test_*.py'
