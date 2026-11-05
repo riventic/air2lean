@@ -708,18 +708,6 @@
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
-      "path": "Proofs/Atomics/Stack.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Iogroup/Counter.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
       "path": "Proofs/ProvenanceGap/Gen.lean",
       "tactic": "within",
       "count": 1,
@@ -738,12 +726,6 @@
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
-      "path": "Proofs/Sync/Mutex.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
       "path": "Proofs/Sync/RwLock.lean",
       "tactic": "unroll_sched",
       "count": 1,
@@ -751,24 +733,6 @@
     },
     {
       "path": "Proofs/Sync/RwLockSnapshotPair.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Threads/Counter.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Threadsync/Handoff.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Threadsync/Mutex.lean",
       "tactic": "unroll_sched",
       "count": 1,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
