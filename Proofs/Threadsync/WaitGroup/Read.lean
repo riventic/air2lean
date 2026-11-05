@@ -68,8 +68,8 @@ theorem live6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
 theorem free6 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
     (h6 : 6 ≤ (G 0).2.ph.rank) (hm : (G 0).1.ph = .out) : L.Free G := fun u => by
   by_cases h0 : u = 0
-  · subst h0; show (G 0).1.ph ≠ .holds; rw [hm]; decide
-  · show (G u).1.ph ≠ .holds; rw [gone6 hu h6 u h0]; decide
+  · subst h0; show (G 0).1.ph.held = true → False; rw [hm]; decide
+  · show (G u).1.ph.held = true → False; rw [gone6 hu h6 u h0]; decide
 
 /-- The `Tally`'s decode, from the values of its four words. -/
 theorem tally_decode {bs : Array Byte} {a : BitVec 64} {b c d : BitVec 32}
