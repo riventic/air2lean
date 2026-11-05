@@ -325,8 +325,8 @@ def omega_proofs_shared : MetaM Unit := do
       unless (← internTerms tbl e).equal e do
         throwError "omega_proofs_shared: {e} interned as a different term"
     -- `Nat`, `#0` and the three functions
-    unless (← tbl.get).size == 5 do
-      throwError "omega_proofs_shared: binder names or annotations merged: {(← tbl.get).size}"
+    let size ← (← tbl.get).terms.foldM (fun n _ => pure (n + 1)) (0 : Nat)
+    unless size == 5 do throwError "omega_proofs_shared: binder names or annotations merged: {size}"
   finally fsymRuns.modify (·.erase id)
 
 run_meta omega_proofs_shared
