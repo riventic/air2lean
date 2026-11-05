@@ -114,9 +114,10 @@ in Lean, not Zig exports; they call the translated std operations) are proved th
   `a = 3`, `b = 4` and `post`s a semaphore with no permit; `main` `wait`s (std's
   condition-variable loop with predicate recheck), reads the message while the producer may
   still run, joins and frees. `mailbox_spec` (result 34) and `mailbox_safe` quantify over
-  every fuel and every oracle. The proof uses only `SemContract` and `Sem.Fits`; its
-  deadlock-freedom obligation (`Fits.live`) covers the consumer asleep at the condition
-  before the post.
+  every fuel and every oracle. The proof is in the full-state logic and uses only the
+  semaphore's contract `SemImpl` (`FSem.Fits`, every implementation; the results take
+  `Sync.ioSem`); its deadlock-freedom obligation (`hlive` of `SemImpl.wait_wp`,
+  `Mailbox.wait_live`) covers the consumer asleep at the condition before the post.
 
 `tests/roadmap/sync-contracts/Runtime.lean` executes both clients under five fixed oracles
 as compiled finite witnesses (complete runs with 10 / 34, joined threads, freed block).

@@ -192,4 +192,21 @@ theorem value_block_add (p : Ptr) (b : BlockId) (n : Nat) (q : Frac) (c : MemM U
     FTotalTriple (bshare b q n) c (fun _ => bshare 0 q n) := by
   fsym [rule]
 
+/-- A fact whose split substitutes locals: `x` by `e`, then `y` by `hy`. -/
+structure InSub (x y : Nat) : Prop where
+  e : x = 5
+  hy : y = x + 1
+
+/-- A fact of a user structure whose field is again one, followed by a field over the same local. -/
+structure OutSub (x y : Nat) : Prop where
+  i : InSub x y
+  le : x ≤ 9
+
+/-- The fields of a fact of a user structure whose split substitutes a local: the substitution
+reintroduces the fact and the fields split before it, so the remaining fields are projections of
+the reintroduced fact (`destruct`, ledger #fsym-split-nested-struct-subst). -/
+theorem nested_struct_subst (x y : Nat) (h : OutSub x y) :
+    FTotalTriple emp (pure y : MemM Nat) (fun r => ⟪r = 6⟫) := by
+  fsym
+
 end SepAuto.Facts

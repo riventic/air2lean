@@ -102,8 +102,8 @@ futex waits) take no environment.
 **Wait** (`Os.futexWait`). One `pick`, then in the same turn the kernel's compare: an atomic read
 of the newest message of the `u32` (`atomicLoadAt 0 .relaxed`). It records an atomic-read
 footprint, so a racing plain write is `.illegal`, and an `observe` (audit finding #14). A bad
-pointer is `.illegal`. A different value returns `mismatch` (`EAGAIN`; macOS `0`). Otherwise the
-oracle picks:
+pointer is `.illegal`. A different value returns `mismatch` (`EAGAIN`). Otherwise the oracle
+picks:
 
 1. sleep. An untimed wait stops at the scheduler's `wait p e`, which compares again and sleeps
    until a wake. A changed word goes on, which is a return with `0`, as Linux allows. A timed
@@ -112,36 +112,44 @@ oracle picks:
 2. `EINTR` at once: a signal or any spurious return (audit finding #2).
 3. with a timeout, `ETIMEDOUT` at once.
 
+macOS `__ulock_wait*` returns `--ull_nwaiters` after a wake, a spurious return or a mismatch:
+the other threads waiting at the key, a non-negative `c_int`. For a word that is not resident it
+returns `-EFAULT`. The model tracks neither, so the oracle picks one of them at one more stop
+(`Darwin.ulockResult`). Std only tests `status >= 0`, and treats `EFAULT` as a spurious return.
+The sources, and why `ENOMEM` and `EDOM` are not modelled, are in the `ZigLean/Os/Futex.lean`
+module doc.
+
 **Wake** (`Os.futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at
 the address (`wakeSets`), with no FIFO order (audit finding #6). The woken threads go on at their
 next turn. A wake accesses no memory and gives no edge: std re-reads the word with an acquire.
 macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std retries.
 
-The Linux WAIT/WAKE wrappers reject an unaligned numeric address with `-EINVAL` before any
-interrupt, scheduling choice, word read or queue effect. WAIT copies and validates a supplied
-timespec before this check, following Linux's syscall/key order. A private WAKE still reads
-no futex word: an aligned unmapped or known freed address, including zero, is not rejected
-by alignment. A pointer into a block the memory does not have resolves to no numeric
-address: WAIT and WAKE at it are `.illegal`, a conservative over-approximation. This does
-not implement every native user-range/shared-VM error. The existing
-raw WP rules expose both the immediate EINVAL post and aligned generic operation; valid
-lock/Event calls derive alignment from their existing block invariants, with no new caller
-premise. The queue's missing numeric-address/domain distinction remains separate under S6.
+Address validation comes before any interrupt, scheduling choice, word read or queue effect
+(module doc of `ZigLean/Os/Futex.lean`, audit S6). The Linux wrappers follow `get_futex_key`
+(`Linux.futexKey`): WAIT first copies and validates a supplied timespec; an unaligned address
+returns `-EINVAL`; an address with bits 63 and 55 set returns `-EFAULT`; the key forms at a live
+writable word (`Mem.wordAt`) and, for a private key, at any address below the end of a block
+the run placed (`Mem.userBelow`, so a freed word's private WAKE returns 0). Every other address
+is a conservative `.illegal` refusal (for example a shared WAKE at a freed word, or an address
+above every block). The macOS rows (`Darwin.ulockAddr`) return `-EINVAL` for a null WAIT or
+WAKE address and an unaligned WAIT address; an unaligned WAKE finds no waiter. A pointer into a
+block the memory does not have resolves to no numeric address: `.illegal`. The queue's missing
+numeric-address/domain distinction remains open under S6.
 
-The reusable address run/cases/alignment facts live beside `Full.ptrAddr_run`. Typed lock
-and shared-word invariants supply their numeric alignment there, and `Fits`/`Word.InRest`
-forward those facts through the existing WP walker. Clients supply these library invariant
-facts; they do not open the block invariant or select an aligned specialization themselves.
-The aligned and returned-error specializations use the existing fsym registry.
-
-The rule-boundary correction is explicit:
+The raw rules `WP.futex_4arg`/`WP.futex_3arg` expose the EINVAL post, the key's error and
+result cases (`WP.futexKey`), and the generic operation. The specializations
+`WP.futex_4arg_of_aligned`, `WP.futex_3arg_of_aligned`, `WP.ulock_wait2` and `WP.ulock_wake`
+take the guard `m.wordAt p = true`. A lock or shared-word invariant supplies it
+(`FLock.Fits.wordAt`, `Fits.wordWordAt`); a client states it with `have` before `fsym`
+(workaround, ledger #fsym-forward-bool-fact).
 
 | Declaration | Previous obligation | Corrected obligation |
 | --- | --- | --- |
-| `WP.futex_4arg` (untimed WAIT) | Every supported call reduces to the generic successful wait | Actual address resolution, returned EINVAL at the same ghost/memory/depth when unaligned, generic wait when aligned |
-| `WP.futex_3arg` (WAKE) | Every supported call reduces to the generic successful wake | The same returned-error/aligned-success split, with no futex-word read |
+| `WP.futex_4arg` (untimed WAIT) | Every supported call reduces to the generic successful wait | Actual address resolution, returned EINVAL when unaligned, the key's `-EFAULT`/refusal cases, generic wait once the key forms |
+| `WP.futex_3arg` (WAKE) | Every supported call reduces to the generic successful wake | The same split, with no futex-word read |
+| `WP.ulock_wait2`, `WP.ulock_wake` | No address premise | A live writable word (`m.wordAt p`) |
 | `WP.osFutexWait`, `WP.osFutexWake` | Generic operation over the current queue | Unchanged |
-| WPOsFutex Linux lock/Event statements | Existing public postconditions | Exact headers retained; address facts derived from existing invariants and the generic aligned specialization |
+| WPOsFutex Linux and macOS lock/Event statements | Existing public postconditions | Exact headers retained; the word fact derived from the existing invariants |
 
 ## Threads
 
@@ -252,7 +260,6 @@ The following are missing:
 * `sigaction`, `sigprocmask` and `sigaltstack`: no memory effect for std's use, but they need rows
   before translated code can call them.
 * `posix_memalign` (`c_allocator` for alignments above 16).
-* `__ulock_wait*`'s non-negative waiter count, which is always `0`.
 
 The models use the merged C02 (TLS: `tlsEnter` in the dispatcher) and C07 (`pthread_detach` is
 `Thread.detach`) definitions. The interrupt bit (OSG-01) is the OS mechanism under std's

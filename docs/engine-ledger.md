@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 163 rows, 67 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 167 rows, 69 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -51,7 +51,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
 | [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
-| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone. |
+| [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone. |
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
 | [carve-size-probes](#row-carve-size-probes) | A carve's size probes searched the case facts of other regions | arena-retain (retaining reset over wpts headers) | - | - |
@@ -85,8 +85,10 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [l10-native-lock-step-contract](#row-l10-native-lock-step-contract) | Native lock-step contract before semaphore resource-transfer walks | L10 semaphore migration (Task 07; coordinated with L11 and Task 06) | - | Close after native lock primitive producers and Full consumers preserve the original Step guarantees without registered legacy dependencies, the generic fsym resource-transfer and held/outside signal walks pass strict actual term-and-type closure, and Task 07's translated Semaphore/SemCounter/Mailbox migration is complete. This row authorizes no transitional code. |
 | [l11-waitgroup-rwlock-impl](#row-l11-waitgroup-rwlock-impl) | Word rules for gone threads, then WaitGroup and RwLockImpl on the full-state logic | L11 RwLock/WaitGroup migration (maintainer decision 2026-11-03) | - | Closes when Proofs/Sync/RwLock.lean, Proofs/Sync/RwLockContract.lean, Proofs/Sync/RwLockSnapshotPair.lean and Proofs/Threadsync/WaitGroup.lean leave `legacy_users` with their statements unchanged. |
 | [literal-pointer-provider](#row-literal-pointer-provider) | A literal pointer in a state region, found by the planner instead of a walk rewrite | coordinator (2026-11-04, /simple on #604: the walk rewrite is shallow) | `ZigLean/Sep/Full/Auto.lean` | Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch. |
-| [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row. |
+| [client-glue-copies](#row-client-glue-copies) | Sync clients copy the memory glue of their protocol's rest (cells of the words in the rest, the block, start and fork facts) | L10p (/review of PR648, 2026-11-05) | `Proofs/SemCounter/Mem.lean`, `Proofs/SemCounter/Start.lean`, `Proofs/Handoff/Protocol.lean`, `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/Mailbox/Protocol.lean`, `Proofs/Sync/Mailbox/Steps.lean`, `Proofs/Sync/Mailbox/Start.lean` | Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, replace Handoff's `le_nil` by `VClock.le_default` (as SemCounter does) and `upd0_1`/`upd1_0` by `upd_ne`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row. |
+| [fsym-or-witness-order](#row-fsym-or-witness-order) | fsym's post solver chooses an existential's witness by a disjunction before the conjunct that determines it | claude/fsym-fvar (found closing row fsym-unknown-fvar-mutex-loop, 2026-11-05) | `Proofs/Threadsync/ThreadMutex.lean` | Transitional: once the solver orders such a conjunction itself, state `lockInvD` (darwin) in its natural order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m` again, swap-build `Proofs.Threadsync.ThreadMutex` against the darwin translation, and close this row. |
 | [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
+| [fsym-forward-bool-fact](#row-fsym-forward-bool-fact) | fsym does not forward a hint term's Bool-equation fact, so a rule's autoParam guard cannot use it | S6 (#649, futex address validation) | `tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean` | Transitional: once fsym forwards such a fact, delete the `have hw := …` before each `fsym` in SepAuto.WPOsFutex, pass the term in the `fsym` list instead, and close this row. |
 | [fevent-live-exit](#row-fevent-live-exit) | A thread with FEvent's waiter role stays in the event word's live set after its last access | L11f review of PR646 (pass 2, cross-file angle) | - | - |
 
 ## Closed rows
@@ -188,6 +190,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [wp-local-hypothesis-application](#row-wp-local-hypothesis-application) | Apply current local proof functions during bounded WP side proofs | Qualified in PR529: at2f1b/main737, Auto/AutoWP fe270e1f/b9839887, whole canonical WP100 jobs, both actual condition modules161 jobs and exact407-target ROOT pass. Guardf07c262a/unit16d97d42 binds1005 unchanged source/command rows; physical ROOT8e2f1fa3/logdc09702f is reused for inventory. Official SepAuto31 builds206 jobs and replays203 modules/2111 theorems with standard axioms; OneLogic8 builds132 jobs and replays129 modules/108 theorems. SepAuto's general assurance output retains3 unchanged-class float-key/test-opaque policy findings; its documented fixture gate passes, not general policy. Currentnessfc737e7a renews only3 supported stale swap recipes, retains13 runs/49 qualified artifacts, and passes official inventory write/check. At a3a634ab8/main737, focused preflight and independent framework both pass (guardb3e8ad24, logs3b2b8c45/d4af7583), fixed inputs/artifacts unchanged. Final review/simple find no actionable issue. One structural walk retains raw/normalized evidence, forwarding priority, proof-local Eq substitution and exact-type own-equation exclusion; observable controls check actual substituted data. Assigned-update/global-definition controls compile; actual fresh FBA Full/no-PANIC evidence retains its35d8 binding. All original failures/source/artifacts remain archived; no new premise, cap, provider or manual walk is introduced. |
 | [literal-pointer-rebase](#row-literal-pointer-rebase) | Store or load through a literal pointer into a region of the state | Branch claude/fsym-literal-pointer: `rebaseLitPtr?` (Auto.lean) in the walk's no-rule fallback, before views and unfolding, with `ptr_eq_add_off_sub` (AutoRules.lean). Tests: SepAuto.Region `literal_store_load` (a region at a literal base) and `literal_store_offset` (a region at `p.add (bs.extract 0 12).size`, its block and offset from facts). |
 | [read-through-bytes](#row-read-through-bytes) | Read region bytes through stores to other bytes, memset items and a kept prefix | Branch claude/fsym-read-through. Region.lean `@[fsym_arith]`: `extract_writeBytes_other`, `extract_memsetBytes_item`, `extract_replicate_le`, `decode_byte`, `LawfulEnc.decode_encode`, `Array.replicate_one`, `Array.size_replicate`, and the simproc `keptExtract` (with `extract_of_keepsPrefix`). Auto.lean: `arithCore` closes an equation with an unknown side by reducible unification of the normalized sides; `omegaDisch` states a discharged side condition as itself. Tests: SepAuto.Region `read_unwritten`, `read_unwritten_word`, `read_kept`. |
+| [fsym-split-nested-struct-subst](#row-fsym-split-nested-struct-subst) | fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local | closed by the branch claude/fsym-fvar: `destruct`'s structure branch takes each field from the fact as the previous field's substitution reintroduced it (`liveFVar?`). `Zig.SemCounter.U` is a structure again. Regression: SepAuto.Facts `nested_struct_subst`. |
+| [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | closed by the branch claude/fsym-fvar: each branch of a split is walked with the substitutions of its own branch (`eachBranch`); the second branch's substitution of `g₀` had replaced the first's. The row's original call elaborates (checked); `loopD_body` is the shorter call without the `hset`/`hph`/`hok₀` glue, swap-built against the darwin translation. Regression: SepAuto.WP `sibling_values`. |
 | [word-ok-live-set](#row-word-ok-live-set) | Word.Ok asks every plain access to happen before every thread, so a whole-struct read next to a futex word breaks it | closed by PR646, which gives Word.Ok a live set |
 
 ## Shared mechanisms
@@ -1172,11 +1176,11 @@ Request: **Thread backend: undecided side condition blocks a sequential rule's `
 
 Status: **open**. Requester: critic run 15 (coordinator).
 
-Progress: PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule. LEFT: the copies in the legacy-layer files RwLock and SemCounter (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`.
+Progress: PARTLY DONE: `FLock.Inv.loadRest` (ZigLean/Sep/Full/LockSteps.lean) proves the exact plain-load/read-record fact once, from invariant-rest bytes and the caller's NoRace premise. `FLock.Fits.wp_readRest` derives its existing shared-reader statement from that fact with ReadShared.noRace_read; its duplicated primitive proof is removed. The full-state copies in Iogroup/Counter, Handoff/Ops and MutexCounter/Protocol are deleted; their walks pass the protocol's obligations to the rule; SemCounter's copy is gone with its migration (PR648, `wp_readRest`). LEFT: the copy in the legacy-layer file RwLock (`ZigLean.Conc` logic, legacy_users), and the legacy holder copies WaitGroup `wp_cntLoad`/`wp_cntStore` and Semaphore `wp_cnt`.
 
 Request: **`wp_io` has hand copies**: the read of the `io` prefix (read-shared bytes in the protocol's rest, `FLock.Inv.recordX`, no race by `ReadShared.noRace_read`) is proved by hand once per protocol: `Proofs/Iogroup/Counter.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`. Needed: one `@[fsym]` library rule over every protocol with a lock whose rest keeps read-shared bytes, each protocol discharging only its obligations (the bytes in the rest, the invariant kept by a read record).
 
-Workaround sites: `Proofs/Sync/SemCounter.lean`, `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean`
+Workaround sites: `Proofs/Sync/RwLock.lean`, `Proofs/Threadsync/WaitGroup.lean`, `Proofs/Sync/Semaphore.lean`
 
 Deletion plan: when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone.
 
@@ -1879,20 +1883,57 @@ Workaround sites: `ZigLean/Sep/Full/Auto.lean`
 
 Deletion plan: Transitional: delete `rebaseLitPtr?` and its call in walk's no-rule fallback once the planner's pointer-in-region provider lands; the tests SepAuto.Region `literal_store_load` and `literal_store_offset` stay green through the switch.
 
-<a id="row-fsym-unknown-fvar-mutex-loop"></a>
-### #fsym-unknown-fvar-mutex-loop fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body
+<a id="row-client-glue-copies"></a>
+### #client-glue-copies Sync clients copy the memory glue of their protocol's rest (cells of the words in the rest, the block, start and fork facts)
 
-Status: **open**. Requester: L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan).
+Status: **open**. Requester: L10p (/review of PR648, 2026-11-05).
 
-Note: Recorded with #562 (L8 ticks).
+Note: Not a soundness issue: every copy is kernel-checked. Recorded instead of done in PR648 because the change rewrites the merged Handoff and MutexCounter proofs.
 
 Progress: open
 
+Request: Each client of the full-state sync contracts proves its own copy of the same lemma family, which differs only in the layout (the block, the words in the rest, the `io` prefix). Copies: `Proofs/SemCounter/Mem.lean` (`res_eq`, `Rest.split`/`step`/`congr`, `blk_ofG`, `blk_of`, `heap_blk`, `cell_eq`, `cells_same`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `box_notL`, `io_notL`, `BlkOk.lstep`, `Shape.congr`) and `Proofs/SemCounter/Start.lean` (`word_init`, `heap_ne_l`/`heap_ne_r`/`erase_ne_r`, `clk_fork`, `cinv_out`, `split_at`, `box_split`, `sep_box`, `upd0_1`/`upd1_0`) against `Proofs/Handoff/Protocol.lean` (same names), `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean` and `Proofs/Handoff/Ops.lean`; `blk_of` also in `Proofs/MutexCounter/Protocol.lean`. `Proofs/SemCounter/Start.lean`'s `hb_fork` and `sinv_grow` are generic over `FLock`/`FSem` (`sinv_grow` repeats `FSem.Inv.mono` with a growing thread array). A next client would copy them again.
+
+Workaround sites: `Proofs/SemCounter/Mem.lean`, `Proofs/SemCounter/Start.lean`, `Proofs/Handoff/Protocol.lean`, `Proofs/Handoff/Start.lean`, `Proofs/Handoff/Steps.lean`, `Proofs/Handoff/Ops.lean`, `Proofs/MutexCounter/Protocol.lean`, `Proofs/Sync/Mailbox/Protocol.lean`, `Proofs/Sync/Mailbox/Steps.lean`, `Proofs/Sync/Mailbox/Start.lean`
+
+Deletion plan: Move the layout-free lemmas (`res_eq`, `heap_blk`, `frame_rest`, `apart_of`, `BlkOk.of_block`, `word_init`, `heap_ne_*`, `erase_ne_r`, `clk_fork`, `cinv_out`, `hb_fork`, and `sinv_grow` as a generalisation of `FSem.Inv.mono`) to `ZigLean/Sep/Full`, replace Handoff's `le_nil` by `VClock.le_default` (as SemCounter does) and `upd0_1`/`upd1_0` by `upd_ne`, and state the rest family once over a block, a byte range of words and an `io` prefix (a generic `Rest`/`BlkOk` module) with Handoff, MutexCounter and SemCounter as instances; delete every copy and close this row.
+
+<a id="row-fsym-split-nested-struct-subst"></a>
+### #fsym-split-nested-struct-subst fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local
+
+Status: **closed**. Requester: L10p (SemCounter over SemImpl, PR648, 2026-11-05).
+
+Note: Not a soundness issue: the engine failed closed (the walk did not elaborate). The cause was not the nesting: any structure fact whose field's split substitutes a local the fact mentions broke at the next field (`destruct` projected the reverted fact); at the top level `wpSplit` projects all fields first, which hid it.
+
+Progress: closed by the branch claude/fsym-fvar: `destruct`'s structure branch takes each field from the fact as the previous field's substitution reintroduced it (`liveFVar?`). `Zig.SemCounter.U` is a structure again. Regression: SepAuto.Facts `nested_struct_subst`.
+
+Request: When `fsym` splits a hypothesis of a user structure into its fields and one field is again a user structure whose own split substitutes a local (an equation `x = e` with `x` a local), the next continuation fails with `unknown free variable`. Repro (on PR648 before the workaround): `structure T3 (G rX m) : Prop where um : UM G rX m; ci : C.Inv L G m` with `Zig.SemCounter.UM` (its field `rest : Rest rX m` holds `rX = rsum (cellsAt BoxW m) rIO`), as the hypothesis of a continuation of a rule built from `FLock.Fits.wp_tick_plain`, fails even with post `True`. `UM` alone, `Lg` alone, a nested structure without the `rX` equation, `Rest` as a direct field, and the plain conjunction all pass. Same class as row `fsym-unknown-fvar-mutex-loop` (a substitution inside the engine while a pending goal still mentions the local); the fix is in the structure branch of the engine's split (`ZigLean/Sep/Full/Auto.lean`).
+
+<a id="row-fsym-unknown-fvar-mutex-loop"></a>
+### #fsym-unknown-fvar-mutex-loop fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body
+
+Status: **closed**. Requester: L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan).
+
+Note: Recorded with #562 (L8 ticks). The loop's test `if id r.1` reduces by `id_eq` in the WP simp set. `lockInvD`'s order of parts: row `fsym-or-witness-order`.
+
+Progress: closed by the branch claude/fsym-fvar: each branch of a split is walked with the substitutions of its own branch (`eachBranch`); the second branch's substitution of `g₀` had replaced the first's. The row's original call elaborates (checked); `loopD_body` is the shorter call without the `hset`/`hph`/`hok₀` glue, swap-built against the darwin translation. Regression: SepAuto.WP `sibling_values`.
+
 Request: `Proofs/Threadsync/ThreadMutex.lean` `loopD_body` (the macOS `osUnfairLockTry` repeat) walked by `fsym [wp_casD hP hc1 (g := g₀), wp_waitD hP, hset, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD]` fails with `unknown free variable _fvar.…` at the `fsym` call; `hset : ∀ q h, L.set g₀ q h = L.set g q h` is a local hypothesis about `g₀`, which the walk's case split of `hg₀ : g₀ = g ∨ g₀ = L.set g .spin rnil` (or a `subst` inside the engine) removes from the context while a rule instance still mentions it. Only the darwin translation elaborates this branch (Linux uses the futex path). Repro on #562 (before the hand walk): restore the `fsym` call above in `loopD_body`, then `python3 -B scripts/theorem-inventory.py swap-build --lake "$(elan which lake)" --swap threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean -- Proofs.Threadsync.ThreadMutex`. Reproduced with and without #562's `eqFixesUnknowns` change. Needed: every term fsym installs is re-abstracted over (or checked against) the local context it runs in after a case split or substitution, and a local hypothesis whose fvars leave the context is re-instantiated or dropped from the rule set, never kept dangling. Regression: a sep-auto test with a local equation hypothesis over a variable that a disjunction case split substitutes.
+
+<a id="row-fsym-or-witness-order"></a>
+### #fsym-or-witness-order fsym's post solver chooses an existential's witness by a disjunction before the conjunct that determines it
+
+Status: **open**. Requester: claude/fsym-fvar (found closing row fsym-unknown-fvar-mutex-loop, 2026-11-05).
+
+Note: Not a soundness issue (the walk fails closed). The workaround states an equivalent invariant (the conjuncts swapped), not a weakened one.
+
+Progress: open
+
+Request: A post `∃ x, (x = a ∨ x = b) ∧ Inv x` with a hypothesis `Inv b`: `wpGoal`'s `And` case proves the first part first, its `Or` case proves the side `?x = a` whole (`wpAtom`, `eqFixesUnknowns`: the unknown is a side) and commits `?x := a`, and `Inv a` is then left open. The `And` case retries a first part left open, but not a first part closed with a choice the second part refutes. Repro: `Proofs/Threadsync/ThreadMutex.lean`'s `lockInvD` with its original order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m`, swap-built against `tests/golden/0.15.2/threadsync/Gen-darwin.lean`: the wait branch leaves `P.inv (upd G₁ c g) m'` with `P.inv (upd G₁ c (L.set g .spin rnil)) m'` in context. Needed (a separate engine PR): a conjunction whose second part fails after its first part committed an unknown is retried in the other order (the general form of the existing retry, not one more ordering special case); regression in SepAuto.WP next to `and_retry`.
 
 Workaround sites: `Proofs/Threadsync/ThreadMutex.lean`
 
-Deletion plan: Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row.
+Deletion plan: Transitional: once the solver orders such a conjunction itself, state `lockInvD` (darwin) in its natural order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m` again, swap-build `Proofs.Threadsync.ThreadMutex` against the darwin translation, and close this row.
 
 <a id="row-callocspec-partial-step-count"></a>
 ### #callocspec-partial-step-count The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return
@@ -1904,6 +1945,21 @@ Note: Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a 
 Progress: open
 
 Request: `CAllocSpec` (ZigLean/Sep/Full/Dispatch.lean) states each allocator call as a `CTriple`, a partial judgment: an implementation whose `free` never returns meets it. So `Lists.Alloc.freeAll_exact` (`CTriple`, `xs.length + 1` credits in, as many receipts out) gives `Lists.Alloc.freeAll_steps` only for a run that returns (the run's result `pure (v, m')` is a premise). The legacy `Proofs/Lists/Cost.lean` `freeAll_cost` counted unconditionally because it used the hand-written total `Allocator` model, which the trusted-base rule retires. Counterexample to the unconditional count under the present contract: an allocator whose `free` loops forever meets `CAllocSpec` (its triples hold vacuously) and makes `freeAll` diverge on a one-node list, so no run returns and there is no final memory whose `ticks` could be `m.ticks + 2`. Needed: a total allocator contract (each call, at least `free`, terminates), proved by every translated allocator; with it `freeAll_steps` drops the returning-run premise and also gives the run's existence, as `FTotalTriple.ticks_eq_post` does for sequential code.
+
+<a id="row-fsym-forward-bool-fact"></a>
+### #fsym-forward-bool-fact fsym does not forward a hint term's Bool-equation fact, so a rule's autoParam guard cannot use it
+
+Status: **open**. Requester: S6 (#649, futex address validation).
+
+Note: Recorded with #649 (S6 address validation).
+
+Progress: open (workaround)
+
+Request: The OS futex rules `WP.futex_4arg_of_aligned`, `WP.futex_3arg_of_aligned`, `WP.ulock_wait2` and `WP.ulock_wake` (ZigLean/Sep/Full/OsFutex.lean) select on the autoParam guard `hword : m.wordAt p = true := by first | assumption | decide`, which `runAutoParam` closes in the goal's local context. A protocol supplies the fact as a hint term, `fsym [hP.wordAt hi, …]` (`FLock.Fits.wordAt`, `Fits.wordWordAt`), but fsym forwards a hint term's conclusion as a hypothesis only when it is an `∃` (`wpForwardEx`) or arithmetic (`wpForward`), and `wpChain` proves side goals backwards only for a conclusion that is not an equation. So the guard sees no `m.wordAt p = true` and the rule does not apply. Needed: a hint term whose conclusion is a fact about the current memory (a Bool equation such as `m.wordAt p = true`) is forwarded like an `∃` fact, at the stop where its premises hold, so that an autoParam guard's `assumption` finds it. Regression: SepAuto.WPOsFutex with the `have hw` lines removed and `hP.wordAt hi` in the list.
+
+Workaround sites: `tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean`
+
+Deletion plan: Transitional: once fsym forwards such a fact, delete the `have hw := …` before each `fsym` in SepAuto.WPOsFutex, pass the term in the `fsym` list instead, and close this row.
 
 <a id="row-word-ok-live-set"></a>
 ### #word-ok-live-set Word.Ok asks every plain access to happen before every thread, so a whole-struct read next to a futex word breaks it

@@ -63,7 +63,7 @@ if wanted S6-futex-primitive; then
   fi
   # The open witnesses must still elaborate while open: setup failure never means fixed.
   if lake env lean "$here/futex-primitive/CurrentModel.lean"; then
-    echo "S6-futex-primitive: alignment and CHILD_CLEARTID fixed; S6 open -- two key witnesses elaborate"
+    echo "S6-futex-primitive: address validation and CHILD_CLEARTID fixed; S6 open -- two key witnesses elaborate"
     open=1
   else
     echo "S6-futex-primitive: FAILED -- the remaining witnesses did not elaborate" >&2
