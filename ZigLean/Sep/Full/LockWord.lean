@@ -129,15 +129,6 @@ def Hits (e : FootprintEntry) : Prop :=
 /-- No thread holds the lock (awake or at another object's futex wait). -/
 def Free (P : ThreadId → LPh) : Prop := ∀ u, (P u).held = true → False
 
-theorem _root_.Zig.Conc.LPh.held_of_holds {p : LPh} (h : p = .holds) : p.held = true := by
-  rw [h]; rfl
-
-theorem _root_.Zig.Conc.LPh.held_iff {p : LPh} : p.held = true ↔ p = .holds ∨ p = .holdsAway := by
-  cases p <;> simp [LPh.held]
-
-theorem Free.ne {P : ThreadId → LPh} (h : Free P) (u : ThreadId) : P u ≠ .holds := fun e =>
-  h u (by rw [e]; rfl)
-
 theorem Free.held {P : ThreadId → LPh} (h : Free P) (u : ThreadId) : (P u).held = false :=
   Bool.eq_false_iff.mpr (h u)
 
@@ -446,15 +437,10 @@ theorem upd_apply {P : ThreadId → LPh} {t u : ThreadId} {p : LPh} :
     upd P t p u = if u = t then p else P u := by
   unfold upd; split <;> rfl
 
-theorem _root_.Zig.Conc.LPh.ne_gone_of_held {p : LPh} (h : p.held = true) : p ≠ .gone := by
-  rintro rfl; cases h
-
-theorem _root_.Zig.Conc.LPh.busy_of_held {p : LPh} (h : p.held = true) : p.busy = true := by
-  cases p <;> first | rfl | cases h
-
-/-- A change of place of `t` between places that do not hold the lock keeps who holds it. -/
-theorem held_upd {P : ThreadId → LPh} {t : ThreadId} {p : LPh} (h1 : (P t).held = false)
-    (h2 : p.held = false) (u : ThreadId) : (upd P t p u).held = (P u).held := by
+/-- A change of place of `t` that keeps whether it holds the lock (between places that do not
+hold it, or between `holds` and `holdsAway`) keeps who holds it. -/
+theorem held_upd {P : ThreadId → LPh} {t : ThreadId} {p : LPh} {b : Bool} (h1 : (P t).held = b)
+    (h2 : p.held = b) (u : ThreadId) : (upd P t p u).held = (P u).held := by
   rw [upd_apply]; split
   · rename_i h; subst h; rw [h1, h2]
   · rfl
@@ -462,14 +448,6 @@ theorem held_upd {P : ThreadId → LPh} {t : ThreadId} {p : LPh} (h1 : (P t).hel
 theorem free_upd {P : ThreadId → LPh} {t : ThreadId} {p : LPh} (h1 : (P t).held = false)
     (h2 : p.held = false) : Free (upd P t p) ↔ Free P :=
   forall_congr' fun u => by rw [held_upd h1 h2]
-
-/-- A change of place of `t` between `holds` and `holdsAway`, or to the same holding, keeps who
-holds it. -/
-theorem held_upd_held {P : ThreadId → LPh} {t : ThreadId} {p : LPh} (h1 : (P t).held = true)
-    (h2 : p.held = true) (u : ThreadId) : (upd P t p u).held = (P u).held := by
-  rw [upd_apply]; split
-  · rename_i h; subst h; rw [h1, h2]
-  · rfl
 
 /-! ## The word in the heap -/
 
@@ -1686,6 +1664,17 @@ theorem WInv.nestQ {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv 
   · rw [ht, hh] at h2; cases h2
   · exact ⟨_, by rw [← ht]; exact hm, h1, h3⟩
 
+/-- **The lock order at the word**: a holder is never in the futex queue at an address outside
+the lock's nest (other than the word). So with an empty nest of `B`, the second thread of an AB/BA
+deadlock cannot sleep at `A`'s futex while it holds `B`: no rule moves it there. -/
+theorem WInv.held_notQ_off {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : Ptr}
+    (hi : L.WInv P m) (hh : (P t).held = true) (hp : p ≠ L.ptr) (hn : ¬ L.nest p)
+    (hq : (t, p) ∈ m.waiters) : False := by
+  rcases hi.fq _ hq with ⟨h, -⟩ | ⟨-, h⟩ | ⟨-, -, h⟩
+  · exact hp h
+  · rw [h] at hh; cases hh
+  · exact hn h
+
 /-- `t` is not in the futex queue if its place is not `wait`, `away` or `holdsAway`. -/
 theorem WInv.notQ {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv P m)
     (hw : P t ≠ .wait) (ha : P t ≠ .away) (hh : P t ≠ .holdsAway) :
@@ -2106,7 +2095,7 @@ theorem WInv.wake {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {n : Nat} {
     · exact absurd hp h1
   subst hm'
   refine ⟨Step.same rfl rfl rfl rfl rfl rfl (by
-        -- an entry at another futex is a thread `away`, not a woken one (at `wait`)
+        -- an entry at another futex is a thread `away` or `holdsAway`, not a woken one (at `wait`)
         dsimp only
         rw [Array.filter_filter]
         refine Array.filter_and_of_imp fun w hwm hw => ?_
@@ -2189,9 +2178,9 @@ theorem WInv.waitOff {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Ptr
       rw [Array.any_push, hvq']; simp [Ne.symm hvt]
   · exact ⟨rfl, hout _ _ hiM rfl⟩
 
-/-- A futex wait of a holder `t` (`holdsAway`, not in the queue) at a futex `p` of the lock's
-`nest` (an inner lock's word, a semaphore's condition), whose bytes are not the word's: the
-invariant holds with the same places, with `t` in the queue if it sleeps. -/
+/-- A futex wait of a holder `t` at `holdsAway` at a futex `p` of the lock's `nest` (an inner
+lock's word, a semaphore's condition), whose bytes are not the word's: the invariant holds with
+the same places, with `t` in the queue if it sleeps. -/
 theorem WInv.waitNest {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Ptr} {e : BitVec 32}
     {b : Bool} (hi : L.WInv P m) (hph : P t = .holdsAway) (hp : p ≠ L.ptr) (hn : L.nest p)
     (hoff : ∀ bid blk o, m.access p 4 4 = pure (bid, blk, o) → bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o)
@@ -2219,46 +2208,16 @@ theorem WInv.waitNest {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Pt
       rw [Array.any_push, hvq']; simp [Ne.symm hvt]
   · exact hiM.requeue hiM.fq hiM.wit
 
-/-- A holder that may sleep elsewhere: `t` goes from `holds` to `holdsAway` (before the futex
-wait of an inner object of the lock's `nest`). No memory step. -/
-theorem WInv.nap {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv P m)
-    (hph : P t = .holds) : L.WInv (upd P t .holdsAway) m := by
-  have hh : ∀ u, (upd P t .holdsAway u).held = (P u).held :=
-    held_upd_held (by rw [hph]; rfl) rfl
-  have hph' : ∀ u, upd P t .holdsAway u ≠ .gone ↔ P u ≠ .gone := fun u => by
+/-- A holder `t` that is not in the futex queue changes between the holding places (`holds`,
+`holdsAway`). No memory step. -/
+theorem WInv.reheld {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.WInv P m)
+    (hph : (P t).held = true) (hp : p.held = true) (hq : m.waiters.any (·.1 == t) = false) :
+    L.WInv (upd P t p) m := by
+  have hh : ∀ u, (upd P t p u).held = (P u).held := held_upd hph hp
+  have hph' : ∀ u, upd P t p u ≠ .gone ↔ P u ≠ .gone := fun u => by
     rw [upd_apply]; split
-    · rename_i e; subst e; rw [hph]; decide
-    · exact Iff.rfl
-  refine ⟨hi.csize, fun u hu => hi.live u ((hph' u).mp hu), hi.blk, ?_,
-    fun u v hu hv => hi.one u v (by rw [← hh]; exact hu) (by rw [← hh]; exact hv), hi.loc,
-    hi.wfpW fun u => (hph' u).mp, fun i l hl => ⟨(hi.rel i l hl).1, fun u hu =>
-      (hi.rel i l hl).2 u (by rw [← hh]; exact hu)⟩, fun w hw => ?_, fun hw => ?_,
-    fun u hu => hi.owner u (by rw [← hh]; exact hu)⟩
-  · obtain ⟨w, hw, hu, hz⟩ := hi.word
-    exact ⟨w, hw, hu, hz.trans (forall_congr' fun u => by rw [hh])⟩
-  · have hwt : w.1 ≠ t := ne_of_notQ (hi.notQ (by rw [hph]; decide) (by rw [hph]; decide)
-      (by rw [hph]; decide)) hw
-    rw [upd_ne _ _ hwt]; exact hi.fq w hw
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hw
-    refine ⟨v, hv, fun hvw => hq ?_, ?_, fun hvh => h2 (by rw [← hh]; exact hvh)⟩
-    · rw [upd_apply] at hvw; split at hvw
-      · cases hvw
-      · exact hvw
-    · rw [upd_apply]; split
-      · rfl
-      · exact h1
-
-/-- A holder at `holdsAway` that is not in the futex queue goes back to `holds` (after the inner
-object's code returned; the caller shows that it is awake, e.g. from the inner object's
-invariant). No memory step. -/
-theorem WInv.unnap {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv P m)
-    (hph : P t = .holdsAway) (hq : m.waiters.any (·.1 == t) = false) :
-    L.WInv (upd P t .holds) m := by
-  have hh : ∀ u, (upd P t .holds u).held = (P u).held :=
-    held_upd_held (by rw [hph]; rfl) rfl
-  have hph' : ∀ u, upd P t .holds u ≠ .gone ↔ P u ≠ .gone := fun u => by
-    rw [upd_apply]; split
-    · rename_i e; subst e; rw [hph]; decide
+    · rename_i e; subst e
+      exact ⟨fun _ => LPh.ne_gone_of_held hph, fun _ => LPh.ne_gone_of_held hp⟩
     · exact Iff.rfl
   refine ⟨hi.csize, fun u hu => hi.live u ((hph' u).mp hu), hi.blk, ?_,
     fun u v hu hv => hi.one u v (by rw [← hh]; exact hu) (by rw [← hh]; exact hv), hi.loc,
@@ -2271,11 +2230,26 @@ theorem WInv.unnap {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv 
   · obtain ⟨v, hv, hq', h1, h2⟩ := hi.wit hw
     refine ⟨v, hv, fun hvw => hq' ?_, ?_, fun hvh => h2 (by rw [← hh]; exact hvh)⟩
     · rw [upd_apply] at hvw; split at hvw
-      · cases hvw
+      · subst hvw; cases hp
       · exact hvw
     · rw [upd_apply]; split
-      · rfl
+      · exact LPh.busy_of_held hp
       · exact h1
+
+/-- A holder that may sleep elsewhere: `t` goes from `holds` to `holdsAway` (before the futex
+wait of an inner object of the lock's `nest`). No memory step. -/
+theorem WInv.nap {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv P m)
+    (hph : P t = .holds) : L.WInv (upd P t .holdsAway) m :=
+  hi.reheld (LPh.held_of_holds hph) rfl
+    (hi.notQ (by rw [hph]; decide) (by rw [hph]; decide) (by rw [hph]; decide))
+
+/-- A holder at `holdsAway` that is not in the futex queue goes back to `holds` (after the inner
+object's code returned; the caller shows that it is awake, e.g. from the inner object's
+invariant). No memory step. -/
+theorem WInv.unnap {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv P m)
+    (hph : P t = .holdsAway) (hq : m.waiters.any (·.1 == t) = false) :
+    L.WInv (upd P t .holds) m :=
+  hi.reheld (by rw [hph]; rfl) rfl hq
 
 /-- A spurious return of a futex wait of thread `t` (`away`, not in the queue) at another
 futex: `t` goes to `out` with the memory before the wait. -/

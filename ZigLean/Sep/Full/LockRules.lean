@@ -277,7 +277,8 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
       (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
 
-/-- A lock step of `t` (not the holder) to a place `p ≠ holds`, as the protocol's invariant. -/
+/-- A lock step of `t` (not the holder) to a place `p` that does not hold the lock, as the
+protocol's invariant. -/
 theorem Fits.stepAt (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}
     {t : ThreadId} {g : γ} {p : LPh} (hg₁ : G₁ t = g) (hok : ok g) (hng : L.ph g ≠ .gone)
     (hnh : (L.ph g).held = false) (hna : L.ph g ≠ .away) (hp : p.held = false) (hiL : L.Inv G₁ rX m₁)
@@ -643,7 +644,8 @@ rules above post `wait` for the hand model's `futexWaitC`; a client of the OS wa
 `spin`, so those posts move to `spin` when the clients switch to the translated code (STD-05
 step D). -/
 
-/-- Thread `t` (`g`) at a place other than `holds` holds nothing of the lock. -/
+/-- Thread `t` (`g`) at a place that does not hold the lock (not `holds`, not `holdsAway`) holds
+nothing of the lock. -/
 theorem Fits.held (hP : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
     (hg : (L.ph g).held = false) (hi : P.inv (upd G t g) m) : L.held g = rnil := by
   obtain ⟨rX, hiL, -⟩ := (hP.inv _ _).mp hi

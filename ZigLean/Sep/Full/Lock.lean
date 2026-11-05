@@ -342,8 +342,8 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
     K.Step t G rX m G' rX' m' ∨ L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m'
   /-- **A holder at another object's futex wait is not in a deadlock** (`LockWord.nest`): the one
   liveness obligation of a lock order. A lock without a nest discharges it at once
-  (`FLock.holdLive_none`: such a holder is never asleep); a nested pair from the inner lock
-  (`FLock.holdLive_inner`). -/
+  (`FLock.holdLive_none`: such a holder is never asleep); a lock whose nest is the words of inner
+  locks from their `Fits` (`FLock.holdLive_inners`, `LockOrder.lean`). -/
   holdLive : ∀ G rX m v, L.Inv G rX m → U G rX m → L.ph (G v) = .holdsAway → P.Live v G m
 
 variable {L}
@@ -498,7 +498,8 @@ theorem Inv.lstep {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId
   obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
   exact ⟨hR rL h1, h2.step hs hLoff hbl hg⟩
 
-/-- A step of the lock's code by `t`, not the holder, to the place `p ≠ holds`. -/
+/-- A step of the lock's code by `t`, not the holder, to a place `p` that does not hold the lock
+(`p.held = false`). -/
 theorem Inv.lstepAt {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
     (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : (L.ph (G t)).held = false)
     (hng : L.ph (G t) ≠ .gone) (hp : p.held = false) (hw : L.WInv (upd (L.pl G) t p) m') :
@@ -602,7 +603,7 @@ theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
   · rw [hphu] at hu
     split at hu
     · rename_i h; subst h; rw [upd_self, L.held_set, L.R_set]; exact hR
-    · exact (LockWord.Free.not hF hu).elim
+    · exact (hF u hu).elim
 
 /-- **A release**: the holder `t` goes to `p`; its resource moves from its part into the rest. -/
 theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
@@ -611,7 +612,7 @@ theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p 
     L.Inv (upd G t (L.set (G t) p rnil)) rX m' := by
   obtain ⟨rL, ho, -, -, -, hnF⟩ := hi.rest
   have hph₁ : (L.ph (G t)).held = true := LPh.held_of_holds hph
-  have hnF' : ¬ L.Free G := fun h => LockWord.Free.not h hph₁
+  have hnF' : ¬ L.Free G := fun h => h t hph₁
   rw [hnF hnF', rnil_rsum] at ho
   obtain ⟨ht, hjt⟩ := hi.ht (by rw [hph]; decide)
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
@@ -1503,7 +1504,7 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
   refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun _ => ⟨hR, fun e he htc => .inl fun u hu _ =>
       hle rL.heap hL' e he htc u hu⟩, fun h => absurd hfree h⟩, hxoff,
     fun u => by rw [hheld]; exact FHeap.disjoint_empty _, fun u _ => hheld u,
-    fun u hu => (LockWord.Free.not hfree hu).elim⟩
+    fun u hu => (hfree u hu).elim⟩
   -- `rsum (rsum rL rW) rX` as `rsum (wordR m) (rsum rL rX)`
   refine ho1.congrRestU (fun l => ?_) (fun l fc' hl => ?_) ?_ ?_
   · by_cases hl : L.In l
