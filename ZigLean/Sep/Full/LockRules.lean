@@ -124,8 +124,36 @@ theorem Fits.step (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
     {t : ThreadId} {p : LPh} {h : Res} (hi : L.Inv G rX m) (hU : U G rX m) (hok : ok (G t))
     (hph : L.ph (G t) ≠ .gone) (hna : L.ph (G t) ≠ .away) (hz : L.ph (G t) ≠ .holdsAway)
     (hs : L.Step t m m') (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
+    (htr : L.Transfer G rX m m' t p h)
     (hl : L.Inv (upd G t (L.set (G t) p h)) rX m') : P.inv (upd G t (L.set (G t) p h)) m' :=
-  (hP.inv _ _).mpr ⟨rX, hl, hP.stable G rX m m' t p h hok hph hna hz hi hU hs hrel⟩
+  (hP.inv _ _).mpr ⟨rX, hl, hP.stable G rX m m' t p h hok hph hna hz hi hU hs hrel htr⟩
+
+/-- A step of `t`'s code to a place without the lock moves no resource. -/
+theorem Transfer.none {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
+    (hnh : (L.ph (G t)).held = false) (hp : p.held = false) : L.Transfer G rX m m' t p rnil where
+  out _ := rfl
+  keep h := by rw [hnh] at h; cases h
+  acq _ h := by rw [hp] at h; cases h
+  rel h := by rw [hnh] at h; cases h
+
+/-- An acquire moves the free lock's resource before the step (`Inv.acq`). -/
+theorem Transfer.acquire {G : ThreadId → γ} {rX rL : Res} {m m' : Mem} {t : ThreadId}
+    (hnh : (L.ph (G t)).held = false) (hfr : L.FreeRes G rX m rL) :
+    L.Transfer G rX m m' t .holds rL where
+  out h := nomatch h
+  keep h := by rw [hnh] at h; cases h
+  acq _ _ := hfr
+  rel h := by rw [hnh] at h; cases h
+
+/-- A release makes the held resource the free one after the step (`Inv.rel`). -/
+theorem Transfer.release {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
+    (hph : L.ph (G t) = .holds) (hp : p.held = false)
+    (hfr : L.FreeRes (upd G t (L.set (G t) p rnil)) rX m' (L.held (G t))) :
+    L.Transfer G rX m m' t p rnil where
+  out _ := rfl
+  keep _ h := by rw [hp] at h; cases h
+  acq h := by rw [hph] at h; cases h
+  rel _ _ := hfr
 
 /-- A lock step with the same ghost values keeps the protocol's invariant. -/
 theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
@@ -134,6 +162,8 @@ theorem Fits.stay (hP : L.Fits K P U ok) {G : ThreadId → γ} {rX : Res} {m m' 
     (hs : L.Step t m m') (hl : L.Inv G rX m') : P.inv G m' := by
   have := hP.step (p := L.ph (G t)) (h := L.held (G t)) hi hU hok hph hna hz hs
     (fun h1 h2 => absurd h1 h2)
+    { out := hi.idle t, keep := fun _ _ => rfl, acq := fun h1 h2 => by rw [h1] at h2; cases h2,
+      rel := fun h1 h2 => by rw [h1] at h2; cases h2 }
     (by rw [upd_set_self]; exact hl)
   rwa [upd_set_self] at this
 
@@ -266,16 +296,16 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
       L.Before m' (({ m₁ with current := t } : Mem).clocks[t]!) := fun h => by
     rw [h] at hnh; cases hnh
   rcases hcase with ⟨rfl, hF, hw, hacq⟩ | ⟨rfl, hw⟩ | ⟨rfl, hw⟩
-  · obtain ⟨rL, -, hl⟩ := hiL.acq hst hnh hng hF hacq hw
+  · obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw
     refine .inl ⟨rfl, rL, ?_⟩
-    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) hl
+    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.acquire hnh hfr) hl
     rwa [hg₁] at this
   · refine .inr (.inl ⟨rfl, ?_⟩)
-    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _)
+    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.none hnh rfl)
       (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
   · refine .inr (.inr ⟨rfl, ?_⟩)
-    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _)
+    have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.none hnh rfl)
       (hiL.lstepAt hst hnh hng (by decide) hw)
     rwa [hg₁] at this
 
@@ -288,7 +318,7 @@ theorem Fits.stepAt (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {
     P.inv (upd G₁ t (L.set g p rnil)) m' := by
   subst hg₁
   exact hP.step hiL hU hok hng hna (LPh.ne_holdsAway_of_not_held hnh) hst
-    (fun h => by rw [h] at hnh; cases hnh) (hiL.lstepAt hst hnh hng hp hw)
+    (fun h => by rw [h] at hnh; cases hnh) (.none hnh hp) (hiL.lstepAt hst hnh hng hp hw)
 
 /-- An acquire of `t` as the protocol's invariant. -/
 theorem Fits.stepAcq (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}
@@ -298,9 +328,9 @@ theorem Fits.stepAcq (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} 
     (hw : L.WInv (upd (L.pl G₁) t .holds) m') :
     ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m' := by
   subst hg₁
-  obtain ⟨rL, -, hl⟩ := hiL.acq hst hnh hng hF hacq hw
+  obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw
   exact ⟨rL, hP.step hiL hU hok hng hna (LPh.ne_holdsAway_of_not_held hnh) hst
-    (fun h => by rw [h] at hnh; cases hnh) hl⟩
+    (fun h => by rw [h] at hnh; cases hnh) (.acquire hnh hfr) hl⟩
 
 /-- A release of the holder `t` as the protocol's invariant. -/
 theorem Fits.stepRel (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem}
@@ -310,9 +340,9 @@ theorem Fits.stepRel (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} 
     (hw : L.WInv (upd (L.pl G₁) t p) m') :
     P.inv (upd G₁ t (L.set g p rnil)) m' := by
   subst hg₁
+  obtain ⟨hfr, hl⟩ := hiL.rel hst hph hp hrel hw
   exact hP.step hiL hU hok (by rw [hph]; decide) (by rw [hph]; decide) (by rw [hph]; decide) hst
-    (fun _ hp' => hbf)
-    (hiL.rel hst hph hp hrel hw)
+    (fun _ hp' => hbf) (.release hph hp hfr) hl
 
 /-- `lock`'s loop, `xchg(contended)`, by thread `t` at `spin` (`g`). -/
 theorem wp_xchgLockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ}
