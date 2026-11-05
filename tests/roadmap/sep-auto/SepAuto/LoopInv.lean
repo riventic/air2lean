@@ -84,20 +84,39 @@ theorem fill_partial (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat +
   unfold fill
   fsym
 
-/-- The same body under another name, whose registered invariant is wrong: it claims `*p` went
-up by `i + 1`, which the entry does not establish and the step does not keep. -/
-def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := fill.loop p n
+/-- The same loop in a thread (`FTTotalTriple.loop_measure`: the body's steps with the locality
+of their commands). -/
+theorem fill_thread (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + n.toNat < 2 ^ 64) :
+    FTTotalTriple (up (pts p 8 v)) (fill p n)
+      (fun _ => FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + n.toNat⟫ ⋆ up (pts p 8 w)) := by
+  unfold fill
+  fsym
 
+/-- The same body under another name … -/
+def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := do
+  let i ← pure ((← get).i)
+  if Zig.lt false i n then (do
+    let v ← Zig.load (BitVec 64) 8 p
+    let v' ← Zig.add false v (1 : BitVec 64)
+    Zig.store (α := BitVec 64) 8 p v'
+    let i' ← Zig.add false ((← get).i) (1 : BitVec 32)
+    modify (fun s => { s with i := i' })
+    pure .rep)
+  else (do
+    pure .brk)
+
+/-- … whose registered invariant is wrong: it holds at the entry, but the step does not keep it
+(`*p` goes up by 1 per iteration, not by 2). -/
 @[fsym_inv] def bad.loop.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn :=
-  ⟪s.i.toNat ≤ n.toNat ∧ v0.toNat + n.toNat + 1 < 2 ^ 64⟫ ⋆
-    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + s.i.toNat + 1⟫ ⋆ up (pts p 8 v))
+  ⟪s.i.toNat ≤ n.toNat ∧ v0.toNat + 2 * n.toNat < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + 2 * s.i.toNat⟫ ⋆ up (pts p 8 v))
 
 @[fsym_inv] def bad.loop.meas (n : BitVec 32) (s : Locals) : Nat :=
   n.toNat - s.i.toNat
 
 @[fsym_inv] def bad.loop.post (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (r : Exit × Locals) :
     FAssn :=
-  ⟪r.1 = .brk⟫ ⋆ (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + n.toNat + 1⟫ ⋆ up (pts p 8 v))
+  ⟪r.1 = .brk⟫ ⋆ (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + 2 * n.toNat⟫ ⋆ up (pts p 8 v))
 
 def bad (p : Ptr) (n : BitVec 32) : MemM Unit := do
   let e ← ((do
@@ -112,12 +131,13 @@ def bad (p : Ptr) (n : BitVec 32) : MemM Unit := do
   | _ => throw .panic
 
 set_option linter.unusedVariables false in
-/-- **A wrong invariant is rejected**: `fsym` does not prove `bad` with it. -/
-example (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + n.toNat + 1 < 2 ^ 64) :
+/-- **A wrong invariant is rejected**: `fsym` does not prove the (false) claim of `bad` with it,
+since the walk of the step does not reach the invariant at the next iteration. -/
+example (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 2 * n.toNat < 2 ^ 64) :
     True := by
   fail_if_success
     have : FTotalTriple (up (pts p 8 v)) (bad p n)
-        (fun _ => FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + n.toNat⟫ ⋆ up (pts p 8 w)) := by
+        (fun _ => FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + 2 * n.toNat⟫ ⋆ up (pts p 8 w)) := by
       unfold bad
       fsym
   trivial

@@ -69,7 +69,8 @@ calls with 20 to 30 facts.
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
   `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
-  `EUpd X Y` of one atom (§Views).
+  `EUpd X Y` of one atom (§Views), `@[fsym_inv]` a loop's invariant, measure and exit post
+  (§Loops).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -752,6 +753,44 @@ obligation without a budget, or a query of a type nested inside one past the bud
 The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
+## Loops
+
+A loop `(Zig.loop (B xs) again).run s₀` that no rule is about is proved by its **registered
+invariant** (`@[fsym_inv]`, P09-E4, `docs/invariant-synthesis.md`): definitions next to the loop
+body `B`, named by their part.
+
+```lean
+@[fsym_inv] def fill.loop.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn := …
+@[fsym_inv] def fill.loop.meas (n : BitVec 32) (s : Locals) : Nat := n.toNat - s.i.toNat
+@[fsym_inv] def fill.loop.post (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (r : Exit × Locals) : FAssn := …
+```
+
+* `B.inv` is the invariant at the start of an iteration, `B.meas` the measure (total correctness:
+  it decreases at each repetition), `B.post` the assertion at the exit. Without `B.post` the
+  exit is the invariant with `again r.1 = false`, which forgets the exit's label and the exit
+  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks the
+  name and the value's type (`FAssn`, `Nat`); one definition of each part per body.
+* `fsym` applies the backend's loop rule with them (`FTotalTriple.loop_measure`, `FTriple.loop`
+  in the partial logic, `FTTotalTriple.loop_measure` and `FTTriple.loop` in a thread,
+  `CTriple.loop` in the concurrent backend) as a rule (`tryRule`, `loopInvRule?`): its
+  precondition `B.inv … s₀` is planned in the state and the rest is the frame, which stays
+  outside the loop; its premise, the step `∀ s, T (B.inv … s) ((B xs).run s) (fun r => if again
+  r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a goal of its
+  own (in the context of the loop), then the walk goes on after the loop from `B.post`.
+* The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
+  the body's arguments `xs`; one of the locals' type is the locals at loop entry `s₀` (the
+  generator's `s0`); every other one (the value at a pointer at entry, `v0`) is an unknown that
+  the plan of the precondition assigns. A plan that leaves one unknown does not apply the rule.
+* The body's definition is inlined in the step (`StateT.run (B xs) s` is no command a rule is
+  about), as a generated call is.
+* The step's side goals that the walk does not prove (arithmetic that needs a lemma about the
+  module's functions) are left to the caller, as a rule's are. A wrong invariant fails: its
+  entry has no plan, or the step's walk does not reach its post (regressions:
+  `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`, total, partial and in a thread, and a wrong
+  invariant that the step does not keep).
+* The caller's rule about the loop (`fsym [h]` with `h` a triple about the loop) is still taken
+  first: the registry is for a loop no rule is about.
+
 ## Recursive groups
 
 `FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
@@ -813,6 +852,8 @@ memory functions, and P03/native stack and producer integration remain open.
   A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
   the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
   `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
+* A loop: its invariant, measure and exit post as `@[fsym_inv] def B.inv`/`B.meas`/`B.post` next
+  to the body `B` (§Loops), not a lemma about the loop passed as `fsym [h]`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.

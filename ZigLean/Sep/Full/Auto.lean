@@ -6587,8 +6587,8 @@ def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
   let atLocals (c : Name) (dom : Expr) (n : Name) : TacticM Expr := do
     let cC ← mkConstWithFreshMVarLevels c
     let args ← forallTelescope (← inferType cC) fun ys _ => ys.pop.mapM fun y => do
-      let n ← return (← y.fvarId!.getDecl).userName
-      let some i := names.idxOf? n | fail m!"`{c}`'s parameter {n} is not one of `{invN}`'s"
+      let y := (← y.fvarId!.getDecl).userName
+      let some i := names.idxOf? y | fail m!"`{c}`'s parameter {y} is not one of `{invN}`'s"
       return pre[i]!
     withLocalDeclD n dom fun t => do mkLambdaFVars #[t] (← mkAppM' cC (args.push t))
   let I ← atLocals invN σ `s
@@ -6610,7 +6610,9 @@ def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
     unless ← isDefEq lms[i]! e do fail m!"`{lem}` does not take{indentExpr e}"
   let some (_, cmd) := ruleConcl? (← whnfR concl) | fail m!"`{lem}` is not a loop rule"
   unless ← isDefEq cmd x do fail m!"`{lem}`'s command does not unify with{indentExpr x}"
-  let step ← mkFreshExprSyntheticOpaqueMVar (← instantiateMVars (← inferType lms[n - 2]!))
+  -- (the body inlined, as a generated call is: `StateT.run (B xs) s` has no rule)
+  let step ← mkFreshExprSyntheticOpaqueMVar
+    (← deltaExpand (← instantiateMVars (← inferType lms[n - 2]!)) (· == B))
   lms[n - 2]!.mvarId!.assign step
   let rule ← instantiateMVars (mkAppN lemC lms)
   let some (k, left) ← tryRule g rule x f (keepPre := true) | do

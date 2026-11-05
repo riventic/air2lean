@@ -222,9 +222,9 @@ def LoopInvEntry.ofDecl (decl : Name) : MetaM LoopInvEntry := do
     throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
       a loop body `B`"
   let .str body last := decl | fail "not a name `B.inv`, `B.meas` or `B.post`"
-  let some role := match last with
-    | "inv" => some LoopInvRole.inv | "meas" => some .meas | "post" => some .post | _ => none
-    | fail "its name does not end in `inv`, `meas` or `post`"
+  let role? : Option LoopInvRole := match last with
+    | "inv" => some .inv | "meas" => some .meas | "post" => some .post | _ => none
+  let some role := role? | fail "its name does not end in `inv`, `meas` or `post`"
   let some (.defnInfo _) := (← getEnv).find? body | fail m!"`{body}` is not a definition"
   let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
   forallTelescope d.type fun xs res => do

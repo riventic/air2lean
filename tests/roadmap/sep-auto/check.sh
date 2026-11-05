@@ -25,7 +25,8 @@
 # rules; LockQueue: a lock step queues only its own thread, `LockWord.Step.newQ`) and total stack
 # pushes of a thread with a stack budget
 # (Stack: the token rules, a thread, the start, rejected pushes without room) and step ticks
-# (Ticks: memory/concurrent loops, straight-line ticks, thread locality, WP segments, one credit).
+# (Ticks: memory/concurrent loops, straight-line ticks, thread locality, WP segments, one credit)
+# and loops by their registered invariants (LoopInv: `@[fsym_inv]`, a wrong invariant rejected).
 # Its large user is
 # the FixedBufferAllocator
 # (tests/roadmap/alloc-fba/AllocFba/Full.lean). Every example is a module of the fixture's library
