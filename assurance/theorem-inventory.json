@@ -1209,8 +1209,6 @@
         "ZigLean.Sep.Full.WordRules",
         "ZigLean.Sep.Full.Wrappers",
         "ZigLean.Sep.Heap",
-        "ZigLean.Sep.Loop",
-        "ZigLean.Sep.Total",
         "ZigLean.Sep.Triple",
         "ZigLean.Simp",
         "ZigLean.SimpAttr",
@@ -1238,16 +1236,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "ddd720b30c8dcda7a6b1cc441cac78c2e8f7b159",
+        "head": "cbd0d9b8fb55f577f086ba14895cf0e1436d5a91",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-05T15:38:30.935486+00:00",
-      "elapsed_seconds": 903.515,
+      "started_utc": "2026-11-05T16:02:56.648505+00:00",
+      "elapsed_seconds": 2.924,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "3f683c86eb71a108d62424361c0849534c09a855e80786692b444c6d388131aa",
+      "log_sha256": "fae3af9fb558cdbc8395338ab1caa5926a6d556eb68de507225327ec453756ed",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Asm.AirCert",
@@ -1554,7 +1552,7 @@
         "Proofs.Slices.Sep": "8be2acf664ad5c7b941b46915e2924154250ae7b9df5a90ef8ec14e5587a5113",
         "Proofs.Sync.Cases": "aea70dca286ca9f99183cf3fd260fb4c13e08e59b5c74ab309effb3667b47f3b",
         "Proofs.Sync.Cond": "92d5bf7f423c46dca566f8c8ef3f779ec7b314a19d1883f5633f844bf0c3d5df",
-        "Proofs.Sync.Contracts": "9e126b4bb67f4f00155dfb4924a50c69a06d399031bd302fc07758c0e125a438",
+        "Proofs.Sync.Contracts": "a697b7f47da9de4467af8e25a82d6c32b87d1e9d0e8a616b1f143d21317e3824",
         "Proofs.Sync.Event": "70d6910e5662ebc8a1b759e05896cc01988128caa52bc227cddffa8e9d63b854",
         "Proofs.Sync.Handoff": "1933c7f543de4cb43f6708049e54adc5cfacaf6ceaef215264621c9ac7c2b8f6",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
@@ -1697,11 +1695,11 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "1bbd01e81a518c102c8a0e5d141de620dffe67bb",
+        "head": "cbd0d9b8fb55f577f086ba14895cf0e1436d5a91",
         "tracked_dirty": true
       },
-      "started_utc": "2026-11-05T13:13:02.948570+00:00",
-      "elapsed_seconds": 0.275,
+      "started_utc": "2026-11-05T16:02:54.475225+00:00",
+      "elapsed_seconds": 0.389,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
@@ -1734,7 +1732,7 @@
       },
       "sources": {
         "Proofs.Sync.Cond": "92d5bf7f423c46dca566f8c8ef3f779ec7b314a19d1883f5633f844bf0c3d5df",
-        "Proofs.Sync.Contracts": "9e126b4bb67f4f00155dfb4924a50c69a06d399031bd302fc07758c0e125a438",
+        "Proofs.Sync.Contracts": "a697b7f47da9de4467af8e25a82d6c32b87d1e9d0e8a616b1f143d21317e3824",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
         "Proofs.Sync.IoSemaphore": "05d0559f922021d90918650faf6de667450ce00d58f86f20b27e523a0e614543",
         "Proofs.Sync.Lock": "a106a56e21ae0fbfdc4d7927fee0bed1a4fbdfb250169e01c7d220fbadcdf5a0",
@@ -1793,16 +1791,16 @@
       "outcome": "success",
       "exit_code": 0,
       "revision": {
-        "head": "864dae84ef841abe142efe56eb3f1069abc8ffb6",
-        "tracked_dirty": true
+        "head": "cbd0d9b8fb55f577f086ba14895cf0e1436d5a91",
+        "tracked_dirty": false
       },
-      "started_utc": "2026-11-05T13:59:52.981859+00:00",
-      "elapsed_seconds": 79.283,
+      "started_utc": "2026-11-05T16:00:52.515492+00:00",
+      "elapsed_seconds": 118.703,
       "host": {
         "machine": "arm64",
         "system": "Darwin"
       },
-      "log_sha256": "137c7fe6410e66b62c6faf452d9e3c8c8a55e77405874d3b2cbf20ce611475ed",
+      "log_sha256": "cd3dbde616199483985ecb2a39b206b1763405436fecfa5f42d976bd506a38b9",
       "lean_toolchain_sha256": "8733782dc070a99b312039cda424f601b80f3be6f6f512627da5ba25adc27632",
       "modules": [
         "Proofs.Floatops.Proofs",
@@ -1877,7 +1875,7 @@
         "Proofs.SemCounter.Start": "e0fc820ae93f3dce65639594a1e083676a385a479271ccc317b922fa40956e0f",
         "Proofs.SemCounter.Steps": "e84c415d19da85a6490f6588f3c18e04812015df56a29320f4161240175df399",
         "Proofs.Sync.Cond": "92d5bf7f423c46dca566f8c8ef3f779ec7b314a19d1883f5633f844bf0c3d5df",
-        "Proofs.Sync.Contracts": "9e126b4bb67f4f00155dfb4924a50c69a06d399031bd302fc07758c0e125a438",
+        "Proofs.Sync.Contracts": "a697b7f47da9de4467af8e25a82d6c32b87d1e9d0e8a616b1f143d21317e3824",
         "Proofs.Sync.Event": "70d6910e5662ebc8a1b759e05896cc01988128caa52bc227cddffa8e9d63b854",
         "Proofs.Sync.Handoff": "1933c7f543de4cb43f6708049e54adc5cfacaf6ceaef215264621c9ac7c2b8f6",
         "Proofs.Sync.IoMutex": "ef4fa4a641cbb48cb27f98a1563cf162f422eef956bc668316328d1744068e12",
