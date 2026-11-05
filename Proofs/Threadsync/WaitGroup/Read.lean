@@ -205,7 +205,7 @@ theorem wp_read {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res} {w : Bool}
       · exact heap_ne_l (L.wordR_some hL'.w.blk ⟨rfl, by show 16 ≤ x; omega, by show x < 20; omega⟩)
       · have hR := hF (free6 hU' h6 hm)
         change up (pts (bPtr.add 20) 4 _) rL at hR
-        obtain ⟨-, -, -, bs, ⟨-, hbs, -, -⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hR
+        obtain ⟨_, _, _, bs, ⟨-, hbs, -, -⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hR
         refine heap_ne_r (heap_ne_l ((up_bytesAt_some hbytes rfl (0, x)).mpr ⟨rfl, ?_, ?_⟩))
         · show 20 ≤ x; omega
         · rw [hbs]; show x < 20 + 4; omega
