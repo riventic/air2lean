@@ -117,18 +117,44 @@ class NoReuse(unittest.TestCase):
             fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
         self.assertIn("not recorded", err.getvalue())
 
-    def test_the_default_guard_stays_within_the_budget_and_an_enclosing_admission(self):
-        # A nested guard above its enclosing admission is refused (build-guard.py `inherited`);
-        # one above the machine's budget would take every slot and still exceed it.
-        for budget, grant, expected in (
-                ("64000", None, fc.GUARD_RSS_MIB), ("64000", {"rss_mib": 22000}, 22000),
-                ("64000", {"rss_mib": 11000.0}, 11000), ("64000", {"rss_mib": 64000}, fc.GUARD_RSS_MIB),
-                ("64000", {"rss_mib": True}, fc.GUARD_RSS_MIB), ("64000", "not json", fc.GUARD_RSS_MIB),
-                ("16000", None, 16000), ("16000", {"rss_mib": 11000}, 11000)):
-            value = grant if isinstance(grant, str) else json.dumps(grant)
-            with self.subTest(budget=budget, grant=grant), \
-                 mock.patch.dict(os.environ, {fc.GUARD.INHERIT: value, "AIR2LEAN_BUILD_MEM_MIB": budget}):
-                self.assertEqual(fc.guard_rss_mib(), expected)
+    def test_a_unit_never_measured_is_charged_the_measured_units_typical_request(self):
+        # The rule of a Lean module never measured (lean-peaks.py `typical`), not the declared
+        # bound: an 11000 MiB charge made every new unit an 11-slot queue head.
+        units = [{"name": "u%02d" % k} for k in range(1, 21)] + [{"name": "new"}]
+        hints = {u["name"]: {"elapsed_s": 1, "lean_threads": 1, "peak_rss_kib": [(100 * k) << 10]}
+                 for k, u in enumerate(units[:-1], 1)}
+        (self.temp / "schedule.json").write_text(json.dumps(hints))
+        with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}):
+            requests = fc.schedule(units, 5000, elastic=True)[1]
+            self.assertEqual(requests[:-1], [max(fc.MEM_FLOOR_MIB, int(100 * k * fc.MEM_MARGIN))
+                                             for k in range(1, 21)])
+            # The 95th percentile (nearest rank: the 19th of 20), not the largest.
+            self.assertEqual(requests[-1], int(1900 * fc.MEM_MARGIN))
+            # Of every unit measured, not only those selected (--only): the guess is the machine's.
+            self.assertEqual(fc.schedule([units[0], units[-1]], 5000, elastic=True)[1],
+                             [requests[0], requests[-1]])
+            self.assertEqual(fc.schedule(units, 5000)[1][-1], 5000)  # not elastic: no limit backs it
+            with mock.patch.object(fc.GUARD, "PROCESS_MIB", 2000):
+                self.assertEqual(fc.schedule(units, 5000, elastic=True)[1][-1], 2000)  # at most the bound
+            (self.temp / "schedule.json").write_text("{}")
+            self.assertEqual(fc.schedule(units, 5000, elastic=True)[1], [fc.GUARD.PROCESS_MIB] * 21)  # none measured
+
+    def test_a_unit_in_an_elastic_guard_is_a_sub_admission_charged_its_request(self):
+        grant = {"lock": "/l/build.lock", "elastic": {"id": "e"}}
+        with mock.patch.dict(os.environ, {fc.GUARD.INHERIT: json.dumps(grant)}):
+            self.assertEqual(fc.elastic_grant(), grant)
+        for value in (json.dumps({"lock": "/l/build.lock"}), "not json", ""):  # plain, malformed, none
+            with mock.patch.dict(os.environ, {fc.GUARD.INHERIT: value}):
+                self.assertIsNone(fc.elastic_grant())
+        with mock.patch.dict(os.environ, {"AIR2LEAN_JOBS": "8", "LEAN_NUM_THREADS": "2"}):
+            argv = fc.admitted(["bash", "-c", "check"], 3474, grant)
+        options = argv[argv.index("--sub-admission"):argv.index("--")]
+        pairs = dict(zip(options[1::2], options[2::2]))
+        self.assertEqual((pairs["--charge-mib"], pairs["--rss-mib"], pairs["--lock"]),
+                         ("3474", str(fc.GUARD.PROCESS_MIB), "/l/build.lock"))
+        # The units' jobs and Lean threads, which the sub-admission's guard sets again.
+        self.assertEqual((pairs["--jobs"], pairs["--lean-threads"]), ("8", "2"))
+        self.assertEqual(argv[argv.index("--") + 1:], ["bash", "-c", "check"])
 
     def test_there_is_no_selection_by_key(self):
         # `--base REF` chose the units by the key's files; it is rejected, not ignored.
