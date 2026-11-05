@@ -322,12 +322,13 @@ theorem Fits.wp_holdParts (hF : L.Fits K P U ok) {α : Type} {x : MemM α}
     P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
   obtain ⟨rX, hiL, hU₀⟩ := (hF.inv G' m).mp hi
   obtain ⟨ht, hjt⟩ := hiL.ht (by rw [hh]; decide)
-  refine hiL.wp_liftMem hc ht hjt htt (hpa _ (hiL.res t hh) (hiL.pdisj t))
+  refine hiL.wp_liftMem hc ht hjt htt (hpa _ (hiL.res t (LPh.held_of_holds hh)) (hiL.pdisj t))
     (fun a m' r' _ hq hs hc' hk => ?_) (.inl hpart)
   obtain ⟨rp, rh, hd, rfl, hqp, hqh⟩ := hq
   obtain ⟨hph, hpt, hhd⟩ := hg' a rp rh hqp hqh
   have hl := hk (g' rp rh) (by rw [hph, hh]) (by rw [hpt, hhd])
-    (by rw [hpt, hhd]; exact hd) (fun h => absurd hph h) (fun h => absurd hh h)
+    (by rw [hpt, hhd]; exact hd) (fun h => by rw [hph] at h; cases h)
+    (fun h => by rw [hh] at h; cases h)
     (fun _ => by rw [hhd]; exact hR a rp rh hqp hqh)
   exact h a m' rp rh hc' hs.threads hqp hqh
     ((hF.inv _ _).mpr ⟨rX, hl, hU a rX m' rp rh hqp hqh hiL hU₀ hjt hs hs.threads hl⟩)

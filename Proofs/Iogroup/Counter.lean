@@ -1107,7 +1107,7 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} {rM : Res} {k : Nat}
         rw [show L.ph (upd G 0 (gJoins rM k k) u) = (upd G 0 (gJoins rM k k) u).1.ph from rfl,
           this] at hu
         cases hu
-      · have := (hiL.w.live u (by rw [hu]; decide)).1
+      · have := (hiL.w.live u (LPh.ne_gone_of_held hu)).1
         rw [hsz] at this; unfold ThreadId at *; omega
   have hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[0]!) = true := fun u hu => by
     by_cases h0 : u = 0

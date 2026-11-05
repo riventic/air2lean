@@ -28,13 +28,31 @@ inductive LPh where
   | wake
   /-- Out of the lock's code, at the futex wait of another sync object: it can sleep there. -/
   | away
+  /-- It holds the lock and is at the futex wait of another sync object (an inner lock of a lock
+  order, a semaphore): it can sleep there (`LockWord.nest`). -/
+  | holdsAway
   deriving DecidableEq
 
 /-- In the lock's code, after `lock`'s first try: the thread will take the lock or wake a
 waiter. -/
 def LPh.busy : LPh → Bool
-  | .spin | .wait | .holds | .wake => true
+  | .spin | .wait | .holds | .wake | .holdsAway => true
   | _ => false
+
+/-- The thread holds the lock: awake (`holds`) or at another object's futex wait
+(`holdsAway`). -/
+def LPh.held : LPh → Bool
+  | .holds | .holdsAway => true
+  | _ => false
+
+theorem LPh.held_of_holds {p : LPh} (h : p = .holds) : p.held = true := by
+  rw [h]; rfl
+
+theorem LPh.ne_gone_of_held {p : LPh} (h : p.held = true) : p ≠ .gone := by
+  rintro rfl; cases h
+
+theorem LPh.busy_of_held {p : LPh} (h : p.held = true) : p.busy = true := by
+  cases p <;> first | rfl | cases h
 
 /-- The clock `c` happened before every thread. -/
 def AllLe (m : Mem) (c : VClock) : Prop :=

@@ -102,7 +102,7 @@ def gPool (b : Bool) (rp rh : Res) : FLG × Bool := (⟨.holds, rp, rh⟩, b)
 theorem return_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m : Mem)
     (hi : (poolL A).Inv (upd G 0 (gPool false r rnil)) rX m) (ha : A r) :
     (poolL A).Inv (upd (upd G 0 (gPool false r rnil)) 0 (gPool true rnil r)) rX m := by
-  refine hi.repartition rfl ?_ ?_ (fun hn => (hn rfl).elim) (fun hn => (hn rfl).elim) ?_
+  refine hi.repartition rfl ?_ ?_ (fun hn => by cases hn) (fun hn => by cases hn) ?_
   · exact (rnil_rsum r).trans (rsum_rnil r).symm
   · exact (FHeap.disjoint_empty r.heap).symm
   · intro _
@@ -114,7 +114,7 @@ theorem take_payload (A : FAssn) (G : ThreadId → FLG × Bool) (rX r : Res) (m 
     A r ∧ (poolL A).Inv (upd (upd G 0 (gPool true rnil r)) 0 (gPool false r rnil)) rX m := by
   constructor
   · simpa [poolL, FLock.prod, poolR, gPool, upd] using hi.res 0 rfl
-  · refine hi.repartition rfl ?_ ?_ (fun hn => (hn rfl).elim) (fun hn => (hn rfl).elim) ?_
+  · refine hi.repartition rfl ?_ ?_ (fun hn => by cases hn) (fun hn => by cases hn) ?_
     · exact (rsum_rnil r).trans (rnil_rsum r).symm
     · exact FHeap.disjoint_empty r.heap
     · intro _
