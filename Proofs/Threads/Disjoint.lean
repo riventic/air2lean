@@ -425,18 +425,13 @@ theorem split_pre {X Y C1 C2 : FAssn} {r : Res} (hh : (X ⋆ (Y ⋆ (C1 ⋆ C2))
   refine sep_assoc' (sep_mono (fun _ h => h) (fun _ h => ?_) h1)
   exact sep_lcomm (sep_assoc (sep_comm h))
 
-theorem decode_u32 (v : BitVec 32) : Enc.decode ((Enc.encode v).extract 0 (0 + Enc.size (BitVec 32))) =
-    (pure v : Result (BitVec 32)) := by
-  rw [show 0 + Enc.size (BitVec 32) = (Enc.encode v).size from (enc_u32 v).symm, Array.extract_size]
-  exact LawfulEnc.decode_encode v
-
 /-- The load of a `u32` stack word. -/
 theorem blk_load {p : Ptr} {A : Nat} {w : BitVec 32} {b : BlockId} (hpb : p.block = some b)
     (h0 : p.off = 0) (hA : A % 4 = 0) :
     FTTriple (blk p A 4 (Enc.encode w) b) (Zig.load (BitVec 32) 4 p)
       (fun r => ⟪r = w⟫ ⋆ blk p A 4 (Enc.encode w) b) := by
   fsym [FTotalTriple.loadBlock (T := BitVec 32) (A := A) (S := 4) (K := .stack) (al := 4) hpb
-    (by decide) (by rw [enc_u32]; decide) (decode_u32 w) (by simp [h0, hA])]
+    (by decide) (by rw [enc_u32]; decide) (LawfulEnc.decode_extract w) (by simp [h0, hA])]
 
 /-- The start memory holds the parts: `main` holds the plain mode, no thread owns anything else. -/
 theorem start (σ : Placement) :
