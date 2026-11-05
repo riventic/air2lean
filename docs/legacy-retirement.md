@@ -27,7 +27,7 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L10, L11 | open | |
 | L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
 | L15 VC layer | done: `vc_gen`, `#vc_extract(_all)`, the `vc_contract` registry, the `ResultProgram` AST and `scripts/vc-report.py` deleted; P02's VCs are `fsym`'s residual goals (`docs/vcs.md`) | #657 |
-| L21 `Conc/Spec` | done: `ZigLean/Conc/Spec/` deleted, with its 5 judgments (`FutexSpec`, `MutexSpec`, `EventSpec`, `WaitGroupSpec`, `CondSpec`); each result's full-state replacement, and the two with none (a generic wait-group contract, a `MutexImpl` strength witness), are in `docs/thread-specs.md` | L21 |
+| L21 `Conc/Spec` | done: `ZigLean/Conc/Spec/` deleted with its 5 judgments; the replacements and open items are in `docs/thread-specs.md` | #677 |
 
 Stage D-a (section 4) is done.
 
@@ -459,7 +459,7 @@ Consumers to move first (invisible to the ratchet today, listed by L1): Conc/{De
 spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs (`unroll_sched` tactic, legacy `Lock/Fits/Step`).
 Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migrated sync proofs (Handoff, Counter) use it with FOwned. Recommended: the maintainer re-statuses
 `Proto.WP` as `target` (it is the all-schedules adequacy engine under `CTriple`, with fsym WP mode as its backend), and retires only `TTriple`, `Owned`, `TlsLemmas`, `Conc.Lock`, the Conc specs
-(`MutexSpec` ...) and `Conc.Total`. Without this decision L12 has no end state.
+(`MutexSpec` ...; deleted, L21) and `Conc.Total`. Without this decision L12 has no end state.
 
 ### L13. Final deletion (see section 4)
 | file | role at the end |
