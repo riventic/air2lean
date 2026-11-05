@@ -356,6 +356,18 @@ class FixtureTests(unittest.TestCase):
         entries = self.written()
         self.assertIn("THR-01", entries["nested"]["premises"])
 
+    def test_root_qualified_reference_reaches_the_closure(self):
+        # `_root_.run_id` inside a namespace names the root theorem; its premises are inherited
+        # even though neither the statement nor the theorem's own name mentions it.
+        self.fixture.files["Proofs/Pin/Proofs.lean"] = """\
+            import Proofs.Conc.Proofs
+            namespace Pin
+            theorem pinned (n : Nat) : True := (fun _ => trivial) (_root_.run_id n)
+            end Pin
+            """
+        entries = self.written()
+        self.assertIn("THR-01", entries["Pin.pinned"]["premises"])
+
     def test_runtime_source_fallback_includes_transitive_imports(self):
         self.fixture.files["ZigLean/Low.lean"] = "def lowLevel := 0\n"
         self.fixture.files["ZigLean/Middle.lean"] = "import ZigLean.Low\ndef middle := lowLevel\n"
