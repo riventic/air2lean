@@ -74,9 +74,11 @@ def main():
         sys.exit(f"Proof.lean has no theorem {', '.join(missing)}")
     with ThreadPoolExecutor(max_workers=int(os.environ.get('AIR2LEAN_MUTANT_JOBS', '1'))) as pool:
         results = list(pool.map(lambda m: run(fixture, ns, work, m, theorems), mutants))
-    failed = [f"mutant {m['name']}: {why}" for m, why in zip(mutants, results) if why]
+    failed = []
     for m, why in zip(mutants, results):
-        if not why:
+        if why:
+            failed.append(f"mutant {m['name']}: {why}")
+        else:
             print(f"mutant {m['name']} of the generated invariant rejected")
     if failed:
         sys.exit('\n'.join(failed))

@@ -310,22 +310,22 @@ inductive Rel where
 def Rel.text : Rel → String
   | .lt => "<" | .le => "<=" | .gt => ">" | .ge => ">=" | .ne => "!="
 
+/-- `¬ x R b` as `x R' b`; none for `!=` (its negation is a `==`). -/
+def Rel.neg? : Rel → Option Rel
+  | .lt => some .ge | .le => some .gt | .gt => some .le | .ge => some .lt | .ne => none
+
 /-- The test `c` with the outcome `o` as `x R b`, for the counter `x`: `none` if `c` is not a
 comparison of `x` with something else, or the outcome is a `==`. -/
-def relOf (x : Name) (c : Sym) (o : Bool) : Option (Rel × Sym) :=
-  let neg : Rel → Option Rel
-    | .lt => some .ge | .le => some .gt | .gt => some .le | .ge => some .lt | .ne => none
+def relOf (x : Name) (c : Sym) (o : Bool) : Option (Rel × Sym) := do
   -- `a R b` with the counter on either side (`R'` the relation with the sides swapped).
   let side (r r' : Rel) (a b : Sym) : Option (Rel × Sym) :=
     if a == .local x then some (r, b) else if b == .local x then some (r', a) else none
-  let pos : Option (Rel × Sym) := match c with
+  let (r, b) ← match c with
     | .lt a b => side .lt .gt a b
     | .le a b => side .le .ge a b
     | .ne a b => side .ne .ne a b
     | _ => none
-  match pos with
-  | some (r, b) => if o then some (r, b) else (neg r).map (·, b)
-  | none => none
+  if o then pure (r, b) else return (← r.neg?, b)
 
 /-- A recognized counted loop. -/
 structure Counted where
@@ -358,16 +358,13 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
   -- The counter: the one local the iteration changes, by 1 up or down.
   let changed := (c.st.locals.zip ctx.fields).filter fun (v, f) => v != .local f
   let #[(v, x)] := changed | throwError "the body writes {changed.size} locals, not one counter"
-  let down ← match v.split with
-    | (.local y, 1) => if y == x then pure false else throwError "the counter `{x}` does not step by 1"
-    | (.local y, -1) => if y == x then pure true else throwError "the counter `{x}` does not step by 1"
-    | _ => throwError "the counter `{x}` does not step by 1"
+  let (base, step) := v.split
+  unless base == .local x && step.natAbs == 1 do throwError "the counter `{x}` does not step by 1"
+  let down := step == -1
   let some (cnd, o) := c.st.cond | throwError "the repeating path is not guarded by a test"
   let some (rel, b) := relOf x cnd o | throwError "the repeating path is not guarded by a test of `{x}`"
   unless (if down then rel != .lt && rel != .le else rel != .gt && rel != .ge) do
     throwError "the counter `{x}` steps away from its bound (`{x} {rel.text} …`)"
-  if down && rel == .ge && b == .lit 0 then
-    throwError "a test `{x} >= 0` of a counter going down, which holds until the step wraps"
   let mut cells := #[]
   for cell in c.st.cells do
     if !cell.stored then cells := cells.push (cell, 0); continue
@@ -393,7 +390,7 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
   -- sum of a cell's increment, so the counter's bounds and the no-overflow facts cover it.
   for a in c.st.checked do
     let (base, k) := a.split
-    unless (base == .local x && (if down then -1 ≤ k && k ≤ 0 else 0 ≤ k && k ≤ 1)) ||
+    unless (base == .local x && (k == 0 || k == step)) ||
         cells.any (fun (cell, n) => cell.stored && base == .cell cell.param && 0 ≤ k && k ≤ n) do
       throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
   return { counter := x, rel, bound := b, down, cells, plain := paths.any (·.st.tick) }
@@ -465,33 +462,26 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
       let mut facts := #[]
       for f in fields do
         if f != x then facts := facts.push s!"s.{f} = s0.{f}"
-      let mut delta := s!"{X} - {X0}"
-      let mut total := ""
-      let mut left := ""
-      if c.down then
-        delta := s!"{X0} - {X}"
-        facts := facts.push s!"{X} ≤ {X0}"
-        if c.incl then
-          facts := facts.push s!"1 ≤ {bound}" |>.push s!"{bound} ≤ {X} + 1"
-          total := s!"{X0} + 1 - {bound}"
-          left := s!"{X} + 1 - {bound}"
+      -- The counter runs from `X0` to the value it exits at: the bound, or one past it for
+      -- `<=`/`>=` (`one`), where the counter's last step must not wrap (`noWrap`; a literal bound
+      -- that makes it false is outside the family).
+      let one := if c.incl then " + 1" else ""
+      let (delta, total, left, range) := if c.down then
+          (s!"{X0} - {X}", s!"{X0}{one} - {bound}", s!"{X}{one} - {bound}", #[s!"{X} ≤ {X0}", s!"{bound} ≤ {X}{one}"])
         else
-          facts := facts.push s!"{bound} ≤ {X}"
-          total := s!"{X0} - {bound}"
-          left := s!"{X} - {bound}"
-      else
-        let last := if c.incl then s!"{bound} + 1" else bound
-        facts := facts.push s!"{X0} ≤ {X}" |>.push s!"{X} ≤ {last}"
-        if c.incl then
-          let ty ← withLocalDeclD `s (.const structName []) fun s =>
-            inferType (mkApp (.const (structName ++ x) []) s)
-          let some w := bitVecWidth? ty | throwError "a counter that is not a word"
-          if let .lit n := c.bound then
-            if n + 1 ≥ 2 ^ w then
-              throwError "a test `{x} <= {n}` of a counter going up, which holds until the step wraps"
-          facts := facts.push s!"{bound} + 1 < 2 ^ {w}"
-        total := s!"{last} - {X0}"
-        left := s!"{last} - {X}"
+          (s!"{X} - {X0}", s!"{bound}{one} - {X0}", s!"{bound}{one} - {X}", #[s!"{X0} ≤ {X}", s!"{X} ≤ {bound}{one}"])
+      facts := facts ++ range
+      if c.incl then
+        let ty ← withLocalDeclD `s (.const structName []) fun s =>
+          inferType (mkApp (.const (structName ++ x) []) s)
+        let some w := bitVecWidth? ty | throwError "a counter that is not a word"
+        let (noWrap, never) := match c.down, c.bound with
+          | true, b => (s!"1 ≤ {bound}", b == Sym.lit 0)
+          | false, .lit n => (s!"{bound} + 1 < 2 ^ {w}", n + 1 ≥ 2 ^ w)
+          | false, _ => (s!"{bound} + 1 < 2 ^ {w}", false)
+        if never then
+          throwError "a test `{x} {c.rel.text} {boundName}` that holds until the counter's step wraps"
+        facts := facts.push noWrap
       let scaled (k : Nat) (t : String) := if k == 1 then s!"({t})" else s!"{k} * ({t})"
       let mut owned := #[]
       let mut doc := #[]
