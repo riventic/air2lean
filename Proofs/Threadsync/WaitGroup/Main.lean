@@ -1,5 +1,6 @@
 import Proofs.Threadsync.WaitGroup.Start
 import ZigLean.Sep.Full.LockSteps
+import ZigLean.Sep.Full.WordNewest
 
 /-!
 # `main`'s steps in `waitGroup`'s protocol

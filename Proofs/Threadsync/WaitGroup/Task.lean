@@ -1,6 +1,7 @@
 import Proofs.Threadsync.WaitGroup.Start
 import Proofs.Threadsync.ThreadMutex
 import Proofs.Threadsync.Event
+import ZigLean.Sep.Full.WordNewest
 
 /-!
 # A task of `waitGroup` (full-state logic)
