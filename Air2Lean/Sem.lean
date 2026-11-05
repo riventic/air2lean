@@ -867,6 +867,76 @@ decreasing_by simp_wf; simp only [sizeOf_toList]; omega
 
 end
 
+/-- The `Op` constructors without an arm in `evalPure`, `evalMem` or `execInst`, each with the
+reason it is outside the fragment (it is `stuck`); the stages are those of
+docs/research/V01-V02.md. The op-table test (tests/roadmap/op-effects) fails unless every
+constructor has a top-level arm or an entry here, and not both: a new `Op` constructor is unhandled
+until it gets one. An arm interprets its constructor for the fragment's value kinds only; other
+kinds are `stuck` too. -/
+def outsideFragment : List (String × String) := [
+  -- Floats (stage 5, `Zig.Float`, the FLT premises).
+  ("divFloat", "float division (stage 5)"),
+  ("sqrt", "float square root (stage 5)"),
+  ("libm", "float libm functions (stage 5)"),
+  ("mulAdd", "float fused multiply-add (stage 5)"),
+  ("floatConv", "float-to-float conversion (stage 5)"),
+  ("floatFromInt", "integer-to-float conversion (stage 5)"),
+  ("intFromFloat", "float-to-integer conversion (stage 5)"),
+  ("floatRound", "float rounding (stage 5)"),
+  ("neg", "float negation (stage 5)"),
+  ("abs", "float `@abs`; the checker rejects integer `abs` (stage 5)"),
+  -- Vectors (stage 5, lane-wise).
+  ("splat", "vectors (stage 5)"),
+  ("select", "vectors (stage 5)"),
+  ("shuffle", "vectors (stage 5)"),
+  ("reduce", "vectors (stage 5)"),
+  ("vectorStoreElem", "vectors (stage 5)"),
+  -- Integer operations not yet interpreted.
+  ("shift", "integer shifts (not yet interpreted)"),
+  ("withOverflow", "overflow builtins return a tuple, an aggregate (stage 4)"),
+  ("shlWithOverflow", "overflow builtins return a tuple, an aggregate (stage 4)"),
+  ("countBits", "bit counting (not yet interpreted)"),
+  ("permuteBits", "bit permutation (not yet interpreted)"),
+  -- Aggregates, enums and unions (stage 4).
+  ("structFieldVal", "aggregate values (stage 4)"),
+  ("aggregateInit", "aggregate values (stage 4)"),
+  ("arrayElemVal", "array values (stage 4)"),
+  ("retLoad", "a result returned through the return pointer, an aggregate (stage 4)"),
+  ("unionTag", "unions (stage 4)"),
+  ("unionInit", "unions (stage 4)"),
+  ("setUnionTag", "unions (stage 4)"),
+  ("isNamedEnum", "enums (stage 4)"),
+  ("tagName", "enum and union tag names (stage 4)"),
+  ("errorName", "error names need the compilation's error numbering (stage 4)"),
+  ("errorsLenLe", "error codes need the compilation's error numbering (stage 4)"),
+  -- Optionals and error unions in memory (stage 4).
+  ("isNullPtr", "optionals in memory (stage 4)"),
+  ("optPayloadPtr", "optionals in memory (stage 4)"),
+  ("isErrPtr", "error unions in memory (stage 4)"),
+  ("errPayloadPtr", "error unions in memory (stage 4)"),
+  ("errCodePtr", "error unions in memory (stage 4)"),
+  ("tryPtr", "error unions in memory (stage 4)"),
+  -- Slicing, bulk memory and field-to-parent pointers (stage 4).
+  ("slice", "slicing (stage 4)"),
+  ("arrayToSlice", "slicing (stage 4)"),
+  ("sliceFieldPtr", "pointers into a slice's fields (stage 4)"),
+  ("fieldParentPtr", "`@fieldParentPtr` (stage 4)"),
+  ("memset", "bulk memory (stage 4)"),
+  ("memcpy", "bulk memory (stage 4)"),
+  -- Labeled switch loops (stage 4).
+  ("loopSwitchBr", "labeled switch loops (stage 4)"),
+  ("switchDispatch", "labeled switch loops (stage 4)"),
+  -- Concurrency (stage 6, `Zig.ConcM`).
+  ("atomicLoad", "atomics (stage 6)"),
+  ("atomicStore", "atomics (stage 6)"),
+  ("atomicRmw", "atomics (stage 6)"),
+  ("cmpxchg", "atomics (stage 6)"),
+  ("runtimeNavPtr", "thread-local globals (stage 6)"),
+  -- External code (no stage yet).
+  ("asm", "inline assembly: its meaning is the A01 effect contract (not staged)"),
+  ("retAddr", "`@returnAddress`, a native code address (not staged)")
+]
+
 /-- The exact prefixed body that `execLoop` invokes, also used by a certificate proving a
 single invocation. This does not add a function-entry tick to an extracted loop helper. -/
 def execIteration (c : Ctx) (body : List Inst) (env : Env) : SM Exit :=

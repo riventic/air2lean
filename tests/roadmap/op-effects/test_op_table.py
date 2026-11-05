@@ -113,6 +113,25 @@ class SourceTests(unittest.TestCase):
         self.assertGreater(len(ops), 80)
         self.assertEqual({r['constructor'] for r in self.table['tags'].values() if r['constructor']}, ops)
 
+    def test_every_op_constructor_is_interpreted_or_outside_the_fragment(self):
+        # V01 coverage lint: a constructor has a Sem arm or a reasoned outsideFragment entry.
+        ops = op_constructors((ROOT / 'Air2Lean/Air/Op.lean').read_text())
+        sem = (ROOT / coverage.SEM).read_text()
+        self.assertEqual(coverage.sem_problems(sem, ops), [])
+        self.assertGreater(len(coverage.sem_arms(sem)), 40)
+
+    def test_sem_lint_detects_gaps(self):
+        sem = ('def evalPure (f : Func) : Result Value :=\n  match i.op with\n  | .arith op => x\n'
+               '  | .bit op => match t with\n    | .bool => y\n  | _ => stuck\n'
+               'def evalMem := 0\ndef execInst :=\n  match _h : i.op with\n  | .«try» v b => z\n'
+               'def outsideFragment : List (String × String) := [\n  ("neg", "floats"),\n  ("bit", "x"),\n'
+               '  ("neg", "again"),\n  ("frob", "")\n]\n')
+        self.assertEqual(coverage.sem_arms(sem), {'arith', 'bit', 'try'})
+        self.assertEqual(coverage.sem_problems(sem, {'arith', 'bit', 'try', 'neg', 'load'}), [
+            'neg: listed twice in outsideFragment', 'bit: an arm and an outsideFragment entry',
+            'load: no interpreter arm and no outsideFragment entry', 'frob: not an Op constructor',
+            'frob: outsideFragment entry without a reason'])
+
     def test_effect_classes(self):
         rows = self.table['tags']
         expected = {'load': 'read', 'store': 'write', 'memcpy': 'read-write', 'atomic_rmw': 'atomic',

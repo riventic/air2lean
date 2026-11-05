@@ -231,6 +231,35 @@ def op_table(cache=None):
     return dict(data, tags=rows)
 
 
+# The interpreter (Air2Lean/Sem.lean, V01): the definitions whose top-level arms interpret an
+# `Op` constructor, and the list of the constructors without an arm, with reasons.
+SEM = 'Air2Lean/Sem.lean'
+SEM_INTERPRETERS = ('evalPure', 'evalMem', 'execInst')
+
+
+def sem_arms(text):
+    """`Op` constructors with a top-level (two-space-indented) arm in one of `SEM_INTERPRETERS`."""
+    return {a or b for name in SEM_INTERPRETERS
+            for a, b in re.findall(r'^  \| \.(?:«([^»]+)»|([A-Za-z][A-Za-z0-9]*))', lean_section(text, name), re.M)}
+
+
+def sem_outside(text):
+    """`Sem.outsideFragment` as [(constructor, reason)], in source order."""
+    return re.findall(r'\("([A-Za-z][A-Za-z0-9]*)",\s*"((?:[^"\\\n]|\\.)*)"\)', lean_section(text, 'outsideFragment'))
+
+
+def sem_problems(text, constructors):
+    """Why the interpreter's arms and `outsideFragment` do not partition `constructors`."""
+    arms, outside = sem_arms(text), sem_outside(text)
+    names = [name for name, _ in outside]
+    problems = [f'{name}: listed twice in outsideFragment' for name in sorted({n for n in names if names.count(n) > 1})]
+    problems += [f'{name}: an arm and an outsideFragment entry' for name in sorted(arms & set(names))]
+    problems += [f'{name}: no interpreter arm and no outsideFragment entry' for name in sorted(constructors - arms - set(names))]
+    problems += [f'{name}: not an Op constructor' for name in sorted((arms | set(names)) - constructors)]
+    problems += [f'{name}: outsideFragment entry without a reason' for name, reason in outside if not reason.strip()]
+    return problems
+
+
 def table_reasons(table, field):
     """{tag: reason} for one reason column (`runtime_reason`, `exporter_reason`)."""
     return {tag: row[field] for tag, row in table['tags'].items() if row[field]}
@@ -889,12 +918,19 @@ def generate(version, source, os_name='linux'):
     resolved = canon_resolved(cache.text(ROOT/'Air2Lean/Air/Canon.lean'))
     produced = producer_literals(source, cache)
     fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
-    semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
+    sem_text = cache.text(ROOT/SEM)
+    sem_interpreted, sem_reasons = sem_arms(sem_text), dict(sem_outside(sem_text))
+    def semantics(ops):
+        # V01: a tag is interpreted when Sem.lean has an arm for each of its constructors.
+        if not ops:
+            return {'status': 'not-decoded', 'paths': [], 'reasons': []}
+        outside = [op for op in ops if op not in sem_interpreted]
+        return {'status': 'outside-fragment' if outside else 'interpreted', 'paths': [SEM],
+                'reasons': [f'{op}: {sem_reasons.get(op, "no interpreter arm")}' for op in outside]}
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
-    path_groups = {'semantics': semantic_paths, 'proofs': proof_paths}
     @lru_cache(maxsize=None)
-    def hits(group, symbol):
-        return source_hits(path_groups[group], symbol, cache)
+    def hits(symbol):
+        return source_hits(proof_paths, symbol, cache)
 
     # Parse actual selected golden and reviewed roadmap compiler-exported JSON; a malformed
     # fixture is not silently evidence.
@@ -961,10 +997,10 @@ def generate(version, source, os_name='linux'):
                      'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'canon-resolved' if disposition == 'resolved-in-canon' else 'unknown-tag-rejection', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
-                     'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
+                     'semantics': semantics(ops),
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},
                      'tests': {'status': 'compiler-fixture-presence-only', 'paths': sorted(test_tags.get(tag, []))},
-                     'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
+                     'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits(op)))},
                      'rejection': {'reason': reason, 'source': 'Air2Lean/Air/Normalize.lean', 'definition': REJECTION_DEFINITIONS[disposition]} if reason else None,
                      'fixture_request': request if disposition == 'emitted-unfixtured' else None,
                      'guidance': (reason + '; source-only rejection classification, no compiler fixture or support qualification') if reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))
