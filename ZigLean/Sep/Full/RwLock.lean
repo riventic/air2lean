@@ -1,183 +1,309 @@
-import ZigLean.Basic
+import ZigLean.Range
 
 /-!
-# Reader/writer state and resources
+# Reader/writer state-value algebra
 
-The state word has a reader count in bits 32 through 62, a pending-writer count
-in bits 1 through 31, and a writing bit at bit 0. These are logical counts used
-by the full-state protocol; operations on the word are the existing native Word
-operations. The protocol must relate the counts to its actual admitted handles.
+One count-width family supplies the encoding, masks and native value equations.
+The current ABI64 std instance uses reader bits32..62, pending-writer bits1..31
+and writing bit0; bit63 is spare, but out-of-range encodings can set it. The
+protocol must relate represented counts to its actual admitted handles.
 -/
 
 namespace Zig.Full
 
 namespace RwState
 
-/-- One reader in the native 64-bit state word. -/
-def readerUnit : Nat := 4294967296
+/-! The value algebra is parameterized by a count width and spare high bits.
+The std layouts are `(31, 1)` on ABI64 and `(15, 1)` on ABI32; this does not
+extend the atomic/thread runtime model to a new target. -/
+namespace Family
 
-/-- The number of representable readers and pending writers. -/
-def countBound : Nat := 2147483648
+abbrev width (c p : Nat) : Nat := 2 * c + 1 + p
+abbrev readerUnit (c : Nat) : Nat := 2 ^ (c + 1)
+abbrev countBound (c : Nat) : Nat := 2 ^ c
 
-/-- The encoding of the two counts and the writing bit. -/
-def encode (readers writers : Nat) (writing : Bool) : BitVec 64 :=
-  BitVec.ofNat 64 (readers * readerUnit + 2 * writers + if writing then 1 else 0)
+def raw (c r w : Nat) (a : Bool) : Nat :=
+  r * readerUnit c + 2 * w + if a then 1 else 0
 
-/-- The count selected by the native reader mask. -/
-def readers (s : BitVec 64) : Nat := s.toNat / readerUnit % countBound
+def encode (c p r w : Nat) (a : Bool) : BitVec (width c p) := .ofNat _ (raw c r w a)
+def readers (c : Nat) (s : BitVec n) : Nat := s.toNat / readerUnit c % countBound c
+def writers (c : Nat) (s : BitVec n) : Nat := s.toNat % readerUnit c / 2
+def writing (s : BitVec n) : Bool := s.toNat % 2 == 1
 
-/-- The pending-writer count in the low word. -/
-def writers (s : BitVec 64) : Nat := s.toNat % readerUnit / 2
+def lowMask (c p : Nat) : BitVec (width c p) := .ofNat _ (readerUnit c - 1)
+def readerMask (c p : Nat) : BitVec (width c p) := .ofNat _ (2 ^ (2 * c + 1) - readerUnit c)
+def clearWriting (c p : Nat) : BitVec (width c p) := .ofNat _ (2 ^ width c p - 2)
 
-/-- Whether the native writing bit is set. -/
-def writing (s : BitVec 64) : Bool := s.toNat % 2 == 1
+/-- The encoding is modular even when either logical count is out of range. -/
+theorem encode_toNat' (c p r w : Nat) (a : Bool) :
+    (encode c p r w a).toNat = raw c r w a % 2 ^ width c p := rfl
 
-/-- Valid count encodings do not wrap the 64-bit word. -/
-theorem encode_toNat {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) :
-    (encode r w a).toNat = r * readerUnit + 2 * w + if a then 1 else 0 := by
-  cases a <;> simp only [encode, Bool.false_eq_true, ↓reduceIte, BitVec.toNat_ofNat]
-  all_goals
-    apply Nat.mod_eq_of_lt
-    simp only [countBound] at hr hw
-    simp only [readerUnit]
-    omega
+theorem low_lt {c w : Nat} (hw : w < countBound c) (a : Bool) :
+    2 * w + (if a then 1 else 0) < readerUnit c := by
+  cases a <;> simp only [readerUnit, countBound, Nat.pow_succ,
+    Bool.false_eq_true, ↓reduceIte] at * <;> omega
 
-/-- The native reader mask recovers the represented reader count. -/
-theorem readers_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) : readers (encode r w a) = r := by
+theorem raw_lt {c p r w : Nat} (hr : r < countBound c) (hw : w < countBound c)
+    (a : Bool) : raw c r w a < 2 ^ width c p := by
+  calc
+    raw c r w a = r * readerUnit c + (2 * w + if a then 1 else 0) := by
+      unfold raw; omega
+    _ < (r + 1) * readerUnit c := by
+      simpa only [Nat.add_mul, Nat.one_mul] using Nat.add_lt_add_left (low_lt hw a) (r * readerUnit c)
+    _ ≤ countBound c * readerUnit c := Nat.mul_le_mul_right _ (Nat.succ_le_of_lt hr)
+    _ = 2 ^ (2 * c + 1) := by
+      simp only [countBound, readerUnit, ← Nat.pow_add]
+      congr 1; omega
+    _ ≤ 2 ^ width c p := Nat.pow_le_pow_right (by decide) (by unfold width; omega)
+
+theorem encode_toNat {c p r w : Nat} (hr : r < countBound c) (hw : w < countBound c)
+    (a : Bool) : (encode c p r w a).toNat = raw c r w a :=
+  Zig.toNat_ofNat_of_lt (raw_lt hr hw a)
+
+theorem low_mod (c p r w : Nat) (a : Bool) :
+    (encode c p r w a).toNat % readerUnit c =
+      (2 * w + if a then 1 else 0) % readerUnit c := by
+  rw [encode_toNat', Nat.mod_mod_of_dvd _ (Nat.pow_dvd_pow 2 (by unfold width; omega))]
+  simp [raw, readerUnit, Nat.add_mod, Nat.mul_mod]
+
+theorem readers_encode {c p r w : Nat} (hr : r < countBound c) (hw : w < countBound c)
+    (a : Bool) : readers c (encode c p r w a) = r := by
   unfold readers
   rw [encode_toNat hr hw]
-  have hlow : 2 * w + (if a then 1 else 0) < readerUnit := by
-    cases a <;> simp only [Bool.false_eq_true, ↓reduceIte, readerUnit, countBound] at * <;>
-      omega
-  have hdiv : (r * readerUnit + 2 * w + (if a then 1 else 0)) / readerUnit = r := by
-    simp only [readerUnit] at *
-    omega
-  rw [hdiv, Nat.mod_eq_of_lt hr]
+  have hu := Nat.two_pow_pos (c + 1)
+  have hd : raw c r w a / readerUnit c = r := by
+    unfold raw
+    rw [Nat.add_assoc, Nat.add_comm (r * readerUnit c), Nat.add_mul_div_right _ _ hu,
+      Nat.div_eq_of_lt (low_lt hw a), Nat.zero_add]
+  rw [hd, Nat.mod_eq_of_lt hr]
 
-/-- The low word recovers the represented pending-writer count. -/
-theorem writers_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) : writers (encode r w a) = w := by
+theorem writers_encode {c p r w : Nat} (hw : w < countBound c) (a : Bool) :
+    writers c (encode c p r w a) = w := by
   unfold writers
-  rw [encode_toNat hr hw]
-  cases a <;> simp only [Bool.false_eq_true, ↓reduceIte, readerUnit, countBound] at * <;>
-    omega
+  rw [low_mod, Nat.mod_eq_of_lt (low_lt hw a)]
+  cases a <;> simp only [Bool.false_eq_true, ↓reduceIte] <;> omega
 
-/-- The represented writing bit is the native low bit. -/
-theorem writing_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) : writing (encode r w a) = a := by
+theorem writing_encode (c p r w : Nat) (a : Bool) : writing (encode c p r w a) = a := by
+  have hd : 2 ∣ 2 ^ width c p := by
+    exact Nat.pow_dvd_pow 2 (show 1 ≤ width c p by unfold width; omega)
   cases a <;>
-    simp [writing, encode_toNat hr hw, readerUnit, Nat.add_mod, Nat.mul_mod]
+    simp [writing, encode_toNat', Nat.mod_mod_of_dvd _ hd, raw, readerUnit,
+      Nat.pow_succ, Nat.add_mod, Nat.mul_mod]
 
-/-- The state-value effect of adding a reader is exact, including modular values.
-The protocol separately proves representability of the new logical count. -/
-theorem add_reader (r w : Nat) (a : Bool) :
-    encode r w a + 4294967296 = encode (r + 1) w a := by
-  change BitVec.ofNat 64 (r * readerUnit + 2 * w + if a then 1 else 0) +
-      BitVec.ofNat 64 readerUnit = _
-  rw [← BitVec.ofNat_add]
-  exact congrArg (BitVec.ofNat 64) (by simp only [readerUnit]; omega)
+theorem low_mask (c p : Nat) (s : BitVec (width c p)) :
+    (s &&& lowMask c p).toNat = s.toNat % readerUnit c := by
+  simpa only [lowMask, readerUnit, Nat.pow_zero, Nat.div_one, Nat.sub_zero, Nat.mul_one]
+    using Zig.toNat_and_field s 0 (c + 1) (by omega) (by unfold width; omega)
 
-/-- A reader's returned handle removes exactly its reader unit. -/
-theorem sub_reader (r w : Nat) (a : Bool) :
-    encode (r + 1) w a - 4294967296 = encode r w a := by
+theorem low_encode {c p r w : Nat} (hw : w < countBound c) (a : Bool) :
+    (encode c p r w a &&& lowMask c p).toNat = 2 * w + if a then 1 else 0 := by
+  rw [low_mask, low_mod, Nat.mod_eq_of_lt (low_lt hw a)]
+
+theorem read_guard {c p r w : Nat} (hw : w < countBound c) (a : Bool) :
+    (encode c p r w a &&& lowMask c p = 0) ↔ w = 0 ∧ a = false := by
+  rw [← BitVec.toNat_inj, low_encode hw]
+  cases a <;> simp <;> omega
+
+theorem reader_mask (c p : Nat) (s : BitVec (width c p)) :
+    (s &&& readerMask c p).toNat = readers c s * readerUnit c := by
+  have he : 2 * c + 1 - (c + 1) = c := by omega
+  simpa only [readerMask, readers, readerUnit, countBound, he]
+    using Zig.toNat_and_field s (c + 1) (2 * c + 1) (by omega) (by unfold width; omega)
+
+theorem last_reader_guard {c p r w : Nat} (hc : 0 < c)
+    (hr : r < countBound c) (hw : w < countBound c)
+    (a : Bool) :
+    (encode c p r w a &&& readerMask c p = BitVec.ofNat (width c p) (readerUnit c)) ↔ r = 1 := by
+  have hu : readerUnit c < 2 ^ width c p := by
+    exact Nat.pow_lt_pow_right (by decide) (by unfold width; omega)
+  rw [← BitVec.toNat_inj, reader_mask, readers_encode hr hw, Zig.toNat_ofNat_of_lt hu]
+  simpa only [Nat.one_mul] using
+    (Nat.mul_right_cancel_iff (n := r) (k := 1) (Nat.two_pow_pos (c + 1)))
+
+theorem writing_mask (c p : Nat) (s : BitVec (width c p)) :
+    (s &&& 1#(width c p)).toNat = s.toNat % 2 := by
+  have h := Zig.toNat_and_field s 0 1 (by omega) (by unfold width; omega)
+  simp only [Nat.pow_one, Nat.pow_zero, Nat.div_one, Nat.sub_zero, Nat.mul_one] at h
+  change (s &&& 1#(width c p)).toNat = s.toNat % 2 at h
+  exact h
+
+/-- The second old-value guard of unlockShared, with no count hypotheses. -/
+theorem writing_guard (c p : Nat) (s : BitVec (width c p)) :
+    (s &&& 1#(width c p) != 0#(width c p)) = writing s := by
+  rw [Bool.eq_iff_iff]
+  simp only [bne_iff_ne, writing, beq_iff_eq]
+  rw [BitVec.toNat_ne, writing_mask]
+  exact Nat.mod_two_ne_zero
+
+theorem raw_twice (c r w : Nat) (a : Bool) :
+    raw c r w a = (r * 2 ^ c + w) * 2 + if a then 1 else 0 := by
+  simp [raw, readerUnit, Nat.pow_succ, Nat.mul_add,
+    Nat.mul_comm, Nat.mul_left_comm]
+
+theorem clear_writer (c p r w : Nat) :
+    encode c p r w true &&& clearWriting c p = encode c p r w false := by
+  have hn : 1 ≤ width c p := by unfold width; omega
+  have hp : 2 ^ width c p = 2 * 2 ^ (width c p - 1) := by
+    simpa only [Nat.pow_one, Nat.mul_comm] using (Nat.pow_sub_mul_pow 2 hn).symm
+  apply BitVec.eq_of_toNat_eq
+  rw [clearWriting, show (2 : Nat) = 2 ^ 1 from rfl,
+    Zig.toNat_and_field _ 1 (width c p) hn (Nat.le_refl _), encode_toNat', encode_toNat',
+    raw_twice, raw_twice]
+  simp only [Bool.false_eq_true, ↓reduceIte, Nat.add_zero, Nat.pow_one]
+  rw [hp, Nat.mod_mul_right_div_self]
+  have hd : ((r * 2 ^ c + w) * 2 + 1) / 2 = r * 2 ^ c + w := by omega
+  rw [hd, Nat.mod_mod]
+  rw [Nat.mul_comm 2, Nat.mul_mod_mul_right]
+
+theorem encode_inj {c p r w r' w' : Nat} (hr : r < countBound c) (hw : w < countBound c)
+    (hr' : r' < countBound c) (hw' : w' < countBound c) (a a' : Bool) :
+    encode c p r w a = encode c p r' w' a' ↔ r = r' ∧ w = w' ∧ a = a' := by
+  constructor
+  · intro he
+    have er := congrArg (readers c) he
+    have ew := congrArg (writers c) he
+    have ea := congrArg writing he
+    rw [readers_encode hr hw, readers_encode hr' hw'] at er
+    rw [writers_encode hw, writers_encode hw'] at ew
+    rw [writing_encode, writing_encode] at ea
+    exact ⟨er, ew, ea⟩
+  · rintro ⟨rfl, rfl, rfl⟩; rfl
+
+/-- One arithmetic encoding equation serves all additive native operations. -/
+theorem encode_add_ofNat (c p r w r' w' : Nat) (a a' : Bool) (k : Nat)
+    (h : raw c r' w' a' = raw c r w a + k) :
+    encode c p r w a + BitVec.ofNat (width c p) k = encode c p r' w' a' := by
+  unfold encode
+  rw [← BitVec.ofNat_add, ← h]
+
+theorem add_reader (c p r w : Nat) (a : Bool) :
+    encode c p r w a + BitVec.ofNat (width c p) (readerUnit c) =
+      encode c p (r + 1) w a := by
+  apply encode_add_ofNat
+  simp only [raw, Nat.add_mul, Nat.one_mul]
+  omega
+
+theorem sub_reader (c p r w : Nat) (a : Bool) :
+    encode c p (r + 1) w a - BitVec.ofNat (width c p) (readerUnit c) =
+      encode c p r w a := by
   rw [← add_reader]
   exact BitVec.add_sub_cancel _ _
 
-/-- Registering a writer adds two in the low word. -/
-theorem add_writer (r w : Nat) (a : Bool) :
-    encode r w a + 2 = encode r (w + 1) a := by
-  change BitVec.ofNat 64 (r * readerUnit + 2 * w + if a then 1 else 0) +
-      BitVec.ofNat 64 2 = _
-  rw [← BitVec.ofNat_add]
-  exact congrArg (BitVec.ofNat 64) (by omega)
-
-/-- The outer holder consumes its pending-writer unit and sets the writing bit. -/
-theorem enter_writer (r w : Nat) :
-    encode r (w + 1) false + 18446744073709551615 = encode r w true := by
-  have he : encode r (w + 1) false = encode r w true + 1 := by
-    change BitVec.ofNat 64 (r * readerUnit + 2 * (w + 1) + 0) =
-      BitVec.ofNat 64 (r * readerUnit + 2 * w + 1) + BitVec.ofNat 64 1
-    rw [← BitVec.ofNat_add]
-    exact congrArg (BitVec.ofNat 64) (by omega)
-  rw [he, BitVec.add_assoc]
-  simp
-
-/-- The real low-word mask is the low-word remainder. -/
-theorem low_mask (s : BitVec 64) :
-    (s &&& 4294967295).toNat = s.toNat % readerUnit := by
-  rw [BitVec.toNat_and]
-  change s.toNat &&& (2 ^ 32 - 1) = s.toNat % (2 ^ 32)
-  exact Nat.and_two_pow_sub_one_eq_mod _ _
-
-/-- A represented low word consists of the pending writers and writing bit. -/
-theorem low_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) :
-    (encode r w a &&& 4294967295).toNat = 2 * w + if a then 1 else 0 := by
-  rw [low_mask, encode_toNat hr hw]
-  cases a <;> simp only [Bool.false_eq_true, ↓reduceIte, readerUnit, countBound] at * <;>
-    omega
-
-/-- The native fast-path guard excludes both a queued writer and a writing holder. -/
-theorem read_guard {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) :
-    (encode r w a &&& 4294967295 = 0) ↔ w = 0 ∧ a = false := by
-  rw [← BitVec.toNat_inj, low_encode hr hw]
-  cases a <;> simp <;> omega
-
-/-- The native reader mask selects exactly the decoder's count, in reader units. -/
-theorem reader_mask (s : BitVec 64) :
-    (s &&& 9223372032559808512).toNat = readers s * readerUnit := by
-  rw [BitVec.toNat_and]
-  change s.toNat &&& 9223372032559808512 = readers s * readerUnit
-  have hd : (s.toNat &&& 9223372032559808512) / readerUnit = readers s := by
-    change (s.toNat &&& 9223372032559808512) / 2 ^ 32 =
-      s.toNat / 2 ^ 32 % 2 ^ 31
-    rw [Nat.and_div_two_pow]
-    change s.toNat / 2 ^ 32 &&& (2 ^ 31 - 1) = _
-    exact Nat.and_two_pow_sub_one_eq_mod _ _
-  have hm : (s.toNat &&& 9223372032559808512) % readerUnit = 0 := by
-    change (s.toNat &&& 9223372032559808512) % 2 ^ 32 = 0
-    rw [Nat.and_mod_two_pow]
-    change s.toNat % 2 ^ 32 &&& 0 = 0
-    exact Nat.and_zero _
-  have he := Nat.mod_add_div (s.toNat &&& 9223372032559808512) readerUnit
-  rw [hd, hm, Nat.zero_add, Nat.mul_comm] at he
-  exact he.symm
-
-/-- The old-value reader guard identifies the last represented reader. -/
-theorem last_reader_guard {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) :
-    (encode r w a &&& 9223372032559808512 = 4294967296) ↔ r = 1 := by
-  rw [← BitVec.toNat_inj, reader_mask, readers_encode hr hw]
-  change r * readerUnit = readerUnit ↔ r = 1
-  simp only [readerUnit]
+theorem add_writer (c p r w : Nat) (a : Bool) :
+    encode c p r w a + 2 = encode c p r (w + 1) a := by
+  apply encode_add_ofNat
+  simp only [raw, Nat.mul_add, Nat.mul_one]
   omega
 
-/-- Clearing the writing bit leaves the represented counts unchanged. -/
-theorem clear_writer {r w : Nat} (hr : r < countBound) (hw : w < countBound) :
-    encode r w true &&& 18446744073709551614 = encode r w false := by
-  have hzero : encode r w false &&& 1 = 0 := by
-    apply BitVec.eq_of_toNat_eq
-    rw [BitVec.toNat_and, encode_toNat hr hw]
-    simp [readerUnit, Nat.add_mod, Nat.mul_mod]
-  have hp : encode r w true = encode r w false ||| 1 := by
+theorem enter_writer (c p r w : Nat) :
+    encode c p r (w + 1) false + (-1) = encode c p r w true := by
+  have he : encode c p r w true + 1 = encode c p r (w + 1) false := by
+    apply encode_add_ofNat
+    simp only [raw, Nat.mul_add, Nat.mul_one, Bool.false_eq_true, ↓reduceIte]
+    omega
+  rw [← he, BitVec.add_assoc]
+  rw [BitVec.add_right_neg, BitVec.add_zero]
+
+/-- Strict logical room justifies the actual checked Zig addition, separately
+from the wrapping RMW equation. -/
+theorem checked_add_reader {c p r w : Nat} (hr : r + 1 < countBound c)
+    (hw : w < countBound c) (a : Bool) (safe : Bool) :
+    Zig.add false (encode c p r w a) (BitVec.ofNat (width c p) (readerUnit c)) safe =
+      pure (encode c p (r + 1) w a) := by
+  have hsum : (encode c p r w a).toNat +
+      (BitVec.ofNat (width c p) (readerUnit c)).toNat < 2 ^ width c p := by
+    rw [encode_toNat (by omega : r < countBound c) hw a, BitVec.toNat_ofNat]
     calc
-      encode r w true = encode r w false + 1 := by
-        change BitVec.ofNat 64 (r * readerUnit + 2 * w + 1) =
-          BitVec.ofNat 64 (r * readerUnit + 2 * w + 0) + BitVec.ofNat 64 1
-        rw [← BitVec.ofNat_add]
-      _ = encode r w false ||| 1 := BitVec.add_eq_or_of_and_eq_zero _ _ hzero
-  have hkeep : encode r w false &&& ~~~(1 : BitVec 64) = encode r w false := by
-    have hsplit : (encode r w false &&& 1) |||
-        (encode r w false &&& ~~~(1 : BitVec 64)) = encode r w false := by
-      rw [← BitVec.and_or_distrib_left, BitVec.or_not_self, BitVec.and_allOnes]
-    rw [hzero] at hsplit
-    simpa only [BitVec.ofNat_eq_ofNat, BitVec.zero_or] using hsplit
-  change encode r w true &&& ~~~(1 : BitVec 64) = encode r w false
-  rw [hp, BitVec.and_or_distrib_right, hkeep, BitVec.and_not_self]
-  simp
+      _ ≤ raw c r w a + readerUnit c := Nat.add_le_add_left (Nat.mod_le _ _) _
+      _ = raw c (r + 1) w a := by
+        simp only [raw, Nat.add_mul, Nat.one_mul]; omega
+      _ < _ := raw_lt hr hw a
+  rw [Zig.add_unsigned_of_lt hsum, add_reader]
+
+end Family
+
+/-! ## The ABI64 std layout
+
+Bit 63 is spare. Encoding unbounded counts can still set it; admission must
+establish the actual 31-bit reader and pending-writer bounds. -/
+
+abbrev readerUnit : Nat := Family.readerUnit 31
+abbrev countBound : Nat := Family.countBound 31
+abbrev lowMask : BitVec 64 := Family.lowMask 31 1
+abbrev readerMask : BitVec 64 := Family.readerMask 31 1
+abbrev writingBit : BitVec 64 := 1
+abbrev clearWriting : BitVec 64 := Family.clearWriting 31 1
+abbrev writerEntryDelta : BitVec 64 := -1
+
+abbrev encode (r w : Nat) (a : Bool) : BitVec 64 := Family.encode 31 1 r w a
+abbrev readers (s : BitVec 64) : Nat := Family.readers 31 s
+abbrev writers (s : BitVec 64) : Nat := Family.writers 31 s
+abbrev writing (s : BitVec 64) : Bool := Family.writing s
+
+theorem encode_toNat' (r w : Nat) (a : Bool) :
+    (encode r w a).toNat = (r * readerUnit + 2 * w + if a then 1 else 0) % 2 ^ 64 :=
+  Family.encode_toNat' 31 1 r w a
+
+theorem encode_toNat {r w : Nat} (hr : r < countBound) (hw : w < countBound) (a : Bool) :
+    (encode r w a).toNat = r * readerUnit + 2 * w + if a then 1 else 0 :=
+  Family.encode_toNat hr hw a
+
+theorem readers_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
+    (a : Bool) : readers (encode r w a) = r := Family.readers_encode hr hw a
+
+theorem writers_encode {r w : Nat} (hw : w < countBound) (a : Bool) :
+    writers (encode r w a) = w := Family.writers_encode hw a
+
+theorem writing_encode (r w : Nat) (a : Bool) : writing (encode r w a) = a :=
+  Family.writing_encode 31 1 r w a
+
+theorem add_reader (r w : Nat) (a : Bool) :
+    encode r w a + BitVec.ofNat 64 readerUnit = encode (r + 1) w a :=
+  Family.add_reader 31 1 r w a
+
+theorem sub_reader (r w : Nat) (a : Bool) :
+    encode (r + 1) w a - BitVec.ofNat 64 readerUnit = encode r w a :=
+  Family.sub_reader 31 1 r w a
+
+theorem add_writer (r w : Nat) (a : Bool) :
+    encode r w a + 2 = encode r (w + 1) a := Family.add_writer 31 1 r w a
+
+theorem enter_writer (r w : Nat) :
+    encode r (w + 1) false + writerEntryDelta = encode r w true :=
+  Family.enter_writer 31 1 r w
+
+theorem checked_add_reader {r w : Nat} (hr : r + 1 < countBound) (hw : w < countBound)
+    (a : Bool) (safe : Bool) :
+    Zig.add false (encode r w a) (BitVec.ofNat 64 readerUnit) safe =
+      pure (encode (r + 1) w a) := Family.checked_add_reader hr hw a safe
+
+theorem low_mask (s : BitVec 64) : (s &&& lowMask).toNat = s.toNat % readerUnit :=
+  Family.low_mask 31 1 s
+
+theorem low_encode {r w : Nat} (hw : w < countBound) (a : Bool) :
+    (encode r w a &&& lowMask).toNat = 2 * w + if a then 1 else 0 :=
+  Family.low_encode hw a
+
+theorem read_guard {r w : Nat} (hw : w < countBound) (a : Bool) :
+    (encode r w a &&& lowMask = 0) ↔ w = 0 ∧ a = false := Family.read_guard hw a
+
+theorem reader_mask (s : BitVec 64) :
+    (s &&& readerMask).toNat = readers s * readerUnit := Family.reader_mask 31 1 s
+
+theorem last_reader_guard {r w : Nat} (hr : r < countBound) (hw : w < countBound) (a : Bool) :
+    (encode r w a &&& readerMask = BitVec.ofNat 64 readerUnit) ↔ r = 1 :=
+  Family.last_reader_guard (by decide) hr hw a
+
+theorem writing_guard (s : BitVec 64) : (s &&& writingBit != 0) = writing s :=
+  Family.writing_guard 31 1 s
+
+theorem clear_writer (r w : Nat) :
+    encode r w true &&& clearWriting = encode r w false := Family.clear_writer 31 1 r w
+
+theorem encode_inj {r w r' w' : Nat} (hr : r < countBound) (hw : w < countBound)
+    (hr' : r' < countBound) (hw' : w' < countBound) (a a' : Bool) :
+    encode r w a = encode r' w' a' ↔ r = r' ∧ w = w' ∧ a = a' :=
+  Family.encode_inj hr hw hr' hw' a a'
 
 end RwState
 
