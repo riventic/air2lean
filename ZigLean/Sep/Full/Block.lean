@@ -556,7 +556,8 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
       FStepIn.retire fun x h1 h2 =>
         ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x (by omega) (by omega))
     have hset : FStepIn rF.heap.erase mf (mr.afterByteRemap b blk n) :=
-      FStepIn.setBlock (m := mf) (fun h => by simp [hK] at h) fun l hl e hlen ⟨blk', h1, h2⟩ => by
+      FStepIn.setBlock (m := mf) (fun _ h => by cases hb.symm.trans h; rfl)
+        (fun h => by simp [hK] at h) fun l hl e hlen ⟨blk', h1, h2⟩ => by
         -- a location of the block that the shrink keeps lies before the new end
         obtain ⟨-, hnh⟩ := Mem.mem_retire hl
         have h1' : m.blocks[b]? = some blk' := by rw [← e]; exact h1

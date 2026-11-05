@@ -3,8 +3,8 @@ import ZigLean.Sep.Full.AutoAll
 /-!
 Whole-array ownership in the full-state logic (`ZigLean/Sep/Full/Arr.lean`): the assertion
 lemmas `arr_split`/`arr_focus` at their boundaries, and item loads and stores walked by `fsym`
-with `FTotalTriple.arr_load`/`arr_store`, keeping the array whole and an independent allocation
-in the frame. Bounds are obligations: a one-past-end item is rejected, and a walk never drops
+with `FTotalTriple.arr_load`/`arr_store` (item `0` through `p` itself: `arr_load_zero`/
+`arr_store_zero`), keeping the array whole and an independent allocation in the frame. Bounds are obligations: a one-past-end item is rejected, and a walk never drops
 the frame, keeps an old value or changes a neighbour.
 -/
 
@@ -27,6 +27,14 @@ theorem updateMiddle_contract (p q : Ptr) (first middle last w : BitVec 32)
 example (p : Ptr) (x y : BitVec 32) (R : FAssn) :
     FTotalTriple (up (arr p [x, y]) ⋆ R) (Zig.load (BitVec 32) 4 (p.elem 4 1))
       (fun v => ⟪v = y⟫ ⋆ (up (arr p [x, y]) ⋆ R)) := by
+  fsym
+
+-- Item `0` through the array's own pointer, as generated code reaches it (`acc[0] += 1` loads
+-- and stores at `p`; `&xs[0]` is `p`): `FTotalTriple.arr_load_zero`/`arr_store_zero`.
+theorem bump_first (p : Ptr) (xs : List (BitVec 64)) (h : 0 < xs.length) :
+    FTotalTriple (up (arr p xs))
+      (Zig.load (BitVec 64) 8 p >>= fun v => Zig.store (α := BitVec 64) 8 p (v + 1))
+      (fun _ => up (arr p (xs.set 0 (xs[0] + 1)))) := by
   fsym
 
 -- A symbolic index with its bound as a premise.
@@ -130,3 +138,7 @@ end ProofTools.ArrayTest
 /-- info: 'ProofTools.ArrayTest.updateMiddle_contract' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in
 #print axioms ProofTools.ArrayTest.updateMiddle_contract
+
+/-- info: 'ProofTools.ArrayTest.bump_first' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms ProofTools.ArrayTest.bump_first

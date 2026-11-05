@@ -756,8 +756,9 @@ class FreshnessTests(unittest.TestCase):
             self.assertEqual(replay.call_args.kwargs['compiled_inputs_sha256'], universe.input_digest([]))
             validate = replay.call_args.kwargs['validate_inputs']
             validate()
-            inputs.return_value = [['changed synthetic compiled input']]
-            with self.assertRaisesRegex(ValueError, 'canonical Lake compiled inputs changed'):
+            inputs.return_value = [['changed', 'changed', True, [['changed/M.olean', '', '00']]]]
+            with self.assertRaisesRegex(ValueError, 'canonical Lake compiled inputs changed during kernel '
+                                                    r'replay: changed \(root\): absent -> .*changed/M.olean'):
                 validate()
         runtime = self.report['extractor']['toolchain_runtime_sha256']
         self.assertEqual(replay.call_args.kwargs['expected_runtime'], runtime)
