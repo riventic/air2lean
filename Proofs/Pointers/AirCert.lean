@@ -18,6 +18,22 @@ Outside the certificate fragment:
 * `pointers.maxPtr`: a parameter that is not an integer, bool, plain pointer or slice
 * `pointers.setOpt`: a parameter that is not an integer, bool, plain pointer or slice
 * `pointers.setOptJob`: inst 2: an instruction outside the fragment
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+
+* `pointers.addDown` trusted-Canon: renumber
+* `pointers.addTo` trusted-Canon: renumber
+* `pointers.bumpOpt` trusted-Canon: renumber
+* `pointers.copyJob` trusted-Canon: renumber
+* `pointers.delay` trusted-Canon: forwardReadOnlyCopies, renumber
+* `pointers.dueOf` trusted-Canon: forwardReadOnlyCopies, renumber
+* `pointers.maxPtr` trusted-Canon: renumber
+* `pointers.same` trusted-Canon: renumber
+* `pointers.setOpt` trusted-Canon: renumber
+* `pointers.setOptJob` trusted-Canon: renumber
+* `pointers.sumTo` trusted-Canon: renumber
+* `pointers.swap` trusted-Canon: renumber
 -/
 
 def source_0 : _root_.Air2Lean.Func :=
