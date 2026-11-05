@@ -190,7 +190,7 @@ programs with loops). -/
 theorem mutexCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) mutexCounter (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch mutexCounter work
+  delta dispatch mutexCounter work work.loop4 Thread_Mutex_lock Zig.osUnfairLockC
   iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
   decide +kernel
 
