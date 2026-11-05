@@ -138,7 +138,7 @@ fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes 
 theorem semaphoreCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (semaphoreCounter ⟨⟩) (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 end Sync.SemCounter
