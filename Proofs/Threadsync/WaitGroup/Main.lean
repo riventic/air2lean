@@ -303,4 +303,161 @@ theorem wp_startMany {G : ThreadId → Gh} {m : Mem} {d : Nat} {rM : Res}
   unfold Thread_WaitGroup_startMany
   fsym [wp_smRmw, debug_assert]
 
+/-! ## The spawns -/
+
+theorem le_nil (c : VClock) : VClock.le #[] c = true := by
+  unfold VClock.le VClock.get
+  simp only [Array.all_eq_true]
+  intro i _
+  simp
+
+/-- A fork by `t` moves no thread's clock back. -/
+theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : ThreadId) :
+    VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
+      (VClock.bump (cs[t]!) t))[u]!) = true := by
+  by_cases hu : u < cs.size
+  · exact (Conc.fork_clocks ht).1 u hu
+  · rw [getElem!_neg cs u hu]; exact le_nil _
+
+/-- A task's bound grows with its clock, at the same finish (and finish clock). -/
+theorem bnd_le {G G' : ThreadId → Gh} {m m' : Mem} {u : ThreadId}
+    (hfd : (G' u).2.ph.fd = (G u).2.ph.fd)
+    (hfc : (G u).2.ph.fd = true → (G' u).2.fc = (G u).2.fc)
+    (hclk : VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    VClock.le (bnd G m u) (bnd G' m' u) = true := by
+  unfold bnd; rw [hfd]
+  cases h : (G u).2.ph.fd
+  · simpa using hclk
+  · simp only [↓reduceIte]; rw [hfc h]; exact VClock.le_refl _
+
+/-- A thread out of the event's code gets another ghost value out of it (`FEvent.Inv.toOut`). -/
+theorem einv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} (hI : E.Inv L G m)
+    (h₀ : (G t).2.e = .out) (h₁ : g.2.e = .out) (hwx : E.wx (G t) → E.wx g) :
+    E.Inv L (upd G t g) m :=
+  have hsd : E.ph g ≠ .sd := fun h => by
+    rw [show E.ph g = g.2.e from rfl, h₁] at h; cases h
+  hI.toOut (.inl h₀) (.inl h₁) (fun h => absurd h hsd) hwx (fun h => absurd h hsd)
+
+/-- Before `main`'s `add(1)` no task is the setter, and the event has no `is_set` write. -/
+theorem no_set {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
+    (hwa : (G 0).2.ph.wa = false) :
+    (∀ u, (G u).2.sx = false) ∧ ∀ j < (EV.hist m).size, ¬ IsSetW m j := by
+  have hsx : ∀ u, (G u).2.sx = false := fun u => by
+    cases h : (G u).2.sx
+    · rfl
+    · have := (hu.sto u h).2.1; rw [hwa] at this; cases this
+  refine ⟨hsx, fun j hj hs => ?_⟩
+  obtain ⟨⟨u, h, -⟩, -⟩ := hu.isw j hj hs
+  rw [hsx u] at h; cases h
+
+/-- **`main`'s spawn of task `k`** (from `main`'s place `(G 0).2`, before its `add(1)`, to `x₁`):
+the new thread starts at `lk` with `main`'s clock, so the words stay `Ok` for the live sets with it
+(`Word.Ok.fork_native`) and its bound is above every access `main` made; no setter yet. -/
+theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM rP : Res}
+    {x₁ : X} (hu : U G rX m) (hk0 : k ≠ 0) (hk3 : k < 3) (hGk : (G k).2 = {})
+    (hcs : m.clocks.size = m.threads.size) (he₀ : (G 0).2.e = .out)
+    (hwa₀ : (G 0).2.ph.wa = false) (hpre : (G 0).2.ph ≠ .pre)
+    (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false) (hwa₁ : x₁.ph.wa = false) (hfd₁ : x₁.ph.fd = false)
+    (hr₁ : x₁.ph.rank < 4) (hpre₁ : x₁.ph ≠ .pre)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (k, m')))
+    (hsh : Shape (fun u => (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u).2)
+      { m with threads := m.threads.push { spawner := 0, joined := false } }) :
+    U (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁)) rX m' := by
+  have hfork := hf
+  change ((Thread.forkWith false).run { m with current := 0 }).run = some (.ok (k, m')) at hfork
+  rw [Proto.forkWith_run] at hfork
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfork
+  obtain ⟨hk, rfl⟩ := hfork
+  have ht0 : 0 < m.threads.size := by unfold ThreadId at *; omega
+  have hclk := clk_fork (cs := m.clocks) (t := 0) (by rw [hcs]; exact ht0)
+  have h0 : upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) 0 = gO rM x₁ := upd_self _ _ _
+  have hk' : upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) k = gO rP { ph := .lk } := by
+    rw [upd_ne _ _ hk0, upd_self]
+  have hX : ∀ u, u ≠ 0 → u ≠ k → upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u = G u :=
+    fun u h0 hk => by rw [upd_ne _ _ h0, upd_ne _ _ hk]
+  have hmain := fd0 hu
+  obtain ⟨hnsx, hnis⟩ := no_set hu hwa₀
+  -- the places that the fields read: `fd`, `sx`, `wa` stay those of `G` but at 0 and `k`
+  have hfd : ∀ u, (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u).2.ph.fd = (G u).2.ph.fd :=
+    fun u => by
+      by_cases e0 : u = 0
+      · subst e0; rw [h0, hmain]; exact hfd₁
+      by_cases ek : u = k
+      · subst ek; rw [hk', hGk]; rfl
+      rw [hX u e0 ek]
+  have hsx' : ∀ u, (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u).2.sx = false := fun u => by
+    by_cases e0 : u = 0
+    · subst e0; rw [h0]; exact hsx₁
+    by_cases ek : u = k
+    · subst ek; rw [hk']; rfl
+    rw [hX u e0 ek]; exact hnsx u
+  have hfdT : ∀ u, (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u).2.ph.fd = true →
+      upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u = G u ∧ u ≠ 0 := fun u h => by
+    by_cases e0 : u = 0
+    · subst e0; rw [h0] at h; exact absurd (h.symm.trans hfd₁) (by decide)
+    by_cases ek : u = k
+    · subst ek; rw [hk'] at h; cases h
+    exact ⟨hX u e0 ek, e0⟩
+  have hWl : ∀ u, WLive (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u) → WLive (G u) :=
+    fun u h => by unfold WLive at h ⊢; rw [← hfd u]; exact h
+  have hEl : ∀ u, ELive (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u) → ELive (G u) :=
+    fun u h => by
+      by_cases e0 : u = 0
+      · subst e0; exact .inl hmain
+      by_cases ek : u = k
+      · subst ek; exact .inl (by show (G u).2.ph.fd = false; rw [hGk]; rfl)
+      rwa [hX u e0 ek] at h
+  obtain ⟨hwG, hhG⟩ := (hu.wg.anti hWl).fork_native (t := 0) ht0 hcs hf
+    (fun _ => by show (upd (upd G k _) 0 (gO rM x₁) 0).2.ph.fd = false; rw [h0]; exact hfd₁)
+  obtain ⟨hwE, hhE⟩ := (hu.ev.anti hEl).fork_native (t := 0) ht0 hcs hf
+    (fun _ => .inl (by show (upd (upd G k _) 0 (gO rM x₁) 0).2.ph.fd = false; rw [h0]; exact hfd₁))
+  have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhE rfl hclk
+    (by simp) id id hu.einv.fresh
+  have hJ' := einv_out (einv_out hJ (t := k) (g := gO rP { ph := .lk }) (by rw [hGk]) rfl
+      (fun h => by
+        have h' : (G k).2.ph.wa = true := h
+        rw [hGk] at h'; cases h'))
+    (t := 0) (g := gO rM x₁) (by rw [upd_ne _ _ (Ne.symm hk0)]; exact he₀) he₁
+    (fun h => by
+      have h' : (upd G k (gO rP { ph := .lk }) 0).2.ph.wa = true := h
+      rw [upd_ne _ _ (Ne.symm hk0), hwa₀] at h'; cases h')
+  refine ⟨Shape.congr hsh rfl (fun _ => rfl) (fun _ h => h), hu.rest.congr fun _ _ => rfl, hu.blk,
+    hwG, hwE, hJ', ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hu.q⟩
+  · -- gv: `main` past `pre` before its `add`, no task finished
+    show (newest WG _).Val _
+    unfold newest; rw [hhG]
+    have e : wgv (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) 0).2
+        (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) 1).2
+        (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) 2).2 = wgv (G 0).2 (G 1).2 (G 2).2 := by
+      unfold wgv X.fdn
+      rw [h0, hfd 1, hfd 2]
+      show (if x₁.ph = .pre then 0 else 4 + (if x₁.ph.wa then 1 else 0) - _) = _
+      rw [if_neg hpre₁, if_neg hpre, hwa₁, hwa₀]
+    rw [e]; exact hu.gv
+  · intro u h; obtain ⟨e, -⟩ := hfdT u h; unfold newest; rw [hhG, e]; rw [e] at h; exact hu.gw u h
+  · intro u h; rw [hsx' u] at h; cases h
+  · intro h; rw [h0] at h; have h' : x₁.ph = .ev := h; rw [h'] at hr₁; simp [Ph.rank] at hr₁
+  · intro j hj hs; unfold IsSetW at hs; rw [hhE] at hj hs; exact absurd hs (hnis j hj)
+  · intro i hi j hj h1 h2; unfold IsSetW at h1 h2; rw [hhE] at hi hj h1 h2
+    exact hu.one i hi j hj h1 h2
+  · intro u h; rw [hsx' u] at h; cases h
+  · intro u h; obtain ⟨e, -⟩ := hfdT u h; rw [e]; rw [e] at h; exact hu.lg u h
+  · intro u h3
+    rw [hX u (by unfold ThreadId at *; omega) (by unfold ThreadId at *; omega)]; exact hu.out3 u h3
+  · intro u h
+    by_cases e0 : u = 0
+    · exact e0
+    by_cases ek : u = k
+    · subst ek; rw [hk'] at h; cases h
+    rw [hX u e0 ek] at h; exact hu.wa0 u h
+  · intro u v h; rw [hsx' u] at h; cases h
+  · -- attr: the same accesses; the bounds grow
+    intro e he hb hkw hl ho
+    rcases hu.attr e he hb hkw hl ho with h | ⟨u, hu12, h⟩ | ⟨j, hj, hs, -⟩
+    · exact .inl (VClock.le_trans h (hclk 0))
+    · exact .inr (.inl ⟨u, hu12, VClock.le_trans h (bnd_le (hfd u)
+        (fun h => by rw [(hfdT u (by rw [hfd u]; exact h)).1]) (hclk u))⟩)
+    · exact absurd hs (hnis j hj)
+  · intro h; rw [h0] at h; have h' : 6 ≤ x₁.ph.rank := h; omega
+
 end Threadsync.WG
