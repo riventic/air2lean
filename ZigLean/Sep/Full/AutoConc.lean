@@ -31,7 +31,7 @@ import ZigLean.Mem.Repr
   pulled out (`callIndirect_bind`, `pullIndirect`), so the call is one command. `fsym` executes
   it by a `CTriple` rule for the table call, or reads the arm that the facts select
   (`callIndirect_pos`/`_neg`), then the last arm (`callIndirect_nil`).
-* **`fsym_norm`** for concurrent bodies: the `CNorm` lemmas (`conc_norm`), the atomic ops of
+* **`fsym_norm`** for concurrent bodies: the `CNorm` lemmas (`ZigLean/Sep/Full/Conc.lean`), the atomic ops of
   `CM` as an oracle pick and a `MemM` op, and `ConcM.liftMem` pushed through the `MemM` layer
   (`liftMem_bind`, `liftMem_ite`), so a generated `MemM` callee is walked command by command.
 * Sequential step rules that generated concurrent code reaches: `@intFromPtr` of `?*T`
