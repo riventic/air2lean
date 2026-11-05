@@ -1837,6 +1837,7 @@
     "Proofs/Atomics/Stack.lean",
     "Proofs/Threads/Counter.lean",
     "Proofs/Sync/SemCounter.lean",
+    "Proofs/Threadsync/WaitGroup.lean",
     "tests/roadmap/sync-contracts/EventSet.lean",
     "tests/roadmap/sync-contracts/Runtime.lean"
    ],
