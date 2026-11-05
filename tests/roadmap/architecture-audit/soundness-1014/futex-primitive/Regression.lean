@@ -82,6 +82,39 @@ theorem ulock_null_einval :
       .leaf (some (.ok (negErrno32 Darwin.E.INVAL, base))) :=
   ⟨rfl, rfl, rfl⟩
 
+/-- After option 0 of a wait's first pick (the kernel's compare), the next stop: the count of
+its pick and the result after option `c`. -/
+private def ulockRet (x : CoN Nat (BitVec 32 × Mem) 3) (c : Nat) :
+    Option (Nat × Option (Except Error Int)) :=
+  match x with
+  | .sync (.pick _) m k =>
+    match k (0 : Nat) m with
+    | .sync (.pick count) m' k' =>
+      match k' c m' with
+      | .leaf r => some (count m', r.map (·.map (·.1.toInt)))
+      | .sync .. => none
+    | .sync .. | .leaf _ => none
+  | _ => none
+
+/-- A word of value 3. -/
+private def three : Mem := { blocks := #[{ block 4096 8 with
+  bytes := #[.int 3, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0] }] }
+
+/-- The mismatched wait of `0` at the word of value 3, after option `c` of its second pick. -/
+private def mismatch (c : Nat) : Option (Nat × Option (Except Error Int)) :=
+  ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three) c
+
+/-- `__ulock_wait2` returns `--ull_nwaiters` (xnu-12377.121.6 `sys_ulock.c:826`), the other
+waiters at the key, not always `0`, or `-EFAULT` for a word that is not resident (:652–663):
+after a mismatch the oracle picks among `-EFAULT` and the `2^31` non-negative `c_int`s, here
+`-EFAULT`, `0`, `5` and `2^31 - 1`. -/
+theorem ulock_wait_nwaiters :
+    mismatch 0 = some (2 ^ 31 + 1, some (.ok (-14))) ∧
+    mismatch 1 = some (2 ^ 31 + 1, some (.ok 0)) ∧
+    mismatch 6 = some (2 ^ 31 + 1, some (.ok 5)) ∧
+    mismatch (2 ^ 31) = some (2 ^ 31 + 1, some (.ok (2 ^ 31 - 1))) :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
+
 private def twoRawWaiters : Mem := {
   base with
   blocks := #[{ block 4096 8 with

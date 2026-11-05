@@ -57,7 +57,7 @@ theorem darwin_wait (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId
   have he : (BitVec.ofNat 64 L.c).setWidth 32 = BitVec.ofNat 32 L.c := by
     apply BitVec.eq_of_toNat_eq; simp
   have hw := hP.wordAt hi
-  fsym [wp_osWait hP he hg hok hi]
+  fsym [wp_osWait hP he hg hok hi, wp_ulockResult hP]
 
 /-- macOS: `wake(p, n)` with `n > 1` sets `WAKE_ALL` (`__ulock_wake(… | WAKE_ALL, 0)`): by the
 thread at `wake`, it goes on at `out`, or after a spurious `EINTR` at `wake`. -/
