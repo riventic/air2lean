@@ -133,7 +133,7 @@ theorem Inv.loadRest {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T
   obtain ⟨r, A, S, K', bs, hr, hsub, hbs, hdec, ha, hK⟩ := hrest
   obtain ⟨rL, ho, hin⟩ := hi.restIn
   obtain ⟨hrun, hb, hcov⟩ :=
-    ho.loadRun hpb hn hr (fun l fc h => hin l fc (hsub l fc h)) hbs hdec ha hK hread
+    ho.loadRun hpb hn hr (fun l fc h => ⟨fc, hin l fc (hsub l fc h), rfl⟩) hbs hdec ha hK hread
   refine ⟨hrun, hi.recordX (k := .read) (by decide) hc ht hb hn fun x h1 h2 => ?_⟩
   obtain ⟨fc', hfc'⟩ := Option.ne_none_iff_exists'.mp (hcov x h1 h2)
   rw [hsub _ _ hfc']; simp
@@ -142,13 +142,19 @@ theorem Inv.loadRest {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T
 `gone`): the bytes are in the lock's complete rest (the protocol's rest `rX`, the word's cells and
 the free lock's resource `rL`), so the read may span the word and what the lock protects. The
 caller shows the bytes for every `rL` the invariant allows (with `R` when the lock is free,
-`rnil` when it is held, apart from the word and from `rX`), and that the read does not race. -/
+`rnil` when it is held, apart from the word and from `rX`), up to `Cell.norm`, and that the read
+does not race. The bytes may be given as the memory's: every cell of the complete rest is the
+memory's, up to `Cell.norm`. -/
 theorem Inv.loadAll {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T}
     {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
     (hpb : p.block = some b) (hn : 0 < Enc.size T)
     (hrest : ∀ rL, (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase →
-      FHeap.Disjoint rL.heap rX.heap → ∃ r A S K' bs, up (bytesAt p A S K' bs) r ∧
-      (∀ l fc, r.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc) ∧
+      FHeap.Disjoint rL.heap rX.heap →
+      (∀ l fc, (rsum (L.wordR m) (rsum rL rX)).heap l = some fc →
+        (m.heap l).map Cell.norm = some fc.cell.norm) →
+      ∃ r A S K' bs, up (bytesAt p A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → ∃ fc', (rsum (L.wordR m) (rsum rL rX)).heap l = some fc' ∧
+        fc'.cell.norm = fc.cell.norm) ∧
       bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧ (A + p.off.toNat) % a = 0 ∧
       K' ≠ .constGlobal)
     (hc : m.current = t) (hg : L.ph (G t) ≠ .gone)
@@ -159,11 +165,12 @@ theorem Inv.loadAll {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T}
   obtain ⟨ht, _⟩ := hi.ht hg
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   obtain ⟨r, A, S, K', bs, hr, hsub, hbs, hdec, ha, hK⟩ :=
-    hrest rL (fun h => (hF h).1) hnF hLoff hLX
+    hrest rL (fun h => (hF h).1) hnF hLoff hLX fun _ _ h => ho.rest_cell h
   obtain ⟨hrun, hb, hcov⟩ := ho.loadRun hpb hn hr hsub hbs hdec ha hK hread
   refine ⟨hrun, hi.recordAll hc ht hb hsole fun u hu x h1 h2 => ho.part_off hu ?_⟩
   obtain ⟨fc', hfc'⟩ := Option.ne_none_iff_exists'.mp (hcov x h1 h2)
-  rw [hsub _ _ hfc']; simp
+  obtain ⟨fc'', h'', -⟩ := hsub _ _ hfc'
+  rw [h'']; simp
 
 /-- Reads by other admitted readers need no clock ordering. Every conflicting write
 must precede this reader through the publication clock or through AllLe. -/
@@ -238,8 +245,11 @@ theorem Fits.wp_readAll (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b :
     (hsole : ∀ G rX m u, U G rX m → A u (G u) → ∀ w < m.threads.size, w ≠ u → L.ph (G w) = .gone)
     (hrest : ∀ G rX m u rL, L.Inv G rX m → U G rX m → A u (G u) → (L.Free G → L.R G rL) →
       (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase → FHeap.Disjoint rL.heap rX.heap →
+      (∀ l fc, (rsum (L.wordR m) (rsum rL rX)).heap l = some fc →
+        (m.heap l).map Cell.norm = some fc.cell.norm) →
       ∃ r B S K' bs, up (bytesAt p B S K' bs) r ∧
-      (∀ l fc, r.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc) ∧
+      (∀ l fc, r.heap l = some fc → ∃ fc', (rsum (L.wordR m) (rsum rL rX)).heap l = some fc' ∧
+        fc'.cell.norm = fc.cell.norm) ∧
       bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧ (B + p.off.toNat) % a = 0 ∧
       K' ≠ .constGlobal)
     (hread : ∀ G rX m u, U G rX m → A u (G u) → m.current = u →

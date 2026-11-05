@@ -218,19 +218,30 @@ theorem FOwned.start0_facts {σ : Placement} {m : Mem} (hm : m = Mem.ofGlobals �
   subst hm
   exact ⟨FOwned.start0_plain σ, by rw [Conc.upd_self]; exact plain_intro, rfl, rfl, rfl, rfl⟩
 
-/-- **Bytes of a thread rest are the memory's**: a part `r` of the rest `rO` (`FOwned`) with the
-bytes `bs` at `p` (`0 < bs.size`): `p`'s block holds `bs` there. -/
+/-- A cell of `r` that is a cell of the rest `rO` (`FOwned`) up to `Cell.norm` is the memory's,
+up to `Cell.norm`. -/
+theorem FOwned.rest_cell_norm {own : ThreadId → Res} {rO r : Res} {m : Mem}
+    (ho : FOwned own rO m)
+    (hsub : ∀ l fc, r.heap l = some fc → ∃ fc', rO.heap l = some fc' ∧ fc'.cell.norm = fc.cell.norm)
+    {l : Loc} {fc : FCell} (hl : r.heap l = some fc) :
+    (m.heap l).map Cell.norm = some fc.cell.norm := by
+  obtain ⟨fc', h', hn⟩ := hsub l fc hl
+  rw [ho.rest_cell h', hn]
+
+/-- **Bytes of a thread rest are the memory's**: a part `r` of the rest `rO` (`FOwned`), up to
+`Cell.norm`, with the bytes `bs` at `p` (`0 < bs.size`): `p`'s block holds `bs` there. -/
 theorem FOwned.rest_bytes {own : ThreadId → Res} {rO r : Res} {m : Mem}
     (ho : FOwned own rO m) {p : Ptr}
     {A S : Nat} {K : BlockKind} {bs : Array Byte} {b : BlockId} (hp : up (bytesAt p A S K bs) r)
-    (hpb : p.block = some b) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)
+    (hpb : p.block = some b)
+    (hsub : ∀ l fc, r.heap l = some fc → ∃ fc', rO.heap l = some fc' ∧ fc'.cell.norm = fc.cell.norm)
     (hpos : 0 < bs.size) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
   have cell : ∀ j (hj : j < bs.size), ∃ blk, m.blocks[b]? = some blk ∧
       blk.bytes[p.off.toNat + j]? = some bs[j] := by
     intro j hj
     obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hp hpb hj
-    have hn := ho.rest_cell (hsub _ _ hfc)
+    have hn := ho.rest_cell_norm hsub hfc
     cases e : m.heap (b, p.off.toNat + j) with
     | none => rw [e] at hn; cases hn
     | some c =>
@@ -250,12 +261,13 @@ theorem FOwned.rest_bytes {own : ThreadId → Res} {rO r : Res} {m : Mem}
   exact (Array.getElem?_eq_some_iff.mp hx).2
 
 /-- **A plain load of bytes of a thread rest** `rO` (`FOwned`): the bytes `bs` at `p` of a part
-`r` of the rest decode to `v`, at an aligned address. The load reads `v` and records the read, the
-block exists, and `r` has every byte read. -/
+`r` of the rest (up to `Cell.norm`) decode to `v`, at an aligned address. The load reads `v` and
+records the read, the block exists, and `r` has every byte read. -/
 theorem FOwned.loadRun {own : ThreadId → Res} {rO r : Res} {m : Mem}
     (ho : FOwned own rO m) {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a A S : Nat}
     {K' : BlockKind} {bs : Array Byte} {v : T} (hpb : p.block = some b) (hn : 0 < Enc.size T)
-    (hr : up (bytesAt p A S K' bs) r) (hsub : ∀ l fc, r.heap l = some fc → rO.heap l = some fc)
+    (hr : up (bytesAt p A S K' bs) r)
+    (hsub : ∀ l fc, r.heap l = some fc → ∃ fc', rO.heap l = some fc' ∧ fc'.cell.norm = fc.cell.norm)
     (hbs : bs.size = Enc.size T) (hdec : Enc.decode bs = pure v) (ha : (A + p.off.toNat) % a = 0)
     (hK : K' ≠ .constGlobal) (hread : NoRace m b p.off.toNat (Enc.size T) .read) :
     (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) ∧
@@ -264,7 +276,7 @@ theorem FOwned.loadRun {own : ThreadId → Res} {rO r : Res} {m : Mem}
   have hpos : 0 < bs.size := by omega
   obtain ⟨blk, hblk, hx⟩ := ho.rest_bytes hr hpb hsub hpos
   obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hr hpb hpos
-  have hm := ho.rest_cell (hsub _ _ hfc)
+  have hm := ho.rest_cell_norm hsub hfc
   rw [Nat.add_zero] at hm
   obtain ⟨c, e⟩ : ∃ c, m.heap (b, p.off.toNat) = some c := by
     cases e : m.heap (b, p.off.toNat) with
