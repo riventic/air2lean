@@ -117,6 +117,28 @@ class NoReuse(unittest.TestCase):
             fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
         self.assertIn("not recorded", err.getvalue())
 
+    def test_a_unit_never_measured_is_charged_the_measured_units_typical_request(self):
+        # The rule of a Lean module never measured (lean-peaks.py `typical`), not the declared
+        # bound: an 11000 MiB charge made every new unit an 11-slot queue head.
+        units = [{"name": "u%02d" % k} for k in range(1, 21)] + [{"name": "new"}]
+        hints = {u["name"]: {"elapsed_s": 1, "lean_threads": 1, "peak_rss_kib": [(100 * k) << 10]}
+                 for k, u in enumerate(units[:-1], 1)}
+        (self.temp / "schedule.json").write_text(json.dumps(hints))
+        with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}):
+            requests = fc.schedule(units, 5000, elastic=True)[1]
+            self.assertEqual(requests[:-1], [max(fc.MEM_FLOOR_MIB, int(100 * k * fc.MEM_MARGIN))
+                                             for k in range(1, 21)])
+            # The 95th percentile (nearest rank: the 19th of 20), not the largest.
+            self.assertEqual(requests[-1], int(1900 * fc.MEM_MARGIN))
+            # Of every unit measured, not only those selected (--only): the guess is the machine's.
+            self.assertEqual(fc.schedule([units[0], units[-1]], 5000, elastic=True)[1],
+                             [requests[0], requests[-1]])
+            self.assertEqual(fc.schedule(units, 5000)[1][-1], 5000)  # not elastic: no limit backs it
+            with mock.patch.object(fc.GUARD, "PROCESS_MIB", 2000):
+                self.assertEqual(fc.schedule(units, 5000, elastic=True)[1][-1], 2000)  # at most the bound
+            (self.temp / "schedule.json").write_text("{}")
+            self.assertEqual(fc.schedule(units, 5000, elastic=True)[1], [fc.GUARD.PROCESS_MIB] * 21)  # none measured
+
     def test_a_unit_in_an_elastic_guard_is_a_sub_admission_charged_its_request(self):
         grant = {"lock": "/l/build.lock", "elastic": {"id": "e"}}
         with mock.patch.dict(os.environ, {fc.GUARD.INHERIT: json.dumps(grant)}):
