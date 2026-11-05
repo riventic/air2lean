@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-11-05, after #648): 18 `legacy_users` left**, mapped in the "Dependency map" below.
+**Status (2026-11-05, after #648 and #643): 17 `legacy_users` left**, mapped in the "Dependency map" below.
 The numbered sections are the 2026-10-14 plan, and their tables still list files that are gone.
 `assurance/proof-framework.json` is the current list.
 
@@ -27,9 +27,9 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 
 Stage D-a (section 4) is done.
 
-### Dependency map of the 18 remaining users (2026-11-05, after #648)
+### Dependency map of the 17 remaining users (2026-11-05, after #648 and #643)
 
-`legacy_users` has 18 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
+`legacy_users` has 17 entries. "Reason" is what `scripts/proof-framework.py` matches. Every
 replacement named below is on main, except where the row says it is not.
 
 | file | reason | legacy items it uses | full-state replacement | waits for |
@@ -37,7 +37,6 @@ replacement named below is on main, except where the row says it is not.
 | Proofs/Sync/RwLockSnapshotPair | names `TTriple` | `TTriple.{alloc,storeAt,load}` under `WP.liftM_owned`; RwLock's protocol (`RwContract`) | `FOwned` + fsym WP mode; an `RwLockImpl` contract (none on main) | RwLock |
 | Proofs/Sync/RwLockContract | imports Conc/Witness | `TLive` (Conc/Witness), RwLock's protocol and `E.Spec` (`acquire_shared`, `read_with_facts`) | `CLive` (Full/Witness); `RwLockImpl` (none) | RwLock |
 | Proofs/Sync/RwLock | names `TTriple` | legacy `Lock`/`Proto` protocol, Conc/Word `Word.Op`/`Keep`, WeakWord, `TTriple.load/store`, local `Sem.Spec` (the semaphore as an abstract part `E`) | `FLock`/`MutexImpl` for its inner `Io.Mutex`; **`SemImpl` (#575, open)** for its semaphore; `RwLockImpl` (none) | #575 SemImpl |
-| Proofs/Sync/Mailbox | names `TTriple` | `SemContract` (Proofs/Sync/Contracts), `TTriple.{store,alloc,storeAt,load}` | **`SemImpl` (#575, open)**; `FOwned` | #575 SemImpl |
 | Proofs/Sync/Semaphore | names `TTriple` | Sync/Lock's `MutexOps.lock_specOn`, Conc/Word, WeakWord, legacy `Lock.Fits` | `SemImpl` on `CondImpl` (multi-waiter, #599) + `MutexImpl` | L10i (#575) |
 | Proofs/Threadsync/WaitGroup | names `TTriple` | Threadsync/Lock, Conc/Word, legacy `Lock`/`Proto` | `EventImpl` (Full/Event) + `MutexImpl` (Threadsync/ThreadMutex) | L10i; #572 blocker 1 (plain 24-byte read over the mutex word vs `FLock` `LiveLe`), #579 |
 | Proofs/Sync/Lock | imports Conc/LockRules | legacy `Lock.FitsOn`, LockRules | `MutexImpl` instance `Proofs/Sync/IoMutex.ioMutex` | its consumers: Semaphore, `Contracts.mutex` |
@@ -55,7 +54,8 @@ replacement named below is on main, except where the row says it is not.
 `LEGACY_MODULES` and the legacy names):
 
 - `Proofs/Sync/Contracts`. It imports RwLockContract. `MutexContract`/`mutex` use Sync/Lock's
-  `MutexOps.lock_specOn`; `RwContract`/`rwLock` use RwLock. Only Mailbox uses `SemContract`.
+  `MutexOps.lock_specOn`; `RwContract`/`rwLock` use RwLock. `SemContract` has no user since
+  Mailbox's migration (#643).
   `MutexContract`, `CondContract` and `RwContract` have no users outside the file. Their
   full-state replacements are `MutexImpl` (`ioMutex`) and `CondImpl`.
 - `ZigLean/Conc/WeakWord` imports Conc/Word. Its users are RwLock and Semaphore.
@@ -85,7 +85,7 @@ replacement named below is on main, except where the row says it is not.
 
 **Retirement order** (each step needs only the steps before it):
 
-1. Mailbox, Semaphore: SemImpl (#575, L10i); SemCounter done (#648). WaitGroup: L10i, #572/#579.
+1. Semaphore: SemImpl (#575, L10i); SemCounter done (#648), Mailbox done (#643). WaitGroup: L10i, #572/#579.
 2. RwLock (needs SemImpl, plus a new `RwLockImpl` contract with `Io.RwLock` as its instance), then
    RwLockContract and RwLockSnapshotPair as clients of `RwLockImpl` (for every implementation),
    and `Contracts.{RwContract,SemContract}`.
@@ -96,9 +96,10 @@ replacement named below is on main, except where the row says it is not.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
 6. Sep/{Block,Triple,Loop,Total}: stage D-e.
 
-**Nothing in the cluster can be retired before #575.** The RwLock cluster and Mailbox wait for
-the `SemImpl` statement. `Io.RwLock`'s writer waits on an `Io.Semaphore`, and its last reader
-posts. A separate semaphore spec for RwLock or Mailbox would duplicate #575's contract, which
+**Nothing in the cluster could be retired before #575** (merged; SemCounter and Mailbox are its
+clients now, #648, #643). The RwLock cluster waits for an `RwLockImpl` over `SemImpl`.
+`Io.RwLock`'s writer waits on an `Io.Semaphore`, and its last reader
+posts. A separate semaphore spec for RwLock would duplicate #575's contract, which
 CLAUDE.md rules out ("one mechanism"). Sync/Lock and Threadsync/Lock each wait for an L10i
 file. The Conc library chain waits for those.
 
@@ -432,7 +433,7 @@ L10 Condition/semaphore clients (L, 1 agent, 2 weeks): needs a `SemImpl` on `FCo
 | --- | --- | --- | --- |
 | Proofs/Sync/Semaphore.lean (2916) | `Sem.wait_spec`/`post_spec` of translated Io.Semaphore; `Sem.Fits` | L | proof |
 | Proofs/Sync/SemCounter.lean (1482) | `semaphoreCounter` = 4 under every schedule | M | done: client of `SemImpl` (`Proofs/SemCounter/*`, `ioSem`); completes by kernel evaluation (#648) |
-| Proofs/Sync/Mailbox.lean (1173) | producer/consumer over `SemContract`, result 34 | M | proof |
+| Proofs/Sync/Mailbox.lean (1173) | producer/consumer, result 34 | M | done: client of `SemImpl` for every implementation (`Proofs/Sync/Mailbox/*`, `ioSem`), `mailbox_spec`/`mailbox_safe` verbatim; completes by kernel evaluation (#643) |
 
 L10's remaining semaphore migration and native contract blocker are tracked by ledger `l10-native-lock-step-contract`.
 
