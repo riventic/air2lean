@@ -2127,8 +2127,8 @@ theorem WInv.wait {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {b : Bool} 
     obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hi.blk.access
     have : ({ m with current := t } : Mem).access L.ptr 4 4 = m.access L.ptr 4 4 := rfl
     rw [this, ha₀] at ha
-    cases ha
     have hkey : blk₀.key L.o false = L.key M := (Mem.wordKey_of (m := M) hb₀ L.o false).symm
+    cases ha
     refine ⟨hsM.trans (Step.same rfl rfl rfl rfl rfl rfl
       (by rw [hkey]; simp only [Array.size_push, bne_self_eq_false, Bool.false_eq_true,
             not_false_eq_true, Nat.add_left_cancel_iff, Array.filter_push_of_neg]; rfl)
@@ -2268,7 +2268,9 @@ theorem WInv.waitOff {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Ptr
     · have hw' : L.Waits m m.waiters := by
         unfold LockWord.Waits at hw ⊢
         rw [Array.any_push] at hw
-        simpa [hk] using hw
+        have hkm : L.key (({ m with current := t } : Mem).recordAt bid o 4 .atomicRead) =
+            L.key m := rfl
+        simpa [hk, hkm] using hw
       obtain ⟨v, hv, hvq, h1, h2⟩ := hiM.wit hw'
       have hvt : v ≠ t := fun e => by rw [e, hph] at h1; cases h1
       refine ⟨v, hv, fun hvw => ?_, h1, h2⟩
@@ -2300,7 +2302,9 @@ theorem WInv.waitNest {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {p : Pt
     · have hw' : L.Waits m m.waiters := by
         unfold LockWord.Waits at hw ⊢
         rw [Array.any_push] at hw
-        simpa [hk] using hw
+        have hkm : L.key (({ m with current := t } : Mem).recordAt bid o 4 .atomicRead) =
+            L.key m := rfl
+        simpa [hk, hkm] using hw
       obtain ⟨v, hv, hvq, h1, h2⟩ := hiM.wit hw'
       refine ⟨v, hv, fun hvw => ?_, h1, h2⟩
       have hvt : v ≠ t := fun e => by rw [e, hph] at hvw; cases hvw
