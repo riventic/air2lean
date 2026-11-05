@@ -231,6 +231,10 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   `t`. The destination's raw `current` is not constrained by this summary. -/
   atomics : ∀ hF, L.Off hF → ∃ σ,
     AMap hF { m with current := t } { m' with current := t } σ
+  /-- A new queue entry is `t`'s: the lock's futex wait queues only its caller. Without it a step
+  could queue another thread at the word, and another lock's invariant (whose `Queue` places
+  that thread) would not survive this lock's step (the two-lock product). -/
+  newQ : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t
 
 section
 
@@ -381,13 +385,15 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hs : m'.seen = m.seen := by first | rfl | assumption)
     (hn : m.nextMsg ≤ m'.nextMsg := by first | exact Nat.le_refl _ | assumption)
     (hk : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true :=
-      by first | exact fun _ _ h => h | assumption) : L.Step t m m' :=
+      by first | exact fun _ _ h => h | assumption)
+    (hq : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t :=
+      by first | exact fun _ h h' => absurd h h' | assumption) : L.Step t m m' :=
   ⟨ht, fun e he => .inl (hf ▸ he), hg, by rw [hc], fun _ _ => by rw [hc],
     by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw, hk,
     fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold LockWord.Loc; rw [ha]; exact hl, hle⟩, .inl ha,
     fun e he => .inl (hf ▸ he), .of_atomics ha, hx,
     (fun h => h.keep (fun _ hl _ => ha ▸ hl) (fun _ _ _ hin => hin.of_blocks hb) fun _ he => hf ▸ he),
-    hn, fun _ _ => ⟨some, AMap.of_eq ha hs⟩⟩
+    hn, fun _ _ => ⟨some, AMap.of_eq ha hs⟩, hq⟩
 
 /-- A queue entry at another futex is in the queue after a lock step iff it was before (from the
 exact `waiters` equality, which also keeps their order and multiplicity). -/
@@ -959,7 +965,8 @@ theorem Step.trans {t : ThreadId} {m₁ m₂ m₃ : Mem} (h₁ : L.Step t m₁ m
     fun u hu h => h₂.woken u hu (h₁.woken u hu h), fun c h => h₂.before c (h₁.before c h), hlocs,
     fun e he => ?_,
     h₁.shapes.trans h₂.shapes, h₁.aux.trans h₂.aux, (fun h => h₂.cov (h₁.cov h)),
-    Nat.le_trans h₁.nextMsg h₂.nextMsg, fun hF hoff => ?_⟩
+    Nat.le_trans h₁.nextMsg h₂.nextMsg, fun hF hoff => ?_,
+    fun w hw h1 => if h2 : w ∈ m₂.waiters then h₁.newQ w h2 h1 else h₂.newQ w hw h2⟩
   rotate_right
   · obtain ⟨σ, hσ⟩ := h₁.atomics hF hoff
     obtain ⟨τ, hτ⟩ := h₂.atomics hF hoff
@@ -1146,7 +1153,8 @@ theorem WInv.recordStep {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {k : Acc
   refine ⟨rfl, fun e he => ?_, rfl, by simp [Mem.recordAt], ?_, ?_, rfl, .inl rfl,
     rfl, fun _ _ h => h, fun _ h => h, .inl rfl, fun e he => ?_, .of_atomics rfl,
     ⟨rfl, rfl, rfl⟩,
-    Mem.MsgCov.recordAt, Nat.le_refl _, fun _ _ => ⟨some, AMap.of_eq rfl rfl⟩⟩
+    Mem.MsgCov.recordAt, Nat.le_refl _, fun _ _ => ⟨some, AMap.of_eq rfl rfl⟩,
+    fun _ h h' => absurd h h'⟩
   · simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · exact .inl he
@@ -1632,7 +1640,8 @@ theorem WInv.rmwStep {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
     fun e he => .inl (hfp ▸ he), .inl (shapes_set hli hat (by rw [hl0]; rfl)), hax, hcov,
     (htransport (fun _ => none) (fun _ _ _ => rfl)).nextMsg, fun hF hoff => by
       obtain ⟨σ, ha⟩ := (htransport hF hoff).atomics
-      exact ⟨σ, ha.withCurrent hc⟩⟩,
+      exact ⟨σ, ha.withCurrent hc⟩,
+    fun _ h h' => absurd (by rw [hwq] at h; exact h) h'⟩,
     hcur.trans hc, hwq, hcl, hbl, hat⟩
   obtain ⟨rfl, rfl⟩ := loc_unique hl hl₀
   refine ⟨_, _, loc_set hl hat rfl rfl, ?_⟩
@@ -2043,7 +2052,11 @@ theorem WInv.wait {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {b : Bool} 
     cases ha
     refine ⟨hsM.trans (Step.same rfl rfl rfl rfl rfl rfl
       (by simp only [Array.size_push, bne_self_eq_false, Bool.false_eq_true, not_false_eq_true,
-            Nat.add_left_cancel_iff, Array.filter_push_of_neg]; rfl)) (.inr rfl), ?_⟩
+            Nat.add_left_cancel_iff, Array.filter_push_of_neg]; rfl)
+      (hq := fun w hw hn => by
+        rcases Array.mem_push.mp hw with hw | rfl
+        · exact absurd hw hn
+        · rfl)) (.inr rfl), ?_⟩
     simp only [↓reduceIte]
     have h2 : L.U32 M (BitVec.ofNat 32 L.c) := (u32_bytes (m := M) hb₀).mpr hv
     obtain ⟨u0, hu0⟩ := not_free_iff.mp fun hF =>
@@ -2111,7 +2124,8 @@ theorem WInv.wake {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {n : Nat} {
         · exact (bne_iff_ne.mp hw) h1
         · rw [hwoke w.1 (Array.contains_iff_mem.mp hc)] at h2; cases h2
         · rw [hwoke w.1 (Array.contains_iff_mem.mp hc)] at h2; cases h2)
-      (hk := fun _ _ h => by simp only [Array.contains_append, h, Bool.true_or]), rfl,
+      (hk := fun _ _ h => by simp only [Array.contains_append, h, Bool.true_or])
+      (hq := fun _ hw hn => absurd (Array.mem_filter.mp hw).1 hn), rfl,
     hi.queue hnh hng (by decide) (by decide)
     ((fq_keep hi (by rw [hph]; decide) (by rw [hph]; decide) (by rw [hph]; decide)).mono
       (fun w hw => (Array.mem_filter.mp hw).1) fun _ _ => rfl) (fun hpos => ?_)⟩
@@ -2341,7 +2355,8 @@ theorem WInv.prepK {P : ThreadId → LPh} {m m₁ : Mem} {t li : Nat} {k : Acces
     (htransport (fun _ => none) (fun _ _ _ => rfl)).nextMsg, fun hF hoff => by
       obtain ⟨σ, ha⟩ := (htransport hF hoff).atomics
       have hr : AMap hF m (m.recordAt L.b L.o 4 k) some := AMap.of_eq rfl rfl
-      exact ⟨_, (hr.trans ha rfl).withCurrent hc⟩⟩,
+      exact ⟨_, (hr.trans ha rfl).withCurrent hc⟩,
+    fun _ h h' => absurd (by rw [hw₁] at h; exact h) h'⟩,
     by rw [hcu₁, ← hc]; rfl, by rw [hw₁]; rfl, by rw [hb₁]; rfl, (loc_get hl').2.2, hrec⟩
   · rw [hf₁] at he
     simp only [Mem.recordAt, Array.mem_push] at he
@@ -2439,7 +2454,8 @@ theorem Step.observe {t : ThreadId} {m₁ : Mem} {li id : Nat} {l : ALoc}
     L.Step t m₁ (observeM m₁ li id) := by
   refine ⟨rfl, fun _ he => .inl he, rfl, rfl, fun _ _ => rfl, VClock.le_refl _, rfl,
     .inl rfl, rfl, fun _ _ h => h, fun _ h => h, .inl rfl, fun _ he => .inl he,
-    .of_atomics rfl, .refl _, (fun h => h), Nat.le_refl _, fun hF hoff => ?_⟩
+    .of_atomics rfl, .refl _, (fun h => h), Nat.le_refl _, fun hF hoff => ?_,
+    fun _ h h' => absurd h h'⟩
   have hnot : ¬ (m₁.atomics[li]!).In hF := by
     rw [(loc_get hl).2.2]
     intro hin
