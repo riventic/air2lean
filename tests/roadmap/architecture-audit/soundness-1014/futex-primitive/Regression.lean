@@ -47,15 +47,18 @@ theorem unaligned_wake_einval :
       some (.ok (-22, #[], #[])) := by
   decide +kernel
 
-/-- `access_ok` (core.c:540): an address at or above `2^63`, also an aligned negative offset as a
-`usize`, is outside every modelled user address space: `-EFAULT` before a key or queue lookup,
-for private and shared WAKE and for WAIT. -/
+/-- `access_ok` (core.c:540): an address with bits 63 and 55 set, also an aligned negative offset
+as a `usize`, is a kernel address on x86_64 and aarch64, tagged or not: `-EFAULT` before a key or
+queue lookup, for private and shared WAKE and for WAIT. Address `2^63` is a user address under
+aarch64's tagged-address ABI: a conservative refusal. -/
 theorem access_ok_efault :
-    observeWake (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) base = some (.ok (-14, #[], #[])) ∧
+    observeWake (Linux.futex_3arg ⟨none, 2 ^ 63 + 2 ^ 55⟩ 0x81 1) base =
+      some (.ok (-14, #[], #[])) ∧
+    observeWake (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) base = some (.error .illegal) ∧
     observeWake (Linux.futex_3arg ⟨none, -4⟩ 0x81 1) base = some (.ok (-14, #[], #[])) ∧
     observeWake (Linux.futex_3arg ⟨none, -4⟩ 1 1) base = some (.ok (-14, #[], #[])) ∧
     observeWake (Linux.futex_4arg ⟨none, -4⟩ 0x80 0 none) base = some (.ok (-14, #[], #[])) :=
-  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
 
 /-- A private key needs a user address, not a live word (core.c:596–611): a private WAKE below
 the end of a placed block returns 0. A shared key needs a writable page (`get_user_pages_fast`),

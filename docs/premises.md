@@ -1269,7 +1269,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   returns `-EINVAL` without reading the futex word, changing its queue or spending a scheduling
   turn. This alignment validation adds no state effect after any timeout copy. Then
   `get_futex_key` (`Linux.futexKey`, shared without `FUTEX_PRIVATE`) returns `-EFAULT` for an
-  address at or above `2^63`. The key forms at a live writable word and, for a private key, at
+  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). The
+  key forms at a live writable word and, for a private key, at
   any address below a placed block's end. Any other address is refused (`.illegal`). macOS
   WAIT returns `-EINVAL` for a null or unaligned address.
   The existing comparison and sleep path follows these checks on Linux. The kernel compares

@@ -1755,6 +1755,17 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Recorded with #562 (L8 ticks): freeAll_steps takes the returning run as a premise."
+  },
+  {
+   "id": "fsym-forward-bool-fact",
+   "title": "fsym does not forward a hint term's Bool-equation fact, so a rule's autoParam guard cannot use it",
+   "status": "open",
+   "requester": "S6 (#649, futex address validation)",
+   "progress": "open (workaround)",
+   "request": "The OS futex rules `WP.futex_4arg_of_aligned`, `WP.futex_3arg_of_aligned`, `WP.ulock_wait2` and `WP.ulock_wake` (ZigLean/Sep/Full/OsFutex.lean) select on the autoParam guard `hword : m.wordAt p = true := by first | assumption | decide`, which `runAutoParam` closes in the goal's local context. A protocol supplies the fact as a hint term, `fsym [hP.wordAt hi, …]` (`FLock.Fits.wordAt`, `Fits.wordWordAt`), but fsym forwards a hint term's conclusion as a hypothesis only when it is an `∃` (`wpForwardEx`) or arithmetic (`wpForward`), and `wpChain` proves side goals backwards only for a conclusion that is not an equation. So the guard sees no `m.wordAt p = true` and the rule does not apply. Needed: a hint term whose conclusion is a fact about the current memory (a Bool equation such as `m.wordAt p = true`) is forwarded like an `∃` fact, at the stop where its premises hold, so that an autoParam guard's `assumption` finds it. Regression: SepAuto.WPOsFutex with the `have hw` lines removed and `hP.wordAt hi` in the list.",
+   "workaround_sites": ["tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean"],
+   "deletion_plan": "Transitional: once fsym forwards such a fact, delete the `have hw := …` before each `fsym` in SepAuto.WPOsFutex, pass the term in the `fsym` list instead, and close this row.",
+   "note": "Recorded with #649 (S6 address validation)."
   }
  ],
  "mechanisms": [

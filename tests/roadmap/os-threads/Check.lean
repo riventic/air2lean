@@ -182,8 +182,10 @@ example (m : Mem) :
     let q ← word 0
     lift (free q)
     Linux.futex_3arg q 1 1) hex64 == ["Zig.Error.illegal"]
--- `access_ok`: an address at or above 2^63 (also a negative offset, as a `usize`) is EFAULT.
-#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) hex64 == ["-14"]
+-- `access_ok`: an address with bits 63 and 55 set (also a negative offset, as a `usize`) is
+-- EFAULT. `2^63` is a user address under aarch64's tagged-address ABI: refused (conservative).
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63 + 2 ^ 55⟩ 0x81 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) hex64 == ["Zig.Error.illegal"]
 #guard outcomes noKids (Linux.futex_3arg ⟨none, -4⟩ 0x81 1) hex64 == ["-14"]
 #guard outcomes noKids (Linux.futex_3arg ⟨none, -4⟩ 1 1) hex64 == ["-14"]
 #guard outcomes noKids (Linux.futex_4arg ⟨none, -4⟩ 0x80 0 none) hex64 == ["-14"]

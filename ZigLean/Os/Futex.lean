@@ -52,14 +52,17 @@ address the kernel receives is the pointer's numeric address as a `usize` (`fute
     `FUTEX_PRIVATE_FLAG`) needs a writable page: `get_user_pages_fast`, for anonymous memory a
     key of the address space and the address, distinct from the private key.
 
-  The model forms the key exactly when it knows the native result. That is the case for a live
-  writable word of the model (`Mem.wordAt`), and for a private key, any address below the end of
-  a block that the run placed (`Mem.userBelow`, premise SEM-07). An address at or above `2^63`
-  is outside every modelled user address space: `-EFAULT`. Any other address would need native
-  mapping or address-space-limit knowledge that the model leaves open, for example the
-  read-only file-backed (inode) key of a shared request on a `const` global, or an address
-  above every block. That is a conservative `.illegal` refusal: the model says `.illegal` where
-  native code returns `-EFAULT` or forms a key.
+  The model forms the key only where it knows that the kernel forms it: at a live writable word
+  of the model (`Mem.wordAt`), and, for a private key, at any address below the end of a block
+  that the run placed (`Mem.userBelow`, premise SEM-07). It returns `-EFAULT` only where no
+  `access_ok` passes: at an address with bits 63 and 55 set. That is a kernel address on x86_64,
+  also with LAM (whose `untagged_addr` keeps an address with bit 63 set), and on aarch64, also
+  under the tagged-address ABI (whose `untagged_addr` sign-extends bit 55). Any other address
+  would need native mapping or address-space knowledge that the model leaves open, for example
+  the read-only file-backed (inode) key of a shared request on a `const` global, an address above
+  every block, or a tagged aarch64 address. That is a conservative `.illegal` refusal: the model
+  says `.illegal` where native code returns `-EFAULT` or forms a key. Once the key forms, the
+  queue still matches waiters by pointer, not by key (audit S6, premise OSF-02).
 * **macOS** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A WAIT with a null or unaligned address
   returns `-EINVAL`. A WAKE with a null address returns `-EINVAL`, and an unaligned WAKE looks up
   its key and finds no waiter. The key is the task and the address (`ULK_UADDR`). A live
@@ -242,13 +245,13 @@ namespace Linux
 
 /-- `get_futex_key` (core.c:521–628) after the alignment check, at the pointer `p` with numeric
 address `a`, for a shared or a private key: `none` once the kernel forms the key, `-EFAULT` for
-an address outside the user address space (`access_ok`), `.illegal` where the native result
+an address that no `access_ok` admits (bits 63 and 55 set, module doc), `.illegal` where the native result
 needs knowledge that the model leaves open (module doc). No state change. -/
 def futexKey (p : Ptr) (a : Int) (shared : Bool) : MemM (Option (BitVec 64)) := do
   let m ← get
   let u := futexAddr a
   if m.wordAt p || (!shared && m.userBelow (u + 4)) then return none
-  if 2 ^ 63 ≤ u then return some (negErrno E.FAULT)
+  if 2 ^ 63 ≤ u && u.testBit 55 then return some (negErrno E.FAULT)
   throw .illegal
 
 /-- `FUTEX_OP{ .cmd = .WAIT }` and `FUTEX_OP{ .cmd = .WAKE }`; `.private = true` adds `0x80`. -/
@@ -301,7 +304,8 @@ def UL_COMPARE_AND_WAIT_NO_ERRNO : BitVec 32 := 0x01000001
 def UL_WAKE_ALL : BitVec 32 := 0x100
 
 /-- `sys_ulock.c`'s address check: the pointer, or `none` (`EINVAL`) for a null address (no
-pointer, or one at address `0`) or, with `aligned`, one that is not a multiple of four. A live
+pointer, or one at address `0`) or, with `aligned`, one that is not a multiple of four (the
+32-bit ops' `lock_size - 1`; the 64-bit ops stay `.unspecified` before this check). A live
 writable word of the model passes without resolving its address: it is never null (SEM-07). -/
 def ulockAddr (addr : Option Ptr) (aligned : Bool) : MemM (Option Ptr) := do
   let some p := addr | return none

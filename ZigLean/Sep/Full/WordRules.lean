@@ -70,14 +70,6 @@ section Atomic
 
 variable {bits bytes : Nat} {W : Word bits bytes}
 
-/-- Any shared word kept in a protocol's rest supplies actual numeric alignment. This is
-the generic fact for event, condition and other word clients of the Linux futex rules. -/
-theorem Fits.wordPtrAddr_aligned {W : Word 32 4} (hP : L.Fits K P U ok) (hW : W.InRest U)
-    {G : ThreadId → γ} {m : Mem} (hi : P.inv G m) :
-    ∃ a, (Zig.ptrAddr W.ptr).run m = pure (a, m) ∧ a % 4 = 0 := by
-  obtain ⟨rX, -, hU⟩ := (hP.inv _ _).mp hi
-  exact (hW _ _ _ hU).1.ptrAddr_aligned
-
 /-- Any shared word kept in a protocol's rest is a live writable word (`Mem.wordAt`), which the
 futex rows' address validation needs. -/
 theorem Fits.wordWordAt {W : Word 32 4} (hP : L.Fits K P U ok) (hW : W.InRest U)

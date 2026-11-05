@@ -443,9 +443,12 @@ refusal. The regressions are in `Regression.lean`, and the runtime controls are 
   `ulock_null_einval`.
 * **Process-shared and 64-bit ulock (fail closed, unchanged).** These requests stay
   `.unspecified`, outside the process-local 32-bit model.
-* **Linux `access_ok` (fixed).** An address at or above `2^63`, including an aligned
-  negative offset as a `usize`, returns `-EFAULT` before a key or queue lookup: every
-  modelled user address space ends below it. The regression is `access_ok_efault`.
+* **Linux `access_ok` (fixed).** An address with bits 63 and 55 set, including an aligned
+  negative offset as a `usize`, returns `-EFAULT` before a key or queue lookup. It is a kernel
+  address on x86_64, also with LAM, and on aarch64, also under the tagged-address ABI, whose
+  `untagged_addr` sign-extends bit 55. Any other address at or above `2^63`, such as `2^63`
+  itself, is a user address under that ABI and is refused (`.illegal`). The regression is
+  `access_ok_efault`.
 * **Linux shared key without a backing mapping (conservative refusal).** A shared key needs
   `get_user_pages_fast`. The model knows the page only for a live writable word
   (`Mem.wordAt`). At any other address it says `.illegal`, never a returned 0. Natively this
@@ -458,11 +461,12 @@ refusal. The regressions are in `Regression.lean`, and the runtime controls are 
 WAIT's word read after validation keeps its conservative refusal: a bad pointer is
 `.illegal` where native code returns `-EFAULT`. Every refusal is `.illegal` where native code
 returns an error code or forms a key, so a proof that a program never reaches it is
-stronger than the native fact. These refusals sit alongside the two remaining key witnesses
-above.
+stronger than the native fact. The two key witnesses in `CurrentModel.lean`
+(`private_wakes_shared`, `equal_address_ptr_miss`) stay open: once the key forms, the queue
+matches waiters by pointer, not by key.
 
-**Status: open.** `check.sh S6-futex-primitive` reports `alignment and CHILD_CLEARTID fixed;
-S6 open` only after the regressions and the two remaining witnesses elaborate.
+**Status: open.** `check.sh S6-futex-primitive` reports `address validation and CHILD_CLEARTID
+fixed; S6 open` only after the regressions and the two remaining witnesses elaborate.
 An elaboration or setup failure prints `FAILED` and returns nonzero, never `fixed`.
 `--require-fixed S6-futex-primitive` fails while the finding remains open.
 No translated Thread S5 subcase or aggregate S5 status changes in this audit addition.

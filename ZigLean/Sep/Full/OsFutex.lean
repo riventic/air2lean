@@ -25,7 +25,8 @@ other rules (`LockRules.lean`, `WordRules.lean`, `Event.lean`, `Cond.lean`).
   delivered again.
 * **Rows** (`@[fsym]`): `WP.futex_4arg`, `WP.futex_3arg`, `WP.ulock_wait2`, `WP.ulock_wake` reduce
   a row with std's arguments to the generic op, with the row's return code of each result
-  (`Linux.waitCode`, `Darwin.waitCode`, `Darwin.wakeCode`).
+  (`Linux.waitCode`, `Darwin.waitCode`, `Darwin.wakeCode`), after the row's address validation
+  (`WP.futexKey`; the specializations take the guard `m.wordAt p = true`).
 
 **The wake count** (audit soundness-2026-10-14 §S5). The scheduler's `wake p n` of the hand
 models wakes `min n k` of `k` waiters. Natively std's `wake(p, n)` on macOS sets `WAKE_ALL` for
