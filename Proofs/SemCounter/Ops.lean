@@ -405,25 +405,39 @@ theorem Shape.sum_le {Y : ThreadId → Ph} {m : Mem} (h : Shape Y m) : sum Y ≤
       · exact hw _ e
     omega
 
-/-- **A step of the permit's holder on its own part** (`FCond.wp_liftPart`): it owns `n` with the
-value it recorded at the take (at most 4), next to its part `rp`; its part after the step is the
-step's post. -/
+/-- The permit's holder recorded at most 4 increments (`tot`, `Shape.sum_le`): the bound of the
+increment of `n`. -/
+theorem hold_le {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {r : Res} {k s : Nat}
+    (hi : (proto semOf).inv (upd G t (gW r k true s)) m) : s ≤ 4 := by
+  obtain ⟨rX, -, hu⟩ := hi
+  rw [hu.lg.tot t k s (by rw [upd_self]; rfl)]
+  exact hu.um.shape.sum_le
+
+/-- **A step of the permit's holder on its own part** (`FCond.wp_liftPart`): its part after the
+step is the step's post. -/
+theorem wp_own {α : Type} {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
+    {Q : α → (ThreadId → Gh) → Mem → Nat → Prop} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    {t : ThreadId} {r : Res} {k s : Nat}
+    (hi : (proto semOf).inv (upd G t (gW r k true s)) m) (hc : m.current = t)
+    (htt : FTTriple Pa x Qa) (hp : Pa r)
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
+      (proto semOf).inv (upd G t (gW r' k true s)) m' → Q a G m' d) :
+    (proto semOf).WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d :=
+  FCond.wp_liftPart (fits (semOf := semOf)).toC.toFits (.inl rfl) hi hc htt hp
+    (fun a m' r' hx hq hc' _ _ hi' => h a m' r' hx hq hc' hi')
+
+/-- **The first step of the permit's holder on its own part** after the take (`wp_wait`'s
+post): it owns `n` with the value it recorded, next to its part `rp`. -/
 theorem wp_ownN {α : Type} {x : MemM α} {Qa : α → FAssn}
     {Q : α → (ThreadId → Gh) → Mem → Nat → Prop} {G : ThreadId → Gh} {m : Mem} {d : Nat}
     {t : ThreadId} {rp r : Res} {k s : Nat}
     (hi : (proto semOf).inv (upd G t (gW (rsum rp r) k true s)) m) (hc : m.current = t)
     (hr : up (pts nPtr 4 (BitVec.ofNat 32 s)) r) (hdj : FHeap.Disjoint rp.heap r.heap)
-    (htt : FTTriple (⟪s ≤ 4⟫ ⋆ ((fun x => x = rp) ⋆ up (pts nPtr 4 (BitVec.ofNat 32 s)))) x Qa)
+    (htt : FTTriple ((fun x => x = rp) ⋆ up (pts nPtr 4 (BitVec.ofNat 32 s))) x Qa)
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' → m'.current = t →
       (proto semOf).inv (upd G t (gW r' k true s)) m' → Q a G m' d) :
-    (proto semOf).WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d := by
-  have hs : s ≤ 4 := by
-    obtain ⟨rX, -, hu⟩ := id hi
-    rw [hu.lg.tot t k s (by rw [upd_self]; rfl)]
-    exact hu.um.shape.sum_le
-  exact FCond.wp_liftPart (fits (semOf := semOf)).toC.toFits (.inl rfl) hi hc htt
-    (Full.sep_lift.mpr ⟨hs, rp, r, hdj, rfl, rfl, hr⟩)
-    (fun a m' r' hx hq hc' _ _ hi' => h a m' r' hx hq hc' hi')
+    (proto semOf).WP t (ConcM.liftMem x : ConcM Tgt α) Q G m d :=
+  wp_own hi hc htt ⟨rp, r, hdj, rfl, rfl, hr⟩ h
 
 /-- **`post` after the increment** (`wp_post`): the holder's part is `rp` and `n`, one increment
 further. -/

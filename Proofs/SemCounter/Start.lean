@@ -524,7 +524,8 @@ both threads go to `semWork` with no increment and no permit. -/
 theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP : Res}
     (hP : plain rP) (hi : (proto semOf).inv G m) (hg : G 0 = gO (rsum rM rP) { ph := .pre })
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
-    c = 1 ∧ (proto semOf).inv (upd (upd G 1 (gW rP 0 false 0)) 0 (gW rM 0 false 0)) m' := by
+    c = 1 ∧ m'.current = 0 ∧
+      (proto semOf).inv (upd (upd G 1 (gW rP 0 false 0)) 0 (gW rM 0 false 0)) m' := by
   obtain ⟨rX, hL, hu⟩ := hi
   obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, h0, -⟩⟩ := hu.um.shape
   rotate_left
@@ -618,7 +619,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
   have hI' := cinv_out (cinv_out hI (t := 1) (g := gW rP 0 false 0) hG1c rfl)
     (t := 0) (g := gW rM 0 false 0) (by rw [upd1_0]; exact hG0c) rfl
   have hsat := FCond.Sated.congr (C := C) hhS
-  refine ⟨hs1, rX, by rw [hs1] at hL'; exact hL', ⟨⟨⟨?_, .inr ⟨by simp [hs1], ?_,
+  refine ⟨hs1, rfl, rX, by rw [hs1] at hL'; exact hL', ⟨⟨⟨?_, .inr ⟨by simp [hs1], ?_,
       .inr ⟨0, by decide, false, 0, by show (upd (upd G 1 _) 0 _ 0).2.ph = _; rw [hX0]⟩,
       .inr ⟨0, by decide, false, 0, by show (upd (upd G 1 _) 0 _ 1).2.ph = _; rw [hX1]⟩,
       fun u hu' => by
@@ -664,7 +665,7 @@ parts. -/
 theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
     (hp : rM.Plain) (hi : (proto semOf).inv G m) (hg : G 0 = gO rM { ph := .pre })
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
-    c = 1 ∧ ∃ rP, plain rP ∧
+    c = 1 ∧ m'.current = 0 ∧ ∃ rP, plain rP ∧
       (proto semOf).inv (upd (upd G 1 (gW rP 0 false 0)) 0 (gW rM 0 false 0)) m' := by
   obtain ⟨rX, hL, hU⟩ := hi
   have hL₀ : L.Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
@@ -678,9 +679,9 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
   have hU' := U_part (t := 0) (r := rsum rM rP) (atStop 0 hU)
   have hG' : upd G 0 (L.setPart (G 0) (rsum rM rP)) 0 = gO (rsum rM rP) { ph := .pre } := by
     rw [upd_self, hg]; rfl
-  obtain ⟨hc, hi'⟩ := inv_spawnParts (semOf := semOf) hpP
+  obtain ⟨hc, hcur, hi'⟩ := inv_spawnParts (semOf := semOf) hpP
     ⟨rX, by simpa only [upd_upd] using hL', hU'⟩ hG' hf
-  refine ⟨hc, rP, hpP, ?_⟩
+  refine ⟨hc, hcur, rP, hpP, ?_⟩
   have he : upd (upd (upd G 0 (L.setPart (G 0) (rsum rM rP))) 1 (gW rP 0 false 0))
       0 (gW rM 0 false 0) = upd (upd G 1 (gW rP 0 false 0)) 0 (gW rM 0 false 0) := by
     rw [upd_comm G _ _ (by decide : (0 : ThreadId) ≠ 1), upd_upd]
