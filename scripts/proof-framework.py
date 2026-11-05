@@ -361,6 +361,11 @@ def retiring_tactics(data):
                    if e["kind"] == "syntax" and e.get("status") == "legacy-to-retire"})
 
 
+# A command that only gives attributes to names (`attribute [zig_run] f g`) holds no tactic: a
+# keyword in it is a declaration's name, e.g. a translated Zig function `within`.
+ATTRIBUTE_LINE = re.compile(r"^attribute\s+\[[^\]\n]*\](?:[ \t]+[\w.'«»]+)+[ \t]*$", re.M)
+
+
 def scan_uses(root, keywords):
     """{(path, keyword): occurrences} of the given tactic keywords in the tree's Lean code."""
     if not keywords:
@@ -372,7 +377,7 @@ def scan_uses(root, keywords):
         text = (root / path).read_text(encoding="utf-8")
         if not any(kw.split()[0] in text for kw in keywords):
             continue
-        for m in word.finditer(strip_comments_and_strings(text)):
+        for m in word.finditer(ATTRIBUTE_LINE.sub("", strip_comments_and_strings(text))):
             kw = " ".join(m[1].split())
             found[(path, kw)] = found.get((path, kw), 0) + 1
     return found

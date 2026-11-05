@@ -389,6 +389,15 @@ class Ratchet(unittest.TestCase):
         git(self.repo, "add", ".")
         self.assertEqual(self.check(), 0)
 
+    def test_name_in_an_attribute_command_is_ignored(self):
+        self.declare_retiring_tactic()
+        (self.repo / "Fresh.lean").write_text("attribute [simp] rt_old Foo.rt_old\n"
+                                              "attribute [simp] a in\ntheorem d : True := by rt_old\n")
+        git(self.repo, "add", ".")
+        code, err = self.diagnostics()
+        self.assertEqual(code, 1)  # only the tactic after `attribute … in` counts
+        self.assertIn("Fresh.lean: 1 new use(s)", err)
+
     def test_raised_count_needs_approval_against_base(self):
         self.declare_retiring_tactic()
         with (self.repo / "Old.lean").open("a") as f:
