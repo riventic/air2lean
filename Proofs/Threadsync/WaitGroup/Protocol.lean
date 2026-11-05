@@ -214,6 +214,10 @@ def Shape (Y : ThreadId → X) (m : Mem) : Prop :=
 /-- The newest write of a word. -/
 abbrev newest {n nb : Nat} (W : Word n nb) (m : Mem) : Word.Entry := (W.hist m)[(W.hist m).size - 1]!
 
+theorem newest_push {n nb : Nat} {W : Word n nb} {m m' : Mem} {x : Word.Entry}
+    (h : W.hist m' = (W.hist m).push x) : newest W m' = x := by
+  unfold newest; rw [h, Array.size_push, Nat.add_sub_cancel, Word.get_push_eq]
+
 /-- The rest of the invariant (module doc). -/
 structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   shape : Shape (fun u => (G u).2) m

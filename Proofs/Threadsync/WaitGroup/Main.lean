@@ -18,10 +18,6 @@ theorem val_eq {n : Nat} {x : Word.Entry} {a b : BitVec n} (ha : x.Val a) (hb : 
     a = b := by
   unfold Word.Entry.Val at ha hb; rw [ha] at hb; cases hb; rfl
 
-theorem newest_push {n nb : Nat} {W : Word n nb} {m m' : Mem} {x : Word.Entry}
-    (h : W.hist m' = (W.hist m).push x) : newest W m' = x := by
-  unfold newest; rw [h, Array.size_push, Nat.add_sub_cancel, Word.get_push_eq]
-
 /-- `main` never finishes. -/
 theorem fd0 {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m) : (G 0).2.ph.fd = false := by
   have h : (G 0).2.ph.isMain = true := hu.shape.2.1

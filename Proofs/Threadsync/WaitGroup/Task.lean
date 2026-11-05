@@ -280,10 +280,6 @@ theorem wg_arith {A B : Nat} (hA : A ≤ 1) (hB : B ≤ 1) :
   rcases (by omega : A = 0 ∨ A = 1) with rfl | rfl <;>
     rcases (by omega : B = 0 ∨ B = 1) with rfl | rfl <;> decide
 
-theorem newest_push {W : Word 64 8} {m m' : Mem} {x : Word.Entry}
-    (hh : W.hist m' = (W.hist m).push x) : newest W m' = x := by
-  unfold newest; rw [hh, Array.size_push, Nat.add_sub_cancel]; exact Word.get_push_eq
-
 /-- The rest's part without the group's word: the cells of the other bytes below the mutex. -/
 theorem rY_at {rY : Res} {m : Mem} (h : Rest (rsum (WG.cellsR m) rY) m) {l : Zig.Loc} (hb : BoxW l)
     (hw : ¬ WG.In l) : rY.heap l = (m.heap l).map fun c => ⟨c, none⟩ := by
