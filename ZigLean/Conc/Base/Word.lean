@@ -49,6 +49,10 @@ variable {n nb : Nat} (W : Word n nb)
 /-- The address of the word. -/
 def ptr : Ptr := ⟨some W.b, (W.o : Int)⟩
 
+/-- The private futex key of the word in `m` (`Mem.wordKey`): the key of a futex wait or wake at
+`ptr` while the word's block exists (`Mem.keyAt_wordKey`). It reads only the block's address. -/
+def key (m : Mem) : FutexKey := m.wordKey W.b W.o
+
 include W in
 theorem sz_eq : intSize n = nb := by
   rcases W.n_ok with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> rfl

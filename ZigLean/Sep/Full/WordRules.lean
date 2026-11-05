@@ -509,16 +509,17 @@ variable {W : Word 32 4}
 /-- A futex wake at the word (`futexWakeC`), by thread `t` (`g`): the lock's invariant holds with
 the same rest; the client shows its `U` after the wake, given its `U` and the lock's word invariant
 at the stop. -/
-theorem wp_wordWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {io : Io}
-    {c : BitVec 32} (hi : P.inv (upd G t g) m) {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
+theorem wp_wordWake (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL L.toLockWord)
+    {io : Io} {c : BitVec 32} (hi : P.inv (upd G t g) m)
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁ cs m', G₁ t = g → U G₁ rX m₁ → L.WInv (L.pl G₁) m₁ →
-      ((Thread.futexWake W.ptr c.toNat cs).run { m₁ with current := t }).run =
+      ((Thread.futexWakePtr W.ptr c.toNat cs).run { m₁ with current := t }).run =
         some (.ok ((), m')) → L.Inv G₁ rX m' → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io W.ptr c : CM Tgt σ Unit).run s) Q G m n := by
   refine WP.futexWakeC fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ cs m' hw => ?_⟩
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
-  exact h k hk G₁ rX m₁ cs m' hg₁ hU hiL.w hw (hiL.wakeOff hap hw)
+  exact h k hk G₁ rX m₁ cs m' hg₁ hU hiL.w hw (hiL.wakeOff (hW _ _ _ hU).1 hap hw)
 
 /-- The thread `t` at `out` (`g`) holds nothing of the lock. -/
 theorem Fits.heldOut (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd G t g) m) :
