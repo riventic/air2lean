@@ -6,8 +6,9 @@ import ZigLean.Simp
 /-!
 # Rules of the OS futex, wake and interrupt models (premises OSF-01, OSF-02, OSG-01; proof-only)
 
-Facts about `ZigLean/Os/Futex.lean` and `ZigLean/Os/Thread.lean` that client proofs (the planned
-`FutexSpec`, `docs/thread-io-translation.md` §4.1) use, and kernel-checked runs of the scheduler:
+Facts about `ZigLean/Os/Futex.lean` and `ZigLean/Os/Thread.lean` that the full-state OS futex
+rules (`ZigLean/Sep/Full/OsFutex.lean`: `WP.osFutexWait`, `WP.osFutexWake`) and their client
+proofs use, and kernel-checked runs of the scheduler:
 
 * a wake's options are exactly the subsets of `min n k` of the `k` threads queued at the key,
   there is always one (`wakeCount_pos`), and every thread it wakes was queued there

@@ -1320,10 +1320,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal
-  ([S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open)),
-  never a caller assumption authorizing a zero result for a native error. The queue still
-  matches waiters by provenance pointer rather than by the canonical numeric key and domain;
-  that part of S6 is open. No caller alignment or address-domain premise is added.
+  ([S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)),
+  never a caller assumption authorizing a zero result for a native error. The queue matches
+  waiters by the key (`FutexKey`: the domain and the `usize` of the numeric address,
+  `Mem.keyAt`), as `get_futex_key`; two live words of a memory with the live layout have
+  different keys (`Mem.keyAt_ne`). No caller alignment or address-domain premise is added.
 - Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
   rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
@@ -1364,9 +1365,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   thread's `freeAndExit` is outside the model.
 - Model gap: `Os.Linux.cloneExit` wakes at most one waiter at `ctid` (the oracle's choice; the
   regression `cleartid_wakes_one` of
-  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open)).
-  Its wake still matches waiters by provenance pointer rather than by the shared-domain numeric
-  key; that part of S6 is open.
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)).
+  Its wake matches waiters by the shared-domain key of `ctid`'s numeric address (`FutexKey`).
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
   `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
 - Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Linux v6.16

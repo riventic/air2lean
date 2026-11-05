@@ -37,7 +37,7 @@ now lies at the two ends of the pipeline:
 | S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): an inexact `@shrExact` gave `.overflow`, a safety panic, with and without safety. Without safety it is unchecked IB. With safety, Sema's `shrOverflow` check comes *after* the op, which LLVM emits as `lshr exact`: the check branches on poison, and ReleaseSafe deletes it and returns a value. | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`); native rows in `illegal-behavior/native/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
 | S5 | SOUNDNESS (reported 2026-10-16); model fidelity on analysis | The hand models of std's futex wake (`Thread.Futex.wake`, `Io.futexWake`; STD-05) wake exactly `min n k` of `k` waiters. Natively macOS wakes all of them for `n > 1` (`WAKE_ALL`), and Linux at most `2^31 − 1`. No false native statement was derived from it (§S5). | `futex-wake/WakeCount.lean` (kernel) |
-| S6 | SOUNDNESS (primitive fidelity), **open** | Linux numeric alignment now returns EINVAL before queue effects, and `CHILD_CLEARTID` wakes at most one waiter. A macOS WAIT returns the oracle's count of other waiters. The OS model still omits private/shared keys and compares provenance pointers rather than canonical addresses. These are checked state mismatches; no false shipped client theorem is claimed. Std's untimed futex calls bypass the OS rows ([finding 4](#s6-hand-rows), open). | `futex-primitive/Regression.lean`, `futex-primitive/CurrentModel.lean` (kernel; observation boundaries in §S6) |
+| S6 | SOUNDNESS (primitive fidelity), **fixed (OS rows)** | Linux numeric alignment now returns EINVAL before queue effects, and `CHILD_CLEARTID` wakes at most one waiter. A macOS WAIT returns the oracle's count of other waiters. The futex queue is keyed by `FutexKey` (the domain and the `usize` of the numeric address, `Mem.keyAt`): private and shared waiters differ, and two pointers at one address share a key. These were checked state mismatches; no false shipped client theorem was claimed. Std's untimed futex calls bypass the OS rows ([finding 4](#s6-hand-rows), open). | `futex-primitive/Regression.lean` (kernel; observation boundaries in §S6) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
 | F3 | FAIL-OPEN | Witnesses do not link claims to the program. Non-vacuity witnesses pick any `Mem.FSeq` memory, not `mem0`. No shipped `Proofs/` claim uses `FTriple.run_init*`/`FTotalTriple.run_init*`. The `CTriple` claims of `Proofs/Lists` (`Alloc`, `Append`, `Container`) have no witness, apart from two fixtures in `tests/roadmap/lists-fba`. | survey (§F3) |
@@ -374,15 +374,15 @@ rules next to them. Its regressions in `tests/roadmap/os-threads/Check.lean` che
 **Status: open** (steps D and E). The hand rows bypass the OS rows in more than the wake count:
 [S6, finding 4](#s6-hand-rows).
 
-## S6. OS futex keys, validation and CHILD_CLEARTID (SOUNDNESS, open)
+## S6. OS futex keys, validation and CHILD_CLEARTID (SOUNDNESS, fixed for the OS rows)
 
 Reported during the Task19/STD-05 primitive review on PR #437, before activating the translated
 Thread wake. The existing OS primitive needs correction independently of S5's hand-row removal.
 The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
 `ZigLean/Os/Thread.lean`; they do not replace those definitions or change a client contract.
 
-**Regressions** (`futex-primitive/Regression.lean`) **and remaining witnesses**
-(`futex-primitive/CurrentModel.lean`):
+**Regressions** (`futex-primitive/Regression.lean`; the former witnesses of
+`futex-primitive/CurrentModel.lean` are replaced by the key regressions below):
 
 * `unaligned_wake_einval` (regression): actual Linux private WAKE at address 4097 returns
   `-EINVAL` with an empty queue, as a complete `Sched.runTrace` observation. The former return-zero witness is
@@ -390,14 +390,17 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
   unchanged state at depth zero, both accepted flag modes, timeout-copy precedence and aligned
   private WAKE without a word access. The raw WP rules expose immediate EINVAL; existing
   lock/Event headers derive aligned success from their block invariants.
-* `private_wakes_shared`: actual shared/private WAIT definitions are equal, discarding the
-  mode. The actual private WAKE continuation removes the seeded waiter and returns 1. The model
-  has no domain field to distinguish that waiter from one originating in shared WAIT; native
-  private and shared keys differ.
-* `equal_address_ptr_miss`: two live disjoint blocks at 4096 and 4100 give distinct provenance
-  pointers for one-past A and start B, both at numeric address 4100. The actual private WAKE
-  continuation through one-past A returns 0 and retains start B's waiter. The native key uses the
-  numeric address within the address space, rather than the model's provenance pointer.
+* `private_wake_skips_shared` (fixed): the former witness `private_wakes_shared` showed the
+  shared and private WAIT definitions equal, discarding the mode, and the private WAKE removing a
+  shared waiter. The queue entry is now a `FutexKey` with the domain
+  (`Thread.futexWait p e shared` queues `Block.key o shared`, Linux's `FUT_OFF_MMSHARED`): the
+  two WAITs stop in their own domains, and the private WAKE leaves a shared waiter queued
+  (returns 0) and wakes a private one (returns 1).
+* `equal_address_wakes` (fixed): the former witness `equal_address_ptr_miss` had two live blocks
+  at 4096 and 4100 give distinct provenance pointers for one-past A and start B, both at numeric
+  address 4100, and the private WAKE through one-past A return 0. The key is now the `usize` of
+  the numeric address (`Mem.keyAt`, as `get_futex_key`), so that WAKE wakes start B's waiter and
+  returns 1.
 * `cleartid_over_wake` (fixed): the former `cloneExit` continuation cleared the word and woke
   both seeded raw waiters. Linux's `mm_release` uses shared `FUTEX_WAKE` with count 1, so wakes
   at most one. `cloneExit` now wakes at most one, the oracle's choice, in the same turn and pick
@@ -406,7 +409,7 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
   other stays queued. Neither witness establishes two valid std join-handle owners or a false
   shipped client termination theorem.
 
-Every assertion here except `unaligned_wake_einval` observes the `CoN` call frontier and its
+Every assertion here except `unaligned_wake_einval` and the key regressions observes the `CoN` call frontier and its
 actual continuation before scheduler completion. Their definitions retain the original input thread records rather
 than rewriting them to force completion. The actual primitive still performs its effects,
 including `cloneExit`'s `markExited` update. Completing such a seeded run also invokes
@@ -478,15 +481,23 @@ refusal. The regressions are in `Regression.lean`, and the runtime controls are 
 WAIT's word read after validation keeps its conservative refusal: a bad pointer is
 `.illegal` where native code returns `-EFAULT`. Every refusal is `.illegal` where native code
 returns an error code or forms a key, so a proof that a program never reaches it is
-stronger than the native fact. The two key witnesses in `CurrentModel.lean`
-(`private_wakes_shared`, `equal_address_ptr_miss`) stay open: once the key forms, the queue
-matches waiters by pointer, not by key.
+stronger than the native fact.
 
-**Status: open.** `check.sh S6-futex-primitive` reports `address validation and CHILD_CLEARTID
-fixed; S6 open` only after the regressions and the two remaining witnesses elaborate.
-An elaboration or setup failure prints `FAILED` and returns nonzero, never `fixed`.
-`--require-fixed S6-futex-primitive` fails while the finding remains open.
-No translated Thread S5 subcase or aggregate S5 status changes in this audit addition.
+**The keyed queue** (PR #668). `Mem.waiters : Array (ThreadId × FutexKey)`; a WAIT queues the
+key of its word in its domain, a WAKE (`Thread.futexWake k`) wakes at a key, and the OS rows form
+the key from the validated address (`futexKeyOf`). The scheduler's `futexWakeC` resolves the
+pointer's private key in the memory of the wake (`Thread.futexWakePtr`). Protocol invariants
+name their word's waiters by the word's total key (`Mem.wordKey`, `LockWord.key`, `Word.key`),
+which reads only the block's address; a frame step keeps every block's address
+(`FStepIn.addrs`, #681), so the keys stay. Two live words have different keys only in a memory
+with the live layout (`Mem.keyAt_ne`, premise OSF-02); FLock's invariant has it from its
+`FOwned`. No client statement is weakened.
+
+**Status: fixed (OS rows).** `check.sh S6-futex-primitive` reports `fixed (OS rows)` once every
+regression elaborates; an elaboration failure prints `FAILED` and returns nonzero.
+`--require-fixed S6-futex-primitive` passes. The std hand rows' scope stays open as
+[finding 4](#s6-hand-rows). No translated Thread S5 subcase or aggregate S5 status changes in this
+audit addition.
 
 <a id="s6-hand-rows"></a>
 ### S6, finding 4: std's untimed futex calls bypass the OS rows (SOUNDNESS scope, open)
@@ -525,7 +536,7 @@ part of `Io.Threaded` and `os_unfair_lock` are modelled by hand in place of thei
    (`cleartid_wakes_one`, `unaligned_wake_einval`, `access_ok_efault` for WAKE, S5's
    `native_wakes_all`) are statements about rows that no translation reaches yet. Only the wait
    corrections (`ulock_wait_nwaiters`, the WAIT validation) reach a translated timed wait. The
-   queue key lives in the scheduler queue that both paths share, so the planned canonical key
+   queue key lives in the scheduler queue that both paths share, so the canonical key (#668)
    also reaches the hand rows. Even then the hand rows keep their own wake count and skip
    validation. So S6's status covers the OS rows, and it says so.
 3. *EDOM at a mutex word* (unmodelled native outcome). On macOS 0.15.2, thread A blocks in
