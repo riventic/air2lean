@@ -1240,6 +1240,28 @@
    "deletion_plan": ""
   },
   {
+   "id": "P09-E6",
+   "title": "arithmetic congruence of library atoms (counter-dependent sums)",
+   "status": "open",
+   "requester": "invariant-synthesis (P09, S2c′: `counted.tri`, `nested`'s outer loop)",
+   "progress": "open; found by R1d (2026-11-05). The library sum design is checked up to this goal: `sumBelow` with `sumBelow (n + 1) = sumBelow n + n` and the non-recursive conditional `fsym_arith` rewrites `x < b → sumBelow b - sumBelow x = x + (sumBelow b - (sumBelow x + x))` and `b ≤ x → sumBelow b - sumBelow x = 0` closes the step's overflow side goals of `tri.loop5` under the invariant `v + (sumBelow n - sumBelow i) = v₀ + (sumBelow n - sumBelow i₀)`. (A recursive conditional unfold, `x < b → S x b = x + S (x + 1) b`, hits the maximum recursion depth: in a context whose facts are contradictory the discharger proves every side condition.)",
+   "request": "**Congruence of the arithmetic's atoms, as `modCongr` does for remainders**: the counter's step leaves a fresh word `x` with the fact `x.toNat = s.i.toNat + 1`, and the invariant's atom `sumBelow x.toNat` is unrelated to `sumBelow (s.i.toNat + 1)` (which `fsym_arith` rewrites to `sumBelow s.i.toNat + s.i.toNat`), so `omega` leaves `v' + (sumBelow n - sumBelow x.toNat) = w + (sumBelow n - sumBelow i₀)`. Needed in `arithCore`: for an application `f a` of a `Nat`/`Int`-valued function in the target or the facts, an argument `a` that the facts equate to a term `b` (by `congrEq`), rewrite it to `f b` (or add `f a = f b`) before `omega`, so the `fsym_arith` lemmas of `f` apply.",
+   "workaround_sites": [
+    "tests/roadmap/loop-tactics/nested/Proof.lean"
+   ],
+   "deletion_plan": "nested's hand outer invariant `outerI`, `outerPost`, `cnt`, `cnt_mono` and `outer_step`'s `rw [show x.toNat = s.i.toNat + 1 …, cnt]`: delete when `air2lean-invgen` emits counter-dependent cells over the library `sumBelow` (S2c′) and summarizes the generated inner loop in the outer body, which needs this row."
+  },
+  {
+   "id": "P09-E7",
+   "title": "normal form of a state atom's arguments after a step rule (`List.set` of a literal list)",
+   "status": "open",
+   "requester": "invariant-synthesis (P09, S2c′: `counted.pairAt`)",
+   "progress": "open; found by R1d (2026-11-05). The item rules through the array's own pointer (`FTotalTriple.arr_load_zero`/`arr_store_zero`, merged with this row) make `fsym` walk `pairAt.loop5`'s body (`acc[0] += 1; acc[1] += 2`) under an invariant owning `arr p [w₀, w₁]`; tagging `List.set_cons_zero`/`List.set_cons_succ` `fsym_norm`/`fsym_arith` does not change the residual: the walk does not normalize atom arguments.",
+   "request": "**Normalize a state atom's arguments after a step rule**: `arr_store`'s post `arr p (vs.set i.toNat w)`, instantiated at a literal list and index, stays `arr p (([w₀, w₁].set 0 x).set (1#64).toNat y)`, and the update into the invariant's `∃ w₀ w₁, ⟪…⟫ ⋆ up (arr p [w₀, w₁])` fails (`EUpd` residual). Needed: the walk puts the arguments of the state's atoms in `fsym_arith` normal form (literal `toNat`, `List.set`/`getElem` of a literal list at a literal index), or the planner matches atom arguments up to it (`congrEq` reducing `List.set` of a list literal).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "recursive-group-total",
    "title": "Generic total correctness of a recursive function group",
    "status": "open",

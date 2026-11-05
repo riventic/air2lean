@@ -40,6 +40,14 @@ example (p q : Ptr) (xs : List (BitVec 8)) (ys : List (BitVec 32)) (i j : BitVec
         up (arr p (xs.set i.toNat (Zig.addWrap xs[i.toNat] 1))))) := by
   fsym [bumpAt_array p xs i hlen hi, at_array q ys j hj]
 
+/-- Item `0` through the array's own pointer, as generated code reaches it (`acc[0] += 1` loads
+and stores at `p`, `&xs[0]` is `p`): `FTotalTriple.arr_load_zero`, `FTotalTriple.arr_store_zero`. -/
+theorem bump_first (p : Ptr) (xs : List (BitVec 64)) (h : 0 < xs.length) :
+    FTotalTriple (up (arr p xs))
+      (Zig.load (BitVec 64) 8 p >>= fun v => Zig.store (α := BitVec 64) 8 p (v + 1))
+      (fun _ => up (arr p (xs.set 0 (xs[0] + 1)))) := by
+  fsym
+
 end ProofTools.ArrayClients
 
 /-- info: 'ProofTools.ArrayClients.bumpAt_array' depends on axioms: [propext, Classical.choice, Quot.sound] -/

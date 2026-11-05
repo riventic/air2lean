@@ -12,8 +12,9 @@ import ZigLean.Sep.Full.Region
   `EUpd.arr_join`, `EUpd.arr_unfocus`, which read the block's labels from the memory (`Res.fix`):
   in the full logic the joined resource is held by the same memory with the same frame.
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
-  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array;
-  `arr_ptrProject` (the pointer to an item, one past the end and the empty array included);
+  in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array, and
+  `arr_load_zero`/`arr_store_zero` of item `0` through `p` itself (the form `fsym_norm` gives
+  `p.elem _ 0`, `Norm.elem_zero`); `arr_ptrProject` (the pointer to an item, one past the end and the empty array included);
   `arr_memset` (all items) and `arr_memmove` (ranges that may overlap), both from the rules on
   owned bytes (`arr_of`); the facts of an array (`facts_arr`) and its extent for pointer
   formation `&xs[i]` (`Live.arr`); in a thread the rules apply with the locality of the item's
@@ -367,6 +368,24 @@ theorem EUpd.arr_unfocus {k : Nat} {w : T} (hn : 0 < Enc.size T) (hk : k < vs.le
   FTotalTriple.eupd (EUpd.arr_focus hi hs) <|
     FTotalTriple.eupd_post (FTotalTriple.frame (FTotalTriple.store hn w)) fun _ =>
       EUpd.arr_unfocus hn hi
+
+/-- **Load** of item `0` through the array's own pointer: `arr_load` at index `0`, whose pointer
+`p.elem _ 0` the walk normalizes to `p` (`Norm.elem_zero`, also the result of `&xs[0]`,
+`ptrProject_elem_zero`). -/
+@[fsym] theorem FTotalTriple.arr_load_zero (hn : 0 < Enc.size T) (hs : Enc.align T ∣ Enc.size T)
+    (hi : 0 < vs.length) :
+    FTotalTriple (up (Zig.arr p vs)) (Zig.load T (Enc.align T) p)
+      (fun v => ⟪v = vs[0]⟫ ⋆ up (Zig.arr p vs)) := by
+  simpa only [Norm.elem_zero, show (0 : BitVec 64).toNat = 0 from rfl] using
+    FTotalTriple.arr_load (p := p) (i := 0) hn hs hi
+
+/-- **Store** to item `0` through the array's own pointer (`arr_store` at index `0`). -/
+@[fsym] theorem FTotalTriple.arr_store_zero [LawfulEnc T] (hn : 0 < Enc.size T)
+    (hs : Enc.align T ∣ Enc.size T) (hi : 0 < vs.length) (w : T) :
+    FTotalTriple (up (Zig.arr p vs)) (Zig.store (Enc.align T) p w)
+      (fun _ => up (Zig.arr p (vs.set 0 w))) := by
+  simpa only [Norm.elem_zero, show (0 : BitVec 64).toNat = 0 from rfl] using
+    FTotalTriple.arr_store (p := p) (i := 0) hn hs hi w
 
 /-- **Pointer to item `i ≤ vs.length`** of an owned array (one past the end included, and the
 empty array: `ptr_add`, `ptr_elem_ptr`, `slice_elem_ptr`): the memory is unchanged. The item
