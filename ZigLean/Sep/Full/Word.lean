@@ -277,6 +277,14 @@ theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G 
   simp only [FHeap.union_apply]
   cases (L.wordR m).heap l <;> cases rL.heap l <;> simp_all
 
+/-- The word's cells are apart from a resource off the word. -/
+theorem wordR_none {r : Res} {m : Mem} (hoff : L.Off r.heap.erase) {l : Zig.Loc} {fc : FCell}
+    (hl : r.heap l = some fc) : (L.wordR m).heap l = none := by
+  by_cases hin : L.In l
+  · have := LockWord.off_erase.mp hoff l hin
+    simp [hl] at this
+  · exact cellsAt_none hin
+
 /-- The protocol's rest is in the lock's complete rest (with the word's cells and the free lock's
 resource). -/
 theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) :
@@ -285,12 +293,7 @@ theorem Inv.restIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m
   obtain ⟨rL, ho, -, hLX, -⟩ := hi.rest
   refine ⟨rL, ho, fun l fc hl => ?_⟩
   have hrL : rL.heap l = none := (hLX l).resolve_right (by simp [hl])
-  have hwr : (L.wordR m).heap l = none := by
-    by_cases hin : L.In l
-    · have := LockWord.off_erase.mp hi.xoff l hin
-      simp [hl] at this
-    · exact cellsAt_none hin
-  simp only [rsum, FHeap.union_apply, hl, hwr, hrL, Option.none_or]
+  simp only [rsum, FHeap.union_apply, hl, wordR_none hi.xoff hl, hrL, Option.none_or]
 
 /-- The free lock's resource is in the lock's complete rest (apart from the word's cells): the
 `rL` counterpart of `Inv.restIn`. -/
@@ -299,12 +302,7 @@ theorem Inv.lockResIn {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G r
       ∀ l fc, rL.heap l = some fc → (rsum (L.wordR m) (rsum rL rX)).heap l = some fc := by
   obtain ⟨rL, ho, hLoff, -, hF, -⟩ := hi.rest
   refine ⟨rL, ho, fun h => (hF h).1, fun l fc hl => ?_⟩
-  have hwr : (L.wordR m).heap l = none := by
-    by_cases hin : L.In l
-    · have := LockWord.off_erase.mp hLoff l hin
-      simp [hl] at this
-    · exact cellsAt_none hin
-  simp only [rsum, FHeap.union_apply, hl, hwr, Option.none_or, Option.some_or]
+  simp only [rsum, FHeap.union_apply, hl, wordR_none hLoff hl, Option.none_or, Option.some_or]
 
 /-- A byte of the rest is the memory's, up to `Cell.norm`. -/
 theorem Inv.restCell {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}

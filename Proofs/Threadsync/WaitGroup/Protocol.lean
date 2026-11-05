@@ -103,6 +103,10 @@ def fd : Ph → Bool
   | .st | .fin => true
   | _ => false
 
+/-- A task that finished stored the counter. -/
+theorem stored_of_fd {p : Ph} (h : p.fd = true) : p.stored = true := by
+  cases p <;> first | rfl | cases h
+
 end Ph
 
 /-- A thread's ghost value outside the lock (module doc). -/

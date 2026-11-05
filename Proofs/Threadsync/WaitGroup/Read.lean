@@ -117,8 +117,7 @@ theorem tally_val {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : L.Inv G rX m)
   have hR := hF (free6 hu h6 hm)
   obtain ⟨h1, h2, -⟩ := hu.done h6
   have hc2 : (G 1).2.cnt + (G 2).2.cnt = 2 := by
-    unfold X.cnt; rw [if_pos (by unfold Ph.fd at h1; revert h1; cases (G 1).2.ph <;> simp [Ph.stored]),
-      if_pos (by unfold Ph.fd at h2; revert h2; cases (G 2).2.ph <;> simp [Ph.stored])]
+    unfold X.cnt; rw [if_pos (Ph.stored_of_fd h1), if_pos (Ph.stored_of_fd h2)]
   change up (pts (bPtr.add 20) 4 (BitVec.ofNat 32 ((G 1).2.cnt + (G 2).2.cnt))) rL at hR
   rw [hc2] at hR
   obtain ⟨A, S, K, bs, ⟨-, hbs, hdv, -⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hR
