@@ -1283,13 +1283,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
   `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. After a wake, a spurious
   return or a mismatch, `__ulock_wait*` returns `--ull_nwaiters` (xnu-12377.121.6
-  `sys_ulock.c:826`), or `-EFAULT` for a word that is not resident (`:652–663`). The model
-  leaves both to the oracle: one more stop, then `-EFAULT` or any non-negative `c_int`. Its
-  `ENOMEM` path (`:636`) is unreachable, because `zalloc(Z_WAITOK)` never fails from a zone
-  that is not exhaustible. Its `EDOM` path (`:646`) needs another opcode at the key. That
-  happens only at a `std.Thread.Mutex` word (`os_unfair_lock`, the STD-06 hand rows), which is
-  a recorded model gap
-  ([S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)).
+  `sys_ulock.c:826`), or `-EFAULT` for a word that is not resident. The model leaves both to
+  the oracle: one more stop, then `-EFAULT` or any non-negative `c_int`. `ENOMEM` is
+  unreachable. `EDOM` at a `std.Thread.Mutex` word (the STD-06 hand rows) is a recorded model
+  gap ([S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)). The sources
+  are in the `ZigLean/Os/Futex.lean` module doc.
   Other commands, flags and `val2` are outside the model
   (`.unspecified`). The translator binds `os.linux.futex_4arg`
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/

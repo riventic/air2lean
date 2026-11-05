@@ -121,7 +121,7 @@ def racyKid : Tgt → ConcM Tgt Unit := fun _ => lift (store 4 p0 (1 : BitVec 32
 def ulockMismatch : List String :=
   outcomes (cap := 50) noKids (do let p ← word 3; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0) hex32
 #guard ulockMismatch.length == 50 && ulockMismatch.contains "-14" && ulockMismatch.contains "48" &&
-  ulockMismatch.all fun s => s == "-14" || (s.toInt?.map fun i => decide (0 ≤ i)).getD false
+  ulockMismatch.all fun s => s == "-14" || s.toInt?.any (0 ≤ ·)
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 1) hex32 ==
   ["Zig.Error.unspecified"]
 -- macOS address validation (S6, `sys_ulock.c`): a null or unaligned WAIT and a null WAKE are

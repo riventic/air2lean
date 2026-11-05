@@ -340,16 +340,25 @@ def ulockAddr (addr : Option Ptr) (aligned : Bool) : MemM (Option Ptr) := do
 /-- The number of non-negative `c_int`s, `[0, 2^31)`: the values of `--ull_nwaiters`. -/
 def ulockWaiters : Nat := 2 ^ 31
 
+/-- Option `c` of a wait's result pick: `0` is `-EFAULT`, `c + 1` is `--ull_nwaiters = c`. -/
+def ulockCode (c : Nat) : BitVec 32 := if c = 0 then negErrno32 E.FAULT else BitVec.ofNat 32 (c - 1)
+
 /-- The return code of a wait that ended with `r` (module doc). After a wake, a spurious return or
 a mismatch the oracle picks option `0`, `-EFAULT` (a word that is not resident), or option
 `c + 1`, `--ull_nwaiters = c` (`sys_ulock.c:826`, any non-negative `c_int`). Else `-EINTR` or
 `-ETIMEDOUT`. -/
 def ulockResult : WaitResult → ConcM Tgt (BitVec 32)
-  | .woken | .mismatch => do
-    let c ← pick fun _ => ulockWaiters + 1
-    return if c = 0 then negErrno32 E.FAULT else BitVec.ofNat 32 (c - 1)
+  | .woken | .mismatch => return ulockCode (← pick fun _ => ulockWaiters + 1)
   | .interrupted => return negErrno32 E.INTR
   | .timedOut => return negErrno32 E.TIMEDOUT
+
+/-- The return codes `s` of a wait that ended with `r` (`ulockResult`): `-EFAULT` or any
+non-negative `c_int` after a wake, a spurious return or a mismatch, else `-EINTR` or
+`-ETIMEDOUT`. -/
+def WaitCode : WaitResult → BitVec 32 → Prop
+  | .woken, s | .mismatch, s => s = negErrno32 E.FAULT ∨ 0 ≤ s.toInt
+  | .interrupted, s => s = negErrno32 E.INTR
+  | .timedOut, s => s = negErrno32 E.TIMEDOUT
 
 /-- The shared part of `__ulock_wait2`/`__ulock_wait`: the wait's `ulockResult`, or `-EINVAL`
 for a null or unaligned address (module doc). -/

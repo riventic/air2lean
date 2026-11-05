@@ -268,20 +268,16 @@ def wakeCode : Option Nat → BitVec 32
 def wakeMax (op : BitVec 32) : Option Nat :=
   if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none
 
-/-- The return codes `s` of a wait that ended with `r` (`ulockResult`): `-EFAULT` or any
-non-negative `c_int` after a wake, a spurious return or a mismatch, else `-EINTR` or
-`-ETIMEDOUT`. -/
-def WaitCode : WaitResult → BitVec 32 → Prop
-  | .woken, s | .mismatch, s => s = negErrno32 E.FAULT ∨ 0 ≤ s.toInt
-  | .interrupted, s => s = negErrno32 E.INTR
-  | .timedOut, s => s = negErrno32 E.TIMEDOUT
-
-/-- A waiter count of the oracle is a non-negative `c_int`. -/
-theorem waiters_toInt_nonneg {c : Nat} (h : c < ulockWaiters) :
-    0 ≤ (BitVec.ofNat 32 c).toInt := by
-  unfold ulockWaiters at h
-  rw [BitVec.toInt_eq_toNat_of_lt (by rw [BitVec.toNat_ofNat]; omega)]
-  exact Int.natCast_nonneg _
+/-- Each option of a wait's result pick is `-EFAULT` or a non-negative `c_int`: a return code of
+a wake or a mismatch (`WaitCode`). -/
+theorem ulockCode_waitCode {c : Nat} (h : c < ulockWaiters + 1) :
+    ulockCode c = negErrno32 E.FAULT ∨ 0 ≤ (ulockCode c).toInt := by
+  unfold ulockCode
+  split
+  · exact .inl rfl
+  · unfold ulockWaiters at h
+    rw [BitVec.toInt_eq_toNat_of_lt (by rw [BitVec.toNat_ofNat]; omega)]
+    exact .inr (Int.natCast_nonneg _)
 
 end Darwin
 
@@ -416,10 +412,26 @@ theorem WP.ulockResult {r : WaitResult} {Q : BitVec 32 → (ThreadId → γ) →
     refine WP.bind (WP.sync (fun k hk => ?_) hcost)
     obtain ⟨g, hg, hc⟩ := h (by simp) k hk
     refine ⟨g, hg, fun G₁ m₁ hg₁ hi₁ ht₁ c hcr => WP.pure' (hc G₁ m₁ hg₁ hi₁ ht₁ _ ?_)⟩
-    have hc : c < Darwin.ulockWaiters + 1 := hcr.elim id fun ⟨h0, _⟩ => by simp [Darwin.ulockWaiters] at h0
-    split
-    · exact .inl rfl
-    · exact .inr (Darwin.waiters_toInt_nonneg (by omega))
+    have hlt : c < Darwin.ulockWaiters + 1 :=
+      hcr.elim id fun ⟨h0, _⟩ => by simp [Darwin.ulockWaiters] at h0
+    exact Darwin.ulockCode_waitCode hlt
+
+open Os in
+/-- **A macOS wait's return code at a protocol whose invariant survives a stop**: the thread keeps
+its ghost value `g` over the oracle's stop (`WP.ulockResult`). A protocol supplies only `hstay`,
+that its invariant holds at a stop of a thread that exists, with `current := t` (`FLock.Fits.curT`
+for every lock-based protocol). -/
+theorem WP.ulockResult_stay {r : WaitResult} {g : γ}
+    (hstay : ∀ G₁ m₁, P.inv G₁ m₁ → t < m₁.threads.size → P.inv G₁ { m₁ with current := t })
+    (hc : m.current = t) (hi : P.inv (upd G t g) m)
+    {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ d, d ≤ n → ∀ s G₁ m', Darwin.WaitCode r s → m'.current = t →
+      P.inv (upd G₁ t g) m' → Q s G₁ m' d)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n :=
+  WP.ulockResult (fun _ k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht s hs =>
+      h k (by omega) s G₁ _ hs rfl (by rw [← hg₁, upd_same]; exact hstay G₁ m₁ hi₁ ht)⟩)
+    (fun _ s hs => h n (Nat.le_refl _) s G m hs hc hi) hcost
 
 /-! ## Address validation -/
 
