@@ -1439,14 +1439,24 @@ os._exit(0)
         # Behind a merge guard (which needs no running workload to end), ahead of an exclusive one
         # (which waits for the elastic workload, so for its lifeline).
         self.assertTrue(first.ticket.endswith("-" + guard.LEAF))
-        # A guard of an older checkout drains behind every entry of `merge/`: the lifeline's mirror
-        # comes first there, and new guards leave it out.
-        self.assertEqual(sorted(os.listdir(self.tickets)), [first.mirror[0], merge.ticket, exclusive.ticket])
-        self.assertTrue(first.mirror[0].startswith("%020d-" % 0))
-        self.assertEqual(merge.drain_tickets(), [merge.ticket, exclusive.ticket])
         self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
+        self.assertIsNone(first.mirror)  # not its turn: older guards drain behind the merge ticket anyway
         merge.leave_queue()
         self.assertTrue(first.my_turn() and not exclusive.my_turn())
+        # Its turn, and no head that knows lifelines: a guard of an older checkout may keep the
+        # queue from it. It mirrors its ticket first in `merge/`, where those guards drain behind
+        # every entry; new guards leave the mirror out.
+        first.mirror_lifeline()
+        self.assertEqual(sorted(os.listdir(self.tickets)), [first.mirror[0], exclusive.ticket])
+        self.assertTrue(first.mirror[0].startswith("%020d-" % 0))
+        self.assertEqual(exclusive.drain_tickets(), [exclusive.ticket])
+        heads = first.heads
+        for content, mirrored in (({"pid": 1, "unmet": 0, "need": 2, "lifeline_aware": True}, False),
+                                  ({"pid": 1, "unmet": 0, "need": 2}, True)):  # a new head, an older one
+            with self.subTest(content=content), guard.publish_entry(heads, guard.entry_name(), content,
+                                                                     lambda path: path.open("a")):
+                first.mirror_lifeline()
+                self.assertEqual(first.mirror is not None, mirrored)
         first.hold_queue(True)  # its head: the mirror goes, older guards backfill beside it
         self.assertEqual(os.listdir(self.tickets), [exclusive.ticket])
         first.release()

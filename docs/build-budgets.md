@@ -219,10 +219,14 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   On the remote host (2026-11-05) a drain-style lifeline of an unmeasured part (11 slots, 20 of
   28 held) made 7 lane jobs wait 8 to 19 minutes with 4.7 of 24 GB in use. Those older guards
   do not see `lifeline-tickets/`, though, and would keep the queue from a lifeline (a large
-  head or an exclusive one, until its `--lock-wait`). So while a lifeline does not hold the
-  queue it mirrors its ticket in `merge/` under a name for time 0, which they drain behind first.
-  New guards ignore the mirror, and it goes once the lifeline holds the queue, so they drain
-  only for that hand-over. The mirror goes once no checkout before PR #661 runs a guard. A part
+  head or an exclusive one, until its `--lock-wait`). So a lifeline whose turn it is mirrors its
+  ticket in `merge/` under a name for time 0, which they drain behind first. It does so only
+  while it does not hold the queue and no queue head that knows lifelines publishes its
+  reservation: new heads mark their `heads/` entry `lifeline_aware`. New guards ignore the
+  mirror, and it is withdrawn as soon as that no longer holds. So older guards drain only while
+  one of them stands in the lifeline's way, never while the lifeline waits for a head that may
+  lead (the first version of the mirror did, and made two lane jobs wait beside 10 free slots on
+  the remote host). The mirror goes once no checkout before PR #661 runs a guard. A part
   of a running workload waits like a normal guard: the
   workload yields memory to lane jobs between its processes. A background workload (the health
   run) gets one part at a time ahead of others through its lifeline; its other parts wait for an

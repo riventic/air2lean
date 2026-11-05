@@ -86,11 +86,12 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   queue head, except for the normal guards that began to wait before it and fit beside the
   elastic bases (`Admission.my_turn`): those are admitted while every elastic workload waits, so
   each comes first once. Normal guards backfill beside its reservation as beside any head. A
-  lifeline not holding the queue mirrors its ticket in `merge/` for guards of older checkouts
-  (`Admission.mirror_lifeline`). So every elastic workload progresses: some part of it runs, or
-  its lifeline comes up and finds PROCESS_MIB that no base holds once its ramp has passed and the
-  running workloads, backfilled ones included, end (each bounded by its --timeout); an elastic
-  guard with no room waits outside the queue and holds nothing. Where the budget has no such
+  lifeline whose turn it is mirrors its ticket in `merge/` while a guard of an older checkout
+  may keep the queue from it (`Admission.mirror_lifeline`). So every elastic workload
+  progresses: some part of it runs, or its lifeline comes up and finds PROCESS_MIB that no base
+  holds once its ramp has passed and the running workloads, backfilled ones included, end (each
+  bounded by its --timeout); an elastic guard with no room waits outside the queue and holds
+  nothing. Where the budget has no such
   room, or inside a guard that is not elastic, `elastic_plan` (`--elastic-plan BASE`) tells the
   scripts to run one plain admission instead.
 Never take a private lock lane (another AIR2LEAN_BUILD_LOCK) to get around a wait: the budget
@@ -1054,12 +1055,16 @@ class Admission:
         self.mirror_lifeline()
 
     def mirror_lifeline(self):
-        """A queued lifeline that does not hold the queue mirrors its ticket in `<lock>.d/merge/`,
-        named for time 0 (first in name order) and ignored by `drain_tickets`: guards of checkouts
-        before lifeline tickets read it as the oldest drain ticket and give the queue back, so none
-        of them keeps the queue from it. It is withdrawn once the lifeline holds the queue, and
-        those guards backfill beside its reservation again. Delete this once no such checkout runs."""
-        wanted = self.priority == LEAF and self.ticket and not self.holds_queue
+        """Guards of checkouts before lifeline tickets do not see them, so one of them may keep the
+        queue from a lifeline. A queued lifeline whose turn it is (`my_turn`), while it does not
+        hold the queue and no queue head that knows lifelines publishes its reservation
+        (`lifeline_aware`), mirrors its ticket in `<lock>.d/merge/`. The mirror is named for time
+        0 (first in name order) and ignored by `drain_tickets`; those guards read it as the oldest
+        drain ticket and give the queue back. It is withdrawn as soon as that no longer holds, so
+        they drain only while one of them stands in the lifeline's way, never while it waits for a
+        head that may lead. Delete this once no such checkout runs."""
+        wanted = self.priority == LEAF and self.ticket and not self.holds_queue and self.my_turn() \
+            and not any(entry.get("lifeline_aware") for entry in held_entries(self.heads).values())
         if wanted and self.mirror is None:
             name = entry_name(LEAF, at=0)
             self.mirror = (name, publish_entry(self.tickets, name, {}, lambda path: path.open("a")))
@@ -1103,7 +1108,7 @@ class Admission:
         """As the waiting queue head, publish the slots it reserves but does not hold yet (unmet)
         and those it still lacks (need). A new entry, then the old one goes: a reader may count
         both, never neither."""
-        content = {"pid": os.getpid(), "unmet": unmet, "need": need}
+        content = {"pid": os.getpid(), "unmet": unmet, "need": need, "lifeline_aware": True}
         if self.head and self.head[2] == content:
             return
         name = entry_name()
@@ -1294,6 +1299,7 @@ class Admission:
                 self.waited = True
                 self.announce()
             self.take_lifeline()  # a sub-admission queues with a lifeline ticket once it holds it
+            self.mirror_lifeline()  # what the lifeline waits for changes while it waits
             if publish and self.priority != "background":
                 self.publish_waiting()  # until its admission ends the wait (`run`)
             time.sleep(min(0.05, self.a.lock_wait))
