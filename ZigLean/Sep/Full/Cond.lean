@@ -611,6 +611,7 @@ theorem _root_.Zig.Full.FLock.Fits.enterEn (hC : L.Fits (C.prim L) P U ok) {G : 
   have hnq : ∀ w ∈ m.waiters, w.1 ≠ t := by
     have := hL.w.notQ (t := t) (show L.ph (upd G t g t) ≠ .wait by rw [upd_self, hgh]; decide)
       (show L.ph (upd G t g t) ≠ .away by rw [upd_self, hgh]; decide)
+      (show L.ph (upd G t g t) ≠ .holdsAway by rw [upd_self, hgh]; decide)
     exact FLock.notQ_mem this
   have hI₀ := hC.wInv _ _ _ hU
   have hI := hI₀.quiet (t := t) (g' := C.set g .en) (m' := m)
@@ -622,7 +623,7 @@ theorem _root_.Zig.Full.FLock.Fits.enterEn (hC : L.Fits (C.prim L) P U ok) {G : 
       · rfl
       · have h1 := hI₀.crit u hc
         have h2 : L.ph (upd G t g t) = .holds := by rw [upd_self, hgh]
-        exact absurd (hL.w.one u t h1 h2) hu⟩)
+        exact absurd (hL.w.one u t (LPh.held_of_holds h1) (LPh.held_of_holds h2)) hu⟩)
     (fun _ => (hL.ht (t := t) (by rw [upd_self, hgh]; decide)).1)
     (fun _ _ h => by rw [C.ph_set] at h; cases h)
   rw [upd_upd] at hI
@@ -650,7 +651,8 @@ theorem wp_ldEp (hC : L.Fits (C.prim L) P U ok) (hg : C.ph g = .en)
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh hw' hw₀ hct hrun hA _hS _hR hL => by
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hms : C.MStep C.Ep t m₁ m' := mstep_op hc₁ hw₀ hct (by rcases hrun with ⟨c, hr⟩; exact .inl ⟨c, _, _, hr⟩) hw' (.inl hh)
-      obtain ⟨hI, hnq⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide) hop.waiters hL
+      obtain ⟨hI, hnq⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide)
+        (by rw [hg₁, hgh]; decide) hop.waiters hL
       have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
       refine h k hk G₁ m' b j (hop.current.trans hc₁) (hC.backC (.inr rfl) hg₁
         (by rw [hg]; exact True.intro) (by rw [hg]; exact hfl) hU hwL hY hms (.inl hh) hL ?_)
@@ -686,7 +688,8 @@ theorem _root_.Zig.Full.FLock.Fits.afterReg (hC : L.Fits (C.prim L) P U ok)
     (hh : C.S.hist m' = (C.S.hist m₁).push (Word.rmwEnt m' t ord (C.lastS m₁) (old + 1))) :
     RegOld old ∧ P.inv (upd G₁ t (C.set g (.reg i (C.S.hist m₁).size false e))) m' := by
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
-  obtain ⟨hI, -⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide) hop.waiters hL
+  obtain ⟨hI, -⟩ := hC.atOp hU (by rw [hg₁, hgh]; decide) (by rw [hg₁, hgh]; decide)
+        (by rw [hg₁, hgh]; decide) hop.waiters hL
   have hcr : (C.ph (G₁ t)).crit = true := by rw [hg₁, hg]; rfl
   have hold : val (C.lastS m₁) = old := val_of hv
   have hroom := hI.room t hcr
@@ -1042,9 +1045,10 @@ theorem _root_.Zig.Full.FLock.Fits.enterSl (hC : L.Fits (C.prim L) P U ok) {G : 
   obtain ⟨rX, hL, hU⟩ := (hC.inv _ _).mp hi
   obtain ⟨-, rY, rfl, hY⟩ := (hC.wRest (.inl rfl)) _ _ _ hU
   have hI := hC.wInv _ _ _ hU
-  have hlt : L.ph (upd G t g t) ≠ .wait ∧ L.ph (upd G t g t) ≠ .away := by
+  have hlt : L.ph (upd G t g t) ≠ .wait ∧ L.ph (upd G t g t) ≠ .away ∧
+      L.ph (upd G t g t) ≠ .holdsAway := by
     rw [upd_self]; rcases hgo with h | h <;> rw [h] <;> decide
-  have hnq : ∀ w ∈ m.waiters, w.1 ≠ t := FLock.notQ_mem (hL.w.notQ hlt.1 hlt.2)
+  have hnq : ∀ w ∈ m.waiters, w.1 ≠ t := FLock.notQ_mem (hL.w.notQ hlt.1 hlt.2.1 hlt.2.2)
   have hI' := hI.quiet (t := t) (g' := C.set g (.sl (C.S.hist m) (m.clocks[t]!))) (m' := m)
     (by rw [upd_self, hgx]; trivial) (by rw [C.ph_set]; trivial) rfl rfl rfl rfl rfl
     (fun _ => VClock.le_refl _) hnq (fun i e h => by rw [C.ph_set] at h; cases h)
@@ -1097,6 +1101,7 @@ theorem _root_.Zig.Full.FLock.Fits.afterReadSl (hC : L.Fits (C.prim L) P U ok)
     rw [hp]
     have hlp := hI.lp t (by rw [hgt]; rfl)
     obtain ⟨-, hnq⟩ := hC.atOp hU (by rcases hlp with h | h <;> rw [h] <;> decide)
+      (by rcases hlp with h | h <;> rw [h] <;> decide)
       (by rcases hlp with h | h <;> rw [h] <;> decide) hop.waiters hL
     exact hC.backC (.inl rfl) hg₁ (by rw [hg]; exact True.intro) (by rw [hg]; exact True.intro) hU hwL hY hms
       (.inl hE) hL (hI.quiet (t := t) (g' := C.set g .out) (m' := m') (by rw [hgt]; trivial)
@@ -1363,12 +1368,13 @@ theorem _root_.Zig.Full.FLock.Fits.liveC (hC : L.Fits (C.prim L) P U ok) {G : Th
     P.Live t G m := by
   intro _ hall
   obtain ⟨rX, hL, hU⟩ := (hC.inv _ _).mp hi
-  have hnw := hC.noWaits hL hall
+  have hnw := hC.noWaits hL hU hall
   exact (hC.wInv _ _ _ hU).noDeadlock (fin := P.fin) (joins := P.joins) hC.kfin hC.kjoins
     (fun w hw he => hnw (Array.any_eq_true'.mpr ⟨w, hw, by simp [he]⟩))
     (fun u hu => hL.w.notQ (t := u)
       (show L.ph (G u) ≠ .wait by rcases hu with hu | hu <;> rw [hu] <;> decide)
-      (show L.ph (G u) ≠ .away by rcases hu with hu | hu <;> rw [hu] <;> decide)) hall h
+      (show L.ph (G u) ≠ .away by rcases hu with hu | hu <;> rw [hu] <;> decide)
+      (show L.ph (G u) ≠ .holdsAway by rcases hu with hu | hu <;> rw [hu] <;> decide)) hall h
 
 /-- A read at a word of the condition by `t` (`g`), which stays where it is. -/
 theorem _root_.Zig.Full.FLock.Fits.afterReadC (hC : L.Fits (C.prim L) P U ok)
@@ -1408,7 +1414,8 @@ theorem _root_.Zig.Full.FLock.Fits.retEp (hC : L.Fits (C.prim L) P U ok) {i jr :
   obtain ⟨-, rY, rfl, hY⟩ := (hC.wRest (.inr rfl)) _ _ _ hU
   have hnq : C.qd m₁ t = false := qd_false (hL.w.notQ (t := t)
     (show L.ph (G₁ t) ≠ .wait by rw [hg₁, hgo]; decide)
-    (show L.ph (G₁ t) ≠ .away by rw [hg₁, hgo]; decide))
+    (show L.ph (G₁ t) ≠ .away by rw [hg₁, hgo]; decide)
+    (show L.ph (G₁ t) ≠ .holdsAway by rw [hg₁, hgo]; decide))
   exact hC.backC (.inr rfl) hg₁ (by rw [hg]; exact ⟨rfl, Nat.le_refl _⟩) (by rw [hg]; exact True.intro)
     hU hL.w hY .same (.inl rfl) hL
     ((hC.wInv _ _ _ hU).ret (by rw [hg₁, hg]) (C.ph_set _ _) rfl rfl rfl rfl (fun _ _ => rfl) hnq

@@ -1096,10 +1096,10 @@ theorem Fits.back (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Lv Inv Move 
 invariant, `t` is not in the futex queue. -/
 theorem Fits.atOp (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Lv Inv Move ownAt) P U ok)
     {rX rX' : Res} (hU : U G₁ rX m₁) (hw : L.ph (G₁ t) ≠ .wait) (ha : L.ph (G₁ t) ≠ .away)
-    (hwait : m'.waiters = m₁.waiters) (hL : L.Inv G₁ rX' m') :
+    (hh : L.ph (G₁ t) ≠ .holdsAway) (hwait : m'.waiters = m₁.waiters) (hL : L.Inv G₁ rX' m') :
     Inv G₁ m₁ ∧ ∀ w ∈ m₁.waiters, w.1 ≠ t := by
   refine ⟨hK.wInv _ _ _ hU, ?_⟩
-  have := hL.w.notQ (t := t) hw ha
+  have := hL.w.notQ (t := t) hw ha hh
   rw [hwait] at this
   exact notQ_mem this
 
