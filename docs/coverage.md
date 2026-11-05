@@ -151,13 +151,10 @@ semantic support claims.
 * **Emission:** `dispatch-arm`, `erased-dispatch-arm`, `not-reached` (the tag is
   rejected earlier) or `missing-dispatch-arm`. A dispatch arm is a source match
   arm, not evidence that every operand type is emitted correctly.
-* **Semantics:** `interpreted` when `Air2Lean/Sem.lean` has an interpreter arm
-  for each of the tag's constructors, `outside-fragment` with the
-  `Sem.outsideFragment` reasons otherwise, `resolved-in-canon` or `not-decoded`
-  for a tag without constructors. Generation fails unless the arms and
-  `outsideFragment` partition the `Op` constructors (the V01 coverage lint). An
-  arm interprets its constructor for the semantics' value kinds only
-  ([air-semantics.md](air-semantics.md)).
+* **Semantics:** from the op table's `sem_outside_reason` (`Sem.outside?`, the
+  V01 coverage lint): `interpreted` when the AIR semantics interprets each of
+  the tag's constructors, `outside-fragment` with the reasons otherwise,
+  `resolved-in-canon` or `not-decoded` for a tag without constructors.
 * **Proofs:** constructor-symbol occurrences provide reviewer
   navigation. A hit can occur in comments or unrelated code; it is explicitly a
   symbol index, not a semantic implementation or theorem-coverage assertion.

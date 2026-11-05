@@ -6,6 +6,9 @@
 constructor of an `Op`, with an effect class and an emitter route; every `Op` constructor must
 be reachable from a tag; an unknown tag (also an unlisted `call*` variant) must be rejected,
 not decoded or skipped; and the classifier and the analyses that read it keep no wildcard arm.
+V01 coverage lint: `Sem.outside?` (exported as `sem_outside_reason`) is `none` for exactly the
+constructors with a top-level arm in `evalPure`/`evalMem`/`execInst` that is not only `stuck`
+(comments ignored, each alternative of an arm counted).
 
 usage: test_op_table.py [--self-test] <air2lean binary>
 `--self-test` runs only the source checks (no translator).
