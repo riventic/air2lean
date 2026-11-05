@@ -280,7 +280,7 @@ example : ∀ a < 3, ∀ b < 2,
     pure (r, ((← lift get).waitersAt k0).length)) (fun (r, k) => s!"{r.toInt} {k}")
     (m0 := threeWaiters) == ["-4 3", "0 0"]
 #guard outcomes noKids (do
-    ConcM.sync (.wake k0 2)
+    ConcM.sync (.wake p0 2)
     pure ((← lift get).waitersAt k0).length) toString (m0 := threeWaiters) == ["1"]
 -- Linux: `nr_wake` is an `int`, so at most 2^31 − 1 threads wake; a `u32` count above it reads
 -- as negative and wakes one, which is why std clamps with `@min(n, maxInt(i32))` (the library

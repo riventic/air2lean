@@ -33,9 +33,10 @@ A sleeper that a `tgkill`/`pthread_kill` (`ZigLean/Os/Thread.lean`, OSG-01) woke
 `interrupted`. A wake gives no happens-before edge: std reads the word again with an acquire.
 
 **Wake** (`futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at the
-key (audit finding #6: no FIFO order), which go on; the call returns their number. No memory
-access: the row formed the key (`FutexKey`, the domain and the `usize` address) before. macOS `__ulock_wake` also has the option `EINTR`
-with nobody woken (std retries).
+pointer's key (audit finding #6: no FIFO order), which go on; the call returns their number. No
+memory access: the key (`FutexKey`, the domain and the `usize` address, `Mem.keyAt`) is resolved
+in the waking step, at the memory of the pick, as the kernel forms it inside the call. macOS
+`__ulock_wake` also has the option `EINTR` with nobody woken (std retries).
 
 The return conventions are the ABI's: a Linux wrapper returns the raw `usize` (`-errno` on
 failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` return `-errno` as
@@ -246,12 +247,14 @@ def wakeAt (c : Nat) (k : FutexKey) (n : Option Nat) : MemM (Option Nat) := do
   wakeThreads ts
   return some ts.length
 
-/-- A futex wake of up to `n` waiters at the key `k` (`none`: all of them; module doc). With
-`spurious`, there is one more option, `none`: `EINTR`, nobody woken. -/
-def futexWake (k : FutexKey) (n : Option Nat) (spurious : Bool := false) :
+/-- A futex wake of up to `n` waiters at `p`'s key in the domain `shared` (`none`: all of them;
+module doc). With `spurious`, there is one more option, `none`: `EINTR`, nobody woken. The key is
+resolved in the waking step, at the memory where the oracle picks (`Mem.keyAt`; `.illegal` if
+`p`'s block does not exist, which the row's address check before rules out). -/
+def futexWake (p : Ptr) (shared : Bool) (n : Option Nat) (spurious : Bool := false) :
     ConcM Tgt (Option Nat) := do
-  let c ← pick fun m => wakeCount k n m + (if spurious then 1 else 0)
-  ConcM.liftMem (wakeAt c k n)
+  let c ← pick fun m => wakeCountAt p shared n m + (if spurious then 1 else 0)
+  ConcM.liftMem (do wakeAt c (← futexKeyOf p shared) n)
 
 /-! ## `struct timespec` -/
 
@@ -338,7 +341,7 @@ def futex_3arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) : ConcM Tg
   let a ← ConcM.liftMem (ptrAddr uaddr)
   if a % 4 ≠ 0 then return negErrno E.INVAL
   if let some e ← ConcM.liftMem (futexKey uaddr a (futex_op = FUTEX_WAKE)) then return e
-  let r ← futexWake ⟨futex_op = FUTEX_WAKE, futexAddr a⟩ (some (wakeLimit val))
+  let r ← futexWake uaddr (futex_op = FUTEX_WAKE) (some (wakeLimit val))
   return BitVec.ofNat 64 (r.getD 0)
 
 end Linux
@@ -414,8 +417,7 @@ def __ulock_wake (op : BitVec 32) (addr : Option Ptr) (val : BitVec 64) : ConcM 
       val ≠ 0 then
     throw .unspecified
   let some p ← ConcM.liftMem (ulockAddr addr false) | return negErrno32 E.INVAL
-  let a ← ConcM.liftMem (ptrAddr p)
-  match ← futexWake ⟨false, futexAddr a⟩ (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
+  match ← futexWake p false (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
       (spurious := true) with
   | none => return negErrno32 E.INTR
   | some 0 => return negErrno32 E.NOENT

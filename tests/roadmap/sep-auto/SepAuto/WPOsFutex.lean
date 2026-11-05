@@ -106,7 +106,7 @@ theorem aligned_wake_selection (P : Proto Tgt γ) (t : ThreadId) (G : ThreadId �
     (m : Mem) (d : Nat) (p : Ptr) (a : Int)
     (ha : (Zig.ptrAddr p).run m = pure (a, m)) (hal : a % 4 = 0) (hw : m.wordAt p = true)
     (Q : BitVec 64 → (ThreadId → γ) → Mem → Nat → Prop)
-    (h : P.WP t (Os.futexWake p (some (Linux.wakeLimit 1)) false : ConcM Tgt (Option Nat))
+    (h : P.WP t (Os.futexWake p false (some (Linux.wakeLimit 1)) false : ConcM Tgt (Option Nat))
       (fun r => Q (BitVec.ofNat 64 (r.getD 0))) G m d) :
     P.WP t (Linux.futex_3arg p 0x81 1) Q G m d := by
   fsym [h]

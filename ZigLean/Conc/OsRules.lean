@@ -9,7 +9,7 @@ import ZigLean.Simp
 Facts about `ZigLean/Os/Futex.lean` and `ZigLean/Os/Thread.lean` that client proofs (the planned
 `FutexSpec`, `docs/thread-io-translation.md` §4.1) use, and kernel-checked runs of the scheduler:
 
-* a wake's options are exactly the subsets of `min n k` of the `k` threads queued at the address,
+* a wake's options are exactly the subsets of `min n k` of the `k` threads queued at the key,
   there is always one (`wakeCount_pos`), and every thread it wakes was queued there
   (`wakeSets_mem`);
 * a wake and an interrupt touch only the wait queue and the interrupt set: no clock, footprint,
