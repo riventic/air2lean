@@ -566,7 +566,7 @@ theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U A)
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M (fun u => A (G₁ u)) → M.blocks = m₁.blocks → W.Holds m₁ e →
-      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.key m₁) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -579,7 +579,7 @@ theorem Fits.wordWaitStepTo (hP : L.Fits K P U ok) (hW : W.InRest U A)
     (h : ∀ G₁ m', m'.current = t → P.inv (upd G₁ t (K.pl.set g p)) m' → K' () G₁ m')
     {G₁ : ThreadId → γ} {m₁ : Mem} (hg₁ : G₁ t = L.set g .away rnil) (hi₁ : P.inv G₁ m₁)
     (hlv : A (L.set g .away rnil) := by trivial) :
-    P.Step t (.wait W.ptr e) G₁ m₁ K' := by
+    P.Step t (.wait W.ptr e false) G₁ m₁ K' := by
   have hph : L.ph (L.set g .away rnil) = .away := L.ph_set _ _ _
   -- `t` holds nothing at `out`, so `g` is `g` with the place `out`
   have hgo : L.set (L.set g .away rnil) .out rnil = g := by
@@ -649,7 +649,7 @@ theorem wp_wordWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M (fun u => A (G₁ u)) → M.blocks = m₁.blocks →
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
-      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.key m₁) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -685,7 +685,7 @@ theorem wp_wordWait (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL L
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M (fun u => A (G₁ u)) → M.blocks = m₁.blocks →
       W.Holds m₁ ((Packed.toBits e).setWidth 32) →
-      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.key m₁) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -743,7 +743,7 @@ theorem wp_wordOsWaitTo (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.Apar
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M (fun u => A (G₁ u)) → M.blocks = m₁.blocks → W.Holds m₁ e →
-      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.key m₁) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -815,7 +815,7 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL
       M = ({ m₁ with current := t } : Mem).recordAt W.b W.o 4 .atomicRead →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
       W.hist M = W.hist m₁ → W.Ok M (fun u => A (G₁ u)) → M.blocks = m₁.blocks → W.Holds m₁ e →
-      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.ptr) })
+      U G₁ (rsum (W.cellsR m₁) rY) { M with waiters := M.waiters.push (t, W.key m₁) })
     (hUo : ∀ G₁ rY m₁ M, G₁ t = L.set g .away rnil → U G₁ (rsum (W.cellsR m₁) rY) m₁ →
       L.WInv (L.pl G₁) m₁ → (∀ l, W.In l → rY.heap l = none) → m₁.waiters.any (·.1 == t) = false →
       (M.atomics = m₁.atomics ∧ M.seen = m₁.seen ∧ M.nextMsg = m₁.nextMsg) →
@@ -839,21 +839,24 @@ theorem wp_wordOsWait (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL
 the lock's invariant with the same rest, and the client shows its `U` after it (given its `U`
 and the lock's word invariant at the stop); a spurious
 `EINTR` (`spurious`, macOS) wakes nobody, and the protocol's invariant holds at the stop. -/
-theorem wp_wordOsWake (hP : L.Fits K P U ok) (hap : W.ApartL L.toLockWord) {w : Option Nat}
-    {spurious : Bool} (hi : P.inv (upd G t g) m)
+theorem wp_wordOsWake (hP : L.Fits K P U ok) (hW : W.InRest U A) (hap : W.ApartL L.toLockWord)
+    {w : Option Nat} {spurious : Bool} (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ rX m₁, G₁ t = g → U G₁ rX m₁ → L.WInv (L.pl G₁) m₁ →
-      (∀ cs m', ((Thread.futexWake W.ptr (Os.wakeSize w (m₁.waitersAt W.ptr).length) cs).run
+      (∀ cs m', ((Thread.futexWake (W.key m₁)
+          (Os.wakeSize w (m₁.waitersAt (W.key m₁)).length) cs).run
           { m₁ with current := t }).run = some (.ok ((), m')) → L.Inv G₁ rX m' →
-        Q (some (Os.wakeSize w (m₁.waitersAt W.ptr).length)) G₁ m' k) ∧
+        Q (some (Os.wakeSize w (m₁.waitersAt (W.key m₁)).length)) G₁ m' k) ∧
       (spurious = true → P.inv (upd G₁ t g) { m₁ with current := t } →
         Q none G₁ { m₁ with current := t } k))
     (hcost : P.cost = none := by first | rfl | assumption) :
-    P.WP t (Os.futexWake W.ptr w spurious : ConcM Tgt (Option Nat)) Q G m n := by
+    P.WP t (Os.futexWake W.ptr false w spurious : ConcM Tgt (Option Nat)) Q G m n := by
   refine WP.osFutexWake fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht => ?_⟩
   obtain ⟨rX, hiL, hU⟩ := (hP.inv _ _).mp hi₁
+  have hWo := (hW _ _ _ hU).1
   obtain ⟨hw, hsp⟩ := h k hk G₁ rX m₁ hg₁ hU hiL.w
-  refine ⟨fun cs m' hr => hw cs m' hr (hiL.wakeOff hap hr), fun hs => hsp hs ?_⟩
+  refine ⟨W.key m₁, hWo.keyAt, fun cs m' hr => hw cs m' hr (hiL.wakeOffKey (hiL.key_ne hWo hap) hr),
+    fun hs => hsp hs ?_⟩
   obtain ⟨-, -, -, hic⟩ := hP.curT t hi₁ ht
   rw [← hg₁, upd_same]; exact hic
 
@@ -948,7 +951,8 @@ theorem wp_liftPartWCur (hP : L.Fits K P U ok) (hW : W.InRest U A) {α : Type} {
   exact h a m' r' rY hr hq hc' hU hL hY hs hcells hw' hh hL'
 
 /-- A thread not in the futex queue. -/
-theorem notQ_mem {ws : Array (ThreadId × Ptr)} {t : ThreadId} (h : ws.any (·.1 == t) = false) :
+theorem notQ_mem {α : Type} {ws : Array (ThreadId × α)} {t : ThreadId}
+    (h : ws.any (·.1 == t) = false) :
     ∀ w ∈ ws, w.1 ≠ t := fun w hw e => by
   have : ws.any (·.1 == t) = true := Array.any_eq_true'.mpr ⟨w, hw, by simp [e]⟩
   rw [h] at this; cases this
@@ -960,7 +964,7 @@ theorem woken_erase {ws : Array ThreadId} {t u : ThreadId} (hu : u ≠ t) :
 
 /-- **A futex wake at `p` keeps the queue at another futex `q` exactly**, when a thread queued at
 `q` is not queued at `p` (`hone`; the wake drops a woken thread's entries by its id). -/
-theorem futexWake_waitersAt {p q : Ptr} {n : Nat} {cs : List Nat} {m m' : Mem}
+theorem futexWake_waitersAt {p q : FutexKey} {n : Nat} {cs : List Nat} {m m' : Mem}
     (hone : ∀ w ∈ m.waiters, w.2 = q → ∀ w' ∈ m.waiters, w'.1 = w.1 → w'.2 ≠ p)
     (h : ((Thread.futexWake p n cs).run m).run = some (.ok ((), m'))) :
     m'.waiters.filter (·.2 == q) = m.waiters.filter (·.2 == q) := by

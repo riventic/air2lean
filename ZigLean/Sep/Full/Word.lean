@@ -117,6 +117,11 @@ theorem ApartL.ptr_ne {W : Word 32 4} {L : LockWord} (hap : W.ApartL L) : W.ptr 
   · exact h e.1.symm
   · exact h e.2.symm
 
+/-- The word's private futex key is `Word.key`. -/
+theorem Ok.keyAt {m : Mem} (hW : W.Ok m A) : m.keyAt W.ptr false = some (W.key m) := by
+  obtain ⟨blk, hb, -⟩ := hW.blk
+  exact Mem.keyAt_wordKey hb W.o false
+
 /-- A word apart from the lock's has another futex key, in either domain, in a memory with the live
 layout: two live bytes have different keys (`Mem.keyAt_ne`, premise OSF-02). -/
 theorem ApartL.keyAt_ne {L : LockWord} {m : Mem} (hap : W.ApartL L) (hl : m.LiveLayout)
@@ -286,6 +291,11 @@ theorem Inv.layout {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m
 theorem Inv.keyAt_ne {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hW : W.Ok m A)
     (hap : W.ApartL L.toLockWord) (sh : Bool) : m.keyAt W.ptr sh ≠ some (L.key m) :=
   hap.keyAt_ne hi.layout hW hi.w.blk sh
+
+/-- A word apart from the lock's has another private key (`Inv.keyAt_ne`). -/
+theorem Inv.key_ne {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) (hW : W.Ok m A)
+    (hap : W.ApartL L.toLockWord) : W.key m ≠ L.key m := fun e =>
+  hi.keyAt_ne hW hap false (by rw [hW.keyAt, e])
 
 /-- A rest with the same bytes up to `Cell.norm` and the same knowledge and ghost state. -/
 theorem Inv.congrX {G : ThreadId → γ} {rX rX' : Res} {m : Mem} (hi : L.Inv G rX m)
@@ -521,6 +531,17 @@ theorem Inv.spuriousOff {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     L.Inv (upd G t (L.set (G t) .out rnil)) rX { m with current := t } :=
   (hi.cur t).toOut rfl (by rw [hph]; decide) (by rw [hph]; decide) (hi.w.spuriousOff (t := t) (by exact hph) hq).2
 
+/-- A futex wake by thread `t` at a key other than the lock word's: the lock's invariant holds. -/
+theorem Inv.wakeOffKey {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {k : FutexKey}
+    {n : Nat} {cs : List Nat} (hi : L.Inv G rX m) (hk : k ≠ L.key m)
+    (h : ((Thread.futexWake k n cs).run { m with current := t }).run = some (.ok ((), m'))) :
+    L.Inv G rX m' := by
+  have hw := hi.w.wakeOff hk h
+  have hm' := Proto.modify_ok h
+  subst hm'
+  exact hi.requeue t _ _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl) (fun _ h => h)
+    (fun _ => Iff.rfl)
+
 /-- A futex wake by thread `t` at a shared word apart from the lock's (`futexWakeC`, at the word's
 private key in the memory of the wake): the lock's invariant holds. -/
 theorem Inv.wakeOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
@@ -528,18 +549,8 @@ theorem Inv.wakeOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
     (h : ((Thread.futexWakePtr W.ptr k cs).run { m with current := t }).run =
       some (.ok ((), m'))) :
     L.Inv G rX m' := by
-  cases hk : m.keyAt W.ptr false with
-  | none =>
-    rw [Thread.futexWakePtr_none (m := { m with current := t }) hk] at h
-    cases h
-    exact hi.cur t
-  | some k' =>
-    rw [Thread.futexWakePtr_eq (m := { m with current := t }) hk] at h
-    have hw := hi.w.wakeOff (fun e => hi.keyAt_ne hW hap false (by rw [hk, e])) h
-    have hm' := Proto.modify_ok h
-    subst hm'
-    exact hi.requeue t _ _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl) (fun _ h => h)
-      (fun _ => Iff.rfl)
+  rw [Thread.futexWakePtr_eq (m := { m with current := t }) hW.keyAt] at h
+  exact hi.wakeOffKey (hi.key_ne hW hap) h
 
 end FLock
 
