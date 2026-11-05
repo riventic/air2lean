@@ -25,8 +25,9 @@ same way.
 
 **Linux exit** (OST-02). The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`:
 the entry function, then the kernel's `CHILD_CLEARTID` in one turn (`cloneExit`): a release store
-of `0` to the `i32` at `ctid`, which carries the thread's final clock, a wake of every waiter at
-`ctid`, and the end of the join obligation (`ThreadRec.joined`, so `checkJoinedByChild` of the
+of `0` to the `i32` at `ctid`, which carries the thread's final clock, a wake of at most one
+waiter at `ctid` (the oracle's choice; Linux's `mm_release` wakes with count 1), and the end of
+the join obligation (`ThreadRec.joined`, so `checkJoinedByChild` of the
 parent passes only after the thread exited). Std's translated `LinuxThreadImpl.join` (a `seq_cst`
 load loop and `futex_4arg` on `child_tid`) gets the join edge from the store; the scheduler's
 `join` is not used on Linux. A detached thread's `freeAndExit` (inline `munmap` + `exit`) is not
@@ -174,13 +175,17 @@ def clone (env : Env) (t : Tgt) (stack : BitVec 64) (flags : BitVec 32) (ptid : 
 
 /-- The kernel's `CHILD_CLEARTID` when a `clone` thread exits (module doc): one turn. The
 thread's native stack goes back to its mapping first (`releaseStack`), so the release store
-orders it before the joiner's `munmap`. -/
+orders it before the joiner's `munmap`. The one pick chooses both the store's slot (`c / w`) and
+which waiter the wake of at most one wakes (`c % w`, among the `w ≥ 1` options of
+`wakeCount ctid (some 1)`, read in the memory the pick counted; neither `releaseStack` nor the
+store changes the queue): Linux's `mm_release` calls `FUTEX_WAKE` with count 1. -/
 def cloneExit (ctid : Ptr) : ConcM Tgt Unit := do
-  let c ← pick (storeCount 32 .release 4 ctid)
+  let c ← pick fun m => wakeCount ctid (some 1) m * storeCount 32 .release 4 ctid m
   ConcM.liftMem do
+    let w := wakeCount ctid (some 1) (← get)
     releaseStack
-    atomicStoreAt c .release 4 ctid (0 : BitVec 32)
-    wakeAll ctid
+    atomicStoreAt (c / w) .release 4 ctid (0 : BitVec 32)
+    let _ ← wakeAt (c % w) ctid (some 1)
     markExited
 
 /-- The dispatcher of a `clone` target: the entry function, then the exit (module doc). -/

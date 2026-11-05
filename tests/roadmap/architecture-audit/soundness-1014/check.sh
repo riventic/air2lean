@@ -56,12 +56,17 @@ if wanted F2-contract-fee-false; then
 fi
 lean_case S5-futex-wake-count futex-wake/WakeCount.lean
 if wanted S6-futex-primitive; then
-  # Alignment regression plus three remaining witnesses: setup failure never means fixed.
+  # The corrected cases are positive regressions: one that fails to elaborate never means fixed.
+  if ! lake env lean "$here/futex-primitive/Regression.lean"; then
+    echo "S6-futex-primitive: FAILED -- a corrected-model regression did not elaborate" >&2
+    exit 1
+  fi
+  # The open witnesses must still elaborate while open: setup failure never means fixed.
   if lake env lean "$here/futex-primitive/CurrentModel.lean"; then
-    echo "S6-futex-primitive: alignment fixed; S6 open -- three remaining primitive witnesses elaborate"
+    echo "S6-futex-primitive: address validation and CHILD_CLEARTID fixed; S6 open -- two key witnesses elaborate"
     open=1
   else
-    echo "S6-futex-primitive: FAILED -- alignment regression or remaining witnesses did not elaborate" >&2
+    echo "S6-futex-primitive: FAILED -- the remaining witnesses did not elaborate" >&2
     exit 1
   fi
 fi

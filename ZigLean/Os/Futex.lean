@@ -16,7 +16,7 @@ std-mode futex rows.
 **Wait** (`futexWait`). One `pick`, then in the same turn the kernel's compare: an atomic read of
 the `u32` at `p` that reads the newest message (`atomicLoadAt 0 .relaxed`: an atomic-read
 footprint, so a racing plain write is `.illegal`, and `observe`, so the waiter's view moves on;
-audit finding #14). A bad pointer (no live block, out of bounds, misaligned) is `.illegal` (std
+audit finding #14). A bad pointer that passed address validation (no live block, out of bounds) is `.illegal` (std
 treats `EFAULT` as an OS bug). If the word is not `expected`, the call returns `mismatch`
 (`EAGAIN`). Otherwise the oracle picks one of:
 
@@ -42,11 +42,34 @@ failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` r
 a `c_int`. Arguments that std never passes (other futex commands, flags, `val2`) are outside the
 model: `.unspecified`.
 
-The Linux WAIT/WAKE wrappers first resolve the numeric address and reject a remainder modulo
-four with `-EINVAL`, before an interrupt, pick, word read or queue change. WAIT copies and
-validates its optional timespec first. WAKE performs no word read: an aligned unmapped, zero
-or known freed address is not rejected by this alignment check. Other native address/VM
-errors are not exhaustively modelled here; existing conservative access failures stay.
+**Address validation** happens before an interrupt, pick, word read or queue change. The
+address the kernel receives is the pointer's numeric address as a `usize` (`futexAddr`).
+
+* **Linux.** WAIT first copies and validates its optional timespec. Both rows then follow
+  `get_futex_key` (Linux v6.16 `kernel/futex/core.c:521–628`, `Linux.futexKey`):
+  - an address that is not a multiple of four returns `-EINVAL`;
+  - then `access_ok` and the key. A private key needs a user address. A shared key (no
+    `FUTEX_PRIVATE_FLAG`) needs a writable page: `get_user_pages_fast`, for anonymous memory a
+    key of the address space and the address, distinct from the private key.
+
+  The model forms the key only where it knows that the kernel forms it: at a live writable word
+  of the model (`Mem.wordAt`), and, for a private key, at any address below the end of a block
+  that the run placed (`Mem.userBelow`, premise SEM-07). It returns `-EFAULT` only where no
+  `access_ok` passes: at an address with bits 63 and 55 set. That is a kernel address on x86_64,
+  also with LAM (whose `untagged_addr` keeps an address with bit 63 set), and on aarch64, also
+  under the tagged-address ABI (whose `untagged_addr` sign-extends bit 55). Any other address
+  would need native mapping or address-space knowledge that the model leaves open, for example
+  the read-only file-backed (inode) key of a shared request on a `const` global, an address above
+  every block, or a tagged aarch64 address. That is a conservative `.illegal` refusal: the model
+  says `.illegal` where native code returns `-EFAULT` or forms a key. Once the key forms, the
+  queue still matches waiters by pointer, not by key (audit S6, premise OSF-02).
+* **macOS** (xnu-12377.121.6, `bsd/kern/sys_ulock.c`). A WAIT with a null or unaligned address
+  returns `-EINVAL`. A WAKE with a null address returns `-EINVAL`, and an unaligned WAKE looks up
+  its key and finds no waiter. The key is the task and the address (`ULK_UADDR`). A live
+  writable word of the model is never null (SEM-07).
+
+Past validation, WAIT's word read keeps the existing conservative access failure. A bad
+pointer is `.illegal` where native code returns `-EFAULT`.
 -/
 
 namespace Zig
@@ -68,6 +91,7 @@ def SRCH : Nat := 3
 def INTR : Nat := 4
 def AGAIN : Nat := 11
 def NOMEM : Nat := 12
+def FAULT : Nat := 14
 def INVAL : Nat := 22
 def TIMEDOUT : Nat := 110
 end Linux.E
@@ -186,10 +210,6 @@ def futexWake (p : Ptr) (n : Option Nat) (spurious : Bool := false) : ConcM Tgt 
   let c ← pick fun m => wakeCount p n m + (if spurious then 1 else 0)
   ConcM.liftMem (wakeAt c p n)
 
-/-- Wake every thread queued at `p` (the kernel's wake after `CHILD_CLEARTID`): no choice. -/
-def wakeAll (p : Ptr) : MemM Unit := do
-  wakeThreads ((← get).waitersAt p)
-
 /-! ## `struct timespec` -/
 
 /-- A `timespec` (`{ sec: isize, nsec: isize }`, 16 bytes, both targets) as the kernel reads it:
@@ -201,9 +221,38 @@ def readTimespec (p : Ptr) : MemM (Option Nat) := do
   if sec.toInt < 0 ∨ nsec.toInt < 0 ∨ 1000000000 ≤ nsec.toInt then return none
   return some (sec.toNat * 1000000000 + nsec.toNat)
 
+/-! ## Address validation (module doc) -/
+
+/-- The address that the kernel receives for a pointer with numeric address `a`: its `usize`. -/
+def futexAddr (a : Int) : Nat := (a % 2 ^ 64).toNat
+
+/-- `p` is a live writable `u32` of the model: four live bytes of one live block that is not
+read-only, at an address that is a multiple of four (`Mem.accessW`). Natively it is a mapped,
+writable user word (premise SEM-07). -/
+def _root_.Zig.Mem.wordAt (m : Mem) (p : Ptr) : Bool :=
+  match (m.accessW p 4 4).run with
+  | some (.ok _) => true
+  | _ => false
+
+/-- The address `e - 1` is below the end of a block that the run placed, live or not: natively a
+user address (premise SEM-07), so `access_ok` passes for every address below `e`. -/
+def _root_.Zig.Mem.userBelow (m : Mem) (e : Nat) : Bool :=
+  m.blocks.any fun blk => decide (0 < blk.bytes.size ∧ e ≤ blk.addr + blk.bytes.size)
+
 /-! ## Linux (`std.os.linux`, x86_64) -/
 
 namespace Linux
+
+/-- `get_futex_key` (core.c:521–628) after the alignment check, at the pointer `p` with numeric
+address `a`, for a shared or a private key: `none` once the kernel forms the key, `-EFAULT` for
+an address that no `access_ok` admits (bits 63 and 55 set, module doc), `.illegal` where the native result
+needs knowledge that the model leaves open (module doc). No state change. -/
+def futexKey (p : Ptr) (a : Int) (shared : Bool) : MemM (Option (BitVec 64)) := do
+  let m ← get
+  let u := futexAddr a
+  if m.wordAt p || (!shared && m.userBelow (u + 4)) then return none
+  if 2 ^ 63 ≤ u && u.testBit 55 then return some (negErrno E.FAULT)
+  throw .illegal
 
 /-- `FUTEX_OP{ .cmd = .WAIT }` and `FUTEX_OP{ .cmd = .WAKE }`; `.private = true` adds `0x80`. -/
 def FUTEX_WAIT : BitVec 32 := 0
@@ -212,14 +261,17 @@ def FUTEX_PRIVATE : BitVec 32 := 0x80
 
 /-- `os.linux.futex_4arg(uaddr: *const anyopaque, futex_op: FUTEX_OP, val: u32,
 timeout: ?*const timespec) usize` with `cmd = .WAIT` (private or not): `0` (woken),
-`-EAGAIN`, `-EINTR`, `-ETIMEDOUT`, or `-EINVAL` for an invalid timeout or unaligned address.
-`futex_op` is the `FUTEX_OP`'s bits. -/
+`-EAGAIN`, `-EINTR`, `-ETIMEDOUT`, `-EINVAL` for an invalid timeout or unaligned address, or
+`-EFAULT` (`futexKey`). `futex_op` is the `FUTEX_OP`'s bits; without `FUTEX_PRIVATE` the key is
+shared. -/
 def futex_4arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) (timeout : Option Ptr) :
     ConcM Tgt (BitVec 64) := do
   if futex_op ≠ FUTEX_WAIT ∧ futex_op ≠ FUTEX_WAIT ||| FUTEX_PRIVATE then throw .unspecified
   if let some ts := timeout then
     if (← ConcM.liftMem (readTimespec ts)).isNone then return negErrno E.INVAL
-  if (← ConcM.liftMem (ptrAddr uaddr)) % 4 ≠ 0 then return negErrno E.INVAL
+  let a ← ConcM.liftMem (ptrAddr uaddr)
+  if a % 4 ≠ 0 then return negErrno E.INVAL
+  if let some e ← ConcM.liftMem (futexKey uaddr a (futex_op = FUTEX_WAIT)) then return e
   match ← futexWait uaddr val timeout.isSome with
   | .woken => return 0
   | .mismatch => return negErrno E.AGAIN
@@ -231,11 +283,13 @@ def futex_4arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) (timeout :
 def wakeLimit (val : BitVec 32) : Nat := if val.toInt ≤ 0 then 1 else val.toNat
 
 /-- `os.linux.futex_3arg(uaddr: *const anyopaque, futex_op: FUTEX_OP, val: u32) usize` with
-`cmd = .WAKE` (private or not): the number of threads woken, or `-EINVAL` for an unaligned
-numeric address (module doc). -/
+`cmd = .WAKE` (private or not): the number of threads woken, `-EINVAL` for an unaligned
+numeric address, or `-EFAULT` (`futexKey`; module doc). -/
 def futex_3arg (uaddr : Ptr) (futex_op : BitVec 32) (val : BitVec 32) : ConcM Tgt (BitVec 64) := do
   if futex_op ≠ FUTEX_WAKE ∧ futex_op ≠ FUTEX_WAKE ||| FUTEX_PRIVATE then throw .unspecified
-  if (← ConcM.liftMem (ptrAddr uaddr)) % 4 ≠ 0 then return negErrno E.INVAL
+  let a ← ConcM.liftMem (ptrAddr uaddr)
+  if a % 4 ≠ 0 then return negErrno E.INVAL
+  if let some e ← ConcM.liftMem (futexKey uaddr a (futex_op = FUTEX_WAKE)) then return e
   let r ← futexWake uaddr (some (wakeLimit val))
   return BitVec.ofNat 64 (r.getD 0)
 
@@ -249,12 +303,23 @@ namespace Darwin
 def UL_COMPARE_AND_WAIT_NO_ERRNO : BitVec 32 := 0x01000001
 def UL_WAKE_ALL : BitVec 32 := 0x100
 
+/-- `sys_ulock.c`'s address check: the pointer, or `none` (`EINVAL`) for a null address (no
+pointer, or one at address `0`) or, with `aligned`, one that is not a multiple of four (the
+32-bit ops' `lock_size - 1`; the 64-bit ops stay `.unspecified` before this check). A live
+writable word of the model passes without resolving its address: it is never null (SEM-07). -/
+def ulockAddr (addr : Option Ptr) (aligned : Bool) : MemM (Option Ptr) := do
+  let some p := addr | return none
+  if (← get).wordAt p then return some p
+  let u := futexAddr (← ptrAddr p)
+  return if u = 0 ∨ (aligned ∧ u % 4 ≠ 0) then none else some p
+
 /-- The shared part of `__ulock_wait2`/`__ulock_wait`: a non-negative result (`0`) for a wake, a
-spurious return or a mismatch; `-EINTR`, `-ETIMEDOUT`. -/
+spurious return or a mismatch; `-EINTR`, `-ETIMEDOUT`; `-EINVAL` for a null or unaligned address
+(module doc). -/
 def ulockWait (op : BitVec 32) (addr : Option Ptr) (value : BitVec 64) (timed : Bool) :
     ConcM Tgt (BitVec 32) := do
   if op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ∨ 2 ^ 32 ≤ value.toNat then throw .unspecified
-  let some p := addr | throw .illegal
+  let some p ← ConcM.liftMem (ulockAddr addr true) | return negErrno32 E.INVAL
   match ← futexWait p (value.setWidth 32) timed with
   | .woken | .mismatch => return 0
   | .interrupted => return negErrno32 E.INTR
@@ -275,12 +340,13 @@ def __ulock_wait (op : BitVec 32) (addr : Option Ptr) (val : BitVec 64) (timeout
 
 /-- `__ulock_wake(op: UL, addr: ?*const anyopaque, val: u64) c_int`: wakes one waiter (oracle) or,
 with `WAKE_ALL`, every waiter at `addr`: `0` if it woke one, `-ENOENT` if nobody waited, or
-`-EINTR` with nobody woken (std retries). `val` must be `0`. -/
+`-EINTR` with nobody woken (std retries), or `-EINVAL` for a null address (module doc). `val`
+must be `0`. -/
 def __ulock_wake (op : BitVec 32) (addr : Option Ptr) (val : BitVec 64) : ConcM Tgt (BitVec 32) := do
   if (op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ∧ op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ||| UL_WAKE_ALL) ∨
       val ≠ 0 then
     throw .unspecified
-  let some p := addr | throw .illegal
+  let some p ← ConcM.liftMem (ulockAddr addr false) | return negErrno32 E.INVAL
   match ← futexWake p (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
       (spurious := true) with
   | none => return negErrno32 E.INTR

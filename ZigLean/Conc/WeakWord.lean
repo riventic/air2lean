@@ -62,7 +62,7 @@ theorem Ok.weakCas_noErr {m : Mem} {c : Nat} {succ fail : AtomicOrder} {exp new 
     (hw : W.Ok m) (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (hcr : c < weakCasCount n succ nb W.ptr exp m ∨ weakCasCount n succ nb W.ptr exp m = 0 ∧ c = 0)
     (e : Error) : ((cmpxchgWeakAt c succ fail nb W.ptr exp new).run m).run ≠ some (.error e) := by
-  obtain ⟨blk, -, haw, hnr, hloc⟩ := hw.prep_ok ht (k := .atomicRead) rfl
+  obtain ⟨blk, -, haw, hnr, hloc⟩ := hw.prep_ok ht trivial (k := .atomicRead) rfl
   have hprep : ∀ e, ((weakCasPrep n nb W.ptr exp).run m).run ≠ some (.error e) :=
     weakCasPrep_noErr (casPrep_noErr haw hnr hloc)
   refine cmpxchgWeakAt_noErr hprep (fun li opts m₁ hp => ?_)
@@ -88,7 +88,7 @@ theorem Ok.weakCas_noErr {m : Mem} {c : Nat} {succ fail : AtomicOrder} {exp new 
     rw [W.sz_eq] at hl
     obtain ⟨l, hl', hw₁, hop₁, -⟩ := hw.prep rfl ht hcs rfl hl
     obtain ⟨blk₁, -, ha₁, hnr₁, -⟩ := hw₁.prep_ok (by rw [hop₁.current, hop₁.threads]; exact ht)
-      (k := .atomicWrite) rfl
+      trivial (k := .atomicWrite) rfl
     rw [casMarkWrite_run ha₁ hnr₁] at he
     cases he
 

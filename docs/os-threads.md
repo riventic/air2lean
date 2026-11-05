@@ -117,31 +117,32 @@ the address (`wakeSets`), with no FIFO order (audit finding #6). The woken threa
 next turn. A wake accesses no memory and gives no edge: std re-reads the word with an acquire.
 macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std retries.
 
-The Linux WAIT/WAKE wrappers reject an unaligned numeric address with `-EINVAL` before any
-interrupt, scheduling choice, word read or queue effect. WAIT copies and validates a supplied
-timespec before this check, following Linux's syscall/key order. A private WAKE still reads
-no futex word: an aligned unmapped or known freed address, including zero, is not rejected
-by alignment. A pointer into a block the memory does not have resolves to no numeric
-address: WAIT and WAKE at it are `.illegal`, a conservative over-approximation. This does
-not implement every native user-range/shared-VM error. The existing
-raw WP rules expose both the immediate EINVAL post and aligned generic operation; valid
-lock/Event calls derive alignment from their existing block invariants, with no new caller
-premise. The queue's missing numeric-address/domain distinction remains separate under S6.
+Address validation comes before any interrupt, scheduling choice, word read or queue effect
+(module doc of `ZigLean/Os/Futex.lean`, audit S6). The Linux wrappers follow `get_futex_key`
+(`Linux.futexKey`): WAIT first copies and validates a supplied timespec; an unaligned address
+returns `-EINVAL`; an address with bits 63 and 55 set returns `-EFAULT`; the key forms at a live
+writable word (`Mem.wordAt`) and, for a private key, at any address below the end of a block
+the run placed (`Mem.userBelow`, so a freed word's private WAKE returns 0). Every other address
+is a conservative `.illegal` refusal (for example a shared WAKE at a freed word, or an address
+above every block). The macOS rows (`Darwin.ulockAddr`) return `-EINVAL` for a null WAIT or
+WAKE address and an unaligned WAIT address; an unaligned WAKE finds no waiter. A pointer into a
+block the memory does not have resolves to no numeric address: `.illegal`. The queue's missing
+numeric-address/domain distinction remains open under S6.
 
-The reusable address run/cases/alignment facts live beside `Full.ptrAddr_run`. Typed lock
-and shared-word invariants supply their numeric alignment there, and `Fits`/`Word.InRest`
-forward those facts through the existing WP walker. Clients supply these library invariant
-facts; they do not open the block invariant or select an aligned specialization themselves.
-The aligned and returned-error specializations use the existing fsym registry.
-
-The rule-boundary correction is explicit:
+The raw rules `WP.futex_4arg`/`WP.futex_3arg` expose the EINVAL post, the key's error and
+result cases (`WP.futexKey`), and the generic operation. The specializations
+`WP.futex_4arg_of_aligned`, `WP.futex_3arg_of_aligned`, `WP.ulock_wait2` and `WP.ulock_wake`
+take the guard `m.wordAt p = true`. A lock or shared-word invariant supplies it
+(`FLock.Fits.wordAt`, `Fits.wordWordAt`); a client states it with `have` before `fsym`
+(workaround, ledger #fsym-forward-bool-fact).
 
 | Declaration | Previous obligation | Corrected obligation |
 | --- | --- | --- |
-| `WP.futex_4arg` (untimed WAIT) | Every supported call reduces to the generic successful wait | Actual address resolution, returned EINVAL at the same ghost/memory/depth when unaligned, generic wait when aligned |
-| `WP.futex_3arg` (WAKE) | Every supported call reduces to the generic successful wake | The same returned-error/aligned-success split, with no futex-word read |
+| `WP.futex_4arg` (untimed WAIT) | Every supported call reduces to the generic successful wait | Actual address resolution, returned EINVAL when unaligned, the key's `-EFAULT`/refusal cases, generic wait once the key forms |
+| `WP.futex_3arg` (WAKE) | Every supported call reduces to the generic successful wake | The same split, with no futex-word read |
+| `WP.ulock_wait2`, `WP.ulock_wake` | No address premise | A live writable word (`m.wordAt p`) |
 | `WP.osFutexWait`, `WP.osFutexWake` | Generic operation over the current queue | Unchanged |
-| WPOsFutex Linux lock/Event statements | Existing public postconditions | Exact headers retained; address facts derived from existing invariants and the generic aligned specialization |
+| WPOsFutex Linux and macOS lock/Event statements | Existing public postconditions | Exact headers retained; the word fact derived from the existing invariants |
 
 ## Threads
 
@@ -170,7 +171,8 @@ macOS `pthread_create` maps the stack itself; a child's locals are placed like a
 
 **Linux exit and join.** The dispatcher of a `clone` target is `Linux.cloneThread entry ctid`.
 After `entry` returns, `cloneExit` does `CHILD_CLEARTID` in one turn: a release store of `0` to
-`ctid` that carries the thread's final clock, a wake of every waiter at `ctid`, and the end of
+`ctid` that carries the thread's final clock, a wake of at most one waiter at `ctid` (the
+oracle's choice; Linux's `mm_release` wakes with count 1), and the end of
 the join obligation (`ThreadRec.joined`). The exit is no join edge (`ThreadRec.released`): the
 end of a block that the child accessed races unless the parent's join loop ordered it
 (`Mem.freeRaces`). The thread then ends, in the same turn. Std's

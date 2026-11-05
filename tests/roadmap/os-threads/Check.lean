@@ -120,6 +120,15 @@ def racyKid : Tgt → ConcM Tgt Unit := fun _ => lift (store 4 p0 (1 : BitVec 32
 #guard outcomes noKids (do let p ← word 3; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0) hex32 == ["0"]
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 1) hex32 ==
   ["Zig.Error.unspecified"]
+-- macOS address validation (S6, `sys_ulock.c`): a null or unaligned WAIT and a null WAKE are
+-- EINVAL; an unaligned WAKE finds no waiter at its key (ENOENT, or a spurious EINTR).
+#guard outcomes noKids (Darwin.__ulock_wait2 0x01000001 none 0 0 0) hex32 == ["-22"]
+#guard outcomes noKids (Darwin.__ulock_wait2 0x01000001 (some ⟨none, 0⟩) 0 0 0) hex32 == ["-22"]
+#guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some (p.add 1)) 0 0 0)
+  hex32 == ["-22"]
+#guard outcomes noKids (Darwin.__ulock_wake 0x01000001 none 0) hex32 == ["-22"]
+#guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wake 0x01000001 (some (p.add 1)) 0)
+  hex32 == ["-2", "-4"]
 
 /-! ## Linux numeric alignment and validation order -/
 
@@ -158,13 +167,31 @@ example (m : Mem) :
       .leaf (some (.ok (negErrno Linux.E.INVAL, m))) := by
   rfl
 
--- An aligned unmapped address, zero, and a freed known block still need no futex-word read.
-#guard outcomes noKids (Linux.futex_3arg ⟨none, 4096⟩ 0x81 1) hex64 == ["0"]
-#guard outcomes noKids (Linux.futex_3arg ⟨none, 0⟩ 0x81 1) hex64 == ["0"]
+-- A private key needs a user address, not a live word: a freed block's address is one (S6).
 #guard outcomes noKids (do
     let q ← word 0
     lift (free q)
     Linux.futex_3arg q 0x81 1) hex64 == ["0"]
+-- So is an address below a block's end, without a word there.
+#guard outcomes noKids (do
+    let q ← word 0
+    let a ← lift (ptrAddr q)
+    Linux.futex_3arg ⟨none, a - 4096⟩ 0x81 1) hex64 == ["0"]
+-- A shared key needs a live writable word: a freed block's is refused (conservative, S6).
+#guard outcomes noKids (do
+    let q ← word 0
+    lift (free q)
+    Linux.futex_3arg q 1 1) hex64 == ["Zig.Error.illegal"]
+-- `access_ok`: an address with bits 63 and 55 set (also a negative offset, as a `usize`) is
+-- EFAULT. `2^63` is a user address under aarch64's tagged-address ABI: refused (conservative).
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63 + 2 ^ 55⟩ 0x81 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) hex64 == ["Zig.Error.illegal"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, -4⟩ 0x81 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, -4⟩ 1 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_4arg ⟨none, -4⟩ 0x80 0 none) hex64 == ["-14"]
+-- An address above every block of the run: the native result depends on the target's user
+-- address limit, which the model leaves open (conservative refusal, S6).
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 62⟩ 0x81 1) hex64 == ["Zig.Error.illegal"]
 
 /-- Unsupported operations still fail before numeric resolution of an unknown block. -/
 example :
@@ -232,7 +259,10 @@ def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
 -- for `n > 1`: with three threads asleep, `wake(p, 2)` wakes all three, under every choice of the
 -- oracle (kernel-checked), and `__ulock_wake` returns 0, or a spurious -EINTR with nobody woken.
 -- The hand model's scheduler wake `.wake p 2` wakes two (one stays asleep) under every choice.
-def threeWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, p0)] }
+def threeWaiters : Mem := {
+  blocks := #[{ bytes := Array.replicate 4 (.int 0), align := 4, kind := .heap, live := true,
+                addr := 4096 }]
+  waiters := #[(1, p0), (2, p0), (3, p0)] }
 example : ∀ c < wakeCount p0 none threeWaiters,
     ((wakeAt c p0 none).run threeWaiters).run.map (·.map fun (n, m) => (n, m.waitersAt p0)) =
       some (.ok (some 3, [])) := by decide +kernel

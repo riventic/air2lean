@@ -37,7 +37,7 @@ now lies at the two ends of the pipeline:
 | S3b | SOUNDNESS (outcomes), **fixed** | The rest of S3 (§S3, status): an inexact `@shrExact` gave `.overflow`, a safety panic, with and without safety. Without safety it is unchecked IB. With safety, Sema's `shrOverflow` check comes *after* the op, which LLVM emits as `lshr exact`: the check branches on poison, and ReleaseSafe deletes it and returns a value. | `translator/shr-unsafe` (real 0.16.0 export, kernel `rfl`); native rows in `illegal-behavior/native/` |
 | S4 | SOUNDNESS (claim reading) | A non-strict protocol (`Proto.strict = false`) discharges every error leaf, including `.unspecified` and `.unsupportedTimer`. Natively the program goes on after those. `run_sound` results ("every result satisfies Q") then omit native runs. | `nonstrict-unspecified/NonStrict.lean` (kernel), `nan.zig` (native) |
 | S5 | SOUNDNESS (reported 2026-10-16); model fidelity on analysis | The hand models of std's futex wake (`Thread.Futex.wake`, `Io.futexWake`; STD-05) wake exactly `min n k` of `k` waiters. Natively macOS wakes all of them for `n > 1` (`WAKE_ALL`), and Linux at most `2^31 − 1`. No false native statement was derived from it (§S5). | `futex-wake/WakeCount.lean` (kernel) |
-| S6 | SOUNDNESS (primitive fidelity), **open** | Linux numeric alignment now returns EINVAL before queue effects. The OS model still omits private/shared keys, compares provenance pointers rather than canonical addresses, and wakes every waiter at `CHILD_CLEARTID` instead of at most one. These are checked state mismatches; no false shipped client theorem is claimed. | `futex-primitive/CurrentModel.lean` (kernel; observation boundaries in §S6) |
+| S6 | SOUNDNESS (primitive fidelity), **open** | Linux numeric alignment now returns EINVAL before queue effects, and `CHILD_CLEARTID` wakes at most one waiter. The OS model still omits private/shared keys and compares provenance pointers rather than canonical addresses. These are checked state mismatches; no false shipped client theorem is claimed. | `futex-primitive/Regression.lean`, `futex-primitive/CurrentModel.lean` (kernel; observation boundaries in §S6) |
 | F1 | FAIL-OPEN | The export's `std` module is not bound to the reviewed std sources. A std lib modified via `--zig-lib-dir` still gets the reviewed std models. | `translator/libdir-spoof` (real export from a patched lib, `#guard`) |
 | F2 | FAIL-OPEN | Allocator contracts (`FAllocSpec`, `CAllocSpec`) carry no non-vacuity obligation. An invariant whose fee never holds (allowed by `fee_add`, #302) lets an allocator that traps on every call satisfy the **total** contract. No allocator proof states that its `own ⋆ fee` holds after its `init`. | `contract-vacuity/FeeFalse.lean` (kernel) |
 | F3 | FAIL-OPEN | Witnesses do not link claims to the program. Non-vacuity witnesses pick any `Mem.FSeq` memory, not `mem0`. No shipped `Proofs/` claim uses `FTriple.run_init*`/`FTotalTriple.run_init*`. The `CTriple` claims of `Proofs/Lists` (`Alloc`, `Append`, `Container`) have no witness, apart from two fixtures in `tests/roadmap/lists-fba`. | survey (§F3) |
@@ -380,10 +380,11 @@ Thread wake. The existing OS primitive needs correction independently of S5's ha
 The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
 `ZigLean/Os/Thread.lean`; they do not replace those definitions or change a client contract.
 
-**Alignment regression and remaining witnesses** (`futex-primitive/CurrentModel.lean`):
+**Regressions** (`futex-primitive/Regression.lean`) **and remaining witnesses**
+(`futex-primitive/CurrentModel.lean`):
 
-* `unaligned_wake_einval`: actual Linux private WAKE at address 4097 returns `-EINVAL` with an
-  empty queue, as a complete `Sched.runTrace` observation. The former return-zero witness is
+* `unaligned_wake_einval` (regression): actual Linux private WAKE at address 4097 returns
+  `-EINVAL` with an empty queue, as a complete `Sched.runTrace` observation. The former return-zero witness is
   replaced by this positive corrected expectation. The OS runtime controls also cover full
   unchanged state at depth zero, both accepted flag modes, timeout-copy precedence and aligned
   private WAKE without a word access. The raw WP rules expose immediate EINVAL; existing
@@ -396,13 +397,16 @@ The counterexamples use the actual definitions in `ZigLean/Os/Futex.lean` and
   pointers for one-past A and start B, both at numeric address 4100. The actual private WAKE
   continuation through one-past A returns 0 and retains start B's waiter. The native key uses the
   numeric address within the address space, rather than the model's provenance pointer.
-* `cleartid_over_wake`: the actual `cloneExit` continuation clears the word and wakes both
-  seeded raw waiters. Linux's `mm_release` uses shared `FUTEX_WAKE` with count 1, so wakes at
-  most one. This does not establish two valid std join-handle owners or a false shipped client
-  termination theorem.
+* `cleartid_over_wake` (fixed): the former `cloneExit` continuation cleared the word and woke
+  both seeded raw waiters. Linux's `mm_release` uses shared `FUTEX_WAKE` with count 1, so wakes
+  at most one. `cloneExit` now wakes at most one, the oracle's choice, in the same turn and pick
+  as the store. The regression `cleartid_wakes_one` replaces the witness: with two raw waiters
+  queued, the pick has exactly two options, each clears the word and wakes one waiter, and the
+  other stays queued. Neither witness establishes two valid std join-handle owners or a false
+  shipped client termination theorem.
 
-The last three assertions observe the existing `CoN` call frontier and its actual continuation
-before scheduler completion. Their definitions retain the original input thread records rather
+Every assertion here except `unaligned_wake_einval` observes the `CoN` call frontier and its
+actual continuation before scheduler completion. Their definitions retain the original input thread records rather
 than rewriting them to force completion. The actual primitive still performs its effects,
 including `cloneExit`'s `markExited` update. Completing such a seeded run also invokes
 `Thread.checkJoinedByChild`, a separate handle-ownership obligation;
@@ -423,33 +427,46 @@ Validation follows each operation; unsupported shared-object aliases stay fail c
 default domain for an unqualified `Io` implementation, shadow queue, new proof framework or
 weakened client statement is justified by this finding. The maintainer approved OST-02's
 shared wake-one correction and OSL-01 in [437/6262067015](https://github.com/riventic/air2lean/pull/437#issuecomment-6262067015);
-the catalogue changes are separate from this runtime correction. The actual `cloneExit` still
-wakes all raw waiters, and the Darwin lock representation/interface is not implemented here.
+the catalogue changes are separate from this runtime correction. `cloneExit` now wakes at most
+one raw waiter; the Darwin lock representation/interface is not implemented here.
 
-**Named validation scenarios still open** (coordinator review465/6267927217):
+**Named validation scenarios** (coordinator review465/6267927217). All of them are now
+resolved: exactly where the native result is known, and otherwise as a documented conservative
+refusal. The regressions are in `Regression.lean`, and the runtime controls are in
+`tests/roadmap/os-threads/Check.lean`.
 
-* Darwin WAIT with a null address currently throws `.illegal`; native ulock returns its
-  address-validation error. An unaligned WAIT must likewise expose the native validation
-  result before comparison or queue effects. Darwin WAKE with a null address currently
-  throws `.illegal`, whereas native ulock returns `-ENOENT`. These include conservative
-  model refusals, not a claim that a whole valid client finishes with a false result.
-* Process-shared and 64-bit Darwin ulock requests remain outside the process-local 32-bit
-  model and must be refused, rather than interpreted as that supported operation. Their
-  exact native validation/return cases need controls before any support is admitted.
-* Linux `access_ok` is not implemented by the alignment check: private WAKE at
-  `⟨none, 2^63⟩`, or at aligned negative offset `⟨none, -4⟩`, can return 0 with an empty
-  model queue; native address-range validation returns `-EFAULT` before a key or queue lookup.
-* A shared Linux WAKE at an aligned user-range address with no valid backing mapping
-  (for example unmapped 4096) needs shared-key lookup and `-EFAULT`. The current Ptr-only
-  empty-queue model can return 0 without that lookup; the same private unmapped-address
-  wake is not evidence that the shared lookup is valid.
+* **Darwin WAIT and WAKE address validation (fixed).** xnu-12377.121.6
+  [`sys_ulock.c:571`](https://github.com/apple-oss-distributions/xnu/blob/ac9718fb1af618d5ce8678d0dc6e8a58f252216f/bsd/kern/sys_ulock.c#L571)
+  rejects a null or unaligned WAIT with `EINVAL` before the compare. `:966` rejects a null
+  WAKE with `EINVAL`, not `-ENOENT` as first recorded; an unaligned WAKE looks up its key and
+  finds no waiter. `Darwin.ulockAddr` models these cases. The regression is
+  `ulock_null_einval`.
+* **Process-shared and 64-bit ulock (fail closed, unchanged).** These requests stay
+  `.unspecified`, outside the process-local 32-bit model.
+* **Linux `access_ok` (fixed).** An address with bits 63 and 55 set, including an aligned
+  negative offset as a `usize`, returns `-EFAULT` before a key or queue lookup. It is a kernel
+  address on x86_64, also with LAM, and on aarch64, also under the tagged-address ABI, whose
+  `untagged_addr` sign-extends bit 55. Any other address at or above `2^63`, such as `2^63`
+  itself, is a user address under that ABI and is refused (`.illegal`). The regression is
+  `access_ok_efault`.
+* **Linux shared key without a backing mapping (conservative refusal).** A shared key needs
+  `get_user_pages_fast`. The model knows the page only for a live writable word
+  (`Mem.wordAt`). At any other address it says `.illegal`, never a returned 0. Natively this
+  is `-EFAULT` for an unmapped page, a key for a page mapped outside the model, or an
+  inode-based key for a read-only file page. The private key needs only a user address: any
+  address below the end of a block the run placed (SEM-07) forms it. A private address above
+  every block depends on the target's address-space limit and is also refused. The
+  regression is `private_key_shared_refusal`.
 
-These are the finite residual scenarios named in the takeover, alongside the three existing
-key/exit witnesses above. Each correction needs its own causal witness before it is called
-fixed; recording them here neither implements them nor expands this alignment-only slice.
+WAIT's word read after validation keeps its conservative refusal: a bad pointer is
+`.illegal` where native code returns `-EFAULT`. Every refusal is `.illegal` where native code
+returns an error code or forms a key, so a proof that a program never reaches it is
+stronger than the native fact. The two key witnesses in `CurrentModel.lean`
+(`private_wakes_shared`, `equal_address_ptr_miss`) stay open: once the key forms, the queue
+matches waiters by pointer, not by key.
 
-**Status: open.** `check.sh S6-futex-primitive` reports `alignment fixed; S6 open`
-only after the positive regression and three remaining witnesses elaborate.
+**Status: open.** `check.sh S6-futex-primitive` reports `address validation and CHILD_CLEARTID
+fixed; S6 open` only after the regressions and the two remaining witnesses elaborate.
 An elaboration or setup failure prints `FAILED` and returns nonzero, never `fixed`.
 `--require-fixed S6-futex-primitive` fails while the finding remains open.
 No translated Thread S5 subcase or aggregate S5 status changes in this audit addition.
