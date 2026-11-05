@@ -21,6 +21,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The library module that air2lean-invgen imports besides the translated module: `fsym` for the
+# Houdini pruning walks.
+LIBRARY = 'ZigLean.Sep.Full.AutoAll'
+
 # (Inv.lean, fixture root, translated module, its namespace)
 TARGETS = [
     ('tests/roadmap/loop-tactics/nested/Nested/Inv.lean', 'tests/roadmap/loop-tactics/nested',
@@ -46,6 +50,8 @@ def generate(root, module, namespace, work):
     lean_path = [work / 'olean']
     log = work / 'compile.log'
     subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', src], cwd=ROOT, check=True)
+    # The library the generator imports for its pruning walks (Air2Lean/InvGenMain.lean).
+    subprocess.run(['lake', 'build', '-q', LIBRARY], cwd=ROOT, check=True)
     error = compile_unit(src, root, work / 'olean' / (rel + '.olean'), lean_path, log)
     if error:
         sys.exit(log.read_text()[-4000:] + error)

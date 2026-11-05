@@ -40,6 +40,13 @@ The body is read by a symbolic run over its monadic term (`bind`, `pure`, `get`,
 the lifted `Zig.load`/`Zig.store`/`Zig.add`/`Zig.sub`/`Zig.intCast`, the unsigned comparisons
 `Zig.lt`/`gt`/`le`/`ge`, `!=` (`bne`), a slice's `len`, `Zig.tick`, a `match` on a known exit):
 this is a reading of the generated term, not a second semantics. Nothing it concludes is trusted.
+
+The reading proposes candidate facts, and `fsym` decides which of them stay (Houdini pruning,
+`houdini`): each candidate is true at loop entry (the counter on either side of its entry value,
+a written cell counted up or down from it), the generator walks the step triple of one iteration
+over them with `fsym` in its own environment, drops the candidates that the walk's report names
+as residuals, and repeats until a walk proves the step. The file's record lists each dropped
+candidate with the walk that dropped it.
 -/
 
 open Lean Meta
@@ -399,16 +406,158 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
 def relName (ns n : Name) : String :=
   (n.replacePrefix ns .anonymous).toString
 
-/-- Names the generated text binds next to the loop's parameters. -/
+/-- Names the generated text binds next to the loop's parameters (`r`: the step's result in the
+check of `walk`). -/
 def reserved (n : Name) : Bool :=
   match n with
-  | .str .anonymous s => ["s", "s0", "v", "up", "pts", "plain", "FAssn", "Zig", "BitVec"].contains s ||
+  | .str .anonymous s => ["s", "s0", "v", "r", "up", "pts", "plain", "FAssn", "Zig", "BitVec"].contains s ||
       (s.startsWith "v" && s.length > 1 && (s.toList.drop 1).all Char.isDigit)
   | _ => false
 
-/-- The invariant `body.inv` and measure `body.meas` of the loop `body` (the definition run by
-`Zig.loop`) with exit test `again`, as source text, or why there are none. -/
-def genLoop (ns body again : Name) : MetaM (Except String String) := do
+/-- A candidate fact of a loop invariant, as source text over the loop's parameters, the entry
+locals `s0`, the cells' entry values `vₖ` and the locals `s`. -/
+structure Fact where
+  text : String
+  /-- The written cell `k` (with its value type) whose current value `v` the fact states: the fact
+  stands inside that cell's existential. -/
+  cell? : Option (Nat × String) := none
+  deriving Inhabited
+
+/-- A resource of the invariant, in order. -/
+inductive Owned where
+  /-- A cell the loop only reads, owned at its entry value. -/
+  | read (atom : String)
+  /-- The written cell `k`, owned at a value `v : ty` that its facts state. -/
+  | written (k : Nat) (ty atom : String)
+  | plain
+
+/-- The candidate invariant `name.inv` of a loop and its measure `name.meas`, as source text: the
+facts are candidates, which `houdini` prunes. -/
+structure Cand where
+  /-- The loop body's name and its exit test's, without the namespace. -/
+  name : String
+  again : String
+  /-- The invariant's doc comment, with its line break. -/
+  doc : String
+  /-- The loop's parameters as binders and as arguments, the locals' structure, the cells' entry
+  values `vₖ` as binders and as arguments, and those of the measure. -/
+  binders : String
+  args : String
+  loc : String
+  entry : String
+  vargs : String
+  measEntry : String
+  measArgs : String
+  facts : Array Fact
+  owned : Array Owned
+  meas : String
+
+/-- The invariant's body with the kept facts (`keep`), each written by `fact`. -/
+def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String := Id.run do
+  let kept := (List.range c.facts.size).filter (keep[·]!)
+  let top := kept.filter (c.facts[·]!.cell?.isNone)
+  let mut atoms := #[]
+  if !top.isEmpty then atoms := atoms.push s!"⟪{" ∧\n      ".intercalate (top.map fact)}⟫"
+  for o in c.owned do
+    match o with
+    | .read atom => atoms := atoms.push atom
+    | .plain => atoms := atoms.push "plain"
+    | .written k ty atom =>
+      let fs := kept.filter fun i => (c.facts[i]!.cell?.map (·.1)) == some k
+      atoms := atoms.push <| if fs.isEmpty then s!"(FAssn.ex fun v : {ty} => {atom})"
+        else s!"(FAssn.ex fun v : {ty} => ⟪{" ∧ ".intercalate (fs.map fact)}⟫ ⋆ {atom})"
+  return if atoms.isEmpty then "⟪True⟫" else " ⋆\n    ".intercalate atoms.toList
+
+/-- The generated definitions with the kept facts. -/
+def Cand.output (c : Cand) (keep : Array Bool) : String :=
+  s!"{c.doc}def {c.name}.inv {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) : FAssn :=\n  \
+    {c.body keep (c.facts[·]!.text)}\n\n\
+    /-- The measure of `{c.name}`: the iterations left. -/\n\
+    def {c.name}.meas {c.binders}{c.measEntry}(s : {c.loc}) : Nat :=\n  {c.meas}\n"
+
+/-- The check of the kept facts: each one a definition `name.candᵢ` (so that a residual goal
+names it), the invariant over them, the measure, and the step triple of one iteration, walked by
+`fsym` with its report on: from the invariant, a repeating iteration ends in it with a smaller
+measure, an exiting one in it. (The exit post is the invariant: in the counted family an exit
+changes no local and no memory.) -/
+def Cand.check (c : Cand) (keep : Array Bool) : String := Id.run do
+  let mut defs := ""
+  for h : i in [0:c.facts.size] do
+    if !keep[i]! then continue
+    let v := match c.facts[i].cell? with | some (_, ty) => s!"(v : {ty}) " | none => ""
+    defs := defs ++ s!"def {c.name}.cand{i} {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) {v}: Prop :=\n  \
+      {c.facts[i].text}\n\n"
+  let use (i : Nat) := s!"{c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
+  let inv (s : String) := s!"{c.name}.inv {c.args}s0 {c.vargs}{s}"
+  let meas (s : String) := s!"{c.name}.meas {c.args}{c.measArgs}{s}"
+  return s!"{defs}def {c.name}.inv {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) : FAssn :=\n  \
+    {c.body keep use}\n\n\
+    def {c.name}.meas {c.binders}{c.measEntry}(s : {c.loc}) : Nat :=\n  {c.meas}\n\n\
+    set_option fsym.report true in\n\
+    theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
+      FTotalTriple ({inv "s"}) (({c.name} {c.args}).run s)\n      \
+      (fun r => if {c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {inv "r.2"}) := by\n  \
+      unfold {c.name} {c.name}.inv {c.name}.meas\n  fsym\n"
+
+/-- One `fsym` walk of the step with the kept facts (`Cand.check`, elaborated in the current
+environment, which imports the library): the kept facts it does not re-establish, read off its
+report (P09-E1: a residual of the postcondition whose goal is a candidate's definition), or why
+the walk is no proof of the step (a residual that no candidate explains, such as the measure or
+an overflow, or a check that does not elaborate). The walk is not trusted: the generated
+definitions are checked by the proofs that use them. -/
+def walk (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (Except String (Array Nat)) := do
+  let text := s!"namespace {ns}\nopen Zig Zig.Full Zig.Full.FAssn Zig.Full.Auto\n\
+    set_option linter.unusedVariables false\n\n{c.check keep}\nend {ns}\n"
+  let opts := ({} : Options).setBool `Elab.async false
+  let (_, msgs) ← Lean.Elab.process text (← getEnv) opts (some "<air2lean-invgen check>")
+  let mut report := none
+  let mut errors := #[]
+  for m in msgs.toList do
+    let s ← m.data.toString
+    if s.startsWith "fsym-report " then report := (Json.parse (toString (s.drop 12))).toOption
+    else if m.severity == .error then errors := errors.push s
+  let some r := report | return .error s!"the step check did not run `fsym`: {errors.getD 0 "no report"}"
+  let .ok residuals := r.getObjValAs? (Array Json) "residuals" | return .error "an `fsym` report without residuals"
+  if residuals.isEmpty then
+    return if errors.isEmpty then .ok #[] else .error s!"the step check failed: {errors[0]!}"
+  let pre := s!"{ns}.{c.name}.cand"
+  let mut drop := #[]
+  for res in residuals do
+    let goal := res.getObjValD "goal"
+    let reason := ((res.getObjValD "origin").getObjValAs? String "reason").toOption.getD ""
+    let i? := (goal.getObjValAs? String "head").toOption.bind fun h =>
+      if h.startsWith pre then (toString (h.drop pre.length)).toNat? else none
+    match i? with
+    | some i =>
+      if reason == "postcondition_not_proved" && keep[i]?.getD false then
+        unless drop.contains i do drop := drop.push i
+        continue
+    | none => pure ()
+    let goalText := (goal.getObjValAs? String "text").toOption.getD ""
+    return .error s!"a residual of the step that no candidate explains: `{goalText}` ({reason})"
+  return .ok drop
+
+/-- Houdini pruning (Flanagan and Leino, `docs/invariant-synthesis.md`): walk the step with the
+kept facts and drop those that the walk does not re-establish, until a walk drops none; its last
+walk is a proof of the step. Returns the kept facts and each pruning decision (the fact and the
+walk that dropped it). Each walk drops at least one fact, so there are at most `facts + 1`. -/
+def houdini (ns : Name) (c : Cand) : MetaM (Except String (Array Bool × Array Json)) := do
+  let mut keep := Array.replicate c.facts.size true
+  let mut pruned := #[]
+  for n in [1:c.facts.size + 2] do
+    match ← walk ns c keep with
+    | .error e => return .error e
+    | .ok drop =>
+      if drop.isEmpty then return .ok (keep, pruned)
+      for i in drop do
+        keep := keep.set! i false
+        pruned := pruned.push (Json.mkObj [("fact", c.facts[i]!.text), ("walk", n),
+          ("residual", "postcondition_not_proved")])
+  return .error "Houdini pruning reached no fixpoint"
+
+/-- The candidate invariant and measure of the loop `body` (the definition run by `Zig.loop`) with
+exit test `again`, or why there are none. -/
+def candLoop (ns body again : Name) : MetaM (Except String Cand) := do
   try
     let some (.defnInfo d) := (← getEnv).find? body | throwError "not a definition"
     let text ← lambdaTelescope d.value fun xs code => do
@@ -428,9 +577,11 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
       let c ← counted ctx isAgain paths
       -- The text.
       let mut binders := ""
+      let mut args := ""
       for x in xs do
         let decl ← x.fvarId!.getDecl
         binders := binders ++ s!"({decl.userName} : {← ppExpr decl.type}) "
+        args := args ++ s!"{decl.userName} "
       let pname (i : Nat) : MetaM String := return (← xs[i]!.fvarId!.getDecl).userName.toString
       let loc := relName ns structName
       let x := c.counter
@@ -438,8 +589,10 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
       let tys ← c.cells.mapM fun (cell, _) => return toString (← ppExpr cell.ty)
       let binder (k : Nat) := s!"(v{k} : {tys[k]!}) "
       let entry := String.join ((List.range tys.size).map binder)
+      let vargs := String.join ((List.range tys.size).map (s!"v{·} "))
       let boundCell? := c.cells.findIdx? fun (cell, _) => c.bound == .cell cell.param
       let measEntry := (boundCell?.map binder).getD ""
+      let measArgs := (boundCell?.map (s!"v{·} ")).getD ""
       let (bound, boundName) ← match c.bound with
         | .local y => pure (s!"s.{y}.toNat", y.toString)
         | .param i => do
@@ -459,18 +612,19 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
       -- in all, and its measure is `left`.
       let X := s!"s.{x}.toNat"
       let X0 := s!"s0.{x}.toNat"
-      let mut facts := #[]
+      let mut facts : Array Fact := #[]
       for f in fields do
-        if f != x then facts := facts.push s!"s.{f} = s0.{f}"
+        if f != x then facts := facts.push { text := s!"s.{f} = s0.{f}" }
       -- The counter runs from `X0` to the value it exits at: the bound, or one past it for
       -- `<=`/`>=` (`one`), where the counter's last step must not wrap (`noWrap`; a literal bound
-      -- that makes it false is outside the family).
+      -- that makes it false is outside the family). Which side of `X0` it stays on is left to
+      -- Houdini: both are candidates (true at entry), and the step keeps one.
       let one := if c.incl then " + 1" else ""
-      let (delta, total, left, range) := if c.down then
-          (s!"{X0} - {X}", s!"{X0}{one} - {bound}", s!"{X}{one} - {bound}", #[s!"{X} ≤ {X0}", s!"{bound} ≤ {X}{one}"])
+      let (total, left, toExit) := if c.down then
+          (s!"{X0}{one} - {bound}", s!"{X}{one} - {bound}", s!"{bound} ≤ {X}{one}")
         else
-          (s!"{X} - {X0}", s!"{bound}{one} - {X0}", s!"{bound}{one} - {X}", #[s!"{X0} ≤ {X}", s!"{X} ≤ {bound}{one}"])
-      facts := facts ++ range
+          (s!"{bound}{one} - {X0}", s!"{bound}{one} - {X}", s!"{X} ≤ {bound}{one}")
+      facts := facts ++ #[{ text := s!"{X0} ≤ {X}" }, { text := s!"{X} ≤ {X0}" }, { text := toExit }]
       if c.incl then
         let ty ← withLocalDeclD `s (.const structName []) fun s =>
           inferType (mkApp (.const (structName ++ x) []) s)
@@ -481,7 +635,7 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
           | false, _ => (s!"{bound} + 1 < 2 ^ {w}", false)
         if never then
           throwError "a test `{x} {c.rel.text} {boundName}` that holds until the counter's step wraps"
-        facts := facts.push noWrap
+        facts := facts.push { text := noWrap }
       let scaled (k : Nat) (t : String) := if k == 1 then s!"({t})" else s!"{k} * ({t})"
       let mut owned := #[]
       let mut doc := #[]
@@ -490,25 +644,36 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
         let p ← pname cell.param
         let ty := tys[k]!
         if !cell.stored then
-          owned := owned.push s!"up (pts {p} {cell.align} v{k})"
+          owned := owned.push (.read s!"up (pts {p} {cell.align} v{k})")
           doc := doc.push s!"\n`v{k}` is `*{p}`, which the loop only reads."
           continue
-        facts := facts.push s!"v{k}.toNat + {scaled inc total} < 2 ^ {cell.width}"
-        owned := owned.push <|
-          s!"(FAssn.ex fun v : {ty} => ⟪v.toNat = v{k}.toNat + {scaled inc delta}⟫ ⋆ up (pts {p} {cell.align} v))"
+        facts := facts.push { text := s!"v{k}.toNat + {scaled inc total} < 2 ^ {cell.width}" }
+        -- The cell's value after the iterations so far, counted up or down from `X0`: both are
+        -- candidates (true at entry), Houdini keeps the one of the counter's direction.
+        for d in (if inc == 0 then #[s!"{X} - {X0}"] else #[s!"{X} - {X0}", s!"{X0} - {X}"]) do
+          facts := facts.push { text := s!"v.toNat = v{k}.toNat + {scaled inc d}", cell? := some (k, ty) }
+        owned := owned.push (.written k ty s!"up (pts {p} {cell.align} v)")
         doc := doc.push s!"\n`v{k}` is `*{p}` there, which goes up by {inc} per iteration."
-      if c.plain then owned := owned.push "plain"
+      if c.plain then owned := owned.push .plain
       let name := relName ns body
-      let factText := " ∧\n      ".intercalate facts.toList
-      let ownedText := " ⋆\n    ".intercalate owned.toList
-      let bodyText := if owned.isEmpty then s!"⟪{factText}⟫" else s!"⟪{factText}⟫ ⋆\n    {ownedText}"
-      return s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
-        by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n\
-        def {name}.inv {binders}(s0 : {loc}) {entry}(s : {loc}) : FAssn :=\n  {bodyText}\n\n\
-        /-- The measure of `{name}`: the iterations left. -/\n\
-        def {name}.meas {binders}{measEntry}(s : {loc}) : Nat :=\n  {left}\n"
+      return {
+        name, again := relName ns again, binders, args, loc, entry, vargs, measEntry, measArgs,
+        facts, owned, meas := left,
+        doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
+          by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
     pure (.ok text)
   catch ex => pure (.error (← ex.toMessageData.toString))
+
+/-- The invariant `body.inv` and measure `body.meas` of the loop `body` with exit test `again`
+(`candLoop`, pruned by `houdini`) as source text with the pruning decisions, or why there are
+none. -/
+def genLoop (ns body again : Name) : MetaM (Except String (String × Array Json)) := do
+  let c ← match ← candLoop ns body again with
+    | .ok c => pure c
+    | .error e => return .error e
+  match ← houdini ns c with
+  | .ok (keep, pruned) => return .ok (c.output keep, pruned)
+  | .error e => return .error e
 
 /-- The loops that `e` runs: each `Zig.loop (body …) again` as the body's definition and the
 exit test, read off the term (no naming convention). A loop whose body is not an applied
@@ -539,7 +704,9 @@ def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
 invariant for, with the reason. The record on its first line holds `generator` (the generator's
 revision record) and `inputs` (the files read, as `[path, sha256]`) as given, and `output`, the
 SHA-256 of the rest of the file: with them, `scripts/gen-integrity.py invgen` finds a stale or
-hand-edited file without running the generator. -/
+hand-edited file without running the generator. Each loop's entry in `loops` names its family and
+the facts Houdini pruned (`pruned`), or why it has no invariant (`none`). The current environment
+must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
 def generate (module ns : Name) (generator inputs : Json) :
     MetaM (String × Array (String × String)) := do
   let mut loops := #[]
@@ -548,8 +715,8 @@ def generate (module ns : Name) (generator inputs : Json) :
   for (b, a) in ← loopsOf module ns do
     let loop := relName ns b
     match ← genLoop ns b a with
-    | .ok t =>
-      loops := loops.push (Json.mkObj [("loop", loop), ("family", "counted")])
+    | .ok (t, pruned) =>
+      loops := loops.push (Json.mkObj [("loop", loop), ("family", "counted"), ("pruned", Json.arr pruned)])
       defs := defs.push t
     | .error why =>
       loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
