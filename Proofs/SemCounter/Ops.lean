@@ -30,6 +30,13 @@ def gW (r : Res) (k : Nat) (b : Bool) (s : Nat) : Gh := (⟨.out, r, rnil⟩, { 
 /-- The cell of `n` with the value `s`. -/
 def Tn (Y : ThreadId → Ph) : FAssn := up (pts nPtr 4 (BitVec.ofNat 32 (sum Y)))
 
+/-- The client parts after two updates of `t` with the same client part. -/
+theorem xs_upd_ph {G : ThreadId → Gh} {t : ThreadId} {g g' : Gh} (h : g.2.ph = g'.2.ph) :
+    xs (upd G t g) = xs (upd G t g') := by
+  funext u; unfold xs upd; split
+  · exact h
+  · rfl
+
 /-! ## The count -/
 
 theorem held_of {Y : ThreadId → Ph} {t : ThreadId} (ht : t < 2) (h : (Y t).holds = true) :
@@ -119,9 +126,7 @@ theorem U_take {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {rp r h
       (sum (xs (upd G t (gW rp k false 0))))) .holds h₂) (.pst sh sc)) := ⟨_, rfl⟩
   rw [← hG₁] at hu; rw [← hG₂] at hci hsi ⊢
   have hX₁ : xs G₁ = xs (upd G t (gW rp k false 0)) := by
-    rw [hG₁]
-    exact (xs_upd (G := G) (t := t) (g := S.set (L.set (gW rp k false 0) .holds h₁) (.pst sh sc))
-      rfl).trans (xs_upd (G := G) (t := t) (g := gW rp k false 0) rfl).symm
+    rw [hG₁]; exact xs_upd_ph rfl
   have hne : ∀ u, u ≠ t → G₂ u = G₁ u := fun u e => by rw [hG₂, hG₁, upd_ne _ _ e, upd_ne _ _ e]
   have h₁t : (G₁ t).2.ph = .work k false 0 := by rw [hG₁, upd_self]; rfl
   have h₂t : (G₂ t).2.ph = .work k true (sum (xs (upd G t (gW rp k false 0)))) := by
@@ -142,7 +147,7 @@ theorem U_take {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {rp r h
     by_cases e : u = t
     · subst e; rw [hG₁, hG₂, upd_self, upd_self]; rfl
     · rw [hne u e]
-  refine ⟨⟨hu.um.shape.work (by show (G₁ t).2.ph = _; rw [h₁t]) (by omega)
+  refine ⟨⟨hu.um.shape.work (k' := k) (by show (G₁ t).2.ph = _; rw [h₁t]) (by omega)
       (by show (G₂ t).2.ph = _; rw [h₂t]) fun u e => by show (G₂ u).2.ph = _; rw [hne u e],
     hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we, hu.um.q⟩, hci, hsi,
     hu.lg.relabel hc rfl rfl ?_ ?_ ?_ (fun j hj => hb_same hP (hu.lg.ehb j hj))⟩
@@ -177,8 +182,7 @@ theorem nreg_lt {G : ThreadId → Gh} {rX : Res} {m : Mem} (hI : C.Inv L G m) (h
 
 /-- **No deadlock at the condition** (`SemImpl.wait_wp`'s `hlive`): at count 0 the permit's holder
 runs. -/
-theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId}
-    (hreg : ∃ i jr e, C.ph (G t) = .reg i jr false e) (hi : (proto semOf).inv G m)
+theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hi : (proto semOf).inv G m)
     (hcnt : S.cnt G = 0) : (proto semOf).Live t G m := by
   intro _ hall
   obtain ⟨rX, hL, hu⟩ := id hi
@@ -226,7 +230,7 @@ theorem wp_wait (I : SemImpl Tgt) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p) (t 
     rfl ⟨k, 0, hk, rfl⟩ ⟨rfl, .inl rfl⟩ (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)
     (fun _ => ⟨rfl, .inl rfl⟩) (fun G rL m _ hne => ?_) (fun G rL m _ hne r hr => ?_)
     (fun G rX m h₁ h₂ r sh sc hne _ _ hu hL hsi hci => U_take hk hne hu hci hsi)
-    (fun G₁ rL m₁ hi₁ _ n hn => ?_) (fun G₁ m₁ hreg _ hi₁ _ _ hcnt => live_of hreg hi₁ hcnt)
+    (fun G₁ rL m₁ hi₁ _ n hn => ?_) (fun _ _ _ _ hi₁ _ _ hcnt => live_of hi₁ hcnt)
     io G m d hpl hi hc
   · -- the count: 1 before the take, 0 after it
     have h1 : held (xs (upd G t (gW rp k false 0))) = false := pv_ne hne
@@ -245,7 +249,8 @@ theorem wp_wait (I : SemImpl Tgt) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p) (t 
       unfold Pool at this; rw [h1] at this
       simp only [Bool.false_eq_true, ↓reduceIte] at this; exact this
     show (Pool (xs _) ⋆ Tn (xs _)) r
-    rw [hp]; exact sep_comm (sep_emp.mpr hr')
+    rw [hp]
+    exact Full.sep_comm (Full.sep_emp.mpr hr')
   · obtain ⟨rX, -, hu⟩ := hi₁
     have hc : ∀ u, C.ph (upd G₁ t (L.set (S.set (gW rp k false 0) .wt) .holds rL) u) =
         C.ph (upd G₁ t (gW rp k false 0) u) := fun u => by
@@ -297,7 +302,7 @@ theorem U_give {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {rp rT 
     by_cases e : u = t
     · subst e; rw [hG₁, hG₂, upd_self, upd_self]; rfl
     · rw [hne u e]
-  refine ⟨⟨hu.um.shape.work (by show (G₁ t).2.ph = _; rw [h₁t]) (by omega)
+  refine ⟨⟨hu.um.shape.work (k' := k + 1) (by show (G₁ t).2.ph = _; rw [h₁t]) (by omega)
       (by show (G₂ t).2.ph = _; rw [h₂t]) fun u e => by show (G₂ u).2.ph = _; rw [hne u e],
     hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we, hu.um.q⟩, hci, hsi,
     hu.lg.relabel hc rfl rfl ?_ ?_ ?_ (fun j hj => hb_same hP (hu.lg.ehb j hj))⟩
@@ -349,11 +354,13 @@ theorem wp_post (I : SemImpl Tgt) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p) (t 
           rw [upd_ne _ _ e] at this ⊢; exact this
       rw [hf 0 (by decide), hf 1 (by decide)]; rfl
     · have := hu.lg.tot t k s ht'
-      rw [this, xs_upd (g := L.set (gW (rsum rp rT) k true s) .holds rL) rfl,
-        xs_upd (G := G) (t := t) (g := gW (rsum rp rT) k true s) rfl]
-  have hhold : ∀ G : ThreadId → Gh, held (xs (upd G t (gW (rsum rp rT) k true s))) = true :=
-    fun G => held_of ht2 (by show ((upd G t (gW (rsum rp rT) k true s) t).2.ph).holds = true
-      rw [upd_self]; rfl)
+      rwa [xs_upd_ph (G := G) (t := t) (g := L.set (gW (rsum rp rT) k true s) .holds rL)
+        (g' := gW (rsum rp rT) k true s) rfl] at this
+  have hhold : ∀ G : ThreadId → Gh, held (xs (upd G t (gW (rsum rp rT) k true s))) = true := by
+    intro G
+    refine held_of ht2 ?_
+    show ((upd G t (gW (rsum rp rT) k true s) t).2.ph).holds = true
+    rw [upd_self]; rfl
   refine I.post_wp fits rfl hLc hp t (gW (rsum rp rT) k true s) (gW rp (k + 1) false 0) rT rfl rfl
     rfl ⟨rfl, .inl rfl⟩ rfl rfl rfl rfl ⟨rfl, .inl rfl⟩ rfl hdj (fun G rL m hi' => ?_)
     (fun G rL m hi' r hr => ?_) (fun G rX m h₁ h₂ sh sc hu _ hsi hci => U_give hk hu hci hsi)
@@ -366,16 +373,17 @@ theorem wp_post (I : SemImpl Tgt) (hLc : L.c = I.c) {p : Ptr} (hp : p = S.p) (t 
       unfold Pool; rw [hhold G]; simp only [↓reduceIte]
     have hr' : r = rT := by
       have : ((fun r => r = rT) ⋆ Pool (xs (upd G t (gW (rsum rp rT) k true s)))) r := hr
-      rw [hp0] at this; exact sep_emp.mp this
+      rw [hp0] at this; exact (Full.sep_emp (P := fun r => r = rT) (r := r)).mp this
     subst hr'
     show Pool (xs _) r
     unfold Pool; rw [hf]; simp only [Bool.false_eq_true, ↓reduceIte]
     have hsum : sum (xs (upd G t (gW rp (k + 1) false 0))) = s + 1 := by
       rw [hs]
-      exact sum_upd ht2 (fun u e => by show (upd G t _ u).2.ph = (upd G t _ u).2.ph
-        rw [upd_ne _ _ e, upd_ne _ _ e])
-        (by show (upd G t _ t).2.ph.count = (upd G t _ t).2.ph.count + 1
-            rw [upd_self, upd_self]; rfl)
+      refine sum_upd ht2 (fun u e => ?_) ?_
+      · show (upd G t _ u).2.ph = (upd G t _ u).2.ph
+        rw [upd_ne _ _ e, upd_ne _ _ e]
+      · show (upd G t _ t).2.ph.count = (upd G t _ t).2.ph.count + 1
+        rw [upd_self, upd_self]; rfl
     rw [hsum]; exact hrT
 
 end SemCounter
