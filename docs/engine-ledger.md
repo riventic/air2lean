@@ -2039,7 +2039,7 @@ Request: `FEvent.Live g := (wx g ∨ sx g) ∧ ¬ (ph g).Setting` takes the live
 
 Status: **closed**. Requester: L17 (retiring unroll_sched).
 
-Note: Checked with the theorem-inventory swap builds (0.17.0 sync, 0.15.2 darwin and aarch64 threadsync, 0.15.2 atomics and threads).
+Note: The `zig_run` witnesses were built against every translation `lake build Proofs` runs them on: 0.16.0 linux, and the theorem-inventory swap builds (0.17.0 sync, 0.15.2 darwin and aarch64 threadsync, 0.15.2 atomics and threads), PR #697.
 
 Progress: closed by PR #697 on the `zig_run` simp set (#690: the translator tags every executable declaration of default generation, ZigLean tags `Zig.loop` and `Zig.osUnfairLockC`; docs/proof-automation.md, kernel-run witnesses). Every witness that was listed here (Sync/{Handoff,Mutex,SemCounter}, Threadsync/{Mutex,Handoff,WaitGroup}, Iogroup/Counter, Atomics/Stack, Threads/Counter, sync-contracts/{EventSet,Runtime}) is `iterate n (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])` + `decide +kernel` and names only hand-written definitions; `Sync.Handoff.handoff_completes` no longer uses `unroll_sched`.
 
