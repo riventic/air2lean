@@ -1332,10 +1332,11 @@ os._exit(0)
                   "g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g); "
                   "block = bytearray(96 << 20); import time; time.sleep(0.5); "
                   "print('free', g.free_mib(g.Path(%r), 13312)); print('hello')") % (str(GUARD), str(self.root / "shared.lock"))
-        inner = self.sub_args(source, "--charge-mib", "2048", "--rss-mib", "4096")
+        # Its declared bound is far above its charge: it is no overcommitted workload (no excess).
+        inner = self.sub_args(source, "--charge-mib", "2048", "--rss-mib", "11000")
         result, report, log = self.in_elastic(inner, "--rss-mib", "64")
         self.assertEqual((result.returncode, report["outcome"]), (0, "success"), log.read_text())
-        self.assertIn("free 10240\nhello\n", log.read_text())
+        self.assertIn("free 10240\nhello\n", log.read_text())  # base 1 + charge 2 of 13 slots
         self.assertLess(report["peak_sampled_rss_kib"], 64 * 1024)
         self.assertTrue(json.loads(report["environment_overrides"][guard.INHERIT])["elastic"]["id"])
 

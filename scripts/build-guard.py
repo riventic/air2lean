@@ -995,7 +995,7 @@ class Admission:
         instead registers its base if the bound on the elastic bases allows (False: not now)."""
         if self.a.elastic:
             return self.register_elastic()
-        if self.weight == self.declared:
+        if self.weight == self.declared or self.a.sub_admission:  # its charge is its limit: no excess
             return True
         if self.within_bound():
             self.register()
@@ -1684,9 +1684,11 @@ def lean_processes_env(sysroot, lock):
 def lean_process(lean, args):
     """One Lean elaboration of a --lean-processes workload (its sysroot's `bin/lean`): a
     sub-admission charged by the module's measured peak (scripts/lean-peaks.py: this machine's
-    measurements of the same source, else the committed table, else PROCESS_MIB), stopped there
-    and run again at PROCESS_MIB if it outgrows it. One Lean thread, so the peaks are comparable.
-    Its exact peak (`peak_process_rss_kib`) is recorded for the next charge. Outside an elastic
+    measurements of the same source, else the committed table, else PROCESS_MIB or, for a
+    seeding run, AIR2LEAN_LEAN_UNMEASURED_MIB), stopped there and run again at PROCESS_MIB if it
+    outgrows it. One Lean thread, so the peaks are comparable. Its exact peak
+    (`peak_process_rss_kib`) is recorded for the next charge, its report written to
+    AIR2LEAN_LEAN_REPORTS when set (scripts/full-build.sh: the build's logs). Outside an elastic
     admission (a sub-admission's own Lake) it is the toolchain's lean."""
     source = next((arg for arg in args if arg.endswith(".lean")), None)
     try:
@@ -1703,10 +1705,16 @@ def lean_process(lean, args):
     sha = digest(path) if path.is_file() else None
     store = Path(grant["lock"] + ".d") / "lean-peaks.json"
     peak = peaks.known_peak_kib(store, workspace, module, sha)
-    charge = PROCESS_MIB if peak is None else min(PROCESS_MIB, max(SLOT_MIB, math.ceil(CHARGE_MARGIN * peak / 1024)))
-    a = parse_args(["--sub-admission", "--charge-mib", str(charge), "--rss-mib", str(PROCESS_MIB),
+    if peak is None:  # a seeding run may guess lower: a guess too low only costs a retry
+        charge = positive(os.environ.get("AIR2LEAN_LEAN_UNMEASURED_MIB") or PROCESS_MIB)
+    else:
+        charge = max(SLOT_MIB, math.ceil(CHARGE_MARGIN * peak / 1024))
+    reports = os.environ.get("AIR2LEAN_LEAN_REPORTS")
+    report_path = Path(reports) / ("%s.%d.json" % (module.replace("/", "__"), os.getpid())) if reports else None
+    a = parse_args(["--sub-admission", "--charge-mib", str(min(charge, PROCESS_MIB)), "--rss-mib", str(PROCESS_MIB),
                     "--lock", grant["lock"], "--interval", "1", "--timeout", "28800",
-                    "--lock-wait", os.environ.get("AIR2LEAN_LOCK_WAIT") or "21600", "--", lean, *args])
+                    "--lock-wait", os.environ.get("AIR2LEAN_LOCK_WAIT") or "21600",
+                    *(["--report", str(report_path)] if report_path else []), "--", lean, *args])
     a.quiet = True  # its stderr is Lean's, which Lake reports
     report = guarded(a)
     if report["outcome"] == "success" and sha:

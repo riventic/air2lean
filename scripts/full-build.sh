@@ -81,6 +81,9 @@ if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   exit "$status"
 fi
 sysroot=$(lean --print-prefix)  # the toolchain's: --lean-processes runs its lean through the guard
+# Each Lean process's guard report (module, charge, wait, time, exact peak), beside the phase logs.
+export AIR2LEAN_LEAN_REPORTS="$logs/lean-processes"
+mkdir -p "$AIR2LEAN_LEAN_REPORTS"
 
 # guarded NAME DIR [GUARD OPTION...] -- CMD...: CMD in DIR under build-guard (an inheriting guard
 # of $rss, unless the options say otherwise), through the shared Lake cache.
