@@ -33,11 +33,6 @@ def gO (r : Res) (x : X) : Gh := (⟨.out, r, rnil⟩, x)
 
 /-! ## Bytes -/
 
-theorem le_nil (c : VClock) : VClock.le #[] c = true := by
-  unfold VClock.le VClock.get
-  simp only [Array.all_eq_true]
-  intro i _
-  simp
 
 theorem o16 : (cPtr.add 16).off.toNat = 16 := by simp [cPtr, Ptr.add]
 theorem o24 : (cPtr.add 24).off.toNat = 24 := by simp [cPtr, Ptr.add]
@@ -120,10 +115,10 @@ theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0)
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hsz, h4, by rw [hk]; simp⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
-    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_, ?_⟩
+    fun e he hh => .inr ((hfp e he hh).on _), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
-  · intro c; rw [Word.hist_none hno]; exact le_nil c
+  · intro c; rw [Word.hist_none hno]; exact VClock.le_default c
 
 /-! ## The start -/
 
@@ -453,7 +448,7 @@ theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : Thre
       (VClock.bump (cs[t]!) t))[u]!) = true := by
   by_cases hu : u < cs.size
   · exact (Conc.fork_clocks ht).1 u hu
-  · rw [getElem!_neg cs u hu]; exact le_nil _
+  · rw [getElem!_neg cs u hu]; exact VClock.le_default _
 
 /-- **`HB` over a spawn by `main`**: the kid's clock is above `main`'s, so a clock below every
 thread that has not ended is below the kid's too. -/
