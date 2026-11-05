@@ -922,8 +922,6 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 /-- A thread out of the lock's code with part `r` at the places `x`. -/
 def gO (r : Res) (x : X) : Gh := (⟨.out, r, rnil⟩, x)
 
-theorem part_gO {r : Res} {x : X} : (L K).part (gO r x) = r := rfl
-
 /-- No thread at the start. -/
 def G0 : ThreadId → Gh := fun _ => (⟨.gone, rnil, rnil⟩, {})
 
@@ -954,7 +952,7 @@ theorem fitsL : (L K).Fits (FPrim.empty Gh) (proto K) (U K) ok :=
 
 /-- **The protocol keeps the semaphore** (`FSem.Fits`): the lock's laws, the steps of the
 condition's and the semaphore's code (`cstep`, `U_own`, `enterStep`, `holdStep`), the ticks, and
-the window: a registered `main` has at most two epoch writes after its saved one (`regE`). -/
+the window: a registered `main` has at most one epoch write after its saved one (`regE`). -/
 theorem fitsS : (S K).Fits (proto K) (U K) ok where
   ok_s _ h := h.2
   win G rX m hu u i jr e hreg _ _ := by

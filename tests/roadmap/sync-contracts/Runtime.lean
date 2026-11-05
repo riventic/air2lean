@@ -1,5 +1,4 @@
 import Proofs.Sync.Proofs
-import Proofs.Sync.Mailbox.Run
 
 /-!
 # Contract-client runtime witnesses (C14)

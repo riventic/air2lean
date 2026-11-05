@@ -6,7 +6,7 @@ the ROADMAP cite; edit the lane text in the PR that changes the lane. Moved here
 handoff directory on 2026-10-15 without changes to the text below; "engine rows #N" there are rows of the
 [engine ledger](engine-ledger.md) (the first `#20` is row `20a`, the atoms equal up to arithmetic).
 
-**Status (2026-11-05, after #648): 18 `legacy_users` left**, mapped in the "Dependency map" below.
+**Status (2026-11-05, after #648 and #643): 17 `legacy_users` left**, mapped in the "Dependency map" below.
 The numbered sections are the 2026-10-14 plan, and their tables still list files that are gone.
 `assurance/proof-framework.json` is the current list.
 
@@ -96,9 +96,10 @@ replacement named below is on main, except where the row says it is not.
 5. LockRules → Lock → Csl → Own: each one after its only importer above.
 6. Sep/{Block,Triple,Loop,Total}: stage D-e.
 
-**Nothing in the cluster can be retired before #575.** The RwLock cluster and Mailbox wait for
-the `SemImpl` statement. `Io.RwLock`'s writer waits on an `Io.Semaphore`, and its last reader
-posts. A separate semaphore spec for RwLock or Mailbox would duplicate #575's contract, which
+**Nothing in the cluster could be retired before #575** (merged; SemCounter and Mailbox are its
+clients now, #648, #643). The RwLock cluster waits for an `RwLockImpl` over `SemImpl`.
+`Io.RwLock`'s writer waits on an `Io.Semaphore`, and its last reader
+posts. A separate semaphore spec for RwLock would duplicate #575's contract, which
 CLAUDE.md rules out ("one mechanism"). Sync/Lock and Threadsync/Lock each wait for an L10i
 file. The Conc library chain waits for those.
 

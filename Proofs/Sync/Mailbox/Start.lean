@@ -28,19 +28,9 @@ namespace Sync.Mailbox
 
 variable {K : Cfg}
 
-theorem gO_setPart {r r' : Res} {x : X} : (L K).setPart (gO r x) r' = gO r' x := rfl
-
-theorem empty_disj (h : FHeap) : FHeap.Disjoint FHeap.empty h := fun _ => .inl rfl
-
-theorem le_nil (c : VClock) : VClock.le #[] c = true := by
-  unfold VClock.le VClock.get
-  simp only [Array.all_eq_true]
-  intro i _
-  simp
+theorem empty_disj (h : FHeap) : FHeap.Disjoint FHeap.empty h := (FHeap.disjoint_empty h).symm
 
 /-! ## `main`'s start -/
-
-theorem off_add (k : Nat) : (cPtr.add k).off.toNat = k := by simp [cPtr, Ptr.add]
 
 theorem heap_ne_l {a b : Res} {l : Zig.Loc} (h : a.heap l ≠ none) : (rsum a b).heap l ≠ none := by
   simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
@@ -71,7 +61,7 @@ theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0)
     fun e he hh => .inr ((hfp e he hh).on _), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
-  · intro c; rw [Word.hist_none hno]; exact le_nil c
+  · intro c; rw [Word.hist_none hno]; exact VClock.le_default c
 
 /-- The bytes `a .. c` of `bs` at `a` are the bytes `a .. b` and `b .. c`. -/
 theorem split_at {bs : Array Byte} {A S a b c : Nat} {r : Res}
@@ -281,7 +271,7 @@ theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : Thre
       (VClock.bump (cs[t]!) t))[u]!) = true := by
   by_cases hu : u < cs.size
   · exact (Conc.fork_clocks ht).1 u hu
-  · rw [getElem!_neg cs u hu]; exact le_nil _
+  · rw [getElem!_neg cs u hu]; exact VClock.le_default _
 
 theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rc : Res}
     (hp : rM.Plain) (hd : FHeap.Disjoint rM.heap rc.heap)

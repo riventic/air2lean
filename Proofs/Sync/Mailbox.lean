@@ -103,7 +103,7 @@ end Proofs
 def stdK : Cfg := ⟨ioSem.c, .inr (.inl rfl)⟩
 
 /-- **The consumer receives the whole message under every schedule**: every completed run of
-the mailbox client returns 34 (every oracle, every fuel). -/
+the mailbox client returns 34 (every oracle, every fuel; the spawn does not fail). -/
 theorem mailbox_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
     (io : Io) (h : (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 34 := by
