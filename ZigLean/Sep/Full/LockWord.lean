@@ -191,6 +191,11 @@ theorem BlkOk.ptrAddr_aligned {L : LockWord} {m : Mem} (h : L.BlkOk m) :
   obtain ⟨blk, hb, -, -, ha, -, -⟩ := h
   exact Full.ptrAddr_aligned hb ha
 
+/-- The word's private futex key is `LockWord.key`. -/
+theorem BlkOk.keyAt {L : LockWord} {m : Mem} (h : L.BlkOk m) : m.keyAt L.ptr false = some (L.key m) := by
+  obtain ⟨blk, hb, -⟩ := h
+  exact Mem.keyAt_wordKey hb L.o false
+
 /-- The invariant of the word at the places `P` (module doc). -/
 structure WInv (P : ThreadId → LPh) (m : Mem) : Prop where
   csize : m.clocks.size = m.threads.size
@@ -2226,6 +2231,17 @@ theorem WInv.wake {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {n : Nat} {
     rw [he, Array.contains_iff_mem.mpr hw0] at this
     cases this
   · rw [upd_ne _ _ hw0t, hw0p] at hh; cases hh
+
+/-- `WInv.wake` at the word's pointer (`Thread.futexWakePtr`, `futexWakeC`): its private key is
+the word's key. -/
+theorem WInv.wakePtr {P : ThreadId → LPh} {m m' : Mem} {t : ThreadId} {n : Nat} {cs : List Nat}
+    (hi : L.WInv P m) (hph : P t = .wake) (hn : 1 ≤ n)
+    (h : ((Thread.futexWakePtr L.ptr n cs).run { m with current := t }).run =
+      some (.ok ((), m'))) :
+    L.Step t m m' ∧ m'.current = t ∧ L.WInv (upd P t .out) m' := by
+  have hk : ({ m with current := t } : Mem).keyAt L.ptr false = some (L.key m) := hi.blk.keyAt
+  rw [Thread.futexWakePtr_eq hk] at h
+  exact hi.wake hph hn h
 
 /-- A change of the futex queue and the woken threads, with the same places. -/
 theorem WInv.requeue {P : ThreadId → LPh} {m : Mem} {c : ThreadId}
