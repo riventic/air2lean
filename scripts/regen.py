@@ -146,6 +146,12 @@ def step_gen(check):
     run([PY, '-B', 'scripts/gen-integrity.py', 'write'])
 
 
+def step_invgen(check):
+    """Generated loop invariants (`Inv.lean`) from the translated modules `gen` wrote."""
+    guarded('invgen', [PY, '-B', 'scripts/invgen.py', 'check' if check else 'write'], env=lake_env(),
+            timeout=3600)
+
+
 def simple(check_argv, write_argv):
     def step(check):
         if ok(check_argv):
@@ -406,6 +412,7 @@ STEPS = [
      simple([PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'check'],
             [PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'write'])),
     ('gen', 'pr', ['Gen.lean modules (scripts/gen-integrity.py list)'], step_gen),
+    ('invgen', 'pr', ['Inv.lean generated invariants (scripts/invgen.py TARGETS)'], step_invgen),
     ('ci-matrix', 'pr', ['.github/workflows/ci.yml (generated matrix regions)'],
      simple([PY, 'scripts/ci-matrix.py', 'check'], [PY, 'scripts/ci-matrix.py', 'write'])),
     ('trust-report', 'pr', ['docs/trust-report.md'],

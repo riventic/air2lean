@@ -42,11 +42,6 @@
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
     },
     {
-      "name": "CondSpec",
-      "module": "ZigLean.Conc.Spec.Cond",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "Contract",
       "module": "ZigLean.External",
       "status": "target",
@@ -57,11 +52,6 @@
       "module": "ZigLean.Sep.Full.Event",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
-      "name": "EventSpec",
-      "module": "ZigLean.Conc.Spec.Event",
-      "status": "legacy-to-retire"
     },
     {
       "name": "EventuallyReturns",
@@ -256,11 +246,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "FutexSpec",
-      "module": "ZigLean.Conc.Spec.Futex",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "Grows",
       "module": "ZigLean.Conc.Lemmas",
       "status": "legacy-to-retire",
@@ -325,11 +310,6 @@
       "module": "ZigLean.Sep.Full.Mutex",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "MutexSpec",
-      "module": "ZigLean.Conc.Spec.Mutex",
-      "status": "legacy-to-retire"
     },
     {
       "name": "OkR",
@@ -488,11 +468,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "WaitGroupSpec",
-      "module": "ZigLean.Conc.Spec.WaitGroup",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "Within",
       "module": "ZigLean.Sep.Full.Extent",
       "status": "target",
@@ -505,20 +480,6 @@
     }
   ],
   "tactics": [
-    {
-      "tactic": "#audit_unchecked_theorem",
-      "kind": "command",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Unchecked",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "#audit_unchecked_universal",
-      "kind": "command",
-      "module": "tests.roadmap.architecture-audit.claims.AuditClaims.Universal",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
     {
       "tactic": "conc_norm",
       "kind": "syntax",
@@ -710,10 +671,6 @@
     },
     {
       "path": "Proofs/Sync/Semaphore.lean"
-    },
-    {
-      "path": "Proofs/Threadsync/Lock.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
     },
     {
       "path": "ZigLean/Conc/Csl.lean"

@@ -867,6 +867,67 @@ decreasing_by simp_wf; simp only [sizeOf_toList]; omega
 
 end
 
+/-- Why the interpreter has no arm for `op`'s constructor (it is `stuck`), or `none` when
+`evalPure`, `evalMem` or `execInst` has a top-level arm for it. The stages are those of
+docs/research/V01-V02.md. No wildcard arm, so a new `Op` constructor is unhandled until it is
+classified here. `air2lean --print-op-table` exports it (`sem_outside_reason`), and the
+op-table test (tests/roadmap/op-effects) checks that the `none` constructors are exactly those
+with an interpreter arm that is not only `stuck`. An arm interprets its constructor for the
+fragment's value kinds only; other kinds are `stuck` too. -/
+def outside? : Op → Option String
+  | .arg .. | .arith .. | .div .. | .minMax .. | .bit .. | .not .. | .cmp .. | .boolAnd ..
+  | .boolOr .. | .intCast .. | .trunc .. | .bitcast .. | .isNull .. | .isNonNull ..
+  | .optPayload .. | .wrapOptional .. | .isErr .. | .isNonErr .. | .errPayload .. | .errCode ..
+  | .wrapErrPayload .. | .wrapErr .. | .alloc | .fieldPtr .. | .load .. | .store ..
+  | .sliceLen .. | .sliceElemVal .. | .ptrAdd .. | .elemPtr .. | .ptrElemVal .. | .slicePtr ..
+  | .call .. | .block .. | .loop .. | .br .. | .«repeat» .. | .condBr .. | .switchBr ..
+  | .«try» .. | .ret .. | .unreach | .trap | .line .. | .dbg .. => none
+  -- Floats (stage 5, `Zig.Float`, the FLT premises).
+  | .divFloat .. => some "float division (stage 5)"
+  | .sqrt .. => some "float square root (stage 5)"
+  | .libm .. => some "float libm functions (stage 5)"
+  | .mulAdd .. => some "float fused multiply-add (stage 5)"
+  | .floatConv .. => some "float-to-float conversion (stage 5)"
+  | .floatFromInt .. => some "integer-to-float conversion (stage 5)"
+  | .intFromFloat .. => some "float-to-integer conversion (stage 5)"
+  | .floatRound .. => some "float rounding (stage 5)"
+  | .neg .. => some "float negation (stage 5)"
+  | .abs .. => some "float `@abs`; the checker rejects integer `abs` (stage 5)"
+  -- Vectors (stage 5, lane-wise).
+  | .splat .. | .select .. | .shuffle .. | .reduce .. | .vectorStoreElem .. =>
+    some "vectors (stage 5)"
+  -- Integer operations.
+  | .shift .. => some "integer shifts (not staged)"
+  | .countBits .. => some "bit counting (not staged)"
+  | .permuteBits .. => some "bit permutation (not staged)"
+  | .withOverflow .. | .shlWithOverflow .. =>
+    some "overflow builtins return a tuple, an aggregate (stage 4)"
+  -- Aggregates, enums and unions (stage 4).
+  | .structFieldVal .. | .aggregateInit .. => some "aggregate values (stage 4)"
+  | .arrayElemVal .. => some "array values (stage 4)"
+  | .retLoad .. => some "a result returned through the return pointer, an aggregate (stage 4)"
+  | .unionTag .. | .unionInit .. | .setUnionTag .. => some "unions (stage 4)"
+  | .isNamedEnum .. => some "enums (stage 4)"
+  | .tagName .. => some "enum and union tag names (stage 4)"
+  | .errorName .. => some "error names need the compilation's error numbering (stage 4)"
+  | .errorsLenLe .. => some "error codes need the compilation's error numbering (stage 4)"
+  -- Optionals and error unions in memory (stage 4).
+  | .isNullPtr .. | .optPayloadPtr .. => some "optionals in memory (stage 4)"
+  | .isErrPtr .. | .errPayloadPtr .. | .errCodePtr .. | .tryPtr .. =>
+    some "error unions in memory (stage 4)"
+  -- Slicing, bulk memory and field-to-parent pointers (stage 4).
+  | .slice .. | .arrayToSlice .. => some "slicing (stage 4)"
+  | .sliceFieldPtr .. => some "pointers into a slice's fields (stage 4)"
+  | .fieldParentPtr .. => some "`@fieldParentPtr` (stage 4)"
+  | .memset .. | .memcpy .. => some "bulk memory (stage 4)"
+  | .loopSwitchBr .. | .switchDispatch .. => some "labeled switch loops (stage 4)"
+  -- Concurrency (stage 6, `Zig.ConcM`).
+  | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => some "atomics (stage 6)"
+  | .runtimeNavPtr .. => some "thread-local globals (stage 6)"
+  -- Assembly and the return-address oracle.
+  | .asm .. => some "inline assembly: its meaning is the A01 effect contract (not staged)"
+  | .retAddr => some "`@returnAddress`: the return-address oracle `Zig.returnAddress` (not staged)"
+
 /-- The exact prefixed body that `execLoop` invokes, also used by a certificate proving a
 single invocation. This does not add a function-entry tick to an extracted loop helper. -/
 def execIteration (c : Ctx) (body : List Inst) (env : Env) : SM Exit :=
