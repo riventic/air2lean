@@ -3564,8 +3564,7 @@ partial def unfoldCmd (x : Expr) : MetaM (Option Simp.Result) := do
     if let .const c _ := p.getAppFn then
       if ← isMatcher c then return none
     let some r ← unfoldCmd p | return none
-    return some (← Simp.mkCongrFun (← Simp.mkCongrArg (mkAppN x.getAppFn (x.getAppArgs.extract 0 3)) r)
-      (x.getArg! 4))
+    return some (← congrAt (fun z => mkAppN x.getAppFn (x.getAppArgs.set! 3 z)) p r)
   let .const c _ := x.getAppFn | return none
   if (← getProjectionFnInfo? c).isSome then return ← unfold1Eq? x
   if ← isLibrary c then return none
@@ -6555,16 +6554,24 @@ def loopRuleOf (L : Bk) : Option Name :=
   else if L.L.isConstOf ``TLogic.partial then some ``FTTriple.loop
   else none
 
-/-- The command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`): the
-loop and its body's definition `B`. -/
-def registeredLoop? (x : Expr) : MetaM (Option (Expr × Name)) := do
+/-- A loop command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`):
+the loop, its body's definition `B` and `B`'s registered `inv`, `meas` and `post`. -/
+structure RegLoop where
+  loop : Expr
+  body : Name
+  inv : Name
+  meas? : Option Name
+  post? : Option Name
+
+/-- The command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`). -/
+def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
   let x := x.consumeMData
   unless x.isAppOfArity ``StateT.run 5 do return none
   let l := (x.getArg! 3).consumeMData
   unless l.isAppOfArity ``Zig.loop 7 do return none
   let some B := (l.getArg! 5).consumeMData.getAppFn.constName? | return none
-  unless (loopInvOf (← getEnv) B).1.isSome do return none
-  return some (l, B)
+  let (some inv, meas?, post?) := loopInvOf (← getEnv) B | return none
+  return some { loop := l, body := B, inv, meas?, post? }
 
 /-- **A loop with a registered invariant** (`@[fsym_inv]`, P09-E4): the command
 `(Zig.loop (B xs) again).run s₀` of `x >>= f` by the backend's loop rule (`loopRuleOf`) with the
@@ -6572,24 +6579,21 @@ invariant `B.inv`, the measure `B.meas` (total correctness) and the exit post `B
 one: the invariant with `again r.1 = false`), applied as a rule (`tryRule`: its precondition
 planned, the frame inferred). Their parameters before the locals are matched by name with
 `B.inv`'s: `B.inv`'s first ones are the body's arguments `xs`, one named `s0` is the locals at
-loop entry `s₀`, and the others are unknowns that the plan of the precondition assigns.
-* `none`: the command is not a loop with a registered invariant (nothing changed);
-* `some (.ok (k, step, left))`: the continuation, the goal of the body's step (`∀ s, …`, which the
+loop entry `s₀`, and the others are unknowns that the plan of the precondition assigns. `lem` is
+`loopRuleOf L`.
+* `.ok (k, step, left)`: the continuation, the goal of the body's step (`∀ s, …`, which the
   caller walks) and the side goals left;
-* `some (.error why)`: the invariant does not hold at the entry (no plan, or an unknown that the
+* `.error why`: the invariant does not hold at the entry (no plan, or an unknown that the
   plan leaves; nothing changed).
 
 A registration that does not fit the loop (no measure in a total logic, a parameter of `B.meas`
 that `B.inv` does not have) is an error. -/
-def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
-    TacticM (Option (Except MessageData (MVarId × MVarId × List MVarId))) := g.withContext do
-  let some (l, B) ← registeredLoop? x | return none
+def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
+    TacticM (Except MessageData (MVarId × MVarId × List MVarId)) := g.withContext do
+  let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN? } := R
   let (body, again, s₀) := ((l.getArg! 5).consumeMData, l.getArg! 6, x.consumeMData.getArg! 4)
-  let (some invN, measN?, postN?) := loopInvOf (← getEnv) B | return none
   let fail {α} (why : MessageData) : TacticM α :=
     throwError "fsym: the loop invariant of `{B}` (`@[fsym_inv]`): {why}"
-  -- (a proof over a variable logic: no rule, the loop stays a residual)
-  let some lem := loopRuleOf L | return none
   let total := !L.part
   let s ← saveState
   let restoreArith ← (← caches).saveArith
@@ -6606,9 +6610,9 @@ def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
       if i < xs.size then
         unless ← isDefEq pre[i] xs[i]! do
           fail m!"`{invN}`'s parameter {names[i]!} is not the body's argument{indentExpr xs[i]!}"
-      else if names[i]! == `s0 then
+      else if names[i]! == loopEntryParam then
         unless ← isDefEq pre[i] s₀ do
-          fail m!"`{invN}`'s parameter s0 is not of the loop's locals{indentExpr s₀}"
+          fail m!"`{invN}`'s parameter {loopEntryParam} is not of the loop's locals{indentExpr s₀}"
     -- `B.meas`, `B.post` at `B.inv`'s parameters of the same names (and types)
     let atParams (c : Name) : TacticM Expr := do
       let args ← ((← inferType (mkConst c)).getForallBinderNames.toArray.pop).mapM fun y => do
@@ -6638,13 +6642,13 @@ def loopInvRule? (g : MVarId) (L : Bk) (x f : Expr) :
     let step ← mkFreshExprSyntheticOpaqueMVar (← instantiateMVars (← inferType lms[n - 2]!))
     lms[n - 2]!.mvarId!.assign step
     let some (k, left) ← tryRule g (← instantiateMVars (mkAppN lemC lms)) x f (keepPre := true) | do
-      rollback; return some (.error m!"`{invN}` has no plan in the state at the loop's entry")
+      rollback; return .error m!"`{invN}` has no plan in the state at the loop's entry"
     for h : i in [0:pre.size] do
       if (← instantiateMVars pre[i]).hasExprMVar then
         rollback
-        return some (.error m!"the plan at the loop's entry does not determine `{invN}`'s \
-          parameter {names[i]!}")
-    return some (.ok (k, step.mvarId!, left))
+        return .error m!"the plan at the loop's entry does not determine `{invN}`'s \
+          parameter {names[i]!}"
+    return .ok (k, step.mvarId!, left)
   catch ex => rollback; throw ex
 
 mutual
@@ -7082,14 +7086,17 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- does not count): its registered invariant (`@[fsym_inv]`), after the views that a rule's
   -- precondition wanted; the body's step and the rest walked as branches. An invariant with no
   -- plan at the entry: after the views and the rebase of what its plan wanted, reported.
-  if !partialRule && (← registeredLoop? x).isSome then
+  -- (a proof over a variable logic has no loop rule: the loop stays a residual)
+  let loop? ← if partialRule then pure none else registeredLoop? x
+  if let (some R, some lem) := (loop?, loopRuleOf L) then
     if !wanted.isEmpty then
       if let some r ← viewed wanted then return r
-    match ← reportLimit m!"the registered invariant of the loop{indentExpr x}" (loopInvRule? g L x f) with
-    | some (.ok (k, step, left)) =>
+    match ← reportLimit m!"the registered invariant of the loop{indentExpr x}"
+        (loopInvRule? g L lem R x f) with
+    | .ok (k, step, left) =>
       let (_, step) ← step.intro `s
       return left ++ (← eachBranch [step, k] id (walk · user extra (fuel - 1)))
-    | some (.error why) =>
+    | .error why =>
       let wantedInv ← (← caches).wanted.get
       if wantedInv.size != wanted.size then
         if let some r ← viewed wantedInv then return r
@@ -7098,7 +7105,6 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
           (fuel - 1)
       Report.stopMessage m!"fsym: {why}{indentExpr x}\nwith the precondition{indentExpr P}"
       return ← Report.leave g [g] "invariant_not_established" "loop_entry" (some x)
-    | none => pure ()
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
     let s1 ← saveState

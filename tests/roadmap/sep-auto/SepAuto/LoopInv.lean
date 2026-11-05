@@ -138,17 +138,7 @@ theorem drain_total (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 
   fsym
 
 /-- The same body under another name … -/
-def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := do
-  let i ← pure ((← get).i)
-  if Zig.lt false i n then (do
-    let v ← Zig.load (BitVec 64) 8 p
-    let v' ← Zig.add false v (1 : BitVec 64)
-    Zig.store (α := BitVec 64) 8 p v'
-    let i' ← Zig.add false ((← get).i) (1 : BitVec 32)
-    modify (fun s => { s with i := i' })
-    pure .rep)
-  else (do
-    pure .brk)
+def bad.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := fill.loop p n
 
 /-- … whose registered invariant is wrong: it holds at the entry, but the step does not keep it
 (`*p` goes up by 1 per iteration, not by 2). -/

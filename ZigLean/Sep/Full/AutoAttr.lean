@@ -197,6 +197,12 @@ initialize registerBuiltinAttribute {
     fsymViewExt.add decl kind
 }
 
+/-- The parts of a loop body `B` that `@[fsym_inv]` registers: `B.inv`, `B.meas` and `B.post`. -/
+def loopInvParts : List String := ["inv", "meas", "post"]
+
+/-- The parameter of `B.inv` (and `B.meas`, `B.post`) that is the locals at the loop's entry. -/
+def loopEntryParam : Name := `s0
+
 open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
 `StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
@@ -209,8 +215,7 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
     throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
       a loop body `B`"
   let .str body last := decl | fail "not a name `B.inv`, `B.meas` or `B.post`"
-  unless last == "inv" || last == "meas" || last == "post" do
-    fail "its name does not end in `inv`, `meas` or `post`"
+  unless last ∈ loopInvParts do fail "its name does not end in `inv`, `meas` or `post`"
   let some (.defnInfo b) := (← getEnv).find? body
     | fail m!"`{body}` is not a definition (declared before its invariant)"
   let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
@@ -226,26 +231,27 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
     return if dep σ || dep ε then none else some (σ, ε)
   forallTelescope d.type fun xs res => do
     let some s := xs.back? | fail "no parameter for the loop's locals"
+    if let some (σ, ε) := types? then
+      let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
+      unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
+    let locStruct := types?.any fun (σ, _) => σ.getAppFn.constName?.any (isStructure (← getEnv))
     let mut seen : NameSet := {}
-    for x in xs do
-      let l ← x.fvarId!.getDecl
+    for h : i in [0:xs.size] do
+      let l ← xs[i].fvarId!.getDecl
       unless l.binderInfo.isExplicit do fail m!"the parameter {l.userName} is not explicit"
       if l.userName.hasMacroScopes || seen.contains l.userName then
         fail m!"the parameter {l.userName} has no name of its own"
       seen := seen.insert l.userName
-    if let some (σ, ε) := types? then
-      let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
-      unless ← isDefEq (← inferType s) loc do fail m!"its last parameter is not of type {loc}"
       -- the locals at the entry: the parameter `s0` (`fsym` binds it by name), and no other of a
       -- locals structure's type
-      let locStruct := σ.getAppFn.constName?.any (isStructure (← getEnv))
-      for x in xs.pop do
-        let l ← x.fvarId!.getDecl
-        let isLoc ← isDefEq l.type σ
-        if l.userName == `s0 && !isLoc then fail m!"its parameter s0 is not of type {σ}"
-        if l.userName != `s0 && isLoc && locStruct then
-          fail m!"its parameter {l.userName} of the locals' type is not named s0 (the locals at the \
-            loop's entry)"
+      if let some (σ, _) := types? then
+        if i + 1 < xs.size then
+          let isLoc ← isDefEq l.type σ
+          if l.userName == loopEntryParam && !isLoc then
+            fail m!"its parameter {loopEntryParam} is not of type {σ}"
+          if l.userName != loopEntryParam && isLoc && locStruct then
+            fail m!"its parameter {l.userName} of the locals' type is not named {loopEntryParam} \
+              (the locals at the loop's entry)"
     let want := if last == "meas" then mkConst ``Nat else mkConst `Zig.Full.FAssn
     unless ← isDefEq res want do fail m!"its value is not of type {want}"
 
