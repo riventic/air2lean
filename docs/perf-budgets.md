@@ -247,13 +247,18 @@ with other jobs, so differences below about 20% are noise):
   `ExceptT.run` over the whole term. The general lemma `Zig.Result.eq_pure_of_run`
   (`ZigLean/ResultRun.lean`) states the step once at a variable; no statement changed, and the
   module's elaboration went from 19-22 s to 15-17 s (three runs each, `-DElab.async=false`).
-  Remaining in `Threadsync.Handoff` and `WaitGroup`: kernel type checking of the large
-  `refine` chains (`sig_body` 4.5 s, `handoff_completes` 3.4 s, `fwait_spec`, `wus_spec`
-  2.7 s each, `inv_finish` 3.5 s). Other `have _ : x = pure a := h` steps exist in
-  `Proofs/Lists` and `ZigLean/Sep`; they are not hotspots.
+  Remaining in `Threadsync.Handoff` and `WaitGroup` at that profile: kernel type checking of
+  the large `refine` chains (`handoff_completes` 3.4 s; the other theorems it named, `sig_body`,
+  `fwait_spec`, `wus_spec` and `inv_finish`, went when both proofs moved to the full-state
+  logic). `WaitGroup`'s proof is now split over `Proofs/Threadsync/WaitGroup/` (#640), whose
+  modules are in the `threadsync` workload's `proof_modules`; its heaviest steps, `wp_wgWait`
+  (`Wait.lean`) and `task_spec` (`Task.lean`), raise `maxHeartbeats`. Other
+  `have _ : x = pure a := h` steps exist in `Proofs/Lists` and `ZigLean/Sep`; they are not
+  hotspots.
 
 No lookup-structure change in the translator is claimed: no translator phase other than
-`renumber` exceeds 16 ms. The remaining proof candidates are the `WaitGroup`/`Handoff` `refine` chains above.
+`renumber` exceeds 16 ms. The remaining proof candidates are `handoff_completes` and the split
+`WaitGroup` above; both await a profile on the full-state logic.
 
 `python3 tests/roadmap/perf-budgets/test_perf_budgets.py` tests the gate,
 baseline derivation, AIR overlay, module-local cold cleanup, `wait4` measurement
