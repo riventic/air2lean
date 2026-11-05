@@ -146,7 +146,7 @@ theorem Holds.regroup {m : Mem} {r rF r' rF' : Res} (hh : Holds m r rF)
   have eh := congrArg Res.heap he
   have ek := congrArg Res.know he
   have eg := congrArg Res.gh he
-  simp only [rsum] at eh ek eg
+  dsimp only at eh ek eg
   have hk : Know.Sub (r'.know.union rF'.know) m.kn := by rw [ek]; exact hh.know.union hh.knowF
   refine ⟨hd, by rw [eh]; exact hh.heap, hk.left, hk.right, ?_⟩
   have hg := hh.ghost
@@ -211,9 +211,8 @@ theorem move {o' rO' : Res} (ho : FOwned own rO m) (ht : t < m.threads.size)
   have hRO : FHeap.Disjoint rR.heap rO.heap := (FHeap.disjoint_union_left.mp hh.disj).2
   -- `rR` is apart from the old sum, so from the new one's summands
   have hR' : FHeap.Disjoint rR.heap (o'.heap ∪ rO'.heap) := by
-    have := congrArg Res.heap he
-    simp only [rsum] at this
-    rw [this]; exact FHeap.disjoint_union_right.mpr ⟨hdR.symm, hRO⟩
+    rw [show o'.heap ∪ rO'.heap = (own t).heap ∪ rO.heap from congrArg Res.heap he]
+    exact FHeap.disjoint_union_right.mpr ⟨hdR.symm, hRO⟩
   obtain ⟨hRo, hRr⟩ := FHeap.disjoint_union_right.mp hR'
   have hcur : (rsum o' rO').NoCur := by rw [he]; exact Res.noCur_rsum (ho.noCur.1 t) ho.noCur.2
   refine ⟨⟨_, parts_put ht hR hRo.symm, hh.regroup ?_ ?_⟩, fun u hu => ?_, fun u hu => ?_,
@@ -228,7 +227,7 @@ theorem move {o' rO' : Res} (ho : FOwned own rO m) (ht : t < m.threads.size)
   · by_cases e : u = t
     · subst e; rw [upd_self]; exact hown
     · rw [upd_ne _ _ e]; exact ho.owns u hu
-  · rw [upd_ne _ _ (show u ≠ t by omega)]; exact ho.outside u hu
+  · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
   · by_cases e : u = t
     · subst e; rw [upd_self]; exact hcur.left
     · rw [upd_ne _ _ e]; exact ho.noCur.1 u
