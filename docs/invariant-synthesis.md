@@ -492,6 +492,11 @@ Each stage is a permanent part of the end state, and none adds a shim.
 P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
 the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
 
+P09-E4's engine part is implemented (`docs/proof-automation.md`, §Loops): `@[fsym_inv]` registers
+`B.inv`, `B.meas` and the exit post `B.post` of a loop body `B`. The exit post is registered
+because the invariant alone forgets the exit's label and test, which a translated caller matches
+on, and `fsym` infers no strongest post at a loop's exits (P09-E2).
+
 ### Implemented: counted loops (S2, first slice)
 
 `air2lean-invgen` (`Air2Lean/InvGen.lean`, executable `Air2Lean/InvGenMain.lean`, lake target
