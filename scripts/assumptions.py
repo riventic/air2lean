@@ -956,12 +956,14 @@ def checked_modules(module: str, roots: list[Path]) -> list[str]:
     return sorted(found)
 
 
-def orphan_error(olean: Path, package: Path) -> ValueError:
-    """An olean of `package` whose module has no source there: Lake can build it no more, and
-    `leanchecker` would check it (lean-deps.py `orphan_outputs`)."""
-    return ValueError(f"{olean}: compiled module without a source in {package} (deleted since it was "
-                      "built); scripts/full-build.sh removes such outputs "
-                      "(python3 -B scripts/lean-deps.py --prune-orphans)")
+def require_source(sources: list[Path], module: str, olean: Path, package: Path) -> None:
+    """Fails on `olean`, of `package` (source directories `sources`), when `module` has no source
+    there: Lake can build it no more, and `leanchecker` would check it (lean-deps.py
+    `orphan_outputs`)."""
+    if not lean_deps().has_source(sources, module.replace(".", "/")):
+        raise ValueError(f"{olean}: compiled module without a source in {package} (deleted since it "
+                         "was built); scripts/full-build.sh removes such outputs "
+                         "(python3 -B scripts/lean-deps.py --prune-orphans)")
 
 
 def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) -> list[str] | None:
@@ -978,15 +980,13 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
                deps.package_sources(path)) for path in packages}
     needs = []
     for module in sorted(modules):
-        stem = module.replace(".", "/")
-        relative = stem + ".olean"
+        relative = module.replace(".", "/") + ".olean"
         owner = next((root for root in roots if (root / relative).is_file()), None)
         if owner not in owners:
             return None
         package, name, sources = owners[owner]
-        if not deps.has_source(sources, stem):
-            raise orphan_error(owner / relative, package)
-        needs +=[f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
+        require_source(sources, module, owner / relative, package)
+        needs += [f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
     return needs
 
 
@@ -1617,8 +1617,7 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
         checked = sorted({c for m in lake_modules for c in checked_modules(m, [built])})
         sources = lean_deps().package_sources(ROOT)
         for module in checked:
-            if not lean_deps().has_source(sources, module.replace(".", "/")):
-                raise orphan_error(built / (module.replace(".", "/") + ".olean"), ROOT)
+            require_source(sources, module, built / (module.replace(".", "/") + ".olean"), ROOT)
         run(["lake", "--rehash", "build", "--no-build", *checked])
     lake_inputs = library_compiled_inputs(ROOT)
     cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)
