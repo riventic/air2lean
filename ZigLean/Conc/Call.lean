@@ -158,11 +158,9 @@ def futexWaitCancelableC {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
     futexWaitC io p expected
     lateCancelC
 
-/-- `Io.futexWake(T, ptr, max_waiters)`, at `ptr`'s private key (`futexKeyOf`). -/
+/-- `Io.futexWake(T, ptr, max_waiters)`, at `ptr`'s private key (`Thread.futexWakePtr`). -/
 def futexWakeC (_ : Io) (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
-  StateT.lift do
-    let k ← ConcM.liftMem (futexKeyOf p false)
-    discard (ConcM.sync (Tgt := Tgt) (.wake k n.toNat))
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 
 /-! ### `Io.Group` (0.16.0; `docs/std-models.md` §Thread model, §Cancelation)
 
@@ -252,11 +250,9 @@ def mutexOwnerCheck (p : Ptr) : ConcM Tgt Unit := ConcM.liftMem (Thread.mutexOwn
 def threadFutexWaitC (p : Ptr) (expected : BitVec 32) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wait p expected false)))
 
-/-- `Thread.Futex.wake(ptr, max_waiters)`, at `ptr`'s private key (`futexKeyOf`). -/
+/-- `Thread.Futex.wake(ptr, max_waiters)`, at `ptr`'s private key (`Thread.futexWakePtr`). -/
 def threadFutexWakeC (p : Ptr) (n : BitVec 32) : CM Tgt σ Unit :=
-  StateT.lift do
-    let k ← ConcM.liftMem (futexKeyOf p false)
-    discard (ConcM.sync (Tgt := Tgt) (.wake k n.toNat))
+  StateT.lift (discard (ConcM.sync (Tgt := Tgt) (.wake p n.toNat)))
 
 /-- One try of `os_unfair_lock_lock` at the lock word `p`: an acquire `cmpxchg` 0 → 1; on a
 failure, a futex wait while the word holds the value read. `true`: try again. -/

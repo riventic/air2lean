@@ -137,9 +137,9 @@ inductive SyncOp (Tgt : Type) where
   /-- A futex wait (`Io.futexWait`): if the `u32` at `p` is `expected`, the thread waits until a
   `wake` at `p`'s key (`Mem.keyAt`, domain `shared`); else it goes on. -/
   | wait (p : Ptr) (expected : BitVec 32) (shared : Bool)
-  /-- A futex wake (`Io.futexWake`): up to `n` threads that wait at the key `k` go on. The caller
-  resolved the key (`futexKeyOf`), so the wake itself cannot fail. -/
-  | wake (k : FutexKey) (n : Nat)
+  /-- A futex wake (`Io.futexWake`): up to `n` threads that wait at `p`'s private key go on
+  (`Thread.futexWakePtr`: the key is resolved when the wake runs). -/
+  | wake (p : Ptr) (n : Nat)
 
 /-- The response of the scheduler to a sync op. -/
 def SyncOp.Resp {Tgt : Type} : SyncOp Tgt → Type

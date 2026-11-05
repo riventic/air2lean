@@ -757,12 +757,33 @@ def wakeSet (ws : Array (ThreadId × FutexKey)) (p : FutexKey) (n : Nat) (cs : L
   (wakePick n ((ws.filter (·.2 == p)).toList.map (·.1)) cs).toArray
 
 /-- A futex wake at the key `k`: up to `n` of the waiters at `k` are woken, the ones that the
-choices `cs` pick (`wakeSet`; the scheduler takes them from the oracle). The caller resolved the
-key (`futexKeyOf`). No happens-before edge (the std code reads the value again with an
-acquire). -/
+choices `cs` pick (`wakeSet`; the scheduler takes them from the oracle). No happens-before edge
+(the std code reads the value again with an acquire). -/
 def futexWake (k : FutexKey) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
   let woke := wakeSet m.waiters k n cs
   { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
+
+/-- A futex wake at `p` (`Io.futexWake`, `Thread.Futex.wake`): `futexWake` at `p`'s private key
+(`Mem.keyAt`), resolved in the step that wakes, as the kernel resolves it in the syscall. A
+protocol's invariant then reads its word's key in the memory of the wake (`Mem.wordKey`): no key
+resolved earlier has to stay valid across other threads' steps. A pointer without a block has no
+key and wakes no thread. -/
+def futexWakePtr (p : Ptr) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
+  match m.keyAt p false with
+  | some k =>
+    let woke := wakeSet m.waiters k n cs
+    { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
+  | none => m
+
+/-- The wake at a pointer with a key is the wake at the key. -/
+theorem futexWakePtr_eq {p : Ptr} {k : FutexKey} {m : Mem} (h : m.keyAt p false = some k)
+    (n : Nat) (cs : List Nat) : (futexWakePtr p n cs).run m = (futexWake k n cs).run m := by
+  simp only [futexWakePtr, futexWake, StateT.run_modify, h]
+
+/-- The wake at a pointer without a key changes nothing. -/
+theorem futexWakePtr_none {p : Ptr} {m : Mem} (h : m.keyAt p false = none) (n : Nat)
+    (cs : List Nat) : ((futexWakePtr p n cs).run m).run = some (.ok ((), m)) := by
+  simp only [futexWakePtr, StateT.run_modify, h]; rfl
 
 /-- The number of waiters at the key `p`. -/
 def waitersAt (ws : Array (ThreadId × FutexKey)) (p : FutexKey) : Nat := (ws.filter (·.2 == p)).size

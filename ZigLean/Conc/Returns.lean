@@ -64,7 +64,7 @@ def PB {β : Type} (cr : γ → Nat) (g : γ) (b : Nat) (p : Sched.Paused Tgt β
   1 ≤ cr g ∧ cr g ≤ p.depth ∧
     match p.op with
     | .spawn tgt => ∃ k, (∀ g₀, P.init tgt g₀ → 1 ≤ cr g₀ ∧ cr g₀ ≤ k) ∧ cr g + k ≤ b
-    | .wait _ _ | .gate | .spawnGated _ => False
+    | .wait _ _ _ | .gate | .spawnGated _ => False
     | _ => cr g ≤ b
 
 theorem PB.le {β : Type} {cr : γ → Nat} {g : γ} {b : Nat} {p : Sched.Paused Tgt β}
@@ -216,7 +216,7 @@ theorem turn_budget {β : Type} {cr : γ → Nat} (hcost : P.cost = some cr) {t 
     {G G₂ : ThreadId → γ} {p p' : Sched.Paused Tgt β}
     {g : γ} {b : Nat} (hpb : P.PB cr (G t) b p) (hG : G₂ t = G t)
     (hc : (P.Charged t p'.op G₂ g ∧ p'.depth + 1 = p.depth) ∨
-      (p'.op = p.op ∧ ∃ ptr e, p.op = .wait ptr e)) :
+      (p'.op = p.op ∧ ∃ ptr e sh, p.op = .wait ptr e sh)) :
     P.PB cr g (cr (G t) - 1) p' := by
   rcases hc with ⟨hch, hd⟩ | ⟨-, ptr, e, he⟩
   · have hco := hch cr hcost
@@ -510,9 +510,9 @@ theorem stop_needs_credits {cr : γ → Nat} (hcost : P.cost = some cr) {t : Thr
 
 /-- A futex wait has no charge: in a protocol that counts turns it has no proof (fail closed;
 its turns depend on another thread's progress). -/
-theorem wait_fails_closed {cr : γ → Nat} (hcost : P.cost = some cr) {t : ThreadId} {p : Ptr}
+theorem wait_fails_closed {cr : γ → Nat} (hcost : P.cost = some cr) {t : ThreadId} {p : Ptr} {sh : Bool}
     {e : BitVec 32} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop} {G : ThreadId → γ} {m : Mem}
-    {n : Nat} : ¬ P.WP t (ConcM.sync (.wait p e)) Q G m (n + 1) := by
+    {n : Nat} : ¬ P.WP t (ConcM.sync (.wait p e sh)) Q G m (n + 1) := by
   intro h
   unfold WP at h
   simp only [ConcM.sync, Safe] at h

@@ -109,6 +109,18 @@ theorem Mem.heap_some {m : Mem} {b : BlockId} {o : Nat} {c : Cell} (h : m.heap (
     · rw [dite_eq_left_of_eq_true (eq_true hc)] at h; cases h; exact ⟨blk, rfl, hc.1, hc.2.1, rfl⟩
     · rw [dite_eq_right_of_eq_false (eq_false hc)] at h; cases h
 
+/-- The same live byte of block `b` (its cell holds the block's address): the same futex keys of
+the block's words (`Mem.wordKey`). -/
+theorem Mem.wordKey_of_heap {m m' : Mem} {b : BlockId} {x : Nat} {c : Cell}
+    (hc : m.heap (b, x) = some c) (h : m'.heap (b, x) = m.heap (b, x)) (o : Nat) (sh : Bool) :
+    m'.wordKey b o sh = m.wordKey b o sh := by
+  obtain ⟨blk, hb, -, _, e⟩ := Mem.heap_some hc
+  obtain ⟨blk', hb', -, _, e'⟩ := Mem.heap_some (h.trans hc)
+  rw [e] at e'
+  simp only [Cell.mk.injEq] at e'
+  refine Mem.wordKey_of_addr ?_ o sh
+  rw [hb, hb', Option.map_some, Option.map_some, e'.2.1]
+
 /-- A live byte is at or above its block's first live offset (`BlockKind.mappedLo`). -/
 theorem Mem.heap_some_lo {m : Mem} {b : BlockId} {o : Nat} {c : Cell} (h : m.heap (b, o) = some c) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.kind.mappedLo ≤ o := by

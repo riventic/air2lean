@@ -289,26 +289,20 @@ theorem WP.futexWaitC {ε : Type} {w : Nat} [Packed ε w] {io : Io} {p : Ptr} {e
   · exact WP.pure' this
   · exact ⟨this.1, WP.pure' this.2⟩
 
-/-- A futex wake (`futexWakeC`) at `p`'s private key `pk` (`Mem.keyAt`): the thread stops with
-the ghost value `g`; `Q` holds after the wake. -/
-theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ} {pk : FutexKey}
-    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop} (hk : m.keyAt p false = some pk)
+/-- A futex wake (`futexWakeC`) at `p`'s private key, resolved in the memory of the wake
+(`Thread.futexWakePtr`): the thread stops with the ghost value `g`; `Q` holds after the wake. -/
+theorem WP.futexWakeC {io : Io} {p : Ptr} {c : BitVec 32} {s : σ}
+    {Q : Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      ∀ cs m', ((Thread.futexWake pk c.toNat cs).run { m₁ with current := t }).run =
+      ∀ cs m', ((Thread.futexWakePtr p c.toNat cs).run { m₁ with current := t }).run =
         some (.ok ((), m')) → Q ((), s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((futexWakeC io p c : CM Tgt σ Unit).run s) Q G m n := by
-  show P.WP t ((ConcM.liftMem (futexKeyOf p false) >>= fun pk =>
-    (fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.wake pk c.toNat)) >>= fun a =>
+  show P.WP t (((fun _ => ()) <$> ConcM.sync (Tgt := Tgt) (.wake p c.toNat)) >>= fun a =>
     pure (a, s)) Q G m n
-  have hr := futexKeyOf_run hk
-  refine WP.bind (WP.bind (WP.liftMem' (fun e he => ?_) (fun k' m' he => ?_) fun he => ?_))
-  · rw [hr] at he; cases he
-  · rw [hr] at he; cases he
-    refine ⟨rfl, WP.map (WP.sync (fun k hk => ?_) hcost)⟩
-    obtain ⟨g, hi, hc⟩ := h k hk
-    exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ cs m' hw => WP.pure' (hc G₁ m₁ hg hi₁ cs m' hw)⟩
-  · rw [hr] at he; cases he
+  refine WP.bind (WP.map (WP.sync (fun k hk => ?_) hcost))
+  obtain ⟨g, hi, hc⟩ := h k hk
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ cs m' hw => WP.pure' (hc G₁ m₁ hg hi₁ cs m' hw)⟩
 
 /-- `Thread.isTask`: whether the current thread is an `Io` task; the memory stays. -/
 theorem isTask_run (m : Mem) : (Thread.isTask.run m).run = some (.ok (m.current != 0, m)) := rfl

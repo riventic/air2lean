@@ -152,7 +152,7 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
       ∀ b m', ((Thread.futexWait p e sh).run { m with current := t }).run = some (.ok (b, m')) →
         if b then P.inv G m' ∧ K () G { m with current := t } else K () G m')
   | .wake p n, K => ∀ cs m',
-      ((Thread.futexWake p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
+      ((Thread.futexWakePtr p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
 /-- The charge of a stop at `op` with the credits `cr`: the thread resumed with `old` credits and
 stops with `new`. The turn that reaches the stop costs one credit, and the thread keeps at least
@@ -598,9 +598,10 @@ theorem set_ok {x : Mem} {m m' : Mem} {a : PUnit}
 end MemM
 
 /-- A futex wake does not throw, and keeps the threads. -/
-theorem futexWake_ok (p : FutexKey) (n : Nat) (cs : List Nat) (m : Mem) :
-    ∃ m', ((Thread.futexWake p n cs).run m).run = some (.ok ((), m')) ∧ m'.threads = m.threads :=
-  ⟨_, rfl, rfl⟩
+theorem futexWake_ok (p : Ptr) (n : Nat) (cs : List Nat) (m : Mem) :
+    ∃ m', ((Thread.futexWakePtr p n cs).run m).run = some (.ok ((), m')) ∧
+      m'.threads = m.threads :=
+  ⟨_, rfl, by dsimp only; split <;> rfl⟩
 
 /-- The oracle's choices change only the oracle position. -/
 theorem chooseMany_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} :
@@ -622,7 +623,7 @@ theorem chooseMany_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} 
     obtain ⟨-, rfl⟩ := hx
     exact ⟨st, tr, rfl⟩
 
-theorem chooseWake_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} {p : FutexKey} {n : Nat}
+theorem chooseWake_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} {p : Ptr} {n : Nat}
     {cs : List Nat} (h : s.chooseWake o p n = (cs, s')) :
     ∃ st tr, s' = { s with step := st, trace := tr } := chooseMany_eq h
 

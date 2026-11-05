@@ -154,11 +154,11 @@ def State.chooseMany (s : State Tgt α) (o : Nat → Nat) : List Nat → List Na
     let (xs, s) := s.chooseMany o cs
     (x :: xs, s)
 
-/-- The waiters that a wake of up to `n` waiters at the key `p` wakes: one choice for each, among
-the waiters at `p` not picked yet (`Thread.wakeSet`). -/
-def State.chooseWake (s : State Tgt α) (o : Nat → Nat) (p : FutexKey) (n : Nat) :
+/-- The waiters that a wake of up to `n` waiters at `p`'s private key wakes: one choice for each,
+among the waiters at the key not picked yet (`Thread.wakeSet`); none without a key. -/
+def State.chooseWake (s : State Tgt α) (o : Nat → Nat) (p : Ptr) (n : Nat) :
     List Nat × State Tgt α :=
-  let k := Thread.waitersAt s.mem.waiters p
+  let k := ((s.mem.keyAt p false).map (Thread.waitersAt s.mem.waiters)).getD 0
   s.chooseMany o ((List.range (Nat.min n k)).map (k - ·))
 
 /-- The execution of an `Io.Group.async` task that the oracle picks among the environment's
@@ -216,10 +216,10 @@ def turnTrace {β : Type} (env : Env) (dispatch : Tgt → ConcM Tgt Unit) (fuel 
       if c = spuriousWake then (settle t s₂ (k () s₂.mem), s₂.trace)
       else (.ok (.paused ⟨d, .wait ptr e sh, k⟩, none, { s₁ with step := s₂.step, trace := s₂.trace }),
         s₂.trace)
-  | ⟨_, .wake key n, k⟩ =>
-    let (cs, s) := s.chooseWake o key n
+  | ⟨_, .wake ptr n, k⟩ =>
+    let (cs, s) := s.chooseWake o ptr n
     (do
-      let ((), s) ← s.onMem (Thread.futexWake key n cs)
+      let ((), s) ← s.onMem (Thread.futexWakePtr ptr n cs)
       settle t s (k () s.mem), s.trace)
 
 /-- The semantic result of one turn; `turnTrace` also retains its oracle choices. -/
