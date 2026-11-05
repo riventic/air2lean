@@ -32,7 +32,7 @@ proof framework").
 * `tactics`: every tactic declaration (`syntax`/`macro`/`elab … : tactic`) and every extension of a
   tactic declared in another module (`macro_rules`), with module and status; likewise every
   command (`… : command`, kinds `command` and `command-rules`), because a command elaborator can
-  add, hide or rewrite declarations (`if_decl … end_if` elaborates its theorems only when a
+  add, hide or rewrite declarations (`when_defined … end_when` elaborates its theorems only when a
   constant exists);
 * `registries`: every declaration of an attribute or a simp set, with its kind (`attribute`,
   `simp-set`, `rule-set`) and module: the commands `register_simp_attr`, `register_label_attr`, …
@@ -44,7 +44,7 @@ proof framework").
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
-  status `legacy-to-retire` (`unroll_sched`, `tomega`, …), found as a word match in
+  status `legacy-to-retire` (`unroll_sched`, …), found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
   gates building new proofs on it, so a new file cannot import `ZigLean.Conc.Unroll` and call
   `unroll_sched` without a reviewed addition. A new file or a rising count fails, also against the
@@ -89,7 +89,9 @@ postcondition, which neither an implication nor the model's own result alone sta
 | `vc_gen(?)`, `#vc_extract(_all)`, `@[vc_contract]` | `VC/Extract`, `VC/ContractAttr` (deleted, L15) | `fsym`: the VCs are its residual goals, `fsym.report` their origins; a `Result` contract through `FTotalTriple.result_spec` ([vcs.md](vcs.md)) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |
 | `blkat_alloc` | `Conc/Lemmas` (deleted, L14) | term proofs over `BlkAt.alloc` and `BlkAt.afterAlloc` |
-| `tomega`, `zig_range` | `Conc/Spec/Count`, `Range` | `fsym_arith` and `@[fsym_provider]` facts |
+| `tomega` | `Conc/Spec/Count` (deleted, L18) | `Nat` library lemmas (`Nat.ne_of_gt`, `Nat.lt_of_lt_of_le`) |
+| `zig_range` | `Range` | `fsym_arith` and `@[fsym_provider]` facts |
+| `if_decl` | `Threadsync/Variant` (deleted, L18) | `when_defined` (`VersionGate`), the one translation gate; it retires with engine-ledger #case-family-enrollment |
 | module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
 
 A legacy entry leaves the list when its last user is migrated and the definition is deleted
