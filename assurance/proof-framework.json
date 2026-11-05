@@ -36,12 +36,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "CondContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "CondImpl",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
@@ -327,12 +321,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "MutexContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "MutexImpl",
       "module": "ZigLean.Sep.Full.Mutex",
       "status": "target",
@@ -412,12 +400,6 @@
       "name": "Sem.Spec",
       "module": "Proofs.Sync.RwLock",
       "status": "legacy-to-retire"
-    },
-    {
-      "name": "SemContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "SemImpl",

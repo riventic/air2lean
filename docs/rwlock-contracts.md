@@ -86,19 +86,24 @@ That larger extraction and generic Event/WaitGroup contracts are separate remain
 
 ## Reusable synchronization contracts
 
-`Proofs/Sync/Contracts.lean` packages each sync object as a `Prop` structure over its
-*operations*, proved once against the translated Zig 0.16.0 std code:
+A contract is a `Prop` structure over a sync object's *operations*, proved once against the
+translated Zig 0.16.0 std code. The mutex, semaphore and condition contracts are the full-state
+ones, for every implementation; `Proofs/Sync/Contracts.lean` keeps the restricted RwLock one:
 
 | Contract | Proved once by | Lock invariant / ownership transfer | Scope |
 |---|---|---|---|
-| `MutexContract lk ul` | `Sync.Contracts.mutex` (`MutexOps.lock_specOn`, `unlock_specOn`) | `lock` moves a heap with `L.R` from the lock to the holder's `held` part; `unlock` moves it back | every protocol with the lock (`Lock.FitsOn`), any resource, any thread count |
-| `SemContract S wait post` | `Sync.Contracts.semaphore` (`Sem.wait_spec`, `post_spec`) | `post` moves `h₃` from the caller's part into the free permits' `Res`; `wait` moves `T` out | every protocol with the semaphore (`Sem.Fits`); one condition waiter at a time |
-| `CondContract S wait signal` | `Sync.Contracts.condition` (`Sem.condWait_spec`, `signal_spec`) | `wait` gives the mutex's resource back and returns holding a new one; the caller rechecks its predicate | the condition and mutex of an `Io.Semaphore` layout; predicate "permit count is 0"; one waiter |
+| `MutexImpl` (`ZigLean/Sep/Full/Mutex.lean`) | `Sync.ioMutex` (`Proofs/Sync/IoMutex.lean`) | `lock` moves the lock's resource to the holder; `unlock` moves it back | every protocol with the lock (`FLock.Fits`), any resource, any thread count |
+| `SemImpl` (`ZigLean/Sep/Full/Sem.lean`) | `Sync.ioSem` (`Proofs/Sync/IoSemaphore.lean`) | `post` moves a heap from the caller into the free permits' resource; `wait` moves one out | every protocol with the semaphore (`FSem.Fits`) |
+| `CondImpl` (`ZigLean/Sep/Full/Cond.lean`) | `Sync.ioCond` (`Proofs/Sync/Cond.lean`) | `wait` gives the mutex's resource back and returns holding it again; the caller rechecks its predicate | any number of waiters |
 | `RwContract E …` | `Sync.Contracts.rwLock` (existing `RwLockRead` specs) | shared/exclusive acquire gives `NPts`, release returns it | only the restricted protocol above (reader 0, writer 1, `NPts`) |
+
+The legacy-protocol `MutexContract`, `SemContract` and `CondContract` (PR125) had no client left
+after SnapshotCache and Mailbox moved to the full-state contracts; they were removed (L12,
+`docs/legacy-retirement.md`).
 
 A client that takes a contract as a hypothesis receives the operations as abstract
 functions, so its proof cannot unfold the std code. It still establishes the object's
-invariant interface (`Lock.FitsOn`, `Sem.Fits`), which includes the implementation's ghost
+invariant interface (`FLock.Fits`, `FSem.Fits`), which includes the implementation's ghost
 phases and futex/word histories, so a client is not independent of that encoding. Two new model clients (written
 in Lean, not Zig exports; they call the translated std operations) are proved this way:
 
