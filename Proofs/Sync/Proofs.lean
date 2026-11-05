@@ -48,7 +48,7 @@ theorem tryLock_twice :
 theorem wait_alone_deadlock :
     (match (Sched.run ⟨.any, .available⟩ dispatch 10 sc (do
       let p ← newMutex
-      ConcM.sync (Tgt := Tgt) (.wait p 0)) {}).run with
+      ConcM.sync (Tgt := Tgt) (.wait p 0 false)) {}).run with
      | some (.error .deadlock) => true
      | _ => false) = true := by
   decide +kernel
@@ -57,7 +57,7 @@ theorem wait_alone_deadlock :
 theorem wait_other_value :
     (match (Sched.run ⟨.any, .available⟩ dispatch 10 sc (do
       let p ← newMutex
-      ConcM.sync (Tgt := Tgt) (.wait p 1)) {}).run with
+      ConcM.sync (Tgt := Tgt) (.wait p 1 false)) {}).run with
      | some (.ok _) => true
      | _ => false) = true := by
   decide +kernel

@@ -373,7 +373,8 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rc : Res
       rcases (by omega : u = 0 ∨ u = 1) with rfl | rfl
       · exact VClock.le_trans h0 (hcl 0 (by rw [hcs, hs1]; decide))
       · have := hcn; rw [hcs, hs1] at this; exact VClock.le_trans h0 this
-  have hI := hU.cinv.stay hhS hhE (by rw [hm']) (fun _ hw _ => by rw [hm'] at hw; exact hw)
+  have hI := hU.cinv.stay hhS hhE (by rw [hm']; rfl) (by rw [hm']; rfl) (by rw [hm'])
+    (fun _ hw _ => by rw [hm'] at hw; exact hw)
     (fun _ _ h => by rw [hm']; exact h) (by rw [hm']; simp) hclk
   have hI' : C.Inv (L K) G' m' := by
     rw [hG']
@@ -414,7 +415,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rc : Res
         have h : (G' u).2.s = _ := hu
         rw [(hc' u).2] at h; cases h
       live := fun hc _ => absurd (pv_npost (by show (G' 1).2.ph.posted = false; rw [hX1]; rfl)) hc }
-  have hq' : ∀ w ∈ m'.waiters, w.2 = (L K).ptr ∨ w.2 = WE.ptr := by rw [hm']; exact hU.q
+  have hq' : ∀ w ∈ m'.waiters, w.2 = (L K).key m' ∨ w.2 = WE.key m' := by rw [hm']; exact hU.q
   subst hm'
   refine ⟨⟨?_, .inr ⟨by simp [hs1], ?_, (by dsimp only; rw [hX0]; rfl),
       (by dsimp only; rw [hX0]; decide), (by dsimp only; rw [hX1]; rfl),
