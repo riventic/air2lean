@@ -460,4 +460,158 @@ theorem U_spawn {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {k : ThreadId} {rM
     · exact absurd hs (hnis j hj)
   · intro h; rw [h0] at h; have h' : 6 ≤ x₁.ph.rank := h; omega
 
+/-- **The threads after `main`'s spawn of task `k`**: one more, spawned by `main`, not joined. -/
+theorem shape_spawn {G : ThreadId → Gh} {m : Mem} {k : ThreadId} {rM rP : Res} {x₁ : X}
+    (h : Shape (fun u => (G u).2) m)
+    (hk : (k = 1 ∧ (G 0).2.ph = .sm ∧ x₁.ph = .sp1) ∨ (k = 2 ∧ (G 0).2.ph = .sp1 ∧ x₁.ph = .run)) :
+    m.threads.size = k ∧ (G k).2 = {} ∧
+      Shape (fun u => (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u).2)
+        { m with threads := m.threads.push { spawner := 0, joined := false } } := by
+  obtain ⟨h00, -, hn, hc⟩ := h
+  have hk0 : k ≠ 0 := by rcases hk with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
+  have e0 : (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) 0).2 = x₁ := by rw [upd_self]; rfl
+  have ek : (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) k).2 = { ph := .lk } := by
+    rw [upd_ne _ _ hk0, upd_self]; rfl
+  have eu : ∀ u, u ≠ 0 → u ≠ k → upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) u = G u :=
+    fun u h0 hk => by rw [upd_ne _ _ h0, upd_ne _ _ hk]
+  have hpush : ∀ i, i < m.threads.size →
+      (m.threads.push ({ spawner := 0, joined := false } : ThreadRec))[i]? = m.threads[i]? :=
+    fun i hi => by simp only [Array.getElem?_push]; rw [ite_eq_right_iff.mpr (by omega)]
+  have hnew : (m.threads.push ({ spawner := 0, joined := false } : ThreadRec))[m.threads.size]? =
+      some { spawner := 0, joined := false } := by simp
+  generalize upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) = G' at e0 ek eu ⊢
+  rcases hk with ⟨rfl, h0, h1⟩ | ⟨rfl, h0, h1⟩
+  · rcases hc with ⟨a, -, c, d⟩ | ⟨-, b, -⟩ | ⟨-, b, -⟩
+    · refine ⟨a, c, ?_, ?_, fun u hu => ?_, .inr (.inl ⟨?_, ?_, ?_, ?_, ?_⟩)⟩
+      · show (m.threads.push _)[0]? = _; rw [hpush 0 (by omega)]; exact h00
+      · show (G' 0).2.ph.isMain = true; rw [e0, h1]; rfl
+      · show (G' u).2 = _
+        rw [eu u (by unfold ThreadId at *; omega) (by unfold ThreadId at *; omega)]; exact hn u hu
+      · show (m.threads.push _).size = 2; rw [Array.size_push, a]
+      · show (G' 0).2.ph = _; rw [e0, h1]
+      · show (m.threads.push _)[1]? = _; rw [show 1 = m.threads.size by omega]; exact hnew
+      · show (G' 1).2.ph.isTask = true; rw [ek]; rfl
+      · show (G' 2).2 = _; rw [eu 2 (by decide) (by decide)]; exact d
+    · have : (G 0).2.ph = .sp1 := b; rw [h0] at this; cases this
+    · have : 3 ≤ (G 0).2.ph.rank := b; rw [h0] at this; simp [Ph.rank] at this
+  · rcases hc with ⟨-, b, -⟩ | ⟨a, -, c, d, f⟩ | ⟨-, b, -⟩
+    · have : (G 0).2.ph.rank ≤ 1 := b; rw [h0] at this; simp [Ph.rank] at this
+    · refine ⟨a, f, ?_, ?_, fun u hu => ?_, .inr (.inr ⟨?_, ?_, ?_, ?_, ?_, ?_⟩)⟩
+      · show (m.threads.push _)[0]? = _; rw [hpush 0 (by omega)]; exact h00
+      · show (G' 0).2.ph.isMain = true; rw [e0, h1]; rfl
+      · show (G' u).2 = _
+        rw [eu u (by unfold ThreadId at *; omega) (by unfold ThreadId at *; omega)]; exact hn u hu
+      · show (m.threads.push _).size = 3; rw [Array.size_push, a]
+      · show 3 ≤ (G' 0).2.ph.rank; rw [e0, h1]; decide
+      · show (G' 1).2.ph.isTask = true; rw [eu 1 (by decide) (by decide)]; exact d
+      · show (G' 2).2.ph.isTask = true; rw [ek]; rfl
+      · show (m.threads.push _)[1]? = some { spawner := 0, joined := decide ((G' 0).2.ph = Ph.j1) }
+        rw [hpush 1 (by omega), c, e0, h1]; rfl
+      · show (m.threads.push _)[2]? = _; rw [show 2 = m.threads.size by omega]; exact hnew
+    · have : 3 ≤ (G 0).2.ph.rank := b; rw [h0] at this; simp [Ph.rank] at this
+
+/-- The counter after a spawn: the new task has not stored it. -/
+theorem R_spawn {G : ThreadId → Gh} {k : ThreadId} {g₀ g₁ : Gh} {r : Res} (hk0 : k ≠ 0)
+    (hGk : (G k).2 = {}) (hg₀ : g₀.2.ph = .lk) (h : L.R G r) : L.R (upd (upd G k g₀) 0 g₁) r := by
+  have hc : ∀ u, u ≠ 0 → (upd (upd G k g₀) 0 g₁ u).2.cnt = (G u).2.cnt := fun u hu => by
+    rw [upd_ne _ _ hu]
+    by_cases e : u = k
+    · subst e; rw [upd_self, hGk]; unfold X.cnt; rw [hg₀]; rfl
+    · rw [upd_ne _ _ e]
+  show up (pts (bPtr.add 20) 4
+    (BitVec.ofNat 32 ((upd (upd G k g₀) 0 g₁ 1).2.cnt + (upd (upd G k g₀) 0 g₁ 2).2.cnt))) r
+  rw [hc 1 (by decide), hc 2 (by decide)]
+  exact h
+
+/-- **`main`'s spawn of task `k`** after its part has been split (`rP`, the copied plain mode, is
+the task's): the lock forks (`FLock.Inv.fork`) and `U` holds (`U_spawn`). -/
+theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c k : ThreadId} {rM rP : Res}
+    {x₀ x₁ : X} (hP : plain rP) (hi : proto.inv G m) (hg : G 0 = gO (rsum rM rP) x₀)
+    (hk : (k = 1 ∧ x₀.ph = .sm ∧ x₁.ph = .sp1) ∨ (k = 2 ∧ x₀.ph = .sp1 ∧ x₁.ph = .run))
+    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = k ∧ proto.inv (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁)) m' := by
+  obtain ⟨rX, hL, hu⟩ := hi
+  have hx₀ : (G 0).2 = x₀ := by rw [hg]; rfl
+  obtain ⟨hsz, hGk, hsh⟩ := shape_spawn (rM := rM) (rP := rP) (x₁ := x₁) hu.shape (by
+    rw [hx₀]; exact hk)
+  have hk0 : k ≠ 0 := by rcases hk with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
+  have hcs : m.clocks.size = m.threads.size := hL.w.csize
+  have hfork := hf
+  change ((Thread.forkWith false).run { m with current := 0 }).run = some (.ok (c, m')) at hfork
+  rw [Proto.forkWith_run] at hfork
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hfork
+  have hc : c = k := by rw [← hfork.1]; exact hsz
+  subst hc
+  have hL' := hL.fork (t := 0) (g₁ := gO rM x₁) (g₀ := gO rP { ph := .lk })
+    (by rw [hg]; rfl) hf (by rw [hg]; rfl)
+    (by show FHeap.Disjoint rM.heap rP.heap; rw [(plain_ghost hP).1]; exact FHeap.disjoint_empty _)
+    rfl rfl rfl rfl fun r hR => by
+      rw [← hfork.1, hsz]; exact R_spawn hk0 hGk rfl hR
+  rw [← hfork.1, hsz] at hL'
+  have hph : x₁.ph.rank < 4 ∧ x₁.ph ≠ .pre ∧ x₁.ph.wa = false ∧ x₁.ph.fd = false ∧
+      x₀.ph.wa = false ∧ x₀.ph ≠ .pre := by
+    rcases hk with ⟨-, h0, h1⟩ | ⟨-, h0, h1⟩ <;> rw [h0, h1] <;> decide
+  obtain ⟨hr₁, hp₁, hwa₁, hfd₁, hwa₀, hp₀⟩ := hph
+  refine ⟨rfl, _, hL', U_spawn hu hk0 (by rcases hk with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide) hGk hcs
+    (by rw [hx₀]; exact he₀) (by rw [hx₀]; exact hwa₀) (by rw [hx₀]; exact hp₀) he₁ hsx₁ hwa₁ hfd₁
+    hr₁ hp₁ (by rw [← hfork.1, hsz] at hf; exact hf) hsh⟩
+
+/-- A change of `t`'s part at the same memory keeps `U` (`U_own_native` with no step). -/
+theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Res}
+    (hu : U G rX m) (hc : m.current = t) (hng : (G t).1.ph ≠ .gone)
+    (hi' : L.Inv (upd G t (L.setPart (G t) r)) rX m) :
+    U (upd G t (L.setPart (G t) r)) rX m := by
+  obtain ⟨rY, hrX, hY⟩ := Rest.split (fun _ => ev_box) hu.rest
+  subst hrX
+  exact U_own_native hu hY hng hc (FStepIn.refl _ _) (fun _ _ => rfl) rfl hi'
+
+/-- **`main`'s spawn of task `k`**: `main` copies its duplicable plain mode `rM` for the task
+(`EUpd.plain_split`), then forks (`inv_spawnParts`). -/
+theorem inv_spawnK {G : ThreadId → Gh} {m m' : Mem} {c k : ThreadId} {rM : Res} {x₀ x₁ : X}
+    (hp : rM.Plain) (hi : proto.inv G m) (hg : G 0 = gO rM x₀)
+    (hk : (k = 1 ∧ x₀.ph = .sm ∧ x₁.ph = .sp1) ∨ (k = 2 ∧ x₀.ph = .sp1 ∧ x₁.ph = .run))
+    (he₀ : x₀.e = .out) (he₁ : x₁.e = .out) (hsx₁ : x₁.sx = false)
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = k ∧ ∃ rP, plain rP ∧
+      proto.inv (upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁)) m' := by
+  obtain ⟨rX, hL, hU⟩ := hi
+  have hL₀ : L.Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
+    rw [upd_same]
+    exact hL.cur 0
+  obtain ⟨r, ⟨r₁, rP, hd, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart proto rfl
+    (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = L.part (G 0))
+      fun r hr => by rw [hr, hg]; exact hp)
+  have hrM : rM = r₁ := by rw [hr₁, hg]; rfl
+  subst hrM
+  have hU₀ := atStop 0 hU
+  have hU' := U_part hU₀ rfl (by rw [hg]; exact fun h => nomatch h)
+    (by simpa only [upd_upd] using hL')
+  have hG' : upd G 0 (L.setPart (G 0) (rsum rM rP)) 0 = gO (rsum rM rP) x₀ := by
+    rw [upd_self, hg]; rfl
+  obtain ⟨hc, hi'⟩ := inv_spawnParts hpP ⟨rX, by simpa only [upd_upd] using hL', hU'⟩ hG' hk he₀
+    he₁ hsx₁ hf
+  refine ⟨hc, rP, hpP, ?_⟩
+  have hk0 : k ≠ 0 := by rcases hk with ⟨rfl, -⟩ | ⟨rfl, -⟩ <;> decide
+  have he : upd (upd (upd G 0 (L.setPart (G 0) (rsum rM rP))) k (gO rP { ph := .lk }))
+      0 (gO rM x₁) = upd (upd G k (gO rP { ph := .lk })) 0 (gO rM x₁) := by
+    rw [upd_comm G _ _ (Ne.symm hk0), upd_upd]
+  rwa [he] at hi'
+
+/-- `main`'s first spawn, at `sm`: task 1; `main` to `sp1`. -/
+theorem inv_spawn1 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res} (hp : rM.Plain)
+    (hi : proto.inv G m) (hg : G 0 = gO rM { ph := .sm })
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = 1 ∧ ∃ rP, plain rP ∧
+      proto.inv (upd (upd G 1 (gO rP { ph := .lk })) 0 (gO rM { ph := .sp1 })) m' :=
+  inv_spawnK hp hi hg (.inl ⟨rfl, rfl, rfl⟩) rfl rfl rfl hf
+
+/-- `main`'s second spawn, at `sp1`: task 2; `main` to `run`. -/
+theorem inv_spawn2 {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res} (hp : rM.Plain)
+    (hi : proto.inv G m) (hg : G 0 = gO rM { ph := .sp1 })
+    (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
+    c = 2 ∧ ∃ rP, plain rP ∧
+      proto.inv (upd (upd G 2 (gO rP { ph := .lk })) 0 (gO rM { ph := .run })) m' :=
+  inv_spawnK hp hi hg (.inr ⟨rfl, rfl, rfl⟩) rfl rfl rfl hf
+
 end Threadsync.WG
