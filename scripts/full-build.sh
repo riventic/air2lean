@@ -31,16 +31,17 @@
 #   - debug-ID canonicalization: complete native Func binding for every gen-integrity case,
 #     plus one fresh independent Assurance replay of the generic CanonSem theorem module.
 #     This phase always checks; it has no cached-success marker.
-# Lake runs up to LEAN_NUM_THREADS (--lean-threads) Lean processes at once, and the guard's
-# --rss-mib bounds their sum. Defaults: as many processes at 11000 MiB each (under the 12 GB
-# per-process cap) as fit in what no other guarded workload holds when the build starts, at most
-# half the machine's memory budget and one per core, at least one: --lean-threads
-# max(1, min(cores, budget / 2 / 11000, free / 11000)), --rss-mib 11000 times that (budget and
-# free slots: build-guard.py, AIR2LEAN_BUILD_MEM_MIB or 75% of physical memory; 64 GB, 18 cores,
-# nothing else running: 2 processes, 22000 MiB). So the build asks for no more than is free and
-# does not hold the admission queue for slots other agents' builds hold. The guard waits up to
-# AIR2LEAN_LOCK_WAIT seconds (default 3600) for the build lock. All phases run in one admission
-# (below). Prints each phase's time.
+# Memory is charged by need (docs/build-budgets.md#elastic-workloads). The build is one elastic
+# admission of --rss-mib (default 4096 MiB: Lake, the scripts, the assurance extractor's build),
+# held for all phases. Every Lean elaboration of the Lake phases (root, diff, files and the
+# proof-fixture package) takes a sub-admission of its own while it runs, charged 1.3 x its
+# module's measured peak (scripts/lean-peaks.py) and stopped and run again at 11000 MiB if it
+# outgrows that; an unmeasured or changed module is charged 11000 MiB. So does each fixture-check
+# unit (its measured peak, scripts/fixture-checks.py) and the canon phase (its recent runs). Lake
+# runs up to --lean-threads Lean processes at once (default min(8, cores)), each on one Lean
+# thread; the slots they hold, not the thread count, bound the memory, and other workloads are
+# admitted beside them. The guards wait up to AIR2LEAN_LOCK_WAIT seconds (default 3600) for the
+# build lock. Prints each phase's time.
 set -euo pipefail
 cd "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -48,7 +49,7 @@ targets() {  # one derivation from lakefile.toml, shared with the per-check buil
   python3 -B scripts/lean-deps.py --all
 }
 
-per_process=11000 threads= rss= logs= fixtures=1
+threads= rss=4096 logs= fixtures=1
 while [ $# -gt 0 ]; do
   case $1 in
     --targets) targets; exit 0 ;;
@@ -56,46 +57,41 @@ while [ $# -gt 0 ]; do
     --rss-mib) rss=${2:?--rss-mib needs a number}; shift 2 ;;
     --logs) logs=${2:?--logs needs a directory}; shift 2 ;;
     --no-fixtures) fixtures=0; shift ;;
-    -h|--help) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "full-build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
-if [ -z "$threads" ]; then
-  threads=$(python3 -B - "$per_process" <<'PY'
-import importlib.util, os, sys
-spec = importlib.util.spec_from_file_location('guard', 'scripts/build-guard.py')
-guard = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(guard)
-per_process, budget = int(sys.argv[1]), guard.default_budget_mib()
-print(max(1, min(os.cpu_count() or 1, budget // 2 // per_process, guard.free_mib(budget_mib=budget) // per_process)))
-PY
-)
-fi
-[ -n "$rss" ] || rss=$((threads * per_process))
+cores=$(python3 -c 'import os; print(os.cpu_count() or 1)')
+[ -n "$threads" ] || threads=$((cores < 8 ? cores : 8))
 [ -n "$logs" ] || logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-full-build.XXXXXX")
 mkdir -p "$logs"
 
-# One admission for the whole build: this script runs again inside one guard, and each phase's
-# guard inherits that admission (build-guard.py, INHERIT) instead of queueing again. The phases
-# keep their own limits and reports, each within $rss (the fixture checks' guard,
-# scripts/fixture-checks.sh: all of it). A phase guard above it fails (inheritance_refused).
+# One elastic admission for the whole build: this script runs again inside one guard, and each
+# phase's guard inherits it (build-guard.py, INHERIT) instead of queueing again. The phases keep
+# their own limits and reports, each within $rss; their sub-admissions hold slots of their own.
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
   inner=(--lean-threads "$threads" --rss-mib "$rss" --logs "$logs")
   [ "$fixtures" = 1 ] || inner+=(--no-fixtures)
-  echo "full-build: $threads Lean processes, one admission of $rss MiB (logs: $logs)"
+  echo "full-build: up to $threads Lean processes, each charged its measured need; elastic base $rss MiB (logs: $logs)"
   status=0
-  AIR2LEAN_FULL_BUILD_INNER=1 python3 -B scripts/build-guard.py --cwd "$PWD" --lean-threads "$threads" \
+  AIR2LEAN_FULL_BUILD_INNER=1 python3 -B scripts/build-guard.py --cwd "$PWD" --elastic --lean-threads "$threads" \
     --jobs 8 --rss-mib "$rss" --report "$logs/full-build.json" --log "$logs/full-build.log" \
     --timeout 28800 --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- bash "$0" "${inner[@]}" || status=$?
   grep -E '^(full-build|fixture-checks)' "$logs/full-build.log" || true
   exit "$status"
 fi
+sysroot=$(lean --print-prefix)  # the toolchain's: --lean-processes runs its lean through the guard
 
-guarded() {  # guarded NAME DIR CMD...: CMD in DIR under build-guard, through the shared Lake cache
-  local name=$1 dir=$2 start=$SECONDS
+# guarded NAME DIR [GUARD OPTION...] -- CMD...: CMD in DIR under build-guard (an inheriting guard
+# of $rss, unless the options say otherwise), through the shared Lake cache.
+guarded() {
+  local name=$1 dir=$2 start=$SECONDS options=()
   shift 2
+  while [ "$1" != -- ]; do options+=("$1"); shift; done
+  shift
+  [ ${#options[@]} -gt 0 ] || options=(--rss-mib "$rss")
   if ! python3 -B scripts/cas.py run -- python3 -B scripts/build-guard.py --cwd "$dir" \
-      --lean-threads "$threads" --jobs "${jobs:-1}" --rss-mib "$rss" \
+      --lean-threads "$threads" --jobs "${jobs:-1}" "${options[@]}" \
       --report "$logs/$name.json" --log "$logs/$name.log" --timeout 7200 \
       --lock-wait "${AIR2LEAN_LOCK_WAIT:-3600}" -- "$@"; then
     echo "full-build: $name failed (log: $logs/$name.log)" >&2
@@ -118,24 +114,27 @@ python3 -B scripts/lean-deps.py --prune-orphans
 root=()
 # The mandatory canon phase below includes structural case coverage (ledger #case-family-enrollment).
 while IFS= read -r target; do root+=("$target"); done < <(targets)
-guarded root "$PWD" lake build "${root[@]}"
-guarded diff "$PWD/tests/diff" lake build Outcome ScheduleSearch Concurrent
+guarded root "$PWD" --rss-mib "$rss" --lean-processes "$sysroot" -- lake build "${root[@]}"
+guarded diff "$PWD/tests/diff" --rss-mib "$rss" --lean-processes "$sysroot" -- lake build Outcome ScheduleSearch Concurrent
 # Lean files that only a `lake env lean` elaborates (strength logs, fixtures, tutorials): the
-# libraries' modules cannot import them. Up to 3 at once (the guard's memory budget); results are
-# remembered per input (lean-deps.py), so an unchanged file costs nothing.
-jobs=3 guarded files "$PWD" python3 -B scripts/lean-deps.py --elaborate
+# libraries' modules cannot import them. Up to $threads at once, each `lean` its own sub-admission
+# (the guard's --rss-mib holds only the `lake env` processes); results are remembered per input
+# (lean-deps.py), so an unchanged file costs nothing.
+jobs=$threads guarded files "$PWD" --rss-mib "$rss" --lean-processes "$sysroot" -- \
+  python3 -B scripts/lean-deps.py --elaborate --mem-mib 256
 # Retain per-case native binding evidence and the one generic kernel audit beside the logs.
 canon_artifacts=$(mktemp -d "$logs/canon.XXXXXX")
 # Its per-case bindings run on AIR2LEAN_JOBS threads (scripts/canon_certification.py), light on
-# memory: one per Lean process of the budget.
-jobs=$threads guarded canon "$PWD" python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
+# memory. A sub-admission charged by its recent runs (at most 11000 MiB): it holds its slots only
+# while it runs, and its kernel audit sees the toolchain's own sysroot.
+jobs=2 guarded canon "$PWD" --sub-admission --rss-mib 11000 --lean-threads 1 -- \
+  python3 -I -B scripts/gen-integrity.py certify --work-dir "$canon_artifacts/work"
 # The proof-fixture checks CI runs, in their own guard (scripts/fixture-checks.sh). It builds the
 # proof-fixture package (tests/roadmap/lakefile.toml), every library, first, once: the checks run
 # in parallel, and two Lake builds of one workspace must not build the same module at once.
 if [ "$fixtures" = 1 ]; then
-  # Within this build's admission ($rss): the units share it, the longest first, each admitted by
-  # its measured peak (scripts/fixture-checks.py `schedule`), each Lake with this build's Lean
-  # processes ($threads: one 11000 MiB process each, so a unit fits its share).
-  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 --lean-threads "$threads" \
+  # Within this build's elastic admission: the package's Lean processes and the units take
+  # sub-admissions, each unit charged its measured peak (scripts/fixture-checks.py `schedule`).
+  scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 --lean-threads 1 \
     || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi

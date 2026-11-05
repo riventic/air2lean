@@ -121,10 +121,10 @@ class NoReuse(unittest.TestCase):
         # A nested guard above its enclosing admission is refused (build-guard.py `inherited`);
         # one above the machine's budget would take every slot and still exceed it.
         for budget, grant, expected in (
-                ("64000", None, fc.GUARD_RSS_MIB), ("64000", {"rss_mib": 22000}, 22000),
-                ("64000", {"rss_mib": 11000.0}, 11000), ("64000", {"rss_mib": 64000}, fc.GUARD_RSS_MIB),
+                ("64000", None, fc.GUARD_RSS_MIB), ("64000", {"rss_mib": 2048}, 2048),
+                ("64000", {"rss_mib": 3000.0}, 3000), ("64000", {"rss_mib": 64000}, fc.GUARD_RSS_MIB),
                 ("64000", {"rss_mib": True}, fc.GUARD_RSS_MIB), ("64000", "not json", fc.GUARD_RSS_MIB),
-                ("16000", None, 16000), ("16000", {"rss_mib": 11000}, 11000)):
+                ("3000", None, 3000), ("3000", {"rss_mib": 2048}, 2048)):
             value = grant if isinstance(grant, str) else json.dumps(grant)
             with self.subTest(budget=budget, grant=grant), \
                  mock.patch.dict(os.environ, {fc.GUARD.INHERIT: value, "AIR2LEAN_BUILD_MEM_MIB": budget}):
