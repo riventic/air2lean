@@ -17,7 +17,8 @@ Outside the certificate fragment:
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
 is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
-`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
 * `options.find` trusted-Canon: none
 * `options.findOr` trusted-Canon: none

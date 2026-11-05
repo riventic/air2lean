@@ -25,7 +25,8 @@ Outside the certificate fragment:
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
 is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
-`renumber` is not listed where its native binding to `Renumber.execFunc_rename` holds:
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
 * `atomic.Value(threads.Phase).init` trusted-Canon: none
 * `atomic.Value(u32).init` trusted-Canon: none
