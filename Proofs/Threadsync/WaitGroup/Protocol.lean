@@ -150,18 +150,20 @@ each task before its finish. A task does not access the `Tally` after its finish
 read after its wait need be below `main` alone. -/
 def WLive (g : Gh) : Prop := g.2.ph.fd = false
 
-/-- **The event's word's live set**: `main` (from its `add(1)` on the waiter; its store of the
-`Tally` and its whole read are its own accesses) and the event's own live set (`FEvent.Live`: the
-setter until its `is_set` write). -/
-def ELive (g : Gh) : Prop := g.2.ph.isMain = true ∨ E.Live g
+/-- **The event's word's live set**: the group's (`main`, from its `add(1)` on the waiter, and each
+task before its finish, which may become the setter) and the event's own (`FEvent.Live`: the setter
+until its `is_set` write). The plain accesses to the word are `main`'s store of the `Tally` before
+its spawns and its whole read after its wait. -/
+def ELive (g : Gh) : Prop := WLive g ∨ E.Live g
 
 /-- The live sets read only the places outside the lock. -/
 theorem WLive_snd {g g' : Gh} (h : g'.2 = g.2) : WLive g' ↔ WLive g := by
   unfold WLive; rw [h]
 
 theorem ELive_snd {g g' : Gh} (h : g'.2 = g.2) : ELive g' ↔ ELive g := by
-  show (_ ∨ (g'.2.ph.wa = true ∨ (g'.2.sx = true ∧ g'.2.ph = .st)) ∧ ¬ g'.2.e.Setting) ↔
-    (_ ∨ (g.2.ph.wa = true ∨ (g.2.sx = true ∧ g.2.ph = .st)) ∧ ¬ g.2.e.Setting)
+  show (g'.2.ph.fd = false ∨ (g'.2.ph.wa = true ∨ (g'.2.sx = true ∧ g'.2.ph = .st)) ∧
+      ¬ g'.2.e.Setting) ↔
+    (g.2.ph.fd = false ∨ (g.2.ph.wa = true ∨ (g.2.sx = true ∧ g.2.ph = .st)) ∧ ¬ g.2.e.Setting)
   rw [h]
 
 /-- The threads that run the lock's code: out of the event's code, and not a task while it holds
