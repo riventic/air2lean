@@ -80,8 +80,10 @@ structure St where
   must bound it, also when its result is not used. -/
   adds : Array Sym := #[]
   snaps : Array (Array Sym) := #[]
-  ticks : Nat := 0
-  cond : Array (Sym × Bool) := #[]
+  /-- Whether the path took a step (`Zig.tick`). -/
+  tick : Bool := false
+  /-- The test the path passed, with its outcome (the families test once per iteration). -/
+  cond : Option (Sym × Bool) := none
 
 /-- A path through the body and its result. -/
 structure Path where
@@ -191,16 +193,16 @@ partial def exec (ctx : Ctx) (st : St) (e : Expr) : MetaM (Array Path) := do
     return #[{ st := { st' with locals := new }, res := unitV }]
   | some `Zig.callM =>
     unless args.size == 3 && args[2]!.isConstOf `Zig.tick do throwError "a call: {e}"
-    return #[{ st := { st with ticks := st.ticks + 1 }, res := unitV }]
+    return #[{ st := { st with tick := true }, res := unitV }]
   | some ``ite =>
     unless args.size == 5 && args[1]!.isAppOfArity ``Eq 3 && args[1]!.appArg!.isConstOf ``Bool.true do
       throwError "a condition that is not a Bool test: {e}"
     -- The families test once per iteration: a second test on a path is outside them (and
     -- stopping here keeps the paths from doubling at every test).
-    unless st.cond.isEmpty do throwError "a second test in one iteration"
+    if st.cond.isSome then throwError "a second test in one iteration"
     let c ← evalPure ctx st (args[1]!.getArg! 1)
-    return (← exec ctx { st with cond := st.cond.push (c, true) } args[3]!) ++
-      (← exec ctx { st with cond := st.cond.push (c, false) } args[4]!)
+    return (← exec ctx { st with cond := some (c, true) } args[3]!) ++
+      (← exec ctx { st with cond := some (c, false) } args[4]!)
   | some n =>
     if (n == ``liftM || n == ``MonadLiftT.monadLift) && args.size == 5 then
       return #[← execLift ctx st args[4]!]
@@ -247,8 +249,9 @@ end
 
 /-- A recognized counted loop. -/
 structure Counted where
-  counter : Nat
-  /-- The bound: a local index or a loop parameter. -/
+  /-- The counter, a local. -/
+  counter : Name
+  /-- The bound: another local, a loop parameter or a literal. -/
   bound : Sym
   /-- The cells the body writes, with their increments. -/
   cells : Array (Cell × Nat)
@@ -263,10 +266,9 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     if ← again e then cont := cont.push p else exits := exits.push p
   let #[c] := cont | throwError "{cont.size} repeating paths, not one"
   if exits.isEmpty then throwError "no exit"
-  let #[(.lt (.local x) b, true)] := c.st.cond | throwError "the repeating path is not guarded by one unsigned `x < b`"
-  let some xi := ctx.fields.idxOf? x | throwError "a guard on an unknown local"
+  let some (.lt (.local x) b, true) := c.st.cond | throwError "the repeating path is not guarded by one unsigned `x < b`"
   match b with
-  | .local y => unless y != x && ctx.fields.contains y do throwError "a bound that is not another local"
+  | .local y => if y == x then throwError "a bound that is not another local"
   | .param _ | .lit _ => pure ()
   | _ => throwError "a bound that is not a local, a parameter or a literal"
   for (v, f) in c.st.locals.zip ctx.fields do
@@ -280,7 +282,7 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     unless base == .cell cell.param do throwError "a cell that does not go up by a constant"
     cells := cells.push (cell, k)
   for p in exits do
-    let #[(.lt (.local x') b', false)] := p.st.cond | throwError "an exit not guarded by `¬ x < b`"
+    let some (.lt (.local x') b', false) := p.st.cond | throwError "an exit not guarded by `¬ x < b`"
     unless x' == x && b' == b do throwError "an exit guarded by another test"
     unless p.st.cells.isEmpty && p.st.adds.isEmpty &&
         (p.st.locals.zip ctx.fields).all (fun (v, f) => v == .local f) do
@@ -291,17 +293,11 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     let (base, k) := a.split
     unless (base == .local x && k ≤ 1) || cells.any (fun (cell, n) => base == .cell cell.param && k ≤ n) do
       throwError "an add that the counter's and the cells' bounds do not cover"
-  let plain := paths.any (·.st.ticks > 0)
-  return { counter := xi, bound := b, cells, plain }
+  return { counter := x, bound := b, cells, plain := paths.any (·.st.tick) }
 
 /-- `n` without the namespace `ns`. -/
 def relName (ns n : Name) : String :=
   (n.replacePrefix ns .anonymous).toString
-
-/-- One generated loop: the source text of its definitions, or why there are none. -/
-structure LoopOut where
-  loop : Name
-  text : Except String String
 
 /-- Names the generated text binds next to the loop's parameters. -/
 def reserved (n : Name) : Bool :=
@@ -311,9 +307,9 @@ def reserved (n : Name) : Bool :=
   | _ => false
 
 /-- The invariant `body.inv` and measure `body.meas` of the loop `body` (the definition run by
-`Zig.loop`) with exit test `again`. -/
-def genLoop (ns body again : Name) : MetaM LoopOut := do
-  let res : Except String String ← try
+`Zig.loop`) with exit test `again`, as source text, or why there are none. -/
+def genLoop (ns body again : Name) : MetaM (Except String String) := do
+  try
     let some (.defnInfo d) := (← getEnv).find? body | throwError "not a definition"
     let text ← lambdaTelescope d.value fun xs code => do
       let ty ← inferType code
@@ -337,7 +333,7 @@ def genLoop (ns body again : Name) : MetaM LoopOut := do
         binders := binders ++ s!"({decl.userName} : {← ppExpr decl.type}) "
       let pname (i : Nat) : MetaM String := return (← xs[i]!.fvarId!.getDecl).userName.toString
       let loc := relName ns structName
-      let x := fields[c.counter]!
+      let x := c.counter
       let (bound, boundName) ← match c.bound with
         | .local y => pure (s!"s.{y}.toNat", y.toString)
         | .param i => do
@@ -376,24 +372,17 @@ def genLoop (ns body again : Name) : MetaM LoopOut := do
         def {name}.meas {binders}(s : {loc}) : Nat :=\n  {bound} - s.{x}.toNat\n"
     pure (.ok text)
   catch ex => pure (.error (← ex.toMessageData.toString))
-  return { loop := body, text := res }
 
 /-- The loops that `e` runs: each `Zig.loop (body …) again` as the body's definition and the
 exit test, read off the term (no naming convention). A loop whose body is not an applied
-definition or whose test is not a constant is `(.anonymous, .anonymous)`. -/
-partial def loopApps (e : Expr) (acc : Array (Name × Name)) : Array (Name × Name) :=
-  let acc :=
-    if e.isAppOfArity `Zig.loop 7 then
-      match e.getArg! 5 |>.getAppFn.constName?, e.getArg! 6 |>.constName? with
-      | some b, some a => acc.push (b, a)
-      | _, _ => acc.push (.anonymous, .anonymous)
-    else acc
-  match e with
-  | .app f x => loopApps x (loopApps f acc)
-  | .lam _ t b _ | .forallE _ t b _ => loopApps b (loopApps t acc)
-  | .letE _ t v b _ => loopApps b (loopApps v (loopApps t acc))
-  | .mdata _ b | .proj _ _ b => loopApps b acc
-  | _ => acc
+definition or whose test is not a constant is an error. -/
+def loopApps (e : Expr) : MetaM (Array (Name × Name)) := do
+  let out ← IO.mkRef #[]
+  e.forEachWhere (·.isAppOfArity `Zig.loop 7) fun l =>
+    match l.getArg! 5 |>.getAppFn.constName?, l.getArg! 6 |>.constName? with
+    | some b, some a => out.modify (·.push (b, a))
+    | _, _ => throwError "a `Zig.loop` whose body is not an applied definition: {l}"
+  out.get
 
 /-- The loops of `module`, all with their bodies in the namespace `ns`, sorted. -/
 def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
@@ -402,11 +391,9 @@ def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
   let mut out : Array (Name × Name) := #[]
   for n in env.header.moduleData[idx.toNat]!.constNames do
     if let some (.defnInfo d) := env.find? n then
-      for l in loopApps d.value #[] do
+      for l in ← loopApps d.value do
         if !out.contains l then out := out.push l
   if out.isEmpty then throwError "module {module} runs no `Zig.loop`"
-  if out.contains (.anonymous, .anonymous) then
-    throwError "module {module} runs a `Zig.loop` whose body is not an applied definition"
   if let some (b, _) := out.find? (!ns.isPrefixOf ·.1) then
     throwError "the loop body {b} is outside the namespace {ns}"
   return out.qsort (fun a b => a.1.toString < b.1.toString)
@@ -414,15 +401,21 @@ def loopsOf (module ns : Name) : MetaM (Array (Name × Name)) := do
 /-- The generated file for `module` (whose translated names are in `ns`), and the loops it has no
 invariant for, with the reason. -/
 def generate (module ns : Name) : MetaM (String × Array (String × String)) := do
-  let outs ← (← loopsOf module ns).mapM fun (b, a) => genLoop ns b a
+  let mut loops := #[]
+  let mut defs := #[]
+  let mut skipped := #[]
+  for (b, a) in ← loopsOf module ns do
+    let loop := relName ns b
+    match ← genLoop ns b a with
+    | .ok t =>
+      loops := loops.push (Json.mkObj [("loop", loop), ("family", "counted")])
+      defs := defs.push t
+    | .error why =>
+      loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
+      skipped := skipped.push (loop, why)
   let record := Json.mkObj [
     ("generator", "air2lean-invgen"), ("version", (1 : Nat)), ("module", module.toString),
-    ("loops", Json.arr <| outs.map fun o => match o.text with
-      | .ok _ => Json.mkObj [("loop", relName ns o.loop), ("family", "counted")]
-      | .error why => Json.mkObj [("loop", relName ns o.loop), ("none", why)])]
-  let defs := outs.filterMap fun o => match o.text with | .ok t => some t | .error _ => none
-  let skipped := outs.filterMap fun o => match o.text with
-    | .ok _ => none | .error why => some (relName ns o.loop, why)
+    ("loops", Json.arr loops)]
   return (·, skipped) <| s!"-- air2lean-invgen: {record.compress}\n\
     import {module}\n\
     import ZigLean.Sep.Full.Ghost\n\n\

@@ -532,7 +532,7 @@ it `pairs_total`) is unchanged. The hand step and loop lemmas around them (`inne
 `nested/check.sh`:
 
 * regenerates `Inv.lean` from the committed translation and compares it byte for byte
-  (`scripts/invgen.py check`);
+  (`lake exe air2lean-invgen`, as `scripts/invgen.py check` does);
 * checks the proof against it;
 * checks three seeded mutants of the generated file (a wrong cell relation, a dropped bound `x ≤ b`,
   a measure that does not decrease): each still elaborates, and the proof then fails with an

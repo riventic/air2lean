@@ -9,17 +9,17 @@ given paths), the translated module is compiled into a scratch directory and `ai
 (`lake exe`, which builds it) writes the file there. `check` fails when a committed file differs
 from it; `write` replaces the stale ones. The translated modules must be current first
 (`scripts/gen-integrity.py`): scripts/regen.py runs this as its `invgen` step, right after `gen`,
-and a fixture check runs `check` on the file it proves against. Lean runs unguarded here: callers
+and a fixture check repeats the comparison for the file it proves against. Lean runs unguarded here: callers
 run it under scripts/build-guard.py.
 """
 import argparse
-import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from theorem_universe import ROOT, compile_unit, with_lean_path  # noqa: E402
 
 # (Inv.lean, fixture root, translated module, its namespace)
 TARGETS = [
@@ -31,17 +31,16 @@ TARGETS = [
 def generate(root, module, namespace, work):
     """`air2lean-invgen`'s output for `module` (a module of the fixture at `root`), as bytes."""
     rel = module.replace('.', '/')
-    src = ROOT / root / (rel + '.lean')
-    olean = work / 'olean' / (rel + '.olean')
-    olean.parent.mkdir(parents=True)
-    env = dict(os.environ, LEAN_PATH=os.pathsep.join(filter(None, [
-        str(work / 'olean'), str(ROOT / '.lake/build/lib/lean'), os.environ.get('LEAN_PATH')])))
-    subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', str(src)], cwd=ROOT, check=True)
-    subprocess.run(['lake', 'env', 'lean', '-R', str(ROOT / root), '-o', str(olean), str(src)],
-                   cwd=ROOT, env=env, check=True)
+    src = f'{root}/{rel}.lean'
+    lean_path = [work / 'olean']
+    log = work / 'compile.log'
+    subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', src], cwd=ROOT, check=True)
+    error = compile_unit(src, root, work / 'olean' / (rel + '.olean'), lean_path, log)
+    if error:
+        sys.exit(log.read_text()[-4000:] + error)
     out = work / 'Inv.lean'
     subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '-o', str(out)],
-                   cwd=ROOT, env=env, check=True)
+                   cwd=ROOT, env=with_lean_path(lean_path), check=True)
     return out.read_bytes()
 
 

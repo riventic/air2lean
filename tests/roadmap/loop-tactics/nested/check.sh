@@ -4,8 +4,8 @@
 # compare them with the committed Nested/Inv.lean, and kernel-check the full-state nested-loop
 # proof (nested/Proof.lean). Seeded mutants of the generated invariant and measure must make the
 # proof fail: the generator is untrusted, and only the check accepts its output.
-# Needs a built translator (lake build air2lean); builds the generator (scripts/invgen.py, by
-# lake exe) and the full-state library modules the proof imports itself; no Zig compiler.
+# Needs a built translator (lake build air2lean); builds the generator (lake exe
+# air2lean-invgen) and the full-state library modules the proof imports itself; no Zig compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
@@ -32,8 +32,10 @@ cmp "$work/Gen.lean" "$dir/Nested/Gen.lean"
 mkdir -p "$work/olean/Nested"
 export LEAN_PATH="$work/olean:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 lake env lean -R "$dir" -o "$work/olean/Nested/Gen.olean" "$dir/Nested/Gen.lean"
-# The generated invariants, reproduced byte for byte from the committed translation.
-python3 -B scripts/invgen.py check "$dir/Nested/Inv.lean"
+# The generated invariants, reproduced byte for byte from the committed translation (the
+# fixture's target of scripts/invgen.py, run on the Gen.olean just built).
+lake exe air2lean-invgen Nested.Gen Nested -o "$work/Inv.lean"
+cmp "$work/Inv.lean" "$dir/Nested/Inv.lean"
 lake env lean -R "$dir" -o "$work/olean/Nested/Inv.olean" "$dir/Nested/Inv.lean"
 lake env lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
 # Negative controls: each seeded mutant of the generated file still elaborates, and the proof
