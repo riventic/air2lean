@@ -67,9 +67,9 @@ theorem load_u32_by_sole {γ : Type} {L : FLock γ} {G : ThreadId → γ} {m : M
     (hread : NoRace m b p.off.toNat 4 .read) :
     (load (BitVec 32) 4 p).run m = pure (v, m.recordAt b p.off.toNat 4 .read) ∧
       L.Inv G rX (m.recordAt b p.off.toNat 4 .read) := by
-  refine hi.loadAll hpb (by decide) (fun rL hF hnF hoff hd => ?_) hc hg hsole hread
+  refine hi.loadAll hpb (by decide) (fun rL hF hnF hoff hd _ => ?_) hc hg hsole hread
   obtain ⟨r, hr, hsub⟩ := hr rL hF hnF hoff hd
   obtain ⟨A, S, K, bs, ⟨ha, hbs, hdec, hK⟩, hbytes⟩ := FTotalTriple.up_pts_iff_bytesAt.mp hr
-  exact ⟨r, A, S, K, bs, hbytes, hsub, hbs, hdec, ha, hK⟩
+  exact ⟨r, A, S, K, bs, hbytes, fun l fc h => ⟨fc, hsub l fc h, rfl⟩, hbs, hdec, ha, hK⟩
 
 end SepAuto.ReadRest

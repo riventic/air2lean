@@ -410,7 +410,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
   (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
+- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex` (not in the OS rows `Os.*`, OSF-01/OSF-02, and not where the occurrence is the key layer's word `FutexKey`, `futexAddr` or `futexKeyOf`, e.g. `futexKeyOf_run`; `futexWait_futexAddr_eq` still derives THR-05).
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -865,7 +865,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   loops do not reduce in the kernel, so loop clients use runtime assertions,
   invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
   iterations (`unroll_sched`), whose result is the loop's result.
-- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
+- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>

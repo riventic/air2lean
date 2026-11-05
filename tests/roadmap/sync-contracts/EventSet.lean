@@ -12,7 +12,7 @@ whose bytes 8..12 are the event's word):
 * `futexSetR`: `Thread.ResetEvent.FutexImpl.set` with its `xchg(is_set)` relaxed instead of
   release. Nothing orders the tasks' counter stores before `main`'s read: `relaxedSet_races`.
   The same copies of `finish` and `task` with the generated set are the generated code
-  (`dispatchW_gen`), which completes (`Threadsync.WG.waitGroup_completes`), so the order is the
+  (`dispatchW_gen`), which completes (`Threadsync.WG.waitGroup_completes`, in `Runtime.lean`), so the order is the
   only difference.
 * `set2`: a set that writes `is_set` twice (two release `xchg`s, each followed by a wake if it
   read `waiting`). `main` synchronizes with the first and reads the `Tally` while the second is
@@ -170,7 +170,7 @@ theorem doubleSet_races :
 
 /-- Control for `futexSetR`: the copies of `finish` and `task` with the generated set are the
 generated `dispatch`, which completes with 2 under the same schedule
-(`Threadsync.WG.waitGroup_completes`). -/
+(`Threadsync.WG.waitGroup_completes`, in `Runtime.lean`). -/
 theorem dispatchW_gen : dispatchW Thread_ResetEvent_set = dispatch := by
   funext x; cases x <;> rfl
 
