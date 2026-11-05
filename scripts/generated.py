@@ -2,7 +2,7 @@
 """Whole-tree generated files: produced by CI on the exact merged tree, published on `generated`.
 
 The files that assurance/generated.json lists describe the whole tree (coverage inventories,
-premise index, provenance fixtures): they go stale whenever main moves, so they are not
+premise index, theorem inventory, provenance fixtures): they go stale whenever main moves, so they are not
 committed (.gitignore). docs/ci.md#whole-tree-generated-files has the design and the trust
 argument. This is the one helper that produces, publishes and supplies them:
 
@@ -64,7 +64,8 @@ WORKFLOW = '.github/workflows/ci.yml'
 # and produce artifacts, but do not carry the publication transition contract.
 EVIDENCE_EVENTS = ('push',)
 # The ci.yml jobs that produce the files, and the artifact each uploads.
-PRODUCERS = {'generated': 'generated-files', 'provenance': 'generated-provenance'}
+PRODUCERS = {'generated': 'generated-files', 'provenance': 'generated-provenance',
+             'theorem-inventory': 'generated-theorem-inventory'}
 REMOTE_REF = 'refs/remotes/origin/generated'
 
 
@@ -158,12 +159,21 @@ def gen_provenance(group: dict, root: Path):
         run(*tool, 'record', work, '--generated-from-head', cwd=root)
 
 
-GENERATORS = {'coverage': gen_coverage, 'premise-index': gen_premise_index, 'provenance': gen_provenance}
+def gen_theorem_inventory(group: dict, root: Path):
+    """The runs are planned from the committed theorem list and rebuilt (guarded) when their
+    recorded hashes no longer match; scripts/regen.py owns the guarded builds."""
+    run(sys.executable, '-B', 'scripts/regen.py', '--only', 'inventory', cwd=root)
 
 
-def regen(data: dict, names=None, root: Path = ROOT):
+GENERATORS = {'coverage': gen_coverage, 'premise-index': gen_premise_index, 'provenance': gen_provenance,
+              'theorem-inventory': gen_theorem_inventory}
+
+
+def regen(data: dict, names=None, root: Path = ROOT, fresh: bool = False):
+    """Regenerate the groups. An `incremental` group keeps its files for its generator to renew,
+    unless `fresh` (CI's `produce`: every pass starts from nothing)."""
     for group in groups(data, names):
-        for rel in group['paths']:
+        for rel in group['paths'] if fresh or not group.get('incremental') else ():
             (root / rel).unlink(missing_ok=True)
         print('== regenerating %s' % group['name'], flush=True)
         GENERATORS[group['generator']](group, root)
@@ -177,13 +187,14 @@ def regen(data: dict, names=None, root: Path = ROOT):
 def drop(value, dotted: str):
     """`value` without the field at the dotted path (absent paths are fine)."""
     head, _, rest = dotted.partition('.')
-    if not isinstance(value, dict) or head not in value:
+    if not isinstance(value, dict):
         return value
     value = dict(value)
-    if rest:
-        value[head] = drop(value[head], rest)
-    else:
-        del value[head]
+    for key in (list(value) if head == '*' else [head] if head in value else []):  # `*`: every key
+        if rest:
+            value[key] = drop(value[key], rest)
+        else:
+            del value[key]
     return value
 
 
@@ -227,7 +238,7 @@ def produce(data: dict, names, out: Path, root: Path = ROOT):
     paths = all_paths(data, names)
     passes = []
     for number in (1, 2):
-        regen(data, names, root)
+        regen(data, names, root, fresh=True)
         snapshot = out.parent / ('.%s.pass%d' % (out.name, number))
         shutil.rmtree(snapshot, ignore_errors=True)
         for rel in paths:
@@ -318,11 +329,17 @@ def fetch(data: dict, names, rev: str | None, root: Path = ROOT) -> str:
     else:
         base = git('merge-base', 'HEAD', 'origin/main', cwd=root, check=False) or 'HEAD'
         candidates = git('rev-list', '--first-parent', '--max-count=200', base, cwd=root).split()
-    commit = next((c for c in candidates if c in published), None)
+    wanted = all_paths(data, names)
+
+    def holds(entry):  # an entry published before a group existed lacks its files: look further back
+        return all(git('cat-file', '-e', '%s:%s' % (entry, rel), cwd=root, check=False) is not None for rel in wanted)
+
+    commit = next((c for c in candidates if c in published and holds(published[c])), None)
     if commit is None:
-        raise Error('no published entry for %s' % (rev or 'any first-parent ancestor of the merge base'))
+        raise Error('no published entry with %s for %s'
+                    % (', '.join(wanted), rev or 'any first-parent ancestor of the merge base'))
     entry = published[commit]
-    for rel in all_paths(data, names):
+    for rel in wanted:
         blob = subprocess.run(['git', 'cat-file', 'blob', '%s:%s' % (entry, rel)], cwd=root, capture_output=True)
         if blob.returncode:
             raise Error('%s (entry %s for %s) has no %s' % (data['branch'], entry, commit, rel))
@@ -339,11 +356,12 @@ def materialize(data: dict, heavy: str, root: Path = ROOT):
     if heavy == 'regen':
         regen(data, rest, root)
     elif heavy == 'fetch':
-        try:
-            commit = fetch(data, rest, None, root)
-            print('note: %s are main %s\'s; CI regenerates them for this tree' % (', '.join(rest), commit[:12]))
-        except Error as error:
-            print('note: %s not materialized (%s); CI regenerates them' % (', '.join(rest), error), file=sys.stderr)
+        for name in rest:  # one group at a time: a group published later than another still arrives
+            try:
+                commit = fetch(data, [name], None, root)
+                print('note: %s is main %s\'s; CI regenerates it for this tree' % (name, commit[:12]))
+            except Error as error:
+                print('note: %s not materialized (%s); CI regenerates it' % (name, error), file=sys.stderr)
 
 
 def api(path: str):

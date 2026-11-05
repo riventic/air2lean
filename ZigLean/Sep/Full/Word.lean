@@ -3429,7 +3429,7 @@ theorem WordHB.last {G : ThreadId → γ} {m : Mem} (h : L.WordHB W G m)
     (hi : i < (W.hist m).size) (hfl : Word.Floor (W.hist m) (m.clocks[t]!) i) :
     i = (W.hist m).size - 1 := by
   have hlast : (W.hist m).size - 1 < (W.hist m).size := by omega
-  have := hfl _ hlast (HB.le hw (h _ hlast) ht)
+  have := hfl _ hlast (HB.le hw (h _ hlast) (LPh.held_of_holds ht))
   omega
 
 /-- `WordHB` stays over a step that carries `HB` (`HB.mono`) and keeps the word's writes or pushes
@@ -3452,10 +3452,10 @@ theorem WordHB.step {G G' : ThreadId → γ} {m m' : Mem} (h : L.WordHB W G m)
 the lock's: it keeps the word's writes (`Word.Ok.lockStep`). -/
 theorem WordHB.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {h : Res}
     (hE : L.WordHB W G m) (hwE : W.Ok m A) (hapE : W.ApartL L.toLockWord)
-    (hg : L.ph (G t) ≠ .gone) (hs : L.Step t m m')
+    (hg : L.ph (G t) ≠ .gone) (hz : L.ph (G t) ≠ .holdsAway) (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
     L.WordHB W (upd G t (L.set (G t) q h)) m' :=
-  hE.step (fun _ hc => hc.lstep hg hs hrel) (.inl (hwE.lockStep hs hapE).2)
+  hE.step (fun _ hc => hc.lstep hg hz hs hrel) (.inl (hwE.lockStep hs hapE).2)
 
 end FLock
 end Full

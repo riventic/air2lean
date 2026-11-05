@@ -17,6 +17,15 @@
       "paths": ["docs/premise-index.md"]
     },
     {
+      "name": "theorem-inventory",
+      "generator": "theorem-inventory",
+      "heavy": true,
+      "incremental": true,
+      "note": "scripts/regen.py --only inventory: the runs planned from assurance/theorem-list.json (theorem-inventory.py plan), each a guarded Lean build (one lake build over the committed translations, one swap-build per Zig version and target), recorded, then docs/theorem-inventory.md rendered from its template; incremental: a run whose recorded hashes still match is kept",
+      "paths": ["assurance/theorem-inventory.json", "docs/theorem-inventory.md"],
+      "run_bound": {"assurance/theorem-inventory.json": ["runs.*.started_utc", "runs.*.elapsed_seconds", "runs.*.host", "runs.*.log_sha256"]}
+    },
+    {
       "name": "provenance",
       "generator": "provenance",
       "fixture": "provenance",

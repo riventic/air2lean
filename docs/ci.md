@@ -527,6 +527,7 @@ publishes and supplies them):
 | --- | --- | --- |
 | `coverage` | `coverage/<version>.json` per supported version | `coverage.py generate --os linux` over the pinned pristine source |
 | `premise-index` | `docs/premise-index.md` | `premises.py write` |
+| `theorem-inventory` | `assurance/theorem-inventory.json`, `docs/theorem-inventory.md` | `regen.py --only inventory`: the runs planned from the committed `assurance/theorem-list.json`, each a guarded Lean build, recorded; the document rendered from `docs/theorem-inventory.template.md` |
 | `provenance`, `provenance-gap` | `manifest.json`, `pins.json`, `receipt/{audit,plan,receipt}.json` of `assurance/provenance{,-gap}/` | `provenance-evidence.py regenerate --refresh`, `install`, `record` |
 
 A file is whole-tree when its content depends on most of the tree (translator, runtime, goldens,
@@ -536,16 +537,18 @@ manifest/pin and 6 premise-index regeneration commits in the week before this ch
 that changes only with its own subject stays committed and is checked for staleness as before:
 goldens, `Gen.lean` modules, the fixtures' source, AIR and proofs, `docs/support-matrix.md`
 (its coverage counts change only with dispositions, i.e. with a translator change), the trust
-report. The theorem inventory's run records (`assurance/theorem-inventory.json` `runs`) are
-whole-tree too but are recorded from Lean builds that CI does not run per translation yet; they
-stay committed until CI records them (next step: one deterministic swap-build record per
-required translation, timing fields dropped).
+report. The theorem inventory (decision, maintainer, 2026-11-05) is whole-tree: its recorded
+runs depend on every `Proofs` source and translation, its regeneration (Lean builds, about 25
+minutes) kept losing the race with `main`, and it conflicted on almost every merge. The hand-written
+part, the list of headline theorems, stays committed (`assurance/theorem-list.json`, and the
+document's prose in `docs/theorem-inventory.template.md`); the runs and the rendered table are
+generated.
 
 **Not committed.** The files are in `.gitignore`. No PR adds or changes one, and agents never
 regenerate them for a PR.
 
 **Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`, `schedule`) has
-two jobs that regenerate them on exactly the checked-out tree:
+three jobs that regenerate them on exactly the checked-out tree:
 
 - `generated` (no build; about a minute): `scripts/generated.py produce --group coverage --group
   premise-index`. Each generator runs twice; the two outputs must be byte-identical. The files
@@ -562,6 +565,14 @@ two jobs that regenerate them on exactly the checked-out tree:
   excluded fields); then the strict `check` and strict
   `replay` of both fixtures and the fixture regressions run on them. Uploaded as
   `generated-provenance`.
+- `theorem-inventory` (after `lake`; no Zig): the runs planned from the list (one `lake build` over
+  the committed translations, one `swap-build` per Zig version and target over the goldens), twice;
+  the runs' start time, duration, host and log digest are the `run_bound` fields. Then the
+  inventory regressions and the full `theorem-inventory.py check` run on the result. Uploaded as
+  `generated-theorem-inventory`. Readers fail closed when the files are missing (`run
+  scripts/generated.py materialize`); `preflight` checks the committed list alone
+  (`check --list`), because the copy `materialize` fetches is main's, not the tree of a PR that
+  changes a `Proofs` source. The main health run (`regen.sh`) regenerates and fully checks it.
 
 A generator that fails (a missing coverage disposition, a fresh AIR or `Gen.lean` that differs
 from the committed one, a strict check) fails the job, so a PR whose tree does not regenerate
