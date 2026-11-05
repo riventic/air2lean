@@ -56,7 +56,7 @@ class UniverseTests(unittest.TestCase):
         indexed = {f.rel for f in premises.theorem_files(premises.load_repository(ROOT, config))}
         audited = {u.file for u in units} | {m.replace('.', '/') + '.lean' for m in shipped}
         self.assertEqual(indexed - audited, set())
-        self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Result.lean',
+        self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Memory.lean',
                          'case-studies/flow-time/FlowTime/Proofs.lean'} <= audited)
         gated = {u.file: u.gate for u in units if u.gate}
         # A file that imports a gated file inherits its gate (`gate_of`), as the strength log of
