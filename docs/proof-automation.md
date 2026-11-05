@@ -875,9 +875,10 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
   loop body (`f.loop<id>`), each member of a recursive group (by its unsplit equation
   `f.eq_def`: its own equation lemmas split a `match` on a parameter into one lemma per case,
   which a computed argument never matches), each `--model` wrapper (`air2lean_model_<i>`) and
-  `dispatch`. Also `Zig.loop` and the library models that hold a loop (`Zig.osUnfairLockC`), both
-  tagged in `ZigLean/Simp.lean`. A new library model with a `Zig.loop` or a `partial_fixpoint`
-  is tagged there too, as is a `--model` implementation that holds one, where it is defined.
+  `dispatch`. Also `Zig.loop` (tagged in `ZigLean/Simp.lean`) and the library models that hold a
+  loop, each tagged where it is defined (`Zig.osUnfairLockC`, `ZigLean/Conc/Call.lean`), so that
+  `ZigLean.Simp` imports no model. A new library model with a `Zig.loop` or a `partial_fixpoint`
+  is tagged the same way, as is a `--model` implementation that holds one.
 * **Emission rule.** The translator ends each declaration group with
   `attribute [zig_run] <the group's executable declarations>`, each model wrapper with
   `attribute [zig_run] air2lean_model_<i>` and `dispatch` with `attribute [zig_run] dispatch`
