@@ -602,6 +602,14 @@ structure ViewRetryState where
 def ViewRetryState.same (s t : ViewRetryState) : Bool :=
   s.resources.isPerm t.resources && s.requests.isPerm t.requests && s.facts.isPerm t.facts
 
+/-- A term of the `omega` certificates' table (`RunCaches.omegaTerms`), up to `Expr.equal`:
+binder names and annotations count, so a subterm is replaced only by the very same term. -/
+structure InternKey where
+  e : Expr
+
+instance : BEq InternKey := ⟨fun a b => a.e.equal b.e⟩
+instance : Hashable InternKey := ⟨(·.e.hash)⟩
+
 /-- A recognized total-group step. This is traversal context, not a proof assumption or a
 registry. Only the root's local contract can create it; every walk restores its caller's value. -/
 structure RecBoundary where
@@ -697,7 +705,7 @@ structure RunCaches where
   /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
   fuelOut : IO.Ref Bool
   /-- The subterms of the run's `omega` certificates, each distinct term once (`omegaRaw`). -/
-  omegaTerms : IO.Ref (Std.HashMap Expr Expr)
+  omegaTerms : IO.Ref (Std.HashSet InternKey)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -823,8 +831,9 @@ def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : Meta
   return r
 
 /-- `internTerms` (implementation): bottom up, each node of `e` once (`memo`, by address), its
-children replaced first, so that a lookup in `tbl` compares children by address. -/
-unsafe def internTermsImpl (tbl : IO.Ref (Std.HashMap Expr Expr)) (e : Expr) : IO Expr := do
+children replaced first, so that a lookup in `tbl` compares children by address. `shareCommon'`
+first turns `omega`'s tree into a graph, so that `visit` meets each distinct node once. -/
+unsafe def internTermsImpl (tbl : IO.Ref (Std.HashSet InternKey)) (e : Expr) : IO Expr := do
   let memo ← IO.mkRef (mkPtrMap (α := Expr) (β := Expr))
   let rec visit (e : Expr) : IO Expr := do
     if let some r := (← memo.get).find? e then return r
@@ -836,17 +845,18 @@ unsafe def internTermsImpl (tbl : IO.Ref (Std.HashMap Expr Expr)) (e : Expr) : I
       | .mdata _ b => pure (e.updateMData! (← visit b))
       | .proj _ _ b => pure (e.updateProj! (← visit b))
       | _ => pure e
-    let r ← match (← tbl.get).get? e' with
-      | some r => pure r
-      | none => tbl.modify (·.insert e' e'); pure e'
+    let r ← match (← tbl.get).get? ⟨e'⟩ with
+      | some r => pure r.e
+      | none => tbl.modify (·.insert ⟨e'⟩); pure e'
     memo.modify (·.insert e r)
     return r
   visit (ShareCommon.shareCommon' e)
 
-/-- `e` hash-consed against `tbl`: each subterm is replaced by the structurally equal term in
-`tbl`, and the new ones are added. Used across the `omega` certificates of a run (`omegaRaw`). -/
+/-- `e` hash-consed against `tbl`: each subterm is replaced by the equal term in `tbl`
+(`InternKey`), and the new ones are added. Used across the `omega` certificates of a run
+(`omegaRaw`). -/
 @[implemented_by internTermsImpl]
-opaque internTerms (tbl : IO.Ref (Std.HashMap Expr Expr)) (e : Expr) : IO Expr
+opaque internTerms (tbl : IO.Ref (Std.HashSet InternKey)) (e : Expr) : IO Expr
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean.
 
@@ -855,7 +865,8 @@ used twice is proved twice, and every call serializes its atoms and facts again.
 certificates therefore repeat a few subterms millions of times (ArenaSpec `loop66_c0`: 64M term
 nodes, 0.23M distinct, held until the theorem is checked). They are hash-consed against the run's
 table (`RunCaches.omegaTerms`), so the run's caches, the goals' assignments and the final term
-hold each distinct subterm once. -/
+hold each distinct subterm once, and `omega`'s own goals, which hold the certificate unshared,
+are dropped (`omegaRaw'`). -/
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let h0 ← IO.getNumHeartbeats
   let r ← omegaRaw' facts ty
@@ -868,8 +879,7 @@ where
   let s ← saveState
   -- `omega` may exhaust the recursion depth on a false goal with many case splits: a failure
   tryCatchRuntimeEx (do
-    -- one level deeper, `omega` assigns only its own unknowns
-    let pf ← withNewMCtxDepth do
+    let prove : MetaM Expr := do
       let m ← mkFreshExprMVar ty
       let before := (← getLCtx).lastDecl.map (·.fvarId)
       if let some g ← m.mvarId!.falseOrByContra then
@@ -881,15 +891,23 @@ where
           withTheReader Core.Context
             (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
             Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
-      internTerms (← caches).omegaTerms (← instantiateMVars m)
-    -- so its goals, which hold the certificate unshared, are dropped with nothing else; a proof
-    -- that still has one of them as an unknown is no proof
-    let mctx := s.meta.mctx
-    setMCtx mctx
-    unless (← getMVars pf).all mctx.decls.contains &&
-        (!pf.hasLevelMVar || (collectLevelMVars {} pf).result.all mctx.lDecls.contains) do
-      return none
-    return some pf)
+      instantiateMVars m
+    -- A problem without unknowns is solved one depth deeper: `omega` assigns only its own goals,
+    -- whose assignments hold the certificate unshared, and they are dropped with the depth (with
+    -- its postponed constraints: a proof that needs one, or still has one of the goals as an
+    -- unknown, is no proof). With unknowns, `omega` may assign them, at the context's depth.
+    let closed ← (ty :: (← facts.mapM inferType).toList).allM fun t =>
+      return !(← instantiateMVars t).hasMVar
+    let pf? ← if !closed then some <$> prove else
+      let pf? ← withNewMCtxDepth do
+        let pf ← prove
+        return if (← getPostponed).isEmpty then some pf else none
+      let mctx ← getMCtx
+      pure <| pf?.filter fun pf =>
+        (!pf.hasExprMVar || (pf.collectMVars {}).result.all mctx.decls.contains) &&
+        (!pf.hasLevelMVar || (collectLevelMVars {} pf).result.all mctx.lDecls.contains)
+    let some pf := pf? | s.restore; return none
+    return some (← internTerms (← caches).omegaTerms pf))
     fun _ => do s.restore; return none
 
 /-- A proposition `omega` reads: relations of natural numbers and integers under `¬ ∧ ∨ → ↔`. -/

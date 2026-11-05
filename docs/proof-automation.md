@@ -754,15 +754,19 @@ parallel; a run is identified by the option `fsym.run`).
 serializes its coefficient lists again, a constraint used twice is proved twice, and every call
 serializes its atoms and facts again. Unshared, the certificates of one ArenaSpec walk
 (`loop66_c0`) reached 64M term nodes for 0.23M distinct ones, and the elaborator held them until
-the theorem was checked (5.9–6.3 GB at one thread). Each certificate is therefore hash-consed
-against the run's table (`RunCaches.omegaTerms`): a subterm becomes the alpha-equivalent one already
-in the table (equal up to binder names and annotations, which the kernel ignores). `omega` runs
-one metavariable depth deeper, so it can assign only its own unknowns, and those unknowns (whose
-assignments hold the unshared copy) are dropped once the proof is instantiated. A proof that
-still mentions one is treated as no proof. The interning is an `unsafe` meta-level function
+the theorem was checked (6.4–6.7 GB at one thread). Each certificate is therefore hash-consed
+against the run's table (`RunCaches.omegaTerms`): a subterm becomes the equal one already in the
+table (`Expr.equal`, binder names and annotations included). A problem without unknowns (its
+target and its facts' types have no metavariables) is solved one metavariable depth deeper, so
+`omega` can assign only its own goals, and those goals (whose assignments hold the unshared copy)
+are dropped with the depth once the proof is instantiated. A proof that still mentions one, or
+needs a postponed constraint of the depth, is treated as no proof. A problem with unknowns is
+solved at the context's depth as before, where `omega` may assign them. The interning is an
+`unsafe` meta-level function
 (`internTermsImpl`, by pointer); it only rebuilds `Expr` values and never appears in a proof
-term. The kernel checks the result as before (regression test: `omega_proofs_shared`,
-`tests/roadmap/sep-auto/SepAuto/Arith.lean`).
+term. The kernel checks every theorem as before. The regression test `omega_proofs_shared`
+(`tests/roadmap/sep-auto/SepAuto/Arith.lean`) type-checks shared proofs, finds no duplicate node
+in them and no goal of `omega` kept, and proves a problem with an unknown.
 
 ## Recursive groups
 

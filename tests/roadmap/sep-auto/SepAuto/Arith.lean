@@ -283,7 +283,8 @@ open Lean Meta Zig.Full.Auto
 again finds no duplicate node. The problem chains four facts over five atoms, so a certificate
 combines constraints in several steps over the same coefficient lists; the second goal of the
 run uses the same facts and atoms. (Core `omega` alone: 2576 nodes for 739 distinct ones on the
-first goal.) Nor does the run keep `omega`'s goals, which hold the certificate unshared. -/
+first goal.) Nor does the run keep `omega`'s goals, which hold the certificate unshared. A
+problem with an unknown is still proved. -/
 def omega_proofs_shared : MetaM Unit := do
   let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
   fsymRuns.modify (·.insert id (← RunCaches.new))
@@ -307,12 +308,20 @@ def omega_proofs_shared : MetaM Unit := do
     let some p1 ← omegaRaw #[h1, h2, h3, h4] ty1 | throwError "omega_proofs_shared: no proof"
     let some p2 ← omegaRaw #[h1, h2, h3, h4] ty2 | throwError "omega_proofs_shared: no proof"
     -- `omega`'s own goals hold the unshared certificate: none is kept
-    let kept := (← goals) - before
-    unless kept == 0 do throwError "omega_proofs_shared: {kept} goals of omega kept"
+    let after ← goals
+    unless after == before do
+      throwError "omega_proofs_shared: {before} goals before omega, {after} after"
+    for (p, ty) in [(p1, ty1), (p2, ty2)] do
+      Meta.check p
+      unless ← isDefEq (← inferType p) ty do throwError "omega_proofs_shared: {p} does not prove {ty}"
     for (what, x) in [("the first", p1), ("both", mkApp2 (mkConst ``Prod.mk) p1 p2)] do
       let n ← x.numObjs
       let m ← (ShareCommon.shareCommon' x).numObjs
       unless n == m do throwError "omega_proofs_shared: {what}: {n} term nodes, {m} distinct"
+    -- a problem with an unknown is solved at the context's depth, as before the sharing
+    let w ← mkFreshExprMVar (mkConst ``Nat)
+    let some _ ← omegaRaw #[h1] (← le w (← add w (mkNatLit 1)))
+      | throwError "omega_proofs_shared: no proof of ?w ≤ ?w + 1"
   finally fsymRuns.modify (·.erase id)
 
 run_meta omega_proofs_shared
