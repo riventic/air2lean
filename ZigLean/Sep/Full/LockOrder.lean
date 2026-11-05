@@ -49,7 +49,7 @@ theorem holdLive_inners {ι : Type} {A : FLock γ} {B : ι → FLock γ} {K : ι
   obtain ⟨rY, hiB, hUB⟩ := ((hB i).inv G m).mp (hinv G rX m hi hU)
   obtain rfl : k = (B i).key m := Option.some.inj (hpk.symm.trans hiB.w.blk.keyAt)
   have hw : (B i).ph (G v) = .wait := by
-    rcases hiB.w.fq _ hpm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
+    rcases hiB.w.fq _ hkm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
     · exact h
     · exact absurd rfl h
     · exact absurd rfl h

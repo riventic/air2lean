@@ -766,8 +766,9 @@ def futexWake (k : FutexKey) (n : Nat) (cs : List Nat) : MemM Unit := modify fun
 /-- A futex wake at `p` (`Io.futexWake`, `Thread.Futex.wake`): `futexWake` at `p`'s private key
 (`Mem.keyAt`), resolved in the step that wakes, as the kernel resolves it in the syscall. A
 protocol's invariant then reads its word's key in the memory of the wake (`Mem.wordKey`): no key
-resolved earlier has to stay valid across other threads' steps. A pointer without a block has no
-key and wakes no thread. -/
+resolved earlier has to stay valid across other threads' steps. A pointer into a block id that
+does not exist has no key and wakes no thread; a pointer with no block (`⟨none, off⟩`) has the
+private key of its address `off`, as a raw address has in the kernel. -/
 def futexWakePtr (p : Ptr) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
   match m.keyAt p false with
   | some k =>

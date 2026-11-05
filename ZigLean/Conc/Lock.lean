@@ -341,12 +341,6 @@ theorem Step.key {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : L.key m' = L
   · exact (Mem.wordKey_of_blocks (m := m.write L.b _ L.o _) h _ _ _).trans
       (Mem.wordKey_write hb _ _ _)
 
-/-- A step keeps every block's address, so every futex key (`Mem.SameAddrs.wordKey`). -/
-theorem Step.addrs {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : m.SameAddrs m' := by
-  rcases hs.blocks with h | ⟨_, _, hb, -, -, -, h⟩
-  · exact .of_blocks h
-  · exact (Mem.sameAddrs_write hb).trans (.of_blocks h)
-
 /-- The same memory, but `current`, `seen`, `nextMsg` and `woken`. -/
 theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)
     (s : Array (ThreadId × Nat × Nat)) (k : Nat) (w : Array ThreadId) :

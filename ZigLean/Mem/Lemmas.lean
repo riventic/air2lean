@@ -209,14 +209,6 @@ theorem Mem.keyAt_wordKey {m : Mem} {b : BlockId} {blk : Block} (h : m.blocks[b]
     (o : Nat) (sh : Bool) : m.keyAt ⟨some b, (o : Int)⟩ sh = some (m.wordKey b o sh) := by
   rw [Mem.keyAt_block h, Mem.wordKey_of h, Block.key]
 
-/-- The key a futex wait queues (`Thread.futexWait`, `Block.key` of the accessed word) is the
-total key of the word. -/
-theorem Mem.wordKey_of_access {m : Mem} {p : Ptr} {n al : Nat} {b : BlockId} {blk : Block}
-    {o : Nat} (h : m.access p n al = pure (b, blk, o)) (sh : Bool) :
-    blk.key o sh = m.wordKey b o sh := by
-  obtain ⟨-, hb, -⟩ := access_eq h
-  rw [Mem.wordKey_of hb]
-
 /-- The total key reads only the block's address. -/
 theorem Mem.wordKey_of_addr {m m' : Mem} {b : BlockId}
     (h : (m'.blocks[b]?).map (·.addr) = (m.blocks[b]?).map (·.addr)) (o : Nat) (sh : Bool) :
@@ -249,10 +241,6 @@ theorem Mem.keyAt_ne_off {m : Mem} {b : BlockId} {o o' : Nat} (h : o ≠ o') (ho
   | some blk =>
     rw [Mem.keyAt_wordKey hb]
     exact fun e => Mem.wordKey_ne_off h ho ho' sh sh' (Option.some.inj e)
-
-/-- Keys in different domains differ (Linux: `FUT_OFF_MMSHARED`). -/
-theorem FutexKey.ne_of_shared {k k' : FutexKey} (h : k.shared ≠ k'.shared) : k ≠ k' :=
-  fun e => h (e ▸ rfl)
 
 /-- A successful access starts at or above its block's first live offset. -/
 theorem access_lo {m : Mem} {p : Ptr} {n a : Nat} {b : BlockId} {blk : Block} {o : Nat}
