@@ -26,6 +26,7 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L12 Sync/Lock, Threadsync/Lock, Conc/Witness | open: the legacy `MutexContract`, `SemContract`, `CondContract` removed from `Proofs/Sync/Contracts`; the three files wait for their importers (Semaphore via RwLock, WaitGroup, RwLockContract) | #653 |
 | L10, L11 | open | |
 | L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
+| L15 VC layer | done: `vc_gen`, `#vc_extract(_all)`, the `vc_contract` registry, the `ResultProgram` AST and `scripts/vc-report.py` deleted; P02's VCs are `fsym`'s residual goals (`docs/vcs.md`) | #657 |
 
 Stage D-a (section 4) is done.
 

@@ -31,7 +31,6 @@ INVENTORY = 'tests/roadmap/inventory/test_inventory.py'
 THEOREMS = 'tests/roadmap/theorem-inventory/test_inventory.py'
 PREMISES = 'tests/roadmap/premises/test_premises.py'
 RELEASE = 'tests/roadmap/release-record/test_release_record.py'
-VC_REPORT = 'tests/roadmap/vcs/test_vc_report.py'
 CLOSURE = 'tests/roadmap/dependency-closure/test_dependency_closure.py'
 EXPORT = 'tests/roadmap/project-export/test_project_export.py'
 MODULE_KEYS = 'tests/roadmap/modular-output/test_keys.py'
@@ -247,18 +246,6 @@ MUTANTS = {
     'release-ledger-revision-unchecked': (
         'scripts/release-record.py', '        if not SHA1.fullmatch(reviewed):\n', '        if False:\n',
         RELEASE, 'rr', ('LedgerTests.test_entry_without_reviewed_revision_fails',)),
-    # P02: a Lean error (e.g. a failed vc_gen? contract) must not be hidden by the report.
-    'vc-report-lean-error-masked': (
-        'scripts/vc-report.py',
-        '            if m.get("severity") == "error" and PREFIX not in str(m.get("data", ""))]',
-        '            if False]', VC_REPORT, 'VC',
-        ('ReportTests.test_lean_errors_are_surfaced_and_reports_are_not_errors',)),
-    # P02: an obligation without a closing hypothesis stays open in the report.
-    'vc-report-open-obligations-hidden': (
-        'scripts/vc-report.py',
-        '        open_count = sum(1 for item in obligations if item["closed_by"] is None)\n',
-        '        open_count = 0\n', VC_REPORT, 'VC',
-        ('ReportTests.test_open_obligations_are_counted_and_closed_ones_named',)),
     # I02: a callee without AIR must be reported missing, never counted as exported.
     'closure-missing-callee-hidden': (
         'scripts/dependency-closure.py', "    missing = [n for n in nodes if n['class'] == 'missing']\n",

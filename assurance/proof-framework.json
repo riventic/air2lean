@@ -520,20 +520,6 @@
       "approved": "coordinator 2026-10-14 (command gate seed)"
     },
     {
-      "tactic": "#vc_extract",
-      "kind": "command",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "#vc_extract_all",
-      "kind": "command",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
       "tactic": "conc_norm",
       "kind": "syntax",
       "module": "ZigLean.Sep.Full.Conc",
@@ -619,12 +605,6 @@
       "module": "ZigLean.Sep.Full.Unroll",
       "status": "legacy-to-retire",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "tactic": "vc_gen",
-      "kind": "syntax",
-      "module": "ZigLean.VC.Extract",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "when_defined",
@@ -717,13 +697,6 @@
       "kind": "attribute",
       "module": "ZigLean.Sep.Full.AutoAttr",
       "status": "target",
-      "approved": "coordinator 2026-10-16 (registry gate seed)"
-    },
-    {
-      "registry": "vc_contract",
-      "kind": "attribute",
-      "module": "ZigLean.VC.ContractAttr",
-      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-16 (registry gate seed)"
     },
     {
@@ -941,18 +914,6 @@
       "path": "tests/roadmap/proof-tools/Unroll.lean",
       "tactic": "unroll_solo",
       "count": 2,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/vcs/Extract.lean",
-      "tactic": "vc_gen",
-      "count": 7,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/vcs/Memory.lean",
-      "tactic": "vc_gen",
-      "count": 9,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     }
   ]
