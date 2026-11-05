@@ -204,7 +204,7 @@ theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hi : (proto semO
   · obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h
     have e : w.1 = v := by simpa using he
     rcases hu.um.q w hw with hq | hq
-    · exact ((fits (semOf := semOf)).noWaits hL hall)
+    · exact ((fits (semOf := semOf)).noWaits hL hu hall)
         (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
     · obtain ⟨i, jr, e', h1, -⟩ := hu.cinv.q w hw hq
       have hw1 : ((G v).2.c).waits = true := by

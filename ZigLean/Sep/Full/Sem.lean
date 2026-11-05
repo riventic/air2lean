@@ -342,7 +342,7 @@ theorem cnt_held (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t 
     {g : γ} {rL : Res} {v : BitVec 64} {B : FAssn} (hi : P.inv (upd G t (L.set g .holds rL)) m)
     (hv : (up (pts S.p 8 v) ⋆ B) rL) : S.cnt (upd G t (L.set g .holds rL)) = v := by
   obtain ⟨rX, hL, -⟩ := (hS.inv _ m).mp hi
-  have hR := hL.res t (by rw [upd_self, L.ph_set])
+  have hR := hL.res t (by rw [upd_self, L.ph_set]; rfl)
   rw [upd_self, L.held_set, R_cnt] at hR
   exact pts_agree hR hv
 
@@ -734,7 +734,7 @@ theorem no_pst {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hI : S
     ∀ v, v ≠ t → (S.ph (G v)).isPst = false := fun v hv => by
   cases hp : (S.ph (G v)).isPst
   · rfl
-  · exact absurd (hL.w.one v t (hI.pst v hp) hh) hv
+  · exact absurd (hL.w.one v t (LPh.held_of_holds (hI.pst v hp)) (LPh.held_of_holds hh)) hv
 
 /-- **A step of the holder in the semaphore's own code keeps its invariant** (`Move.hold`). -/
 theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m m' : Mem}
@@ -766,7 +766,8 @@ theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
   have hhS := FCond.hist_hold hsub hfs hcells (.inl rfl)
   have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hhS]
   have hnq : ∀ w ∈ m.waiters, w.1 ≠ t := FLock.notQ_mem (hL.w.notQ
-    (by show L.ph (G t) ≠ _; rw [hh]; decide) (by show L.ph (G t) ≠ _; rw [hh]; decide))
+    (by show L.ph (G t) ≠ _; rw [hh]; decide) (by show L.ph (G t) ≠ _; rw [hh]; decide)
+    (by show L.ph (G t) ≠ _; rw [hh]; decide))
   have hnp := no_pst hI hL hh
   have hTk : ∀ v, v ≠ t → (S.Tk (upd G t (S.set (L.set (G t) .holds h) s)) v ↔ S.Tk G v) :=
     fun v e => by unfold Tk; rw [hsph v e, hcph]
@@ -811,7 +812,7 @@ theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
     rw [hcph] at hu
     by_cases e : v = t
     · subst e
-      obtain rfl := hL.w.one u v (hsub.1.crit u hu) hh
+      obtain rfl := hL.w.one u v (LPh.held_of_holds (hsub.1.crit u hu)) (LPh.held_of_holds hh)
       rw [hcx] at hu; exact absurd hu (by decide)
     · rw [hsph v e] at hv; exact hI.cp u v hu hv
   · -- tq
@@ -887,7 +888,8 @@ theorem condHold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
   have hcp : C.ph (S.set (L.set (G t) .holds h) s) = .out := by
     rw [S.cph_set, cph_l hS, hcx]
   have hnq : ∀ w ∈ m.waiters, w.1 ≠ t := FLock.notQ_mem (hL.w.notQ
-    (by show L.ph (G t) ≠ _; rw [hh]; decide) (by show L.ph (G t) ≠ _; rw [hh]; decide))
+    (by show L.ph (G t) ≠ _; rw [hh]; decide) (by show L.ph (G t) ≠ _; rw [hh]; decide)
+    (by show L.ph (G t) ≠ _; rw [hh]; decide))
   exact hC.quiet (by rw [hcx]; trivial) (by rw [hcp]; trivial)
     (FCond.hist_hold hsub hfs hcells (.inl rfl)) (FCond.hist_hold hsub hfs hcells (.inr rfl)) hfs.waiters
     hfs.woken hfs.threads hfs.clock hnq (fun i e h' => by rw [hcp] at h'; cases h')
@@ -970,7 +972,8 @@ theorem Inv.atPst {G G' : ThreadId → γ} {m : Mem} {t : ThreadId} (hI : S.Inv 
     rw [hcph] at hu
     by_cases e : u = t
     · subst e; rw [hcx0] at hu; exact absurd hu (by decide)
-    · exact absurd (hw.one u t (by show L.ph (G' u) = _; rw [hG u e]; exact hC.crit u hu) hh) e
+    · exact absurd (hw.one u t (LPh.held_of_holds (by show L.ph (G' u) = _; rw [hG u e]; exact hC.crit u hu))
+        (LPh.held_of_holds hh)) e
   refine ⟨fun u hu => hI.ex u (by rw [← hsph u]; exact hu), fun u hu => ?_,
     fun u hu => absurd hu (fun h' => hcrit u h'),
     fun u hu => (by rw [hsph]; exact hI.wt u (by rw [← hcph u]; exact hu)),
@@ -1047,7 +1050,7 @@ theorem Fits.live (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t
     simp only [ht, ↓reduceIte] at this
     exact Nat.lt_of_lt_of_le Nat.one_pos this
   intro _ hall
-  have hnw := hS.noWaits hL hall
+  have hnw := hS.noWaits hL hU hall
   rcases hI.live hz hw with h | ⟨u, hu⟩ | ⟨v, hv⟩
   · omega
   · have huh := hI.pst u hu
@@ -1055,7 +1058,7 @@ theorem Fits.live (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t
     rcases hall u hut with hf | hq | hj
     · have := hS.fin _ hf; rw [huh] at this; cases this
     · have := hL.w.notQ (t := u) (by show L.ph (G u) ≠ _; rw [huh]; decide)
-        (by show L.ph (G u) ≠ _; rw [huh]; decide)
+        (by show L.ph (G u) ≠ _; rw [huh]; decide) (by show L.ph (G u) ≠ _; rw [huh]; decide)
       rw [this] at hq; cases hq
     · have := hS.joins _ hj; rw [huh] at this; cases this
   · have hvt := hI.ex v (by rw [hv.1]; exact SPh.noConfusion)
@@ -1124,6 +1127,7 @@ theorem Fits.toC (hS : S.Fits P U ok) : C.Fits L P U ok where
   set_part g p r := pset_c hS.toFits g r p
   role_l _ g q h := hS.role_l () g q h
   role_part _ g r := hS.role_part () g r
+  holdLive := hS.holdLive
   ok_calm g p q hp hq := by
     by_cases hs : S.ph g = .out ∨ S.ph g = .wt
     · have := hS.ok_calm g (p, S.ph g) (q, S.ph g) ⟨hp, hs⟩ ⟨hq, hs⟩
@@ -1296,6 +1300,7 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
       (by rw [upd_self]; exact hfx) (by rw [upd_self, S.cph_set, cph_l hS]; exact hgx) hL'.w
   have hCf : C.Inv L (upd G t gf) m' := by
     have hnq : ∀ w ∈ m'.waiters, w.1 ≠ t := FLock.notQ_mem (hL'.w.notQ
+      (by show L.ph (upd G t gf t) ≠ _; rw [upd_self, hfh]; decide)
       (by show L.ph (upd G t gf t) ≠ _; rw [upd_self, hfh]; decide)
       (by show L.ph (upd G t gf t) ≠ _; rw [upd_self, hfh]; decide))
     have := hC₁.quiet (t := t) (g' := gf) (m' := m')
