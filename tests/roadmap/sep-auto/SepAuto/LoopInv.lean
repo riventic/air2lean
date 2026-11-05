@@ -132,6 +132,8 @@ def bad (p : Ptr) (n : BitVec 32) : MemM Unit := do
 
 section
 open Lean Meta Elab Tactic Zig.Full.Auto.Report
+-- The claims below are quoted inside `run_tac`: unhygienic, so they name the example's variables.
+set_option hygiene false
 
 set_option linter.unusedVariables false in
 /-- **A wrong invariant is rejected**: `fsym` does not prove the (false) claim of `bad` with it.
@@ -144,8 +146,10 @@ example (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 2 * n.toNat 
       FAssn.ex fun w : BitVec 64 => ⟪w.toNat = v.toNat + 2 * n.toNat⟫ ⋆ up (pts p 8 w)))) none
     let g ← mkFreshExprSyntheticOpaqueMVar (← deltaExpand ty (· == ``bad))
     let (gs, report) ← runReport g.mvarId!
-    unless !gs.isEmpty && report.residuals.all (·.origin.reason != "invariant_not_established") &&
-        ((← instantiateMVars g).find? (·.isConstOf ``FTotalTriple.loop_measure)).isSome do
+    -- every residual is in the walk of the step, whose postcondition is the measure's decrease
+    -- and the invariant at the next iteration
+    let inStep (r : Residual) := (r.origin.source.text.splitOn "bad.loop.meas").length > 1
+    unless !gs.isEmpty && report.residuals.all inStep do
       throwError "the wrong invariant was not rejected by the walk of its step: {line report}"
   trivial
 
@@ -158,6 +162,7 @@ def early.loop (p : Ptr) (n : BitVec 32) : MM Locals Exit := bad.loop p n
 @[fsym_inv] def early.loop.meas (n : BitVec 32) (s : Locals) : Nat :=
   n.toNat - s.i.toNat
 
+set_option linter.unusedVariables false in
 /-- **An invariant that does not hold at the entry** is reported as such: one residual, the loop
 with `invariant_not_established` at `loop_entry`. -/
 example (p : Ptr) (n : BitVec 32) (v : BitVec 64) : True := by
@@ -203,7 +208,10 @@ def notALoop : Nat := 0
 @[fsym_inv] def fill.loop.post2 (r : Exit × Locals) : FAssn := emp
 
 set_option linter.unusedVariables false in
-/-- error: @[fsym_inv] SepAuto.LoopInv.early.loop.post: its last parameter is not of type Exit × Locals; expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B` -/
+/--
+error: @[fsym_inv] SepAuto.LoopInv.early.loop.post: its last parameter is not of type Exit ×
+  Locals; expected the definition `B.inv`, `B.meas` or `B.post` of a loop body `B`
+-/
 #guard_msgs in
 @[fsym_inv] def early.loop.post (s : Locals) : FAssn := emp
 
