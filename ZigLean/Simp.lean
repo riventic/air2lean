@@ -1,5 +1,6 @@
 import ZigLean.SimpAttr
 import ZigLean.Basic
+import ZigLean.Conc.Call
 
 attribute [zig_unfold] StateT.run' StateT.run bind pure StateT.bind StateT.pure StateT.map
   ExceptT.bind ExceptT.pure ExceptT.mk ExceptT.bindCont ExceptT.map Functor.map liftM monadLift
@@ -7,5 +8,6 @@ attribute [zig_unfold] StateT.run' StateT.run bind pure StateT.bind StateT.pure 
   Option.bind get getThe MonadState.get MonadStateOf.get StateT.get modify modifyGet
   MonadState.modifyGet MonadStateOf.modifyGet StateT.modifyGet Zig.call Zig.asmTrap
 
--- A kernel-run witness unfolds every loop by its defining equation (`ZigLean.SimpAttr`).
-attribute [zig_run] Zig.loop
+-- A kernel-run witness unfolds every loop by its defining equation, and the models that hold one
+-- (`ZigLean.SimpAttr`).
+attribute [zig_run] Zig.loop Zig.osUnfairLockC

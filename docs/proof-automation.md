@@ -818,18 +818,23 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
 ```
 
 * **Contents.** Every executable declaration of generated code: each function, each extracted
-  loop body (`f.loop<id>`), each member of a recursive group, and `dispatch`. Also `Zig.loop`
-  (`ZigLean/Simp.lean`) and the library models that hold a loop (`Zig.osUnfairLockC`,
-  `ZigLean/Conc/Call.lean`). A new model with a `Zig.loop` or a `partial_fixpoint` gets
-  `@[zig_run]` where it is defined.
+  loop body (`f.loop<id>`), each member of a recursive group (by its unsplit equation
+  `f.eq_def`: its own equation lemmas split a `match` on a parameter into one lemma per case,
+  which a computed argument never matches), each `--model` wrapper (`air2lean_model_<i>`) and
+  `dispatch`. Also `Zig.loop` and the library models that hold a loop (`Zig.osUnfairLockC`), both
+  tagged in `ZigLean/Simp.lean`. A new library model with a `Zig.loop` or a `partial_fixpoint`
+  is tagged there too, as is a `--model` implementation that holds one, where it is defined.
 * **Emission rule.** The translator ends each declaration group with
-  `attribute [zig_run] <the group's executable declarations>` and `dispatch` with
-  `attribute [zig_run] dispatch` (`runAttribute`, `Air2Lean/Emit.lean`). This is default
-  generation, so every translation (every Zig version and target) tags its own declarations and
-  one proof covers all of them.
-* **Use.** `singlePass` unfolds every visible occurrence once per pass. `iterate n` needs `n` at
-  least the call depth to the deepest loop plus the iterations of the run's longest loop.
-  `unfoldPartialApp` unfolds `dispatch`, which `Sched.run` takes unapplied.
+  `attribute [zig_run] <the group's executable declarations>`, each model wrapper with
+  `attribute [zig_run] air2lean_model_<i>` and `dispatch` with `attribute [zig_run] dispatch`
+  (`runAttribute`, `Air2Lean/Emit.lean`). This is default generation, so every translation
+  (every Zig version and target) tags its own declarations and one proof covers all of them.
+* **Use.** A plain definition unfolds as far as the term goes within one pass. A loop or a
+  recursive call unfolds one level per pass (`singlePass`), so `iterate n` needs `n` at least the
+  run's deepest count of nested loop iterations and recursive calls. A pass that changes nothing
+  fails, but the remaining `Zig.loop` of an unfinished loop always rewrites. `unfoldPartialApp`
+  unfolds `dispatch`, which `Sched.run` takes unapplied. A hand-written client definition on the
+  path (a test's `vt`, `client`) is unfolded by name first.
 * **Kernel-run witnesses only.** The rewrites unfold loops and recursive groups without end. Use
   the set only under `singlePass`. Never add its members to `zig_unfold` or another set, and never
   pass it to `fsym` or to a simp call without `singlePass`.

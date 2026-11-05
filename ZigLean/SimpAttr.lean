@@ -6,8 +6,9 @@ can only get attributes in a file after the one that declares it. -/
 register_simp_attr zig_unfold
 
 /-- Simp set of the definitions a kernel-computed run unfolds: every executable declaration of
-generated code (the translator tags each function, loop body and `dispatch`), `Zig.loop`
-(`ZigLean.Simp`) and the models that hold a loop (`Zig.osUnfairLockC`). A run witness uses it as
+generated code (the translator tags each function, loop body, recursive member by `eq_def`,
+model wrapper and `dispatch`), `Zig.loop` and the models that hold a loop (`Zig.osUnfairLockC`),
+both in `ZigLean.Simp`. A run witness uses it as
 `iterate n (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])`
 and then `decide +kernel`, naming no generated declaration (docs/proof-automation.md, kernel-run
 witnesses). Its rewrites unfold loops and recursive groups without end: use it only with

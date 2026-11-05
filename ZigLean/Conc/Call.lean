@@ -1,6 +1,5 @@
 import ZigLean.Conc.Basic
 import ZigLean.Basic
-import ZigLean.SimpAttr
 import ZigLean.Mem.Thread
 
 /-!
@@ -264,7 +263,7 @@ def osUnfairLockTry (p : Ptr) : CM Tgt σ Bool := do
 the lock's contract, built from the model's ops: the word is 1 while a thread holds the lock;
 the lock is an acquire, the unlock a release (the happens-before edge); a thread that waits
 sleeps at the futex (so a deadlock is `.deadlock`). -/
-@[zig_run] def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
+def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
   let _ ← loop (osUnfairLockTry p) id
   pure ()
 

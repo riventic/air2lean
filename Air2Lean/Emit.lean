@@ -4692,6 +4692,13 @@ def firstModelCalls (models : Array ModelBinding) (funcs : Array Func) :
     if let some site := (index.getD m.symbol #[])[0]? then sites := sites.insert m.symbol site
   return sites
 
+/-- The `zig_run` simp set (`ZigLean/SimpAttr.lean`, docs/proof-automation.md) gets every
+executable declaration: each function, each extracted loop body, each model wrapper and
+`dispatch`. A kernel-run witness unfolds the run's path with this one set, so it names no
+generated declaration. -/
+def runAttribute (names : Array String) : List String :=
+  if names.isEmpty then [] else [s!"attribute [zig_run] {" ".intercalate names.toList}"]
+
 /-- Emit a typed implementation adapter plus a complete contract obligation. Imported
 identifiers are rooted so generated names cannot shadow the user's definitions. -/
 def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
@@ -4738,7 +4745,7 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
   return String.intercalate "\n\n" ([
     s!"def {base}_contract : Zig.External.Contract ({argsTy}) ({result}) := _root_.{m.contract}",
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := {claims}_root_.{m.implementation} {tuple}"] ++
-    footprintDef ++ [evidence])
+    runAttribute #[base] ++ footprintDef ++ [evidence])
 
 /-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
 (`ZigLean/Mem/Width.lean`); a 64-bit program keeps the global ones. -/
@@ -4821,12 +4828,6 @@ structure EmitParts where
   concFuncs : Array String := #[]
   /-- Each function's certificate shape (`CertShape`). -/
   shapes : Array (String × CertShape) := #[]
-
-/-- The `zig_run` simp set (`ZigLean/SimpAttr.lean`, docs/proof-automation.md) gets every
-executable declaration: each function, each extracted loop body and `dispatch`. A kernel-run
-witness unfolds the run's path with this one set, so it names no generated declaration. -/
-def runAttribute (names : Array String) : List String :=
-  if names.isEmpty then [] else [s!"attribute [zig_run] {" ".intercalate names.toList}"]
 
 /-- The modules the header imports. -/
 def EmitParts.headerImports (parts : EmitParts) : List String :=
@@ -5000,7 +5001,10 @@ def emitProgramParts (program : Program) (prefix_ : String)
       else String.intercalate "\n\n" defs
     let text := String.intercalate "\n\n"
       (parts.flatMap (·.types) ++ parts.flatMap (·.agains) ++ declarations ++
-        runAttribute (executable.flatMap (·.members.map (·.name))) ++
+        -- A recursive member enters by its unsplit equation: its own equation lemmas split a
+        -- `match` on a parameter into one lemma per case, which a computed argument never matches.
+        runAttribute (executable.flatMap fun g =>
+          g.members.map fun d => if g.recursive then d.name ++ ".eq_def" else d.name) ++
         (if proofApi then (members.toList.zip parts).map fun (f, p) =>
           emitProofApi f p recursiveIds.contains else []))
     (names, callees, text)
