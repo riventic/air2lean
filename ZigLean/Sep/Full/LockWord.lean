@@ -72,13 +72,15 @@ def key (m : Mem) : FutexKey := m.wordKey L.b L.o
 /-- A futex key of the lock's `nest` in `m`: the key of a pointer of the nest, in either domain. -/
 def NestKey (m : Mem) (k : FutexKey) : Prop := ∃ p sh, L.nest p ∧ m.keyAt p sh = some k
 
-theorem key_of_addrs {m m' : Mem} (h : m.SameAddrs m') : L.key m' = L.key m :=
-  Mem.wordKey_of_addr (h L.b) L.o false
+/-- The word's key stays while its block does, at its address (`FStepIn.addrs`). -/
+theorem key_of_addrs {m m' : Mem} (h : m.SameAddrs m') {blk : Block}
+    (hb : m.blocks[L.b]? = some blk) : L.key m' = L.key m :=
+  h.wordKey hb L.o false
 
 theorem NestKey.of_addrs {m m' : Mem} {k : FutexKey} (h : m.SameAddrs m') (hk : L.NestKey m k) :
     L.NestKey m' k := by
   obtain ⟨p, sh, hn, hp⟩ := hk
-  exact ⟨p, sh, hn, (Mem.keyAt_of_addrs h p sh).trans hp⟩
+  exact ⟨p, sh, hn, Mem.keyAt_of_addrs h hp⟩
 
 /-- The values of the word: `0`, `1`, `c`. -/
 def Val (w : Nat) : Prop := w = 0 ∨ w = 1 ∨ w = L.c
@@ -166,16 +168,17 @@ def Queue (P : ThreadId → LPh) (m : Mem) (ws : Array (ThreadId × FutexKey)) :
 
 /-- The queue in a memory with the same block addresses. -/
 theorem Queue.of_addrs {P : ThreadId → LPh} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
-    (h : m.SameAddrs m') (hq : L.Queue P m ws) : L.Queue P m' ws := fun w hw => by
-  rw [L.key_of_addrs h]
+    (h : m.SameAddrs m') {blk : Block} (hb : m.blocks[L.b]? = some blk) (hq : L.Queue P m ws) :
+    L.Queue P m' ws := fun w hw => by
+  rw [L.key_of_addrs h hb]
   rcases hq w hw with hq | hq | ⟨h1, h2, h3⟩
   · exact .inl hq
   · exact .inr (.inl hq)
   · exact .inr (.inr ⟨h1, h2, NestKey.of_addrs L h h3⟩)
 
 theorem Waits.of_addrs {m m' : Mem} {ws : Array (ThreadId × FutexKey)} (h : m.SameAddrs m')
-    (hw : L.Waits m' ws) : L.Waits m ws := by
-  unfold LockWord.Waits at hw; rw [L.key_of_addrs h] at hw; exact hw
+    {blk : Block} (hb : m.blocks[L.b]? = some blk) (hw : L.Waits m' ws) : L.Waits m ws := by
+  unfold LockWord.Waits at hw; rw [L.key_of_addrs h hb] at hw; exact hw
 
 /-- The word's block: live, with the word inside, aligned, writable, mapped at the word. -/
 def BlkOk (m : Mem) : Prop :=
@@ -278,8 +281,10 @@ theorem Step.addrs {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : m.SameAddr
       (Mem.SameAddrs.of_blocks (m := m.write L.b blk L.o bs) h)
 
 /-- A lock step keeps the word's futex key. -/
-theorem Step.key {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : L.key m' = L.key m :=
-  L.key_of_addrs hs.addrs
+theorem Step.key {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : L.key m' = L.key m := by
+  rcases hs.blocks with h | ⟨blk, bs, hb, -, -, -, -⟩
+  · exact Mem.wordKey_of_blocks h L.b L.o false
+  · exact L.key_of_addrs hs.addrs hb
 
 /-- A record introduced by a lock step is a record of the lock word. This follows
 from the actual array effect, without a layout or well-formedness premise. -/
