@@ -86,7 +86,8 @@ theorem cinv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     (C Lo).Inv (L Lo) (upd G t g) m := by
   have hcg : (C Lo).ph g = .out := h₁
   have hct : (C Lo).ph (G t) = .out := h₀
-  refine hI.frame rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _) (fun _ => VClock.le_refl _)
+  refine hI.frame rfl rfl rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _)
+    (fun _ => VClock.le_refl _)
     (fun h => by rw [hcg, hct] at h; rcases h with h | h <;> cases h)
     (fun _ _ h => by rw [hcg] at h; cases h) (fun _ _ _ _ h => by rw [hcg] at h; cases h)
     (fun h => by obtain ⟨_, _, _, h'⟩ := hI.qd_reg h; rw [hct] at h'; cases h')
@@ -467,12 +468,12 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
   have hG0c : (G 0).2.c = .out := by rw [hg]; rfl
   have hG0e : (G 0).2.e = .out := by rw [hg]; rfl
   -- the condition's and the event's invariants
-  have hI := hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (by simp) hclk
+  have hI := hu.cinv.stay hhS hhE rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (by simp) hclk
   have hI' := cinv_out (cinv_out hI (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl)
     (t := 0) (g := gO rM { ph := .run })
     (by rw [upd1_0]; exact hG0c) rfl
   have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhV rfl hclk (by simp <;> omega) id id
-    hu.einv.fresh
+    hu.einv.fresh rfl rfl
   have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl
       (fun h => by
         have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h

@@ -105,7 +105,18 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   /-- A signaller at `inc` made the only post the state has room for. -/
   incS : ∀ v q n h, (G v).2.c = .inc q n h → C.Sated m
   /-- A thread sleeps only at the mutex or at the epoch. -/
-  q : ∀ w ∈ m.waiters, w.2 = (L K).ptr ∨ w.2 = WE.ptr
+  q : ∀ w ∈ m.waiters, w.2 = (L K).key m ∨ w.2 = WE.key m
+
+variable {K} in
+/-- The futex queue's fact over a step that keeps the waiters and every block's address
+(`FStepIn.addrs`): the two keys stay. -/
+theorem U.q_addrs {G : ThreadId → Gh} {rX : Res} {m m' : Mem} (hu : U K G rX m)
+    (h : m.SameAddrs m') (hw : m'.waiters = m.waiters) :
+    ∀ w ∈ m'.waiters, w.2 = (L K).key m' ∨ w.2 = WE.key m' := fun w hw' => by
+  obtain ⟨_, hb₀, -⟩ := hu.blk
+  rw [hw] at hw'
+  rw [(L K).key_of_addrs h hb₀, hu.we.key_of_addrs h]
+  exact hu.q w hw'
 
 /-- The protocol, in strict mode: the producer starts with a plain part and the message. -/
 def proto : Proto Tgt Gh where
@@ -425,7 +436,7 @@ theorem U.congr {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U K G
     (ws : WS.Ok m') (we : WE.Ok m') (cinv : C.Inv (L K) G' m') (sinv : (S K).Inv G' m')
     (swt : ∀ u, (G' u).2.s = .wt → (G' u).2.ph = .wt)
     (hmono : ∀ c, (L K).HB G m c → (L K).HB G' m' c)
-    (q : ∀ w ∈ m'.waiters, w.2 = (L K).ptr ∨ w.2 = WE.ptr) : U K G' rX' m' := by
+    (q : ∀ w ∈ m'.waiters, w.2 = (L K).key m' ∨ w.2 = WE.key m') : U K G' rX' m' := by
   have hS : C.S.hist m' = C.S.hist m := hhS
   refine ⟨shape, rest, blk, ws, we, cinv, sinv, swt, hu.hbE.step hmono (.inl hhE),
     fun u i e h => ?_, fun u i jr sn e h => ?_, fun v q' n h' h => ?_, q⟩
@@ -451,13 +462,14 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   refine hu.congr (fun u i e h' => by rwa [hX] at h') (fun u i jr sn e h' => by rwa [hX] at h')
     (fun u q n h'' h' => by rwa [hX] at h') hhS hhE ?_
     (hu.rest.congr fun l hl => hs.heap (box_notL hl)) (hu.blk.lstep hs) hwS hwE
-    (hu.cinv.lstep hu.ws hu.we apS apE hok.1 hna (fun _ _ _ => rfl) hs)
+    (hu.cinv.lstep hu.ws hu.we apS apE (weKey_ne K m) hok.1 hna (fun _ _ _ => rfl) hs)
     (hu.sinv.lstep hu.ws apS (fun _ _ _ => rfl) (fun _ _ _ => rfl) hst hng hs hrel)
     (fun u h' => by rw [hX] at h' ⊢; exact hu.swt u h') (fun c hc => hc.lstep hng hs hrel)
     (fun w hw => ?_)
   · have : (fun u => (upd G t ((L K).set (G t) p h) u).2) = fun u => (G u).2 := funext hX
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
-  · by_cases hl : w.2 = (L K).ptr
+  · rw [hs.key, hu.we.key_of_addrs hs.addrs]
+    by_cases hl : w.2 = (L K).key m
     · exact .inl hl
     · exact hu.q w ((hs.waiters_mem w hl).mp hw)
 
@@ -468,11 +480,11 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
     fun _ hw => (hw.fields_native (m' := { m with current := t })
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
   ⟨hu.shape, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we,
-    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
+    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
       (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.sinv.mono (m' := { m with current := t }) (fun _ => rfl) (fun _ => rfl) rfl
       (fun u h => hu.sinv.pst u h) (fun _ h => .inl h) (fun _ => VClock.le_refl _) (fun _ h => h)
-      rfl (fun _ h => h) (fun _ hw => .inl hw) rfl,
+      rfl (fun _ h => h) (fun _ hw => .inl hw) rfl rfl,
     hu.swt, hu.hbE, hu.ldE, hu.regE, hu.incS, hu.q⟩
 
 /-- **A framed step of `t` that keeps its places** (its part, its held resource) keeps `U`, given
@@ -496,7 +508,7 @@ theorem U_frame {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId}
   refine hu.congr (fun u i e h => by rwa [hX'] at h) (fun u i jr sn e h => by rwa [hX'] at h)
     (fun u q n h' h => by rwa [hX'] at h) hhS hhE ?_ hrest hbk hwS hwE hC hS
     (fun u h => by rw [hX'] at h ⊢; exact hu.swt u h) (fun c hc => ?_)
-    (fun w hw => by rw [hs.waiters] at hw; exact hu.q w hw)
+    (hu.q_addrs hs.addrs hs.waiters)
   · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
   · refine hc.mono (fun u h => .inl ?_) hs.clock (fun c hb => ?_) hs.threads (fun u h => ?_)
@@ -514,7 +526,9 @@ theorem cinv_frame {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} 
     C.Inv (L K) (upd G t g) m' :=
   hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
     (fun _ h => by show g.1.ph = _; rw [hph]; exact h)
-    (fun h => by show (g.2.s).isPst = true; rw [hX]; exact h) hhS hhE (by rw [hs.waiters])
+    (fun h => by show (g.2.s).isPst = true; rw [hX]; exact h) hhS hhE
+    (hu.we.key_of_addrs hs.addrs) (let ⟨_, hb₀, _⟩ := hu.blk; (L K).key_of_addrs hs.addrs hb₀)
+    (by rw [hs.waiters])
     (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
     (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock
 
@@ -649,7 +663,7 @@ theorem holdStep {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {s
   refine hu.congr (fun u i e h' => by rwa [(hpc u).2] at h')
     (fun u i jr sn e h' => by rwa [(hpc u).2] at h') (fun u q n h'' h' => by rwa [(hpc u).2] at h')
     hhS hhE ?_ (hu.rest.congr hcs) (blk_of hi' hu.rest) hwS hwE hC hS (fun u h' => ?_)
-    (fun c hc => ?_) (fun w hw => by rw [hfs.waiters] at hw; exact hu.q w hw)
+    (fun c hc => ?_) (hu.q_addrs hfs.addrs hfs.waiters)
   · refine Shape.congr hu.shape hfs.threads (fun u => (hpc u).1) fun u hu' => ⟨?_, ?_⟩
     · exact Classical.byContradiction fun hne => absurd (hC.ex u hne) (by rw [hfs.threads]; simp only [ThreadId] at *; omega)
     · exact Classical.byContradiction fun hne => absurd (hS.ex u hne) (by rw [hfs.threads]; simp only [ThreadId] at *; omega)
@@ -920,6 +934,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       refine hsat (hr fun hc => ?_) (hu.incS v q' n h' h'')
       exact hu.crit_sig (u := t) (v := v) hc (by rw [h''] <;> rfl)
   · -- q
+    rw [hs.key hu.we, hs.lockKey hwL.blk]
     rcases hs.waiters hw with h' | rfl
     · exact hu.q w h'
     · exact .inr rfl

@@ -94,7 +94,7 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   have hst : (S.ph (G t)).isPst = false := by
     rcases hok.2 with e | e <;> (show (G t).2.sp.isPst = false; rw [e]; rfl)
   refine ⟨hu.um.lstep hs (funext fun u => congrArg X.ph (hX u)),
-    hu.cinv.lstep hu.um.ws hu.um.we apS apE hok.1 hna (fun _ _ _ => rfl) hs,
+    hu.cinv.lstep hu.um.ws hu.um.we apS apE (weKey_ne m) hok.1 hna (fun _ _ _ => rfl) hs,
     hu.sinv.lstep hu.um.ws apS (fun _ _ _ => rfl) (fun _ _ _ => rfl) hst hg hs hrel,
     hu.lg.congr (fun u => congrArg X.ph (hX u)) (fun u => congrArg X.c (hX u))
       (hu.um.ws.lockStep hs apS).2 (hu.um.we.lockStep hs apE).2
@@ -105,11 +105,11 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
 theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U G rX m) :
     U G rX { m with current := t } :=
   ⟨hu.um.atStop t,
-    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
+    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
       (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.sinv.mono (m' := { m with current := t }) (fun _ => rfl) (fun _ => rfl) rfl hu.sinv.pst
       (fun _ h => .inl h) (fun _ => VClock.le_refl _) (fun _ h => h) rfl (fun _ h => h)
-      (fun _ h => .inl h) rfl,
+      (fun _ h => .inl h) rfl rfl,
     ⟨hu.lg.one, hu.lg.tot, hu.lg.wtx, hu.lg.ehb, hu.lg.f0, hu.lg.rc, hu.lg.f2, hu.lg.f3, hu.lg.f4,
       hu.lg.incS⟩⟩
 
@@ -160,7 +160,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
       (fun l hl => frame_rest (rest_box hu.um.rest (fun _ => box_live hu.um) (we_box hl)))
       (fun l _ => rfl)
   have hci : C.Inv L (upd G t (L.setPart (G t) r)) m.ticked :=
-    hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id hS hE (by rw [hfs.waiters])
+    hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id hS hE rfl rfl (by rw [hfs.waiters])
       (fun w hw _ => .inl (by rw [hfs.waiters] at hw; exact hw))
       (fun _ _ _ h => by rw [hfs.woken]; exact h) (Nat.le_of_eq (by rw [hfs.threads])) hfs.clock
   have hcl : m.ticked = { m with ticks := m.ticks + 1 } := rfl
@@ -484,7 +484,8 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
         · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
       · have := hr.2.2; omega
-    · rcases hs.waiters hw with h' | rfl
+    · rw [hs.key hu.um.we, hs.lockKey hWI.blk]
+      rcases hs.waiters hw with h' | rfl
       · exact hu.um.q w h'
       · exact .inr rfl
   refine ⟨hum, hI, hsi, ⟨by rw [(hph 0).1, (hph 1).1]; exact hu.lg.one, fun u k s h' => ?_,
