@@ -44,14 +44,10 @@ def translator : Revision.Translator := translator_revision%
 def runtime : Revision.Translator := runtime_revision%
 
 /-- `translator` as recorded in the source-map sidecar and the module manifest. -/
-def revisionJson (t : Revision.Translator) : Lean.Json := Lean.Json.mkObj [("lean", .str t.lean),
-  ("revision", .str t.revision),
-  ("modules", .arr (t.modules.map fun (m, h) => .arr #[.str m, .str h]))]
-
-def translatorJson : Lean.Json := revisionJson translator
+def translatorJson : Lean.Json := translator.toJson
 
 /-- `runtime` as recorded in the source-map sidecar and the module manifest. -/
-def runtimeJson : Lean.Json := revisionJson runtime
+def runtimeJson : Lean.Json := runtime.toJson
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++

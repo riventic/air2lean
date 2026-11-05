@@ -19,10 +19,7 @@ on stderr with the reason; it gets no definition. An error is printed on stderr,
 open Lean Meta
 
 /-- The generator's revision record. -/
-def generatorRecord : Json :=
-  let t := translator_revision%
-  Json.mkObj [("lean", t.lean), ("revision", t.revision),
-    ("modules", Json.arr (t.modules.map fun (m, h) => Json.arr #[m, h]))]
+def generatorRecord : Json := (translator_revision%).toJson
 
 unsafe def main (argv : List String) : IO UInt32 := do
   let (module, ns, source, out) := match argv with

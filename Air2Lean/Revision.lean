@@ -81,6 +81,12 @@ def Translator.of (lean : String) (sources : Array (String × ByteArray)) : Tran
   let listing := lean ++ "\n" ++ String.join (modules.toList.map fun (m, h) => s!"{m} {h}\n")
   { lean, modules, revision := sha256 listing.toUTF8 }
 
+/-- `t` as the records write it (the source-map sidecar, the module manifest, the `Inv.lean`
+record of `air2lean-invgen`): `{lean, revision, modules: [[module, sha256], …]}`. -/
+def Translator.toJson (t : Translator) : Lean.Json := Lean.Json.mkObj [("lean", .str t.lean),
+  ("revision", .str t.revision),
+  ("modules", .arr (t.modules.map fun (m, h) => .arr #[.str m, .str h]))]
+
 open Lean Elab Term in
 /-- The sources of the imported modules whose root is `rootName`, as `Translator.of`'s input.
 `withMain`: also the using file itself. -/
