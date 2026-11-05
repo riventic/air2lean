@@ -593,7 +593,6 @@ class InvgenRecordTests(unittest.TestCase):
         self.assertIn("Fx/Fx/Inv.lean: no valid air2lean-invgen record", error)
 
     def test_record_outside_the_targets_fails(self):
-        self.write_record()
         self.write_record(path="Fx/Fx/Other.lean")
         self.tracked = self.tracked + ["Fx/Fx/Other.lean", "Fx/Fx/Deleted.lean"]
         error, = self.errors()

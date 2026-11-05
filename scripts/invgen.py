@@ -19,8 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from theorem_universe import ROOT, compile_unit, with_lean_path  # noqa: E402
+ROOT = Path(__file__).resolve().parent.parent
 
 # (Inv.lean, fixture root, translated module, its namespace)
 TARGETS = [
@@ -29,10 +28,19 @@ TARGETS = [
 ]
 
 
+def source(root, module):
+    """The source of the translated `module` of the fixture at `root`: the generator's input
+    (`--source`), which `scripts/gen-integrity.py invgen` checks the record against."""
+    return f"{root}/{module.replace('.', '/')}.lean"
+
+
 def generate(root, module, namespace, work):
     """`air2lean-invgen`'s output for `module` (a module of the fixture at `root`), as bytes."""
+    # (here, not at the top: scripts/gen-integrity.py reads TARGETS and `source` without Lean)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from theorem_universe import compile_unit, with_lean_path
     rel = module.replace('.', '/')
-    src = f'{root}/{rel}.lean'
+    src = source(root, module)
     lean_path = [work / 'olean']
     log = work / 'compile.log'
     subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', src], cwd=ROOT, check=True)

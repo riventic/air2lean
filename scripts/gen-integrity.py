@@ -37,9 +37,8 @@ module and namespace that names the generator revision of the checkout (its Lean
 SHA-256 of each of its modules, `translator_revision%`), the current SHA-256 of the input it read
 (the translated module's source) and the SHA-256 of the rest of the file (no hand edit); no other
 tracked file has such a record. The generator is deterministic, so equal hashes mean the file is
-current; otherwise `scripts/invgen.py write` regenerates it. A runtime change that changes how a
-translated module elaborates is not an input here: `scripts/invgen.py check` (preflight after the
-full build, regen) reruns the generator.
+current; otherwise `scripts/invgen.py write` regenerates it. The runtime is not an input here
+(docs/invariant-synthesis.md): `scripts/invgen.py check` reruns the generator.
 
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
@@ -311,39 +310,46 @@ INVGEN_PREFIX = b"-- air2lean-invgen: "
 
 
 @functools.cache
-def sha256_file(path):
-    """The SHA-256 of `path`, or None if it is not a file (cached for one `invgen_errors` run)."""
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+def sibling(script):
+    """The globals of the sibling script `script` (run once)."""
+    return runpy.run_path(str(Path(__file__).with_name(script)))
 
 
-def invgen_record(path):
+def invgen_record(path, *, header_only=False):
     """The record on the first line of the generated invariants `path` and the SHA-256 of the
-    text after it; ValueError if there is none."""
+    text after it (`header_only`: None, the rest unread); ValueError if there is no record,
+    OSError if there is no file."""
     with open(ROOT / path, "rb") as f:
-        first, body = f.readline(), f.read()
-    if not first.startswith(INVGEN_PREFIX):
-        raise ValueError("no air2lean-invgen record on its first line")
+        first = f.readline()
+        if not first.startswith(INVGEN_PREFIX):
+            raise ValueError("no air2lean-invgen record on its first line")
+        if header_only:
+            return None
+        body = f.read()
     return json.loads(first[len(INVGEN_PREFIX):]), hashlib.sha256(body).hexdigest()
 
 
 def invgen_errors(targets=None):
     """The `invgen` command: each target of scripts/invgen.py (`targets`: its TARGETS) has a
     record that matches it and the checkout, and no other tracked file has one."""
-    tools = Path(__file__).resolve().parent
-    valid_revision = runpy.run_path(str(tools / "semantic-fingerprints.py"))["valid_translator"]
-    if targets is None:
-        targets = runpy.run_path(str(tools / "invgen.py"))["TARGETS"]
+    invgen = sibling("invgen.py")
+    valid_revision = sibling("semantic-fingerprints.py")["valid_translator"]
+    targets = invgen["TARGETS"] if targets is None else targets
     toolchain = (ROOT / "lean-toolchain").read_text().strip()
-    sha256_file.cache_clear()
+
+    @functools.cache
+    def sha256_file(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
     errors = []
     known = {target[0] for target in targets}
     for path in git_files("*.lean"):
-        if path not in known and (ROOT / path).is_file():
-            with open(ROOT / path, "rb") as f:
-                if f.readline().startswith(INVGEN_PREFIX):
-                    errors.append(f"{path}: an air2lean-invgen record that is not a target of scripts/invgen.py")
+        if path not in known:
+            with contextlib.suppress(OSError, ValueError):
+                invgen_record(path, header_only=True)
+                errors.append(f"{path}: an air2lean-invgen record that is not a target of scripts/invgen.py")
     for path, root, module, namespace in targets:
-        source = f"{root}/{module.replace('.', '/')}.lean"
+        source = invgen["source"](root, module)
         try:
             record, body = invgen_record(path)
             generator, [[name, digest]] = record["generator"], record["inputs"]
@@ -364,7 +370,7 @@ def invgen_errors(targets=None):
         stale = [] if toolchain.rpartition(":")[2] == "v" + generator["lean"] else \
             [f"Lean {generator['lean']} (lean-toolchain {toolchain})"]
         stale += [f"generator module {m}" for m, d in generator["modules"]
-                  if sha256_file(ROOT / (m.replace(".", "/") + ".lean")) != d]
+                  if sha256_file(premise_markers.module_path(ROOT, m)) != d]
         if sha256_file(ROOT / source) != digest:
             stale.append(f"input {source}")
         if stale:
