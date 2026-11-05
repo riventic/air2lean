@@ -14,7 +14,8 @@ import ZigLean.Sep.Full.Region
 * **Step rules** (`@[fsym]`): `FTotalTriple.arr_load` and `FTotalTriple.arr_store` of an
   in-bounds item `p.elem (Enc.size T) i` at the type's alignment, keeping the whole array, and
   `arr_load_zero`/`arr_store_zero` of item `0` through `p` itself (the form `fsym_norm` gives
-  `p.elem _ 0`, `Norm.elem_zero`); `arr_ptrProject` (the pointer to an item, one past the end and the empty array included);
+  `p.elem _ 0`, `Norm.elem_zero`); `arr_ptrProject` (the pointer to an item, one past the end
+  and the empty array included);
   `arr_memset` (all items) and `arr_memmove` (ranges that may overlap), both from the rules on
   owned bytes (`arr_of`); the facts of an array (`facts_arr`) and its extent for pointer
   formation `&xs[i]` (`Live.arr`); in a thread the rules apply with the locality of the item's

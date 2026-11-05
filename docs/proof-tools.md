@@ -29,7 +29,8 @@ are updates that read the labels from the memory (`EUpd.arr_join`, `EUpd.arr_unf
 `fsym` walks item loads and stores on whole-array ownership with the `@[fsym]` rules
 `FTotalTriple.arr_load` and `FTotalTriple.arr_store` (an in-bounds item `p.elem (Enc.size T) i`
 at the type's alignment; the array stays whole, the bound `i.toNat < xs.length` is a side
-condition), and pointer formation `&xs[i]` with `ptrProject_elem_of` and the provider
+condition; item `0` through `p` itself, the form the walk gives `p.elem _ 0`, by
+`arr_load_zero`/`arr_store_zero`), and pointer formation `&xs[i]` with `ptrProject_elem_of` and the provider
 `Live.arr`. For example:
 
 ```lean
