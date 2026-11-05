@@ -1408,26 +1408,28 @@ os._exit(0)
         code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "3072", cwd=self.worktree("big"))
         self.assertEqual((code, evidence["outcome"]), (75, "elastic_too_large"))
 
+    def lock_admission(self, *options, rss="1024"):
+        """An Admission (not acquired) on the test's lock, in the elastic budget (13 slots)."""
+        return self.admission(*options, budget=ELASTIC_BUDGET[1], rss=rss)
+
+    def part(self, workload="elastic-1"):
+        part = self.lock_admission("--sub-admission", "--charge-mib", "1024")
+        part.enclosing = {"elastic": {"id": workload}}
+        return part
+
+    @staticmethod
+    def take(part):
+        """Take the lifeline now, not after the part's next attempt time (ATTEMPT_EVERY)."""
+        part.next_lifeline = 0
+        return part.take_lifeline()
+
     def test_the_lifeline_goes_ahead_of_every_exclusive_ticket(self):
-        def admission(*options):
-            a = guard.parse_args(["--lock", str(self.root / "shared.lock"), "--cwd", str(self.root),
-                                  *ELASTIC_BUDGET, *options, "--", "true"])
-            lock = guard.Admission(a)
-            lock.directory.mkdir(exist_ok=True)
-            self.addCleanup(lock.release)
-            return lock
-        logs = ("--report", str(self.root / "r"), "--log", str(self.root / "l"))
-        merge = admission(*logs, "--priority", "merge")
+        admission, take = self.lock_admission, self.take
+        merge = admission("--priority", "merge")
         merge.join_queue()
-        exclusive = admission(*logs, "--exclusive")
+        exclusive = admission("--exclusive")
         exclusive.join_queue()
-        first, second, running = (admission("--sub-admission", "--charge-mib", "1024", "--rss-mib", "1024")
-                                  for _ in range(3))
-        for part in (first, second, running):
-            part.enclosing = {"elastic": {"id": "elastic-1"}}
-        def take(part):  # now, not after its next attempt time (ATTEMPT_EVERY)
-            part.next_lifeline = 0
-            return part.take_lifeline()
+        first, second, running = (self.part() for _ in range(3))
         running.publish_leaf()  # while a part of the workload runs, nobody needs the lifeline
         self.assertFalse(take(first))
         running.release()
@@ -1437,12 +1439,44 @@ os._exit(0)
         # Behind a merge guard (which needs no running workload to end), ahead of an exclusive one
         # (which waits for the elastic workload, so for its lifeline).
         self.assertTrue(first.ticket.endswith("-" + guard.LEAF))
-        self.assertEqual(sorted(os.listdir(self.tickets)), [merge.ticket, exclusive.ticket])  # older guards drain behind these
+        # A guard of an older checkout drains behind every entry of `merge/`: the lifeline's mirror
+        # comes first there, and new guards leave it out.
+        self.assertEqual(sorted(os.listdir(self.tickets)), [first.mirror[0], merge.ticket, exclusive.ticket])
+        self.assertTrue(first.mirror[0].startswith("%020d-" % 0))
+        self.assertEqual(merge.drain_tickets(), [merge.ticket, exclusive.ticket])
         self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
         merge.leave_queue()
         self.assertTrue(first.my_turn() and not exclusive.my_turn())
+        first.holds_queue = True  # its head: the mirror goes, older guards backfill beside it
+        first.mirror_lifeline()
+        self.assertEqual(os.listdir(self.tickets), [exclusive.ticket])
         first.release()
         self.assertTrue(take(second))
+
+    def test_a_normal_head_leads_ahead_of_later_lifelines_only_if_it_fits_beside_the_bases(self):
+        early, large, late = (self.lock_admission(rss=mib) for mib in ("2048", "13312", "1024"))
+        for guard_ in (early, large):
+            guard_.publish_waiting()
+        lifeline = self.part()
+        self.assertTrue(self.take(lifeline))
+        late.publish_waiting()
+        # 13 slots, no elastic base: the early guard (2) and the large one (13) fit; they waited
+        # before the lifeline, the late one after it.
+        self.assertEqual([g.my_turn() for g in (early, large, late)], [True, True, False])
+        self.assertTrue(lifeline.my_turn())
+        # A base of 2 slots: the large guard could only be admitted once that workload ends, which
+        # may need its lifeline, so the lifeline leads ahead of it.
+        guard.publish_entry(early.elastic, guard.entry_name(), {"pid": os.getpid(), "slots": 2}, early.open)
+        self.assertEqual([g.my_turn() for g in (early, large, late)], [True, False, False])
+        # An elastic entry of another shape: no normal guard leads ahead of a lifeline (fail closed).
+        guard.publish_entry(early.elastic, guard.entry_name(), {"slots": "x"}, early.open)
+        self.assertFalse(early.my_turn())
+        # A drain ticket: no normal guard leads, none backfills.
+        lifeline.release()
+        merge = self.lock_admission("--priority", "merge")
+        merge.join_queue()
+        self.assertFalse(early.my_turn())
+        self.assertEqual(early.drain_tickets(), [merge.ticket])
 
     def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):
         # The remote host, 2026-11-05: an unmeasured part (11 slots) took its workload's lifeline
@@ -1456,7 +1490,7 @@ os._exit(0)
                                     "--elastic", *budget, "--rss-mib", "1024", "--timeout", "20", "--lock-wait", "5")
         elastic = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.addCleanup(self.cleanup_process, elastic)
-        lifelines, heads = (Path(str(self.root / "shared.lock") + ".d") / name for name in ("lifeline-tickets", "heads"))
+        lifelines, heads = self.tickets.parent / "lifeline-tickets", self.tickets.parent / "heads"
         deadline = time.monotonic() + 5
         while not (guard.held_entries(lifelines) and guard.held_entries(heads)) and time.monotonic() < deadline:
             time.sleep(0.01)

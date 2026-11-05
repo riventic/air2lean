@@ -206,15 +206,24 @@ Lane jobs queued meanwhile on an idle host. An elastic workload instead holds sl
   lifeline: a ticket in `<lock>.d/lifeline-tickets/`, served behind the merge tickets (a merge
   guard waits for no running workload, so it is admitted and ends) and ahead of every exclusive
   ticket (which waits for every running workload, the elastic one too). The lifeline reserves,
-  it does not drain. With only lifelines queued, the first leads the normal lane: it becomes the
-  queue head (a normal head gives the queue back to it, and no normal guard takes it meanwhile),
-  and normal guards backfill beside its reservation as beside any head (Backfill above). So each
-  elastic workload always has a part running or coming up, and that part finds 11000 MiB that no
-  base holds once its ramp has passed and the running workloads end. Its ticket is kept out of
+  it does not drain. Behind no drain ticket, the first lifeline leads the normal lane as its
+  queue head. The exceptions are normal guards that began to wait before it and whose weight
+  fits beside the elastic bases: such a guard can be admitted while every elastic workload
+  waits, so it keeps or takes the head first. Every other normal head gives the queue back to the
+  lifeline. Normal guards backfill beside the lifeline's reservation as beside any head (Backfill
+  above). So a lifeline waits for finitely many heads, each admitted in bounded time, and a
+  large normal guard is not sent back by every later lifeline. Each elastic workload always has a
+  part running or coming up, and that part finds 11000 MiB that no base holds once its ramp has
+  passed and the running workloads, backfilled ones included, end. Its ticket is kept out of
   `<lock>.d/merge/` because guards of older checkouts read every ticket there as a drain ticket.
   On the remote host (2026-11-05) a drain-style lifeline of an unmeasured part (11 slots, 20 of
-  28 held) made 7 lane jobs wait 8 to 19 minutes with 4.7 of 24 GB in use. A part of a running
-  workload waits like a normal guard: the
+  28 held) made 7 lane jobs wait 8 to 19 minutes with 4.7 of 24 GB in use. Those older guards
+  do not see `lifeline-tickets/`, though, and would keep the queue from a lifeline (a large
+  head or an exclusive one, until its `--lock-wait`). So while a lifeline does not hold the
+  queue it mirrors its ticket in `merge/` under a name for time 0, which they drain behind first.
+  New guards ignore the mirror, and it goes once the lifeline holds the queue, so they drain
+  only for that hand-over. The mirror goes once no checkout before PR #661 runs a guard. A part
+  of a running workload waits like a normal guard: the
   workload yields memory to lane jobs between its processes. A background workload (the health
   run) gets one part at a time ahead of others through its lifeline; its other parts wait for an
   idle moment as before.
