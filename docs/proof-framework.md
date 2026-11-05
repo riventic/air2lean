@@ -44,7 +44,7 @@ proof framework").
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
-  status `legacy-to-retire` (`unroll_sched`, `blkat_alloc`, `vc_gen`, …), found as a word match in
+  status `legacy-to-retire` (`unroll_sched`, `tomega`, `vc_gen`, …), found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
   gates building new proofs on it, so a new file cannot import `ZigLean.Conc.Unroll` and call
   `unroll_sched` without a reviewed addition. A new file or a rising count fails, also against the
