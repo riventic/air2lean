@@ -902,11 +902,12 @@ theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
           · exact .inl (by omega)
         · exact .inr (by omega)
 
-/-- Validity and history under unchanged memory-model data and growing clocks. This proves
-the word's fields directly rather than constructing a legacy preservation summary. -/
-theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
+/-- Validity and history under unchanged memory-model data, as many threads (their records may
+change: a join) and growing clocks. This proves the word's fields directly rather than
+constructing a legacy preservation summary. -/
+theorem Ok.fields_size {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
-    (ht : m'.threads = m.threads)
+    (ht : m'.threads.size = m.threads.size)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
     W.Ok m' A ∧ W.hist m' = W.hist m := by
   have hl : ∀ i l, W.Loc m' i l ↔ W.Loc m i l := by
@@ -917,15 +918,23 @@ theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks
   · obtain ⟨h1, h2, h3, h4, h5⟩ := hw.loc i l ((hl i l).mp h)
     exact ⟨h1, h2, h3, by rw [h4, curBytes_congr hb], h5⟩
   · rw [hf] at he
-    rcases hw.wfp e he hh with ⟨hk, hle⟩ | hle
-    · exact .inl ⟨hk, Conc.someLe_mono ht (fun u _ => hcl u) hle⟩
-    · exact .inr (Conc.allLeOn_mono ht (fun u _ => hcl u) hle)
+    rcases hw.wfp e he hh with ⟨hk, u, hu, hle⟩ | hle
+    · exact .inl ⟨hk, u, ht ▸ hu, VClock.le_trans hle (hcl u)⟩
+    · exact .inr fun u hu ha => VClock.le_trans (hle u (ht ▸ hu) ha) (hcl u)
   · obtain ⟨v, hv⟩ := hw.val
     refine ⟨v, ?_⟩
     unfold Holds at hv ⊢
     rw [curBytes_congr hb]
     exact hv
   · exact (hw.plain i l ((hl i l).mp h)).of_fp fun e he => .inl (hf ▸ he)
+
+/-- `Ok.fields_size` with the same threads. -/
+theorem Ok.fields_native {m m' : Mem} (hw : W.Ok m A) (hb : m'.blocks = m.blocks)
+    (ha : m'.atomics = m.atomics) (hf : m'.footprint = m.footprint)
+    (ht : m'.threads = m.threads)
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    W.Ok m' A ∧ W.hist m' = W.hist m :=
+  hw.fields_size hb ha hf (congrArg Array.size ht) hcl
 
 /-- Recording an access apart from the word preserves its validity and history.
 The footprint and clocks are checked directly, for every access kind and word width. -/
