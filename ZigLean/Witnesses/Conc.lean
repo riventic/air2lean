@@ -30,10 +30,12 @@ nonvacuity_witness Proto.casMarkWrite_run :=
     by with_unfolding_all rfl, mem1_noRace _ _ _ _ _ _, trivial⟩
 
 nonvacuity_witness Proto.futexWait_run_go :=
-  ⟨p0, 0, mem1 (Enc.encode (0 : BitVec 32)), 0, blk (Enc.encode (0 : BitVec 32)), 0, 0, by decide +kernel,
+  ⟨p0, 0, false, mem1 (Enc.encode (0 : BitVec 32)), 0, blk (Enc.encode (0 : BitVec 32)), 0, 0,
+    by decide +kernel,
     by with_unfolding_all rfl, mem1_noRace _ _ _ _ _ _, by with_unfolding_all rfl, trivial⟩
 
-nonvacuity_witness Proto.futexWait_run_woken := ⟨p0, 0, { woken := #[0] }, by decide +kernel, trivial⟩
+nonvacuity_witness Proto.futexWait_run_woken :=
+  ⟨p0, 0, false, { woken := #[0] }, by decide +kernel, trivial⟩
 
 nonvacuity_witness Proto.intOfBytes_rmw := ⟨32, inferInstance, 0, trivial⟩
 
