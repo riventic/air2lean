@@ -1,6 +1,6 @@
 # Proofs about memory
 
-A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.MemM α`. `ZigLean/Sep/` is a separation logic for such functions. Import its modules (`ZigLean.Sep.Loop`, `ZigLean.Sep.Block`, …); the generated code does not import them.
+A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.MemM α`. `ZigLean/Sep/` is a separation logic for such functions. Import its modules (`ZigLean.Sep.Full.AutoAll`, `ZigLean.Sep.Full.Loop`, …); the generated code does not import them.
 
 ## Model
 
@@ -31,7 +31,6 @@ A function that uses memory (`docs/generated-code.md` §Memory) returns `Zig.Mem
 | `Triple.load`, `Triple.store` | `pts p a v` before and after (`0 < Enc.size T`; `store` needs `LawfulEnc T`) |
 | `Triple.alloc`, `Triple.free` | a new block with undefined bytes; `free` needs every byte of the block, from offset 0 |
 | `Triple.arr_ptrProject` | `&xs[i]` of an owned array, `i ≤ len`: the checked pointer formation `ptrProject` (MM-3) returns `p.elem size i` and keeps `arr p xs` |
-| `loop_sep_spec`, `loop_sep_ghost` | a `Zig.loop` with an invariant that is an assertion (below) |
 
 A proof about generated code does not apply the rules one by one. It unfolds the code with `simp [f, zig_unfold, …]` and gives it the result of each memory operation. The `*_run` lemmas give that result, for a heap `h` that owns the bytes, in a memory whose heap is `h ∪ hF`. Unlike `Triple`, a `*_run` lemma is not wrapped: it takes `Mem.Seq m` as an explicit hypothesis and returns `Mem.Seq m'` as part of its conclusion, so a hand-written proof that calls one directly (`Proofs/Lists/Cost.lean`, `Proofs/Pointers/Proofs.lean`) threads it from one call to the next, starting from `singleThread_empty`.
 
@@ -57,17 +56,17 @@ theorem swap_sep (p q : Ptr) (x y : BitVec 32) :
   fsym
 ```
 
-`fsym` ([proof-automation.md](proof-automation.md)) walks the generated code: it finds the cell of each load and store in the precondition and frames the rest. A proof in the full-state logic supplies the statement (and, for a loop, the invariant). The rest of this page describes the legacy `Triple` layer, which is being migrated to the full-state logic and deleted (CLAUDE.md, "One proof framework").
+`fsym` ([proof-automation.md](proof-automation.md)) walks the generated code: it finds the cell of each load and store in the precondition and frames the rest. A proof in the full-state logic supplies the statement (and, for a loop, the invariant). The Triples section above describes the legacy `Triple` layer, which is being migrated to the full-state logic and deleted (CLAUDE.md, "One proof framework"); the loop rules below are the full-state ones.
 
 Literals: after `simp`, a constant is `1#32`, not `(1 : BitVec 32)`, and `(a + b).toNat` is `(a.toNat + b.toNat) % 2 ^ w` with the power as a number. State the facts that `simp` needs in that form.
 
 ## A loop
 
-`loop_sep_spec body again I meas post hF` needs, for each iteration from a heap `h` with `I s h`: the run of the body, the new heap `h'` (with the same frame `hF`), and either `I s' h'` and a smaller `meas s'` (the loop repeats), or `post e s' h'` (it exits). The invariant `I` is on the locals `s` and the owned heap. Like a `*_run` lemma, `loop_sep_spec` is not wrapped by `Triple`: each iteration takes and returns `Mem.Seq`, so a call site threads it the same way.
+The loop rules are in `ZigLean/Sep/Full/Loop.lean`. `FTotalTriple.loop_measure` needs, for each iteration from a state with `I s`, an `FTotalTriple` of the body that ends in either `I s'` with a smaller measure (the loop repeats) or the post (it exits). The invariant `I` is an `FAssn` on the locals `s`; `FTriple.loop` is the partial form, without a measure.
 
 `reverse` (`Proofs/Slices/Sep.lean`, full-state logic): the invariant `revInv` says that the items before `i` and after `j` are swapped and the others are unchanged; `revMeas s = j + 1 - i`. `fsym` walks one iteration (`reverse_swap`, `reverse_exit`), `reverse_step` adds the list arithmetic of the invariant, `FTotalTriple.loop_measure` (`ZigLean/Sep/Full/Loop.lean`) makes the loop a rule (`reverse_loop`) that `fsym` uses for `reverse_spec`.
 
-A walk over a linked list ends because the rest of the list gets shorter, and the locals do not give that length. `loop_sep_ghost` takes the measure from the invariant: `I s n` has a number `n`, and each repeat gives an `n' < n`. Its full-state form is `FTotalTriple.loop_ghost`: in `Proofs/Lists/Linked.lean`, the invariant of `reverse` is: `prev` has the first items in the other order, and `cur` has the other `n` items.
+A walk over a linked list ends because the rest of the list gets shorter, and the locals do not give that length. `FTotalTriple.loop_ghost` takes the measure from the invariant: `I s n` has a number `n`, and each repeat gives an `n' < n`. In `Proofs/Lists/Linked.lean`, the invariant of `reverse` is: `prev` has the first items in the other order, and `cur` has the other `n` items.
 
 ## Globals
 

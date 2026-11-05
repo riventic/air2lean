@@ -36,12 +36,6 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "CondContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "CondImpl",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
@@ -327,12 +321,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "MutexContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "MutexImpl",
       "module": "ZigLean.Sep.Full.Mutex",
       "status": "target",
@@ -392,11 +380,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Returns",
-      "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "ReturnsWithin",
       "module": "ZigLean.Conc.Total",
       "status": "legacy-to-retire"
@@ -417,12 +400,6 @@
       "name": "Sem.Spec",
       "module": "Proofs.Sync.RwLock",
       "status": "legacy-to-retire"
-    },
-    {
-      "name": "SemContract",
-      "module": "Proofs.Sync.Contracts",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "SemImpl",
@@ -494,17 +471,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "TotalTriple",
-      "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire"
-    },
-    {
-      "name": "TotalTripleIn",
-      "module": "ZigLean.Sep.Total",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
       "name": "Triple",
       "module": "ZigLean.Sep.Triple",
       "status": "legacy-to-retire"
@@ -566,12 +532,6 @@
       "module": "ZigLean.VC.Extract",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "blkat_alloc",
-      "kind": "syntax",
-      "module": "ZigLean.Conc.Lemmas",
-      "status": "legacy-to-retire"
     },
     {
       "tactic": "conc_norm",
@@ -823,12 +783,6 @@
       "path": "ZigLean/Sep/Block.lean"
     },
     {
-      "path": "ZigLean/Sep/Loop.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Total.lean"
-    },
-    {
       "path": "ZigLean/Sep/Triple.lean"
     }
   ],
@@ -837,24 +791,6 @@
       "path": "Air2Lean/Check.lean",
       "tactic": "within",
       "count": 12,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Atomics/MessagePassing.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Atomics/Relaxed.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Atomics/Stack.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
@@ -907,12 +843,6 @@
     },
     {
       "path": "Proofs/Threads/Counter.lean",
-      "tactic": "blkat_alloc",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/Threads/Counter.lean",
       "tactic": "unroll_sched",
       "count": 1,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
@@ -933,12 +863,6 @@
       "path": "Proofs/Threadsync/WaitGroup.lean",
       "tactic": "unroll_sched",
       "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/Lemmas.lean",
-      "tactic": "blkat_alloc",
-      "count": 2,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
