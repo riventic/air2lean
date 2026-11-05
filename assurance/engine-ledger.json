@@ -1747,24 +1747,35 @@
   {
    "id": "fsym-split-nested-struct-subst",
    "title": "fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local",
-   "status": "open",
+   "status": "closed",
    "requester": "L10p (SemCounter over SemImpl, PR648, 2026-11-05)",
-   "progress": "open",
+   "progress": "closed by the branch claude/fsym-fvar: `destruct`'s structure branch takes each field from the fact as the previous field's substitution reintroduced it (`liveFVar?`). `Zig.SemCounter.U` is a structure again. Regression: SepAuto.Facts `nested_struct_subst`.",
    "request": "When `fsym` splits a hypothesis of a user structure into its fields and one field is again a user structure whose own split substitutes a local (an equation `x = e` with `x` a local), the next continuation fails with `unknown free variable`. Repro (on PR648 before the workaround): `structure T3 (G rX m) : Prop where um : UM G rX m; ci : C.Inv L G m` with `Zig.SemCounter.UM` (its field `rest : Rest rX m` holds `rX = rsum (cellsAt BoxW m) rIO`), as the hypothesis of a continuation of a rule built from `FLock.Fits.wp_tick_plain`, fails even with post `True`. `UM` alone, `Lg` alone, a nested structure without the `rX` equation, `Rest` as a direct field, and the plain conjunction all pass. Same class as row `fsym-unknown-fvar-mutex-loop` (a substitution inside the engine while a pending goal still mentions the local); the fix is in the structure branch of the engine's split (`ZigLean/Sep/Full/Auto.lean`).",
-   "workaround_sites": ["Proofs/SemCounter/Protocol.lean"],
-   "deletion_plan": "Transitional: once the split keeps nested structure fields with substituted locals in the current local context, make `Zig.SemCounter.U` a structure with the fields `um`, `cinv`, `sinv`, `lg` (as `Proofs/Handoff/Protocol.lean`'s `U`), delete the projection theorems `U.um`/`U.cinv`/`U.sinv`/`U.lg`, rebuild `Proofs.Sync.SemCounter`, and close this row.",
-   "note": "Not a soundness issue: the engine fails closed (the walk does not elaborate); the workaround states the same invariant as a conjunction."
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Not a soundness issue: the engine failed closed (the walk did not elaborate). The cause was not the nesting: any structure fact whose field's split substitutes a local the fact mentions broke at the next field (`destruct` projected the reverted fact); at the top level `wpSplit` projects all fields first, which hid it."
   },
   {
    "id": "fsym-unknown-fvar-mutex-loop",
    "title": "fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body",
-   "status": "open",
+   "status": "closed",
    "requester": "L8f/L8g (#562, coordinator decision 2026-11-04: ledger row with repro, hand walk kept with a deletion plan)",
-   "progress": "open",
+   "progress": "closed by the branch claude/fsym-fvar: each branch of a split is walked with the substitutions of its own branch (`eachBranch`); the second branch's substitution of `g₀` had replaced the first's. The row's original call elaborates (checked); `loopD_body` is the shorter call without the `hset`/`hph`/`hok₀` glue, swap-built against the darwin translation. Regression: SepAuto.WP `sibling_values`.",
    "request": "`Proofs/Threadsync/ThreadMutex.lean` `loopD_body` (the macOS `osUnfairLockTry` repeat) walked by `fsym [wp_casD hP hc1 (g := g₀), wp_waitD hP, hset, L.ph_set, L.set_set, hP.ok_set, lockInvD, lockPostD]` fails with `unknown free variable _fvar.…` at the `fsym` call; `hset : ∀ q h, L.set g₀ q h = L.set g q h` is a local hypothesis about `g₀`, which the walk's case split of `hg₀ : g₀ = g ∨ g₀ = L.set g .spin rnil` (or a `subst` inside the engine) removes from the context while a rule instance still mentions it. Only the darwin translation elaborates this branch (Linux uses the futex path). Repro on #562 (before the hand walk): restore the `fsym` call above in `loopD_body`, then `python3 -B scripts/theorem-inventory.py swap-build --lake \"$(elan which lake)\" --swap threadsync=tests/golden/0.15.2/threadsync/Gen-darwin.lean -- Proofs.Threadsync.ThreadMutex`. Reproduced with and without #562's `eqFixesUnknowns` change. Needed: every term fsym installs is re-abstracted over (or checked against) the local context it runs in after a case split or substitution, and a local hypothesis whose fvars leave the context is re-instantiated or dropped from the rule set, never kept dangling. Regression: a sep-auto test with a local equation hypothesis over a variable that a disjunction case split substitutes.",
+   "workaround_sites": [],
+   "deletion_plan": "",
+   "note": "Recorded with #562 (L8 ticks). The loop's test `if id r.1` reduces by `id_eq` in the WP simp set. `lockInvD`'s order of parts: row `fsym-or-witness-order`."
+  },
+  {
+   "id": "fsym-or-witness-order",
+   "title": "fsym's post solver chooses an existential's witness by a disjunction before the conjunct that determines it",
+   "status": "open",
+   "requester": "claude/fsym-fvar (found closing row fsym-unknown-fvar-mutex-loop, 2026-11-05)",
+   "progress": "open",
+   "request": "A post `∃ x, (x = a ∨ x = b) ∧ Inv x` with a hypothesis `Inv b`: `wpGoal`'s `And` case proves the first part first, its `Or` case proves the side `?x = a` whole (`wpAtom`, `eqFixesUnknowns`: the unknown is a side) and commits `?x := a`, and `Inv a` is then left open. The `And` case retries a first part left open, but not a first part closed with a choice the second part refutes. Repro: `Proofs/Threadsync/ThreadMutex.lean`'s `lockInvD` with its original order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m`, swap-built against `tests/golden/0.15.2/threadsync/Gen-darwin.lean`: the wait branch leaves `P.inv (upd G₁ c g) m'` with `P.inv (upd G₁ c (L.set g .spin rnil)) m'` in context. Needed (a separate engine PR): a conjunction whose second part fails after its first part committed an unknown is retried in the other order (the general form of the existing retry, not one more ordering special case); regression in SepAuto.WP next to `and_retry`.",
    "workaround_sites": ["Proofs/Threadsync/ThreadMutex.lean"],
-   "deletion_plan": "Transitional: once fsym keeps rule instances inside the current local context, replace the hand walk of `loopD_body` (`WP.bind (wp_casD …)`, `WP.bind (wp_waitD …)`, `WP.pure'` steps) by the single `fsym [...]` call above, swap-build it against the darwin translation, and close this row.",
-   "note": "Recorded with #562 (L8 ticks)."
+   "deletion_plan": "Transitional: once the solver orders such a conjunction itself, state `lockInvD` (darwin) in its natural order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m` again, swap-build `Proofs.Threadsync.ThreadMutex` against the darwin translation, and close this row.",
+   "note": "Not a soundness issue (the walk fails closed). The workaround states an equivalent invariant (the conjuncts swapped), not a weakened one."
   },
   {
    "id": "callocspec-partial-step-count",

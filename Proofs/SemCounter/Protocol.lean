@@ -217,17 +217,12 @@ structure Lg (G : ThreadId → Gh) (m : Mem) : Prop where
   /-- After a post, every registered waiter is signalled. -/
   incS : ∀ v q n h, (G v).2.c = .inc q n h → C.Sated m
 
-/-- The rest of the invariant (module doc). A conjunction, not a structure: `fsym` splits a fact
-of a user structure into its fields, and a field that is again a user structure whose split
-substitutes a local (`UM`'s `rest`: `rX = …`) leaves a stale local
-(ledger #fsym-split-nested-struct-subst). -/
-abbrev U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop :=
-  UM G rX m ∧ C.Inv L G m ∧ S.Inv G m ∧ Lg G m
-
-theorem U.um {G : ThreadId → Gh} {rX : Res} {m : Mem} (h : U G rX m) : UM G rX m := h.1
-theorem U.cinv {G : ThreadId → Gh} {rX : Res} {m : Mem} (h : U G rX m) : C.Inv L G m := h.2.1
-theorem U.sinv {G : ThreadId → Gh} {rX : Res} {m : Mem} (h : U G rX m) : S.Inv G m := h.2.2.1
-theorem U.lg {G : ThreadId → Gh} {rX : Res} {m : Mem} (h : U G rX m) : Lg G m := h.2.2.2
+/-- The rest of the invariant (module doc). -/
+structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
+  um : UM G rX m
+  cinv : C.Inv L G m
+  sinv : S.Inv G m
+  lg : Lg G m
 
 variable {Tgt : Type}
 
