@@ -243,6 +243,291 @@ theorem cnt_un_l (n : Nat) : ({ ph := .un } : X).cnt + n = ({ ph := .hl } : X).c
   show 1 + n = 0 + n + 1; omega
 theorem cnt_un_r (n : Nat) : n + ({ ph := .un } : X).cnt = n + ({ ph := .hl } : X).cnt + 1 := rfl
 
+/-! ## The finish: `fetchSub(2, acqRel)` at the group's state -/
+
+/-- A task after its finish: the setter (`b`: it read 3) at `st`, else at `fin`; `gone` for the
+lock, with its clock after the RMW. -/
+def gF (rp : Res) (c : VClock) (b : Bool) : Gh :=
+  (⟨.gone, rp, rnil⟩, { ph := if b then .st else .fin, fc := c, sx := b })
+
+theorem gS_eq (rp : Res) (c : VClock) : gS rp c = gF rp c true := rfl
+theorem gN_eq (rp : Res) (c : VClock) : gN rp c = gF rp c false := rfl
+
+theorem val_eq64 {x : Word.Entry} {a b : BitVec 64} (ha : x.Val a) (hb : x.Val b) : a = b := by
+  unfold Word.Entry.Val at ha hb; rw [ha] at hb; cases hb; rfl
+
+/-- The group's values at a finish: `4 + A - 2 * B` (`A`: `main` added, `B`: the other task
+finished), then two less; it read 3 iff both. -/
+theorem wg_arith {A B : Nat} (hA : A ≤ 1) (hB : B ≤ 1) :
+    BitVec.ofNat 64 (4 + A - 2 * B) - 2 = BitVec.ofNat 64 (4 + A - 2 * (B + 1)) ∧
+    (BitVec.ofNat 64 (4 + A - 2 * B) = 3 ↔ A = 1 ∧ B = 1) ∧
+    (BitVec.ofNat 64 (4 + A - 2 * B) = 2 ∨ BitVec.ofNat 64 (4 + A - 2 * B) = 4 ∨
+      BitVec.ofNat 64 (4 + A - 2 * B) = 5 ∨ BitVec.ofNat 64 (4 + A - 2 * B) = 3) := by
+  rcases (by omega : A = 0 ∨ A = 1) with rfl | rfl <;>
+    rcases (by omega : B = 0 ∨ B = 1) with rfl | rfl <;> decide
+
+theorem newest_push {W : Word 64 8} {m m' : Mem} {x : Word.Entry}
+    (hh : W.hist m' = (W.hist m).push x) : newest W m' = x := by
+  unfold newest; rw [hh, Array.size_push, Nat.add_sub_cancel]; exact Word.get_push_eq
+
+/-- The rest's part without the group's word: the cells of the other bytes below the mutex. -/
+theorem rY_at {rY : Res} {m : Mem} (h : Rest (rsum (WG.cellsR m) rY) m) {l : Zig.Loc} (hb : BoxW l)
+    (hw : ¬ WG.In l) : rY.heap l = (m.heap l).map fun c => ⟨c, none⟩ := by
+  obtain ⟨rB, -, hB, hrX⟩ := h
+  have := congrFun (congrArg Res.heap hrX) l
+  simp only [FHeap.union_apply, Word.cellsR] at this
+  rw [cellsAt_none hw, Option.none_or] at this
+  rw [this, cellsAt_of hb, hB l hb, Option.or_none]
+
+theorem Shape.threads {Y : ThreadId → X} {m m' : Mem} (h : Shape Y m)
+    (ht : m'.threads = m.threads) : Shape Y m' := by
+  unfold Shape at *; rw [ht]; exact h
+
+/-- **The protocol after a task's finish** (`fetchSub(2, acqRel)` by `t` at `un`, out of the lock,
+from the stop `G`, `m` to `m'`; the facts of `FLock.Fits.wp_wordRmw`): the task leaves the lock
+for good with its clock after the RMW as its finish clock; it read 3 iff `main` added and the
+other task finished, and then it is the setter, whose clock is above both finish clocks (the other's
+by the release sequence and the RMW's acquire). -/
+theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp : Res}
+    {old : BitVec 64} (hg : G t = gO rp { ph := .un }) (hc : m.current = t)
+    (hu : U G (rsum (WG.cellsR m) rY) m) (hY : ∀ l, WG.In l → rY.heap l = none)
+    (hv : (newest WG m).Val old)
+    (hh : WG.hist m' = (WG.hist m).push
+      (Word.rmwEnt m' t .acqRel (newest WG m) (RmwOp.apply .sub false old 2)))
+    (hacq : VClock.le (newest WG m).relClock (m'.clocks[t]!) = true)
+    (hw' : WG.Ok m' (fun u => WLive (G u)))
+    (hA : ∀ hF : Heap, (∀ x, WG.o ≤ x → x < WG.o + 8 → hF (WG.b, x) = none) → FStepIn hF m m')
+    (hL : L.Inv G (rsum (WG.cellsR m') rY) m') :
+    (old = 3 ∧ proto.inv (upd G t (gS rp (m'.clocks[t]!))) m') ∨
+    ((old = 2 ∨ old = 4 ∨ old = 5) ∧ proto.inv (upd G t (gN rp (m'.clocks[t]!))) m') := by
+  -- the task
+  have hgt : (G t).1.ph ≠ .gone := by rw [hg]; nofun
+  obtain ⟨ht3, -⟩ := live3 hu hgt
+  have ht0 : t ≠ 0 := fun e => by
+    subst e; have := hu.shape.2.1; change (G 0).2.ph.isMain = true at this
+    rw [hg] at this; simp [gO, Ph.isMain] at this
+  have ht12 : t = 1 ∨ t = 2 := by
+    rcases lt3 ht3 with h | h | h
+    · exact absurd h ht0
+    · exact .inl h
+    · exact .inr h
+  have hpre : (G 0).2.ph ≠ .pre := by
+    obtain ⟨-, -, -, hc3⟩ := hu.shape
+    rcases hc3 with ⟨-, -, h1, h2⟩ | ⟨-, h0, -⟩ | ⟨-, h0, -⟩
+    · change (G 1).2 = {} at h1; change (G 2).2 = {} at h2
+      rcases ht12 with rfl | rfl
+      · have := congrArg X.ph h1; rw [hg] at this; cases this
+      · have := congrArg X.ph h2; rw [hg] at this; cases this
+    · rw [h0]; nofun
+    · intro h; rw [h] at h0; exact absurd h0 (by decide)
+  -- the group's values
+  have hfdt : (G t).2.ph.fd = false := by rw [hg]; rfl
+  obtain ⟨A, B, hA1, hB1, hW0, hW1, hAw, hBo⟩ : ∃ A B : Nat, A ≤ 1 ∧ B ≤ 1 ∧
+      wgv (G 0).2 (G 1).2 (G 2).2 = 4 + A - 2 * B ∧
+      (∀ g : Gh, g.2.ph.fd = true →
+        wgv (upd G t g 0).2 (upd G t g 1).2 (upd G t g 2).2 = 4 + A - 2 * (B + 1)) ∧
+      ((G 0).2.ph.wa = true ↔ A = 1) ∧
+      ∀ u, (u = 1 ∨ u = 2) → u ≠ t → ((G u).2.ph.fd = true ↔ B = 1) := by
+    have hft : (G t).2.fdn = 0 := by unfold X.fdn; rw [hfdt]; rfl
+    have hle : ∀ x : X, x.fdn ≤ 1 := fun x => by unfold X.fdn; split <;> omega
+    refine ⟨if (G 0).2.ph.wa then 1 else 0, (G 1).2.fdn + (G 2).2.fdn, by split <;> omega, ?_, ?_,
+      fun g hgfd => ?_, by cases (G 0).2.ph.wa <;> simp, ?_⟩
+    · rcases ht12 with rfl | rfl
+      · rw [hft]; have := hle (G 2).2; omega
+      · rw [hft]; have := hle (G 1).2; omega
+    · unfold wgv; rw [if_neg hpre]
+    · have h0 : (upd G t g 0).2 = (G 0).2 := by rw [upd_ne _ _ (Ne.symm ht0)]
+      have hg1 : g.2.fdn = 1 := by unfold X.fdn; rw [hgfd]; rfl
+      unfold wgv; rw [h0, if_neg hpre]
+      rcases ht12 with rfl | rfl
+      · rw [upd_self, upd_ne _ _ (by decide : (2 : Nat) ≠ 1), hg1, hft]; omega
+      · rw [upd_self, upd_ne _ _ (by decide : (1 : Nat) ≠ 2), hg1, hft]
+    · rintro u hu12 hne
+      rcases hu12 with rfl | rfl <;> rcases ht12 with rfl | rfl
+      · exact absurd rfl hne
+      · rw [hft]; unfold X.fdn; cases (G 1).2.ph.fd <;> simp
+      · rw [hft]; unfold X.fdn; cases (G 2).2.ph.fd <;> simp
+      · exact absurd rfl hne
+  have hold : old = BitVec.ofNat 64 (4 + A - 2 * B) := by
+    rw [← hW0]; exact val_eq64 hv hu.gv
+  obtain ⟨hsub, h3, hcases⟩ := wg_arith hA1 hB1
+  -- the step's facts
+  have hs : FStepIn rY.heap.erase m m' := hA _ fun x h1 h2 => by
+    simp [FHeap.erase, hY (WG.b, x) ⟨rfl, h1, h2⟩]
+  obtain ⟨rB, hB, -, hrX⟩ := hu.rest
+  have hgB : rY.gh = rB.gh := by
+    have := congrArg Res.gh hrX; simpa [cellsAt, Word.cellsR] using this
+  have hbk' : BlkOk m' := blk_of hL hB hgB
+  have hcs : ∀ l, BoxW l → ¬ WG.In l → m'.heap l = m.heap l := by
+    rintro ⟨b, x⟩ ⟨h0, h1⟩ hw
+    simp only at h0 h1; subst h0
+    refine cell_eq hu.blk hbk' hL (by omega) ?_
+    simp only [FHeap.union_apply, Word.cellsR]
+    rw [cellsAt_none hw, Option.none_or, rY_at hu.rest ⟨rfl, h1⟩ hw]
+  have hcovE : ∀ l, EV.In l → rY.heap.erase l ≠ none := fun l hl => by
+    simp only [FHeap.erase, ne_eq, Option.map_eq_none_iff]
+    rw [rY_at hu.rest (ev_box hl) (fun h => wg_ev h hl)]
+    simpa using box_live hu (ev_box hl)
+  have hnE : ∀ l, EV.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => by rw [hcs l (ev_box hl) (fun h => wg_ev h hl)]
+  have hwE := hu.ev.fstep hs hcovE hnE
+  have hhE : EV.hist m' = EV.hist m := Word.hist_fstep hu.ev hs hcovE hnE
+  have hfr : EV.Fresh m' := hu.einv.fresh.fstep hs (fun x h1 h2 => hcovE _ ⟨rfl, h1, h2⟩)
+    (fun i l hl => (hu.ev.loc i l hl).1)
+  have hclk := hs.clock
+  have hcm : m.current = t := hc
+  -- no thread has the setter's role yet: `t` did not finish
+  have hnosx : ∀ u, (G u).2.sx = true → False := fun u h => by
+    obtain ⟨-, -, h1, h2, -⟩ := hu.sto u h
+    rcases ht12 with rfl | rfl
+    · rw [hfdt] at h1; cases h1
+    · rw [hfdt] at h2; cases h2
+  -- the new ghost value
+  suffices key : ∀ b : Bool, (b = true ↔ old = 3) →
+      proto.inv (upd G t (gF rp (m'.clocks[t]!) b)) m' by
+    by_cases e : old = 3
+    · exact .inl ⟨e, key true (iff_of_true rfl e)⟩
+    · refine .inr ⟨?_, key false (iff_of_false (by decide) e)⟩
+      rw [hold] at e ⊢; rcases hcases with h | h | h | h
+      · exact .inl h
+      · exact .inr (.inl h)
+      · exact .inr (.inr h)
+      · exact absurd h e
+  intro b hb
+  have hb3 : b = true ↔ A = 1 ∧ B = 1 := by rw [hb, hold]; exact h3
+  let g' : Gh := gF rp (m'.clocks[t]!) b
+  show proto.inv (upd G t g') m'
+  have hG : ∀ u, u ≠ t → upd G t g' u = G u := fun u h => upd_ne _ _ h
+  have hGt : upd G t g' t = g' := upd_self _ _ _
+  have hfd' : g'.2.ph.fd = true := by
+    show (if b then Ph.st else Ph.fin).fd = true; cases b <;> rfl
+  have hwa' : g'.2.ph.wa = false := by
+    show (if b then Ph.st else Ph.fin).wa = false; cases b <;> rfl
+  have hfin' : g'.2.ph = .fin ↔ b = false := by
+    show (if b then Ph.st else Ph.fin) = .fin ↔ b = false; cases b <;> simp
+  -- both tasks finished after it iff the other did
+  have hbothfd : B = 1 → ∀ u, (u = 1 ∨ u = 2) → (upd G t g' u).2.ph.fd = true := fun hB u hu12 => by
+    by_cases e : u = t
+    · subst e; rw [hGt]; exact hfd'
+    · rw [hG u e]; exact (hBo u hu12 e).mpr hB
+  have hbnd : ∀ u, VClock.le (bnd G m u) (bnd (upd G t g') m' u) = true := fun u => by
+    by_cases e : u = t
+    · subst e; unfold bnd; rw [hGt, hfd', hfdt]; exact hclk _
+    · unfold bnd; rw [hG u e]; split
+      · exact VClock.le_refl _
+      · exact hclk u
+  have hnew : newest WG m' = Word.rmwEnt m' t .acqRel (newest WG m) (RmwOp.apply .sub false old 2) :=
+    newest_push hh
+  refine ⟨rsum (WG.cellsR m') rY, ?_, ?_⟩
+  · -- the lock: `t` leaves it for good; the counter keeps its store
+    refine hL.ghost (t := t) (g := g') (by rw [hg]; rfl) (.inr (.inl rfl)) (by rw [hg]; rfl) rfl
+      (fun h => absurd rfl h) (fun r hR => ?_)
+    have hcu : ∀ u, (upd G t g' u).2.cnt = (G u).2.cnt := fun u => by
+      by_cases e : u = t
+      · subst e; rw [hGt, hg]; cases b <;> rfl
+      · rw [hG u e]
+    exact R_congr (Y := fun u => (G u).2) (Y' := fun u => (upd G t g' u).2) (hcu 1) (hcu 2) hR
+  refine ⟨?_, Rest.step (fun _ => wg_box) hu.rest rfl hY hcs, hbk',
+    hw'.anti fun u h => ?_, hwE.anti fun u h => ?_, ?_, ?_, fun u h => ?_, fun u h => ?_,
+    fun h0 h1 h2 => ?_, fun j hj hsj => ?_, ?_, fun u h1 h2 => ?_, fun u h => ?_, fun u h3 => ?_,
+    fun u h => ?_, fun u v h1 h2 => ?_, fun e he hb0 hk hl ho => ?_, fun h => ?_, ?_⟩
+  · -- shape
+    rw [upd_snd]
+    exact (Shape.task hu.shape (by rw [hg]; rfl) (by cases b <;> rfl)).threads hs.threads
+  · -- the group's live set: `t` leaves it
+    by_cases e : u = t
+    · subst e; unfold WLive at h; rw [hGt, hfd'] at h; cases h
+    · rwa [hG u e] at h
+  · -- the event's live set: `t` was in it (before its finish)
+    by_cases e : u = t
+    · subst e; exact .inl hfdt
+    · rwa [hG u e] at h
+  · -- the event: its word stays; `t` stays out of its code
+    have hI := hu.einv.frame (t := t) (G' := G) (fun _ _ => rfl) rfl rfl hhE hs.waiters hclk
+      (Nat.le_of_eq (by rw [hs.threads])) id id hfr
+    refine hI.relabel (fun u hu => upd_ne _ _ hu) (by rw [hGt, hg]; rfl)
+      (fun h => absurd (by rw [hGt]; rfl) h) (fun h => ?_) (fun h => ?_)
+    · have h' : (G t).2.ph.wa = true := h; rw [hg] at h'; cases h'
+    · exact (hnosx t h.1).elim
+  · -- gv: two less
+    show (newest WG m').Val _
+    rw [hnew, hW1 g' hfd', ← hsub, ← hold]; exact intOfBytes_rmw _
+  · -- gw: the RMW continues the release sequence and releases `t`'s clock
+    rw [hnew]
+    show VClock.le _ (VClock.merge (newest WG m).relClock (m'.clocks[t]!)) = true
+    by_cases e : u = t
+    · subst e; rw [hGt]; exact VClock.le_merge_right _ _
+    · rw [hG u e] at h ⊢
+      exact VClock.le_trans (hu.gw u h) (VClock.le_merge_left _ _)
+  · -- sto: the setter is `t`
+    by_cases e : u = t
+    · subst e
+      rw [hGt] at h
+      obtain ⟨hA', hB'⟩ := hb3.mp h
+      have h0 : (upd G u g' 0).2 = (G 0).2 := by rw [hG 0 (Ne.symm ht0)]
+      refine ⟨ht12, by rw [h0]; exact hAw.mpr hA', hbothfd hB' 1 (.inl rfl), hbothfd hB' 2 (.inr rfl),
+        fun _ => ?_⟩
+      -- the other task's finish clock is below the RMW's release clock it acquired
+      have hle : ∀ v, (v = 1 ∨ v = 2) →
+          VClock.le (upd G u g' v).2.fc (m'.clocks[u]!) = true := fun v hv => by
+        by_cases e' : v = u
+        · subst e'; rw [hGt]; exact VClock.le_refl _
+        · rw [hG v e']
+          exact VClock.le_trans (hu.gw v ((hBo v hv e').mpr hB')) hacq
+      exact ⟨hle 1 (.inl rfl), hle 2 (.inr rfl)⟩
+    · rw [hG u e] at h; exact (hnosx u h).elim
+  · -- last3: `main` at its wait and both finished: `t` read 3
+    have h0e : (G 0).2.ph = .ev := by rwa [hG 0 (Ne.symm ht0)] at h0
+    have hB' : B = 1 := by
+      rcases ht12 with rfl | rfl
+      · rw [hG 2 (by decide)] at h2; exact (hBo 2 (.inr rfl) (by decide)).mp h2
+      · rw [hG 1 (by decide)] at h1; exact (hBo 1 (.inl rfl) (by decide)).mp h1
+    have hA' : A = 1 := hAw.mp (by rw [h0e]; rfl)
+    exact ⟨t, by rw [hGt]; exact hb3.mpr ⟨hA', hB'⟩⟩
+  · -- isw: no `is_set` write before the setter's
+    unfold IsSetW at hsj; rw [hhE] at hj hsj
+    obtain ⟨⟨u, h1, -⟩, -⟩ := hu.isw j hj hsj
+    exact (hnosx u h1).elim
+  · intro i hi j hj h1 h2; unfold IsSetW at h1 h2; rw [hhE] at hi hj h1 h2
+    exact hu.one i hi j hj h1 h2
+  · -- sfin: the setter is at `st`
+    by_cases e : u = t
+    · subst e; rw [hGt] at h1 h2
+      have h1' : b = true := h1
+      rw [hfin'.mp h2] at h1'; cases h1'
+    · rw [hG u e] at h1; exact (hnosx u h1).elim
+  · by_cases e : u = t
+    · subst e; rw [hGt]; rfl
+    · rw [hG u e] at h ⊢; exact hu.lg u h
+  · rw [hG u (ne_of_lt3 h3 ht3)]; exact hu.out3 u h3
+  · by_cases e : u = t
+    · subst e; rw [hGt, hwa'] at h; cases h
+    · rw [hG u e] at h; exact hu.wa0 u h
+  · have hu' : u = t := Classical.byContradiction fun e => by
+      rw [hG u e] at h1; exact hnosx u h1
+    have hv' : v = t := Classical.byContradiction fun e => by
+      rw [hG v e] at h2; exact hnosx v h2
+    rw [hu', hv']
+  · -- attr: the RMW's write access is below `t`'s finish clock
+    rw [hhE]
+    rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
+    · have hp := narrows_box hn hl ho
+      obtain ⟨-, hb₀, hk₀, -, -, hc'⟩ := hn
+      rcases hu.attr e₀ he₀ (hb₀ ▸ hb0) (hk₀ ▸ hk) hp.1 hp.2 with h | ⟨u, hu12, h⟩ | ⟨j, hj, hsj, h⟩
+      · exact .inl (VClock.le_trans hc' (VClock.le_trans h (hclk 0)))
+      · exact .inr (.inl ⟨u, hu12, VClock.le_trans hc' (VClock.le_trans h (hbnd u))⟩)
+      · refine .inr (.inr ⟨j, hj, ?_, VClock.le_trans hc' h⟩)
+        unfold IsSetW; rw [hhE]; exact hsj
+    · refine .inr (.inl ⟨t, ht12, ?_⟩)
+      unfold bnd; rw [hGt, hfd']; rw [hcm] at hle; exact hle
+  · -- done: `main` did not pass its wait (`t` had not finished)
+    rw [hG 0 (Ne.symm ht0)] at h
+    obtain ⟨h1, h2, -⟩ := hu.done h
+    rcases ht12 with rfl | rfl
+    · rw [hfdt] at h1; cases h1
+    · rw [hfdt] at h2; cases h2
+  · intro w hw; rw [hs.waiters] at hw; exact hu.q w hw
+
 section Sync
 
 variable (mi : MutexImpl Tgt) (ei : EventImpl Tgt)
@@ -272,12 +557,19 @@ end Sync
 theorem wp_finRmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat}
     {rp : Res} (hi : proto.inv (upd G t (gO rp { ph := .un })) m)
     {Q : BitVec 64 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
-    (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' (old : BitVec 64), m'.current = t →
       ((old = 3 ∧ proto.inv (upd G₁ t (gS rp (m'.clocks[t]!))) m') ∨
        ((old = 2 ∨ old = 4 ∨ old = 5) ∧ proto.inv (upd G₁ t (gN rp (m'.clocks[t]!))) m')) →
       Q (old, s) G₁ m' k) :
     proto.WP t ((atomicRmwC .sub false .acqRel 8 bPtr (2 : BitVec 64) : CM Tgt σ (BitVec 64)).run s)
-      Q G m n := sorry
+      Q G m n := by
+  show proto.WP t ((atomicRmwC .sub false .acqRel 8 WG.ptr (2 : BitVec 64) : CM Tgt σ (BitVec 64)).run s)
+    Q G m n
+  refine FLock.wp_wordRmw fitsL wg_inRest apG hi
+    (fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU _ hY hv _ hh hacq hw' _ _ _ hA _ _ hL => ?_) rfl rfl
+  have hs := hA (fun _ => none) (fun _ _ _ => rfl)
+  exact h k hk G₁ m' old (by rw [hs.current, hc₁])
+    (inv_fin hg₁ hc₁ hU hY hv hh (hacq rfl) hw' hA hL)
 
 /-- A `debug.assert` whose condition holds is a pure step. -/
 theorem debugAssert_run {c : Bool} (h : c = true) (m : Mem) :
