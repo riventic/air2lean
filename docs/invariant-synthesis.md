@@ -596,15 +596,10 @@ Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (
   `([w₀, w₁].set 0 x).set (1#64).toNat y` and does not match the invariant's list: engine ledger
   row #atom-args-normal-form.
 * `tri` adds the counter to its cell (`acc.* += i`): "a cell that does not go up by a constant".
-  A library sum `S` (`S n = 0 + 1 + … + (n - 1)`, to be added with its first client) makes the
-  invariant `v + (S n - S i) = v₀ + (S n - S i₀)` linear. With `S (n + 1) = S n + n` and the
-  non-recursive `fsym_arith` rewrites `x < b → S b - S x = x + (S b - (S x + x))` and
-  `b ≤ x → S b - S x = 0`, the step's overflow side goals close with no monotonicity lemma
-  (checked on `tri.loop5`). A recursive conditional unfold `x < b → T x b = x + T (x + 1) b` does
-  not work: where the facts are contradictory, the discharger proves every side condition and
-  simp hits its recursion limit. The counter's step still leaves `S x.toNat` beside the fact
-  `x.toNat = i.toNat + 1`, which the arithmetic does not relate: engine ledger row
-  #arith-atom-congruence. The hand `cnt`/`cnt_mono` of `nested`'s outer loop are that glue today.
+  A library sum `S` (`S n = 0 + 1 + … + (n - 1)`) makes the invariant linear, but the counter's
+  step leaves `S x.toNat` beside `x.toNat = i.toNat + 1`, which the arithmetic does not relate:
+  engine ledger row #arith-atom-congruence (it holds the rewrites that were checked). The hand
+  `cnt`/`cnt_mono` of `nested`'s outer loop are that glue today.
 
 Houdini pruning is not in S2c either: the family's invariants are exact (no candidate conjunct is
 optional), and pruning needs the generator to state and walk the step triple itself
