@@ -567,7 +567,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   refine ⟨hown ▸ ho', fun u => ?_, fun u hu => ?_, fun u hu => ?_, hblk', ?_,
     fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_,
       fun i l hl => ?_⟩, fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
-    (hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1)).of_key hkey, fun hp => ?_,
+    Lock.Queue.of_key L hkey (hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1)), fun hp => ?_,
     fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u (by rwa [hphu] at hu)
       ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · by_cases hu : u = t
@@ -618,7 +618,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
     · rw [upd_ne _ _ hut] at hu ⊢
       have htn : L.ph (G t) ≠ .holds := fun h => hut (hi.one u t hu h)
       exact hRk htn _ (hi.res u hu)
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ L.Waits.of_key hkey hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ Lock.Waits.of_key L hkey hp)
     refine ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, by rw [hphu]; exact h1, fun hh => ?_⟩
     rw [hphu] at hh; exact (hU32 _).mpr (h2 hh)
 

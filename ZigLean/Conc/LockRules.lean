@@ -198,7 +198,7 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
   refine ⟨?_, hi.pdisj, hi.idle, fun u hu => ?_, by rw [hb]; exact hi.blk, ?_, hi.one,
     ⟨fun l hl => hi.loc.only l (ha ▸ hl), fun i l hl => ?_,
       fun i l hl => (hi.loc.plain i l ((hloc i l).mp hl)).of_fp hpl⟩, fun u => hown ▸ hi.off u,
-    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hw]; exact hi.fq.of_key hkey,
+    fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, hi.res, by rw [hw]; exact Lock.Queue.of_key L hkey hi.fq,
     fun hp => ?_, fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u hu; ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · rw [hown]
     refine hi.own.keep (by rw [ht]) hcs (fun u => hheap ▸ hi.own.sub u)
@@ -228,7 +228,7 @@ theorem Inv.mono {G : ThreadId → γ} {m m' : Mem} (hi : L.Inv G m) (ht : m'.th
         · exact absurd htc (hnR hL hR hoff)
         · rw [hb] at hb'; exact absurd hbl (Nat.not_lt.mpr hb')
       · exact .inl hle
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ L.Waits.of_key hkey hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hw ▸ Lock.Waits.of_key L hkey hp)
     exact ⟨v, ht ▸ hv, hw ▸ hq, h1, fun hh => (hU32 _).mpr (h2 hh)⟩
 
 /-- The record of an atomic access to the word by the current thread. -/
