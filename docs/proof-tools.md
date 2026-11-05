@@ -76,10 +76,8 @@ bounded P04 contribution.
 memory that holds `P` with some frame. Divergence and safety panics cannot satisfy this
 equality. An unsatisfiable precondition remains vacuous, as with ordinary Hoare logic. Zig
 error-union values such as `OutOfMemory` remain return values. `FTotalTriple.toPartial`
-projects partial correctness; partial correctness alone never establishes termination. The
-loop rules `FTotalTriple.loop_measure` and `FTotalTriple.loop_ghost`
-(`ZigLean/Sep/Full/Loop.lean`) require a natural-number measure that strictly decreases on
-each repeat. Reports classify theorems over these interfaces by their kernel types, not by
+projects partial correctness; partial correctness alone never establishes termination. The total
+loop rules are in [Loops, recursion and range conversions](#loops-recursion-and-range-conversions). Reports classify theorems over these interfaces by their kernel types, not by
 labels (`docs/claim-strength.md`).
 
 The scenarios of the retired `Normalize`, `Clients` and `Total` regressions (AC normalization,

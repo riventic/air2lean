@@ -473,20 +473,10 @@ Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migr
 judgment entries `TotalTriple`, `TotalTripleIn` and `Returns`. No Lean file imported Sep/Total, and
 only Sep/Total imported Sep/Loop. Decision 4 (keep them compiled until the final PR) served the
 strength check; that check no longer needs them, because the strength log writes each legacy
-statement out (#497) and `Full/Strength` imports neither. For the record, the deleted body that
-the strength log unfolds is
-
-    TotalTripleIn R P c Q :=
-      ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → P hP → m.Seq → R m →
-        ∃ v m' hQ, c.run m = pure (v, m') ∧ Heap.Disjoint hQ hF ∧
-          m'.heap = hQ ∪ hF ∧ Q v hQ ∧ m'.Seq
-
-(`TotalTriple` is the same without `R m`; `Returns` is the same without `R m` and concludes only
-`∃ v m', c.run m = pure (v, m')`). The
-claim heads `Zig.TotalTriple` and `Zig.Returns` stay reserved names in
-`assurance/claim-heads.json`: a theorem whose head has either name supports no claim, so
-guaranteed-return still needs `FTotalTriple` or `FTTotalTriple`. The loop rules are
-`FTotalTriple.loop_measure`/`loop_ghost` and `FTriple.loop` (`Full/Loop`).
+statement out (#497) and `Full/Strength` imports neither. The definitions the strength log
+unfolds are last present in `ZigLean/Sep/Total.lean` at 6672f4058. The claim heads
+`Zig.TotalTriple` and `Zig.Returns` stay reserved names ([claim-strength.md](claim-strength.md)),
+so guaranteed-return still needs `FTotalTriple` or `FTTotalTriple`.
 
 ## 4. Final deletion PR (stages)
 
@@ -549,7 +539,7 @@ Handoff notes: nothing in the repo was edited. Branch order assumptions: fold-de
 1. Extend LEGACY_MODULES to the Conc cluster (honest gate; +10 visible users). Fix the import-line false positives at the same time (L1).
 2. Proto.WP -> target (the migrated Handoff/Counter proofs use it; WP mode is in fsym).
 3. Tick-cost model: owned by a design agent now (ticks as the memory-authority mode of the generic ACell counter, as in the stack lane's PR3 design); design note first, then implementation lane L8.
-4. Keep Full/Strength + Sep/{Triple,Total,Loop,Block} compiled until the final PR (only check that migrated statements are not weaker). (Sep/{Total,Loop} went early in L13 step 1: the strength log no longer needs them.)
+4. Keep Full/Strength + Sep/{Triple,Total,Loop,Block} compiled until the final PR (only check that migrated statements are not weaker). (Sep/{Total,Loop} deleted early, L13 step 1.)
 5. claims.py: reserved-names mechanism for legacy claim heads, approved (L7).
 Start now: L1, L2, tick design. L3 (Sep/Base split, keystone) starts after merge waves 7 (csl) and 8 (fold) land, to avoid conflicts with queued branches. Group 2 after L3.
 
