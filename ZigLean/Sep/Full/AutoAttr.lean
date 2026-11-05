@@ -32,6 +32,9 @@ import Lean
   as a region of plain bytes; bytes with their facts as a typed view). When the planner does
   not find an atom of the head that `Y` provides (a rule's precondition, a return's
   postcondition), `fsym` applies the view to the state atoms of that block and walks on.
+* `@[fsym_inv]` marks a **loop's invariant** `B.inv`, its measure `B.meas` and its exit post
+  `B.post`, definitions next to the loop body `B` (P09-E4): at `(Zig.loop (B …) again).run s`
+  with no rule, `fsym` applies its backend's loop rule with them and walks the body's step.
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -193,6 +196,67 @@ initialize registerBuiltinAttribute {
       throwError "@[fsym_view] {decl}: expected a view lemma `EUpd X Y` of one atom `X`"
     fsymViewExt.add decl kind
 }
+
+/-- The part of a loop's registered invariant (`@[fsym_inv]`) that a definition `B.inv`, `B.meas`
+or `B.post` is, by its last name component. -/
+inductive LoopInvRole where
+  | inv
+  | meas
+  | post
+  deriving Inhabited, BEq, Repr
+
+/-- An `@[fsym_inv]` entry: the definition `decl` is the invariant, the measure or the exit post
+of the loops whose body is the definition `body` (`Zig.loop (body …) again`). -/
+structure LoopInvEntry where
+  body : Name
+  role : LoopInvRole
+  decl : Name
+  deriving Inhabited
+
+open Meta in
+/-- The entry of `decl` (`B.inv`, `B.meas` or `B.post` of a definition `B`), or an error that says
+why it is not one. Its last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post), the
+others are named; `fsym` matches them by name (`docs/proof-automation.md`, §Loops). -/
+def LoopInvEntry.ofDecl (decl : Name) : MetaM LoopInvEntry := do
+  let fail {α} (why : MessageData) : MetaM α :=
+    throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
+      a loop body `B`"
+  let .str body last := decl | fail "not a name `B.inv`, `B.meas` or `B.post`"
+  let some role := match last with
+    | "inv" => some LoopInvRole.inv | "meas" => some .meas | "post" => some .post | _ => none
+    | fail "its name does not end in `inv`, `meas` or `post`"
+  let some (.defnInfo _) := (← getEnv).find? body | fail m!"`{body}` is not a definition"
+  let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
+  forallTelescope d.type fun xs res => do
+    if xs.isEmpty then fail "no parameter for the loop's locals"
+    let want := if role == .meas then mkConst ``Nat else mkConst `Zig.Full.FAssn
+    unless ← isDefEq res want do fail m!"its value is not of type {want}"
+  return { body, role, decl }
+
+/-- The loops' invariants (`@[fsym_inv]`), in declaration order: at a loop with no rule, `fsym`
+applies its backend's loop rule with them (`walkCore`). -/
+initialize fsymInvExt : SimpleScopedEnvExtension LoopInvEntry (Array LoopInvEntry) ←
+  registerSimpleScopedEnvExtension {
+    addEntry := fun s n => s.push n
+    initial := #[]
+  }
+
+initialize registerBuiltinAttribute {
+  name := `fsym_inv
+  descr := "a loop's invariant `B.inv`, measure `B.meas` or exit post `B.post` (loop body `B`) for \
+    the full-state symbolic executor `fsym`"
+  add := fun decl _ kind => do
+    let e ← (LoopInvEntry.ofDecl decl).run' {} {}
+    if let some e' := (fsymInvExt.getState (← getEnv)).find? fun e' => e'.body == e.body && e'.role == e.role then
+      throwError "@[fsym_inv] {decl}: the loop body `{e.body}` already has {e'.decl}"
+    fsymInvExt.add e kind
+}
+
+/-- The registered invariant, measure and exit post of the loop body `body` (`@[fsym_inv]`). -/
+def loopInvOf (env : Environment) (body : Name) : Option Name × Option Name × Option Name :=
+  let es := (fsymInvExt.getState env).filter (·.body == body)
+  let get (r : LoopInvRole) := (es.find? (·.role == r)).map (·.decl)
+  (get .inv, get .meas, get .post)
 
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/
 def isFsymAtom (env : Environment) (c : Name) : Bool :=
