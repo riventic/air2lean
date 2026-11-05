@@ -304,5 +304,27 @@ theorem FOwned.loadRun {own : ThreadId → Res} {rO r : Res} {m : Mem}
   exact ⟨load_run hacc hd hkind hread, (Array.getElem?_eq_some_iff.mp hblk).1,
     fun x h1 h2 => (up_bytesAt_some hr hpb (b, x)).mpr ⟨rfl, h1, by omega⟩⟩
 
+/-- **A live block's bytes as a part**: the memory's cells (`cellsAt`) of the `n` bytes at `p`
+in its live block are `bytesAt` of the block's bytes there, at the block's address, size and
+kind. -/
+theorem up_bytesAt_cellsAt {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} {n : Nat}
+    (hpb : p.block = some b) (h0 : 0 ≤ p.off) (hb : m.blocks[b]? = some blk)
+    (hl : blk.live = true) (hsz : p.off.toNat + n ≤ blk.bytes.size)
+    (hlo : blk.kind.mappedLo ≤ p.off.toNat) :
+    up (bytesAt p blk.addr blk.bytes.size blk.kind
+        (blk.bytes.extract p.off.toNat (p.off.toNat + n)))
+      (cellsAt (fun l => l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + n) m) := by
+  refine ⟨⟨b, hpb, h0, fun ⟨b', x⟩ => ?_⟩, rfl, rfl⟩
+  simp only [FHeap.erase, cellsAt, Array.size_extract, Nat.min_eq_left hsz,
+    Nat.add_sub_cancel_left]
+  by_cases hin : b' = b ∧ p.off.toNat ≤ x ∧ x < p.off.toNat + n
+  · obtain ⟨rfl, h1, h2⟩ := hin
+    rw [if_pos ⟨rfl, h1, h2⟩, if_pos ⟨rfl, h1, h2⟩, Mem.heap_of hb,
+      dif_pos ⟨hl, by omega, by omega⟩]
+    simp only [Option.map_some, Option.some.injEq, Cell.mk.injEq, and_true]
+    rw [getElem!_pos _ _ (by simp only [Array.size_extract]; omega), Array.getElem_extract]
+    congr 1; omega
+  · rw [if_neg hin, if_neg hin]; rfl
+
 end Full
 end Zig

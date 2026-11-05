@@ -172,6 +172,44 @@ theorem Inv.loadAll {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T}
   obtain ⟨fc'', h'', -⟩ := hsub _ _ hfc'
   rw [h'']; simp
 
+/-- **`Inv.loadAll` of the memory's bytes**: the load reads what `p`'s live block holds
+(`hdec`), when the lock's complete rest has each byte read, for every lock resource the
+invariant allows (`hcov`): the bytes are the rest's, up to `Cell.norm`
+(`up_bytesAt_cellsAt`). -/
+theorem Inv.loadMem {T : Type} [Enc T] {p : Ptr} {b : BlockId} {blk : Block} {a : Nat} {v : T}
+    {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
+    (hpb : p.block = some b) (h0 : 0 ≤ p.off) (hn : 0 < Enc.size T)
+    (hb : m.blocks[b]? = some blk) (hl : blk.live = true)
+    (hsz : p.off.toNat + Enc.size T ≤ blk.bytes.size) (hlo : blk.kind.mappedLo ≤ p.off.toNat)
+    (hdec : Enc.decode (blk.bytes.extract p.off.toNat (p.off.toNat + Enc.size T)) = pure v)
+    (ha : (blk.addr + p.off.toNat) % a = 0) (hK : blk.kind ≠ .constGlobal)
+    (hcov : ∀ rL, (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) → L.Off rL.heap.erase →
+      FHeap.Disjoint rL.heap rX.heap → ∀ x, p.off.toNat ≤ x → x < p.off.toNat + Enc.size T →
+      (rsum (L.wordR m) (rsum rL rX)).heap (b, x) ≠ none)
+    (hc : m.current = t) (hg : L.ph (G t) ≠ .gone)
+    (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)
+    (hread : NoRace m b p.off.toNat (Enc.size T) .read) :
+    (load T a p).run m = pure (v, m.recordAt b p.off.toNat (Enc.size T) .read) ∧
+      L.Inv G rX (m.recordAt b p.off.toNat (Enc.size T) .read) := by
+  refine hi.loadAll hpb hn (fun rL hF hnF hoff hd hm => ⟨_, _, _, _, _,
+    up_bytesAt_cellsAt hpb h0 hb hl hsz hlo, fun l fc h => ?_,
+    by simp only [Array.size_extract]; omega, hdec, ha, hK⟩) hc hg hsole hread
+  obtain ⟨b', x⟩ := l
+  simp only [cellsAt] at h
+  split at h
+  · rename_i hin
+    obtain ⟨rfl, h1, h2⟩ := hin
+    obtain ⟨fc', hfc'⟩ := Option.ne_none_iff_exists'.mp (hcov rL hF hnF hoff hd x h1 h2)
+    refine ⟨fc', hfc', ?_⟩
+    have := hm _ _ hfc'
+    cases e : m.heap (b', x) with
+    | none => rw [e] at h; cases h
+    | some c =>
+      rw [e] at h this
+      cases h
+      exact (Option.some.inj this).symm
+  · cases h
+
 /-- Reads by other admitted readers need no clock ordering. Every conflicting write
 must precede this reader through the publication clock or through AllLe. -/
 theorem _root_.Zig.Full.noRace_read_of_publication {m : Mem} {b o n : Nat}
