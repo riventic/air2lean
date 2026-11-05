@@ -527,6 +527,7 @@ publishes and supplies them):
 | --- | --- | --- |
 | `coverage` | `coverage/<version>.json` per supported version | `coverage.py generate --os linux` over the pinned pristine source |
 | `premise-index` | `docs/premise-index.md` | `premises.py write` |
+| `theorem-inventory` | `assurance/theorem-inventory.json`, `docs/theorem-inventory.md` | `regen.py --only inventory`: the runs planned from the committed `assurance/theorem-list.json`, each a guarded Lean build, recorded; the document rendered from `docs/theorem-inventory.template.md` |
 | `provenance`, `provenance-gap` | `manifest.json`, `pins.json`, `receipt/{audit,plan,receipt}.json` of `assurance/provenance{,-gap}/` | `provenance-evidence.py regenerate --refresh`, `install`, `record` |
 
 A file is whole-tree when its content depends on most of the tree (translator, runtime, goldens,
@@ -536,16 +537,18 @@ manifest/pin and 6 premise-index regeneration commits in the week before this ch
 that changes only with its own subject stays committed and is checked for staleness as before:
 goldens, `Gen.lean` modules, the fixtures' source, AIR and proofs, `docs/support-matrix.md`
 (its coverage counts change only with dispositions, i.e. with a translator change), the trust
-report. The theorem inventory's run records (`assurance/theorem-inventory.json` `runs`) are
-whole-tree too but are recorded from Lean builds that CI does not run per translation yet; they
-stay committed until CI records them (next step: one deterministic swap-build record per
-required translation, timing fields dropped).
+report. The theorem inventory (decision, maintainer, 2026-11-05) is whole-tree: its recorded
+runs depend on every `Proofs` source and translation, its regeneration (Lean builds, about 25
+minutes) kept losing the race with `main`, and it conflicted on almost every merge. The hand-written
+part, the list of headline theorems, stays committed (`assurance/theorem-list.json`, and the
+document's prose in `docs/theorem-inventory.template.md`); the runs and the rendered table are
+generated.
 
 **Not committed.** The files are in `.gitignore`. No PR adds or changes one, and agents never
 regenerate them for a PR.
 
 **Produced twice on the tested tree.** Every CI run (PR, `push`, `merge_group`, `workflow_dispatch`, `schedule`) has
-two jobs that regenerate them on exactly the checked-out tree:
+three jobs that regenerate them on exactly the checked-out tree:
 
 - `generated` (no build; about a minute): `scripts/generated.py produce --group coverage --group
   premise-index`. Each generator runs twice; the two outputs must be byte-identical. The files
@@ -562,6 +565,14 @@ two jobs that regenerate them on exactly the checked-out tree:
   excluded fields); then the strict `check` and strict
   `replay` of both fixtures and the fixture regressions run on them. Uploaded as
   `generated-provenance`.
+- `theorem-inventory` (after `lake`; no Zig): the runs planned from the list (one `lake build` over
+  the committed translations, one `swap-build` per Zig version and target over the goldens), twice;
+  the runs' start time, duration, host and log digest are the `run_bound` fields. Then the
+  inventory regressions and the full `theorem-inventory.py check` run on the result. Uploaded as
+  `generated-theorem-inventory`. Readers fail closed when the files are missing (`run
+  scripts/generated.py materialize`); `preflight` checks the committed list alone
+  (`check --list`), because the copy `materialize` fetches is main's, not the tree of a PR that
+  changes a `Proofs` source. The main health run (`regen.sh`) regenerates and fully checks it.
 
 A generator that fails (a missing coverage disposition, a fresh AIR or `Gen.lean` that differs
 from the committed one, a strict check) fails the job, so a PR whose tree does not regenerate
@@ -790,13 +801,15 @@ default targets (`ZigLean`, `Air2Lean`, `air2lean`); the `ZigLean` root imports 
 full-state logic (`ZigLean.Sep.Full.*`) nor `Proofs`, so a check that runs `lake env lean` after
 it reads whatever oleans an earlier build left, possibly stale ones. The full build is every
 library and executable of `lakefile.toml` with every tracked module of `ZigLean/`, `Air2Lean/` and
-`Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (2 Lean threads,
-11000 MiB by default) and through the shared artifact cache ([build-cache.md](build-cache.md)).
+`Proofs/`, and the `tests/diff` libraries, under `scripts/build-guard.py` (an elastic admission:
+each Lean process holds its module's measured need while it runs,
+[build-budgets.md](build-budgets.md#elastic-workloads)) and through the shared artifact cache
+([build-cache.md](build-cache.md)).
 A third phase elaborates the **standalone Lean files** (`scripts/lean-deps.py --elaborate`): every
 tracked `.lean` file outside the libraries' directories that imports only Lean and modules of this
 package (the strength logs, the proof-client fixtures, the tutorials; `lean-deps.py --files` lists
-them), with `lake env lean`, three at a time inside the same guard. The libraries cannot import
-such files, so before this phase a break in one (a renamed module, #342 and the strength logs)
+them), with `lake env "$LEAN"`, each its own sub-admission inside the same guard. The libraries
+cannot import such files, so before this phase a break in one (a renamed module, #342 and the strength logs)
 was found only by the `check.sh` that happened to run it. The set is derived, not listed: a new
 file is covered by being committed. Two rules besides "it checks": an import of a package module
 that has no file fails for every Lean file, standalone or not; and the files under `reject` in
@@ -844,13 +857,10 @@ than the job's runner (the dev Mac for the x86_64-linux rows), the native-execut
 (a `tests/` script called with `--native…`, the convention of `scripts/target-matrix.py`) become
 no-ops, and the run says how many: they execute binaries of the runner's target, so they run in
 the Rosetta container (`scripts/local-ci.sh part PART`, [rosetta.md](rosetta.md)). Units run up
-to eight at once inside their own guard (24000 MiB, at most the guard budget `AIR2LEAN_BUILD_MEM_MIB`
-and the admission of an enclosing guard: the full build's whole admission; `--jobs`, `--rss-mib`),
-each with up to two Lean processes (`--lean-threads`; the full build passes its own count, one
-11000 MiB process per thread), the longest first by
-the last runs' wall times, each admitted while the memory requests of the running units (1.5x a
-unit's largest recent sampled peak, scaled up when the run has more Lean threads than the
-measured one) fit in 85% of the guard's limit; the measurements
+to eight at once inside their own elastic guard (`--jobs`; base `--rss-mib` 4096, at most an
+enclosing guard's), each with one Lean process (`--lean-threads`), the longest first by the last
+runs' wall times, each a sub-admission charged 1.5x the unit's largest recent sampled peak
+(11000 MiB unmeasured; [build-budgets.md](build-budgets.md#elastic-workloads)); the measurements
 (`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
 result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
