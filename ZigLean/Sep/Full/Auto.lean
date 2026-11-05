@@ -868,21 +868,27 @@ where
   let s ← saveState
   -- `omega` may exhaust the recursion depth on a false goal with many case splits: a failure
   tryCatchRuntimeEx (do
-    let m ← mkFreshExprMVar ty
-    let before := (← getLCtx).lastDecl.map (·.fvarId)
-    let some g ← m.mvarId!.falseOrByContra | return some (← instantiateMVars m)
-    g.withContext do
-      let neg := match (← getLCtx).lastDecl with
-        | some d => if some d.fvarId != before then #[d.toExpr] else #[]
-        | none => #[]
-      -- `omega`'s case splits on `/` and `%` by literals recurse deeply on a false goal
-      withTheReader Core.Context (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
-        Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
-    let pf ← internTerms (← caches).omegaTerms (← instantiateMVars m)
-    -- `omega`'s own goals hold its certificate unshared: the state before it, where the proof's
-    -- unknowns (of the facts) are declared, keeps only the shared copy
-    let decls := s.meta.mctx.decls
-    if (← getMVars pf).all decls.contains then s.restore
+    -- one level deeper, `omega` assigns only its own unknowns
+    let pf ← withNewMCtxDepth do
+      let m ← mkFreshExprMVar ty
+      let before := (← getLCtx).lastDecl.map (·.fvarId)
+      if let some g ← m.mvarId!.falseOrByContra then
+        g.withContext do
+          let neg := match (← getLCtx).lastDecl with
+            | some d => if some d.fvarId != before then #[d.toExpr] else #[]
+            | none => #[]
+          -- `omega`'s case splits on `/` and `%` by literals recurse deeply on a false goal
+          withTheReader Core.Context
+            (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
+            Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
+      internTerms (← caches).omegaTerms (← instantiateMVars m)
+    -- so its goals, which hold the certificate unshared, are dropped with nothing else; a proof
+    -- that still has one of them as an unknown is no proof
+    let mctx := s.meta.mctx
+    setMCtx mctx
+    unless (← getMVars pf).all mctx.decls.contains &&
+        (!pf.hasLevelMVar || (collectLevelMVars {} pf).result.all mctx.lDecls.contains) do
+      return none
     return some pf)
     fun _ => do s.restore; return none
 

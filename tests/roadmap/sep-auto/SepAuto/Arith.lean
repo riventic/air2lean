@@ -283,7 +283,7 @@ open Lean Meta Zig.Full.Auto
 again finds no duplicate node. The problem chains four facts over five atoms, so a certificate
 combines constraints in several steps over the same coefficient lists; the second goal of the
 run uses the same facts and atoms. (Core `omega` alone: 2576 nodes for 739 distinct ones on the
-first goal.) -/
+first goal.) Nor does the run keep `omega`'s goals, which hold the certificate unshared. -/
 def omega_proofs_shared : MetaM Unit := do
   let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
   fsymRuns.modify (·.insert id (← RunCaches.new))
@@ -302,8 +302,13 @@ def omega_proofs_shared : MetaM Unit := do
     let ty2 ← le (← add (← add a b) d) (mkNatLit 10)
     withLocalDeclD `h1 t1 fun h1 => withLocalDeclD `h2 t2 fun h2 =>
     withLocalDeclD `h3 t3 fun h3 => withLocalDeclD `h4 t4 fun h4 => do
+    let goals : MetaM Nat := return (← getMCtx).decls.foldl (fun n _ _ => n + 1) 0
+    let before ← goals
     let some p1 ← omegaRaw #[h1, h2, h3, h4] ty1 | throwError "omega_proofs_shared: no proof"
     let some p2 ← omegaRaw #[h1, h2, h3, h4] ty2 | throwError "omega_proofs_shared: no proof"
+    -- `omega`'s own goals hold the unshared certificate: none is kept
+    let kept := (← goals) - before
+    unless kept == 0 do throwError "omega_proofs_shared: {kept} goals of omega kept"
     for (what, x) in [("the first", p1), ("both", mkApp2 (mkConst ``Prod.mk) p1 p2)] do
       let n ← x.numObjs
       let m ← (ShareCommon.shareCommon' x).numObjs
