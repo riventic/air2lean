@@ -437,8 +437,14 @@ private def run (args : List String) : IO UInt32 := do
                 let after ← withErrorTable after errorTable
                 pure (after, some (offset, before, after), #[])
               else
-                let (f, fired) ← normalizeTraced raw (track := a.airCertificate.isSome)
-                pure (← withErrorTable f errorTable, none, fired)
+                let (f, pre, fired) ← normalizeTraced raw (track := a.airCertificate.isSome)
+                let f ← withErrorTable f errorTable
+                -- `renumber` is not trusted where its native binding to the generic theorem
+                -- (`Renumber.execFunc_rename`) holds; otherwise it stays (fail closed).
+                let bound := match pre.map (withErrorTable · errorTable) with
+                  | some (.ok pre) => CanonCertificate.renumberBound pre f
+                  | _ => false
+                pure (f, none, if bound then fired.erase "renumber" else fired)
               : Except String (Func × Option (Nat × Func × Func) × Array String))
             times := { times with normalize := times.normalize + normalizeNs }
             match normalized with

@@ -26,20 +26,22 @@ Outside the certificate fragment:
 * `variants.totalArea`: a slice parameter whose items are not integers or `bool`
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `variants.advance` trusted-Canon: renumber
-* `variants.area` trusted-Canon: renumber
-* `variants.codeOf` trusted-Canon: renumber
-* `variants.isRound` trusted-Canon: renumber
-* `variants.isUrgent` trusted-Canon: renumber
-* `variants.lightOf` trusted-Canon: renumber
-* `variants.next` trusted-Canon: renumber
-* `variants.prioValue` trusted-Canon: renumber
-* `variants.radius` trusted-Canon: renumber
-* `variants.scale` trusted-Canon: renumber
-* `variants.severity` trusted-Canon: renumber
-* `variants.totalArea` trusted-Canon: renumber
+* `variants.advance` trusted-Canon: none
+* `variants.area` trusted-Canon: none
+* `variants.codeOf` trusted-Canon: none
+* `variants.isRound` trusted-Canon: none
+* `variants.isUrgent` trusted-Canon: none
+* `variants.lightOf` trusted-Canon: none
+* `variants.next` trusted-Canon: none
+* `variants.prioValue` trusted-Canon: none
+* `variants.radius` trusted-Canon: none
+* `variants.scale` trusted-Canon: none
+* `variants.severity` trusted-Canon: none
+* `variants.totalArea` trusted-Canon: none
 -/
 
 end Variants.AirCert

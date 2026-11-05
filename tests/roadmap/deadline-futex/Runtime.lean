@@ -28,6 +28,9 @@ private def input (clock : Time.AwakeEnvironment := equalClock) : Inputs :=
 
 private def p : Ptr := ⟨some 0, 0⟩
 private def other : Ptr := ⟨some 1, 0⟩
+/-- The private futex keys of `p` and `other` in `memory` (`Mem.keyAt`). -/
+private def pk : FutexKey := ⟨false, 4096⟩
+private def otherK : FutexKey := ⟨false, 4104⟩
 private def memory : Mem :=
   { blocks := #[{ bytes := #[.int 0, .int 0, .int 0, .int 0], align := 4,
                    kind := .stack, live := true, addr := 4096 },
@@ -65,7 +68,7 @@ def main : IO Unit := do
   check "enqueued call has no result" (result pending) none
   check "continuation actually paused" (match pending.state.control with | .waiting _ => true | _ => false) true
   check "registration retained" pending.state.kernel.registration.isSome true
-  check "queue contains selected owner" pending.state.kernel.mem.waiters #[(0, p)]
+  check "queue contains selected owner" pending.state.kernel.mem.waiters #[(0, pk)]
   check "compare recorded atomic read" (pending.state.kernel.mem.footprint.map (·.kind)) #[.atomicRead]
   check "sentinel unchanged" (pending.state.kernel.mem.blocks[1]?.map (·.bytes)) (some #[.int 73])
   let idle := resume (fun _ => 0) 20 pending.state
@@ -106,12 +109,12 @@ def main : IO Unit := do
   let first := run (input) 1 (fun _ => 0) repeatedWait memory
   let firstReturn := step { first.state with kernel := first.state.kernel.wake p 1 } (.normal .wake)
   let second := resume (fun _ => 0) 1 firstReturn.state
-  check "next wait registers without stale wake" second.state.kernel.mem.waiters #[(0, p)]
+  check "next wait registers without stale wake" second.state.kernel.mem.waiters #[(0, pk)]
   check "next wait stays blocked" (result second) none
   let framed := { pending.state with kernel := { pending.state.kernel with
-    mem := { pending.state.kernel.mem with waiters := #[(0, p), (1, other)], woken := #[1, 0, 0] } } }
+    mem := { pending.state.kernel.mem with waiters := #[(0, pk), (1, otherK)], woken := #[1, 0, 0] } } }
   let framedReturn := step framed (.normal .spurious)
-  check "other owner's waiter framed" framedReturn.state.kernel.mem.waiters #[(1, other)]
+  check "other owner's waiter framed" framedReturn.state.kernel.mem.waiters #[(1, otherK)]
   check "other owner's wake framed; duplicates cleared" framedReturn.state.kernel.mem.woken #[1]
   let nullWait : Program Nat := .wait ⟨none, 0⟩ 0 (.deadline eleven) (fun _ => .done 1)
   check "invalid pointer rejected" (result (run (input) 5 (fun _ => 0) nullWait memory))
@@ -150,7 +153,7 @@ def main : IO Unit := do
   let wakeThenYield : Program Nat :=
     .wake p 1 (fun _ => .yield (fun _ => .done 73))
   let boundWake := wakeThenYield >>= fun value => Program.done (value + 1)
-  let wakeMem := { memory with waiters := #[(1, p)] }
+  let wakeMem := { memory with waiters := #[(1, pk)] }
   let wakeResult := run (input) 4 (fun _ => 0) boundWake wakeMem
   check "suspended wake/yield bind retains source value" (result wakeResult) (some (.ok 74))
   check "suspended wake/yield preserves scheduler turns" wakeResult.state.trace #[1, 1, 1]

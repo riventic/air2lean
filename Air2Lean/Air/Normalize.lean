@@ -562,10 +562,15 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
            noalias := raw.noalias, uncheckedIb := raw.uncheckedIb,
            allocatorModel := raw.allocatorModel, targetOs := BuildProfile.tripleOs raw.profile.targetTriple }
 
-/-- `normalize`, with the Canon rewrites that fired when `track` (`Raw.CanonTrace.fired`). -/
-def normalizeTraced (raw : Raw.RawFunc) (track : Bool) : Except String (Func × Array String) := do
+/-- `normalize`, with the Canon rewrites that fired when `track` (`Raw.CanonTrace.fired`) and,
+when `renumber` fired, its input decoded (`none` if that input does not decode: `renumber` then
+stays trusted). -/
+def normalizeTraced (raw : Raw.RawFunc) (track : Bool) :
+    Except String (Func × Option Func × Array String) := do
   let trace ← Raw.canonicalizeTraced raw track
-  return (← normalizeCanonical trace.afterDebug, trace.fired)
+  let pre := if trace.fired.contains "renumber" then
+    (normalizeCanonical trace.input).toOption else none
+  return (← normalizeCanonical trace.afterDebug, pre, trace.fired)
 
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `ZigVersion.all`. -/
 def normalize (raw : Raw.RawFunc) : Except String Func :=

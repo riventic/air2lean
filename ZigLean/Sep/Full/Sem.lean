@@ -149,7 +149,7 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
   mutex). -/
   cp : ∀ u v, (C.ph (G u)).crit → (S.ph (G v)).isPst → False
   /-- A taker sleeps only at the mutex's futex. -/
-  tq : ∀ w ∈ m.waiters, S.Tk G w.1 → w.2 = L.ptr
+  tq : ∀ w ∈ m.waiters, S.Tk G w.1 → w.2 = L.key m
   /-- Every state write is a post, or happened before the mutex's holder, its newest release or
   every thread that has not ended (registrations and posts), or before a taker (a consume). -/
   hw : ∀ p, 0 < p → p < (C.S.hist m).size → FCond.SUp (C.S.hist m) p ∨
@@ -368,7 +368,7 @@ theorem Inv.mono {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
     (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hbef : ∀ c, L.Before m c → L.Before m' c) (ht : m'.threads = m.threads)
     (hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone)
-    (hwq : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w.2 = L.ptr)
+    (hwq : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w.2 = L.key m) (hkL : L.key m' = L.key m)
     (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' := by
   have hTk : ∀ v, S.Tk G' v ↔ S.Tk G v := fun v => by unfold Tk; rw [hsph, hcph]
   have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
@@ -379,7 +379,8 @@ theorem Inv.mono {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
     fun w hw hk => ?_, fun p h0 hp => ?_, fun u h c hu => ?_, fun u h c hu p h0 hp => ?_,
     fun u h c hu p h0 hp => ?_, fun hc hpw => ?_⟩
   · rw [ht]; exact hI.ex u (by rw [← hsph u]; exact hu)
-  · rcases hwq w hw with hw | hw
+  · rw [hkL]
+    rcases hwq w hw with hw | hw
     · exact hI.tq w hw ((hTk _).mp hk)
     · exact hw
   · rw [hS] at hp ⊢
@@ -452,7 +453,7 @@ theorem Inv.partTick {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : T
       hu))
     (fun _ => VClock.le_refl _) (fun _ h => h) rfl
     (fun u => (hph (fun g => L.ph g ≠ .gone) (fun g r => by rw [L.ph_setPart]) u).mp)
-    (fun w hw => .inl hw) rfl
+    (fun w hw => .inl hw) rfl rfl
 
 /-- **A step of the condition's code keeps the semaphore's invariant** (for `Fits.toC`). A new
 state write is classified by the stepping thread's registration: kept (then it is a post,
@@ -464,7 +465,8 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
     S.Inv G' m' := by
   have hap : ∀ W, (W = C.S ∨ W = C.Ep) → W.ApartL L.toLockWord := hS.apart
   obtain ⟨W, rY, hW, rfl, rfl, hY, hC', hmv | hown⟩ := hst
-  · obtain ⟨p, q, h, ⟨hn, hq, hms, -, -⟩, -, rfl⟩ := hmv
+  · obtain ⟨p, q, h, ⟨hn, hq, hms, -, -⟩, hwL, rfl⟩ := hmv
+    have hkE : C.Ep.key m' = C.Ep.key m := hms.key (hsub.2 C.Ep (.inr rfl)).1
     have hqh : L.ph (G t) = .holds → q = .holds := fun hh => by
       rcases hq with ⟨rfl, -⟩ | ⟨ho, -, -⟩
       · exact hh
@@ -581,6 +583,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
       · subst e; rw [hcpt] at hu; exact hI.cp u v (hn.crit hu) hv
       · rw [hcph u e] at hu; exact hI.cp u v hu hv
     · -- tq
+      rw [hwL.blk.key_of_addrs hms.addrs]
       rcases hms.waiters hw with hw0 | rfl
       · by_cases e : w.1 = t
         · have hk2 := hk.2
@@ -589,7 +592,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
           rcases CPh.Next.to_out hn' with h' | h' | h'
           · exact hI.tq w hw0 ⟨by rw [← hsph]; exact hk.1, by rw [e]; exact h'⟩
           · rcases hC.qw w hw0 (by rw [e]; exact CPh.isReg_waits h') with h'' | h''
-            · obtain ⟨i, jr, ee, hreg, -⟩ := hC'.q w hw h''
+            · obtain ⟨i, jr, ee, hreg, -⟩ := hC'.q w hw (h''.trans hkE.symm)
               rw [e, hcpt, hk2] at hreg; cases hreg
             · exact h''
           · exfalso
@@ -598,7 +601,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
             rw [hsph, e] at h1
             rw [h1] at hsx; cases hsx
         · exact hI.tq w hw0 ⟨by rw [← hsph]; exact hk.1, by rw [← hcph w.1 e]; exact hk.2⟩
-      · obtain ⟨i, jr, ee, hreg, -⟩ := hC'.q _ hw rfl
+      · obtain ⟨i, jr, ee, hreg, -⟩ := hC'.q _ hw hkE.symm
         rw [hk.2] at hreg; cases hreg
     · -- hw: every state write
       by_cases hjo : j < (C.S.hist m).size
@@ -704,7 +707,8 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
     exact hI.mono hsph hcph (by rw [pv_pupd, upd_same])
       (fun u hu => by rw [hlph]; exact hI.pst u hu) (fun u hu => .inl (by rw [hlph]; exact hu))
       hfs.clock (FLock.Inv.before_fstep hL0 hfs) hfs.threads (fun u hu => by rwa [hlph] at hu)
-      (fun w hw => .inl (by rwa [hfs.waiters] at hw)) (hY' C.S (.inl rfl))
+      (fun w hw => .inl (by rwa [hfs.waiters] at hw))
+      (hL0.w.blk.key_of_addrs hfs.addrs) (hY' C.S (.inl rfl))
 
 /-- **A lock step of a thread out of `pst`** keeps the semaphore's invariant (for a client's
 `FLock.Fits.stable`, whose `ok` excludes `pst`; the component facts are the ones that
@@ -728,10 +732,10 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem}
     (fun u hu => ?_) (FLock.lstep_hold hz hrel) hs.clocks hs.before hs.threads
     (FLock.lstep_live hg)
     (fun w hw => by
-      by_cases hl : w.2 = L.ptr
+      by_cases hl : w.2 = L.key m
       · exact .inr hl
       · exact .inl ((hs.waiters_mem w hl).mp hw))
-    (hwS.lockStep hs hapS).2
+    hs.key (hwS.lockStep hs hapS).2
   by_cases e : u = t
   · subst e; rw [hst] at hu; cases hu
   · rw [upd_ne _ _ e]; exact hI.pst u hu
@@ -826,6 +830,8 @@ theorem Inv.hold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
   · -- tq
     rw [hfs.waiters] at hw
     have e := hnq w hw
+    obtain ⟨_, hb, _⟩ := hL.w.blk
+    rw [L.key_of_addrs hfs.addrs hb]
     exact hI.tq w hw ((hTk w.1 e).mp hk)
   · -- hw
     rw [hhS] at hp ⊢
@@ -903,6 +909,8 @@ theorem condHold (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {rX : Res} {m
     hfs.woken hfs.threads hfs.clock hnq (fun i e h' => by rw [hcp] at h'; cases h')
     (fun h' => by rw [hcp] at h'; exact absurd h' (by decide)) (fun h' => absurd hcp h')
     (fun sh c h' => by rw [hcp] at h'; cases h')
+    ((hsub.2 C.Ep (.inr rfl)).1.key_of_addrs hfs.addrs)
+    (hL.w.blk.key_of_addrs hfs.addrs)
 
 /-- **The waiter's entry into the condition at count 0 keeps the semaphore's invariant**
 (`Move.enter`). -/
@@ -1316,7 +1324,7 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
       (by rw [upd_self, S.cph_set, cph_l hS, hgx]; trivial) (by rw [hfx]; trivial)
       rfl rfl rfl rfl rfl (fun _ => VClock.le_refl _) hnq
       (fun i e h' => by rw [hfx] at h'; cases h') (fun h' => by rw [hfx] at h'; exact absurd h' (by decide))
-      (fun h' => absurd hfx h') (fun sh c h' => by rw [hfx] at h'; cases h')
+      (fun h' => absurd hfx h') (fun sh c h' => by rw [hfx] at h'; cases h') rfl rfl
     rwa [upd_upd] at this
   exact hUc hU₁ hL' hIf hCf
 

@@ -344,9 +344,9 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (.inr (.inl (by show 0 + n ≤ 32; omega)))
   exact ⟨⟨hu.um.shape, hu.um.io.read (hc ▸ ht) hcs 0 0 n, hu.um.rest.congr fun _ _ => rfl,
       hu.um.blk, hwS, hwE, hu.um.q⟩,
-    hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk,
+    hu.cinv.stay hhS hhE rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk,
     hu.sinv.mono (fun _ => rfl) (fun _ => rfl) rfl hu.sinv.pst (fun _ h => .inl h) hclk
-      (fun _ h => h) rfl (fun _ h => h) (fun _ h => .inl h) hhS,
+      (fun _ h => h) rfl (fun _ h => h) (fun _ h => .inl h) rfl hhS,
     hu.lg.congr (fun _ => rfl) (fun _ => rfl) hhS hhE hu.lg.wtx
       (fun j hj => by
         rw [hhE] at hj ⊢
@@ -404,7 +404,8 @@ theorem cinv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     C.Inv L (upd G t g) m := by
   have hcg : C.ph g = .out := h₁
   have hct : C.ph (G t) = .out := h₀
-  refine hI.frame rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _) (fun _ => VClock.le_refl _)
+  refine hI.frame rfl rfl rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _)
+    (fun _ => VClock.le_refl _)
     (fun h => by rw [hcg, hct] at h; rcases h with h | h <;> cases h)
     (fun _ _ h => by rw [hcg] at h; cases h) (fun _ _ _ _ h => by rw [hcg] at h; cases h)
     (fun h => by obtain ⟨_, _, _, h'⟩ := hI.qd_reg h; rw [hct] at h'; cases h')
@@ -429,13 +430,13 @@ theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Re
     show pv (xs _) = pv (xs _); rw [hxs]
   refine ⟨⟨by rw [hxs]; exact hu.um.shape, hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we,
       hu.um.q⟩,
-    hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id rfl rfl rfl (fun w hw _ => .inl hw)
+    hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id rfl rfl rfl rfl rfl (fun w hw _ => .inl hw)
       (fun _ _ _ h => h) (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.sinv.mono (fun u => congrArg X.sp (hX u)) (fun u => congrArg X.c (hX u)) hcnt
       (fun u h => by show (upd G t _ u).1.ph = _; rw [hP u]; exact hu.sinv.pst u h)
       (fun u h => .inl (by show ((upd G t _ u).1.ph).held = _; rw [hP u]; exact h))
       (fun _ => VClock.le_refl _) (fun _ h => h) rfl
-      (fun u h => by show (G u).1.ph ≠ _; rw [← hP u]; exact h) (fun _ h => .inl h) rfl,
+      (fun u h => by show (G u).1.ph ≠ _; rw [← hP u]; exact h) (fun _ h => .inl h) rfl rfl,
     hu.lg.congr (fun u => congrArg X.ph (hX u)) (fun u => congrArg X.c (hX u)) rfl rfl
       (fun u h => by rw [hX u] at h ⊢; exact hu.lg.wtx u h)
       (fun j hj => hb_same hP (hu.lg.ehb j hj))⟩
@@ -478,7 +479,7 @@ theorem sinv_grow {G G' : ThreadId → Gh} {m m' : Mem} (hI : S.Inv G m)
     (hHB : ∀ c, L.HB G m c → L.HB G' m' c)
     (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (ht : m.threads.size ≤ m'.threads.size)
-    (hwq : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w.2 = L.ptr)
+    (hwq : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w.2 = L.key m) (hkL : L.key m' = L.key m)
     (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' := by
   have hTk : ∀ v, S.Tk G' v ↔ S.Tk G v := fun v => by unfold FSem.Tk; rw [hsph, hcph]
   have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
@@ -489,7 +490,8 @@ theorem sinv_grow {G G' : ThreadId → Gh} {m m' : Mem} (hI : S.Inv G m)
     fun w hw hk => ?_, fun p h0 hp => ?_, fun u h c hu => ?_, fun u h c hu p h0 hp => ?_,
     fun u h c hu p h0 hp => ?_, fun hc hpw => ?_⟩
   · exact Nat.lt_of_lt_of_le (hI.ex u (by rw [← hsph u]; exact hu)) ht
-  · rcases hwq w hw with hw | hw
+  · rw [hkL]
+    rcases hwq w hw with hw | hw
     · exact hI.tq w hw ((hTk _).mp hk)
     · exact hw
   · rw [hS] at hp ⊢
@@ -609,7 +611,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
       (fun u hu' _ => by
         rw [hs1] at hu'; obtain rfl : u = 0 := by unfold ThreadId at *; omega
         rw [hG0L]; decide)
-  have hI := hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (by simp) hclk
+  have hI := hu.cinv.stay hhS hhE rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (by simp) hclk
   have hI' := cinv_out (cinv_out hI (t := 1) (g := gW rP 0 false 0) hG1c rfl)
     (t := 0) (g := gW rM 0 false 0) (by rw [upd1_0]; exact hG0c) rfl
   have hsat := FCond.Sated.congr (C := C) hhS
@@ -621,7 +623,7 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
         rw [hXu u hu']; exact hnone u (by unfold ThreadId at *; omega)⟩⟩, ?_,
       hu.um.rest.congr fun _ _ => rfl, hu.um.blk, hwS, hwE, fun w hw => hu.um.q w hw⟩,
     hI', sinv_grow hu.sinv hsph hcph hcnt (fun u h => ?_) hHB hclk (by simp) (fun w hw => .inl hw)
-      hhS, ⟨.inl (by rw [hX0]; rfl), fun u k s h => ?_, fun u h => ?_,
+      rfl hhS, ⟨.inl (by rw [hX0]; rfl), fun u k s h => ?_, fun u h => ?_,
       fun k hk => by rw [hhE] at hk ⊢; exact hHB _ (hu.lg.ehb k hk),
       fun u i e h => by rw [hcph u] at h; rw [hhE]; exact hu.lg.f0 u i e h,
       fun u v hr hc' => by rw [hcph u] at hr; rw [hcph v] at hc'; exact hu.lg.rc u v hr hc',
@@ -775,7 +777,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} {rp : Re
        rwa [upd_upd] at this,
     hU.sinv.mono hsph hcph hcnt
       (fun u h => hhold u (hU.sinv.pst u h)) (fun u h => .inl (hlheld u h))
-      (fun _ => VClock.le_refl _) (fun _ h => h) rfl hlph (fun _ h => .inl h) rfl,
+      (fun _ => VClock.le_refl _) (fun _ h => h) rfl hlph (fun _ h => .inl h) rfl rfl,
     hU.lg.relabel hcph rfl rfl ?_ ?_ ?_
       (fun j hj => (hU.lg.ehb j hj).mono (fun u h => .inl (hlheld u h)) (fun _ => VClock.le_refl _)
         (fun _ h => h) rfl hlph)⟩

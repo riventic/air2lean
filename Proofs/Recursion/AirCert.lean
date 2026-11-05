@@ -15,12 +15,14 @@ Outside the certificate fragment:
 (none)
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `recursion.fact` trusted-Canon: renumber
-* `recursion.gcd` trusted-Canon: renumber
-* `recursion.isEven` trusted-Canon: renumber
-* `recursion.isOdd` trusted-Canon: renumber
+* `recursion.fact` trusted-Canon: none
+* `recursion.gcd` trusted-Canon: none
+* `recursion.isEven` trusted-Canon: none
+* `recursion.isOdd` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=
