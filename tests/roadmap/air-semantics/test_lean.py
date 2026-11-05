@@ -136,6 +136,11 @@ def check_native_binding():
     for label in ('wrong live ID', 'wrong nested body', 'wrong layout', 'wrong function metadata',
                   'wrong offset', 'wrong global initializer', 'one bad item'):
         assert lines.count(f'native-debug-binding: {label} rejected') == 1, result.stdout
+    # `renumber`: an injective renaming binds; a collapsed ID, a changed operand or changed
+    # metadata keeps it trusted (fail closed).
+    assert lines.count('native-renumber-binding: injective renaming bound') == 1, result.stdout
+    for label in ('collapsed IDs', 'wrong operand', 'wrong function metadata'):
+        assert lines.count(f'native-renumber-binding: {label} rejected') == 1, result.stdout
     assert json.loads(lines[-1]) == dict(kind='canon-debug-native-binding', version=1,
                                       functions=17, changed=True), result.stdout
     print(result.stdout, end='')

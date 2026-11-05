@@ -910,6 +910,9 @@ def sinkPastChecks (f : RawFunc) : RawFunc :=
 that fired. The certificate report names them as trusted (`trusted-Canon`, docs/air-semantics.md
 §Canonicalization). -/
 structure CanonTrace extends RenumberTrace where
+  /-- `renumber`'s input. The certificate path binds it to the output by an injective renaming
+  (`CanonCertificate.renumberBound`, `Renumber.execFunc_rename`). -/
+  input : RawFunc
   /-- The rewrites (module doc) whose output differs from their input in any `RawFunc` field,
   by their function names, in pipeline order. -/
   fired : Array String
@@ -936,7 +939,7 @@ def canonicalizeTraced (f : RawFunc) (track : Bool) : Except String CanonTrace :
   let (f, fired) ← rewrites.foldlM step (f, #[])
   validateRefs f
   let trace := renumberTraced f
-  pure { toRenumberTrace := trace,
+  pure { toRenumberTrace := trace, input := f,
          fired := if track && trace.afterDebug != f then fired.push "renumber" else fired }
 
 /-- The ordinary and certificate paths share the complete canonicalization pipeline. -/
