@@ -1281,8 +1281,12 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `ETIMEDOUT` if a timeout was given, or sleeps. An untimed sleeper waits in the queue until a
   wake or an interrupt; the scheduler reads the word again first and a changed word is a return
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
-  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
-  `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
+  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. After a wake, a spurious
+  return or a mismatch, `__ulock_wait*` returns `--ull_nwaiters` (xnu-12377.121.6
+  `sys_ulock.c:826`), which the model leaves to the oracle: one more stop, then any
+  non-negative `c_int`. Its `ENOMEM` (`:636`; `zalloc(Z_WAITOK)` of a non-exhaustible zone never
+  fails) and `EDOM` (`:646`; every admitted op is `COMPARE_AND_WAIT`) paths are unreachable.
+  Other commands, flags and `val2` are outside the model
   (`.unspecified`). The translator binds `os.linux.futex_4arg`
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
   `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
