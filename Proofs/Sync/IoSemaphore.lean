@@ -68,24 +68,27 @@ theorem semWaitLoop_body (hS : S.Fits P U ok) (hcost : P.cost = none)
 /-- **`Io.Semaphore.waitUncancelable`** with the caller's part kept, at the caller's ghost value
 (`SemImpl.wait_wp_resource` at the kept part). -/
 theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = ioMutex.c)
-    {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (T : FAssn)
+    {p : Ptr} (hp : p = S.p) (t : ThreadId) (g : γ) (gx : (ThreadId → X) → γ)
+    (T : (ThreadId → X) → FAssn)
     (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hwx : S.wx g) (hokg : ok g)
-    (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
-    (hokx : ok gx)
+    (hxo : ∀ Y, L.ph (gx Y) = .out) (hxh : ∀ Y, L.held (gx Y) = rnil)
+    (hxx : ∀ Y, C.ph (gx Y) = .out) (hxs : ∀ Y, S.ph (gx Y) = .out) (hokx : ∀ Y, ok (gx Y))
     (hcnt : ∀ G rL m, P.inv (upd G t (L.set (S.set g .wt) .holds rL)) m →
-      S.cnt (upd G t g) ≠ 0 → S.cnt (upd G t gx) = S.cnt (upd G t g) - 1)
+      S.cnt (upd G t g) ≠ 0 → S.cnt (upd G t (gx (S.xs (upd G t g)))) = S.cnt (upd G t g) - 1)
     (hpool : ∀ G rL m, P.inv (upd G t (L.set (S.set g .wt) .holds rL)) m →
       S.cnt (upd G t g) ≠ 0 → ∀ r, S.Pool (S.xs (upd G t g)) r →
-      (S.Pool (S.xs (upd G t gx)) ⋆ T) r)
-    (hU : ∀ G rX m h₁ h₂ r sh sc, S.cnt (upd G t g) ≠ 0 → T r →
+      (S.Pool (S.xs (upd G t (gx (S.xs (upd G t g))))) ⋆ T (S.xs (upd G t g))) r)
+    (hU : ∀ G rX m h₁ h₂ r sh sc, S.cnt (upd G t g) ≠ 0 → T (S.xs (upd G t g)) r →
       FHeap.Disjoint (L.part g).heap r.heap →
       U (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m →
-      L.Inv (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) (.pst sh sc)))
-        rX m →
-      S.Inv (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) (.pst sh sc))) m →
-      C.Inv L (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) (.pst sh sc)))
-        m →
-      U (upd G t (S.set (L.set (L.setPart gx (rsum (L.part g) r)) .holds h₂) (.pst sh sc))) rX m)
+      L.Inv (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum (L.part g) r))
+        .holds h₂) (.pst sh sc))) rX m →
+      S.Inv (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum (L.part g) r))
+        .holds h₂) (.pst sh sc))) m →
+      C.Inv L (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum (L.part g) r))
+        .holds h₂) (.pst sh sc))) m →
+      U (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum (L.part g) r))
+        .holds h₂) (.pst sh sc))) rX m)
     (hroom : ∀ G₁ rL m₁, P.inv (upd G₁ t (L.set (S.set g .wt) .holds rL)) m₁ →
       S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
       C.nreg (upd G₁ t g) T < 65535)
@@ -96,11 +99,11 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m)
     (hc : m.current = t) :
     P.WP t (Io_Semaphore_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r, T r ∧ FHeap.Disjoint (L.part g).heap r.heap ∧
-        P.inv (upd G' t (L.setPart gx (rsum (L.part g) r))) m') G m d := by
+      ∃ Y r, T Y r ∧ FHeap.Disjoint (L.part g).heap r.heap ∧
+        P.inv (upd G' t (L.setPart (gx Y) (rsum (L.part g) r))) m') G m d := by
   subst hp
   have hF := hS.toFits
-  have hokp : ∀ r, ok (L.setPart gx r) := fun r => (hF.ok_setPart gx r).mpr hokx
+  have hokp : ∀ Y r, ok (L.setPart (gx Y) r) := fun Y r => (hF.ok_setPart (gx Y) r).mpr (hokx Y)
   have hu' : ∀ r, 0 < (rsum (L.part g) r).gh.ac.frag .unmetered :=
     fun _ => Res.unmetered_rsum_left hu
   unfold Io_Semaphore_waitUncancelable
@@ -119,24 +122,29 @@ theorem ioSem_wait_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
 /-- **`Io.Semaphore.waitUncancelable`** (`SemImpl.wait_wp_resource`): the kept part is the
 caller's (`keepPart`), so the premises at it are at the caller's ghost value. -/
 theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
-    (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p) (t : ThreadId) (g gx : γ) (T : FAssn)
+    (hLc : L.c = ioMutex.c) {p : Ptr} (hp : p = S.p) (t : ThreadId) (g : γ)
+    (gx : (ThreadId → X) → γ) (T : (ThreadId → X) → FAssn)
     (hgo : L.ph g = .out) (hgx : C.ph g = .out) (hgs : S.ph g = .out) (hwx : S.wx g) (hokg : ok g)
-    (hxo : L.ph gx = .out) (hxh : L.held gx = rnil) (hxx : C.ph gx = .out) (hxs : S.ph gx = .out)
-    (hokx : ok gx)
+    (hxo : ∀ Y, L.ph (gx Y) = .out) (hxh : ∀ Y, L.held (gx Y) = rnil)
+    (hxx : ∀ Y, C.ph (gx Y) = .out) (hxs : ∀ Y, S.ph (gx Y) = .out) (hokx : ∀ Y, ok (gx Y))
     (hcnt : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G rL m,
       P.inv (upd G t (L.set (S.set (L.setPart g rᵢ) .wt) .holds rL)) m →
-      S.cnt (upd G t g) ≠ 0 → S.cnt (upd G t gx) = S.cnt (upd G t g) - 1)
+      S.cnt (upd G t g) ≠ 0 → S.cnt (upd G t (gx (S.xs (upd G t g)))) = S.cnt (upd G t g) - 1)
     (hpool : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G rL m,
       P.inv (upd G t (L.set (S.set (L.setPart g rᵢ) .wt) .holds rL)) m →
       S.cnt (upd G t g) ≠ 0 → ∀ r, S.Pool (S.xs (upd G t g)) r →
-      (S.Pool (S.xs (upd G t gx)) ⋆ T) r)
+      (S.Pool (S.xs (upd G t (gx (S.xs (upd G t g))))) ⋆ T (S.xs (upd G t g))) r)
     (hU : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G rX m h₁ h₂ r sh sc, S.cnt (upd G t g) ≠ 0 →
-      T r → FHeap.Disjoint rᵢ.heap r.heap →
+      T (S.xs (upd G t g)) r → FHeap.Disjoint rᵢ.heap r.heap →
       U (upd G t (S.set (L.set (L.setPart g rᵢ) .holds h₁) (.pst sh sc))) rX m →
-      L.Inv (upd G t (S.set (L.set (L.setPart gx (rsum rᵢ r)) .holds h₂) (.pst sh sc))) rX m →
-      S.Inv (upd G t (S.set (L.set (L.setPart gx (rsum rᵢ r)) .holds h₂) (.pst sh sc))) m →
-      C.Inv L (upd G t (S.set (L.set (L.setPart gx (rsum rᵢ r)) .holds h₂) (.pst sh sc))) m →
-      U (upd G t (S.set (L.set (L.setPart gx (rsum rᵢ r)) .holds h₂) (.pst sh sc))) rX m)
+      L.Inv (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum rᵢ r)) .holds h₂)
+        (.pst sh sc))) rX m →
+      S.Inv (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum rᵢ r)) .holds h₂)
+        (.pst sh sc))) m →
+      C.Inv L (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum rᵢ r)) .holds h₂)
+        (.pst sh sc))) m →
+      U (upd G t (S.set (L.set (L.setPart (gx (S.xs (upd G t g))) (rsum rᵢ r)) .holds h₂)
+        (.pst sh sc))) rX m)
     (hroom : ∀ rᵢ, keepPart t (L.part g) rᵢ → ∀ G₁ rL m₁,
       P.inv (upd G₁ t (L.set (S.set (L.setPart g rᵢ) .wt) .holds rL)) m₁ →
       S.cnt (upd G₁ t g) = 0 → ∀ T, (∀ u, T ≤ u → C.ph (upd G₁ t g u) = .out) →
@@ -147,8 +155,8 @@ theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) (hc : m.current = t) :
     P.WP t (Io_Semaphore_waitUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      ∃ r' r, keepPart t (L.part g) r' ∧ T r ∧ FHeap.Disjoint r'.heap r.heap ∧
-        P.inv (upd G' t (L.setPart gx (rsum r' r))) m') G m d := by
+      ∃ Y r' r, keepPart t (L.part g) r' ∧ T Y r ∧ FHeap.Disjoint r'.heap r.heap ∧
+        P.inv (upd G' t (L.setPart (gx Y) (rsum r' r))) m') G m d := by
   have hcnt := hcnt _ rfl
   have hpool := hpool _ rfl
   have hU := hU _ rfl
@@ -156,8 +164,8 @@ theorem ioSem_wait_wp_resource (hS : S.Fits P U ok) (hcost : P.cost = none)
   simp only [L.setPart_self] at hcnt hpool hU hroom
   refine WP.mono ?_ (ioSem_wait_wp hS hcost hLc hp t g gx T hgo hgx hgs hwx hokg hxo hxh hxx hxs
     hokx hcnt hpool hU hroom hlive io G m d hu hi hc)
-  rintro _ G' m' d' ⟨hd, hc', r, hT, hdj, hi'⟩
-  exact ⟨hd, hc', L.part g, r, rfl, hT, hdj, hi'⟩
+  rintro _ G' m' d' ⟨hd, hc', Y, r, hT, hdj, hi'⟩
+  exact ⟨hd, hc', Y, L.part g, r, rfl, hT, hdj, hi'⟩
 
 /-! ## `post` -/
 
