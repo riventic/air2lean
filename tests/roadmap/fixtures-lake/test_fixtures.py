@@ -347,5 +347,55 @@ class LakeKernelReplay(unittest.TestCase):
         self.assertEqual(self.replay(text)["status"], "pass")
 
 
+class ReplayFreshness(unittest.TestCase):
+    """scripts/assumptions.py replay_and_freshness: `leanchecker Lib` checks every olean below
+    `Lib` (`checked_modules`), also `Lib.Extra`, which `Lib` does not import. A stale one fails
+    the trace check before the compiled inputs are bound, rather than being checked as it is or
+    rebuilt by a Lake receipt during the replay (which then failed with "canonical Lake compiled
+    inputs changed during kernel replay")."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-replay-freshness-test.")
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name).resolve()
+        shutil.copy(ROOT / "lean-toolchain", self.repo / "lean-toolchain")
+        (self.repo / "lakefile.toml").write_text('name = "air2lean"\n[[lean_lib]]\nname = "Lib"\n')
+        (self.repo / "Lib.lean").write_text("def lib : Nat := 1\n")
+        (self.repo / "Lib").mkdir()
+        self.extra = self.repo / "Lib/Extra.lean"
+        self.extra.write_text("def extra : Nat := 1\n")
+        spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
+        self.assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.assumptions)
+        for patch in (mock.patch.object(self.assumptions, "ROOT", self.repo),
+                      mock.patch.object(self.assumptions, "LAKE_ROOTS", ("Lib",)), without_cache()):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.build("Lib", "Lib.Extra")
+
+    def build(self, *modules):
+        done = fx.lake(self.repo, ["build", *modules], capture=True)
+        self.assertEqual(done.returncode, 0, done.stdout)
+
+    def audit(self):
+        sysroot = Path(self.assumptions.lake_env("LEAN_SYSROOT")).resolve()
+        raw = {"extractor": {"lean_sysroot": str(sysroot),
+                             "toolchain_runtime_sha256": self.assumptions.toolchain_runtime_sha256(sysroot)},
+               "nodes": [], "modules": ["Lib"]}
+        freshness = self.assumptions.replay_and_freshness(raw)
+        return raw["kernel_replay"]["status"], freshness["lake_trace_check"]["status"]
+
+    def test_stale_olean_below_an_audited_module_fails_before_the_replay(self):
+        self.assertEqual(self.audit(), ("pass", "up-to-date"))
+        self.extra.write_text("def extra : Nat := 2\n")  # Lib.Extra's olean is now stale
+        olean = self.repo / ".lake/build/lib/lean/Lib/Extra.olean"
+        before = olean.read_bytes()
+        with mock.patch("sys.stderr"), self.assertRaisesRegex(RuntimeError, "--no-build .*Lib.Extra"):
+            self.audit()
+        self.assertEqual(olean.read_bytes(), before)  # the audit built nothing
+        self.build("Lib.Extra")
+        self.assertEqual(self.audit(), ("pass", "up-to-date"))
+
+
 if __name__ == "__main__":
     unittest.main()

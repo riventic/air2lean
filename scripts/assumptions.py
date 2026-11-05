@@ -1603,8 +1603,14 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
             raise ValueError(f'witness source has no compiler-owned run binding: {module}')
         artifacts.append(row)
     if lake_modules:
-        # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
-        run(["lake", "--rehash", "build", "--no-build", *lake_modules])
+        # Fails if any Lake-built olean the replay reads is stale against its sources (--no-build
+        # audits too): an audited module's, and each one `leanchecker` checks below it
+        # (`checked_modules`: an olean of an older build that no import reaches). A Lake receipt
+        # needs all of them, so a stale one would be rebuilt during the replay, after the compiled
+        # inputs are bound (`validate_inputs`). An orphan (no source) is refused by `module_needs`.
+        checked = sorted({c for m in lake_modules for c in checked_modules(m, [built])
+                          if (ROOT / (c.replace(".", "/") + ".lean")).is_file()})
+        run(["lake", "--rehash", "build", "--no-build", *checked])
     lake_inputs = library_compiled_inputs(ROOT)
     cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)
 
