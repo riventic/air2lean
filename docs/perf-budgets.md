@@ -257,7 +257,8 @@ with other jobs, so differences below about 20% are noise):
   hotspots.
 
 No lookup-structure change in the translator is claimed: no translator phase other than
-`renumber` exceeds 16 ms. The remaining proof candidates are the `WaitGroup`/`Handoff` `refine` chains above.
+`renumber` exceeds 16 ms. The remaining proof candidates are `handoff_completes` and the split
+`WaitGroup` above; both await a profile on the full-state logic.
 
 `python3 tests/roadmap/perf-budgets/test_perf_budgets.py` tests the gate,
 baseline derivation, AIR overlay, module-local cold cleanup, `wait4` measurement
