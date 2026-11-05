@@ -111,6 +111,13 @@ def BlockKind.mappedLo : BlockKind → Nat
   | .mapped lo => lo
   | _ => 0
 
+/-- The block's pages are anonymous memory natively: a stack, a heap block or an OS mapping
+(`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global, and an allocator's block
+(whose buffer may be a global), can lie on a file-backed page. -/
+def BlockKind.anon : BlockKind → Bool
+  | .stack | .heap | .mapped _ => true
+  | .global | .constGlobal | .owned _ => false
+
 @[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
 @[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl

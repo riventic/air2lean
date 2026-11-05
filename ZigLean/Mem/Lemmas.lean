@@ -164,21 +164,24 @@ theorem futexKeyOf_run {m : Mem} {p : Ptr} {sh : Bool} {k : FutexKey}
   simp [futexKeyOf, h, zig_unfold, get, getThe, MonadStateOf.get, StateT.get, ExceptT.pure,
     ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
 
+/-- `ptrAddr` is `addrIn` in the state monad: the address and the same memory, or `.illegal`
+without a block. -/
+theorem ptrAddr_run_addrIn (p : Ptr) (m : Mem) : (ptrAddr p).run m = match addrIn m.blocks p with
+    | some v => pure (v, m) | none => throw .illegal := by
+  obtain ⟨pb, po⟩ := p
+  cases pb with
+  | none => rfl
+  | some b =>
+    cases hb : m.blocks[b]? <;>
+      simp [ptrAddr, addrIn, hb, zig_unfold, get, getThe, MonadStateOf.get, StateT.get,
+        ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, throw, throwThe,
+        MonadExceptOf.throw]
+
 /-- The key that an OS row forms from the address `a` that `ptrAddr` gave is `Mem.keyAt`. -/
 theorem Mem.keyAt_of_ptrAddr {m m' : Mem} {p : Ptr} {a : Int}
     (h : (ptrAddr p).run m = pure (a, m')) (sh : Bool) : m.keyAt p sh = some ⟨sh, futexAddr a⟩ := by
-  have hr : (ptrAddr p).run m = match addrIn m.blocks p with
-      | some v => pure (v, m) | none => throw .illegal := by
-    obtain ⟨pb, po⟩ := p
-    cases pb with
-    | none => rfl
-    | some b =>
-      cases hb : m.blocks[b]? <;>
-        simp [ptrAddr, addrIn, hb, zig_unfold, get, getThe, MonadStateOf.get, StateT.get,
-          ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont, throw, throwThe,
-          MonadExceptOf.throw]
   unfold Mem.keyAt
-  rw [hr] at h
+  rw [ptrAddr_run_addrIn] at h
   split at h
   · rename_i v hv
     rw [hv]

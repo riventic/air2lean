@@ -260,14 +260,12 @@ def _root_.Zig.Mem.wordAt (m : Mem) (p : Ptr) : Bool :=
   | some (.ok _) => true
   | _ => false
 
-/-- `p` points into a block whose pages are anonymous memory natively: a stack, a heap block or
-an OS mapping (`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global or an
-allocator's block (whose buffer may be a global) can lie on a file-backed page. -/
+/-- `p` points into a block whose pages are anonymous memory natively (`BlockKind.anon`). -/
 def _root_.Zig.Mem.anonAt (m : Mem) (p : Ptr) : Bool :=
-  match p.block.bind (m.blocks[·]?) with
-  | some blk => match blk.kind with
-    | .stack | .heap | .mapped _ => true
-    | _ => false
+  match p.block with
+  | some b => match m.blocks[b]? with
+    | some blk => blk.kind.anon
+    | none => false
   | none => false
 
 /-- The address `e - 1` is below the end of a block that the run placed, live or not: natively a
