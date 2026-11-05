@@ -558,7 +558,10 @@ for it, and its invariant (`outerI`, with the quadratic `cnt`) stays hand-writte
 
 The counter may go up or down by 1 (`Zig.add`/`Zig.sub`), under any unsigned test of it that
 moves towards the bound: `x < b` and `x <= b` going up, `x > b` and `x >= b` going down, and
-`x != b` either way (the test's outcome may be either branch: `¬ x < b` repeating is `x >= b`).
+`x != b` either way, with the counter on either side of the test and either branch of an order
+test repeating (`¬ x < b` repeating is `x >= b`; `==` is outside the family, as are a `>= 0` and a
+`<= maxInt` test, which hold until the step wraps). As in S2, the invariant holds at entry only for
+a counter that starts on the repeating side of its exit value or at it; the client proves that.
 The bound may also be the length of a slice parameter (`p.len`) or a cell the loop only reads
 (`*p`, read in every iteration); a read-only cell is owned at its entry value `vₖ`, and a measure
 with it as bound takes `vₖ`. The invariant bounds the counter between its entry value and the

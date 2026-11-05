@@ -22,14 +22,17 @@ from pathlib import Path
 
 
 def spans(proof):
-    """Each theorem's lines in `proof`: from its `theorem` line up to the next unindented line."""
+    """Each theorem's lines in `proof`, 1-based and half-open: from its `theorem` line up to the
+    next unindented line. A name declared twice is an error (a mutant names one theorem)."""
     lines = proof.read_text().splitlines()
     out = {}
     for i, line in enumerate(lines):
         m = re.match(r'theorem (\S+)', line)
         if m:
+            if m.group(1) in out:
+                sys.exit(f'{proof}: two theorems named {m.group(1)}')
             end = next((j for j in range(i + 1, len(lines)) if lines[j][:1] not in ('', ' ')), len(lines))
-            out[m.group(1)] = (i + 1, end)
+            out[m.group(1)] = (i + 1, end + 1)
     return out
 
 
@@ -59,7 +62,12 @@ def run(fixture, ns, work, mutant, theorems):
 
 def main():
     fixture, ns, work = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+    if not os.environ.get('LEAN_PATH'):
+        sys.exit('LEAN_PATH must reach WORK/olean and the library (invgen-fixture.sh sets it)')
     mutants = json.loads((fixture / 'mutants.json').read_text())
+    names = [m['name'] for m in mutants]
+    if not mutants or len(set(names)) != len(names):
+        sys.exit(f'{fixture}/mutants.json: no mutants, or two with one name')
     theorems = spans(fixture / 'Proof.lean')
     missing = [t for m in mutants for t in m['in'] if t not in theorems]
     if missing:
