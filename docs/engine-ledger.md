@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 167 rows, 69 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 169 rows, 70 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -48,9 +48,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [67](#row-67) | updHeads keeps a user head folded only at Qv's top level | fba-reset | `tests/roadmap/alloc-fba/AllocFba/Full.lean` | write `fown` with `fbody` once updHeads keeps a nested user head folded. |
 | [68](#row-68) | WP walk: a side goal whose unknown is fixed by a LATER conjunct is not re-solved | L9 | `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/Mutex.lean` | reorder `workInv` / `workPost` back (the conjunct that fixes k last) once the WP walk retries deferred side goals after their unknowns are assigned. |
 | [69](#row-69) | WP rules are tried on a command with a different head; the failed unification unfolds both generated functions | L9 | `Proofs/Threadsync/Mutex.lean` | drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly. |
-| [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | sync lane | - | delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
-| [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module. |
+| [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module. |
 | [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/RwLock.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone. |
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
@@ -90,6 +89,8 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
 | [fsym-forward-bool-fact](#row-fsym-forward-bool-fact) | fsym does not forward a hint term's Bool-equation fact, so a rule's autoParam guard cannot use it | S6 (#649, futex address validation) | `tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean` | Transitional: once fsym forwards such a fact, delete the `have hw := …` before each `fsym` in SepAuto.WPOsFutex, pass the term in the `fsym` list instead, and close this row. |
 | [fevent-live-exit](#row-fevent-live-exit) | A thread with FEvent's waiter role stays in the event word's live set after its last access | L11f review of PR646 (pass 2, cross-file angle) | - | - |
+| [waitgroup-impl-contract](#row-waitgroup-impl-contract) | No generic wait-group contract (`WaitGroupImpl`) on the full-state logic | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, "What has no replacement yet"). |
+| [mutex-impl-relaxed-witness](#row-mutex-impl-relaxed-witness) | No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock` | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when the witness is in tests and checked by its fixture's check script. |
 
 ## Closed rows
 
@@ -155,6 +156,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [62](#row-62) | A struct access over several parts in a thread | DONE PR #322 (ownsJoin); the hand lemmas were deleted by PR #350 |
 | [63](#row-63) | planShares' split ignores tags | DONE codex/fsym-share-tags: split keyed by (block, tag); regression sep-auto Walk.tags_apart |
 | [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | DONE PR2; PR #354 merged |
+| [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | DONE (L21): deleted with ZigLean/Conc/Spec and MutexSpec. Its relaxed-unlock counterexample against MutexImpl is row mutex-impl-relaxed-witness. |
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | DONE: part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); the page-backed Lists.Open env chore/l4-controls (tests/roadmap/alloc-translated/ListsPage.lean: ext, env_runs, page_spec) |
 | [73](#row-73) | Run-level adequacy to .illegal | DONE: part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B; the page allocator's freed = dead, PageThread.fthread_free). The Controls restatement (chore/l4-controls) needs no run-level theorem: with #77 fixed the kernel evaluates the runs (`.illegal` and the leak) from the start memory |
@@ -1094,11 +1096,11 @@ Deletion plan: drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mute
 <a id="row-69d"></a>
 ### #69d Conc/Spec/MutexToy: witness of the legacy MutexSpec
 
-Status: **open**. Requester: sync lane.
+Status: **closed**. Requester: sync lane.
 
 Note: dead-module row 69 of agent 17; L9 row 69 keeps 69; this one is 69d
 
-Progress: plan recorded PR2
+Progress: DONE (L21): deleted with ZigLean/Conc/Spec and MutexSpec. Its relaxed-unlock counterexample against MutexImpl is row mutex-impl-relaxed-witness.
 
 Request: `Conc/Spec/MutexToy`: witness/counterexample of legacy `MutexSpec` (legacy-to-retire). PLAN: delete together with MutexSpec (docs/proof-framework.md row); restate relaxed-unlock counterexample against MutexImpl if wanted
 
@@ -1133,9 +1135,9 @@ Status: **open**. Requester: os lane.
 
 Progress: plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts
 
-Request: `Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md "Derived from", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed
+Request: `Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md "Derived from", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the full-state futex rules (the `Io` futex slots as `CTriple` rules when those land, docs/thread-specs.md), then the module is absorbed
 
-Deletion plan: move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module.
+Deletion plan: move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module.
 
 <a id="row-72"></a>
 ### #72 PageAllocator as an environment of an open std.mem.Allocator
@@ -1984,3 +1986,25 @@ Note: Not a soundness gap: a thread outside the live set cannot access the word 
 Progress: open
 
 Request: `FEvent.Live g := (wx g ∨ sx g) ∧ ¬ (ph g).Setting` takes the live set from the roles, and the invariant keeps the waiter role (`Inv.wx`, `Inv.wby`; `Inv.toOut` asks `E.wx (G t) → E.wx g`), so a waiter that returned to `out` stays live for good. Scenario: a worker waits and main sets; the worker returns and ends; main joins it and then reads the struct that holds the event with a plain read (or reinitializes it). The read's clock is main's after the join, not below the worker's, so `E.W.Ok m (Live ∘ G)` is false from then on although the program is race-free. WaitGroup (#640) is not affected: its only waiter is main, the reader. Needed: a way out of the live set for a thread that will not access the word again (a protocol-chosen exit, kept by `Inv.wby` through another witness of each `waiting` write), proved generically in `FEvent`.
+
+<a id="row-waitgroup-impl-contract"></a>
+### #waitgroup-impl-contract No generic wait-group contract (`WaitGroupImpl`) on the full-state logic
+
+Status: **open**. Requester: L21 (retirement of ZigLean/Conc/Spec, PR677).
+
+Progress: open
+
+Request: The retired `WaitGroupSpec` was stated for every client (its instance was a hand transcription of `Io.Threaded`'s private `WaitGroup`). On the full-state logic, the same algorithm (0.15.2's generated `Thread.WaitGroup`) is proved only inside one program (`Proofs/Threadsync/WaitGroup.lean`, `waitGroup_spec`/`waitGroup_safe`), as a client of `MutexImpl` and `EventImpl`. Needed: a `WaitGroupImpl` contract (start/finish/wait for every protocol that has the group: the waiter sees every finisher's writes, every token taken, no deadlock) with 0.15.2's `Thread.WaitGroup` proved against it once for every program, the threadsync program a client. 0.16.0 and 0.17.0 have no public `WaitGroup`; `Io.Threaded`'s pool counter joins this when `Io.Threaded` is translated (`IoSpec`).
+
+Deletion plan: Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, "What has no replacement yet").
+
+<a id="row-mutex-impl-relaxed-witness"></a>
+### #mutex-impl-relaxed-witness No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock`
+
+Status: **open**. Requester: L21 (retirement of ZigLean/Conc/Spec, PR677).
+
+Progress: open
+
+Request: The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.
+
+Deletion plan: Closes when the witness is in tests and checked by its fixture's check script.

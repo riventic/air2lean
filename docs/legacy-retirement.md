@@ -27,6 +27,7 @@ The numbered sections are the 2026-10-14 plan, and their tables still list files
 | L10, L11 | open | |
 | L13 final deletion | Sep/{Total,Loop} deleted early (no importer left); Sep/{Triple,Block} wait for stage D-e | #655 |
 | L15 VC layer | done: `vc_gen`, `#vc_extract(_all)`, the `vc_contract` registry, the `ResultProgram` AST and `scripts/vc-report.py` deleted; P02's VCs are `fsym`'s residual goals (`docs/vcs.md`) | #657 |
+| L21 `Conc/Spec` | done: `ZigLean/Conc/Spec/` deleted with its 5 judgments; the replacements and open items are in `docs/thread-specs.md` | #677 |
 
 Stage D-a (section 4) is done.
 
@@ -137,7 +138,7 @@ Findings about the ratchet itself (lane L1):
   `assurance/proof-framework.json`, 2026-10-20): 41 judgments (Sep.Triple `Triple`, Sep.Total
   `Returns/TotalTriple/TotalTripleIn`, Sep.Bounded `TotalTripleWithin`, Sep.Cost `Mem.SameAllocs`, Sep.AllocSpec
   `AllocInv/AllocSpec/Logic`, Conc.Own `TTriple`, Conc.TlsLemmas `TTripleIn`, Conc.Word `BlkStep/Keep/KeepK`, Conc.Lock
-  `Lock/Fits/FitsOn/Step`, Conc.Spec.* (5 specs), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas
+  `Lock/Fits/FitsOn/Step`, Conc.Spec.* (5 specs, deleted L21), Conc.Total (3), Conc.TimedBudget (2), Conc.Clock `StepIn`, Conc.Lemmas
   `Grows`, LockBase `LocsKeep`, Conc.Witness `TLive`, Proofs.Sync.{RwLock,Semaphore} (4), tests: futures `CancelSpec`,
   asm-wrappers `Spec`, claims.Fixture `FWrapped`, sep-full `FTripleCell/FTripleExact`) and 22 tactic entries
   (Automation `sep_frame/sep_normalize`, Wrappers `sep_from/tame_prim`, Full.Conc `conc_norm`, Full.Tame `tame`,
@@ -457,7 +458,7 @@ Consumers to move first (invisible to the ratchet today, listed by L1): Conc/{De
 spawn-failure/Runtime, thread-tuples/ThreadTuples/Proofs (`unroll_sched` tactic, legacy `Lock/Fits/Step`).
 Open decision D-WP: `Proto.WP` is `legacy-to-retire` in the ratchet but all migrated sync proofs (Handoff, Counter) use it with FOwned. Recommended: the maintainer re-statuses
 `Proto.WP` as `target` (it is the all-schedules adequacy engine under `CTriple`, with fsym WP mode as its backend), and retires only `TTriple`, `Owned`, `TlsLemmas`, `Conc.Lock`, the Conc specs
-(`MutexSpec` ...) and `Conc.Total`. Without this decision L12 has no end state.
+(`MutexSpec` ...; deleted, L21) and `Conc.Total`. Without this decision L12 has no end state.
 
 ### L13. Final deletion (see section 4)
 | file | role at the end |

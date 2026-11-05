@@ -926,9 +926,9 @@
   {
    "id": "69d",
    "title": "Conc/Spec/MutexToy: witness of the legacy MutexSpec",
-   "status": "open",
+   "status": "closed",
    "requester": "sync lane",
-   "progress": "plan recorded PR2",
+   "progress": "DONE (L21): deleted with ZigLean/Conc/Spec and MutexSpec. Its relaxed-unlock counterexample against MutexImpl is row mutex-impl-relaxed-witness.",
    "request": "`Conc/Spec/MutexToy`: witness/counterexample of legacy `MutexSpec` (legacy-to-retire). PLAN: delete together with MutexSpec (docs/proof-framework.md row); restate relaxed-unlock counterexample against MutexImpl if wanted",
    "workaround_sites": [],
    "deletion_plan": "delete Conc/Spec/MutexToy together with the legacy MutexSpec (docs/proof-framework.md row); restate the relaxed-unlock counterexample against MutexImpl if wanted.",
@@ -961,9 +961,9 @@
    "status": "open",
    "requester": "os lane",
    "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
-   "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md §4.1), then the module is absorbed",
+   "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the full-state futex rules (the `Io` futex slots as `CTriple` rules when those land, docs/thread-specs.md), then the module is absorbed",
    "workaround_sites": [],
-   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the FutexSpec/CTriple futex rules when those land (docs/thread-io-translation.md section 4.1), then absorb the module."
+   "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module."
   },
   {
    "id": "72",
@@ -1820,6 +1820,26 @@
    "workaround_sites": [],
    "deletion_plan": "",
    "note": "Not a soundness gap: a thread outside the live set cannot access the word (every access rule takes the live-set premise); the gap is what can be proved."
+  },
+  {
+   "id": "waitgroup-impl-contract",
+   "title": "No generic wait-group contract (`WaitGroupImpl`) on the full-state logic",
+   "status": "open",
+   "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
+   "progress": "open",
+   "request": "The retired `WaitGroupSpec` was stated for every client (its instance was a hand transcription of `Io.Threaded`'s private `WaitGroup`). On the full-state logic, the same algorithm (0.15.2's generated `Thread.WaitGroup`) is proved only inside one program (`Proofs/Threadsync/WaitGroup.lean`, `waitGroup_spec`/`waitGroup_safe`), as a client of `MutexImpl` and `EventImpl`. Needed: a `WaitGroupImpl` contract (start/finish/wait for every protocol that has the group: the waiter sees every finisher's writes, every token taken, no deadlock) with 0.15.2's `Thread.WaitGroup` proved against it once for every program, the threadsync program a client. 0.16.0 and 0.17.0 have no public `WaitGroup`; `Io.Threaded`'s pool counter joins this when `Io.Threaded` is translated (`IoSpec`).",
+   "workaround_sites": [],
+   "deletion_plan": "Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, \"What has no replacement yet\")."
+  },
+  {
+   "id": "mutex-impl-relaxed-witness",
+   "title": "No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock`",
+   "status": "open",
+   "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
+   "progress": "open",
+   "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
+   "workaround_sites": [],
+   "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
   }
  ],
  "mechanisms": [
