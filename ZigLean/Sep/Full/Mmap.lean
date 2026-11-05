@@ -1597,8 +1597,8 @@ theorem _root_.Zig.Mem.mremapGrown_step {m : Mem} {hF : Heap} {P : Nat} {b : Blo
     FStepIn hF m (m.mremapGrown P b blk lo n) ∧ m.RevivesOwned (m.mremapGrown P b blk lo n) := by
   refine ⟨(FStepIn.forgetFrom b blk.bytes.size fun blk' h => by
       rw [hb] at h; cases h; exact Nat.le_refl _).trans
-    (FStepIn.setBlock (m := m.forgetFrom b blk.bytes.size) (fun _ h => by cases hb.symm.trans h; rfl)
-      (fun h => ⟨blk, hb, h⟩) fun l _ e _ ⟨blk', h1, h2⟩ => by
+    (FStepIn.setBlock_of (m := m.forgetFrom b blk.bytes.size) hb rfl id
+      fun l _ e _ ⟨blk', h1, h2⟩ => by
         have h1' : m.blocks[b]? = some blk' := by rw [← e]; exact h1
         rw [hb] at h1'; cases h1'
         simp only [Array.size_append]; omega),

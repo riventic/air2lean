@@ -1252,11 +1252,18 @@ theorem FStepIn.setBlock {b : BlockId} {nb : Block}
   cov := Mem.MsgCov.keepFp (fun _ hl _ => hl)
     (fun l hl hpos hin => hin.setBlock fun e => hsz l hl e hpos hin) fun _ he => he
 
+/-- `FStepIn.setBlock` of the block `blk` at `b`: `nb` at `blk`'s address, a `const` global only
+if `blk` is. -/
+theorem FStepIn.setBlock_of {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
+    (ha : nb.addr = blk.addr) (hk : nb.kind = .constGlobal → blk.kind = .constGlobal)
+    (hsz : ∀ l ∈ m.atomics, l.block = b → 0 < l.len → l.InBlock m → l.off + l.len ≤ nb.bytes.size) :
+    FStepIn hF m { m with blocks := m.blocks.set! b nb } :=
+  FStepIn.setBlock (fun _ h => by cases hb.symm.trans h; exact ha) (fun h => ⟨blk, hb, hk h⟩) hsz
+
 /-- `Mem.write` of block `b` of `m` keeps its kind. -/
 theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)
     (bs : Array Byte) : FStepIn hF m (m.write b blk o bs) :=
-  FStepIn.setBlock (fun _ h => by rw [hb] at h; cases h; rfl) (fun h => ⟨blk, hb, h⟩)
-    fun _ _ e _ ⟨blk', h1, h2⟩ => by
+  FStepIn.setBlock_of hb rfl id fun _ _ e _ ⟨blk', h1, h2⟩ => by
     rw [e, hb] at h1; cases h1
     exact Nat.le_trans h2 (writeBytes_size_ge _ _ _)
 
@@ -1580,8 +1587,7 @@ theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
     FStepIn hF m (insertM m li (m.atomics[li]!).msgs.size msg) := by
   rw [insertM_last hb]
   refine (FStepIn.setLoc (M := (m.atomics[li]!).msgs.push msg) (Nat.le_succ _) hnot
-    fun F h hpos x hx => ?_).trans (FStepIn.setBlock (fun _ h => by simp_all)
-      (fun h => ⟨blk, hb, h⟩) fun l _ e _ hin => ?_)
+    fun F h hpos x hx => ?_).trans (FStepIn.setBlock_of hb rfl id fun l _ e _ hin => ?_)
   · rcases Array.mem_push.mp hx with hx | rfl
     · by_cases hi : li < m.atomics.size
       · have hmem : m.atomics[li]! ∈ m.atomics := by

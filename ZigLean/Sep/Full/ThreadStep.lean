@@ -578,8 +578,8 @@ theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size al
 theorem _root_.Zig.FStepIn.kill {m : Mem} {hF : Heap} {b : BlockId} {blk : Block}
     (hb : m.blocks[b]? = some blk) :
     FStepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
-  FStepIn.setBlock (fun _ h => by rw [hb] at h; cases h; rfl) (fun h => ⟨blk, hb, h⟩)
-    fun l _ e _ ⟨blk', h1, h2⟩ => by rw [e, hb] at h1; cases h1; exact h2
+  FStepIn.setBlock_of hb rfl id fun l _ e _ ⟨blk', h1, h2⟩ => by
+    rw [e, hb] at h1; cases h1; exact h2
 
 theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :
     m.NoRevive { m with blocks := m.blocks.set! b { blk with live := false } } :=
