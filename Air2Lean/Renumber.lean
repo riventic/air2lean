@@ -288,7 +288,7 @@ theorem renFrame_setCell (fr : Frame) (k : InstId) (v : Option Value) :
     by_cases hj : j = k
     · subst hj; simp
     · have : ρ j ≠ ρ k := fun e => hj (hρ _ _ e)
-      simp [hj, this, dif_pos (⟨j, rfl⟩ : ∃ i, ρ i = ρ j), choose_eq hρ]
+      simp [hj, this]
   · have hx : x ≠ ρ k := fun e => h ⟨k, e.symm⟩
     simp [dif_neg h, hx]
 
@@ -309,7 +309,7 @@ theorem renEnv_set (env : Env) (j : InstId) (t : TyId) (v : Value) :
     by_cases hi : i = j
     · subst hi; simp
     · have : ρ i ≠ ρ j := fun e => hi (hρ _ _ e)
-      simp [hi, this, dif_pos (⟨i, rfl⟩ : ∃ k, ρ k = ρ i), choose_eq hρ]
+      simp [hi, this]
   · have hx : x ≠ ρ j := fun e => h ⟨j, e.symm⟩
     simp [dif_neg h, hx]
 
@@ -371,7 +371,7 @@ theorem regInst_ren {ρ : InstId → InstId} (hρ : Inj ρ) (a : InstId) (i : In
     rw [regCases_ren hρ a cs.toList, regBody_ren hρ a e.toList,
       renCases_all cs.toList (fun items ranges =>
         items.all (clearOf (ρ a) ·) && ranges.all (fun x => clearOf (ρ a) x.1 && clearOf (ρ a) x.2))]
-    simp [List.all_map, Function.comp_def, clearOf_ren hρ, Array.all_toList]
+    simp [clearOf_ren hρ, Array.all_toList]
   case «try» v b => rw [regBody_ren hρ a b.toList]
 termination_by (sizeOf i, 1)
 decreasing_by
@@ -1064,7 +1064,7 @@ theorem sim_pure {α β : Type} {g : β → α} {a : α} {b : β} (h : a = g b) 
 theorem sim_liftR {α β : Type} (g : β → α) (x : Result β) : Sim ρ g (liftR (g <$> x)) (liftR x) := by
   intro s
   apply StateT.ext; intro m
-  simp only [liftR, StateT.run_lift, StateT.run_bind, StateT.run_pure, StateT.run_map, map_bind,
+  simp only [liftR, StateT.run_lift, StateT.run_bind, StateT.run_pure, map_bind,
     bind_map_left, map_pure, bind_assoc, pure_bind, mapRes]
 
 theorem sim_liftR_eq {α : Type} {x₁ x₂ : Result α} (h : x₁ = x₂) : Sim ρ id (liftR x₁) (liftR x₂) := by
@@ -1166,7 +1166,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
   case case2 => intro i rest env ih hinv hreg; simp only [renBody, execBody]; exact ih hinv hreg
   case case27 =>
     intro s w x el env ih hinv hreg
-    simp only [renCases, execSwitch, List.toList_toArray]
+    simp only [renCases, execSwitch]
     exact ih hinv fun a ha => (hreg a ha).2.1
   case case28 =>
     intro s w x sc more el env ihb ihm hinv hreg
@@ -1174,7 +1174,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
         sc.ranges.toList.all fun (l, h) => clearOf a l && clearOf a h) = true := fun a ha => by
       have := (hreg a ha).2.2; simp only [casesClear, List.all_cons, Bool.and_eq_true] at this
       simp only [Bool.and_eq_true]; exact this.1
-    simp only [renCases, execSwitch, renCtx, caseHit_renFunc, List.toList_toArray]
+    simp only [renCases, execSwitch, renCtx, caseHit_renFunc]
     refine sim_bind (sim_liftR_eq (caseHit_ren hρ hinv s x sc _ hc)) (ok_true _) fun b _ => sim_ite ?_ ?_
     · exact ihb hinv fun a ha => by
         have := (hreg a ha).1; simp only [regCases, Bool.and_eq_true] at this; exact this.1
@@ -1185,7 +1185,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
   case case29 =>
     intro id body env ih hinv hreg
     intro s
-    simp only [execLoop, iteration_ren, List.toList_toArray]
+    simp only [execLoop, iteration_ren]
     exact loop_comm _ _ _ _ (renExit ρ) (renFrame ρ) (sim_iteration c (ih hinv hreg)) (again_ren hρ id) s
   case case3 =>
     intro i rest env index hop v hv ih hinv hreg
@@ -1202,7 +1202,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
     obtain ⟨id, ty, op⟩ := i; simp only at hop; subst hop
     obtain ⟨h1, h2⟩ := RegOk.cons hreg
     simp only [regInst, regUse, Bool.true_and] at h1
-    simp only [renInst, execInst, List.toList_toArray]
+    simp only [renInst, execInst]
     refine sim_bind (ihb hinv h1) (flow _ _ hinv h1) fun e he => ?_
     cases e with
     | br t v =>
@@ -1257,7 +1257,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
       fun a ha => regUse_of_regInst ((RegOk.cons hreg).1 a ha)
     obtain ⟨h1, _⟩ := RegOk.cons hreg
     simp only [regInst, Bool.and_eq_true] at h1
-    simp only [renInst, execInst, renCtx, operand_renFunc, List.toList_toArray]
+    simp only [renInst, execInst, renCtx, operand_renFunc]
     exact sim_bind (sim_liftR_eq (agree_of_clear hρ hinv cv hc).1) (ok_true _) fun w _ =>
       sim_bind (sim_liftR_eq rfl) (ok_true _) fun b _ =>
         sim_ite (iht hinv fun a ha => (h1 a ha).2.1) (ihe hinv fun a ha => (h1 a ha).2.2)
@@ -1270,7 +1270,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
         simp only [regUse, Bool.and_eq_true] at this; exact this
     obtain ⟨h1, _⟩ := RegOk.cons hreg
     simp only [regInst, Bool.and_eq_true] at h1
-    simp only [renInst, execInst, renCtx, operand_renFunc, List.toList_toArray]
+    simp only [renInst, execInst, renCtx, operand_renFunc]
     refine sim_bind (sim_liftR_eq (agree_of_clear hρ hinv v fun a ha => (hu a ha).1).1) (ok_true _)
       fun w _ => ?_
     cases w
@@ -1392,7 +1392,7 @@ theorem execBody_sim : ∀ l env, InvEnv c.func env → RegOk c.func l →
     simp only [regInst, Bool.and_eq_true] at h1
     have he : errUnionOperand c.func (renEnv ρ env) (renVal ρ v) = errUnionOperand c.func env v := by
       simp only [errUnionOperand, operandTy_ren hρ, (agree_of_clear hρ hinv v hc).1]
-    simp only [renInst, execInst, renCtx, errUnionOperand_renFunc, List.toList_toArray]
+    simp only [renInst, execInst, renCtx, errUnionOperand_renFunc]
     refine sim_bind (sim_liftR_eq he) (Q := (cellFree · = true)) (ok_lift ?_) fun w hw => ?_
     · unfold errUnionOperand
       split
