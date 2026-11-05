@@ -33,7 +33,7 @@ partial_fixpoint
 
 end
 
-attribute [zig_run] fact
+attribute [zig_run] fact.eq_def
 
 structure gcdLocals where
   deriving Inhabited
@@ -73,7 +73,7 @@ partial_fixpoint
 
 end
 
-attribute [zig_run] gcd
+attribute [zig_run] gcd.eq_def
 
 structure isOddLocals where
   deriving Inhabited
@@ -129,6 +129,6 @@ partial_fixpoint
 
 end
 
-attribute [zig_run] isEven isOdd
+attribute [zig_run] isEven.eq_def isOdd.eq_def
 
 end Recursion

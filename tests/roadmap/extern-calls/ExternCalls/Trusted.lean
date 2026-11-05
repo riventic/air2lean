@@ -11,6 +11,8 @@ def air2lean_model_0_contract : Zig.External.Contract ((BitVec 32)) (BitVec 32) 
 
 def air2lean_model_0 (p0 : BitVec 32) : Zig.MemM (BitVec 32) := _root_.ExternModel.abs p0
 
+attribute [zig_run] air2lean_model_0
+
 -- Explicit imported-model assumption; reported in air2lean-models.
 axiom air2lean_model_0_evidence : air2lean_model_0_contract.Holds .total [Zig.Error.illegal] .preserves _root_.ExternModel.abs
 

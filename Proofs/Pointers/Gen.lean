@@ -54,7 +54,7 @@ partial_fixpoint
 
 end
 
-attribute [zig_run] addDown
+attribute [zig_run] addDown.eq_def
 
 structure addToLocals where
   deriving Inhabited

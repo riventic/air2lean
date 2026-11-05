@@ -16,6 +16,8 @@ def air2lean_model_0_contract : Zig.External.Contract ((Zig.Ptr) × (BitVec 32))
 
 def air2lean_model_0 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Bool) := Zig.External.claim p0 .write *> _root_.CallbackModel.visit (p0, p1)
 
+attribute [zig_run] air2lean_model_0
+
 def air2lean_model_0_footprint : Zig.External.Footprint ((Zig.Ptr) × (BitVec 32)) where
   reads := fun _ => []
   writes := fun args => [Zig.External.Region.block args.1]

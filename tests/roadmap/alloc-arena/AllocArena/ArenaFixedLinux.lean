@@ -3094,7 +3094,7 @@ partial_fixpoint
 
 end
 
-attribute [zig_run] heap_ArenaAllocator_alloc.loop375 heap_ArenaAllocator_alloc heap_ArenaAllocator_alloc.loop31
+attribute [zig_run] heap_ArenaAllocator_alloc.loop375 heap_ArenaAllocator_alloc.eq_def heap_ArenaAllocator_alloc.loop31.eq_def
 
 structure mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7Locals where
   deriving Inhabited

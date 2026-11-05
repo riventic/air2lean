@@ -179,11 +179,15 @@ def air2lean_model_0_contract : Zig.External.Contract ((BitVec 32)) (BitVec 64) 
 
 def air2lean_model_0 (p0 : BitVec 32) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.close p0
 
+attribute [zig_run] air2lean_model_0
+
 theorem air2lean_model_0_evidence : air2lean_model_0_contract.Holds .total [Zig.Error.illegal] .tracked _root_.Zig.Env.Linux.close := _root_.Zig.Env.Linux.closeEvidence
 
 def air2lean_model_1_contract : Zig.External.Contract ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) (BitVec 64) := _root_.Zig.Env.Linux.readContract
 
 def air2lean_model_1 (p0 : BitVec 32) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.read (p0, p1, p2)
+
+attribute [zig_run] air2lean_model_1
 
 def air2lean_model_1_footprint : Zig.External.Footprint ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) where
   reads := fun _ => []
