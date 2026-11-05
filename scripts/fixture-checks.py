@@ -94,11 +94,11 @@ NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--
 # unit whose runner is not installed, since a check script may send the runner's errors to a file.
 RUNNER = re.compile(r'AIR2LEAN_\w+_RUN')
 # Scheduling (`schedule`): a request is the largest of a unit's last HINT_RUNS sampled peaks times
-# MEM_MARGIN (sampling every 2 s misses short spikes), at least MEM_FLOOR_MIB; the requests of
-# the running units stay within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the
-# guard enforces on their sum.
+# MEM_MARGIN (sampling every 2 s misses short spikes), at least MEM_FLOOR_MIB. In an elastic
+# admission (scripts/fixture-checks.sh, scripts/full-build.sh) each unit is a sub-admission of
+# build-guard charged its request (`admitted`); elsewhere the requests of the running units stay
+# within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the guard enforces on their sum.
 HINT_RUNS, MEM_MARGIN, MEM_FLOOR_MIB, MEM_SHARE = 5, 1.5, 1024, 0.85
-GUARD_RSS_MIB = 24000  # the units' guard on its own (`guard_rss_mib`)
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -307,20 +307,32 @@ def _stage(unit, scratch):
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
 
 
-def guard_rss_mib():
-    """The default limit of the units' guard (scripts/fixture-checks.sh): GUARD_RSS_MIB, at most
-    the machine's guard budget (AIR2LEAN_BUILD_MEM_MIB, build-guard.py `default_budget_mib`) and
-    the admission of an enclosing guard (build-guard.py INHERIT; scripts/full-build.sh), which
-    the units' guard inherits and which refuses a larger limit (inheritance_refused)."""
-    limits = [GUARD_RSS_MIB, GUARD.default_budget_mib()]  # the budget may be fractional
-    try:
-        grant = json.loads(os.environ.get(GUARD.INHERIT) or 'null')
-    except ValueError:
-        grant = None
-    limit = grant.get('rss_mib') if isinstance(grant, dict) else None
-    if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > 0:
-        limits.append(int(limit))
-    return int(min(limits))
+def elastic_grant():
+    """The enclosing guard's admission when it is elastic (build-guard.py --elastic: the units'
+    guard, scripts/fixture-checks.sh), else None."""
+    grant = GUARD.read_grant()
+    return grant if grant and grant.get('elastic') and isinstance(grant.get('lock'), str) else None
+
+
+def admitted(command, request_mib, grant):
+    """A unit's command as a sub-admission of the elastic guard: it holds its own slots, charged
+    its request, while it runs, and runs again at build-guard's PROCESS_MIB if it outgrows them.
+    It keeps the units' guard's jobs and Lean threads (which the sub-admission sets again), samples
+    as often as the hints were measured (`write_hints`)."""
+    return [sys.executable, '-B', str(ROOT / 'scripts/build-guard.py'),
+            *GUARD.part_options(request_mib, grant['lock'], 2), '--cwd', str(ROOT),
+            '--jobs', os.environ.get('AIR2LEAN_JOBS') or '1',
+            '--lean-threads', os.environ.get('LEAN_NUM_THREADS') or '1', '--', *command]
+
+
+def lean_processes_env(grant):
+    """The environment of the proof-fixture package's build in an elastic admission: each of its
+    Lean processes is a sub-admission charged its module's measured peak (build-guard.py
+    --lean-processes; the package holds the largest modules, 9 GB and more). Only that build:
+    the assurance tools refuse a LEAN_SYSROOT overlay."""
+    sysroot = subprocess.run(['lean', '--print-prefix'], cwd=ROOT, check=True, capture_output=True,
+                             text=True).stdout.strip()
+    return os.environ | GUARD.lean_processes_env(sysroot, Path(grant['lock']))
 
 
 def hints_path():
@@ -428,9 +440,11 @@ def prepare_shared(log: Path):
     an up-to-date check), and the compiled assurance extractor (assumptions.py `prepared_tool`).
     Returns the failure, or None."""
     try:
+        grant = elastic_grant()
+        env = lean_processes_env(grant) if grant else None
         with open(log, 'wb') as out:
-            status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
-    except OSError as error:
+            status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, env=env, stdout=out, stderr=subprocess.STDOUT).returncode
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
         return 'the proof-fixture package: %s' % error
     if status:
         return 'the proof-fixture package: fixtures.py build exited %d (log %s)%s' % (status, log, log_tail(log))
@@ -475,12 +489,7 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
                         'wall time by process kind (scripts/par.py) to this JSON file')
-    parser.add_argument('--guard-rss-mib', action='store_true',
-                        help='print the default limit of scripts/fixture-checks.sh\'s guard (`guard_rss_mib`)')
     a = parser.parse_args(argv)
-    if a.guard_rss_mib:
-        print(guard_rss_mib())
-        return 0
     tree = Tree()
     units = [u for u in discover(tree)
              if not a.only or any(t in u['name'] or any(t in c for c in u['checks']) for t in a.only)]
@@ -515,12 +524,18 @@ def main(argv=None):
                 if env is not None:  # one build: the units' audits share their kernel replays
                     env['AIR2LEAN_FIXTURE_REPLAY_CACHE'] = str(scratch / 'kernel-replay.json')
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
-            order, requests = schedule(units, a.mem_mib)
+            grant = elastic_grant()
+            order, requests = schedule(units, GUARD.PROCESS_MIB if grant else a.mem_mib)
             for job, request in zip(jobs, requests):
-                job.mem_mib = request
-            workers, budget = par.workers(a.jobs, None, len(jobs)), int(par.memory_budget_mib() * MEM_SHARE)
-            print('fixture-checks: running %d units, up to %d at once within %d MiB'
-                  % (len(units), workers, budget), flush=True)
+                if grant:  # each unit admitted by build-guard, beside every other workload
+                    job.argv = admitted(job.argv, request, grant)
+                else:
+                    job.mem_mib = request
+            workers = par.workers(a.jobs, None, len(jobs))
+            budget = None if grant else int(par.memory_budget_mib() * MEM_SHARE)
+            print('fixture-checks: running %d units, up to %d at once, %s'
+                  % (len(units), workers, 'each its own sub-admission' if grant else 'within %d MiB' % budget),
+                  flush=True)
             stats, statuses, before = [], None, None
             try:
                 # The units' audits share one toolchain-runtime digest, hashed again when they end

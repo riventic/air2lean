@@ -18,7 +18,10 @@ python3 scripts/build-guard.py \
 The default lock is `$HOME/.cache/air2lean/build.lock`; `--lock` overrides
 `AIR2LEAN_BUILD_LOCK`. Lock files are never removed, so waiting coordinators retain
 the same flock inodes. A workload that is not admitted fails with exit 75 without starting a
-child. `--lock-wait SECONDS` permits bounded waiting. A nested guard in the same checkout
+child. `--lock-wait SECONDS` permits bounded waiting; without it a guard waits
+`AIR2LEAN_LOCK_WAIT` seconds (the scripts' common setting; the remote host's jobs set it), else
+none, so a guard a script starts without the option (the proof-receipt audit) waits like the
+script's others instead of failing at the first busy moment. A nested guard in the same checkout
 also fails or waits (one build per workspace): wrap a whole workload once. Advisory locking
 coordinates participating callers; unguarded builds are outside its control. Existing
 `zig-patch/build.sh` already uses `-j1` for its compiler bootstrap.
@@ -31,11 +34,8 @@ The machine's guarded workloads share one memory budget, `--mem-budget-mib` (def
 and the guard stops it above `--rss-mib`, so the admitted workloads stay within the budget
 (up to the sampling limits below). On the 64 GB development Mac that is 48 slots: four
 single-process builds (`--rss-mib 11000`) run at once instead of one. `scripts/full-build.sh`
-sizes itself from the slots free when it starts (`free_mib`): max(1, min(cores, budget / 2 /
-11000, free / 11000)) Lean processes (Lake's LEAN_NUM_THREADS), with `--rss-mib` 11000 per
-process, in one admission for all its phases. That is at most 2 processes and 22 slots on that
-Mac. It never asks for more than half the machine, and it asks for at most what was free, so it
-does not hold the admission queue for slots that other running builds hold.
+and `scripts/fixture-checks.sh` are [elastic workloads](#elastic-workloads): each Lean process
+and fixture unit holds slots of its own, charged its measured need, only while it runs.
 
 - One build per Lake workspace: Lake has no build lock, so a workload holds
   `<lock>.d/ws-<digest>` of the git top level of `--cwd` (else `--cwd`) exclusively. Check trees
@@ -48,7 +48,15 @@ does not hold the admission queue for slots that other running builds hold.
   still runs alone.
 - Arrival order: acquirers queue on `<lock>.d/queue`; the one holding it (the head) collects its
   slots while later ones wait, so a large workload is not starved by small ones. The workspace
-  lock is taken before the queue, so waiting for one's own checkout holds up nobody.
+  lock is taken before the queue, so waiting for one's own checkout holds up nobody. Normal
+  guards take the queue in the order they entered it (an entry in `<lock>.d/queued/`,
+  `first_in_line`), not by whoever polls the free queue lock first. That race let the parts of
+  an elastic workload (several always waiting, each followed by the next) keep the queue from
+  lane jobs: on the remote host (2026-11-05) a full build's 6-slot part was the head while three
+  lane jobs waited and 86% of the memory was free. A guard counts in line only while it is in
+  its turn and alive (it refreshes its entry; one not refreshed for 3 s is passed over), so one
+  behind a ticket, too large beside the elastic bases, or stopped holds up nobody. Ticket holders
+  keep their own order (drain tickets below), and guards of older checkouts still race.
 - Backfill: a head that holds all the free slots and waits for running workloads to free the
   rest leaves the machine partly idle. On the remote build host (2026-11-03), 11-slot heads
   waited up to 20 minutes while 18 GB were unused. So a head short of its slots holds only a
@@ -144,6 +152,107 @@ does not hold the admission queue for slots that other running builds hold.
   and workspace, and the charge: `declared_slots`, `overcommit`, `charge_mib`, `history_runs`,
   `why_declared` (why it holds its declared slots), `preempted_at_available_mib` and
   `backfilled`; `lock_wait_seconds` the time to admission.
+
+## Elastic workloads
+
+A full build used to hold one admission of 11000 MiB per Lean process for all its phases: on
+the remote build host (17000 MiB budget) that was one Lean process at a time, a serial build,
+and 11000 MiB held for the whole health run (about 3 h) while its processes mostly used 1–3 GB.
+Lane jobs queued meanwhile on an idle host. An elastic workload instead holds slots by need:
+
+- **Base.** `--elastic --rss-mib B` holds B (full-build.sh and fixture-checks.sh: 4096 MiB) for
+  the part of the workload that is not a sub-admission: Lake itself, the scripts, the assurance
+  extractor's build, the canon phase (about 2 GB). Its guard enforces B on that part only.
+- **Plain fallback.** `build-guard.py --elastic-plan B` prints how the two scripts run: elastic
+  with base B (at most an enclosing elastic grant's), or one plain admission where the budget
+  leaves no room for a base beside one 11000 MiB process (at most 11000 MiB, one Lean thread) or
+  inside a guard that is not elastic (its whole limit).
+- **Parts.** A guard in it with `--sub-admission` holds slots of its own while it runs, charged
+  `--charge-mib` (its measured need), which is also its limit with no excess; `--rss-mib` is its
+  declared bound, at most 11000 (`PROCESS_MIB`, under the 12 GiB
+  per-process watchdog). A part over its charge is stopped and run again once at that bound
+  (`stopped_run` in its report; for a part without `--log` the stopped run's output is
+  dropped). The enclosing guards leave a running part's processes out of their sums.
+- **Lean processes.** `--lean-processes SYSROOT` (SYSROOT: `lean --print-prefix`) makes every
+  Lean elaboration of the workload a part: Lake takes its Lean from a sysroot of links to the
+  toolchain whose `bin/lean` runs each elaboration of a `.lean` file as
+  `build-guard.py --lean-process` (`LAKE_OVERRIDE_LEAN`, `LEAN_SYSROOT`, `LEAN`). `lake env`
+  puts the toolchain's own `bin` first on `PATH`, so a script elaborates a file with
+  `lake env "$LEAN" FILE` (scripts/lean-deps.py), not `lake env lean`. Lake traces no sysroot
+  path (its Lean trace is the githash), so the same modules are up to date with or without it,
+  and the guard of a process is silent unless it fails (Lake keeps a process's output in its
+  traces and replays it). Server, worker, `--run`, `--stdin` and `--deps` runs go straight to the
+  real `lean`. Each process runs on one Lean thread, charged
+  1.3 x its module's measured peak (a guess for a changed or new module: Measured peaks, below).
+  Lake runs up to
+  `--lean-threads` of them at once (full-build.sh: min(8, cores)), and the slots they hold, not
+  the thread count, bound their memory. The assurance tools refuse a `LEAN_SYSROOT` overlay, so
+  only builds use it: the root, tests/diff and standalone-file phases and the proof-fixture
+  package's build in fixture-checks.
+- **Measured peaks** (`scripts/lean-peaks.py`). Each successful elaboration records the
+  kernel's high-water mark of its Lean process (`peak_process_rss_kib`, exact, not sampled) for
+  its module's path and source SHA-256, the last 3, in `<lock>.d/lean-peaks.json` on the machine
+  (replaced whole on each record). `assurance/lean-peaks.json` seeds a machine that has not
+  measured a module yet. It is generated (`python3 -B scripts/lean-peaks.py write`, from the
+  store and the table before it; never hand-edited). It is measurement data, not a derived file:
+  `scripts/regen.sh` does not rewrite it (every run would differ) and no check fails on it. A
+  module whose source changed is charged 1.3 x the peak of its earlier source (the row `write`
+  keeps, with that source's SHA-256, until the module is measured again): a guess, safe because
+  the charge is the process's limit, so a module that grew costs one retry at 11000 MiB. A module
+  never measured is charged 1.3 x the table's 95th-percentile peak (nearest rank;
+  `charge_peak_kib`), computed from the committed table on each charge, not a constant (2000 MiB
+  over the 803 rows of 2026-11-05, so a 2600 MiB charge; 11000 MiB only for an empty table). The
+  same kind of guess: a new module that outgrows it (about one in twenty, if new modules are like
+  the measured ones) costs one retry at 11000 MiB.
+  Before, every changed or new module was charged 11000 MiB, and `write` dropped a changed
+  module's row: after one main merge (2026-11-05) 49 rows went and 223 of 977 tracked modules had
+  none, so the remote host's after-run met one 11-slot queue head after another, with lane jobs
+  waiting beside them on a host 86% free; with rows kept, the 174 modules never measured still
+  made such heads (an unmeasured cross-target tutorial file while two lane jobs waited, 83%
+  free). A refresh is an ordinary PR after a build on the remote host. `lean-peaks.py top` lists
+  the largest. `AIR2LEAN_LEAN_REPORTS=DIR` keeps each process's guard report (full-build.sh:
+  `<logs>/lean-processes`).
+- **Fixture units.** In an elastic admission each fixture-check unit is a part charged its
+  measured peak (scripts/fixture-checks.py `schedule`; 11000 MiB unmeasured), with the units'
+  guard's jobs and Lean threads.
+- **Waiting.** A part waits for slots like any guard, up to 8 h (`PART_TIMEOUT`, the full
+  build's own `--timeout`), and so do the full build's phases: on a busy host its processes
+  wait, they do not fail.
+- **No deadlock.** The bases of the admitted elastic workloads leave 11000 MiB of the budget
+  free (`<lock>.d/elastic/`, checked under `<lock>.d/register`; an elastic guard without room
+  waits outside the queue, holding nothing, and a base too large ever to fit fails with
+  `elastic_too_large`). A part of a workload none of whose parts runs takes the workload's
+  lifeline: a ticket in `<lock>.d/lifeline-tickets/`, served behind the merge tickets (a merge
+  guard waits for no running workload, so it is admitted and ends) and ahead of every exclusive
+  ticket (which waits for every running workload, the elastic one too). The lifeline reserves,
+  it does not drain. Behind no drain ticket, the first lifeline leads the normal lane as its
+  queue head. The exceptions are normal guards that began to wait before it and whose weight
+  fits beside the elastic bases: such a guard can be admitted while every elastic workload
+  waits, so it keeps or takes the head first. Every other normal head gives the queue back to the
+  lifeline. Normal guards backfill beside the lifeline's reservation as beside any head (Backfill
+  above). So a lifeline waits for finitely many heads, each admitted in bounded time, and a
+  large normal guard is not sent back by every later lifeline. Each elastic workload always has a
+  part running or coming up, and that part finds 11000 MiB that no base holds once its ramp has
+  passed and the running workloads, backfilled ones included, end. Its ticket is kept out of
+  `<lock>.d/merge/` because guards of older checkouts read every ticket there as a drain ticket.
+  On the remote host (2026-11-05) a drain-style lifeline of an unmeasured part (11 slots, 20 of
+  28 held) made 7 lane jobs wait 8 to 19 minutes with 4.7 of 24 GB in use. Those older guards
+  do not see `lifeline-tickets/`, though, and would keep the queue from a lifeline (a large
+  head or an exclusive one, until its `--lock-wait`). So a lifeline whose turn it is mirrors its
+  ticket in `merge/` under a name for time 0, which they drain behind first. It does so only
+  while it does not hold the queue and no queue head that knows lifelines publishes its
+  reservation: new heads mark their `heads/` entry `lifeline_aware`. New guards ignore the
+  mirror, and it is withdrawn as soon as that no longer holds. So older guards drain only while
+  one of them stands in the lifeline's way, never while the lifeline waits for a head that may
+  lead (the first version of the mirror did, and made two lane jobs wait beside 10 free slots on
+  the remote host). The mirror is a workaround for those older checkouts only: it goes once
+  none of them runs a guard (ledger `guard-lifeline-mirror`: the date and the check). A part
+  of a running workload waits like a normal guard: the
+  workload yields memory to lane jobs between its processes. A background workload (the health
+  run) gets one part at a time ahead of others through its lifeline; its other parts wait for an
+  idle moment as before.
+- **Safety stays.** The 12 GiB watchdog, every guard's sampled limit and the MemAvailable
+  backstop are unchanged; a part never overcommits (its charge is its limit).
 
 A private lock lane (another `AIR2LEAN_BUILD_LOCK` to skip the queue) escapes the budget: the
 machine overcommits memory and thrashes, and every build gets slower. Do not use one; lower
