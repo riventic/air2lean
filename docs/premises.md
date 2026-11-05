@@ -872,7 +872,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### SEM-04 — Total-correctness statements
 
 - Kind: meaning.
-- Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
+- Statement: `FTotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
   than SEM-03 and only cover their stated finite clients. An `FTotalTriple` that holds `B`
   credits additionally bounds the steps (`Zig.tick`) of the run by `B`
@@ -882,8 +882,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Full.Cost`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
-- Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
+- Derived from: `ZigLean.Sep.Full.Logic`, `ZigLean.Sep.Full.Loop`, `ZigLean.Sep.Full.Cost`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
+- Sources: `ZigLean/Sep/Full/Logic.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
 ### SEM-05 — Model step and allocation counts are not time or memory measurements
@@ -939,7 +939,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
   (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
   `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
-  total-correctness statement shows room, `Mem.allocOk`, e.g. with `TotalTripleIn`). A proposal
+  total-correctness statement shows room, as STK-01 describes). A proposal
   inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-18,
   STK-02). The
   full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
@@ -980,7 +980,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
   which excludes every other error) reads `.stackOverflow` as it reads a run that does not
   terminate; a total-correctness statement excludes it, so one that allocates shows room
-  (legacy `TotalTripleIn`; in the full-state logic, under a budget the stack-depth token of
+  (under a budget the stack-depth token of
   `docs/sep-full-state.md` §Stack depth, `sp t S D`, from `FTotalTriple.run_init_stack`; without
   a budget, which has no room resource, the start-memory run premise of `FTriple.run_init_ok`).
   Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
