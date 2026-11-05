@@ -6,9 +6,11 @@ import Air2Lean.Revision
 
 The offline, untrusted invariant generator of `docs/invariant-synthesis.md`. It reads the loops
 of a translated module (the `Zig.loop` bodies `F.loopN` with their `F.againN`), as the elaborated
-terms that `fsym` walks, and writes their invariants and measures as plain `def`s into a Lean
-file (`Inv.lean`). It adds no tactic, judgment or command: the proofs that use the definitions are
-`fsym` walks that the kernel checks, so a wrong or too weak invariant makes a proof fail, never a
+terms that `fsym` walks, and writes their invariants `F.loopN.inv`, measures `F.loopN.meas` and
+exit posts `F.loopN.post` as `def`s into a Lean file (`Inv.lean`), registered with `@[fsym_inv]`:
+at the loop, `fsym` applies its loop rule with them (P09-E4), so a proof of the function that runs
+the loop names no loop lemma. It adds no tactic, judgment or command: the proofs that use the
+definitions are `fsym` walks that the kernel checks, so a wrong or too weak invariant makes a proof fail, never a
 wrong proof. A loop outside the families below gets no definition: the generator records why in
 the file's header and on stderr, and a proof that needs it does not build (fail closed).
 
@@ -27,7 +29,9 @@ Families (layer 2 of the design: numeric facts and measures over the variables o
   value it exits at (`b`, or one past `b` for `<=`/`>=`, with the fact that the step there does
   not wrap), states each written cell as `vₖ + cₖ * d` from its entry value `vₖ` (`d` the
   iterations so far), and carries the no-overflow fact `vₖ + cₖ * n < 2 ^ w` (`n` all
-  iterations) that the checked adds need. The measure is the iterations left. A body that takes
+  iterations) that the checked adds need. The measure is the iterations left. The exit post is the
+  exit's label, the other locals at their entry values, the counter at its exit value and each
+  written cell at `vₖ + cₖ * n` (the invariant with no iteration left). A body that takes
   a step (`Zig.tick`) runs in the plain mode, so the invariant carries `plain`. The invariant
   holds at entry only for a counter that starts on the repeating side of its exit value (or at
   it): a client proves that, and a loop entered past it is not an instance.
@@ -341,6 +345,8 @@ structure Counted where
   /-- The cells the body accesses, in order, with their increments (`0` for a cell it only
   reads). -/
   cells : Array (Cell × Nat)
+  /-- The exits' labels: the constructors of the exit type that an exiting iteration returns. -/
+  exits : Array Name
   plain : Bool
 
 /-- `R` includes the bound: the counter passes it by one before the loop exits. -/
@@ -393,7 +399,13 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     unless (base == .local x && (k == 0 || k == step)) ||
         cells.any (fun (cell, n) => cell.stored && base == .cell cell.param && 0 ≤ k && k ≤ n) do
       throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
-  return { counter := x, rel, bound := b, down, cells, plain := paths.any (·.st.tick) }
+  let mut labels := #[]
+  for p in exits do
+    let some l := (match p.res with | .val e => e.constName? | _ => none)
+      | throwError "an exit that is not a constructor of the exit type"
+    unless labels.contains l do labels := labels.push l
+  return { counter := x, rel, bound := b, down, cells, exits := labels,
+           plain := paths.any (·.st.tick) }
 
 /-- `n` without the namespace `ns`. -/
 def relName (ns n : Name) : String :=
@@ -402,7 +414,7 @@ def relName (ns n : Name) : String :=
 /-- Names the generated text binds next to the loop's parameters. -/
 def reserved (n : Name) : Bool :=
   match n with
-  | .str .anonymous s => ["s", "s0", "v", "up", "pts", "plain", "FAssn", "Zig", "BitVec"].contains s ||
+  | .str .anonymous s => ["s", "s0", "r", "v", "up", "pts", "plain", "FAssn", "Zig", "BitVec"].contains s ||
       (s.startsWith "v" && s.length > 1 && (s.toList.drop 1).all Char.isDigit)
   | _ => false
 
@@ -415,6 +427,7 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
       let ty ← inferType code
       unless ty.isAppOfArity `Zig.MM 2 do throwError "not a loop body of `Zig.MM`"
       let some structName := (ty.getArg! 0).constName? | throwError "locals that are not a structure"
+      let some exitName := (ty.getArg! 1).constName? | throwError "an exit type that is not named"
       unless isStructure (← getEnv) structName do throwError "locals that are not a structure"
       for x in xs do
         let n := (← x.fvarId!.getDecl).userName
@@ -455,6 +468,10 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
           let some k := boundCell? | throwError "a bound cell"
           pure (s!"v{k}.toNat", s!"*{← pname i}")
         | _ => throwError "a bound"
+      -- the bound at the locals `sv` (`bound` is at `s`)
+      let boundAt (sv : String) := match c.bound with
+        | .local y => s!"{sv}.{y}.toNat"
+        | _ => bound
       -- `X` the counter, `X0` its entry value: the loop counts `delta` iterations so far, `total`
       -- in all, and its measure is `left`.
       let X := s!"s.{x}.toNat"
@@ -471,6 +488,8 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
         else
           (s!"{X} - {X0}", s!"{bound}{one} - {X0}", s!"{bound}{one} - {X}", #[s!"{X0} ≤ {X}", s!"{X} ≤ {bound}{one}"])
       facts := facts ++ range
+      -- `total` at the exit's locals `r.2`
+      let totalPost := if c.down then s!"{X0}{one} - {boundAt "r.2"}" else s!"{boundAt "r.2"}{one} - {X0}"
       if c.incl then
         let ty ← withLocalDeclD `s (.const structName []) fun s =>
           inferType (mkApp (.const (structName ++ x) []) s)
@@ -483,7 +502,17 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
           throwError "a test `{x} {c.rel.text} {boundName}` that holds until the counter's step wraps"
         facts := facts.push noWrap
       let scaled (k : Nat) (t : String) := if k == 1 then s!"({t})" else s!"{k} * ({t})"
+      -- The exit post: the exit's label, the other locals at their entry values, the counter at
+      -- its exit value and each written cell after all `total` iterations.
+      let XR := s!"r.2.{x}.toNat"
+      let label := " ∨ ".intercalate (c.exits.map (s!"r.1 = {relName ns ·}")).toList
+      let mut post := #[if c.exits.size == 1 then label else s!"({label})"]
+      for f in fields do
+        if f != x then post := post.push s!"r.2.{f} = s0.{f}"
+      post := post.push <|
+        if c.down then s!"{XR}{one} = {boundAt "r.2"}" else s!"{XR} = {boundAt "r.2"}{one}"
       let mut owned := #[]
+      let mut ownedPost := #[]
       let mut doc := #[]
       for h : k in [0:c.cells.size] do
         let (cell, inc) := c.cells[k]
@@ -491,22 +520,31 @@ def genLoop (ns body again : Name) : MetaM (Except String String) := do
         let ty := tys[k]!
         if !cell.stored then
           owned := owned.push s!"up (pts {p} {cell.align} v{k})"
+          ownedPost := ownedPost.push s!"up (pts {p} {cell.align} v{k})"
           doc := doc.push s!"\n`v{k}` is `*{p}`, which the loop only reads."
           continue
         facts := facts.push s!"v{k}.toNat + {scaled inc total} < 2 ^ {cell.width}"
-        owned := owned.push <|
-          s!"(FAssn.ex fun v : {ty} => ⟪v.toNat = v{k}.toNat + {scaled inc delta}⟫ ⋆ up (pts {p} {cell.align} v))"
+        let after (n : String) :=
+          s!"(FAssn.ex fun v : {ty} => ⟪v.toNat = v{k}.toNat + {scaled inc n}⟫ ⋆ up (pts {p} {cell.align} v))"
+        owned := owned.push (after delta)
+        ownedPost := ownedPost.push (after totalPost)
         doc := doc.push s!"\n`v{k}` is `*{p}` there, which goes up by {inc} per iteration."
-      if c.plain then owned := owned.push "plain"
+      if c.plain then
+        owned := owned.push "plain"
+        ownedPost := ownedPost.push "plain"
       let name := relName ns body
-      let factText := " ∧\n      ".intercalate facts.toList
-      let ownedText := " ⋆\n    ".intercalate owned.toList
-      let bodyText := if owned.isEmpty then s!"⟪{factText}⟫" else s!"⟪{factText}⟫ ⋆\n    {ownedText}"
+      let assn (facts owned : Array String) :=
+        let factText := " ∧\n      ".intercalate facts.toList
+        let ownedText := " ⋆\n    ".intercalate owned.toList
+        if owned.isEmpty then s!"⟪{factText}⟫" else s!"⟪{factText}⟫ ⋆\n    {ownedText}"
       return s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
         by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n\
-        def {name}.inv {binders}(s0 : {loc}) {entry}(s : {loc}) : FAssn :=\n  {bodyText}\n\n\
+        @[fsym_inv] def {name}.inv {binders}(s0 : {loc}) {entry}(s : {loc}) : FAssn :=\n  {assn facts owned}\n\n\
         /-- The measure of `{name}`: the iterations left. -/\n\
-        def {name}.meas {binders}{measEntry}(s : {loc}) : Nat :=\n  {left}\n"
+        @[fsym_inv] def {name}.meas {binders}{measEntry}(s : {loc}) : Nat :=\n  {left}\n\n\
+        /-- The exit post of `{name}`: the loop exits with `r`, after all iterations. -/\n\
+        @[fsym_inv] def {name}.post {binders}(s0 : {loc}) {entry}(r : {relName ns exitName} × {loc}) : FAssn :=\n  \
+        {assn post ownedPost}\n"
     pure (.ok text)
   catch ex => pure (.error (← ex.toMessageData.toString))
 
@@ -555,7 +593,8 @@ def generate (module ns : Name) (generator inputs : Json) :
       loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
       skipped := skipped.push (loop, why)
   let body := s!"import {module}\n\
-    import ZigLean.Sep.Full.Ghost\n\n\
+    import ZigLean.Sep.Full.Ghost\n\
+    import ZigLean.Sep.Full.AutoAttr\n\n\
     /-!\n\
     Generated by `air2lean-invgen` (`docs/invariant-synthesis.md`) from `{module}`: do not edit.\n\
     Untrusted: the proofs that use these definitions are checked by the kernel.\n\
