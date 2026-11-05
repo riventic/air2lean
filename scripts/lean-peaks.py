@@ -8,12 +8,10 @@ A --lean-processes workload (scripts/full-build.sh, docs/build-budgets.md#elasti
 every Lean elaboration as its own sub-admission of build-guard, charged 1.3 x the module's
 measured peak and stopped and run again at the declared bound (build-guard PROCESS_MIB, 11000
 MiB) when it outgrows that. A measurement belongs to one source text: the module's path in the
-workspace and the SHA-256 of its file. A module whose source changed is charged 1.3 x the peak
-of its earlier source until it ran once more (a guess: the retry at the declared bound covers a
-module that grew), one never measured 1.3 x the table's 95th-percentile peak (the same guess;
-the declared bound for an empty table). (A change in its imports keeps the measurement, for the
-same reason.) Charging the declared bound for every changed or new module made each one an
-11-slot queue head on the shared remote host, with lane jobs waiting beside it.
+workspace and the SHA-256 of its file. A changed or new module is charged by a guess until it
+ran once more (`charge_peak_kib`; a change in its imports keeps the measurement). Charging the
+declared bound for every changed or new module made each one an 11-slot queue head on the
+shared remote host, with lane jobs waiting beside it.
 
 The measurements come from two places, in this order:
 - this machine's store, `<lock>.d/lean-peaks.json` beside build-guard's lock: each successful
@@ -96,17 +94,18 @@ def charge_peak_kib(store: Path, workspace: Path, module: str, sha: str | None) 
     measured, the TYPICAL quantile (nearest rank) of the committed table's peaks. None for an
     empty table: the declared bound. A guess is safe because the charge is the process's limit:
     a module that outgrows it costs one retry at the declared bound."""
-    measured, committed = read_store(store), read_table(workspace)
-    entry, row = measured.get(module), committed.get(module)
+    entry = read_store(store).get(module)
     entry_kib = max(entry['peaks_kib']) if entry else None
-    row_kib = row['peak_mib'] * 1024 if row else None
     if entry and entry['sha256'] == sha:
-        return entry_kib
+        return entry_kib  # the warm case: the table is not read
+    committed = read_table(workspace)
+    row = committed.get(module)
+    row_kib = row['peak_mib'] * 1024 if row else None
     if row and row['sha256'] == sha:
         return row_kib
-    if entry or row:
+    if entry_kib or row_kib:
         return entry_kib or row_kib
-    peaks = sorted(row['peak_mib'] for row in committed.values())
+    peaks = sorted(other['peak_mib'] for other in committed.values())
     return peaks[math.ceil(TYPICAL * len(peaks)) - 1] * 1024 if peaks else None
 
 
