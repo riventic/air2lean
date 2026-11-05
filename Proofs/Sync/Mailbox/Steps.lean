@@ -199,7 +199,7 @@ theorem inv_pr {G : ThreadId → Gh} {m : Mem} {r : Res} {k k' : Nat}
       have hs := hu.shape
       refine hs.prod (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl)
         (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl) (fun ht => ?_)
-        (fun u e => by show (upd G 1 _ u).2 = (upd G 1 _ u).2; rw [upd_ne _ _ e, upd_ne _ _ e])
+        (fun _ e => upd_ne₂ e)
       have := hs.took ht
       simp [upd_self, gO, Ph.posted] at this
 
@@ -212,7 +212,7 @@ theorem inv_fin {G : ThreadId → Gh} {m : Mem} {r : Res}
       refine hu.shape.prod (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl)
         (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl)
         (fun _ => by show (upd G 1 _ 1).2.ph.posted = true; rw [upd_self]; rfl)
-        (fun u e => by show (upd G 1 _ u).2 = (upd G 1 _ u).2; rw [upd_ne _ _ e, upd_ne _ _ e])
+        (fun _ e => upd_ne₂ e)
 
 /-! ## No deadlock -/
 
@@ -317,7 +317,7 @@ theorem wait_U : ∀ (G : ThreadId → Gh) rX m h₁ h₂ r sh sc, (S K).cnt (up
       (by show (upd G 0 _ 0).2.ph.isMain = true; rw [upd_self]; rfl)
       (by show (upd G 0 _ 0).2.ph ≠ _; rw [upd_self]; nofun)
       (fun _ => by show (upd G 0 _ 1).2.ph.posted = true; rw [upd0_1]; exact hp1)
-      (fun u e => by show (upd G 0 _ u).2 = (upd G 0 _ u).2; rw [upd_ne _ _ e, upd_ne _ _ e])
+      (fun _ e => upd_ne₂ e)
   · by_cases e : u = 0
     · subst e; rw [upd_self] at h; cases h
     · rw [upd_ne _ _ e] at h ⊢; have := hu.swt u; rw [upd_ne _ _ e] at this; exact this h
@@ -409,7 +409,7 @@ theorem post_U : ∀ (G : ThreadId → Gh) rX m h₁ h₂ sh sc,
   · refine hu.shape.prod (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl)
       (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl)
       (fun _ => by show (upd G 1 _ 1).2.ph.posted = true; rw [upd_self]; rfl)
-      (fun u e => by show (upd G 1 _ u).2 = (upd G 1 _ u).2; rw [upd_ne _ _ e, upd_ne _ _ e])
+      (fun _ e => upd_ne₂ e)
   · by_cases e : u = 1
     · subst e; rw [upd_self] at h; cases h
     · rw [upd_ne _ _ e] at h ⊢; have := hu.swt u; rw [upd_ne _ _ e] at this; exact this h

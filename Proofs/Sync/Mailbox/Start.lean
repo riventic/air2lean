@@ -491,7 +491,7 @@ theorem inv_joins {G : ThreadId → Gh} {m : Mem} {r : Res}
       (by show (upd G 0 _ 0).2.ph.isMain = true; rw [upd_self]; rfl)
       (by show (upd G 0 _ 0).2.ph ≠ .pre; rw [upd_self]; simp [gO])
       (fun _ => hs.took (by show (upd G 0 _ 0).2.ph.took = true; rw [upd_self]; rfl))
-      (fun u e => by show (upd G 0 _ u).2 = (upd G 0 _ u).2; rw [upd_ne _ _ e, upd_ne _ _ e])
+      (fun _ e => upd_ne₂ e)
 
 theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM : Res}
     (hi : (proto K).inv (upd G 0 (gO rM { ph := .joins })) m)

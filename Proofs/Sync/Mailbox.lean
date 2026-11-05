@@ -59,9 +59,7 @@ theorem Shape.one {Y : ThreadId → X} {m : Mem} (h : Shape Y m) {u : ThreadId}
   · refine Classical.byContradiction fun hne => ?_
     by_cases h0 : u = 0
     · subst h0
-      have : ∀ p : Ph, p.isMain = true → p.isProd = false := fun p => by
-        cases p <;> simp [Ph.isProd, Ph.isMain]
-      rw [this _ hm] at hp; cases hp
+      rw [Ph.isMain_of_isProd hp] at hm; cases hm
     · rw [hu u (by simp only [ThreadId] at *; omega)] at hp; cases hp
 
 /-- **The producer**: its code, then its end. -/

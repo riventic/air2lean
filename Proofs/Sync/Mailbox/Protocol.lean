@@ -41,7 +41,16 @@ def isProd : Ph → Bool
   | .pr _ | .pd | .fin => true
   | _ => false
 
+/-- No place is both `main`'s and the producer's. -/
+theorem isMain_of_isProd {p : Ph} (h : p.isProd = true) : p.isMain = false := by
+  cases p <;> simp_all [isProd, isMain]
+
 end Ph
+
+/-- Two updates of the same thread agree at every other thread (the ghost value's second part). -/
+theorem upd_ne₂ {G : ThreadId → Gh} {t u : ThreadId} {g g' : Gh} (e : u ≠ t) :
+    (upd G t g u).2 = (upd G t g' u).2 := by
+  rw [upd_ne _ _ e, upd_ne _ _ e]
 
 theorem X.eq_empty {x : X} (hp : x.ph = .none) (hc : x.c = .out) (hs : x.s = .out) : x = {} := by
   cases x; simp only at hp hc hs; subst hp hc hs; rfl
@@ -343,9 +352,7 @@ theorem Shape.zero {Y : ThreadId → X} {m : Mem} (h : Shape Y m) {u : ThreadId}
     rw [hu u (by simp only [ThreadId] at *; omega)] at hp; exact absurd hp (by decide)
   · by_cases h1 : u = 1
     · subst h1
-      have : ∀ p : Ph, p.isProd = true → p.isMain = false := fun p => by
-        cases p <;> simp [Ph.isProd, Ph.isMain]
-      rw [this _ hpr] at hp; exact absurd hp (by decide)
+      rw [Ph.isMain_of_isProd hpr] at hp; exact absurd hp (by decide)
     · refine Classical.byContradiction fun hne => ?_
       rw [hu u (by simp only [ThreadId] at *; omega)] at hp; exact absurd hp (by decide)
 
