@@ -618,7 +618,7 @@ def compiled_inputs_changes(old: list, new: list, limit: int = 10) -> str:
     def flat(records):
         entries = {}
         for selected, resolved, exists, files in records:
-            entries[selected] = f'resolved={resolved} exists={exists}'
+            entries[selected + ' (root)'] = f'resolved={resolved} exists={exists}'
             entries.update((path, f'link={link!r} sha256={content or "-"}') for path, link, content in files)
         return entries
     before, after = flat(old), flat(new)
@@ -956,6 +956,14 @@ def checked_modules(module: str, roots: list[Path]) -> list[str]:
     return sorted(found)
 
 
+def orphan_error(olean: Path, package: Path) -> ValueError:
+    """An olean of `package` whose module has no source there: Lake can build it no more, and
+    `leanchecker` would check it (lean-deps.py `orphan_outputs`)."""
+    return ValueError(f"{olean}: compiled module without a source in {package} (deleted since it was "
+                      "built); scripts/full-build.sh removes such outputs "
+                      "(python3 -B scripts/lean-deps.py --prune-orphans)")
+
+
 def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) -> list[str] | None:
     """Lake targets that put each module's olean and dependency trace into a generated module's
     trace without importing it (`@pkg/+M:olean`, `@pkg/+M:depTrace`): an import would run the
@@ -977,10 +985,8 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
             return None
         package, name, sources = owners[owner]
         if not deps.has_source(sources, stem):
-            raise ValueError(f"{owner / relative}: compiled module without a source in {package} (deleted "
-                             "since it was built); scripts/full-build.sh removes such outputs "
-                             "(python3 -B scripts/lean-deps.py --prune-orphans)")
-        needs += [f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
+            raise orphan_error(owner / relative, package)
+        needs +=[f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
     return needs
 
 
@@ -1607,9 +1613,12 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
         # audits too): an audited module's, and each one `leanchecker` checks below it
         # (`checked_modules`: an olean of an older build that no import reaches). A Lake receipt
         # needs all of them, so a stale one would be rebuilt during the replay, after the compiled
-        # inputs are bound (`validate_inputs`). An orphan (no source) is refused by `module_needs`.
-        checked = sorted({c for m in lake_modules for c in checked_modules(m, [built])
-                          if (ROOT / (c.replace(".", "/") + ".lean")).is_file()})
+        # inputs are bound (`validate_inputs`). An orphan (no source) fails here, on either path.
+        checked = sorted({c for m in lake_modules for c in checked_modules(m, [built])})
+        sources = lean_deps().package_sources(ROOT)
+        for module in checked:
+            if not lean_deps().has_source(sources, module.replace(".", "/")):
+                raise orphan_error(built / (module.replace(".", "/") + ".olean"), ROOT)
         run(["lake", "--rehash", "build", "--no-build", *checked])
     lake_inputs = library_compiled_inputs(ROOT)
     cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)

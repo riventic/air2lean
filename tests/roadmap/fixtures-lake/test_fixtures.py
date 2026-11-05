@@ -352,7 +352,7 @@ class ReplayFreshness(unittest.TestCase):
     `Lib` (`checked_modules`), also `Lib.Extra`, which `Lib` does not import. A stale one fails
     the trace check before the compiled inputs are bound, rather than being checked as it is or
     rebuilt by a Lake receipt during the replay (which then failed with "canonical Lake compiled
-    inputs changed during kernel replay")."""
+    inputs changed during kernel replay"). An orphan one (no source) fails there too."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="air2lean-replay-freshness-test.")
@@ -395,6 +395,11 @@ class ReplayFreshness(unittest.TestCase):
         self.assertEqual(olean.read_bytes(), before)  # the audit built nothing
         self.build("Lib.Extra")
         self.assertEqual(self.audit(), ("pass", "up-to-date"))
+
+    def test_orphan_olean_below_an_audited_module_fails_before_the_replay(self):
+        self.extra.unlink()  # Lib.Extra's olean has no source any more: Lake cannot build it
+        with self.assertRaisesRegex(ValueError, "Lib/Extra.olean: compiled module without a source"):
+            self.audit()
 
 
 if __name__ == "__main__":
