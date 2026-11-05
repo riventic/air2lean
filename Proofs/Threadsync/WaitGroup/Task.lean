@@ -1,0 +1,352 @@
+import Proofs.Threadsync.WaitGroup.Start
+import Proofs.Threadsync.ThreadMutex
+import Proofs.Threadsync.Event
+
+/-!
+# A task of `waitGroup` (full-state logic)
+
+EXPERIMENT SKELETON.
+-/
+
+open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Threadsync
+
+namespace Threadsync.WG
+
+attribute [local irreducible] Proto.WP
+
+/-- The setter after its finish (it read 3), before its `set`. -/
+def gS (rp : Res) (fc : VClock) : Gh := (⟨.gone, rp, rnil⟩, { ph := .st, fc := fc, sx := true })
+
+/-- A task after a finish that did not read 3. -/
+def gN (rp : Res) (fc : VClock) : Gh := (⟨.gone, rp, rnil⟩, { ph := .fin, fc := fc })
+
+/-- The setter at its end. -/
+def gE (rp : Res) (fc : VClock) : Gh := (⟨.gone, rp, rnil⟩, { ph := .fin, fc := fc, sx := true })
+
+/-! ## A task's places before its finish -/
+
+theorem Ph.main_task {p : Ph} (h1 : p.isMain = true) (h2 : p.isTask = true) : False := by
+  cases p <;> simp [Ph.isMain, Ph.isTask] at h1 h2
+
+/-- **The threads' shape after a task moves to another task's place.** -/
+theorem Shape.task {Y : ThreadId → X} {m : Mem} {t : ThreadId} {x : X} (h : Shape Y m)
+    (ht : (Y t).ph.isTask = true) (hx : x.ph.isTask = true) : Shape (upd Y t x) m := by
+  obtain ⟨h0, hm, h3, hc⟩ := h
+  have t3 : t < 3 := Nat.lt_of_not_le fun h => by rw [h3 t h] at ht; exact absurd ht (by decide)
+  have h3' : ∀ u, 3 ≤ u → upd Y t x u = {} := fun u hu => by
+    rw [upd_ne _ _ (ne_of_lt3 hu t3)]; exact h3 u hu
+  rcases lt3 t3 with rfl | rfl | rfl
+  · exact (Ph.main_task hm ht).elim
+  · have e0 : upd Y 1 x 0 = Y 0 := upd_ne _ _ (by decide)
+    have e2 : upd Y 1 x 2 = Y 2 := upd_ne _ _ (by decide)
+    refine ⟨h0, by rw [e0]; exact hm, h3', ?_⟩
+    rw [e0, e2, upd_self]
+    rcases hc with ⟨-, -, c, -⟩ | ⟨a, b, c, -, f⟩ | ⟨a, b, -, d, f, g⟩
+    · rw [c] at ht; exact absurd ht (by decide)
+    · exact .inr (.inl ⟨a, b, c, hx, f⟩)
+    · exact .inr (.inr ⟨a, b, hx, d, f, g⟩)
+  · have e0 : upd Y 2 x 0 = Y 0 := upd_ne _ _ (by decide)
+    have e1 : upd Y 2 x 1 = Y 1 := upd_ne _ _ (by decide)
+    refine ⟨h0, by rw [e0]; exact hm, h3', ?_⟩
+    rw [e0, e1, upd_self]
+    rcases hc with ⟨-, -, -, d⟩ | ⟨-, -, -, -, f⟩ | ⟨a, b, c, -, f, g⟩
+    · rw [d] at ht; exact absurd ht (by decide)
+    · rw [f] at ht; exact absurd ht (by decide)
+    · exact .inr (.inr ⟨a, b, c, hx, f, g⟩)
+
+/-- Two places of a thread that `U` reads alike (all but the place in the code itself). -/
+structure XEq (x y : X) : Prop where
+  e : x.e = y.e
+  fc : x.fc = y.fc
+  sx : x.sx = y.sx
+  fd : x.ph.fd = y.ph.fd
+  wa : x.ph.wa = y.ph.wa
+  st : (x.ph = .st) = (y.ph = .st)
+  fin : (x.ph = .fin) = (y.ph = .fin)
+
+theorem XEq.refl (x : X) : XEq x x := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- A task before its finish: in or before its lock, holding the mutex, or after its store. -/
+def Ph.pre3 : Ph → Bool
+  | .lk | .hl | .un => true
+  | _ => false
+
+/-- Two places of a task before its finish, with the same event place, clock and role. -/
+theorem XEq.pre3 {x y : X} (hx : x.ph.pre3 = true) (hy : y.ph.pre3 = true) (he : x.e = y.e)
+    (hfc : x.fc = y.fc) (hsx : x.sx = y.sx) : XEq x y := by
+  refine ⟨he, hfc, hsx, ?_, ?_, ?_, ?_⟩ <;>
+  · revert hx hy; cases x.ph <;> cases y.ph <;> simp [Ph.pre3, Ph.fd, Ph.wa]
+
+/-- **`U` after a change of the threads' places that `U` reads alike** (`XEq`), at the same
+memory, with `main`'s place kept, the lock's places kept, the shape and the event's invariant. -/
+theorem U_congr {G G' : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m)
+    (hX : ∀ u, XEq (G' u).2 (G u).2) (h0 : (G' 0).2 = (G 0).2)
+    (hP : ∀ u, (G' u).1.ph = (G u).1.ph) (hsh : Shape (fun u => (G' u).2) m)
+    (hE : E.Inv L G' m) : U G' rX m := by
+  refine ⟨hsh, hu.rest, hu.blk, hu.wg.anti fun u h => ?_, hu.ev.anti fun u h => ?_, hE, ?_,
+    fun u h => ?_, fun u h => ?_, fun h0' h1 h2 => ?_, fun j hj hs => ?_, hu.one,
+    fun u h1 h2 => ?_, fun u h => ?_, fun u h => ?_, fun u h => ?_, fun u v h1 h2 => ?_,
+    fun e he hb hk hl ho => ?_, fun h => ?_, hu.q⟩
+  · unfold WLive at h ⊢; rw [← (hX u).fd]; exact h
+  · change (G' u).2.ph.fd = false ∨ ((G' u).2.ph.wa = true ∨ ((G' u).2.sx = true ∧
+      (G' u).2.ph = .st)) ∧ ¬ (G' u).2.e.Setting at h
+    change (G u).2.ph.fd = false ∨ ((G u).2.ph.wa = true ∨ ((G u).2.sx = true ∧
+      (G u).2.ph = .st)) ∧ ¬ (G u).2.e.Setting
+    rw [(hX u).fd, (hX u).wa, (hX u).sx, (hX u).st, (hX u).e] at h; exact h
+  · show (newest WG m).Val _
+    have : wgv (G' 0).2 (G' 1).2 (G' 2).2 = wgv (G 0).2 (G 1).2 (G 2).2 := by
+      unfold wgv X.fdn; rw [h0, (hX 1).fd, (hX 2).fd]
+    rw [this]; exact hu.gv
+  · rw [(hX u).fd] at h; rw [(hX u).fc]; exact hu.gw u h
+  · rw [(hX u).sx] at h
+    rw [h0, (hX 1).fd, (hX 2).fd, (hX u).e, (hX 1).fc, (hX 2).fc]; exact hu.sto u h
+  · rw [h0] at h0'; rw [(hX 1).fd] at h1; rw [(hX 2).fd] at h2
+    obtain ⟨u, hu'⟩ := hu.last3 h0' h1 h2; exact ⟨u, by rw [(hX u).sx]; exact hu'⟩
+  · rw [(hX 1).fc, (hX 2).fc]
+    obtain ⟨⟨u, h1, h2⟩, h3, h4⟩ := hu.isw j hj hs
+    exact ⟨⟨u, by rw [(hX u).sx]; exact h1, by rw [(hX u).e, (hX u).fin]; exact h2⟩, h3, h4⟩
+  · rw [(hX u).sx] at h1; rw [(hX u).fin] at h2; exact hu.sfin u h1 h2
+  · rw [(hX u).fd] at h; rw [hP u]; exact hu.lg u h
+  · rw [hP u]; exact hu.out3 u h
+  · rw [(hX u).wa] at h; exact hu.wa0 u h
+  · rw [(hX u).sx] at h1; rw [(hX v).sx] at h2; exact hu.sx1 u v h1 h2
+  · rcases hu.attr e he hb hk hl ho with h | ⟨u, hu12, h⟩ | h
+    · exact .inl h
+    · exact .inr (.inl ⟨u, hu12, by unfold bnd at h ⊢; rw [(hX u).fd, (hX u).fc]; exact h⟩)
+    · exact .inr (.inr h)
+  · rw [h0] at h; rw [(hX 1).fd, (hX 2).fd, (hX 1).fc, (hX 2).fc]
+    obtain ⟨a, b, c, d, f, k⟩ := hu.done h
+    exact ⟨a, b, c, d, f, fun u hs => by
+      rw [(hX u).sx] at hs; rw [(hX u).e, (hX u).fin]; exact k u hs⟩
+
+/-- **A task before its finish moves to another such place** (its lock's return, its store), at
+the same memory, keeping its lock place, out of the event's code. -/
+theorem U_task {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g : Gh} (hu : U G rX m)
+    (hp : (G t).2.ph.pre3 = true) (hp' : g.2.ph.pre3 = true) (he : g.2.e = .out)
+    (he' : (G t).2.e = .out) (hfc : g.2.fc = (G t).2.fc) (hsx : g.2.sx = (G t).2.sx)
+    (hph : g.1.ph = (G t).1.ph) : U (upd G t g) rX m := by
+  have hx : XEq g.2 (G t).2 := XEq.pre3 hp' hp (he.trans he'.symm) hfc hsx
+  have htk : ∀ {p : Ph}, p.pre3 = true → p.isTask = true := fun {p} h => by
+    cases p <;> simp [Ph.pre3, Ph.isTask] at h ⊢
+  have ht0 : t ≠ 0 := fun e => by
+    subst e; exact Ph.main_task hu.shape.2.1 (htk hp)
+  have hX : ∀ u, XEq (upd G t g u).2 (G u).2 := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self]; exact hx
+    · rw [upd_ne _ _ e]; exact XEq.refl _
+  refine U_congr hu hX (by rw [upd_ne _ _ (Ne.symm ht0)]) (fun u => ?_) ?_ ?_
+  · by_cases e : u = t
+    · subst e; rw [upd_self]; exact hph
+    · rw [upd_ne _ _ e]
+  · rw [upd_snd]; exact Shape.task hu.shape (htk hp) (htk hp')
+  · exact hu.einv.relabel (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact he.trans he'.symm)
+      (fun h => absurd (by rw [upd_self]; exact he) h)
+      (fun h => by
+        have h' : (G t).2.ph.wa = true := h
+        rw [upd_self]; show g.2.ph.wa = true; rw [hx.wa]; exact h')
+      (fun h => by
+        have h' : (G t).2.sx = true ∧ (G t).2.ph = .st := h
+        rw [upd_self]; show g.2.sx = true ∧ g.2.ph = .st; rw [hx.sx, hx.st]; exact h')
+
+/-- `R` reads only the threads' stores. -/
+theorem R_congr {Y Y' : ThreadId → X} {r : Res} (h1 : (Y' 1).cnt = (Y 1).cnt)
+    (h2 : (Y' 2).cnt = (Y 2).cnt) (h : R Y r) : R Y' r := by
+  unfold R at h ⊢; rw [h1, h2]; exact h
+
+/-- **The lock's invariant after a change of `t`'s places outside the lock** (the same lock
+place, part and resource; the same store of the counter). -/
+theorem L_relabel {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g₀ g₁ : Gh}
+    (hL : L.Inv (upd G t g₀) rX m) (h1 : g₁.1 = g₀.1) (hc : g₁.2.cnt = g₀.2.cnt) :
+    L.Inv (upd G t g₁) rX m := by
+  have hcu : ∀ u, (upd G t g₁ u).2.cnt = (upd G t g₀ u).2.cnt := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self, upd_self]; exact hc
+    · rw [upd_ne _ _ e, upd_ne _ _ e]
+  have := hL.relabel (t := t) (g := g₁) (by rw [upd_self]; show g₁.1.ph = g₀.1.ph; rw [h1])
+    (by rw [upd_self]; show g₁.1.part = g₀.1.part; rw [h1])
+    (by rw [upd_self]; show g₁.1.held = g₀.1.held; rw [h1])
+    (fun r hR => by
+      rw [upd_upd]
+      exact R_congr (Y := fun u => (upd G t g₀ u).2) (Y' := fun u => (upd G t g₁ u).2)
+        (hcu 1) (hcu 2) hR)
+  rwa [upd_upd] at this
+
+/-- **A task after its `lock`**: it holds the mutex at `hl`. -/
+theorem inv_hl {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {rp rL : Res}
+    (hi : proto.inv (upd G t (gH rp rL { ph := .lk })) m) :
+    proto.inv (upd G t (gH rp rL { ph := .hl })) m := by
+  obtain ⟨rX, hL, hu⟩ := hi
+  refine ⟨rX, L_relabel hL rfl rfl, ?_⟩
+  have := U_task (t := t) (g := gH rp rL { ph := .hl }) hu (by rw [upd_self]; rfl) rfl rfl
+    (by rw [upd_self]; rfl) (by rw [upd_self]; rfl) (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+  rwa [upd_upd] at this
+
+/-! ## The holder's steps on the counter -/
+
+/-- **A native step of `t` framed by the lock's word and the protocol's rest** (the holder's step,
+`FLock.Fits.wp_hold`) keeps `U` with `t`'s new ghost value at the same places: the lock's
+invariant after it pins the block and the cells of the two words (`cell_eq`). -/
+theorem U_frame {G G'' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
+    (hu : U G rX m) (hc : m.current = t) (hng : (G t).1.ph ≠ .gone)
+    (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hL : L.Inv G'' rX m')
+    (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) : U (upd G t g) rX m' := by
+  obtain ⟨rB, hB, hBoff, hrX⟩ := hu.rest
+  have hbk' : BlkOk m' := blk_of (hrX ▸ hL) hB rfl
+  have hcs : ∀ l, BoxW l → m'.heap l = m.heap l := by
+    rintro ⟨b, x⟩ ⟨h0, h1⟩
+    simp only at h0 h1; subst h0
+    refine cell_eq hu.blk hbk' hL (by omega) ?_
+    rw [hrX]; simp only [FHeap.union_apply]
+    rw [cellsAt_of (W := BoxW) ⟨rfl, h1⟩, hBoff _ ⟨rfl, h1⟩, Option.or_none]
+  have hcov : ∀ l, BoxW l → (rsum (L.wordR m) rX).heap.erase l ≠ none :=
+    fun l hl => frame_box hu.rest hl (box_live hu hl)
+  have hnG : ∀ l, WG.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => by rw [hcs l (wg_box hl)]
+  have hnE : ∀ l, EV.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => by rw [hcs l (ev_box hl)]
+  exact U_own hu hs hc hng (hu.rest.congr hcs) hbk'
+    (hu.wg.fstep hs (fun l hl => hcov l (wg_box hl)) hnG)
+    (hu.ev.fstep hs (fun l hl => hcov l (ev_box hl)) hnE)
+    (Word.hist_fstep hu.wg hs (fun l hl => hcov l (wg_box hl)) hnG)
+    (Word.hist_fstep hu.ev hs (fun l hl => hcov l (ev_box hl)) hnE)
+    (hu.einv.fresh.fstep hs (fun x h1 h2 => hcov _ (ev_box ⟨rfl, h1, h2⟩))
+      (fun i l hl => (hu.ev.loc i l hl).1)) hX hph
+
+/-- **The holder's load and store of the counter** keep `U` (the obligation of
+`FLock.Fits.wp_hold`): its step at `hl` (`U_frame`), then its next place, `hl` (a load) or `un`
+(the store). The places first: the walk tries the candidate places by them. -/
+theorem U_hold {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {rp rL r : Res}
+    {x₀ x₁ : X} (hx : x₀ = { ph := .hl } ∧ (x₁ = { ph := .hl } ∨ x₁ = { ph := .un }))
+    (hu : U (upd G t (gH rp rL x₀)) rX m) (hc : m.current = t)
+    (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hL : L.Inv G' rX m') :
+    U (upd G t (gH rp r x₁)) rX m' := by
+  obtain ⟨rfl, hx₁⟩ := hx
+  have h1 := U_frame (g := gH rp r { ph := .hl }) hu hc (by rw [upd_self]; nofun) hs hL
+    (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
+  rw [upd_upd] at h1
+  have h2 := U_task (t := t) (g := gH rp r x₁) h1 (by rw [upd_self]; rfl)
+    (by rcases hx₁ with rfl | rfl <;> rfl) (by rcases hx₁ with rfl | rfl <;> rfl)
+    (by rw [upd_self]; rfl) (by rw [upd_self]; rcases hx₁ with rfl | rfl <;> rfl)
+    (by rw [upd_self]; rcases hx₁ with rfl | rfl <;> rfl) (by rw [upd_self]; rfl)
+  rwa [upd_upd] at h2
+
+/-- A task's store counts at most once. -/
+theorem cnt_le1 (x : X) : x.cnt ≤ 1 := by unfold X.cnt; split <;> omega
+
+theorem cnt1_le {Y : ThreadId → X} {m : Mem} (_ : Shape Y m) : (Y 1).cnt ≤ 1 := cnt_le1 _
+theorem cnt2_le {Y : ThreadId → X} {m : Mem} (_ : Shape Y m) : (Y 2).cnt ≤ 1 := cnt_le1 _
+
+theorem cnt_hl : ({ ph := .hl } : X).cnt = 0 := rfl
+/-- The store of the counter (`hl` to `un`), on either side of the sum (the task's place in
+`R`'s sum). -/
+theorem cnt_un_l (n : Nat) : ({ ph := .un } : X).cnt + n = ({ ph := .hl } : X).cnt + n + 1 := by
+  show 1 + n = 0 + n + 1; omega
+theorem cnt_un_r (n : Nat) : n + ({ ph := .un } : X).cnt = n + ({ ph := .hl } : X).cnt + 1 := rfl
+
+section Sync
+
+variable (mi : MutexImpl Tgt) (ei : EventImpl Tgt)
+
+theorem wp_lockT (hLc : L.c = mi.c) {p : Ptr} (hp : p = L.ptr) (io : Io) {t : ThreadId}
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res} (hpP : rp.Plain)
+    (hi : proto.inv (upd G t (gO rp { ph := .lk })) m) :
+    proto.WP t (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ rL, proto.inv (upd G' t (gH rp rL { ph := .hl })) m') G m d :=
+  WP.mono (fun _ _ _ _ ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, inv_hl hi'⟩)
+    (mi.lock_wp fitsL rfl hp hLc t (gO rp { ph := .lk }) rfl ⟨rfl, nofun⟩ hpP.unmetered io G m d hi)
+
+theorem wp_unlockT (hLc : L.c = mi.c) {p : Ptr} (hp : p = L.ptr) (io : Io) {t : ThreadId}
+    {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp rL : Res}
+    (hi : proto.inv (upd G t (gH rp rL { ph := .un })) m) (hc : m.current = t) :
+    proto.WP t (mi.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+      proto.inv (upd G' t (gO rp { ph := .un })) m') G m d :=
+  mi.unlock_wp fitsL rfl hp hLc t (gH rp rL { ph := .un }) rfl ⟨rfl, nofun⟩ io G m d hi hc
+
+theorem wp_setT {p : Ptr} (hp : p = EV.ptr) (io : Io) {t : ThreadId} {G : ThreadId → Gh} {m : Mem}
+    {d : Nat} {rp : Res} {fc : VClock} (hi : proto.inv (upd G t (gS rp fc)) m) :
+    proto.WP t (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      proto.inv (upd G' t (gE rp fc)) m') G m d := sorry
+
+end Sync
+
+theorem wp_finRmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m : Mem} {n : Nat}
+    {rp : Res} (hi : proto.inv (upd G t (gO rp { ph := .un })) m)
+    {Q : BitVec 64 × σ → (ThreadId → Gh) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
+      ((old = 3 ∧ proto.inv (upd G₁ t (gS rp (m'.clocks[t]!))) m') ∨
+       ((old = 2 ∨ old = 4 ∨ old = 5) ∧ proto.inv (upd G₁ t (gN rp (m'.clocks[t]!))) m')) →
+      Q (old, s) G₁ m' k) :
+    proto.WP t ((atomicRmwC .sub false .acqRel 8 bPtr (2 : BitVec 64) : CM Tgt σ (BitVec 64)).run s)
+      Q G m n := sorry
+
+/-- A `debug.assert` whose condition holds is a pure step. -/
+theorem debugAssert_run {c : Bool} (h : c = true) (m : Mem) :
+    (StateT.lift (debug_assert c) : MemM Unit).run m = pure ((), m) := by
+  subst h; rfl
+
+variable [Zig.Os.HasEnv]
+
+theorem finish_spec {t : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res}
+    (hi : proto.inv (upd G t (gO rp { ph := .un })) m) (hc : m.current = t) :
+    proto.WP t (Thread_WaitGroup_finish bPtr) (fun _ G' m' _ => m'.current = t ∧
+      ∃ g, proto.fin g ∧ proto.inv (upd G' t g) m') G m d := by
+  unfold Thread_WaitGroup_finish
+  fsym [WP.liftMem_pure (projI _ _) rfl, fitsL.wp_tick_plain, wp_finRmw,
+    WP.liftMem_pure (debugAssert_run _ _) rfl, wp_setT resetEvent rfl ⟨⟩]
+
+/-! ## A task -/
+
+set_option maxHeartbeats 800000 in
+/-- **A task** (thread 1 or 2, at `lk` with a plain part `rp`): `lock`, the counter's load, `+ 1`
+and store (the holder's steps, `FLock.Fits.wp_hold`, at `hl` and to `un`), `unlock`, and the
+group's `finish` (`finish_spec`); it ends `gone` at `fin`, out of the event's code. The walk splits
+on the thread (the counter's sum reads both tasks' stores). -/
+theorem task_spec {u : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res} (hp : rp.Plain)
+    (_hu : u = 1 ∨ u = 2) (hi : proto.inv (upd G u (gO rp { ph := .lk })) m) (hc : m.current = u) :
+    proto.WP u (task bPtr) (fun _ G' m' _ => m'.current = u ∧
+      ∃ g, proto.fin g ∧ proto.inv (upd G' u g) m') G m d := by
+  unfold task
+  fsym [WP.liftMem_pure (projI _ _) rfl, fitsL.wp_tick_plain, wp_lockT threadMutex rfl rfl ⟨⟩ hp,
+    wp_unlockT threadMutex rfl rfl ⟨⟩, fitsL.wp_hold (g' := fun r => gH rp r { ph := .hl }),
+    fitsL.wp_hold (g' := fun r => gH rp r { ph := .un }), U_hold, cnt1_le, cnt2_le, cnt_un_l,
+    cnt_un_r, cnt_hl, Nat.zero_add, Nat.add_zero, finish_spec]
+
+omit [Zig.Os.HasEnv] in
+/-- **A task's end** (`QKid`), for any ghost value at the protocol's end. -/
+theorem qkid_fin {G : ThreadId → Gh} {m : Mem} {d : Nat} {u : ThreadId} (hu : 0 < u) {g : Gh}
+    (hg : proto.fin g) (hi : proto.inv (upd G u g) m) : proto.QKid u () G m d := by
+  refine ⟨g, hi, hg, fun _ => ?_⟩
+  obtain ⟨rX, -, hU⟩ := hi
+  exact joinedAll_of_main (spawners hU.shape) hu
+
+omit [Zig.Os.HasEnv] in
+theorem dispatch_task (p : Ptr) : dispatch (Tgt.task p) = (fun _ => ()) <$> task p := rfl
+
+/-- **A spawned thread runs a task** (the protocol's `init`: the `producer` and `work` targets are
+not this program's), from its place `lk` to its end. -/
+theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId)
+    (G : ThreadId → Gh) (m : Mem) (d : Nat) (hu : 0 < u) (hgu : G u = g) (hi : proto.inv G m) :
+    proto.WP u (dispatch tgt) (proto.QKid u) G { m with current := u } d := by
+  cases tgt with
+  | task p =>
+    obtain ⟨rfl, rp, hpP, rfl⟩ := hg
+    have hu12 : u = 1 ∨ u = 2 := by
+      obtain ⟨rX, -, hU⟩ := id hi
+      have ht : (G u).2.ph.isTask = true := by rw [hgu]; rfl
+      obtain ⟨-, hm, h3, -⟩ := hU.shape
+      have hu3 : u < 3 := Nat.lt_of_not_le fun h => by
+        have := h3 u h; change (G u).2 = {} at this; rw [this] at ht; exact absurd ht (by decide)
+      rcases lt3 hu3 with rfl | h | h
+      · exact absurd hu (by decide)
+      · exact .inl h
+      · exact .inr h
+    rw [dispatch_task]
+    refine WP.map (WP.mono ?_ (task_spec G _ d (Res.plain_of hpP) hu12
+      (by rw [show gO rp { ph := .lk } = G u from hgu.symm, upd_same]
+          exact inv_cur u hi (by rw [hgu]; nofun)) rfl))
+    rintro _ G' m' _ ⟨-, g', hfin, hi'⟩
+    exact qkid_fin hu hfin hi'
+  | producer p => exact hg.elim
+  | work p => exact hg.elim
+
+end Threadsync.WG
