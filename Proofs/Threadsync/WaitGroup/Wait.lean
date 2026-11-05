@@ -42,11 +42,13 @@ theorem U_main {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {x₁ : X} (hu : U 
   have hmain := fd0 hu
   obtain ⟨hwG, hhG⟩ := hu.wg.fields_size hb ha hf hts hclk
   obtain ⟨hwE, hhE⟩ := hu.ev.fields_size hb ha hf hts hclk
+  have hkE : EV.key m' = EV.key m := Mem.wordKey_of_blocks hb _ _ _
+  have hkL : L.key m' = L.key m := Mem.wordKey_of_blocks hb _ _ _
   have hI : E.Inv L (upd G 0 ((G 0).1, x₁)) m' :=
     hu.einv.frame (t := 0) (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact he)
       (by rw [upd_self]; rfl) hhE hw hclk (Nat.le_of_eq hts.symm)
       (fun h => by rw [upd_self]; show x₁.wk = true; rw [hwk]; exact h)
-      (fun h => absurd hmain (by rw [h.2]; decide)) (hu.einv.fresh.of_eq ha hn)
+      (fun h => absurd hmain (by rw [h.2]; decide)) (hu.einv.fresh.of_eq ha hn) hkE hkL
   have hattr := attr_step hu (G' := G) (fun _ => rfl) hclk hhE
     (fun e he _ _ => .inl ⟨e, hf ▸ he, .refl e⟩)
   have hbnd : ∀ u, (u = 1 ∨ u = 2) → bnd (upd G 0 ((G 0).1, x₁)) m' u = bnd G m' u := by
@@ -54,7 +56,7 @@ theorem U_main {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {x₁ : X} (hu : U 
   obtain ⟨blk, hb1, hb2⟩ := hu.blk
   refine ⟨hsh, hu.rest.congr fun l _ => hh l, ⟨blk, by rw [hb]; exact hb1, hb2⟩,
     hwG.anti fun u h => ?_, hwE.anti fun u h => ?_, hI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-    ?_, ?_, ?_, ?_, fun w hw' => hu.q w (by rw [← hw]; exact hw')⟩
+    ?_, ?_, ?_, ?_, fun w hw' => by rw [hkL, hkE]; exact hu.q w (by rw [← hw]; exact hw')⟩
   · by_cases e : u = 0
     · subst e; exact hmain
     · rwa [hX u e] at h
