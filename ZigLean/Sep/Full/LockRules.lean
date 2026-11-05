@@ -741,8 +741,8 @@ theorem wp_ulockResult (hP : L.Fits K P U ok) {r : Os.WaitResult} {t : ThreadId}
     P.WP t (Os.Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n := by
   refine WP.ulockResult (fun _ k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht s hs => ?_⟩)
     (fun _ s hs => h n (Nat.le_refl _) s G m hs hc hi) hcost
-  exact h k (by omega) s G₁ _ hs rfl
-    (by rw [← hg₁, upd_same]; exact (hP.curT t hi₁ ht).2.2)
+  obtain ⟨-, -, -, hi'⟩ := hP.curT t hi₁ ht
+  exact h k (by omega) s G₁ _ hs rfl (by rw [← hg₁, upd_same]; exact hi')
 
 /-- **`unlock`'s OS futex wake** (`Os.futexWake`, OSF-02) of up to `w ≥ 1` waiters (or all) at the
 lock's word, by thread `t` at `wake` (`g`): after a wake it goes on at `out`; after a spurious

@@ -84,7 +84,7 @@ theorem ulock_null_einval :
 
 /-- After option 0 of a wait's first pick (the kernel's compare), the next stop: the count of
 its pick and the result after option `c`. -/
-private def ulockRet (x : CoN Nat (BitVec 32 × Mem) 2) (c : Nat) :
+private def ulockRet (x : CoN Nat (BitVec 32 × Mem) 3) (c : Nat) :
     Option (Nat × Option (Except Error Int)) :=
   match x with
   | .sync (.pick _) m k =>
@@ -104,11 +104,11 @@ private def three : Mem := { blocks := #[{ block 4096 8 with
 waiters at the key, not always `0`: after a mismatch the oracle picks any of the `2^31`
 non-negative `c_int`s, here `0`, `5` and `2^31 - 1`. -/
 theorem ulock_wait_nwaiters :
-    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 2 three) 0 =
+    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three) 0 =
       some (2 ^ 31, some (.ok 0)) ∧
-    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 2 three) 5 =
+    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three) 5 =
       some (2 ^ 31, some (.ok 5)) ∧
-    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 2 three)
+    ulockRet ((Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0 : ConcM Nat (BitVec 32)) 3 three)
       (2 ^ 31 - 1) = some (2 ^ 31, some (.ok (2 ^ 31 - 1))) :=
   ⟨by decide +kernel, by decide +kernel, by decide +kernel⟩
 
