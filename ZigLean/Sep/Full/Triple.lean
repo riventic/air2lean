@@ -208,14 +208,13 @@ theorem Holds.cellN {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {c : FC
     (hc : r.heap l = some c) : ∃ c', m.heap l = some c' ∧ c'.norm = c.cell.norm :=
   hh.heap.cell (by rw [FHeap.union_apply, hc]; rfl)
 
-/-- **An owned byte is a live byte**: owning byte `x` of block `b` gives a live block whose size
-is above `x` (and whose mapping start is at most `x`), at the cell's address. In-bounds facts
-come from ownership (`docs/sep-full-state.md` §Block extents). -/
-theorem Holds.block {m : Mem} {r rF : Res} (hh : Holds m r rF) {b : BlockId} {x : Nat} {fc : FCell}
-    (h : r.heap (b, x) = some fc) : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
-      x < blk.bytes.size ∧ blk.kind.mappedLo ≤ x ∧ fc.cell.addr = blk.addr ∧
+/-- A live byte read as the cell `fc` (up to `Cell.norm`) is in a live block whose size is above
+it, at the cell's address and kind. -/
+theorem Mem.block_of_cell {m : Mem} {b : BlockId} {x : Nat} {fc : FCell}
+    (h : ∃ c, m.heap (b, x) = some c ∧ c.norm = fc.cell.norm) : ∃ blk, m.blocks[b]? = some blk ∧
+      blk.live = true ∧ x < blk.bytes.size ∧ blk.kind.mappedLo ≤ x ∧ fc.cell.addr = blk.addr ∧
       fc.cell.kind.norm = blk.kind.norm := by
-  obtain ⟨c, hc, hn⟩ := hh.cellN h
+  obtain ⟨c, hc, hn⟩ := h
   obtain ⟨blk, hb, hl, hx, he⟩ := Mem.heap_some hc
   obtain ⟨blk', hb', hlo⟩ := Mem.heap_some_lo hc
   rw [hb] at hb'; cases hb'
@@ -223,6 +222,21 @@ theorem Holds.block {m : Mem} {r rF : Res} (hh : Holds m r rF) {b : BlockId} {x 
   have hk := congrArg Cell.kind hn
   subst he
   exact ⟨blk, hb, hl, hx, hlo, ha.symm, hk.symm⟩
+
+/-- **An owned byte is a live byte**: owning byte `x` of block `b` gives a live block whose size
+is above `x` (and whose mapping start is at most `x`), at the cell's address. In-bounds facts
+come from ownership (`docs/sep-full-state.md` §Block extents). -/
+theorem Holds.block {m : Mem} {r rF : Res} (hh : Holds m r rF) {b : BlockId} {x : Nat} {fc : FCell}
+    (h : r.heap (b, x) = some fc) : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
+      x < blk.bytes.size ∧ blk.kind.mappedLo ≤ x ∧ fc.cell.addr = blk.addr ∧
+      fc.cell.kind.norm = blk.kind.norm :=
+  Mem.block_of_cell (hh.cellN h)
+
+/-- **A share reads a live byte** (`SMatch.share_cell`): a positive fraction of `fc` at `l` gives
+the memory's cell there, as an exclusive cell does (`Holds.cellN`). -/
+theorem Holds.cellS {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {fc : FCell}
+    (hq : 0 < (r.gh.share l fc).val) : ∃ c', m.heap l = some c' ∧ c'.norm = fc.cell.norm :=
+  hh.heap.share_cell (Ghost.add_share _ _ _) hq
 
 /-! ### Cells with their block's actual extent (`Res.fix`)
 
@@ -496,6 +510,14 @@ theorem Holds.not_pos_of_heap {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Lo
     (h : (r.heap ∪ rF.heap) l ≠ none) : ¬ ((r.gh.add rF.gh).share l).Pos := by
   rw [← SCell.cell_eq_none_iff]
   exact (hh.heap.apart l).resolve_left h
+
+/-- At a byte a resource holds as a cell, and no share of, the frame holds no share. -/
+theorem Holds.frame_share_zero {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hu : r.gh.share l = SCell.zero) (hl : r.heap l ≠ none) : rF.gh.share l = SCell.zero := by
+  have hn : ¬ ((r.gh.add rF.gh).share l).Pos := hh.not_pos_of_heap (by
+    simp only [FHeap.union_apply]; intro e; exact hl (Option.or_eq_none_iff.mp e).1)
+  rw [Ghost.add_share, hu, SCell.zero_add, SCell.not_pos_iff] at hn
+  exact hn.eq
 
 /-- A live byte that neither the resource nor the frame holds exclusively is shared. -/
 theorem Holds.pos_of_live {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {c : Cell}
