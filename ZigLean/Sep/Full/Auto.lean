@@ -1373,6 +1373,17 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     return out
   r
 
+/-- `e` with each closed arithmetic subterm (`2 ^ 64 - 4096`, a numeral) as one placeholder:
+`omega` evaluates them, so two facts of the same skeleton say the same to it. -/
+def closedArithSkeleton (e : Expr) : Expr :=
+  e.replace fun x =>
+    if x.hasFVar || x.hasMVar || x.hasLooseBVars then none
+    else if x.isRawNatLit || x.isAppOfArity ``OfNat.ofNat 3 || x.isAppOfArity ``HAdd.hAdd 6 ||
+        x.isAppOfArity ``HSub.hSub 6 || x.isAppOfArity ``HMul.hMul 6 ||
+        x.isAppOfArity ``HDiv.hDiv 6 || x.isAppOfArity ``HMod.hMod 6 ||
+        x.isAppOfArity ``HPow.hPow 6 then some (mkConst `fsym.closed)
+    else none
+
 /-- The facts relevant to `tgt` normalized again, each against all the facts. A hypothesis is
 normalized against the facts before it, once, when it enters the context (`normFacts`, cached),
 so a conditional rewrite whose side condition only a later fact proves did not apply to it
@@ -1395,7 +1406,10 @@ def renormFacts (facts : Array Expr) (tgt : Expr) (cases := true) :
     let s ← saveState
     try
       let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
-      unless r.expr == ty || r.expr.isTrue do
+      -- (a new form that only folds closed terms, `2 ^ 64 - 4096` of a hypothesis that its
+      -- normalization left, says nothing new to `omega`)
+      unless r.expr == ty || r.expr.isTrue ||
+          closedArithSkeleton r.expr == closedArithSkeleton ty do
         out := out.push (← mpResult r f, r.expr)
     catch _ => s.restore
   return out
