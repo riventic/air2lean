@@ -921,8 +921,8 @@ theorem wp_liftPartW (hP : L.Fits K P U ok) (hW : W.InRest U A) {α : Type} {x :
   obtain ⟨rX, hL, hU⟩ := (hP.inv _ _).mp hi
   obtain ⟨hw, rY, rfl, hY⟩ := hW _ _ _ hU
   refine hL.wp_liftPart hc hgo htt hp (fun a m' r' hr hq hs hc' hL' => ?_) hret
-  obtain ⟨hcells, hw', hh, hL'⟩ := hL'.partWordPost hw hs
-  exact h a m' r' rY hr hq hc' hU hL hY hs hcells hw' hh hL'
+  obtain ⟨hcells, hw', hh, hL'⟩ := hL'.partWordPost hw hs.cells
+  exact h a m' r' rY hr hq hc' hU hL hY hs.cells hcells hw' hh hL'
 
 /-- A caller-part step requiring ephemeral `cur t`, with the same native word/rest facts as
 `wp_liftPartW`. The token is supplied for the local step and never stored across a stop. -/
@@ -949,8 +949,8 @@ theorem wp_liftPartWCur (hP : L.Fits K P U ok) (hW : W.InRest U A) {α : Type} {
   obtain ⟨rX, hL, hU⟩ := (hP.inv _ _).mp hi
   obtain ⟨hw, rY, rfl, hY⟩ := hW _ _ _ hU
   refine hL.wp_liftPartCur hc hgo htt hp (fun a m' r' hr hq hs hc' hL' => ?_) hret
-  obtain ⟨hcells, hw', hh, hL'⟩ := hL'.partWordPost hw hs
-  exact h a m' r' rY hr hq hc' hU hL hY hs hcells hw' hh hL'
+  obtain ⟨hcells, hw', hh, hL'⟩ := hL'.partWordPost hw hs.cells
+  exact h a m' r' rY hr hq hc' hU hL hY hs.cells hcells hw' hh hL'
 
 /-- A thread not in the futex queue. -/
 theorem notQ_mem {α : Type} {ws : Array (ThreadId × α)} {t : ThreadId}

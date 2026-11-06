@@ -337,6 +337,18 @@ structure Keeps (B : FLock γ) (G : ThreadId → γ) (m : Mem) (rL rH rX : Res) 
   xdisj : FHeap.Disjoint (rsum rL rH).heap rX.heap
   xoff : B.Off rX.heap.erase
 
+/-- **The invariant with a rest that is the same up to `Cell.norm`** (`FOwned.congrRest`; the same
+knowledge and ghost state). -/
+theorem Inv.congrRest {rX' : Res} (hi : L.Inv G rX m) (hs : FHeap.Sim rX'.heap rX.heap)
+    (hk : rX'.know = rX.know) (hg : rX'.gh = rX.gh) : L.Inv G rX' m := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  have hn : ∀ l, rX'.heap l = none ↔ rX.heap l = none := fun _ => hs.none
+  refine ⟨hi.w, ⟨rL, ho.congrRest ((FHeap.Sim.refl _).union ((FHeap.Sim.refl _).union hs))
+      (by simp only [rsum, hk]) (by simp only [rsum, hg]),
+    hLoff, fun l => (hLX l).imp id (hn l).mpr, hF, hnF⟩,
+    LockWord.off_erase.mpr fun l hl => (hn l).mpr (LockWord.off_erase.mp hi.xoff l hl),
+    hi.pdisj, hi.idle, hi.res⟩
+
 end FLock
 
 namespace FLock.Pair
@@ -555,6 +567,168 @@ theorem U_atStop {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} (t
   obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
   obtain ⟨he, hk'⟩ := Keeps.cur hk t
   exact ⟨rL, rH, rX, by rw [he], hk', hcl rX hu⟩
+
+/-- **A step on a thread's own part in `A`'s view keeps what the product keeps of `B`**, in the
+frame of `Inv.wp_liftMem` (`A`'s word and rest, with their read shares): `B`'s word cells stay up
+to `Cell.norm` (from `A`'s invariant after the step, `hi'`), so `A`'s invariant also holds with
+`B`'s side at the new memory, and `B` is kept at the same free resource, holders' resources and
+rest. The thread's new ghost value `g` keeps its place and its held resource at `B`, and `B`'s
+resource. -/
+theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
+    (hp : A.Pair B) (hk : B.Keeps G m rL rH rX)
+    (hs : FStepIn (rsum (A.wordR m) (rsum (side B m rL rH) rX)).owned m m'
+      (rsum (A.wordR m) (rsum (side B m rL rH) rX)).shared)
+    (hi' : A.Inv (upd G t g) (rsum (side B m rL rH) rX) m')
+    (hph : B.ph g = B.ph (G t)) (hheld : B.held g = B.held (G t))
+    (hR : ∀ r, B.R G r → B.R (upd G t g) r) :
+    A.Inv (upd G t g) (rsum (side B m' rL rH) rX) m' ∧ B.Keeps (upd G t g) m' rL rH rX := by
+  have hf := hk.facts
+  have hbB : B.BlkOk m := hf.w.blk
+  obtain ⟨rLA, ho', -, hLX', -⟩ := hi'.rest
+  -- `B`'s word cells: in `A`'s rest, so the same up to `Cell.norm`
+  have hside : ∀ l, B.In l → ∃ c, m.heap l = some c ∧
+      (rsum (side B m rL rH) rX).heap l = some ⟨c, none⟩ := fun l hl => by
+    obtain ⟨b, x⟩ := l
+    obtain ⟨h1, h2, h3⟩ := hl; simp only at h1 h2 h3; subst h1
+    cases e : m.heap (B.b, x) with
+    | none => exact absurd e (hbB.cell h2 h3)
+    | some c =>
+      refine ⟨c, rfl, ?_⟩
+      show ((((B.wordR m).heap (B.b, x)).or ((rsum rL rH).heap (B.b, x))).or (rX.heap (B.b, x))) = _
+      rw [cellsAt_of (show B.In (B.b, x) from ⟨rfl, h2, h3⟩), e]; rfl
+  have hcellsL : ∀ l, B.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
+    intro l hl
+    obtain ⟨c, hc, hX⟩ := hside l hl
+    have hA : (A.wordR m').heap l = none := cellsAt_none (hp.apart.symm.not_in hl)
+    have hLA : rLA.heap l = none := (hLX' l).resolve_right (by rw [hX]; exact nofun)
+    have hO : (rsum (A.wordR m') (rsum rLA (rsum (side B m rL rH) rX))).heap l = some ⟨c, none⟩ := by
+      show ((A.wordR m').heap l).or ((rLA.heap l).or ((rsum (side B m rL rH) rX).heap l)) = _
+      rw [hA, hLA, hX]; rfl
+    rw [hc, ho'.rest_cell hO]
+    rfl
+  have hcells : ∀ x, B.o ≤ x → x < B.o + 4 →
+      (m'.heap (B.b, x)).map Cell.norm = (m.heap (B.b, x)).map Cell.norm :=
+    fun x h1 h2 => hcellsL _ ⟨rfl, h1, h2⟩
+  have hsim : FHeap.Sim (side B m' rL rH).heap (side B m rL rH).heap := by
+    intro l
+    show (((B.wordR m').heap l).or ((rsum rL rH).heap l)).map (fun fc => (fc.cell.norm, fc.atom)) =
+      (((B.wordR m).heap l).or ((rsum rL rH).heap l)).map (fun fc => (fc.cell.norm, fc.atom))
+    by_cases hl : B.In l
+    · have := hcellsL l hl
+      rw [cellsAt_of hl, cellsAt_of hl]
+      cases e : m.heap l <;> cases e' : m'.heap l <;> simp_all [Option.map]
+    · rw [cellsAt_none hl, cellsAt_none hl]
+  -- the frame has `B`'s word bytes as cells, `rL`'s and `rH`'s resources
+  have hFh : ∀ l, (side B m rL rH).heap l ≠ none →
+      (rsum (A.wordR m) (rsum (side B m rL rH) rX)).heap l ≠ none := fun l hl hn => hl (by
+    have hn' : ((A.wordR m).heap l).or (((side B m rL rH).heap l).or (rX.heap l)) = none := hn
+    exact (Option.or_eq_none_iff.mp (Option.or_eq_none_iff.mp hn').2).1)
+  have hwH : ∀ x, B.o ≤ x → x < B.o + 4 →
+      (rsum (A.wordR m) (rsum (side B m rL rH) rX)).heap (B.b, x) ≠ none := fun x h1 h2 => by
+    refine hFh _ fun hn => LockWord.wordR_some hbB (l := (B.b, x)) ⟨rfl, h1, h2⟩ ?_
+    have hn' : ((B.wordR m).heap (B.b, x)).or ((rsum rL rH).heap (B.b, x)) = none := hn
+    exact (Option.or_eq_none_iff.mp hn').1
+  have hwF := fun x h1 h2 => Res.owned_of_heap (hwH x h1 h2)
+  have hwR := fun x h1 h2 => Res.excl_shared_disj (Res.excl_of_heap (hwH x h1 h2))
+  -- a resource of `B`'s side is in the frame, its exclusive bytes not among the frame's shares
+  have hsubO : ∀ {r : Res}, (∀ l, r.owned l ≠ none → (side B m rL rH).owned l ≠ none) →
+      ∀ l, r.owned l ≠ none → (rsum (A.wordR m) (rsum (side B m rL rH) rX)).owned l ≠ none :=
+    fun h l hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl (h l hl))))
+  have hsubX : ∀ {r : Res}, (∀ l, r.excl l ≠ none → (side B m rL rH).excl l ≠ none) →
+      ∀ l, r.excl l ≠ none → (rsum (A.wordR m) (rsum (side B m rL rH) rX)).shared l = none :=
+    fun h l hl => Res.excl_shared_disj
+      (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl (h l hl)))))
+  -- the new ghost value is `G`'s at `B`
+  have hU : ∀ u, B.ph (upd G t g u) = B.ph (G u) ∧ B.held (upd G t g u) = B.held (G u) :=
+    fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self]; exact ⟨hph, hheld⟩
+      · rw [upd_ne _ _ e]; exact ⟨rfl, rfl⟩
+  have hpl : B.pl (upd G t g) = B.pl G := funext fun u => (hU u).1
+  have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
+  have hheldOf : B.heldOf (upd G t g) m' = B.heldOf G m := funext fun u => by
+    unfold heldOf; rw [hjb, (hU u).2]
+  have hfree : B.Free (upd G t g) ↔ B.Free G := by unfold FLock.Free; rw [hpl]
+  have hok : ∀ i l, B.Loc m i l → l.len = 4 := fun i l hl => (hf.w.loc.ok i l hl).1
+  -- the thread's new part at `A` is apart from its resource at `B`, which is in `A`'s rest
+  have hpdt : FHeap.Disjoint (B.part g).heap (B.held (G t)).heap := by
+    by_cases hg : B.ph (G t) = .gone
+    · rw [hf.idle t (by rw [hg]; rfl)]; exact fun _ => .inr rfl
+    obtain ⟨ht, hjt⟩ := hf.w.live t hg
+    obtain ⟨rj, hrj, hsj⟩ := sepN_mem hk.held ht
+    simp only [partOf, heldOf, hjt, Bool.false_eq_true, ↓reduceIte] at hrj; subst hrj
+    intro l
+    refine (Classical.em ((B.held (G t)).heap l = none)).symm.imp (fun hn => ?_) id
+    have hO : (rsum (A.wordR m') (rsum rLA (rsum (side B m rL rH) rX))).heap l ≠ none :=
+      fun e => hsj l hn (by
+        have e' : ((A.wordR m').heap l).or ((rLA.heap l).or
+            ((((B.wordR m).heap l).or ((rL.heap l).or (rH.heap l))).or (rX.heap l))) = none := e
+        simp only [Option.or_eq_none_iff] at e'
+        exact e'.2.2.1.2.2)
+    have := ho'.part_off (u := t) (by rw [hs.threads]; exact ht) hO
+    have e' : ((A.part g).heap l).or ((A.held g).heap l) = none := by
+      have h0 := this
+      simp only [FLock.own, hjb, hjt, upd_self, Bool.false_eq_true, ↓reduceIte] at h0
+      exact h0
+    rw [← hp.part]; exact (Option.or_eq_none_iff.mp e').1
+  refine ⟨hi'.congrRest (hsim.union (FHeap.Sim.refl _)) rfl rfl,
+    ⟨⟨by rw [hpl]; exact hf.w.stepIn hs hwF hwR hcells, hf.loff, fun hF => ?_,
+      fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
+    by rw [hheldOf, hs.threads]; exact hk.held, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩⟩
+  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
+    refine ⟨hR rL h1, ?_⟩
+    rw [hpl]
+    exact h2.stepIn hs (hsubO fun l hl => (Res.owned_sep rfl rfl).mpr (.inr
+        ((Res.owned_sep rfl rfl).mpr (.inl hl)))) hwF hok
+      (hsubX fun l hl => Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl))))
+  · by_cases e : u = t
+    · subst e; rw [upd_self, hheld]; exact hpdt
+    · rw [upd_ne _ _ e]; exact hf.pdisj u
+  · rw [(hU u).1] at hu; rw [(hU u).2]; exact hf.idle u hu
+  · rw [(hU u).1] at hu; rw [(hU u).2]; exact hR _ (hf.res u hu)
+  · rw [hs.threads] at hu; rw [hheldOf]
+    by_cases e : u = m.current
+    · rw [e]
+      have := (hk.owns _ (e ▸ hu)).fstepCur hs
+      rwa [hs.current] at this
+    obtain ⟨_, rfl, hsj⟩ := sepN_owned hk.held hu
+    obtain ⟨_, rfl, hxj⟩ := sepN_excl hk.held hu
+    have hin : ∀ l, (B.heldOf G m u).owned l ≠ none → (side B m rL rH).owned l ≠ none :=
+      fun l hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr (hsj l hl))))
+    exact (hk.owns u hu).fstep hs e
+      (fun l hl => ⟨hsubO hin l (Res.owned_of_excl hl), hsubX (fun l hl =>
+        Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inr (hxj l hl))))) l hl⟩)
+      fun l hl => hsubO hin l (Res.owned_of_shared hl)
+
+/-- **A step on a thread's own part in `A`'s view keeps the product's rest** (`Inv.wp_liftMem`'s
+continuation): `A`'s invariant after the step gives the product's rest at `B`'s new side, when the
+protocol's own `U` is kept. -/
+theorem U_partStep (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res}
+    {t : ThreadId} {g : γ} {m' : Mem} (hU : Pair.U B U G rXA m)
+    (hs : FStepIn (rsum (A.wordR m) rXA).owned m m' (rsum (A.wordR m) rXA).shared)
+    (hi' : A.Inv (upd G t g) rXA m')
+    (hph : B.ph g = B.ph (G t)) (hheld : B.held g = B.held (G t))
+    (hR : ∀ r, B.R G r → B.R (upd G t g) r)
+    (hcl : ∀ rL rH rX, rXA = rsum (side B m rL rH) rX → B.Keeps G m rL rH rX → U G rX m →
+      U (upd G t g) rX m') :
+    ∃ rXA', A.Inv (upd G t g) rXA' m' ∧ Pair.U B U (upd G t g) rXA' m' := by
+  obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+  obtain ⟨hi'', hk'⟩ := Keeps.partStep hp hk hs hi' hph hheld hR
+  exact ⟨_, hi'', rL, rH, rX, rfl, hk', hcl rL rH rX rfl hk hu⟩
+
+/-- **A tick on a part keeps the product's rest** (`A.PartTick`, for `A`'s `Fits.kstep`): the
+tick changes no byte, so `B`'s side stays exactly; the protocol's own `U` must be kept. -/
+theorem U_partTick (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId}
+    {rXA rXA' : Res} {G' : ThreadId → γ} {m' : Mem} (hU : Pair.U B U G rXA m)
+    (htick : A.PartTick t G rXA m G' rXA' m')
+    (hcl : ∀ rX, U G rX m → U G' rX m') : Pair.U B U G' rXA' m' := by
+  obtain ⟨-, -, -, r, -, rfl, rfl, rfl, hi'⟩ := htick
+  obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+  have hpart : A.setPart (G t) r = B.setPart (G t) r := hp.setPart _ _
+  obtain ⟨-, hk'⟩ := Keeps.partStep hp hk (FStepIn.ticked m _).reads hi'
+    (by rw [hpart, B.ph_setPart]) (by rw [hpart, B.held_setPart])
+    (fun r' h => by rw [hpart]; exact (B.R_setPart G t r r').mpr h)
+  exact ⟨rL, rH, rX, rfl, hk', hcl rX hu⟩
 
 /-- **The two-lock product's invariant is the same in either lock's view**: a protocol whose
 invariant is `A`'s with `Pair.U B U` is also `B`'s with `Pair.U A U` (`FLock.Fits.inv` for both

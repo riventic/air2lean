@@ -220,6 +220,27 @@ theorem _root_.Zig.FStepIn.cells {r : Res} {m m' : Mem} (hs : FStepIn r.owned m 
     rw [if_pos (Res.excl_shared_disj (Res.excl_of_heap hh))]
     exact Res.owned_of_heap hh
 
+/-- **A step in a frame `a ⋆ b ⋆ c` is a step in `a ⋆ c`**: a byte that the whole frame holds as a
+partial share, and `a ⋆ c` holds, is a partial share of `a ⋆ c` (a whole share of `a ⋆ c` would
+be whole in the frame). -/
+theorem _root_.Zig.FStepIn.dropMid {a b c : Res} {m m' : Mem}
+    (hs : FStepIn (rsum a (rsum b c)).owned m m' (rsum a (rsum b c)).shared) :
+    FStepIn (rsum a c).owned m m' (rsum a c).shared :=
+  hs.weakenR (fun l hl => by
+      rcases (Res.owned_sep rfl rfl).mp hl with h | h
+      · exact (Res.owned_sep rfl rfl).mpr (.inl h)
+      · exact (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr h))))
+    fun l hl hR => by
+      obtain ⟨hn, hw, -⟩ := Res.shared_ne.mp hR
+      simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at hn
+      have hn' : (rsum a c).heap l = none := by
+        simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff]; exact ⟨hn.1, hn.2.2⟩
+      refine Res.shared_ne.mpr ⟨hn', fun hw' => hw ?_,
+        ((Res.owned_ne.mp hl).resolve_left fun h => h hn')⟩
+      simp only [rsum, Ghost.add_share] at hw' ⊢
+      rw [← SCell.add_assoc, SCell.add_comm (a.gh.share l) (b.gh.share l), SCell.add_assoc]
+      exact SCell.Whole.add' _ hw'
+
 theorem _root_.Zig.Mem.OwnsRes.fork {m m' : Mem} {t u c : ThreadId} {gt : Bool} {r : Res}
     (ho : m.OwnsRes u r) (hcs : m.clocks.size = m.threads.size) (hu : u < m.threads.size)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
