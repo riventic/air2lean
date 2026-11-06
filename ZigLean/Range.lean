@@ -42,6 +42,34 @@ theorem toNat_setWidth_of_lt {a : BitVec n} (h : a.toNat < 2 ^ m) :
 theorem toNat_ofNat_of_lt {k : Nat} (h : k < 2 ^ n) : (BitVec.ofNat n k).toNat = k := by
   rw [BitVec.toNat_ofNat]; exact Nat.mod_eq_of_lt h
 
+/-! ## Contiguous bit fields -/
+
+/-- A mask selects a contiguous field, retaining its original bit positions. -/
+theorem land_field (x lo hi : Nat) (h : lo ≤ hi) :
+    x &&& (2 ^ hi - 2 ^ lo) = (x / 2 ^ lo % 2 ^ (hi - lo)) * 2 ^ lo := by
+  have hp := Nat.two_pow_pos lo
+  have hm : 2 ^ hi - 2 ^ lo = (2 ^ (hi - lo) - 1) * 2 ^ lo := by
+    rw [Nat.sub_mul, Nat.one_mul, Nat.pow_sub_mul_pow 2 h]
+  have hd : (x &&& (2 ^ hi - 2 ^ lo)) / 2 ^ lo = x / 2 ^ lo % 2 ^ (hi - lo) := by
+    rw [Nat.and_div_two_pow, hm, Nat.mul_div_left _ hp,
+      Nat.and_two_pow_sub_one_eq_mod]
+  have hz : (x &&& (2 ^ hi - 2 ^ lo)) % 2 ^ lo = 0 := by
+    rw [Nat.and_mod_two_pow, hm]
+    simp
+  have he := Nat.mod_add_div (x &&& (2 ^ hi - 2 ^ lo)) (2 ^ lo)
+  rw [hz, hd, Nat.zero_add, Nat.mul_comm] at he
+  exact he.symm
+
+/-- The fixed-width instance, with both field endpoints inside the word. -/
+theorem toNat_and_field (x : BitVec n) (lo hi : Nat) (hlo : lo ≤ hi) (hhi : hi ≤ n) :
+    (x &&& BitVec.ofNat n (2 ^ hi - 2 ^ lo)).toNat =
+      (x.toNat / 2 ^ lo % 2 ^ (hi - lo)) * 2 ^ lo := by
+  have hm : 2 ^ hi - 2 ^ lo < 2 ^ n :=
+    Nat.lt_of_lt_of_le (Nat.sub_lt (Nat.two_pow_pos hi) (Nat.two_pow_pos lo))
+      (Nat.pow_le_pow_right (by decide) hhi)
+  rw [BitVec.toNat_and, toNat_ofNat_of_lt hm]
+  exact land_field _ _ _ hlo
+
 /-! ## BitVec ↔ Int -/
 
 /-- A value below the sign bit has the same signed and unsigned reading. -/

@@ -761,7 +761,11 @@ of one byte, ordered before a later exclusive acquire by the RwLock's state word
 then two choices stay conservative: a recorded access to the rest (`FOwned.recordRest`) needs
 that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the parts' and the
 rest's owned sets empty. Then `RwLockImpl` hands shared holders the protected resource at a
-fraction.
+fraction: the generic share above, `sheap H q` of the protected heap `H` (no RwLock-specific
+algebra). The free lock's fraction halves at each shared acquire (`sheap_add`,
+`Frac.half_add_half`), so the fractions need no bound on the readers; the native counters do
+(ledger `rwlock-reader-admission-room`), and `RwLockImpl` carries that room as `hroom` premises,
+as `CondImpl`/`SemImpl` carry the condition's 65535-waiter limit (maintainer decision 2026-11-06).
 
 ### The fee of a grant (coordinator decision 2026-10-12)
 
