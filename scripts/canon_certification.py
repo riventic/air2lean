@@ -64,8 +64,11 @@ def check_audit(report, artifacts):
     """Require the actual generic roots and the freshly replayed artifact of every generic module."""
     replay = report.get("kernel_replay", {})
     freshness = report.get("freshness", {})
+    # The auditor lists its modules in its own (sorted) order: the scope is the exact multiset.
+    modules = report.get("modules")
     if (report.get("status") != "pass" or report.get("violations") != []
-            or report.get("modules") != list(MODULES) or replay.get("status") != "pass"
+            or not isinstance(modules, list) or sorted(map(str, modules)) != sorted(MODULES)
+            or replay.get("status") != "pass"
             or replay.get("rejected") != [] or replay.get("reused") != []
             or freshness.get("lake_trace_check", {}).get("status") != "up-to-date"):
         raise ValueError("generic canonicalization audit did not freshly accept its complete scope")
