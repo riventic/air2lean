@@ -67,12 +67,12 @@ def FLive (P : FAssn) (c : MemM α) : Prop :=
 /-- An admissible input of a thread triple with precondition `P`. -/
 def FTTAdmit (P : FAssn) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
-    (_ : m.Owns m.current r.heap.erase), True
+    (_ : m.Owns m.current r.owned), True
 
 /-- An admissible input of a thread triple with precondition `P` on which `c` returns. -/
 def FTTLive (P : FAssn) (c : MemM α) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
-    (_ : m.Owns m.current r.heap.erase), ∃ v, (c.run m).run = some (.ok v)
+    (_ : m.Owns m.current r.owned), ∃ v, (c.run m).run = some (.ok v)
 
 /-- An admissible input of a concurrent triple with precondition `P`, at some depth: a thread
 triple's (`FTTAdmit`). -/
@@ -82,7 +82,7 @@ def CAdmit (P : FAssn) : Prop := ∃ (_ : Nat), FTTAdmit P
 (`soloTree`: each stop answered in the memory it stopped with), returns. -/
 def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop :=
   ∃ (n : Nat) (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
-    (_ : m.Owns m.current r.heap.erase), ∃ v, soloTree (x n m) = some (.ok v)
+    (_ : m.Owns m.current r.owned), ∃ v, soloTree (x n m) = some (.ok v)
 
 /-- A memory without stack budgets holds its native full heap with an empty frame. -/
 theorem holds_mem (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :

@@ -47,7 +47,7 @@ def epFee (γ e : Nat) (φ : Frac) : FAssn := epTok γ e φ ⋆ ⟪0 < φ.val⟫
 theorem epFee_ghost {γ e : Nat} {φ : Frac} {r : Res} (h : epFee γ e φ r) :
     r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
   obtain ⟨-, h⟩ := sep_lift.mp (sep_comm h)
-  exact ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
+  exact ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 /-- Fees split and join (`epTok_add`). -/
 theorem epFee_add (γ e : Nat) {a b : Frac} (ha : 0 < a.val) (hb : 0 < b.val) :
@@ -503,7 +503,7 @@ theorem ledgerRcpt_noBytes {γ e : Nat} : ∀ g r, ledgerRcpt γ e g r → NoByt
         obtain ⟨b, h⟩ := h
         obtain ⟨k, h⟩ := h
         have h := (sep_lift.mp h).2
-        exact ⟨h.2.1, h.2.2.1, by rw [h.2.2.2]; exact fun _ _ => rfl⟩)
+        exact ⟨h.2.1, h.2.2.1, by rw [h.2.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)
       (fun _ h => epFee_ghost h) h
 
 theorem ledgerRcpts_noBytes {γ e : Nat} {M : GMap} {r : Res}

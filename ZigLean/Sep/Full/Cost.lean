@@ -61,7 +61,8 @@ theorem Holds.mintCredits {m : Mem} {r rF : Res} (n : Nat) (hh : Holds m r rF)
   generalize hcg : (r.gh.add rF.gh).ac = c at hu hM hV ha ho
   have e : ((r.gh.add (Ghost.cred n)).add rF.gh).ac = (ACell.fragAt .cred n).add c := by
     rw [← hcg]; ext <;> simp [Ghost.cred] <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare (Ghost.share_add₂ Ghost.share_add_none rfl), hk, hkF,
+    hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
   · funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
@@ -128,7 +129,8 @@ theorem Holds.addSpent {m : Mem} {r rF : Res} (hh : Holds m r rF)
   have e : (r.gh.add (rF.gh.add (Ghost.ofAC (ACell.fragAt .spent m.ticks)))).ac =
       (ACell.fragAt .spent m.ticks).add c := by
     rw [← hcg]; ext <;> simp <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare (Ghost.share_add₂ rfl Ghost.share_add_none), hk, hkF,
+    hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
   · funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
@@ -193,18 +195,20 @@ theorem FTriple.ticks_eq_post {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
     (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) {v : α} {m' : Mem}
     (hr : c.run m = pure (v, m')) :
     m'.ticks = m.ticks + N ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
-      FMatch m' (r'.heap ∪ rF.heap) ∧ Q v r' ∧ m'.FSeq := by
+      SMatch m' (r'.heap ∪ rF.heap) (r'.gh.add rF.gh).share ∧ Q v r' ∧ m'.FSeq := by
   have hle := h.ticks_le hh hp hs hc.toMeterFree hr
   have hge := h.ticks_ge (Holds.addCredits N hh hc.cred hc.auth hc.unmetered)
     (sep_credits_intro hp N) hs (by simpa [Ghost.cred, Ghost.credAuth] using hc.spent) hr
   have h' := h m _ _ (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
   rw [hr] at h'
   obtain ⟨r', hh', hq, hs'⟩ := h'
-  obtain ⟨r₁, r₂, -, rfl, hq, h0, -, -⟩ := hq
+  obtain ⟨r₁, r₂, -, rfl, hq, h0, -, hg2⟩ := hq
   have hd := hh'.disj
   have hm := hh'.heap
   simp only [h0, FHeap.union_empty] at hd hm
-  exact ⟨by omega, r₁, hd, hm, hq, hs'⟩
+  exact ⟨by omega, r₁, hd, hm.reShare (Ghost.share_add₂
+    (Ghost.share_add_none (b := r₂.gh) (by rw [hg2]; rfl)).symm
+    (Ghost.share_add_none (b := Ghost.credAuth _)).symm), hq, hs'⟩
 
 /-- **At most `N` steps**: from a meter-free start, a run proved with `N` credits raises the step
 count by at most `N`. -/
@@ -232,7 +236,7 @@ theorem FTotalTriple.ticks_eq_post {α : Type} {P : FAssn} {c : MemM α} {Q : α
     (h : FTotalTriple (P ⋆ credits N) c (fun v => Q v ⋆ spent N)) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF) :
     ∃ v m', c.run m = pure (v, m') ∧ m'.ticks = m.ticks + N ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
-      FMatch m' (r'.heap ∪ rF.heap) ∧ Q v r' ∧ m'.FSeq := by
+      SMatch m' (r'.heap ∪ rF.heap) (r'.gh.add rF.gh).share ∧ Q v r' ∧ m'.FSeq := by
   obtain ⟨v, m', -, hr, -⟩ :=
     h.runs (Holds.addCredits N hh hc.cred hc.auth hc.unmetered) (sep_credits_intro hp N) hs
   exact ⟨v, m', hr, h.toPartial.ticks_eq_post hh hp hs hc hr⟩

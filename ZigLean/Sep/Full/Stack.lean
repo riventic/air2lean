@@ -71,6 +71,7 @@ theorem Holds.unstack {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : r.gh = Gh
     Holds m.unstacked ⟨r.heap, r.know, Ghost.unit⟩ ⟨rF.heap, rF.know, { rF.gh with ac := ACell.unit }⟩ := by
   refine hh.reAC rfl rfl ?_ ?_ ?_ (by simpa using ACell.valid_unit)
     (by simpa using MemAuth.unit (m := m.unstacked) (Mem.noStack_of_stacks rfl))
+    (by rw [hr]; funext _; simp [Ghost.ofAC])
   · rw [hr]; funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · rw [hr]; funext b; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · rw [hr]; funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.unit]

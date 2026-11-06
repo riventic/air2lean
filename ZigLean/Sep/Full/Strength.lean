@@ -86,7 +86,8 @@ theorem holds_ofHeap {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m
   refine ⟨FHeap.ofHeap_disjoint hd, ?_, fun _ h => h.elim, fun _ h => h.elim, ?_, ?_, ?_, ?_⟩
   · have : FHeap.ofHeap (shapes m) hP ∪ FHeap.ofHeap (shapes m) hF = m.fheap := by
       rw [← FHeap.ofHeap_union, ← hm]; rfl
-    show FMatch m (_ ∪ _); rw [this]; exact FMatch.fheap m
+    exact SMatch.of_fmatch (by show FMatch m (_ ∪ _); rw [this]; exact FMatch.fheap m)
+      fun _ => SCell.Empty.add SCell.empty_zero SCell.empty_zero
   · show Ghost.Ok _ _; rw [Ghost.Ok, Ghost.add_comm]; exact hok
   · show ExtTrue m (Ghost.unit.add _); rw [Ghost.unit_add]; exact heapExts_true hd hm
   · show ClFresh m (Ghost.unit.add _); rw [Ghost.unit_add]; exact fun _ _ _ => rfl
@@ -187,7 +188,9 @@ theorem FTriple.toTriple_on {c : MemM α} {P : Assn} {Q : α → Assn}
       have hF' := frame_back hd hm hh'
       refine ⟨(r'.fix m').heap.erase, ?_, ?_, ?_, hs'.1⟩
       · rw [← hF']; exact FHeap.erase_disjoint (FHeap.fix_disjoint hh'.disj)
-      · rw [← hF']; exact hh'.fix.heap_exact hh'.fix_exact hh'.fix_exactF
+      · rw [← hF']; exact hh'.fix.heap_exact hh'.fix_exact hh'.fix_exactF fun _ =>
+          SCell.Empty.add (by rw [show (r'.fix m').gh = Ghost.unit from hq.2.2]; exact SCell.empty_zero)
+            SCell.empty_zero
       · exact upE_fix (hQ v) (fun _ _ _ _ _ _ _ h => by cases h) hh' (upE_none.mpr hq)
 
 /-- **Strength (D1a), total form**: a total full-state triple over legacy assertions gives the
@@ -217,8 +220,8 @@ theorem FTotalTriple.toTotal_on_plain {c : MemM α} {P : Assn} {Q : α → Assn}
   intro m hP hF hd hm hp _ ⟨hs, hns⟩
   have ht' : FTotalTriple (up P ⋆ plain) c (fun v => up (Q v)) :=
     ht.eupd_post fun _ => (EUpd.of_imp fun _ h => by unfold plain at h; exact sep_assoc' h).trans
-      ((EUpd.drop (K := unmetered) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩).trans
-        (EUpd.drop (K := noStack) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩))
+      ((EUpd.drop (K := unmetered) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩).trans
+        (EUpd.drop (K := noStack) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩))
   obtain ⟨v, m', r', hr, hh', hq, hs'⟩ := ht'.runs
     ((holds_ofHeap hd hm hns).addPlain hns fun _ => by simp [Ghost.exts])
     (sep_plain_intro ⟨by simpa using hp, rfl, rfl⟩) hs
@@ -226,7 +229,9 @@ theorem FTotalTriple.toTotal_on_plain {c : MemM α} {P : Assn} {Q : α → Assn}
   refine ⟨v, m', (r'.fix m').heap.erase, hr, ?_, ?_,
     upE_fix (hQ v) (fun _ _ _ _ _ _ _ h => by cases h) hh' (upE_none.mpr hq), hs'.1⟩
   · rw [← hF']; exact FHeap.erase_disjoint (FHeap.fix_disjoint hh'.disj)
-  · rw [← hF']; exact hh'.fix.heap_exact hh'.fix_exact hh'.fix_exactF
+  · rw [← hF']; exact hh'.fix.heap_exact hh'.fix_exact hh'.fix_exactF fun _ =>
+      SCell.Empty.add (by rw [show (r'.fix m').gh = Ghost.unit from hq.2.2]; exact SCell.empty_zero)
+        SCell.empty_zero
 
 end Full
 end Zig

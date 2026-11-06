@@ -96,7 +96,7 @@ theorem gE_ok : GOk m2 Ghost.unit gE := by
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 8192 (.mapped 0) Frac.one else ECell.unit, fun _ _ => ECell.unit,
-        ACell.unit.add ACell.unit⟩)).auth1_ok
+        ACell.unit.add ACell.unit, fun _ => SCell.zero.add SCell.zero⟩)).auth1_ok
         (S := 8192) (K := .mapped 0)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩
@@ -150,7 +150,10 @@ theorem split_state : ∃ gA gS : Ghost, Holds m2 ⟨own 4096 8192, Know.none, g
     bshare 0 hf 8192 none ⟨FHeap.empty, Know.none, gS⟩ := by
   -- the full extent, next to all the bytes
   have h0 : Holds m2 ⟨FHeap.empty, Know.none, gE⟩ ⟨own 4096 8192 ∪ own 0 4096, Know.none, Ghost.unit⟩ :=
-    Holds.swap ⟨fun _ => .inr rfl, by rw [FHeap.union_empty]; exact fmatch2, Know.sub_none _,
+    Holds.swap ⟨fun _ => .inr rfl, by
+        rw [FHeap.union_empty]
+        exact SMatch.of_fmatch fmatch2 fun _ => SCell.Empty.add SCell.empty_zero SCell.empty_zero,
+      Know.sub_none _,
       Know.sub_none _, gE_ok⟩
   have hb : bauth 0 8192 (.mapped 0) (hf.add hf) ⟨FHeap.empty, Know.none, gE⟩ := by
     rw [hf, Frac.half_add_half]; exact ⟨rfl, rfl, rfl⟩
@@ -160,7 +163,9 @@ theorem split_state : ∃ gA gS : Ghost, Holds m2 ⟨own 4096 8192, Know.none, g
   have ea := bauth_eq ha
   have es := bshare_eq hs
   subst ea es
-  refine ⟨_, _, ⟨fun l => ?_, fmatch2, Know.sub_none _, Know.sub_none _, ?_⟩, ha, hs⟩
+  refine ⟨_, _, ⟨fun l => ?_, SMatch.of_fmatch fmatch2
+    fun _ => SCell.Empty.add SCell.empty_zero SCell.empty_zero, Know.sub_none _, Know.sub_none _, ?_⟩,
+    ha, hs⟩
   · obtain ⟨b, o⟩ := l
     simp only [own]
     by_cases h : b = 0 ∧ 4096 ≤ o ∧ o < 8192

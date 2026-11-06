@@ -24,7 +24,8 @@ theorem Holds.split {m : Mem} {r₁ r₂ rF : Res} (hd : FHeap.Disjoint r₁.hea
   obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨h1F, -⟩ := FHeap.disjoint_union_left.mp hdisj
   have h2F := (FHeap.disjoint_union_left.mp hdisj).2
-  exact ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩, by rw [← FHeap.union_assoc]; exact hheap,
+  exact ⟨FHeap.disjoint_union_right.mpr ⟨hd, h1F⟩,
+    by rw [← FHeap.union_assoc, ← Ghost.add_assoc]; exact hheap,
     hk.left, hk.right.union hkF, GOk.assoc.mp hg⟩
 
 /-- `c` returns from every memory that holds `P` with some frame. -/
@@ -105,7 +106,8 @@ theorem Holds.join {m : Mem} {r₁ r₂ rF : Res} (hd : FHeap.Disjoint r₁.heap
     Holds m ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ rF := by
   obtain ⟨hd', hh', hk', hkF', hg'⟩ := hh
   exact ⟨FHeap.disjoint_union_left.mpr ⟨(FHeap.disjoint_union_right.mp hd').2, h2F⟩,
-    by rw [FHeap.union_assoc]; exact hh', hk'.union hkF'.left, hkF'.right, GOk.assoc.mpr hg'⟩
+    by rw [FHeap.union_assoc, Ghost.add_assoc]; exact hh', hk'.union hkF'.left, hkF'.right,
+    GOk.assoc.mpr hg'⟩
 
 namespace EUpd
 
@@ -120,7 +122,7 @@ theorem trans (h₁ : EUpd P P') (h₂ : EUpd P' P'') : EUpd P P'' := fun m r rF
 /-- The knowledge that a block is dead can be forgotten. -/
 theorem dead_drop {b : BlockId} : EUpd (dead b) FAssn.emp := fun _ _ rF hh hp _ =>
   ⟨⟨FHeap.empty, Know.none, Ghost.unit⟩, ⟨by simpa [hp.1] using hh.disj,
-    by simpa [hp.1] using hh.heap, Know.sub_none _, hh.knowF, by simpa [hp.2.2] using hh.ghost⟩,
+    by simpa [hp.1, hp.2.2] using hh.heap, Know.sub_none _, hh.knowF, by simpa [hp.2.2] using hh.ghost⟩,
     rfl, rfl, rfl⟩
 
 end EUpd

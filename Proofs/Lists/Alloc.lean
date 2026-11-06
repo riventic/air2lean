@@ -588,7 +588,7 @@ theorem freeAll_steps (hd : Option Ptr) (xs : List (BitVec 32))
     (hc : CreditFree r rF) {v : Unit} {m' : Mem}
     (hr : (Sched.soloRun fuel (freeAll ⟨ctx, vtp⟩ hd)).run m = pure (v, m')) :
     m'.ticks = m.ticks + (xs.length + 1) ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
-      FMatch m' (r'.heap ∪ rF.heap) ∧
+      SMatch m' (r'.heap ∪ rF.heap) (r'.gh.add rF.gh).share ∧
       (I.own ⋆ ((fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ freedSeg I hd none xs.length)) r' ∧
       m'.FSeq :=
   ((freeAll_exact ctx vtp fns I e φ hd xs h).toSolo fuel).ticks_eq_post hh hp hs hc hr

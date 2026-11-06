@@ -59,12 +59,12 @@ comes with its epoch's whole token, which the frame then holds. -/
 theorem no_mint_ep :
     ¬ ∀ γ, Upd (gauth γ 0 GMap.empty) (gauth γ 0 GMap.empty ⋆ epTok γ 0 Frac.one) := by
   intro hm
-  obtain ⟨r, ⟨γ, hr⟩, -, -, -, -, -, hok, -⟩ :=
+  obtain ⟨r, ⟨γ, hr⟩, -, -, -, -, -, -, hok, -⟩ :=
     Upd.alloc none ⟨FHeap.empty, Know.none, Ghost.unit⟩ ⟨rfl, rfl, rfl⟩ Ghost.unit (GOk.unit (m := m0)).1
   rw [gauth_epTok hr] at hok
   have hok' : Ghost.Ok (Ghost.at γ (GCell.auth1 0 GMap.empty none)) (Ghost.at γ (GCell.ep1 0 Frac.one)) := by
     unfold Ghost.Ok at hok ⊢; rwa [Ghost.add_unit, ← Ghost.at_add] at hok
-  obtain ⟨r', hr', -, -, -, -, -, hok2, -⟩ :=
+  obtain ⟨r', hr', -, -, -, -, -, -, hok2, -⟩ :=
     hm γ ⟨FHeap.empty, Know.none, Ghost.at γ (GCell.auth1 0 GMap.empty none)⟩ ⟨rfl, rfl, rfl⟩ _ hok'
   rw [gauth_epTok hr'] at hok2
   have hv := hok2.1.1 γ

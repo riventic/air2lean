@@ -25,7 +25,7 @@ open FAssn
 /-- **Drop a claim**: it owns no bytes and no knowledge. -/
 theorem claim_drop {b : BlockId} {lo hi : Nat} {t : STag} {R : FAssn} : EUpd (bclaim b lo hi t ⋆ R) R :=
   EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
-    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
+    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)
 
 /-- **Drop a pointer's claim** (one whose block the state has not opened, e.g. the released
 bytes' claim of a shrink, `FAllocInv.relBytes`). -/
@@ -44,19 +44,19 @@ not reclaim a byte or mint a replacement claim; it is the existing `EUpd.drop` l
 
 @[fsym_drop] theorem EUpd.gauthP_drop {γ e : Nat} {M : GMap} {p : STag} {R : FAssn} :
     EUpd (gauthP γ e M p ⋆ R) R :=
-  EUpd.dropL fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
+  EUpd.dropL fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 @[fsym_drop] theorem EUpd.gfrag_drop {γ e i : Nat} {g : GRegion} {R : FAssn} :
     EUpd (gfrag γ e i g ⋆ R) R :=
-  EUpd.dropL fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
+  EUpd.dropL fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 @[fsym_drop] theorem EUpd.bshare_drop {b : BlockId} {q : Frac} {k : Nat} {t : STag} {R : FAssn} :
     EUpd (bshare b q k t ⋆ R) R :=
-  EUpd.dropL fun _ h => ⟨h.2.1, h.2.2.1, by rw [h.2.2.2]; exact fun _ _ => rfl⟩
+  EUpd.dropL fun _ h => ⟨h.2.1, h.2.2.1, by rw [h.2.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 @[fsym_drop] theorem EUpd.bcrcpt_drop {b : BlockId} {lo hi γ e : Nat} {R : FAssn} :
     EUpd (bcrcpt b lo hi γ e ⋆ R) R :=
-  EUpd.dropL fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
+  EUpd.dropL fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 @[fsym_drop] theorem EUpd.pure_drop {φ : Prop} {R : FAssn} : EUpd (⟪φ⟫ ⋆ R) R :=
   EUpd.of_imp fun _ h => (sep_lift.mp h).2

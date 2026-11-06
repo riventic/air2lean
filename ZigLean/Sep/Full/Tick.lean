@@ -77,7 +77,8 @@ theorem Holds.tick_unmetered {m : Mem} {r rF : Res} (hh : Holds m r rF)
   generalize hcg : (r.gh.add rF.gh).ac = c at hM hV hu' hna ho
   have e : ((r.gh.add Ghost.spent1).add rF.gh).ac = (ACell.fragAt .spent 1).add c := by
     rw [← hcg]; ext <;> simp <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ticked ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare (Ghost.share_add₂ Ghost.share_add_none rfl), hk, hkF,
+    hg.ticked ?_ ?_ ?_ ?_ ?_⟩
   · funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
@@ -111,7 +112,10 @@ theorem Holds.tick_credit {m : Mem} {r₀ rF : Res} (hh : Holds m ⟨r₀.heap, 
   have e : ((r₀.gh.add Ghost.spent1).add rF.gh).ac = (ACell.fragAt .spent 1).add c := by
     rw [← hcg]; ext <;> simp <;> omega
   rw [e0] at hM hV ho
-  refine ⟨hd, hm, hk, hkF, hg.ticked ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare (Ghost.share_add₂ (by
+      show (r₀.gh.add Ghost.spent1).share = (r₀.gh.add (Ghost.cred 1)).share
+      rw [Ghost.share_add_none, Ghost.share_add_none]) rfl), hk, hkF,
+    hg.ticked ?_ ?_ ?_ ?_ ?_⟩
   · funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
@@ -161,11 +165,11 @@ theorem spent_zero : spent 0 = emp := by funext r; simp [spent, emp]
 /-- **Receipts and credits that are not used are dropped.** -/
 @[fsym_drop] theorem EUpd.spent_drop {n : Nat} {R : FAssn} : EUpd (spent n ⋆ R) R :=
   EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
-    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
+    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)
 
 @[fsym_drop] theorem EUpd.credits_drop {n : Nat} {R : FAssn} : EUpd (credits n ⋆ R) R :=
   EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
-    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
+    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)
 
 /-- **The plain mode splits off a resource that holds its fragments** (`Res.Plain`,
 `Holds.splitPlain`): a precondition whose resources hold the plain mode (an exact thread part, a

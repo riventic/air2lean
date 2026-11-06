@@ -86,7 +86,7 @@ theorem fconc : m.FConc := by
       subst h; decide
     · simp [m] at h
 
-theorem owns : m.Owns m.current rC.heap.erase := fun e he => by simp [m] at he
+theorem owns : m.Owns m.current rC.owned := fun e he => by simp [m] at he
 
 /-- The run, computed by the kernel: the value `0`, no footprint entry, the clock unchanged. -/
 theorem run_unchangedB :
@@ -108,7 +108,7 @@ theorem cload_thread :
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ (⟪v = 0⟫ ⋆ cpts p 1 (0 : BitVec 8)) r' ∧
-        m'.FConc ∧ m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m' :=
+        m'.FConc ∧ m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m' :=
   (FTTotalTriple.cload (p := p) (a := 1) (v := (0 : BitVec 8)) (by decide)).1 m rC rF holds hc
     fconc owns
 

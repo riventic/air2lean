@@ -33,12 +33,12 @@ variable {α σ ε : Type}
 theorem FTTriple.admissible {P : FAssn} {Q : α → FAssn} :
     Lean.Order.admissible (fun c : MemM α => FTTriple P c Q) :=
   admissible_pi_apply (β := fun _ : Mem => Result (α × Mem))
-    (fun m o => ∀ r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+    (fun m o => ∀ r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
       match o.run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m')
+          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m')
     fun _ => by
       change Lean.Order.admissible fun x : FlatOrder none => _
       exact admissible_flatOrder _ fun _ _ _ _ _ _ => trivial
