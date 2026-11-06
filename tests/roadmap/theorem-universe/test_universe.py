@@ -99,6 +99,20 @@ class UniverseTests(unittest.TestCase):
             self.assertTrue(units[rel].module.startswith('Universe.'))
         self.assertEqual(units['tests/roadmap/idle-loops/IdleLoop/Gen.lean'].module, 'IdleLoop.Gen')
 
+    def test_fixture_lake_modules_have_their_lake_names(self):
+        # A fixture Lake module that nothing imports and that imports no local module was named
+        # from its own directory (`Contracts`), so its audit and its float labels disagreed with
+        # every Lake-built audit (`Outcomes.Contracts`).
+        import fixtures
+        lake = fixtures.source_modules(ROOT)  # Lake's own enumeration (`lake query`)
+        self.assertEqual(fixtures.source_roots(ROOT), {file: root for file, root in lake.values()})
+        units = {u.file: u for u in universe.universe()[1]}
+        for module, (file, root) in lake.items():
+            if file in units:
+                self.assertEqual((units[file].module, units[file].root), (module, root), file)
+        self.assertEqual(units['tests/roadmap/outcome-taxonomy/Outcomes/Contracts.lean'].module,
+                         'Outcomes.Contracts')
+
     def test_scan_rejects_kernel_bypass_and_placeholders(self):
         source = ('-- sorry in a comment is fine\n/- set_option debug.skipKernelTC true -/\n'
                   'theorem a : True := by sorry\nset_option debug.skipKernelTC true in\n'
