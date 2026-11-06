@@ -6,12 +6,22 @@ import ZigLean.Conc.Clock
 
 `FTTriple P c Q` is `FTriple` for a `MemM` step of one thread inside a concurrent run
 (`docs/sep-threads.md`): the same resources (`Res`), the same `Holds` and the same assertions, with
-ownership by the thread's clock (`Mem.Owns` of the bytes the resource holds, exclusively or by a
-read share: `Res.owned`) in place of `Mem.Seq`, and the step's race freedom (`FStepIn` of the
-frame's bytes: the frame, the other threads and the atomic locations over the frame stay) in the
-post. Which bytes a resource holds is fixed by the memory and the frame (`Holds.owned_sub`), so
-an update in a thread gains no byte. It replaces the legacy `TTriple`
-(`ZigLean/Conc/Own.lean`).
+ownership by the thread's clock in place of `Mem.Seq`, and the step's race freedom in the post.
+It replaces the legacy `TTriple` (`ZigLean/Conc/Own.lean`).
+
+- **Ownership, option R** (`Mem.OwnsRes`, `docs/sep-full-state.md` §Read shares): the thread owns
+  the resource's exclusive bytes (cells and whole shares, `Res.excl`: every recorded access before
+  its clock, `Mem.Owns`) and reads its partial shares (`Res.shared`: every recorded write before its
+  clock, `Mem.OwnsR`), so concurrent readers each own their share. `Mem.OwnsRes.of_owns` gives it
+  from ownership of all the bytes (`Res.owned`), as for any share-free resource.
+- **Race freedom** (`FStepIn rF.owned m m' rF.shared`): the frame, the other threads and the
+  atomic locations over the frame stay; a new access touches no frame byte except a read of the
+  frame's partial shares. Next to a byte the resource holds, the frame holds at most a partial share
+  (`Holds.frame_shared`), so a load of the resource's bytes is local (`ThreadLocal.loadOwned`,
+  `@[fsym]` `FTTotalTriple.sload` in `Share.lean`).
+- Which bytes a resource holds is fixed by the memory and the frame (`Holds.owned_sub`), so an
+  update in a thread gains no byte. Gathering partial shares of different owners into a whole share
+  fails closed (engine ledger `share-gather`).
 
 - **Memory invariant** (`Mem.FConc`): the current thread exists, the atomic layout is well formed
   and live blocks lie apart (`FSeq` without `Seq`).
