@@ -77,7 +77,8 @@ theorem Holds.tick_unmetered {m : Mem} {r rF : Res} (hh : Holds m r rF)
   generalize hcg : (r.gh.add rF.gh).ac = c at hM hV hu' hna ho
   have e : ((r.gh.add Ghost.spent1).add rF.gh).ac = (ACell.fragAt .spent 1).add c := by
     rw [← hcg]; ext <;> simp <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ticked ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare (Ghost.share_add₂ Ghost.share_add_none rfl), hk, hkF,
+    hg.ticked ?_ ?_ ?_ ?_ ?_⟩
   · funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
@@ -111,7 +112,10 @@ theorem Holds.tick_credit {m : Mem} {r₀ rF : Res} (hh : Holds m ⟨r₀.heap, 
   have e : ((r₀.gh.add Ghost.spent1).add rF.gh).ac = (ACell.fragAt .spent 1).add c := by
     rw [← hcg]; ext <;> simp <;> omega
   rw [e0] at hM hV ho
-  refine ⟨hd, hm, hk, hkF, hg.ticked ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare (Ghost.share_add₂ (by
+      show (r₀.gh.add Ghost.spent1).share = (r₀.gh.add (Ghost.cred 1)).share
+      rw [Ghost.share_add_none, Ghost.share_add_none]) rfl), hk, hkF,
+    hg.ticked ?_ ?_ ?_ ?_ ?_⟩
   · funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.ofAC, Ghost.cred, Ghost.unit]

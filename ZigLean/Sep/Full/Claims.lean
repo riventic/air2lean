@@ -499,7 +499,8 @@ theorem FTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → F
           rw [hQ v b r' hnb hq y, hh.ghost.2.2.1.frame b h1 y, ECell.add_unit]
         refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
             r'.gh.add (Ghost.atCl b (ECell.onRange (lo v) (hi v) (ECell.shareT none Frac.one 0)))⟩,
-          ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
+          ⟨by rw [FHeap.union_empty]; exact hh'.disj,
+            by rw [FHeap.union_empty]; exact hh'.heap.reShare (Ghost.share_add₂ Ghost.share_add_none rfl),
             by rw [Know.union_none]; exact hh'.know, hh'.knowF,
             GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok (lo v) (hi v) y ls hu)
               (fun y γ e k => onRange_share_tags (lo v) (hi v) y γ e k)⟩, ?_, hs'⟩

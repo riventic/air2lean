@@ -551,6 +551,39 @@ theorem of_add (c : FCell) (q₁ q₂ : Frac) : (of c q₁).add (of c q₂) = of
     · rw [e, of_self, of_self, of_self]; rfl
     · rw [of_ne _ e, of_ne _ e, of_ne _ e]; grind
 
+/-- **Nothing or the whole of one cell**: a memory accounts for a byte's shares exactly
+(`SMatch`), so who holds a byte, exclusively or by shares, is fixed by the memory and the frame
+(`Holds.owned_sub`). -/
+def Total (a : SCell) : Prop := a = zero ∨ ∃ c, a = of c Frac.one
+
+theorem Total.valid {a : SCell} (h : a.Total) : a.Valid := by
+  rcases h with rfl | ⟨c, rfl⟩
+  · exact valid_zero
+  · exact valid_of (by decide)
+
+/-- Holds a positive fraction of some cell. -/
+def Pos (a : SCell) : Prop := ∃ c, 0 < (a c).val
+
+theorem not_pos_iff {a : SCell} : ¬ a.Pos ↔ a.Empty := by
+  constructor
+  · intro h c; have := (a c).nonneg
+    exact Classical.byContradiction fun hne => h ⟨c, by grind⟩
+  · rintro h ⟨c, hc⟩; rw [h c] at hc; exact absurd hc (by decide)
+
+theorem pos_add_iff {a b : SCell} : (a.add b).Pos ↔ a.Pos ∨ b.Pos := by
+  constructor
+  · rintro ⟨c, hc⟩; rw [add_val] at hc
+    have := (a c).nonneg; have := (b c).nonneg
+    by_cases ha : 0 < (a c).val
+    · exact .inl ⟨c, ha⟩
+    · exact .inr ⟨c, by grind⟩
+  · rintro (⟨c, hc⟩ | ⟨c, hc⟩)
+    · exact ⟨c, pos_add b hc⟩
+    · exact ⟨c, pos_add' a hc⟩
+
+theorem cell_eq_none_iff {a : SCell} : a.cell = none ↔ ¬ a.Pos := by
+  unfold cell Pos; split <;> simp_all
+
 end SCell
 
 /-- A region named by a ledger token: its start pointer, its length in bytes, the fraction of
@@ -1562,9 +1595,10 @@ noncomputable def SCells (s : Loc → SCell) : FHeap := fun l => (s l).cell
 
 /-- **The heap `h` with the read shares `s` matches `m`**: `h` and the cells the shares read
 together match `m` (`FMatch`), no share is on a location of `h` (a shared cell is no resource's
-exclusive cell), and each location's shares are valid (one cell, at most whole). -/
+exclusive cell), and each location's shares are accounted for exactly: none, or the whole of one
+cell (`SCell.Total`). -/
 def SMatch (m : Mem) (h : FHeap) (s : Loc → SCell) : Prop :=
-  FMatch m (h ∪ SCells s) ∧ FHeap.Disjoint h (SCells s) ∧ ∀ l, (s l).Valid
+  FMatch m (h ∪ SCells s) ∧ FHeap.Disjoint h (SCells s) ∧ ∀ l, (s l).Total
 
 namespace SMatch
 
@@ -1574,7 +1608,9 @@ theorem whole (hm : SMatch m h s) : FMatch m (h ∪ SCells s) := hm.1
 
 theorem apart (hm : SMatch m h s) : FHeap.Disjoint h (SCells s) := hm.2.1
 
-theorem valid (hm : SMatch m h s) : ∀ l, (s l).Valid := hm.2.2
+theorem total (hm : SMatch m h s) : ∀ l, (s l).Total := hm.2.2
+
+theorem valid (hm : SMatch m h s) : ∀ l, (s l).Valid := fun l => (hm.total l).valid
 
 /-- An exclusive cell is a live byte of `m` (up to `Cell.norm`). -/
 theorem cell (hm : SMatch m h s) {l : Loc} {fc : FCell} (hl : h l = some fc) :
@@ -1591,11 +1627,19 @@ theorem none (hm : SMatch m h s) {l : Loc} (hl : h l = none) (hs : SCells s l = 
     m.heap l = none :=
   hm.whole.none (by simp [hl, hs])
 
+/-- A shared cell is a live byte of `m`. -/
+theorem share_live (hm : SMatch m h s) {l : Loc} (hl : SCells s l ≠ Option.none) :
+    m.heap l ≠ Option.none := fun e => by
+  have := hm.whole.1 l
+  rw [e, Option.map_none, eq_comm, Option.map_eq_none_iff, FHeap.union_apply,
+    Option.or_eq_none_iff] at this
+  exact hl this.2
+
 /-- Without shares it is `FMatch`. -/
 theorem of_fmatch (hm : FMatch m h) (hs : ∀ l, (s l).Empty) : SMatch m h s := by
   have e : SCells s = FHeap.empty := funext fun l => SCell.cell_eq_none (hs l)
   refine ⟨by rw [e, FHeap.union_empty]; exact hm, by rw [e]; exact FHeap.disjoint_empty h,
-    fun l => by rw [(hs l).eq]; exact SCell.valid_zero⟩
+    fun l => .inl (hs l).eq⟩
 
 theorem fmatch (hm : SMatch m h s) (hs : ∀ l, (s l).Empty) : FMatch m h := by
   have e : SCells s = FHeap.empty := funext fun l => SCell.cell_eq_none (hs l)
@@ -1603,6 +1647,13 @@ theorem fmatch (hm : SMatch m h s) (hs : ∀ l, (s l).Empty) : FMatch m h := by
 
 /-- The same shares, written another way (a ghost change that leaves them: `Ghost.share_add₂`). -/
 theorem reShare {s' : Loc → SCell} (hm : SMatch m h s) (e : s' = s) : SMatch m h s' := e ▸ hm
+
+/-- **The same shares over a new memory and heap**: `h'` with the shares matches `m'`, and `h'`
+has no location `h` lacks (a write, a retire or a re-tag of exclusive cells). -/
+theorem of_whole {m' : Mem} {h' : FHeap} (hm : SMatch m h s) (hf : FMatch m' (h' ∪ SCells s))
+    (hd : ∀ l, h' l ≠ Option.none → h l ≠ Option.none) : SMatch m' h' s :=
+  ⟨hf, fun l => (hm.apart l).imp_left fun e => Classical.byContradiction fun hn => hd l hn e,
+    hm.total⟩
 
 end SMatch
 

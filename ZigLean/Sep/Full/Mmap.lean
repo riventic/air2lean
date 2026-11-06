@@ -55,15 +55,24 @@ theorem Holds.reblock_heap {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Blo
     (hkeep : ∀ o c c', m.heap (b, o) = some c → m'.heap (b, o) = some c' → c'.byte = c.byte)
     (hdom : ∀ l, r.heap l ≠ none ↔ (l.1 = b ∧ m.heap l ≠ none ∧ m'.heap l = none)) :
     FHeap.Disjoint (reblockRes m m' b nb).heap rF.heap ∧
-      FMatch m' ((reblockRes m m' b nb).heap ∪ rF.heap) := by
+      SMatch m' ((reblockRes m m' b nb).heap ∪ rF.heap) (r.gh.add rF.gh).share := by
   have hget := blocks_set_get hb hbs
   have hb' : m'.blocks[b]? = some nb := by rw [hget]; simp
   have hoth : ∀ l : Loc, l.1 ≠ b → m'.heap l = m.heap l := fun ⟨x, o⟩ hx => by
     simp only [Mem.heap]; rw [hget x, if_neg hx]
   have hFlive : ∀ l fc, rF.heap l = some fc → m.heap l ≠ none := fun l fc h => by
     obtain ⟨c, hc, -⟩ := hh.swap.cellN h; rw [hc]; simp
-  have hold := hh.heap.1
-  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩⟩
+  have hold := hh.heap.whole.1
+  -- a share is on a live byte that the resource does not hold
+  have hS : ∀ l, SCells (r.gh.add rF.gh).share l ≠ none → m.heap l ≠ none ∧ r.heap l = none ∧
+      rF.heap l = none := fun l hs => by
+    refine ⟨hh.heap.share_live hs, ?_⟩
+    rcases hh.heap.apart l with e | e
+    · exact Option.or_eq_none_iff.mp (by rwa [FHeap.union_apply] at e)
+    · exact absurd e hs
+  have hSn : ∀ l, m.heap l = none → SCells (r.gh.add rF.gh).share l = none := fun l hm =>
+    Classical.byContradiction fun hs => (hS l hs).1 hm
+  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩, fun l => ?_, hh.heap.total⟩
   · -- disjoint
     by_cases hc : l.1 = b ∧ m.heap l = none
     · right
@@ -79,7 +88,7 @@ theorem Holds.reblock_heap {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Blo
           cases e : rF.heap l with
           | none => rfl
           | some fc => exact absurd hm (hFlive _ _ e)
-        rw [if_pos ⟨hx, hm⟩, hFn]
+        rw [if_pos ⟨hx, hm⟩, hFn, hSn l hm, Option.or_none, Option.or_none]
         cases m'.heap l <;> rfl
       · rw [if_neg (fun h => hm h.2), Option.none_or]
         by_cases hm' : m'.heap l = none
@@ -88,10 +97,12 @@ theorem Holds.reblock_heap {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Blo
             rcases hh.disj l with e | e
             · exact absurd e hr
             · exact e
-          rw [hm', hFn]; rfl
+          have hSl : SCells (r.gh.add rF.gh).share l = none :=
+            Classical.byContradiction fun hs => hr (hS l hs).2.1
+          rw [hm', hFn, hSl]; rfl
         · have hrn : r.heap l = none := Classical.byContradiction fun hc => hm' ((hdom l).mp hc).2.2
           have h1 := hold l
-          rw [FHeap.union_apply, hrn, Option.none_or] at h1
+          simp only [FHeap.union_apply, hrn, Option.none_or] at h1
           rw [← h1]
           obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp hm
           obtain ⟨c', hc'⟩ := Option.ne_none_iff_exists'.mp hm'
@@ -109,15 +120,38 @@ theorem Holds.reblock_heap {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Blo
     · rw [if_neg (fun h => hx h.1), Option.none_or, hoth l hx]
       have hrn : r.heap l = none := Classical.byContradiction fun hc => hx ((hdom l).mp hc).1
       have h1 := hold l
-      rw [FHeap.union_apply, hrn, Option.none_or] at h1
+      simp only [FHeap.union_apply, hrn, Option.none_or] at h1
       exact h1
   · -- tags
     simp only [FHeap.union_apply, reblockRes] at hfc
+    rw [hsh]
     split at hfc
-    · cases e : m'.heap l with
-      | none => rw [e, Option.map_none, Option.none_or] at hfc; rw [hsh]; exact hh.tagF hfc
-      | some c => rw [e, Option.map_some, Option.some_or] at hfc; cases hfc; trivial
-    · rw [Option.none_or] at hfc; rw [hsh]; exact hh.tagF hfc
+    next hcb =>
+      cases e : m'.heap l with
+      | none =>
+        rw [e, Option.map_none, Option.none_or] at hfc
+        have hrn : r.heap l = none :=
+          Classical.byContradiction fun hc => ((hdom l).mp hc).2.1 hcb.2
+        exact hh.heap.whole.2 l fc (by simpa [FHeap.union_apply, hrn] using hfc)
+      | some c =>
+        rw [e, Option.map_some, Option.some_or, Option.some_or] at hfc; cases hfc; trivial
+    next =>
+      rw [Option.none_or] at hfc
+      cases e : r.heap l with
+      | none => exact hh.heap.whole.2 l fc (by simpa [FHeap.union_apply, e] using hfc)
+      | some fc₀ =>
+        have hFn : rF.heap l = none := (hh.disj l).resolve_left (by simp [e])
+        have hSl : SCells (r.gh.add rF.gh).share l = none :=
+          Classical.byContradiction fun hs => by simp [(hS l hs).2.1] at e
+        rw [hFn, hSl] at hfc; cases hfc
+  · -- no share on a byte that became live or that the frame holds
+    by_cases hc : l.1 = b ∧ m.heap l = none
+    · exact .inr (hSn l hc.2)
+    · rcases hh.heap.apart l with e | e
+      · left
+        rw [FHeap.union_apply, Option.or_eq_none_iff] at e
+        simp [reblockRes, hc, e.2]
+      · exact .inr e
 
 /-- **One block's extent changes under its full extent** (module doc): block `b` becomes `nb` at
 the same address with a kind of the same normal form, its live bytes keep their values, and the
@@ -148,7 +182,7 @@ theorem Holds.reblock {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {
     have := full_excl hok (b := b) (S := S) (K := K) (by simp [Ghost.exts, extOne])
     rwa [Ghost.ls_exts_add] at this
   obtain ⟨hdisj, hmatch⟩ := hh.reblock_heap hb hbs hsh ha hk hkeep hdom
-  refine ⟨hdisj, hmatch, Know.sub_none _,
+  refine ⟨hdisj, hmatch.reShare (Ghost.share_add₂ (by rw [hrg]; rfl) rfl), Know.sub_none _,
     hh.knowF.trans (KMono.set hb ha hc hbs fun hd => by
       obtain ⟨blk', hb', hl', -⟩ := hh.bauth (sep_comm hp)
       rw [hb] at hb'; cases hb'; rw [hl'] at hd; cases hd),
@@ -260,7 +294,7 @@ theorem Holds.grow {m m' : Mem} {r rF : Res} {b : BlockId} {blk nb : Block} {S :
     intro c; funext γ e p; simp [Ghost.ls, Ghost.add, Ghost.atExt]
   rw [ecb, els] at hvb
   obtain ⟨hz, hv', he⟩ := ECell.auth1_move (S' := nb.bytes.size) (K' := nb.kind) hvb.1
-  refine ⟨hdisj, hmatch, Know.sub_none _,
+  refine ⟨hdisj, hmatch.reShare (Ghost.share_add₂ (by rw [hrg]; rfl) rfl), Know.sub_none _,
     hh.knowF.trans (KMono.set hb ha hc hbs fun hd => by rw [hl0] at hd; cases hd), ?_⟩
   show GOk m' (Ghost.atExt b (ECell.auth1 nb.bytes.size nb.kind q)) rF.gh
   refine ⟨⟨⟨fun γ => ?_, fun x => ?_, hok.1.2.2.1.congr (by funext x y; simp) (by rw [els, els]),
@@ -1472,10 +1506,10 @@ theorem munmap (os : Os.Target) (s : Slice)
                 alignUp s.len.toNat os.pageSize) blk.bytes.size - s.ptr.off.toNat)
               omega
             rw [hnh] at hh'; cases hh'
-        refine ⟨((FStepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hown' hbs
+        refine ⟨((FStepIn.recordAt (m := m.noFp) hc.1 (hh.erase_disj_owned) hown' hbs
             (fun _ ⟨blk', e1, e2⟩ => ?_)).trans
             (FStepIn.retire fun x h1 h2 =>
-              ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hown' x h1 h2))).trans
+              ((hh.erase_disj_owned) (b, x)).resolve_left (hown' x h1 h2))).trans
             (FStepIn.setBlock (fun _ h => by cases hb.symm.trans h; cases u <;> rfl)
               (fun hK => ?_) hsz),
           Mem.NoRevive.setBlock (m := m) hb rfl ?_ ?_ ?_⟩
@@ -1505,7 +1539,7 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
   obtain ⟨_, m₃, h5, h6⟩ := Conc.Proto.MemM.bind_ok h4
   have e1 := Conc.Proto.MemM.set_ok h5
   subst e1
-  have hst : FStepIn rF.heap.erase m.noFp { m.noFp with allocs := m.noFp.allocs + 1 } :=
+  have hst : FStepIn rF.owned m.noFp { m.noFp with allocs := m.noFp.allocs + 1 } :=
     FStepIn.bumpAllocs
   split at h6
   · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h6
@@ -1579,11 +1613,11 @@ theorem mremapShrink (os : Os.Target) (p : Ptr) (oldLen newLen : BitVec 64) (fla
         simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
         exact ⟨⟨⟨⟨e, by omega⟩, hlen⟩, by omega⟩, by omega⟩
       rw [hnh] at hh'; cases hh'
-    refine ⟨((FStepIn.recordAt (m := m.noFp) hc.1 (FHeap.erase_disjoint hh.disj) hin'
+    refine ⟨((FStepIn.recordAt (m := m.noFp) hc.1 (hh.erase_disj_owned) hin'
       (Array.getElem?_eq_some_iff.mp hb).1
         (fun _ ⟨blk', e1, e2⟩ => ?_)).trans
         (FStepIn.retire fun x h1 h2 =>
-          ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x h1 h2))).trans
+          ((hh.erase_disj_owned) (b, x)).resolve_left (hin' x h1 h2))).trans
         (FStepIn.setBlock (fun _ h => by cases hb.symm.trans h; rfl) (fun hK => ?_) hsz), ?_⟩
     · rw [hb] at e1; cases e1; rw [hk] at e2; cases e2
     · simp [hk] at hK
@@ -1643,7 +1677,7 @@ theorem mremapGrow (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId} {
   · rw [hrun m hb, hrun m.noFp hb, e1, e2]
     split <;> (try split) <;> rfl
   · have hb₁ : ({ m with allocs := m.allocs + 1 } : Mem).blocks[b]? = some blk := hb
-    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } := FStepIn.bumpAllocs
+    have hst₁ : FStepIn rF.owned m { m with allocs := m.allocs + 1 } := FStepIn.bumpAllocs
     rw [hrun m hb] at e
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
@@ -1652,7 +1686,7 @@ theorem mremapGrow (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId} {
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
       exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.heap.erase) (P := os.pageSize)
+      obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.owned) (P := os.pageSize)
         (n := newLen.toNat) hb₁ hl hK
       exact ⟨hst₁.trans hst₂, hrev₂⟩
 
@@ -1708,7 +1742,7 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
   · rw [hrun m hb hnr.2, hrun m.noFp hb hnr.1, e1, e2, e3, e4, e5, e6]
     split <;> (try split) <;> (try split) <;> rfl
   · have hb₁ : ({ m with allocs := m.allocs + 1 } : Mem).blocks[b]? = some blk := hb
-    have hst₁ : FStepIn rF.heap.erase m { m with allocs := m.allocs + 1 } := FStepIn.bumpAllocs
+    have hst₁ : FStepIn rF.owned m { m with allocs := m.allocs + 1 } := FStepIn.bumpAllocs
     rw [hrun m hb hnr.2] at e
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
@@ -1721,8 +1755,8 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
         -- the move: the owned write of the old bytes, the end of the old block, the new block
         let mr := ({ m with allocs := m.allocs + 1 } : Mem).recordAt b lo (blk.bytes.size - lo) .write
         have hbr : mr.blocks[b]? = some blk := hb
-        have hrec : FStepIn rF.heap.erase { m with allocs := m.allocs + 1 } mr :=
-          FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hin' (Array.getElem?_eq_some_iff.mp hb).1
+        have hrec : FStepIn rF.owned { m with allocs := m.allocs + 1 } mr :=
+          FStepIn.recordAt hc.1 (hh.erase_disj_owned) hin' (Array.getElem?_eq_some_iff.mp hb).1
             fun _ ⟨blk', h1, h2⟩ => by
               have h1' : m.blocks[b]? = some blk' := h1
               rw [hb] at h1'; cases h1'; rw [hK] at h2; cases h2
@@ -1730,7 +1764,7 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
           { bytes := blk.bytes.extract lo blk.bytes.size ++ mremapFill os.pageSize (blk.bytes.size - lo) n,
             align := os.pageSize, kind := .mapped 0, live := true, addr := mr.mapAddr os.pageSize n }
         let mk : Mem := { mr with blocks := mr.blocks.set! b { blk with live := false } }
-        have hpush : FStepIn rF.heap.erase mk (mr.mremapMoved os.pageSize b blk lo n) :=
+        have hpush : FStepIn rF.owned mk (mr.mremapMoved os.pageSize b blk lo n) :=
           FStepIn.push (m := mk) nnb
         refine ⟨((hst₁.trans hrec).trans (FStepIn.kill hbr)).trans hpush, ?_⟩
         have hk : mr.NoRevive mk := Mem.NoRevive.kill mr b blk
@@ -1742,7 +1776,7 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
       exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.heap.erase) (P := os.pageSize)
+      obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.owned) (P := os.pageSize)
         (n := newLen.toNat) hb₁ hl hK
       exact ⟨hst₁.trans hst₂, hrev₂⟩
 

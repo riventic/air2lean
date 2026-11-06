@@ -66,7 +66,9 @@ memory without stack budgets. -/
 theorem holds_exts {m : Mem} {h : FHeap} {k : Know} {E : BlockId → Option (Nat × BlockKind)}
     (hm : FMatch m h) (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) (hns : m.NoStack) :
     Holds m ⟨h, k, Ghost.exts E⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ := by
-  refine ⟨FHeap.disjoint_empty _, by simpa using hm, hk, fun _ h => h.elim, ?_, ?_, ?_, ?_⟩
+  refine ⟨FHeap.disjoint_empty _,
+    SMatch.of_fmatch (by simpa using hm) fun _ => by rw [Ghost.add_unit]; exact SCell.empty_zero,
+    hk, fun _ h => h.elim, ?_, ?_, ?_, ?_⟩
   · exact exts_ok E
   · show ExtTrue m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact ht
   · show ClFresh m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact fun _ _ _ => rfl
@@ -179,6 +181,7 @@ private theorem gextGh_eq (j : BlockId) (S : Nat) (K : BlockKind) :
     by_cases hb : b = j <;> by_cases hS : 0 < S <;> simp [hb, hS, Ghost.atExt, Ghost.exts, Ghost.unit]
   · funext b x; split <;> simp [Ghost.atExt, Ghost.exts, Ghost.unit]
   · split <;> simp
+  · split <;> rfl
 
 private theorem exts_add {E E' : BlockId → Option (Nat × BlockKind)}
     (h : ∀ b, E b = none ∨ E' b = none) :
@@ -190,6 +193,7 @@ private theorem exts_add {E E' : BlockId → Option (Nat × BlockKind)}
     rcases h b with e | e <;> rw [e] <;> split <;> simp_all
   · funext b x; simp [Ghost.add, Ghost.exts]
   · simp
+  · funext l; simp [Ghost.add, Ghost.exts]
 
 private theorem initR_gh (m : Mem) (n : Nat) : (initR m n).gh = Ghost.exts (initE m n) := by
   induction n with
@@ -473,7 +477,8 @@ theorem initRes_holds_stack (σ : Placement) (gs : List (Array Byte × Nat × Bl
   have hv : c.Valid :=
     ACell.Valid.add_ex _ (ACell.Valid.add_ex _ hvu fun v => by simp) fun v => by
       simp [curCell]
-  refine ⟨hh.reAC (by rw [hws]) (by rw [hws]) ?_ ?_ ?_ (by rw [ec]; exact hv) ?_, ?_⟩
+  refine ⟨hh.reAC (by rw [hws]) (by rw [hws]) ?_ ?_ ?_ (by rw [ec]; exact hv) ?_
+    (by funext _; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]), ?_⟩
   · funext γ; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.stackStart, Ghost.cur, Ghost.ofAC, Ghost.unit]

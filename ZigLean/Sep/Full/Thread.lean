@@ -6,9 +6,11 @@ import ZigLean.Conc.Clock
 
 `FTTriple P c Q` is `FTriple` for a `MemM` step of one thread inside a concurrent run
 (`docs/sep-threads.md`): the same resources (`Res`), the same `Holds` and the same assertions, with
-ownership by the thread's clock (`Mem.Owns`, of the erased bytes) in place of `Mem.Seq`, and the
-step's race freedom (`FStepIn` of the frame's bytes: the frame, the other threads and the atomic
-locations over the frame stay) in the post. It replaces the legacy `TTriple`
+ownership by the thread's clock (`Mem.Owns` of the bytes the resource holds, exclusively or by a
+read share: `Res.owned`) in place of `Mem.Seq`, and the step's race freedom (`FStepIn` of the
+frame's bytes: the frame, the other threads and the atomic locations over the frame stay) in the
+post. Which bytes a resource holds is fixed by the memory and the frame (`Holds.owned_sub`), so
+an update in a thread gains no byte. It replaces the legacy `TTriple`
 (`ZigLean/Conc/Own.lean`).
 
 - **Memory invariant** (`Mem.FConc`): the current thread exists, the atomic layout is well formed
@@ -83,20 +85,6 @@ theorem erase_sub {h hF : Heap} (hh : Holds m r rF) (hm : m.heap = h ∪ hF)
   rw [hn, Option.none_or] at hc
   exact hFs l (by rw [hc]; simp) hrF
 
-/-- Two resources that `m` holds next to the same frame have the same bytes. -/
-theorem erase_sub_of (hh : Holds m r rF) (hh' : Holds m r' rF) (l : Loc)
-    (hl : r'.heap.erase l ≠ none) : r.heap.erase l ≠ none := by
-  obtain ⟨fc, hfc⟩ : ∃ fc, r'.heap l = some fc := by
-    cases e : r'.heap l with
-    | none => simp [FHeap.erase, e] at hl
-    | some fc => exact ⟨fc, rfl⟩
-  have hrF : rF.heap l = none := (hh'.disj l).resolve_left (by simp [hfc])
-  obtain ⟨c, hc, -⟩ := hh'.heap.cell (l := l) (fc := fc) (by simp [hfc])
-  intro hn
-  have hr : r.heap l = none := by simpa [FHeap.erase] using hn
-  have := hh.heap.none (l := l) (by simp [hr, hrF])
-  rw [hc] at this; cases this
-
 end Holds
 
 theorem FHeap.erase_fix_ne {m : Mem} {h : FHeap} {l : Loc} :
@@ -107,21 +95,21 @@ theorem FHeap.erase_fix_ne {m : Mem} {h : FHeap} {l : Loc} :
 
 /-- `FTriple` for a step of one thread inside a concurrent run (module doc). -/
 def FTTriple {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
     match (c.run m).run with
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m'
+        m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m'
 
 namespace FTTriple
 
 variable {α β : Type} {P P' R : FAssn} {Q Q' : α → FAssn} {c : MemM α}
 
 theorem of_run
-    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
       ∃ v m' r', c.run m = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
+        m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
     FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨v, m', r', hr, h'⟩ := h m r rF hh hp hc ho
@@ -161,39 +149,39 @@ precondition cannot state (`Mem.MsgCov` at an oracle pick's resumption): the bod
 triple in each of them. -/
 theorem of_fix_on (Φ : Mem → Prop) (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
     (h : ∀ m r rF, Φ m → Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
-      m.Owns m.current r.heap.erase →
+      m.Owns m.current r.owned →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
-    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
+    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m' := by
+          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m' := by
   intro m r rF hΦ hh hp hc ho
   have := h m (r.fix m) (rF.fix m) hΦ hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
-    (ho.sub fun l hl => FHeap.erase_fix_ne.mp hl)
+    (ho.sub fun _ hl => Res.owned_fix.mp hl)
   split at this
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
-      hst.weaken fun l hl => FHeap.erase_fix_ne.mpr hl⟩
+      hst.weaken fun _ hl => Res.owned_fix.mpr hl⟩
 
 /-- **Thread rules from exact cells** (`FTriple.of_fix`): it is enough to prove a thread triple
 for resources whose cells are the memory's exact cells, if the precondition survives reading
 the actual sizes. The thread owns the same bytes, and the frame has the same bytes. -/
 theorem of_fix (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
     (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
-      m.Owns m.current r.heap.erase →
+      m.Owns m.current r.owned →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.heap.erase ∧ FStepIn rF.heap.erase m m') :
+          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
     FTTriple P c Q :=
   fun m r rF hh hp hc ho =>
     of_fix_on (fun _ => True) hP (fun m r rF _ => h m r rF) m r rF trivial hh hp hc ho
@@ -204,21 +192,17 @@ theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) 
   intro m r rF hh hpr hc ho
   obtain ⟨rP, rR, hd, rfl, hp, hr⟩ := hpr
   have hRF := (FHeap.disjoint_union_left.mp hh.disj).2
-  have ho2 : m.Owns m.current (rP.heap.erase ∪ rR.heap.erase) := by simpa using ho
-  have hoR : m.Owns m.current rR.heap.erase := Mem.OwnsC.right ho2
-  have := ht m rP _ (Holds.split hd hh) hp hc (Mem.OwnsC.left ho2)
+  have hoR : m.Owns m.current rR.owned := ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)
+  have := ht m rP _ (Holds.split hd hh) hp hc (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))
   split at this
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     have hQR := (FHeap.disjoint_union_right.mp hh'.disj).1
-    have hsubR : ∀ l, rR.heap.erase l ≠ none → (rR.heap ∪ rF.heap).erase l ≠ none := fun l hl => by
-      simp only [FHeap.erase_union, Heap.union_apply]; cases e : rR.heap.erase l <;> simp_all
     refine ⟨_, Holds.join hQR hRF hh', ⟨r', rR, hQR, rfl, hq, hr⟩, hc', ?_,
-      hst.weaken fun l hl => ?_⟩
-    · show Mem.OwnsC _ _ _
-      rw [FHeap.erase_union]; exact Mem.OwnsC.union ho' (Mem.Owns.fstepSelf hst hoR hsubR)
-    · simp only [FHeap.erase_union, Heap.union_apply]; cases e : rR.heap.erase l <;> simp_all
+      hst.weaken fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)⟩
+    exact (Mem.OwnsC.union ho' (Mem.Owns.fstepSelf hst hoR
+      fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))).sub fun _ => Res.owned_sub_union rfl rfl
 
 theorem frameL (ht : FTTriple P c Q) : FTTriple (R ⋆ P) c (fun v => R ⋆ Q v) :=
   conseq (frame (R := R) ht) (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
@@ -263,7 +247,7 @@ theorem lift {φ : Prop} (h : φ → FTTriple P c Q) : FTTriple (⟪φ⟫ ⋆ P)
 theorem eupd (hu : EUpd P P') (ht : FTTriple P' c Q) : FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨r', hh', hp'⟩ := hu m.noFp r rF hh.toNoFp hp hc.noFp
-  exact ht m r' rF hh'.ofNoFp hp' hc (ho.sub (hh.erase_sub_of hh'.ofNoFp))
+  exact ht m r' rF hh'.ofNoFp hp' hc (ho.sub fun _ => hh.owned_sub hh'.ofNoFp)
 
 /-- An update of the postcondition. -/
 theorem eupd_post (ht : FTTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTTriple P c Q' := by
@@ -274,7 +258,7 @@ theorem eupd_post (ht : FTTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTTrip
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     obtain ⟨r'', hh'', hq'⟩ := hu _ _ r' rF hh'.toNoFp hq hc'.noFp
-    exact ⟨r'', hh''.ofNoFp, hq', hc', ho'.sub (hh'.erase_sub_of hh''.ofNoFp), hst⟩
+    exact ⟨r'', hh''.ofNoFp, hq', hc', ho'.sub fun _ => hh'.owned_sub hh''.ofNoFp, hst⟩
 
 /-- A ghost update of the precondition. -/
 theorem upd (hu : Upd P P') (ht : FTTriple P' c Q) : FTTriple P c Q := eupd (EUpd.of_upd hu) ht
@@ -308,8 +292,10 @@ theorem drop {K : α → FAssn} (ht : FTTriple P c (fun v => Q v ⋆ K v))
   · exact this
   · obtain ⟨r', ⟨hd, hm, hk, hkF, hg⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hc', ho', hs'⟩ := this
     obtain ⟨e, ha⟩ := hK _ _ hk2
-    simp only [e, FHeap.union_empty] at hd hm ho'
-    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hc', ho', hs'⟩
+    simp only [e, FHeap.union_empty] at hd hm
+    rw [ha.share_add] at hm
+    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hc',
+      ho'.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl), hs'⟩
 
 end FTTriple
 
@@ -324,7 +310,7 @@ concurrent logic (`WP` for safety, `Stops` for turns) from one total thread trip
 
 /-- From every memory where the thread owns `P`, `c` returns a value. -/
 def FTTReturns {α : Type} (P : FAssn) (c : MemM α) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.heap.erase →
+  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
     ∃ v m', c.run m = pure (v, m')
 
 /-- Total correctness of a thread's step. -/
@@ -339,7 +325,7 @@ theorem toPartial (ht : FTTotalTriple P c Q) : FTTriple P c Q := ht.1
 
 /-- The step has a result (the premise of a turn budget's `liftMem` step). -/
 theorem halts (ht : FTTotalTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r)
-    (hc : m.FConc) (ho : m.Owns m.current r.heap.erase) : (c.run m).run ≠ none := by
+    (hc : m.FConc) (ho : m.Owns m.current r.owned) : (c.run m).run ≠ none := by
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hc ho
   rw [e]; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
@@ -354,8 +340,8 @@ theorem conseq (ht : FTTotalTriple P c Q) (hp : ∀ r, P' r → P r) (hq : ∀ v
 theorem frame (ht : FTTotalTriple P c Q) : FTTotalTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by
   refine ⟨ht.1.frame, fun m r rF hh hpr hc ho => ?_⟩
   obtain ⟨rP, rR, hd, rfl, hp, -⟩ := hpr
-  have ho2 : m.Owns m.current (rP.heap.erase ∪ rR.heap.erase) := by simpa using ho
-  exact ht.2 m rP _ (Holds.split hd hh) hp hc (Mem.OwnsC.left ho2)
+  exact ht.2 m rP _ (Holds.split hd hh) hp hc
+    (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))
 
 theorem ret (v : α) : FTTotalTriple (Q v) (pure v : MemM α) Q :=
   ⟨FTTriple.ret v, fun m _ _ _ _ _ _ => ⟨v, m, rfl⟩⟩

@@ -284,7 +284,7 @@ theorem SMatch.sim {m : Mem} {h h' : FHeap} {s : Loc → SCell} (hm : SMatch m h
     (hs : FHeap.Sim h' h) : SMatch m h' s := by
   have hu : FHeap.Sim (h' ∪ SCells s) (h ∪ SCells s) := hs.union (FHeap.Sim.refl _)
   refine ⟨⟨fun l => by rw [hm.whole.1 l]; exact (hu.norm l).symm, fun l fc hl => ?_⟩,
-    fun l => ?_, hm.valid⟩
+    fun l => ?_, hm.total⟩
   · obtain ⟨fc', h1, -, ha⟩ := hu.symm.some hl
     rw [← ha]; exact hm.whole.2 l fc' h1
   · rcases hm.apart l with e | e
@@ -430,6 +430,154 @@ theorem Holds.tagF {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {fc : FC
   rcases hh.disj l with e | e
   · rw [FHeap.union_apply, e, Option.none_or, hc]
   · rw [e] at hc; cases hc
+
+/-! ### The bytes a resource holds (§Read shares) -/
+
+/-- **The bytes a resource holds**: its exclusive cells and the bytes it holds a read share of.
+A thread's race ownership covers them (`FTTriple`): which bytes these are is fixed by the memory
+and the frame (`Holds.owned_sub`), because the memory accounts for every byte's shares exactly
+(`SCell.Total`). Only the domain counts (`Mem.OwnsC`, `FootprintEntry.Touches`). -/
+noncomputable def Res.owned (r : Res) : Heap := fun l =>
+  ((r.heap l).map (·.cell)).or ((r.gh.share l).cell.map (·.cell))
+
+theorem Res.owned_ne {r : Res} {l : Loc} :
+    r.owned l ≠ none ↔ r.heap l ≠ none ∨ (r.gh.share l).Pos := by
+  simp only [Res.owned, ne_eq, Option.or_eq_none_iff, Option.map_eq_none_iff,
+    SCell.cell_eq_none_iff]
+  grind
+
+theorem Res.owned_of_heap {r : Res} {l : Loc} (h : r.heap l ≠ none) : r.owned l ≠ none :=
+  Res.owned_ne.mpr (.inl h)
+
+theorem Res.owned_of_erase {r : Res} {l : Loc} (h : r.heap.erase l ≠ none) : r.owned l ≠ none :=
+  Res.owned_of_heap fun e => h (by simp [FHeap.erase, e])
+
+/-- A byte of a resource made of two parts is a byte of one of them. -/
+theorem Res.owned_sep {r r₁ r₂ : Res} (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) {l : Loc} :
+    r.owned l ≠ none ↔ r₁.owned l ≠ none ∨ r₂.owned l ≠ none := by
+  simp only [Res.owned_ne, hh, hg, FHeap.union_apply, ne_eq, Option.or_eq_none_iff,
+    Ghost.add_share, SCell.pos_add_iff]
+  grind
+
+/-- The owned bytes of the two parts own the bytes of the whole (`Mem.OwnsC.union`). -/
+theorem Res.owned_sub_union {r r₁ r₂ : Res} (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) {l : Loc} (hl : r.owned l ≠ none) :
+    (r₁.owned ∪ r₂.owned) l ≠ none := fun hn => by
+  simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+  rcases (Res.owned_sep hh hg).mp hl with h | h
+  · exact h hn.1
+  · exact h hn.2
+
+/-- Reading the actual sizes and kinds keeps the owned bytes. -/
+theorem Res.owned_fix {m : Mem} {r : Res} {l : Loc} : (r.fix m).owned l ≠ none ↔ r.owned l ≠ none := by
+  simp only [Res.owned_ne, Res.fix, ne_eq, FHeap.fix_none]
+
+/-- Ghost state without shares (a counter cell, a token) adds nothing to the owned set. -/
+theorem Res.owned_addGh {r : Res} {g : Ghost} (hb : g.share = fun _ => SCell.zero := by rfl) :
+    (⟨r.heap, r.know, r.gh.add g⟩ : Res).owned = r.owned := by
+  funext l; simp only [Res.owned, Ghost.share_add_none hb]
+
+/-- No share of a byte where a resource or its frame has an exclusive cell. -/
+theorem Holds.not_pos_of_heap {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (h : (r.heap ∪ rF.heap) l ≠ none) : ¬ ((r.gh.add rF.gh).share l).Pos := by
+  rw [← SCell.cell_eq_none_iff]
+  exact (hh.heap.apart l).resolve_left h
+
+/-- A live byte that neither the resource nor the frame holds exclusively is shared. -/
+theorem Holds.pos_of_live {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {c : Cell}
+    (hc : m.heap l = some c) (h : (r.heap ∪ rF.heap) l = none) : ((r.gh.add rF.gh).share l).Pos := by
+  refine Classical.byContradiction fun hp => ?_
+  rw [hh.heap.none h (SCell.cell_eq_none_iff.mpr hp)] at hc; cases hc
+
+/-- A byte a resource holds is live, and not the frame's exclusive cell. -/
+theorem Holds.live_of_owned {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hl : r.owned l ≠ none) : (∃ c, m.heap l = some c) ∧ rF.heap l = none := by
+  rcases Res.owned_ne.mp hl with h' | h'
+  · obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp h'
+    obtain ⟨c, hc, -⟩ := hh.heap.cell (l := l) (fc := fc) (by simp [hfc])
+    exact ⟨⟨c, hc⟩, (hh.disj l).resolve_left h'⟩
+  · have hn : SCells (r.gh.add rF.gh).share l ≠ none := by
+      show ((r.gh.add rF.gh).share l).cell ≠ none
+      rw [ne_eq, SCell.cell_eq_none_iff, Classical.not_not, Ghost.add_share]
+      exact SCell.pos_add_iff.mpr (.inl h')
+    obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp hn
+    have hx := (hh.heap.apart l).resolve_right (by rw [hfc]; simp)
+    obtain ⟨c, hc, -⟩ := hh.heap.whole.cell (l := l) (fc := fc) (by simp [hx, hfc])
+    simp only [FHeap.union_apply, Option.or_eq_none_iff] at hx
+    exact ⟨⟨c, hc⟩, hx.2⟩
+
+/-- **The bytes a resource holds are fixed by the frame**: if a memory holds `r` next to `rF`
+and another (or the same) memory holds `r'` next to `rF`, a byte live in the first that `r'`
+holds, `r` holds. A byte is the frame's, or the resource's (exclusively or by a share: the
+memory accounts for the whole of a shared byte, `SCell.Total`). -/
+theorem Holds.owned_sub' {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF) (hh' : Holds m' r' rF)
+    {l : Loc} (hlive : ∃ c, m.heap l = some c) (hl : r'.owned l ≠ none) : r.owned l ≠ none := by
+  by_cases hr' : r.heap l ≠ none
+  · exact Res.owned_of_heap hr'
+  have hr : r.heap l = none := Classical.byContradiction hr'
+  obtain ⟨c₀, hc₀⟩ := hlive
+  have hrF := (hh'.live_of_owned hl).2
+  -- under `r` it is shared, wholly (`SCell.Total`)
+  have hP := hh.pos_of_live hc₀ (by simp [hr, hrF])
+  obtain ⟨c, e⟩ := (hh.heap.total l).resolve_left fun e => by
+    rw [e] at hP; exact SCell.not_pos_iff.mpr SCell.empty_zero hP
+  refine Res.owned_ne.mpr (.inr (Classical.byContradiction fun hn => ?_))
+  -- if `r` held none of it, the frame would hold the whole, and `r'` nothing
+  have eF : rF.gh.share l = SCell.of c Frac.one := by
+    rw [← e, Ghost.add_share, (SCell.not_pos_iff.mp hn).eq, SCell.zero_add]
+  have h1 : (rF.gh.share l c).val = 1 := by rw [eF, SCell.of_self]; rfl
+  rcases Res.owned_ne.mp hl with h' | h'
+  · exact hh'.not_pos_of_heap (l := l) (by simp [h'])
+      (by rw [Ghost.add_share]; exact SCell.pos_add_iff.mpr (.inr ⟨c, by rw [h1]; decide⟩))
+  · have hv : ((rF.gh.share l).add (r'.gh.share l)).Valid := by
+      rw [SCell.add_comm, ← Ghost.add_share]; exact hh'.heap.valid l
+    exact SCell.not_pos_iff.mpr (hv.whole h1) h'
+
+/-- **The bytes a resource holds are fixed by the memory and the frame**: next to the same frame,
+a memory holds no resource with a byte another one it holds lacks (`owned_sub'`). So an update
+(`EUpd`) never gives a thread a byte: a read share becomes exclusive only with its byte already
+held. -/
+theorem Holds.owned_sub {m : Mem} {r r' rF : Res} (hh : Holds m r rF) (hh' : Holds m r' rF)
+    {l : Loc} (hl : r'.owned l ≠ none) : r.owned l ≠ none :=
+  hh.owned_sub' hh' (hh'.live_of_owned hl).1 hl
+
+/-- A byte the resource holds exclusively is no byte of the frame. -/
+theorem Holds.frame_not_owned {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (h : r.heap l ≠ none) : rF.owned l = none := by
+  refine Classical.byContradiction fun hn => ?_
+  rcases Res.owned_ne.mp hn with h' | h'
+  · rcases hh.disj l with e | e
+    · exact h e
+    · exact h' e
+  · exact hh.not_pos_of_heap (l := l) (by simpa [Option.or_eq_none_iff] using fun e => absurd e h)
+      (by rw [Ghost.add_share]; exact SCell.pos_add_iff.mpr (.inr h'))
+
+/-- **Every live byte is owned** by the resource or the frame: an exclusive cell or a share. -/
+theorem Holds.owned_of_live {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hl : m.heap l ≠ none) : r.owned l ≠ none ∨ rF.owned l ≠ none := by
+  by_cases hs : SCells (r.gh.add rF.gh).share l = none
+  · cases e : (r.heap ∪ rF.heap) l with
+    | none => exact absurd (hh.heap.none e hs) hl
+    | some _ =>
+      rw [FHeap.union_apply] at e
+      cases e₁ : r.heap l with
+      | some _ => exact .inl (Res.owned_of_heap (by simp [e₁]))
+      | none => rw [e₁, Option.none_or] at e; exact .inr (Res.owned_of_heap (by simp [e]))
+  · have hp : ((r.gh.add rF.gh).share l).Pos :=
+      Classical.byContradiction fun hn => hs (SCell.cell_eq_none_iff.mpr hn)
+    rw [Ghost.add_share] at hp
+    rcases SCell.pos_add_iff.mp hp with h | h
+    · exact .inl (Res.owned_ne.mpr (.inr h))
+    · exact .inr (Res.owned_ne.mpr (.inr h))
+
+/-- The resource's exclusive bytes and the frame's owned bytes are apart: an access to the
+former steps outside the frame. -/
+theorem Holds.erase_disj_owned {m : Mem} {r rF : Res} (hh : Holds m r rF) :
+    Heap.Disjoint r.heap.erase rF.owned := fun l => by
+  cases e : r.heap l with
+  | none => exact .inl (by simp [FHeap.erase, e])
+  | some _ => exact .inr (hh.frame_not_owned (by simp [e]))
 
 /-- **Knowledge true in the memory can be added at any time** (a fact of `Mem.kn m` is
 persistent, so whoever holds it later keeps it true). -/

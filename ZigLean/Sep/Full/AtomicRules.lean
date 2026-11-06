@@ -102,13 +102,13 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
   refine FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp)
     fun m r rF hh hxr hxF hp hc ho hwf hld => ?_
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
   have hKb := (abytesAt_kind hxr hab hsz hpb hblk).1
   have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.noRace fun x h1 h2 =>
-    abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+    abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have hacc8 : m.access p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; simpa using hacc
   have hcur : curBytes (m.recordAt b p.off.toNat 8 .atomicRead) b p.off.toNat 8 = bs := by
@@ -122,7 +122,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
       (readOpts m₁ li false)[0]? = some ((m₁.atomics[li]!).msgs.size - 1) ∧
       ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
       (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
-      ¬ (m₁.atomics[li]!).In rF.heap.erase ∧ ShapesWF (shapes m₁) ∧
+      ¬ (m₁.atomics[li]!).In rF.owned ∧ ShapesWF (shapes m₁) ∧
       ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
@@ -165,7 +165,7 @@ theorem FTTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : At
         (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
           unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]) (by
           unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
-      have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
+      have hs0 := fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead
       have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
         (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
         (by rw [intSize_64] at hl; exact hl)
@@ -183,20 +183,20 @@ theorem FTriple.atomicLoadPtr {α : Type} [Enc α] (p : Ptr) (v : α) (ord : Ato
 (choice 0: the newest message): it succeeds, and the word holds the new value. -/
 theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((cmpxchgAt 0 succ fail 8 p v new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((cmpxchgAt 0 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = none⟫ ⋆ apts p new) r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   obtain ⟨hKb, hlo⟩ := abytesAt_kind hxr hab hsz hpb hblk
-  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.heap.erase (b, x) ≠ none :=
-    fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.owned (b, x) ≠ none :=
+    fun x h1 h2 => abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -230,7 +230,7 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       NoRace m₀ b p.off.toNat (intSize 64) .atomicWrite := by
     intro li m₀ hl
     obtain ⟨-, -, -, -, -, ⟨a', sn, next, hm₀⟩, -⟩ := hpost li m₀ hl
-    have ho₀ : m₀.Owns m₀.current r.heap.erase := by rw [hm₀]; exact ho.recordAt hc
+    have ho₀ : m₀.Owns m₀.current r.owned := by rw [hm₀]; exact ho.recordAt hc
     exact ho₀.noRace hmine
   refine ⟨fun e hrun => ?_, fun res m' hrun => ?_⟩
   · refine cmpxchgAt_noErr (fun e' => ?_) (fun li opts m₁ hp => ?_) (fun li opts m₁ hp e' => ?_)
@@ -257,11 +257,11 @@ theorem cmpxchgHit_run (p : Ptr) (v new : BitVec 64) (succ fail : AtomicOrder) {
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
       -- the step: the read's record, the location, the write's record
-      have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
+      have hs₀ := (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
           (by rw [intSize_64] at hl; exact hl))
-      have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
+      have hs₃ := hs₀.trans (fstep_record hh.erase_disj_owned (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
       have key := write_newest_apts hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb hli
         hb ho hwf htag hld hpos0 new
@@ -323,14 +323,14 @@ old value `v`, and the word holds `op.apply signed v x`. -/
 theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
     (ord : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((atomicRmwAt 0 op signed ord 8 p x).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((atomicRmwAt 0 op signed ord 8 p x).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = v⟫ ⋆ apts p (op.apply signed v x)) r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
@@ -343,7 +343,7 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
     exact ⟨hc.2.2.2.symm, hlo⟩
   obtain ⟨hKb, hlo⟩ := hKb
   have hnr : NoRace m b p.off.toNat (intSize 64) .atomicWrite := ho.noRace fun x h1 h2 =>
-    abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+    abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -388,7 +388,7 @@ theorem atomicRmw_run (p : Ptr) (v x : BitVec 64) (op : RmwOp) (signed : Bool)
       subst hm'
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
-      have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite).trans
+      have hs₀ := (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicWrite).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicWrite) rfl)
           (by rw [intSize_64] at hl; exact hl))
@@ -520,20 +520,20 @@ message): it returns the old pointer `v`, and the word holds `new`. -/
 theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α = 8) (p : Ptr)
     (v new : α) (ord : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wptsE p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((atomicXchgPtrAt 0 ord 8 p new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((atomicXchgPtrAt 0 ord 8 p new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = v⟫ ⋆ aptsE p new) r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   obtain ⟨hKb, hlo⟩ := abytesAt_kind hxr hab hsz hpb hblk
   have hnr : NoRace m b p.off.toNat (intSize 64) .atomicWrite := ho.noRace fun x h1 h2 =>
-    abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+    abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -604,7 +604,7 @@ theorem atomicXchgPtr_run {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size α
       subst hres
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
       have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
-      have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicWrite).trans
+      have hs₀ := (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicWrite).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicWrite) rfl)
           (by rw [intSize_64] at hl; exact hl))
@@ -666,20 +666,20 @@ new value. -/
 theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicPtrVal α]
     (hα : Enc.size α = 8) (p : Ptr) (v new : α) (succ fail : AtomicOrder) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wptsE p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((cmpxchgWeakPtrAt 0 succ fail 8 p v new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((cmpxchgWeakPtrAt 0 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = none⟫ ⋆ aptsE p new) r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   obtain ⟨hKb, hlo⟩ := abytesAt_kind hxr hab hsz hpb hblk
-  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.heap.erase (b, x) ≠ none :=
-    fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.owned (b, x) ≠ none :=
+    fun x h1 h2 => abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -715,7 +715,7 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
       NoRace m₀ b p.off.toNat (intSize 64) .atomicWrite := by
     intro li m₀ hl
     obtain ⟨-, -, -, -, -, ⟨a', sn, next, hm₀⟩, -⟩ := hpost li m₀ hl
-    have ho₀ : m₀.Owns m₀.current r.heap.erase := by rw [hm₀]; exact ho.recordAt hc
+    have ho₀ : m₀.Owns m₀.current r.owned := by rw [hm₀]; exact ho.recordAt hc
     exact ho₀.noRace hmine
   unfold cmpxchgWeakPtrAt
   refine ⟨fun e hrun => ?_, fun res m' hrun => ?_⟩
@@ -818,11 +818,11 @@ theorem cmpxchgWeakPtr_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] 
       subst m₇
       rw [hres]
       -- the step: the read's record, the location, the write's record
-      have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
+      have hs₀ := (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
           (by rw [intSize_64] at hl; exact hl))
-      have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
+      have hs₃ := hs₀.trans (fstep_record hh.erase_disj_owned (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
       have key := write_newest_aptsE hα hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb
         hli hb ho hwf htag hld hpos new
@@ -889,20 +889,20 @@ rule for it; the memories in which it holds are an oracle pick's resumptions
 theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
     [AtomicPtrVal α] (p : Ptr) (v new : α) (succ fail : AtomicOrder) {m : Mem}
     {r rF : Res} (hmc : m.MsgCov) (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF)
-    (hp : aptsE p v r) (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hp : aptsE p v r) (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((cmpxchgWeakPtrAt 1 succ fail 8 p v new).run m).run ≠ some (.error e)) ∧
     ∀ res m', ((cmpxchgWeakPtrAt 1 succ fail 8 p v new).run m).run = some (.ok (res, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪res = some v⟫ ⋆ aptsE p v) r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
   obtain ⟨hKb, -⟩ := abytesAt_kind hxr hab hsz hpb hblk
-  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.heap.erase (b, x) ≠ none :=
-    fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.owned (b, x) ≠ none :=
+    fun x h1 h2 => abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -921,7 +921,7 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
         some ((m₁.atomics[li]!).msgs.size - 1, true) ∧
       ((m₁.atomics[li]!).msgs[(m₁.atomics[li]!).msgs.size - 1]!).bytes = bs ∧
       (∃ a sn next, m₁ = { m.recordAt b p.off.toNat 8 .atomicRead with atomics := a, seen := sn, nextMsg := next }) ∧
-      ¬ (m₁.atomics[li]!).In rF.heap.erase ∧ ShapesWF (shapes m₁) ∧
+      ¬ (m₁.atomics[li]!).In rF.owned ∧ ShapesWF (shapes m₁) ∧
       ∀ b' x, if Covers b' x (b, p.off.toNat, 8) then tagOf (shapes m₁) b' x = some (p.off.toNat, 8)
         else tagOf (shapes m₁) b' x = none ∨ tagOf (shapes m₁) b' x = tagOf (shapes m) b' x := by
     intro li m₁ hl
@@ -1056,7 +1056,7 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
       (fun b' x => by rw [hshapes, hsz]; exact htag b' x) (kmono_of_blocks hblocks (by
         unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]) (by
         unfold loadM acqM observeM; split <;> simp [hm₀, Mem.recordAt]))
-    have hs0 := fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead
+    have hs0 := fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead
     have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
       (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
       (by rw [intSize_64] at hl; exact hl)
@@ -1070,20 +1070,20 @@ theorem cmpxchgWeakPtr_spurious_run {α : Type} [Enc α] [LawfulEnc α] [Decidab
 and the word is then an `apts`. -/
 theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
     {r rF : Res} (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.heap.erase)
+    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((atomicLoadUnorderedAt (n := 64) 0 8 p).run m).run ≠ some (.error e)) ∧
     ∀ w m', ((atomicLoadUnorderedAt (n := 64) 0 8 p).run m).run = some (.ok (w, m')) →
       ∃ r', Holds m' r' rF ∧ (⟪w = v⟫ ⋆ apts p v) r' ∧
-        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.heap.erase m m' ∧ m.NoRevive m' := by
+        ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m' := by
   obtain ⟨A, S, K, bs, tg, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
   have hKb := (abytesAt_kind hxr hab hsz hpb hblk).1
   have hnr : NoRace m b p.off.toNat 8 .atomicRead := ho.noRace fun x h1 h2 =>
-    abytesAt_mine hab hpb x h1 (by rw [hsz]; exact h2)
+    abytesAt_owned hab hpb x h1 (by rw [hsz]; exact h2)
   have hacc8 : m.access p 8 8 = pure (b, blk, p.off.toNat) := by simpa using hacc
   have hcur : curBytes (m.recordAt b p.off.toNat 8 .atomicRead) b p.off.toNat 8 = bs := by
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
@@ -1153,7 +1153,7 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
         (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (by rw [hm₁]; rfl))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, hwf,
         LDMono.of_blocks hblocks hld,
-        (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
+        (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead).trans
           (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
             (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl) hl),
         Mem.NoRevive.of_blocks hblocks⟩
@@ -1293,7 +1293,7 @@ section Count
 variable {m : Mem} {r rF : Res} {p : Ptr}
 
 /-- `newest_before` at the access of a prepared atomic op (its `locIdx` after its record). -/
-theorem newest_at (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem newest_at (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) {b o : Nat} {blk : Block}
     (hacc : m.access p (intSize 64) 8 = pure (b, blk, o)) {k : AccessKind} {li : Nat} {m₁ : Mem}
     (hl : ((locIdx b o (intSize 64)).run (m.recordAt b o (intSize 64) k)).run = some (.ok (li, m₁))) :
@@ -1305,7 +1305,7 @@ theorem newest_at (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.he
   rw [intSize_64] at hl
   exact newest_before hh hc.1 ho hmc hc.2.1 hab hsz hpb hl
 
-theorem floor_at (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem floor_at (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) {b o : Nat} {blk : Block}
     (hacc : m.access p (intSize 64) 8 = pure (b, blk, o)) {k : AccessKind} {li : Nat} {m₁ : Mem}
     (hl : ((locIdx b o (intSize 64)).run (m.recordAt b o (intSize 64) k)).run = some (.ok (li, m₁))) :
@@ -1320,7 +1320,7 @@ theorem access_of_accessW {n a : Nat} {x : BlockId × Block × Nat}
   (accessW_pure (by rw [h]; rfl)).1
 
 /-- An atomic load or RMW of an owned word has one option. -/
-theorem loadPrep_count_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem loadPrep_count_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) (ord : AtomicOrder) (rmw : Bool) :
     optCount ((·.2) <$> loadPrep 64 ord 8 p rmw) m ≤ 1 := by
   refine optCount_snd_le (Nat.le_refl 1) fun li opts m' hrun => ?_
@@ -1329,23 +1329,23 @@ theorem loadPrep_count_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.curr
   · exact readOpts_size_le (floor_at hh hc ho hmc hw hacc hl)
   · exact readOpts_size_le (floor_at hh hc ho hmc hw (access_of_accessW hacc) hl)
 
-theorem loadCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem loadCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) (ord : AtomicOrder) : loadCount 64 ord 8 p m ≤ 1 :=
   loadPrep_count_le hh hc ho hmc hw ord false
 
-theorem rmwCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem rmwCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) (ord : AtomicOrder) : rmwCount 64 ord 8 p m ≤ 1 :=
   loadPrep_count_le hh hc ho hmc hw ord true
 
 /-- An atomic store to an owned word has one place. -/
-theorem storeCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem storeCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) (ord : AtomicOrder) : storeCount 64 ord 8 p m ≤ 1 := by
   refine optCount_snd_le (Nat.le_refl 1) fun li opts m' hrun => ?_
   obtain ⟨b, blk, o, hacc, -, hl, rfl⟩ := storePrep_ok hrun
   exact writeSlots_size_le (floor_at hh hc ho hmc hw (access_of_accessW hacc) hl)
 
 /-- The readable messages of a `cmpxchg` at an owned word: one. -/
-theorem casReadPrep_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem casReadPrep_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) {li : Nat} {readable : Array Nat} {m' : Mem}
     (hrun : ((casReadPrep 64 8 p).run m).run = some (.ok ((li, readable), m'))) :
     readable.size ≤ 1 := by
@@ -1353,7 +1353,7 @@ theorem casReadPrep_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current
   exact readOpts_size_le (floor_at hh hc ho hmc hw (access_of_accessW hacc) hl)
 
 /-- A strong `cmpxchg` of an owned word has one option. -/
-theorem casCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem casCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) (succ : AtomicOrder) (expected : BitVec 64) :
     casCount 64 succ 8 p expected m ≤ 1 := by
   refine optCount_snd_le (Nat.le_refl 1) fun li opts m' hrun => ?_
@@ -1363,7 +1363,7 @@ theorem casCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.
 
 /-- A strong pointer `cmpxchg` of an owned word has one option. -/
 theorem casPtrCount_le {α : Type} [Enc α] [DecidableEq α] [AtomicPtrVal α] (hh : Holds m r rF)
-    (hc : m.FConc) (ho : m.Owns m.current r.heap.erase) (hmc : m.MsgCov) (hw : OwnedWord p r)
+    (hc : m.FConc) (ho : m.Owns m.current r.owned) (hmc : m.MsgCov) (hw : OwnedWord p r)
     (expected : α) : casPtrCount 8 p expected m ≤ 1 := by
   refine optCount_snd_le (Nat.le_refl 1) fun li opts m' hrun => ?_
   unfold casPtrPrep at hrun
@@ -1388,7 +1388,7 @@ theorem two_filters {xs : Array Nat} (h : xs.size ≤ 1) {f g : Nat → Bool} {�
 /-- A weak pointer `cmpxchg` of an owned word has two options at most: a success and a spurious
 failure. -/
 theorem weakCasPtrCount_le {α : Type} [Enc α] [DecidableEq α] [AtomicPtrVal α] (hh : Holds m r rF)
-    (hc : m.FConc) (ho : m.Owns m.current r.heap.erase) (hmc : m.MsgCov) (hw : OwnedWord p r)
+    (hc : m.FConc) (ho : m.Owns m.current r.owned) (hmc : m.MsgCov) (hw : OwnedWord p r)
     (expected : α) : weakCasPtrCount 8 p expected m ≤ 2 := by
   refine optCount_snd_le (by decide) fun li opts m' hrun => ?_
   unfold weakCasPtrPrep at hrun
@@ -1401,7 +1401,7 @@ theorem weakCasPtrCount_le {α : Type} [Enc α] [DecidableEq α] [AtomicPtrVal �
   exact two_filters (casReadPrep_le hh hc ho hmc hw hp)
 
 /-- A weak `cmpxchg` of an owned word has two options at most. -/
-theorem weakCasCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem weakCasCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) (succ : AtomicOrder) (expected : BitVec 64) :
     weakCasCount 64 succ 8 p expected m ≤ 2 := by
   refine optCount_snd_le (by decide) fun li opts m' hrun => ?_
@@ -1410,7 +1410,7 @@ theorem weakCasCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.curren
   exact two_filters (readOpts_size_le (floor_at hh hc ho hmc hw (access_of_accessW hacc) hl))
 
 /-- An `unordered` load of an owned word has one option. -/
-theorem unorderedCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.heap.erase)
+theorem unorderedCount_le (hh : Holds m r rF) (hc : m.FConc) (ho : m.Owns m.current r.owned)
     (hmc : m.MsgCov) (hw : OwnedWord p r) : unorderedCount 8 8 p m ≤ 1 := by
   refine optCount_snd_le (Nat.le_refl 1) fun li opts m' hrun => ?_
   obtain ⟨b, blk, o, hacc, hl, rfl⟩ := unorderedPrep_ok hrun
