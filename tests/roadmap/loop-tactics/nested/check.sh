@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # P03 nested loops: retranslate the retained nested.pairs AIR, regenerate the inner loop's
-# invariant and measure (P09, air2lean-invgen), kernel-check the full-state nested-loop proof
-# (nested/Proof.lean) and its seeded mutants (mutants.json: a wrong cell relation, a dropped bound,
-# a measure that does not decrease must each fail the inner loop's theorems), all through
+# invariant, measure and exit post (P09, air2lean-invgen, `@[fsym_inv]`), kernel-check the
+# full-state nested-loop proof (nested/Proof.lean, whose `outer_step` walk applies them) and its
+# seeded mutants (mutants.json: a wrong cell relation, a dropped bound, a measure that does not
+# decrease must each fail `outer_step`), all through
 # ../invgen-fixture.sh; then the proof's strength log. Needs a built translator (lake build
 # air2lean); no Zig compiler.
 set -euo pipefail
