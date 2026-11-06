@@ -2,23 +2,29 @@ import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.Ops
 
 /-!
-# Shared bytes: loads on a read share, and the whole share as the bytes
+# Shared resources: a fraction of an exclusive heap, loads on it, and the whole share
 
 (`docs/sep-full-state.md` §Read shares, maintainer decision 2026-11-06 on #637, option A.)
 
 A read share (`Ghost.share`, `SCell`) lets several resources read one byte at once. This module
-gives the byte-level assertion and its rules:
+states the share once, for every exclusive heap, and derives the byte and typed forms from it:
 
-* `sbytesAt p A S K bs tg q`: a fraction `q` of each cell that `abytesAt p A S K bs tg` owns
-  (the bytes `bs` at `p`, block address `A`, size `S`, kind `K`, atomic tag `tg`); no cell, no
-  knowledge, no other ghost state. `spts p a q v` is the typed form, with `0 < q`.
-* **Reading**: a positive share reads the memory's cell (`Holds.cellS`, `SMatch.share_cell`),
-  so the shared bytes are read in `m` (`Holds.sbytesRead`, `Mem.BytesRead`) and the load rules of
-  owned bytes apply unchanged (`FTotalTriple.load_sbytesAt`, `@[fsym]` `FTotalTriple.sload`). A
-  store or a free needs the byte exclusively, so no rule changes a byte a share reads.
-* **Split and join** of one share's fraction are equalities (`sbytesAt_add`).
-* **The whole share is the bytes**: `EUpd.share_whole` turns exclusive bytes into the whole share,
-  `EUpd.unshare_whole` back (the same cells, split differently: `SMatch.of_full`).
+* `sheap H q`: the fraction `q` of each cell of the heap `H`, held as a share (no cell, no
+  knowledge, no other ghost state). `shared P q`: `q` of a heap of the exclusive assertion `P`.
+  `sbytesAt p A S K bs q := shared (up (bytesAt p A S K bs)) q` (each cell with its own tag) and
+  `spts p a q v` (a positive `q` of `up (pts p a v)`) are instances.
+* **The whole share is the heap**: `Holds.toShares` / `Holds.ofShares` move the cells of `H`
+  between the exclusive heap and the whole share (the same cells, split differently:
+  `SMatch.of_full`); `EUpd.share_whole` / `EUpd.unshare_whole` lift that to any `P` without
+  knowledge or ghost state, so `up (pts p a v)` converts to `spts p a 1 v` and back.
+* **Split and join**: `sheap_add` is an equality; `shared_split` splits any `P`, and
+  `EUpd.shared_join` joins two positive shares of a `P` whose heaps have one domain
+  (`FAssn.FixedDom`: then the two heaps agree, since shares of different cells of one byte do not
+  compose).
+* **Reading**: a positive share reads the memory's cell (`Holds.cellS`), so shared bytes are read
+  in `m` (`Holds.sbytesRead`) and the generic load rule applies (`FTotalTriple.load_of_read`,
+  `load_sbytesAt`, `@[fsym]` `sload`). A store or a free needs the byte exclusively, so no rule
+  changes a byte a share reads.
 
 These rules are sequential (`FTotalTriple`). Several threads that read one byte at once need the
 race clocks of a partial share (slice F4).
@@ -31,45 +37,236 @@ namespace Full
 
 open FAssn
 
-/-- The ghost state with the shares, at fraction `q`, of the cells that `abytesAt` owns at byte
-`o` of block `b` (and nothing else). -/
-noncomputable def Ghost.sharesAt (b : BlockId) (o A S : Nat) (K : BlockKind) (bs : Array Byte)
-    (tg : Option (Nat × Nat)) (q : Frac) : Ghost :=
-  { Ghost.unit with share := fun l =>
-      if l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + bs.size then SCell.of ⟨⟨bs[l.2 - o]!, A, S, K⟩, tg⟩ q
-      else SCell.zero }
+/-- The ghost state holding the fraction `q` of each cell of `H` as a share (and nothing else). -/
+noncomputable def Ghost.sharesOf (H : FHeap) (q : Frac) : Ghost :=
+  { Ghost.unit with share := fun l => (H l).elim SCell.zero (SCell.of · q) }
 
-/-- **Shared bytes** (module doc): a fraction `q` of each cell of `abytesAt p A S K bs tg`. -/
-def sbytesAt (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (tg : Option (Nat × Nat))
-    (q : Frac) : FAssn := fun r =>
-  r.heap = FHeap.empty ∧ r.know = Know.none ∧ ∃ b, p.block = some b ∧ 0 ≤ p.off ∧
-    r.gh = Ghost.sharesAt b p.off.toNat A S K bs tg q
+/-- **The share `q` of the heap `H`** (module doc). -/
+def sheap (H : FHeap) (q : Frac) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.sharesOf H q
 
-/-- **A shared typed value**: a positive fraction of bytes at `p`, readable with alignment `a`,
-that decode to `v`. -/
+/-- **The share `q` of an exclusive assertion** `P`: of a heap that `P` holds alone. -/
+def shared (P : FAssn) (q : Frac) : FAssn := fun r =>
+  ∃ H, P ⟨H, Know.none, Ghost.unit⟩ ∧ sheap H q r
+
+/-- **Shared bytes**: a fraction `q` of the bytes `bs` at `p` (each cell with its own tag). -/
+def sbytesAt (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (q : Frac) : FAssn :=
+  shared (up (bytesAt p A S K bs)) q
+
+/-- **A shared typed value**: a positive fraction of `p ↦ v` (`pts`, not of a `const` global). -/
 def spts {T : Type} [Enc T] (p : Ptr) (a : Nat) (q : Frac) (v : T) : FAssn := fun r =>
-  0 < q.val ∧ ∃ A S K bs tg, (A + p.off.toNat) % a = 0 ∧ bs.size = Enc.size T ∧
-    Enc.decode bs = pure v ∧ sbytesAt p A S K bs tg q r
+  0 < q.val ∧ shared (up (pts p a v)) q r
 
-variable {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
-  {q : Frac}
+/-- All the heaps an exclusive assertion holds alone cover the same locations. -/
+def FAssn.FixedDom (P : FAssn) : Prop :=
+  ∀ H₁ H₂, P ⟨H₁, Know.none, Ghost.unit⟩ → P ⟨H₂, Know.none, Ghost.unit⟩ →
+    ∀ l, (H₁ l).isSome = (H₂ l).isSome
 
-/-! ## Reading -/
+theorem Ghost.sharesOf_share (H : FHeap) (q : Frac) (l : Loc) :
+    (Ghost.sharesOf H q).share l = (H l).elim SCell.zero (SCell.of · q) := rfl
 
-/-- **Shared bytes are read in `m`** (a positive fraction reads the memory's cell). -/
+theorem SCell.cell_of_one (c : FCell) : (SCell.of c Frac.one).cell = some c :=
+  SCell.cell_eq_some (SCell.valid_of (by decide)) (by rw [SCell.of_self]; decide)
+
+/-! ## The whole share is the heap -/
+
+/-- Next to the whole share of `H`, a frame with no share on `H`'s cells: the composed share is
+the cell where `H` has one and the frame's elsewhere. -/
+theorem Ghost.sharesOf_one_add {H : FHeap} {g : Ghost}
+    (hz : ∀ l c, H l = some c → g.share l = SCell.zero) (l : Loc) :
+    ((Ghost.sharesOf H Frac.one).add g).share l = (H l).elim (g.share l) (SCell.of · Frac.one) := by
+  rw [Ghost.add_share, Ghost.sharesOf_share]
+  rcases e : H l with _ | c
+  · exact SCell.zero_add _
+  · rw [Option.elim_some, Option.elim_some, hz l c e, SCell.add_zero]
+
+/-- **The exclusive cells of `H` become the whole share of `H`.** -/
+theorem Holds.toShares {m : Mem} {H : FHeap} {rF : Res} (hh : Holds m ⟨H, Know.none, Ghost.unit⟩ rF) :
+    Holds m ⟨FHeap.empty, Know.none, Ghost.sharesOf H Frac.one⟩ rF := by
+  have hF : ∀ l c, H l = some c → rF.heap l = none ∧ rF.gh.share l = SCell.zero := fun l c e =>
+    have hl : H l ≠ none := by rw [e]; exact Option.some_ne_none _
+    ⟨(hh.disj l).resolve_left hl, hh.frame_share_zero rfl hl⟩
+  have hm : SMatch m (H ∪ rF.heap) rF.gh.share := by
+    have := hh.heap; rw [Ghost.unit_add] at this; exact this
+  have hs := Ghost.sharesOf_one_add (H := H) (g := rF.gh) fun l c e => (hF l c e).2
+  refine ⟨fun _ => .inl rfl, hm.of_full (fun l => ?_) (fun l => ?_) (fun l => ?_), Know.sub_none _,
+    hh.knowF, hh.ghost⟩
+  · simp only [FHeap.union_apply, SCells, hs l]
+    rcases e : H l with _ | c
+    · simp [FHeap.empty]
+    · simp [FHeap.empty, (hF l c e).1, SCell.cell_of_one]
+  · rcases e : H l with _ | c
+    · rcases hm.apart l with e' | e'
+      · exact .inl (by simpa [FHeap.union_apply, FHeap.empty, e] using e')
+      · exact .inr (by show (_ : SCell).cell = none; rw [hs l, e, Option.elim_none]; exact e')
+    · exact .inl (by simp [FHeap.union_apply, FHeap.empty, (hF l c e).1])
+  · rw [hs l]
+    rcases e : H l with _ | c
+    · exact hm.total l
+    · exact .inr ⟨c, rfl⟩
+
+/-- **The whole share of `H` becomes the exclusive cells of `H`**: next to the whole fraction a
+valid frame holds none (`SCell.Valid.whole`). -/
+theorem Holds.ofShares {m : Mem} {H : FHeap} {rF : Res}
+    (hh : Holds m ⟨FHeap.empty, Know.none, Ghost.sharesOf H Frac.one⟩ rF) :
+    Holds m ⟨H, Know.none, Ghost.unit⟩ rF := by
+  have hm : SMatch m (FHeap.empty ∪ rF.heap) ((Ghost.sharesOf H Frac.one).add rF.gh).share :=
+    hh.heap
+  have hz : ∀ l c, H l = some c → rF.gh.share l = SCell.zero := fun l c e => by
+    have hv := hm.valid l
+    rw [Ghost.add_share, Ghost.sharesOf_share, e, Option.elim_some] at hv
+    exact (hv.whole (c := c) (by rw [SCell.of_self]; rfl)).eq
+  have hs := Ghost.sharesOf_one_add hz
+  have hFn : ∀ l c, H l = some c → rF.heap l = none := fun l c e => by
+    have := (hm.apart l).resolve_right (by
+      simp only [SCells, hs l, e, Option.elim_some, SCell.cell_of_one]; exact Option.some_ne_none _)
+    simpa [FHeap.union_apply, FHeap.empty] using this
+  refine ⟨fun l => ?_, ?_, Know.sub_none _, hh.knowF, hh.ghost⟩
+  · rcases e : H l with _ | c
+    · exact .inl e
+    · exact .inr (hFn l c e)
+  · show SMatch m (H ∪ rF.heap) (Ghost.unit.add rF.gh).share
+    rw [Ghost.unit_add]
+    refine hm.of_full (fun l => ?_) (fun l => ?_) (fun l => ?_)
+    · simp only [FHeap.union_apply, SCells, hs l]
+      rcases e : H l with _ | c
+      · simp [FHeap.empty]
+      · simp [FHeap.empty, hFn l c e, hz l c e, SCell.cell_zero, SCell.cell_of_one]
+    · rcases e : H l with _ | c
+      · rcases hm.apart l with e' | e'
+        · exact .inl (by simpa [FHeap.union_apply, FHeap.empty, e] using e')
+        · refine .inr ?_
+          have h' : (((Ghost.sharesOf H Frac.one).add rF.gh).share l).cell = none := e'
+          rwa [hs l, e, Option.elim_none] at h'
+      · exact .inr (by simp [SCells, hz l c e, SCell.cell_zero])
+    · rcases e : H l with _ | c
+      · have := hm.total l; rwa [hs l, e, Option.elim_none] at this
+      · rw [hz l c e]; exact .inl rfl
+
+namespace EUpd
+
+variable {P : FAssn}
+
+/-- **An exclusive assertion becomes its whole share.** -/
+theorem share_whole (hP : ∀ r, P r → r.know = Know.none ∧ r.gh = Ghost.unit) :
+    EUpd P (shared P Frac.one) := by
+  rintro m ⟨H, k, g⟩ rF hh hp _
+  obtain ⟨hk, hg⟩ := hP _ hp
+  subst hk hg
+  exact ⟨_, hh.toShares, H, hp, rfl, rfl, rfl⟩
+
+/-- **The whole share becomes the exclusive assertion.** -/
+theorem unshare_whole : EUpd (shared P Frac.one) P := by
+  rintro m ⟨h, k, g⟩ rF hh ⟨H, hp, hH, hk, hg⟩ _
+  subst hH hk hg
+  exact ⟨_, hh.ofShares, hp⟩
+
+end EUpd
+
+/-! ## Split and join -/
+
+theorem Ghost.sharesOf_add (H : FHeap) (q₁ q₂ : Frac) :
+    (Ghost.sharesOf H q₁).add (Ghost.sharesOf H q₂) = Ghost.sharesOf H (q₁.add q₂) := by
+  ext1
+  · exact (congrArg Ghost.led (Ghost.add_unit Ghost.unit) :)
+  · exact (congrArg Ghost.extent (Ghost.add_unit Ghost.unit) :)
+  · exact (congrArg Ghost.cl (Ghost.add_unit Ghost.unit) :)
+  · exact (congrArg Ghost.ac (Ghost.add_unit Ghost.unit) :)
+  · funext l
+    rw [Ghost.add_share, Ghost.sharesOf_share, Ghost.sharesOf_share, Ghost.sharesOf_share]
+    rcases H l with _ | c
+    · exact SCell.add_zero _
+    · exact SCell.of_add _ _ _
+
+/-- **Split and join of one heap's share are equalities.** -/
+theorem sheap_add {H : FHeap} {q₁ q₂ : Frac} {r : Res} :
+    sheap H (q₁.add q₂) r ↔ (sheap H q₁ ⋆ sheap H q₂) r := by
+  constructor
+  · rintro ⟨hh, hk, hg⟩
+    refine ⟨⟨FHeap.empty, Know.none, Ghost.sharesOf H q₁⟩, ⟨FHeap.empty, Know.none,
+      Ghost.sharesOf H q₂⟩, fun _ => .inl rfl, ?_, ⟨rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl⟩⟩
+    obtain ⟨rh, rk, rg⟩ := r
+    simp only at hh hk hg
+    subst hh hk hg
+    rw [FHeap.union_empty, Know.none_union, Ghost.sharesOf_add]
+  · rintro ⟨r₁, r₂, -, rfl, ⟨h1, k1, g1⟩, ⟨h2, k2, g2⟩⟩
+    refine ⟨?_, ?_, ?_⟩
+    · show r₁.heap ∪ r₂.heap = _; rw [h1, h2, FHeap.union_empty]
+    · show r₁.know.union r₂.know = _; rw [k1, k2, Know.none_union]
+    · show r₁.gh.add r₂.gh = _; rw [g1, g2, Ghost.sharesOf_add]
+
+/-- **A share of `P` splits** into two shares of the same heap. -/
+theorem shared_split {P : FAssn} {q₁ q₂ : Frac} {r : Res} (h : shared P (q₁.add q₂) r) :
+    (shared P q₁ ⋆ shared P q₂) r := by
+  obtain ⟨H, hp, hs⟩ := h
+  obtain ⟨r₁, r₂, hd, e, h1, h2⟩ := sheap_add.mp hs
+  exact ⟨r₁, r₂, hd, e, ⟨H, hp, h1⟩, ⟨H, hp, h2⟩⟩
+
+/-- **Two positive shares of `P` join** when `P`'s heaps have one domain: at each byte both read
+a cell, and in a valid composition they read the same one, so the heaps are equal. -/
+theorem EUpd.shared_join {P : FAssn} (hP : P.FixedDom) {q₁ q₂ : Frac} (hq₁ : 0 < q₁.val)
+    (hq₂ : 0 < q₂.val) : EUpd (shared P q₁ ⋆ shared P q₂) (shared P (q₁.add q₂)) := by
+  rintro m r rF hh ⟨r₁, r₂, hd, rfl, ⟨H₁, hp₁, hs₁⟩, ⟨H₂, hp₂, hs₂⟩⟩ _
+  have e : H₁ = H₂ := funext fun l => by
+    have hdom := hP H₁ H₂ hp₁ hp₂ l
+    rcases e₁ : H₁ l with _ | c₁ <;> rcases e₂ : H₂ l with _ | c₂ <;>
+      simp only [e₁, e₂, Option.isSome_none, Option.isSome_some, Bool.false_eq_true,
+        Bool.true_eq_false] at hdom ⊢
+    · have hv : (((r₁.gh.add r₂.gh).add rF.gh).share l).Valid := hh.heap.valid l
+      have hg : (r₁.gh.add r₂.gh).share l = (SCell.of c₁ q₁).add (SCell.of c₂ q₂) := by
+        rw [Ghost.add_share, hs₁.2.2, hs₂.2.2, Ghost.sharesOf_share, Ghost.sharesOf_share, e₁, e₂,
+          Option.elim_some, Option.elim_some]
+      rw [Ghost.add_share, hg] at hv
+      exact congrArg some (hv.of_add.1 c₁ c₂ (SCell.pos_add _ (by rw [SCell.of_self]; exact hq₁))
+        (SCell.pos_add' _ (by rw [SCell.of_self]; exact hq₂)))
+  subst e
+  exact ⟨_, hh, H₁, hp₁, sheap_add.mpr ⟨r₁, r₂, hd, rfl, hs₁, hs₂⟩⟩
+
+/-! ## Instances: bytes and typed values -/
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {q : Frac}
+
+/-- The bytes at `p` cover the `bs.size` bytes from `p`, whatever they hold. -/
+theorem bytesAt_isSome {h : Heap} {b : BlockId} (hp : bytesAt p A S K bs h)
+    (hb : p.block = some b) (l : Loc) :
+    (h l).isSome = decide (l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size) := by
+  obtain ⟨b', hb', -, hl⟩ := hp
+  rw [hb] at hb'; cases hb'
+  by_cases hc : l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
+  · rw [hl l, ite_eq_left hc, decide_eq_true hc]; rfl
+  · rw [hl l, ite_eq_right hc, decide_eq_false hc]; rfl
+
+theorem fixedDom_bytesAt : (up (bytesAt p A S K bs)).FixedDom := fun H₁ H₂ h₁ h₂ l => by
+  obtain ⟨b, hb, -⟩ := h₁.1
+  have e₁ := bytesAt_isSome h₁.1 hb l
+  have e₂ := bytesAt_isSome h₂.1 hb l
+  simp only [FHeap.erase, Option.isSome_map] at e₁ e₂
+  rw [e₁, e₂]
+
+theorem fixedDom_pts {T : Type} [Enc T] {a : Nat} {v : T} : (up (pts p a v)).FixedDom :=
+  fun H₁ H₂ h₁ h₂ l => by
+    obtain ⟨A₁, S₁, K₁, bs₁, -, hsz₁, -, hb₁, -⟩ := h₁.1
+    obtain ⟨A₂, S₂, K₂, bs₂, -, hsz₂, -, hb₂, -⟩ := h₂.1
+    have ⟨b, hb, _⟩ := hb₁
+    have e₁ := bytesAt_isSome hb₁ hb l
+    have e₂ := bytesAt_isSome hb₂ hb l
+    simp only [FHeap.erase, Option.isSome_map, hsz₁, hsz₂] at e₁ e₂
+    rw [e₁, e₂]
+
+/-- **A positive share reads the memory's cell.** -/
+theorem Holds.sharedCell {m : Mem} {r rF : Res} (hh : Holds m r rF) {H : FHeap}
+    (hs : sheap H q r) (hq : 0 < q.val) {l : Loc} {c : FCell} (e : H l = some c) :
+    ∃ c', m.heap l = some c' ∧ c'.norm = c.cell.norm :=
+  hh.cellS (fc := c) (by rw [hs.2.2, Ghost.sharesOf_share, e, Option.elim_some, SCell.of_self]; exact hq)
+
+/-- **Shared bytes are read in `m`.** -/
 theorem Holds.sbytesRead {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hp : sbytesAt p A S K bs tg q r) (hq : 0 < q.val) : m.BytesRead p A S K bs := by
-  obtain ⟨-, -, b, hpb, h0, hg⟩ := hp
+    (hp : sbytesAt p A S K bs q r) (hq : 0 < q.val) : m.BytesRead p A S K bs := by
+  obtain ⟨H, hb, hs⟩ := hp
+  obtain ⟨b, hpb, h0, -⟩ := hb.1
   refine ⟨b, hpb, h0, fun j hj => ?_⟩
-  have hin : (b, p.off.toNat + j).1 = b ∧ p.off.toNat ≤ (b, p.off.toNat + j).2 ∧
-      (b, p.off.toNat + j).2 < p.off.toNat + bs.size := ⟨rfl, by simp, by simp; omega⟩
-  have hs : r.gh.share (b, p.off.toNat + j) =
-      SCell.of ⟨⟨bs[j]!, A, S, K⟩, tg⟩ q := by
-    rw [hg]; simp only [Ghost.sharesAt, Nat.add_sub_cancel_left]
-    exact if_pos ⟨trivial, hin.2⟩
-  obtain ⟨c, hc, hn⟩ := hh.cellS (fc := ⟨⟨bs[j]!, A, S, K⟩, tg⟩)
-    (by rw [hs, SCell.of_self]; exact hq)
-  exact ⟨c, hc, hn⟩
+  obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hb hpb hj
+  rw [← hc]; exact hh.sharedCell hs hq hfc
 
 namespace FTotalTriple
 
@@ -77,186 +274,64 @@ namespace FTotalTriple
 theorem load_sbytesAt {T : Type} [Enc T] {v : T} {k al : Nat} (hq : 0 < q.val)
     (hn : 0 < Enc.size T) (hk : k + Enc.size T ≤ bs.size) (ha : (A + p.off.toNat + k) % al = 0)
     (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
-    FTotalTriple (sbytesAt p A S K bs tg q) (Zig.load T al (p.add k))
-      (fun x => ⟪x = v⟫ ⋆ sbytesAt p A S K bs tg q) :=
-  of_run fun m r rF hh hp hs => by
-    obtain ⟨b, blk, hacc, -, -, hx⟩ := Mem.bytes_access (hh.sbytesRead hp hq) hn hk ha
-    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
-      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
-      hs.readAt _ _ _ _ _⟩
+    FTotalTriple (sbytesAt p A S K bs q) (Zig.load T al (p.add k))
+      (fun x => ⟪x = v⟫ ⋆ sbytesAt p A S K bs q) :=
+  load_of_read (fun _ _ _ hh hp => hh.sbytesRead hp hq) hn hk ha hv
 
 /-- **Load of a shared typed value** (`spts`, `@[fsym]`): the share stays. -/
 @[fsym] theorem sload {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
     FTotalTriple (spts p a q v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ spts p a q v) :=
-  of_cases fun _ ⟨hq, A, S, K, bs, tg, ha, hsz, hv, hb⟩ => by
-    have t := load_sbytesAt (p := p) (k := 0) (al := a) (A := A) (S := S) (K := K) (bs := bs)
-      (tg := tg) hq hn (by omega) (by simpa using ha)
-      (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
+  of_cases fun _ hp => by
+    obtain ⟨hq, H, hP, hs⟩ := hp
+    obtain ⟨A, S, K, bs, ha, hsz, hv, hb, -⟩ := hP.1
+    have t := load_of_read (P := fun r => spts p a q v r ∧ sbytesAt p A S K bs q r) (q := p)
+      (k := 0) (al := a) (fun _ _ _ hh hp => hh.sbytesRead hp.2 hq) hn (by omega)
+      (by simpa using ha) (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
     simp only [Int.natCast_zero, Ptr.add_zero] at t
-    exact ⟨_, _, t, hb, fun v' _ h => by
+    exact ⟨_, _, t, ⟨⟨hq, H, hP, hs⟩, H, ⟨hb, rfl, rfl⟩, hs⟩, fun v' _ h => by
       obtain ⟨hφ, hb'⟩ := sep_lift.mp h
-      exact sep_lift.mpr ⟨hφ, hq, A, S, K, bs, tg, ha, hsz, hv, hb'⟩⟩
+      exact sep_lift.mpr ⟨hφ, hb'.1⟩⟩
 
 end FTotalTriple
 
-/-! ## Split and join -/
+/-- **Shared bytes split** into two shares of the same bytes. -/
+theorem sbytesAt_split {q₁ q₂ : Frac} {r : Res} (h : sbytesAt p A S K bs (q₁.add q₂) r) :
+    (sbytesAt p A S K bs q₁ ⋆ sbytesAt p A S K bs q₂) r :=
+  shared_split h
 
-theorem Ghost.sharesAt_add (b : BlockId) (o A S : Nat) (K : BlockKind) (bs : Array Byte)
-    (tg : Option (Nat × Nat)) (q₁ q₂ : Frac) :
-    (Ghost.sharesAt b o A S K bs tg q₁).add (Ghost.sharesAt b o A S K bs tg q₂) =
-      Ghost.sharesAt b o A S K bs tg (q₁.add q₂) := by
-  ext1
-  iterate 4 (· (try funext x) <;> (try funext y) <;> simp [Ghost.add, Ghost.sharesAt, Ghost.unit])
-  · funext l
-    simp only [Ghost.add_share, Ghost.sharesAt]
-    split
-    · exact SCell.of_add _ _ _
-    · exact SCell.add_zero _
+/-- **Two positive shares of the bytes join.** -/
+theorem EUpd.sbytesAt_join {q₁ q₂ : Frac} (hq₁ : 0 < q₁.val) (hq₂ : 0 < q₂.val) :
+    EUpd (sbytesAt p A S K bs q₁ ⋆ sbytesAt p A S K bs q₂) (sbytesAt p A S K bs (q₁.add q₂)) :=
+  EUpd.shared_join fixedDom_bytesAt hq₁ hq₂
 
-/-- **Split and join are equalities**: `q₁ + q₂` of the bytes is `q₁` of them next to `q₂`. -/
-theorem sbytesAt_add {q₁ q₂ : Frac} {r : Res} :
-    sbytesAt p A S K bs tg (q₁.add q₂) r ↔
-      (sbytesAt p A S K bs tg q₁ ⋆ sbytesAt p A S K bs tg q₂) r := by
-  constructor
-  · rintro ⟨hh, hk, b, hpb, h0, hg⟩
-    refine ⟨⟨FHeap.empty, Know.none, Ghost.sharesAt b p.off.toNat A S K bs tg q₁⟩,
-      ⟨FHeap.empty, Know.none, Ghost.sharesAt b p.off.toNat A S K bs tg q₂⟩, fun _ => .inl rfl,
-      ?_, ⟨rfl, rfl, b, hpb, h0, rfl⟩, ⟨rfl, rfl, b, hpb, h0, rfl⟩⟩
-    obtain ⟨rh, rk, rg⟩ := r
-    simp only at hh hk hg
-    subst hh hk hg
-    rw [FHeap.union_empty, Know.none_union, Ghost.sharesAt_add]
-  · rintro ⟨r₁, r₂, -, rfl, ⟨h1, k1, b, hpb, h0, g1⟩, ⟨h2, k2, b', hpb', -, g2⟩⟩
-    rw [hpb] at hpb'
-    cases hpb'
-    refine ⟨?_, ?_, b, hpb, h0, ?_⟩
-    · show r₁.heap ∪ r₂.heap = _; rw [h1, h2, FHeap.union_empty]
-    · show r₁.know.union r₂.know = _; rw [k1, k2, Know.none_union]
-    · show r₁.gh.add r₂.gh = _; rw [g1, g2, Ghost.sharesAt_add]
+section Typed
 
-/-! ## The whole share is the bytes -/
+variable {T : Type} [Enc T] {a : Nat} {v : T}
 
-/-- The cells of `abytesAt`, as the share of the whole fraction reads them. -/
-theorem sharesAt_one {b : BlockId} {o : Nat} {l : Loc} :
-    (Ghost.sharesAt b o A S K bs tg Frac.one).share l =
-      if l.1 = b ∧ o ≤ l.2 ∧ l.2 < o + bs.size then SCell.of ⟨⟨bs[l.2 - o]!, A, S, K⟩, tg⟩ Frac.one
-      else SCell.zero := rfl
+/-- **`p ↦ v` becomes its whole share.** -/
+theorem EUpd.spts_whole : EUpd (up (pts p a v)) (spts p a Frac.one v) :=
+  (EUpd.share_whole fun _ h => h.2).trans (EUpd.of_imp fun _ h => ⟨by decide, h⟩)
 
-/-- At a byte a resource holds as a cell, the frame holds no share (the cells and the shares are
-apart, `SMatch.apart`). -/
-theorem Holds.frame_share_zero {m : Mem} {r rF : Res} (hh : Holds m r rF) (hu : r.gh = Ghost.unit)
-    {l : Loc} (hl : r.heap l ≠ none) : rF.gh.share l = SCell.zero := by
-  have hn : ¬ ((r.gh.add rF.gh).share l).Pos := hh.not_pos_of_heap (by
-    simp only [FHeap.union_apply]; intro e; exact hl (Option.or_eq_none_iff.mp e).1)
-  rw [Ghost.add_share, hu, Ghost.unit_share, SCell.zero_add, SCell.not_pos_iff] at hn
-  exact hn.eq
+/-- **The whole share of `p ↦ v` becomes `p ↦ v`.** -/
+theorem EUpd.spts_unwhole : EUpd (spts p a Frac.one v) (up (pts p a v)) :=
+  (EUpd.of_imp fun _ h => h.2).trans EUpd.unshare_whole
 
-/-- **Exclusive bytes become the whole share**: the same cells, held as a share. -/
-theorem EUpd.share_whole : EUpd (abytesAt p A S K bs tg) (sbytesAt p A S K bs tg Frac.one) := by
-  intro m r rF hh hp _
-  obtain ⟨hk, hg, b, hpb, h0, hH⟩ := hp
-  let In : Loc → Prop := fun l => l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
-  let fc : Loc → FCell := fun l => ⟨⟨bs[l.2 - p.off.toNat]!, A, S, K⟩, tg⟩
-  have hin : ∀ l, In l → r.heap l = some (fc l) := fun l h => by rw [hH l, if_pos h]
-  have hout : ∀ l, ¬ In l → r.heap l = none := fun l h => by rw [hH l, if_neg h]
-  have hF0 : ∀ l, In l → rF.gh.share l = SCell.zero := fun l h =>
-    hh.frame_share_zero hg (by rw [hin l h]; exact Option.some_ne_none _)
-  have hFn : ∀ l, In l → rF.heap l = none := fun l h =>
-    (hh.disj l).resolve_left (by rw [hin l h]; exact Option.some_ne_none _)
-  have hsh : ∀ l, ((Ghost.sharesAt b p.off.toNat A S K bs tg Frac.one).add rF.gh).share l =
-      if In l then SCell.of (fc l) Frac.one else (r.gh.add rF.gh).share l := fun l => by
-    rw [Ghost.add_share, sharesAt_one, Ghost.add_share, hg, Ghost.unit_share]
-    by_cases h : In l
-    · rw [if_pos h, if_pos h, hF0 l h, SCell.add_zero]
-    · rw [if_neg h, if_neg h]
-  have hcell : ∀ l, In l → SCells (fun l => (SCell.of (fc l) Frac.one)) l = some (fc l) :=
-    fun l _ => SCell.cell_eq_some (SCell.valid_of (by decide)) (by rw [SCell.of_self]; decide)
-  refine ⟨⟨FHeap.empty, Know.none, Ghost.sharesAt b p.off.toNat A S K bs tg Frac.one⟩,
-    ⟨fun _ => .inl rfl, hh.heap.of_full (fun l => ?_) (fun l => ?_) (fun l => ?_),
-      Know.sub_none _, hh.knowF, by have hgo := hh.ghost; rw [hg] at hgo; exact hgo⟩, rfl, rfl, b,
-      hpb, h0, rfl⟩
-  · by_cases h : In l
-    · have e : SCells ((Ghost.sharesAt b p.off.toNat A S K bs tg Frac.one).add rF.gh).share l =
-          some (fc l) := by
-        show (_ : SCell).cell = _; rw [hsh l, if_pos h]; exact hcell l h
-      simp only [FHeap.union_apply, e, hin l h, FHeap.empty, Option.none_or, hFn l h,
-        Option.some_or]
-    · have e : SCells ((Ghost.sharesAt b p.off.toNat A S K bs tg Frac.one).add rF.gh).share l =
-          SCells (r.gh.add rF.gh).share l := by
-        show (_ : SCell).cell = (_ : SCell).cell; rw [hsh l, if_neg h]
-      simp only [FHeap.union_apply, e, hout l h, FHeap.empty, Option.none_or]
-  · by_cases h : In l
-    · exact .inl (by simp only [FHeap.union_apply, FHeap.empty, Option.none_or, hFn l h])
-    · have e : SCells ((Ghost.sharesAt b p.off.toNat A S K bs tg Frac.one).add rF.gh).share l =
-          SCells (r.gh.add rF.gh).share l := by
-        show (_ : SCell).cell = (_ : SCell).cell; rw [hsh l, if_neg h]
-      rcases hh.heap.apart l with e' | e'
-      · exact .inl (by
-          simp only [FHeap.union_apply, FHeap.empty, Option.none_or] at e' ⊢
-          rw [hout l h, Option.none_or] at e'; exact e')
-      · exact .inr (by rw [e]; exact e')
-  · rw [hsh l]
-    by_cases h : In l
-    · rw [if_pos h]; exact .inr ⟨fc l, rfl⟩
-    · rw [if_neg h]; exact hh.heap.total l
+/-- **A typed share splits** into two positive halves. -/
+theorem spts_split {q₁ q₂ : Frac} (hq₁ : 0 < q₁.val) (hq₂ : 0 < q₂.val) {r : Res}
+    (h : spts p a (q₁.add q₂) v r) : (spts p a q₁ v ⋆ spts p a q₂ v) r := by
+  obtain ⟨r₁, r₂, hd, e, h1, h2⟩ := shared_split h.2
+  exact ⟨r₁, r₂, hd, e, ⟨hq₁, h1⟩, ⟨hq₂, h2⟩⟩
 
-/-- **The whole share becomes the bytes**: next to the whole fraction a valid frame holds none
-(`SCell.Valid.whole`), so the cells are exclusive again. -/
-theorem EUpd.unshare_whole : EUpd (sbytesAt p A S K bs tg Frac.one) (abytesAt p A S K bs tg) := by
-  intro m r rF hh hp _
-  obtain ⟨hH, hk, b, hpb, h0, hg⟩ := hp
-  let In : Loc → Prop := fun l => l.1 = b ∧ p.off.toNat ≤ l.2 ∧ l.2 < p.off.toNat + bs.size
-  let fc : Loc → FCell := fun l => ⟨⟨bs[l.2 - p.off.toNat]!, A, S, K⟩, tg⟩
-  let cells : FHeap := fun l => if In l then some (fc l) else none
-  have hs : ∀ l, (r.gh.add rF.gh).share l =
-      (if In l then SCell.of (fc l) Frac.one else SCell.zero).add (rF.gh.share l) := fun l => by
-    rw [Ghost.add_share, hg]; rfl
-  have hF0 : ∀ l, In l → rF.gh.share l = SCell.zero := fun l h => by
-    have hv := hh.heap.valid l
-    rw [hs l, if_pos h] at hv
-    exact (hv.whole (c := fc l) (by rw [SCell.of_self]; rfl)).eq
-  have hS : ∀ l, In l → SCells (r.gh.add rF.gh).share l = some (fc l) := fun l h => by
-    show (_ : SCell).cell = _
-    rw [hs l, if_pos h, hF0 l h, SCell.add_zero]
-    exact SCell.cell_eq_some (SCell.valid_of (by decide)) (by rw [SCell.of_self]; decide)
-  have hFn : ∀ l, In l → rF.heap l = none := fun l h => by
-    have := (hh.heap.apart l).resolve_right (by rw [hS l h]; exact Option.some_ne_none _)
-    simp only [FHeap.union_apply, hH, FHeap.empty, Option.none_or] at this; exact this
-  have hsh : ∀ l, (Ghost.unit.add rF.gh).share l =
-      if In l then SCell.zero else (r.gh.add rF.gh).share l := fun l => by
-    rw [Ghost.add_share, Ghost.unit_share, SCell.zero_add, hs l]
-    by_cases h : In l
-    · rw [if_pos h]; exact hF0 l h
-    · rw [if_neg h, if_neg h, SCell.zero_add]
-  refine ⟨⟨cells, Know.none, Ghost.unit⟩, ⟨fun l => ?_, hh.heap.of_full (fun l => ?_) (fun l => ?_)
-      (fun l => ?_), Know.sub_none _, hh.knowF, by have hgo := hh.ghost; rw [hg] at hgo; exact hgo⟩,
-    rfl, rfl, b, hpb, h0, fun l => rfl⟩
-  · by_cases h : In l
-    · exact .inr (hFn l h)
-    · exact .inl (by simp only [cells, if_neg h])
-  · by_cases h : In l
-    · have e : SCells (Ghost.unit.add rF.gh).share l = none := by
-        show (_ : SCell).cell = _; rw [hsh l, if_pos h]; exact SCell.cell_zero
-      simp only [FHeap.union_apply, e, cells, if_pos h, hS l h, hH, FHeap.empty, Option.none_or,
-        Option.some_or, hFn l h]
-    · have e : SCells (Ghost.unit.add rF.gh).share l = SCells (r.gh.add rF.gh).share l := by
-        show (_ : SCell).cell = (_ : SCell).cell; rw [hsh l, if_neg h]
-      simp only [FHeap.union_apply, e, cells, if_neg h, hH, FHeap.empty, Option.none_or]
-  · by_cases h : In l
-    · have e : SCells (Ghost.unit.add rF.gh).share l = none := by
-        show (_ : SCell).cell = _; rw [hsh l, if_pos h]; exact SCell.cell_zero
-      exact .inr e
-    · have e : SCells (Ghost.unit.add rF.gh).share l = SCells (r.gh.add rF.gh).share l := by
-        show (_ : SCell).cell = (_ : SCell).cell; rw [hsh l, if_neg h]
-      rcases hh.heap.apart l with e' | e'
-      · exact .inl (by
-          simp only [FHeap.union_apply, hH, FHeap.empty, Option.none_or] at e'
-          simp only [FHeap.union_apply, cells, if_neg h, Option.none_or]; exact e')
-      · exact .inr (by rw [e]; exact e')
-  · rw [hsh l]
-    by_cases h : In l
-    · rw [if_pos h]; exact .inl rfl
-    · rw [if_neg h]; exact hh.heap.total l
+/-- **Two typed shares join.** -/
+theorem EUpd.spts_join {q₁ q₂ : Frac} :
+    EUpd (spts p a q₁ v ⋆ spts p a q₂ v) (spts p a (q₁.add q₂) v) := by
+  intro m r rF hh hp hs
+  obtain ⟨r₁, r₂, hd, e, h1, h2⟩ := hp
+  obtain ⟨r', hh', hr'⟩ := EUpd.shared_join fixedDom_pts h1.1 h2.1 m r rF hh
+    ⟨r₁, r₂, hd, e, h1.2, h2.2⟩ hs
+  exact ⟨r', hh', by have := h1.1; have := h2.1; simp only [Frac.add]; grind, hr'⟩
+
+end Typed
 
 end Full
 end Zig

@@ -511,6 +511,14 @@ theorem Holds.not_pos_of_heap {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Lo
   rw [← SCell.cell_eq_none_iff]
   exact (hh.heap.apart l).resolve_left h
 
+/-- At a byte a resource holds as a cell, and no share of, the frame holds no share. -/
+theorem Holds.frame_share_zero {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hu : r.gh.share l = SCell.zero) (hl : r.heap l ≠ none) : rF.gh.share l = SCell.zero := by
+  have hn : ¬ ((r.gh.add rF.gh).share l).Pos := hh.not_pos_of_heap (by
+    simp only [FHeap.union_apply]; intro e; exact hl (Option.or_eq_none_iff.mp e).1)
+  rw [Ghost.add_share, hu, SCell.zero_add, SCell.not_pos_iff] at hn
+  exact hn.eq
+
 /-- A live byte that neither the resource nor the frame holds exclusively is shared. -/
 theorem Holds.pos_of_live {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {c : Cell}
     (hc : m.heap l = some c) (h : (r.heap ∪ rF.heap) l = none) : ((r.gh.add rF.gh).share l).Pos := by

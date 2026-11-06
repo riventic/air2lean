@@ -741,14 +741,20 @@ every ownership fact of the concurrency layer is over that set: thread ownership
 free resource (`LockWord.Owns … rL.owned`). A share therefore races with no exclusive access,
 and the protocol's rest holds its cells as no one's share (`FOwned.rest_noShare`).
 
-**Shared bytes** (`ZigLean/Sep/Full/Share.lean`). `sbytesAt p A S K bs tg q` is a fraction `q` of
-each cell of `abytesAt p A S K bs tg`, held as a share; `spts p a q v` is a positive fraction of
-bytes that decode to `v`. A load reads shared bytes through the same precondition as exclusive
-ones (`Mem.BytesRead`), so `FTotalTriple.sload` (`@[fsym]`) and `load_sbytesAt` reuse the
-exclusive read path and keep the share. Split and join are an equality (`sbytesAt_add`), and the
-whole share converts to and from the exclusive bytes (`EUpd.share_whole`, `EUpd.unshare_whole`:
-next to the whole fraction a valid frame holds none, `SCell.Valid.whole`). Store and free stay
-exclusive, so no rule changes a byte that a share reads.
+**Shared resources** (`ZigLean/Sep/Full/Share.lean`). The share is stated once, for any heap:
+`sheap H q` holds the fraction `q` of each cell of `H`, and `shared P q` is `q` of a heap the
+exclusive assertion `P` holds alone. The whole share is the heap (`Holds.toShares`,
+`Holds.ofShares`: the same cells, split differently), so any `P` without knowledge or ghost state
+converts to its whole share and back (`EUpd.share_whole`, `EUpd.unshare_whole`). A share splits
+(`shared_split`), and two positive shares join when `P`'s heaps cover one domain
+(`FAssn.FixedDom`; shares of different cells of one byte do not compose, so the heaps agree).
+Shared bytes `sbytesAt p A S K bs q := shared (up (bytesAt …)) q` keep a tag per cell, and the
+typed share `spts p a q v` is a positive `q` of `up (pts p a v)`, so `p ↦ v` converts to
+`spts p a 1 v` and back. A load reads any bytes through one precondition (`Mem.BytesRead`,
+`FTotalTriple.load_of_read`), so `load_sbytesAt` and `@[fsym]` `sload` keep the share. Store and
+free stay exclusive (`OwnsPtr` needs cells), so no rule changes a byte that a share reads. In a
+thread the conversions are sound because thread ownership covers a share's bytes in full (F2);
+read ownership for concurrent readers (F4) must give the conversion back an ordering premise.
 
 Next, in order: the race clocks for a partial share (several readers
 of one byte, ordered before a later exclusive acquire by the RwLock's state word RMWs); until

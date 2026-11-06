@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.Extent
 import ZigLean.Sep.Full.Share
+import ZigLean.Sep.Full.ThreadStep
 
 /-!
 # Read shares: regressions (`ZigLean/Sep/Full/Res.lean` §Read shares)
@@ -8,17 +9,18 @@ import ZigLean.Sep.Full.Share
 2. `disagree_invalid`: shares of two different cells of one byte do not compose, at any fractions.
 3. `over_invalid`: fractions of one cell summing above `1` do not compose.
 4. `whole_excludes`: next to the whole fraction a valid frame holds nothing.
-5. `bytes_halves`: shared bytes split into two halves and join back.
-6. `share_roundtrip`: exclusive bytes become the whole share and back.
-7. `half_reads`: half a typed share reads the value and keeps the half.
-8. `zero_no_spts`: a zero fraction is no typed share.
+5. `mixed_tags`: shared bytes keep a tag per cell (an atomic field next to a plain one).
+6. `bytes_halves`, `halves_join`: the whole share splits into two halves and joins back.
+7. `pts_roundtrip`: `p ↦ v` becomes its whole share and back.
+8. `half_reads`: half a typed share reads the value and keeps the half.
+9. `share_no_store`: a share owns no byte as a cell, so no store or free rule applies.
 
 Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound`.
 -/
 
 namespace Zig.Full.ShareCX
 
-open Zig Zig.Full
+open Zig Zig.Full FAssn
 
 /-- **Two halves of one cell compose and read it.** -/
 theorem halves_read (c : FCell) :
@@ -49,17 +51,34 @@ theorem whole_excludes (c : FCell) {b : SCell} (hv : ((SCell.of c Frac.one).add 
 
 /-! ## Shared bytes (`ZigLean/Sep/Full/Share.lean`) -/
 
-variable {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
 
-/-- **The whole of the bytes splits into two halves, and two halves join back.** -/
-theorem bytes_halves {r : Res} :
-    sbytesAt p A S K bs tg Frac.one r ↔
-      (sbytesAt p A S K bs tg Frac.one.half ⋆ sbytesAt p A S K bs tg Frac.one.half) r := by
-  rw [← sbytesAt_add, Frac.half_add_half]
+/-- **Each cell keeps its own tag**: plain bytes with any tag per cell (an atomic field next to
+a plain one) are shared bytes, whole. -/
+theorem mixed_tags {h : Heap} (hb : bytesAt p A S K bs h) (tag : Loc → Option (Nat × Nat)) :
+    sbytesAt p A S K bs Frac.one
+      ⟨FHeap.empty, Know.none, Ghost.sharesOf (fun l => (h l).map (⟨·, tag l⟩)) Frac.one⟩ := by
+  refine ⟨_, ⟨?_, rfl, rfl⟩, rfl, rfl, rfl⟩
+  have e : FHeap.erase (fun l => (h l).map (⟨·, tag l⟩)) = h := funext fun l => by
+    simp only [FHeap.erase, Option.map_map]; cases h l <;> rfl
+  show bytesAt p A S K bs (FHeap.erase _); rw [e]; exact hb
 
-/-- **Exclusive bytes become the whole share and back.** -/
-theorem share_roundtrip : EUpd (abytesAt p A S K bs tg) (abytesAt p A S K bs tg) :=
-  EUpd.share_whole.trans EUpd.unshare_whole
+/-- **The whole share splits into two halves, and two halves join back.** -/
+theorem bytes_halves {r : Res} (h : sbytesAt p A S K bs Frac.one r) :
+    (sbytesAt p A S K bs Frac.one.half ⋆ sbytesAt p A S K bs Frac.one.half) r :=
+  sbytesAt_split (by rw [Frac.half_add_half]; exact h)
+
+theorem halves_join : EUpd (sbytesAt p A S K bs Frac.one.half ⋆ sbytesAt p A S K bs Frac.one.half)
+    (sbytesAt p A S K bs Frac.one) := by
+  have h := EUpd.sbytesAt_join (p := p) (A := A) (S := S) (K := K) (bs := bs)
+    (q₁ := Frac.one.half) (q₂ := Frac.one.half) (Frac.half_pos (by decide))
+    (Frac.half_pos (by decide))
+  rwa [Frac.half_add_half] at h
+
+/-- **`p ↦ v` becomes its whole share and back** (with `K ≠ .constGlobal` kept). -/
+theorem pts_roundtrip {T : Type} [Enc T] {a : Nat} {v : T} :
+    EUpd (up (pts p a v)) (spts p a Frac.one v) ∧ EUpd (spts p a Frac.one v) (up (pts p a v)) :=
+  ⟨EUpd.spts_whole, EUpd.spts_unwhole⟩
 
 /-- **Half a share reads the value** and keeps the half. -/
 theorem half_reads {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
@@ -67,18 +86,23 @@ theorem half_reads {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
       (fun x => ⟪x = v⟫ ⋆ spts p a Frac.one.half v) :=
   FTotalTriple.sload hn
 
-/-- **No share, no read**: a typed share holds a positive fraction. -/
-theorem zero_no_spts {T : Type} [Enc T] {a : Nat} {v : T} {r : Res} :
-    ¬ spts p a Frac.zero v r := fun h => by
-  have := h.1; simp only [Frac.zero] at this; exact Rat.lt_irrefl this
+/-- **A share licenses no store or free**: a typed share owns no byte as a cell (`OwnsPtr`, the
+premise of the thread store and free rules), whatever its fraction. -/
+theorem share_no_store {T : Type} [Enc T] {a : Nat} {v : T} {q : Frac} {r : Res} {b : BlockId}
+    {n : Nat} (hr : spts p a q v r) (hb : p.block = some b) (hn : 0 < n) :
+    ¬ OwnsPtr (spts p a q v) p n := fun h => by
+  have ⟨_, _, _, hH, _, _⟩ := hr
+  exact h b hb r hr p.off.toNat (Nat.le_refl _) (by omega) (by rw [hH]; rfl)
 
 #print axioms halves_read
 #print axioms disagree_invalid
 #print axioms over_invalid
 #print axioms whole_excludes
+#print axioms mixed_tags
 #print axioms bytes_halves
-#print axioms share_roundtrip
+#print axioms halves_join
+#print axioms pts_roundtrip
 #print axioms half_reads
-#print axioms zero_no_spts
+#print axioms share_no_store
 
 end Zig.Full.ShareCX

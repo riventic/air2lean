@@ -521,17 +521,26 @@ theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
       (noRace_of_singleThread hs.1.single _ _ _ _),
       hh.readAt _ _ _ _ _, sep_lift.mpr ⟨hx, hp⟩, hs.readAt _ _ _ _ _⟩
 
+/-- **Load of a `T`** at byte `k` of bytes that every resource of `P` reads in the memory
+(`Mem.BytesRead`: owned, tagged or shared bytes alike), decoding to `v` there: `P` stays. -/
+theorem load_of_read {P : FAssn} {T : Type} [Enc T] {v : T}
+    (hr : ∀ m r rF, Holds m r rF → P r → m.BytesRead q A S K bs) (hn : 0 < Enc.size T)
+    (hk : k + Enc.size T ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
+    (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
+    FTotalTriple P (Zig.load T al (q.add k)) (fun x => ⟪x = v⟫ ⋆ P) :=
+  of_run fun m r rF hh hp hs => by
+    obtain ⟨b, blk, hacc, -, -, hx⟩ := Mem.bytes_access (hr m r rF hh hp) hn hk ha
+    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
+      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
+      hs.readAt _ _ _ _ _⟩
+
 /-- **Load of a `T`** at byte `k` of owned bytes that decode to `v` there. -/
 theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
     (hk : k + Enc.size T ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
     (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
     FTotalTriple (up (bytesAt q A S K bs)) (Zig.load T al (q.add k))
       (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K bs)) :=
-  of_run fun m r rF hh hp hs => by
-    obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access hp hn hk ha
-    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
-      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
-      hs.readAt _ _ _ _ _⟩
+  load_of_read (fun _ _ _ hh hp => hh.bytesRead hp) hn hk ha hv
 
 /-- **Store of the bytes `bs'`** at byte `k` of owned bytes, not of a `const` global: the bytes
 become `writeBytes bs k bs'`. -/
