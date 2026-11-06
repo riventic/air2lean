@@ -1,4 +1,4 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Conc.WeakWord
 import Proofs.Sync.Semaphore
 import ZigLean.Conc.Word
@@ -4746,10 +4746,12 @@ theorem rwLockRead_safe (env : Env) (henv : env.spawn = .available) {σ : Placem
   (proto E₀).run_safe env (Proto.of_available henv) dispatch G0 rfl (dispatch_spec spec₀) (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.RwLock` reader returns 2 (it reads before the writer) within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+`zig_run` set has unfolded its path (`docs/proof-tools.md`, concrete runs of programs with loops). -/
 theorem rwLockRead_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (rwLockRead ⟨⟩) (mem0 σ)) = some 2 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (rwLockRead ⟨⟩) (mem0 σ)) = some 2 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 10 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 end Sync.RwLockRead
