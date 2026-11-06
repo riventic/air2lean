@@ -341,10 +341,15 @@ def eqCast (pf h : Expr) (mp := true) : MetaM Expr := do
   return mkApp4 (mkConst (if mp then ``Eq.mp else ``Eq.mpr) [← getLevel a]) a b pf h
 
 /-- A proof `h` of a term (or of one definitionally it: an unfolding) as a proof of its simp
-result `r`: by its proof, else definitionally. -/
+result `r`: by its proof, else definitionally. Its type is `r.expr`: the proof states the side
+before simp's last steps without a proof (a `dsimproc`'s fold, `2 ^ 64 - 4096`), and a later
+pass reading the fact's type would fold them again. -/
 def mpResult (r : Simp.Result) (h : Expr) : MetaM Expr := do
   match r.proof? with
-  | some pf => eqCast pf h
+  | some pf =>
+    let p ← eqCast pf h
+    let some (_, _, b) := (← instantiateMVars (← inferType pf)).eq? | return p
+    return if b == r.expr then p else mkExpectedPropHint p r.expr
   | none => return mkExpectedPropHint h r.expr
 
 /-- A proof `h` of the simp result `r` of `t` as a proof of `t`: by its proof, else
@@ -1511,10 +1516,7 @@ where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array E
   let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
   let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
-  let mut out ← if r.expr == ty0 then pure none else
-    match r.proof? with
-    | some pf => pure (some (r.expr, ← mkEqMP pf h))
-    | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
+  let mut out ← if r.expr == ty0 then pure none else pure (some (r.expr, ← mpResult r h))
   -- Retain the normalized equality proof when Lean refutes its constructor equation.
   if !r.expr.hasExprMVar then
     let sides? := match r.expr.eq?, r.expr.heq? with

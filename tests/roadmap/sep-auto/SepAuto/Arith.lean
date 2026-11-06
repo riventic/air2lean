@@ -333,4 +333,31 @@ run_meta omega_proofs_shared
 
 end Shared
 
+/-! ### A fact in normal form states it (`mpResult`, `normFacts`)
+
+A simp result whose last steps have no proof (a `dsimproc`'s fold, `Nat.reduceSub`) keeps the
+proof of the steps before: `pf : P = Q` with `r.expr` past `Q`. The fact must state `r.expr`, not
+`Q`, or the second pass (`renormFacts`) reads `Q` and folds it again on every failed side goal
+(PageSpec's `bs.size ≤ 18446744073709551616 - 4096`, 41 times in `remap_spec`). -/
+section Stated
+open Lean Meta Zig.Full.Auto
+
+run_meta do
+  withLocalDeclD `x (mkConst ``Nat) fun x => do
+  let two64 := mkNatLit 18446744073709551616
+  let q ← mkAppM ``LE.le #[x, ← mkAppM ``HSub.hSub #[two64, mkNatLit 4096]]
+  let nf ← mkAppM ``LE.le #[x, mkNatLit 18446744073709547520]
+  withLocalDeclD `h q fun h => do
+  -- a proof of the steps with a proof (none here: `Q = Q`), the fold after it without one
+  let r : Simp.Result := { expr := nf, proof? := some (← mkEqRefl q) }
+  let p ← mpResult r h
+  Meta.check p
+  let ty ← inferType p
+  unless ty == nf do throwError "mpResult: the fact states {ty}, not its normal form {nf}"
+  -- a result whose proof states it keeps the proof as it is
+  let r' : Simp.Result := { expr := q, proof? := some (← mkEqRefl q) }
+  unless (← inferType (← mpResult r' h)) == q do throwError "mpResult: {q} not kept"
+
+end Stated
+
 end SepAuto.Arith
