@@ -616,6 +616,8 @@ structure RecBoundary where
   proof (over the original hypotheses only).
 * `disch`: side conditions the discharger proved; a proof is reused where its free variables
   are in scope.
+* `dischFail`: side conditions the discharger failed on, with the fact sets it failed with
+  (retried only with a fact outside each of them, as `detFail`).
 * `facts`: the facts of the current arithmetic problem (proofs over the goal's hypotheses of
   propositions in normal form), which the discharger works from.
 * `probe`: probes (a mask, remainder, case or `if` fact for a term): a proof (reused where in
@@ -626,6 +628,7 @@ structure RecBoundary where
 structure RunCaches where
   hyp : IO.Ref (Std.HashMap FVarId (Option (Expr × Expr)))
   disch : IO.Ref (Std.HashMap Expr (Option Expr))
+  dischFail : IO.Ref (Std.HashMap Expr (Array (Std.HashSet Expr)))
   facts : IO.Ref (Array Expr)
   probe : IO.Ref (Std.HashMap Expr (Expr ⊕ Nat))
   ctx : IO.Ref (Option (Simp.Context × Simp.SimprocsArray))
@@ -699,7 +702,8 @@ structure RunCaches where
   fuelOut : IO.Ref Bool
 
 def RunCaches.new : IO RunCaches :=
-  return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
+  return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, dischFail := ← IO.mkRef {},
+           facts := ← IO.mkRef #[],
            probe := ← IO.mkRef {}, ctx := ← IO.mkRef none, prog := ← IO.mkRef none,
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
@@ -720,12 +724,14 @@ def RunCaches.saveArith (c : RunCaches) (on := true) : IO (IO Unit) := do
   unless on do return pure ()
   let hyp ← c.hyp.get
   let disch ← c.disch.get
+  let dischFail ← c.dischFail.get
   let facts ← c.facts.get
   let probe ← c.probe.get
   let detFail ← c.detFail.get
   return do
     c.hyp.set hyp
     c.disch.set disch
+    c.dischFail.set dischFail
     c.facts.set facts
     c.probe.set probe
     c.detFail.set detFail
@@ -769,9 +775,9 @@ def outOfFuel : CoreM Unit := do (← caches).fuelOut.set true
 
 /-- Run the search `x`, and whether it hit a limit: a search in it ran out of fuel (`outOfFuel`), or
 the heartbeat limit is reached (`heartbeatsOut`). **Nothing obtained under a limit is cached as a
-failure** (`probe`, `detProbe`, the derived fields, layouts and instances): such a failure says
-nothing of the input, and a search with more room (another query order, an obligation without a
-probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
+failure** (`probe`, `detProbe`, `omegaDisch`, the derived fields, layouts and instances): such
+a failure says nothing of the input, and a search with more room (another query order, an
+obligation without a probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
 def limitedRun {m : Type → Type} {α : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
     (x : m α) : m (α × Bool) := do
   let ref := (← (caches : CoreM RunCaches)).fuelOut
@@ -1249,7 +1255,9 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
 
 /-- The discharger of the arithmetic simp set (no wrap-around, `pow_mod_elim`, …): the bound of
 a word, else the side goal in normal form by `omega` from the current facts (`dischFacts`);
-cached. -/
+cached: a proof where it is in scope, a failure for the facts it failed with (`dischFail`; not
+under a limit, `limitedRun`; the probe's budget is the discharger's own at every call): each
+failed `omega` asks the side conditions of every relevant fact again (`renormFacts`). -/
 def omegaDisch (cases := true) : Simp.Discharge := fun e => do
   let r : MetaM (Option Expr) := do
     let e ← instantiateMVars e
@@ -1257,7 +1265,10 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     if let some (some pf) := (← (← caches).disch.get).get? e then
       if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
     let facts ← (← caches).facts.get
-    let out ← do
+    let key := if cases then e else mkApp (mkConst `fsym.noCases) e
+    let failed := ((← (← caches).dischFail.get).get? key).getD #[]
+    if failed.any fun s => facts.all s.contains then return none
+    let (out, limited) ← limitedRun do
       -- `x.toNat < 2 ^ w`
       let wordBound : MetaM (Option Expr) := do
         unless e.isAppOfArity ``LT.lt 4 do return none
@@ -1286,7 +1297,11 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     -- no proof, and the proof's type is then the reduced form, which simp's reducible assignment
     -- of the rewrite's hypothesis does not unify)
     let out ← out.mapM (mkExpectedTypeHint · e)
-    if let some pf := out then (← caches).disch.modify (·.insert e (some pf))
+    match out with
+    | some pf => (← caches).disch.modify (·.insert e (some pf))
+    | none =>
+      unless limited do
+        (← caches).dischFail.modify (·.insert key (failed.push (Std.HashSet.ofArray facts)))
     return out
   r
 
