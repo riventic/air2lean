@@ -68,7 +68,7 @@ def treeMap {T T' α : Type} (f : T → T') : {n : Nat} → CoN T α n → CoN T
   | _, .sync (.spawnGated t) m k => .sync (.spawnGated (f t)) m fun r m' => treeMap f (k r m')
   | _, .sync .gate m k => .sync .gate m fun r m' => treeMap f (k r m')
   | _, .sync (.join tid) m k => .sync (.join tid) m fun r m' => treeMap f (k r m')
-  | _, .sync (.wait p e) m k => .sync (.wait p e) m fun r m' => treeMap f (k r m')
+  | _, .sync (.wait p e sh) m k => .sync (.wait p e sh) m fun r m' => treeMap f (k r m')
   | _, .sync (.wake p c) m k => .sync (.wake p c) m fun r m' => treeMap f (k r m')
 
 /-- `x` with every spawn target mapped by `f`. -/
