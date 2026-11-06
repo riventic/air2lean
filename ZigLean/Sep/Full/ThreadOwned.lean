@@ -228,6 +228,35 @@ theorem _root_.Zig.Mem.OwnsRes.join_other {m m' : Mem} {t u w : ThreadId} {r : R
     m'.OwnsRes w r :=
   ⟨ho.1.join_other hw hj, ho.2.join_other hw hj⟩
 
+/-- **No gathering** (`hg`: at every byte one of `a`, `b` holds no partial share): an exclusive
+byte of `a ⋆ b` is exclusive in `a` or in `b`. -/
+theorem _root_.Zig.Full.Res.excl_rsum {a b : Res} (hg : ∀ l, a.shared l = none ∨ b.shared l = none)
+    (l : Loc) (hl : (rsum a b).excl l ≠ none) : (a.excl ∪ b.excl) l ≠ none := fun hn => by
+  simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+  have hnone {r : Res} (hx : r.excl l = none) (hs : r.shared l = none) : r.owned l = none :=
+    Classical.byContradiction fun ho => (Res.excl_or_shared ho).elim (· hx) (· hs)
+  rcases hg l with e | e
+  · have hl' : Res.excl ⟨b.heap ∪ a.heap, b.know.union a.know, b.gh.add a.gh⟩ l ≠ none := by
+      have ha := hnone hn.1 e
+      rcases Res.excl_ne.mp hl with e' | e'
+      · refine Res.excl_ne.mpr (.inl ?_)
+        have : a.heap l = none := by
+          have h' : ¬ a.owned l ≠ none := fun h => h ha
+          rw [Res.owned_ne] at h'; grind
+        simpa [FHeap.union_apply, this] using e'
+      · exact Res.excl_ne.mpr (.inr (by
+          rw [Ghost.add_share, SCell.add_comm, ← Ghost.add_share]; exact e'))
+    exact Res.excl_of_sep_none (hnone hn.1 e) hl' hn.2
+  · exact Res.excl_of_sep_none (hnone hn.2 e) hl hn.1
+
+/-- A shared byte of `a ⋆ b` is a byte of `a` or of `b`. -/
+theorem _root_.Zig.Full.Res.shared_rsum {a b : Res} (l : Loc) (hl : (rsum a b).shared l ≠ none) :
+    (a.owned ∪ b.owned) l ≠ none := fun hn => by
+  simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+  rcases (Res.owned_sep rfl rfl).mp (Res.owned_of_shared hl) with e | e
+  · exact e hn.1
+  · exact e hn.2
+
 /-- **Join without gathering a share**: when at every byte one of the two resources holds no
 partial share (`hg`), each exclusive byte of the joined resource is exclusive in one of them,
 and the parent owns the join. Gathering two partial shares into a whole one would need
@@ -236,29 +265,26 @@ theorem _root_.Zig.Mem.OwnsRes.join {m m' : Mem} {t u : ThreadId} {a b : Res}
     (h₁ : m.OwnsRes t a) (h₂ : m.OwnsRes u b) (ht : t < m.clocks.size)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
     (hg : ∀ l, a.shared l = none ∨ b.shared l = none) :
-    m'.OwnsRes t (rsum a b) := by
-  refine ⟨(Mem.Owns.join h₁.1 h₂.1 ht hj).sub fun l hl hn => ?_,
-    (Mem.OwnsR.join h₁.ownsR h₂.ownsR ht hj).sub fun l hl hn => ?_⟩
-  · simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
-    have hnone {r : Res} (hx : r.excl l = none) (hs : r.shared l = none) : r.owned l = none :=
-      Classical.byContradiction fun ho => (Res.excl_or_shared ho).elim (· hx) (· hs)
-    rcases hg l with e | e
-    · have hl' : Res.excl ⟨b.heap ∪ a.heap, b.know.union a.know, b.gh.add a.gh⟩ l ≠ none := by
-        have ha := hnone hn.1 e
-        rcases Res.excl_ne.mp hl with e' | e'
-        · refine Res.excl_ne.mpr (.inl ?_)
-          have : a.heap l = none := by
-            have h' : ¬ a.owned l ≠ none := fun h => h ha
-            rw [Res.owned_ne] at h'; grind
-          simpa [FHeap.union_apply, this] using e'
-        · exact Res.excl_ne.mpr (.inr (by
-            rw [Ghost.add_share, SCell.add_comm, ← Ghost.add_share]; exact e'))
-      exact Res.excl_of_sep_none (hnone hn.1 e) hl' hn.2
-    · exact Res.excl_of_sep_none (hnone hn.2 e) hl hn.1
-  · simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
-    rcases (Res.owned_sep rfl rfl).mp (Res.owned_of_shared hl) with e | e
-    · exact e hn.1
-    · exact e hn.2
+    m'.OwnsRes t (rsum a b) :=
+  ⟨(Mem.Owns.join h₁.1 h₂.1 ht hj).sub (Res.excl_rsum hg),
+    (Mem.OwnsR.join h₁.ownsR h₂.ownsR ht hj).sub Res.shared_rsum⟩
+
+/-- **Ownership of a sum without gathering a share** (`hg`, as `Mem.OwnsRes.join`). -/
+theorem _root_.Zig.Mem.OwnsRes.gather {m : Mem} {t : ThreadId} {a b : Res} (ha : m.OwnsRes t a)
+    (hb : m.OwnsRes t b) (hg : ∀ l, a.shared l = none ∨ b.shared l = none) :
+    m.OwnsRes t (rsum a b) :=
+  ⟨(Mem.OwnsC.union ha.1 hb.1).sub (Res.excl_rsum hg),
+    (Mem.OwnsRC.union ha.ownsR hb.ownsR).sub Res.shared_rsum⟩
+
+/-- **Ownership of a sum with an owned resource**: with `Mem.Owns` of every byte of `b`, a whole
+share that `a ⋆ b` gathers is owned (a lock's acquire of a resource without partial shares,
+`FOwned.take`). -/
+theorem _root_.Zig.Mem.OwnsRes.addOwns {m : Mem} {t : ThreadId} {a b : Res} (ha : m.OwnsRes t a)
+    (hb : m.Owns t b.owned) : m.OwnsRes t (rsum a b) :=
+  ⟨(Mem.OwnsC.union ha.1 hb).sub fun l hl hn => by
+      simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+      exact Res.excl_of_sep_none hn.2 hl hn.1,
+    (Mem.OwnsRC.union ha.ownsR (Mem.Owns.toR hb)).sub Res.shared_rsum⟩
 
 /-! ## The parts -/
 

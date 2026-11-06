@@ -138,9 +138,17 @@ def Before (m : Mem) (c : VClock) : Prop :=
 
 /-- The free lock owns `h` at the places `P`: each access to it (or to a block that does not
 exist yet) happened before every thread that has not ended, or before the release clock of the
-newest message of the word. -/
-def Owns (P : ThreadId → LPh) (m : Mem) (h : Heap) : Prop :=
-  ∀ e ∈ m.footprint, (e.Touches h ∨ m.blocks.size ≤ e.block) → LiveLe P m e.clock ∨ L.Before m e.clock
+newest message of the word. With `w` (**read ownership**, `Mem.OwnsR`) only each write: the free
+lock's partial read shares, which other holders of the share may read meanwhile
+(`docs/sep-full-state.md` §Read shares, option R). -/
+def Owns (P : ThreadId → LPh) (m : Mem) (h : Heap) (w : Bool := false) : Prop :=
+  ∀ e ∈ m.footprint, (w = true → e.kind.isWrite = true) → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+    LiveLe P m e.clock ∨ L.Before m e.clock
+
+/-- The free lock's resource `r`: its exclusive bytes owned, its shared bytes read
+(`docs/sep-full-state.md` §Read shares; `Mem.OwnsRes` for a thread). -/
+def OwnsRes (P : ThreadId → LPh) (m : Mem) (r : Res) : Prop :=
+  L.Owns P m r.excl ∧ L.Owns P m r.shared true
 
 /-- The access `e` touches a byte of the word (`FootprintEntry.Touches`). -/
 def Hits (e : FootprintEntry) : Prop :=
@@ -387,15 +395,27 @@ theorem Step.first_iff {t : ThreadId} {m m' : Mem} (hs : L.Step t m m')
 
 end
 
+/-- The clock `c` owns `h` in `m`, with `w` only its writes (`Mem.OwnsC`, `Mem.OwnsRC`:
+`ownsW_false`, `ownsW_true`). -/
+def OwnsW (w : Bool) (m : Mem) (c : VClock) (h : Heap) : Prop :=
+  ∀ e ∈ m.footprint, (w = true → e.kind.isWrite = true) → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+    VClock.le e.clock c = true
+
+theorem ownsW_false {m : Mem} {c : VClock} {h : Heap} : OwnsW false m c h ↔ m.OwnsC c h :=
+  ⟨fun ho e he ht => ho e he nofun ht, fun ho e he _ ht => ho e he ht⟩
+
+theorem ownsW_true {m : Mem} {c : VClock} {h : Heap} : OwnsW true m c h ↔ m.OwnsRC c h :=
+  ⟨fun ho e he hw ht => ho e he (fun _ => hw) ht, fun ho e he hw ht => ho e he (hw rfl) ht⟩
+
 /-- An acquire of thread `t` from `m` to `m'`: each heap without the word's bytes that the free
-lock owns in `m` at the places `P`, `t`'s clock owns in `m'`. -/
+lock owns in `m` at the places `P` (or may read: `w`), `t`'s clock owns (may read) in `m'`. -/
 def Acq (P : ThreadId → LPh) (t : ThreadId) (m m' : Mem) : Prop :=
-  ∀ h, L.Owns P m h → L.Off h → m'.OwnsC (m'.clocks[t]!) h
+  ∀ h w, L.Owns P m h w → L.Off h → OwnsW w m' (m'.clocks[t]!) h
 
 /-- A release of thread `t` from `m` to `m'`: each heap without the word's bytes that `t`'s clock
-owns in `m`, the free lock owns in `m'` at the places `P'`. -/
+owns (may read: `w`) in `m`, the free lock owns (may read) in `m'` at the places `P'`. -/
 def Rel (t : ThreadId) (P' : ThreadId → LPh) (m m' : Mem) : Prop :=
-  ∀ h, m.OwnsC (m.clocks[t]!) h → L.Off h → L.Owns P' m' h
+  ∀ h w, OwnsW w m (m.clocks[t]!) h → L.Off h → L.Owns P' m' h w
 
 /-- Thread `t` recorded an access to the word at its clock (an RMW's recorded access before its
 message, whose clock is the thread's: the message is covered, `Mem.MsgCov`). -/
@@ -415,13 +435,27 @@ theorem LiveLe.weaken {P P' : ThreadId → LPh} {m : Mem} {c : VClock}
     (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (h : LiveLe P m c) : LiveLe P' m c :=
   AllLeOn.anti h hg
 
-theorem Owns.weaken {P P' : ThreadId → LPh} {m : Mem} {h : Heap}
-    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.Owns P m h) : L.Owns P' m h :=
-  fun e he ht => (ho e he ht).imp (LiveLe.weaken hg) id
+theorem Owns.weaken {P P' : ThreadId → LPh} {m : Mem} {h : Heap} {w : Bool}
+    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.Owns P m h w) : L.Owns P' m h w :=
+  fun e he hw ht => (ho e he hw ht).imp (LiveLe.weaken hg) id
 
-theorem Owns.sub {P : ThreadId → LPh} {m : Mem} {h h₁ : Heap} (ho : L.Owns P m h)
-    (hs : ∀ l, h₁ l ≠ none → h l ≠ none) : L.Owns P m h₁ :=
-  fun e he ht => ho e he (ht.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hs _ h3⟩) id)
+theorem Owns.sub {P : ThreadId → LPh} {m : Mem} {h h₁ : Heap} {w : Bool} (ho : L.Owns P m h w)
+    (hs : ∀ l, h₁ l ≠ none → h l ≠ none) : L.Owns P m h₁ w :=
+  fun e he hw ht => ho e he hw (ht.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hs _ h3⟩) id)
+
+/-- What the free lock owns, it may read. -/
+theorem Owns.toR {P : ThreadId → LPh} {m : Mem} {h : Heap} (ho : L.Owns P m h) :
+    L.Owns P m h true :=
+  fun e he _ ht => ho e he nofun ht
+
+theorem Owns.union {P : ThreadId → LPh} {m : Mem} {h₁ h₂ : Heap} {w : Bool}
+    (h1 : L.Owns P m h₁ w) (h2 : L.Owns P m h₂ w) : L.Owns P m (h₁ ∪ h₂) w := by
+  intro e he hw ht
+  rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb
+  · by_cases hn : h₁ (e.block, x) = none
+    · exact h2 e he hw (.inl ⟨x, hx1, hx2, by simpa [hn] using hx3⟩)
+    · exact h1 e he hw (.inl ⟨x, hx1, hx2, hn⟩)
+  · exact h1 e he hw (.inr hb)
 
 /-- `wfp` for other places with fewer threads that have not ended. -/
 theorem WInv.wfpW {P P' : ThreadId → LPh} {m : Mem} (hi : L.WInv P m)
@@ -695,7 +729,7 @@ theorem LiveLe.le {P : ThreadId → LPh} {m : Mem} {c c' : VClock} (hc : VClock.
 
 /-- **The word's location stays** over a step whose frame `hF` has the word (`FStepIn`): the
 word's location (if any) has the word's 4 bytes (`hok`), so it is in the frame. -/
-theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
+theorem loc_fstep {m m' : Mem} {hF hR : Heap} (hs : FStepIn hF m m' hR)
     (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) (hok : ∀ i l, L.Loc m i l → l.len = 4)
     (l : ALoc) : (∃ i, L.Loc m' i l) ↔ (∃ i, L.Loc m i l) := by
   obtain ⟨σ, ha⟩ := hs.atomics
@@ -710,10 +744,21 @@ theorem loc_fstep {m m' : Mem} {hF : Heap} (hs : FStepIn hF m m')
   · simp only [Bool.and_eq_true, beq_iff_eq] at hp
     rw [hp.1, hp.2]; exact hwF L.o (Nat.le_refl _) (by omega)
 
-/-- A step of a thread on its own part (`FStepIn hF`, with the word in its frame `hF`), after
-which the word's cells are the same up to `Cell.norm`, keeps the invariant. -/
-theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv P m)
-    (hs : FStepIn hF m m') (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
+/-- A new access that may read the frame's shares `hR` (`FootprintEntry.ReadsIn`) does not hit the
+word, which is in the frame and not a share of it. -/
+theorem not_hits_of_reads {e : FootprintEntry} {hF hR : Heap} (hh : L.Hits e)
+    (hr : e.ReadsIn hF hR) (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
+    (hwR : ∀ x, L.o ≤ x → x < L.o + 4 → hR (L.b, x) = none) : False := by
+  obtain ⟨hb, x, h1, h2, h3, h4⟩ := hh
+  have := (hr x h1 h2 (by rw [hb]; exact hwF x h3 h4)).2
+  rw [hb] at this; exact this (hwR x h3 h4)
+
+/-- A step of a thread on its own part (`FStepIn hF`, with the word in its frame `hF` and not in
+its read shares `hR`), after which the word's cells are the same up to `Cell.norm`, keeps the
+invariant. -/
+theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF hR : Heap} (hi : L.WInv P m)
+    (hs : FStepIn hF m m' hR) (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
+    (hwR : ∀ x, L.o ≤ x → x < L.o + 4 → hR (L.b, x) = none)
     (hcells : ∀ x, L.o ≤ x → x < L.o + 4 →
       (m'.heap (L.b, x)).map Cell.norm = (m.heap (L.b, x)).map Cell.norm) :
     L.WInv P m' := by
@@ -750,7 +795,7 @@ theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv
     · rcases hi.wfp e₀ he₀ (L.hits_narrows hn hh) with ⟨ha, hle⟩ | hle
       · exact .inl ⟨hn.2.2.1 ▸ ha, someLe_mono hs.threads hcl (someLe_le hn.clock hle)⟩
       · exact .inr (LiveLe.mono hs.threads hcl (hle.le hn.clock))
-    · exact absurd (touches_word hh hwF) hnt
+    · exact (not_hits_of_reads hh hnt hwF hwR).elim
   · obtain ⟨i₀, hl₀⟩ := (hloc l).mp ⟨i, hl⟩
     obtain ⟨h1, h2⟩ := hi.rel i₀ l hl₀
     refine ⟨someLe_mono hs.threads hcl h1, fun u hu => ?_⟩
@@ -763,21 +808,26 @@ theorem WInv.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF : Heap} (hi : L.WInv
     exact ⟨j, l, hl', hw⟩
 
 /-- A step of a thread on its own part keeps what the free lock owns in its frame (which has the
-word, whose location has its 4 bytes). -/
-theorem Owns.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF h : Heap} (ho : L.Owns P m h)
-    (hs : FStepIn hF m m') (hsub : ∀ l, h l ≠ none → hF l ≠ none)
-    (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) (hok : ∀ i l, L.Loc m i l → l.len = 4) :
-    L.Owns P m' h := by
-  intro e he htc
+word, whose location has its 4 bytes). The step may read the frame's shares `hR`: the free lock
+keeps what it owns off them (`hd`), and everything it may read (`w`). -/
+theorem Owns.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF hR h : Heap} {w : Bool}
+    (ho : L.Owns P m h w) (hs : FStepIn hF m m' hR) (hsub : ∀ l, h l ≠ none → hF l ≠ none)
+    (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) (hok : ∀ i l, L.Loc m i l → l.len = 4)
+    (hd : w = false → ∀ l, h l ≠ none → hR l = none := by intro _ _ _; rfl) :
+    L.Owns P m' h w := by
+  intro e he hw htc
   rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, hb, -⟩
   · have htc₀ : e₀.Touches h ∨ m.blocks.size ≤ e₀.block :=
       htc.imp hn.touches fun h => hn.2.1 ▸ Nat.le_trans hs.blocks h
-    rcases ho e₀ he₀ htc₀ with h | ⟨i, l, hl, hle⟩
+    rcases ho e₀ he₀ (fun h => by rw [← hn.2.2.1]; exact hw h) htc₀ with h | ⟨i, l, hl, hle⟩
     · exact .inl (LiveLe.mono hs.threads (fun u _ => hs.clock u) (h.le hn.clock))
     · obtain ⟨j, hl'⟩ := (L.loc_fstep hs hwF hok l).mpr ⟨i, hl⟩
       exact .inr ⟨j, l, hl', VClock.le_trans hn.clock hle⟩
   · rcases htc with ⟨x, h1, h2, h3⟩ | hb'
-    · exact absurd ⟨x, h1, h2, hsub _ h3⟩ hnt
+    · obtain ⟨hk, hr⟩ := hnt x h1 h2 (hsub _ h3)
+      cases w with
+      | true => rw [hw rfl] at hk; cases hk
+      | false => exact absurd (hd rfl _ h3) hr
     · exact absurd hb' (Nat.not_le.mpr hb)
 
 /-- A change of the place of thread `t` outside the lock's code: `t` is `out` before, and `out`,
@@ -822,7 +872,7 @@ theorem WInv.fork {P : ThreadId → LPh} {m m' : Mem} {t c : ThreadId} {gt : Boo
     (hi : L.WInv P m) (hout : P t = .out)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
     c = m.threads.size ∧ L.WInv (upd P c .out) m' ∧
-      ∀ h, L.Owns P m h → L.Owns (upd P c .out) m' h := by
+      ∀ h w, L.Owns P m h w → L.Owns (upd P c .out) m' h w := by
   have hcs := hi.csize
   obtain ⟨ht, hjt⟩ := hi.live t (by rw [hout]; decide)
   have hjb := joinedB_fork hf
@@ -871,7 +921,7 @@ theorem WInv.fork {P : ThreadId → LPh} {m m' : Mem} {t c : ThreadId} {gt : Boo
     fun _ _ => Iff.rfl
   refine ⟨⟨by simp [hcs], fun u hu => ?_, hi.blk, ?_, fun u v hu hv => ?_, ⟨hi.loc.only, hi.loc.ok,
     hi.loc.plain⟩, fun e he hh => ?_, fun i l hl => ?_, fun w hw => ?_, fun hp => ?_,
-    fun u hu => hi.owner u ((hholds u).mp hu)⟩, fun h ho e he htc => ?_⟩
+    fun u hu => hi.owner u ((hholds u).mp hu)⟩, fun h w ho e he hw htc => ?_⟩
   · by_cases hc : u = m.threads.size
     · subst hc
       exact ⟨by simp only [Array.size_push]; exact Nat.lt_succ_self _, by rw [hjb]; exact hjc⟩
@@ -898,7 +948,7 @@ theorem WInv.fork {P : ThreadId → LPh} {m m' : Mem} {t c : ThreadId} {gt : Boo
     exact ⟨v, by simp only [Array.size_push]; exact Nat.lt_succ_of_lt hv,
       fun hn => hq (by rwa [hphu v hvc] at hn),
       by rw [hphu v hvc]; exact h1, fun hh => h2 (by rw [← hphu v hvc]; exact hh)⟩
-  · rcases ho e he htc with h | ⟨i, l, hl, hle⟩
+  · rcases ho e he hw htc with h | ⟨i, l, hl, hle⟩
     · exact .inl (hall h)
     · exact .inr ⟨i, l, hl, hle⟩
 
@@ -906,7 +956,7 @@ theorem WInv.fork {P : ThreadId → LPh} {m m' : Mem} {t c : ThreadId} {gt : Boo
 theorem WInv.join {P : ThreadId → LPh} {m m' : Mem} {t u : ThreadId} (hi : L.WInv P m)
     (hut : u ≠ t) (hu0 : u ≠ 0) (hout : P t = .out) (huo : P u = .gone)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
-    L.WInv P m' ∧ ∀ h, L.Owns P m h → L.Owns P m' h := by
+    L.WInv P m' ∧ ∀ h w, L.Owns P m h w → L.Owns P m' h w := by
   have hcs := hi.csize
   obtain ⟨ht, hjt⟩ := hi.live t (by rw [hout]; decide)
   obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
@@ -947,7 +997,7 @@ theorem WInv.join {P : ThreadId → LPh} {m m' : Mem} {t u : ThreadId} (hi : L.W
   have hnu : ∀ w, P w ≠ .gone → w ≠ u := fun w hw e => hw (by rw [e, huo])
   refine ⟨⟨by simp [hcs], fun w hw => ?_, hi.blk, hi.word, hi.one,
     ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, fun e he hh => ?_,
-    fun i l hl => ?_, hi.fq, fun hp => ?_, hi.owner⟩, fun h ho e he htc => ?_⟩
+    fun i l hl => ?_, hi.fq, fun hp => ?_, hi.owner⟩, fun h w ho e he hw htc => ?_⟩
   · obtain ⟨h1, h2⟩ := hi.live w hw
     exact ⟨by rw [hsz]; exact h1, by rw [hjb, if_neg (hnu w hw)]; exact h2⟩
   · rcases hi.wfp e he hh with ⟨ha, hle⟩ | hle
@@ -959,7 +1009,7 @@ theorem WInv.join {P : ThreadId → LPh} {m m' : Mem} {t u : ThreadId} (hi : L.W
     rw [hco w (fun e => by rw [e, hout] at hw; cases hw)]; exact h2 w hw
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
     exact ⟨v, by rw [hsz]; exact hv, hq, h1, h2⟩
-  · rcases ho e he htc with h | ⟨i, l, hl, hle⟩
+  · rcases ho e he hw htc with h | ⟨i, l, hl, hle⟩
     · exact .inl (hall h)
     · exact .inr ⟨i, l, hl, hle⟩
 
@@ -1107,11 +1157,12 @@ theorem Step.fpOff {t : ThreadId} {m m' : Mem} {h : Heap} (hs : L.Step t m m') (
 
 /-- A lock step keeps what a clock of a thread owns without the word's bytes: `t`'s clock only
 grows, and no new access touches it. -/
-theorem OwnsC.step {t : ThreadId} {m m' : Mem} {h : Heap} (hs : L.Step t m m') (hoff : L.Off h)
-    (hbl : L.b < m.blocks.size) (ho : m.OwnsC (m.clocks[t]!) h) : m'.OwnsC (m'.clocks[t]!) h := by
-  intro e he htc
+theorem OwnsW.step {t : ThreadId} {m m' : Mem} {h : Heap} {w : Bool} (hs : L.Step t m m')
+    (hoff : L.Off h) (hbl : L.b < m.blocks.size) (ho : OwnsW w m (m.clocks[t]!) h) :
+    OwnsW w m' (m'.clocks[t]!) h := by
+  intro e he hw htc
   by_cases hm : e ∈ m.footprint
-  · exact VClock.le_trans (ho e hm (htc.imp id fun h => by rw [← hs.bsize]; exact h)) hs.mine
+  · exact VClock.le_trans (ho e hm hw (htc.imp id fun h => by rw [← hs.bsize]; exact h)) hs.mine
   · rcases htc with htc | hbe
     · exact absurd htc (hs.fpOff hoff he hm)
     · rcases hs.fp e he with h | ⟨heb, -⟩
@@ -1122,10 +1173,11 @@ theorem OwnsC.step {t : ThreadId} {m m' : Mem} {h : Heap} (hs : L.Step t m m') (
 threads that have not ended. -/
 theorem Owns.step {P P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {h : Heap}
     (hs : L.Step t m m') (hoff : L.Off h) (hbl : L.b < m.blocks.size)
-    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.Owns P m h) : L.Owns P' m' h := by
-  intro e he htc
+    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) {w : Bool} (ho : L.Owns P m h w) :
+    L.Owns P' m' h w := by
+  intro e he hw htc
   by_cases hm : e ∈ m.footprint
-  · rcases ho e hm (htc.imp id fun h => by rw [← hs.bsize]; exact h) with h | h
+  · rcases ho e hm hw (htc.imp id fun h => by rw [← hs.bsize]; exact h) with h | h
     · exact .inl (hs.liveLe hg h)
     · exact .inr (hs.before _ h)
   · rcases htc with htc | hbe
@@ -1137,23 +1189,41 @@ theorem Owns.step {P P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {h : Hea
 /-- An acquire after a lock step without a place change. -/
 theorem Acq.pre {P : ThreadId → LPh} {t : ThreadId} {m m₁ M : Mem} (hs : L.Step t m m₁)
     (hbl : L.b < m.blocks.size) (h : L.Acq P t m₁ M) : L.Acq P t m M :=
-  fun h' ho hoff => h h' (ho.step hs hoff hbl fun _ h => h) hoff
+  fun h' w ho hoff => h h' w (ho.step hs hoff hbl fun _ h => h) hoff
 
 /-- An acquire followed by a lock step. -/
 theorem Acq.post {P : ThreadId → LPh} {t : ThreadId} {m M M' : Mem} (h : L.Acq P t m M)
     (hs : L.Step t M M') (hbl : L.b < M.blocks.size) : L.Acq P t m M' :=
-  fun h' ho hoff => OwnsC.step hs hoff hbl (h h' ho hoff)
+  fun h' w ho hoff => OwnsW.step hs hoff hbl (h h' w ho hoff)
 
 /-- A release after a lock step. -/
 theorem Rel.pre {P' : ThreadId → LPh} {t : ThreadId} {m m₁ M : Mem} (hs : L.Step t m m₁)
     (hbl : L.b < m.blocks.size) (h : L.Rel t P' m₁ M) : L.Rel t P' m M :=
-  fun h' ho hoff => h h' (OwnsC.step hs hoff hbl ho) hoff
+  fun h' w ho hoff => h h' w (OwnsW.step hs hoff hbl ho) hoff
 
 /-- A release followed by a lock step, for places with fewer threads that have not ended. -/
 theorem Rel.post {P' P'' : ThreadId → LPh} {t : ThreadId} {m M M' : Mem} (h : L.Rel t P' m M)
     (hs : L.Step t M M') (hbl : L.b < M.blocks.size) (hg : ∀ u, P'' u ≠ .gone → P' u ≠ .gone) :
     L.Rel t P'' m M' :=
-  fun h' ho hoff => (h h' ho hoff).step hs hoff hbl hg
+  fun h' w ho hoff => (h h' w ho hoff).step hs hoff hbl hg
+
+/-- An acquire: the free lock's resource `r` is the acquiring thread's (`Mem.OwnsRes`). -/
+theorem Acq.ownsRes {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {r : Res}
+    (h : L.Acq P t m m') (ho : L.OwnsRes P m r) (hoff : L.Off r.owned) :
+    m'.Owns t r.excl ∧ m'.OwnsR t r.shared :=
+  ⟨ownsW_false.mp (h _ false ho.1 (fun x h1 h2 => Classical.byContradiction fun hn =>
+      Res.owned_of_excl hn (hoff x h1 h2))),
+    ownsW_true.mp (h _ true ho.2 (fun x h1 h2 => Classical.byContradiction fun hn =>
+      Res.owned_of_shared hn (hoff x h1 h2)))⟩
+
+/-- A release: the releasing thread's resource `r` is the free lock's. -/
+theorem Rel.ownsRes {P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {r : Res}
+    (h : L.Rel t P' m m') (ho : m.Owns t r.excl ∧ m.OwnsR t r.shared) (hoff : L.Off r.owned) :
+    L.OwnsRes P' m' r :=
+  ⟨h _ false (ownsW_false.mpr ho.1) (fun x h1 h2 => Classical.byContradiction fun hn =>
+      Res.owned_of_excl hn (hoff x h1 h2)),
+    h _ true (ownsW_true.mpr ho.2) (fun x h1 h2 => Classical.byContradiction fun hn =>
+      Res.owned_of_shared hn (hoff x h1 h2))⟩
 
 /-! ## Changes that keep the blocks and the locations -/
 
@@ -1198,14 +1268,14 @@ theorem WInv.mono {P : ThreadId → LPh} {m m' : Mem} (hi : L.WInv P m) (ht : m'
 /-- `Owns` over a memory with the same threads, blocks and atomic locations, clocks that are not
 smaller, and new accesses that touch no byte of `h` or happened before each thread that has not
 ended. -/
-theorem Owns.mono {P : ThreadId → LPh} {m m' : Mem} {h : Heap} (ho : L.Owns P m h)
+theorem Owns.mono {P : ThreadId → LPh} {m m' : Mem} {h : Heap} {w : Bool} (ho : L.Owns P m h w)
     (ht : m'.threads = m.threads) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
     (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
-      (¬ e.Touches h ∧ e.block < m.blocks.size) ∨ LiveLe P m' e.clock) : L.Owns P m' h := by
-  intro e he htc
+      (¬ e.Touches h ∧ e.block < m.blocks.size) ∨ LiveLe P m' e.clock) : L.Owns P m' h w := by
+  intro e he hw htc
   rcases hfp e he with h' | ⟨hnt, hbl⟩ | hle
-  · rcases ho e h' (by rw [← hb]; exact htc) with h | ⟨i, l, hl, hle⟩
+  · rcases ho e h' hw (by rw [← hb]; exact htc) with h | ⟨i, l, hl, hle⟩
     · exact .inl (LiveLe.mono ht (fun u _ => hcl u) h)
     · exact .inr ⟨i, l, by unfold LockWord.Loc; rw [ha]; exact hl, hle⟩
   · rcases htc with htc | hb'
@@ -1290,15 +1360,27 @@ theorem WInv.readK {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {k : AccessKin
 /-- A read by the current thread of bytes that are not the word's keeps what the free lock owns
 of a heap that does not have them. -/
 theorem Owns.readK {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {k : AccessKind} {h : Heap}
-    (ho : L.Owns P m h) (hb : b < m.blocks.size)
+    {w : Bool} (ho : L.Owns P m h w) (hb : b < m.blocks.size)
     (hnR : ∀ x, o ≤ x → x < o + n → h (b, x) = none) :
-    L.Owns P (m.recordAt b o n k) h := by
+    L.Owns P (m.recordAt b o n k) h w := by
   refine ho.mono rfl rfl rfl (recordAt_le m _ _ _ _) fun e he => ?_
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact .inl he
   · refine .inr (.inl ⟨fun ⟨x, h1, h2, h3⟩ => ?_, hb⟩)
     dsimp only at h1 h2 h3; exact h3 (hnR x h1 (by omega))
+
+/-- A recorded read, by any thread, keeps what the free lock may read (`Mem.OwnsR.recordRead`). -/
+theorem Owns.recordRead {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {k : AccessKind} {h : Heap}
+    (ho : L.Owns P m h true) (hk : k.isWrite = false) : L.Owns P (m.recordAt b o n k) h true := by
+  intro e he hw htc
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · rcases ho e he hw htc with h | ⟨i, l, hl, hle⟩
+    · exact .inl (LiveLe.mono (m := m) (m' := m.recordAt b o n k) rfl
+        (fun u _ => recordAt_le m b o n k u) h)
+    · exact .inr ⟨i, l, hl, hle⟩
+  · exact absurd (hw rfl) (by simp [hk])
 
 /-- A plain read by the current thread, the only thread that has not ended: it can read the
 word. The caller shows that the read does not race. -/
@@ -1324,9 +1406,10 @@ theorem WInv.readAll {P : ThreadId → LPh} {m : Mem} {b o n : Nat} (hi : L.WInv
   · exact .inr fun _ => .inr hle
 
 /-- `Owns` after a plain read by the only thread that has not ended. -/
-theorem Owns.readAll {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {h : Heap} (ho : L.Owns P m h)
-    (hcs : m.current < m.clocks.size) (hsole : ∀ u < m.threads.size, u ≠ m.current → P u = .gone) :
-    L.Owns P (m.recordAt b o n .read) h := by
+theorem Owns.readAll {P : ThreadId → LPh} {m : Mem} {b o n : Nat} {h : Heap} {w : Bool}
+    (ho : L.Owns P m h w) (hcs : m.current < m.clocks.size)
+    (hsole : ∀ u < m.threads.size, u ≠ m.current → P u = .gone) :
+    L.Owns P (m.recordAt b o n .read) h w := by
   have hle : LiveLe P (m.recordAt b o n .read) (VClock.bump (m.clocks[m.current]!) m.current) := by
     intro u hu hg
     simp only [Mem.recordAt] at hu ⊢
@@ -1830,7 +1913,7 @@ theorem WInv.acquire {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
     (fun u hu => ?_) ?_ (fun u v hu hv => ?_) ?_
     (by rw [hwM]; exact (fq_keep hi hnw hna hnA).of_step hst) (fun hU hp => ?_)
     hpt (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc])) (fun u hu => ?_),
-    fun h ho hoff => ?_⟩
+    fun h w ho hoff => ?_⟩
   · rw [hphu] at hu
     split at hu
     · rename_i h; subst h; exact hpt
@@ -1872,9 +1955,9 @@ theorem WInv.acquire {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
     · rename_i h; subst h; exact .inl ⟨hF, by simp [rmwMsg, acqM, hc]⟩
     · exact (hF.not hu).elim
   · -- the acquire adopts the release clock of the newest message
-    intro e he htc
+    intro e he hw htc
     by_cases hm : e ∈ m₁.footprint
-    · rcases ho e hm (htc.imp id fun h => by rw [← hst.bsize]; exact h) with h | ⟨i, l₀, hl₀, hle⟩
+    · rcases ho e hm hw (htc.imp id fun h => by rw [← hst.bsize]; exact h) with h | ⟨i, l₀, hl₀, hle⟩
       · exact VClock.le_trans (h t ht hpt) (hst.clocks t)
       · obtain ⟨rfl, rfl⟩ := loc_unique hl₀ hl
         rw [hct]
@@ -2028,7 +2111,7 @@ theorem WInv.release {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
     hg ⟨fun _ => hnh', fun _ => rfl⟩ (fun u v hu _ => (hnh' u hu).elim) ?_
     (by rw [hwM]; exact hfq.of_step hst)
     (fun hU hp' => ?_) (by rw [hph]; decide) (by rw [hclM]; exact rmwMsg_clock (by simp [acqM, hc]))
-    (fun u hu => (hnh' u hu).elim), fun h ho hoff => ?_⟩
+    (fun u hu => (hnh' u hu).elim), fun h w ho hoff => ?_⟩
   · rw [hrelM]
     refine ⟨⟨t, by rw [hst.threads]; exact ht, ?_⟩, fun u hu => (hnh' u hu).elim⟩
     rw [hcl]; exact merge_le hrt (VClock.le_refl _)
@@ -2046,11 +2129,11 @@ theorem WInv.release {P : ThreadId → LPh} {m₁ M : Mem} {t li : Nat} {l : ALo
       exact ⟨t, by rw [hst.threads]; exact ht, fun hw => (by rw [upd_self] at hw; cases hw),
         by rw [upd_self]; rfl, fun hh => (hnh' t hh).elim⟩
   · -- the free lock owns what `t`'s clock owned: the release clock of the new message
-    intro e he htc
+    intro e he hw htc
     by_cases hm : e ∈ m₁.footprint
     · refine .inr ⟨li, _, hl', ?_⟩
       rw [back_push, hrelM]
-      exact VClock.le_trans (ho e hm (htc.imp id fun h => by rw [← hst.bsize]; exact h))
+      exact VClock.le_trans (ho e hm hw (htc.imp id fun h => by rw [← hst.bsize]; exact h))
         (VClock.le_merge_right _ _)
     · rcases htc with htc | hbe
       · exact absurd htc (hst.fpOff hoff he hm)
@@ -2575,7 +2658,7 @@ theorem Step.observe {t : ThreadId} {m₁ : Mem} {li id : Nat} {l : ALoc}
     have hx := hin L.o (by omega) (by omega)
     rw [hb] at hx
     exact hx (hoff L.o (Nat.le_refl _) (by omega))
-  obtain ⟨σ, ha⟩ := (FStepIn.observe id hnot).atomics
+  obtain ⟨σ, ha⟩ := (FStepIn.observe (hR := Heap.empty) id hnot).atomics
   exact ⟨σ, ha.withCurrent hc⟩
 
 /-- The core of a CAS `0 → 1` with an acquire, by thread `t` at `out` or `spin`: on success `t`
