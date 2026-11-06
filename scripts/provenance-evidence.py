@@ -47,7 +47,8 @@ _spec.loader.exec_module(am)
 VERSION = '0.16.0'
 GLOBAL_LINKS = ('compiler_patch', 'translator', 'runtime', 'toolchain')
 # Files outside the Lean import closure that the receipt's audit also depends on (check.sh inputs).
-ENVIRONMENT = ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json', 'assurance/policy.json', 'tools/Assurance.lean')
+ENVIRONMENT = ('lean-toolchain', 'lakefile.toml', 'lake-manifest.json', 'assurance/policy.json', 'tools/Assurance.lean',
+               'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean')
 FIXTURES = {
     'provenance': dict(
         dir='assurance/provenance', example='provenance', namespace='Provenance', prefix='provenance.',
@@ -225,11 +226,14 @@ def lean_toolchain():
     return Path.home() / '.elan/toolchains' / (ROOT / 'lean-toolchain').read_text().strip().replace('/', '--').replace(':', '---')
 
 
-def fresh_receipt(fx, attempt):
-    """A guarded, sealed proof receipt over the tracked tree for the fixture's proof module."""
+def fresh_receipt(fx, attempt, lock_wait=None):
+    """A guarded, sealed proof receipt over the tracked tree for the fixture's proof module. Its
+    guard waits lock_wait seconds for admission (check.sh: AIR2LEAN_LOCK_WAIT), as the
+    pipeline's did; None keeps the caller's AIR2LEAN_LOCK_WAIT."""
     toolchain = lean_toolchain()
+    env = None if lock_wait is None else os.environ | {'AIR2LEAN_LOCK_WAIT': str(lock_wait)}
     done = subprocess.run(['bash', str(ROOT / 'tests/roadmap/proof-receipts/check.sh'), str(attempt),
-                           str(toolchain), fx['label'], fx['proof_module']])
+                           str(toolchain), fx['label'], fx['proof_module']], env=env)
     am.demand(done.returncode == 0, 'fresh proof receipt failed')
     am.receipt.verify(attempt)
     return am.audit_theorems(ROOT, {'proofs': [fx['proofs']]}, attempt / 'audit.json')
@@ -280,7 +284,7 @@ def regenerate(fx, a):
             same('AIR ' + path.name, air / path.name, path)
     same('Gen.lean', work / 'Gen.lean', ROOT / fx['gen'])
     # 2/4 guarded proof receipt over the tracked tree.
-    fresh_audit = fresh_receipt(fx, attempt)
+    fresh_audit = fresh_receipt(fx, attempt, a.lock_wait)
     # --refresh (a new fixture, or an intentional proof change): the fresh manifest is only
     # self-checked, and `install` + `record` replace the committed manifest and pins.
     committed = None if a.refresh else json.loads((fx['path'] / 'manifest.json').read_text())
@@ -361,13 +365,19 @@ def record(fx, a):
     work = Path(os.path.abspath(a.workdir))
     stock = shutil.which(a.stock_zig) if os.sep not in a.stock_zig else a.stock_zig
     am.demand(stock is not None and Path(stock).is_file(), 'stock Zig not found: ' + a.stock_zig)
-    # Recorded beside the run, then moved over the fixture: a failure keeps the committed manifest.
+    # Recorded beside the run, then copied next to the fixture and renamed over it (WORKDIR may be
+    # on another file system, a tmpfs /tmp): a failure keeps the committed manifest.
     staged = work / 'fixture-manifest.json'
     staged.unlink(missing_ok=True)
     record_manifest(fx, staged, fx['dir'] + '/air', fx['dir'] + '/receipt', work / 'native' / fx['example'], stock,
                     a.generated_from_head)
     path = fx['path'] / 'manifest.json'
-    os.replace(staged, path)
+    partial = path.with_name(path.name + '.partial')
+    try:
+        shutil.copyfile(staged, partial)
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
     manifest = am.load(path)
     links = manifest['links']
     pins = {'note': 'Reviewer pins for %s/manifest.json (scripts/provenance-evidence.py). '

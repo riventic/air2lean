@@ -643,9 +643,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hp₃ : Pre m₃ := by
     rw [hm₃]
     exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
-            b0 := by blkat_alloc
-            b1 := by blkat_alloc
-            b2 := by blkat_alloc }
+            b0 := ((BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _).afterAlloc _ _ _
+            b1 := (BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _
+            b2 := BlkAt.alloc _ _ _ (by decide) }
   have hv₃ : (m₃.clocks[0]!).get 1 = 0 := by rw [hm₃]; rfl
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_

@@ -6,11 +6,13 @@ Subcommands (docs/perf-budgets.md):
   baseline  derive per-phase limits from a measurement into the budgets file
   gate      compare a measurement against the budgets; nonzero on a regression
             (--portable: any platform, translator and elaboration; --normalized: also proofs)
-  heartbeats check|record FILE…|show
+  heartbeats check|record FILE… [--tree DIR]…|show
             the heartbeat budgets of proofs that raise `maxHeartbeats` (the budgets file's
             `heartbeats` section): `check` (static, preflight) that every raise of a gated file is
             exactly its recorded budget; `record` elaborates a measuring copy of each file (run it
-            under scripts/build-guard.py) and rewrites its entries; `show` lists them, worst first
+            under scripts/build-guard.py), also in each check tree `--tree` of a proof that is
+            built over several versions' translations (the worst counts), and rewrites its
+            entries; `show` lists them, worst first
 
 `record` starts the translator and Lake; run it once under scripts/build-guard.py so
 the whole suite holds the shared build lock with LEAN_NUM_THREADS=1. `baseline`
@@ -835,13 +837,20 @@ def hb_measure(root, name):
     return found
 
 
-def hb_record(root, budgets, names):
+def hb_record(root, budgets, names, trees=()):
+    """Measure each file in the checkout and in every check tree (`scripts/check-tree.py`: the
+    same proofs over another version's translation); a declaration's budget is its worst."""
     section = hb_section(budgets)
     policy = section["policy"]
     for name in names:
         if name not in section["files"]:
             raise ValueError(f"{name} is not a gated file of the heartbeats section")
         found = hb_measure(root, name)
+        for tree in trees:
+            if (Path(tree) / name).read_text() != (root / name).read_text():
+                raise ValueError(f"{tree}: {name} differs from the checkout's; recreate the check tree")
+            for decl, hb in hb_measure(Path(tree), name).items():
+                found[decl] = max(found.get(decl, 0), hb)
         section["budgets"] = [e for e in section["budgets"] if e["file"] != name] + [
             {"file": name, "declaration": decl, "measured": hb, "budget": hb_budget_of(hb, policy)}
             for decl, hb in found.items() if hb > policy["default"] / policy["tolerance"]]
@@ -858,7 +867,7 @@ def heartbeats(args):
                 print(f"error: {error}")
             return 1 if errors else 0
         if args.action == "record":
-            hb_record(ROOT, budgets, args.files)
+            hb_record(ROOT, budgets, args.files, args.tree)
             write_json(args.budgets, budgets)
             return 0
     except (ValueError, RuntimeError) as error:
@@ -918,6 +927,9 @@ def main(argv=None):
     hb_sub.add_parser("check", help="static: every raise of a gated file is its recorded budget")
     hb_rec = hb_sub.add_parser("record", help="measure the gated FILEs and rewrite their entries")
     hb_rec.add_argument("files", nargs="+")
+    hb_rec.add_argument("--tree", action="append", default=[],
+                        help="also measure in this check tree (another version's translation); "
+                             "the worst measurement is the budget")
     hb_sub.add_parser("show", help="the recorded entries, worst first")
     args = parser.parse_args(argv)
     if args.command == "heartbeats":

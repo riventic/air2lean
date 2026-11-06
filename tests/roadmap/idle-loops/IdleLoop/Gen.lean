@@ -212,6 +212,8 @@ def os_linux_errno (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] os_linux_errno
+
 structure Thread_yieldLocals where
   deriving Inhabited
 
@@ -232,6 +234,8 @@ def Thread_yield  : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] Thread_yield
+
 structure idleLocals where
   deriving Inhabited
 
@@ -248,6 +252,7 @@ def idle.again2 : idleExit → Bool
   | _ => false
 
 def idle.loop2 (p0 : Zig.Ptr) : Zig.CM Tgt idleLocals idleExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i4 ← Zig.atomicLoadC (n := 32) Zig.AtomicOrder.acquire 4 p0
     let i5 ← pure (i4 == (0 : BitVec 32))
@@ -285,8 +290,12 @@ def idle (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] idle.loop2 idle
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end IdleLoop

@@ -1,6 +1,6 @@
 import AllocArena.ArenaLinux
 import ZigLean.Sep.Full.Dispatch
-import ZigLean.Sep.Full.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Sep.Full.Reclaim
 
 /-!
@@ -30,8 +30,8 @@ addition: `getelementptr inbounds` natively, `Zig.ptrProject` here), which lies 
 node's block: `.illegal` (MM-3), and undefined behaviour natively
 (`docs/upstream/arena-oob-gep.md`). `arena_oob_free` builds that state by hand (a 64-byte node
 with `end_index = 1000`) and frees a foreign slice. `not_fallocSpec_arena` reaches it by the
-arena's own `alloc` (the kernel runs its `partial_fixpoint` group cut by `unroll_solo`) and refutes
-every `FAllocSpec` of the stock arena whose invariant holds after `init`.
+arena's own `alloc`, computed by the kernel (`client_illegal`), and refutes every `FAllocSpec` of
+the stock arena whose invariant holds after `init`.
 ## O-H: an address at the top of the address space overflows `alloc`'s alignment
 
 `alloc`'s fast path aligns `buf.ptr + end_index` with `Alignment.forward`, an addition with an
@@ -116,7 +116,10 @@ theorem aligned_index_ok :
 invariant: the client below calls the arena's entries (`vt`) from the memory right after `init`
 (`mInit`), so an `FAllocSpec` invariant whose `own` held there would give the client a triple
 (`client_ct`, composed from the spec's `alloc` and `free` triples), while the kernel computes its
-run to `.illegal` (`client_illegal`: `unroll_solo` cuts the arena's `partial_fixpoint` group). -/
+run to `.illegal` (`client_illegal`). The kernel does not compute a `partial_fixpoint` (the arena's
+`alloc` group, `Zig.loop`); the `zig_run` simp set first rewrites each one the run reaches by its
+defining equation, once per pass. A run that reaches one not unfolded far enough gets stuck,
+so `decide` fails rather than proving anything. -/
 
 /-- The stock arena's four entries. -/
 def vt : CVTable Tgt where
@@ -157,10 +160,13 @@ theorem mInit_fseq : mInit.FSeq := by decide +kernel
 
 set_option maxRecDepth 100000 in
 /-- The client's run in the caller's thread is illegal (O-E): the kernel runs the stock arena's
-`alloc`, `alloc`, `free` (`unroll_solo`: the arena's `partial_fixpoint` group cut). -/
+`alloc`, `alloc`, `free`, once this file's `client` and `vt` are unfolded by name and the
+generated code by the `zig_run` set (`docs/proof-tools.md`). -/
 theorem client_illegal :
     Witness.errOf ((Sched.soloRun 1000 client).run mInit) = some .illegal := by
-  unroll_solo 8
+  unfold client vt
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 /-- Every resource. -/
 def Any : FAssn := fun _ => True
@@ -239,11 +245,14 @@ def resetClient : ConcM Tgt (Option Ptr × Option Ptr) := do
 
 set_option maxHeartbeats 1000000 in
 set_option maxRecDepth 100000 in
-/-- The client's run: both allocations return byte 24 of the child's buffer. -/
+/-- The client's run: both allocations return byte 24 of the child's buffer (computed as
+`client_illegal` is). -/
 theorem reset_client_run :
     (((Sched.soloRun 1000 resetClient).run mInit).run.map fun r => r.map (·.1)) =
       some (.ok (some ⟨some 0, 24⟩, some ⟨some 0, 24⟩)) := by
-  unroll_solo 3
+  unfold resetClient vt
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 /-- A grant of `I` at `p` of 8 bytes, for the fee `φ`. -/
 def G8 (I : FAllocInv) (φ : Frac) (p : Ptr) : FAssn :=

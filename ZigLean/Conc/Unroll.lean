@@ -1,6 +1,7 @@
+import Lean
 import ZigLean.Conc.Sched
 import ZigLean.Conc.Call
-import ZigLean.Conc.Witness
+import ZigLean.Conc.RunResult
 
 /-!
 # Runs of programs with loops, by the kernel
@@ -566,9 +567,9 @@ theorem turnTrace_le {β : Type} (env : Env) {D₁ D₂ : Tgt → ConcM Tgt Unit
     · exact settle_le t (hs _ _ _ _) (h _ _)
     · rfl
     · trivial
-  | wait ptr e =>
+  | wait ptr e sh =>
     simp only [turnTrace, State.onMem]
-    cases hr : (StateT.run (Thread.futexWait ptr e) { mem with current := t }).run with
+    cases hr : (StateT.run (Thread.futexWait ptr e sh) { mem with current := t }).run with
     | none => trivial
     | some r =>
       rcases r with e' | ⟨b, m'⟩

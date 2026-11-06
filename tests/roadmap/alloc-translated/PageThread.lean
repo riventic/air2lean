@@ -53,6 +53,9 @@ theorem fthread_resize (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (A S :
       (PageSpec.vt.resize c s k n ra) ((inv own).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   fsym
 
+-- (180k-200k heartbeats before #699; its second arithmetic pass on failed rule premises adds about
+-- 10%: engine ledger row #second-pass-speculative-cost, whose deletion plan removes this option)
+set_option maxHeartbeats 300000 in
 theorem fthread_remap (c : Ptr) (s : Slice) (k : Nat) (n ra : BitVec 64) (φ : Frac) (bs : Array Byte)
     (hk : k < 64) (hn : 0 < n.toNat) (hfit : (inv own).fits n.toNat k) (hlen : s.len.toNat = bs.size)
     (hpos : 0 < bs.size) :

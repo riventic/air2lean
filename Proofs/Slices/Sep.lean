@@ -1,5 +1,6 @@
 import Proofs.Slices.Gen
 import ZigLean.Sep.Full.AutoAll
+import ZigLean.Sep.Full.Cost
 
 /-!
 # Separation-logic proofs about `examples/slices/slices.zig`
@@ -58,7 +59,7 @@ def revInv (p : Ptr) (vs : List (BitVec 32)) (s : reverseLocals) : FAssn :=
     ⟪ws.length = vs.length ∧ s.i.toNat + s.j.toNat + 1 = vs.length ∧
       ∀ k, k < vs.length →
         ws[k]? = if k < s.i.toNat ∨ s.j.toNat < k then vs[vs.length - 1 - k]? else vs[k]?⟫ ⋆
-    up (arr p ws)
+    (up (arr p ws) ⋆ plain)
 
 /-- The number of iterations that are left. -/
 def revMeas (s : reverseLocals) : Nat := s.j.toNat + 1 - s.i.toNat
@@ -66,15 +67,15 @@ def revMeas (s : reverseLocals) : Nat := s.j.toNat + 1 - s.i.toNat
 /-- One iteration with `i < j`: items `i` and `j` are swapped, `i` goes up and `j` down. -/
 theorem reverse_swap (sl : Slice) (ws : List (BitVec 32)) (s : reverseLocals)
     (hlen : sl.len.toNat = ws.length) (hlt : s.i.toNat < s.j.toNat) (hj : s.j.toNat < ws.length) :
-    FTotalTriple (up (arr sl.ptr ws)) ((reverse.loop15 sl).run s)
+    FTotalTriple (up (arr sl.ptr ws) ⋆ plain) ((reverse.loop15 sl).run s)
       (fun r => ⟪r.1 = .rep15 ∧ r.2.i.toNat = s.i.toNat + 1 ∧ r.2.j.toNat + 1 = s.j.toNat⟫ ⋆
-        up (arr sl.ptr ((ws.set s.i.toNat ws[s.j.toNat]).set s.j.toNat ws[s.i.toNat]))) := by
+        (up (arr sl.ptr ((ws.set s.i.toNat ws[s.j.toNat]).set s.j.toNat ws[s.i.toNat])) ⋆ plain)) := by
   unfold reverse.loop15
   fsym
 
 /-- The iteration with `j ≤ i`: the loop exits. -/
 theorem reverse_exit (sl : Slice) (R : FAssn) (s : reverseLocals) (hge : ¬ s.i.toNat < s.j.toNat) :
-    FTotalTriple R ((reverse.loop15 sl).run s) (fun r => ⟪r = (.br14, s)⟫ ⋆ R) := by
+    FTotalTriple (R ⋆ plain) ((reverse.loop15 sl).run s) (fun r => ⟪r = (.br14, s)⟫ ⋆ (R ⋆ plain)) := by
   unfold reverse.loop15
   fsym
 
@@ -82,7 +83,7 @@ theorem reverse_step (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat =
     (s : reverseLocals) :
     FTotalTriple (revInv sl.ptr vs s) ((reverse.loop15 sl).run s)
       (fun r => if reverse.again15 r.1 then ⟪revMeas r.2 < revMeas s⟫ ⋆ revInv sl.ptr vs r.2
-        else ⟪r.1 = .br14⟫ ⋆ up (arr sl.ptr vs.reverse)) := by
+        else ⟪r.1 = .br14⟫ ⋆ (up (arr sl.ptr vs.reverse) ⋆ plain)) := by
   refine FTotalTriple.ex fun ws => FTotalTriple.lift fun ⟨hwl, hij, hk⟩ => ?_
   by_cases hlt : s.i.toNat < s.j.toNat
   · have hjn : s.j.toNat < ws.length := by omega
@@ -131,9 +132,10 @@ with the items in the other order. -/
 theorem reverse_loop {mb : Lean.Order.MonoBind (MM reverseLocals)} (sl : Slice)
     (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) (s : reverseLocals)
     (hi : s.i.toNat = 0) (hj : s.j.toNat + 1 = vs.length) :
-    FTotalTriple (up (arr sl.ptr vs))
+    FTotalTriple (up (arr sl.ptr vs) ⋆ plain)
       ((@Zig.loop (MM reverseLocals) _ _ mb _ (reverse.loop15 sl) reverse.again15).run s)
-      (fun r => FAssn.ex fun t : reverseLocals => ⟪r = (.br14, t)⟫ ⋆ up (arr sl.ptr vs.reverse)) :=
+      (fun r => FAssn.ex fun t : reverseLocals =>
+        ⟪r = (.br14, t)⟫ ⋆ (up (arr sl.ptr vs.reverse) ⋆ plain)) :=
   (FTotalTriple.loop_measure (revInv sl.ptr vs) revMeas _ (reverse_step sl vs hlen) s).pre
     (fun _ h => ⟨vs, Full.sep_lift.mpr ⟨⟨rfl, by omega, fun k hk => by
       rw [ite_eq_right_of_eq_false _ _ (eq_false (by omega))]⟩, h⟩⟩)
@@ -141,9 +143,10 @@ theorem reverse_loop {mb : Lean.Order.MonoBind (MM reverseLocals)} (sl : Slice)
       obtain ⟨he, h⟩ := Full.sep_lift.mp h
       exact ⟨t, Full.sep_lift.mpr ⟨by simp only at he; rw [he], h⟩⟩
 
-/-- `reverse` reverses the items in place. -/
+/-- `reverse` reverses the items in place. Its loop's steps run in the plain mode. -/
 theorem reverse_spec (sl : Slice) (vs : List (BitVec 32)) (hlen : sl.len.toNat = vs.length) :
-    FTotalTriple (up (arr sl.ptr vs)) (reverse sl) (fun _ => up (arr sl.ptr vs.reverse)) := by
+    FTotalTriple (up (arr sl.ptr vs) ⋆ plain) (reverse sl)
+      (fun _ => up (arr sl.ptr vs.reverse) ⋆ plain) := by
   unfold reverse
   fsym [reverse_loop sl vs hlen]
   -- The empty slice returns before the loop: its items are their own reverse.
@@ -160,10 +163,13 @@ theorem pts32_pre : Witness.FAdmit (up (pts counter 4 (0 : BitVec 32))) :=
 theorem arr32_pre : Witness.FAdmit (up (arr Witness.p0 [(0 : BitVec 32)])) :=
   Witness.FAdmit.up Witness.arr32 (Witness.mem1_fseq _ _ (by decide +kernel))
 
+theorem arr32_pre_plain : Witness.FAdmit (up (arr Witness.p0 [(0 : BitVec 32)]) ⋆ plain) :=
+  Witness.FAdmit.up_plain Witness.arr32 (Witness.mem1_fseq _ _ (by decide +kernel))
+
 theorem arr8_pre : Witness.FAdmit (up (arr Witness.p0 [(0 : BitVec 8)])) :=
   Witness.FAdmit.up (Witness.mem1_arr1 0 (by decide +kernel)) (Witness.mem1_fseq _ _ (by decide +kernel))
 
 nonvacuity_witness bump_spec := ⟨0, by decide, pts32_pre⟩
 nonvacuity_witness copyWithin_spec := ⟨⟨Witness.p0, 1⟩, [0], 0, 0, 0, rfl, by decide, by decide, arr32_pre⟩
 nonvacuity_witness fill_sep := ⟨⟨Witness.p0, 1⟩, [0], 1, rfl, arr8_pre⟩
-nonvacuity_witness reverse_spec := ⟨⟨Witness.p0, 1⟩, [0], rfl, arr32_pre⟩
+nonvacuity_witness reverse_spec := ⟨⟨Witness.p0, 1⟩, [0], rfl, arr32_pre_plain⟩

@@ -21,7 +21,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .checked_future _ _ => [.value]
   | .fill_future _ (capture0, _) => [.ptr capture0, .value]
@@ -52,6 +52,8 @@ def checked (p0 : BitVec 32) : Zig.Result (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] checked
+
 structure awaitErrorLocals where
   f : Zig.Ptr
   deriving Inhabited
@@ -73,6 +75,8 @@ def awaitError (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNam
   match e with
   | .ret v => pure v
 
+attribute [zig_run] awaitError
+
 structure fillLocals where
   deriving Inhabited
 
@@ -85,6 +89,8 @@ def fill (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM fillLocals fillExit).run' (default : fillLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] fill
 
 structure awaitOwnedLocals where
   out : Zig.Ptr
@@ -113,6 +119,8 @@ def awaitOwned (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] awaitOwned
+
 structure squareLocals where
   deriving Inhabited
 
@@ -125,6 +133,8 @@ def square (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M squareLocals squareExit).run' (default : squareLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] square
 
 structure awaitTwiceLocals where
   f : Zig.Ptr
@@ -149,6 +159,8 @@ def awaitTwice (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] awaitTwice
+
 structure awaitValueLocals where
   f : Zig.Ptr
   deriving Inhabited
@@ -169,6 +181,8 @@ def awaitValue (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   Zig.free s2
   match e with
   | .ret v => pure v
+
+attribute [zig_run] awaitValue
 
 structure cancellableLocals where
   deriving Inhabited
@@ -192,6 +206,8 @@ def cancellable (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
   match e with
   | .ret v => pure v
 
+attribute [zig_run] cancellable
+
 structure cancelValueLocals where
   f : Zig.Ptr
   deriving Inhabited
@@ -213,6 +229,8 @@ def cancelValue (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
   match e with
   | .ret v => pure v
 
+attribute [zig_run] cancelValue
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .checked_future futureSlot a => do
@@ -231,5 +249,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
     do
       let futureResult ← cancellable capture0 capture1
       Zig.ConcM.liftMem ((letI : Zig.Enc (Except Zig.ErrName (BitVec 32)) := Zig.errorUnionEnc (⟨#["Canceled"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (BitVec 32))); Zig.Future.complete futureSlot futureResult))
+
+attribute [zig_run] dispatch
 
 end Futures

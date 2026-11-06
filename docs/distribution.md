@@ -66,6 +66,7 @@ with the command to run. Checks, in order:
 | `patched-zig-<v>` | each supported version's `zig-air-<v>/bin/zig`: present, reports `<v>`, and its AIR-only lock state |
 | `translator` | `.lake/build/bin/air2lean` exists (translate.sh rebuilds it anyway) |
 | `bootstrap-tools` | `curl`, `tar`, `xz`, `patch` and `sha256sum`/`shasum` for `zig-patch/build.sh` |
+| `native-runners` | on x86_64-linux, the runners of CI's native rows that `fixture-checks.sh` runs there: each `AIR2LEAN_<ARCH>_RUN` of `ci.yml` (qemu-user) and `node` (warn when missing; skipped on other hosts) |
 | `docker` | Docker daemon reachable (only `local-ci.sh`/`clean-env.sh` need it; `--no-docker` skips) |
 | `disk`, `memory` | free disk at the repository and physical memory against `resources` |
 
@@ -96,7 +97,7 @@ scripts/clean-env.sh --translate   # also bootstrap the default Zig, check the l
 ```
 
 It builds `Dockerfile.clean-env` (Ubuntu 24.04 with only bash, ca-certificates, curl, git,
-patch, python3 and xz-utils; `linux/amd64`) with no build context, copies tracked files only
+patch, procps, python3 and xz-utils; `linux/amd64`) with no build context, copies tracked files only
 (no `.lake`, compilers or caches), mounts no cache volumes and runs as an unprivileged user.
 Inside it follows [getting started](getting-started.md) literally: installs the pinned elan
 (sha256-verified), `elan toolchain install $(cat lean-toolchain)`, `scripts/doctor.sh --require

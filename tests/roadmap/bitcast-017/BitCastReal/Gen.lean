@@ -49,6 +49,8 @@ def boolsToInt (p0 : Zig.Vec (Bool) 16) : Zig.Result (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] boolsToInt
+
 structure bytesToIntLocals where
   deriving Inhabited
 
@@ -61,6 +63,8 @@ def bytesToInt (p0 : Vector (BitVec 8) 4) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M bytesToIntLocals bytesToIntExit).run' (default : bytesToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] bytesToInt
 
 structure enumToSignedLocals where
   deriving Inhabited
@@ -75,6 +79,8 @@ def enumToSigned (p0 : E) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] enumToSigned
+
 structure intToEnumLocals where
   deriving Inhabited
 
@@ -87,6 +93,8 @@ def intToEnum (p0 : BitVec 8) : Zig.Result (E) := do
     pure (.ret i1)) : Zig.M intToEnumLocals intToEnumExit).run' (default : intToEnumLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] intToEnum
 
 structure intToPaddedLocals where
   deriving Inhabited
@@ -101,6 +109,8 @@ def intToPadded (p0 : BitVec 48) : Zig.Result (Vector (BitVec 24) 2) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] intToPadded
+
 structure intToVecLocals where
   deriving Inhabited
 
@@ -113,6 +123,8 @@ def intToVec (p0 : BitVec 20) : Zig.Result (Zig.Vec (BitVec 5) 4) := do
     pure (.ret i1)) : Zig.M intToVecLocals intToVecExit).run' (default : intToVecLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] intToVec
 
 structure packedToBitsLocals where
   deriving Inhabited
@@ -127,6 +139,8 @@ def packedToBits (p0 : P) : Zig.Result (Vector (BitVec 1) 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] packedToBits
+
 structure paddedToIntLocals where
   deriving Inhabited
 
@@ -139,6 +153,8 @@ def paddedToInt (p0 : Vector (BitVec 24) 2) : Zig.Result (BitVec 48) := do
     pure (.ret i1)) : Zig.M paddedToIntLocals paddedToIntExit).run' (default : paddedToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] paddedToInt
 
 structure vecToArrayLocals where
   deriving Inhabited
@@ -153,6 +169,8 @@ def vecToArray (p0 : Zig.Vec (BitVec 5) 4) : Zig.Result (Vector (BitVec 4) 5) :=
   match e with
   | .ret v => pure v
 
+attribute [zig_run] vecToArray
+
 structure vecToIntLocals where
   deriving Inhabited
 
@@ -165,5 +183,7 @@ def vecToInt (p0 : Zig.Vec (BitVec 5) 4) : Zig.Result (BitVec 20) := do
     pure (.ret i1)) : Zig.M vecToIntLocals vecToIntExit).run' (default : vecToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vecToInt
 
 end BitCastReal

@@ -99,6 +99,8 @@ def atomic_Value_u32_init (p0 : BitVec 32) : Zig.Result (atomic_Value_u32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] atomic_Value_u32_init
+
 structure mpWriterLocals where
   deriving Inhabited
 
@@ -123,6 +125,8 @@ def mpWriter (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] mpWriter
 
 structure mpRelAcqLocals where
   data : Zig.Ptr
@@ -185,6 +189,8 @@ def mpRelAcq  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mpRelAcq
+
 structure mpWriterRelaxedLocals where
   deriving Inhabited
 
@@ -209,6 +215,8 @@ def mpWriterRelaxed (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] mpWriterRelaxed
 
 structure mpRelaxedLocals where
   data : Zig.Ptr
@@ -271,6 +279,8 @@ def mpRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mpRelaxed
+
 structure pushLocals where
   h : BitVec 32
   deriving Inhabited
@@ -289,6 +299,7 @@ def push.again12 : pushExit → Bool
   | _ => false
 
 def push.loop12 (p0 : Zig.Ptr) : Zig.CM Tgt pushLocals pushExit := do
+  Zig.callMC Zig.tick
   let i13 ← pure p0
   let i14 ← Zig.load (Zig.Ptr) 8 i13
   let i15 ← Zig.callMC (Zig.ptrProject i14 (·.add 4))
@@ -352,6 +363,8 @@ def push (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] push.loop12 push
+
 structure sbLocals where
   deriving Inhabited
 
@@ -386,6 +399,8 @@ def sb (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] sb
 
 structure sbRelaxedLocals where
   x : Zig.Ptr
@@ -466,6 +481,8 @@ def sbRelaxed  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   Zig.free s0
   match e with
   | .ret v => pure v
+
+attribute [zig_run] sbRelaxed
 
 structure stackPushLocals where
   s : Zig.Ptr
@@ -581,6 +598,8 @@ def stackPush  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] stackPush
+
 structure wwLocals where
   deriving Inhabited
 
@@ -611,6 +630,8 @@ def ww (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] ww
 
 structure twoPlusTwoWLocals where
   x : Zig.Ptr
@@ -693,6 +714,8 @@ def twoPlusTwoW  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] twoPlusTwoW
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .mpWriter a => discard (mpWriter a)
@@ -700,5 +723,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .sb a => discard (sb a)
   | .push a => discard (push a)
   | .ww a => discard (ww a)
+
+attribute [zig_run] dispatch
 
 end Atomics

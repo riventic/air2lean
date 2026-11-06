@@ -21,6 +21,8 @@ def air2lean_model_0_contract : Zig.External.Contract ((Zig.Ptr) × (BitVec 32))
 
 def air2lean_model_0 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Bool) := _root_.CallbackModel.visit (p0, p1)
 
+attribute [zig_run] air2lean_model_0
+
 def air2lean_model_0_footprint : Zig.External.Footprint ((Zig.Ptr) × (BitVec 32)) where
   reads := fun _ => []
   writes := fun args => [Zig.External.Region.block args.1]
@@ -54,6 +56,8 @@ def sumVisit (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] sumVisit
+
 structure callOpsLocals where
   deriving Inhabited
 
@@ -69,6 +73,8 @@ def callOps (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.MemM (Bool) := 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] callOps
+
 structure evaluateLocals where
   deriving Inhabited
 
@@ -81,6 +87,8 @@ def evaluate (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) : Zig.MemM (Bool) :=
     pure (.ret i3)) : Zig.MM evaluateLocals evaluateExit).run' (default : evaluateLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] evaluate
 
 structure forEachLocals where
   local3 : BitVec 64
@@ -98,6 +106,7 @@ def forEach.again7 : forEachExit → Bool
   | _ => false
 
 def forEach.loop7 (p0 : Zig.Slice) (p1 : Zig.Ptr) (p2 : Zig.Ptr) (i5 : BitVec 64) : Zig.MM forEachLocals forEachExit := do
+  Zig.callM Zig.tick
   let i8 ← pure ((← get).local3)
   match ← ((do
     let i10 ← pure (i8)
@@ -136,6 +145,8 @@ def forEach (p0 : Zig.Slice) (p1 : Zig.Ptr) (p2 : Zig.Ptr) : Zig.MemM (Bool) := 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] forEach.loop7 forEach
+
 structure viaOpsLocals where
   deriving Inhabited
 
@@ -151,6 +162,8 @@ def viaOps (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : Zig.Ptr) : Zig.MemM (Bool) := d
   match e with
   | .ret v => pure v
 
+attribute [zig_run] viaOps
+
 structure runExternalLocals where
   deriving Inhabited
 
@@ -164,6 +177,8 @@ def runExternal (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] runExternal
+
 structure runLocalLocals where
   deriving Inhabited
 
@@ -176,5 +191,7 @@ def runLocal (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MemM (Bool) := do
     pure (.ret i2)) : Zig.MM runLocalLocals runLocalExit).run' (default : runLocalLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] runLocal
 
 end Callbacks

@@ -29,7 +29,8 @@ uses `sorry` or `native_decide`. `#print axioms` on the theorems lists only `pro
 
 Prove that reversing a list with the generated `reverse` and then freeing it with the
 generated `freeAll` leaks nothing: from the list and the allocator's state, the run ends with
-the allocator's state and the fee of every node only.
+the allocator's state and the fee of every node only. Both loops take their steps in the plain
+mode (`plain`: no meter, no stack budget).
 
 ```lean
 def reverseThenFree (a : mem_Allocator) (hd : Option Ptr) : ConcM Tgt Unit :=
@@ -38,8 +39,8 @@ def reverseThenFree (a : mem_Allocator) (hd : Option Ptr) : ConcM Tgt Unit :=
 theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
     (φ : Frac) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr)
     (xs : List (BitVec 32)) :
-    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
-      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList))
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (reverseThenFree ⟨ctx, vtp⟩ hd)
+      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain)
 ```
 
 Hint: compose `Lists.Linked.reverse_thread` (`reverse` as a step of the thread that owns the

@@ -60,6 +60,7 @@ def mem_eqlBytes.again143 : mem_eqlBytesExit → Bool
   | _ => false
 
 def mem_eqlBytes.loop208 (i206 : BitVec 64) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit := do
+  Zig.callM Zig.tick
   let i209 ← pure ((← get).local201)
   match ← ((do
     let i211 ← pure (i209)
@@ -123,6 +124,7 @@ def mem_eqlBytes.loop208 (i206 : BitVec 64) : Zig.MM mem_eqlBytesLocals mem_eqlB
   | e => pure e
 
 def mem_eqlBytes.loop143 (i141 : Vector (BitVec 64) 4) : Zig.MM mem_eqlBytesLocals mem_eqlBytesExit := do
+  Zig.callM Zig.tick
   let i144 ← pure ((← get).local124)
   match ← ((do
     let i146 ← pure (i144)
@@ -406,6 +408,8 @@ def mem_eqlBytes (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_eqlBytes.loop208 mem_eqlBytes.loop143 mem_eqlBytes
+
 structure mem_sliceAsBytes__anon_ea9612f03fedLocals where
   deriving Inhabited
 
@@ -454,6 +458,8 @@ def mem_sliceAsBytes__anon_ea9612f03fed (p0 : Zig.Slice) : Zig.MemM (Zig.Slice) 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_sliceAsBytes__anon_ea9612f03fed
+
 structure mem_eql__anon_f1fdef28237dLocals where
   deriving Inhabited
 
@@ -480,6 +486,8 @@ def mem_eql__anon_f1fdef28237d (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Boo
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_eql__anon_f1fdef28237d
+
 structure boolItemToLaneLocals where
   deriving Inhabited
 
@@ -492,6 +500,8 @@ def boolItemToLane (p0 : Vector (Bool) 1) : Zig.Result (Zig.Vec (Bool) 1) := do
     pure (.ret i1)) : Zig.M boolItemToLaneLocals boolItemToLaneExit).run' (default : boolItemToLaneLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] boolItemToLane
 
 structure boolLanesToByteLocals where
   deriving Inhabited
@@ -506,6 +516,8 @@ def boolLanesToByte (p0 : Zig.Vec (Bool) 8) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] boolLanesToByte
+
 structure bytesToHalvesLocals where
   deriving Inhabited
 
@@ -519,6 +531,8 @@ def bytesToHalves (p0 : Vector (BitVec 8) 4) : Zig.Result (Zig.Vec (BitVec 16) 2
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bytesToHalves
+
 structure bytesToLanesLocals where
   deriving Inhabited
 
@@ -531,6 +545,8 @@ def bytesToLanes (p0 : Vector (BitVec 8) 4) : Zig.Result (Zig.Vec (BitVec 8) 4) 
     pure (.ret i1)) : Zig.M bytesToLanesLocals bytesToLanesExit).run' (default : bytesToLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] bytesToLanes
 
 structure eqlChunkLocals where
   deriving Inhabited
@@ -549,6 +565,8 @@ def eqlChunk (p0 : Vector (BitVec 8) 16) (p1 : Vector (BitVec 8) 16) : Zig.Resul
   match e with
   | .ret v => pure v
 
+attribute [zig_run] eqlChunk
+
 structure halvesToBytesLocals where
   deriving Inhabited
 
@@ -561,6 +579,8 @@ def halvesToBytes (p0 : Zig.Vec (BitVec 16) 2) : Zig.Result (Vector (BitVec 8) 4
     pure (.ret i1)) : Zig.M halvesToBytesLocals halvesToBytesExit).run' (default : halvesToBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] halvesToBytes
 
 structure intToPackedLanesLocals where
   deriving Inhabited
@@ -575,6 +595,8 @@ def intToPackedLanes (p0 : BitVec 9) : Zig.Result (Zig.Vec (BitVec 3) 3) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] intToPackedLanes
+
 structure lanesToBytesLocals where
   deriving Inhabited
 
@@ -587,6 +609,8 @@ def lanesToBytes (p0 : Zig.Vec (BitVec 8) 4) : Zig.Result (Vector (BitVec 8) 4) 
     pure (.ret i1)) : Zig.M lanesToBytesLocals lanesToBytesExit).run' (default : lanesToBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] lanesToBytes
 
 structure lanesToWordLocals where
   deriving Inhabited
@@ -601,6 +625,8 @@ def lanesToWord (p0 : Zig.Vec (BitVec 8) 4) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] lanesToWord
+
 structure packedLanesToIntLocals where
   deriving Inhabited
 
@@ -613,6 +639,8 @@ def packedLanesToInt (p0 : Zig.Vec (BitVec 3) 3) : Zig.Result (BitVec 9) := do
     pure (.ret i1)) : Zig.M packedLanesToIntLocals packedLanesToIntExit).run' (default : packedLanesToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] packedLanesToInt
 
 structure stdEqlLocals where
   deriving Inhabited
@@ -629,6 +657,8 @@ def stdEql (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] stdEql
+
 structure u24ItemToLaneLocals where
   deriving Inhabited
 
@@ -641,6 +671,8 @@ def u24ItemToLane (p0 : Vector (BitVec 24) 1) : Zig.Result (Zig.Vec (BitVec 24) 
     pure (.ret i1)) : Zig.M u24ItemToLaneLocals u24ItemToLaneExit).run' (default : u24ItemToLaneLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u24ItemToLane
 
 structure u24LaneToItemLocals where
   deriving Inhabited
@@ -655,6 +687,8 @@ def u24LaneToItem (p0 : Zig.Vec (BitVec 24) 1) : Zig.Result (Vector (BitVec 24) 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] u24LaneToItem
+
 structure wordToLanesLocals where
   deriving Inhabited
 
@@ -667,5 +701,7 @@ def wordToLanes (p0 : BitVec 32) : Zig.Result (Zig.Vec (BitVec 8) 4) := do
     pure (.ret i1)) : Zig.M wordToLanesLocals wordToLanesExit).run' (default : wordToLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] wordToLanes
 
 end VectorCasts

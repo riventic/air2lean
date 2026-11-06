@@ -29,6 +29,8 @@ def resetOnError (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Except Zig.ErrName (
   match e with
   | .ret v => pure v
 
+attribute [zig_run] resetOnError
+
 structure twoPathsLocals where
   deriving Inhabited
 
@@ -57,5 +59,7 @@ def twoPaths (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 8) : Zig.MemM (Except Zi
         pure (.ret i15)))) : Zig.MM twoPathsLocals twoPathsExit).run' (default : twoPathsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] twoPaths
 
 end TryAliases

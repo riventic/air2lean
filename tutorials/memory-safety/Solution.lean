@@ -19,8 +19,8 @@ def reverseThenFree (a : mem_Allocator) (hd : Option Ptr) : ConcM Tgt Unit :=
 theorem reverseThenFree_spec (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt)
     (φ : Frac) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr)
     (xs : List (BitVec 32)) :
-    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList)) (reverseThenFree ⟨ctx, vtp⟩ hd)
-      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList)) :=
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (reverseThenFree ⟨ctx, vtp⟩ hd)
+      (fun _ => I.own ⋆ (fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ plain) :=
   CTriple.bind (CTriple.liftMem (((Lists.Linked.reverse_thread (X := nodeRest I φ) hd xs).toPartial.frame
       (R := I.own ⋆ vtR vtp fns.toList)).pre fun _ hr => ac_cast hr (by ac_rfl)))
     fun r => ((freeAll_spec ctx vtp fns I e φ r xs.reverse h).pre fun _ hr => ac_cast hr (by ac_rfl)).post

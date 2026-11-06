@@ -55,7 +55,7 @@ fingerprint and of every I04 module key: a runtime change invalidates every proo
 (`runtime_changed` in the comparison report), even though no translator input changed.
 `tests/roadmap/stable-generation/test_cli.py` checks the recorded module list against the
 import closure read from the checkout and each digest against the file. Scope: proof
-libraries outside that closure (`ZigLean.Sep`, `ZigLean.Conc.Spec`, ...) do not alter the
+libraries outside that closure (`ZigLean.Sep.Full`, ...) do not alter the
 meaning of generated definitions; they are covered by the I07 manifest's `runtime` link
 (all of `ZigLean/`) and by rebuilding the proofs.
 

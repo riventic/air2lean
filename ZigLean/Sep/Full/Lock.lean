@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.LockWord
 import ZigLean.Sep.Full.ThreadRest
 import ZigLean.Sep.Full.Atomic
+import ZigLean.Sep.Full.Tick
 
 /-!
 # A lock that owns a resource, over full-state resources
@@ -26,9 +27,10 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
   judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
-  the lock's code (`LockWord.Step`) by a thread with `ok` keeps `U` with the same `rX`. The
-  primitive `K` (`FPrim`) is data: a thread's place in its code (`FPlace`), its roles, what the
-  rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
+  the lock's code (`LockWord.Step`) by a thread with `ok`, not `gone`, `away` or `holdsAway`, keeps
+  `U`
+  with the same `rX`. The primitive `K` (`FPrim`) is data: a thread's place in its code
+  (`FPlace`), its roles, what the rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
   and every step, and the primitive's place is a part of the ghost value independent of the
   lock's (the compatibility laws `lph` … `role_part`). The lock alone is `FPrim.empty`
   (`Fits.ofLock`); a primitive over futex words (the event, the condition) is `FPrim.ofWords`
@@ -268,17 +270,49 @@ def own (G : ThreadId → γ) (m : Mem) (u : ThreadId) : Res :=
 /-- No thread holds the lock. -/
 def Free (G : ThreadId → γ) : Prop := LockWord.Free (L.pl G)
 
+/-- **`rL` is the free lock's resource** in the invariant's rest (`Inv.rest`): the threads' parts
+and the rest `wordR ⋆ rL ⋆ rX` (`FOwned`), `rL` off the word and apart from `rX`, with `R` and
+`LockWord.Owns` while the lock is free, and `rnil` while a thread holds it (so `rL` is the lock's
+resource only when the lock is free). -/
+abbrev FreeRes (G : ThreadId → γ) (rX : Res) (m : Mem) (rL : Res) : Prop :=
+  FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧
+    L.Off rL.heap.erase ∧ FHeap.Disjoint rL.heap rX.heap ∧
+    (L.Free G → L.R G rL ∧ L.toLockWord.Owns (L.pl G) m rL.heap.erase) ∧ (¬ L.Free G → rL = rnil)
+
 /-- The invariant of the lock with the protocol's own rest `rX` (module doc). -/
 structure Inv (G : ThreadId → γ) (rX : Res) (m : Mem) : Prop where
   w : L.WInv (L.pl G) m
-  rest : ∃ rL, FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧
-    L.Off rL.heap.erase ∧ FHeap.Disjoint rL.heap rX.heap ∧
-    (L.Free G → L.R G rL ∧ L.toLockWord.Owns (L.pl G) m rL.heap.erase) ∧ (¬ L.Free G → rL = rnil)
+  rest : ∃ rL, L.FreeRes G rX m rL
   xoff : L.Off rX.heap.erase
   pdisj : ∀ u, FHeap.Disjoint (L.part (G u)).heap (L.held (G u)).heap
-  idle : ∀ u, L.ph (G u) ≠ .holds → L.held (G u) = rnil
-  /-- The holder's resource. -/
-  res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
+  idle : ∀ u, (L.ph (G u)).held = false → L.held (G u) = rnil
+  /-- The holder's resource (awake, or at another object's futex wait). -/
+  res : ∀ u, (L.ph (G u)).held = true → L.R G (L.held (G u))
+
+/-- An instrumented step on the caller's part, including while another sync object's internal
+phase makes `ok` false. The existing total thread rule pays for the actual tick and fixes its
+complete post-resource; the protected resource and the protocol rest are framed unchanged.
+Native atomic/futex steps still use their exact `Step`/`Mem.Aux` summaries. -/
+def PartTick (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem)
+    (G' : ThreadId → γ) (rX' : Res) (m' : Mem) : Prop :=
+  m.current = t ∧ L.ph (G t) ≠ .gone ∧ L.Inv G rX m ∧ ∃ r,
+    FTTotalTriple (fun rp => rp = L.part (G t)) Zig.tick (fun _ rp => rp = r) ∧
+    G' = upd G t (L.setPart (G t) r) ∧ rX' = rX ∧ m' = m.ticked ∧ L.Inv G' rX' m'
+
+/-- **The resource a step of the lock's code moves**, when `t` goes to the place `p` with the held
+resource `h` (a premise of `Fits.stable`; ledger #lock-stable-inv), in four cases: without the
+lock afterwards `t` holds nothing; a holder that stays one keeps its resource; at an acquire the
+lock was free and `h` is its resource before the step (`Inv.acq`); at a release the free lock's
+resource after the step is the one `t` held (`Inv.rel`). The rules build it with `Transfer.none`,
+`stay`, `acquire` and `release` (`LockRules.lean`). -/
+def Transfer (G : ThreadId → γ) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res) :
+    Prop :=
+  (p.held = false → h = rnil) ∧
+  ((L.ph (G t)).held = true → p.held = true → h = L.held (G t)) ∧
+  ((L.ph (G t)).held = false → p.held = true → L.Free G ∧ L.FreeRes G rX m h) ∧
+  ((L.ph (G t)).held = true → p.held = false →
+    L.FreeRes (upd G t (L.set (G t) p h)) rX m' (L.held (G t)))
+
 
 /-- **A protocol with the lock `L` keeps the primitive `K`** (module doc), where only a thread with
 `ok` runs the lock's code: its invariant is `FLock.Inv` and `U`, with the same rest `rX`; `U` keeps
@@ -293,13 +327,37 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g
   ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g
   /-- A step of a thread in the lock's code keeps `U`; at a release, the thread's clock happened
-  before the newest message of the word. -/
-  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
+  before the newest message of the word. The thread runs the lock's code, so it has not ended
+  and is not away in another object's code, without the lock (`away`) or holding it
+  (`holdsAway`). A holder's nap and unnap (`holds` ↔ `holdsAway`, `LockWord.WInv.nap`/`unnap`)
+  are not such steps: no lock code runs and the word does not change. Their `U`-stability is a
+  hypothesis of the nap and unnap rules (`Fits.nap`/`Fits.unnap`, planned with the two-lock
+  product), discharged by each nesting protocol for its own `U`; a protocol that never nests
+  (empty `nest`) proves nothing for them (decision on #667). The client may use the lock's
+  invariant before the step (`L.Inv G rX m`), e.g. in a two-lock product the stepping lock's
+  `BlkOk`, which the other lock's invariant inside `U` needs. Every rule that applies `stable`
+  has it (ledger #lock-stable-inv).
+
+  The client also gets the resource the step moves (`Transfer`: `rnil` without the lock, the old
+  one for a holder that stays one, at an acquire the free resource before the step, at a release
+  the free resource after it is the one `t` held). Every rule has it: at once for a step that
+  neither holds the lock before nor after it, from `Inv.idle` for a step that keeps the place,
+  from `Inv.acq`/`Inv.rel` for an acquire or a release (maintainer
+  decision 2026-11-05, option (a) on #693).
+  Without it `h` is arbitrary, and a two-lock product's `U` cannot say where lock A's held
+  resource lies in lock B's rest, which B's invariant needs after a critical-section step.
+  Counterexample: at A's acquire take `h := {d ↦ w}` with `d` outside B's rest; the coupling is
+  false, yet `stable` demanded `U`. Rejected: the post-step invariant (pins `h` only for precise
+  `R`), a ghost free resource (changes `Inv`), fixed footprints and strict nesting only. -/
+  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
+    L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
-    U (upd G t (L.set (G t) p h)) rX m'
-  /-- A stop of any thread (`current := t`) keeps `U`: a thread without `ok` (one inside another
-  sync object's code, which runs no lock code) stops too. -/
-  atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }
+    L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m'
+  /-- A stop of any thread (`current := t`, a thread that exists) keeps `U`: a thread without `ok`
+  (one inside another sync object's code, which runs no lock code) stops too, and so does a thread
+  that left the lock (`gone`) and runs other sync code. The scheduler resumes only a thread that
+  exists (`Proto.Safe`), so the stop knows `t < m.threads.size`. -/
+  atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t }
   /-- A finished or joinable thread is out of the primitive's code. -/
   kfin : ∀ g, P.fin g → K.pl.ph g = K.out
   kjoins : ∀ g, P.joins g → K.pl.ph g = K.out
@@ -319,10 +377,26 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   role_part : ∀ i g r, K.role i (L.setPart g r) ↔ K.role i g
   /-- `ok` does not read the primitive's place among the calm ones. -/
   ok_calm : ∀ g p q, K.calm p → K.calm q → (ok (K.pl.set g p) ↔ ok (K.pl.set g q))
-  /-- A step of the primitive's code keeps `U`. -/
-  kstep : ∀ t G rX m G' rX' m', K.Step t G rX m G' rX' m' → U G rX m → U G' rX' m'
+  /-- A native primitive step or an admitted caller-part tick keeps `U`. The latter transports
+  the exact memory and actual resource post through the same composite stability obligation,
+  without requiring `ok` in an internal busy phase. -/
+  kstep : ∀ t G rX m G' rX' m',
+    K.Step t G rX m G' rX' m' ∨ L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m'
+  /-- **A holder at another object's futex wait is not in a deadlock** (`LockWord.nest`): the one
+  liveness obligation of a lock order. A lock without a nest discharges it at once
+  (`FLock.holdLive_none`: such a holder is never asleep); a lock whose nest is the words of inner
+  locks from their `Fits` (`FLock.holdLive_inners`, `LockOrder.lean`). -/
+  holdLive : ∀ G rX m v, L.Inv G rX m → U G rX m → L.ph (G v) = .holdsAway → P.Live v G m
 
 variable {L}
+
+/-- **The obligation for a lock without a nest** (every single-lock protocol): a holder at
+`holdsAway` is never in the futex queue, so it is never in a deadlock. -/
+theorem holdLive_none {Tgt : Type} {P : Proto Tgt γ} (hn : ∀ p, ¬ L.nest p) {G : ThreadId → γ}
+    {rX : Res} {m : Mem} {v : ThreadId} (hi : L.Inv G rX m) (hv : L.ph (G v) = .holdsAway) :
+    P.Live v G m := fun hq _ => by
+  obtain ⟨-, -, -, p, hp, -⟩ := hi.w.nestQ hv hq
+  exact hn p hp
 
 /-- The same ghost value for `t` (`set_self`). -/
 theorem upd_set_self (G : ThreadId → γ) (t : ThreadId) :
@@ -334,10 +408,13 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     {ok : γ → Prop} (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g)
-    (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
+    (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
+      L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
       (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
-      U (upd G t (L.set (G t) p h)) rX m')
-    (atStop : ∀ G rX m t, L.ph (G t) ≠ .gone → U G rX m → U G rX { m with current := t }) :
+      L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
+    (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
+    (hn : ∀ p, ¬ L.nest p := by exact fun _ h => h) :
     L.Fits (FPrim.empty γ) P U ok where
   inv := inv
   fin := fin
@@ -361,22 +438,23 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
   role_l i := nomatch i
   role_part i := nomatch i
   ok_calm _ _ _ _ _ := Iff.rfl
-  kstep _ _ _ _ _ _ _ h := nomatch h
+  kstep t G rX m G' rX' m' h hU := h.elim (fun h => nomatch h)
+    (fun h => tick t G rX m G' rX' m' h hU)
+  holdLive _ _ _ _ hi _ hv := holdLive_none hn hi hv
 
-/-- **A protocol with the lock alone**, where every thread may run the lock's code: a stop keeps
-`U` as a step of the lock's code that changes nothing. -/
+/-- **A protocol with the lock alone**, where every thread may run the lock's code. -/
 theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
-    (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → U G rX m → L.Step t m m' →
-      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
-      U (upd G t (L.set (G t) p h)) rX m') :
+    (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → L.ph (G t) ≠ .holdsAway → L.Inv G rX m →
+      U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+      L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
+    (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
+    (hn : ∀ p, ¬ L.nest p := by exact fun _ h => h) :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ => stable G rX m m' t p h) fun G rX m t hph hU => by
-      have := stable G rX m { m with current := t } t (L.ph (G t)) (L.held (G t)) hph hU
-        (LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)) (fun h1 h2 => absurd h1 h2)
-      rwa [upd_set_self] at this
+    (fun G rX m m' t p h _ hg _ hz => stable G rX m m' t p h hg hz) atStop tick hn
 
 /-! ## Basic facts -/
 
@@ -402,9 +480,17 @@ theorem own_upd {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ}
   · subst hu; simp [hjt, upd]
   · simp only [upd, hu, ↓reduceIte]
 
-theorem free_iff_of {G G' : ThreadId → γ} (h : ∀ u, L.ph (G' u) = .holds ↔ L.ph (G u) = .holds) :
+theorem held_false_of_iff {a b : LPh} (h : a.held = true ↔ b.held = true) (ha : a.held = false) :
+    b.held = false := by
+  cases hb : b.held
+  · rfl
+  · rw [h.mpr hb] at ha; cases ha
+
+theorem free_iff_of {G G' : ThreadId → γ}
+    (h : ∀ u, (L.ph (G' u)).held = true ↔ (L.ph (G u)).held = true) :
     L.Free G' ↔ L.Free G := by
-  unfold FLock.Free LockWord.Free pl; exact forall_congr' fun u => not_congr (h u)
+  unfold FLock.Free LockWord.Free pl
+  exact forall_congr' fun u => imp_congr_left (h u)
 
 theorem Inv.ht {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {t : ThreadId}
     (hg : L.ph (G t) ≠ .gone) : t < m.threads.size ∧ joinedB m t = false :=
@@ -443,8 +529,8 @@ theorem Inv.lstep {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId
     (hg : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone)
     (hR : ∀ r, L.R G r → L.R G' r)
     (hpd : ∀ u, FHeap.Disjoint (L.part (G' u)).heap (L.held (G' u)).heap)
-    (hidle : ∀ u, L.ph (G' u) ≠ .holds → L.held (G' u) = rnil)
-    (hres : ∀ u, L.ph (G' u) = .holds → L.R G' (L.held (G' u))) : L.Inv G' rX m' := by
+    (hidle : ∀ u, (L.ph (G' u)).held = false → L.held (G' u) = rnil)
+    (hres : ∀ u, (L.ph (G' u)).held = true → L.R G' (L.held (G' u))) : L.Inv G' rX m' := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   have hbl : L.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hi.w.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
@@ -453,10 +539,11 @@ theorem Inv.lstep {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId
   obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
   exact ⟨hR rL h1, h2.step hs hLoff hbl hg⟩
 
-/-- A step of the lock's code by `t`, not the holder, to the place `p ≠ holds`. -/
+/-- A step of the lock's code by `t`, not the holder, to a place `p` that does not hold the lock
+(`p.held = false`). -/
 theorem Inv.lstepAt {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
-    (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : L.ph (G t) ≠ .holds) (hng : L.ph (G t) ≠ .gone)
-    (hp : p ≠ .holds) (hw : L.WInv (upd (L.pl G) t p) m') :
+    (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : (L.ph (G t)).held = false)
+    (hng : L.ph (G t) ≠ .gone) (hp : p.held = false) (hw : L.WInv (upd (L.pl G) t p) m') :
     L.Inv (upd G t (L.set (G t) p rnil)) rX m' := by
   obtain ⟨-, hjt⟩ := hi.ht hng
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
@@ -465,9 +552,10 @@ theorem Inv.lstepAt {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     intro u; unfold upd; split
     · exact L.ph_set _ _ _
     · rfl
-  have hholds : ∀ u, L.ph (upd G t (L.set (G t) p rnil) u) = .holds ↔ L.ph (G u) = .holds := by
+  have hholds : ∀ u, (L.ph (upd G t (L.set (G t) p rnil) u)).held = true ↔
+      (L.ph (G u)).held = true := by
     intro u; rw [hphu]; split
-    · rename_i h; subst h; exact ⟨fun h => absurd h hp, fun h => absurd h hnh⟩
+    · rename_i h; subst h; rw [hp, hnh]
     · exact Iff.rfl
   refine hi.lstep hs (by rw [pl_upd_set]; exact hw) ?_ (free_iff_of hholds) (fun u h => ?_)
     (fun r h => (L.R_set G t p rnil r).mpr h) (fun u => ?_) (fun u hu => ?_) (fun u hu => ?_)
@@ -485,7 +573,7 @@ theorem Inv.lstepAt {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     · exact L.held_set _ _ _
     · rename_i h; rw [hphu, if_neg h] at hu; exact hi.idle u hu
   · have hut : u ≠ t := fun e => by
-      have := (hholds u).mp hu; rw [e] at this; exact hnh this
+      have := (hholds u).mp hu; rw [e, hnh] at this; cases this
     rw [upd_ne _ _ hut, L.R_set]; exact hi.res u ((hholds u).mp hu)
 
 /-- A step of the lock's code with the same ghost values. -/
@@ -501,13 +589,15 @@ theorem Inv.groups {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m
   exact ⟨hi.w.groups gs, ⟨rL, ho.keep rfl rfl rfl rfl rfl, hLoff, hLX, hF, hnF⟩, hi.xoff, hi.pdisj,
     hi.idle, hi.res⟩
 
-/-- **An acquire**: `t` takes the free lock; the resource moves from the rest into its part. -/
+/-- **An acquire**: `t` takes the free lock; the resource, the free one before the step
+(`FreeRes`), moves from the rest into its part. -/
 theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
-    (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : L.ph (G t) ≠ .holds)
+    (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : (L.ph (G t)).held = false)
     (hng : L.ph (G t) ≠ .gone) (hF : L.Free G) (hacq : L.Acq (L.pl G) t m m')
     (hw : L.WInv (upd (L.pl G) t .holds) m') :
-    ∃ rL, L.R G rL ∧ L.Inv (upd G t (L.set (G t) .holds rL)) rX m' := by
-  obtain ⟨rL, ho, hLoff, hLX, hFr, -⟩ := hi.rest
+    ∃ rL, L.FreeRes G rX m rL ∧ L.Inv (upd G t (L.set (G t) .holds rL)) rX m' := by
+  obtain ⟨rL, hfr⟩ := hi.rest
+  obtain ⟨ho, hLoff, hLX, hFr, -⟩ := id hfr
   obtain ⟨hR, hLown⟩ := hFr hF
   obtain ⟨ht, hjt⟩ := hi.ht hng
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
@@ -532,9 +622,9 @@ theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     intro u; unfold upd; split
     · exact L.ph_set _ _ _
     · rfl
-  refine ⟨rL, hR, by rw [hpt]; exact hw, ⟨rnil, ?_, LockWord.off_erase.mpr fun _ _ => rfl,
-    FHeap.Disjoint.symm (FHeap.disjoint_empty _), fun hF' =>
-      absurd (show L.ph (upd G t (L.set (G t) .holds rL) t) = .holds by rw [hphu]; simp) (hF' t),
+  refine ⟨rL, hfr, by rw [hpt]; exact hw, ⟨rnil, ?_, LockWord.off_erase.mpr fun _ _ => rfl,
+    FHeap.Disjoint.symm (FHeap.disjoint_empty _), fun hF' => (by
+      have h := hF'.held t; unfold pl at h; rw [hphu, if_pos rfl] at h; cases h),
     fun _ => rfl⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
   · rw [rnil_rsum, own_upd hjb hjt, L.part_set, L.held_set]
     have : rsum (L.own G m t) rL = rsum (L.part (G t)) rL := by
@@ -551,24 +641,27 @@ theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
       exact h2
     · exact hi.pdisj u
   · unfold upd; split
-    · rename_i h; subst h; rw [hphu, if_pos rfl] at hu; exact absurd rfl hu
+    · rename_i h; subst h; rw [hphu, if_pos rfl] at hu; cases hu
     · rename_i h; rw [hphu, if_neg h] at hu; exact hi.idle u hu
   · rw [hphu] at hu
     split at hu
     · rename_i h; subst h; rw [upd_self, L.held_set, L.R_set]; exact hR
-    · exact absurd hu (hF u)
+    · exact (hF u hu).elim
 
-/-- **A release**: the holder `t` goes to `p`; its resource moves from its part into the rest. -/
+/-- **A release**: the holder `t` goes to `p`; its resource moves from its part into the rest, as
+the free one after the step (`FreeRes`). -/
 theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p : LPh}
-    (hi : L.Inv G rX m) (hs : L.Step t m m') (hph : L.ph (G t) = .holds) (hp : p ≠ .holds)
+    (hi : L.Inv G rX m) (hs : L.Step t m m') (hph : L.ph (G t) = .holds) (hp : p.held = false)
     (hrel : L.Rel t (upd (L.pl G) t p) m m') (hw : L.WInv (upd (L.pl G) t p) m') :
-    L.Inv (upd G t (L.set (G t) p rnil)) rX m' := by
+    L.FreeRes (upd G t (L.set (G t) p rnil)) rX m' (L.held (G t)) ∧
+      L.Inv (upd G t (L.set (G t) p rnil)) rX m' := by
   obtain ⟨rL, ho, -, -, -, hnF⟩ := hi.rest
-  have hnF' : ¬ L.Free G := fun h => h t hph
+  have hph₁ : (L.ph (G t)).held = true := LPh.held_of_holds hph
+  have hnF' : ¬ L.Free G := fun h => h t hph₁
   rw [hnF hnF', rnil_rsum] at ho
   obtain ⟨ht, hjt⟩ := hi.ht (by rw [hph]; decide)
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
-  have honly : ∀ u, L.ph (G u) = .holds → u = t := fun u hu => hi.w.one u t hu hph
+  have honly : ∀ u, (L.ph (G u)).held = true → u = t := fun u hu => hi.w.one u t hu hph₁
   -- the held resource: in `t`'s part, so without the word's bytes and apart from `rX`
   have hsplit : L.own G m t = rsum (L.part (G t)) (L.held (G t)) := own_live hjt
   have hoffT := Inv.wordFree ho hi.w.blk ht
@@ -603,27 +696,31 @@ theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p 
     intro u; unfold upd; split
     · exact L.ph_set _ _ _
     · rfl
-  have hnh : ∀ u, L.ph (upd G t (L.set (G t) p rnil) u) ≠ .holds := by
-    intro u hu; rw [hphu] at hu
-    split at hu
-    · exact hp hu
-    · rename_i h; exact h (honly u hu)
+  have hnh₀ : ∀ u, u ≠ t → (L.ph (G u)).held = false := fun u h => by
+    cases hu : (L.ph (G u)).held
+    · rfl
+    · exact absurd (honly u hu) h
+  have hnh : ∀ u, (L.ph (upd G t (L.set (G t) p rnil) u)).held = false := by
+    intro u; rw [hphu]; split
+    · exact hp
+    · rename_i h; exact hnh₀ u h
   have hown : m.OwnsC (m.clocks[t]!) (L.held (G t)).heap.erase :=
     (ho.owns t ht).sub fun l h => by
       rw [hsplit]; simp only [FHeap.erase, rsum, FHeap.union_apply, Option.map_eq_none_iff,
         ne_eq] at h ⊢
       cases e : (L.part (G t)).heap l <;> simp_all
-  refine ⟨by rw [hpt]; exact hw, ⟨(L.held (G t)), ?_, hHoff, hHX, fun _ => ⟨?_, by rw [hpt]; exact hrel _ hown hHoff⟩,
-    fun h => absurd (fun u => hnh u) h⟩, hi.xoff, fun u => ?_, fun u _ => ?_,
-    fun u hu => absurd hu (hnh u)⟩
-  · rw [own_upd hjb hjt, L.part_set, L.held_set, rsum_rnil]; exact ho2
-  · rw [L.R_set]; exact hi.res t hph
+  have hfr : L.FreeRes (upd G t (L.set (G t) p rnil)) rX m' (L.held (G t)) :=
+    ⟨by rw [own_upd hjb hjt, L.part_set, L.held_set, rsum_rnil]; exact ho2, hHoff, hHX,
+      fun _ => ⟨by rw [L.R_set]; exact hi.res t hph₁, by rw [hpt]; exact hrel _ hown hHoff⟩,
+      fun h => absurd (LockWord.Free.of_held hnh) h⟩
+  refine ⟨hfr, by rw [hpt]; exact hw, ⟨_, hfr⟩, hi.xoff, fun u => ?_, fun u _ => ?_,
+    fun u hu => by rw [hnh u] at hu; cases hu⟩
   · unfold upd; split
     · rw [L.held_set]; exact FHeap.disjoint_empty _
     · exact hi.pdisj u
   · unfold upd; split
     · exact L.held_set _ _ _
-    · rename_i h; exact hi.idle u (fun e => h (honly u e))
+    · rename_i h; exact hi.idle u (hnh₀ u h)
 
 /-! ## Steps outside the lock's code -/
 
@@ -635,8 +732,8 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
     (hpart : L.part g = L.part (G t)) (hheld : L.held g = rnil)
     (hlive : L.ph g ≠ .gone → t < m.threads.size ∧ joinedB m t = false)
     (hRk : ∀ r, L.R G r → L.R (upd G t g) r) : L.Inv (upd G t g) rX m := by
-  have hnh : L.ph (G t) ≠ .holds := by rw [hph]; decide
-  have hgh : L.ph g ≠ .holds := by rcases hg with h | h | h <;> rw [h] <;> decide
+  have hnh : (L.ph (G t)).held = false := by rw [hph]; rfl
+  have hgh : (L.ph g).held = false := by rcases hg with h | h | h <;> rw [h] <;> rfl
   have hown : L.own (upd G t g) m = L.own G m := by
     funext u; unfold FLock.own
     by_cases h : u = t
@@ -644,9 +741,9 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
     · rw [upd_ne _ _ h]
   have hphu : ∀ u, L.ph (upd G t g u) = if u = t then L.ph g else L.ph (G u) := fun u => by
     unfold upd; split <;> rfl
-  have hholds : ∀ u, L.ph (upd G t g u) = .holds ↔ L.ph (G u) = .holds := by
+  have hholds : ∀ u, (L.ph (upd G t g u)).held = true ↔ (L.ph (G u)).held = true := by
     intro u; rw [hphu]; split
-    · rename_i h; subst h; exact ⟨fun h => absurd h hgh, fun h => absurd h hnh⟩
+    · rename_i h; subst h; rw [hgh, hnh]
     · exact Iff.rfl
   have hfree := free_iff_of (L := L) hholds
   have hgw : ∀ u, L.ph (upd G t g u) ≠ .gone → L.ph (G u) ≠ .gone := fun u h => by
@@ -666,7 +763,7 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
     · exact hheld
     · rename_i h; rw [hphu, if_neg h] at hu; exact hi.idle u hu
   · have hut : u ≠ t := fun e => by
-      have := (hholds u).mp hu; rw [e] at this; exact hnh this
+      have := (hholds u).mp hu; rw [e, hnh] at this; cases this
     rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
 
 /-- A new split of a thread's complete resource at the same lock phase. Equality of `Res`
@@ -676,9 +773,9 @@ theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     (hi : L.Inv G rX m) (hph : L.ph g = L.ph (G t))
     (hsum : rsum (L.part g) (L.held g) = rsum (L.part (G t)) (L.held (G t)))
     (hdisj : FHeap.Disjoint (L.part g).heap (L.held g).heap)
-    (hidle : L.ph g ≠ .holds → L.held g = rnil)
-    (hRk : L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r)
-    (hres : L.ph g = .holds → L.R (upd G t g) (L.held g)) :
+    (hidle : (L.ph g).held = false → L.held g = rnil)
+    (hRk : (L.ph (G t)).held = false → ∀ r, L.R G r → L.R (upd G t g) r)
+    (hres : (L.ph g).held = true → L.R (upd G t g) (L.held g)) :
     L.Inv (upd G t g) rX m := by
   have hphu : ∀ u, L.ph (upd G t g u) = L.ph (G u) := fun u => by
     by_cases e : u = t
@@ -696,7 +793,7 @@ theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_,
     fun u hu => ?_⟩
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    exact ⟨hRk (hfree.mp hF' t) rL h1, by rw [hpl]; exact h2⟩
+    exact ⟨hRk ((hfree.mp hF').held t) rL h1, by rw [hpl]; exact h2⟩
   · by_cases e : u = t
     · subst e; rw [upd_self]; exact hdisj
     · rw [upd_ne _ _ e]; exact hi.pdisj u
@@ -708,7 +805,7 @@ theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     by_cases e : u = t
     · subst e; rw [upd_self]; exact hres (by rw [hph]; exact hu)
     · rw [upd_ne _ _ e]
-      exact hRk (fun ht => e (hi.w.one u t hu ht)) _ (hi.res u hu)
+      exact hRk (hi.w.held_false_of_ne hu e) _ (hi.res u hu)
 
 /-- Take one complete resource from protocol rest into this caller's part at the same
 mutex phase. The free/held lock resource, all other callers, memory and phase map stay.
@@ -872,39 +969,22 @@ theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g
     (fun hn => hheld.trans (hi.idle t (hph ▸ hn))) (fun _ => hRk)
     (fun hh => by rw [hheld]; exact hRk _ (hi.res t (hph ▸ hh)))
 
-/-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
-ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
-the invariant; the step keeps the lock's word and the protocol's rest `rX` (`FStepIn`). A `MemM`
-step does not stop, so the ghost values of the `WP` (`G₀`) are any. -/
-theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
-    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
-    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
-    (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
-    (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
-    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
-      m'.current = t →
-      (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
-        FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
-        (L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r) →
-        (L.ph g = .holds → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
-      Q a G₀ m' n)
-    (hret : P.Partial ∨ FTTReturns Pa x := by
-      first
-        | exact .inl (.inl rfl)
-        | exact .inl (.inr rfl)
-        | assumption
-        | exact .inl (by assumption)
-        | exact .inl (.inr (by assumption))
-        | exact .inl (.inl (by assumption))) :
-    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  refine WP.liftMem_fownedR htt ho hc ht (by rw [own_live hjt]; exact hp)
-    (fun a m' r' hr ho' hq hs => h a m' r' hr hq (hs.weaken fun l hl => ?_) (hs.current.trans hc)
-      fun g hph hr' hpd hidle hRk hres => ?_) hret
-  · simp only [FHeap.erase, Option.map_eq_none_iff, ne_eq, rsum, FHeap.union_apply,
-      Option.or_eq_none_iff, not_and] at hl ⊢
-    intro h1 _; exact hl h1
+/-- The invariant reconstruction shared by ordinary and cur-aware local steps. The native
+step protects the ACTUAL rest footprint, and its actual post ownership supplies the new part.
+No execution rule or resource mode is assumed by this pure reconstruction. -/
+private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m' : Mem}
+    {t : ThreadId} {g : γ} (hi : L.Inv G rX m) (hjt : joinedB m t = false)
+    (hLoff : L.Off rL.heap.erase) (hLX : FHeap.Disjoint rL.heap rX.heap)
+    (hF : L.Free G → L.R G rL ∧ L.toLockWord.Owns (L.pl G) m rL.heap.erase)
+    (hnF : ¬ L.Free G → rL = rnil)
+    (ho' : FOwned (upd (L.own G m) t r') (rsum (L.wordR m) (rsum rL rX)) m')
+    (hs : FStepIn (rsum (L.wordR m) (rsum rL rX)).heap.erase m m')
+    (hph : L.ph g = L.ph (G t)) (hr' : rsum (L.part g) (L.held g) = r')
+    (hpd : FHeap.Disjoint (L.part g).heap (L.held g).heap)
+    (hidle : (L.ph g).held = false → L.held g = rnil)
+    (hRk : (L.ph (G t)).held = false → ∀ r, L.R G r → L.R (upd G t g) r)
+    (hres : (L.ph g).held = true → L.R (upd G t g) (L.held g)) :
+    L.Inv (upd G t g) rX m' := by
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
   -- the word's cells: the same up to `Cell.norm`
   have hcells : ∀ x, L.o ≤ x → x < L.o + 4 →
@@ -931,7 +1011,8 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
     · rfl
   have hphu : ∀ u, L.ph (upd G t g u) = L.ph (G u) := fun u => by
     have := congrFun hplg u; exact this
-  have hholds : ∀ u, L.ph (upd G t g u) = .holds ↔ L.ph (G u) = .holds := fun u => by rw [hphu]
+  have hholds : ∀ u, (L.ph (upd G t g u)).held = true ↔ (L.ph (G u)).held = true := fun u => by
+    rw [hphu]
   have hfree := free_iff_of (L := L) hholds
   -- the rest with the new memory's word cells
   have hsim : FHeap.Sim (rsum (L.wordR m') (rsum rL rX)).heap (rsum (L.wordR m) (rsum rL rX)).heap := by
@@ -950,7 +1031,7 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
   · rw [own_upd hjb hjt, hr']; exact ho2
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    have htn : L.ph (G t) ≠ .holds := fun e => hfree.mp hF' t e
+    have htn : (L.ph (G t)).held = false := (hfree.mp hF').held t
     have hsub : ∀ l, rL.heap.erase l ≠ none →
         (rsum (L.wordR m) (rsum rL rX)).heap.erase l ≠ none := by
       intro l hl
@@ -969,8 +1050,81 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
     · subst hut; rw [upd_self]; exact hres (by rw [hph]; rw [hphu] at hu; exact hu)
     · rw [upd_ne _ _ hut]
       rw [hphu] at hu
-      have htn : L.ph (G t) ≠ .holds := fun e => hut (hi.w.one u t hu e)
-      exact hRk htn _ (hi.res u hu)
+      exact hRk (hi.w.held_false_of_ne hu hut) _ (hi.res u hu)
+
+/-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
+ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
+the invariant; the step keeps the lock's word and the protocol's rest `rX` (`FStepIn`). A `MemM`
+step does not stop, so the ghost values of the `WP` (`G₀`) are any. -/
+theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
+    (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
+    (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      m'.current = t →
+      (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
+        FHeap.Disjoint (L.part g).heap (L.held g).heap → ((L.ph g).held = false → L.held g = rnil) →
+        ((L.ph (G t)).held = false → ∀ r, L.R G r → L.R (upd G t g) r) →
+        ((L.ph g).held = true → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
+      Q a G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine WP.liftMem_fownedR htt ho hc ht (by rw [own_live hjt]; exact hp) ?_ hret
+  intro a m' r' hr ho' hq hs
+  have hsX : FStepIn (rsum (L.wordR m) rX).heap.erase m m' := by
+    refine hs.weaken fun l hl => ?_
+    simp only [FHeap.erase, Option.map_eq_none_iff, ne_eq, rsum, FHeap.union_apply,
+      Option.or_eq_none_iff, not_and] at hl ⊢
+    intro h1 _; exact hl h1
+  exact h a m' r' hr hq hsX (hs.current.trans hc)
+    (fun g hph hr' hpd hidle hRk hres =>
+      hi.rebuildPartStep hjt hLoff hLX hF hnF ho' hs hph hr' hpd hidle hRk hres)
+
+/-- A local step with `cur t` supplied only for the step. The actual-rest cur-aware rule
+returns its exact protected footprint; the SAME invariant reconstruction handles its post. -/
+theorem Inv.wp_liftMemCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
+    (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t))
+    (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' → m'.current = t →
+      (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
+        FHeap.Disjoint (L.part g).heap (L.held g).heap → ((L.ph g).held = false → L.held g = rnil) →
+        ((L.ph (G t)).held = false → ∀ r, L.R G r → L.R (upd G t g) r) →
+        ((L.ph g).held = true → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
+      Q a G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine WP.liftMem_fownedCurR htt ho hc ht (by rw [own_live hjt]; exact hp) ?_ hret
+  intro a m' r' hr ho' hq hs
+  have hsX : FStepIn (rsum (L.wordR m) rX).heap.erase m m' := by
+    refine hs.weaken fun l hl => ?_
+    simp only [FHeap.erase, Option.map_eq_none_iff, ne_eq, rsum, FHeap.union_apply,
+      Option.or_eq_none_iff, not_and] at hl ⊢
+    intro h1 _; exact hl h1
+  exact h a m' r' hr hq hsX (hs.current.trans hc)
+    (fun g hph hr' hpd hidle hRk hres =>
+      hi.rebuildPartStep hjt hLoff hLX hF hnF ho' hs hph hr' hpd hidle hRk hres)
 
 /-- `Inv.wp_liftMem` for a step of generated code (`liftM`). -/
 theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ} {Pa : FAssn}
@@ -982,9 +1136,9 @@ theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ
       FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
       m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
-        FHeap.Disjoint (L.part g).heap (L.held g).heap → (L.ph g ≠ .holds → L.held g = rnil) →
-        (L.ph (G t) ≠ .holds → ∀ r, L.R G r → L.R (upd G t g) r) →
-        (L.ph g = .holds → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
+        FHeap.Disjoint (L.part g).heap (L.held g).heap → ((L.ph g).held = false → L.held g = rnil) →
+        ((L.ph (G t)).held = false → ∀ r, L.R G r → L.R (upd G t g) r) →
+        ((L.ph g).held = true → L.R (upd G t g) (L.held g)) → L.Inv (upd G t g) rX m') →
       Q (a, s) G₀ m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
@@ -999,9 +1153,133 @@ theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ
   exact WP.bind (hi.wp_liftMem hc ht hjt htt hp (fun a m' r' hr hq hs hc' hk =>
     WP.pure' (h a m' r' hr hq hs hc' hk)) hret)
 
-/-- **A step of thread `t` on its own part** (`g`, out of the lock's code or holding the lock;
-the held resource is framed), with a thread triple: its part becomes the triple's post
-(`setPart`). -/
+/-- Finish a caller-only step while keeping the complete held resource. Both ordinary and
+cur-aware lifting use this same ghost/resource reconstruction. -/
+private theorem Inv.finishPartStep {G : ThreadId → γ} {g : γ} {rX r : Res} {m m' : Mem}
+    {t : ThreadId} (hi : L.Inv (upd G t g) rX m)
+    (hd : FHeap.Disjoint r.heap (L.held g).heap)
+    (hk : ∀ g', L.ph g' = L.ph (upd G t g t) →
+      rsum (L.part g') (L.held g') = rsum r (L.held g) →
+      FHeap.Disjoint (L.part g').heap (L.held g').heap →
+      ((L.ph g').held = false → L.held g' = rnil) →
+      ((L.ph (upd G t g t)).held = false → ∀ r', L.R (upd G t g) r' →
+        L.R (upd (upd G t g) t g') r') →
+      ((L.ph g').held = true → L.R (upd (upd G t g) t g') (L.held g')) →
+      L.Inv (upd (upd G t g) t g') rX m') :
+    L.Inv (upd G t (L.setPart g r)) rX m' := by
+  have hR : ∀ r', L.R (upd G t g) r' →
+      L.R (upd (upd G t g) t (L.setPart g r)) r' := fun r' hr => by
+    have := (L.R_setPart (upd G t g) t r r').mpr hr
+    rwa [upd_self] at this
+  have := hk (L.setPart g r) (by rw [L.ph_setPart, upd_self])
+    (by rw [L.part_setPart, L.held_setPart])
+    (by rw [L.part_setPart, L.held_setPart]; exact hd)
+    (fun e => by
+      rw [L.ph_setPart] at e; rw [L.held_setPart]
+      have := hi.idle t (by rw [upd_self]; exact e); rwa [upd_self] at this)
+    (fun _ => hR)
+    (fun e => by
+      rw [L.ph_setPart] at e; rw [L.held_setPart]
+      have := hi.res t (by rw [upd_self]; exact e); rw [upd_self] at this; exact hR _ this)
+  rwa [upd_upd] at this
+
+/-- **A step of any live thread on its own part**, including inside composite sync code. The
+whole held resource is framed, and the caller part becomes the thread triple's actual post. -/
+theorem Inv.wp_liftPartLive {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g ≠ .gone)
+    (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns Pa x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
+  have hgn : L.ph (upd G t g t) ≠ .gone := by
+    rw [upd_self]; exact hgo
+  obtain ⟨ht, hjt⟩ := hi.ht hgn
+  have hd : FHeap.Disjoint (L.part g).heap (L.held g).heap := by
+    have := hi.pdisj t; rwa [upd_self] at this
+  refine hi.wp_liftMem hc ht hjt (htt.frame (R := (· = L.held g)))
+    (by rw [upd_self]; exact ⟨_, _, hd, rfl, hp, rfl⟩)
+    (fun a m' r'' hr hq hs hc' hk => ?_)
+    (hret.imp_right fun hr => (FTTotalTriple.frame (R := (· = L.held g)) ⟨htt, hr⟩).2)
+  obtain ⟨r', rH, hd', rfl, hq', rfl⟩ := hq
+  refine h a m' r' hr hq' hs hc' ?_
+  exact hi.finishPartStep hd' hk
+
+/-- A cur-aware step on the caller's part, at any live internal or public phase. The token
+is provided only for this local step; the WHOLE held resource and actual rest remain framed. -/
+theorem Inv.wp_liftPartLiveCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g ≠ .gone)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
+  have hgn : L.ph (upd G t g t) ≠ .gone := by
+    rw [upd_self]; exact hgo
+  obtain ⟨ht, hjt⟩ := hi.ht hgn
+  have hd : FHeap.Disjoint (L.part g).heap (L.held g).heap := by
+    have := hi.pdisj t; rwa [upd_self] at this
+  have httF : FTTriple ((Pa ⋆ (· = L.held g)) ⋆ cur t) x
+      (fun a => (Qa a ⋆ (· = L.held g)) ⋆ cur t) :=
+    (htt.frame (R := (· = L.held g))).conseq
+      (fun _ h => sep_assoc' (sep_mono_right (fun _ => sep_comm) (sep_assoc h)))
+      (fun _ _ h => sep_assoc' (sep_mono_right (fun _ => sep_comm) (sep_assoc h)))
+  have hretF : P.Partial ∨ FTTReturns ((Pa ⋆ (· = L.held g)) ⋆ cur t) x := by
+    refine hret.imp_right fun hr => ?_
+    have htF : FTTotalTriple ((Pa ⋆ (· = L.held g)) ⋆ cur t) x
+        (fun a => (Qa a ⋆ (· = L.held g)) ⋆ cur t) :=
+      (FTTotalTriple.frame (R := (· = L.held g)) ⟨htt, hr⟩).conseq
+        (fun _ h => sep_assoc' (sep_mono_right (fun _ => sep_comm) (sep_assoc h)))
+        (fun _ _ h => sep_assoc' (sep_mono_right (fun _ => sep_comm) (sep_assoc h)))
+    exact htF.2
+  refine hi.wp_liftMemCur hc ht hjt httF
+    (by rw [upd_self]; exact ⟨_, _, hd, rfl, hp, rfl⟩)
+    (fun a m' r'' hr hq hs hc' hk => ?_) hretF
+  obtain ⟨r', rH, hd', rfl, hq', rfl⟩ := hq
+  exact h a m' r' hr hq' hs hc' (hi.finishPartStep hd' hk)
+
+/-- A same-memory caller-part update, derived from the total rule for `pure`. This is the
+resource operation used to retain, duplicate or drop plain fragments at initialization, spawn
+and join boundaries. The whole held resource and every other thread remain framed. -/
+theorem Inv.eupdPart {Tgt : Type} (P : Proto Tgt γ) {G : ThreadId → γ} {g : γ}
+    {rX : Res} {m : Mem} {t : ThreadId} {Qa : FAssn}
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
+    (hu : EUpd (fun r => r = L.part g) Qa) :
+    ∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m := by
+  have htt : FTTotalTriple (fun r => r = L.part g) (pure () : MemM Unit) (fun _ => Qa) :=
+    .ofSeq (FTotalTriple.eupd hu (FTotalTriple.ret (Q := fun _ : Unit => Qa) ())) (ThreadLocal.pure ())
+  have hw : P.WP t (ConcM.liftMem (pure () : MemM Unit) : ConcM Tgt Unit)
+      (fun _ _ _ _ => ∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m) G m 0 :=
+    hi.wp_liftPartLive hc hg htt.1 rfl (fun _ m' r hr hq _ _ hi' => by
+      have hm : m' = m :=
+        (Prod.mk.inj (Except.ok.inj (Option.some.inj hr))).2.symm
+      exact ⟨r, hq, hm ▸ hi'⟩) (.inr htt.2)
+  change m.threads.size = m.threads.size ∧
+    (∃ r, Qa r ∧ L.Inv (upd G t (L.setPart g r)) rX m) at hw
+  exact hw.2
+
+/-- A caller-part step at a public lock place. The general rule also covers the live internal
+phases of composite sync code; both frame the holder's complete resource. -/
 theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
     {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
@@ -1018,32 +1296,28 @@ theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : F
         | exact .inl (by assumption)
         | exact .inl (.inr (by assumption))
         | exact .inl (.inl (by assumption))) :
-    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n := by
-  have hgn : L.ph (upd G t g t) ≠ .gone := by
-    rw [upd_self]; rcases hgo with e | e <;> rw [e] <;> decide
-  obtain ⟨ht, hjt⟩ := hi.ht hgn
-  have hd : FHeap.Disjoint (L.part g).heap (L.held g).heap := by
-    have := hi.pdisj t; rwa [upd_self] at this
-  refine hi.wp_liftMem hc ht hjt (htt.frame (R := (· = L.held g)))
-    (by rw [upd_self]; exact ⟨_, _, hd, rfl, hp, rfl⟩)
-    (fun a m' r'' hr hq hs hc' hk => ?_)
-    (hret.imp_right fun hr => (FTTotalTriple.frame (R := (· = L.held g)) ⟨htt, hr⟩).2)
-  obtain ⟨r', rH, hd', rfl, hq', rfl⟩ := hq
-  refine h a m' r' hr hq' hs hc' ?_
-  have hR : ∀ r, L.R (upd G t g) r → L.R (upd (upd G t g) t (L.setPart g r')) r := fun r hr => by
-    have := (L.R_setPart (upd G t g) t r' r).mpr hr
-    rwa [upd_self] at this
-  have := hk (L.setPart g r') (by rw [L.ph_setPart, upd_self])
-    (by rw [L.part_setPart, L.held_setPart])
-    (by rw [L.part_setPart, L.held_setPart]; exact hd')
-    (fun e => by
-      rw [L.ph_setPart] at e; rw [L.held_setPart]
-      have := hi.idle t (by rw [upd_self]; exact e); rwa [upd_self] at this)
-    (fun _ => hR)
-    (fun e => by
-      rw [L.ph_setPart] at e; rw [L.held_setPart]
-      have := hi.res t (by rw [upd_self]; exact e); rw [upd_self] at this; exact hR _ this)
-  rwa [upd_upd] at this
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n :=
+  hi.wp_liftPartLive hc (by rcases hgo with h | h <;> rw [h] <;> decide) htt hp h hret
+
+/-- The cur-aware caller-part lift at the public lock places. -/
+theorem Inv.wp_liftPartCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
+    {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
+    {rX : Res} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
+    (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
+    (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
+      FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
+    (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
+      first
+        | exact .inl (.inl rfl)
+        | exact .inl (.inr rfl)
+        | assumption
+        | exact .inl (by assumption)
+        | exact .inl (.inr (by assumption))
+        | exact .inl (.inl (by assumption))) :
+    P.WP t (ConcM.liftMem x : ConcM Tgt α) Q G₀ m n :=
+  hi.wp_liftPartLiveCur hc (by rcases hgo with h | h <;> rw [h] <;> decide) htt hp h hret
 
 /-! ## Spawn and join -/
 
@@ -1087,7 +1361,8 @@ theorem Inv.fork {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t c : ThreadId} 
     · by_cases h2 : u = m.threads.size
       · simp [h1, h2, h₀, hct]
       · simp [h1, h2]
-  have hphu : ∀ u, L.ph (upd (upd G m.threads.size g₀) t g₁ u) = .holds ↔ L.ph (G u) = .holds := by
+  have hphu : ∀ u, (L.ph (upd (upd G m.threads.size g₀) t g₁ u)).held = true ↔
+      (L.ph (G u)).held = true := by
     intro u
     have := congrFun hpl u; simp only [pl] at this; rw [this, LockWord.upd_apply]
     split
@@ -1117,7 +1392,7 @@ theorem Inv.fork {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t c : ThreadId} 
     · by_cases h2 : u = m.threads.size
       · simp only [h1, h2, hct, ↓reduceIte, h₀h]; exact FHeap.disjoint_empty _
       · simp only [h1, h2, ↓reduceIte]; exact hi.pdisj u
-  · rw [ne_eq, hphu] at hu; unfold upd
+  · replace hu := held_false_of_iff (hphu u) hu; unfold upd
     by_cases h1 : u = t
     · simp only [h1, ↓reduceIte, h₁h]
     · by_cases h2 : u = m.threads.size
@@ -1159,7 +1434,7 @@ theorem Inv.join {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t u : ThreadId} 
     rw [pl_upd, hgo, ← hout]; funext w; simp only [LockWord.upd_apply]; split
     · rename_i e; subst e; rfl
     · rfl
-  have hholds : ∀ w, L.ph (upd G t g w) = .holds ↔ L.ph (G w) = .holds := fun w => by
+  have hholds : ∀ w, (L.ph (upd G t g w)).held = true ↔ (L.ph (G w)).held = true := fun w => by
     have := congrFun hpl w; simp only [pl] at this; rw [this]
   have hfree := free_iff_of (L := L) hholds
   refine ⟨by rw [hpl]; exact hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_,
@@ -1182,7 +1457,7 @@ theorem Inv.join {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t u : ThreadId} 
   · unfold upd; split
     · rw [hgh]; exact FHeap.disjoint_empty _
     · exact hi.pdisj w
-  · rw [ne_eq, hholds] at hw'; unfold upd; split
+  · replace hw' := held_false_of_iff (hholds w) hw'; unfold upd; split
     · exact hgh
     · exact hi.idle w hw'
   · rw [hholds] at hw'
@@ -1207,8 +1482,8 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
     (hblk : L.BlkOk m) (h0 : L.U32 m 0) (hat : ∀ l ∈ m.atomics, l.block ≠ L.b)
     (hq : m.waiters = #[]) (hall : AllLe m (m.clocks[t]!)) :
     L.Inv G rX m := by
-  have hfree : L.Free G := fun u => by
-    show L.ph (G u) ≠ _; rcases hph u with ⟨h, -⟩ | h <;> rw [h] <;> decide
+  have hfree : L.Free G := LockWord.Free.of_held fun u => by
+    show (L.ph (G u)).held = false; rcases hph u with ⟨h, -⟩ | h <;> rw [h] <;> rfl
   have hownE : L.own G m = upd own t (L.part (G t)) := by
     funext u; unfold upd
     by_cases hu : u = t
@@ -1268,7 +1543,7 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
   refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun _ => ⟨hR, fun e he htc => .inl fun u hu _ =>
       hle rL.heap hL' e he htc u hu⟩, fun h => absurd hfree h⟩, hxoff,
     fun u => by rw [hheld]; exact FHeap.disjoint_empty _, fun u _ => hheld u,
-    fun u hu => absurd hu (hfree u)⟩
+    fun u hu => (hfree u hu).elim⟩
   -- `rsum (rsum rL rW) rX` as `rsum (wordR m) (rsum rL rX)`
   refine ho1.congrRestU (fun l => ?_) (fun l fc' hl => ?_) ?_ ?_
   · by_cases hl : L.In l
@@ -1355,6 +1630,27 @@ theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi :
 
 /-! ## A recorded access to bytes of the protocol's rest -/
 
+/-- A recorded access of the current thread `t` to bytes that no thread's part has (`hno`), given
+the word's invariant after it (`hw`) and what the free lock owns after it (`hown`): the invariant
+holds after it. -/
+theorem Inv.record {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} {k : AccessKind} (hi : L.Inv G rX m) (hc : m.current = t)
+    (ht : t < m.threads.size) (hb : b < m.blocks.size)
+    (hw : L.WInv (L.pl G) (m.recordAt b o n k))
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none)
+    (hown : ∀ rL : Res, FHeap.Disjoint rL.heap rX.heap → L.Owns (L.pl G) m rL.heap.erase →
+      L.Owns (L.pl G) (m.recordAt b o n k) rL.heap.erase) :
+    L.Inv G rX (m.recordAt b o n k) := by
+  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj, hi.idle, hi.res⟩
+  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
+    rw [this]
+    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
+    rw [e]
+    exact ho.recordRest hc ht hb hno
+  · obtain ⟨h1, h2⟩ := hF hF'
+    exact ⟨h1, hown rL hLX h2⟩
+
 /-- A recorded access of the current thread `t` (not a write) to `n` bytes of the protocol's own
 rest `rX` (a read of a read-shared buffer): the invariant holds after it. -/
 theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
@@ -1362,7 +1658,7 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
     (ht : t < m.threads.size) (hb : b < m.blocks.size) (hn : 0 < n)
     (hX : ∀ x, o ≤ x → x < o + n → rX.heap (b, x) ≠ none) :
     L.Inv G rX (m.recordAt b o n k) := by
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
+  obtain ⟨rL, ho, -⟩ := hi.rest
   have hrest : ∀ x, o ≤ x → x < o + n → (rsum (L.wordR m) (rsum rL rX)).heap (b, x) ≠ none :=
     fun x h1 h2 => by
       have := hX x h1 h2
@@ -1384,19 +1680,115 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
           have h0 := LockWord.off_erase.mp hi.xoff (L.b, x) ⟨rfl, h3, h4⟩
           exact this h0
     · exact .inl hbb
-  have hLb : ∀ x, o ≤ x → x < o + n → rL.heap.erase (b, x) = none := fun x h1 h2 => by
-    have := (hLX (b, x)).resolve_right (hX x h1 h2)
-    simp [FHeap.erase, this]
-  have hjb : joinedB (m.recordAt b o n k) = joinedB m := rfl
-  refine ⟨hi.w.readK hk hnw, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_, hnF⟩, hi.xoff, hi.pdisj,
-    hi.idle, hi.res⟩
-  · have : L.wordR (m.recordAt b o n k) = L.wordR m := wordR_congr rfl
-    rw [this]
-    have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
-    rw [e]
-    exact ho.recordRest hc ht hb fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2)
-  · obtain ⟨h1, h2⟩ := hF hF'
-    exact ⟨h1, h2.readK hb (fun x h1 h2 => hLb x h1 h2)⟩
+  exact hi.record hc ht hb (hi.w.readK hk hnw)
+    (fun u hu x h1 h2 => ho.part_off hu (hrest x h1 h2))
+    fun rL' hLX' h2 => h2.readK hb fun x h1 h2 => by
+      have := (hLX' (b, x)).resolve_right (hX x h1 h2)
+      simp [FHeap.erase, this]
+
+/-- A plain read by the current thread `t`, when every other thread has left the lock (`gone`), of
+bytes that no thread's part has (`hno`; e.g. bytes of the protocol's rest, the word's cells and the
+free lock's resource): the invariant holds after it. -/
+theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : BlockId}
+    {o n : Nat} (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hb : b < m.blocks.size) (hsole : ∀ u < m.threads.size, u ≠ t → L.ph (G u) = .gone)
+    (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).heap (b, x) = none) :
+    L.Inv G rX (m.recordAt b o n .read) := by
+  have hs : ∀ u < m.threads.size, u ≠ m.current → L.pl G u = .gone := fun u hu h =>
+    hsole u hu (by rw [← hc]; exact h)
+  exact hi.record hc ht hb (hi.w.readAll (by rw [hc]; exact ht) hs) hno
+    fun _ _ h2 => h2.readAll (by rw [hi.w.csize, hc]; exact ht) hs
+
+/-! ## Happened before the lock's holder
+
+A clock that a client of the lock relates to the lock's holders (`HB`): a write made while
+holding the lock happened before every later holder (`HB.le`), and the fact stays over the steps
+that keep the holders, the word's releases and the threads (`HB.mono`). -/
+
+variable (L) in
+/-- The clock `c` happened before the lock's holder (awake or at another object's futex wait:
+`held`, so the fact survives `WInv.nap`), before the release clock of the newest message of the
+lock's word, or before every thread that has not ended. -/
+def HB (G : ThreadId → γ) (m : Mem) (c : VClock) : Prop :=
+  (∃ u, (L.ph (G u)).held = true ∧ VClock.le c (m.clocks[u]!) = true) ∨ L.Before m c ∨
+    LockWord.LiveLe (L.pl G) m c
+
+/-- A clock that happened before the lock's holder `t` (with the word's invariant). -/
+theorem HB.le {G : ThreadId → γ} {m : Mem} {c : VClock} (hw : L.WInv (L.pl G) m)
+    (h : L.HB G m c) {t : ThreadId} (ht : (L.ph (G t)).held = true) :
+    VClock.le c (m.clocks[t]!) = true := by
+  rcases h with ⟨u, hu, hle⟩ | ⟨i, l, hl, hle⟩ | hlive
+  · obtain rfl := hw.one u t hu ht; exact hle
+  · exact VClock.le_trans hle ((hw.rel i l hl).2 t ht)
+  · exact hlive t (hw.live t (LPh.ne_gone_of_held ht)).1 (LPh.ne_gone_of_held ht)
+
+/-- The word's releases stay over a step that has the lock's word in its frame. -/
+theorem Inv.before_fstep {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
+    (hfs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') :
+    ∀ c, L.Before m c → L.Before m' c := by
+  rintro c ⟨i, l, hl, hle⟩
+  obtain ⟨i', hl'⟩ := (LockWord.loc_fstep (L := L.toLockWord) hfs
+    (fun x h1 h2 => by
+      have := LockWord.wordR_some hL.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
+      simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+        Option.or_eq_none_iff, not_and]
+      intro h; exact absurd h this)
+    (fun i l hl => (hL.w.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
+  exact ⟨i', l, hl', hle⟩
+
+/-- **`HB` stays** over a step that keeps the holders (or releases with the release fact), grows
+the clocks, keeps the word's newest release and the threads that have not ended. -/
+theorem HB.mono {G G' : ThreadId → γ} {m m' : Mem} {c : VClock} (h : L.HB G m c)
+    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true ∨
+      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hbef : ∀ c, L.Before m c → L.Before m' c) (ht : m'.threads = m.threads)
+    (hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) : L.HB G' m' c := by
+  rcases h with ⟨u, hu, hle⟩ | hb | hlive
+  · rcases hhold u hu with h' | hrel
+    · exact .inl ⟨u, h', VClock.le_trans hle (hcl u)⟩
+    · exact .inr (.inl (hrel c hle))
+  · exact .inr (.inl (hbef c hb))
+  · exact .inr (.inr (fun u hu hg =>
+      VClock.le_trans (hlive u (ht ▸ hu) (hgone u hg)) (hcl u)))
+
+/-- A clock that happened before thread `t`, which holds the lock. -/
+theorem HB.of_holder {G : ThreadId → γ} {m : Mem} {c : VClock} {t : ThreadId}
+    (ht : (L.ph (G t)).held = true) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=
+  .inl ⟨t, ht, hle⟩
+
+/-- **A holder over a step of the lock's code** by `t` (which runs the lock's code, so it is not
+at `holdsAway`) to any place `q` (`Fits.stable`): it still holds, or (at a release: `t` held the
+lock and `q` is not `holds`) its clock happened before the newest message of the word (`hrel`).
+The `hhold` of `HB.mono`. -/
+theorem lstep_hold {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q : LPh} {h : Res}
+    (hz : L.ph (G t) ≠ .holdsAway)
+    (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) (u : ThreadId)
+    (hu : (L.ph (G u)).held = true) : (L.ph (upd G t (L.set (G t) q h) u)).held = true ∨
+      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c := by
+  by_cases e : u = t
+  · subst e
+    by_cases hq : q = .holds
+    · exact .inl (by rw [upd_self, L.ph_set, hq]; rfl)
+    · exact .inr fun c hc => L.before_le (hrel (LPh.holds_of_held hu hz) hq) hc
+  · exact .inl (by rw [upd_ne _ _ e]; exact hu)
+
+/-- **A thread that has not ended over a step of the lock's code** by `t` (not `gone`) to any
+place: it had not ended before it. The `hgone` of `HB.mono`. -/
+theorem lstep_live {G : ThreadId → γ} {t : ThreadId} {q : LPh} {h : Res}
+    (hg : L.ph (G t) ≠ .gone) (u : ThreadId) (hu : L.ph (upd G t (L.set (G t) q h) u) ≠ .gone) :
+    L.ph (G u) ≠ .gone := by
+  by_cases e : u = t
+  · subst e; exact hg
+  · rwa [upd_ne _ _ e] at hu
+
+/-- **`HB` stays over a step of the lock's code** by `t` to any place `q` (`Fits.stable`):
+`lstep_hold`, `lstep_live`. -/
+theorem HB.lstep {G : ThreadId → γ} {m m' : Mem} {c : VClock} {t : ThreadId} {q : LPh} {h : Res}
+    (hc : L.HB G m c) (hg : L.ph (G t) ≠ .gone) (hz : L.ph (G t) ≠ .holdsAway) (hs : L.Step t m m')
+    (hrel : L.ph (G t) = .holds → q ≠ .holds → L.Before m' (m.clocks[t]!)) :
+    L.HB (upd G t (L.set (G t) q h)) m' c :=
+  hc.mono (lstep_hold hz hrel) hs.clocks hs.before hs.threads (lstep_live hg)
 
 end FLock
 

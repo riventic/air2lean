@@ -43,10 +43,10 @@ private theorem before_first :
   simp [before, word]
 
 theorem overlapping_identity : lock.Step 0 before before :=
-  LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)
+  LockWord.Step.same rfl rfl rfl rfl rfl rfl rfl
 
 theorem duplicate_identity : lock.Step 0 duplicated duplicated :=
-  LockWord.Step.same rfl rfl rfl rfl rfl rfl (fun _ _ => Iff.rfl)
+  LockWord.Step.same rfl rfl rfl rfl rfl rfl rfl
 
 theorem reject_changed_overlap : ¬ lock.Step 0 before changed := by
   intro hs

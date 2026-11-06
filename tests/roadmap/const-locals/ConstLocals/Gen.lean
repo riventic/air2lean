@@ -204,6 +204,8 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] bump
+
 structure deadLocals where
   deriving Inhabited
 
@@ -215,6 +217,8 @@ def dead (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret (0 : BitVec 32))) : Zig.M deadLocals deadExit).run' (default : deadLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] dead
 
 structure readLocals where
   deriving Inhabited
@@ -245,6 +249,8 @@ def read (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] read
+
 structure liveLocals where
   deriving Inhabited
 
@@ -257,6 +263,8 @@ def live (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
     pure (.ret i1)) : Zig.MM liveLocals liveExit).run' (default : liveLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] live
 
 structure stackLocals where
   x : Zig.Ptr
@@ -277,6 +285,8 @@ def stack (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] stack
+
 structure entryLocals where
   deriving Inhabited
 
@@ -293,6 +303,8 @@ def entry (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
     pure (.ret i6)) : Zig.MM entryLocals entryExit).run' (default : entryLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] entry
 
 structure roundTripLocals where
   deriving Inhabited
@@ -329,5 +341,7 @@ def roundTrip (p0 : BitVec 64) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] roundTrip
 
 end ConstLocals

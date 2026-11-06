@@ -244,6 +244,11 @@ def bound_of(entry, statement=None) -> dict | None:
             'expr': expr if isinstance(expr, str) else None}
 
 
+def cost_bound_status(bound: dict | None) -> str:
+    """Describe the conclusion's bound without inferring one from mode atoms or ticks."""
+    return 'no cost bound established' if bound is None else 'explicit bound in theorem conclusion'
+
+
 def check_bound(declared, found) -> str | None:
     """Why a manifest goal's `bound` is not what the theorem proves, or None. A declared
     `{unit, max}` needs a closed proved bound of that unit at most `max` (a smaller bound implies
@@ -524,6 +529,7 @@ def classify(report: dict, heads: dict | None = None, reserved=None) -> dict:
                          'subject': found['subject'], 'claims': found['claims'],
                          'claim_class': found['claim_class'], 'derived_strength': found['strength'],
                          'type_strength': found['type_strength'], 'bound': found['bound'],
+                          'cost_bound_status': cost_bound_status(found['bound']),
                          'witnesses': found['witnesses'], 'allocator_creation': found['allocator_creation'],
                          'caps': found['caps'],
                          'outcomes': (statement_of(theorem) or {}).get('outcomes'),
@@ -567,6 +573,7 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
     definition, which the theorem's conclusion must be about."""
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
               'derived_strength': None, 'claim_class': None, 'bound': None, 'domain': goal['domain'],
+              'cost_bound_status': cost_bound_status(None),
               'derived_domain': None, 'binding': None, 'caps': [],
               'caller_obligations': (obligations or {}).get(goal['theorem'], []), 'premises': None}
     theorem = theorems.get(goal['theorem'])
@@ -578,6 +585,7 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
                    allowed=allowed, audited=theorems, nodes=nodes, reserved=reserved)
     premises = premises_of(theorem, found['claims'])
     result.update(derived_strength=found['strength'], claim_class=found['claim_class'], bound=found['bound'],
+                  cost_bound_status=cost_bound_status(found['bound']),
                   derived_domain=found['domain'], binding=found['binding'], caps=found['caps'], premises=premises,
                   allocator_creation=found['allocator_creation'])
     result['theorem_outcome_contract'] = OUTCOMES.theorem_contract(

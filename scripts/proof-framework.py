@@ -21,7 +21,13 @@ lists what exists today, so that nothing parallel is added:
   `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is not a declaration. A
   registry is a second way to add automation, so a new one is reviewed like a new tactic;
 * `legacy_users`: every Lean file that uses the legacy separation logic (imports a module of
-  `LEGACY_MODULES` or names a legacy triple, `LEGACY_NAMES`), by path.
+  `LEGACY_MODULES` or names a legacy triple, `LEGACY_NAMES`), by path;
+* `tactic_uses`: per file and per tactic, how often a tactic of `tactics` with kind `syntax` and
+  status `legacy-to-retire` (`unroll_sched`, `tomega`, …) occurs in the code (`scan_uses`: a word
+  match outside comments and strings; a local variable of the same name counts, a conservative
+  over-approximation). Declaring a tactic is gated above, using it needs its own entry, so a new
+  file cannot build on a tactic to retire without a reviewed addition. A count that rises is a
+  new use; one that falls is stale (lower it with `--write`).
 
 Status is `target` (the framework) or `legacy-to-retire` (to be migrated and deleted). The check
 fails on an entry that the tree has and the file lacks (a new judgment, tactic, registry or legacy
@@ -85,7 +91,7 @@ TACTIC_DECL = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:syntax|
 TACTIC_RULES = re.compile(r"(?:@\[[^\]]*\]\s*)*(?:(?:scoped|local)\s+)?(?:macro_rules|elab_rules)\b")
 TACTIC_RULE = re.compile(r"^\s*(?:macro_rules|elab_rules[^|]*)?\s*\|\s*`\((?:(tactic|command)\|)?\s*([^\s$)\]]+)", re.M)
 # The syntax category of a declaration (before its `=>`) or of a rules block (`elab_rules : command`).
-# A command elaborator can add, hide or rewrite declarations (`if_decl … end_if` drops theorems when
+# A command elaborator can add, hide or rewrite declarations (`when_defined … end_when` drops theorems when
 # its condition fails), so new commands are gated like new tactics.
 CATEGORY = re.compile(r":\s*(tactic|command)\b")
 DECL_KIND = {"tactic": "syntax", "command": "command"}
@@ -344,7 +350,37 @@ def entry_keys(data):
         out[("registry", e["registry"], e["kind"], e["module"])] = e
     for e in data.get("legacy_users", []):
         out[("legacy user", e["path"])] = e
+    for e in data.get("tactic_uses", []):
+        out[("tactic use", e["path"], e["tactic"])] = e
     return out
+
+
+def retiring_tactics(data):
+    """The keywords of the tactics (kind `syntax`) that are to retire, whose uses are gated."""
+    return sorted({e["tactic"] for e in data.get("tactics", [])
+                   if e["kind"] == "syntax" and e.get("status") == "legacy-to-retire"})
+
+
+# A command that only gives attributes to names (`attribute [zig_run] f g`) holds no tactic: a
+# keyword in it is a declaration's name, e.g. a translated Zig function `within`.
+ATTRIBUTE_LINE = re.compile(r"^attribute\s+\[[^\]\n]*\](?:[ \t]+[\w.'«»]+)+[ \t]*$", re.M)
+
+
+def scan_uses(root, keywords):
+    """{(path, keyword): occurrences} of the given tactic keywords in the tree's Lean code."""
+    if not keywords:
+        return {}
+    word = re.compile(r"(?<![\w'.!?])(" + "|".join(r"\s+".join(map(re.escape, kw.split()))
+                                                 for kw in keywords) + r")(?![\w'!?])")
+    found = {}
+    for path in tracked_lean(root):
+        text = (root / path).read_text(encoding="utf-8")
+        if not any(kw.split()[0] in text for kw in keywords):
+            continue
+        for m in word.finditer(ATTRIBUTE_LINE.sub("", strip_comments_and_strings(text))):
+            kw = " ".join(m[1].split())
+            found[(path, kw)] = found.get((path, kw), 0) + 1
+    return found
 
 
 def keys(data):
@@ -363,15 +399,15 @@ def default_status(entry):
     if "name" in entry:
         if entry["name"].split(".")[-1] in TARGET_JUDGMENTS:
             return "target"
-        # Structural candidates: the legacy layer's and the hand-written sync specs' are to retire.
-        legacy = LEGACY_MODULES.match(entry["module"]) or entry["module"].startswith("ZigLean.Conc.Spec.")
-        return "legacy-to-retire" if legacy or entry["name"].endswith(SUFFIXES) else "target"
+        # Structural candidates: the legacy layer's, and parallel judgments by name, are to retire.
+        legacy = LEGACY_MODULES.match(entry["module"]) or entry["name"].endswith(SUFFIXES)
+        return "legacy-to-retire" if legacy else "target"
     # A tactic or registry that is not `fsym`'s is a candidate for a parallel automation; the
     # review of its approval sets `target` when it belongs to the framework.
     return "target" if TARGET_AUTOMATION.match(entry.get("tactic") or entry["registry"]) else "legacy-to-retire"
 
 
-def render(judgments, tactics, registries, users, old, approved=None):
+def render(judgments, tactics, registries, users, old, approved=None, uses=None):
     known = entry_keys(old)
 
     def keep(key, e):
@@ -391,15 +427,18 @@ def render(judgments, tactics, registries, users, old, approved=None):
     ts = [keep(("tactic", *k), e) for k, e in sorted(tactics.items())]
     rs = [keep(("registry", *k), e) for k, e in sorted(registries.items())]
     us = [keep(("legacy user", p), {"path": p}) for p in sorted(users)]
+    tus = [keep(("tactic use", p, kw), {"path": p, "tactic": kw, "count": n})
+           for (p, kw), n in sorted((uses or {}).items())]
     return {
         "description": "One proof framework (docs/proof-framework.md): the program judgments, "
-                       "tactics, attribute and simp-set registries and legacy-logic users that "
-                       "exist. Only shrinks; additions need the coordinator "
+                       "tactics, attribute and simp-set registries, legacy-logic users and uses "
+                       "of tactics to retire that exist. Only shrinks; additions need the coordinator "
                        "(scripts/proof-framework.py).",
         "judgments": js,
         "tactics": ts,
         "registries": rs,
         "legacy_users": us,
+        "tactic_uses": tus,
     }
 
 
@@ -456,9 +495,12 @@ def main(argv=None):
     old = json.loads(path.read_text()) if path.exists() else {}
     judgments, tactics, registries, users = scan(root)
     if args.write:
-        path.write_text(json.dumps(render(judgments, tactics, registries, users, old, args.approve),
-                                   indent=2) + "\n")
+        data = render(judgments, tactics, registries, users, old, args.approve)
+        data = render(judgments, tactics, registries, users, old, args.approve,
+                      scan_uses(root, retiring_tactics(data)))
+        path.write_text(json.dumps(data, indent=2) + "\n")
         old = json.loads(path.read_text())
+    uses = scan_uses(root, retiring_tactics(old))
     errors = []
     for e in old.get("judgments", []) + old.get("tactics", []) + old.get("registries", []):
         if e.get("status") not in STATUSES:
@@ -474,6 +516,15 @@ def main(argv=None):
                       "(docs/proof-framework.md); a new one is a coordinator decision")
     for p in sorted(set(users) - fu):
         errors.append(f"{p}: uses the legacy logic ({users[p]}); {hint}")
+    filed = {(e["path"], e["tactic"]): e["count"] for e in old.get("tactic_uses", [])}
+    for (p, kw), n in sorted(uses.items()):
+        if n > filed.get((p, kw), 0):
+            errors.append(f"{p}: {n - filed.get((p, kw), 0)} new use(s) of the tactic to retire `{kw}`; "
+                          f"{hint}")
+    for (p, kw), n in sorted(filed.items()):
+        if n > uses.get((p, kw), 0):
+            errors.append(f"{FILE}: {p} uses `{kw}` {uses.get((p, kw), 0)} time(s), not {n}; "
+                          "lower or delete its tactic_uses entry (--write)")
     for name, mod in sorted(fj - set(judgments)):
         errors.append(f"{FILE}: judgment `{name}` ({mod}) is gone; delete its entry")
     for kw, kind, mod in sorted(ft - set(tactics)):
@@ -495,6 +546,10 @@ def main(argv=None):
             retiring = {k for k, e in before.items() if e.get("status") == "legacy-to-retire"}
             moved = {k[:-1] for k in retiring if k not in now}
             for k, e in sorted(now.items(), key=lambda x: str(x[0])):
+                if (k[0] == "tactic use" and k in before and e["count"] > before[k]["count"]
+                        and not e.get("approved")):
+                    errors.append(f"{FILE}: {k} rises from {before[k]['count']} to {e['count']} "
+                                  f"against {rev}'s file; the file only shrinks (\"approved\")")
                 if k not in before and not e.get("approved"):
                     errors.append(f"{FILE}: {k} is not in {rev}'s file; the file only shrinks "
                                   "(an addition records the coordinator's approval: \"approved\")")
@@ -506,7 +561,7 @@ def main(argv=None):
         print(e, file=sys.stderr)
     if not errors:
         print(f"proof-framework: {len(fj)} judgments, {len(ft)} tactic entries, {len(fr)} registries, "
-              f"{len(fu)} legacy users; nothing new")
+              f"{len(fu)} legacy users, {len(filed)} tactic-use entries; nothing new")
     return 1 if errors else 0
 
 

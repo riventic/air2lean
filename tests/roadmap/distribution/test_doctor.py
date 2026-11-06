@@ -109,6 +109,24 @@ class Doctor(unittest.TestCase):
             self.check(report, cid)
         self.assertEqual(self.check(report, 'patched-zig-0.15.2')['status'], 'skip')
 
+    def test_native_runners_follow_the_workflow(self):
+        spec = importlib.util.spec_from_file_location('air2lean_doctor', self.repo / 'scripts/doctor.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        tools = ['node', 'qemu-aarch64-static', 'qemu-mips64-static', 'qemu-s390x-static']
+
+        def native(host):
+            doctor = module.Doctor(self.repo, self.base, None, {'PATH': str(self.bin)})
+            doctor.host_id = host
+            doctor.native_runners()
+            return doctor.checks[-1]
+        self.assertEqual(native('aarch64-macos')['status'], 'skip')
+        missing = native('x86_64-linux')
+        self.assertEqual((missing['status'], missing['details']['missing']), ('warn', tools))
+        for tool in tools:
+            write_tool(self.bin / tool)
+        self.assertEqual(native('x86_64-linux')['status'], 'ok')
+
     def test_proofs_only_without_zig(self):
         os.unlink(self.bin / 'stock-zig')
         report = self.doctor('--require', 'proofs', expected=0)

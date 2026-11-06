@@ -68,7 +68,7 @@ theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.
   size := hs.size
   others := hs.others
   mine := hs.mine
-  blocks := hs.blocks
+  addrs := hs.addrs
   nextMsg := hs.nextMsg
   atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.mono, ha.kept, ha.frame, ha.new, ha.seen, ha.own⟩
   fp e he := by
@@ -554,7 +554,7 @@ theorem _root_.Zig.FStepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (
   size := rfl
   others _ _ := rfl
   mine := VClock.le_refl _
-  blocks := by simp [Mem.afterAlloc]
+  addrs := .of_push rfl
   nextMsg := Nat.le_refl _
   atomics := ⟨some, AMap.of_eq rfl rfl⟩
   fp e he := .inl ⟨e, he, .refl e⟩
@@ -578,7 +578,7 @@ theorem _root_.Zig.Mem.NoRevive.afterAlloc (m : Mem) (kind : BlockKind) (size al
 theorem _root_.Zig.FStepIn.kill {m : Mem} {hF : Heap} {b : BlockId} {blk : Block}
     (hb : m.blocks[b]? = some blk) :
     FStepIn hF m { m with blocks := m.blocks.set! b { blk with live := false } } :=
-  FStepIn.setBlock (fun h => ⟨blk, hb, h⟩) fun l _ e _ ⟨blk', h1, h2⟩ => by
+  FStepIn.setBlock_of hb rfl id fun l _ e _ ⟨blk', h1, h2⟩ => by
     rw [e, hb] at h1; cases h1; exact h2
 
 theorem _root_.Zig.Mem.NoRevive.kill (m : Mem) (b : BlockId) (blk : Block) :

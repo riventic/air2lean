@@ -922,14 +922,16 @@ def main(argv=None) -> int:
             return 1 if errors else 0
         output = args.output_dir.resolve()
         output.mkdir(parents=True, exist_ok=True)
-        if args.command == "audit":
-            cache = args.replay_cache or output / "replay-cache.json"
-            if args.replay_cache is None:
-                cache.unlink(missing_ok=True)  # The default cache serves this run only.
-            report = audit(output, not args.no_build, args.shipped, cache)
-        else:
-            report = gate(Path(args.file).resolve(), Path(args.root).resolve(), args.lean_path.resolve(), output,
-                          args.replay_cache and args.replay_cache.resolve())
+        # One toolchain-runtime digest for this command's audits (assumptions.runtime_run).
+        with assumptions.runtime_run():
+            if args.command == "audit":
+                cache = args.replay_cache or output / "replay-cache.json"
+                if args.replay_cache is None:
+                    cache.unlink(missing_ok=True)  # The default cache serves this run only.
+                report = audit(output, not args.no_build, args.shipped, cache)
+            else:
+                report = gate(Path(args.file).resolve(), Path(args.root).resolve(), args.lean_path.resolve(),
+                              output, args.replay_cache and args.replay_cache.resolve())
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         print(f"theorem universe error: {error}", file=sys.stderr)
         return 2

@@ -28,6 +28,7 @@ inductive addDownExit where
 mutual
 
 def addDown (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
+  Zig.tick
   Zig.enterFrame
   let e ← ((do
     match ← ((do
@@ -53,6 +54,8 @@ partial_fixpoint
 
 end
 
+attribute [zig_run] addDown.eq_def
+
 structure addToLocals where
   deriving Inhabited
 
@@ -68,6 +71,8 @@ def addTo (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM addToLocals addToExit).run' (default : addToLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] addTo
 
 structure bumpOptLocals where
   deriving Inhabited
@@ -95,6 +100,8 @@ def bumpOpt (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] bumpOpt
+
 structure copyJobLocals where
   deriving Inhabited
 
@@ -108,6 +115,8 @@ def copyJob (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM copyJobLocals copyJobExit).run' (default : copyJobLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] copyJob
 
 structure delayLocals where
   deriving Inhabited
@@ -125,6 +134,8 @@ def delay (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] delay
+
 structure dueOfLocals where
   deriving Inhabited
 
@@ -137,6 +148,8 @@ def dueOf (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i1)) : Zig.MM dueOfLocals dueOfExit).run' (default : dueOfLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] dueOf
 
 structure maxPtrLocals where
   deriving Inhabited
@@ -184,6 +197,8 @@ def maxPtr (p0 : Option (Zig.Ptr)) (p1 : Option (Zig.Ptr)) : Zig.MemM (Option (Z
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] maxPtr
+
 structure sameLocals where
   deriving Inhabited
 
@@ -197,6 +212,8 @@ def same (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] same
+
 structure setOptLocals where
   deriving Inhabited
 
@@ -209,6 +226,8 @@ def setOpt (p0 : Zig.Ptr) (p1 : Option (BitVec 32)) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM setOptLocals setOptExit).run' (default : setOptLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] setOpt
 
 structure setOptJobLocals where
   deriving Inhabited
@@ -229,6 +248,8 @@ def setOptJob (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] setOptJob
+
 structure sumToLocals where
   acc : Zig.Ptr
   i : BitVec 32
@@ -245,6 +266,7 @@ def sumTo.again6 : sumToExit → Bool
   | _ => false
 
 def sumTo.loop6 (p0 : BitVec 32) (i1 : Zig.Ptr) : Zig.MM sumToLocals sumToExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).i)
     let i9 ← pure (Zig.lt false i8 p0)
@@ -278,6 +300,8 @@ def sumTo (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sumTo.loop6 sumTo
+
 structure swapLocals where
   deriving Inhabited
 
@@ -293,5 +317,7 @@ def swap (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM swapLocals swapExit).run' (default : swapLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] swap
 
 end Pointers

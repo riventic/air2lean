@@ -41,6 +41,8 @@ def copy (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] copy
+
 structure ticksLocals where
   deriving Inhabited
 
@@ -53,6 +55,8 @@ def ticks  : Zig.MemM (BitVec 64) := do
     pure (.ret i0)) : Zig.MM ticksLocals ticksExit).run' (default : ticksLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] ticks
 
 structure elapsedLocals where
   deriving Inhabited
@@ -68,6 +72,8 @@ def elapsed  : Zig.MemM (BitVec 64) := do
     pure (.ret i2)) : Zig.MM elapsedLocals elapsedExit).run' (default : elapsedLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] elapsed
 
 structure fillLocals where
   d : Zig.Ptr
@@ -91,6 +97,8 @@ def fill (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 8) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] fill
+
 structure loadmLocals where
   deriving Inhabited
 
@@ -104,6 +112,8 @@ def loadm (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
     pure (.ret i2)) : Zig.MM loadmLocals loadmExit).run' (default : loadmLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] loadm
 
 structure rand64Locals where
   v : BitVec 64
@@ -127,6 +137,8 @@ def rand64 (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] rand64
+
 structure randomLocals where
   deriving Inhabited
 
@@ -139,5 +151,7 @@ def random  : Zig.MemM (BitVec 64) := do
     pure (.ret i0)) : Zig.MM randomLocals randomExit).run' (default : randomLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] random
 
 end AsmEnv

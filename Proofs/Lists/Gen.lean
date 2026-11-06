@@ -45,6 +45,8 @@ def array_list_Aligned_u32_null_growCapacity (p0 : BitVec 64) : Zig.Result (BitV
   match e with
   | .ret v => pure v
 
+attribute [zig_run] array_list_Aligned_u32_null_growCapacity
+
 structure array_list_Aligned_u32_null_allocatedSliceLocals where
   local1 : array_list_Aligned_u32_null
   deriving Inhabited
@@ -63,6 +65,8 @@ def array_list_Aligned_u32_null_allocatedSlice (p0 : array_list_Aligned_u32_null
     pure (.ret i11)) : Zig.MM array_list_Aligned_u32_null_allocatedSliceLocals array_list_Aligned_u32_null_allocatedSliceExit).run' (default : array_list_Aligned_u32_null_allocatedSliceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] array_list_Aligned_u32_null_allocatedSlice
 
 structure array_list_Aligned_u32_null_ensureTotalCapacityPreciseLocals where
   local19 : Zig.Slice
@@ -178,6 +182,8 @@ def array_list_Aligned_u32_null_ensureTotalCapacityPrecise (p0 : Zig.Ptr) (p1 : 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] array_list_Aligned_u32_null_ensureTotalCapacityPrecise
+
 structure array_list_Aligned_u32_null_ensureTotalCapacityLocals where
   deriving Inhabited
 
@@ -207,6 +213,8 @@ def array_list_Aligned_u32_null_ensureTotalCapacity (p0 : Zig.Ptr) (p1 : Zig.All
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] array_list_Aligned_u32_null_ensureTotalCapacity
+
 structure debug_assertLocals where
   deriving Inhabited
 
@@ -228,6 +236,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] debug_assert
 
 structure array_list_Aligned_u32_null_addOneAssumeCapacityLocals where
   deriving Inhabited
@@ -273,6 +283,8 @@ def array_list_Aligned_u32_null_addOneAssumeCapacity (p0 : Zig.Ptr) : Zig.MemM (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] array_list_Aligned_u32_null_addOneAssumeCapacity
+
 structure array_list_Aligned_u32_null_addOneLocals where
   deriving Inhabited
 
@@ -299,6 +311,8 @@ def array_list_Aligned_u32_null_addOne (p0 : Zig.Ptr) (p1 : Zig.Allocator) : Zig
   match e with
   | .ret v => pure v
 
+attribute [zig_run] array_list_Aligned_u32_null_addOne
+
 structure array_list_Aligned_u32_null_appendLocals where
   deriving Inhabited
 
@@ -319,6 +333,8 @@ def array_list_Aligned_u32_null_append (p0 : Zig.Ptr) (p1 : Zig.Allocator) (p2 :
       pure (.ret (.ok () : Except Zig.ErrName (Unit))))) : Zig.MM array_list_Aligned_u32_null_appendLocals array_list_Aligned_u32_null_appendExit).run' (default : array_list_Aligned_u32_null_appendLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] array_list_Aligned_u32_null_append
 
 structure array_list_Aligned_u32_null_clearAndFreeLocals where
   deriving Inhabited
@@ -341,6 +357,8 @@ def array_list_Aligned_u32_null_clearAndFree (p0 : Zig.Ptr) (p1 : Zig.Allocator)
   match e with
   | .ret => pure ()
 
+attribute [zig_run] array_list_Aligned_u32_null_clearAndFree
+
 structure array_list_Aligned_u32_null_deinitLocals where
   deriving Inhabited
 
@@ -357,6 +375,8 @@ def array_list_Aligned_u32_null_deinit (p0 : Zig.Ptr) (p1 : Zig.Allocator) : Zig
     pure .ret) : Zig.MM array_list_Aligned_u32_null_deinitLocals array_list_Aligned_u32_null_deinitExit).run' (default : array_list_Aligned_u32_null_deinitLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] array_list_Aligned_u32_null_deinit
 
 structure array_list_Aligned_u32_null_toOwnedSliceLocals where
   deriving Inhabited
@@ -432,6 +452,8 @@ def array_list_Aligned_u32_null_toOwnedSlice (p0 : Zig.Ptr) (p1 : Zig.Allocator)
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] array_list_Aligned_u32_null_toOwnedSlice
+
 structure allocatorWordLocals where
   c : Zig.Ptr
   deriving Inhabited
@@ -452,6 +474,8 @@ def allocatorWord (p0 : Zig.Allocator) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] allocatorWord
+
 structure dupeLocals where
   deriving Inhabited
 
@@ -466,6 +490,8 @@ def dupe (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (Z
     pure (.ret i3)) : Zig.MM dupeLocals dupeExit).run' (default : dupeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] dupe
 
 structure mem_Allocator_dupeSentinel__anon_294b7c9823bdLocals where
   deriving Inhabited
@@ -572,6 +598,8 @@ def mem_Allocator_dupeSentinel__anon_294b7c9823bd (p0 : Zig.Allocator) (p1 : Zig
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_dupeSentinel__anon_294b7c9823bd
+
 structure mem_Allocator_dupeZ__anon_ad013b83a643Locals where
   deriving Inhabited
 
@@ -585,6 +613,8 @@ def mem_Allocator_dupeZ__anon_ad013b83a643 (p0 : Zig.Allocator) (p1 : Zig.Slice)
     pure (.ret i2)) : Zig.MM mem_Allocator_dupeZ__anon_ad013b83a643Locals mem_Allocator_dupeZ__anon_ad013b83a643Exit).run' (default : mem_Allocator_dupeZ__anon_ad013b83a643Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Allocator_dupeZ__anon_ad013b83a643
 
 structure dupeZLenLocals where
   n : BitVec 64
@@ -602,6 +632,7 @@ def dupeZLen.again11 : dupeZLenExit → Bool
   | _ => false
 
 def dupeZLen.loop11 (i3 : Zig.Slice) : Zig.MM dupeZLenLocals dupeZLenExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i13 ← pure ((← get).n)
     let i14 ← pure i3.len
@@ -650,6 +681,8 @@ def dupeZLen (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrNam
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] dupeZLen.loop11 dupeZLen
+
 structure evensLocals where
   list : Zig.Ptr
   local4 : BitVec 64
@@ -667,6 +700,7 @@ def evens.again8 : evensExit → Bool
   | _ => false
 
 def evens.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i2 : Zig.Ptr) (i6 : BitVec 64) : Zig.MM evensLocals evensExit := do
+  Zig.callM Zig.tick
   let i9 ← pure ((← get).local4)
   match ← ((do
     let i11 ← pure (i9)
@@ -727,6 +761,8 @@ def evens (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] evens.loop8 evens
+
 structure freeAllLocals where
   p : Option (Zig.Ptr)
   deriving Inhabited
@@ -742,6 +778,7 @@ def freeAll.again5 : freeAllExit → Bool
   | _ => false
 
 def freeAll.loop5 (p0 : Zig.Allocator) : Zig.MM freeAllLocals freeAllExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).p)
     let i8 ← pure ((i7).isSome)
@@ -771,6 +808,8 @@ def freeAll (p0 : Zig.Allocator) (p1 : Option (Zig.Ptr)) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] freeAll.loop5 freeAll
+
 structure pushLocals where
   deriving Inhabited
 
@@ -797,6 +836,8 @@ def push (p0 : Zig.Allocator) (p1 : Option (Zig.Ptr)) (p2 : BitVec 32) : Zig.Mem
   match e with
   | .ret v => pure v
 
+attribute [zig_run] push
+
 structure reverseLocals where
   prev : Option (Zig.Ptr)
   cur : Option (Zig.Ptr)
@@ -813,6 +854,7 @@ def reverse.again6 : reverseExit → Bool
   | _ => false
 
 def reverse.loop6  : Zig.MM reverseLocals reverseExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).cur)
     let i9 ← pure ((i8).isSome)
@@ -847,6 +889,8 @@ def reverse (p0 : Option (Zig.Ptr)) : Zig.MemM (Option (Zig.Ptr)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] reverse.loop6 reverse
+
 structure sumLocals where
   s : BitVec 64
   p : Option (Zig.Ptr)
@@ -863,6 +907,7 @@ def sum.again6 : sumExit → Bool
   | _ => false
 
 def sum.loop6  : Zig.MM sumLocals sumExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).p)
     let i9 ← pure ((i8).isSome)
@@ -899,6 +944,8 @@ def sum (p0 : Option (Zig.Ptr)) : Zig.MemM (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sum.loop6 sum
+
 structure listSumLocals where
   head : Option (Zig.Ptr)
   local4 : BitVec 64
@@ -916,6 +963,7 @@ def listSum.again8 : listSumExit → Bool
   | _ => false
 
 def listSum.loop8 (p0 : Zig.Allocator) (p1 : Zig.Slice) (i6 : BitVec 64) : Zig.MM listSumLocals listSumExit := do
+  Zig.callM Zig.tick
   let i9 ← pure ((← get).local4)
   match ← ((do
     let i11 ← pure (i9)
@@ -984,6 +1032,8 @@ def listSum (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] listSum.loop8 listSum
+
 structure sumRangeLocals where
   local8 : BitVec 64
   s : BitVec 64
@@ -1008,6 +1058,7 @@ def sumRange.again12 : sumRangeExit → Bool
   | _ => false
 
 def sumRange.loop33 (i3 : Zig.Slice) (i31 : BitVec 64) : Zig.MM sumRangeLocals sumRangeExit := do
+  Zig.callM Zig.tick
   let i34 ← pure ((← get).local29)
   match ← ((do
     let i36 ← pure (i34)
@@ -1029,6 +1080,7 @@ def sumRange.loop33 (i3 : Zig.Slice) (i31 : BitVec 64) : Zig.MM sumRangeLocals s
   | e => pure e
 
 def sumRange.loop12 (i3 : Zig.Slice) (i10 : BitVec 64) : Zig.MM sumRangeLocals sumRangeExit := do
+  Zig.callM Zig.tick
   let i13 ← pure ((← get).local8)
   match ← ((do
     let i15 ← pure (i13)
@@ -1078,5 +1130,7 @@ def sumRange (p0 : Zig.Allocator) (p1 : BitVec 64) : Zig.MemM (Except Zig.ErrNam
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] sumRange.loop33 sumRange.loop12 sumRange
 
 end Lists

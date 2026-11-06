@@ -95,17 +95,18 @@ def retry_while_busy(name, attempt, busy):
         time.sleep(120)
 
 
-def guarded(name, argv, env=None, timeout=18000, tools=()):
+def guarded(name, argv, env=None, timeout=18000, tools=(), rss_mib=6144):
     """argv under scripts/build-guard.py (lock AIR2LEAN_BUILD_LOCK), retried while the lock is busy;
-    its RSS limit is AIR2LEAN_REGEN_RSS_MIB (default 11000 MiB, as the full build's; the guard
-    reserves that much of the machine's build memory budget while the step runs).
-    Returns (report path, log path)."""
+    its RSS limit is AIR2LEAN_REGEN_RSS_MIB, else `rss_mib` (the guard reserves that much of the
+    machine's build memory budget while the step runs). The default 6144 MiB is the largest
+    measured peak of the fixed steps, `claims` building its modules in a cold worktree at 4131 MiB,
+    plus 30%, in whole GiB. Returns (report path, log path)."""
     WORK.mkdir(parents=True, exist_ok=True)
     report, logfile = WORK / (name + '.guard.json'), WORK / (name + '.guard.log')
     wait = os.environ.get('AIR2LEAN_LOCK_WAIT', '21600')
     code = retry_while_busy(name, lambda n: run(
         [PY, 'scripts/build-guard.py', '--cwd', ROOT, '--lock-wait', wait, '--timeout', timeout,
-         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', '11000'), '--log-bytes', 16 << 20,
+         '--rss-mib', os.environ.get('AIR2LEAN_REGEN_RSS_MIB', rss_mib), '--log-bytes', 16 << 20,
          '--report', report, '--log', logfile,
          *[arg for tool in tools for arg in ('--tool', str(tool))], '--', *argv],
         env=env, check=False).returncode, lambda code: code == LOCK_BUSY)
@@ -143,6 +144,13 @@ def step_gen(check):
     if check:
         raise Failed('generated modules are stale; regenerate with: scripts/gen-integrity.py write')
     run([PY, '-B', 'scripts/gen-integrity.py', 'write'])
+
+
+def step_invgen(check):
+    """Generated loop invariants (`Inv.lean`) from the translated modules `gen` wrote: always a
+    generator run, which also sees what the records do not hash (docs/invariant-synthesis.md)."""
+    guarded('invgen', [PY, '-B', 'scripts/invgen.py', 'check' if check else 'write'], env=lake_env(),
+            timeout=3600)
 
 
 def simple(check_argv, write_argv):
@@ -183,25 +191,35 @@ def step_coverage(check):
 def step_pins(check):
     """Input pins of the L04 try-pointers integration (check-artifacts.py): its retained
     translation and the exporter it was taken with. Outputs are pinned, not translator sources:
-    check.sh and gen-integrity.py re-translate and compare the output itself."""
+    check.sh and gen-integrity.py re-translate and compare the output itself. Also the retained
+    translations in the `artifacts` inventories of fixture manifests their check scripts compare:
+    `gen`/`exports` regenerate those translations, so their hashes follow."""
     digest = lambda rel: cas.sha256_file(ROOT / rel)
-    pins = {'tests/roadmap/try-pointers/emitter-integration.json': {
-                'format': 'l04-emitter-integration-inputs-v2',
-                'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
-            'tests/roadmap/try-pointers/integration-qualification.json': {
-                'current_exporter_sha256': digest('zig-patch/air-json/json.zig')}}
-    # Fields a pin file no longer has (the v1 emitter pin) are dropped, so a format change is a regen.
-    obsolete = {'tests/roadmap/try-pointers/emitter-integration.json': ['current_emitter_sha256']}
-    for rel, fields in pins.items():
+
+    def sync(rel, fields, section=None, drop=()):
         data = json.loads((ROOT / rel).read_text())
-        if all(data.get(k) == v for k, v in fields.items()) and not any(k in data for k in obsolete.get(rel, [])):
-            continue
+        target = data if section is None else data[section]
+        if all(target.get(k) == v for k, v in fields.items()) and not any(k in target for k in drop):
+            return
         if check:
             raise Failed(rel + ' pins are stale')
-        for k in obsolete.get(rel, []):
-            data.pop(k, None)
-        data.update(fields)
+        for k in drop:
+            target.pop(k, None)
+        target.update(fields)
         write_if_changed(rel, (json.dumps(data, indent=2) + '\n').encode())
+
+    # The v1 emitter pin is dropped, so a format change is a regen.
+    sync('tests/roadmap/try-pointers/emitter-integration.json',
+         {'format': 'l04-emitter-integration-inputs-v2',
+          'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
+         drop=['current_emitter_sha256'])
+    sync('tests/roadmap/try-pointers/integration-qualification.json',
+         {'current_exporter_sha256': digest('zig-patch/air-json/json.zig')})
+    retained = {'tests/roadmap/try-pointers/aliases/provenance.json': ['TryAliases/Gen.lean'],
+                'tests/roadmap/packed-fields/compiler-provenance.json':
+                    ['PackedFieldsFresh/Gen.lean', 'PackedFieldsX86/Gen.lean']}
+    for rel, gens in retained.items():
+        sync(rel, {g: digest(Path(rel).parent / g) for g in gens}, section='artifacts')
 
 
 def exported_fixtures():
@@ -318,42 +336,51 @@ def run_is_current(inv_mod, run_record):
             and all(inv_mod.module_evidence_matches(ROOT, run_record, mod, build.swaps) for mod in built))
 
 
+def planned_run_is_current(inv_mod, run_record, planned):
+    """A recorded run is kept only for the same build the list plans now, with current hashes."""
+    try:
+        build = inv_mod.parse_build_command(ROOT, run_record.get('command'), lake=inv_mod.producer_path(run_record))
+    except inv_mod.Error:
+        return False
+    return (build.swaps == planned['swaps'] and set(planned['modules']) <= set(run_record.get('modules', []))
+            and run_is_current(inv_mod, run_record))
+
+
 def step_inventory(check):
-    """Re-record every theorem-inventory run whose recorded hashes no longer match, then write."""
+    """The theorem inventory (assurance/theorem-inventory.json, docs/theorem-inventory.md): whole-tree
+    generated files, never committed (assurance/generated.json). The runs are planned from the
+    committed list (theorem-inventory.py `plan`); a run whose recorded hashes still match is kept,
+    the others are rebuilt (guarded) and recorded, then the document is rendered and checked."""
     inv_mod = load('theorem_inventory', 'theorem-inventory.py')
-    inventory = inv_mod.load(ROOT)
-    stale = [rid for rid, r in sorted(inventory.get('runs', {}).items()) if not run_is_current(inv_mod, r)]
     if check:
-        if stale:
-            raise Failed('stale theorem-inventory runs: ' + ', '.join(stale))
         run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
         return
-    # Reject unsupported producers/commands before dispatching any stale run, even if its
-    # hashes are stale for another reason. Never replay arbitrary historical argv.
-    plans = {}
-    for rid in stale:
-        try:
-            record = inventory['runs'][rid]
-            plans[rid] = inv_mod.parse_build_command(ROOT, record.get('command'), lake=inv_mod.producer_path(record))
-        except inv_mod.Error as error:
-            raise Failed(f'theorem-inventory run {rid}: refusing replay: {error}') from error
+    listed = inv_mod.load_list(ROOT)
+    try:
+        previous = inv_mod.load(ROOT).get('runs', {})
+    except (inv_mod.Error, OSError, ValueError):
+        previous = {}  # missing, or generated from another list: every run is rebuilt
+    planned = inv_mod.plan(ROOT, listed)
+    kept = {rid: record for rid, record in previous.items()
+            if rid in planned and planned_run_is_current(inv_mod, record, planned[rid])}
+    stale = [rid for rid in planned if rid not in kept]
+    inv_mod.write_inventory(ROOT, {**listed, 'runs': kept})
     try:
         lake = inv_mod.selected_lake(ROOT) if stale else None
     except inv_mod.Error as error:
-        raise Failed(f'theorem-inventory: cannot select Lake for renewal: {error}') from error
+        raise Failed(f'theorem-inventory: cannot select Lake for the runs: {error}') from error
     for rid in stale:
-        record = inventory['runs'][rid]
-        log('re-recording theorem-inventory run %s' % rid)
-        plan = plans[rid]
-        report, logfile = guarded('inventory-' + rid, plan.renewal(lake, python=PY), env=lake_env(),
-                                  tools=[lake] if plan.kind == 'swap' else [])
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', record['zig'],
-             '--target', record['target'], '--guard-report', report, '--guard-log', logfile])
-    if not ok([PY, '-B', 'scripts/theorem-inventory.py', 'check']):
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'write'])
-        run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
-
-
+        log('recording theorem-inventory run %s' % rid)
+        command = inv_mod.plan_command(planned[rid], lake, PY)
+        # A run rebuilds its proof set cold, up to the whole tree: the full build's per-process
+        # limit (scripts/full-build.sh), since one-thread Proofs.Sync builds peak 5.3 GB and up to
+        # 6.9 GB within accepted variance (assurance/perf-budgets.json, `sync`).
+        report, logfile = guarded('inventory-' + rid, command.renewal(lake, python=PY), env=lake_env(),
+                                  tools=[lake] if command.kind == 'swap' else [], rss_mib=11000)
+        run([PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', rid, '--zig', planned[rid]['zig'],
+             '--target', planned[rid]['target'], '--guard-report', report, '--guard-log', logfile])
+    run([PY, '-B', 'scripts/theorem-inventory.py', 'write'])
+    run([PY, '-B', 'scripts/theorem-inventory.py', 'check'])
 
 
 def provenance_current():
@@ -401,6 +428,7 @@ STEPS = [
      simple([PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'check'],
             [PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'write'])),
     ('gen', 'pr', ['Gen.lean modules (scripts/gen-integrity.py list)'], step_gen),
+    ('invgen', 'pr', ['Inv.lean generated invariants (scripts/invgen.py TARGETS)'], step_invgen),
     ('ci-matrix', 'pr', ['.github/workflows/ci.yml (generated matrix regions)'],
      simple([PY, 'scripts/ci-matrix.py', 'check'], [PY, 'scripts/ci-matrix.py', 'write'])),
     ('trust-report', 'pr', ['docs/trust-report.md'],
@@ -427,13 +455,13 @@ STEPS = [
     ('assurance-statements', 'pr', ['tests/roadmap/coverage-report/statement-binding.json'], step_assurance_statements),
     ('audit-exposure', 'pr', ['tests/roadmap/architecture-audit/claims/exposure-report.json'],
      step_audit_exposure),
-    ('inventory', 'pr', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
+    ('inventory', 'tree', ['assurance/theorem-inventory.json', 'docs/theorem-inventory.md'], step_inventory),
     ('provenance', 'tree', ['assurance/provenance-gap/{manifest,pins}.json, receipt/',
                             'assurance/provenance/{manifest,pins}.json, receipt/'], None),
 ]
 # The `tree` steps are exactly the generators of assurance/generated.json (one source of truth):
 # whole-tree files are never committed; CI produces them and publishes them on `generated`.
-TREE_GROUPS = {'coverage': ['coverage'], 'premises': ['premise-index'],
+TREE_GROUPS = {'coverage': ['coverage'], 'premises': ['premise-index'], 'inventory': ['theorem-inventory'],
                'provenance': ['provenance', 'provenance-gap']}
 GENERATED = load('generated', 'generated.py')
 assert sorted(g for groups in TREE_GROUPS.values() for g in groups) == sorted(

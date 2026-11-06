@@ -294,6 +294,81 @@ and byte value. Read providers can use their ordinary array facts after this nor
   simp only [memsetBytes, Enc.encode_byte]
   exact Region.flatten_replicate_single _ _
 
+/-! ### Reads of bytes (the arithmetic normalization of a provider's `Enc.decode (bs.extract lo hi)`)
+
+A read normalizes the bytes it reads: through a store that wrote other bytes, a memset's item, a
+replicated byte, the prefix that a reallocation kept; and then decodes them. -/
+
+/-- Bytes that a write did not touch are the old ones. -/
+@[fsym_arith] theorem _root_.Zig.extract_writeBytes_other {a cs : Array Byte} {o lo hi : Nat}
+    (h : o + cs.size ≤ a.size) (hlo : lo ≤ hi) (hhi : hi ≤ a.size)
+    (hd : o + cs.size ≤ lo ∨ hi ≤ o) :
+    (writeBytes a o cs).extract lo hi = a.extract lo hi := by
+  have := extract_writeBytes_disjoint a o cs lo (hi - lo) h (by omega) (by omega)
+  rwa [Nat.add_sub_cancel' hlo] at this
+
+/-- An item of a defined-value memset is the value's encoding. -/
+@[fsym_arith] theorem _root_.Zig.extract_memsetBytes_item {T : Type} [Enc T] [LawfulEnc T]
+    {count lo hi : Nat} {v : T} (hpos : 0 < Enc.size T) (hitem : lo % Enc.size T = 0)
+    (hhi : hi = lo + Enc.size T) (hfit : hi ≤ count * Enc.size T) :
+    (memsetBytes count (some v)).extract lo hi = Enc.encode v := by
+  have hw := LawfulEnc.size_encode v
+  have hj : lo / Enc.size T < count := (Nat.div_lt_iff_lt_mul hpos).mpr (by omega)
+  have hk : Enc.size T * (lo / Enc.size T) = lo := by
+    have := Nat.mod_add_div lo (Enc.size T); omega
+  have he := Array.extract_flatten_replicate (Enc.encode v) count (lo / Enc.size T) hj
+  subst hhi
+  simpa only [memsetBytes, hw, hk] using he
+
+/-- Bytes of a replicated byte within its extent. -/
+@[fsym_arith] theorem _root_.Zig.extract_replicate_le {α : Type} {a : α} {n i j : Nat} (h : j ≤ n) :
+    (Array.replicate n a).extract i j = Array.replicate (j - i) a := by
+  simp [Array.extract_replicate, Nat.min_eq_left h]
+
+/-- One byte decodes to itself (as the read of a replicated byte leaves it, `replicate 1`: a
+singleton `#[b]` would not match `extract_replicate_le` when a one-byte memset is read). -/
+@[fsym_arith] theorem _root_.Zig.decode_byte (v : BitVec 8) :
+    (Enc.decode (Array.replicate 1 (Byte.int v)) : Result (BitVec 8)) = pure v := by
+  rw [Array.replicate_one, ← Enc.encode_byte]; exact LawfulEnc.decode_encode v
+
+attribute [fsym_arith] LawfulEnc.decode_encode
+
+/-- Bytes within a kept prefix (`keepsPrefix old new`, a reallocation's) are the old ones. -/
+theorem _root_.Zig.extract_of_keepsPrefix {old new : Array Byte} {lo hi : Nat}
+    (hk : keepsPrefix old new) (h1 : hi ≤ old.size) (h2 : hi ≤ new.size) :
+    new.extract lo hi = old.extract lo hi := by
+  unfold keepsPrefix at hk
+  have := congrArg (fun a => Array.extract a lo hi) hk
+  simp only [Array.extract_extract, Nat.zero_add, Nat.min_eq_left h1, Nat.min_eq_left h2] at this
+  exact this
+
+open Lean Meta Simp in
+/-- A read `x.extract lo hi` of bytes `x` that a fact `keepsPrefix old x` of the context relates to
+`old` (a reallocation's kept bytes): `old.extract lo hi`, when `hi` is within both (by the
+discharger). -/
+simproc [fsym_arith] keptExtract (Array.extract _ _ _) := fun e => do
+  unless e.isAppOfArity ``Array.extract 4 do return .continue
+  let x := e.getArg! 1
+  unless x.isFVar do return .continue
+  let (lo, hi) := (e.getArg! 2, e.getArg! 3)
+  for d in ← getLCtx do
+    if d.isImplementationDetail || !d.type.isAppOfArity ``Zig.keepsPrefix 2 then continue
+    let ty ← instantiateMVars d.type
+    unless ty.isAppOfArity ``Zig.keepsPrefix 2 && ty.appArg! == x do continue
+    let old := ty.appFn!.appArg!
+    -- (no cycle: `old` mentions `x`, or a fact `keepsPrefix x old` leads back; a reallocation's
+    -- facts form a chain, old to new)
+    if old.containsFVar x.fvarId! then continue
+    if old.isFVar && (← getLCtx).any fun d' => d'.type.isAppOfArity ``Zig.keepsPrefix 2 &&
+        d'.type.appFn!.appArg! == x && d'.type.appArg! == old then continue
+    let some p1 ← (← getMethods).discharge? (← mkAppM ``LE.le #[hi, ← mkAppM ``Array.size #[old]])
+      | continue
+    let some p2 ← (← getMethods).discharge? (← mkAppM ``LE.le #[hi, ← mkAppM ``Array.size #[x]])
+      | continue
+    let pf ← mkAppOptM ``Zig.extract_of_keepsPrefix #[old, x, lo, hi, d.toExpr, p1, p2]
+    return .visit { expr := ← mkAppM ``Array.extract #[old, lo, hi], proof? := pf }
+  return .continue
+
 /-- Set a whole region to `n` copies of a lawful encoded value, or to undefined bytes. The
 native byte rule handles zero-sized encodings and empty ranges as well. -/
 @[fsym] theorem memsetRegion {T : Type} [Enc T] [LawfulEnc T] {n : BitVec 64}

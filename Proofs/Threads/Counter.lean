@@ -1,5 +1,6 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import Proofs.Threads.Gen
+import ZigLean.Conc.Base.Lock
 import ZigLean.Conc.Lemmas
 import ZigLean.Mem.Witness
 
@@ -967,6 +968,13 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
       if bump.again4 r.1 then bumpInv n u p r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : bumpLocals) => 0) s)
       else bumpPost n u p r G' m' d') G m d := by
+  unfold bump.loop4
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
+  -- the body's step tick: the invariant does not read the step count
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : bumpInv n u p s G { m with ticks := m.ticks + 1 } d := h
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
   obtain ⟨hcur, hle, hi, he⟩ := h
   have hg : (Conc.upd G u (.bump p s.i.toNat false)) u = .bump p s.i.toNat false :=
     Conc.upd_self _ _ _
@@ -975,8 +983,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
   have hlt₀ : m.current < m.threads.size := by rw [hcur]; exact (inv_kid n hi hg).2.1
   have hcs₀ : m.clocks.size = m.threads.size := by
     obtain ⟨_, _, _, _, h1, h2, _⟩ := hi; rw [h1, h2]
-  unfold bump.loop4
-  simp only [StateT.run_bind, StateT.run_get, pure_bind, bind_assoc]
   refine WP.bind (WP.callMC_ptrProject (proj_ctx n hi he hg (k := 8) (by decide)) ?_)
   dsimp only
   refine WP.bind (WP.liftM (fun e h => (load_n_noErr n hi he hg hcur e h).elim)
@@ -1033,18 +1039,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     exact ⟨rfl, hcur, heq ▸ hi₁, heq ▸ he₁⟩
 
 /-! ## `main`'s steps -/
-
-theorem fork_eq {m m' : Mem} {c : ThreadId}
-    (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m' = { m with
-      clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
-        (VClock.bump (m.clocks[m.current]!) m.current),
-      threads := m.threads.push { spawner := m.current, joined := false } } := by
-  simp [Thread.fork, Thread.forkWith, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-    StateT.get, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
-    ExceptT.bind, ExceptT.bindCont, Option.bind] at h
-  obtain ⟨rfl, rfl⟩ := h
-  exact ⟨rfl, rfl⟩
 
 theorem total_succ (G : ThreadId → Gh) (s : Nat) :
     total G (s + 1) = total G s + (G (s + 1)).count := by
@@ -1487,6 +1481,10 @@ structure PreA (m : Mem) : Prop where
   atm : m.atomics = #[]
   fp : ∀ e ∈ m.footprint, VClock.le e.clock (m.clocks[0]!) = true
 
+/-- A step tick keeps `PreA`: it reads no step count. -/
+theorem PreA.ticked {m : Mem} (h : PreA m) : PreA { m with ticks := m.ticks + 1 } :=
+  ⟨h.cur, h.th, h.cs, h.atm, h.fp⟩
+
 theorem preA_recordAt {m : Mem} {b o l : Nat} {k : AccessKind} (h : PreA m) :
     PreA (m.recordAt b o l k) := by
   obtain ⟨hc, ht, hs, ha, hf⟩ := h
@@ -1657,9 +1655,14 @@ theorem loop9_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) (
         (d' < d ∨ d' = d ∧ (fun (x : parallelCounterLocals) => 4 - x.local6.toNat) r.2 <
           (fun (x : parallelCounterLocals) => 4 - x.local6.toNat) s)
       else post9 n r G' m' d') G m d := by
-  obtain ⟨rfl, hle, hhd, hpa, hpb, hcnt, hsl⟩ := h
   unfold parallelCounter.loop9
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : inv9 n s G { m with ticks := m.ticks + 1 } d := by
+    obtain ⟨h1, h2, h3, hpa, h5⟩ := h; exact ⟨h1, h2, h3, hpa.ticked, h5⟩
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
+  obtain ⟨rfl, hle, hhd, hpa, hpb, hcnt, hsl⟩ := h
   split
   · rename_i hlt
     have hlt' : s.local6.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
@@ -1872,9 +1875,13 @@ theorem loop32_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
         (d' < d ∨ d' = d ∧ (fun (_ : parallelCounterLocals) => 0) r.2 <
           (fun (_ : parallelCounterLocals) => 0) s)
       else post32 n r G' m' d') G m d := by
-  obtain ⟨hstarted, hle, hcur, hi, he⟩ := h
   unfold parallelCounter.loop32
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : inv32 n s G { m with ticks := m.ticks + 1 } d := h
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
+  obtain ⟨hstarted, hle, hcur, hi, he⟩ := h
   split
   · rename_i hlt
     have hlt' : s.local29.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
@@ -1996,11 +2003,15 @@ theorem loop88_body (s : parallelCounterLocals) (G : ThreadId → Gh) (m : Mem) 
         (d' < d ∨ d' = d ∧ (fun (_ : parallelCounterLocals) => 0) r.2 <
           (fun (_ : parallelCounterLocals) => 0) s)
       else post88 n r G' m' d') G m d := by
+  unfold parallelCounter.loop88
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : inv88 n s G { m with ticks := m.ticks + 1 } d := h
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
   obtain ⟨hle, hcur, J, hJl, hJle, hi, he⟩ := h
   have hnd : ∀ q, (Conc.upd G 0 (.main 4 J)) m.current ≠ .bump q n.toNat true := by
     rw [hcur, Conc.upd_self]; intro q h; cases h
-  unfold parallelCounter.loop88
-  simp only [StateT.run_bind, StateT.run_get, pure_bind]
   split
   · rename_i hlt
     have hlt' : s.local85.toNat < 4 := by simpa [lt, BitVec.ult] using hlt
@@ -2151,7 +2162,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- The three blocks.
   have hpb3 : PreB m₃ := by
     subst hm₁ hm₂ hm₃
-    refine ⟨by blkat_alloc, by blkat_alloc, by blkat_alloc, fun e he => ?_⟩
+    refine ⟨((BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _).afterAlloc _ _ _,
+      (BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _, BlkAt.alloc _ _ _ (by decide),
+      fun e he => ?_⟩
     simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he
   simp only [e0, e1, e2]
   refine WP.bind ?_
@@ -2341,11 +2354,14 @@ theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {σ : P
     (main_spec n σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, `parallelCounter 1` returns 4 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops; the loops over the 4 threads run 5 times). -/
 theorem parallelCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 9 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 /-! ## Non-vacuity witnesses -/
 

@@ -97,6 +97,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] debug_assert
+
 structure math_isPowerOfTwo__anon_38853e1fe316Locals where
   deriving Inhabited
 
@@ -115,6 +117,8 @@ def math_isPowerOfTwo__anon_38853e1fe316 (p0 : BitVec 64) : Zig.Result (Bool) :=
     pure (.ret i7)) : Zig.M math_isPowerOfTwo__anon_38853e1fe316Locals math_isPowerOfTwo__anon_38853e1fe316Exit).run' (default : math_isPowerOfTwo__anon_38853e1fe316Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] math_isPowerOfTwo__anon_38853e1fe316
 
 structure math_mul__anon_44faaf286c79Locals where
   deriving Inhabited
@@ -142,6 +146,8 @@ def math_mul__anon_44faaf286c79 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] math_mul__anon_44faaf286c79
+
 structure mem_Alignment_fromByteUnitsLocals where
   deriving Inhabited
 
@@ -158,6 +164,8 @@ def mem_Alignment_fromByteUnits (p0 : BitVec 64) : Zig.Result (mem_Alignment) :=
     pure (.ret i5)) : Zig.M mem_Alignment_fromByteUnitsLocals mem_Alignment_fromByteUnitsExit).run' (default : mem_Alignment_fromByteUnitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Alignment_fromByteUnits
 
 structure mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals where
   deriving Inhabited
@@ -209,6 +217,8 @@ def mem_Allocator_allocBytesAligned__anon_0618802aa46a [Ext] (p0 : mem_Allocator
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_allocBytesAligned__anon_0618802aa46a
+
 structure mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals where
   deriving Inhabited
 
@@ -234,6 +244,8 @@ def mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 [Ext] (p0 : mem_A
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43
 
 structure mem_Allocator_allocWithOptionsRetAddr__anon_e6e9421071c7Locals where
   deriving Inhabited
@@ -309,6 +321,8 @@ def mem_Allocator_allocWithOptionsRetAddr__anon_e6e9421071c7 [Ext] (p0 : mem_All
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_allocWithOptionsRetAddr__anon_e6e9421071c7
+
 structure mem_Allocator_allocSentinel__anon_72739710ba98Locals where
   local4 : Zig.Ptr
   deriving Inhabited
@@ -330,6 +344,8 @@ def mem_Allocator_allocSentinel__anon_72739710ba98 [Ext] (p0 : mem_Allocator) (p
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mem_Allocator_allocSentinel__anon_72739710ba98
+
 structure mem_absorbSentinel__anon_2445b0d558b2Locals where
   local1 : Zig.Slice
   deriving Inhabited
@@ -349,6 +365,8 @@ def mem_absorbSentinel__anon_2445b0d558b2 (p0 : Zig.Slice) : Zig.MemM (Zig.Slice
     pure (.ret i11)) : Zig.MM mem_absorbSentinel__anon_2445b0d558b2Locals mem_absorbSentinel__anon_2445b0d558b2Exit).run' (default : mem_absorbSentinel__anon_2445b0d558b2Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_absorbSentinel__anon_2445b0d558b2
 
 structure mem_Allocator_free__anon_0ba161b45e0aLocals where
   deriving Inhabited
@@ -390,6 +408,8 @@ def mem_Allocator_free__anon_0ba161b45e0a [Ext] (p0 : mem_Allocator) (p1 : Zig.S
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_free__anon_0ba161b45e0a
+
 structure mem_absorbSentinel__anon_7342b53a30edLocals where
   deriving Inhabited
 
@@ -401,6 +421,8 @@ def mem_absorbSentinel__anon_7342b53a30ed (p0 : Zig.Slice) : Zig.MemM (Zig.Slice
     pure (.ret p0)) : Zig.MM mem_absorbSentinel__anon_7342b53a30edLocals mem_absorbSentinel__anon_7342b53a30edExit).run' (default : mem_absorbSentinel__anon_7342b53a30edLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_absorbSentinel__anon_7342b53a30ed
 
 structure mem_Allocator_free__anon_1e60e7ef40f5Locals where
   deriving Inhabited
@@ -441,6 +463,8 @@ def mem_Allocator_free__anon_1e60e7ef40f5 [Ext] (p0 : mem_Allocator) (p1 : Zig.S
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_free__anon_1e60e7ef40f5
 
 structure mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals where
   local20 : Zig.Ptr
@@ -629,6 +653,8 @@ def mem_Allocator_reallocAdvanced__anon_0df1ef68623e [Ext] (p0 : mem_Allocator) 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_reallocAdvanced__anon_0df1ef68623e
+
 structure mem_Allocator_realloc__anon_af0c43114565Locals where
   deriving Inhabited
 
@@ -642,6 +668,8 @@ def mem_Allocator_realloc__anon_af0c43114565 [Ext] (p0 : mem_Allocator) (p1 : Zi
     pure (.ret i4)) : Zig.CM Tgt mem_Allocator_realloc__anon_af0c43114565Locals mem_Allocator_realloc__anon_af0c43114565Exit).run' (default : mem_Allocator_realloc__anon_af0c43114565Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Allocator_realloc__anon_af0c43114565
 
 structure appendLocals where
   local3 : Zig.Slice
@@ -729,6 +757,8 @@ def append [Ext] (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 8) : Zig.Con
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] append
+
 structure makeLocals where
   deriving Inhabited
 
@@ -743,6 +773,8 @@ def make [Ext] (p0 : mem_Allocator) (p1 : BitVec 64) : Zig.ConcM Tgt (Except Zig
   match e with
   | .ret v => pure v
 
+attribute [zig_run] make
+
 structure releaseLocals where
   deriving Inhabited
 
@@ -755,6 +787,8 @@ def release [Ext] (p0 : mem_Allocator) (p1 : Zig.Slice) : Zig.ConcM Tgt (Unit) :
     pure .ret) : Zig.CM Tgt releaseLocals releaseExit).run' (default : releaseLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] release
 
 structure resizeLocals where
   local3 : Zig.Slice
@@ -824,8 +858,12 @@ def resize [Ext] (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) : Zig.Co
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] resize
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch [Ext] : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end Interfaces.Sentinel

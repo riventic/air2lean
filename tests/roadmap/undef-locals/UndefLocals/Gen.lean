@@ -47,6 +47,8 @@ def branchOut (p0 : Bool) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] branchOut
+
 structure condWriteLocals where
   x : Zig.Bytes (BitVec 32)
   deriving Inhabited
@@ -73,6 +75,8 @@ def condWrite (p0 : Bool) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] condWrite
+
 structure mkLocals where
   s : Zig.Bytes (Pair)
   deriving Inhabited
@@ -89,6 +93,8 @@ def mk  : Zig.Result (Zig.Bytes (Pair)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mk
+
 structure copyALocals where
   deriving Inhabited
 
@@ -103,6 +109,8 @@ def copyA  : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] copyA
+
 structure copyBLocals where
   deriving Inhabited
 
@@ -116,6 +124,8 @@ def copyB  : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M copyBLocals copyBExit).run' (default : copyBLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] copyB
 
 structure fieldALocals where
   s : Zig.Bytes (Pair)
@@ -133,6 +143,8 @@ def fieldA  : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] fieldA
+
 structure fieldBLocals where
   s : Zig.Bytes (Pair)
   deriving Inhabited
@@ -148,6 +160,8 @@ def fieldB  : Zig.Result (BitVec 32) := do
     pure (.ret i5)) : Zig.M fieldBLocals fieldBExit).run' { (default : fieldBLocals) with s := Zig.Bytes.undef (Pair) }
   match e with
   | .ret v => pure v
+
+attribute [zig_run] fieldB
 
 structure wholeReadLocals where
   x : Zig.Bytes (BitVec 32)
@@ -165,6 +179,8 @@ def wholeRead  : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] wholeRead
+
 structure writtenReadLocals where
   x : BitVec 32
   deriving Inhabited
@@ -181,5 +197,7 @@ def writtenRead  : Zig.Result (BitVec 32) := do
     pure (.ret i4)) : Zig.M writtenReadLocals writtenReadExit).run' (default : writtenReadLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] writtenRead
 
 end UndefLocals
