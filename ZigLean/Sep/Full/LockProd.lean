@@ -18,7 +18,13 @@ each lock's code then need only their own lock's `Fits`; the other lock rides in
 * `FLock.Facts`: the lock invariant without the parts (`FOwned`), at a given free resource. In the
   other lock's view these are what the product keeps of a lock (`Pair.U`), with the holders'
   ownership of their resources.
-* `Pair.swap`: `A`'s invariant and `B`'s facts give `B`'s invariant and `A`'s facts.
+* `Pair.swap`: `A`'s invariant and `B`'s facts give `B`'s invariant and `A`'s facts;
+  `Pair.inv_iff`: so one protocol invariant serves both locks' `Fits.inv`.
+* **`B` kept across `A`'s view's steps**: a step of `A`'s code (`Pair.Keeps.otherStep`; a thread it
+  queues is `away` from `B`, or holds `B` at `holdsAway` with `A`'s key in `B`'s nest), a change
+  of `A`'s coordinates such as a nap (`Keeps.setA`), a stop (`Keeps.cur`). `Pair.U_stable`,
+  `U_setA` and `U_atStop` lift them to `Pair.U` for `A`'s `Fits.stable`, `Fits.nap`'s `hU` and
+  `Fits.atStop`. Still to come (ledger #two-lock-product): a step on a part, and `PartTick`.
 -/
 
 namespace Zig
@@ -461,6 +467,36 @@ theorem Keeps.otherStep (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {m' : Me
   · rw [hheld, hs.threads]; exact hk.held
   · rw [hs.threads] at hu; rw [hheld]
     exact LockWord.Owns.lstep hs (hHown u hu) hbl (hk.owns u hu)
+
+/-- **A change of `A`'s coordinates keeps what the product keeps of `B`**, at the same memory
+(e.g. `A`'s nap and unnap, `FLock.Fits.nap`/`unnap`). -/
+theorem Keeps.setA (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {p : LPh} {h : Res}
+    (hk : B.Keeps G m rL rH rX) : B.Keeps (upd G t (A.set (G t) p h)) m rL rH rX := by
+  have hU := hp.B_upd G t p h
+  have hpl : B.pl (upd G t (A.set (G t) p h)) = B.pl G := funext fun u => (hU u).1
+  have hheld : B.heldOf (upd G t (A.set (G t) p h)) m = B.heldOf G m := funext fun u => by
+    unfold heldOf; rw [(hU u).2.2]
+  have hR : ∀ r, B.R (upd G t (A.set (G t) p h)) r ↔ B.R G r := hp.R_ab G t p h
+  have hfree : B.Free (upd G t (A.set (G t) p h)) ↔ B.Free G := by
+    unfold FLock.Free; rw [hpl]
+  have hf := hk.facts
+  refine ⟨⟨by rw [hpl]; exact hf.w, hf.loff, fun hF => ?_,
+    fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
+    by rw [hheld]; exact hk.held, by rw [hheld]; exact hk.owns, hk.hoff, hk.xdisj, hk.xoff⟩
+  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
+    exact ⟨(hR rL).mpr h1, by rw [hpl]; exact h2⟩
+  · rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u
+  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact hf.idle u hu
+  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact (hR _).mpr (hf.res u hu)
+
+/-- **The nap or unnap of `A`'s holder keeps the product's rest** (`FLock.Fits.nap`/`unnap`'s
+`hU`), when the protocol's own `U` is kept. -/
+theorem U_setA (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} {t : ThreadId}
+    {p : LPh} {h : Res} (hU : Pair.U B U G rXA m)
+    (hcl : ∀ rX, U G rX m → U (upd G t (A.set (G t) p h)) rX m) :
+    Pair.U B U (upd G t (A.set (G t) p h)) rXA m := by
+  obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+  exact ⟨rL, rH, rX, rfl, Keeps.setA hp hk, hcl rX hu⟩
 
 /-- **A stop keeps what the product keeps of `B`** (`current := t`). -/
 theorem Keeps.cur {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) (t : ThreadId) :
