@@ -128,7 +128,8 @@ theorem size_load_rule (α : Type) [Packed α 64] (hv : Packed.valid (α := α) 
         Holds m' r' ⟨FHeap.ofHeap (shapes m) hF, Know.none, Ghost.exts (heapExts m hF)⟩ ∧
         w = Packed.ofBits 0 ∧ apts N 0 r'
     | _ => False := by
-  have h := FTTriple.atomicLoadAsW (α := α) N 0 .relaxed hv m _ _ holds word fconc owns
+  have h := FTTriple.atomicLoadAsW (α := α) N 0 .relaxed hv m _ _ holds word fconc
+    (by rw [Res.owned_eq_erase]; exact owns)
   have hint := size_load_reads
   generalize hr : ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 N).run m).run = res at hint
   rcases res with _ | (e | ⟨v, m₁⟩)

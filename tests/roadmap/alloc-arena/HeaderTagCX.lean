@@ -79,7 +79,9 @@ def r0 : Res := ⟨m0.fheap, Know.none, Ghost.unit⟩
 def rE : Res := ⟨FHeap.empty, Know.none, Ghost.unit⟩
 
 theorem holds0 : Holds m0 r0 rE :=
-  ⟨FHeap.disjoint_empty _, by simpa [r0, rE] using FMatch.fheap m0, Know.sub_none _,
+  ⟨FHeap.disjoint_empty _, by
+    simpa [r0, rE] using SMatch.of_fmatch (s := Ghost.unit.share) (FMatch.fheap m0)
+      fun _ => SCell.empty_zero, Know.sub_none _,
     Know.sub_none _, GOk.unit⟩
 
 /-- **The fresh node is what the child grants**: plain owned bytes (`up`), in a memory that holds. -/
@@ -103,10 +105,10 @@ theorem no_apts_at {m : Mem} (hs : shapes m = [(0, 0, 16)]) (v : BitVec 64) (Q :
   cases hb
   have e := hl (0, 0)
   rw [ite_eq_left ⟨rfl, by simp [N0], by simp [N0, hsz]⟩] at e
-  have hu : ((r₁.heap ∪ r₂.heap) ∪ rF.heap) (0, 0) =
+  have hu : (((r₁.heap ∪ r₂.heap) ∪ rF.heap) ∪ SCells ((r₁.gh.add r₂.gh).add rF.gh).share) (0, 0) =
       some ⟨⟨bs[0 - (N0.off.toNat)]!, A, S, K⟩, some (N0.off.toNat, 8)⟩ := by
-    rw [FHeap.union_apply, FHeap.union_apply, e]; rfl
-  have ht := hh.heap.2 _ _ hu
+    rw [FHeap.union_apply, FHeap.union_apply, FHeap.union_apply, e]; rfl
+  have ht := hh.heap.whole.2 _ _ hu
   simp only [TagSat, hs, tag_m0 (by decide : (0 : Nat) < 16), N0] at ht
   simp at ht
 
