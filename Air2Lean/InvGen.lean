@@ -680,7 +680,7 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       let X := s!"s.{x}.toNat"
       let X0 := s!"s0.{x}.toNat"
       -- the other locals at their entry values, at the locals `sv`
-      let pinned (sv : String) := (fields.filter (· != x)).map (s!"{sv}.{·} = s0.{·}")
+      let pinned (sv : String) := (fields.filter (· != x)).map fun f => s!"{sv}.{f} = s0.{f}"
       let mut facts : Array Fact := (pinned "s").map ({ text := · })
       -- The counter runs from `X0` to the value it exits at: the bound, or one past it for
       -- `<=`/`>=` (`one`), where the counter's last step must not wrap (`noWrap`; a literal bound
