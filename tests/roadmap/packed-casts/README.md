@@ -34,8 +34,9 @@ instances of `ZigLean/PackedRepr.lean` for floats, packed unions, arrays and vec
 | `reject_lanes.zig` | Rejected: a lane pointer into a vector field of a packed struct, which 0.14.1 and 0.15.2 miscompile ([upstream draft](../../../docs/upstream/packed-vector-lane-ptr.md)) |
 | `compile-errors/` | Casts that Sema rejects, with `expected.txt` per version. An `auto` struct, tuple or tagged union fails on every version. Arrays of `auto` structs and tagged unions fail from 0.16.0, and an `extern` struct from 0.17.0 |
 | `air/<version>/<source>/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
-| `gen/<version>/<Namespace>.lean` | Their retained translations |
-| `Model.lean`, `ModelLogical.lean`, `ModelVector.lean`, `ModelAuto.lean` | Kernel-checked results (`decide +kernel`) of the translations, then `main` prints `native.zig`'s lines |
+| `PackedCasts/<version>/<Source>.lean` | Their retained translations (`<version>` as a name: `V0_17_0`; `<Source>` one of `PackedCasts`, `Logical017`, `VectorFields`, `AutoItems`) |
+| `PackedCasts/<version>/{Model,ModelLogical,ModelVector,ModelAuto}.lean` | Kernel-checked results (`decide +kernel`) of the translations, then `main` prints `native.zig`'s lines. Each is written for the newest version of its source; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
+| `PackedCasts/Show.lean` | The models' formatting of results as `native.zig` prints them |
 | `native.zig`, `expected/<version>.txt` | The native program and its output (stock Zig, x86_64-linux-musl ReleaseSafe and Debug print the same) |
 
 ```sh

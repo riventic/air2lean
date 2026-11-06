@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# L04 pointer-try lifetimes and native runs (README.md). Run in the serialized build queue.
+# L04 pointer-try lifetimes and native runs (README.md). Lake builds the library TryLifetimes
+# (tests/roadmap/lakefile.toml; scripts/fixtures.py, run it under scripts/build-guard.py).
 #   check.sh [--check]          translate air/<version>/ (0.14.1, 0.15.2, 0.16.0, 0.17.0), compare
-#                               with gen/<version>.lean, build it and run Lifetimes.lean
-#                               (kernel-checked sequential theorems, 32 scheduler oracles)
+#                               with TryLifetimes/<version>/Gen.lean, check that each version's
+#                               Lifetimes.lean is the 0.17.0 one with the version renamed, build
+#                               the library, audit the axioms and run each version's Lifetimes
+#                               `main` (kernel-checked sequential theorems, 32 scheduler oracles)
 #   check.sh --native VERSION   with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE): the tests of
 #                               try_pointers.zig, try_aliases.zig and try_lifetimes.zig for
 #                               x86_64-linux-musl, ReleaseSafe and Debug, in Docker linux/amd64
@@ -47,25 +50,29 @@ case "${1:---check}" in
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native VERSION|--export VERSION DIR]' >&2; exit 2 ;;
 esac
-python3 -B scripts/lean-deps.py --build "$dir"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-lifetimes.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+primary="$dir/TryLifetimes/V0_17_0/Lifetimes.lean"
+modules=() mains=() theorems=()
 for v in "${versions[@]}"; do
-  w="$work/$v"
-  mkdir -p "$w/TryLifetimes"
-  "$translator" "$dir/air/$v" -o "$w/TryLifetimes/Gen.lean" --namespace TryLifetimes \
+  t="V${v//./_}"
+  # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+  "$translator" "$dir/air/$v" -o "$work/$t.lean" --namespace "TryLifetimes.$t" \
     --prefix try_lifetimes.
-  cmp "$w/TryLifetimes/Gen.lean" "$dir/gen/$v.lean"
-  cp "$dir/Lifetimes.lean" "$w/"
-  LEAN_PATH="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" \
-    "${lean_cmd[@]}" -R "$w" -o "$w/TryLifetimes/Gen.olean" "$w/TryLifetimes/Gen.lean"
-  echo "$v: $(LEAN_PATH="$w:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}" \
-    "${lean_cmd[@]}" -R "$w" --run "$w/Lifetimes.lean")"
-  # Compiled and audited (axioms, sorry, kernel replay), not only run: it is indexed (F2).
-  python3 -B scripts/theorem_universe.py gate "$w/Lifetimes.lean" --root "$w" \
-    --lean-path "$w" --output-dir "$w/universe" --replay-cache "$work/replay-cache.json" > /dev/null
+  cmp "$work/$t.lean" "$dir/TryLifetimes/$t/Gen.lean"
+  # Every version's module states the same theorems: the 0.17.0 one, the version renamed.
+  [ "$t" = V0_17_0 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_0=$t"
+  modules+=("TryLifetimes.$t.Lifetimes")
+  mains+=("TryLifetimes.$t.Lifetimes:TryLifetimes.$t.Lifetimes.main")
+  theorems+=(--declaration "TryLifetimes.$t.Lifetimes.readDangling_illegal")
+done
+python3 -B scripts/fixtures.py build TryLifetimes
+# Compiled and audited (axioms, sorry, kernel replay), not only run: they are indexed (F2).
+python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}"
+python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"
+for v in "${versions[@]}"; do
+  line=$(cat "$work/out/TryLifetimes.V${v//./_}.Lifetimes.main.txt")
+  echo "$v: $line"
 done

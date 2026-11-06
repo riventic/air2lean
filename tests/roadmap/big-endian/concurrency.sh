@@ -4,9 +4,12 @@
 # endian) with Zig 0.17.0, and 0.15.2 (which also has `std.Thread.Futex`).
 #
 #   concurrency.sh [--check]          translate air/<version>/concurrency/<target>, compare with
-#                                     conc-gen/<version>-<target>.lean, build, run ConcDiff.lean and ConcFutex.lean
-#                                     (24 scheduler oracles per case) and compare with
-#                                     observed/concurrency-<version>-<target>.txt
+#                                     BigEndian/Conc/<version>/<target>/Gen.lean, check that every
+#                                     version's and target's Run, Diff and Futex modules are the
+#                                     written ones (0.17.0 x86_64-linux; Futex: 0.15.2) renamed,
+#                                     build the library BigEndian (tests/roadmap/lakefile.toml),
+#                                     run Diff's and Futex's `main` (24 scheduler oracles per
+#                                     case) and compare with observed/concurrency-<version>-<target>.txt
 #   concurrency.sh --native VERSION   build concurrency_native.zig with a stock Zig VERSION
 #                                     (AIR2LEAN_ZIG_NATIVE) for each target, run it and compare
 #                                     with the retained observation: s390x in Docker
@@ -16,7 +19,7 @@
 #                                     EI_ABIVERSION cleared, the code is unchanged);
 #                                     AIR2LEAN_<ARCH>_RUN names a direct runner (empty: the host)
 #   concurrency.sh --export VERSION DIR   fresh AIR (AIR2LEAN_ZIG_AIR)
-# Run in the serialized build queue.
+# Lake builds the library (scripts/fixtures.py): run it under scripts/build-guard.py.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -69,30 +72,45 @@ case "${1:---check}" in
 esac
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-be-conc.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+conc="$dir/BigEndian/Conc"
+ns() { case "$1" in s390x-linux) echo S390x ;; mips64-linux) echo Mips64 ;; x86_64-linux) echo X64 ;; esac; }
+mains=()
 for v in "${versions[@]}"; do
+  V="V${v//./_}"
   for t in "${targets[@]}"; do
-    w="$work/$v-$t"
-    mkdir -p "$w/Conc"
-    "$translator" "$dir/air/$v/concurrency/$t" -o "$w/Conc/Gen.lean" --namespace Conc \
+    T=$(ns "$t")
+    # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+    "$translator" "$dir/air/$v/concurrency/$t" -o "$work/$V-$T.lean" --namespace "BigEndian.Conc.$V.$T" \
       --prefix concurrency.
-    cmp "$w/Conc/Gen.lean" "$dir/conc-gen/$v-$t.lean"
-    LEAN_PATH="$w:$repo_root/.lake/build/lib/lean" \
-      "${lean_cmd[@]}" -R "$w" -o "$w/Conc/Gen.olean" "$w/Conc/Gen.lean"
-    cp "$dir/ConcRun.lean" "$dir/ConcDiff.lean" "$dir/ConcFutex.lean" "$w/"
-    export LEAN_PATH="$w:$repo_root/.lake/build/lib/lean"
-    "${lean_cmd[@]}" -R "$w" -o "$w/ConcRun.olean" "$w/ConcRun.lean"
-    "${lean_cmd[@]}" -R "$w" --run "$w/ConcDiff.lean" > "$w/lines.txt" \
-      || { cat "$w/lines.txt" >&2; exit 1; }
-    if [ "$v" = 0.15.2 ]; then
-      "${lean_cmd[@]}" -R "$w" --run "$w/ConcFutex.lean" >> "$w/lines.txt" \
-        || { cat "$w/lines.txt" >&2; exit 1; }
+    cmp "$work/$V-$T.lean" "$conc/$V/$T/Gen.lean"
+    # One model for every version and target: the written one, the version and target renamed.
+    if [ "$V/$T" != V0_17_0/X64 ]; then
+      for m in Run Diff; do
+        python3 -B scripts/fixtures.py instance "$conc/V0_17_0/X64/$m.lean" --subst "V0_17_0=$V" --subst "X64=$T"
+      done
     fi
-    diff -u "$dir/observed/concurrency-$v-$t.txt" "$w/lines.txt"
-    echo "$v $t: the model's $(wc -l < "$w/lines.txt" | tr -d ' ') lines match the native observation"
+    mains+=("BigEndian.Conc.$V.$T.Diff:BigEndian.Conc.$V.$T.Diff.main")
+    if [ "$v" = 0.15.2 ]; then
+      [ "$T" = X64 ] || python3 -B scripts/fixtures.py instance "$conc/V0_15_2/X64/Futex.lean" --subst "X64=$T"
+      mains+=("BigEndian.Conc.$V.$T.Futex:BigEndian.Conc.$V.$T.Futex.main")
+    fi
+  done
+done
+python3 -B scripts/fixtures.py build BigEndian
+python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"
+for v in "${versions[@]}"; do
+  V="V${v//./_}"
+  for t in "${targets[@]}"; do
+    T=$(ns "$t")
+    lines="$work/out/BigEndian.Conc.$V.$T.Diff.main.txt"
+    if [ "$v" = 0.15.2 ]; then
+      cat "$lines" "$work/out/BigEndian.Conc.$V.$T.Futex.main.txt" > "$work/$V-$T.txt"
+      lines="$work/$V-$T.txt"
+    fi
+    diff -u "$dir/observed/concurrency-$v-$t.txt" "$lines"
+    echo "$v $t: the model's $(wc -l < "$lines" | tr -d ' ') lines match the native observation"
   done
 done
 # The big-endian lines differ from the little-endian ones where the bytes are observed, and the
