@@ -120,6 +120,8 @@ def structB1 (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] structB1
+
 structure structsToIntLocals where
   deriving Inhabited
 
@@ -132,6 +134,8 @@ def structsToInt (p0 : Vector (S) 2) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M structsToIntLocals structsToIntExit).run' (default : structsToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] structsToInt
 
 structure unionPayload1Locals where
   deriving Inhabited
@@ -161,6 +165,8 @@ def unionPayload1 (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] unionPayload1
+
 structure unionsToIntLocals where
   deriving Inhabited
 
@@ -173,5 +179,7 @@ def unionsToInt (p0 : Vector (T) 2) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M unionsToIntLocals unionsToIntExit).run' (default : unionsToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unionsToInt
 
 end AutoItems

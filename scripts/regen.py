@@ -191,25 +191,35 @@ def step_coverage(check):
 def step_pins(check):
     """Input pins of the L04 try-pointers integration (check-artifacts.py): its retained
     translation and the exporter it was taken with. Outputs are pinned, not translator sources:
-    check.sh and gen-integrity.py re-translate and compare the output itself."""
+    check.sh and gen-integrity.py re-translate and compare the output itself. Also the retained
+    translations in the `artifacts` inventories of fixture manifests their check scripts compare:
+    `gen`/`exports` regenerate those translations, so their hashes follow."""
     digest = lambda rel: cas.sha256_file(ROOT / rel)
-    pins = {'tests/roadmap/try-pointers/emitter-integration.json': {
-                'format': 'l04-emitter-integration-inputs-v2',
-                'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
-            'tests/roadmap/try-pointers/integration-qualification.json': {
-                'current_exporter_sha256': digest('zig-patch/air-json/json.zig')}}
-    # Fields a pin file no longer has (the v1 emitter pin) are dropped, so a format change is a regen.
-    obsolete = {'tests/roadmap/try-pointers/emitter-integration.json': ['current_emitter_sha256']}
-    for rel, fields in pins.items():
+
+    def sync(rel, fields, section=None, drop=()):
         data = json.loads((ROOT / rel).read_text())
-        if all(data.get(k) == v for k, v in fields.items()) and not any(k in data for k in obsolete.get(rel, [])):
-            continue
+        target = data if section is None else data[section]
+        if all(target.get(k) == v for k, v in fields.items()) and not any(k in target for k in drop):
+            return
         if check:
             raise Failed(rel + ' pins are stale')
-        for k in obsolete.get(rel, []):
-            data.pop(k, None)
-        data.update(fields)
+        for k in drop:
+            target.pop(k, None)
+        target.update(fields)
         write_if_changed(rel, (json.dumps(data, indent=2) + '\n').encode())
+
+    # The v1 emitter pin is dropped, so a format change is a regen.
+    sync('tests/roadmap/try-pointers/emitter-integration.json',
+         {'format': 'l04-emitter-integration-inputs-v2',
+          'current_generated_sha256': digest('tests/roadmap/try-pointers/TryPointers/Gen.lean')},
+         drop=['current_emitter_sha256'])
+    sync('tests/roadmap/try-pointers/integration-qualification.json',
+         {'current_exporter_sha256': digest('zig-patch/air-json/json.zig')})
+    retained = {'tests/roadmap/try-pointers/aliases/provenance.json': ['TryAliases/Gen.lean'],
+                'tests/roadmap/packed-fields/compiler-provenance.json':
+                    ['PackedFieldsFresh/Gen.lean', 'PackedFieldsX86/Gen.lean']}
+    for rel, gens in retained.items():
+        sync(rel, {g: digest(Path(rel).parent / g) for g in gens}, section='artifacts')
 
 
 def exported_fixtures():

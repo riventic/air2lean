@@ -82,6 +82,8 @@ def work (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] work
+
 structure entryLocals where
   deriving Inhabited
 
@@ -94,5 +96,7 @@ def entry (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret i2)) : Zig.M entryLocals entryExit).run' (default : entryLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] entry
 
 end FuzzS19

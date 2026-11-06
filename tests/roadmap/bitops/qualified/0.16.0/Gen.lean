@@ -18,6 +18,8 @@ def cardinality (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] cardinality
+
 structure clearLowestLocals where
   deriving Inhabited
 
@@ -31,6 +33,8 @@ def clearLowest (p0 : BitVec 64) : Zig.Result (BitVec 64) := do
     pure (.ret i2)) : Zig.M clearLowestLocals clearLowestExit).run' (default : clearLowestLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] clearLowest
 
 structure counts8Locals where
   deriving Inhabited
@@ -53,6 +57,8 @@ def counts8 (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
     pure (.ret i10)) : Zig.M counts8Locals counts8Exit).run' (default : counts8Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] counts8
 
 structure countsNarrowLocals where
   deriving Inhabited
@@ -77,6 +83,8 @@ def countsNarrow (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] countsNarrow
+
 structure countsOneLocals where
   deriving Inhabited
 
@@ -100,6 +108,8 @@ def countsOne (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] countsOne
+
 structure countsSigned8Locals where
   deriving Inhabited
 
@@ -121,6 +131,8 @@ def countsSigned8 (p0 : BitVec 8) : Zig.Result (BitVec 32) := do
     pure (.ret i10)) : Zig.M countsSigned8Locals countsSigned8Exit).run' (default : countsSigned8Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] countsSigned8
 
 structure firstSetLocals where
   deriving Inhabited
@@ -146,6 +158,8 @@ def firstSet (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] firstSet
+
 structure leadingLanesLocals where
   deriving Inhabited
 
@@ -160,6 +174,8 @@ def leadingLanes (p0 : Zig.Vec (BitVec 8) 4) : Zig.Result (Zig.Vec (BitVec 8) 4)
   match e with
   | .ret v => pure v
 
+attribute [zig_run] leadingLanes
+
 structure populationLanesLocals where
   deriving Inhabited
 
@@ -173,6 +189,8 @@ def populationLanes (p0 : Zig.Vec (BitVec 8) 4) : Zig.Result (Zig.Vec (BitVec 8)
     pure (.ret i2)) : Zig.M populationLanesLocals populationLanesExit).run' (default : populationLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] populationLanes
 
 structure shiftLanesLocals where
   deriving Inhabited
@@ -193,6 +211,8 @@ def shiftLanes (p0 : Zig.Vec (BitVec 8) 4) (p1 : Zig.Vec (BitVec 8) 4) : Zig.Res
     pure (.ret i9)) : Zig.M shiftLanesLocals shiftLanesExit).run' (default : shiftLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] shiftLanes
 
 structure shiftNarrowLocals where
   deriving Inhabited
@@ -215,6 +235,8 @@ def shiftNarrow (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shiftNarrow
+
 structure shiftSigned8Locals where
   deriving Inhabited
 
@@ -236,6 +258,8 @@ def shiftSigned8 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shiftSigned8
+
 structure shiftSignedLanesLocals where
   deriving Inhabited
 
@@ -256,6 +280,8 @@ def shiftSignedLanes (p0 : Zig.Vec (BitVec 8) 4) (p1 : Zig.Vec (BitVec 8) 4) : Z
     pure (.ret i10)) : Zig.M shiftSignedLanesLocals shiftSignedLanesExit).run' (default : shiftSignedLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] shiftSignedLanes
 
 structure shiftSignedNarrowLocals where
   deriving Inhabited
@@ -279,6 +305,8 @@ def shiftSignedNarrow (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 8) :=
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shiftSignedNarrow
+
 structure shiftUnsigned8Locals where
   deriving Inhabited
 
@@ -299,6 +327,8 @@ def shiftUnsigned8 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 16) := d
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shiftUnsigned8
+
 structure trailingLanesLocals where
   deriving Inhabited
 
@@ -312,5 +342,7 @@ def trailingLanes (p0 : Zig.Vec (BitVec 8) 4) : Zig.Result (Zig.Vec (BitVec 8) 4
     pure (.ret i2)) : Zig.M trailingLanesLocals trailingLanesExit).run' (default : trailingLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] trailingLanes
 
 end Bitops

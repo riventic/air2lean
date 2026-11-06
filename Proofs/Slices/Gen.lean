@@ -76,6 +76,8 @@ def «at» (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] «at»
+
 structure bumpLocals where
   deriving Inhabited
 
@@ -91,6 +93,8 @@ def bump  : Zig.MemM (BitVec 32) := do
     pure (.ret i3)) : Zig.MM bumpLocals bumpExit).run' (default : bumpLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] bump
 
 structure bumpAtLocals where
   deriving Inhabited
@@ -119,6 +123,8 @@ def bumpAt (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] bumpAt
+
 structure clearLocals where
   deriving Inhabited
 
@@ -132,6 +138,8 @@ def clear (p0 : Zig.Slice) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM clearLocals clearExit).run' (default : clearLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] clear
 
 structure colorNameLocals where
   deriving Inhabited
@@ -156,6 +164,8 @@ def colorName (p0 : Color) : Zig.MemM (Zig.Slice) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] colorName
 
 structure copyLocals where
   deriving Inhabited
@@ -196,6 +206,8 @@ def copy (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] copy
 
 structure copyWithinLocals where
   deriving Inhabited
@@ -251,6 +263,8 @@ def copyWithin (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 6
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] copyWithin
+
 structure factorialLocals where
   deriving Inhabited
 
@@ -273,6 +287,8 @@ def factorial (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] factorial
 
 structure failNameLocals where
   deriving Inhabited
@@ -299,6 +315,8 @@ def failName (p0 : BitVec 8) : Zig.MemM (Zig.Slice) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] failName
+
 structure fillLocals where
   deriving Inhabited
 
@@ -312,6 +330,8 @@ def fill (p0 : Zig.Slice) (p1 : BitVec 8) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM fillLocals fillExit).run' (default : fillLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] fill
 
 structure indexOfScalarLocals where
   local1 : BitVec 64
@@ -366,6 +386,8 @@ def indexOfScalar (p0 : BitVec 8) : Zig.MemM (Option (BitVec 64)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] indexOfScalar.loop4 indexOfScalar
+
 structure lenOrLocals where
   deriving Inhabited
 
@@ -389,6 +411,8 @@ def lenOr (p0 : Option (Zig.Slice)) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] lenOr
 
 structure localArrLocals where
   a : Zig.Ptr
@@ -425,6 +449,8 @@ def localArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] localArr
+
 structure prevItemLocals where
   deriving Inhabited
 
@@ -439,6 +465,8 @@ def prevItem (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i3)) : Zig.MM prevItemLocals prevItemExit).run' (default : prevItemLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] prevItem
 
 structure reverseLocals where
   i : BitVec 64
@@ -558,6 +586,8 @@ def reverse (p0 : Zig.Slice) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] reverse.loop15 reverse
+
 structure secondLocals where
   deriving Inhabited
 
@@ -571,6 +601,8 @@ def second (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM secondLocals secondExit).run' (default : secondLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] second
 
 structure sentinelArrLocals where
   x : Zig.Ptr
@@ -624,6 +656,8 @@ def sentinelArr (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sentinelArr
+
 structure subZLocals where
   deriving Inhabited
 
@@ -670,6 +704,8 @@ def subZ (p0 : Zig.Slice) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Slic
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] subZ
 
 structure sumSliceLocals where
   t : BitVec 32
@@ -721,6 +757,8 @@ def sumSlice (p0 : Array (BitVec 32)) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sumSlice.loop7 sumSlice
+
 structure sumMidLocals where
   deriving Inhabited
 
@@ -760,6 +798,8 @@ def sumMid (p0 : Zig.Slice) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] sumMid
 
 structure sumZLocals where
   sum : BitVec 32
@@ -813,6 +853,8 @@ def sumZ (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sumZ.loop6 sumZ
+
 structure totalLocals where
   deriving Inhabited
 
@@ -826,5 +868,7 @@ def total (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM totalLocals totalExit).run' (default : totalLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] total
 
 end Slices

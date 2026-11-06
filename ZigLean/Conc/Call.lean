@@ -1,6 +1,7 @@
 import ZigLean.Conc.Basic
 import ZigLean.Basic
 import ZigLean.Mem.Thread
+import ZigLean.SimpAttr
 
 /-!
 # Calls and sync ops in a concurrent function
@@ -268,6 +269,9 @@ sleeps at the futex (so a deadlock is `.deadlock`). -/
 def osUnfairLockC (p : Ptr) : CM Tgt σ Unit := do
   let _ ← loop (osUnfairLockTry p) id
   pure ()
+
+-- A model that holds a loop is in the kernel-run set (`ZigLean.SimpAttr`).
+attribute [zig_run] osUnfairLockC
 
 /-- `os_unfair_lock_unlock`: the owner check (`Thread.mutexOwnerCheck`: an unlock by a thread
 that does not hold the lock is `.illegal`, as the C function terminates the process), a release

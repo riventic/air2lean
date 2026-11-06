@@ -898,6 +898,41 @@ condition includes all `n + 1` frames, and a budgeted start-memory witness suppl
 `MemM` code, not an AIR/native certificate: `Certificate.fragment` still refuses recursive
 memory functions, and P03/native stack and producer integration remain open.
 
+## Kernel-run witnesses (`zig_run`)
+
+A theorem that one concrete run completes (`…_completes`, a counterexample run) is computed by
+the kernel (`decide +kernel`). The kernel does not unfold `Zig.loop` or a `partial_fixpoint`
+group, so the proof first rewrites them by their defining equations. It does that with one simp
+set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
+
+```lean
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
+```
+
+* **Contents.** Every executable declaration of generated code: each function, each extracted
+  loop body (`f.loop<id>`), each member of a recursive group (by its unsplit equation
+  `f.eq_def`: its own equation lemmas split a `match` on a parameter into one lemma per case,
+  which a computed argument never matches), each `--model` wrapper (`air2lean_model_<i>`) and
+  `dispatch`. Also `Zig.loop` (tagged in `ZigLean/Simp.lean`) and the library models that hold a
+  loop, each tagged where it is defined (`Zig.osUnfairLockC`, `ZigLean/Conc/Call.lean`), so that
+  `ZigLean.Simp` imports no model. A new library model with a `Zig.loop` or a `partial_fixpoint`
+  is tagged the same way, as is a `--model` implementation that holds one.
+* **Emission rule.** The translator ends each declaration group with
+  `attribute [zig_run] <the group's executable declarations>`, each model wrapper with
+  `attribute [zig_run] air2lean_model_<i>` and `dispatch` with `attribute [zig_run] dispatch`
+  (`runAttribute`, `Air2Lean/Emit.lean`). This is default generation, so every translation
+  (every Zig version and target) tags its own declarations and one proof covers all of them.
+* **Use.** A plain definition unfolds as far as the term goes within one pass. A loop or a
+  recursive call unfolds one level per pass (`singlePass`), so `iterate n` needs `n` at least the
+  run's deepest count of nested loop iterations and recursive calls. A pass that changes nothing
+  fails, but the remaining `Zig.loop` of an unfinished loop always rewrites. `unfoldPartialApp`
+  unfolds `dispatch`, which `Sched.run` takes unapplied. A hand-written client definition on the
+  path (a test's `vt`, `client`) is unfolded by name first.
+* **Kernel-run witnesses only.** The rewrites unfold loops and recursive groups without end. Use
+  the set only under `singlePass`. Never add its members to `zig_unfold` or another set, and never
+  pass it to `fsym` or to a simp call without `singlePass`.
+
 ## Extending it
 
 * A new command: a step rule `@[fsym] theorem … : FTotalTriple P c Q` in a library module, with

@@ -382,6 +382,8 @@ def back (p0 : BitVec 16) : Zig.Result (Zig.ErrName) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] back
+
 structure codeLocals where
   deriving Inhabited
 
@@ -395,6 +397,8 @@ def code (p0 : Zig.ErrName) : Zig.Result (BitVec 16) := do
     pure (.ret i2)) : Zig.M codeLocals codeExit).run' (default : codeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] code
 
 structure nameOfLocals where
   deriving Inhabited
@@ -423,6 +427,8 @@ def nameOf (p0 : BitVec 16) : Zig.MemM (Zig.Slice) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] nameOf
+
 structure roundTripLocals where
   deriving Inhabited
 
@@ -450,6 +456,8 @@ def roundTrip (p0 : Zig.ErrName) : Zig.Result (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] roundTrip
 
 structure viaMemoryLocals where
   cells : Zig.Ptr
@@ -490,5 +498,7 @@ def viaMemory (p0 : Zig.ErrName) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] viaMemory
 
 end ErrorInts

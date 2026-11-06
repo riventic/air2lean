@@ -87,4 +87,6 @@ def pairs (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] pairs.loop14 pairs.loop5 pairs
+
 end Nested

@@ -478,6 +478,8 @@ def addrEq (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] addrEq
+
 structure align4Locals where
   deriving Inhabited
 
@@ -503,6 +505,8 @@ def align4 (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] align4
+
 structure doubleLocals where
   deriving Inhabited
 
@@ -515,6 +519,8 @@ def double (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M doubleLocals doubleExit).run' (default : doubleLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] double
 
 structure squareLocals where
   deriving Inhabited
@@ -529,6 +535,8 @@ def square (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] square
+
 structure succLocals where
   deriving Inhabited
 
@@ -541,6 +549,8 @@ def succ (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M succLocals succExit).run' (default : succLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] succ
 
 structure applyOpLocals where
   deriving Inhabited
@@ -566,6 +576,8 @@ def applyOp (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] applyOp
+
 structure applyTwiceLocals where
   deriving Inhabited
 
@@ -580,6 +592,8 @@ def applyTwice (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] applyTwice
+
 structure asConstLocals where
   deriving Inhabited
 
@@ -592,6 +606,8 @@ def asConst (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i1)) : Zig.MM asConstLocals asConstExit).run' (default : asConstLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] asConst
 
 structure asVolatileLocals where
   deriving Inhabited
@@ -607,6 +623,8 @@ def asVolatile (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] asVolatile
+
 structure bitsToFloatLocals where
   deriving Inhabited
 
@@ -621,6 +639,8 @@ def bitsToFloat (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Zig.F32) := do
     pure (.ret i4)) : Zig.MM bitsToFloatLocals bitsToFloatExit).run' (default : bitsToFloatLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] bitsToFloat
 
 structure bumpLocals where
   deriving Inhabited
@@ -649,6 +669,8 @@ def bump (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] bump
 
 structure digitLocals where
   deriving Inhabited
@@ -681,6 +703,8 @@ def digit (p0 : BitVec 8) : Zig.Result (Except Zig.ErrName (BitVec 8)) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] digit
 
 structure bumpDigitLocals where
   r : Zig.Ptr
@@ -720,6 +744,8 @@ def bumpDigit (p0 : BitVec 8) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] bumpDigit
+
 structure bumpPairLocals where
   deriving Inhabited
 
@@ -740,6 +766,8 @@ def bumpPair (p0 : Zig.Ptr) (p1 : BitVec 6) : Zig.MemM (BitVec 3) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bumpPair
+
 structure byteToFlagsLocals where
   deriving Inhabited
 
@@ -752,6 +780,8 @@ def byteToFlags (p0 : BitVec 8) : Zig.Result (Flags) := do
     pure (.ret i1)) : Zig.M byteToFlagsLocals byteToFlagsExit).run' (default : byteToFlagsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] byteToFlags
 
 structure ctlModeLocals where
   deriving Inhabited
@@ -768,6 +798,8 @@ def ctlMode (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
     pure (.ret i4)) : Zig.MM ctlModeLocals ctlModeExit).run' (default : ctlModeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] ctlMode
 
 structure ctlSumLocals where
   deriving Inhabited
@@ -788,6 +820,8 @@ def ctlSum (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] ctlSum
+
 structure dropConstLocals where
   deriving Inhabited
 
@@ -800,6 +834,8 @@ def dropConst (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i1)) : Zig.MM dropConstLocals dropConstExit).run' (default : dropConstLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] dropConst
 
 structure flagsToByteLocals where
   deriving Inhabited
@@ -814,6 +850,8 @@ def flagsToByte (p0 : Flags) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] flagsToByte
+
 structure floatBitsLocals where
   deriving Inhabited
 
@@ -827,6 +865,8 @@ def floatBits (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM floatBitsLocals floatBitsExit).run' (default : floatBitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] floatBits
 
 structure growCircleLocals where
   deriving Inhabited
@@ -863,6 +903,8 @@ def growCircle (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] growCircle
 
 structure headerLenLocals where
   deriving Inhabited
@@ -904,6 +946,8 @@ def headerLen (p0 : Zig.Slice) : Zig.MemM (Option (BitVec 16)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] headerLen
+
 structure incCountLocals where
   deriving Inhabited
 
@@ -919,6 +963,8 @@ def incCount (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM incCountLocals incCountExit).run' (default : incCountLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] incCount
 
 structure isOkLocals where
   deriving Inhabited
@@ -946,6 +992,8 @@ def isOk (p0 : Zig.Ptr) : Zig.MemM (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] isOk
+
 structure laneSetLocals where
   deriving Inhabited
 
@@ -963,6 +1011,8 @@ def laneSet (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] laneSet
+
 structure lowByteLocals where
   deriving Inhabited
 
@@ -976,6 +1026,8 @@ def lowByte (p0 : Word) : Zig.Result (BitVec 8) := do
     pure (.ret i2)) : Zig.M lowByteLocals lowByteExit).run' (default : lowByteLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] lowByte
 
 structure maskCountLocals where
   deriving Inhabited
@@ -991,6 +1043,8 @@ def maskCount (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
     pure (.ret i3)) : Zig.MM maskCountLocals maskCountExit).run' (default : maskCountLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] maskCount
 
 structure maskStoreLocals where
   local2 : Zig.Ptr
@@ -1029,6 +1083,8 @@ def maskStore (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] maskStore
+
 structure nibSignedLocals where
   deriving Inhabited
 
@@ -1041,6 +1097,8 @@ def nibSigned (p0 : Nib) : Zig.Result (BitVec 4) := do
     pure (.ret i1)) : Zig.M nibSignedLocals nibSignedExit).run' (default : nibSignedLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] nibSigned
 
 structure nibArgLocals where
   deriving Inhabited
@@ -1055,6 +1113,8 @@ def nibArg (p0 : BitVec 4) : Zig.Result (BitVec 4) := do
     pure (.ret i2)) : Zig.M nibArgLocals nibArgExit).run' (default : nibArgLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] nibArg
 
 structure numIntLocals where
   deriving Inhabited
@@ -1081,6 +1141,8 @@ def numInt (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] numInt
 
 structure setNumLocals where
   deriving Inhabited
@@ -1110,6 +1172,8 @@ def setNum (p0 : Zig.Ptr) (p1 : Bool) (p2 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] setNum
+
 structure numRoundTripLocals where
   n : Zig.Ptr
   deriving Inhabited
@@ -1130,6 +1194,8 @@ def numRoundTrip (p0 : Bool) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] numRoundTrip
+
 structure parentOfXLocals where
   deriving Inhabited
 
@@ -1143,6 +1209,8 @@ def parentOfX (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] parentOfX
+
 structure parentOfYLocals where
   deriving Inhabited
 
@@ -1155,6 +1223,8 @@ def parentOfY (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i1)) : Zig.MM parentOfYLocals parentOfYExit).run' (default : parentOfYLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] parentOfY
 
 structure ptrFromAddrLocals where
   deriving Inhabited
@@ -1188,6 +1258,8 @@ def ptrFromAddr (p0 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] ptrFromAddr
 
 structure ptrRoundTripLocals where
   deriving Inhabited
@@ -1223,6 +1295,8 @@ def ptrRoundTrip (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] ptrRoundTrip
+
 structure readHeaderLocals where
   deriving Inhabited
 
@@ -1237,6 +1311,8 @@ def readHeader (p0 : Zig.Slice) : Zig.MemM (Header) := do
     pure (.ret i3)) : Zig.MM readHeaderLocals readHeaderExit).run' (default : readHeaderLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readHeader
 
 structure regSignedLocals where
   local1 : Reg
@@ -1254,6 +1330,8 @@ def regSigned (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] regSigned
+
 structure setCircleLocals where
   deriving Inhabited
 
@@ -1268,6 +1346,8 @@ def setCircle (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM setCircleLocals setCircleExit).run' (default : setCircleLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] setCircle
 
 structure setHalfLocals where
   deriving Inhabited
@@ -1284,6 +1364,8 @@ def setHalf (p0 : Zig.Ptr) (p1 : BitVec 16) : Zig.MemM (BitVec 32) := do
     pure (.ret i5)) : Zig.MM setHalfLocals setHalfExit).run' (default : setHalfLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] setHalf
 
 structure setModeLocals where
   f : Flags
@@ -1303,6 +1385,8 @@ def setMode (p0 : BitVec 8) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setMode
+
 structure setNibLocals where
   deriving Inhabited
 
@@ -1319,6 +1403,8 @@ def setNib (p0 : Zig.Ptr) (p1 : BitVec 4) : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setNib
+
 structure setRegFlagsLocals where
   deriving Inhabited
 
@@ -1334,6 +1420,8 @@ def setRegFlags (p0 : Zig.Ptr) (p1 : Flags) : Zig.MemM (BitVec 8) := do
     pure (.ret i5)) : Zig.MM setRegFlagsLocals setRegFlagsExit).run' (default : setRegFlagsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] setRegFlags
 
 structure shapeAreaLocals where
   deriving Inhabited
@@ -1370,6 +1458,8 @@ def shapeArea (p0 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] shapeArea
+
 structure twiceLocals where
   deriving Inhabited
 
@@ -1392,6 +1482,8 @@ def twice (p0 : Bool) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] twice
+
 structure wordArgLocals where
   deriving Inhabited
 
@@ -1406,6 +1498,8 @@ def wordArg (p0 : BitVec 32) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] wordArg
+
 structure wordOfLocals where
   local1 : Word
   deriving Inhabited
@@ -1419,6 +1513,8 @@ def wordOf (p0 : BitVec 32) : Zig.Result (Word) := do
     pure (.ret (← get).local1)) : Zig.M wordOfLocals wordOfExit).run' (default : wordOfLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] wordOf
 
 structure wordByteLocals where
   w : Word
@@ -1448,6 +1544,8 @@ def wordByte (p0 : BitVec 32) (p1 : BitVec 2) : Zig.Result (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] wordByte
+
 structure wordHalfLocals where
   deriving Inhabited
 
@@ -1461,6 +1559,8 @@ def wordHalf (p0 : BitVec 32) : Zig.Result (BitVec 16) := do
     pure (.ret i2)) : Zig.M wordHalfLocals wordHalfExit).run' (default : wordHalfLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] wordHalf
 
 structure writeTableLocals where
   deriving Inhabited
@@ -1487,5 +1587,7 @@ def writeTable (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] writeTable
 
 end Layout

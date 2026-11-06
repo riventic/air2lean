@@ -641,6 +641,13 @@
       "module": "ZigLean.SimpAttr",
       "status": "target",
       "approved": "coordinator 2026-10-16 (registry gate seed)"
+    },
+    {
+      "registry": "zig_run",
+      "kind": "simp-set",
+      "module": "ZigLean.SimpAttr",
+      "status": "target",
+      "approved": "coordinator 2026-11-05 (L17b: kernel-run witnesses, ledger run-witness-loop-names and 9h)"
     }
   ],
   "legacy_users": [

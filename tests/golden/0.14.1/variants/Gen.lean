@@ -202,6 +202,8 @@ def next (p0 : Light) : Zig.Result (Light) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] next
+
 structure advanceLocals where
   cur : Light
   i : BitVec 32
@@ -249,6 +251,8 @@ def advance (p0 : Light) (p1 : BitVec 32) : Zig.Result (Light) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] advance.loop7 advance
+
 structure areaLocals where
   deriving Inhabited
 
@@ -291,6 +295,8 @@ def area (p0 : Shape) : Zig.Result (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] area
+
 structure codeOfLocals where
   deriving Inhabited
 
@@ -303,6 +309,8 @@ def codeOf (p0 : BitVec 8) : Zig.Result (Code) := do
     pure (.ret i1)) : Zig.M codeOfLocals codeOfExit).run' (default : codeOfLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] codeOf
 
 structure isRoundLocals where
   deriving Inhabited
@@ -318,6 +326,8 @@ def isRound (p0 : Shape) : Zig.Result (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] isRound
+
 structure isUrgentLocals where
   deriving Inhabited
 
@@ -330,6 +340,8 @@ def isUrgent (p0 : Prio) : Zig.Result (Bool) := do
     pure (.ret i1)) : Zig.M isUrgentLocals isUrgentExit).run' (default : isUrgentLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] isUrgent
 
 structure lightOfLocals where
   deriving Inhabited
@@ -344,6 +356,8 @@ def lightOf (p0 : BitVec 8) : Zig.Result (Light) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] lightOf
+
 structure prioValueLocals where
   deriving Inhabited
 
@@ -356,6 +370,8 @@ def prioValue (p0 : Prio) : Zig.Result (BitVec 8) := do
     pure (.ret i1)) : Zig.M prioValueLocals prioValueExit).run' (default : prioValueLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] prioValue
 
 structure radiusLocals where
   deriving Inhabited
@@ -380,6 +396,8 @@ def radius (p0 : Shape) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] radius
 
 structure scaleLocals where
   local2 : Shape
@@ -427,6 +445,8 @@ def scale (p0 : Shape) (p1 : BitVec 32) : Zig.Result (Shape) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] scale
+
 structure severityLocals where
   deriving Inhabited
 
@@ -450,6 +470,8 @@ def severity (p0 : Code) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] severity
 
 structure totalAreaLocals where
   total : BitVec 64
@@ -501,5 +523,7 @@ def totalArea (p0 : Array (Shape)) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] totalArea.loop7 totalArea
 
 end Variants
