@@ -1426,6 +1426,11 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     modules; this runtime binding does not authenticate project/private import closures.
     `lake_package`: every module's check is a Lake-built receipt in that package's replay
     workspace instead (`lake_kernel_replay`), when Lake resolves exactly `lean_path` there.
+    Otherwise, with `cache` (the caller allows reuse), the check of each `cacheable` module is a
+    receipt in the root package's replay workspace, which Lake keeps across builds until the
+    module or an import changes, when Lake resolves exactly the root package's build directory
+    and the toolchain there; such a passing module counts as `reused`, and the others are checked
+    afresh or through `cache`. Without `cache`, every module outside `lake_package` replays now.
     Several audits of one build may share `cache` at once (scripts/fixture-checks.py's run): each
     cacheable module is checked under a claim (`<cache>.d/<module>.lock`), the cache is read
     again under it and a pass is merged in at once, so concurrent audits replay each module once
@@ -1497,14 +1502,20 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     modules, published = sorted(digests), []
     receipts = (lake_kernel_replay(modules, lake_package, checker_sha, runtime_sha, lean_path)
                 if lake_package is not None and modules else None)
+    root = receipts is None and cache is not None and bool(built := sorted(set(modules) & cacheable))
+    if root:
+        # A `cacheable` module and its whole import closure resolve to the root package's build
+        # directory or the toolchain on `lean_path` (cacheable_modules), so leanchecker checks the
+        # same oleans on the root package's own lookup path.
+        receipts = lake_kernel_replay(built, ROOT, checker_sha, runtime_sha, os.pathsep.join(
+            map(str, (ROOT / ".lake/build/lib/lean", toolchain / "lib/lean"))))
     try:
-        if receipts is not None:
-            results = {m: (False, None if r.get("status") == "pass" else {
-                "module": m, "output": f"leanchecker exited {r.get('exit_code')}\n" + str(r.get("output", ""))})
-                for m, r in receipts.items()}
-        else:
+        results = {m: (root and r.get("status") == "pass", None if r.get("status") == "pass" else {
+            "module": m, "output": f"leanchecker exited {r.get('exit_code')}\n" + str(r.get("output", ""))})
+            for m, r in (receipts or {}).items()}
+        if rest := [m for m in modules if m not in results]:
             with ThreadPoolExecutor(jobs) as pool:
-                results = dict(zip(modules, pool.map(check, modules)))
+                results.update(zip(rest, pool.map(check, rest)))
         if toolchain_runtime_sha256(toolchain) != runtime_sha:
             raise ValueError('toolchain runtime changed during kernel replay')
         if validate_inputs is not None:
