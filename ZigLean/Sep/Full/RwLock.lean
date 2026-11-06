@@ -6,7 +6,42 @@ import ZigLean.Range
 One count-width family supplies the encoding, masks and native value equations.
 The current ABI64 std instance uses reader bits32..62, pending-writer bits1..31
 and writing bit0; bit63 is spare, but out-of-range encodings can set it. The
-protocol must relate represented counts to its actual admitted handles.
+protocol must relate represented counts to its actual admitted handles; the
+contract `RwLockImpl` takes that room as `hroom` premises (ledger
+`rwlock-reader-admission-room`, maintainer decision 2026-11-06).
+
+## Scope (fail closed)
+
+The family has an equation for every state operation of the 0.17
+`std/Io/RwLock.zig` entry points: `add_reader`/`sub_reader` and `read_guard`
+(the shared paths), `add_writer`, `enter_writer` and `drain_guard` (`lock`),
+`last_reader_guard`/`writing_guard` (`unlockShared`), `clear_writer` (`unlock`
+and the canceled `lock`'s `And ~is_writing`), `set_writing` (`tryLock`'s
+`state | is_writing` under `reader_mask == 0`) and `sub_writer` (the canceled
+`lock`'s `Sub writer`).
+
+The contract `RwLockImpl` (B2) states only the four uncancelable entry points
+`lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared`.
+`tryLock`, `tryLockShared` and the cancelable `lock`/`lockShared` are not
+modelled: there is no contract rule for them, so a client that calls them has
+no rule to walk the call with and its proof fails closed. Before they enter the
+contract the protocol has two open obligations: `tryLock` sets writing without a
+counted intent (so the writing count cannot rely on the holder's own `-1`), and
+a canceled `lock` clears writing while readers drain, so the semaphore invariant
+must admit the stale permit that its `waitUncancelable` consumes.
+
+## Rule registration (B2)
+
+No lemma here is tagged yet. When the instance proofs walk the Gen bodies:
+- `@[simp]` (closed equations over literal operands): `add_reader`,
+  `sub_reader`, `add_writer`, `sub_writer`, `enter_writer`, `clear_writer`,
+  `set_writing`, `readers_encode`, `writers_encode`, `writing_encode`,
+  `writing_guard`;
+- guards with count premises (`read_guard`, `last_reader_guard`,
+  `drain_guard_encode`, `checked_add_reader`) are hint terms in the protocol's
+  `fsym [...]` list, since their premises come from the invariant;
+- nothing here is an `@[fsym]` step rule: the RMW steps are the generic
+  atomic rules, and this file supplies only their value equations.
 -/
 
 namespace Zig.Full
@@ -120,6 +155,23 @@ theorem last_reader_guard {c p r w : Nat} (hc : 0 < c)
   simpa only [Nat.one_mul] using
     (Nat.mul_right_cancel_iff (n := r) (k := 1) (Nat.two_pow_pos (c + 1)))
 
+/-- The reader field is nonzero exactly when the decoded reader count is. -/
+theorem readers_ne_zero (c p : Nat) (s : BitVec (width c p)) :
+    s &&& readerMask c p ≠ 0#(width c p) ↔ readers c s ≠ 0 := by
+  rw [Ne, Ne, ← BitVec.toNat_inj, reader_mask, BitVec.toNat_zero, Nat.mul_eq_zero]
+  simp
+
+/-- The drain guard of `lock` (`old & reader_mask != 0`), with no count hypotheses. -/
+theorem drain_guard (c p : Nat) (s : BitVec (width c p)) :
+    (s &&& readerMask c p != 0#(width c p)) = (readers c s != 0) := by
+  rw [Bool.eq_iff_iff]
+  simp only [bne_iff_ne]
+  exact readers_ne_zero c p s
+
+theorem drain_guard_encode {c p r w : Nat} (hr : r < countBound c) (hw : w < countBound c)
+    (a : Bool) : (encode c p r w a &&& readerMask c p != 0#(width c p)) = (r != 0) := by
+  rw [drain_guard, readers_encode hr hw]
+
 theorem writing_mask (c p : Nat) (s : BitVec (width c p)) :
     (s &&& 1#(width c p)).toNat = s.toNat % 2 := by
   have h := Zig.toNat_and_field s 0 1 (by omega) (by unfold width; omega)
@@ -135,7 +187,7 @@ theorem writing_guard (c p : Nat) (s : BitVec (width c p)) :
   rw [BitVec.toNat_ne, writing_mask]
   exact Nat.mod_two_ne_zero
 
-theorem raw_twice (c r w : Nat) (a : Bool) :
+private theorem raw_twice (c r w : Nat) (a : Bool) :
     raw c r w a = (r * 2 ^ c + w) * 2 + if a then 1 else 0 := by
   simp [raw, readerUnit, Nat.pow_succ, Nat.mul_add,
     Nat.mul_comm, Nat.mul_left_comm]
@@ -195,6 +247,25 @@ theorem add_writer (c p r w : Nat) (a : Bool) :
   simp only [raw, Nat.mul_add, Nat.mul_one]
   omega
 
+/-- A canceled `lock` withdraws its intent (`Sub writer`). -/
+theorem sub_writer (c p r w : Nat) (a : Bool) :
+    encode c p r (w + 1) a - 2 = encode c p r w a := by
+  rw [← add_writer]
+  exact BitVec.add_sub_cancel _ _
+
+/-- `tryLock` sets writing on a value whose writing bit is clear (`state | is_writing`). -/
+theorem set_writing (c p r w : Nat) :
+    encode c p r w false ||| 1#(width c p) = encode c p r w true := by
+  have h0 : encode c p r w false &&& 1#(width c p) = 0#(width c p) := by
+    apply BitVec.eq_of_toNat_eq
+    have he := writing_encode c p r w false
+    simp only [writing, beq_eq_false_iff_ne, ne_eq] at he
+    rw [writing_mask, BitVec.toNat_zero]
+    omega
+  rw [← BitVec.add_eq_or_of_and_eq_zero _ _ h0]
+  apply encode_add_ofNat
+  simp [raw]
+
 theorem enter_writer (c p r w : Nat) :
     encode c p r (w + 1) false + (-1) = encode c p r w true := by
   have he : encode c p r w true + 1 = encode c p r (w + 1) false := by
@@ -231,79 +302,15 @@ abbrev readerUnit : Nat := Family.readerUnit 31
 abbrev countBound : Nat := Family.countBound 31
 abbrev lowMask : BitVec 64 := Family.lowMask 31 1
 abbrev readerMask : BitVec 64 := Family.readerMask 31 1
-abbrev writingBit : BitVec 64 := 1
 abbrev clearWriting : BitVec 64 := Family.clearWriting 31 1
-abbrev writerEntryDelta : BitVec 64 := -1
 
 abbrev encode (r w : Nat) (a : Bool) : BitVec 64 := Family.encode 31 1 r w a
 abbrev readers (s : BitVec 64) : Nat := Family.readers 31 s
 abbrev writers (s : BitVec 64) : Nat := Family.writers 31 s
 abbrev writing (s : BitVec 64) : Bool := Family.writing s
 
-theorem encode_toNat' (r w : Nat) (a : Bool) :
-    (encode r w a).toNat = (r * readerUnit + 2 * w + if a then 1 else 0) % 2 ^ 64 :=
-  Family.encode_toNat' 31 1 r w a
-
-theorem encode_toNat {r w : Nat} (hr : r < countBound) (hw : w < countBound) (a : Bool) :
-    (encode r w a).toNat = r * readerUnit + 2 * w + if a then 1 else 0 :=
-  Family.encode_toNat hr hw a
-
-theorem readers_encode {r w : Nat} (hr : r < countBound) (hw : w < countBound)
-    (a : Bool) : readers (encode r w a) = r := Family.readers_encode hr hw a
-
-theorem writers_encode {r w : Nat} (hw : w < countBound) (a : Bool) :
-    writers (encode r w a) = w := Family.writers_encode hw a
-
-theorem writing_encode (r w : Nat) (a : Bool) : writing (encode r w a) = a :=
-  Family.writing_encode 31 1 r w a
-
-theorem add_reader (r w : Nat) (a : Bool) :
-    encode r w a + BitVec.ofNat 64 readerUnit = encode (r + 1) w a :=
-  Family.add_reader 31 1 r w a
-
-theorem sub_reader (r w : Nat) (a : Bool) :
-    encode (r + 1) w a - BitVec.ofNat 64 readerUnit = encode r w a :=
-  Family.sub_reader 31 1 r w a
-
-theorem add_writer (r w : Nat) (a : Bool) :
-    encode r w a + 2 = encode r (w + 1) a := Family.add_writer 31 1 r w a
-
-theorem enter_writer (r w : Nat) :
-    encode r (w + 1) false + writerEntryDelta = encode r w true :=
-  Family.enter_writer 31 1 r w
-
-theorem checked_add_reader {r w : Nat} (hr : r + 1 < countBound) (hw : w < countBound)
-    (a : Bool) (safe : Bool) :
-    Zig.add false (encode r w a) (BitVec.ofNat 64 readerUnit) safe =
-      pure (encode (r + 1) w a) := Family.checked_add_reader hr hw a safe
-
-theorem low_mask (s : BitVec 64) : (s &&& lowMask).toNat = s.toNat % readerUnit :=
-  Family.low_mask 31 1 s
-
-theorem low_encode {r w : Nat} (hw : w < countBound) (a : Bool) :
-    (encode r w a &&& lowMask).toNat = 2 * w + if a then 1 else 0 :=
-  Family.low_encode hw a
-
-theorem read_guard {r w : Nat} (hw : w < countBound) (a : Bool) :
-    (encode r w a &&& lowMask = 0) ↔ w = 0 ∧ a = false := Family.read_guard hw a
-
-theorem reader_mask (s : BitVec 64) :
-    (s &&& readerMask).toNat = readers s * readerUnit := Family.reader_mask 31 1 s
-
-theorem last_reader_guard {r w : Nat} (hr : r < countBound) (hw : w < countBound) (a : Bool) :
-    (encode r w a &&& readerMask = BitVec.ofNat 64 readerUnit) ↔ r = 1 :=
-  Family.last_reader_guard (by decide) hr hw a
-
-theorem writing_guard (s : BitVec 64) : (s &&& writingBit != 0) = writing s :=
-  Family.writing_guard 31 1 s
-
-theorem clear_writer (r w : Nat) :
-    encode r w true &&& clearWriting = encode r w false := Family.clear_writer 31 1 r w
-
-theorem encode_inj {r w r' w' : Nat} (hr : r < countBound) (hw : w < countBound)
-    (hr' : r' < countBound) (hw' : w' < countBound) (a a' : Bool) :
-    encode r w a = encode r' w' a' ↔ r = r' ∧ w = w' ∧ a = a' :=
-  Family.encode_inj hr hw hr' hw' a a'
+/-! The `Family` lemmas apply to this instance directly through the `abbrev`s
+(`Family.add_reader 31 1`, `Family.read_guard`, ...); no restatement is kept. -/
 
 end RwState
 

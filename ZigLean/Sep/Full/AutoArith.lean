@@ -138,17 +138,18 @@ theorem and_not_lowMask' (x : BitVec w) (j : Nat) :
 /-- An exponent reduced modulo a bound it is below (`2 ^ (k % 64)` from a `u6` shift count). -/
 theorem pow_mod_elim {b x m : Nat} (h : x < m) : b ^ (x % m) = b ^ x := by rw [Nat.mod_eq_of_lt h]
 
-/-- Masks of natural numbers known by facts (the arithmetic solver's `addFacts`). -/
+/-- Masks of natural numbers known by facts (the arithmetic solver's `addFacts`): the two ends
+of the general field mask `Zig.land_field` (`ZigLean/Range.lean`). -/
 theorem land_low {a b j : Nat} (h : b = 2 ^ j - 1) : a &&& b = a % 2 ^ j := by
-  subst h; exact Nat.and_two_pow_sub_one_eq_mod a j
+  subst h; simpa using Zig.land_field a 0 j (Nat.zero_le j)
 theorem land_high' {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w - 2 ^ j) :
     a &&& b = a - a % 2 ^ j := by
-  have hjw : 2 ^ j ≤ 2 ^ w := Nat.pow_le_pow_right (by omega) hj
-  have hp := Nat.two_pow_pos j
-  have t := and_not_lowMask' (BitVec.ofNat w a) j
-  rw [BitVec.toNat_and, BitVec.toNat_not, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
-    Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt (by omega : 2 ^ j - 1 < 2 ^ w)] at t
-  rw [h, ← t]; congr 1; omega
+  have hq : a / 2 ^ j < 2 ^ (w - j) := by
+    rw [Nat.div_lt_iff_lt_mul (Nat.two_pow_pos j), ← Nat.pow_add, Nat.sub_add_cancel hj]
+    exact ha
+  have hd := Nat.mod_add_div a (2 ^ j)
+  rw [h, Zig.land_field a j w hj, Nat.mod_eq_of_lt hq, Nat.mul_comm]
+  omega
 
 /-- `land_high'` without truncated subtraction. -/
 theorem land_high {a b j w : Nat} (ha : a < 2 ^ w) (hj : j ≤ w) (h : b = 2 ^ w - 2 ^ j) :
