@@ -707,6 +707,37 @@ which `held` carries the whole claim before and after (`heldW`, `rresizePostW`).
 client for more and gives it the same claims back. `FAllocInv.resize_granted_of` (whole region)
 splits and joins the claim along with the bytes.
 
+### Read shares (maintainer decision 2026-11-06, #637)
+
+**The problem.** Heap ownership is exclusive: a byte is in exactly one resource's `FHeap`
+(`Holds.disj`), and knowledge (`Know`) is persistent, so it cannot stand for a read right that a
+later writer revokes. A generic `RwLockImpl` (any number of shared holders, any protected
+resource) must let several holders read the same bytes at once. The legacy `RwContract` avoided
+this with one reader and one writer.
+
+**The decision (option A).** Heap cells get fractions: a load needs a positive fraction of the
+byte's cell, a store or a free needs the byte exclusively, and shared acquire hands out the
+protected resource at a fraction. Rejected: an invariant-read rule (a load of bytes owned by a
+protocol's rest while its state excludes writers: no `Res` change, but a reader could not pass
+its access into sequential `FTriple` code such as a helper that reads a protected slice), and
+disjoint per-reader pieces (no shared reads of one cell, so not the whole family).
+
+**The share algebra** (`Res.lean` §Read shares, regressions `tests/roadmap/sep-full/ShareCX.lean`).
+A share cell `SCell := FCell → Frac` holds the fraction of each possible cell value; composition
+is pointwise addition, so it is total, commutative and associative with unit `SCell.zero`.
+`SCell.Valid` asks for at most one value with a positive fraction, held at most whole: shares
+that disagree on the cell, or that sum above `1`, do not compose. `SCell.cell` is the cell a valid
+share reads; a positive part reads the sum's cell (`cell_add`); next to the whole fraction a valid
+frame holds nothing (`Valid.whole`), which is the conversion between a whole share and exclusive
+ownership; split and join are equalities (`of_add`).
+
+**Integration (next steps, in order).** The shares become a component of the ghost state, and
+`Holds` matches the memory against the exclusive heaps and the cells of the composed shares, with
+share locations apart from both exclusive heaps. The load rule takes a positive share; store and
+free stay exclusive, so no rule changes a byte that a share reads. The concurrency layer orders
+every shared read before a later exclusive acquire (the RwLock's state word RMWs give the order).
+Then `RwLockImpl` hands shared holders the protected resource at a fraction.
+
 ### The fee of a grant (coordinator decision 2026-10-12)
 
 **The problem.** A `reset` that revokes outstanding grants is unsound whatever ghost state it
