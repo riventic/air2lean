@@ -95,10 +95,10 @@ namespace FOwned
 
 variable {a b : ThreadId → Res} {rO rb : Res} {m : Mem}
 
-/-- The parts own their bytes: a part of an exact composition is in a part. -/
+/-- The parts own their resources: a part of an exact composition is in a part. -/
 theorem owns_right (ho : FOwned (fun u => rsum (a u) (b u)) rO m) {u : ThreadId}
-    (hu : u < m.threads.size) : m.Owns u (b u).owned :=
-  (ho.owns u hu).sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)
+    (hu : u < m.threads.size) : m.OwnsRes u (b u) :=
+  (ho.owns u hu).sepR rfl rfl
 
 /-- **A family moves out of the parts into the rest**: each thread's part `a u ⋆ b u` keeps
 `a u`, and the composition `rb` of the `b u` joins the rest. -/
@@ -113,14 +113,16 @@ theorem out (ho : FOwned (fun u => rsum (a u) (b u)) rO m)
   obtain ⟨hdaO, hdbO⟩ := FHeap.disjoint_union_left.mp hdT
   have hcT : (rsum ra rb).NoCur := sepN_noCur (fun j r h => by rw [h]; exact ho.noCur.1 j) hs
   exact ⟨rb, hb, hdbO, ⟨ra, ha, hh.regroup (FHeap.disjoint_union_right.mpr ⟨hd, hdaO⟩)
-    rsum_assoc.symm⟩, fun u hu => (ho.owns u hu).sub fun l hl => (Res.owned_sep rfl rfl).mpr
-    (.inl hl), haout, ho.csize, ho.conc, ⟨fun u => Res.NoCur.left (ho.noCur.1 u),
+    rsum_assoc.symm⟩, fun u hu => (ho.owns u hu).sepL rfl rfl, haout, ho.csize, ho.conc, ⟨fun u => Res.NoCur.left (ho.noCur.1 u),
     Res.noCur_rsum (Res.NoCur.right hcT) ho.noCur.2⟩⟩
 
 /-- **A family moves from the rest into the parts**: the composition `rb` of the `b u` leaves
-the rest, and each thread's part grows by `b u`, whose bytes its clock owns. -/
+the rest, and each thread's part grows by `b u`, which its clock owns (`Mem.OwnsRes`). No byte
+gathers two partial shares (`hg`, `Mem.OwnsRes.gather`): a whole share would need every read of
+it ordered before the thread, which `OwnsRes` of the two shares does not give (`ShareRaceCX`). -/
 theorem into (ho : FOwned a (rsum rb rO) m) (hb : sepN m.threads.size (partOf b) rb)
-    (hbO : FHeap.Disjoint rb.heap rO.heap) (hown : ∀ u < m.threads.size, m.Owns u (b u).owned)
+    (hbO : FHeap.Disjoint rb.heap rO.heap) (hown : ∀ u < m.threads.size, m.OwnsRes u (b u))
+    (hg : ∀ u < m.threads.size, ∀ l, (a u).shared l = none ∨ (b u).shared l = none)
     (hbout : ∀ u, m.threads.size ≤ u → emp (b u)) :
     FOwned (fun u => rsum (a u) (b u)) rO m := by
   obtain ⟨ra, ha, hh⟩ := ho.holds
@@ -142,9 +144,7 @@ theorem into (ho : FOwned a (rsum rb rO) m) (hb : sepN m.threads.size (partOf b)
     hh.regroup (FHeap.disjoint_union_left.mpr ⟨hdaO, hbO⟩) rsum_assoc⟩, fun u hu => ?_,
     fun u hu => ?_, ho.csize, ho.conc,
     ⟨fun u => Res.noCur_rsum (ho.noCur.1 u) ?_, Res.NoCur.right hcR⟩⟩
-  · have h1 := ho.owns u hu
-    have h2 := hown u hu
-    exact (h1.union h2).sub fun l hl => Res.owned_sub_union rfl rfl hl
+  · exact (ho.owns u hu).gather (hown u hu) (hg u hu)
   · obtain ⟨h1, k1, g1⟩ := ho.outside u hu
     obtain ⟨h2, k2, g2⟩ := hbout u hu
     refine ⟨?_, ?_, ?_⟩
@@ -195,21 +195,28 @@ theorem off_owned_of_rest {own : ThreadId → Res} {rO rc : Res}
       · simp only [rsum, Ghost.add_share]
         exact SCell.pos_add_iff.mpr (.inr hp)
 
-/-- **A lock step keeps what any thread owns** without the word's bytes: the stepping thread's
-clock grows (`OwnsC.step`), the others stay, and no new access touches the bytes. -/
-theorem Owns.lstep {t u : ThreadId} {m' : Mem} {h : Heap} (hs : L.Step t m m') (hoff : L.Off h)
-    (hbl : L.b < m.blocks.size) (ho : m.Owns u h) : m'.Owns u h := by
+/-- **A lock step keeps what any thread's clock owns** without the word's bytes: the stepping
+thread's clock grows (`OwnsW.step`), the others stay, and no new access touches the bytes. -/
+theorem OwnsW.lstep {t u : ThreadId} {m' : Mem} {h : Heap} {w : Bool} (hs : L.Step t m m')
+    (hoff : L.Off h) (hbl : L.b < m.blocks.size) (ho : OwnsW w m (m.clocks[u]!) h) :
+    OwnsW w m' (m'.clocks[u]!) h := by
   by_cases e : u = t
-  · subst e; exact OwnsC.step hs hoff hbl ho
-  · unfold Mem.Owns; rw [hs.others u e]
-    intro en he htc
+  · subst e; exact OwnsW.step hs hoff hbl ho
+  · rw [hs.others u e]
+    intro en he hw htc
     by_cases hm : en ∈ m.footprint
-    · exact ho en hm (htc.imp id fun h => by rw [← hs.bsize]; exact h)
+    · exact ho en hm hw (htc.imp id fun h => by rw [← hs.bsize]; exact h)
     · rcases htc with htc | hbe
       · exact absurd htc (hs.fpOff hoff he hm)
       · rcases hs.fp en he with h | ⟨heb, -⟩
         · exact absurd h hm
         · rw [heb, hs.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
+
+/-- **A lock step keeps what any thread owns** without the word's bytes (`OwnsW.lstep`). -/
+theorem ownsRes_lstep {t u : ThreadId} {m' : Mem} {r : Res} (hs : L.Step t m m')
+    (hoff : L.Off r.owned) (hbl : L.b < m.blocks.size) (ho : m.OwnsRes u r) : m'.OwnsRes u r :=
+  ⟨ownsW_false.mp (OwnsW.lstep hs hoff.excl hbl (ownsW_false.mpr ho.1)),
+    ownsW_true.mp (OwnsW.lstep hs hoff.shared hbl (ownsW_true.mpr ho.2))⟩
 
 end LockWord
 
@@ -237,7 +244,7 @@ theorem own_eq (G : ThreadId → γ) (m : Mem) :
 structure Facts (G : ThreadId → γ) (m : Mem) (rL : Res) : Prop where
   w : L.WInv (L.pl G) m
   loff : L.Off rL.heap.erase
-  free : L.Free G → L.R G rL ∧ L.toLockWord.Owns (L.pl G) m rL.owned
+  free : L.Free G → L.R G rL ∧ L.toLockWord.OwnsRes (L.pl G) m rL
   busy : ¬ L.Free G → rL = rnil
   pdisj : ∀ u, FHeap.Disjoint (L.part (G u)).heap (L.held (G u)).heap
   idle : ∀ u, (L.ph (G u)).held = false → L.held (G u) = rnil
@@ -297,6 +304,23 @@ theorem Facts.free_held_disj (hf : L.Facts G m rL) {rH : Res}
     · rw [hf.idle j (hF.held j)] at hj; exact hj rfl
   · rw [hf.busy hF]; exact fun _ => .inl rfl
 
+variable (L) in
+/-- **No thread's part and held resource share a byte partially** (`FOwned.into`'s `hg`): moving
+the held resources into the parts gathers no read share (`Mem.OwnsRes.gather`; engine ledger
+#share-gather). -/
+def NoGatherHeld (G : ThreadId → γ) (m : Mem) : Prop :=
+  ∀ u < m.threads.size, ∀ l, (L.base G m u).shared l = none ∨ (L.heldOf G m u).shared l = none
+
+/-- A lock whose resource holds no partial share gathers none (`FAssn.Unshared`): a holder's
+resource satisfies `R`, any other thread holds nothing. -/
+theorem NoGatherHeld.of_R (hR : ∀ G, (L.R G).Unshared) (hf : L.Facts G m rL) :
+    L.NoGatherHeld G m := fun u _ l => .inr (by
+  unfold heldOf; split
+  · exact FAssn.Unshared.emp _ ⟨rfl, rfl, rfl⟩ l
+  · cases e : (L.ph (G u)).held
+    · rw [hf.idle u e]; exact FAssn.Unshared.emp _ ⟨rfl, rfl, rfl⟩ l
+    · exact hR G _ (hf.res u e) l)
+
 /-- **`B` in the other lock's view**: `B`'s word, its free resource `rL` and its holders'
 resources `rH`. -/
 abbrev side (B : FLock γ) (m : Mem) (rL rH : Res) : Res := rsum (B.wordR m) (rsum rL rH)
@@ -308,7 +332,7 @@ from `rL`, `rH`. -/
 structure Keeps (B : FLock γ) (G : ThreadId → γ) (m : Mem) (rL rH rX : Res) : Prop where
   facts : B.Facts G m rL
   held : sepN m.threads.size (partOf (B.heldOf G m)) rH
-  owns : ∀ u < m.threads.size, m.Owns u (B.heldOf G m u).owned
+  owns : ∀ u < m.threads.size, m.OwnsRes u (B.heldOf G m u)
   hoff : B.Off rH.heap.erase
   xdisj : FHeap.Disjoint (rsum rL rH).heap rX.heap
   xoff : B.Off rX.heap.erase
@@ -328,9 +352,11 @@ def U (B : FLock γ) (U : (ThreadId → γ) → Res → Mem → Prop) :
 
 /-- **Either lock's view gives the other's** (module doc): `A`'s invariant with `B`'s side in its
 rest, and `B` kept, give `B`'s invariant with `A`'s side in its rest, and `A` kept. The holders'
-resources of `A` move out of the threads' parts into `B`'s rest, and those of `B` move in. -/
+resources of `A` move out of the threads' parts into `B`'s rest, and those of `B` move in,
+gathering no read share (`hg`; `NoGatherHeld.of_R` for a resource without partial shares). -/
 theorem swap (hp : A.Pair B) {rLB rHB rX : Res}
-    (hi : A.Inv G (rsum (side B m rLB rHB) rX) m) (hk : B.Keeps G m rLB rHB rX) :
+    (hi : A.Inv G (rsum (side B m rLB rHB) rX) m) (hk : B.Keeps G m rLB rHB rX)
+    (hg : B.NoGatherHeld G m) :
     ∃ rLA rHA, B.Inv G (rsum (side A m rLA rHA) rX) m ∧ A.Keeps G m rLA rHA rX := by
   obtain ⟨rLA, ⟨hoA, hLoffA, hLXA, -, -⟩, hfA⟩ := hi.facts
   have hxA := hi.xoff
@@ -374,7 +400,7 @@ theorem swap (hp : A.Pair B) {rLB rHB rX : Res}
       (rsum (B.wordR m) (rsum rLB (rsum (side A m rLA rHA) rX))).heap :=
     FHeap.disjoint_union_right.mpr ⟨hHB_Bw, FHeap.disjoint_union_right.mpr ⟨hHB_LB,
       FHeap.disjoint_union_right.mpr ⟨hHB_SA, hxd.2⟩⟩⟩
-  have ho2 := ho1.into hk.held hHB_O hk.owns fun u hu => hk.facts.heldOf_out hu
+  have ho2 := ho1.into hk.held hHB_O hk.owns hg fun u hu => hk.facts.heldOf_out hu
   rw [← FLock.own_eq] at ho2
   have hBX : B.Off (rsum (side A m rLA rHA) rX).heap.erase :=
     LockWord.off_erase.mpr fun l hl => by
@@ -460,13 +486,14 @@ theorem Keeps.otherStep (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {m' : Me
   · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
     refine ⟨(hR rL).mpr h1, ?_⟩
     rw [hpl]
-    exact h2.otherStep hs hap hLown hbl fun _ h => h
+    exact ⟨h2.1.otherStep hs hap hLown.excl hbl fun _ h => h,
+      h2.2.otherStep hs hap hLown.shared hbl fun _ h => h⟩
   · rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u
   · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact hf.idle u hu
   · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact (hR _).mpr (hf.res u hu)
   · rw [hheld, hs.threads]; exact hk.held
   · rw [hs.threads] at hu; rw [hheld]
-    exact LockWord.Owns.lstep hs (hHown u hu) hbl (hk.owns u hu)
+    exact LockWord.ownsRes_lstep hs (hHown u hu) hbl (hk.owns u hu)
 
 /-- **A change of `A`'s coordinates keeps what the product keeps of `B`**, at the same memory
 (e.g. `A`'s nap and unnap, `FLock.Fits.nap`/`unnap`). -/
@@ -531,15 +558,18 @@ theorem U_atStop {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} (t
 
 /-- **The two-lock product's invariant is the same in either lock's view**: a protocol whose
 invariant is `A`'s with `Pair.U B U` is also `B`'s with `Pair.U A U` (`FLock.Fits.inv` for both
-locks). -/
-theorem inv_iff (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} :
+locks). Neither lock's held resources gather a read share with the parts (`hgA`, `hgB`;
+`NoGatherHeld.of_R`). -/
+theorem inv_iff (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop}
+    (hgA : ∀ rL, A.Facts G m rL → A.NoGatherHeld G m)
+    (hgB : ∀ rL, B.Facts G m rL → B.NoGatherHeld G m) :
     (∃ rX, A.Inv G rX m ∧ Pair.U B U G rX m) ↔ (∃ rX, B.Inv G rX m ∧ Pair.U A U G rX m) := by
   constructor
   · rintro ⟨_, hi, rL, rH, rX, rfl, hk, hU⟩
-    obtain ⟨rL', rH', hi', hk'⟩ := hp.swap hi hk
+    obtain ⟨rL', rH', hi', hk'⟩ := hp.swap hi hk (hgB rL hk.facts)
     exact ⟨_, hi', rL', rH', rX, rfl, hk', hU⟩
   · rintro ⟨_, hi, rL, rH, rX, rfl, hk, hU⟩
-    obtain ⟨rL', rH', hi', hk'⟩ := hp.symm.swap hi hk
+    obtain ⟨rL', rH', hi', hk'⟩ := hp.symm.swap hi hk (hgA rL hk.facts)
     exact ⟨_, hi', rL', rH', rX, rfl, hk', hU⟩
 
 end FLock.Pair
