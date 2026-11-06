@@ -337,6 +337,54 @@ def placeOperands (op : Op) : Array Val :=
 def placesOf (roots : Array (InstId × InstId)) (a : InstId) : Array InstId :=
   roots.filterMap fun (p, r) => if r == a then some p else none
 
+/-- `v` refers to the instruction `a`. -/
+def Val.isInst (a : InstId) : Val → Bool
+  | .inst id => id == a
+  | _ => false
+
+/-- `v` refers to one of the instructions `ids`. -/
+def Val.instIn (ids : Array InstId) : Val → Bool
+  | .inst id => ids.contains id
+  | _ => false
+
+/-- `v` is a wholly `undefined` value. -/
+def Val.isUndef : Val → Bool
+  | .undef _ => true
+  | _ => false
+
+def Op.isAlloc : Op → Bool
+  | .alloc => true
+  | _ => false
+
+def Op.isDbg : Op → Bool
+  | .dbg .. => true
+  | _ => false
+
+/-- A store of a wholly `undefined` value. -/
+def Op.isUndefStore : Op → Bool
+  | .store _ (.undef _) => true
+  | _ => false
+
+/-- `j` (or a body inside it) can jump to a block or loop that encloses `j`. -/
+def Inst.leavesBody (j : Inst) : Bool :=
+  let inner := flattenInst #[] j
+  inner.any fun x => x.op.effects.control.jumpTarget?.any fun t => !inner.any (·.id == t)
+
+/-- `j` (or a body inside it) has one of the places `ps` as an operand, `dbg` aside. -/
+def Inst.usesPlaceOf (ps : Array InstId) (j : Inst) : Bool :=
+  (flattenInst #[] j).any fun x => !x.op.isDbg && (placeOperands x.op).any (·.instIn ps)
+
+/-- `j` writes the whole local `a` (with the places `ps`) with a defined value: a `store` of a
+value with no `undefined` part, or an output-only `=` asm output whose inputs read no place of
+`a`. -/
+def Inst.overwritesLocal (ps : Array InstId) (a : InstId) (j : Inst) : Bool :=
+  match j.op with
+  | .store p v => p.isInst a && !v.isUndef && !v.hasNestedUndef
+  | .asm _ _ _ outputs inputs =>
+    outputs.any (fun o => o.ref.any (·.isInst a) && o.constraint.startsWith "=") &&
+      !inputs.any (·.ref.any (·.instIn ps))
+  | _ => false
+
 /-- The stores of a wholly `undefined` value to an `alloc` itself that no read can observe: the
 next instruction of the same body that uses a place of the `alloc` (`dbg` aside) writes the
 whole local with a defined value (a `store`, or an output-only `=` asm output), and no
@@ -344,43 +392,21 @@ instruction before it can leave the body to an enclosing block or loop (`br`, `r
 dispatch), which could reach a read past the write. -/
 def deadUndefStores (f : Func) : Array InstId :=
   let insts := f.allInsts
-  -- `j` (or a body inside it) can jump to a block or loop that encloses `j`.
-  let leaves (j : Inst) : Bool :=
-    let inner := flattenInst #[] j
-    inner.any fun x => match x.op.effects.control.jumpTarget? with
-      | some t => !inner.any (·.id == t)
-      | none => false
   let roots := placeRoots insts
   (bodyLists f.body).foldl (init := #[]) fun acc body =>
     body.zipIdx.foldl (init := acc) fun acc (i, k) => match i.op with
       | .store (.inst a) (.undef _) =>
-        if !insts.any (fun j => j.id == a && j.op matches .alloc) then acc else
+        if !insts.any (fun j => j.id == a && j.op.isAlloc) then acc else
         let ps := placesOf roots a
-        let usesA (j : Inst) : Bool := (flattenInst #[] j).any fun x => match x.op with
-          | .dbg .. => false
-          | op => (placeOperands op).any fun v => match v with
-            | .inst id => ps.contains id
-            | _ => false
-        let overwrites (j : Inst) : Bool := match j.op with
-          | .store (.inst p) v => p == a && !(v matches .undef _) && !v.hasNestedUndef
-          | .asm _ _ _ outputs inputs =>
-            outputs.any (fun o => (match o.ref with
-                | some (.inst id) => id == a
-                | _ => false) && o.constraint.startsWith "=") &&
-              !inputs.any fun o => match o.ref with
-                | some (.inst id) => ps.contains id
-                | _ => false
-          | _ => false
-        match (body.extract (k + 1) body.size).find? (fun j => usesA j || leaves j) with
-        | some j => if overwrites j then acc.push i.id else acc
-        | none => acc
+        let next := (body.extract (k + 1) body.size).find? fun j => j.usesPlaceOf ps || j.leavesBody
+        if next.any (·.overwritesLocal ps a) then acc.push i.id else acc
       | _ => acc
 
 /-- The `alloc`s that receive a store of a wholly `undefined` value that a read can observe
 (not `deadUndefStores`), through any of their places. -/
 def undefAllocs (f : Func) : Array InstId :=
   let insts := f.allInsts
-  if !insts.any (fun i => i.op matches .store _ (.undef _)) then #[] else
+  if !insts.any (·.op.isUndefStore) then #[] else
   let roots := placeRoots insts
   let dead := deadUndefStores f
   insts.foldl (init := #[]) fun acc i => match i.op with
@@ -400,28 +426,33 @@ def structFieldOffset? (types : Array Ty) (layouts : Array Layout) (tid : TyId) 
   if offsets.size != fields.size then none
   offsets[idx]?
 
+/-- The pointee type of the pointer-typed instruction `id` of `insts`. -/
+def instPtrChild? (types : Array Ty) (insts : Array Inst) (id : InstId) : Option TyId :=
+  ((insts.find? (·.id == id)).map (·.ty)).bind fun t => match types[t]? with
+    | some (.ptr _ _ c) => some c
+    | _ => none
+
+/-- The instruction `i` of `insts` uses the places `ps` only as a byte local's (`byteLocalOk`):
+as the pointer of a `load` or `store`, of a field pointer of a non-`packed` struct, or in
+`dbg`. -/
+def byteLocalUseOk (f : Func) (insts : Array Inst) (ps : Array InstId) (i : Inst) : Bool :=
+  if !(placeOperands i.op).any (·.instIn ps) then true else
+  match i.op with
+  | .load p => p.instIn ps
+  | .store p v => p.instIn ps && !v.instIn ps
+  | .fieldPtr p@(.inst b) idx =>
+    p.instIn ps && (f.layouts[i.ty]?.map (·.hostSize)).getD 0 == 0 &&
+      ((instPtrChild? f.types insts b).bind (structFieldOffset? f.types f.layouts · idx)).isSome
+  | .dbg .. => true
+  | _ => false
+
 /-- The `alloc` `a` can be a byte local (`Zig.Bytes`): its type has no pointer, and each of its
 places is the `alloc` or a field pointer of a non-`packed` struct, used only by `load`, `store`
 (as the pointer), `struct_field_ptr` and `dbg`. -/
 def byteLocalOk (f : Func) (insts : Array Inst) (roots : Array (InstId × InstId)) (a : InstId) :
     Bool :=
   let ps := placesOf roots a
-  let isP (v : Val) : Bool := match v with | .inst id => ps.contains id | _ => false
-  let tyOf (id : InstId) : Option TyId := (insts.find? (·.id == id)).map (·.ty)
-  let child (id : InstId) : Option TyId := (tyOf id).bind fun t => match f.types[t]? with
-    | some (.ptr _ _ c) => some c
-    | _ => none
-  (child a).any (!hasPtr f.types ·) &&
-  insts.all fun i =>
-    if !(placeOperands i.op).any isP then true else
-    match i.op with
-    | .load p => isP p
-    | .store p v => isP p && !isP v
-    | .fieldPtr p@(.inst b) idx =>
-      isP p && (f.layouts[i.ty]?.map (·.hostSize)).getD 0 == 0 &&
-        ((child b).bind (structFieldOffset? f.types f.layouts · idx)).isSome
-    | .dbg .. => true
-    | _ => false
+  (instPtrChild? f.types insts a).any (!hasPtr f.types ·) && insts.all (byteLocalUseOk f insts ps)
 
 /-- The byte locals of `f`: the `undefAllocs` that do not escape by their uses and are
 `byteLocalOk`. Each is a `Locals` field of type `Zig.Bytes T`. -/
@@ -482,9 +513,9 @@ def Func.admitsUndefPtr (f : Func) (t : TyId) : Bool :=
   f.allocatorModel == .translated &&
     (match f.types[t]? with | some (.ptr "one" ..) | some (.ptr "many" ..) => true | _ => false)
 
-/-- `f` uses memory by itself, not counting its calls. -/
-def Func.usesMemoryLocally (f : Func) : Bool :=
-  let insts := f.allInsts
+/-- The instruction `i` of `f` (`insts`: its instructions) is `@ptrFromInt`: a `bitcast` of a
+non-pointer to a pointer or optional pointer. -/
+def Func.isPtrFromInt (f : Func) (insts : Array Inst) (i : Inst) : Bool :=
   -- A pointer or optional pointer type.
   let ptrLike (t : Option TyId) : Bool := match t.bind (f.types[·]?) with
     | some (.ptr ..) => true
@@ -493,24 +524,32 @@ def Func.usesMemoryLocally (f : Func) : Bool :=
   let tyOf (v : Val) : Option TyId := match v with
     | .inst id => (insts.find? (·.id == id)).map (·.ty)
     | v => v.constTy?
+  match i.op with
+  | .bitcast _ a => ptrLike (some i.ty) && !ptrLike (tyOf a)
+  | _ => false
+
+/-- The instruction `i` of `f` (`insts`: its instructions) uses memory by itself. -/
+def Func.usesMemoryAt (f : Func) (insts : Array Inst) (i : Inst) : Bool :=
+  let values := valueOperands i.op
+  memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.dialect.arch ||
+  i.op.isMemAsm f.dialect.arch ||
+  values.any Val.pointsToMem ||
+  -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`);
+  -- `checkUndefOperands` admits it as a pointer operand too.
+  (values ++ ptrOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
+  -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
+  f.isPtrFromInt insts i ||
+  -- Nullable pointer temporaries need address observations even with no pointer
+  -- parameters, no dereference and an integer/bool return.
+  nullablePtrTy f.types f.layouts i.ty ||
+  -- A place operand that is a pointer constant is memory, not a local.
+  i.op.effects.places.any Val.pointsToMem
+
+/-- `f` uses memory by itself, not counting its calls. -/
+def Func.usesMemoryLocally (f : Func) : Bool :=
+  let insts := f.allInsts
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    insts.any fun i =>
-      let values := valueOperands i.op
-      memoryOp i.op f.allocatorModel || i.op.isDeviceAsm f.dialect.arch ||
-      i.op.isMemAsm f.dialect.arch ||
-      values.any Val.pointsToMem ||
-      -- An admitted `undefined` pointer operand reads the oracle in `Zig.Mem` (`Zig.undefPtr`);
-      -- `checkUndefOperands` admits it as a pointer operand too.
-      (values ++ ptrOperands i.op).any (Val.hasUndefExcept (!f.admitsUndefPtr ·)) ||
-      -- `@ptrFromInt` resolves the address against the memory's blocks (`Zig.ptrFromAddr`).
-      (match i.op with
-       | .bitcast _ a => ptrLike (some i.ty) && !ptrLike (tyOf a)
-       | _ => false) ||
-      -- Nullable pointer temporaries need address observations even with no pointer
-      -- parameters, no dereference and an integer/bool return.
-      nullablePtrTy f.types f.layouts i.ty ||
-      -- A place operand that is a pointer constant is memory, not a local.
-      i.op.effects.places.any Val.pointsToMem
+    insts.any (f.usesMemoryAt insts)
 
 /-- Is `id`'s value read anywhere in `f`, chasing it through a block-exit `br` that only
 forwards it as the block's own value: a call to a generic/inline std function (e.g. `fetchAdd`)
