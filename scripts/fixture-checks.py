@@ -62,6 +62,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -305,7 +306,12 @@ def _stage(unit, scratch):
             if not shutil.which(env[name].split()[0], path=env['PATH']):
                 raise Unavailable('missing prerequisite: %s=%s is not installed '
                                   '(scripts/doctor.sh native-runners)' % (name, env[name]))
-    return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
+    # Every attempt starts from the staged temp, as a CI job starts from a fresh runner.temp:
+    # build-guard runs a unit stopped at its charge again with the same command
+    # (`retries_at_declared`), and the stopped attempt's outputs there are no input of the rerun
+    # (spawn-failure's evidence directory must be empty). The staged entries are the host-zig links.
+    reset = 'find %s -mindepth 1 -maxdepth 1 ! -name "host-zig-*" -exec rm -rf -- {} +\n' % shlex.quote(str(temp))
+    return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', reset + place(unit['run'])], env
 
 
 def elastic_grant():
