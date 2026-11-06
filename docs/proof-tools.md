@@ -319,8 +319,9 @@ declaration, so it covers every translation whose run needs at most its `n` pass
 ### `unroll_sched` (legacy-to-retire)
 
 `ZigLean.Conc.Unroll` (an optional module) is the earlier tactic for the same goals, being
-retired (`docs/legacy-retirement.md`, section 5). Its last proof uses are the two RwLock run
-witnesses (`Proofs/Sync/RwLock.lean`, `Proofs/Sync/RwLockSnapshotPair.lean`):
+retired (`docs/legacy-retirement.md`, section 5). Its only remaining use is its own regression
+fixture; program witnesses, including the RwLock witnesses, use the `zig_run` form above. The
+earlier form was:
 
 ```lean
 theorem rwLockRead_completes : … :=
