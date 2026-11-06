@@ -21,6 +21,8 @@ def addTo (p0 : Zig.Ptr) (p1 : Zig.Vec (BitVec 32) 4) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] addTo
+
 structure andLanesLocals where
   deriving Inhabited
 
@@ -34,6 +36,8 @@ def andLanes (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] andLanes
+
 structure checkedAddLocals where
   deriving Inhabited
 
@@ -46,6 +50,8 @@ def checkedAdd (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.R
     pure (.ret i2)) : Zig.M checkedAddLocals checkedAddExit).run' (default : checkedAddLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] checkedAdd
 
 structure fDotLocals where
   deriving Inhabited
@@ -61,6 +67,8 @@ def fDot (p0 : Zig.Vec (Zig.F32) 4) (p1 : Zig.Vec (Zig.F32) 4) : Zig.Result (Zig
   match e with
   | .ret v => pure v
 
+attribute [zig_run] fDot
+
 structure fMaxLocals where
   deriving Inhabited
 
@@ -73,6 +81,8 @@ def fMax (p0 : Zig.Vec (Zig.F32) 4) : Zig.Result (Zig.F32) := do
     pure (.ret i1)) : Zig.M fMaxLocals fMaxExit).run' (default : fMaxLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] fMax
 
 structure fMinLocals where
   deriving Inhabited
@@ -87,6 +97,8 @@ def fMin (p0 : Zig.Vec (Zig.F32) 4) : Zig.Result (Zig.F32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] fMin
+
 structure interleaveLocals where
   deriving Inhabited
 
@@ -99,6 +111,8 @@ def interleave (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.R
     pure (.ret i2)) : Zig.M interleaveLocals interleaveExit).run' (default : interleaveLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] interleave
 
 structure maxLaneLocals where
   deriving Inhabited
@@ -113,6 +127,8 @@ def maxLane (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] maxLane
+
 structure minLaneLocals where
   deriving Inhabited
 
@@ -125,6 +141,8 @@ def minLane (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M minLaneLocals minLaneExit).run' (default : minLaneLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] minLane
 
 structure orLanesLocals where
   deriving Inhabited
@@ -139,6 +157,8 @@ def orLanes (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] orLanes
+
 structure pickLocals where
   deriving Inhabited
 
@@ -152,6 +172,8 @@ def pick (p0 : Zig.Vec (Bool) 4) (p1 : Zig.Vec (BitVec 32) 4) (p2 : Zig.Vec (Bit
   match e with
   | .ret v => pure v
 
+attribute [zig_run] pick
+
 structure reverseLocals where
   deriving Inhabited
 
@@ -164,6 +186,8 @@ def reverse (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) :=
     pure (.ret i1)) : Zig.M reverseLocals reverseExit).run' (default : reverseLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] reverse
 
 structure sModLocals where
   deriving Inhabited
@@ -188,6 +212,8 @@ def sMod (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sMod
+
 structure sRemLocals where
   deriving Inhabited
 
@@ -211,6 +237,8 @@ def sRem (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sRem
+
 structure satAddLocals where
   deriving Inhabited
 
@@ -223,6 +251,8 @@ def satAdd (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Resul
     pure (.ret i2)) : Zig.M satAddLocals satAddExit).run' (default : satAddLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] satAdd
 
 structure splatAddLocals where
   deriving Inhabited
@@ -237,6 +267,8 @@ def splatAdd (p0 : Zig.Vec (BitVec 32) 4) (p1 : BitVec 32) : Zig.Result (Zig.Vec
     pure (.ret i3)) : Zig.M splatAddLocals splatAddExit).run' (default : splatAddLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] splatAdd
 
 structure twiceInMemLocals where
   acc : Zig.Ptr
@@ -257,6 +289,8 @@ def twiceInMem (p0 : Zig.Vec (BitVec 32) 4) : Zig.MemM (Zig.Vec (BitVec 32) 4) :
   match e with
   | .ret v => pure v
 
+attribute [zig_run] twiceInMem
+
 structure uDotWrapLocals where
   deriving Inhabited
 
@@ -271,6 +305,8 @@ def uDotWrap (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Res
   match e with
   | .ret v => pure v
 
+attribute [zig_run] uDotWrap
+
 structure uMinLaneLocals where
   deriving Inhabited
 
@@ -284,6 +320,8 @@ def uMinLane (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] uMinLane
+
 structure vAbsLocals where
   deriving Inhabited
 
@@ -296,6 +334,8 @@ def vAbs (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
     pure (.ret i1)) : Zig.M vAbsLocals vAbsExit).run' (default : vAbsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vAbs
 
 structure vBitsLocals where
   deriving Inhabited
@@ -312,6 +352,8 @@ def vBits (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result
     pure (.ret i5)) : Zig.M vBitsLocals vBitsExit).run' (default : vBitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vBits
 
 structure vDivLocals where
   deriving Inhabited
@@ -349,6 +391,8 @@ def vDiv (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] vDiv
+
 structure vLessLocals where
   deriving Inhabited
 
@@ -362,6 +406,8 @@ def vLess (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result
     pure (.ret i3)) : Zig.M vLessLocals vLessExit).run' (default : vLessLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vLess
 
 structure vMinMaxLocals where
   deriving Inhabited
@@ -377,6 +423,8 @@ def vMinMax (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Resu
     pure (.ret i4)) : Zig.M vMinMaxLocals vMinMaxExit).run' (default : vMinMaxLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vMinMax
 
 structure vModLocals where
   deriving Inhabited
@@ -402,6 +450,8 @@ def vMod (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Result 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] vMod
+
 structure vNarrowLocals where
   deriving Inhabited
 
@@ -415,6 +465,8 @@ def vNarrow (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 16) 4) :=
   match e with
   | .ret v => pure v
 
+attribute [zig_run] vNarrow
+
 structure vNegLocals where
   deriving Inhabited
 
@@ -427,6 +479,8 @@ def vNeg (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (BitVec 32) 4) := do
     pure (.ret i1)) : Zig.M vNegLocals vNegExit).run' (default : vNegLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vNeg
 
 structure vOverflowLocals where
   deriving Inhabited
@@ -445,6 +499,8 @@ def vOverflow (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Re
   match e with
   | .ret v => pure v
 
+attribute [zig_run] vOverflow
+
 structure vShiftLocals where
   deriving Inhabited
 
@@ -461,6 +517,8 @@ def vShift (p0 : Zig.Vec (BitVec 32) 4) (p1 : Zig.Vec (BitVec 32) 4) : Zig.Resul
   match e with
   | .ret v => pure v
 
+attribute [zig_run] vShift
+
 structure vToFloatLocals where
   deriving Inhabited
 
@@ -474,6 +532,8 @@ def vToFloat (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (Zig.Vec (Zig.F32) 4) := 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] vToFloat
+
 structure xorLanesLocals where
   deriving Inhabited
 
@@ -486,5 +546,7 @@ def xorLanes (p0 : Zig.Vec (BitVec 32) 4) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M xorLanesLocals xorLanesExit).run' (default : xorLanesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] xorLanes
 
 end Vectors

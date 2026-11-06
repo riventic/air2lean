@@ -50,6 +50,8 @@ def localA  : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] localA
+
 structure localBLocals where
   local0 : Zig.Ptr
   deriving Inhabited
@@ -69,6 +71,8 @@ def localB  : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] localB
+
 structure recLenLocals where
   deriving Inhabited
 
@@ -83,6 +87,8 @@ def recLen  : Zig.MemM (BitVec 8) := do
     pure (.ret i2)) : Zig.MM recLenLocals recLenExit).run' (default : recLenLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] recLen
 
 structure recMidLocals where
   deriving Inhabited
@@ -99,6 +105,8 @@ def recMid  : Zig.MemM (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] recMid
+
 structure storePairLocals where
   deriving Inhabited
 
@@ -111,5 +119,7 @@ def storePair (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM storePairLocals storePairExit).run' (default : storePairLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] storePair
 
 end UndefOperands

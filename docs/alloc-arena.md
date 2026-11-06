@@ -120,7 +120,7 @@ for the child of `arena_oom_free`: for every invariant `I` with `CAllocSpec vt a
 admits 8 and 4096 bytes, `I.own` does not hold, with any frame, in the memory right after
 `init`: its `alloc` and `free` triples compose into a triple of the client `alloc(8)`, `alloc(4096)`, `free`
 (`client_ct`), whose run from that memory the kernel computes to `.illegal` (`client_illegal`,
-`unroll_solo` cutting the arena's `partial_fixpoint` group; the memory is `Mem.FSeq` by
+after the `zig_run` simp passes unfold the arena's `partial_fixpoint` group and loops; the memory is `Mem.FSeq` by
 `decide`). The fix is in the arena: the patch gives the reservation back when the request does
 not fit and makes the overflowing sizes fail instead of panicking.
 

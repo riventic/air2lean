@@ -562,14 +562,24 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
            noalias := raw.noalias, uncheckedIb := raw.uncheckedIb,
            allocatorModel := raw.allocatorModel, targetOs := BuildProfile.tripleOs raw.profile.targetTriple }
 
+/-- `normalize`, with the Canon rewrites that fired when `track` (`Raw.CanonTrace.fired`) and,
+when `renumber` fired, its input decoded (`none` if that input does not decode: `renumber` then
+stays trusted). -/
+def normalizeTraced (raw : Raw.RawFunc) (track : Bool) :
+    Except String (Func × Option Func × Array String) := do
+  let trace ← Raw.canonicalizeTraced raw track
+  let pre := if trace.fired.contains "renumber" then
+    (normalizeCanonical trace.input).toOption else none
+  return (← normalizeCanonical trace.afterDebug, pre, trace.fired)
+
 /-- `RawFunc → Func`. Rejects a `zig_version` outside `ZigVersion.all`. -/
-def normalize (raw : Raw.RawFunc) : Except String Func := do
-  normalizeCanonical (← Raw.canonicalize raw)
+def normalize (raw : Raw.RawFunc) : Except String Func :=
+  (·.1) <$> normalizeTraced raw false
 
 /-- Actual normalized inputs and outputs of canonicalization's final debug-definition
 rewrite. The ordinary path decodes only the final snapshot; certificate emission retains both. -/
 def normalizeDebugTrace (raw : Raw.RawFunc) : Except String (Nat × Func × Func) := do
-  let trace ← Raw.canonicalizeTraced raw
+  let trace ← Raw.canonicalizeTraced raw false
   return (trace.offset, ← normalizeCanonical trace.beforeDebug, ← normalizeCanonical trace.afterDebug)
 
 /-- The exporter's error numbering beside the AIR files (`error-table.air2lean`, L10), if any.

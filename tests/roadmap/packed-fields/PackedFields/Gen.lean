@@ -120,6 +120,8 @@ def boolOn  : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] boolOn
+
 structure hostAbiLocals where
   deriving Inhabited
 
@@ -136,6 +138,8 @@ def hostAbi  : Zig.MemM (BitVec 4) := do
     pure (.ret i4)) : Zig.MM hostAbiLocals hostAbiExit).run' (default : hostAbiLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] hostAbi
 
 structure innerCLocals where
   deriving Inhabited
@@ -155,6 +159,8 @@ def innerC  : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] innerC
+
 structure innerCKeepsALocals where
   deriving Inhabited
 
@@ -173,6 +179,8 @@ def innerCKeepsA  : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] innerCKeepsA
+
 structure innerPartialLocals where
   deriving Inhabited
 
@@ -188,6 +196,8 @@ def innerPartial  : Zig.MemM (Inner) := do
     pure (.ret i3)) : Zig.MM innerPartialLocals innerPartialExit).run' (default : innerPartialLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] innerPartial
 
 structure localUndefLocals where
   local0 : Zig.Ptr
@@ -211,6 +221,8 @@ def localUndef  : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] localUndef
+
 structure modeHighLocals where
   deriving Inhabited
 
@@ -225,6 +237,8 @@ def modeHigh  : Zig.MemM (Mode) := do
     pure (.ret i2)) : Zig.MM modeHighLocals modeHighExit).run' (default : modeHighLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] modeHigh
 
 structure setALocals where
   deriving Inhabited
@@ -241,6 +255,8 @@ def setA  : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setA
+
 structure setInnerLocals where
   deriving Inhabited
 
@@ -256,6 +272,8 @@ def setInner  : Zig.MemM (Inner) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setInner
+
 structure signedSLocals where
   deriving Inhabited
 
@@ -270,6 +288,8 @@ def signedS  : Zig.MemM (BitVec 5) := do
     pure (.ret i2)) : Zig.MM signedSLocals signedSExit).run' (default : signedSLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] signedS
 
 structure undefFieldLocals where
   deriving Inhabited
@@ -287,6 +307,8 @@ def undefField  : Zig.MemM (BitVec 4) := do
     pure (.ret i4)) : Zig.MM undefFieldLocals undefFieldExit).run' (default : undefFieldLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] undefField
 
 structure undefKeepsALocals where
   deriving Inhabited
@@ -306,6 +328,8 @@ def undefKeepsA  : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] undefKeepsA
+
 structure unionBadModeLocals where
   deriving Inhabited
 
@@ -322,6 +346,8 @@ def unionBadMode  : Zig.MemM (Mode) := do
     pure (.ret i4)) : Zig.MM unionBadModeLocals unionBadModeExit).run' (default : unionBadModeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unionBadMode
 
 structure unionRawLocals where
   deriving Inhabited
@@ -340,5 +366,7 @@ def unionRaw  : Zig.MemM (BitVec 24) := do
     pure (.ret i5)) : Zig.MM unionRawLocals unionRawExit).run' (default : unionRawLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unionRaw
 
 end PackedFields

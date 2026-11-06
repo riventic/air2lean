@@ -231,6 +231,11 @@ def op_table(cache=None):
     return dict(data, tags=rows)
 
 
+# The AIR semantics (V01). The op table's `sem_outside_reason` is `Sem.outside?`: null for a
+# constructor that it interprets; tests/roadmap/op-effects checks it against the interpreter.
+SEM = 'Air2Lean/Sem.lean'
+
+
 def table_reasons(table, field):
     """{tag: reason} for one reason column (`runtime_reason`, `exporter_reason`)."""
     return {tag: row[field] for tag, row in table['tags'].items() if row[field]}
@@ -362,6 +367,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/null-pointers/air/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/null-pointers/air-reject/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
+    'tests/roadmap/loop-tactics/counted/air': 'tests/roadmap/loop-tactics/counted/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',
@@ -734,7 +740,9 @@ def lean_section(text, name):
     match = re.search(r'^(?:(?:private|partial|noncomputable) )*def ' + re.escape(name) + r'(?![^\s])', text, re.M)
     if not match:
         raise ValueError(f'missing Lean definition {name}')
-    end = re.compile(r'^(?:/--|@\[|end\b|mutual\b|theorem |(?:(?:private|partial|noncomputable) )*def )', re.M).search(text, match.end())
+    end = re.compile(r'^(?:/--|@\[|#|(?:end|mutual|namespace|section|open|attribute|set_option)\b|'
+                     r'(?:(?:private|protected|partial|noncomputable|unsafe) )*'
+                     r'(?:def|theorem|lemma|abbrev|instance|structure|inductive|class|example|opaque|axiom)\b)', re.M).search(text, match.end())
     return text[match.start():end.start() if end else len(text)]
 
 
@@ -889,12 +897,18 @@ def generate(version, source, os_name='linux'):
     resolved = canon_resolved(cache.text(ROOT/'Air2Lean/Air/Canon.lean'))
     produced = producer_literals(source, cache)
     fixture_text = cache.text(ROOT/FIXTURE_SOURCE)
-    semantic_paths = sorted((ROOT/'ZigLean').rglob('*.lean'))
+    sem_reasons = {row['constructor']: row['sem_outside_reason'] for row in table['tags'].values() if row['constructor']}
+    def semantics(ops, disposition):
+        # V01: a tag is interpreted when Sem.lean interprets each of its constructors.
+        if not ops:
+            status = 'resolved-in-canon' if disposition == 'resolved-in-canon' else 'not-decoded'
+            return {'status': status, 'paths': [], 'reasons': []}
+        reasons = [f'{op}: {sem_reasons[op]}' for op in dict.fromkeys(ops) if sem_reasons[op]]
+        return {'status': 'outside-fragment' if reasons else 'interpreted', 'paths': [SEM], 'reasons': reasons}
     proof_paths = sorted((ROOT/'Proofs').rglob('*.lean'))
-    path_groups = {'semantics': semantic_paths, 'proofs': proof_paths}
     @lru_cache(maxsize=None)
-    def hits(group, symbol):
-        return source_hits(path_groups[group], symbol, cache)
+    def hits(symbol):
+        return source_hits(proof_paths, symbol, cache)
 
     # Parse actual selected golden and reviewed roadmap compiler-exported JSON; a malformed
     # fixture is not silently evidence.
@@ -961,10 +975,10 @@ def generate(version, source, os_name='linux'):
                      'normalization': {'status': 'explicit-source-rejection' if rejection_reason else 'fast-math-rejection' if tag.endswith(fast_suffix) else 'explicit-source-branch' if tag in norms else 'canon-resolved' if disposition == 'resolved-in-canon' else 'unknown-tag-rejection', 'constructors': ops},
                      'parser': {'status': 'generic-schema-source-only', 'paths': ['Air2Lean/Air/Schema.lean', 'Air2Lean/Air/Json.lean', 'Air2Lean/Air/Canon.lean']},
                      'checker': {'status': 'conditional-type-and-layout-review-required', 'paths': ['Air2Lean/Check.lean']},
-                     'semantics': {'status': 'symbol-index-only', 'paths': sorted(set(p for op in ops for p in hits('semantics', op)))},
+                     'semantics': semantics(ops, disposition),
                      'emission': {'status': emission, 'paths': ['Air2Lean/Emit.lean'] if reached else []},
                      'tests': {'status': 'compiler-fixture-presence-only', 'paths': sorted(test_tags.get(tag, []))},
-                     'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits('proofs', op)))},
+                     'proofs': {'status': 'symbol-index-only-not-proof-coverage', 'paths': sorted(set(p for op in ops for p in hits(op)))},
                      'rejection': {'reason': reason, 'source': 'Air2Lean/Air/Normalize.lean', 'definition': REJECTION_DEFINITIONS[disposition]} if reason else None,
                      'fixture_request': request if disposition == 'emitted-unfixtured' else None,
                      'guidance': (reason + '; source-only rejection classification, no compiler fixture or support qualification') if reason else DISPOSITIONS['tags'][disposition] + ' Qualification needs a compiler fixture, rejection/differential tests and a checked contract.'}))

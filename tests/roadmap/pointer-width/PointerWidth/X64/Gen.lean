@@ -42,6 +42,8 @@ def «at» (p0 : Array (BitVec 32)) (p1 : BitVec 64) : Zig.Result (BitVec 32) :=
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] «at»
+
 structure byteCountLocals where
   deriving Inhabited
 
@@ -67,6 +69,8 @@ def byteCount (p0 : BitVec 64) : Zig.Result (Option (BitVec 64)) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] byteCount
 
 structure copy4Locals where
   deriving Inhabited
@@ -110,6 +114,8 @@ def copy4 (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] copy4
+
 structure offsetOfLocals where
   local2 : Zig.Slice
   deriving Inhabited
@@ -141,6 +147,8 @@ def offsetOf (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] offsetOf
+
 structure releaseLocals where
   deriving Inhabited
 
@@ -154,6 +162,8 @@ def release (p0 : Zig.Allocator) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM releaseLocals releaseExit).run' (default : releaseLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] release
 
 structure restLenLocals where
   deriving Inhabited
@@ -170,6 +180,8 @@ def restLen (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] restLen
+
 structure setFirstLocals where
   deriving Inhabited
 
@@ -185,6 +197,8 @@ def setFirst (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] setFirst
+
 structure succLocals where
   deriving Inhabited
 
@@ -197,6 +211,8 @@ def succ (p0 : BitVec 64) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M succLocals succExit).run' (default : succLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] succ
 
 structure zerosLocals where
   deriving Inhabited
@@ -221,5 +237,7 @@ def zeros (p0 : Zig.Allocator) (p1 : BitVec 64) : Zig.MemM (Except Zig.ErrName (
       pure (.ret i10))) : Zig.MM zerosLocals zerosExit).run' (default : zerosLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] zeros
 
 end PointerWidth.X64

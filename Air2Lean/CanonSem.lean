@@ -130,6 +130,9 @@ def eraseFunc (f : Func) : Func := { f with body := (eraseBody f.body.toList).to
 
 def eraseCtx (c : Ctx) : Ctx := { c with func := eraseFunc c.func }
 
+theorem iteration_erase (c : Ctx) {α : Type} (body : SM α) :
+    iteration (eraseCtx c) body = iteration c body := rfl
+
 theorem eraseCases_all (cs : List SwitchCase)
     (p : Array Val → Array (Val × Val) → Bool) :
     (eraseCases cs).all (fun sc => p sc.items sc.ranges) =
@@ -259,7 +262,7 @@ theorem execBody_erase (c : Ctx) : ∀ l env,
     rfl
   case case29 =>
     intro id body env ih
-    simp only [execLoop, ih]
+    simp only [execLoop, iteration_erase, ih]
   all_goals
     intro i
     obtain ⟨id, ty, op⟩ := i
@@ -276,14 +279,16 @@ theorem execBody_erase (c : Ctx) : ∀ l env,
   case case26 =>
     cases op <;> simp_all <;> try rfl
 
-theorem execFunc_erase (call : Oracle) (f : Func) (args : List Value) :
-    execFunc call (eraseFunc f) args = execFunc call f args := by
-  simp only [execFunc, argsOk_erase, show (eraseFunc f).params = f.params from rfl]
+theorem execFunc_erase (prog : Prog) (call : Oracle) (f : Func) (args : List Value) :
+    execFunc prog call (eraseFunc f) args = execFunc prog call f args := by
+  simp only [execFunc, argsOk_erase, show (eraseFunc f).params = f.params from rfl,
+    show (eraseFunc f).name = f.name from rfl]
   by_cases h : argsOk f f.params.toList args = true
   · simp only [h, ite_true]
-    have hb := execBody_erase ⟨f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)
+    have hb := execBody_erase ⟨prog, f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)
     change (do
-      let (e, frame) ← (execBody (eraseCtx ⟨f, args, call, fun _ => none⟩)
+      if prog.entryTicked f.name then Zig.tick
+      let (e, frame) ← (execBody (eraseCtx ⟨prog, f, args, call, fun _ => none⟩)
         (eraseBody f.body.toList) (fun _ => none)).run {}
       frame.blocks.forM Zig.free
       match e with | .ret v => pure v | _ => StateT.lift stuck) = _
@@ -291,20 +296,20 @@ theorem execFunc_erase (call : Oracle) (f : Func) (args : List Value) :
     congr 1
   · simp only [h, Bool.false_eq_true, ite_false]
 
-theorem execFunc_of_erase_eq (call : Oracle) (f g : Func) (args : List Value)
-    (h : eraseFunc f = eraseFunc g) : execFunc call f args = execFunc call g args := by
+theorem execFunc_of_erase_eq (prog : Prog) (call : Oracle) (f g : Func) (args : List Value)
+    (h : eraseFunc f = eraseFunc g) : execFunc prog call f args = execFunc prog call g args := by
   calc
-    execFunc call f args = execFunc call (eraseFunc f) args := (execFunc_erase call f args).symm
-    _ = execFunc call (eraseFunc g) args := congrArg (fun k => execFunc call k args) h
-    _ = execFunc call g args := execFunc_erase call g args
+    execFunc prog call f args = execFunc prog call (eraseFunc f) args := (execFunc_erase prog call f args).symm
+    _ = execFunc prog call (eraseFunc g) args := congrArg (fun k => execFunc prog call k args) h
+    _ = execFunc prog call g args := execFunc_erase prog call g args
 
 /-- Keep shared metadata opaque while checking the actual bodies. The conclusion is the
 same full execution equality; the certificate discharges the body-erasure equality. -/
-theorem execFunc_of_body_erase_eq (call : Oracle) (metadata : Func)
+theorem execFunc_of_body_erase_eq (prog : Prog) (call : Oracle) (metadata : Func)
     (before after : Array Inst) (args : List Value)
     (h : eraseBody before.toList = eraseBody after.toList) :
-    execFunc call { metadata with body := before } args =
-      execFunc call { metadata with body := after } args := by
+    execFunc prog call { metadata with body := before } args =
+      execFunc prog call { metadata with body := after } args := by
   apply execFunc_of_erase_eq
   exact congrArg (fun body => { metadata with body := body.toArray }) h
 
@@ -312,9 +317,9 @@ theorem execFunc_of_body_erase_eq (call : Oracle) (metadata : Func)
 Actual Raw snapshots are bound to this map by native evidence, never per-case re-proofs.
 The equality may hold vacuously when both executions are stuck outside Sem's fragment
 or because a reference cannot be resolved; it does not prove defined execution. -/
-theorem execFunc_mapDebugArray (call : Oracle) (f : Func) (rename : InstId → InstId)
+theorem execFunc_mapDebugArray (prog : Prog) (call : Oracle) (f : Func) (rename : InstId → InstId)
     (args : List Value) :
-    execFunc call f args = execFunc call { f with body := mapDebugArray rename f.body } args := by
-  exact execFunc_of_body_erase_eq call f f.body _ args (erase_mapDebugArray rename f.body)
+    execFunc prog call f args = execFunc prog call { f with body := mapDebugArray rename f.body } args := by
+  exact execFunc_of_body_erase_eq prog call f f.body _ args (erase_mapDebugArray rename f.body)
 
 end Air2Lean.DebugIds

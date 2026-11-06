@@ -46,7 +46,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .writeWorker (capture0, _) => [.ptr capture0, .value]
 
@@ -62,6 +62,8 @@ def writeWorker (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM writeWorkerLocals writeWorkerExit).run' (default : writeWorkerLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] writeWorker
 
 structure groupAsyncLocals where
   out : Zig.Ptr
@@ -97,6 +99,8 @@ def groupAsync (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNam
   Zig.free s2
   match e with
   | .ret v => pure v
+
+attribute [zig_run] groupAsync
 
 structure groupConcurrentLocals where
   out : Zig.Ptr
@@ -143,6 +147,8 @@ def groupConcurrent (p0 : Zig.Io) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
   match e with
   | .ret v => pure v
 
+attribute [zig_run] groupConcurrent
+
 structure threadCatchLocals where
   out : Zig.Ptr
   deriving Inhabited
@@ -176,6 +182,8 @@ def threadCatch (p0 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] threadCatch
 
 structure threadPairLocals where
   left : Zig.Ptr
@@ -225,10 +233,14 @@ def threadPair (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32))
   match e with
   | .ret v => pure v
 
+attribute [zig_run] threadPair
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .writeWorker a =>
     let (capture0, capture1) := a
     discard (Zig.ConcM.liftMem (writeWorker capture0 capture1))
+
+attribute [zig_run] dispatch
 
 end SpawnFailure

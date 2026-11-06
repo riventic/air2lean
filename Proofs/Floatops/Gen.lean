@@ -91,6 +91,8 @@ def cmp64 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] cmp64
+
 structure divExact64Locals where
   deriving Inhabited
 
@@ -114,6 +116,8 @@ def divExact64 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] divExact64
 
 structure op128Locals where
   deriving Inhabited
@@ -242,6 +246,8 @@ def op128 (p0 : BitVec 8) (p1 : Zig.F128) (p2 : Zig.F128) (p3 : Zig.F128) : Zig.
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] op128
+
 structure op16Locals where
   deriving Inhabited
 
@@ -368,6 +374,8 @@ def op16 (p0 : BitVec 8) (p1 : Zig.F16) (p2 : Zig.F16) (p3 : Zig.F16) : Zig.Resu
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] op16
 
 structure op32Locals where
   deriving Inhabited
@@ -496,6 +504,8 @@ def op32 (p0 : BitVec 8) (p1 : Zig.F32) (p2 : Zig.F32) (p3 : Zig.F32) : Zig.Resu
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] op32
+
 structure op64Locals where
   deriving Inhabited
 
@@ -623,6 +633,8 @@ def op64 (p0 : BitVec 8) (p1 : Zig.F64) (p2 : Zig.F64) (p3 : Zig.F64) : Zig.Resu
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] op64
+
 structure op80Locals where
   deriving Inhabited
 
@@ -749,5 +761,7 @@ def op80 (p0 : BitVec 8) (p1 : Zig.F80) (p2 : Zig.F80) (p3 : Zig.F80) : Zig.Resu
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] op80
 
 end Floatops

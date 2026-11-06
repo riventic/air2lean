@@ -32,7 +32,7 @@ proof framework").
 * `tactics`: every tactic declaration (`syntax`/`macro`/`elab … : tactic`) and every extension of a
   tactic declared in another module (`macro_rules`), with module and status; likewise every
   command (`… : command`, kinds `command` and `command-rules`), because a command elaborator can
-  add, hide or rewrite declarations (`if_decl … end_if` elaborates its theorems only when a
+  add, hide or rewrite declarations (`when_defined … end_when` elaborates its theorems only when a
   constant exists);
 * `registries`: every declaration of an attribute or a simp set, with its kind (`attribute`,
   `simp-set`, `rule-set`) and module: the commands `register_simp_attr`, `register_label_attr`, …
@@ -42,7 +42,15 @@ proof framework").
   Applying one (`@[fsym]`, `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is
   not a declaration and is not recorded;
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
-  triple.
+  triple;
+* `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
+  status `legacy-to-retire` (`unroll_sched`, …), found as a word match in
+  the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
+  gates building new proofs on it, so a new file cannot import `ZigLean.Conc.Unroll` and call
+  `unroll_sched` without a reviewed addition. A new file or a rising count fails, also against the
+  base (unless the entry records `"approved"`); a falling count is stale (`--write` lowers it).
+  A local name equal to a retiring tactic (`let within := …`) also counts, a conservative
+  over-approximation.
 
 Status is `target` (the framework above) or `legacy-to-retire`. The check fails on anything new
 and on entries that no longer exist (delete them: the file is exact). Against the base branch the
@@ -56,15 +64,16 @@ moves to another module, unless the entry records the maintainer's `"status_appr
 | legacy | where | target |
 | --- | --- | --- |
 | `Triple` | `Sep/Triple` | `FTriple` over `up P`; the strength lemma `FTriple.toTriple_on` gives the legacy statement back on every `Mem.FSeqPlain` memory (`Mem.FSeq` without a stack budget, which the legacy logic does not have; Plan A, D1) |
-| `TotalTriple`, `Returns` | `Sep/Total` | `FTotalTriple`, `FReturns` (`FTotalTriple.toTotal_on`) |
-| `TotalTripleIn`, `TotalTripleStk` (#166) | `Sep/Total`, stack work | `FTotalTriple` whose precondition owns the room it needs (a stack-room resource) |
-| `TotalTripleWithin`, `FailsWithin` (#166), `Sep/Cost` | `Sep/Bounded`, `Sep/Cost` | `FTotalTriple` with a cost resource (credits in the ghost state, spent by the step rules) |
-| `TTriple`, `TTripleIn` | `Conc/Own`, `Conc/TlsLemmas` | `CTriple` (thread-local resources in `FAssn`; Plan A4) |
+| `TotalTriple`, `Returns`, loop rules | `Sep/Total`, `Sep/Loop` (deleted, L13) | `FTotalTriple`, `FReturns` (`FTotalTriple.toTotal_on`); loops: `Full/Loop` |
+| `TotalTripleIn`, `TotalTripleStk` (#166) | `Sep/Total` (deleted, L13), stack work | `FTotalTriple` whose precondition owns the room it needs (a stack-room resource) |
+| `TotalTripleWithin`, `FailsWithin` (#166), `Sep/Cost` | `Sep/Bounded`, `Sep/Cost` (deleted, L8) | `FTotalTriple` with a cost resource (credits in the ghost state, spent by the step rules; `Full/Cost`: exact counts, tight bounds, counted loops) |
+| `TTriple` (`TTripleIn` and `Conc/TlsLemmas` deleted) | `Conc/Own` | `CTriple` (thread-local resources in `FAssn`; Plan A4) |
 | `EventuallyReturns`, `EventuallyReturnsUnder`, `ReturnsWithin`, `Stops`, `Turns` (#178) | `Conc/Total` | a total `CTriple` with turn credits as a ghost resource |
 | `MemM.Halts` (#178) | | a consequence of the total step rules (`FReturns`) |
 | `LoopTemplate`, `DispatchTemplate`, `DispatchSpec`, `RecTemplate` | `Sep/LoopTemplate`, `Sep/DispatchTemplate`, `RecTemplate` | loop, dispatch and call rules for `fsym` (`Full/Loop`: `FTotalTriple.loop_ghost`, `FTriple.loop`; recursion by `FTriple.admissible_fun`) |
 | `AllocSpec` | `Sep/AllocSpec` | `FAllocSpec` |
-| `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec`, `Sem.Spec`, `CancelSpec` | `Conc/Spec/*`, proofs | the same contracts stated with `CTriple` (Plan A4); `Conc/Spec/MutexToy` (a spin mutex meets `MutexSpec`, one with a monotonic `unlock` does not; imported by nothing) is deleted with `MutexSpec`, its counterexample restated against `MutexImpl` if still wanted |
+| `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec` | `Conc/Spec/*` (deleted, L21) | `MutexImpl`, `CondImpl`, `EventImpl` over the model futex's rules ([thread-specs.md](thread-specs.md)) |
+| `Sem.Spec`, `CancelSpec` | proofs | the same contracts stated with `CTriple` (Plan A4) |
 | `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
 
 `Float.AllowedSpec` is `target` (maintainer, 2026-10-18, #439): it is the pure-result fragment. It
@@ -74,14 +83,18 @@ postcondition, which neither an implication nor the model's own result alone sta
 | legacy tactic | where | target |
 | --- | --- | --- |
 | `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
-| `sep_normalize`, `sep_frame` | `Sep/Automation` | `fsym` (frame inference is the planner) |
-| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers`, `Full/Tame` | native `@[fsym]` rules (no lifting) |
-| `conc_norm` | `Full/Conc` | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
+| `sep_normalize`, `sep_frame` | `Sep/Automation` (deleted, L6 D-b) | `fsym` (frame inference is the planner) |
+| `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` (`tame` deleted, L16) | native `@[fsym]` rules (no lifting) |
+| `conc_norm` | `Full/Conc` (`conc_norm` deleted, L16) | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
+| `unroll_solo` | `Full/Unroll` (module deleted, L16) | the partial fixpoints' defining equations (`unfold`), then `decide +kernel` |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
-| `vc_gen(?)` | `VC/Extract` | retargeted onto `FTriple` (Plan A, D3) |
+| `vc_gen(?)`, `#vc_extract(_all)`, `@[vc_contract]` | `VC/Extract`, `VC/ContractAttr` (deleted, L15) | `fsym`: the VCs are its residual goals, `fsym.report` their origins; a `Result` contract through `FTotalTriple.result_spec` ([vcs.md](vcs.md)) |
 | `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |
-| `blkat_alloc`, `tomega`, `zig_range` | `Conc/Lemmas`, `Conc/Spec/Count`, `Range` | `fsym_arith` and `@[fsym_provider]` facts |
-| module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `bridge_*`, `pure_norm`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
+| `blkat_alloc` | `Conc/Lemmas` (deleted, L14) | term proofs over `BlkAt.alloc` and `BlkAt.afterAlloc` |
+| `tomega` | `Conc/Spec/Count` (deleted, L18) | `Nat` library lemmas (`Nat.ne_of_gt`, `Nat.lt_of_lt_of_le`) |
+| `zig_range` | `Range` | `fsym_arith` and `@[fsym_provider]` facts |
+| `if_decl` | `Threadsync/Variant` (deleted, L18) | `when_defined` (`VersionGate`), the one translation gate; it retires with engine-ledger #case-family-enrollment |
+| module glue in `Proofs/`, `tests/`, `Air2Lean/Sem` (`fma_case`, `spec_case`, `mach_step`, `word_step`, `nn_step`, `mono_step`, `ok_step`) | modules | general library lemmas or `fsym` rules (CLAUDE.md, "General tactics over module-specific ones") |
 
 A legacy entry leaves the list when its last user is migrated and the definition is deleted
 ([ROADMAP.md](../ROADMAP.md), architecture work). The lanes, blockers, deletion stages (D-a to D-e)

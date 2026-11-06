@@ -60,8 +60,7 @@ optimize mode (`scripts/build-modes.py`), automation limits classified as counte
 (`scripts/counterexample.py`), evidence from a CI job on another host
 (`scripts/target-matrix.py`), hidden compiled-mode source gaps and unmapped runtime modules
 (`scripts/premises.py`), and pull-request runs, masked failures and ledger entries without a
-reviewed revision in release records (`scripts/release-record.py`), Lean errors or
-open obligations hidden by the verification-condition report (`scripts/vc-report.py`), untyped
+reviewed revision in release records (`scripts/release-record.py`), untyped
 host differences and unpinned model exclusions in differential accounting (`scripts/diff-report.py`),
 and a dropped asm fault-condition premise (`scripts/claims.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named

@@ -6,7 +6,7 @@ import ZigLean.Mem.Basic
 A spawn copies its argument tuple into the child. `Emit.lean` classifies each captured field
 (`Tgt.captures`): a value is copied bits with no pointer identity; a pointer or slice copies only
 its identity, so the pointed-to region stays in shared memory and a proof must say how the child
-gets it (`ZigLean/Conc/Transfer.lean`). Fields whose type may embed pointer identities that the
+gets it (`FCapture.grant`, `ZigLean/Sep/Full/ThreadSpawn.lean`). Fields whose type may embed pointer identities that the
 emitter does not decompose (aggregates holding pointers, allocators, `Io`, thread handles) are
 `other`: the generated ownership obligation cannot be discharged for them.
 -/

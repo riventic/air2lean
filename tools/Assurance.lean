@@ -13,18 +13,14 @@ import ZigLean.Sep.Full.AllocSpec
 import tools.OutcomeContracts
 
 /-!
-Environment-based assurance data extraction. The generated driver imports only this file and
-invokes `#assurance_audit`, which imports the selected modules without running their
-initializers (`importWithoutInitializers`). Policy is deliberately applied outside this command:
-the raw declaration graph and Lean's own transitive axiom inventory remain inspectable.
+Environment-based assurance data extraction. The compiled extractor (`tools/AssuranceMain.lean`,
+the `assurance` executable) imports this file's closure and the selected modules once, running
+no interpreted initializer of any of them (`importAudited`), and prints the report (`report`).
+Policy is deliberately applied outside it: the raw declaration graph and Lean's own transitive
+axiom inventory remain inspectable.
 -/
 
-open Lean Elab Command Meta
-
-register_option air2lean.assurance.allDeclarations : Bool := {
-  defValue := false
-  descr := "seed the assurance graph with every checked declaration in selected modules"
-}
+open Lean Meta
 
 namespace Air2Lean.Assurance
 
@@ -264,6 +260,187 @@ private def fingerprint (c : ConstantInfo) : String := Id.run do
   let (type, seen) := (exprDigest c.type).run {}
   let value := ((c.value? (allowOpaque := true)).map fun v => ((exprDigest v).run seen).1).getD "-"
   return digestText s!"{type}|{value}"
+
+/-! Factual partial-fixpoint metadata for the existing AIR certificate producer. The reader
+uses Lean's own lazy induction theorem and its actual telescope; it does not repeat SCC,
+fixed-parameter or recursion analysis. It is independent of the assurance audit below. -/
+
+private def fixpointBinder (xs : Array Expr) (x : Expr) : MetaM Json := do
+  let some index := xs.idxOf? x | throwError "fixpoint binder is outside its telescope"
+  let decl ← x.fvarId!.getDecl
+  return Json.mkObj [("index", toJson index), ("name", toJson decl.userName.toString),
+    ("binder", binderJson decl.binderInfo)]
+
+private def realizeFixpointInduction (member : Name) (isMutual : Bool) : MetaM ConstantInfo := do
+  let some info := Lean.Elab.PartialFixpoint.eqnInfoExt.find? (← getEnv) member
+    | throwError "missing compiler partial-fixpoint metadata: {member}"
+  unless !info.declNames.isEmpty && info.declNames.contains member &&
+      info.fixpointType.size == info.declNames.size &&
+      info.fixpointType.all (fun kind => kind matches .partialFixpoint) do
+    throwError "invalid compiler partial-fixpoint membership or kind: {member}"
+  if isMutual then
+    unless info.declNames.size > 1 && info.declNames[0]? == some member do
+      throwError "mutual fixpoint induction requires the actual group leader: {member}"
+  -- These are the names registered by Lean's standard partial-fixpoint reserved-name
+  -- action. The public resolver below must realize its actual checked theorem.
+  let suffix : Name := if isMutual then `mutual_fixpoint_induct else `fixpoint_induct
+  let expected := member ++ suffix
+  let actual ← realizeGlobalConstNoOverloadCore expected
+  unless actual == expected do throwError "fixpoint theorem resolved to another declaration: {actual}"
+  let ci ← getConstInfo actual
+  unless ci.isTheorem do throwError "fixpoint induction is not a checked theorem: {actual}"
+  if ci.type.hasFVar || ci.type.hasMVar || ci.type.hasLooseBVars then
+    throwError "fixpoint induction has an open kernel type: {actual}"
+  return ci
+
+/-- The original declaration application retained in a compiler induction conclusion. Do not
+unfold it: its declaration identity and actual arguments bind the compiler's fixed positions. -/
+private def fixpointApplication (e : Expr) : MetaM (Name × Array Expr) :=
+  lambdaTelescope e fun _ body => do
+    let body := body.consumeMData
+    let .const name _ := body.getAppFn | throwError "fixpoint conclusion has no declaration head"
+    return (name, body.getAppArgs)
+
+private def fixpointConclusion (xs : Array Expr) (body : Expr) : MetaM (Expr × Name × Array Expr) := do
+  let body := body.consumeMData
+  let motive := body.getAppFn
+  unless motive.isFVar && (xs.idxOf? motive).isSome && body.getAppArgs.size == 1 do
+    throwError "fixpoint conclusion is not a telescope motive applied to one declaration"
+  let (member, args) ← fixpointApplication body.appArg!
+  return (motive, member, args)
+
+/-- Member labels come from the actual packed theorem, using the compiler's existing product
+projections. The single-member case has no product. Names below are read, never synthesized. -/
+private def fixpointMotiveLabels (info : Lean.Elab.PartialFixpoint.EqnInfo)
+    (ci : ConstantInfo) : MetaM (Array (Name × Name)) :=
+  forallTelescope ci.type fun xs body =>
+    withLocalDeclD `conclusion body fun proof => do
+      let parts := Lean.Meta.PProdN.projs info.declNames.size body proof
+      let mut labels := #[]
+      for part in parts do
+        let (motive, member, _) ← fixpointConclusion xs (← inferType part)
+        unless info.declNames.contains member do
+          throwError "fixpoint induction mentions an unexpected member: {member}"
+        let name := (← motive.fvarId!.getDecl).userName
+        if labels.any (fun (oldName, oldMember) => oldName == name || oldMember == member) then
+          throwError "fixpoint induction has duplicate motive or member labels"
+        labels := labels.push (name, member)
+      unless labels.size == info.declNames.size do throwError "incomplete fixpoint motive labels"
+      return labels
+
+private def fixpointInductionJson (info : Lean.Elab.PartialFixpoint.EqnInfo)
+    (labels : Array (Name × Name)) (target : Name) : MetaM Json := do
+  let ci ← realizeFixpointInduction target false
+  forallTelescope ci.type fun xs body => do
+    let (targetMotive, actualTarget, targetArgs) ← fixpointConclusion xs body
+    unless actualTarget == target do throwError "fixpoint theorem concludes in another member"
+    let some targetIndex := info.declNames.idxOf? target | throwError "unknown fixpoint target"
+    let some perm := info.fixedParamPerms.perms[targetIndex]? | throwError "missing fixed permutation"
+    let mut fixed := #[]
+    let mut fixedIndices := #[]
+    for groupIndex in [:info.fixedParamPerms.numFixed] do
+      let positions := (Array.range perm.size).filter (fun i => perm[i]! == some groupIndex)
+      unless positions.size == 1 do throwError "invalid fixed-parameter permutation"
+      let some arg := targetArgs[positions[0]!]?
+        | throwError "fixed parameter absent from actual induction conclusion"
+      let entry ← fixpointBinder xs arg
+      fixed := fixed.push (entry.setObjVal! "group_index" (toJson groupIndex))
+      fixedIndices := fixedIndices.push (xs.idxOf arg)
+    let mut motives : Array (Name × Expr) := #[]
+    for (name, member) in labels do
+      let candidates ← xs.filterM fun x => return (← x.fvarId!.getDecl).userName == name
+      unless candidates.size == 1 do throwError "fixpoint motive binder is missing or ambiguous: {name}"
+      motives := motives.push (member, candidates[0]!)
+    unless motives.any (fun (member, motive) => member == target && motive == targetMotive) do
+      throwError "fixpoint target motive disagrees with the compiler's packed theorem"
+    let mut members := #[]
+    let mut roleIndices := fixedIndices
+    for member in info.declNames do
+      let some (_, motive) := motives.find? (·.1 == member) | throwError "missing member motive"
+      let mut adms : Array Expr := #[]
+      let mut steps : Array (Expr × Json) := #[]
+      for x in xs do
+        let decl ← x.fvarId!.getDecl
+        let type := decl.type.consumeMData
+        if type.isAppOf ``Lean.Order.admissible && type.getAppArgs.back? == some motive then
+          adms := adms.push x
+        else
+          let step? ← forallTelescope type fun inner result => do
+            let result := result.consumeMData
+            unless result.getAppFn == motive && result.getAppArgs.size == 1 do return none
+            let mut approxs : Array (Name × Expr) := #[]
+            let mut ihs : Array Json := #[]
+            for ih in inner do
+              let ihType := (← ih.fvarId!.getDecl).type.consumeMData
+              let some (callee, _) := motives.find? (·.2 == ihType.getAppFn) | continue
+              unless ihType.getAppArgs.size == 1 do throwError "invalid induction hypothesis application"
+              let approx := ihType.appArg!.consumeMData
+              unless approx.isFVar && (inner.idxOf? approx).isSome do
+                throwError "induction hypothesis does not refer to a step approximation"
+              if approxs.any (fun (oldMember, oldApprox) => oldMember == callee || oldApprox == approx) then
+                throwError "duplicate retained fixpoint approximation"
+              approxs := approxs.push (callee, approx)
+              let entry ← fixpointBinder inner ih
+              ihs := ihs.push <| (entry.setObjVal! "member" (toJson callee.toString)).setObjVal!
+                "approx_index" (toJson (inner.idxOf approx))
+            let mut approxJson := #[]
+            for approx in inner do
+              if let some (callee, _) := approxs.find? (·.2 == approx) then
+                let entry ← fixpointBinder inner approx
+                approxJson := approxJson.push (entry.setObjVal! "member" (toJson callee.toString))
+            unless approxJson.size + ihs.size == inner.size do
+              throwError "unclassified binder in actual fixpoint step telescope"
+            let entry ← fixpointBinder xs x
+            return some <| (entry.setObjVal! "approxs" (Json.arr approxJson)).setObjVal! "ihs" (Json.arr ihs)
+          if let some entry := step? then steps := steps.push (x, entry)
+      unless adms.size == 1 && steps.size == 1 do
+        throwError "missing or ambiguous admissibility/step binder for {member}"
+      let motiveJson ← fixpointBinder xs motive
+      let admJson ← fixpointBinder xs adms[0]!
+      let (step, stepJson) := steps[0]!
+      for role in #[motive, adms[0]!, step] do roleIndices := roleIndices.push (xs.idxOf role)
+      members := members.push <| Json.mkObj [("name", toJson member.toString),
+        ("motive", motiveJson), ("adm", admJson), ("step", stepJson)]
+    unless roleIndices.size == xs.size && roleIndices.toList.eraseDups.length == xs.size do
+      throwError "unclassified or duplicate outer fixpoint induction binder"
+    return Json.mkObj [("name", toJson ci.name.toString), ("target", toJson target.toString),
+      ("fixed", Json.arr fixed), ("members", Json.arr members),
+      ("type", toJson (serialize ci.type)), ("fingerprint", toJson (fingerprint ci))]
+
+/-- Read compiler facts for selected, already-imported generated modules. A private preparation
+driver calls this ordinary helper through Lean's existing `run_meta`; it adds no proof API and
+does not change the assurance audit's selected roots, graph, claims or output. -/
+def partialFixpointData (modules : Array String) : MetaM Json := withoutExporting do
+  let env ← getEnv
+  let leaders := env.checked.get.constants.fold (init := ({} : NameSet)) fun found name _ =>
+    if !(modules.contains (moduleOf env name)) then found else
+    match Lean.Elab.PartialFixpoint.eqnInfoExt.find? env name with
+    | some info => if info.fixpointType.all (fun kind => kind matches .partialFixpoint) then
+        found.insert info.declNames[0]! else found
+    | none => found
+  let mut groups := #[]
+  for leader in leaders.toArray.qsort Name.lt do
+    let some info := Lean.Elab.PartialFixpoint.eqnInfoExt.find? (← getEnv) leader
+      | throwError "partial-fixpoint metadata disappeared: {leader}"
+    unless !info.declNames.isEmpty && info.fixedParamPerms.perms.size == info.declNames.size do
+      throwError "invalid compiler fixpoint membership/permutations"
+    let canonical ← realizeFixpointInduction leader (info.declNames.size > 1)
+    let labels ← fixpointMotiveLabels info canonical
+    let mut members := #[]
+    for member in info.declNames, perm in info.fixedParamPerms.perms do
+      let ci ← getConstInfo member
+      let params ← forallBoundedTelescope ci.type (some perm.size) fun xs _ => do
+        unless xs.size == perm.size do throwError "compiler fixed permutation exceeds declaration arity"
+        xs.mapM fun x => do
+          let decl ← x.fvarId!.getDecl
+          return Json.mkObj [("name", toJson decl.userName.toString),
+            ("binder", binderJson decl.binderInfo)]
+      members := members.push <| Json.mkObj [("name", toJson member.toString),
+        ("params", Json.arr params), ("fixed", toJson perm)]
+    let inductions ← info.declNames.mapM (fixpointInductionJson info labels)
+    groups := groups.push <| Json.mkObj [("members", Json.arr members),
+      ("num_fixed", toJson info.fixedParamPerms.numFixed), ("inductions", Json.arr inductions)]
+  return Json.mkObj [("fixpoint_groups", Json.arr groups)]
 
 /-- Original kernel facts for the framework ratchet. These are candidate evidence, never an
 ordinary-data exemption. In particular, a non-Prop result does not prove a record harmless. -/
@@ -677,79 +854,52 @@ private def statementJson (n : Name) (type : Expr) (allocatorCreation : Array Js
         ("liveness", witnessJson env n Zig.Witness.livenessSuffix st.liveness),
         ("reachability", reachabilityJson)])]
 
-/-- A copy of `n` outside the compacted region its components live in. -/
-private def copyName : Name → Name
-  | .anonymous => .anonymous
-  | .str p s => .str (copyName p) (String.ofList s.toList)
-  | .num p k => .num (copyName p) k
+/-- The extractor's own modules (this file) and `modules`, in one environment, imported the way
+`leanchecker` loads them: no interpreted initializer runs (docs/architecture-audit/
+soundness-2026-10-20.md E1). Importing an audited module the way `lean` imports a file's header
+would run its `initialize` code in this process, which writes the report. The import is Lean's
+`importModules` in its steps, through Lean's public API: `importModulesCore` reads every module of
+the closure from its `.olean` and runs nothing; `finalizeImport` of that read without extensions
+(`loadExts := false`, which runs nothing either) names its modules in the environment header;
+each of them is marked as already initialized in `interpretedModInits`, so `finalizeImport` of
+the same read, which loads the extensions and runs the `[init]` attributes, runs none of theirs.
+`finalizeImport` builds the header from the import state alone, and both calls take the one
+read, so the marked set is exactly the set imported (no second read of the closure can disagree
+with it). Only the extractor's own modules keep their initializers: this
+process is the compiled extractor (`tools/AssuranceMain.lean`), which ran their native
+initializers when it started. It holds no imported module before this call, so each module is
+loaded once: a second import of a loaded module would copy it, the whole of `Lean` alone about
+2.1 GB. The extractor's own modules are imported too: the claim heads they import make an
+audited module's declaration of the same name fail, and the report's terms name their constants
+(tools/OutcomeContracts.lean). -/
+unsafe def importAudited (modules : Array Name) (opts : Options) : IO Environment := do
+  let imports := (#[`tools.Assurance] ++ modules).map ({ module := · })
+  withImporting do
+    let (_, s) ← (importModulesCore imports).run
+    -- `ImportState`'s fields are private; the header of a finalization without extensions names
+    -- the modules of `s`. It is not leaked, so it is freed right after this projection; the
+    -- compacted regions both environments point into are freed only by `freeRegions`.
+    let read := (← finalizeImport s imports opts (leakEnv := false) (loadExts := false)).header.moduleNames
+    interpretedModInits.modify fun initialized => read.foldl (init := initialized) (·.insert ·)
+    enableInitializersExecution
+    finalizeImport s imports opts (leakEnv := true) (loadExts := true)
 
-/-- The copied import names of `data`: an action of its own (not inlined), so the copies are made
-before `importClosure` frees the region `data` lives in. -/
-@[noinline] private def copyImports (data : ModuleData) : IO (Array Name) :=
-  return data.imports.map (copyName ·.module)
-
-/-- The modules `roots` import transitively, without the `loaded` ones (this process's own
-closure, closed under imports), read from their `.olean` headers. Each module's data is freed
-once its imports are copied out: building an environment here instead would hold a second copy
-of every module in memory, since a region mapped at its base address once is copied, not mapped,
-by every later import of it. -/
-private unsafe def importClosure (loaded : NameSet) (roots : Array Name) : IO (Array Name) := do
-  let mut seen := loaded
-  let mut closure := #[]
-  let mut todo := roots.toList
-  while true do
-    match todo with
-    | [] => break
-    | m :: rest =>
-      todo := rest
-      if seen.contains m then continue
-      seen := seen.insert m
-      closure := closure.push m
-      let (data, region) ← readModuleData (← findOLean m)
-      let imports ← copyImports data
-      region.free
-      todo := imports.toList ++ todo
-  return closure
-
-/-- The current imports and `modules`, imported the way `leanchecker` loads them: no newly
-imported module's initializer runs (docs/architecture-audit/soundness-2026-10-20.md E1). Importing
-an audited module through the driver's header would run its `initialize` code in this process,
-which writes the report. The closure of `modules` beyond this process's own (`importClosure`) is
-read first; each of its modules is then marked as already initialized, so the extension-loading
-import runs no `[init]` of it. Only the extractor's own imports, initialized when this file was
-elaborated, keep theirs. -/
-private unsafe def importWithoutInitializersImpl (env : Environment) (modules : Array Name)
-    (opts : Options) : IO Environment := do
-  let loaded := env.header.moduleNames.foldl (init := {}) NameSet.insert
-  let closure ← importClosure loaded modules
-  let initialized ← interpretedModInits.get
-  interpretedModInits.set (closure.foldl (init := initialized) (·.insert ·))
-  enableInitializersExecution
-  importModules (env.header.imports ++ modules.map ({ module := · })) opts (loadExts := true)
-    (leakEnv := true)
-
-@[implemented_by importWithoutInitializersImpl]
-private opaque importWithoutInitializers (env : Environment) (modules : Array Name) (opts : Options) :
-  IO Environment
-
-syntax (name := assuranceAudit) "#assurance_audit" "[" str,* "]" : command
-
-elab_rules : command
-  | `(#assurance_audit [$modules:str,*]) => do
-    let selected := modules.getElems.map (·.getString)
+/-- The report of the `selected` modules in the current environment (`importAudited`):
+`seedAll` makes every checked declaration of them a graph root (`--all-declarations`), and each
+of `families` must resolve there (a renamed family fails, even when no selected declaration
+references its old name). -/
+def report (selected : Array String) (seedAll : Bool) (families : Array Name) : MetaM Json := do
     if selected.isEmpty then throwError "assurance audit requires modules"
-    -- The driver imports only this file; the audited modules are imported here, running none
-    -- of their initializers (`importWithoutInitializers`).
-    setEnv (← importWithoutInitializers (← getEnv) (selected.map String.toName) (← getOptions))
     -- The checked environment excludes erroneous elaborator placeholders. Private olean
     -- data is loaded by ordinary (non-`module`) imports, so proof bodies are available.
     let env := (← getEnv).setExporting false
+    for family in families do
+      unless env.contains family do throwError "unknown framework family {family}"
     if env.header.modules.size != env.header.moduleData.size then
       throwError "assurance import metadata is incomplete"
     let moduleImports := (env.header.modules.zip env.header.moduleData).map fun (entry, data) =>
       (entry.module.toString, if entry.hasData then namesJson (data.imports.map (·.module)) else Json.null)
     let selectedSet := Std.HashSet.ofArray selected
-    let seedAll := air2lean.assurance.allDeclarations.get (← getOptions)
     let (roots, declarations, selectedDeclarations) := env.checked.get.constants.fold
       (init := ((#[] : Array Name), (#[] : Array Name), (#[] : Array Name)))
       fun (roots, declarations, selectedDeclarations) n c =>
@@ -764,7 +914,7 @@ elab_rules : command
     let (allocatorDeps, contracts) := allocatorGraph env roots.toList
     let mut creationRecords : Std.HashMap Name (Json × List Nat) := {}
     for contract in contracts do
-      let record ← liftTermElabM <| withoutExporting <| allocatorCreationJson env contract
+      let record ← withoutExporting <| allocatorCreationJson env contract
       creationRecords := creationRecords.insert contract record
     let namedContracts := contracts.filter fun name =>
       ((env.checked.get.find? name).bind fun ci => allocatorInvariant? ci.type).isSome
@@ -776,7 +926,7 @@ elab_rules : command
     -- those bodies once here, and propagate any failure into every client's cached record.
     for contract in namedContracts do
       let records := allocatorReachable allocatorDeps creationRecords [contract]
-      let found ← liftTermElabM <| withoutExporting <|
+      let found ← withoutExporting <|
         allocatorUses env contract contractSet relevant
       applicationUses := applicationUses.insert contract found
       let inspected := allocatorApplications contract records found
@@ -817,7 +967,7 @@ elab_rules : command
     if seedAll then
       for n in selectedDeclarations do
         let some c := env.checked.get.find? n | throwError "selected declaration disappeared: {n}"
-        let evidence ← liftTermElabM <| withoutExporting <| frameworkEvidence env n c
+        let evidence ← withoutExporting <| frameworkEvidence env n c
         framework := framework.push evidence
     let mut theorems : Array Json := #[]
     for n in roots do
@@ -825,7 +975,7 @@ elab_rules : command
       let (conclusion, statement, shape) ← match env.checked.get.find? n with
         | some c => do
           let creation := allocatorReachable allocatorDeps creationRecords [n]
-          let shape ← liftTermElabM <| withoutExporting do
+          let shape ← withoutExporting do
             let creation ← if creation.isEmpty && !relevant.contains n then pure creation else do
               let found ← match applicationUses.get? n with
                 | some found => pure found
@@ -846,6 +996,6 @@ elab_rules : command
         else roots.toList ++ declarations.toList)))] ++
       if seedAll then [("selected_declaration_roots", namesJson selectedDeclarations),
         ("selected_declaration_evidence", Json.arr framework)] else []
-    liftIO <| IO.println ("AIR2LEAN_ASSURANCE_JSON:" ++ result.compress)
+    return result
 
 end Air2Lean.Assurance

@@ -108,6 +108,8 @@ def byteOfF64 (p0 : Zig.F64) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] byteOfF64
+
 structure byteOfU32Locals where
   v : Zig.Ptr
   deriving Inhabited
@@ -137,6 +139,8 @@ def byteOfU32 (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] byteOfU32
+
 structure bytesToF64BitsLocals where
   deriving Inhabited
 
@@ -151,6 +155,8 @@ def bytesToF64Bits (p0 : Vector (BitVec 8) 8) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bytesToF64Bits
+
 structure bytesToU32Locals where
   deriving Inhabited
 
@@ -163,6 +169,8 @@ def bytesToU32 (p0 : Vector (BitVec 8) 4) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M bytesToU32Locals bytesToU32Exit).run' (default : bytesToU32Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] bytesToU32
 
 structure externToBytesLocals where
   local3 : S
@@ -182,6 +190,8 @@ def externToBytes (p0 : BitVec 16) (p1 : BitVec 16) (p2 : BitVec 32) : Zig.Resul
   match e with
   | .ret v => pure v
 
+attribute [zig_run] externToBytes
+
 structure f16ToBytesLocals where
   deriving Inhabited
 
@@ -195,6 +205,8 @@ def f16ToBytes (p0 : Zig.F16) : Zig.Result (Vector (BitVec 8) 2) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] f16ToBytes
+
 structure f32ToBytesLocals where
   deriving Inhabited
 
@@ -207,6 +219,8 @@ def f32ToBytes (p0 : Zig.F32) : Zig.Result (Vector (BitVec 8) 4) := do
     pure (.ret i1)) : Zig.M f32ToBytesLocals f32ToBytesExit).run' (default : f32ToBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] f32ToBytes
 
 structure fieldFromBytesLocals where
   p : Zig.Ptr
@@ -237,6 +251,8 @@ def fieldFromBytes (p0 : BitVec 8) (p1 : BitVec 8) (p2 : BitVec 8) (p3 : BitVec 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] fieldFromBytes
+
 structure i16ToBytesLocals where
   deriving Inhabited
 
@@ -249,6 +265,8 @@ def i16ToBytes (p0 : BitVec 16) : Zig.Result (Vector (BitVec 8) 2) := do
     pure (.ret i1)) : Zig.M i16ToBytesLocals i16ToBytesExit).run' (default : i16ToBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] i16ToBytes
 
 structure packed16ToBytesLocals where
   local2 : Q
@@ -267,6 +285,8 @@ def packed16ToBytes (p0 : BitVec 12) (p1 : BitVec 4) : Zig.Result (Vector (BitVe
   match e with
   | .ret v => pure v
 
+attribute [zig_run] packed16ToBytes
+
 structure packedToBytesLocals where
   deriving Inhabited
 
@@ -280,6 +300,8 @@ def packedToBytes (p0 : BitVec 32) : Zig.Result (Vector (BitVec 8) 4) := do
     pure (.ret i2)) : Zig.M packedToBytesLocals packedToBytesExit).run' (default : packedToBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] packedToBytes
 
 structure setFieldBytesLocals where
   p : Zig.Ptr
@@ -303,6 +325,8 @@ def setFieldBytes (p0 : BitVec 32) (p1 : BitVec 12) : Zig.MemM (Vector (BitVec 8
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setFieldBytes
+
 structure u16FromStoredBytesLocals where
   v : Zig.Ptr
   deriving Inhabited
@@ -325,6 +349,8 @@ def u16FromStoredBytes (p0 : BitVec 8) (p1 : BitVec 8) : Zig.MemM (BitVec 16) :=
   match e with
   | .ret v => pure v
 
+attribute [zig_run] u16FromStoredBytes
+
 structure u32ToBytesLocals where
   deriving Inhabited
 
@@ -338,6 +364,8 @@ def u32ToBytes (p0 : BitVec 32) : Zig.Result (Vector (BitVec 8) 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] u32ToBytes
+
 structure u64ToHalvesLocals where
   deriving Inhabited
 
@@ -350,6 +378,8 @@ def u64ToHalves (p0 : BitVec 64) : Zig.Result (Vector (BitVec 32) 2) := do
     pure (.ret i1)) : Zig.M u64ToHalvesLocals u64ToHalvesExit).run' (default : u64ToHalvesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u64ToHalves
 
 structure unionByteLocals where
   local2 : Zig.Ptr
@@ -382,6 +412,8 @@ def unionByte (p0 : BitVec 32) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] unionByte
+
 structure unionHalfLocals where
   local1 : Zig.Ptr
   deriving Inhabited
@@ -402,5 +434,7 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
   Zig.free s1
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unionHalf
 
 end BigEndian.X64

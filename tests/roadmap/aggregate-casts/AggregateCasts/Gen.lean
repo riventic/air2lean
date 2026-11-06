@@ -82,6 +82,8 @@ def bytesToPadded (p0 : Vector (BitVec 8) 8) : Zig.Result (Padded) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bytesToPadded
+
 structure bytesToU32Locals where
   deriving Inhabited
 
@@ -95,6 +97,8 @@ def bytesToU32 (p0 : Vector (BitVec 8) 4) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bytesToU32
+
 structure optAddrLocals where
   deriving Inhabited
 
@@ -107,6 +111,8 @@ def optAddr (p0 : Option (Zig.Ptr)) : Zig.MemM (BitVec 64) := do
     pure (.ret i1)) : Zig.MM optAddrLocals optAddrExit).run' (default : optAddrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] optAddr
 
 structure optFromAddrLocals where
   deriving Inhabited
@@ -132,6 +138,8 @@ def optFromAddr (p0 : BitVec 64) : Zig.MemM (Option (Zig.Ptr)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] optFromAddr
+
 structure optUnwrapLocals where
   deriving Inhabited
 
@@ -156,6 +164,8 @@ def optUnwrap (p0 : Option (Zig.Ptr)) : Zig.MemM (Zig.Ptr) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] optUnwrap
+
 structure paddedToBytesLocals where
   deriving Inhabited
 
@@ -168,6 +178,8 @@ def paddedToBytes (p0 : Padded) : Zig.Result (Vector (BitVec 8) 8) := do
     pure (.ret i1)) : Zig.M paddedToBytesLocals paddedToBytesExit).run' (default : paddedToBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] paddedToBytes
 
 structure pairToU64Locals where
   deriving Inhabited
@@ -182,6 +194,8 @@ def pairToU64 (p0 : Pair) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] pairToU64
+
 structure ptrWrapLocals where
   deriving Inhabited
 
@@ -194,6 +208,8 @@ def ptrWrap (p0 : Zig.Ptr) : Zig.MemM (Option (Zig.Ptr)) := do
     pure (.ret i1)) : Zig.MM ptrWrapLocals ptrWrapExit).run' (default : ptrWrapLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] ptrWrap
 
 structure shortToU32Locals where
   deriving Inhabited
@@ -208,6 +224,8 @@ def shortToU32 (p0 : Short) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shortToU32
+
 structure u24x2ToU56Locals where
   deriving Inhabited
 
@@ -220,6 +238,8 @@ def u24x2ToU56 (p0 : Vector (BitVec 24) 2) : Zig.Result (BitVec 56) := do
     pure (.ret i1)) : Zig.M u24x2ToU56Locals u24x2ToU56Exit).run' (default : u24x2ToU56Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u24x2ToU56
 
 structure u32ToBytesLocals where
   deriving Inhabited
@@ -234,6 +254,8 @@ def u32ToBytes (p0 : BitVec 32) : Zig.Result (Vector (BitVec 8) 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] u32ToBytes
+
 structure u32ToWordLocals where
   deriving Inhabited
 
@@ -246,6 +268,8 @@ def u32ToWord (p0 : BitVec 32) : Zig.Result (Word) := do
     pure (.ret i1)) : Zig.M u32ToWordLocals u32ToWordExit).run' (default : u32ToWordLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u32ToWord
 
 structure u56ToU24x2Locals where
   deriving Inhabited
@@ -260,6 +284,8 @@ def u56ToU24x2 (p0 : BitVec 56) : Zig.Result (Vector (BitVec 24) 2) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] u56ToU24x2
+
 structure u64ToPairLocals where
   deriving Inhabited
 
@@ -272,5 +298,7 @@ def u64ToPair (p0 : BitVec 64) : Zig.Result (Pair) := do
     pure (.ret i1)) : Zig.M u64ToPairLocals u64ToPairExit).run' (default : u64ToPairLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u64ToPair
 
 end AggregateCasts

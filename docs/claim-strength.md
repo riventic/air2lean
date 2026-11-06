@@ -63,7 +63,11 @@ through the fixture's spoofs, registered in a test-only registry. A head whose c
 in its conclusion) implies none of the three unconditional claims, so every declared strength is
 rejected for it with a reason naming the premise. A head with a `bound` (unit `loop_body_runs`
 or `scheduler_turns`, argument `bound_arg`) reports a `bound` object with the unit and, from the
-extracted argument, its closed value or printed form. Other theorems report `bound: null`.
+extracted argument, its closed value or printed form. Other theorems report `bound: null`
+and `cost_bound_status: "no cost bound established"`. A plain/unmetered mode atom, an emitted
+tick or a successful unbounded proof does not establish a bound. When a registered conclusion
+states a bound, the status is `"explicit bound in theorem conclusion"`; the existing unit,
+value and expression checks still decide whether a manifest's claimed bound is accepted.
 
 ## Witnesses
 
@@ -104,8 +108,8 @@ total triple of the same program gives (`FLive.of_total`, `FTTLive.of_total`). T
 legacy heads (`Triple`, `TotalTriple`, `TTriple`, …) back no claim, so their library rules have
 no companions. `Zig.loop` is a `partial_fixpoint`,
 which the kernel does not unfold, so a loop's run comes from a total triple or an input that
-skips the loop (a run of the scheduler can cut each loop instead: `unroll_sched`,
-[proof-tools.md](proof-tools.md#concrete-runs-of-programs-with-loops-unroll_sched)). A `Proofs/` theorem has its companions next to it; the library lemmas of
+skips the loop (a run of the scheduler can unfold each loop by `Zig.loop.eq_1` first,
+[proof-tools.md](proof-tools.md#concrete-runs-of-programs-with-loops)). A `Proofs/` theorem has its companions next to it; the library lemmas of
 `ZigLean/` have theirs in `ZigLean/Witnesses/*.lean`, since modules that generated code imports
 must not import the witness commands. A premise about an `opaque` function (the assembly
 theorems of `Proofs/Asm/Proofs.lean`) has no companion: the kernel cannot evaluate it, so those

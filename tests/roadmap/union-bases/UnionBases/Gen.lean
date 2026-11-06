@@ -552,6 +552,8 @@ def barePairPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] barePairPtr
+
 structure extBytePtrLocals where
   deriving Inhabited
 
@@ -563,6 +565,8 @@ def extBytePtr  : Zig.MemM (Zig.Ptr) := do
     pure (.ret (⟨some 0, 38⟩ : Zig.Ptr))) : Zig.MM extBytePtrLocals extBytePtrExit).run' (default : extBytePtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] extBytePtr
 
 structure extHiPtrLocals where
   deriving Inhabited
@@ -576,6 +580,8 @@ def extHiPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] extHiPtr
+
 structure extWordPtrLocals where
   deriving Inhabited
 
@@ -587,6 +593,8 @@ def extWordPtr  : Zig.MemM (Zig.Ptr) := do
     pure (.ret (⟨some 0, 36⟩ : Zig.Ptr))) : Zig.MM extWordPtrLocals extWordPtrExit).run' (default : extWordPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] extWordPtr
 
 structure lowPairPtrLocals where
   deriving Inhabited
@@ -600,6 +608,8 @@ def lowPairPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] lowPairPtr
+
 structure maybeCellPtrLocals where
   deriving Inhabited
 
@@ -611,6 +621,8 @@ def maybeCellPtr  : Zig.MemM (Zig.Ptr) := do
     pure (.ret (⟨some 0, 58⟩ : Zig.Ptr))) : Zig.MM maybeCellPtrLocals maybeCellPtrExit).run' (default : maybeCellPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] maybeCellPtr
 
 structure mixedHighPtrLocals where
   deriving Inhabited
@@ -624,6 +636,8 @@ def mixedHighPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mixedHighPtr
+
 structure mixedLowPtrLocals where
   deriving Inhabited
 
@@ -636,6 +650,8 @@ def mixedLowPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mixedLowPtr
+
 structure outerPairPtrLocals where
   deriving Inhabited
 
@@ -647,6 +663,8 @@ def outerPairPtr  : Zig.MemM (Zig.Ptr) := do
     pure (.ret (⟨some 0, 27⟩ : Zig.Ptr))) : Zig.MM outerPairPtrLocals outerPairPtrExit).run' (default : outerPairPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] outerPairPtr
 
 structure projectBareLocals where
   deriving Inhabited
@@ -675,6 +693,8 @@ def projectBare (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] projectBare
+
 structure projectWideLocals where
   deriving Inhabited
 
@@ -702,6 +722,8 @@ def projectWide (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] projectWide
+
 structure readExtByteLocals where
   deriving Inhabited
 
@@ -724,6 +746,8 @@ def readExtByte (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] readExtByte
 
 structure readWideCellLocals where
   deriving Inhabited
@@ -748,6 +772,8 @@ def readWideCell (p0 : BitVec 64) : Zig.MemM (BitVec 16) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] readWideCell
+
 structure resBytePtrLocals where
   deriving Inhabited
 
@@ -759,6 +785,8 @@ def resBytePtr  : Zig.MemM (Zig.Ptr) := do
     pure (.ret (⟨some 0, 71⟩ : Zig.Ptr))) : Zig.MM resBytePtrLocals resBytePtrExit).run' (default : resBytePtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] resBytePtr
 
 structure wideCellPtrLocals where
   deriving Inhabited
@@ -772,6 +800,8 @@ def wideCellPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] wideCellPtr
+
 structure wideSliceLocals where
   deriving Inhabited
 
@@ -783,5 +813,7 @@ def wideSlice  : Zig.MemM (Zig.Slice) := do
     pure (.ret (⟨(⟨some 0, 46⟩ : Zig.Ptr), (2 : BitVec 64)⟩ : Zig.Slice))) : Zig.MM wideSliceLocals wideSliceExit).run' (default : wideSliceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] wideSlice
 
 end UnionBases

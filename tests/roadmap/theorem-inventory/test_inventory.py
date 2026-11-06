@@ -63,7 +63,7 @@ FILES = {
         | `Proofs/Conc/Proofs.lean` | `main_spec` (0 under every schedule), `main_sc` (one schedule) |
         ''',
     'docs/vector-proofs.md': '# Checked vector addition proofs\n',
-    'docs/theorem-inventory.md': f'# Inventory\n\n{ti.BEGIN}\n{ti.END}\n',
+    'docs/theorem-inventory.template.md': f'# Inventory\n\n{ti.BEGIN}\n{ti.END}\n',
     # Stub attestation: exit 0 unless a listed path is named in STALE.
     'scripts/gen-integrity.py': '''\
         import sys
@@ -104,8 +104,10 @@ class Fixture:
         return json.loads((self.root / ti.INVENTORY).read_text())
 
     def save(self, inv):
-        (self.root / ti.INVENTORY).parent.mkdir(parents=True, exist_ok=True)
-        (self.root / ti.INVENTORY).write_text(json.dumps(inv))
+        """The generated inventory, and the committed list it was generated from."""
+        for rel, data in ((ti.INVENTORY, inv), (ti.LIST, {k: v for k, v in inv.items() if k != 'runs'})):
+            (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text(json.dumps(data))
 
     def track_files(self):
         subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
@@ -152,10 +154,10 @@ class Fixture:
 
     def record_all(self):
         """The committed translations (both versions of conc/demo) and the 0.15.2 demo golden."""
-        self.record('all', '0.16.0', *self.guard('all', ['lake', 'build', 'Proofs'], 'Build completed\n'))
+        self.record('committed', '0.16.0', *self.guard('committed', ['lake', 'build', 'Proofs'], 'Build completed\n'))
         swap = 'tests/golden/0.15.2/demo/Gen.lean'
         digest = hashlib.sha256((self.root / swap).read_bytes()).hexdigest()
-        self.record('demo-0152', '0.15.2', *self.guard(
+        self.record('0.15.2-linux', '0.15.2', *self.guard(
             'demo', ['python3', str(self.root / 'scripts/theorem-inventory.py'), 'swap-build',
                      '--swap', f'demo={swap}', '--', 'Proofs.Demo.Proofs'],
             f'{ti.SWAP_PREFIX}demo {swap} {digest}\nBuild completed\n'))
@@ -203,49 +205,58 @@ class FixtureTests(unittest.TestCase):
         with mock.patch.object(regen, 'ROOT', self.fx.root):
             self.assertEqual(regen.run_is_current(ti, self.fx.load()['runs'][run_id]), expected)
 
+    def step_inventory(self, guarded=None):
+        """regen.step_inventory over the fixture, with no guard, build, record command or compiler
+        executed: only its dispatch (and the inventory file it rewrites, restored afterwards)."""
+        path = self.fx.root / ti.INVENTORY
+        before = path.read_text()
+        calls = {'guarded': mock.Mock(return_value=('report.json', 'guard.log')), 'run': mock.Mock()}
+        try:
+            with mock.patch.object(regen, 'ROOT', self.fx.root), \
+                    mock.patch.object(regen, 'load', return_value=ti), \
+                    mock.patch.object(regen, 'guarded', calls['guarded']), \
+                    mock.patch.object(regen, 'run', calls['run']), \
+                    mock.patch.object(regen, 'lake_env', return_value={}):
+                regen.step_inventory(False)
+        finally:
+            path.write_text(before)
+        return calls
+
     def assertReplayRuns(self, *run_ids):
-        # Exercise dispatch only: no guard, replay, record command or compiler executes.
-        records = self.fx.load()['runs']
-        with mock.patch.object(regen, 'ROOT', self.fx.root), \
-                mock.patch.object(regen, 'load', return_value=ti), \
-                mock.patch.object(regen, 'guarded', return_value=('report.json', 'guard.log')) as guarded, \
-                mock.patch.object(regen, 'run') as run, \
-                mock.patch.object(regen, 'ok', return_value=True), \
-                mock.patch.object(regen, 'lake_env', return_value={}):
-            regen.step_inventory(False)
-        self.assertEqual([call.args[0] for call in guarded.call_args_list],
-                         ['inventory-' + name for name in sorted(run_ids)])
-        self.assertEqual(run.call_args_list, [mock.call([
-            regen.PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', name,
-            '--zig', records[name]['zig'], '--target', records[name]['target'],
-            '--guard-report', 'report.json', '--guard-log', 'guard.log'])
-            for name in sorted(run_ids)])
-        return guarded.call_args_list
+        """Exactly these planned runs are rebuilt (the others are kept): each one from the plan,
+        never from a recorded command."""
+        plan = ti.plan(self.fx.root, ti.load_list(self.fx.root))
+        order = [name for name in plan if name in run_ids]  # the plan's order
+        self.assertEqual(sorted(order), sorted(run_ids), 'not planned runs')
+        calls = self.step_inventory()
+        guarded = calls['guarded'].call_args_list
+        self.assertEqual([call.args[0] for call in guarded], ['inventory-' + name for name in order])
+        for call, name in zip(guarded, order):
+            command = call.args[1]
+            self.assertEqual(ti.parse_build_command(self.fx.root, command, lake=str(self.fx.lake)).swaps,
+                             plan[name]['swaps'])
+        records = [mock.call([regen.PY, '-B', 'scripts/theorem-inventory.py', 'record', '--run', name,
+                              '--zig', plan[name]['zig'], '--target', plan[name]['target'],
+                              '--guard-report', 'report.json', '--guard-log', 'guard.log'])
+                   for name in order]
+        self.assertEqual(calls['run'].call_args_list,
+                         records + [mock.call([regen.PY, '-B', 'scripts/theorem-inventory.py', 'write']),
+                                    mock.call([regen.PY, '-B', 'scripts/theorem-inventory.py', 'check'])])
+        return guarded
 
     def assertReplayRejected(self):
-        # Unsupported historical argv must be refused before any guarded dispatch.
-        resolver = ti.selected_lake
-        resolves = resolver.call_count
-        with mock.patch.object(regen, 'ROOT', self.fx.root), \
-                mock.patch.object(regen, 'load', return_value=ti), \
-                mock.patch.object(regen, 'guarded') as guarded, \
-                mock.patch.object(regen, 'run') as run, \
-                mock.patch.object(regen, 'lake_env') as lake_env:
-            with self.assertRaisesRegex(regen.Failed, 'refusing replay'):
-                regen.step_inventory(False)
-        guarded.assert_not_called()
-        run.assert_not_called()
-        lake_env.assert_not_called()
-        self.assertEqual(resolver.call_count, resolves)
+        """A recorded command is never replayed: an unsupported one is dropped, and the planned
+        runs are rebuilt from the plan."""
+        self.assertReplayRuns(*ti.plan(self.fx.root, ti.load_list(self.fx.root)))
 
     def assertBuildCommandRejected(self, command, run_id, theorem, translation, closure):
         inv = self.fx.load()
-        run = inv['runs']['all']
+        run = inv['runs']['committed']
         run['command'] = command
-        inv['runs'] = {'all': run}
+        inv['runs'] = {'committed': run}
         self.fx.save(inv)
         self.assertIsNone(ti.current_result(self.fx.root, inv, theorem, translation, closure))
-        self.assertRunCurrent('all', False)
+        self.assertRunCurrent('committed', False)
         self.assertReplayRejected()
         report, log = self.fx.guard(run_id, command, '')
         with contextlib.redirect_stderr(io.StringIO()):
@@ -281,6 +292,37 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(ti.translations(self.fx.root, 'conc')[1],
                          {'zig': '0.16.0', 'target': 'darwin', 'gen': str(darwin.relative_to(self.fx.root))})
 
+    def test_missing_generated_inventory_fails_closed(self):
+        (self.fx.root / ti.INVENTORY).unlink()
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            self.fx.assert_main(['check'], code=1)
+        self.assertIn('scripts/generated.py materialize', error.getvalue())
+        self.assertEqual(ti.check(self.fx.root, list_only=True), [])  # the committed list needs no generated file
+
+    def test_inventory_generated_from_another_list_fails_closed(self):
+        inv = self.fx.load()
+        inv['theorems'][0]['domain'] = 'a narrower domain'
+        (self.fx.root / ti.INVENTORY).write_text(json.dumps(inv))
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            self.fx.assert_main(['check'], code=1)
+        self.assertIn('generated from a different', error.getvalue())
+        self.assertIn('scripts/generated.py materialize', error.getvalue())
+
+    def test_missing_generated_document_fails_closed(self):
+        self.fx.record_all()
+        (self.fx.root / ti.DOC).unlink()
+        self.assertError('scripts/generated.py materialize')
+
+    def test_plan_is_derived_from_the_list(self):
+        self.assertEqual(ti.plan(self.fx.root, ti.load_list(self.fx.root)), {
+            'committed': {'zig': '0.16.0', 'target': 'linux', 'swaps': {},
+                          'modules': ['Proofs.Conc.Proofs', 'Proofs.Demo.Proofs']},
+            '0.15.2-linux': {'zig': '0.15.2', 'target': 'linux',
+                             'swaps': {'demo': 'tests/golden/0.15.2/demo/Gen.lean'},
+                             'modules': ['Proofs.Demo.Proofs']}})
+
     def test_no_run_is_no_result(self):
         self.assertError('Demo.f_spec: no current check result for 0.16.0/linux')
         self.assertError('Conc.main_spec: no current check result for 0.16.0/linux')
@@ -288,13 +330,13 @@ class FixtureTests(unittest.TestCase):
     def test_recorded_runs_pass(self):
         self.fx.record_all()
         self.assertEqual(self.fx.errors(), [])
-        run = self.fx.load()['runs']['demo-0152']
+        run = self.fx.load()['runs']['0.15.2-linux']
         self.assertEqual(run['modules'], ['Proofs.Demo.Proofs'])
         self.assertEqual(run['gens']['demo']['path'], 'tests/golden/0.15.2/demo/Gen.lean')
         self.assertEqual(run['command'][1], 'scripts/theorem-inventory.py')
         doc = (self.fx.root / ti.DOC).read_text()
         self.assertIn('`Demo.f_spec`', doc)
-        self.assertIn('0.15.2/linux: pass, run `demo-0152`', doc)
+        self.assertIn('0.15.2/linux: pass, run `0.15.2-linux`', doc)
 
     def test_retained_translation(self):
         # A theorem over a retained translation (`gen`): only that file, its version from the
@@ -311,7 +353,7 @@ class FixtureTests(unittest.TestCase):
         self.assertError('Demo.g_spec: no current check result for 0.17.0/linux (Proofs/Demo/Open.lean)')
         self.fx.record_all()
         self.assertEqual(self.fx.errors(), [])
-        self.assertEqual(self.fx.load()['runs']['all']['gens']['Proofs.Demo.Open']['path'],
+        self.assertEqual(self.fx.load()['runs']['committed']['gens']['Proofs.Demo.Open']['path'],
                          'Proofs/Demo/Open.lean')
         gen = self.fx.root / 'Proofs/Demo/Open.lean'
         gen.write_text(gen.read_text() + '\n')
@@ -340,13 +382,13 @@ class FixtureTests(unittest.TestCase):
         self.fx.record_all()
 
         self.assertEqual(self.fx.errors(), [])
-        run = self.fx.load()['runs']['all']
+        run = self.fx.load()['runs']['committed']
         canonical = 'Proofs/Demo/Gen.lean'
         self.assertEqual(run['gens']['demo'],
                          {'path': canonical, 'sha256': ti.sha256(self.fx.root / canonical)})
         self.assertEqual(run['gens'][case_module], {'path': case_path, 'sha256': ti.sha256(gen)})
         self.assertNotIn(case_module, run['sources'])
-        self.assertEqual(self.fx.load()['runs']['demo-0152']['gens']['demo']['path'],
+        self.assertEqual(self.fx.load()['runs']['0.15.2-linux']['gens']['demo']['path'],
                          'tests/golden/0.15.2/demo/Gen.lean')
 
         gen.write_text(gen.read_text() + '\n')
@@ -370,7 +412,7 @@ class FixtureTests(unittest.TestCase):
         self.fx.record_all()
 
         self.assertEqual(self.fx.errors(), [])
-        run = self.fx.load()['runs']['all']
+        run = self.fx.load()['runs']['committed']
         self.assertEqual(run['gens']['Proofs.Demo.Helper.Gen'],
                          {'path': 'Proofs/Demo/Helper/Gen.lean', 'sha256': ti.sha256(helper)})
         self.assertNotIn('Proofs.Demo.Helper.Gen', run['sources'])
@@ -398,8 +440,8 @@ class FixtureTests(unittest.TestCase):
         self.assertIn(helper_path, untracked.splitlines())
         self.fx.record_all()
         self.assertEqual(self.fx.errors(), [])
-        self.assertRunCurrent('all', True)
-        self.assertRunCurrent('demo-0152', True)
+        self.assertRunCurrent('committed', True)
+        self.assertRunCurrent('0.15.2-linux', True)
         canonical_sha = ti.sha256(self.fx.root / 'Proofs/Demo/Gen.lean')
         foreign = 'tests/foreign-gen.lean'
         (self.fx.root / foreign).write_bytes(helper.read_bytes())
@@ -408,25 +450,25 @@ class FixtureTests(unittest.TestCase):
             run['gens'][helper_module]['path'] = foreign
         self.fx.save(inv)
         self.assertError('Demo.f_spec: no current check result for 0.16.0/linux')
-        self.assertRunCurrent('all', False)
-        self.assertRunCurrent('demo-0152', False)
-        self.assertReplayRuns('all', 'demo-0152')
+        self.assertRunCurrent('committed', False)
+        self.assertRunCurrent('0.15.2-linux', False)
+        self.assertReplayRuns('committed', '0.15.2-linux')
 
         for run in inv['runs'].values():
             del run['gens'][helper_module]
         self.fx.save(inv)
         self.assertError('Demo.f_spec: no current check result for 0.16.0/linux')
-        self.assertRunCurrent('all', False)
-        self.assertRunCurrent('demo-0152', False)
-        self.assertReplayRuns('all', 'demo-0152')
+        self.assertRunCurrent('committed', False)
+        self.assertRunCurrent('0.15.2-linux', False)
+        self.assertReplayRuns('committed', '0.15.2-linux')
         helper.write_text(helper.read_text() + '\n')
         self.assertEqual(ti.sha256(self.fx.root / 'Proofs/Demo/Gen.lean'), canonical_sha)
         self.assertError('Demo.f_spec: no current check result for 0.16.0/linux')
-        self.assertRunCurrent('all', False)
-        self.assertRunCurrent('demo-0152', False)
+        self.assertRunCurrent('committed', False)
+        self.assertRunCurrent('0.15.2-linux', False)
         self.fx.record_all()
         self.assertEqual(self.fx.errors(), [])
-        self.assertRunCurrent('all', True)
+        self.assertRunCurrent('committed', True)
         self.assertReplayRuns()
 
     def test_historical_wrong_swap_identity_is_stale_in_reader_and_regen(self):
@@ -434,7 +476,7 @@ class FixtureTests(unittest.TestCase):
         canonical = 'Proofs/Demo/Gen.lean'
         golden = 'tests/golden/0.15.2/demo/Gen.lean'
         inv = self.fx.load()
-        old = inv['runs']['demo-0152']
+        old = inv['runs']['0.15.2-linux']
         old['command'][old['command'].index('--swap') + 1] = 'Demo=' + golden
         old['gens']['demo'] = {'path': canonical, 'sha256': ti.sha256(self.fx.root / canonical)}
         inv['runs'] = {'legacy-mixed': old}
@@ -444,7 +486,7 @@ class FixtureTests(unittest.TestCase):
         translation = ti.translations(self.fx.root, 'demo')[0]
         self.assertIsNone(ti.current_result(self.fx.root, inv, theorem, translation, closure))
         self.assertRunCurrent('legacy-mixed', False)
-        self.assertReplayRuns('legacy-mixed')
+        self.assertReplayRuns('committed', '0.15.2-linux')  # the legacy run is dropped, not replayed
         self.assertEqual(self.fx.load()['runs']['legacy-mixed']['gens']['demo']['path'], canonical)
 
         log = f'{ti.SWAP_PREFIX}demo {golden} {ti.sha256(self.fx.root / golden)}\n'
@@ -453,26 +495,26 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(ti.current_result(self.fx.root, fresh, theorem,
                                            ti.translations(self.fx.root, 'demo')[1], closure), 'fresh')
         self.assertRunCurrent('fresh', True)
-        self.assertReplayRuns('legacy-mixed')
+        self.assertReplayRuns('committed', '0.15.2-linux')  # the legacy run is dropped, not replayed
 
     def test_regen_preserves_toolchain_all_entry_hashes_and_module_membership(self):
         self.fx.record_all()
-        self.assertRunCurrent('all', True)
+        self.assertRunCurrent('committed', True)
         self.assertReplayRuns()
         with mock.patch.object(regen, 'ROOT', self.fx.root):
-            run = self.fx.load()['runs']['all']
+            run = self.fx.load()['runs']['committed']
             run['lean_toolchain_sha256'] = '0' * 64
             self.assertFalse(regen.run_is_current(ti, run))
-            run = self.fx.load()['runs']['all']
+            run = self.fx.load()['runs']['committed']
             run['gens']['extra'] = {'path': 'Proofs/Demo/Gen.lean', 'sha256': '0' * 64}
             self.assertFalse(regen.run_is_current(ti, run))
-            run = self.fx.load()['runs']['all']
+            run = self.fx.load()['runs']['committed']
             run['sources']['Proofs.Demo.Missing'] = '0' * 64
             self.assertFalse(regen.run_is_current(ti, run))
         (self.fx.root / 'Proofs/Demo/Extra.lean').write_text('def extra : Nat := 0\n')
-        self.assertRunCurrent('all', False)
-        self.assertRunCurrent('demo-0152', True)
-        self.assertReplayRuns('all')
+        self.assertRunCurrent('committed', False)
+        self.assertRunCurrent('0.15.2-linux', True)
+        self.assertReplayRuns('committed')
 
     def test_unsupported_recorded_commands_are_noncurrent(self):
         self.fx.record_all()
@@ -524,7 +566,6 @@ class FixtureTests(unittest.TestCase):
                 self.fx.record('valid', '0.16.0', *self.fx.guard('valid', command, 'ok\n'))
                 inv = self.fx.load()
                 self.assertRunCurrent('valid', True)
-                self.assertReplayRuns()
                 self.assertEqual(ti.current_result(self.fx.root, inv, theorem,
                     translation, closure), 'valid')
 
@@ -559,9 +600,26 @@ class FixtureTests(unittest.TestCase):
         proof = self.fx.root / ti.module_path(module)
         proof.write_text(proof.read_text() + '\n-- source changed\n')
         self.assertRunCurrent('no-build', False)
-        calls = self.assertReplayRuns('no-build')
-        self.assertEqual(calls[0].args[1], [str(self.fx.lake), '--rehash', 'build', module])
+        calls = self.assertReplayRuns('committed', '0.15.2-linux')  # planned afresh, never `--no-build`
+        self.assertEqual(calls[0].args[1][1:], ['build', 'Proofs.Conc.Proofs', module])
         self.assertEqual(self.fx.load()['runs']['no-build'], saved)
+
+    def test_renewal_skips_modules_deleted_since_the_recording(self):
+        gone = self.fx.root / ti.module_path('Proofs.Demo.Gone')
+        gone.write_text('theorem gone : True := trivial\n')
+        command = [str(self.fx.lake), 'build', 'Proofs', 'Proofs.Demo.Gone', 'Proofs.Demo.Proofs']
+        self.fx.record('committed', '0.16.0', *self.fx.guard('committed', command, 'built\n', prepare=False))
+        gone.unlink()
+        proof = self.fx.root / ti.module_path('Proofs.Demo.Proofs')
+        proof.write_text(proof.read_text() + '\n-- source changed\n')
+        self.assertRunCurrent('committed', False)
+        calls = self.assertReplayRuns('committed', '0.15.2-linux')  # a deleted module is not planned
+        self.assertEqual(calls[0].args[1], [str(self.fx.lake), 'build', 'Proofs.Conc.Proofs', 'Proofs.Demo.Proofs'])
+        # With every target gone the renewal would be a bare default-target build: refused.
+        inv = self.fx.load()
+        inv['runs']['committed']['command'] = [str(self.fx.lake), 'build', 'Proofs.Demo.Gone']
+        self.fx.save(inv)
+        self.assertReplayRejected()
 
     def test_swapped_imports_are_recorded_and_checked_from_the_selected_source(self):
         helper_module = 'Proofs.Extra.Helper'
@@ -573,23 +631,23 @@ class FixtureTests(unittest.TestCase):
         self.fx.record_all()  # Stub attestation only; this does not qualify a real golden.
         self.assertEqual(self.fx.errors(), [])
         inv = self.fx.load()
-        saved = inv['runs']['demo-0152']
+        saved = inv['runs']['0.15.2-linux']
         self.assertIn(helper_module, saved['modules'])
         self.assertEqual(saved['sources'][helper_module], ti.sha256(helper))
         theorem = THEOREMS[0]
         translation = ti.translations(self.fx.root, 'demo')[1]
         canonical_closure = ti.closure(self.fx.root, [theorem['module']])
         self.assertNotIn(helper_module, canonical_closure)
-        self.assertEqual(ti.current_result(self.fx.root, inv, theorem, translation, canonical_closure), 'demo-0152')
+        self.assertEqual(ti.current_result(self.fx.root, inv, theorem, translation, canonical_closure), '0.15.2-linux')
         incomplete = deepcopy(inv)
-        incomplete['runs']['demo-0152']['modules'].remove(helper_module)
+        incomplete['runs']['0.15.2-linux']['modules'].remove(helper_module)
         self.assertIsNone(ti.current_result(self.fx.root, incomplete, theorem, translation, canonical_closure))
         with mock.patch.object(regen, 'ROOT', self.fx.root):
-            self.assertFalse(regen.run_is_current(ti, incomplete['runs']['demo-0152']))
+            self.assertFalse(regen.run_is_current(ti, incomplete['runs']['0.15.2-linux']))
         helper.write_text(helper.read_text() + '-- changed dependency\n')
         self.assertIsNone(ti.current_result(self.fx.root, inv, theorem, translation, canonical_closure))
-        self.assertRunCurrent('demo-0152', False)
-        self.assertReplayRuns('all', 'demo-0152')
+        self.assertRunCurrent('0.15.2-linux', False)
+        self.assertReplayRuns('committed', '0.15.2-linux')
 
     def test_translation_classification_reuses_reads_and_invalidates_with_metadata(self):
         source = self.fx.root / 'Proofs/Demo/Extra.lean'
@@ -623,8 +681,8 @@ class FixtureTests(unittest.TestCase):
     def test_identical_run_targets_share_only_invocation_local_discovery(self):
         self.fx.record_all()
         inv = self.fx.load()
-        inv['runs']['all-copy'] = deepcopy(inv['runs']['all'])
-        inv['runs']['all']['sources']['Proofs.Demo.Proofs'] = '0' * 64
+        inv['runs']['all-copy'] = deepcopy(inv['runs']['committed'])
+        inv['runs']['committed']['sources']['Proofs.Demo.Proofs'] = '0' * 64
         with mock.patch.object(ti, 'library_modules', wraps=ti.library_modules) as discover:
             rows, errors = ti.results(self.fx.root, inv)
         self.assertEqual(errors, [])
@@ -681,10 +739,10 @@ class FixtureTests(unittest.TestCase):
             for saved in self.fx.load()['runs'].values():
                 self.assertEqual(ti.prepare_run(self.fx.root, saved)[0].lake, str(self.fx.lake))
             inv = self.fx.load()
-            inv['runs'] = {'all': inv['runs']['all']}
-            inv['runs']['all']['command'] = ['/bin/echo', 'build', 'Proofs']
+            inv['runs'] = {'committed': inv['runs']['committed']}
+            inv['runs']['committed']['command'] = ['/bin/echo', 'build', 'Proofs']
             self.fx.save(inv)
-            self.assertRunCurrent('all', False)
+            self.assertRunCurrent('committed', False)
             self.assertReplayRejected()
         with self.assertRaises(ti.Error):
             ti.parse_build_command(self.fx.root, [str(physical), 'build', 'Proofs'])
@@ -692,21 +750,21 @@ class FixtureTests(unittest.TestCase):
     def test_run_preparation_is_lazy_invocation_local_and_direct_calls_are_fresh(self):
         self.fx.record_all()
         inv = self.fx.load()
-        filtered = deepcopy(inv['runs']['all'])
+        filtered = deepcopy(inv['runs']['committed'])
         filtered['outcome'] = 'child_failed'
         inv['runs']['00-failed'] = filtered
         with mock.patch.object(ti, 'prepare_run', wraps=ti.prepare_run) as prepare:
             rows, errors = ti.results(self.fx.root, inv)
             self.assertEqual(errors, [])
-        self.assertEqual(prepare.call_count, 2)  # all once, demo-0152 once, never the failed run.
+        self.assertEqual(prepare.call_count, 2)  # all once, 0.15.2-linux once, never the failed run.
         self.assertTrue(all(call.args[1]['outcome'] == 'success' for call in prepare.call_args_list))
-        self.assertEqual(rows[0]['checks'][0]['run'], 'all')
-        self.assertEqual(rows[0]['checks'][1]['run'], 'demo-0152')
+        self.assertEqual(rows[0]['checks'][0]['run'], 'committed')
+        self.assertEqual(rows[0]['checks'][1]['run'], '0.15.2-linux')
         theorem = THEOREMS[0]
         tr = ti.translations(self.fx.root, 'demo')[0]
         closure = ti.closure(self.fx.root, [theorem['module']])
         with mock.patch.object(ti, 'prepare_run', wraps=ti.prepare_run) as prepare:
-            self.assertEqual(ti.current_result(self.fx.root, inv, theorem, tr, closure), 'all')
+            self.assertEqual(ti.current_result(self.fx.root, inv, theorem, tr, closure), 'committed')
             (self.fx.root / 'Proofs/Demo/Extra.lean').write_text('def extra : Nat := 0\n')
             self.assertIsNone(ti.current_result(self.fx.root, inv, theorem, tr, closure))
         self.assertEqual(prepare.call_count, 2)
@@ -720,9 +778,9 @@ class FixtureTests(unittest.TestCase):
         self.fx.record_all()
         unused.write_text('def unrelated : Nat := 1\n')
         self.assertEqual(self.fx.errors(), [])
-        self.assertRunCurrent('all', False)
-        self.assertRunCurrent('demo-0152', True)
-        self.assertReplayRuns('all')
+        self.assertRunCurrent('committed', False)
+        self.assertRunCurrent('0.15.2-linux', True)
+        self.assertReplayRuns('committed')
 
     def test_direct_and_nested_producer_capture_positions(self):
         commands = (['lake', 'build', 'Proofs'],
@@ -774,21 +832,21 @@ class FixtureTests(unittest.TestCase):
         inv = self.fx.load()
         for run in inv['runs'].values():
             del run['producer']
-        inv['runs']['all']['command'] = ['lake', 'build', 'Proofs']
-        inv['runs']['demo-0152']['command'] = [
+        inv['runs']['committed']['command'] = ['lake', 'build', 'Proofs']
+        inv['runs']['0.15.2-linux']['command'] = [
             'python3', 'scripts/theorem-inventory.py', 'swap-build', '--swap',
             'Demo=./tests/golden/0.15.2/demo/Gen.lean', 'Proofs.Demo.Proofs']
         self.fx.save(inv)
         self.assertError('Demo.f_spec: no current check result for 0.16.0/linux')
-        self.assertRunCurrent('all', False)
-        self.assertRunCurrent('demo-0152', False)
-        calls = self.assertReplayRuns('all', 'demo-0152')
-        self.assertEqual(calls[0].args[1], [str(self.fx.lake), 'build', 'Proofs'])
+        self.assertRunCurrent('committed', False)
+        self.assertRunCurrent('0.15.2-linux', False)
+        calls = self.assertReplayRuns('committed', '0.15.2-linux')
+        self.assertEqual(calls[0].args[1], [str(self.fx.lake), 'build', 'Proofs.Conc.Proofs', 'Proofs.Demo.Proofs'])
         nested = ti.parse_build_command(self.fx.root, calls[1].args[1])
         self.assertEqual(nested.lake, str(self.fx.lake))
         self.assertEqual(nested.swaps, {'demo': 'tests/golden/0.15.2/demo/Gen.lean'})
         self.assertEqual(calls[1].kwargs['tools'], [self.fx.lake])
-        self.assertEqual(self.fx.load(), inv)  # A mocked replay never qualifies or rewrites old success.
+        self.assertEqual(self.fx.load(), inv)  # A mocked rebuild never qualifies or rewrites old success.
 
     def test_cross_host_producer_paths_are_structural_and_replay_is_local(self):
         self.fx.record_all()
@@ -818,15 +876,15 @@ class FixtureTests(unittest.TestCase):
                     predicate()
             self.assertEqual(ti.check(self.fx.root, write=True), [])
             self.assertEqual(self.fx.errors(), [])
-            self.assertRunCurrent('all', True)
-            self.assertRunCurrent('demo-0152', True)
+            self.assertRunCurrent('committed', True)
+            self.assertRunCurrent('0.15.2-linux', True)
             self.assertReplayRuns()
         self.assertEqual(self.lake_resolver.call_count, resolves)
         theorem = THEOREMS[0]
         translation = ti.translations(self.fx.root, 'demo')[0]
         closure = ti.closure(self.fx.root, [theorem['module']])
         for mutation in ('missing', 'path', 'hash', 'bytes', 'pin'):
-            bad = deepcopy(inv['runs']['all'])
+            bad = deepcopy(inv['runs']['committed'])
             if mutation == 'missing':
                 del bad['producer']
             elif mutation == 'path':
@@ -843,7 +901,7 @@ class FixtureTests(unittest.TestCase):
                     translation, closure))
         proof = self.fx.root / 'Proofs/Demo/Proofs.lean'
         proof.write_text(proof.read_text() + '\n')
-        calls = self.assertReplayRuns('all', 'demo-0152')
+        calls = self.assertReplayRuns('committed', '0.15.2-linux')
         for call in calls:
             self.assertEqual(ti.parse_build_command(self.fx.root, call.args[1], lake=str(self.fx.lake)).lake,
                              str(self.fx.lake))
@@ -887,7 +945,7 @@ class FixtureTests(unittest.TestCase):
         proof.write_text('import ' + module + '\n' + proof.read_text())
         self.fx.record_all()
         self.assertEqual(self.fx.errors(), [])
-        run = self.fx.load()['runs']['all']
+        run = self.fx.load()['runs']['committed']
         self.assertEqual(run['gens']['demo']['path'], 'Proofs/Demo/Gen.lean')
         self.assertEqual(run['gens'][module]['path'], str(ti.module_path(module)))
         self.assertNotIn(module, run['sources'])
@@ -918,13 +976,13 @@ class FixtureTests(unittest.TestCase):
         self.assertError('Demo.f_spec: no current check result')
 
     def test_one_version_missing(self):
-        self.fx.record('all', '0.16.0', *self.fx.guard('all', ['lake', 'build', 'Proofs'], 'ok\n'))
+        self.fx.record('committed', '0.16.0', *self.fx.guard('committed', ['lake', 'build', 'Proofs'], 'ok\n'))
         errors = self.fx.errors()
         self.assertTrue(any('Demo.f_spec: no current check result for 0.15.2/linux' in e for e in errors))
         self.assertFalse(any('0.16.0/linux' in e for e in errors), errors)
 
     def test_failed_run_is_no_result(self):
-        self.fx.record('all', '0.16.0', *self.fx.guard('all', ['lake', 'build', 'Proofs'], 'error\n',
+        self.fx.record('committed', '0.16.0', *self.fx.guard('committed', ['lake', 'build', 'Proofs'], 'error\n',
                                                        outcome='child_failed', exit_code=1))
         self.assertError('Demo.f_spec: no current check result for 0.16.0/linux')
 
@@ -1025,7 +1083,7 @@ class FixtureTests(unittest.TestCase):
         self.assertError('docs/theorem-inventory.md is stale')
 
     def test_record_rejects_a_foreign_log(self):
-        report, log = self.fx.guard('all', ['lake', 'build', 'Proofs'], 'ok\n')
+        report, log = self.fx.guard('committed', ['lake', 'build', 'Proofs'], 'ok\n')
         log.write_text('edited\n')
         self.fx.assert_main(['record', '--run', 'x', '--zig', '0.16.0', '--guard-report', str(report),
                              '--guard-log', str(log)], code=1)
@@ -1155,11 +1213,13 @@ class FixtureTests(unittest.TestCase):
 
 
 class RepositoryTests(unittest.TestCase):
-    def test_committed_inventory_is_current(self):
-        self.assertEqual(ti.check(ROOT), [])
+    def test_committed_list_is_current(self):
+        # The recorded results are a whole-tree generated file (assurance/generated.json): CI's
+        # `theorem-inventory` job runs the full check on it. Here the committed list alone.
+        self.assertEqual(ti.check(ROOT, list_only=True), [])
 
     def test_threaded_clients_are_all_schedules_and_facts_are_narrower(self):
-        inv = json.loads((ROOT / ti.INVENTORY).read_text())
+        inv = ti.load_list(ROOT)
         scope = {t['name']: t['scope'] for t in inv['theorems']}
         for name in ('Sync.RwLockRead.rwLockRead_spec', 'Sync.RwLockSnapshotPair.snapshotPair_safe',
                      'Threadsync.MutexCounter.mutexCounter_spec', 'Atomics.Stack.stackPush_safe'):
@@ -1170,14 +1230,14 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(scope[name], 'single-step', name)
 
     def test_f05_exclusion_is_in_the_statement_and_the_domain(self):
-        inv = json.loads((ROOT / ti.INVENTORY).read_text())
+        inv = ti.load_list(ROOT)
         op128 = next(t for t in inv['theorems'] if t['name'] == 'op128_spec')
         self.assertIn('except 3, 5, 6 and 9', op128['domain'])
         statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec']
         self.assertIn('sel ≠ 3 ∧ sel ≠ 5 ∧ sel ≠ 6 ∧ sel ≠ 9', statement['statement'])
 
     def test_f05_full_selector_theorem_is_listed_without_exclusion(self):
-        inv = json.loads((ROOT / ti.INVENTORY).read_text())
+        inv = ti.load_list(ROOT)
         full = next(t for t in inv['theorems'] if t['name'] == 'op128_spec_full')
         self.assertIn('every selector', full['domain'])
         statement = ti.declarations((ROOT / 'Proofs/Floatops/Proofs.lean').read_text())['op128_spec_full']

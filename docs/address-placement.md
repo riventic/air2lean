@@ -55,7 +55,7 @@ address facts available are the ones above:
 | `Mem.newAddr_mod`, `Mem.ofGlobals_addr_mod` | a new block or a global is aligned |
 | `Mem.newAddr_clear`, `alloc_run` | a new block is clear of every live block (`≤`, no gap) |
 | `Mem.ofGlobals_block`, `Mem.ofGlobals_getElem?` | block `k` at program start is global `k` |
-| `BlkAt.alloc` (`blkat_alloc`) | a stack block is live, of its size, aligned |
+| `BlkAt.alloc`, `BlkAt.afterAlloc` | a stack block is live, of its size, aligned, and stays so across later allocations |
 
 `Mem.Seq` (the invariant of `Triple`) is only the single-thread condition: there is no
 address invariant (`Mem.AddrBelow` and `Mem.nextAddr` are gone), so no rule exports an order
@@ -86,8 +86,6 @@ liveness and provenance: an access, `free` and `@ptrFromInt`'s provenance recove
   that reuses addresses has room). Only the globals at program start take the first fit.
 * `Mem.top` scans every block, so allocation under `Placement.fresh` is linear in the number of
   blocks so far (runtime cost only).
-* VC extraction (`vc_gen`) has a pointer `==` contract only for provenance-free pointers
-  (`Zig.VC.ptrEqAddr_raw`); comparing pointers into blocks needs a proof by hand.
 * A zero-size object may overlap another block in a native layout; the model's `addrFree`
   does not separate them, so `@ptrFromInt` of such an address can be ambiguous (`.unspecified`
   under `.strict` provenance).

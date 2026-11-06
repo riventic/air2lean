@@ -1,7 +1,7 @@
 import Proofs.Handoff.Ops
 import Proofs.Sync.Cond
 import Proofs.Sync.Event
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.LockSteps
 
@@ -43,6 +43,7 @@ def lo : Layout where
   c := 2
   c_ok := by decide
   ok := by decide
+  fits := by decide
 
 /-- The producer's argument. -/
 def prodOf : Tgt → Option Ptr
@@ -51,23 +52,24 @@ def prodOf : Tgt → Option Ptr
 
 /-! ## The producer -/
 
-theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat)
-    (hi : (proto lo prodOf).inv (upd G 1 (gO rnil { ph := .lk })) m) (hc : m.current = 1) :
+theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res} (hp : rp.Plain)
+    (hi : (proto lo prodOf).inv (upd G 1 (gO rp { ph := .lk })) m) (hc : m.current = 1) :
     (proto lo prodOf).WP 1 (producer bPtr) (fun _ G' m' _ => m'.current = 1 ∧
-      (proto lo prodOf).inv (upd G' 1 (⟨.gone, rnil, rnil⟩, { ph := .fin })) m') G m d := by
+      (proto lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d := by
   unfold producer
   -- `io`: the library's `FLock.Fits.wp_readRest` with this protocol's obligations; `v = 7` and
   -- `ready = true`: the lock holder's step, `FLock.Fits.wp_hold`, to the producer's next place
   fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_tick_plain,
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_readRest rfl (by decide)
       (io_rest (a := 8) rfl (by decide)) (fun _ _ _ hu => hu.io) (io_cov rfl)
       (fun _ _ _ hu ht _ hcs => U_rec hu hcs rfl ht (by decide) (by decide)),
-    wp_lockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
+    wp_lockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩ hp,
     wp_unlockP (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
-    wp_signal (Lo := lo) (prodOf := prodOf) ioCond rfl ⟨⟩,
+    wp_signal (Lo := lo) (prodOf := prodOf) ioCond rfl ⟨⟩ hp,
     wp_set (Lo := lo) (prodOf := prodOf) ioEvent rfl ⟨⟩,
-    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rnil r { ph := .v7 }),
-    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rnil r { ph := .rdy }),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .v7 }),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .rdy }),
     U_storeHeld (Lo := lo), vOf, Ph.hasV, Ph.hasR]
 
 /-- The producer: its code, then its end. -/
@@ -77,15 +79,15 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto lo prodOf).init tgt g) (
     (proto lo prodOf).WP u (dispatch tgt) ((proto lo prodOf).QKid u) G { m with current := u } d := by
   cases tgt with
   | producer p =>
-    obtain ⟨hp, rfl⟩ := hg
+    obtain ⟨hp, rp, hpP, rfl⟩ := hg
     obtain rfl : p = bPtr := Option.some.inj hp
     have hu1 : u = 1 := by
       obtain ⟨rX, -, hU⟩ := id hi
       exact hU.shape.one (u := u) (by show (G u).2.ph.isProd = true; rw [hgu]; rfl)
     subst hu1
     show (proto lo prodOf).WP 1 ((fun _ => ()) <$> producer bPtr) _ G _ d
-    refine WP.map (WP.mono ?_ (producer_spec G _ d
-      (by rw [show gO rnil { ph := .lk } = G 1 from hgu.symm, upd_same]
+    refine WP.map (WP.mono ?_ (producer_spec G _ d (Res.plain_of hpP)
+      (by rw [show gO rp { ph := .lk } = G 1 from hgu.symm, upd_same]
           exact inv_cur 1 hi (by rw [hgu]; nofun)) rfl))
     rintro _ G' m' _ ⟨-, hi'⟩
     exact qkid hi'
@@ -116,6 +118,7 @@ theorem loop24_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadI
   -- `ready`: the lock holder's step at `main`'s place (`FLock.Fits.wp_hold`); `false`: the
   -- condition wait
   fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_tick_plain,
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rM r { ph := .run }),
     U_holdStep (Lo := lo), wp_cwait (Lo := lo) (prodOf := prodOf) ioCond rfl rfl rfl ⟨⟩ hpl,
     handoff.again24]
@@ -131,7 +134,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- `vOf_ready`), `unlock`, the event wait, the join of the producer, the free of the `Box`
   fsym [inv_of_box (Lo := lo) (prodOf := prodOf), inv_spawn (Lo := lo) (prodOf := prodOf),
     WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
-    wp_lockM (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
+    wp_lockM (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩ _,
     WP.loop _ _ (inv24 _) (fun _ => 0) (post24 _) (loop24_body _ _),
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := (fun rM r => gH rM r { ph := .run }) _),
     U_holdStep (Lo := lo), vOf_ready, wp_unlockM (Lo := lo) (prodOf := prodOf) ioMutex rfl rfl ⟨⟩,
@@ -156,10 +159,12 @@ theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Condition` handoff returns 7 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+`zig_run` set has unfolded its path (`docs/proof-tools.md`, concrete runs of programs with loops). -/
 theorem handoff_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 end Sync.Handoff

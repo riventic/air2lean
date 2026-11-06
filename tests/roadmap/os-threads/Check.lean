@@ -70,6 +70,8 @@ def word (v : BitVec 32) : ConcM Tgt Ptr := lift do
   pure p
 
 def p0 : Ptr := ⟨some 0, 0⟩
+/-- The private futex key of `p0` in a memory whose block 0 is at address 4096 (`Mem.keyAt`). -/
+def k0 : FutexKey := ⟨false, 4096⟩
 
 def seqLoad (p : Ptr) : ConcM Tgt (BitVec 32) := do
   let c ← pick (loadCount 32 .seqCst 4 p)
@@ -114,12 +116,25 @@ def racyKid : Tgt → ConcM Tgt Unit := fun _ => lift (store 4 p0 (1 : BitVec 32
     let r ← Linux.futex_4arg p 0x80 7 none
     ConcM.sync (.join t)
     pure r) hex64).contains "Zig.Error.illegal"
--- macOS: woken/mismatch are 0, a spurious return -EINTR, a timeout -ETIMEDOUT.
+-- macOS: woken/mismatch return -EFAULT or the oracle's non-negative `--ull_nwaiters` (2^31 + 1
+-- options, so only the first 50 schedules), a spurious return -EINTR, a timeout -ETIMEDOUT.
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 5 0) hex32 ==
   ["-4", "-60"]
-#guard outcomes noKids (do let p ← word 3; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0) hex32 == ["0"]
+def ulockMismatch : List String :=
+  outcomes (cap := 50) noKids (do let p ← word 3; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 0) hex32
+#guard ulockMismatch.length == 50 && ulockMismatch.contains "-14" && ulockMismatch.contains "48" &&
+  ulockMismatch.all fun s => s == "-14" || s.toInt?.any (0 ≤ ·)
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 1) hex32 ==
   ["Zig.Error.unspecified"]
+-- macOS address validation (S6, `sys_ulock.c`): a null or unaligned WAIT and a null WAKE are
+-- EINVAL; an unaligned WAKE finds no waiter at its key (ENOENT, or a spurious EINTR).
+#guard outcomes noKids (Darwin.__ulock_wait2 0x01000001 none 0 0 0) hex32 == ["-22"]
+#guard outcomes noKids (Darwin.__ulock_wait2 0x01000001 (some ⟨none, 0⟩) 0 0 0) hex32 == ["-22"]
+#guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some (p.add 1)) 0 0 0)
+  hex32 == ["-22"]
+#guard outcomes noKids (Darwin.__ulock_wake 0x01000001 none 0) hex32 == ["-22"]
+#guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wake 0x01000001 (some (p.add 1)) 0)
+  hex32 == ["-2", "-4"]
 
 /-! ## Linux numeric alignment and validation order -/
 
@@ -129,7 +144,7 @@ private def p : Ptr := ⟨some 0, 0⟩
 private def mem : Mem := {
   blocks := #[{ bytes := #[.int 1, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0, .int 0]
                 align := 4, kind := .heap, live := true, addr := 4096 }]
-  waiters := #[(1, p.add 1)]
+  waiters := #[(1, ⟨false, 4097⟩)]
   woken := #[2]
   os := { interrupts := #[0] }
 }
@@ -158,13 +173,31 @@ example (m : Mem) :
       .leaf (some (.ok (negErrno Linux.E.INVAL, m))) := by
   rfl
 
--- An aligned unmapped address, zero, and a freed known block still need no futex-word read.
-#guard outcomes noKids (Linux.futex_3arg ⟨none, 4096⟩ 0x81 1) hex64 == ["0"]
-#guard outcomes noKids (Linux.futex_3arg ⟨none, 0⟩ 0x81 1) hex64 == ["0"]
+-- A private key needs a user address, not a live word: a freed block's address is one (S6).
 #guard outcomes noKids (do
     let q ← word 0
     lift (free q)
     Linux.futex_3arg q 0x81 1) hex64 == ["0"]
+-- So is an address below a block's end, without a word there.
+#guard outcomes noKids (do
+    let q ← word 0
+    let a ← lift (ptrAddr q)
+    Linux.futex_3arg ⟨none, a - 4096⟩ 0x81 1) hex64 == ["0"]
+-- A shared key needs a live writable word: a freed block's is refused (conservative, S6).
+#guard outcomes noKids (do
+    let q ← word 0
+    lift (free q)
+    Linux.futex_3arg q 1 1) hex64 == ["Zig.Error.illegal"]
+-- `access_ok`: an address with bits 63 and 55 set (also a negative offset, as a `usize`) is
+-- EFAULT. `2^63` is a user address under aarch64's tagged-address ABI: refused (conservative).
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63 + 2 ^ 55⟩ 0x81 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 63⟩ 0x81 1) hex64 == ["Zig.Error.illegal"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, -4⟩ 0x81 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_3arg ⟨none, -4⟩ 1 1) hex64 == ["-14"]
+#guard outcomes noKids (Linux.futex_4arg ⟨none, -4⟩ 0x80 0 none) hex64 == ["-14"]
+-- An address above every block of the run: the native result depends on the target's user
+-- address limit, which the model leaves open (conservative refusal, S6).
+#guard outcomes noKids (Linux.futex_3arg ⟨none, 2 ^ 62⟩ 0x81 1) hex64 == ["Zig.Error.illegal"]
 
 /-- Unsupported operations still fail before numeric resolution of an unknown block. -/
 example :
@@ -209,17 +242,17 @@ end LinuxAlignment
 /-! ## OSF-02: futex wake -/
 
 -- The wake subset is the oracle's: with two waiters, a wake of one has two options.
-def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
-#guard wakeCount p0 (some 1) twoWaiters == 2
-#guard wakeCount p0 (some 5) twoWaiters == 1
-#guard wakeCount p0 none twoWaiters == 1
-#guard ((wakeAt 0 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+def twoWaiters : Mem := { waiters := #[(1, k0), (2, k0), (3, ⟨false, 8192⟩)] }
+#guard wakeCount k0 (some 1) twoWaiters == 2
+#guard wakeCount k0 (some 5) twoWaiters == 1
+#guard wakeCount k0 none twoWaiters == 1
+#guard ((wakeAt 0 k0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
   some (.ok (some 1, #[1]))
-#guard ((wakeAt 1 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+#guard ((wakeAt 1 k0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
   some (.ok (some 1, #[2]))
-#guard ((wakeAt 2 p0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
+#guard ((wakeAt 2 k0 (some 1)).run twoWaiters).run.map (·.map fun (n, m) => (n, m.woken)) ==
   some (.ok (none, #[]))
-#guard ((wakeAt 0 p0 none).run twoWaiters).run.map (·.map fun (n, m) => (n, m.waiters.size)) ==
+#guard ((wakeAt 0 k0 none).run twoWaiters).run.map (·.map fun (n, m) => (n, m.waiters.size)) ==
   some (.ok (some 2, 1))
 -- Linux FUTEX_WAKE with nobody waiting wakes 0; `val = 0` still wakes one (kernel `nr_wake`).
 #guard outcomes noKids (do let p ← word 0; Linux.futex_3arg p 0x81 1) hex64 == ["0"]
@@ -232,20 +265,23 @@ def twoWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, ⟨some 1, 0⟩)] }
 -- for `n > 1`: with three threads asleep, `wake(p, 2)` wakes all three, under every choice of the
 -- oracle (kernel-checked), and `__ulock_wake` returns 0, or a spurious -EINTR with nobody woken.
 -- The hand model's scheduler wake `.wake p 2` wakes two (one stays asleep) under every choice.
-def threeWaiters : Mem := { waiters := #[(1, p0), (2, p0), (3, p0)] }
-example : ∀ c < wakeCount p0 none threeWaiters,
-    ((wakeAt c p0 none).run threeWaiters).run.map (·.map fun (n, m) => (n, m.waitersAt p0)) =
+def threeWaiters : Mem := {
+  blocks := #[{ bytes := Array.replicate 4 (.int 0), align := 4, kind := .heap, live := true,
+                addr := 4096 }]
+  waiters := #[(1, k0), (2, k0), (3, k0)] }
+example : ∀ c < wakeCount k0 none threeWaiters,
+    ((wakeAt c k0 none).run threeWaiters).run.map (·.map fun (n, m) => (n, m.waitersAt k0)) =
       some (.ok (some 3, [])) := by decide +kernel
 example : ∀ a < 3, ∀ b < 2,
-    ((Thread.futexWake p0 2 [a, b]).run threeWaiters).run.map
-      (·.map fun (_, m) => (m.waitersAt p0).length) = some (.ok 1) := by decide +kernel
+    ((Thread.futexWake k0 2 [a, b]).run threeWaiters).run.map
+      (·.map fun (_, m) => (m.waitersAt k0).length) = some (.ok 1) := by decide +kernel
 #guard outcomes noKids (do
     let r ← Darwin.__ulock_wake 0x01000101 (some p0) 0
-    pure (r, ((← lift get).waitersAt p0).length)) (fun (r, k) => s!"{r.toInt} {k}")
+    pure (r, ((← lift get).waitersAt k0).length)) (fun (r, k) => s!"{r.toInt} {k}")
     (m0 := threeWaiters) == ["-4 3", "0 0"]
 #guard outcomes noKids (do
     ConcM.sync (.wake p0 2)
-    pure ((← lift get).waitersAt p0).length) toString (m0 := threeWaiters) == ["1"]
+    pure ((← lift get).waitersAt k0).length) toString (m0 := threeWaiters) == ["1"]
 -- Linux: `nr_wake` is an `int`, so at most 2^31 − 1 threads wake; a `u32` count above it reads
 -- as negative and wakes one, which is why std clamps with `@min(n, maxInt(i32))` (the library
 -- theorem `Os.Linux.wakeLimit_le` covers every `val`). The hand model's `.wake p 0xffffffff`
@@ -474,7 +510,7 @@ def sysctl (name : String) : MemM (BitVec 32 × BitVec 32 × BitVec 64) := do
 
 -- A signal wakes a sleeper, which then returns EINTR; otherwise it is pending.
 def sleeper : Mem := { threads := #[{ spawner := 0, joined := true }, { spawner := 0, joined := false }],
-                       clocks := #[#[], #[]], waiters := #[(1, p0)] }
+                       clocks := #[#[], #[]], waiters := #[(1, k0)] }
 #guard ((interrupt 1).run sleeper).run.map (·.map fun (_, m) => (m.waiters.size, m.woken, m.os.interrupts)) ==
   some (.ok (0, #[1], #[1]))
 #guard ((interrupt 0).run sleeper).run.map (·.map fun (_, m) => (m.waiters.size, m.woken, m.os.interrupts)) ==

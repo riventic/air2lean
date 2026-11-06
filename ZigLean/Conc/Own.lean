@@ -149,14 +149,6 @@ theorem bytesAt_in {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
   rw [hpb] at hb'; cases hb'
   rw [hl]; simp [h1, h2]
 
-/-- `std.Io` (one value, 16 bytes): a store of it is a store of an encoding. -/
-instance : LawfulEnc Io where
-  size_encode _ := handleBytes_size .io (by decide)
-  decode_encode _ := by
-    show (do if (← handleOfBytes 16 (handleBytes .io 16)) = .io then pure ⟨⟩ else throw .unspecified :
-      Result Io) = pure ⟨⟩
-    rw [handleOfBytes_handleBytes .io (by decide) (by decide)]; rfl
-
 /-- Two memories with the same cells at the first `n` bytes of a live block `b` (its first live
 offset 0) have the same first `n` bytes there. -/
 theorem Mem.extract_of_heap_eq {m m' : Mem} {b : BlockId} {blk blk' : Block} {n : Nat}

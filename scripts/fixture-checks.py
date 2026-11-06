@@ -28,8 +28,11 @@ invocations, a tests/ script called with `--native...` (scripts/target-matrix.py
 are no-ops: they run binaries of the runner's target (scripts/local-ci.sh part PART runs them in
 the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their count.
 
-Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS; at most budget/--mem-mib at
-once), in the checkout, after the full build's Lean phases. Every unit runs on every invocation:
+Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS), in the checkout, after the
+full build's Lean phases: the longest first, each admitted while the memory requests of the
+running units fit in the guard's budget (`schedule`; from the last runs' wall times and peaks,
+`hints_path`; --mem-mib for a unit not measured yet).
+Those measurements decide only order and admission. Every unit runs on every invocation:
 no result is reused across runs until a sound input tracer exists (maintainer decision on #443,
 2026-10-19; docs/ci.md#full-build). A key over the files a unit's text names missed every input
 reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
@@ -38,7 +41,12 @@ tests/roadmap/asm-effects).
 The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
 (AIR2LEAN_FIXTURE_REPLAY_CACHE, a file in the run's scratch directory, removed with it): a
 Lake-built module that one audit replayed is not replayed again in this run
-(scripts/assumptions.py `kernel_replay`). Nothing outlives the run.
+(scripts/assumptions.py `kernel_replay`). They also share one digest of the Lean toolchain's
+runtime, hashed when the run starts and again when it ends (a change fails the run;
+assumptions.py `runtime_run`). Before the units start, every library of the proof-fixture
+package (tests/roadmap/lakefile.toml, `scripts/fixtures.py build`) and the compiled assurance
+extractor (assumptions.py `prepared_tool`) are built (`prepare_shared`): no unit builds a module
+of the root or the fixture package, and a run in which one changed fails. Nothing outlives the run.
 
 `--prepare` resolves the toolchains of the units that will run (a patched-compiler miss builds it
 under its own scripts/build-guard.py); scripts/full-build.sh calls it before its guarded run.
@@ -63,6 +71,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 import par  # noqa: E402
+import assumptions  # noqa: E402
 
 
 def _load(name, rel):
@@ -75,11 +84,22 @@ def _load(name, rel):
 CR = _load('air2lean_ci_reuse', 'scripts/ci-reuse.py')
 TM = CR.TM
 CAS = _load('air2lean_cas', 'scripts/cas.py')
+GUARD = _load('air2lean_build_guard', 'scripts/build-guard.py')
+PEAKS = _load('air2lean_lean_peaks', 'scripts/lean-peaks.py')
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
 CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
+# A native row's runner (AIR2LEAN_<ARCH>_RUN, a command prefix; empty: the host): `_stage` fails a
+# unit whose runner is not installed, since a check script may send the runner's errors to a file.
+RUNNER = re.compile(r'AIR2LEAN_\w+_RUN')
+# Scheduling (`schedule`): a request is the largest of a unit's last HINT_RUNS sampled peaks times
+# MEM_MARGIN (sampling every 2 s misses short spikes), at least MEM_FLOOR_MIB. In an elastic
+# admission (scripts/fixture-checks.sh, scripts/full-build.sh) each unit is a sub-admission of
+# build-guard charged its request (`admitted`); elsewhere the requests of the running units stay
+# within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the guard enforces on their sum.
+HINT_RUNS, MEM_MARGIN, MEM_FLOOR_MIB, MEM_SHARE = 5, 1.5, 1024, 0.85
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -280,7 +300,122 @@ def _stage(unit, scratch):
         return text.replace(WS, str(workspace)).replace(TMP, str(temp))
 
     env.update({name: place(value) for name, value in unit['env'].items()})
+    if unit['runner'] == HOST:  # its native runs execute here, each through its row's runner
+        for name in sorted(n for n in unit['env'] if RUNNER.fullmatch(n) and env[n].strip()):
+            if not shutil.which(env[name].split()[0], path=env['PATH']):
+                raise Unavailable('missing prerequisite: %s=%s is not installed '
+                                  '(scripts/doctor.sh native-runners)' % (name, env[name]))
     return ['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', place(unit['run'])], env
+
+
+def elastic_grant():
+    """The enclosing guard's admission when it is elastic (build-guard.py --elastic: the units'
+    guard, scripts/fixture-checks.sh), else None."""
+    grant = GUARD.read_grant()
+    return grant if grant and grant.get('elastic') and isinstance(grant.get('lock'), str) else None
+
+
+def admitted(command, request_mib, grant):
+    """A unit's command as a sub-admission of the elastic guard: it holds its own slots, charged
+    its request, while it runs, and runs again at build-guard's PROCESS_MIB if it outgrows them.
+    It keeps the units' guard's jobs and Lean threads (which the sub-admission sets again), samples
+    as often as the hints were measured (`write_hints`)."""
+    return [sys.executable, '-B', str(ROOT / 'scripts/build-guard.py'),
+            *GUARD.part_options(request_mib, grant['lock'], 2), '--cwd', str(ROOT),
+            '--jobs', os.environ.get('AIR2LEAN_JOBS') or '1',
+            '--lean-threads', os.environ.get('LEAN_NUM_THREADS') or '1', '--', *command]
+
+
+def lean_processes_env(grant):
+    """The environment of the proof-fixture package's build in an elastic admission: each of its
+    Lean processes is a sub-admission charged its module's measured peak (build-guard.py
+    --lean-processes; the package holds the largest modules, 9 GB and more). Only that build:
+    the assurance tools refuse a LEAN_SYSROOT overlay."""
+    sysroot = subprocess.run(['lean', '--print-prefix'], cwd=ROOT, check=True, capture_output=True,
+                             text=True).stdout.strip()
+    return os.environ | GUARD.lean_processes_env(sysroot, Path(grant['lock']))
+
+
+def hints_path():
+    """The last runs' per-unit measurements, one file per machine (every worktree runs the same
+    units, and a gate's worktree is fresh): $AIR2LEAN_FIXTURE_SCHEDULE, else beside the build
+    lock in ~/.cache/air2lean. It holds no result, so it is not in the artifact cache."""
+    path = os.environ.get('AIR2LEAN_FIXTURE_SCHEDULE')
+    return Path(path) if path else Path.home() / '.cache' / 'air2lean' / 'fixture-checks' / 'schedule.json'
+
+
+def lean_threads():
+    """The Lean processes each unit's Lake runs at once (LEAN_NUM_THREADS, set by the guard)."""
+    text = os.environ.get('LEAN_NUM_THREADS', '')
+    return int(text) if text.isdigit() and int(text) > 0 else 1
+
+
+def _hint(entry):
+    """A well-formed measurement, else None (the file is a cache: a bad entry is unmeasured)."""
+    number = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0
+    if (isinstance(entry, dict) and number(entry.get('elapsed_s'))
+            and isinstance(entry.get('peak_rss_kib'), list) and all(map(number, entry['peak_rss_kib']))
+            and isinstance(entry.get('lean_threads'), int) and entry['lean_threads'] > 0):
+        return entry
+    return None
+
+
+def read_hints():
+    try:
+        data = json.loads(hints_path().read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if _hint(v)} if isinstance(data, dict) else {}
+
+
+def write_hints(units, stats):
+    """Record each measured unit's wall time and its peaks of the last HINT_RUNS runs with this
+    run's Lean thread count (peaks measured with another count are dropped). A file that cannot
+    be written only loses the measurements: a warning, never a failed run."""
+    hints, threads = read_hints(), lean_threads()
+    for u, s in zip(units, stats):
+        if s:
+            old = hints.get(u['name'])
+            peaks = old['peak_rss_kib'] if old and old['lean_threads'] == threads else []
+            hints[u['name']] = {'elapsed_s': s['elapsed_s'], 'lean_threads': threads,
+                                'peak_rss_kib': ([s['peak_rss_kib']] + peaks)[:HINT_RUNS]}
+    path, written = hints_path(), None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile('w', dir=path.parent, delete=False) as handle:
+            written = handle.name
+            json.dump(hints, handle, indent=1, sort_keys=True)
+        os.replace(written, path)
+    except OSError as error:
+        print('fixture-checks: the schedule was not recorded: %s' % error, file=sys.stderr)
+        if written:
+            Path(written).unlink(missing_ok=True)
+
+
+def schedule(units, mem_mib, elastic=False):
+    """(start order, memory requests in MiB): the longest units first by their last wall time, an
+    unmeasured one before all; a request is the largest recent peak with a margin (MEM_MARGIN,
+    at least MEM_FLOOR_MIB), scaled up by the ratio of Lean threads when this run has more than
+    the measured one. An unmeasured unit requests `mem_mib`; in an elastic admission, where its
+    request is its limit and one that outgrows it runs again at PROCESS_MIB (`admitted`), it
+    requests the typical request of every unit this machine measured, selected or not
+    (lean-peaks.py `typical`, the quantile a Lean module never measured is charged by), at most
+    PROCESS_MIB. Only order and admission depend on these measurements, never a unit's result."""
+    hints, threads = read_hints(), lean_threads()
+
+    def request(hint):
+        if not hint or not hint['peak_rss_kib']:
+            return None
+        return max(MEM_FLOOR_MIB, int(max(hint['peak_rss_kib']) / 1024 * MEM_MARGIN
+                                      * max(1, threads / hint['lean_threads'])))
+
+    known = [hints.get(u['name']) for u in units]
+    order = sorted(range(len(units)), key=lambda i: -(known[i]['elapsed_s'] if known[i] else float('inf')))
+    unmeasured = mem_mib
+    if elastic:
+        typical = PEAKS.typical(filter(None, map(request, hints.values())))
+        unmeasured = min(GUARD.PROCESS_MIB, typical or GUARD.PROCESS_MIB)
+    return order, [request(h) or unmeasured for h in known]
 
 
 def report(units, statuses, stats, path, top=20):
@@ -298,22 +433,56 @@ def report(units, statuses, stats, path, top=20):
                                          row['name']))
 
 
-SHARED = ROOT / '.lake/build/lib/lean'
+# The compiled modules the units import: the root package's and the proof-fixture package's
+# (tests/roadmap/lakefile.toml), whose every library `FIXTURE_BUILD` builds before the units.
+SHARED = (ROOT / '.lake/build/lib/lean', ROOT / 'tests/roadmap/.lake/build/lib/lean')
+FIXTURE_BUILD = [sys.executable, '-B', str(ROOT / 'scripts/fixtures.py'), 'build']
+
+
+def log_tail(log: Path, lines=15):
+    """The last lines of a failure's log, indented, for the failure message (the log may not
+    outlive the run)."""
+    tail = log.read_text(errors='replace').strip().splitlines()[-lines:] if log.is_file() else []
+    return ''.join('\n    ' + line for line in tail)
+
+
+def prepare_shared(log: Path):
+    """Build what the units share before any of them starts, so no unit builds it under the
+    others: every library of the proof-fixture package (a unit's own `fixtures.py build` is then
+    an up-to-date check), and the compiled assurance extractor (assumptions.py `prepared_tool`).
+    Returns the failure, or None."""
+    try:
+        grant = elastic_grant()
+        env = lean_processes_env(grant) if grant else None
+        with open(log, 'wb') as out:
+            status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, env=env, stdout=out, stderr=subprocess.STDOUT).returncode
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        return 'the proof-fixture package: %s' % error
+    if status:
+        return 'the proof-fixture package: fixtures.py build exited %d (log %s)%s' % (status, log, log_tail(log))
+    try:
+        with assumptions.prepared_tool():
+            pass
+    except (OSError, ValueError, RuntimeError) as error:
+        return 'the assurance extractor: %s' % error
+    return None
 
 
 def shared_outputs():
-    """Identity (inode, size, mtime) of every root-package module the units import, its .olean.
-    The full build compiles them before this phase; Lake has no build lock, so a unit that
-    rebuilds one in place races every unit importing it (a missing .olean mid-write, compiled
-    inputs changed during a kernel replay). Lake's trace and hash files are not compared: an
-    up-to-date check may rewrite them."""
+    """Identity (inode, size, mtime) of every compiled file of the shared packages (`SHARED`):
+    each module's .olean and its companions, the files an audit binds (assumptions.py
+    `COMPILED_SUFFIXES`, `lean_path_binding`). They are built before the units (`prepare_shared`);
+    Lake has no build lock, so a unit that rebuilds or deletes one in place races every unit that
+    reads the package (a missing .olean mid-walk, "compiler-owned Unit imported inputs changed").
+    Lake's trace and hash files are not compared: an up-to-date check may rewrite them."""
     found = {}
-    for path in SHARED.rglob('*.olean'):
-        try:
-            info = path.lstat()
-        except FileNotFoundError:
-            continue
-        found[str(path.relative_to(SHARED))] = (info.st_ino, info.st_size, info.st_mtime_ns)
+    for shared in SHARED:
+        for path in (p for suffix in assumptions.COMPILED_SUFFIXES for p in shared.rglob('*' + suffix)):
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
+            found[os.path.relpath(path, ROOT)] = (info.st_ino, info.st_size, info.st_mtime_ns)
     return found
 
 
@@ -367,27 +536,53 @@ def main(argv=None):
                 if env is not None:  # one build: the units' audits share their kernel replays
                     env['AIR2LEAN_FIXTURE_REPLAY_CACHE'] = str(scratch / 'kernel-replay.json')
                 jobs.append(par.Job(names[u['name']], command, cwd=str(ROOT), env=env))
-            workers = par.workers(a.jobs, a.mem_mib, len(jobs))
-            print('fixture-checks: running %d units, %d at once' % (len(units), workers), flush=True)
-            stats, statuses = [], None
-            before = shared_outputs()
+            grant = elastic_grant()
+            order, requests = schedule(units, a.mem_mib, elastic=bool(grant))
+            for job, request in zip(jobs, requests):
+                if grant:  # each unit admitted by build-guard, beside every other workload
+                    job.argv = admitted(job.argv, request, grant)
+                else:
+                    job.mem_mib = request
+            workers = par.workers(a.jobs, None, len(jobs))
+            budget = None if grant else int(par.memory_budget_mib() * MEM_SHARE)
+            print('fixture-checks: running %d units, up to %d at once, %s'
+                  % (len(units), workers, 'each its own sub-admission' if grant else 'within %d MiB' % budget),
+                  flush=True)
+            stats, statuses, before = [], None, None
             try:
-                with open(os.devnull, 'wb') as null:
-                    statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats)
+                # The units' audits share one toolchain-runtime digest, hashed again when they end
+                # (assumptions.runtime_run): a toolchain changed during the run fails it.
+                with assumptions.runtime_run(), open(os.devnull, 'wb') as null:
+                    # They also share the proof-fixture package and the compiled extractor, built
+                    # here, before the units, so no unit builds them under the units that read them.
+                    if error := prepare_shared(logs / 'shared-build.log'):
+                        failed.append(error)
+                    else:
+                        before = shared_outputs()
+                        for job in jobs:
+                            if job.env is not None:
+                                job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
+                        try:
+                            statuses = par.run(jobs, workers, out=null, err=null, log_dir=logs, stats=stats,
+                                               order=order, mem_budget_mib=budget)
+                        except (OSError, ValueError) as error:  # a bad order, a job that cannot spawn
+                            failed.append('the run: %s' % error)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+                failed.append('the toolchain runtime: %s' % error)
             finally:  # also the finished units of a stopped run (a guard's timeout)
                 report(units, statuses or [None] * len(units), stats, a.report)
-            if changed := changed_outputs(before, shared_outputs()):
-                failed.append('the root package\'s build outputs changed while the units ran (a unit '
-                              'built root modules, racing the units that read them): '
+                write_hints(units, stats)
+            if before is not None and (changed := changed_outputs(before, shared_outputs())):
+                failed.append('the shared build outputs changed while the units ran (a unit built '
+                              'modules of the root or the proof-fixture package, racing the units '
+                              'that read them): '
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
-        for u, status in zip(units, statuses):
+        for u, status in zip(units, statuses or []):  # none: the run did not start
             if status != 0:
                 log = logs / (names[u['name']] + '.log')
-                tail = log.read_text(errors='replace').strip().splitlines()[-15:] if log.is_file() else []
-                failed.append('%s (exit %d, log %s)%s' % (u['name'], status, log,
-                                                          ''.join('\n    ' + l for l in tail)))
+                failed.append('%s (exit %d, log %s)%s' % (u['name'], status, log, log_tail(log)))
         if not failed and not a.logs:
             shutil.rmtree(logs, ignore_errors=True)
     skipped = sum(len(u['skipped']) for u in units)

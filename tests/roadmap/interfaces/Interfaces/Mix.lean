@@ -120,6 +120,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] debug_assert
+
 structure mem_Alignment_toByteUnitsLocals where
   deriving Inhabited
 
@@ -133,6 +135,8 @@ def mem_Alignment_toByteUnits (p0 : mem_Alignment) : Zig.Result (BitVec 64) := d
     pure (.ret i2)) : Zig.M mem_Alignment_toByteUnitsLocals mem_Alignment_toByteUnitsExit).run' (default : mem_Alignment_toByteUnitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Alignment_toByteUnits
 
 structure math_isPowerOfTwo__anon_38853e1fe316Locals where
   deriving Inhabited
@@ -152,6 +156,8 @@ def math_isPowerOfTwo__anon_38853e1fe316 (p0 : BitVec 64) : Zig.Result (Bool) :=
     pure (.ret i7)) : Zig.M math_isPowerOfTwo__anon_38853e1fe316Locals math_isPowerOfTwo__anon_38853e1fe316Exit).run' (default : math_isPowerOfTwo__anon_38853e1fe316Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] math_isPowerOfTwo__anon_38853e1fe316
 
 structure mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals where
   deriving Inhabited
@@ -177,6 +183,8 @@ def mem_isValidAlignGeneric__anon_32d5b5f10ec2 (p0 : BitVec 64) : Zig.Result (Bo
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_isValidAlignGeneric__anon_32d5b5f10ec2
+
 structure mem_isValidAlignLocals where
   deriving Inhabited
 
@@ -189,6 +197,8 @@ def mem_isValidAlign (p0 : BitVec 64) : Zig.Result (Bool) := do
     pure (.ret i1)) : Zig.M mem_isValidAlignLocals mem_isValidAlignExit).run' (default : mem_isValidAlignLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_isValidAlign
 
 structure mem_alignPointerOffset__anon_1fdb4fd23aeeLocals where
   ov : BitVec 64 × BitVec 1
@@ -249,6 +259,8 @@ def mem_alignPointerOffset__anon_1fdb4fd23aee (p0 : Zig.Ptr) (p1 : BitVec 64) : 
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_alignPointerOffset__anon_1fdb4fd23aee
 
 structure heap_FixedBufferAllocator_allocLocals where
   deriving Inhabited
@@ -318,6 +330,8 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_alloc
+
 structure heap_FixedBufferAllocator_allocatorLocals where
   local1 : mem_Allocator
   deriving Inhabited
@@ -333,6 +347,8 @@ def heap_FixedBufferAllocator_allocator (p0 : Zig.Ptr) : Zig.MemM (mem_Allocator
     pure (.ret (← get).local1)) : Zig.MM heap_FixedBufferAllocator_allocatorLocals heap_FixedBufferAllocator_allocatorExit).run' (default : heap_FixedBufferAllocator_allocatorLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_FixedBufferAllocator_allocator
 
 structure heap_FixedBufferAllocator_sliceContainsSliceLocals where
   local2 : Zig.Slice
@@ -377,6 +393,8 @@ def heap_FixedBufferAllocator_sliceContainsSlice (p0 : Zig.Slice) (p1 : Zig.Slic
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_sliceContainsSlice
+
 structure heap_FixedBufferAllocator_ownsSliceLocals where
   deriving Inhabited
 
@@ -391,6 +409,8 @@ def heap_FixedBufferAllocator_ownsSlice (p0 : Zig.Ptr) (p1 : Zig.Slice) : Zig.Me
     pure (.ret i4)) : Zig.MM heap_FixedBufferAllocator_ownsSliceLocals heap_FixedBufferAllocator_ownsSliceExit).run' (default : heap_FixedBufferAllocator_ownsSliceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_FixedBufferAllocator_ownsSlice
 
 structure heap_FixedBufferAllocator_isLastAllocationLocals where
   local2 : Zig.Slice
@@ -415,6 +435,8 @@ def heap_FixedBufferAllocator_isLastAllocation (p0 : Zig.Ptr) (p1 : Zig.Slice) :
     pure (.ret i16)) : Zig.MM heap_FixedBufferAllocator_isLastAllocationLocals heap_FixedBufferAllocator_isLastAllocationExit).run' (default : heap_FixedBufferAllocator_isLastAllocationLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_FixedBufferAllocator_isLastAllocation
 
 structure heap_FixedBufferAllocator_freeLocals where
   deriving Inhabited
@@ -457,6 +479,8 @@ def heap_FixedBufferAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Ali
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_free
+
 structure heap_FixedBufferAllocator_initLocals where
   local1 : heap_FixedBufferAllocator
   deriving Inhabited
@@ -471,6 +495,8 @@ def heap_FixedBufferAllocator_init (p0 : Zig.Slice) : Zig.MemM (heap_FixedBuffer
     pure (.ret (← get).local1)) : Zig.MM heap_FixedBufferAllocator_initLocals heap_FixedBufferAllocator_initExit).run' (default : heap_FixedBufferAllocator_initLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_FixedBufferAllocator_init
 
 structure heap_FixedBufferAllocator_resizeLocals where
   deriving Inhabited
@@ -562,6 +588,8 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_resize
+
 structure heap_FixedBufferAllocator_remapLocals where
   local5 : Zig.Slice
   deriving Inhabited
@@ -587,6 +615,8 @@ def heap_FixedBufferAllocator_remap (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Al
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] heap_FixedBufferAllocator_remap
 
 structure mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals where
   deriving Inhabited
@@ -649,6 +679,8 @@ def mem_Allocator_allocBytesAligned__anon_c9141768de1a [Ext] (p0 : mem_Allocator
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_allocBytesAligned__anon_c9141768de1a
+
 structure mem_Allocator_create__anon_8f6a81b88324Locals where
   local11 : Zig.Ptr
   deriving Inhabited
@@ -684,6 +716,8 @@ def mem_Allocator_create__anon_8f6a81b88324 [Ext] (p0 : mem_Allocator) : Zig.Con
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_create__anon_8f6a81b88324
+
 structure makeLocals where
   deriving Inhabited
 
@@ -705,6 +739,8 @@ def make [Ext] (p0 : mem_Allocator) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig
       pure (.ret i9))) : Zig.CM Tgt makeLocals makeExit).run' (default : makeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] make
 
 structure withFbaLocals where
   buf : Zig.Ptr
@@ -741,8 +777,12 @@ def withFba [Ext]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] withFba
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch [Ext] : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end Interfaces.Mix

@@ -28,6 +28,8 @@ def bumpThenRead (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bumpThenRead
+
 structure bumpOtherLocals where
   x : Zig.Ptr
   y : Zig.Ptr
@@ -62,6 +64,8 @@ def bumpOther (p0 : Bool) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] bumpOther
+
 structure copyLocals where
   local3 : BitVec 64
   deriving Inhabited
@@ -77,6 +81,7 @@ def copy.again6 : copyExit → Bool
   | _ => false
 
 def copy.loop6 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MM copyLocals copyExit := do
+  Zig.callM Zig.tick
   let i7 ← pure ((← get).local3)
   match ← ((do
     let i9 ← pure (i7)
@@ -112,6 +117,8 @@ def copy (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] copy.loop6 copy
+
 structure readThenOverflowLocals where
   deriving Inhabited
 
@@ -130,6 +137,8 @@ def readThenOverflow (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   Zig.naExit
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readThenOverflow
 
 structure overflowAfterOverlapLocals where
   x : Zig.Ptr
@@ -165,6 +174,8 @@ def overflowAfterOverlap (p0 : Bool) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] overflowAfterOverlap
+
 structure readCheckedLocals where
   deriving Inhabited
 
@@ -189,6 +200,8 @@ def readChecked (p0 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] readChecked
+
 structure writeThenCallLocals where
   deriving Inhabited
 
@@ -206,6 +219,8 @@ def writeThenCall (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 8) := do
   Zig.naExit
   match e with
   | .ret v => pure v
+
+attribute [zig_run] writeThenCall
 
 structure panicAfterOverlapLocals where
   x : Zig.Ptr
@@ -240,6 +255,8 @@ def panicAfterOverlap (p0 : Bool) : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] panicAfterOverlap
 
 structure shiftCopyLocals where
   buf : Zig.Ptr
@@ -287,6 +304,8 @@ def shiftCopy (p0 : BitVec 64) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] shiftCopy
+
 structure sinkLocals where
   deriving Inhabited
 
@@ -299,6 +318,8 @@ def sink (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM sinkLocals sinkExit).run' (default : sinkLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] sink
 
 structure sumLocals where
   deriving Inhabited
@@ -319,6 +340,8 @@ def sum (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] sum
+
 structure sumSelfLocals where
   x : Zig.Ptr
   deriving Inhabited
@@ -338,6 +361,8 @@ def sumSelf  : Zig.MemM (BitVec 32) := do
   Zig.free s0
   match e with
   | .ret v => pure v
+
+attribute [zig_run] sumSelf
 
 structure swapLocals where
   deriving Inhabited
@@ -360,6 +385,8 @@ def swap (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
   Zig.naExit
   match e with
   | .ret => pure ()
+
+attribute [zig_run] swap
 
 structure swapSelfLocals where
   x : Zig.Ptr
@@ -397,6 +424,8 @@ def swapSelf (p0 : Bool) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] swapSelf
+
 structure twoBuffersLocals where
   a : Zig.Ptr
   b : Zig.Ptr
@@ -422,5 +451,7 @@ def twoBuffers (p0 : BitVec 64) : Zig.MemM (BitVec 8) := do
   Zig.free s3
   match e with
   | .ret v => pure v
+
+attribute [zig_run] twoBuffers
 
 end Noalias

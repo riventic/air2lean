@@ -1,4 +1,4 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Conc.Base.WeakCas
 import Proofs.Atomics.MessagePassing
 import ZigLean.Mem.Witness
@@ -134,6 +134,11 @@ structure Inv (G : ThreadId → Gh) (m : Mem) : Prop where
   join : JoinLe G m
   fp : ∀ e ∈ m.footprint, FpOk G m e
   own : ∀ e ∈ m.footprint, e.tid < m.threads.size ∧ VClock.le e.clock (m.clocks[e.tid]!) = true
+
+/-- A step tick keeps the invariant: it reads no step count. -/
+theorem Inv.ticked {G : ThreadId → Gh} {m : Mem} (h : Inv G m) :
+    Inv G { m with ticks := m.ticks + 1 } :=
+  ⟨h.thr, h.b0, h.b1, h.b2, h.ctx, h.head, h.casn, h.n0, h.join, h.fp, h.own⟩
 
 /-- A pointer into one of the three 16-byte blocks is formed (`ptrProject`, MM-3). -/
 theorem Inv.proj {G : ThreadId → Gh} {m : Mem} (hi : Inv G m) {b : Nat} (hb : b = 0 ∨ b = 1 ∨ b = 2)
@@ -1007,6 +1012,14 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
       if push.again12 r.1 then loopInv u r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : pushLocals) => 0) s)
       else loopPost u r G' m' d') G m d := by
+  unfold push.loop12
+  simp only [StateT.run_bind, pure_bind]
+  -- the body's step tick: the invariant does not read the step count
+  refine WP.bind (WP.callMC_tick ?_)
+  dsimp only
+  replace h : loopInv u s G { m with ticks := m.ticks + 1 } d := by
+    obtain ⟨hc, g, hg, hi⟩ := h; exact ⟨hc, g, hg, hi.ticked⟩
+  generalize { m with ticks := m.ticks + 1 } = m at h ⊢
   obtain ⟨hc, g, hg, hi⟩ := h
   have hk0 : Kid u (upd G u g u) := by
     rw [upd_self]; rcases hg with rfl | ⟨x, rfl⟩
@@ -1015,8 +1028,6 @@ theorem loop12_body (u : Nat) (hu : u = 1 ∨ u = 2) (s : pushLocals) (G : Threa
   have hnd : upd G u g u ≠ .done := by rw [upd_self]; rcases hg with rfl | ⟨x, rfl⟩ <;> intro h <;> cases h
   have ht : m.current < m.threads.size := by rw [hc]; exact kid_lt hi hk0
   have hact : Act (upd G u g) m.current := .inr ⟨by rw [hc]; exact hu, by rw [hc]; exact hnd⟩
-  unfold push.loop12
-  simp only [StateT.run_bind, pure_bind]
   rw [show cPtr u = ⟨some u, ((0 : Nat) : Int)⟩ from rfl]
   have hu3 : u = 0 ∨ u = 1 ∨ u = 2 := by omega
   -- `s.s`
@@ -1825,9 +1836,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hp₃ : Pre m₃ := by
     rw [hm₃]
     exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
-            b0 := by blkat_alloc
-            b1 := by blkat_alloc
-            b2 := by blkat_alloc }
+            b0 := ((BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _).afterAlloc _ _ _
+            b1 := (BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _
+            b2 := BlkAt.alloc _ _ _ (by decide) }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -2110,11 +2121,14 @@ theorem stackPush_safe (env : Env) (henv : env.spawn = .available) {σ : Placeme
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops). -/
 theorem stackPush_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 /-! ## Non-vacuity witnesses
 

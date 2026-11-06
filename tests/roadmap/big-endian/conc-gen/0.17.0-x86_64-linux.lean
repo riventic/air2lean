@@ -153,7 +153,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .adder (capture0, _) => [.ptr capture0, .value]
 
@@ -171,6 +171,8 @@ def atomic_Value_Io_Threaded_Future_Status_init (p0 : Io_Threaded_Future_Status)
   match e with
   | .ret v => pure v
 
+attribute [zig_run] atomic_Value_Io_Threaded_Future_Status_init
+
 structure atomic_Value_Io_Threaded_Thread_Status_initLocals where
   local1 : atomic_Value_Io_Threaded_Thread_Status
   deriving Inhabited
@@ -185,6 +187,8 @@ def atomic_Value_Io_Threaded_Thread_Status_init (p0 : Io_Threaded_Thread_Status)
   match e with
   | .ret v => pure v
 
+attribute [zig_run] atomic_Value_Io_Threaded_Thread_Status_init
+
 structure atomic_Value_u32_initLocals where
   local1 : atomic_Value_u32
   deriving Inhabited
@@ -198,6 +202,8 @@ def atomic_Value_u32_init (p0 : BitVec 32) : Zig.Result (atomic_Value_u32) := do
     pure (.ret (← get).local1)) : Zig.M atomic_Value_u32_initLocals atomic_Value_u32_initExit).run' (default : atomic_Value_u32_initLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] atomic_Value_u32_init
 
 structure adderLocals where
   i : BitVec 32
@@ -214,6 +220,7 @@ def adder.again5 : adderExit → Bool
   | _ => false
 
 def adder.loop5 (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.CM Tgt adderLocals adderExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i7 ← pure ((← get).i)
     let i8 ← pure (Zig.lt false i7 p1)
@@ -241,6 +248,8 @@ def adder (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] adder.loop5 adder
+
 structure bytesThenLoadLocals where
   deriving Inhabited
 
@@ -257,6 +266,8 @@ def bytesThenLoad (p0 : BitVec 8) (p1 : BitVec 8) (p2 : BitVec 8) (p3 : BitVec 8
     pure (.ret i8)) : Zig.CM Tgt bytesThenLoadLocals bytesThenLoadExit).run' (default : bytesThenLoadLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] bytesThenLoad
 
 structure casSwapLocals where
   deriving Inhabited
@@ -282,6 +293,8 @@ def casSwap (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] casSwap
 
 structure heapWordLocals where
   deriving Inhabited
@@ -314,6 +327,8 @@ def heapWord (p0 : Zig.Allocator) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heapWord
+
 structure rmwCarryByte0Locals where
   deriving Inhabited
 
@@ -329,6 +344,8 @@ def rmwCarryByte0 (p0 : BitVec 16) (p1 : BitVec 16) : Zig.ConcM Tgt (BitVec 8) :
   match e with
   | .ret v => pure v
 
+attribute [zig_run] rmwCarryByte0
+
 structure rmwMaxLocals where
   deriving Inhabited
 
@@ -343,6 +360,8 @@ def rmwMax (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
     pure (.ret i4)) : Zig.CM Tgt rmwMaxLocals rmwMaxExit).run' (default : rmwMaxLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] rmwMax
 
 structure storeThenBytesLocals where
   deriving Inhabited
@@ -370,6 +389,8 @@ def storeThenBytes (p0 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
     pure (.ret i15)) : Zig.CM Tgt storeThenBytesLocals storeThenBytesExit).run' (default : storeThenBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] storeThenBytes
 
 structure threadsAddLocals where
   c : Zig.Ptr
@@ -417,10 +438,14 @@ def threadsAdd (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32))
   match e with
   | .ret v => pure v
 
+attribute [zig_run] threadsAdd
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .adder a =>
     let (capture0, capture1) := a
     discard (adder capture0 capture1)
+
+attribute [zig_run] dispatch
 
 end Conc

@@ -94,4 +94,6 @@ def hostAbi  : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] hostAbi
+
 end PackedFieldsX86

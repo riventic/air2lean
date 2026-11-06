@@ -28,6 +28,8 @@ def gap (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] gap
+
 structure withinLocals where
   deriving Inhabited
 
@@ -41,5 +43,7 @@ def within (p0 : BitVec 32) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.Result (Bool
     pure (.ret i4)) : Zig.M withinLocals withinExit).run' (default : withinLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] within
 
 end ProvenanceGap

@@ -655,6 +655,34 @@ theorem store {T : Type} [Enc T] [LawfulEnc T] {a : Nat} {v : T} (hn : 0 < Enc.s
 
 end FTotalTriple
 
+/-- **Two typed values at the same pointer of one resource are the same**: their bytes are the
+resource's cells there. -/
+theorem pts_agree {T : Type} [Enc T] {p : Ptr} {a a' : Nat} {v v' : T} {A B : FAssn} {r : Res}
+    (h : (up (pts p a v) ⋆ A) r) (h' : (up (pts p a' v') ⋆ B) r) : v = v' := by
+  have key : ∀ {a : Nat} {v : T} {A : FAssn}, (up (pts p a v) ⋆ A) r → ∃ bs b,
+      p.block = some b ∧ bs.size = Enc.size T ∧ Enc.decode bs = pure v ∧
+      ∀ j < bs.size, ∃ fc, r.heap (b, p.off.toNat + j) = some fc ∧ fc.cell.byte = bs[j]! := by
+    intro a v A hA
+    obtain ⟨r₁, r₂, -, hr, h₁, -⟩ := hA
+    obtain ⟨A', S', K', bs, ⟨-, hs, hv, -⟩, hb⟩ := FTotalTriple.up_pts_iff_bytesAt.mp h₁
+    obtain ⟨⟨b, hpb, -⟩, -, -⟩ := id hb
+    refine ⟨bs, b, hpb, hs, hv, fun j hj => ?_⟩
+    obtain ⟨fc, hfc, hcell⟩ := up_bytesAt_cell hb hpb hj
+    refine ⟨fc, ?_, by rw [hcell]⟩
+    rw [hr]; show (r₁.heap _).or _ = _; rw [hfc]; rfl
+  obtain ⟨bs, b, hpb, hs, hv, hc⟩ := key h
+  obtain ⟨bs', b', hpb', hs', hv', hc'⟩ := key h'
+  rw [hpb] at hpb'; cases hpb'
+  have hbs : bs = bs' := Array.ext (by rw [hs, hs']) fun j hj hj' => by
+    obtain ⟨fc, h1, h2⟩ := hc j hj
+    obtain ⟨fc', h1', h2'⟩ := hc' j hj'
+    rw [h1] at h1'; cases h1'
+    rw [← getElem!_pos bs j hj, ← getElem!_pos bs' j hj', ← h2, ← h2']
+  subst hbs
+  have e := hv.symm.trans hv'
+  simp only [pure, ExceptT.pure, ExceptT.mk] at e
+  exact Except.ok.inj (Option.some.inj e)
+
 /-! ## Thread rules
 
 Each rule below holds in a thread (`FTTotalTriple`, `ZigLean/Sep/Full/ThreadStep.lean`): a read

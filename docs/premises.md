@@ -89,8 +89,10 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
 - The runtime model is layered, and `implies` records the layers: THR-01 implies SEM-02 (the
   scheduler runs over the block memory), and SEM-02 and SEM-03 imply SEM-01 (memory ops and
   loops return `Zig.Result`).
-- `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: their ops and frame
-  structures use the futex and `ZigLean.Conc.Lock` (`LocsKeep`, `AllLe`).
+- `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: the
+  word vocabulary and its ops (`Conc.Base.Word`) use the futex wait and the atomic ops, and the
+  legacy `Word.Op` and `Word.Keep` part (`Conc.Word`) and `Conc.WeakWord` also use
+  `ZigLean.Conc.Lock` (`LocsKeep`).
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
 - A proof that names a runtime definition can unfold it, so the closure rules also see the
@@ -408,7 +410,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
   (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex`.
+- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex` (not in the OS rows `Os.*`, OSF-01/OSF-02, and not where the occurrence is the key layer's word `FutexKey`, `futexAddr` or `futexKeyOf`, e.g. `futexKeyOf_run`; `futexWait_futexAddr_eq` still derives THR-05).
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -418,11 +420,11 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: On macOS, `Thread.Mutex.DarwinImpl` stops at `os_unfair_lock_*`. The model is the
   lock's contract: an acquire `cmpxchg` 0→1 with a futex sleep, and a release `xchg` of 0
   with a wake, after an owner check (`Thread.mutexOwnerCheck`: an unlock by a thread that did
-  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/Lock.lean` elaborates
-  its DarwinImpl proofs only for a macOS translation (`if_decl`). The committed Linux
+  not make the most recent acquire is `.illegal`, as the C function terminates the process). The C library is trusted to meet it. `Proofs/Threadsync/ThreadMutex.lean` elaborates
+  its DarwinImpl proofs only for a macOS translation (`when_defined`). The committed Linux
   translation selects `FutexImpl`, so no indexed theorem currently lists THR-06.
 - Derived from: tokens `osUnfairLock`, `DarwinImpl`.
-- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/Lock.lean`.
+- Sources: [std-models.md](std-models.md#thread-model), `Proofs/Threadsync/ThreadMutex.lean`.
 
 <a id="thr-07"></a>
 ### THR-07 — Progress hints without fairness
@@ -445,7 +447,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   kernel-proved. A client theorem holds for the protocol, global invariant, ghost state and
   ownership splits that it states or discharges. Strict-safety theorems additionally exclude
   every scheduler error, including races and deadlock.
-- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
+- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
 - Sources: [proofs.md](proofs.md), [rwlock-contracts.md](rwlock-contracts.md).
 
 
@@ -510,7 +512,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   integers, enums, bools, packed structs or single/many pointers (ORD-05). Under
   `--allocator-model translated` an `unordered` load may also read any message not older than
   one that happened before it, ignoring and not updating the thread's own read view.
-- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
+- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
 <a id="ord-02"></a>
@@ -861,39 +863,39 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: `Zig.loop` is a `partial_fixpoint`. Divergence is `none`. `Triple` and loop
   rules constrain only completed results, so a diverging program satisfies them. Finite
   loops do not reduce in the kernel, so loop clients use runtime assertions,
-  invariant-based proofs, or a concrete scheduler run with each loop cut after `k`
-  iterations (`unroll_sched`), whose result is the loop's result.
-- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.VC.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
+  invariant-based proofs, or a concrete scheduler run whose loops are unfolded by their
+  defining equation (`Zig.loop.eq_1`) before the kernel computes it.
+- Derived from: `ZigLean.Loop`, `ZigLean.Sep.*`, `ZigLean.Conc.Unroll`; tokens `loop*`.
 - Sources: [generated-code.md](generated-code.md#loops), [proofs.md](proofs.md).
 
 <a id="sem-04"></a>
 ### SEM-04 — Total-correctness statements
 
 - Kind: meaning.
-- Statement: `TotalTriple` and `Conc.Total` theorems require an actual successful result
+- Statement: `FTotalTriple` and `Conc.Total` theorems require an actual successful result
   for every satisfying state (or every oracle and sufficiently large fuel). They are stronger
-  than SEM-03 and only cover their stated finite clients. `TotalTripleWithin B` additionally
-  bounds the loop-body runs by `B` (`LoopRuns` counts); `ReturnsWithin B` bounds the scheduler
+  than SEM-03 and only cover their stated finite clients. An `FTotalTriple` that holds `B`
+  credits additionally bounds the steps (`Zig.tick`) of the run by `B`
+  (`FTotalTriple.ticks_le`, `ZigLean/Sep/Full/Cost.lean`); `ReturnsWithin B` bounds the scheduler
   budget uniformly in the oracle. `EventuallyReturnsUnder Fair` covers only the oracles that
   satisfy its stated premise and is not an unconditional total result. `Proto.returnsWithin`
   (a protocol that counts turns, `Proto.cost`) bounds every schedule's turns by `main`'s
   starting credits, uniformly in the oracle and without a fairness premise; its result is
   `main`'s value or a stack overflow (STK-01).
-- Derived from: `ZigLean.Sep.Total`, `ZigLean.Sep.Bounded`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
-- Sources: `ZigLean/Sep/Total.lean`, [progress-hints.md](progress-hints.md).
+- Derived from: `ZigLean.Sep.Full.Logic`, `ZigLean.Sep.Full.Loop`, `ZigLean.Sep.Full.Cost`, `ZigLean.Conc.Total`, `ZigLean.Conc.Returns`.
+- Sources: `ZigLean/Sep/Full/Logic.lean`, [progress-hints.md](progress-hints.md).
 
 <a id="sem-05"></a>
 ### SEM-05 — Model step and allocation counts are not time or memory measurements
 
 - Kind: meaning.
-- Statement: `Mem.allocs`, `Mem.liveHeap`, `Mem.ticks` and `LoopRuns` counts are counts in the
-  model. They count allocation requests, live `.heap` blocks, `Zig.tick` steps (credits,
-  [sep-full-state.md](sep-full-state.md#step-ticks)) and loop-body runs of successful runs.
+- Statement: `Mem.allocs` and `Mem.ticks` are counts in the model. They count allocation
+  requests and `Zig.tick` steps (one per loop-body run and recursive entry; credits,
+  [sep-full-state.md](sep-full-state.md#step-ticks)) of successful runs.
   A count does not measure CPU time, instruction count, cache behavior or native allocator
   memory use. Relating one to those needs a separate calibration argument.
-- Derived from: `ZigLean.Sep.Cost`, `ZigLean.Sep.Bounded`, `ZigLean.Sep.Full.MemAuth`,
-  `ZigLean.Sep.Full.Tick`.
-- Sources: [proof-tools.md](proof-tools.md#model-cost-allocation-counts-and-counted-loops-p06), `ZigLean/Sep/Cost.lean`.
+- Derived from: `ZigLean.Sep.Full.MemAuth`, `ZigLean.Sep.Full.Tick`, `ZigLean.Sep.Full.Cost`.
+- Sources: [proof-tools.md](proof-tools.md#model-cost-step-counts-p06), `ZigLean/Sep/Full/Cost.lean`.
 
 <a id="sem-06"></a>
 ### SEM-06 — Canonical AIR fragment semantics
@@ -937,7 +939,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   address space: `rawAlloc` returns null (out of memory), `mmap`/`mremap` fail with `ENOMEM`
   (OSM-01), and `alloc` (a stack block, a thread-local instance or a runtime cell) throws
   `.stackOverflow` (STK-01: partial-correctness statements read it as non-termination; a
-  total-correctness statement shows room, `Mem.allocOk`, e.g. with `TotalTripleIn`). A proposal
+  total-correctness statement shows room, as STK-01 describes). A proposal
   inside a thread's stack reserve is not taken, and the fallback lies past every reserve (MM-18,
   STK-02). The
   full-state invariant `Mem.FSeq` holds only memories whose live blocks end below `2^63`
@@ -978,7 +980,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
   which excludes every other error) reads `.stackOverflow` as it reads a run that does not
   terminate; a total-correctness statement excludes it, so one that allocates shows room
-  (legacy `TotalTripleIn`; in the full-state logic, under a budget the stack-depth token of
+  (under a budget the stack-depth token of
   `docs/sep-full-state.md` §Stack depth, `sp t S D`, from `FTotalTriple.run_init_stack`; without
   a budget, which has no room resource, the start-memory run premise of `FTriple.run_init_ok`).
   Regressions: `tests/roadmap/memory-hardening/NoRoom.lean`,
@@ -1265,17 +1267,31 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   retain the model's existing conservative refusal behavior. Next the kernel checks four-byte
   numeric-address alignment before `access_ok` and key/queue lookup. An unaligned address
   returns `-EINVAL` without reading the futex word, changing its queue or spending a scheduling
-  turn. This alignment validation adds no state effect after any timeout copy.
+  turn. This alignment validation adds no state effect after any timeout copy. Then
+  `get_futex_key` (`Linux.futexKey`, shared without `FUTEX_PRIVATE`) returns `-EFAULT` for an
+  address with bits 63 and 55 set (a kernel address on x86_64 and aarch64, tagged or not). A
+  private key forms at a live writable word and at any address below a placed block's end. A
+  shared key forms only at a live writable word of an anonymous block (a stack, a heap block or
+  an OS mapping, `Mem.anonAt`): on a file-backed page Linux keys by inode and page offset, and a
+  copy-on-write of a `MAP_PRIVATE` page changes the key. Any other address is refused
+  (`.illegal`). macOS
+  WAIT returns `-EINVAL` for a null or unaligned address.
   The existing comparison and sleep path follows these checks on Linux. The kernel compares
   the `u32` at the address with the expected value as one atomic read of the newest message
   of that word: an atomic-read footprint and a read-view update. A bad futex-word pointer is
   `.illegal` (stricter than `EFAULT`). A different value returns at once
-  (`EAGAIN`, `0` on macOS). An equal value either returns at once with `EINTR`, or with
+  (`EAGAIN` on Linux). An equal value either returns at once with `EINTR`, or with
   `ETIMEDOUT` if a timeout was given, or sleeps. An untimed sleeper waits in the queue until a
   wake or an interrupt; the scheduler reads the word again first and a changed word is a return
   with `0`. A timed sleeper stays runnable and returns `0` if a wake reached it, else
-  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. The non-negative result of
-  `__ulock_wait*` is always `0`. Other commands, flags and `val2` are outside the model
+  `ETIMEDOUT`. The waiter gets no happens-before edge from the waker. After a wake, a spurious
+  return or a mismatch, `__ulock_wait*` returns `--ull_nwaiters` (xnu-12377.121.6
+  `sys_ulock.c:826`), or `-EFAULT` for a word that is not resident. The model leaves both to
+  the oracle: one more stop, then `-EFAULT` or any non-negative `c_int`. `ENOMEM` is
+  unreachable. `EDOM` at a `std.Thread.Mutex` word (the STD-06 hand rows) is a recorded model
+  gap ([S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)). The sources
+  are in the `ZigLean/Os/Futex.lean` module doc.
+  Other commands, flags and `val2` are outside the model
   (`.unspecified`). The translator binds `os.linux.futex_4arg`
   (0.15.2 on), `os.linux.futex_wait` (0.14.1, the same system call) and libc's `__ulock_wait2`/
   `__ulock_wait` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
@@ -1294,17 +1310,21 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Kind: trusted.
 - Statement: Supported Linux WAKE checks four-byte numeric-address alignment before
   `access_ok` and key/queue lookup. An unaligned address returns `-EINVAL` without a
-  futex-word access, wake selection, scheduling turn or state change. On the post-validation
-  wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
+  futex-word access, wake selection, scheduling turn or state change. The key follows as for
+  WAIT (OSF-01; no word access). macOS WAKE returns `-EINVAL` for a null address. On the
+  post-validation wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
   result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge.
-- Model gaps (OSF-01 and OSF-02): native Linux user-range/shared-key `EFAULT` paths and Darwin
-  address-validation/refusal cases remain explicitly open in
-  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open).
-  These include conservative model refusals; they are not caller assumptions authorizing a
-  zero result for a native error. No caller alignment or address-domain premise is added.
+- Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
+  xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
+  knowledge outside the model, it is a conservative `.illegal` refusal
+  ([S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)),
+  never a caller assumption authorizing a zero result for a native error. The queue matches
+  waiters by the key (`FutexKey`: the domain and the `usize` of the numeric address,
+  `Mem.keyAt`), as `get_futex_key`; two live words of a memory with the live layout have
+  different keys (`Mem.keyAt_ne`). No caller alignment or address-domain premise is added.
 - Derived from: `ZigLean.Os.Futex`, `ZigLean.Conc.OsRules`, `ZigLean.Sep.Full.OsFutex` (the
   rules of the rows in a protocol); tokens `Os.futexWake`,
   `Os.Linux.futex_3arg`, `Os.Darwin.__ulock_wake`; implies THR-01.
@@ -1343,10 +1363,10 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   edge from it; `pthread_detach` releases the obligation. A join or detach by a thread that does
   not own the handle, of a consumed handle, or a second one, is `.illegal`. A detached Linux
   thread's `freeAndExit` is outside the model.
-- Model gap: the current `Os.Linux.cloneExit` still wakes every waiter at `ctid`, which is more
-  than this premise grants. This is the open finding
-  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-open),
-  and the Task 19 primitive fix closes it.
+- Model gap: `Os.Linux.cloneExit` wakes at most one waiter at `ctid` (the oracle's choice; the
+  regression `cleartid_wakes_one` of
+  [S6](architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)).
+  Its wake matches waiters by the shared-domain key of `ctid`'s numeric address (`FutexKey`).
 - Derived from: `ZigLean.Os.Thread`, `ZigLean.Conc.OsRules`; tokens `Os.Linux.cloneThread`,
   `Os.Linux.cloneExit`, `Os.Darwin.pthread_join`, `Os.Darwin.pthread_detach`; implies THR-01.
 - Sources: [os-threads.md](os-threads.md#threads), `ZigLean/Os/Thread.lean`, Linux v6.16

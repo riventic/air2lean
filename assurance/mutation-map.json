@@ -307,11 +307,11 @@
           "anchor": "next (.foreign n) = none"
         },
         {
-          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "path": "tests/roadmap/dispatch-templates/DispatchTemplate/Template.lean",
           "anchor": "(have : ∀ N n acc, Step (badInv N) rank N ⟨n, acc, .count⟩ := by"
         },
         {
-          "path": "tests/roadmap/dispatch-templates/Template.lean",
+          "path": "tests/roadmap/dispatch-templates/DispatchTemplate/Template.lean",
           "anchor": "(have : ∀ N n acc, Step (inv N) flatRank N ⟨n, acc, .idle⟩ := by"
         },
         {
@@ -1824,27 +1824,31 @@
           "anchor": "theorem wrong_obligation_false"
         },
         {
-          "path": "tests/roadmap/vcs/test_vc_report.py",
-          "anchor": "def test_lean_errors_are_surfaced_and_reports_are_not_errors"
-        },
-        {
-          "path": "tests/roadmap/vcs/test_vc_report.py",
-          "anchor": "def test_open_obligations_are_counted_and_closed_ones_named"
+          "path": "tests/roadmap/vcs/Memory.lean",
+          "anchor": "example : ¬ FTotalTriple emp (throw .panic : MemM Unit) (fun _ => emp)"
         }
       ],
       "mutants": [
         {
-          "name": "vc-report-lean-error-masked",
-          "path": "tests/roadmap/mutation-map/mutants.py",
-          "category": "other"
+          "name": "overflow-bound-dropped",
+          "path": "tests/roadmap/vcs/Extract.lean",
+          "category": "other",
+          "anchor": "-- The overflow bound dropped: the `add` precondition is left."
         },
         {
-          "name": "vc-report-open-obligations-hidden",
-          "path": "tests/roadmap/mutation-map/mutants.py",
-          "category": "other"
+          "name": "cells-not-swapped",
+          "path": "tests/roadmap/vcs/Extract.lean",
+          "category": "other",
+          "anchor": "-- The cells not swapped: the heap postcondition is left."
+        },
+        {
+          "name": "provenance-premise-dropped",
+          "path": "tests/roadmap/vcs/Extract.lean",
+          "category": "other",
+          "anchor": "-- The provenance premise dropped: pointers into blocks are not compared by address"
         }
       ],
-      "note": "Extract.lean (CI) proves contracts of loop-free generated functions through vc_gen obligations, refutes the single goal a wrong tardiness contract leaves, and pins loop requests (invariant + variant) and refusals; report.json is the golden of scripts/vc-report.py. The Python mutants hide a Lean error or open obligations in that report."
+      "note": "Extract.lean (CI) proves contracts of loop-free generated functions from the obligations fsym leaves (the open ones pinned exactly), refutes the single goal a wrong tardiness contract leaves, and pins loop requests and the recursive call; Memory.lean pins each kind of obligation with its fsym.report origin and refutes a reachable panic. Each mutated contract (a dropped overflow bound, unswapped cells, a dropped provenance premise) is pinned with the exact obligation it leaves."
     },
     "P03": {
       "categories": [],
