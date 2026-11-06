@@ -1312,6 +1312,21 @@ theorem Owns.mono {P : ThreadId → LPh} {m m' : Mem} {h : Heap} {w : Bool} (ho 
     · rw [hb] at hb'; exact absurd hbl (Nat.not_lt.mpr hb')
   · exact .inl hle
 
+/-- `OwnsRes` over such a memory (`Owns.mono` for both parts; a new access touches no byte of the
+resource's owned set). -/
+theorem OwnsRes.mono {P : ThreadId → LPh} {m m' : Mem} {r : Res} (ho : L.OwnsRes P m r)
+    (ht : m'.threads = m.threads) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨
+      (¬ e.Touches r.owned ∧ e.block < m.blocks.size) ∨ LiveLe P m' e.clock) :
+    L.OwnsRes P m' r :=
+  have sub : ∀ {h : Heap}, (∀ l, h l ≠ none → r.owned l ≠ none) → ∀ e ∈ m'.footprint,
+      e ∈ m.footprint ∨ (¬ e.Touches h ∧ e.block < m.blocks.size) ∨ LiveLe P m' e.clock :=
+    fun hs e he => (hfp e he).imp_right (Or.imp_left fun ⟨hnt, hbl⟩ =>
+      ⟨fun ⟨x, h1, h2, h3⟩ => hnt ⟨x, h1, h2, hs _ h3⟩, hbl⟩)
+  ⟨ho.1.mono ht hb ha hcl (sub fun _ => Res.owned_of_excl),
+    ho.2.mono ht hb ha hcl (sub fun _ => Res.owned_of_shared)⟩
+
 /-- The record of an atomic access to the word by the current thread. -/
 theorem WInv.record {P : ThreadId → LPh} {m : Mem} (hi : L.WInv P m) {k : AccessKind}
     (hk : k.isAtomic = true) (ht : m.current < m.threads.size) :
