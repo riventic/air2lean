@@ -341,10 +341,15 @@ def eqCast (pf h : Expr) (mp := true) : MetaM Expr := do
   return mkApp4 (mkConst (if mp then ``Eq.mp else ``Eq.mpr) [← getLevel a]) a b pf h
 
 /-- A proof `h` of a term (or of one definitionally it: an unfolding) as a proof of its simp
-result `r`: by its proof, else definitionally. -/
+result `r`: by its proof, else definitionally. Its type is `r.expr`: the proof states the side
+before simp's last steps without a proof (a `dsimproc`'s fold, `2 ^ 64 - 4096`), and a later
+pass reading the fact's type would fold them again. -/
 def mpResult (r : Simp.Result) (h : Expr) : MetaM Expr := do
   match r.proof? with
-  | some pf => eqCast pf h
+  | some pf =>
+    let p ← eqCast pf h
+    let some (_, _, b) := (← instantiateMVars (← inferType pf)).eq? | return p
+    return if b == r.expr then p else mkExpectedPropHint p r.expr
   | none => return mkExpectedPropHint h r.expr
 
 /-- A proof `h` of the simp result `r` of `t` as a proof of `t`: by its proof, else
@@ -561,10 +566,10 @@ def closeWith (g : MVarId) (tac : Syntax) : TacticM Bool := do
     s.restore; return false
   catch _ => s.restore; return false
 
-/-- `e` is `2 ^ x` (natural numbers, `x` not ground: `omega` evaluates `2 ^ (63 + 1)`). -/
+/-- `e` is `2 ^ x` (natural numbers, `x` not a literal). -/
 def isSymPow (e : Expr) : Bool :=
   e.isAppOfArity ``HPow.hPow 6 && (e.getAppArgs[4]!.nat? == some 2) &&
-    (Lean.Elab.Tactic.Omega.groundNat? e.getAppArgs[5]!).isNone && (e.getArg! 0).isConstOf ``Nat
+    (e.getAppArgs[5]!.nat?).isNone && (e.getArg! 0).isConstOf ``Nat
 
 /-- The subterms `2 ^ x` (`isSymPow`) and `z % 2 ^ x` of `e`. -/
 partial def powTerms (e : Expr) : Array Expr × Array Expr :=
@@ -1133,14 +1138,13 @@ where
     | .mdata _ b | .proj _ _ b => go b acc
     | _ => acc
 
-/-- The ground powers of two `L` (`4096`, `2 ^ 12`) of the remainders `z % L` of natural numbers
-in `e`. -/
+/-- The literal powers of two `L` of the remainders `z % L` of natural numbers in `e`. -/
 partial def litPowMods (e : Expr) : Array Nat :=
   go e #[]
 where
   go (e : Expr) (acc : Array Nat) : Array Nat :=
     let acc := if e.isAppOfArity ``HMod.hMod 6 && (e.getArg! 0).isConstOf ``Nat then
-        match Lean.Elab.Tactic.Omega.groundNat? e.appArg! with
+        match e.appArg!.nat? with
         | some c => if c > 1 && c &&& (c - 1) == 0 && !acc.contains c then acc.push c else acc
         | none => acc
       else acc
@@ -1167,7 +1171,7 @@ where
     | _ => acc
 
 /-- Facts for `omega` about the symbolic powers of two `2 ^ x` of the target and the facts,
-which `omega` treats as atoms: `0 < 2 ^ x`; `2 ^ x < 2 ^ c` from `x < c` (`c` ground); a mask
+which `omega` treats as atoms: `0 < 2 ^ x`; `2 ^ x < 2 ^ c` from `x < c` (`c` a literal); a mask
 `a &&& b` with `b = 2 ^ x - 1` (`a % 2 ^ x`) or, for a word `a` of width `w`,
 `b = 2 ^ w - 2 ^ x` (`a - a % 2 ^ x`), by `omega`; and for a remainder `z % 2 ^ x`: it is below
 `2 ^ x` and at most `z`, `z - z % 2 ^ x` is a multiple, and it is `z` (`z < 2 ^ x`) or `0`
@@ -1187,13 +1191,11 @@ def extraFacts (facts : Array Expr) (tgt : Expr) (cases := true) : MetaM (Array 
   for p in pows do
     let x := p.getAppArgs[5]!
     out := out.push (← mkAppM ``Nat.two_pow_pos #[x])
-    -- `2 ^ x ≤ c` for a ground `c`: `x ≤ log2 c`
+    -- `2 ^ x ≤ c` for a literal `c`: `x ≤ log2 c`
     for f in facts do
       let ty ← instantiateMVars (← inferType f)
       unless ty.isAppOfArity ``LE.le 4 && ty.appFn!.appArg! == p do continue
-      -- (a ground bound, `63 + 1`, as `omega` evaluates it; the fact at the literal for the rule)
-      let some c := Lean.Elab.Tactic.Omega.groundNat? ty.appArg! | continue
-      let f ← if ty.appArg!.nat?.isSome then pure f else mkExpectedTypeHint f (mkApp ty.appFn! (mkNatLit c))
+      let some c := ty.appArg!.nat? | continue
       let j := c.log2
       let hc ← mkDecideProof (← mkAppM ``LT.lt #[mkNatLit c, ← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit (j + 1)]])
       out := out.push (← mkAppOptM ``le_of_two_pow_le #[x, mkNatLit c, mkNatLit j, f, hc])
@@ -1202,9 +1204,7 @@ def extraFacts (facts : Array Expr) (tgt : Expr) (cases := true) : MetaM (Array 
       let lt := ty.isAppOfArity ``LT.lt 4
       unless lt || ty.isAppOfArity ``LE.le 4 do continue
       unless ty.appFn!.appArg! == x do continue
-      -- (a ground bound, `63 + 1`, as `omega` evaluates it; the fact at the literal for the rule)
-      let some c := Lean.Elab.Tactic.Omega.groundNat? ty.appArg! | continue
-      let f ← if ty.appArg!.nat?.isSome then pure f else mkExpectedTypeHint f (mkApp ty.appFn! (mkNatLit c))
+      let some c := ty.appArg!.nat? | continue
       let lit := mkNatLit (2 ^ c)
       let pf ← if lt then mkAppM ``Nat.pow_lt_pow_right #[← mkAppM ``Nat.one_lt_two #[], f]
         else mkAppM ``Nat.pow_le_pow_right #[← mkAppM ``Nat.two_pos #[], f]
@@ -1378,35 +1378,6 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     return out
   r
 
-/-- `e` as `omega` reads its numerals: each ground term (`groundNat?`, `groundInt?`: `2 ^ 64 - 4096`
-of literals, not `UInt64.size - 4096`) at a linear position (under the connectives, the orders and
-equations, `+`, `-`, a cast, at `Nat` or `Int`) as its value. `omega` evaluates exactly these
-(`asLinearCombo`), so two facts of one form say the same to it. Not inside an atom (`tsum (2 ^ 3) g`,
-`x * (1 + 1)`, `2 ^ (k + 0)`): `omega` compares atoms as terms. `ty`: the type of a term `e`
-(`none`: `e` is a proposition). -/
-partial def omegaGround (e : Expr) (ty : Option Expr := none) : Expr :=
-  let num (t : Expr) := t.isConstOf ``Nat || t.isConstOf ``Int
-  match ty with
-  | none =>
-    if e.isAppOfArity ``Not 1 then mkApp e.appFn! (omegaGround e.appArg!)
-    else if e.isAppOfArity ``And 2 || e.isAppOfArity ``Or 2 || e.isAppOfArity ``Iff 2 then
-      mkApp2 e.appFn!.appFn! (omegaGround e.appFn!.appArg!) (omegaGround e.appArg!)
-    else if (e.isAppOfArity ``Eq 3 || e.isAppOfArity ``Ne 3 || e.isAppOfArity ``LE.le 4 ||
-        e.isAppOfArity ``LT.lt 4 || e.isAppOfArity ``Dvd.dvd 4) && num (e.getArg! 0) then
-      let t := e.getArg! 0
-      mkApp2 e.appFn!.appFn! (omegaGround e.appFn!.appArg! t) (omegaGround e.appArg! t)
-    else e
-  | some t =>
-    let v := if t.isConstOf ``Nat then (Lean.Elab.Tactic.Omega.groundNat? e).map mkNatLit
-      else if t.isConstOf ``Int then (Lean.Elab.Tactic.Omega.groundInt? e).map toExpr else none
-    if let some v := v then v
-    else if (e.isAppOfArity ``HAdd.hAdd 6 || e.isAppOfArity ``HSub.hSub 6) && e.getArg! 0 == t then
-      mkApp2 e.appFn!.appFn! (omegaGround e.appFn!.appArg! t) (omegaGround e.appArg! t)
-    else if e.isAppOfArity ``Neg.neg 3 && e.getArg! 0 == t then mkApp e.appFn! (omegaGround e.appArg! t)
-    else if e.isAppOfArity ``Nat.cast 3 && e.getArg! 0 == t then
-      mkApp e.appFn! (omegaGround e.appArg! (mkConst ``Nat))
-    else e
-
 /-- The facts relevant to `tgt` normalized again, each against all the facts. A hypothesis is
 normalized against the facts before it, once, when it enters the context (`normFacts`, cached),
 so a conditional rewrite whose side condition only a later fact proves did not apply to it
@@ -1429,9 +1400,7 @@ def renormFacts (facts : Array Expr) (tgt : Expr) (cases := true) :
     let s ← saveState
     try
       let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
-      -- (a new form that only evaluates ground terms `omega` evaluates, `2 ^ 64 - 4096` of a
-      -- hypothesis that its normalization left, says nothing new: `extraFacts` reads them too)
-      unless r.expr == ty || r.expr.isTrue || omegaGround r.expr == omegaGround ty do
+      unless r.expr == ty || r.expr.isTrue do
         out := out.push (← mpResult r f, r.expr)
     catch _ => s.restore
   return out
@@ -1547,10 +1516,7 @@ where normHyp (ctx : Simp.Context) (procs : Simp.SimprocsArray) (facts : Array E
   let h ← if ty == ty0 then pure d.toExpr else mkExpectedTypeHint d.toExpr ty
   (← caches).facts.set facts
   let (r, _) ← fsimp ty ctx procs (discharge? := some (omegaDisch cases))
-  let mut out ← if r.expr == ty0 then pure none else
-    match r.proof? with
-    | some pf => pure (some (r.expr, ← mkEqMP pf h))
-    | none => pure (some (r.expr, ← mkExpectedTypeHint h r.expr))
+  let mut out ← if r.expr == ty0 then pure none else pure (some (r.expr, ← mpResult r h))
   -- Retain the normalized equality proof when Lean refutes its constructor equation.
   if !r.expr.hasExprMVar then
     let sides? := match r.expr.eq?, r.expr.heq? with

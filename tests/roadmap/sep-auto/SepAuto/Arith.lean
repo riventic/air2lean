@@ -333,33 +333,31 @@ run_meta omega_proofs_shared
 
 end Shared
 
-/-! ### A new form that only evaluates ground terms (`renormFacts`, `omegaGround`)
+/-! ### A fact in normal form states it (`mpResult`, `normFacts`)
 
-The second pass drops a fact's new form that says the same to `omega` (PageSpec's
-`2 ^ 64 - 4096` of a hypothesis, folded again on every failed side goal). The two forms are equal
-only when they differ in ground terms `omega` evaluates (`groundNat?`) at linear positions; a
-constant, an atom's argument, a word or another value keeps the new form. -/
-section Ground
-open Lean Meta Elab Term Zig.Full.Auto
+A simp result whose last steps have no proof (a `dsimproc`'s fold, `Nat.reduceSub`) keeps the
+proof of the steps before: `pf : P = Q` with `r.expr` past `Q`. The fact must state `r.expr`, not
+`Q`, or the second pass (`renormFacts`) reads `Q` and folds it again on every failed side goal
+(PageSpec's `bs.size ≤ 18446744073709551616 - 4096`, 41 times in `remap_spec`). -/
+section Stated
+open Lean Meta Zig.Full.Auto
 
-/-- The two propositions of `fun xs => (p, q)` say the same to `omega` (`omegaGround`). -/
-def groundSame (stx : Term) : TermElabM Bool := do
-  let e ← instantiateMVars (← elabTerm stx none)
-  lambdaTelescope e fun _ b => return omegaGround (b.getArg! 2) == omegaGround (b.getArg! 3)
+run_meta do
+  withLocalDeclD `x (mkConst ``Nat) fun x => do
+  let two64 := mkNatLit 18446744073709551616
+  let q ← mkAppM ``LE.le #[x, ← mkAppM ``HSub.hSub #[two64, mkNatLit 4096]]
+  let nf ← mkAppM ``LE.le #[x, mkNatLit 18446744073709547520]
+  withLocalDeclD `h q fun h => do
+  -- a proof of the steps with a proof (none here: `Q = Q`), the fold after it without one
+  let r : Simp.Result := { expr := nf, proof? := some (← mkEqRefl q) }
+  let p ← mpResult r h
+  Meta.check p
+  let ty ← inferType p
+  unless ty == nf do throwError "mpResult: the fact states {ty}, not its normal form {nf}"
+  -- a result whose proof states it keeps the proof as it is
+  let r' : Simp.Result := { expr := q, proof? := some (← mkEqRefl q) }
+  unless (← inferType (← mpResult r' h)) == q do throwError "mpResult: {q} not kept"
 
-run_elab do
-  for (stx, want) in [
-      (← `(fun (x : Nat) => (x ≤ 2 ^ 64 - 4096, x ≤ 18446744073709547520)), true),
-      (← `(fun (n k : Nat) => (n + 2 ^ k ≤ 2 ^ 64 - 4096 ∧ k < 63 + 1, n + 2 ^ k ≤ 18446744073709547520 ∧ k < 64)), true),
-      (← `(fun (x : Int) (k : Nat) => (x + ((k + (1 + 1) : Nat) : Int) < 0, x + ((k + 2 : Nat) : Int) < 0)), true),
-      (← `(fun (x : Nat) => (x ≤ 4096, x ≤ 4095)), false),
-      (← `(fun (x : Nat) => (x ≤ UInt64.size - 4096, x ≤ 18446744073709547520)), false),
-      (← `(fun (n : Nat) (g : Nat → Nat) => (n + g (2 ^ 3) ≤ 10, n + g 8 ≤ 10)), false),
-      (← `(fun (x : Nat) => (x * (1 + 1) ≤ 8, x * 2 ≤ 8)), false),
-      (← `(fun (x : BitVec 64) => (x = 4095#64 + 1#64, x = 4096#64)), false)] do
-    let got ← groundSame stx
-    unless got == want do throwError "omegaGround: {stx} gives {got}, not {want}"
-
-end Ground
+end Stated
 
 end SepAuto.Arith
