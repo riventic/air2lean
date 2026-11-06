@@ -194,7 +194,113 @@ example (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + n.toNat < 2 
       throwError "a post stronger than the exits was proved: {line r}"
   trivial
 
+set_option linter.unusedVariables false in
+/-- A step that stops before one of its exits: the repetition loads from `q`, which the
+invariant does not own; the `brk` exit is reached. (`p` names the invariant's cell.) -/
+def stuck.loop (p q : Ptr) (n : BitVec 32) : MM Locals Exit := do
+  let i ← pure ((← get).i)
+  if Zig.lt false i n then (do
+    let _ ← Zig.load (BitVec 64) 8 q
+    pure .rep)
+  else (do
+    pure .brk)
+
+set_option linter.unusedVariables false in
+/-- `p`'s cell, and `q` is not owned. -/
+@[fsym_inv] def stuck.loop.inv (p q : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn :=
+  up (pts p 8 v0)
+
+@[fsym_inv] def stuck.loop.meas (n : BitVec 32) (s : Locals) : Nat :=
+  n.toNat - s.i.toNat
+
+set_option linter.unusedVariables false in
+/-- The exit post is not inferred from the exits that a stopped step reached (its join would
+leave out the exits after the stop): it stays unknown and the continuation stops with the
+reason, it is not walked from a partial (or `⟪False⟫`) post. -/
+example (p q : Ptr) (n : BitVec 32) (v : BitVec 64) : True := by
+  run_tac withMainContext do
+    let ty ← elabTerm (← `(FTotalTriple (up (pts p 8 v))
+      ((Zig.loop (stuck.loop p q n) again).run { i := 0 }) (fun _ => up (pts p 8 v)))) none
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let (gs, r) ← runReport g.mvarId!
+    let has (reason condition : String) :=
+      r.residuals.any fun x => x.origin.reason == reason && x.origin.condition == condition
+    unless has "no_rule" "program" && has "exit_post_not_inferred" "rule_continuation" &&
+        gs.length == r.residuals.size && r.posts.isEmpty do
+      throwError "the continuation did not stop at the unknown exit post: {line r}"
+  trivial
+
 end
+
+/-! ## Exit notes (`closeEntail`, `noteExit`, `finishExits`) -/
+
+/-- A run's cache with the unknown `E` as a post that the walk infers. -/
+private def withExit {α : Type} (E : Expr) (x : TacticM α) : TacticM α :=
+  withRunCaches do
+    (← caches).inferPosts.modify (·.push E.mvarId!)
+    x
+
+private def nat : Expr := mkConst ``Nat
+
+/-- An unknown exit post assigned before its join: the return's update is a residual
+(`postcondition_not_proved`), the assignment is kept. -/
+example : True := by
+  run_tac do
+    let E ← mkFreshExprMVar (← mkArrow nat (mkConst ``Zig.Full.FAssn))
+    withLocalDeclD `p (mkConst ``Zig.Ptr) fun p => withLocalDeclD `v w64 fun v => do
+      let P ← mkAppM ``FAssn.up #[← mkAppM ``Zig.pts #[p, mkNatLit 8, v]]
+      let g ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkApp E (mkNatLit 3)])
+      let (gs, r) ← Report.collect <| withExit E do
+        let left ← closeEntail g.mvarId!
+        unless left.isEmpty do throwError "the return into the exit post is not noted"
+        E.mvarId!.assign (.lam `x nat P .default)
+        finishExits g
+      unless gs == [g.mvarId!] && r.residuals.size == 1 &&
+          r.residuals[0]!.origin.reason == "postcondition_not_proved" do
+        throwError "the return into an assigned exit post is not a residual: {line r}"
+      unless (← instantiateMVars E) == .lam `x nat P .default do
+        throwError "the exit post's assignment was changed"
+  trivial
+
+/-- A return whose strongest post cannot be stated (the state names a fact of the walk, which
+the post cannot abstract): the update is left, and the exit post stays unknown (it is not
+unified with the state). -/
+example : True := by
+  run_tac do
+    let E ← mkFreshExprMVar (← mkArrow nat (mkConst ``Zig.Full.FAssn))
+    withLocalDeclD `p (mkConst ``Zig.Ptr) fun p => withLocalDeclD `n nat fun n => do
+    withLocalDeclD `h (← mkAppM ``LT.lt #[n, ← mkAppM ``HPow.hPow #[mkNatLit 2, mkNatLit 64]]) fun h => do
+      let P ← mkAppM ``FAssn.up #[← mkAppM ``Zig.pts #[p, mkNatLit 8,
+        ← mkAppOptM ``BitVec.ofNatLT #[mkNatLit 64, n, h]]]
+      let g ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkApp E (mkNatLit 3)])
+      let left ← withExit E do
+        let left ← closeEntail g.mvarId!
+        return left ++ (← finishExits g)
+      unless left == [g.mvarId!] && !(← E.mvarId!.isAssigned) && !(← g.mvarId!.isAssigned) do
+        throwError "a return without a strongest post was not left: {left}"
+  trivial
+
+/-- An exit whose condition the facts do not decide (`if again e = true then … else ?E e` at a
+label `e` that is not a constructor): split on it, the repetition proved as before and the exit
+noted with its condition as a fact, never an `?E` that the entailment assigns. -/
+example : True := by
+  run_tac do
+    let E ← mkFreshExprMVar (← mkArrow (mkConst ``Exit) (mkConst ``Zig.Full.FAssn))
+    withLocalDeclD `p (mkConst ``Zig.Ptr) fun p => withLocalDeclD `v w64 fun v =>
+    withLocalDeclD `e (mkConst ``Exit) fun e => do
+      let P ← mkAppM ``FAssn.up #[← mkAppM ``Zig.pts #[p, mkNatLit 8, v]]
+      let c ← mkEq (mkApp (mkConst ``again) e) (mkConst ``Bool.true)
+      let Q ← mkAppM ``ite #[c, P, mkApp E e]
+      let g ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Q])
+      let left ← withExit E do
+        let left ← closeEntail g.mvarId!
+        return left ++ (← finishExits g)
+      unless left.isEmpty do throwError "the undecided exit was not closed"
+      let post ← instantiateMVars E
+      unless !post.hasExprMVar && (post.find? (·.isAppOf ``Not)).isSome do
+        throwError "the exit post does not carry the exit's condition: {post}"
+      Meta.check (← instantiateMVars g)
+  trivial
 
 /-! ## Missed atoms -/
 

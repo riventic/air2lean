@@ -22,7 +22,7 @@ printing, not a serialization of the expression. -/
 structure Term where
   head : Option String
   text : String
-  deriving Inhabited, ToJson
+  deriving Inhabited, BEq, ToJson
 
 def term (e : Expr) : MetaM Term := do
   let e ← instantiateMVars e
@@ -33,20 +33,20 @@ atom's text) and its type. -/
 structure Unknown where
   name : String
   type : Term
-  deriving Inhabited, ToJson
+  deriving Inhabited, BEq, ToJson
 
 /-- An atom that a plan missed, with the unknowns that the plan left in it (`noteWanted`). -/
 structure Missing where
   atom : Term
   unknowns : Array Unknown
-  deriving Inhabited, ToJson
+  deriving Inhabited, BEq, ToJson
 
 /-- A rule whose precondition had no plan in the state (P09-E3): the rule, and the atoms of
 its precondition that no atom of the state provided. -/
 structure Plan where
   rule : Term
   missing : Array Missing
-  deriving Inhabited, ToJson
+  deriving Inhabited, BEq, ToJson
 
 /-- Where a residual was generated. `program` is the command at that point, not the entry's
 whole program; `rule` includes the arguments of a caller-supplied rule. `plans` are the rules
