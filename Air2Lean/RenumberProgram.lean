@@ -592,7 +592,7 @@ theorem undefAllocs_ren (hρ : Inj ρ) (f : Func) :
   congr 1
   apply foldl_hom_nil
   rintro ⟨id, ty, op⟩ - acc
-  simp only [renInst_op, renInst_id]
+  simp only [renInst_id]
   cases op <;> try rfl
   case store p v =>
     cases p <;> cases v <;> try rfl
