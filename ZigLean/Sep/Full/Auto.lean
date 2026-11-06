@@ -814,18 +814,24 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   | none => unless limited do (← caches).probe.modify (·.insert key (.inr stamp))
   return r
 
-/-- A cached case probe of a split term (`omegaFacts`) from the facts `base`: not retried where
-it failed before with a superset of `base` (`omega` proves nothing from fewer facts), in any
-context (the facts are proofs: the same term is the same proposition). A skipped probe only
-leaves the term to `omega`'s case split. A failure under a limit is not recorded (`limitedRun`:
-a probe past its budget fails at once). -/
-def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
-  let failed := ((← (← caches).detFail.get).get? key).getD #[]
+/-- The search `run` for `key` from the facts `base`, its failures cached in `cache` (`detFail`,
+`dischFail`): not retried where it failed before with a superset of `base` (`omega` proves
+nothing from fewer facts), in any context (the facts are proofs: the same term is the same
+proposition). A failure under a limit is not recorded (`limitedRun`). -/
+def failCached (cache : RunCaches → IO.Ref (Std.HashMap Expr (Array (Std.HashSet Expr))))
+    (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
+  let failed := ((← (cache (← caches)).get).get? key).getD #[]
   if failed.any fun s => base.all s.contains then return none
-  let (r, limited) ← limitedRun (probe key base.size run)
+  let (r, limited) ← limitedRun run
   if r.isNone && !limited then
-    (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
+    (cache (← caches)).modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
+
+/-- A cached case probe of a split term (`omegaFacts`) from the facts `base` (`failCached`): a
+skipped probe only leaves the term to `omega`'s case split; a probe past its budget fails at
+once. -/
+def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) :=
+  failCached RunCaches.detFail key base (probe key base.size run)
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
@@ -1266,9 +1272,7 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
       if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
     let facts ← (← caches).facts.get
     let key := if cases then e else mkApp (mkConst `fsym.noCases) e
-    let failed := ((← (← caches).dischFail.get).get? key).getD #[]
-    if failed.any fun s => facts.all s.contains then return none
-    let (out, limited) ← limitedRun do
+    let out ← failCached RunCaches.dischFail key facts do
       -- `x.toNat < 2 ^ w`
       let wordBound : MetaM (Option Expr) := do
         unless e.isAppOfArity ``LT.lt 4 do return none
@@ -1297,11 +1301,7 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
     -- no proof, and the proof's type is then the reduced form, which simp's reducible assignment
     -- of the rewrite's hypothesis does not unify)
     let out ← out.mapM (mkExpectedTypeHint · e)
-    match out with
-    | some pf => (← caches).disch.modify (·.insert e (some pf))
-    | none =>
-      unless limited do
-        (← caches).dischFail.modify (·.insert key (failed.push (Std.HashSet.ofArray facts)))
+    if let some pf := out then (← caches).disch.modify (·.insert e (some pf))
     return out
   r
 
