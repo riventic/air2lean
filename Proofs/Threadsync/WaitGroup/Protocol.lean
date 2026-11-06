@@ -523,8 +523,8 @@ theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk m) (hs : L.Step t m 
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hok : ok (G t)) (hng : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .away)
     (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m) (hs : L.Step t m m')
-    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
-    U (upd G t (L.set (G t) p h)) rX m' := by
+    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
+    (_ : L.Transfer G rX m m' t p h) : U (upd G t (L.set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t (L.set (G t) p h) u).2 = (G u).2 := fun u =>
     congrFun (FLock.snd_set G t p h) u
   obtain ⟨hwG, hhG⟩ := hu.wg.lockStep hs apG
