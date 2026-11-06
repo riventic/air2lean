@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 176 rows, 71 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 177 rows, 72 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -92,6 +92,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [mutex-impl-relaxed-witness](#row-mutex-impl-relaxed-witness) | No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock` | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when the witness is in tests and checked by its fixture's check script. |
 | [guard-lifeline-mirror](#row-guard-lifeline-mirror) | build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661 | P1c (elastic build-guard admission, PR #661) | `scripts/build-guard.py`, `tests/roadmap/build-budgets/test_guard.py`, `docs/build-budgets.md` | Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running build-guard process (`ps -eo pid,args \| grep build-guard.py`), its checkout (the script path when absolute, else the process's working directory: `readlink /proc/PID/cwd` on arc, `lsof -a -p PID -d cwd -Fn` on the Mac) contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row. |
 | [two-lock-product](#row-two-lock-product) | The generic two-lock product over FLock (lock nesting) is not built yet | L8q/L8r lock-order work (Step 2), #693; parked by the coordinator 2026-11-05 | - | Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree. |
+| [second-pass-speculative-cost](#row-second-pass-speculative-cost) | the arithmetic's second pass runs on the failed side goals of rules that do not apply | coordinator (main red on alloc-translated since #699, PR #703) | `tests/roadmap/alloc-translated/PageThread.lean` | Delete `fthread_remap`'s `set_option maxHeartbeats 300000` when a failed rule premise no longer pays the second pass and `fthread_remap` elaborates within 180k heartbeats (a margin under the default 200k, which it reached before #699). |
 
 ## Closed rows
 
@@ -2102,3 +2103,18 @@ Progress: PARTLY DONE. Landed: `Fits.stable` gets the step's `FLock.Transfer` (d
 Request: A thread that holds one lock while it runs another lock's code (a lock order, RwLockImpl's writer, hand-over-hand) needs both locks' invariants at once over one ghost value, with each lock's held resource placed in the other lock's rest, proved once for every pair of `FLock`s and every `MutexImpl`.
 
 Deletion plan: Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree.
+
+<a id="row-second-pass-speculative-cost"></a>
+### #second-pass-speculative-cost the arithmetic's second pass runs on the failed side goals of rules that do not apply
+
+Status: **open**. Requester: coordinator (main red on alloc-translated since #699, PR #703).
+
+Note: Cost only: the second pass adds facts, never a premise; a goal it fails on fails as before.
+
+Progress: Since #699, `arithCore` normalizes the relevant facts again after every failed `omega` that is not a probe (`renormFacts`, then `atomCongr` and a second `omega`). The side goals of rules tried in turn (`mremapShrinkR` and its siblings, `ptrEqAddr_live`'s cases) fail by design, and each failure pays the pass. #702 caches the discharger's failures by fact set (ArenaSpec `free_ct`: 12M heartbeats a call to 0.35M); #703 makes a normalized fact state its simp result (`mpResult`): simp's proof stated the side before its last proof-less folds, so the second pass read `bs.size ≤ 18446744073709551616 - 4096` and folded it again (PageSpec `remap_spec`: 41 times, each rerunning `extraFacts` and a second `omega`). What remains is `renormFacts`' own `fsimp` of every relevant fact: PageThread `fthread_remap` 19.7M heartbeats over 25 failed goals, about 10% of its cost (180k-200k heartbeats before #699, 200k-220k with #703).
+
+Request: Run the second pass only for a side goal the walk needs: a rule's premise that decides whether the rule applies runs it within a probe's budget (or not at all), the walk's own obligations in full.
+
+Workaround sites: `tests/roadmap/alloc-translated/PageThread.lean`
+
+Deletion plan: Delete `fthread_remap`'s `set_option maxHeartbeats 300000` when a failed rule premise no longer pays the second pass and `fthread_remap` elaborates within 180k heartbeats (a margin under the default 200k, which it reached before #699).
