@@ -17,10 +17,10 @@ namespace StrengthLog.LoopTactics
 /-- The legacy statement (`TotalTriple (pts p 8 v) (pairs p n) (fun _ => pts p 8 …)`) on every
 `Mem.FSeqPlain` memory (no stack budget), from `pairs_total`. -/
 example (p : Ptr) (n : BitVec 32) (v : BitVec 64)
-    (hfit : v.toNat + cnt n.toNat < 2 ^ 64) :
+    (hfit : v.toNat + tsum n.toNat (fun u => u) < 2 ^ 64) :
     ∀ m hP hF, Heap.Disjoint hP hF → m.heap = hP ∪ hF → pts p 8 v hP → m.Seq → m.FSeqPlain →
       ∃ r m' hQ, (pairs p n).run m = pure (r, m') ∧ Heap.Disjoint hQ hF ∧ m'.heap = hQ ∪ hF ∧
-        pts p 8 (BitVec.ofNat 64 (v.toNat + cnt n.toNat)) hQ ∧ m'.Seq :=
+        pts p 8 (BitVec.ofNat 64 (v.toNat + tsum n.toNat (fun u => u))) hQ ∧ m'.Seq :=
   FTotalTriple.toTotal_on_plain (pairs_total p n v hfit) fun _ => SizeFree.pts _ _ _
 
 end StrengthLog.LoopTactics

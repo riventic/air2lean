@@ -135,8 +135,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     (_ : (L Lo).ph (G t) ≠ .gone) (_ : (L Lo).ph (G t) ≠ .holdsAway) (_ : (L Lo).Inv G rX m)
     (hu : U Lo G rX m)
     (hs : (L Lo).Step t m m')
-    (_ : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
-    U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
+    (_ : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!))
+    (_ : (L Lo).Transfer G rX m m' t p h) : U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   obtain ⟨hsh, hio, hrest⟩ := hu
   refine ⟨?_, fun e he hr => ?_, hrest⟩
   · rw [FLock.snd_set]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh

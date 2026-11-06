@@ -1,16 +1,31 @@
+import ZigLean.Sep.Full.AutoAttr
+
 /-!
-# Sums over threads and over writes
+# Sums over threads, over writes and over a loop's counter
 
 A small library for the invariants of the full-state logic that count: `tsum N g` is the sum of
-`g u` over `u < N` (threads, or the writes of a word). The counting invariant of the
-multi-waiter condition (`ZigLean/Sep/Full/CondInv.lean`) uses it for the number of registered
-waiters and of pending claims, and for the signals posted after a write.
+`g u` over `u < N` (threads, the writes of a word, or the values of a loop's counter). The
+counting invariant of the multi-waiter condition (`ZigLean/Sep/Full/CondInv.lean`) uses it for the
+number of registered waiters and of pending claims, and for the signals posted after a write.
 
 * `tsum_upd`: how a sum changes when one point changes.
 * `tsum_ext`: a sum over a support bound does not depend on the bound.
 * `tsum_tag`: a sum over writes is at most a sum over threads, when each write with a positive
   weight has its own thread (a thread names at most one write, its tag).
 * `le_add_tsum_up`: a sequence grows by at most the sum of its increases.
+
+**In the arithmetic of `fsym`** (`fsym_arith`, `docs/proof-automation.md`), a sum is an atom of
+`omega` with these normal forms, so a loop whose cell adds a value of its counter (`acc += i`) has a
+linear invariant `v + (tsum n g - tsum i g) = v₀ + (tsum n g - tsum i₀ g)`:
+
+* `tsum 0 g = 0`, and `tsum (n + 1) g = tsum n g + g n` for a bound written `n + 1` or
+  `Nat.succ n` (`tsumSucc`; not for a numeral bound, which would unfold to that many terms);
+* the terms between two bounds: `tsum b g - tsum x g = g x + (tsum b g - (tsum x g + g x))` where
+  `x < b` and `g x` is not `0` (`tsumSubLt`), and `0` where `b ≤ x` (`tsum_sub_of_le`);
+  non-recursive, so a rewrite never unfolds the sum further.
+
+A counter's step `x.toNat = i.toNat + 1` relates `tsum x.toNat g` to `tsum (i.toNat + 1) g` by the
+solver's congruence of atoms (ledger #arith-atom-congruence).
 
 This is the home of the sum. The legacy `Zig.Spec.tsum` of the retired `Conc/Spec` layer
 (`docs/thread-specs.md`) was the same definition.
@@ -22,10 +37,62 @@ namespace Full
 /-- The sum of `g u` over `u < N`. -/
 def tsum (N : Nat) (g : Nat → Nat) : Nat := ((List.range N).map g).sum
 
-@[simp] theorem tsum_zero (g : Nat → Nat) : tsum 0 g = 0 := rfl
+@[simp, fsym_arith] theorem tsum_zero (g : Nat → Nat) : tsum 0 g = 0 := rfl
 
 theorem tsum_succ (N : Nat) (g : Nat → Nat) : tsum (N + 1) g = tsum N g + g N := by
   simp [tsum, List.range_succ, List.sum_append]
+
+open Lean Meta Simp in
+/-- `tsum (n + 1) g` is `tsum n g + g n` (`tsum_succ`) where the bound is written `n + 1`; a
+numeral bound `N` (which `tsum_succ` as a simp lemma also matches) stays: it would unfold to `N`
+terms. -/
+simproc [fsym_arith] tsumSucc (tsum _ _) := fun e => do
+  unless e.isAppOfArity ``tsum 2 do return .continue
+  let N := e.getArg! 0
+  let n ← if N.isAppOfArity ``HAdd.hAdd 6 && (N.getArg! 5).nat? == some 1 then pure (N.getArg! 4)
+    else if N.isAppOfArity ``Nat.succ 1 then pure N.appArg! else return .continue
+  let g := e.getArg! 1
+  let r := mkNatAdd (mkApp2 (mkConst ``tsum) n g) (mkApp g n).headBeta
+  let pf := mkApp2 (mkConst ``tsum_succ) n g
+  -- (another instance of `+` than `Nat`'s: no rewrite)
+  unless ← isDefEq (← inferType pf) (← mkEq e r) do return .continue
+  return .visit { expr := r, proof? := some (← mkExpectedTypeHint pf (← mkEq e r)) }
+
+theorem tsum_mono {a b : Nat} (g : Nat → Nat) (h : a ≤ b) : tsum a g ≤ tsum b g := by
+  induction h with
+  | refl => exact Nat.le_refl _
+  | step _ ih => rw [tsum_succ]; exact Nat.le_trans ih (Nat.le_add_right _ _)
+
+/-- The terms `x ≤ u < b`: `g x` and the terms `x + 1 ≤ u < b`. -/
+theorem tsum_sub_of_lt {x b : Nat} {g : Nat → Nat} (h : x < b) :
+    tsum b g - tsum x g = g x + (tsum b g - (tsum x g + g x)) := by
+  have := tsum_mono g (show x + 1 ≤ b from h)
+  rw [tsum_succ] at this
+  omega
+
+open Lean Meta Simp in
+/-- `tsum_sub_of_lt` as a rewrite of `fsym_arith`, its side condition `x < b` by the discharger,
+where the term `g x` is not `0`: there its right side normalizes back to its left side
+(`Nat.zero_add`, `Nat.add_zero`), and the rewrite would not end. -/
+simproc [fsym_arith] tsumSubLt ((tsum _ _ : Nat) - tsum _ _) := fun e => do
+  unless e.isAppOfArity ``HSub.hSub 6 do return .continue
+  let (tb, tx) := (e.getArg! 4, e.getArg! 5)
+  unless tb.isAppOfArity ``tsum 2 && tx.isAppOfArity ``tsum 2 && tb.appArg! == tx.appArg! do
+    return .continue
+  let (b, x, g) := (tb.appFn!.appArg!, tx.appFn!.appArg!, tb.appArg!)
+  let gx := (mkApp g x).headBeta
+  if ((← Simp.simp gx).expr.nat?) == some 0 then return .continue
+  let some h ← (← getMethods).discharge? (← mkAppM ``LT.lt #[x, b]) | return .continue
+  let r := mkApp2 e.appFn!.appFn! tb (mkNatAdd tx gx)
+  let r := mkNatAdd gx r
+  let pf ← mkExpectedTypeHint (← mkAppOptM ``tsum_sub_of_lt #[x, b, g, h]) (← mkEq e r)
+  return .visit { expr := r, proof? := some pf }
+
+/-- No terms `x ≤ u < b` where `b ≤ x`. -/
+@[fsym_arith] theorem tsum_sub_of_le {x b : Nat} {g : Nat → Nat} (h : b ≤ x) :
+    tsum b g - tsum x g = 0 := by
+  have := tsum_mono g h
+  omega
 
 theorem tsum_congr {N : Nat} {g h : Nat → Nat} (e : ∀ u, u < N → g u = h u) :
     tsum N g = tsum N h := by

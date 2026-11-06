@@ -564,7 +564,8 @@ unchanged. `nested/check.sh`:
   elaboration error inside `outer_step`, the theorem whose walk runs the inner loop.
 
 The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
-for it, and its invariant (`outerI`, with the quadratic `cnt`) stays hand-written.
+for it, and its invariant (`outerI`, over the library sum `tsum`) stays hand-written (deletion
+plan: engine ledger row P09-E4).
 
 ### Implemented: the counted family widened (S2c)
 
@@ -611,10 +612,12 @@ Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (
   `([w₀, w₁].set 0 x).set (1#64).toNat y` and does not match the invariant's list: engine ledger
   row #atom-args-normal-form.
 * `tri` adds the counter to its cell (`acc.* += i`): "a cell that does not go up by a constant".
-  A library sum `S` (`S n = 0 + 1 + … + (n - 1)`) makes the invariant linear, but the counter's
-  step leaves `S x.toNat` beside `x.toNat = i.toNat + 1`, which the arithmetic does not relate:
-  engine ledger row #arith-atom-congruence (it holds the rewrites that were checked). The hand
-  `cnt`/`cnt_mono` of `nested`'s outer loop are that glue today.
+  The library sum `tsum n g` (`ZigLean/Sep/Full/TSum.lean`, `g u` over `u < n`) makes the
+  invariant linear, `v + (tsum n g - tsum i g) = v₀ + (tsum n g - tsum i₀ g)` with `g = fun u => u`,
+  and `fsym` walks its step: the arithmetic relates `tsum x.toNat g` to `tsum (i.toNat + 1) g`
+  by the congruence of atoms (`docs/proof-automation.md`, closed ledger row
+  #arith-atom-congruence). The generator does not emit it yet; `nested`'s hand outer invariant
+  `outerI` has this form and `fsym` walks it without glue.
 
 ### Implemented: Houdini pruning (S2f)
 
@@ -684,7 +687,7 @@ What the slices do not have yet (next slices, sizes S < M < L):
 | Next | Content | Size |
 |---|---|---|
 | S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
-| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; waits on #atom-args-normal-form), cell updates that depend on the counter (a library sum with the `fsym_arith` lemmas above, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing `outerI` and `cnt`; waits on #arith-atom-congruence) | M |
+| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; waits on #atom-args-normal-form), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
 | S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 
