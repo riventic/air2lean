@@ -5,6 +5,7 @@ import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.Const
 import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Full.Typed
+import ZigLean.Sep.Full.Share
 import ZigLean.Sep.Full.Try
 import ZigLean.Sep.Full.Region
 import ZigLean.Sep.Full.Slice
@@ -21,7 +22,6 @@ import ZigLean.Sep.Full.Tick
 import ZigLean.Sep.Full.ResetLedger
 import ZigLean.Sep.Full.OsFutex
 import ZigLean.Sep.Full.TSum
-import ZigLean.Sep.Full.Share
 import ZigLean.VecMem
 
 /-!
@@ -30,7 +30,7 @@ import ZigLean.VecMem
 A proof of generated code in the full-state logic imports this module and nothing else from the
 library: `fsym` (`Auto`) with every `@[fsym]`, `@[fsym_facts]`, `@[fsym_plan]`, `@[fsym_drop]` and
 provider rule of the library (primitive commands, byte-range claims, `const` globals, arrays,
-typed values and fields, error unions and optionals through pointers, regions, slices, the
+typed values and fields, loads of shared values (`Share`), error unions and optionals through pointers, regions, slices, the
 `std.mem.Allocator` wrappers, blocks, the stack pushes of a budget (`Stack`), the page-mapping
 primitives), the loop and recursion rules (`Loop`, a thread's `ThreadLoop`), the
 start memory (`Init`), the full-state witnesses of claims (`Witness`), the step ticks

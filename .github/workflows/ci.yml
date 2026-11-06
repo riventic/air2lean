@@ -1294,7 +1294,8 @@ jobs:
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # Read shares (decision 2026-11-06, #637): halves compose and read their cell; disagreeing
-          # cells and more than the whole do not compose; the whole leaves the frame nothing.
+          # cells and more than the whole do not compose; the whole leaves the frame nothing; shared
+          # bytes keep per-cell tags, split and join, convert to `pts`, read, and do not store.
           lake env lean tests/roadmap/sep-full/ShareCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/share-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/share-cx.log" <<'EOF'
           import re, sys
