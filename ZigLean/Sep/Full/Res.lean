@@ -483,6 +483,9 @@ theorem empty_zero : zero.Empty := fun _ => rfl
 
 theorem Empty.eq {a : SCell} (h : a.Empty) : a = zero := ext fun c => h c
 
+theorem Empty.add {a b : SCell} (ha : a.Empty) (hb : b.Empty) : (a.add b).Empty := fun c => by
+  rw [add_val, ha c, hb c]; grind
+
 /-- At most one cell has a positive fraction, and it is held at most whole. -/
 def Valid (a : SCell) : Prop :=
   (∀ c c', 0 < (a c).val → 0 < (a c').val → c = c') ∧ ∀ c, (a c).val ≤ 1

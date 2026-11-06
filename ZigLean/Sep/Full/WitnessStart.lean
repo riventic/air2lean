@@ -158,8 +158,16 @@ theorem _root_.Zig.Full.Holds.retag {m : Mem} {r r' rF : Res} (hh : Holds m r rF
     have := hc l
     simp only [FHeap.union_apply]
     cases e' : r'.heap l <;> cases e : r.heap l <;> simp_all
-  refine ⟨fun l => ?_, ⟨fun l => by rw [hh.heap.1 l, hu], fun l fc _ => ?_⟩, hk ▸ hh.know,
-    hh.knowF, hg ▸ hh.ghost⟩
+  have hu' : ∀ l, ((r'.heap ∪ rF.heap ∪ SCells (r.gh.add rF.gh).share) l).map (·.cell.norm) =
+      ((r.heap ∪ rF.heap ∪ SCells (r.gh.add rF.gh).share) l).map (·.cell.norm) := fun l => by
+    have := hu l
+    simp only [FHeap.union_apply] at this ⊢
+    revert this
+    cases (r'.heap l).or (rF.heap l) <;> cases (r.heap l).or (rF.heap l) <;> simp
+  have hd' : ∀ l, (r'.heap ∪ rF.heap) l ≠ none → (r.heap ∪ rF.heap) l ≠ none := fun l => by
+    simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, hn l]; exact id
+  refine ⟨fun l => ?_, (hh.heap.of_whole ⟨fun l => by rw [hh.heap.whole.1 l, hu'],
+    fun l fc _ => ?_⟩ hd').reShare (by rw [hg]), hk ▸ hh.know, hh.knowF, hg ▸ hh.ghost⟩
   · rcases hh.disj l with e | e
     · exact .inl ((hn l).mpr e)
     · exact .inr e
@@ -240,7 +248,8 @@ theorem _root_.Zig.Full.Holds.addClaim {m : Mem} {r rF : Res} {b : BlockId} {lo 
     (hb : b < m.blocks.size) :
     Holds m ⟨r.heap ∪ FHeap.empty, r.know.union Know.none,
       r.gh.add (Ghost.atCl b (ECell.onRange lo hi (ECell.shareT none Frac.one 0)))⟩ rF :=
-  ⟨by rw [FHeap.union_empty]; exact hh.disj, by rw [FHeap.union_empty]; exact hh.heap,
+  ⟨by rw [FHeap.union_empty]; exact hh.disj,
+    by rw [FHeap.union_empty]; exact hh.heap.reShare (Ghost.share_add₂ Ghost.share_add_none rfl),
     by rw [Know.union_none]; exact hh.know, hh.knowF,
     GOk.addCl hh.ghost (fun y => by rw [hr y, hF y, ECell.add_unit]) hb
       (fun y ls hu => onRange_share_ok lo hi y ls hu) (fun y γ e k => onRange_share_tags lo hi y γ e k)⟩

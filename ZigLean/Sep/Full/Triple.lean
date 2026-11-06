@@ -474,8 +474,9 @@ theorem Res.owned_fix {m : Mem} {r : Res} {l : Loc} : (r.fix m).owned l ≠ none
   simp only [Res.owned_ne, Res.fix, ne_eq, FHeap.fix_none]
 
 /-- Ghost state without shares (a counter cell, a token) adds nothing to the owned set. -/
-theorem Res.owned_addGh {r : Res} {g : Ghost} (hb : g.share = fun _ => SCell.zero := by rfl) :
-    (⟨r.heap, r.know, r.gh.add g⟩ : Res).owned = r.owned := by
+theorem Res.owned_addGh {h : FHeap} {k : Know} {a g : Ghost}
+    (hb : g.share = fun _ => SCell.zero := by rfl) :
+    (⟨h, k, a.add g⟩ : Res).owned = (⟨h, k, a⟩ : Res).owned := by
   funext l; simp only [Res.owned, Ghost.share_add_none hb]
 
 /-- No share of a byte where a resource or its frame has an exclusive cell. -/
