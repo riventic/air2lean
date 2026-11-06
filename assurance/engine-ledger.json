@@ -1930,6 +1930,19 @@
    "workaround_sites": [],
    "deletion_plan": "Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree.",
    "note": "Not unsound: no client relies on a two-lock product yet; a nesting client today proves its own `U` (`Fits.nap`/`unnap` hypotheses)."
+  },
+  {
+   "id": "second-pass-speculative-cost",
+   "title": "the arithmetic's second pass runs on the failed side goals of rules that do not apply",
+   "status": "open",
+   "requester": "coordinator (main red on alloc-translated since #699, PR #703)",
+   "progress": "Since #699, `arithCore` normalizes the relevant facts again after every failed `omega` that is not a probe (`renormFacts`, then `atomCongr` and a second `omega`). The side goals of rules tried in turn (`mremapShrinkR` and its siblings, `ptrEqAddr_live`'s cases) fail by design, and each failure pays the pass. #702 caches the discharger's failures by fact set (ArenaSpec `free_ct`: 12M heartbeats a call to 0.35M); #703 drops a new form that only folds closed terms (PageSpec `remap_spec`: `bs.size ≤ 2 ^ 64 - 4096` folded 41 times, each rerunning `extraFacts`). What remains is `renormFacts`' own `fsimp` of every relevant fact: PageThread `fthread_remap` 19.7M heartbeats over 25 failed goals, about 10% of its cost (180k-200k heartbeats before #699, 200k-220k with #703).",
+   "request": "Run the second pass only for a side goal the walk needs: a rule's premise that decides whether the rule applies runs it within a probe's budget (or not at all), the walk's own obligations in full.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-translated/PageThread.lean"
+   ],
+   "deletion_plan": "Delete `fthread_remap`'s `set_option maxHeartbeats 300000` when a failed rule premise no longer pays the second pass (it then fits the default 200k, as before #699).",
+   "note": "Cost only: the second pass adds facts, never a premise; a goal it fails on fails as before."
   }
  ],
  "mechanisms": [
