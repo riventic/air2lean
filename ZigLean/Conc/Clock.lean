@@ -1379,11 +1379,6 @@ theorem Mem.Owns.fstepCur {h : Heap} (hs : FStepIn hF m m' hR) (ho : m.Owns m.cu
     · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
   · exact hle
 
-/-- The current thread keeps what it owns in `hF` over an `FStepIn hF`. -/
-theorem Mem.Owns.fstepSelf {h : Heap} (hs : FStepIn hF m m' hR) (ho : m.Owns m.current h)
-    (_hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns m'.current h :=
-  ho.fstepCur hs
-
 /-- An `FStepIn hF` keeps the read ownership of each part of `hF`, by any clock: a new access to
 a byte of the frame is a read. -/
 theorem Mem.OwnsRC.fstep (hs : FStepIn hF m m' hR) {c : VClock} {h : Heap} (ho : m.OwnsRC c h)

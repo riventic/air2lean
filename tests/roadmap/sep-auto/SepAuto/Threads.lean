@@ -1,6 +1,7 @@
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Arr
 import ZigLean.Sep.Full.Mmap
+import ZigLean.Sep.Full.Share
 import ZigLean.Sep.Full.ThreadLoop
 import ZigLean.Sep.Full.Tick
 
@@ -29,6 +30,12 @@ variable {T : Type} [Enc T] {q : Ptr} {a k al : Nat} {A S : Nat} {K' : BlockKind
 /-- **Load** of a typed value (`pts`) in a thread. -/
 theorem load {v : T} (hn : 0 < Enc.size T) :
     FTTotalTriple (up (pts q a v)) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ up (pts q a v)) := by
+  fsym
+
+/-- **Load** of a shared typed value (`spts`, a read share) in a thread: the sequential `sload`
+with the locality provider `ThreadLocal.sload` (`Full/Share.lean`). -/
+theorem sload {v : T} {q' : Frac} (hn : 0 < Enc.size T) :
+    FTTotalTriple (spts q a q' v) (Zig.load T a q) (fun x => ⟪x = v⟫ ⋆ spts q a q' v) := by
   fsym
 
 /-- **Store** of a typed value (`pts`) in a thread. -/

@@ -21,8 +21,9 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   `rsum part held` (`FLock.own`; a joined thread owns nothing).
 - **The invariant** (`FLock.Inv G rX m`): the word's invariant at the threads' places
   (`LockWord.WInv`); the threads' parts and the rest (`FOwned`), where the rest is the word's cells
-  (`wordR`), the free lock's resource `rL` (with `R`, and each access to it happened before every
-  thread that has not ended or before the newest release of the word: `LockWord.Owns`; `rnil`
+  (`wordR`), the free lock's resource `rL` (with `R`, and each access to its exclusive bytes and
+  each write to its partial read shares happened before every thread that has not ended or
+  before the newest release of the word: `LockWord.OwnsRes`; `rnil`
   while a thread holds the lock) and the protocol's own rest `rX` (other sync objects, read-shared
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
@@ -272,7 +273,7 @@ def Free (G : ThreadId → γ) : Prop := LockWord.Free (L.pl G)
 
 /-- **`rL` is the free lock's resource** in the invariant's rest (`Inv.rest`): the threads' parts
 and the rest `wordR ⋆ rL ⋆ rX` (`FOwned`), `rL` off the word and apart from `rX`, with `R` and
-`LockWord.Owns` while the lock is free, and `rnil` while a thread holds it (so `rL` is the lock's
+`LockWord.OwnsRes` while the lock is free, and `rnil` while a thread holds it (so `rL` is the lock's
 resource only when the lock is free). -/
 abbrev FreeRes (G : ThreadId → γ) (rX : Res) (m : Mem) (rL : Res) : Prop :=
   FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧

@@ -750,13 +750,6 @@ theorem abytesAt_mine {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
   intro x h1 h2
   simp [FHeap.erase, abytesAt_cell hab hpb (l := (b, x)) ⟨rfl, h1, h2⟩]
 
-/-- The bytes of an owned word are in the resource's owned set (`Res.owned`). -/
-theorem abytesAt_owned {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
-    {tg : Option (Nat × Nat)} {r : Res} (hab : abytesAt p A S K bs tg r) {b : BlockId}
-    (hpb : p.block = some b) :
-    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + bs.size → r.owned (b, x) ≠ none := fun x h1 h2 =>
-  Res.owned_of_erase (abytesAt_mine hab hpb x h1 h2)
-
 /-- The bytes of an owned word are exclusive bytes of the resource (`Res.excl`). -/
 theorem abytesAt_excl {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {tg : Option (Nat × Nat)} {r : Res} (hab : abytesAt p A S K bs tg r) {b : BlockId}

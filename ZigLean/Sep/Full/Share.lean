@@ -27,8 +27,9 @@ states the share once, for every exclusive heap, and derives the byte and typed 
   `load_sbytesAt`, `@[fsym]` `sload`). A store or a free needs the byte exclusively, so no rule
   changes a byte a share reads.
 
-These rules are sequential (`FTotalTriple`). Several threads that read one byte at once need the
-race clocks of a partial share (slice F4).
+These rules are sequential (`FTotalTriple`). In a thread a typed share load is local
+(`ThreadLocal.sload`, slice F4: several threads may read one byte at once, `Mem.OwnsR`), so `fsym`
+applies `sload` there too.
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -309,14 +310,13 @@ theorem spts_owned {T : Type} [Enc T] {a : Nat} {v : T} {b : BlockId} (hpb : p.b
   rw [hs.2.2, Ghost.sharesOf_share, hfc, Option.elim_some, SCell.of_self]
   exact hq
 
-/-- **Load of a shared typed value in a thread** (`spts`, `@[fsym]`, §Read shares): the sequential
-rule (`FTotalTriple.sload`, `load_of_read` over `Mem.BytesRead`) is local to the thread
-(`ThreadLocal.loadOwned`): the share orders every write before the load, and other holders of
-the share may read the bytes meanwhile. The share stays. -/
-@[fsym] theorem FTTotalTriple.sload {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
-    FTTotalTriple (spts p a q v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ spts p a q v) :=
-  .ofSeq (FTotalTriple.sload hn) (ThreadLocal.loadOwned fun _ hpb _ hp _ h1 h2 =>
-    spts_owned hpb hp h1 h2)
+/-- **A load of a shared typed value is local to the thread** (`spts`, a locality provider,
+§Read shares): the share orders every write before the load, and other holders of the share may
+read the bytes meanwhile (`ThreadLocal.loadOwned`). So `fsym` applies the sequential `sload` in a
+thread (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), and the share stays. -/
+@[fsym_provider] theorem ThreadLocal.sload {T : Type} [Enc T] {a : Nat} {v : T} :
+    ThreadLocal (spts p a q v) (Zig.load T a p) :=
+  ThreadLocal.loadOwned fun _ hpb _ hp _ h1 h2 => spts_owned hpb hp h1 h2
 
 /-- **Shared bytes split** into two shares of the same bytes. -/
 theorem sbytesAt_split {q₁ q₂ : Frac} {r : Res} (h : sbytesAt p A S K bs (q₁.add q₂) r) :

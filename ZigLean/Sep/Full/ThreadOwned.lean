@@ -345,7 +345,8 @@ theorem part_noCur (ho : FOwned own rO m) {rR : Res}
 /-- **Thread `t`'s part and the rest, split anew**: a new part `o'` and rest `rO'` with the same
 sum as `t`'s part and the rest (e.g. a resource moves between them: in a two-lock product, the
 other lock's held resource, which one lock's view keeps in the rest and the other's in the
-part). The new part must be `t`'s (`Mem.Owns`); the other parts stay. -/
+part). The new part must be `t`'s (`Mem.OwnsRes`: a share it gathers into a whole one needs
+`Mem.Owns` of the byte, engine ledger #share-gather); the other parts stay. -/
 theorem move {o' rO' : Res} (ho : FOwned own rO m) (ht : t < m.threads.size)
     (hd : FHeap.Disjoint o'.heap rO'.heap) (he : rsum o' rO' = rsum (own t) rO)
     (hown : m.OwnsRes t o') : FOwned (upd own t o') rO' m := by

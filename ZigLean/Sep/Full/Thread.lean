@@ -17,8 +17,8 @@ It replaces the legacy `TTriple` (`ZigLean/Conc/Own.lean`).
 - **Race freedom** (`FStepIn rF.owned m m' rF.shared`): the frame, the other threads and the
   atomic locations over the frame stay; a new access touches no frame byte except a read of the
   frame's partial shares. Next to a byte the resource holds, the frame holds at most a partial share
-  (`Holds.frame_shared`), so a load of the resource's bytes is local (`ThreadLocal.loadOwned`,
-  `@[fsym]` `FTTotalTriple.sload` in `Share.lean`).
+  (`Holds.frame_shared`), so a load of the resource's bytes is local (`ThreadLocal.loadOwned`;
+  the locality provider `ThreadLocal.sload` in `Share.lean`).
 - Which bytes a resource holds is fixed by the memory and the frame (`Holds.owned_sub`), so an
   update in a thread gains no byte. Gathering partial shares of different owners into a whole share
   fails closed (engine ledger `share-gather`).
@@ -30,7 +30,7 @@ It replaces the legacy `TTriple` (`ZigLean/Conc/Own.lean`).
   library (`EUpd`, `Upd`, `know_intro`) apply in a thread unchanged (`FTTriple.eupd`, `upd`,
   `know_intro`): they are read in the memory without its recorded accesses (`Mem.noFp`), which
   holds the same resources.
-- **Ownership and race freedom** come from `ZigLean/Conc/Clock.lean` (`Mem.Owns`, `FStepIn`);
+- **Ownership and race freedom** come from `ZigLean/Conc/Clock.lean` (`Mem.Owns`, `Mem.OwnsR`, `FStepIn`);
   this module does not import the legacy layer, and no legacy thread triple is lifted. The thread
   rules of the memory primitives are built on `ZigLean/Sep/Full/ThreadStep.lean`.
 -/
@@ -165,6 +165,21 @@ theorem _root_.Zig.Mem.OwnsRes.upd {rF : Res} (ho : m.OwnsRes t r) (hh : Holds m
   ho.sub (fun _ hl => hh.excl_sub' hh' (hh'.live_of_owned (Res.owned_of_excl hl)).1 hl)
     fun _ hl => hh.owned_sub hh' (Res.owned_of_shared hl)
 
+/-- An exclusive byte of `r₁ ⋆ r₂` that `r₂` does not own at all is exclusive in `r₁`. -/
+theorem _root_.Zig.Full.Res.excl_of_sep_none {r₁ r₂ : Res} {l : Loc}
+    (h₂ : r₂.owned l = none)
+    (hl : Res.excl ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ l ≠ none) :
+    r₁.excl l ≠ none := by
+  have h0 : r₂.heap l = none ∧ ¬ (r₂.gh.share l).Pos := by
+    have : ¬ r₂.owned l ≠ none := fun h => h h₂
+    rw [Res.owned_ne] at this; grind
+  refine Res.excl_ne.mpr ?_
+  rcases Res.excl_ne.mp hl with e | e
+  · left; simpa [FHeap.union_apply, h0.1] using e
+  · right
+    rw [Ghost.add_share, (SCell.not_pos_iff.mp h0.2).eq, SCell.add_zero] at e
+    exact e
+
 /-- **The frame rule's ownership**: after a step of the thread on the part `rP` of `rP ⋆ rR`
 that ends with `rP'`, the thread owns `rP' ⋆ rR`. An exclusive byte of the sum is one of `rP'`,
 or a byte of `rR`, which the sum held exclusively before (`Holds.excl_sub'`: the frame `rF` is
@@ -183,14 +198,7 @@ theorem _root_.Zig.Mem.OwnsRes.frame {hF hR : Heap} {rF rP rP' rR : Res}
     · have hl₀ : Res.owned ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ l ≠ none :=
         (Res.owned_sep rfl rfl).mpr (.inr hR')
       exact (hh.excl_sub' hh' (hh.live_of_owned hl₀).1 hl) hn.2
-    · have hR0 : rR.heap l = none ∧ ¬ (rR.gh.share l).Pos := by
-        rw [Res.owned_ne] at hR'; grind
-      refine absurd hn.1 (Res.excl_ne.mpr ?_)
-      rcases Res.excl_ne.mp hl with e | e
-      · left; simpa [FHeap.union_apply, hR0.1] using e
-      · right
-        rw [Ghost.add_share, (SCell.not_pos_iff.mp hR0.2).eq, SCell.add_zero] at e
-        exact e
+    · exact Res.excl_of_sep_none (Classical.not_not.mp hR') hl hn.1
   · simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
     rcases (Res.owned_sep rfl rfl).mp (Res.owned_of_shared hl) with e | e
     · exact e hn.1
@@ -201,21 +209,6 @@ theorem _root_.Zig.Mem.OwnsRes.addGh_iff {h : FHeap} {k : Know} {a g : Ghost}
     (hb : g.share = fun _ => SCell.zero := by rfl) :
     m.OwnsRes t ⟨h, k, a.add g⟩ ↔ m.OwnsRes t ⟨h, k, a⟩ := by
   unfold Mem.OwnsRes; rw [Res.excl_addGh hb, Res.shared_addGh hb]
-
-/-- An exclusive byte of `r₁ ⋆ r₂` that `r₂` does not own at all is exclusive in `r₁`. -/
-theorem _root_.Zig.Full.Res.excl_of_sep_none {r₁ r₂ : Res} {l : Loc}
-    (h₂ : r₂.owned l = none)
-    (hl : Res.excl ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ l ≠ none) :
-    r₁.excl l ≠ none := by
-  have h0 : r₂.heap l = none ∧ ¬ (r₂.gh.share l).Pos := by
-    have : ¬ r₂.owned l ≠ none := fun h => h h₂
-    rw [Res.owned_ne] at this; grind
-  refine Res.excl_ne.mpr ?_
-  rcases Res.excl_ne.mp hl with e | e
-  · left; simpa [FHeap.union_apply, h0.1] using e
-  · right
-    rw [Ghost.add_share, (SCell.not_pos_iff.mp h0.2).eq, SCell.add_zero] at e
-    exact e
 
 /-- **Another thread keeps owning** a resource of the frame `rF` of a step in `rF.owned` that
 may read `rF.shared`: its exclusive bytes are exclusive in `rF` (`Res.excl_sep`), so no step

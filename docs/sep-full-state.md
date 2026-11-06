@@ -756,11 +756,11 @@ free stay exclusive (`OwnsPtr` needs cells), so no rule changes a byte that a sh
 thread a whole share is exclusive (`Res.excl`), so converting it to a cell and back needs no
 ordering premise; partial shares are only read (option R below).
 
-Next, in order: the race clocks for a partial share (several readers
-of one byte, ordered before a later exclusive acquire by the RwLock's state word RMWs); until
-then two choices stay conservative: a recorded access to the rest (`FOwned.recordRest`) needs
-that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the parts' and the
-rest's owned sets empty. Then `RwLockImpl` hands shared holders the protected resource at a
+The race clocks for a partial share (several readers of one byte, ordered before a later
+exclusive acquire by the RwLock's state word RMWs) are option R below. A recorded access to the
+rest (`FOwned.recordRest`) needs that no part holds the bytes exclusively (`Res.excl`), and a
+write also that no part holds a share of them; `FOwned.heap_empty` needs the parts' and the
+rest's owned sets empty. Next, `RwLockImpl` hands shared holders the protected resource at a
 fraction: the generic share above, `sheap H q` of the protected heap `H` (no RwLock-specific
 algebra). The free lock's fraction halves at each shared acquire (`sheap_add`,
 `Frac.half_add_half`), so the fractions need no bound on the readers; the native counters do
@@ -794,10 +794,11 @@ ownership of the cells. The layer moves to it in one step:
   a load of the resource's bytes reads only `hR`.
 - `FOwned.owns` is `∀ u < size, m.OwnsRes u (own u)`, and the free lock's resource is
   `LockWord.OwnsRes` (`LockWord.Owns … r.excl` and the write-only `LockWord.Owns … r.shared true`).
-- **Thread share load** (`@[fsym]` `FTTotalTriple.sload`, `ThreadLocal.loadOwned`): a load of a
-  byte the resource holds or reads (`spts`, a cell or a share) is local to the thread. Its read
-  ownership orders every write before the load (`Mem.OwnsR.noRace`), the other holders may read the
-  byte meanwhile, and the share stays.
+- **Thread share load** (`ThreadLocal.loadOwned`, the locality provider `ThreadLocal.sload`): a
+  load of a byte the resource holds or reads (`spts`, a cell or a share) is local to the thread, so
+  `fsym` applies the sequential `sload` in a thread (`FTTotalTriple.ofSeq`) with no thread copy of
+  it. Its read ownership orders every write before the load (`Mem.OwnsR.noRace`), the other holders
+  may read the byte meanwhile, and the share stays.
 
 **Gathering fails closed** (engine ledger `share-gather`). When two partial shares held by
 different owners become one whole share, the byte turns exclusive. It then needs every *read* of

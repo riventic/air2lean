@@ -10,7 +10,7 @@ import ZigLean.Sep.AllocSpec.Norm
 A concurrent function (`ConcM`, a tree of sync ops) runs in the calling thread. `CTriple P x Q`
 (`docs/sep-threads.md` §Decision R2) is a thread triple over the run tree `x n m`, stop by stop
 (`CTriple.Run`): from every memory in which the thread owns `P` (`Holds`, `Mem.FConc`,
-`Mem.Owns`, as `FTTriple`), each segment up to the next stop or the result keeps the frame and
+`Mem.OwnsRes`, as `FTTriple`), each segment up to the next stop or the result keeps the frame and
 races with nothing (`FStepIn`); at a stop the thread holds some part, and it goes on in **every**
 memory in which it still owns that part (other threads ran) with **every** answer that memory
 allows (`Sched.soloAnswer`: every choice of a `pick`, as `Proto.Step`). A stop that one thread
