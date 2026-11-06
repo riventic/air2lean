@@ -2356,12 +2356,11 @@ theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {σ : P
 /-- One schedule completes: under the oracle that always picks option 0, `parallelCounter 1` returns 4 within
 fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
 loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
-programs with loops; the loops over the 4 threads need 5 unfoldings). -/
+programs with loops; the loops over the 4 threads run 5 times). -/
 theorem parallelCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch bump parallelCounter
-  iterate 5 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  iterate 9 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 /-! ## Non-vacuity witnesses -/

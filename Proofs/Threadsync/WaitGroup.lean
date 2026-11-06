@@ -71,10 +71,7 @@ theorem waitGroup_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
       (@waitGroup ⟨Os.Env.example⟩) (mem0 σ)) = some 2 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch task waitGroup Thread_WaitGroup_wait Thread_ResetEvent_wait
-    Thread_ResetEvent_FutexImpl_wait Thread_ResetEvent_FutexImpl_waitUntilSet Thread_Mutex_lock
-    Zig.osUnfairLockC
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 end Threadsync.WG

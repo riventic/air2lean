@@ -1,7 +1,7 @@
 import Proofs.Handoff.Ops
 import Proofs.Sync.Cond
 import Proofs.Sync.Event
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.LockSteps
 
@@ -159,11 +159,12 @@ theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.Condition` handoff returns 7 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). It keeps the
-legacy tactic (ledger #run-witness-loop-names). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+`zig_run` set has unfolded its path (`docs/proof-tools.md`, concrete runs of programs with loops). -/
 theorem handoff_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (handoff ⟨⟩) (mem0 σ)) = some 7 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 end Sync.Handoff

@@ -133,18 +133,12 @@ theorem semaphoreCounter_safe (env : Env) (henv : env.spawn = .available) {σ : 
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the semaphore counter returns 4 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run
-(`decide +kernel`). A loop (`Zig.loop`, a `partial_fixpoint`) is not computed by the kernel: the
-proof unfolds the functions on the run's path that hold one (`delta`) and then every loop four
-times by its defining equation (`Zig.loop.eq_1`), more than any loop of this run takes, as in
-`tests/roadmap/sync-contracts/EventSet.lean`. -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+`zig_run` set has unfolded its path (`docs/proof-tools.md`, concrete runs of programs with loops). -/
 theorem semaphoreCounter_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (semaphoreCounter ⟨⟩) (mem0 σ)) = some 4 := by
   refine ⟨.fresh, ?_⟩
-  delta dispatch semaphoreCounter semWork semWork.loop4 Io_Semaphore_waitUncancelable
-    Io_Semaphore_waitUncancelable.loop5 Io_Semaphore_post Io_Mutex_lockUncancelable
-    Io_Condition_signal
-  iterate 4 (simp (config := { singlePass := true, maxSteps := 2000 }) only [Zig.loop.eq_1])
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
 end Sync.SemCounter

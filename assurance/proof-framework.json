@@ -715,12 +715,6 @@
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     },
     {
-      "path": "Proofs/Sync/Handoff.lean",
-      "tactic": "unroll_sched",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
       "path": "Proofs/Sync/RwLock.lean",
       "tactic": "unroll_sched",
       "count": 1,

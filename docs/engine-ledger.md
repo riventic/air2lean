@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 177 rows, 74 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 177 rows, 72 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -29,7 +29,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
 | [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
-| [9h](#row-9h) | unroll_solo: concrete counterexample runs | arena lane | `tests/roadmap/alloc-arena/ArenaObstruction.lean`, `tests/roadmap/proof-tools/Unroll.lean` | The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes. |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
@@ -89,7 +88,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [callocspec-partial-step-count](#row-callocspec-partial-step-count) | The allocator contract CAllocSpec is partial, so a client's exact step count holds only for runs that return | L8g/L8h (#562, coordinator decision 2026-11-04: accepted as a recorded obstruction) | - | - |
 | [fsym-forward-bool-fact](#row-fsym-forward-bool-fact) | fsym does not forward a hint term's Bool-equation fact, so a rule's autoParam guard cannot use it | S6 (#649, futex address validation) | `tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean` | Transitional: once fsym forwards such a fact, delete the `have hw := …` before each `fsym` in SepAuto.WPOsFutex, pass the term in the `fsym` list instead, and close this row. |
 | [fevent-live-exit](#row-fevent-live-exit) | A thread with FEvent's waiter role stays in the event word's live set after its last access | L11f review of PR646 (pass 2, cross-file angle) | - | - |
-| [run-witness-loop-names](#row-run-witness-loop-names) | Kernel run witnesses name the functions on the run's path to its loops, and the path differs between Zig versions and targets | L17 (retiring unroll_sched) | `Proofs/Sync/Handoff.lean`, `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/Mutex.lean`, `Proofs/Threadsync/Handoff.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Atomics/Stack.lean`, `Proofs/Threads/Counter.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Threadsync/WaitGroup.lean`, `tests/roadmap/sync-contracts/EventSet.lean`, `tests/roadmap/sync-contracts/Runtime.lean` | When the mechanism lands, every listed witness uses it: Sync/Handoff drops `unroll_sched` (then the tactic goes with its last use, docs/legacy-retirement.md section 5) and the others drop their hand-written `delta` lists. |
 | [waitgroup-impl-contract](#row-waitgroup-impl-contract) | No generic wait-group contract (`WaitGroupImpl`) on the full-state logic | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, "What has no replacement yet"). |
 | [mutex-impl-relaxed-witness](#row-mutex-impl-relaxed-witness) | No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock` | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when the witness is in tests and checked by its fixture's check script. |
 | [guard-lifeline-mirror](#row-guard-lifeline-mirror) | build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661 | P1c (elastic build-guard admission, PR #661) | `scripts/build-guard.py`, `tests/roadmap/build-budgets/test_guard.py`, `docs/build-budgets.md` | Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running build-guard process (`ps -eo pid,args \| grep build-guard.py`), its checkout (the script path when absolute, else the process's working directory: `readlink /proc/PID/cwd` on arc, `lsof -a -p PID -d cwd -Fn` on the Mac) contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row. |
@@ -113,6 +111,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [9e](#row-9e) | Memory use of plain fsym on arena resize | open |
 | [9f](#row-9f) | Returns closed by module EUpd lemmas (free_last_upd, free_other_upd, resize_shrink_upd, resize_grow_upd, re... | READY #260 |
 | [9g](#row-9g) | within goals as planner goals (fsym_entail) | READY #239 (fsym_entail on Within) |
+| [9h](#row-9h) | unroll_solo: concrete counterexample runs | closed by PR #697 (on the `zig_run` simp set of #690): ArenaObstruction `client_illegal`/`reset_client_run` and ListsPage's runs name only their own client (`unfold client vt`) and unfold the generated code with `simp only [zig_run]` (singlePass), so no translation's loop numbering appears in a proof; proof-tools/Unroll `even_six_solo` names only its own test definitions. |
 | [10](#row-10) | Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join) | not engine (library Full/Arr); note only |
 | [11](#row-11) | CTriple backend on top of FTTriple (T-ctriple | open (after #1); exact request below (2026-10-12, approved design R2, docs/sep-threads.md §T-ctriple) |
 | [12](#row-12) | Precondition planning: region atoms before size-dependent atoms | READY #250 |
@@ -202,6 +201,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [fsym-split-nested-struct-subst](#row-fsym-split-nested-struct-subst) | fsym's split of a user-structure fact leaves a stale local when a field is a structure whose split substitutes a local | closed by the branch claude/fsym-fvar: `destruct`'s structure branch takes each field from the fact as the previous field's substitution reintroduced it (`liveFVar?`). `Zig.SemCounter.U` is a structure again. Regression: SepAuto.Facts `nested_struct_subst`. |
 | [fsym-unknown-fvar-mutex-loop](#row-fsym-unknown-fvar-mutex-loop) | fsym leaves an unknown free variable on the macOS ThreadMutex lock loop body | closed by the branch claude/fsym-fvar: each branch of a split is walked with the substitutions of its own branch (`eachBranch`); the second branch's substitution of `g₀` had replaced the first's. The row's original call elaborates (checked); `loopD_body` is the shorter call without the `hset`/`hph`/`hok₀` glue, swap-built against the darwin translation. Regression: SepAuto.WP `sibling_values`. |
 | [word-ok-live-set](#row-word-ok-live-set) | Word.Ok asks every plain access to happen before every thread, so a whole-struct read next to a futex word breaks it | closed by PR646, which gives Word.Ok a live set |
+| [run-witness-loop-names](#row-run-witness-loop-names) | Kernel run witnesses name the functions on the run's path to its loops, and the path differs between Zig versions and targets | closed by PR #697 on the `zig_run` simp set of #690 (docs/proof-automation.md, kernel-run witnesses): every former workaround site unfolds the run's path with `zig_run` and names only hand-written definitions; `Sync.Handoff.handoff_completes` no longer uses `unroll_sched`. |
 | [fstepin-addrs](#row-fstepin-addrs) | FStepIn does not keep the blocks' addresses, so a futex key of another block is lost across a frame step | closed by PR #681: `FStepIn.addrs : m.SameAddrs m'` (ZigLean/Conc/Clock.lean) replaces the field `blocks` (now the theorem `FStepIn.blocks`), with the library lemmas `Mem.SameAddrs.refl/trans/of_blocks/of_push/of_set/size/addrIn_eq` and `Mem.sameAddrs_write` (ZigLean/Mem/Lemmas.lean) |
 
 ## Shared mechanisms
@@ -438,15 +438,13 @@ Request: `within` → planner: a `Within X P` goal is `fsym_entail`'s `EUpd P (X
 <a id="row-9h"></a>
 ### #9h unroll_solo: concrete counterexample runs
 
-Status: **open**. Requester: arena lane.
+Status: **closed**. Requester: arena lane.
 
-Progress: L16: `unroll_solo` and Full/Unroll are deleted. A concrete in-thread run needs no cut: `unfold` rewrites each `partial_fixpoint` definition and `Zig.loop` by its defining equation as far as the run goes, then `decide +kernel` computes it (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`; ListsPage rewrites by `Zig.loop.eq_1`). Remaining gap, why the row stays open: the unfold lists name generated definitions by hand (`heap_ArenaAllocator_alloc.loop21`, `heap_ArenaAllocator_deinit.loop9`), so a retranslation that renumbers loops needs the lists updated (it fails closed: the kernel gets stuck). Wanted: a name-independent way to unfold a run's loop-running definitions without a new tactic (e.g. a translator-emitted per-module equation set), which would also serve `unroll_sched`'s retirement
+Progress: closed by PR #697 (on the `zig_run` simp set of #690): ArenaObstruction `client_illegal`/`reset_client_run` and ListsPage's runs name only their own client (`unfold client vt`) and unfold the generated code with `simp only [zig_run]` (singlePass), so no translation's loop numbering appears in a proof; proof-tools/Unroll `even_six_solo` names only its own test definitions.
 
 Request: `unroll_solo` (Unroll.lean:56; users ArenaObstruction.lean:162, tests/roadmap/proof-tools/Unroll.lean): concrete counterexample runs, not program proofs. Proposal: a term-level use of `Unroll.expand` + `Sched.soloRun_apply_le` + `decide`, or a CTriple-backend mode; engine lane decides
 
-Workaround sites: `tests/roadmap/alloc-arena/ArenaObstruction.lean`, `tests/roadmap/proof-tools/Unroll.lean`
-
-Deletion plan: The hand-named unfold lists before `decide +kernel` (ArenaObstruction `client_illegal`/`reset_client_run`, proof-tools/Unroll `even_six_solo`) go when a name-independent unfolding of a run's loop-running definitions exists (no new tactic): each proof then names only its client, and the row closes.
+Deletion plan: Done (PR #697): the hand-named unfold lists before `decide +kernel` are gone; each proof names only its client.
 
 <a id="row-10"></a>
 ### #10 Full/Arr rules (arr_load/store/ptrProject, facts_arr, split/join)
@@ -2037,17 +2035,15 @@ Request: `FEvent.Live g := (wx g ∨ sx g) ∧ ¬ (ph g).Setting` takes the live
 <a id="row-run-witness-loop-names"></a>
 ### #run-witness-loop-names Kernel run witnesses name the functions on the run's path to its loops, and the path differs between Zig versions and targets
 
-Status: **open**. Requester: L17 (retiring unroll_sched).
+Status: **closed**. Requester: L17 (retiring unroll_sched).
 
-Note: The hand-written lists in `Proofs/` hold today for every translation that builds their files (checked with the theorem-inventory swap builds: 0.17.0 sync, 0.15.2 darwin and aarch64 threadsync, 0.15.2 atomics and threads).
+Note: The `zig_run` witnesses were built against every translation `lake build Proofs` runs them on: 0.16.0 linux, and the theorem-inventory swap builds (0.17.0 sync, 0.15.2 darwin and aarch64 threadsync, 0.15.2 atomics and threads), PR #697.
 
-Progress: open
+Progress: closed by PR #697 on the `zig_run` simp set of #690 (docs/proof-automation.md, kernel-run witnesses): every former workaround site unfolds the run's path with `zig_run` and names only hand-written definitions; `Sync.Handoff.handoff_completes` no longer uses `unroll_sched`.
 
 Request: Kernel run witnesses name the functions on the run's path to its loops, and that path differs between the translations `lake build Proofs` runs against (docs/proof-tools.md, concrete runs of programs with loops). The names are AIR loop ids (`f.loop<id>`) and anonymous-instance hashes, which a new compiler or std patch can change. `Sync.Handoff.handoff_completes` (Proofs/Sync/Handoff.lean) has no list at all: it reaches `Io.Condition`'s wait loops, which 0.16.0 holds in `Io_Condition_waitInner` and its body `loop23` (absent in 0.17.0) and 0.17.0 in `Io_Condition_waitUncancelable` and its body `loop22` (absent in 0.16.0), and `lake build Proofs` runs against the 0.17.0 sync translation (`0.17.0-linux-goldens`). It keeps `unroll_sched`, which finds the loops itself. Needed: a version-neutral way to reach a run's loops. Candidate: the opt-in `--proof-api` (docs/generated-code.md, stable proof interface) already emits `<B>_unfold` and `<B>_loop<k>_step` lemmas under names from the source identity and the loop's pre-order position, never AIR ids; tagging them with one simp set declared in ZigLean (with the model functions that hold a loop, `Zig.osUnfairLockC`) would make every witness `simp only [<set>, Zig.loop.eq_1]` with no names. Rejected: `when_defined` (legacy-to-retire) and `first | delta <0.16.0 names> | delta <0.17.0 names>` (version glue that the next release breaks again). Possible but weaker: moving the theorem out of `Proofs` into a 0.16.0-pinned fixture, as `mailbox_completes` moved to tests/roadmap/sync-contracts/Runtime.lean; it keeps the theorem but drops its 0.17.0 run.
 
-Workaround sites: `Proofs/Sync/Handoff.lean`, `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/Mutex.lean`, `Proofs/Threadsync/Handoff.lean`, `Proofs/Iogroup/Counter.lean`, `Proofs/Atomics/Stack.lean`, `Proofs/Threads/Counter.lean`, `Proofs/Sync/SemCounter.lean`, `Proofs/Threadsync/WaitGroup.lean`, `tests/roadmap/sync-contracts/EventSet.lean`, `tests/roadmap/sync-contracts/Runtime.lean`
-
-Deletion plan: When the mechanism lands, every listed witness uses it: Sync/Handoff drops `unroll_sched` (then the tactic goes with its last use, docs/legacy-retirement.md section 5) and the others drop their hand-written `delta` lists.
+Deletion plan: Done (PR #697): Sync/Handoff dropped `unroll_sched` (the tactic goes with its last use, docs/legacy-retirement.md section 5) and the others dropped their hand-written `delta` lists.
 
 <a id="row-waitgroup-impl-contract"></a>
 ### #waitgroup-impl-contract No generic wait-group contract (`WaitGroupImpl`) on the full-state logic
