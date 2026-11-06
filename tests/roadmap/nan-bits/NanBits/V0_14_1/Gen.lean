@@ -78,6 +78,8 @@ def arrayCast (p0 : Zig.F32) (p1 : Zig.F32) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] arrayCast
+
 structure constGlobalLocals where
   deriving Inhabited
 
@@ -90,6 +92,8 @@ def constGlobal  : Zig.MemM (BitVec 32) := do
     pure (.ret i0)) : Zig.MM constGlobalLocals constGlobalExit).run' (default : constGlobalLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] constGlobal
 
 structure constStoreLocals where
   deriving Inhabited
@@ -104,6 +108,8 @@ def constStore  : Zig.MemM (BitVec 32) := do
     pure (.ret i1)) : Zig.MM constStoreLocals constStoreExit).run' (default : constStoreLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] constStore
 
 structure copyBytesLocals where
   local3 : Zig.Ptr
@@ -149,6 +155,8 @@ def copyBytes (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] copyBytes
+
 structure finiteBitsLocals where
   deriving Inhabited
 
@@ -163,6 +171,8 @@ def finiteBits (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (BitVec 32) := do
     pure (.ret i4)) : Zig.MM finiteBitsLocals finiteBitsExit).run' (default : finiteBitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] finiteBits
 
 structure reloadIsNaNLocals where
   deriving Inhabited
@@ -181,6 +191,8 @@ def reloadIsNaN (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] reloadIsNaN
+
 structure storeLoadLocals where
   deriving Inhabited
 
@@ -196,6 +208,8 @@ def storeLoad (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] storeLoad
+
 structure storeLoad64Locals where
   deriving Inhabited
 
@@ -210,6 +224,8 @@ def storeLoad64 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.MemM (BitVec 64) := do
     pure (.ret i4)) : Zig.MM storeLoad64Locals storeLoad64Exit).run' (default : storeLoad64Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] storeLoad64
 
 structure structViewLocals where
   local2 : Zig.Ptr
@@ -235,6 +251,8 @@ def structView (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] structView
+
 structure sumBitsLocals where
   deriving Inhabited
 
@@ -249,6 +267,8 @@ def sumBits (p0 : Zig.F32) (p1 : Zig.F32) : Zig.MemM (BitVec 32) := do
     pure (.ret i4)) : Zig.MM sumBitsLocals sumBitsExit).run' (default : sumBitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] sumBits
 
 structure unionViewLocals where
   local2 : FU
@@ -267,6 +287,8 @@ def unionView (p0 : Zig.F32) (p1 : Zig.F32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] unionView
+
 structure vectorCastLocals where
   deriving Inhabited
 
@@ -281,5 +303,7 @@ def vectorCast (p0 : Zig.F32) (p1 : Zig.F32) : Zig.Result (BitVec 64) := do
     pure (.ret i4)) : Zig.M vectorCastLocals vectorCastExit).run' (default : vectorCastLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vectorCast
 
 end NanBits.V0_14_1

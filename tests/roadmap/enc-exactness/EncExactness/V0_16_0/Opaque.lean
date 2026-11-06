@@ -27,4 +27,6 @@ def allocatorWord (p0 : Zig.Allocator) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] allocatorWord
+
 end EncExactness.V0_16_0.Opaque

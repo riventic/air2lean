@@ -41,6 +41,8 @@ def lane1 (p0 : BitVec 16) : Zig.Result (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] lane1
+
 structure laneSumLocals where
   deriving Inhabited
 
@@ -61,6 +63,8 @@ def laneSum (p0 : BitVec 16) : Zig.MemM (BitVec 4) := do
     pure (.ret i9)) : Zig.MM laneSumLocals laneSumExit).run' (default : laneSumLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] laneSum
 
 structure setVectorLocals where
   local4 : Zig.Ptr
@@ -89,5 +93,7 @@ def setVector (p0 : BitVec 4) (p1 : BitVec 4) (p2 : BitVec 4) : Zig.MemM (BitVec
   Zig.free s4
   match e with
   | .ret v => pure v
+
+attribute [zig_run] setVector
 
 end PackedCasts.V0_14_1.VectorFields

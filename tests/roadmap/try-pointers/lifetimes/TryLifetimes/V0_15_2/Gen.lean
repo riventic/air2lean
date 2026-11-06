@@ -24,7 +24,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .reader (capture0, capture1) => [.ptr capture0, .ptr capture1]
   | .writer (capture0, _) => [.ptr capture0, .value]
@@ -49,6 +49,8 @@ def readPayload (p0 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (BitVec 8)) := do
       pure (.ret i7))) : Zig.MM readPayloadLocals readPayloadExit).run' (default : readPayloadLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readPayload
 
 structure readerLocals where
   deriving Inhabited
@@ -75,6 +77,8 @@ def reader (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] reader
 
 structure concurrentReadsLocals where
   cell : Zig.Ptr
@@ -139,6 +143,8 @@ def concurrentReads (p0 : BitVec 8) (p1 : Bool) : Zig.ConcM Tgt (Except Zig.ErrN
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] concurrentReads
+
 structure writePayloadLocals where
   deriving Inhabited
 
@@ -158,6 +164,8 @@ def writePayload (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Except Zig.ErrName (
       pure (.ret (.ok () : Except Zig.ErrName (Unit))))) : Zig.MM writePayloadLocals writePayloadExit).run' (default : writePayloadLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] writePayload
 
 structure writerLocals where
   deriving Inhabited
@@ -182,6 +190,8 @@ def writer (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] writer
 
 structure concurrentWritesLocals where
   c1 : Zig.Ptr
@@ -246,6 +256,8 @@ def concurrentWrites (p0 : BitVec 8) (p1 : BitVec 8) : Zig.ConcM Tgt (Except Zig
   match e with
   | .ret v => pure v
 
+attribute [zig_run] concurrentWrites
+
 structure danglingPayloadLocals where
   deriving Inhabited
 
@@ -279,6 +291,8 @@ def danglingPayload (p0 : Zig.Allocator) (p1 : BitVec 8) : Zig.MemM (Except Zig.
         pure (.ret i18)))) : Zig.MM danglingPayloadLocals danglingPayloadExit).run' (default : danglingPayloadLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] danglingPayload
 
 structure freeOnErrorLocals where
   deriving Inhabited
@@ -324,6 +338,8 @@ def freeOnError (p0 : Zig.Allocator) (p1 : BitVec 8) (p2 : Bool) : Zig.MemM (Exc
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] freeOnError
+
 structure racingAliasesLocals where
   cell : Zig.Ptr
   out : Zig.Ptr
@@ -368,6 +384,8 @@ def racingAliases (p0 : BitVec 8) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 8)
   match e with
   | .ret v => pure v
 
+attribute [zig_run] racingAliases
+
 structure readDanglingLocals where
   deriving Inhabited
 
@@ -390,6 +408,8 @@ def readDangling (p0 : Zig.Allocator) (p1 : BitVec 8) : Zig.MemM (Except Zig.Err
   match e with
   | .ret v => pure v
 
+attribute [zig_run] readDangling
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .reader a =>
@@ -398,5 +418,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .writer a =>
     let (capture0, capture1) := a
     discard (Zig.ConcM.liftMem (writer capture0 capture1))
+
+attribute [zig_run] dispatch
 
 end TryLifetimes.V0_15_2

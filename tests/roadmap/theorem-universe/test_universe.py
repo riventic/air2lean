@@ -481,11 +481,16 @@ class ReplayTests(unittest.TestCase):
             assumptions.kernel_replay(digests, self.toolchain, '', None, lake)
         self.assertEqual(self.checked(), ['Lib', 'Lib'])
 
-    def test_gate_scripts_keep_their_replay_cache_in_the_run_directory(self):
+    def test_fixture_scripts_keep_their_replay_cache_in_the_run(self):
+        # These scripts audit their Lake modules through `fixtures.py audit`, whose replay cache is
+        # its own run directory's file or the fixture-checks run's (AIR2LEAN_FIXTURE_REPLAY_CACHE),
+        # never one shared across runs; none of them passes a cache of its own.
+        fixtures = (ROOT / 'scripts/fixtures.py').read_text()
+        self.assertIn('os.environ.get("AIR2LEAN_FIXTURE_REPLAY_CACHE") or work / "replay-cache.json"', fixtures)
         for script in ('nan-bits', 'enc-exactness', 'packed-casts', 'try-pointers/lifetimes'):
             text = (ROOT / 'tests/roadmap' / script / 'check.sh').read_text()
-            self.assertIn('--replay-cache "$work/replay-cache.json"', text, script)
-            self.assertIn('work=$(mktemp -d', text, script)
+            self.assertIn('scripts/fixtures.py audit', text, script)
+            self.assertNotIn('--replay-cache', text, script)
 
 
 class LakeExtractionTests(unittest.TestCase):

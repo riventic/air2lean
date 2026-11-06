@@ -53,6 +53,8 @@ def boolByte (p0 : Bool) : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] boolByte
+
 structure e24SetPadLocals where
   deriving Inhabited
 
@@ -69,6 +71,8 @@ def e24SetPad (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] e24SetPad
+
 structure i10StoreBytesLocals where
   deriving Inhabited
 
@@ -83,6 +87,8 @@ def i10StoreBytes (p0 : BitVec 10) : Zig.MemM (BitVec 16) := do
     pure (.ret i3)) : Zig.MM i10StoreBytesLocals i10StoreBytesExit).run' (default : i10StoreBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] i10StoreBytes
 
 structure i10ZeroPadLocals where
   deriving Inhabited
@@ -99,6 +105,8 @@ def i10ZeroPad (p0 : BitVec 16) : Zig.MemM (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] i10ZeroPad
+
 structure i24RoundTripLocals where
   deriving Inhabited
 
@@ -113,6 +121,8 @@ def i24RoundTrip (p0 : BitVec 24) : Zig.MemM (BitVec 32) := do
     pure (.ret i3)) : Zig.MM i24RoundTripLocals i24RoundTripExit).run' (default : i24RoundTripLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] i24RoundTrip
 
 structure i24ZeroPadLocals where
   deriving Inhabited
@@ -129,6 +139,8 @@ def i24ZeroPad (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] i24ZeroPad
+
 structure u24SetPadLocals where
   deriving Inhabited
 
@@ -144,6 +156,8 @@ def u24SetPad (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] u24SetPad
+
 structure u24StoreBytesLocals where
   deriving Inhabited
 
@@ -158,5 +172,7 @@ def u24StoreBytes (p0 : BitVec 24) : Zig.MemM (BitVec 32) := do
     pure (.ret i3)) : Zig.MM u24StoreBytesLocals u24StoreBytesExit).run' (default : u24StoreBytesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] u24StoreBytes
 
 end EncExactness.V0_15_2

@@ -144,6 +144,8 @@ def bytesToU (p0 : Vector (BitVec 8) 2) : Zig.Result (U) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bytesToU
+
 structure f16ToULocals where
   deriving Inhabited
 
@@ -156,6 +158,8 @@ def f16ToU (p0 : Zig.F16) : Zig.Result (U) := do
     pure (.ret i1)) : Zig.M f16ToULocals f16ToUExit).run' (default : f16ToULocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] f16ToU
 
 structure floatFieldLocals where
   local1 : R
@@ -178,6 +182,8 @@ def floatField (p0 : Zig.F16) : Zig.Result (BitVec 40) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] floatField
+
 structure floatInPlaceLocals where
   deriving Inhabited
 
@@ -195,6 +201,8 @@ def floatInPlace (p0 : Zig.F16) : Zig.MemM (Zig.F16) := do
     pure (.ret i6)) : Zig.MM floatInPlaceLocals floatInPlaceExit).run' (default : floatInPlaceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] floatInPlace
 
 structure floatKeepsNeighboursLocals where
   deriving Inhabited
@@ -220,6 +228,8 @@ def floatKeepsNeighbours  : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] floatKeepsNeighbours
+
 structure floatsToIntLocals where
   deriving Inhabited
 
@@ -232,6 +242,8 @@ def floatsToInt (p0 : Vector (Zig.F32) 2) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M floatsToIntLocals floatsToIntExit).run' (default : floatsToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] floatsToInt
 
 structure halfToF16Locals where
   deriving Inhabited
@@ -246,6 +258,8 @@ def halfToF16 (p0 : Half) : Zig.Result (Zig.F16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] halfToF16
+
 structure intToFloatsLocals where
   deriving Inhabited
 
@@ -258,6 +272,8 @@ def intToFloats (p0 : BitVec 64) : Zig.Result (Vector (Zig.F32) 2) := do
     pure (.ret i1)) : Zig.M intToFloatsLocals intToFloatsExit).run' (default : intToFloatsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] intToFloats
 
 structure intToRLocals where
   deriving Inhabited
@@ -272,6 +288,8 @@ def intToR (p0 : BitVec 40) : Zig.Result (R) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] intToR
+
 structure intToVecLocals where
   deriving Inhabited
 
@@ -284,6 +302,8 @@ def intToVec (p0 : BitVec 64) : Zig.Result (Zig.Vec (Zig.F32) 2) := do
     pure (.ret i1)) : Zig.M intToVecLocals intToVecExit).run' (default : intToVecLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] intToVec
 
 structure makeRLocals where
   local2 : R
@@ -306,6 +326,8 @@ def makeR (p0 : BitVec 4) (p1 : Zig.F16) : Zig.Result (BitVec 40) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] makeR
+
 structure rToIntLocals where
   deriving Inhabited
 
@@ -318,6 +340,8 @@ def rToInt (p0 : R) : Zig.Result (BitVec 40) := do
     pure (.ret i1)) : Zig.M rToIntLocals rToIntExit).run' (default : rToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] rToInt
 
 structure setFloatLocals where
   deriving Inhabited
@@ -335,6 +359,8 @@ def setFloat  : Zig.MemM (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setFloat
+
 structure setUnionLocals where
   deriving Inhabited
 
@@ -351,6 +377,8 @@ def setUnion  : Zig.MemM (BitVec 16) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setUnion
+
 structure uToBytesLocals where
   deriving Inhabited
 
@@ -364,6 +392,8 @@ def uToBytes (p0 : U) : Zig.Result (Vector (BitVec 8) 2) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] uToBytes
+
 structure uToHalfLocals where
   deriving Inhabited
 
@@ -376,6 +406,8 @@ def uToHalf (p0 : U) : Zig.Result (Half) := do
     pure (.ret i1)) : Zig.M uToHalfLocals uToHalfExit).run' (default : uToHalfLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] uToHalf
 
 structure unionFloatViewLocals where
   deriving Inhabited
@@ -391,6 +423,8 @@ def unionFloatView  : Zig.MemM (BitVec 16) := do
     pure (.ret i2)) : Zig.MM unionFloatViewLocals unionFloatViewExit).run' (default : unionFloatViewLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unionFloatView
 
 structure unionHalfHiLocals where
   deriving Inhabited
@@ -408,6 +442,8 @@ def unionHalfHi  : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] unionHalfHi
+
 structure unionKeepsALocals where
   deriving Inhabited
 
@@ -424,6 +460,8 @@ def unionKeepsA  : Zig.MemM (BitVec 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] unionKeepsA
+
 structure vecToIntLocals where
   deriving Inhabited
 
@@ -437,6 +475,8 @@ def vecToInt (p0 : Zig.Vec (Zig.F32) 2) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] vecToInt
+
 structure wToIntLocals where
   deriving Inhabited
 
@@ -449,6 +489,8 @@ def wToInt (p0 : W) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M wToIntLocals wToIntExit).run' (default : wToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] wToInt
 
 structure wideFloatLocals where
   deriving Inhabited
@@ -466,5 +508,7 @@ def wideFloat (p0 : Zig.F32) : Zig.MemM (Zig.F32) := do
     pure (.ret i5)) : Zig.MM wideFloatLocals wideFloatExit).run' (default : wideFloatLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] wideFloat
 
 end PackedCasts.V0_16_0.PackedCasts

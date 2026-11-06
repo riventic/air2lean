@@ -106,6 +106,8 @@ def fhToBytes (p0 : FH) : Zig.Result (Vector (BitVec 8) 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] fhToBytes
+
 structure floatsToNestedLocals where
   deriving Inhabited
 
@@ -118,6 +120,8 @@ def floatsToNested (p0 : Vector (Zig.F16) 2) : Zig.Result (Vector (Vector (BitVe
     pure (.ret i1)) : Zig.M floatsToNestedLocals floatsToNestedExit).run' (default : floatsToNestedLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] floatsToNested
 
 structure halvesToVecLocals where
   deriving Inhabited
@@ -132,6 +136,8 @@ def halvesToVec (p0 : Vector (Zig.F16) 2) : Zig.Result (Zig.Vec (BitVec 8) 4) :=
   match e with
   | .ret v => pure v
 
+attribute [zig_run] halvesToVec
+
 structure intToModesLocals where
   deriving Inhabited
 
@@ -144,6 +150,8 @@ def intToModes (p0 : BitVec 8) : Zig.Result (Vector (Mode) 4) := do
     pure (.ret i1)) : Zig.M intToModesLocals intToModesExit).run' (default : intToModesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] intToModes
 
 structure intToNestedLocals where
   deriving Inhabited
@@ -158,6 +166,8 @@ def intToNested (p0 : BitVec 24) : Zig.Result (Vector (Vector (BitVec 4) 3) 2) :
   match e with
   | .ret v => pure v
 
+attribute [zig_run] intToNested
+
 structure intToNibsLocals where
   deriving Inhabited
 
@@ -170,6 +180,8 @@ def intToNibs (p0 : BitVec 18) : Zig.Result (Vector (Nib) 3) := do
     pure (.ret i1)) : Zig.M intToNibsLocals intToNibsExit).run' (default : intToNibsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] intToNibs
 
 structure modesToIntLocals where
   deriving Inhabited
@@ -184,6 +196,8 @@ def modesToInt (p0 : Vector (Mode) 4) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] modesToInt
+
 structure nestedToIntLocals where
   deriving Inhabited
 
@@ -196,6 +210,8 @@ def nestedToInt (p0 : Vector (Vector (BitVec 4) 3) 2) : Zig.Result (BitVec 24) :
     pure (.ret i1)) : Zig.M nestedToIntLocals nestedToIntExit).run' (default : nestedToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] nestedToInt
 
 structure nibblesToULocals where
   deriving Inhabited
@@ -210,6 +226,8 @@ def nibblesToU (p0 : Vector (BitVec 4) 4) : Zig.Result (U) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] nibblesToU
+
 structure nibsToIntLocals where
   deriving Inhabited
 
@@ -222,6 +240,8 @@ def nibsToInt (p0 : Vector (Nib) 3) : Zig.Result (BitVec 18) := do
     pure (.ret i1)) : Zig.M nibsToIntLocals nibsToIntExit).run' (default : nibsToIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] nibsToInt
 
 structure uToNibblesLocals where
   deriving Inhabited
@@ -236,6 +256,8 @@ def uToNibbles (p0 : U) : Zig.Result (Vector (BitVec 4) 4) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] uToNibbles
+
 structure unionsToIntLocals where
   deriving Inhabited
 
@@ -249,6 +271,8 @@ def unionsToInt (p0 : Vector (U) 2) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] unionsToInt
+
 structure vecToHalvesLocals where
   deriving Inhabited
 
@@ -261,5 +285,7 @@ def vecToHalves (p0 : Zig.Vec (Zig.F16) 2) : Zig.Result (Vector (Half) 2) := do
     pure (.ret i1)) : Zig.M vecToHalvesLocals vecToHalvesExit).run' (default : vecToHalvesLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] vecToHalves
 
 end PackedCasts.V0_17_0.Logical017
