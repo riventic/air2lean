@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 175 rows, 73 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 176 rows, 74 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -94,6 +94,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [waitgroup-impl-contract](#row-waitgroup-impl-contract) | No generic wait-group contract (`WaitGroupImpl`) on the full-state logic | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when `WaitGroupImpl` is on main with 0.15.2's `Thread.WaitGroup` proved against it and `Proofs/Threadsync/WaitGroup.lean` uses only the contract (docs/thread-specs.md, "What has no replacement yet"). |
 | [mutex-impl-relaxed-witness](#row-mutex-impl-relaxed-witness) | No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock` | L21 (retirement of ZigLean/Conc/Spec, PR677) | - | Closes when the witness is in tests and checked by its fixture's check script. |
 | [guard-lifeline-mirror](#row-guard-lifeline-mirror) | build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661 | P1c (elastic build-guard admission, PR #661) | `scripts/build-guard.py`, `tests/roadmap/build-budgets/test_guard.py`, `docs/build-budgets.md` | Delete `Admission.mirror` and `mirror_lifeline` (and the `lifeline_aware` mark, which only it reads), the mirror part of `test_the_lifeline_goes_ahead_of_every_exclusive_ticket` and the mirror paragraph of docs/build-budgets.md#elastic-workloads in the first PR after 2026-11-19 whose check shows no older guard running: at one main-health run, on arc and on the Mac, for every running build-guard process (`ps -eo pid,args \| grep build-guard.py`), its checkout (the script path when absolute, else the process's working directory: `readlink /proc/PID/cwd` on arc, `lsof -a -p PID -d cwd -Fn` on the Mac) contains #661's merge commit (`git -C <checkout> merge-base --is-ancestor <merge> HEAD`). Then close this row. |
+| [two-lock-product](#row-two-lock-product) | The generic two-lock product over FLock (lock nesting) is not built yet | L8q/L8r lock-order work (Step 2), #693; parked by the coordinator 2026-11-05 | - | Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree. |
 
 ## Closed rows
 
@@ -2092,3 +2093,16 @@ Note: Rejected: option B, a field `a : Nat` (the word's address) in `LockWord` w
 Progress: closed by PR #681: `FStepIn.addrs : m.SameAddrs m'` (ZigLean/Conc/Clock.lean) replaces the field `blocks` (now the theorem `FStepIn.blocks`), with the library lemmas `Mem.SameAddrs.refl/trans/of_blocks/of_push/of_set/size/addrIn_eq` and `Mem.sameAddrs_write` (ZigLean/Mem/Lemmas.lean)
 
 Request: With the futex queue keyed by `FutexKey` (#668), a lock word's invariant names keys: its own (`Mem.wordKey`), and in `LockWord.nest` the keys of other blocks' words (a nested lock's word). `FStepIn` kept only `m.blocks.size ≤ m'.blocks.size`. The word's own key still transports through its cells (the step keeps the word's bytes and block), but a key of another block does not. Counterexample: a frame step by the lock's owner that replaces block `b'` (another lock's word, not in the frame) by a block at another address satisfies every old `FStepIn` field, and `LockWord.nest k` read in `m` (`m.keyAt ⟨b', o⟩ false = some k`) is false in `m'`; so `WInv` is not stable under a frame step and the FLock rules cannot be proved. The model never does this (a block never moves; every `addr :=` is a new block: `Mem.afterAlloc`, a mapping, a moving `mremap`), so the step relation can say it. Needed: a field `addrs : m.SameAddrs m'` of `FStepIn`, discharged at every producer by general lemmas.
+
+<a id="row-two-lock-product"></a>
+### #two-lock-product The generic two-lock product over FLock (lock nesting) is not built yet
+
+Status: **open**. Requester: L8q/L8r lock-order work (Step 2), #693; parked by the coordinator 2026-11-05.
+
+Note: Not unsound: no client relies on a two-lock product yet; a nesting client today proves its own `U` (`Fits.nap`/`unnap` hypotheses).
+
+Progress: PARTLY DONE. Landed: `Fits.stable` gets the step's `FLock.Transfer` (decision (a), #696); `Holds.regroup`, `FOwned.move` (ThreadOwned.lean) and `FLock.Pair`/`Pair.symm`/`part_ba`/`Pair.otherInv` (LockPair.lean, #693). PARKED (coordinator, 2026-11-05: finish open work, start nothing new): (1) the product invariant: one lock's rest is the other's word, the other's resource (free or held) and a common rest, with the `Off` facts and their mirror; at A's acquire B's `FOwned` is rebuilt from `Transfer`'s `A.FreeRes G rX m h` by moving each B-held resource into its holder's part (`FOwned.move`), because `Res.know`/`gh` do not cancel, so an existential free resource in `U` cannot be matched to `A.Inv`'s witness; per-witness forms of `Inv.restIn`/`lockResIn` (Word.lean) help; (2) the FLock version of `Sem.Inv.partTick`; (3) `waitNest` at FLock level; (4) a two-mutex client fixture over `MutexImpl`, generic over every `MutexImpl`; (5) the product API on #637 (RwLockImpl).
+
+Request: A thread that holds one lock while it runs another lock's code (a lock order, RwLockImpl's writer, hand-over-hand) needs both locks' invariants at once over one ghost value, with each lock's held resource placed in the other lock's rest, proved once for every pair of `FLock`s and every `MutexImpl`.
+
+Deletion plan: Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree.
