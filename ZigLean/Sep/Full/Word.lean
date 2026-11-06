@@ -375,18 +375,18 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
   have hXY := FHeap.disjoint_union_right.mp hLX
   have hLW : ∀ l, W.In l → rL.heap l = none := fun l hl =>
     (hXY.1 l).resolve_right (cellsAt_some hl (hw.cellIn hl))
-  have hframe := hs (rsum (L.wordR m) rL).heap.erase (fun x h1 h2 => by
-    simp only [FHeap.erase, FHeap.union_apply,
-      cellsAt_none (fun h => hnw (W.b, x) h ⟨rfl, h1, h2⟩), hLW (W.b, x) ⟨rfl, h1, h2⟩]
-    rfl)
+  -- `rL` owns no byte of `W`: the rest has them as cells (`rest_owned_off`)
+  have hframe := hs (rsum (L.wordR m) rL).owned (fun x h1 h2 => by
+    have hin : W.In (W.b, x) := ⟨rfl, h1, h2⟩
+    refine Classical.byContradiction fun hn => ((Res.owned_sep rfl rfl).mp hn).elim
+      (· (cellsAt_owned_none fun h => hnw _ h hin)) (· (rest_owned_off ho ?_ (hLW _ hin)))
+    intro e
+    simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
+    exact cellsAt_some hin (hw.cellIn hin) e.2.2.1)
   have hframeL : ∀ x, L.o ≤ x → x < L.o + 4 →
-      (rsum (L.wordR m) rL).heap.erase (L.b, x) ≠ none := by
-    intro x h1 h2
-    have hcell := cellsAt_some (m := m) (W := L.In) ⟨rfl, h1, h2⟩ (hi.w.blk.cell h1 h2)
-    simp only [FHeap.erase, FHeap.union_apply]
-    cases he : (L.wordR m).heap (L.b, x) with
-    | none => exact (hcell he).elim
-    | some fc => simp
+      (rsum (L.wordR m) rL).owned (L.b, x) ≠ none := fun x h1 h2 => Res.owned_of_heap fun he => by
+    simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at he
+    exact cellsAt_some (m := m) (W := L.In) ⟨rfl, h1, h2⟩ (hi.w.blk.cell h1 h2) he.1
   have hwi := hi.w.stepIn hframe hframeL (fun x h1 h2 => by rw [hLcells x h1 h2])
   have hWw : FHeap.Disjoint (W.cellsR m).heap (L.wordR m).heap := fun l => by
     by_cases hl : W.In l
@@ -423,10 +423,8 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
   refine ⟨hwi, ⟨rL, ho', hLoff, FHeap.disjoint_union_right.mpr ⟨hLW', hXY.2⟩,
     fun hfree => ?_, hnF⟩, LockWord.off_erase.mpr fun l hl => ?_, hi.pdisj, hi.idle, hi.res⟩
   · obtain ⟨hR, hO⟩ := hF hfree
-    refine ⟨hR, hO.stepIn hframe (fun l hl => ?_) hframeL
+    exact ⟨hR, hO.stepIn hframe (fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)) hframeL
       (fun i l hl => (hi.w.loc.ok i l hl).1)⟩
-    simp only [FHeap.erase, FHeap.union_apply] at hl ⊢
-    cases (L.wordR m).heap l <;> simp_all
   · have hoff := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at hoff ⊢
     exact ⟨cellsAt_none fun h => hnw l hl h, hoff.2⟩

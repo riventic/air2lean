@@ -123,7 +123,7 @@ theorem Holds.congrMem {m m' : Mem} {r rF : Res} (hb : m'.blocks = m.blocks)
   obtain ⟨hd, hm, hkn, hkF, hg, ht, hcf, hma⟩ := hh
   refine ⟨hd, ?_, e3 ▸ hkn, e3 ▸ hkF, hg, fun x => ?_, fun x hx => hcf x (by rw [← hb]; exact hx),
     hma.keep hk⟩
-  · unfold FMatch; rw [e1, e2]; exact hm
+  · exact hm.of_whole (by unfold FMatch; rw [e1, e2]; exact hm.whole) fun _ => id
   · have := ht x; unfold ECell.TrueIn at this ⊢; simpa only [hb] using this
 
 /-- **A change of the counter cell with the stack states** (`GOk.reAC`): a memory with the same
@@ -134,13 +134,17 @@ theorem Holds.reAC {m m' : Mem} {r rF : Res} {g gF : Ghost} (hh : Holds m r rF)
     (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
     (hl : (g.add gF).led = (r.gh.add rF.gh).led) (hx : (g.add gF).extent = (r.gh.add rF.gh).extent)
     (hc : (g.add gF).cl = (r.gh.add rF.gh).cl) (hv : (g.add gF).ac.Valid)
-    (hM : MemAuth m' (g.add gF).ac) : Holds m' ⟨r.heap, r.know, g⟩ ⟨rF.heap, rF.know, gF⟩ := by
+    (hM : MemAuth m' (g.add gF).ac)
+    (hs : (g.add gF).share = (r.gh.add rF.gh).share := by
+      funext _; simp +zetaDelta [Ghost.add_share, Ghost.ofAC, Ghost.cur]) :
+    Holds m' ⟨r.heap, r.know, g⟩ ⟨rF.heap, rF.know, gF⟩ := by
   have e1 : m'.heap = m.heap := by funext ⟨x, o⟩; simp only [Mem.heap, hb]
   have e2 : shapes m' = shapes m := by simp only [shapes, ha]
-  have e3 : m'.kn = m.kn := by funext f; cases f <;> simp only [Mem.kn, hb]
   obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
-  refine ⟨hd, ?_, e3 ▸ hkn, e3 ▸ hkF, hg.reAC hb hl hx hc hv hM⟩
-  unfold FMatch; rw [e1, e2]; exact hm
+  have e3 : m'.kn = m.kn := by funext f; cases f <;> simp only [Mem.kn, hb]
+  have hm' := hm.reShare hs
+  refine ⟨hd, hm'.of_whole ?_ fun _ => id, e3 ▸ hkn, e3 ▸ hkF, hg.reAC hb hl hx hc hv hM⟩
+  unfold FMatch; rw [e1, e2]; exact hm'.whole
 
 /-- **A scheduler stop** (only `current` changes) keeps what a memory holds when no resource
 holds the running thread's token `cur` (`MemAuth.stop`). -/
@@ -308,7 +312,8 @@ theorem Holds.write {m : Mem} {r rF : Res} {b : BlockId} {blk : Block} {o : Nat}
     rintro ⟨x, y⟩ ⟨rfl, h1, h2⟩
     have := hown (y - o) (by omega)
     rwa [show o + (y - o) = y by omega] at this
-  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩, hh.know.trans hkm, hh.knowF.trans hkm,
+  refine ⟨fun l => ?_, hh.heap.of_whole ⟨fun l => ?_, fun l fc hfc => ?_⟩ fun l hl => ?_,
+    hh.know.trans hkm, hh.knowF.trans hkm,
     hh.ghost.keep (m' := m.write b blk o bs')
       (KeepsExt.set (nb := { blk with bytes := writeBytes blk.bytes o bs' }) hb rfl
         (writeBytes_size _ _ _ hn) rfl rfl)
@@ -327,7 +332,7 @@ theorem Holds.write {m : Mem} {r rF : Res} {b : BlockId} {blk : Block} {o : Nat}
       rw [hc.1, hb] at hb'; cases hb'
       simp only [ite_eq_left hc, FHeap.union_apply, Res.writeAt, hfc, Option.map_some, Option.some_or,
         Cell.norm, ha, hk]
-    · have hF := hh.heap.1 l
+    · have hF := hh.heap.whole.1 l
       simp only [ite_eq_right hc, FHeap.union_apply, Res.writeAt] at hF ⊢
       exact hF
   · -- tags: the layout and every cell's tag stay
@@ -335,12 +340,15 @@ theorem Holds.write {m : Mem} {r rF : Res} {b : BlockId} {blk : Block} {o : Nat}
     simp only [FHeap.union_apply, Res.writeAt] at hfc
     split at hfc
     · cases e : r.heap l with
-      | none => rw [e, Option.map_none, Option.none_or] at hfc; exact hh.tagF hfc
+      | none => exact hh.heap.whole.2 l fc (by simpa [FHeap.union_apply, e] using hfc)
       | some fc₀ =>
-        rw [e, Option.map_some, Option.some_or, Option.some.injEq] at hfc
+        rw [e, Option.map_some, Option.some_or, Option.some_or, Option.some.injEq] at hfc
         subst hfc
-        exact hh.heap.2 l fc₀ (by simp [e])
-    · exact hh.heap.2 l fc hfc
+        exact hh.heap.tag (l := l) (fc := fc₀) (by simp [e])
+    · exact hh.heap.whole.2 l fc (by simpa [FHeap.union_apply] using hfc)
+  · -- no new location
+    simp only [FHeap.union_apply, Res.writeAt] at hl ⊢
+    split at hl <;> cases e : r.heap l <;> simp_all
 
 /-- Owned bytes after a write of `bs'` at byte `k` of them: `writeBytes bs k bs'`. -/
 theorem up_bytesAt_writeAt {r : Res} {b : BlockId} {k : Nat} {bs' : Array Byte}
@@ -864,6 +872,7 @@ theorem Ghost.exts_extOne (b : BlockId) (S : Nat) (K : BlockKind) :
   · funext x; simp only [Ghost.atExt, Ghost.exts, extOne]; split <;> simp_all
   · funext x y; simp [Ghost.atExt, Ghost.exts]
   · simp [Ghost.atExt, Ghost.exts]
+  · rfl
 
 end Full
 end Zig

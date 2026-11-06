@@ -134,14 +134,14 @@ theorem write_newest_aptsE {α : Type} [Enc α] [LawfulEnc α] (hα : Enc.size �
       else tagOf (shapes m₀) b' x = none ∨ tagOf (shapes m₀) b' x = tagOf (shapes m) b' x)
     (hld : m.LiveLayout) (hpos : 0 < (m₀.atomics[li]!).msgs.size) (new : α) :
     ∀ M₂ : Mem, M₂.atomics = m₀.atomics → M₂.blocks = m.blocks → m.Aux M₂ →
-      FStepIn rF.heap.erase m M₂ →
+      FStepIn rF.owned m M₂ →
       ∀ msg : Msg, msg.bytes = Enc.encode new → M₂.MsgCovAt li msg →
       ∃ r', Holds (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
           M₂.nextMsg) r' rF ∧ aptsE p new r' ∧
         ShapesWF (shapes (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li
           M₂.nextMsg)) ∧
         (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg).LiveLayout ∧
-        FStepIn rF.heap.erase m
+        FStepIn rF.owned m
           (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) ∧
         m.NoRevive (observeM (insertM M₂ li ((m₀.atomics[li]!).msgs.size - 1 + 1) msg) li M₂.nextMsg) := by
   intro M₂ hat hbl hax hs₂ msg hmb hmc
@@ -161,14 +161,14 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
   refine FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp)
     fun m r rF hh hxr hxF hp hc ho hwf hld => ?_
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   have hpb := (access_eq hacc).1
   have hKb := (abytesAt_kind hxr hab hsz hpb hblk).1
   have hacc8 : m.access p 8 8 = pure (b, blk, p.off.toNat) := by simpa using hacc
   have hnr : NoRace m b p.off.toNat 8 .atomicRead := ho.noRace fun x h1 h2 =>
-    abytesAt_mine hab hpb x h1 (by rw [hsz]; exact h2)
+    abytesAt_owned hab hpb x h1 (by rw [hsz]; exact h2)
   have hcur : curBytes (m.recordAt b p.off.toNat 8 .atomicRead) b p.off.toNat 8 = bs := by
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
@@ -232,7 +232,7 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
         (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (by rw [hm₁]; rfl))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, A, S, K, bs, hal, hK, hsz, hv, by rw [← hsz]; exact hab'⟩,
         hwf, LDMono.of_blocks hblocks hld,
-        (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
+        (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead).trans
           (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
             (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl) hl),
         Mem.NoRevive.of_blocks hblocks⟩
@@ -329,13 +329,13 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
   refine FTTriple.of_step (fun _ _ _ hh hp => aptsE_fix hh hp)
     fun m r rF hh hxr hxF hp hc ho hwf hld => ?_
   obtain ⟨A, S, K, bs, hal, hK, hsz, hv, hab⟩ := hp
-  have hm := hh.heap_exact hxr hxF
+  obtain ⟨_, hm⟩ := hxr.heap_split
   obtain ⟨b, blk, hacc, hblk, hA, hS, hx⟩ := bytesAt_access (q := p) (k := 0) (n := 8) (a := 8)
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   obtain ⟨hKb, hlo⟩ := abytesAt_kind hxr hab hsz hpb hblk
-  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.heap.erase (b, x) ≠ none :=
-    fun x h1 h2 => abytesAt_mine hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.owned (b, x) ≠ none :=
+    fun x h1 h2 => abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -370,7 +370,7 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       NoRace m₀ b p.off.toNat (intSize 64) .atomicWrite := by
     intro li m₀ hl
     obtain ⟨-, -, -, -, -, ⟨a', sn, next, hm₀⟩, -⟩ := hpost li m₀ hl
-    have ho₀ : m₀.Owns m₀.current r.heap.erase := by rw [hm₀]; exact ho.recordAt hc
+    have ho₀ : m₀.Owns m₀.current r.owned := by rw [hm₀]; exact ho.recordAt hc
     exact ho₀.noRace hmine
   refine ⟨fun e hrun => ?_, fun res m' hrun => ?_⟩
   ·
@@ -474,11 +474,11 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       subst m₇
       rw [hres]
       -- the step: the read's record, the location, the write's record
-      have hs₀ := (fstep_record hh.disj hc hab hsz hpb hblk hKb hK .atomicRead).trans
+      have hs₀ := (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead).trans
         (FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
           (word_inBlock hh hab hsz hpb (m.recordAt b p.off.toNat 8 .atomicRead) rfl)
           (by rw [intSize_64] at hl; exact hl))
-      have hs₃ := hs₀.trans (fstep_record hh.disj (hs₀.cur hc) hab hsz hpb
+      have hs₃ := hs₀.trans (fstep_record hh.erase_disj_owned (hs₀.cur hc) hab hsz hpb
         (by rw [hblk₀]; exact hblk) hKb hK (k := .atomicWrite))
       have key := write_newest_aptsE hα hh hab hsz hal hK hpb hblk hlive hlo (by omega) hA hS hKb
         hli hb ho hwf htag hld hpos new

@@ -274,7 +274,12 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
     FHeap.disjoint_union_right.mpr ⟨disj_cellsAt hLK, hXY.2⟩, fun hF' => ?_, hnF⟩, ?_, hi.pdisj,
     hi.idle, hi.res⟩
   · obtain ⟨h1, h2⟩ := hF hF'
-    exact ⟨h1, h2.otherStep hs hap (LockWord.off_erase.mpr hLK) hKbl (fun _ h => h)⟩
+    -- `rL` owns no byte of `K`'s word: the rest has them as cells (`rest_owned_off`)
+    refine ⟨h1, h2.otherStep hs hap (fun x hx1 hx2 => rest_owned_off ho ?_ (hLK _ ⟨rfl, hx1, hx2⟩))
+      hKbl (fun _ h => h)⟩
+    intro e
+    simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
+    exact LockWord.wordR_some hKb ⟨rfl, hx1, hx2⟩ e.2.2.1
   · refine LockWord.off_erase.mpr fun l hl => ?_
     have h := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at h ⊢

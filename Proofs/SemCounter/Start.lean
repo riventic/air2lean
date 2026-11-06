@@ -47,10 +47,6 @@ theorem heap_ne_r {a b : Res} {l : Zig.Loc} (h : b.heap l ≠ none) : (rsum a b)
   simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
   intro _; exact h
 
-theorem erase_ne_r {a b : Res} {l : Zig.Loc} (h : (rsum a b).heap l ≠ none) :
-    (rsum a b).heap.erase l ≠ none := by
-  simpa [FHeap.erase] using h
-
 /-- The bytes `a .. c` of `bs` at `a` are the bytes `a .. b` and `b .. c`. -/
 theorem split_at {bs : Array Byte} {A S a b c : Nat} {r : Res}
     (h : up (bytesAt (cPtr.add a) A S .stack (bs.extract a c)) r) (hab : a ≤ b) (hbc : b ≤ c)
@@ -174,7 +170,7 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
   rw [o28, hs8] at hxB
   -- each access to a byte of `main`'s part happened before `main`
   have hown0 : ∀ e ∈ m.footprint, e.Touches (upd (fun _ => rnil) 0 (rsum (rsum rM (rsum (rsum rCn rN)
-      rW)) (rsum rB rIO)) 0).heap.erase → AllLe m e.clock :=
+      rW)) (rsum rB rIO)) 0).owned → AllLe m e.clock :=
     fun e he htc => allLe_of_one h1 (ho.owns 0 ht e he (.inl htc))
   have hBin : ∀ l, rB.heap l ≠ none ↔ BoxW l := fun l => by
     rw [up_bytesAt_some hB₁ rfl l, o28, hs8]; rfl
@@ -193,7 +189,7 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
         rw [← e1, hxB, e1, he]; exact intOfBytes_rmw 0)
       (fun e he' hh => hown0 e he' (Word.touches_of hh fun x a b => by
         rw [hb, upd_self]
-        exact erase_ne_r (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
+        exact Res.owned_of_heap (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
   obtain ⟨hwsOk, hwsz, hwsv, -⟩ := hwi WS rfl (by decide) (by decide) (by decide) hS
   obtain ⟨hweOk, hwez, hwev, hwec⟩ := hwi WE rfl (by decide) (by decide) (by decide) hE
   -- the mutex holds 0
@@ -296,7 +292,7 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
           ⟨hr.1, by simp [cPtr, Ptr.add], by rw [hsz16]; simp [cPtr, Ptr.add]; exact hr.2.2⟩)
       refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
-      exact erase_ne_r (heap_ne_r (heap_ne_r hx))
+      exact Res.owned_of_heap (heap_ne_r (heap_ne_r hx))
     refine ⟨⟨⟨by rw [hth]; rfl, .inl ⟨h1, hp0, fun u hu => ?_⟩⟩, hio,
         ⟨rIO, ⟨A, bs.extract 0 16, hA, by simp [hs], by rw [hIo]; exact LawfulEnc.decode_encode _,
           ?_⟩, hIOoff,

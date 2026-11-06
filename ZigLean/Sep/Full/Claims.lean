@@ -119,7 +119,7 @@ end ECell
 
 /-- The ghost state with the claim cells `C` on block `b` and nothing else. -/
 def Ghost.atCl (b : BlockId) (C : Nat → ECell) : Ghost :=
-  ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun b' x => if b' = b then C x else ECell.unit, ACell.unit⟩
+  { Ghost.unit with cl := fun b' x => if b' = b then C x else ECell.unit }
 
 @[simp] theorem Ghost.atCl_ac (b : BlockId) (C : Nat → ECell) : (Ghost.atCl b C).ac = ACell.unit := rfl
 
@@ -130,6 +130,7 @@ theorem Ghost.atCl_add (b : BlockId) (C C' : Nat → ECell) :
   · funext x; simp [Ghost.add, Ghost.atCl]
   · funext x y; simp only [Ghost.add, Ghost.atCl]; split <;> simp
   · simp
+  · funext l; simp [Ghost.add, Ghost.atCl, Ghost.unit]
 
 /-- **An exclusive claim** on the bytes `[lo, hi)` of block `b` in world `t` (the root for
 `t = none`, a tag's world for `t = some (γ, e)`). Owns no bytes, no knowledge. -/
@@ -498,7 +499,8 @@ theorem FTriple.mintClaimOpt {α : Type} {P : FAssn} {c : MemM α} {Q : α → F
           rw [hQ v b r' hnb hq y, hh.ghost.2.2.1.frame b h1 y, ECell.add_unit]
         refine ⟨⟨r'.heap ∪ FHeap.empty, r'.know.union Know.none,
             r'.gh.add (Ghost.atCl b (ECell.onRange (lo v) (hi v) (ECell.shareT none Frac.one 0)))⟩,
-          ⟨by rw [FHeap.union_empty]; exact hh'.disj, by rw [FHeap.union_empty]; exact hh'.heap,
+          ⟨by rw [FHeap.union_empty]; exact hh'.disj,
+            by rw [FHeap.union_empty]; exact hh'.heap.reShare (Ghost.share_add₂ Ghost.share_add_none rfl),
             by rw [Know.union_none]; exact hh'.know, hh'.knowF,
             GOk.addCl hh'.ghost hz h2 (fun y ls hu => onRange_share_ok (lo v) (hi v) y ls hu)
               (fun y γ e k => onRange_share_tags (lo v) (hi v) y γ e k)⟩, ?_, hs'⟩
@@ -607,12 +609,12 @@ theorem pcrcpt_split (h1 : lo ≤ m) (h2 : m ≤ hi) :
 theorem pclaim_ghost {r : Res} (h : pclaim p lo hi t r) :
     r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
   obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, g⟩ := sep_lift.mp h
-  exact ⟨h, k, by rw [g]; exact fun _ _ => rfl⟩
+  exact ⟨h, k, by rw [g]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 theorem pcrcpt_ghost {r : Res} (h : pcrcpt p lo hi γ e r) :
     r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
   obtain ⟨b, h⟩ := h; obtain ⟨-, h, k, g⟩ := sep_lift.mp h
-  exact ⟨h, k, by rw [g]; exact fun _ _ => rfl⟩
+  exact ⟨h, k, by rw [g]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 end PtrClaims
 

@@ -1270,8 +1270,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
       have hRest : (rsum rIO rStable).heap (e.block, e.off) ≠ none := by
         simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
         exact fun h => False.elim (hio h)
-      cases e' : (rsum rM (rsum rC rW)).heap (e.block, e.off) <;>
-        simp [FHeap.erase, FHeap.union_apply, e', hRest, hio]
+      exact (Res.owned_sep rfl rfl).mpr (.inr (Res.owned_of_heap hRest))
     · rw [rsum_rnil]
       exact ⟨A, _, hA, enc_io io, by cases io; exact LawfulEnc.decode_encode _,
         rIO, rStable, hdStable, rfl, hIO,

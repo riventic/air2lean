@@ -510,8 +510,8 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
         intro h; exact absurd h this
       refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
-      cases e' : (rsum rp (rsum rC rW)).heap (e.block, e.off) <;>
-        simp [FHeap.erase, FHeap.union_apply, hx]
+      exact Res.owned_of_heap fun h => hx (by
+        simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at h; exact h.2)
 
 /-! ## The spawn, the ends -/
 
@@ -737,7 +737,7 @@ theorem main_counter {own : ThreadId → Res} {rX r : Res} {m : Mem} {w : Nat}
   refine ⟨blk, hblk, hl, hsz, hk, by rw [hA]; rw [hoff] at hal; omega,
     ((L Lo).u32_bytes hblk).mp hw, by rw [hx]; exact hdec, fun k => ?_⟩
   -- `main` owns the word's and the counter's bytes
-  refine Mem.Owns.noRace (h := (upd own 0 r 0).heap.erase) (by rw [hc]; exact ho.owns 0 ht)
+  refine Mem.Owns.noRace (h := (upd own 0 r 0).owned) (by rw [hc]; exact ho.owns 0 ht)
     fun x h1 h2 => ?_
   have hne : ∀ {a b : Res} {l : Zig.Loc}, a.heap l ≠ none ∨ b.heap l ≠ none →
       (rsum a b).heap.erase l ≠ none := fun h => by
@@ -747,8 +747,8 @@ theorem main_counter {own : ThreadId → Res} {rX r : Res} {m : Mem} {w : Nat}
     · exact fun h' => absurd h' h
     · exact fun _ => h
   rw [upd_self, e, e']
-  show (rsum (rsum r₁ r₂) r₀).heap.erase (0, x) ≠ none
-  refine hne (.inl ?_)
+  show (rsum (rsum r₁ r₂) r₀).owned (0, x) ≠ none
+  refine Res.owned_of_erase (hne (.inl ?_))
   have hsome : ∀ {a b : Res} {l : Zig.Loc}, a.heap l ≠ none ∨ b.heap l ≠ none →
       (rsum a b).heap l ≠ none := fun h => by
     simpa [FHeap.erase] using hne h

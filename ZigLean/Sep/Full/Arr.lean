@@ -297,21 +297,20 @@ theorem SizeFree.arr (p : Ptr) (vs : List T) : SizeFree (fun _ => none) (Zig.arr
 
 /-- **Reading the labels from the memory**: a resource of a size-free legacy assertion `up P`
 is replaced by the same bytes with their block's actual size and kind (`Res.fix`), held by the
-same memory with the same frame; `P` holds of them, and their heap with the frame's is the
-memory's. -/
+same memory with the same frame; `P` holds of them, and their heap is a part of the memory's
+(`Exact.heap_split`; the rest are the frame's bytes and the shared bytes). -/
 theorem up_fix {P : Assn} (hsf : SizeFree (fun _ => none) P) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hp : up P r) :
-    Holds m (r.fix m) rF ∧ up P (r.fix m) ∧
-      m.heap = (r.fix m).heap.erase ∪ (rF.fix m).heap.erase :=
+    Holds m (r.fix m) rF ∧ up P (r.fix m) ∧ ∃ hF, m.heap = (r.fix m).heap.erase ∪ hF :=
   ⟨(Holds.congrF hh.swap hh.swap.fix_sim rfl rfl).swap,
     ⟨upE_fix hsf (fun _ _ _ _ _ _ _ h => by cases h) hh (upE_none.mpr hp), hp.2.1, hp.2.2⟩,
-    hh.fix.heap_exact hh.fix_exact hh.fix_exactF⟩
+    hh.fix_exact.heap_split⟩
 
 /-- An update from `up P` to `up P'` that may use the memory's heap. -/
 theorem EUpd.up_of_heap {P P' : Assn} (hsf : SizeFree (fun _ => none) P)
     (h : ∀ (m : Mem) hP hF, m.heap = hP ∪ hF → P hP → P' hP) : EUpd (up P) (up P') :=
   fun _ _ _ hh hp _ =>
-    have ⟨hh', hp', hm⟩ := up_fix hsf hh hp
+    have ⟨hh', hp', _, hm⟩ := up_fix hsf hh hp
     ⟨_, hh', h _ _ _ hm hp'.1, hp'.2⟩
 
 /-- **Split** an array at a boundary. -/
@@ -396,7 +395,7 @@ size of generated code is a literal (`hsz`). -/
     FTotalTriple (up (Zig.arr p vs)) (Zig.ptrProject p (·.elem size i))
       (fun r => ⟪r = p.elem size i⟫ ⋆ up (Zig.arr p vs)) :=
   FTotalTriple.of_read fun _ _ _ hh hp _ =>
-    have ⟨_, hp', hm⟩ := up_fix (SizeFree.arr p vs) hh hp
+    have ⟨_, hp', _, hm⟩ := up_fix (SizeFree.arr p vs) hh hp
     hsz ▸ arr_ptrProject_run hp'.1 hm hi
 
 /-- **A rule on an array from a rule on its owned bytes**: the rule turns the array's bytes into

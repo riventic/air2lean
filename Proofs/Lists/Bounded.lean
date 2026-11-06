@@ -53,7 +53,7 @@ theorem sum_steps (hd : Option Ptr) (xs : List (BitVec 32))
     (hl : list X hd xs r) (hseq : m.FSeq) (hc : CreditFree r rF) :
     ∃ m', (sum hd).run m = pure (BitVec.ofNat 64 (xs.map BitVec.toNat).sum, m') ∧
       m'.ticks = m.ticks + (xs.length + 1) ∧ ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
-        FMatch m' (r'.heap ∪ rF.heap) ∧ list X hd xs r' ∧ m'.FSeq := by
+        SMatch m' (r'.heap ∪ rF.heap) (r'.gh.add rF.gh).share ∧ list X hd xs r' ∧ m'.FSeq := by
   obtain ⟨v, m', hr, ht, r', hd', hm, hq, hs'⟩ := (sum_exact hd xs htot).ticks_eq_post hh hl hseq hc
   obtain ⟨rfl, hl'⟩ := sep_lift.mp hq
   exact ⟨m', hr, ht, r', hd', hm, hl', hs'⟩

@@ -731,12 +731,24 @@ share reads; a positive part reads the sum's cell (`cell_add`); next to the whol
 frame holds nothing (`Valid.whole`), which is the conversion between a whole share and exclusive
 ownership; split and join are equalities (`of_add`).
 
-**Integration (next steps, in order).** The shares become a component of the ghost state, and
-`Holds` matches the memory against the exclusive heaps and the cells of the composed shares, with
-share locations apart from both exclusive heaps. The load rule takes a positive share; store and
-free stay exclusive, so no rule changes a byte that a share reads. The concurrency layer orders
-every shared read before a later exclusive acquire (the RwLock's state word RMWs give the order).
-Then `RwLockImpl` hands shared holders the protected resource at a fraction.
+**Integration.** The shares are a component of the ghost state (`Ghost.share`). `Holds` matches
+the memory against the exclusive heaps and the cells the composed shares read (`SMatch`): the
+cells and the shares are apart (`SMatch.apart`), and each shared byte's shares total exactly the
+whole fraction (`SCell.Total`), so no share is lost or minted (maintainer decision (i),
+2026-11-06). A resource *owns* its exclusive cells and the bytes of its shares (`Res.owned`), and
+every ownership fact of the concurrency layer is over that set: thread ownership
+(`Mem.Owns t r.owned`, `FOwned.owns`), the frame a step keeps (`FStepIn rF.owned`), a lock's
+free resource (`LockWord.Owns … rL.owned`). A share therefore races with no exclusive access,
+and the protocol's rest holds its cells as no one's share (`FOwned.rest_noShare`).
+
+Next, in order: the load rule takes a positive share (an `@[fsym]` rule) and the whole share
+converts to and from the exclusive cell (`Valid.whole`); store and free stay exclusive, so no
+rule changes a byte that a share reads. Then the race clocks for a partial share (several readers
+of one byte, ordered before a later exclusive acquire by the RwLock's state word RMWs); until
+then two choices stay conservative: a recorded access to the rest (`FOwned.recordRest`) needs
+that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the parts' and the
+rest's owned sets empty. Then `RwLockImpl` hands shared holders the protected resource at a
+fraction.
 
 ### The fee of a grant (coordinator decision 2026-10-12)
 

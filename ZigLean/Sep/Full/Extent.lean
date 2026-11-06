@@ -472,8 +472,9 @@ variable {P P' P'' R : FAssn}
 
 /-- A ghost update (`Upd`) is an update in every memory: it keeps the extent claims. -/
 theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
-  obtain ⟨r', hp', e, k, x, xc, xa, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
-  exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
+  obtain ⟨r', hp', e, k, x, xc, xa, xs, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
+  exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap.reShare (Ghost.share_add₂ xs rfl),
+    by rw [k]; exact hh.know,
     hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
       by simpa [xa] using hh.ghost.2.2.2⟩⟩, hp'⟩
 
@@ -486,11 +487,12 @@ theorem drop {K : FAssn}
   obtain ⟨e1, e2, ha⟩ := hK _ hk
   obtain ⟨hd, hm, hkn, hkF, hg⟩ := hh
   simp only [e1, e2, FHeap.union_empty, Know.union_none] at hd hm hkn
+  rw [ha.share_add] at hm
   exact ⟨r₁, ⟨hd, hm, hkn, hkF, GOk.mono hg ha⟩, hp⟩
 
 /-- A part of an epoch token can be dropped (`EUpd.drop`). -/
 theorem dropEp {γ e : Nat} {q : Frac} : EUpd (P ⋆ epTok γ e q) P :=
-  drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩
+  drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩
 
 /-- The same affine ghost disposal with the discarded resource on the left. -/
 theorem dropL {K : FAssn}

@@ -40,10 +40,6 @@ theorem heap_ne_r {a b : Res} {l : Zig.Loc} (h : b.heap l ≠ none) : (rsum a b)
   simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
   intro _; exact h
 
-theorem erase_ne_r {a b : Res} {l : Zig.Loc} (h : (rsum a b).heap l ≠ none) :
-    (rsum a b).heap.erase l ≠ none := by
-  simpa [FHeap.erase] using h
-
 /-- A shared word at the start: no atomic location, each access to it happened before every
 thread, and the value 0, written at no clock. -/
 theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0)
@@ -155,7 +151,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
   have hs8 : (Enc.encode (0 : BitVec 64)).size = 8 := LawfulEnc.size_encode _
   -- each access to a byte of `main`'s part happened before `main`
   have hown0 : ∀ e ∈ m.footprint, e.Touches (upd (fun _ => rnil) 0
-      (rsum (rsum (rsum rM rc) (rsum rI rW)) (rsum rB rP)) 0).heap.erase → AllLe m e.clock :=
+      (rsum (rsum (rsum rM rc) (rsum rI rW)) (rsum rB rP)) 0).owned → AllLe m e.clock :=
     fun e he htc => allLe_of_one h1 (ho.owns 0 ht e he (.inl htc))
   have hBin : ∀ l, rB.heap l ≠ none ↔ BoxW l := fun l => by
     rw [up_bytesAt_some hB rfl l, show (cPtr.add 12).off.toNat = 12 from rfl]
@@ -169,7 +165,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     fun W hW' e he hh => hown0 e he (Word.touches_of hh fun x a b => by
       have hb0 : W.b = 0 := by rcases hW' with rfl | rfl <;> rfl
       rw [hb0, upd_self]
-      exact erase_ne_r (heap_ne_r (heap_ne_l ((hBin _).mpr (two_box hW' _ ⟨hb0.symm, a, b⟩)))))
+      exact Res.owned_of_heap (heap_ne_r (heap_ne_l ((hBin _).mpr (two_box hW' _ ⟨hb0.symm, a, b⟩)))))
   obtain ⟨hwsOk, hwsz, hwsv, -⟩ := word_init (W := WS) rfl
     (by show (blk.addr + 12) % 4 = 0; rw [hAd]; omega) (by show 12 + 4 ≤ _; rw [hS32]; omega)
     hblk hl hK hat

@@ -93,7 +93,15 @@ theorem Holds.push {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : emp r) {nb :
     rcases hc with ⟨S, K, h⟩ | ⟨k, h⟩
     · obtain ⟨blk, hb, -⟩ := ht.1 S K h; rw [hnone] at hb; cases hb
     · obtain ⟨blk, hb, -⟩ := ht.2 k h; rw [hnone] at hb; cases hb
-  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _,
+  -- the shares are the frame's, all on old blocks
+  have hm : SMatch m (r.heap ∪ rF.heap)
+      ((Ghost.exts (extOne b nb.bytes.size nb.kind)).add rF.gh).share :=
+    hh.heap.reShare (by rw [hrg]; exact Ghost.share_add₂ rfl rfl)
+  have hSb : ∀ l : Loc, l.1 = b →
+      SCells ((Ghost.exts (extOne b nb.bytes.size nb.kind)).add rF.gh).share l = none :=
+    fun l hc => Classical.byContradiction fun hs => hm.share_live hs (by
+      obtain ⟨x, y⟩ := l; simp only at hc; subst hc; simp [Mem.heap, hnone])
+  refine ⟨fun l => ?_, ⟨⟨fun l => ?_, fun l fc hfc => ?_⟩, fun l => ?_, hm.total⟩, Know.sub_none _,
     hh.knowF.trans (KMono.push rfl), ⟨Ghost.ok_exts_change hok fun x hx => ?_, fun x => ?_, ?_,
       by have := hh.ghost.2.2.2.keep hk; rw [hrg] at this; simpa [pushRes] using this⟩⟩
   · -- disjoint: the frame has no byte of `b`
@@ -111,18 +119,27 @@ theorem Holds.push {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : emp r) {nb :
         cases e : rF.heap l with
         | none => rfl
         | some fc => exact absurd hc (hFb l fc e)
-      rw [if_pos hc, hFn, Option.or_none]
+      rw [if_pos hc, hFn, hSb l hc, Option.or_none, Option.or_none]
       by_cases hc' : l.2 < nb.bytes.size ∧ nb.kind.mappedLo ≤ l.2
       · rw [dif_pos hc', dif_pos ⟨hc, hc'⟩]; rfl
       · rw [dif_neg hc', dif_neg fun h => hc' h.2]; rfl
     · rw [if_neg hc, dif_neg fun h => hc h.1, Option.none_or]
-      have := hh.heap.1 l
-      rwa [FHeap.union_apply, hr0, FHeap.empty, Option.none_or] at this
-  · -- tags: the new cells have none, the frame's are as before
+      have := hm.whole.1 l
+      simp only [FHeap.union_apply, hr0, FHeap.empty, Option.none_or] at this
+      exact this
+  · -- tags: the new cells have none, the frame's and the shares' are as before
     simp only [FHeap.union_apply, pushRes] at hfc
     split at hfc
-    · cases hfc; trivial
-    · exact hh.tagF (by simpa using hfc)
+    · simp only [Option.some_or, Option.some.injEq] at hfc; subst hfc; trivial
+    · exact hm.whole.2 l fc (by simpa [FHeap.union_apply, hr0, FHeap.empty] using hfc)
+  · -- no share on a byte of the new block or of the frame
+    by_cases hc : l.1 = b
+    · exact .inr (hSb l hc)
+    · rcases hm.apart l with e | e
+      · left
+        simp only [FHeap.union_apply, pushRes, hr0, FHeap.empty, Option.none_or] at e ⊢
+        rw [dif_neg fun h => hc h.1, Option.none_or]; exact e
+      · exact .inr e
   · -- the frame has no claim on the new block
     have : x = b := Classical.byContradiction fun hne => by simp [extOne, hne] at hx
     subst this; exact hdorm
@@ -280,7 +297,8 @@ theorem Holds.allocZero {m : Mem} {r rF : Res} (hh : Holds m r rF) (kind : Block
     (hkm : m.stackBudget? kind = none) : Holds (m.afterAlloc kind 0 align) r rF := by
   have e : (m.afterAlloc kind 0 align).heap = m.heap := funext fun l => by
     rw [afterAlloc_heap]; exact ite_eq_right fun h => absurd h.2.1 (Nat.not_lt_zero _)
-  exact ⟨hh.disj, ⟨fun l => by rw [e]; exact hh.heap.1 l, fun l fc h => hh.heap.2 l fc h⟩,
+  exact ⟨hh.disj, hh.heap.of_whole
+      ⟨fun l => by rw [e]; exact hh.heap.whole.1 l, fun l fc h => hh.heap.whole.2 l fc h⟩ fun _ => id,
     hh.know.trans (KMono.push rfl), hh.knowF.trans (KMono.push rfl),
     hh.ghost.keep (KeepsExt.push rfl) (by simp [Mem.afterAlloc]) (MemAuth.Keep.allocOther hkm)⟩
 
@@ -394,21 +412,45 @@ theorem Holds.free {m : Mem} {r rF : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
       if l.1 = b then none else m.heap l := fun ⟨x, y⟩ => by
     simp only [Mem.heap, hget]
     by_cases hx : x = b <;> simp [hx]
-  refine ⟨fun _ => .inl rfl, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _,
-    hh.knowF.trans (KMono.set (blk' := { blk with live := false }) hb rfl hK rfl),
+  -- the shares are the frame's; none is on `b`, whose live bytes are all the resource's
+  have hm : SMatch m (r.heap ∪ rF.heap) (Ghost.unit.add rF.gh).share :=
+    hh.heap.reShare (by rw [hrg]; exact Ghost.share_add₂ rfl rfl)
+  have hSb : ∀ y, SCells (Ghost.unit.add rF.gh).share (b, y) = none := fun y =>
+    Classical.byContradiction fun hs => by
+      obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp (hm.share_live hs)
+      obtain ⟨blk', hb', -, hy, -⟩ := Mem.heap_some hc
+      obtain ⟨blk'', hb'', hylo⟩ := Mem.heap_some_lo hc
+      rw [hb] at hb' hb''; cases hb'; cases hb''
+      rcases hm.apart (b, y) with e | e
+      · rw [FHeap.union_apply, Option.or_eq_none_iff] at e
+        exact hown y (hbk ▸ hylo) (hsz ▸ hy) e.1
+      · exact hs e
+  refine ⟨fun _ => .inl rfl, ⟨⟨fun l => ?_, fun l fc hfc => ?_⟩, fun l => ?_, hm.total⟩,
+    Know.sub_none _, hh.knowF.trans (KMono.set (blk' := { blk with live := false }) hb rfl hK rfl),
     ⟨?_, fun x => ?_, ?_, by
       have := hh.ghost.2.2.2.keep
         (MemAuth.Keep.kill (m' := { m with blocks := m.blocks.set! b { blk with live := false } })
           hb rfl rfl rfl rfl)
       rw [hrg] at this; simpa using this⟩⟩
-  · -- the frame's cells, outside `b`
-    rw [hheap, FHeap.empty_union]
+  · -- the frame's cells and the shares, outside `b`
+    rw [hheap]
     by_cases hx : l.1 = b
-    · rw [ite_eq_left hx, show l = (b, l.2) from Prod.ext hx rfl, hFb]; rfl
+    · rw [ite_eq_left hx, show l = (b, l.2) from Prod.ext hx rfl]
+      simp only [FHeap.union_apply, FHeap.empty, hFb, hSb, Option.none_or]; rfl
     · rw [ite_eq_right hx]
-      have := hh.heap.1 l
-      rwa [FHeap.union_apply, hrb l hx, Option.none_or] at this
-  · exact hh.tagF (by simpa [FHeap.empty] using hfc)
+      have := hm.whole.1 l
+      simp only [FHeap.union_apply, FHeap.empty, hrb l hx, Option.none_or] at this ⊢
+      exact this
+  · simp only [FHeap.union_apply, FHeap.empty, Option.none_or] at hfc
+    by_cases hx : l.1 = b
+    · rw [show l = (b, l.2) from Prod.ext hx rfl, hFb, hSb, Option.none_or] at hfc; cases hfc
+    · exact hm.whole.2 l fc (by simp only [FHeap.union_apply, hrb l hx, Option.none_or]; exact hfc)
+  · by_cases hx : l.1 = b
+    · exact .inr (by rw [show l = (b, l.2) from Prod.ext hx rfl]; exact hSb _)
+    · rcases hm.apart l with e | e
+      · left
+        simp only [FHeap.union_apply, FHeap.empty, hrb l hx, Option.none_or] at e ⊢; exact e
+      · exact .inr e
   · -- the ghost states compose without `b`'s extent
     have := Ghost.ok_exts_change (E' := fun _ => none) hok fun _ h => by simp at h
     rwa [Ghost.exts_none] at this
@@ -506,7 +548,7 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
   have hacc0 : m.noFp.access s.ptr s.len.toNat 1 = m.access s.ptr s.len.toNat 1 := rfl
   have hst₀ : ∀ v m', (Zig.remapByteBuffer s n).run m = Pure.pure (v, m') →
       (Zig.remapByteBuffer s n).run m = Pure.pure (none, m) →
-      FStepIn rF.heap.erase m m' ∧ m.RevivesOwned m' := fun v m' e h1 => by
+      FStepIn rF.owned m m' ∧ m.RevivesOwned m' := fun v m' e h1 => by
     rw [h1] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨FStepIn.refl _ _, (Mem.NoRevive.refl m).revivesOwned⟩
@@ -549,13 +591,13 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     let mr := m.recordAt b 0 blk.bytes.size .write
     let mf := (mr.forgetFrom b blk.bytes.size).retire b n (blk.bytes.size - n)
-    have hrec : FStepIn rF.heap.erase m mr :=
-      FStepIn.recordAt hc.1 (FHeap.erase_disjoint hh.disj) hin' hbs fun _ ⟨blk', e1, e2⟩ => by
+    have hrec : FStepIn rF.owned m mr :=
+      FStepIn.recordAt hc.1 (hh.erase_disj_owned) hin' hbs fun _ ⟨blk', e1, e2⟩ => by
         rw [hb] at e1; cases e1; rw [hK] at e2; cases e2
-    have hret : FStepIn rF.heap.erase (mr.forgetFrom b blk.bytes.size) mf :=
+    have hret : FStepIn rF.owned (mr.forgetFrom b blk.bytes.size) mf :=
       FStepIn.retire fun x h1 h2 =>
-        ((FHeap.erase_disjoint hh.disj) (b, x)).resolve_left (hin' x (by omega) (by omega))
-    have hset : FStepIn rF.heap.erase mf (mr.afterByteRemap b blk n) :=
+        ((hh.erase_disj_owned) (b, x)).resolve_left (hin' x (by omega) (by omega))
+    have hset : FStepIn rF.owned mf (mr.afterByteRemap b blk n) :=
       FStepIn.setBlock (m := mf) (fun _ h => by cases hb.symm.trans h; rfl)
         (fun h => by simp [hK] at h) fun l hl e hlen ⟨blk', h1, h2⟩ => by
         -- a location of the block that the shrink keeps lies before the new end

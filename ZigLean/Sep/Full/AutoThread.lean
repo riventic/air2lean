@@ -50,7 +50,7 @@ variable {α : Type} {P P' : FAssn} {c : MemM α} {Q Q' : α → FAssn}
 theorem eupd (hu : EUpd P P') (ht : FTTotalTriple P' c Q) : FTTotalTriple P c Q :=
   ⟨FTTriple.eupd hu ht.1, fun m r rF hh hp hc ho => by
     obtain ⟨r', hh', hp'⟩ := hu m.noFp r rF hh.toNoFp hp hc.noFp
-    exact ht.2 m r' rF hh'.ofNoFp hp' hc (ho.sub (hh.erase_sub_of hh'.ofNoFp))⟩
+    exact ht.2 m r' rF hh'.ofNoFp hp' hc (ho.sub fun _ => hh.owned_sub hh'.ofNoFp)⟩
 
 /-- An update of the postcondition. -/
 theorem eupd_post (ht : FTTotalTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTTotalTriple P c Q' :=

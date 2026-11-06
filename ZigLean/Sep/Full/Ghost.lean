@@ -124,16 +124,17 @@ end GCell
 
 /-- The ghost state with cell `c` at `γ` and nothing elsewhere. -/
 def Ghost.at (γ : Nat) (c : GCell) : Ghost :=
-  ⟨fun γ' => if γ' = γ then c else GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit, ACell.unit⟩
+  { Ghost.unit with led := fun γ' => if γ' = γ then c else GCell.unit }
 
 @[simp] theorem Ghost.at_ac (γ : Nat) (c : GCell) : (Ghost.at γ c).ac = ACell.unit := rfl
 
 theorem Ghost.at_add (γ : Nat) (c c' : GCell) : (Ghost.at γ c).add (Ghost.at γ c') = Ghost.at γ (c.add c') := by
   ext1
   · funext γ'; simp only [Ghost.add, Ghost.at]; split <;> simp
-  · funext b; simp [Ghost.add, Ghost.at]
-  · funext b x; simp [Ghost.add, Ghost.at]
+  · funext b; simp [Ghost.add, Ghost.at, Ghost.unit]
+  · funext b x; simp [Ghost.add, Ghost.at, Ghost.unit]
   · simp
+  · funext l; simp [Ghost.add, Ghost.at, Ghost.unit]
 
 @[simp] theorem Ghost.at_unit (γ : Nat) : Ghost.at γ GCell.unit = Ghost.unit := by
   ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.at, Ghost.unit]
@@ -472,7 +473,7 @@ counter cell changes only with the memory's consent: `EUpd`.) -/
 def Upd (P P' : FAssn) : Prop :=
   ∀ r, P r → ∀ g, Ghost.Ok r.gh g →
     ∃ r', P' r' ∧ r'.heap = r.heap ∧ r'.know = r.know ∧ r'.gh.extent = r.gh.extent ∧
-      r'.gh.cl = r.gh.cl ∧ r'.gh.ac = r.gh.ac ∧ Ghost.Ok r'.gh g ∧
+      r'.gh.cl = r.gh.cl ∧ r'.gh.ac = r.gh.ac ∧ r'.gh.share = r.gh.share ∧ Ghost.Ok r'.gh g ∧
         ∀ m, ExtTrue m (r.gh.add g) → ExtTrue m (r'.gh.add g)
 
 /-- What an authority `●(e, M)` and a token `◯(e, i ↦ g)` say about a frame `d` they compose
@@ -503,21 +504,22 @@ namespace Upd
 variable {P P' P'' R : FAssn}
 
 theorem of_imp (h : ∀ r, P r → P' r) : Upd P P' := fun r hp _ hg =>
-  ⟨r, h r hp, rfl, rfl, rfl, rfl, rfl, hg, fun _ h => h⟩
+  ⟨r, h r hp, rfl, rfl, rfl, rfl, rfl, rfl, hg, fun _ h => h⟩
 
 theorem trans (h₁ : Upd P P') (h₂ : Upd P' P'') : Upd P P'' := fun r hp g hg => by
-  obtain ⟨r₁, h1, e1, k1, x1, c1, a1, g1, t1⟩ := h₁ r hp g hg
-  obtain ⟨r₂, h2, e2, k2, x2, c2, a2, g2, t2⟩ := h₂ r₁ h1 g g1
-  exact ⟨r₂, h2, e2.trans e1, k2.trans k1, x2.trans x1, c2.trans c1, a2.trans a1, g2,
+  obtain ⟨r₁, h1, e1, k1, x1, c1, a1, s1, g1, t1⟩ := h₁ r hp g hg
+  obtain ⟨r₂, h2, e2, k2, x2, c2, a2, s2, g2, t2⟩ := h₂ r₁ h1 g g1
+  exact ⟨r₂, h2, e2.trans e1, k2.trans k1, x2.trans x1, c2.trans c1, a2.trans a1, s2.trans s1, g2,
     fun m h => t2 m (t1 m h)⟩
 
 /-- Updates frame. -/
 theorem frame (h : Upd P P') : Upd (P ⋆ R) (P' ⋆ R) := by
   rintro _ ⟨r₁, r₂, hd, rfl, hp, hr⟩ g hg
-  obtain ⟨r₁', hp', e, k, x, xc, xa, hg', ht⟩ := h r₁ hp (r₂.gh.add g) (Ghost.Ok.assoc.mp hg)
+  obtain ⟨r₁', hp', e, k, x, xc, xa, xs, hg', ht⟩ := h r₁ hp (r₂.gh.add g) (Ghost.Ok.assoc.mp hg)
   refine ⟨⟨r₁'.heap ∪ r₂.heap, r₁'.know.union r₂.know, r₁'.gh.add r₂.gh⟩,
     ⟨r₁', r₂, by rw [e]; exact hd, rfl, hp', hr⟩, by simp [e], by simp [k],
-    by simp [Ghost.add, x], by simp [Ghost.add, xc], by simp [xa], Ghost.Ok.assoc.mpr hg', fun m hm => ?_⟩
+    by simp [Ghost.add, x], by simp [Ghost.add, xc], by simp [xa], by simp [Ghost.add, xs],
+    Ghost.Ok.assoc.mpr hg', fun m hm => ?_⟩
   simp only [Ghost.add_assoc] at hm ⊢
   exact ht m hm
 
@@ -534,7 +536,7 @@ theorem single {γ : Nat} {c c' : GCell} {P P' : FAssn}
   have e := hp r hr
   subst e
   obtain ⟨h1, h2⟩ := Ghost.Ok.update h hg
-  exact ⟨_, hp', rfl, rfl, rfl, rfl, rfl, h1, h2⟩
+  exact ⟨_, hp', rfl, rfl, rfl, rfl, rfl, rfl, h1, h2⟩
 
 /-- **A new ledger** with parent tag `p`, at a name no frame uses (no ledger, no tag, no parent
 link), with no grant, and its epoch's whole token (`epTok`). Its tags are lent from shares tagged
@@ -559,7 +561,7 @@ theorem alloc (p : STag) :
   have h0ν : ∀ x, (g.led ν).auth x = 0 := fun x => by rw [hNu]; rfl
   let c' := (GCell.auth1 0 GMap.empty p).add (GCell.ep1 0 Frac.one)
   let G' := (Ghost.at ν c').add g
-  have hx : G'.extent = g.extent := by funext b; simp [G', Ghost.add, Ghost.at]
+  have hx : G'.extent = g.extent := by funext b; simp [G', Ghost.add, Ghost.at, Ghost.unit]
   have hcl : G'.cl = g.cl := Ghost.at_add_cl _ _ _
   have hl : ∀ γ', γ' ≠ ν → G'.led γ' = g.led γ' := fun γ' hne => by
     simp [G', Ghost.add, Ghost.at, hne]
@@ -626,7 +628,7 @@ theorem alloc (p : STag) :
       exact ⟨⟨e', hee, (hq e').mp hl'⟩, (hq e).mp⟩)
   refine ⟨⟨FHeap.empty, Know.none, Ghost.at ν c'⟩, ⟨ν, gauth_epTok_intro⟩,
     h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at, Ghost.unit], by rw [g0]; rfl,
-    by rw [g0]; rfl,
+    by rw [g0]; rfl, by rw [g0]; rfl,
     ⟨hv', ν + 1, fun γ hγ => ⟨?_, ?_, fun γ' e' M e => ?_⟩⟩, fun m hm => ?_⟩
   · rw [hl γ (by omega)]; exact (hN γ (by omega)).1
   · rw [hx]; exact (hN γ (by omega)).2.1
@@ -774,7 +776,8 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} :
         · exact absurd hγ hne
       · exact ⟨⟨x', hxx, (hoth γ' x' w hγ).mp hl'⟩, (hoth γ' x w hγ).mp⟩)
   refine ⟨⟨FHeap.empty, Know.none, Ghost.at γ c'⟩, gauth_epTok_intro,
-    h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at], by rw [g0]; rfl, by rw [g0]; rfl,
+    h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at, Ghost.unit], by rw [g0]; rfl,
+    by rw [g0]; rfl, by rw [g0]; rfl,
     ⟨hv', N + γ + 1, fun γ' hγ => ⟨?_, ?_, fun γ'' x' M' x => ?_⟩⟩,
     fun m hm => by rw [g0] at hm; exact ht' m hm⟩
   · rw [hl γ' (by omega)]; exact (hN γ' (by omega)).1
@@ -814,8 +817,9 @@ variable {α : Type} {P P' : FAssn} {c : MemM α} {Q Q' : α → FAssn}
 /-- A ghost update of the precondition. -/
 theorem upd (hu : Upd P P') (ht : FTriple P' c Q) : FTriple P c Q := by
   intro m r rF hh hp hs
-  obtain ⟨r', hp', e, k, x, xc, xa, hg, ht'⟩ := hu r hp rF.gh hh.ghost.1
-  exact ht m r' rF ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap, by rw [k]; exact hh.know,
+  obtain ⟨r', hp', e, k, x, xc, xa, xs, hg, ht'⟩ := hu r hp rF.gh hh.ghost.1
+  exact ht m r' rF ⟨by rw [e]; exact hh.disj,
+    by rw [e]; exact hh.heap.reShare (Ghost.share_add₂ xs rfl), by rw [k]; exact hh.know,
     hh.knowF, ⟨hg, ht' m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
       by simpa [xa] using hh.ghost.2.2.2⟩⟩ hp' hs
 
@@ -827,8 +831,9 @@ theorem upd_post (ht : FTriple P c Q) (hu : ∀ v, Upd (Q v) (Q' v)) : FTriple P
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hs'⟩ := this
-    obtain ⟨r'', hq', e, k, x, xc, xa, hg, ht'⟩ := hu _ r' hq rF.gh hh'.ghost.1
-    exact ⟨r'', ⟨by rw [e]; exact hh'.disj, by rw [e]; exact hh'.heap, by rw [k]; exact hh'.know,
+    obtain ⟨r'', hq', e, k, x, xc, xa, xs, hg, ht'⟩ := hu _ r' hq rF.gh hh'.ghost.1
+    exact ⟨r'', ⟨by rw [e]; exact hh'.disj,
+      by rw [e]; exact hh'.heap.reShare (Ghost.share_add₂ xs rfl), by rw [k]; exact hh'.know,
       hh'.knowF, ⟨hg, ht' _ hh'.ghost.2.1, hh'.ghost.2.2.1.congr (by funext x y; simp [xc]),
         by simpa [xa] using hh'.ghost.2.2.2⟩⟩, hq', hs'⟩
 
@@ -904,8 +909,9 @@ theorem Holds.noStack {m : Mem} {r rF : Res} (hh : Holds m r rF) (h : 0 < r.gh.a
 theorem plain_ghost {r : Res} (h : plain r) :
     r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh.Affine := by
   obtain ⟨r₁, r₂, -, rfl, ⟨h1, k1, g1⟩, ⟨h2, k2, g2⟩⟩ := h
-  refine ⟨by simp [h1, h2], by simp [k1, k2, Know.union_none], fun k v => ?_⟩
-  simp [g1, g2, Ghost.ofAC]
+  refine ⟨by simp [h1, h2], by simp [k1, k2, Know.union_none], fun k v => ?_, fun l c => ?_⟩
+  · simp [g1, g2, Ghost.ofAC]
+  · simp [g1, g2, Ghost.ofAC, SCell.zero_val]
 
 /-- The plain mode holds a `noStack` fragment. -/
 theorem plain_noStack {r : Res} {R : FAssn} (h : (plain ⋆ R) r) : 0 < r.gh.ac.frag .noStack := by
@@ -995,7 +1001,8 @@ theorem Holds.addCredits {m : Mem} {r rF : Res} (N : Nat) (hh : Holds m r rF)
   have e : ((r.gh.add (Ghost.cred N)).add (rF.gh.add (Ghost.credAuth (m.ticks + N)))).ac =
       (ACell.fragAt .cred N).add ((ACell.authAt .cred (m.ticks + N)).add c) := by
     rw [← hc]; ext <;> simp [Ghost.cred, Ghost.credAuth] <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare ?_, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  · funext l; simp [Ghost.cred, Ghost.credAuth, Ghost.ofAC]
   · funext γ; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.ofAC, Ghost.unit]
@@ -1036,7 +1043,8 @@ theorem Holds.addPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hns : m.NoSta
   have e : ((r.gh.add Ghost.plain).add rF.gh).ac =
       (ACell.fragAt .noStack 1).add ((ACell.fragAt .unmetered 1).add c) := by
     rw [← hc]; ext <;> simp [Ghost.plain] <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare ?_, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  · funext l; simp [Ghost.plain, Ghost.ofAC]
   · funext γ; simp [Ghost.add, Ghost.plain, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.plain, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.plain, Ghost.ofAC, Ghost.unit]
@@ -1135,7 +1143,8 @@ theorem Holds.addCur {m : Mem} {r rF : Res} (hh : Holds m r rF)
   have hV : (r.gh.add rF.gh).ac.Valid := hg.1.1.2.2.2
   have e : ((r.gh.add (Ghost.cur m.current)).add rF.gh).ac = (curCell m.current).add (r.gh.add rF.gh).ac := by
     ext <;> simp [Ghost.cur] <;> omega
-  refine ⟨hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  refine ⟨hd, hm.reShare ?_, hk, hkF, hg.ac_change ?_ ?_ ?_ ?_ ?_⟩
+  · funext l; simp [Ghost.cur, Ghost.ofAC]
   · funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
@@ -1158,8 +1167,9 @@ theorem Holds.dropCurF {m : Mem} {r rF : Res} {t : ThreadId}
     ext <;> simp [Ghost.cur] <;> omega
   simp only at hM hV
   rw [e] at hM hV
-  refine ⟨fun v => ?_, hd, hm, hk, hkF, hg.ac_change ?_ ?_ ?_ hV.of_add_right hM.dropCur⟩
+  refine ⟨fun v => ?_, hd, hm.reShare ?_, hk, hkF, hg.ac_change ?_ ?_ ?_ hV.of_add_right hM.dropCur⟩
   · have := hV.ex_zero v; simp at this; exact this.1
+  · funext l; simp [Ghost.cur, Ghost.ofAC]
   · funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
