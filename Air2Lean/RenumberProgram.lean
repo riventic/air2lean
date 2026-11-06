@@ -319,11 +319,11 @@ theorem pointsToMem_ren (v : Val) : (renVal ρ v).pointsToMem = v.pointsToMem :=
 termination_by sizeOf v
 decreasing_by all_goals simp_wf; omega
 
-theorem hasUndefExcept_ren (admit : TyId → Bool) (v : Val) :
-    (renVal ρ v).hasUndefExcept admit = v.hasUndefExcept admit := by
+theorem hasUndefExcept_ren (allowed : TyId → Bool) (v : Val) :
+    (renVal ρ v).hasUndefExcept allowed = v.hasUndefExcept allowed := by
   cases v with
-  | optSome t w => simpa [renVal, Val.hasUndefExcept] using hasUndefExcept_ren admit w
-  | errUnionOk t w => simpa [renVal, Val.hasUndefExcept] using hasUndefExcept_ren admit w
+  | optSome t w => simpa [renVal, Val.hasUndefExcept] using hasUndefExcept_ren allowed w
+  | errUnionOk t w => simpa [renVal, Val.hasUndefExcept] using hasUndefExcept_ren allowed w
   | _ => simp [renVal, Val.hasUndefExcept]
 termination_by sizeOf v
 decreasing_by all_goals simp_wf; omega
