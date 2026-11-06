@@ -570,7 +570,7 @@ theorem deadUndefStores_ren (hρ : Inj ρ) (f : Func) :
   intro body _ acc
   rw [← Array.map_zipIdx, Array.foldl_map]
   apply foldl_hom_mem
-  intro ⟨i, k⟩ _ a
+  rintro ⟨i, k⟩ - a
   rcases i with ⟨iid, ty, op⟩
   dsimp only [Prod.map, _root_.id]
   simp only [renInst_op, renInst_id]
@@ -591,8 +591,7 @@ theorem undefAllocs_ren (hρ : Inj ρ) (f : Func) :
     Array.map_empty, Array.foldl_map]
   congr 1
   apply foldl_hom_nil
-  intro i _ acc
-  rcases i with ⟨id, ty, op⟩
+  rintro ⟨id, ty, op⟩ - acc
   simp only [renInst_op, renInst_id]
   cases op <;> try rfl
   case store p v =>
