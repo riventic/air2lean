@@ -603,6 +603,7 @@ structure ViewRetryState where
 def ViewRetryState.same (s t : ViewRetryState) : Bool :=
   s.resources.isPerm t.resources && s.requests.isPerm t.requests && s.facts.isPerm t.facts
 
+
 /-- A recognized total-group step. This is traversal context, not a proof assumption or a
 registry. Only the root's local contract can create it; every walk restores its caller's value. -/
 structure RecBoundary where
@@ -700,6 +701,11 @@ structure RunCaches where
   fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
   /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
   fuelOut : IO.Ref Bool
+  /-- The subterms of the run's `omega` certificates (`omegaRaw`), each distinct term once, up to
+  `Expr.equal` (binder names and annotations count). Never rolled back: an entry only shares. A
+  persistent set: the caches of a run are shared between threads (`fsymRuns`), so the runtime
+  never updates them in place, and an insertion into a hash set would copy all of it. -/
+  omegaTerms : IO.Ref (PersistentHashSet ExprStructEq)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, dischFail := ← IO.mkRef {},
@@ -715,7 +721,7 @@ def RunCaches.new : IO RunCaches :=
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
            chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
            runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
-           fuelOut := ← IO.mkRef false }
+           fuelOut := ← IO.mkRef false, omegaTerms := ← IO.mkRef {} }
 
 /-- Restore the existing arithmetic search state with a failed speculative proof choice.
 The simp contexts are prepared before backtracking and are not part of this state. Off
@@ -837,7 +843,44 @@ once. -/
 def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) :=
   failCached RunCaches.detFail key base (probe key base.size run)
 
-/-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean. -/
+/-- `internTerms`' walk: bottom up, its children replaced first, so that a lookup in `tbl`
+compares children by address, and each node once (`memo`; the same node again is found by
+address). A term already in `tbl` is not entered: a certificate contains its facts' proofs, often
+earlier certificates. -/
+partial def internVisit (tbl : IO.Ref (PersistentHashSet ExprStructEq))
+    (memo : IO.Ref (Std.HashMap ExprStructEq Expr)) (e : Expr) : IO Expr := do
+  if let some r := (← memo.get).get? ⟨e⟩ then return r
+  if let some r := (← tbl.get).find? ⟨e⟩ then return r.val
+  let visit := internVisit tbl memo
+  let e' ← match e with
+    | .app f a => pure (e.updateApp! (← visit f) (← visit a))
+    | .lam _ t b _ => pure (e.updateLambdaE! (← visit t) (← visit b))
+    | .forallE _ t b _ => pure (e.updateForallE! (← visit t) (← visit b))
+    | .letE _ t v b _ => pure (e.updateLetE! (← visit t) (← visit v) (← visit b))
+    | .mdata _ b => pure (e.updateMData! (← visit b))
+    | .proj _ _ b => pure (e.updateProj! (← visit b))
+    | _ => pure e
+  let r ← match (← tbl.get).find? ⟨e'⟩ with
+    | some r => pure r.val
+    | none => tbl.modify (·.insert ⟨e'⟩); pure e'
+  memo.modify (·.insert ⟨e⟩ r)
+  return r
+
+/-- `e` hash-consed against `tbl`: each subterm is replaced by the equal term in `tbl`
+(`Expr.equal`), and the new ones are added. `shareCommon'` first turns `omega`'s tree into a
+graph, so that the walk meets each distinct node once. -/
+def internTerms (tbl : IO.Ref (PersistentHashSet ExprStructEq)) (e : Expr) : IO Expr := do
+  internVisit tbl (← IO.mkRef {}) (ShareCommon.shareCommon' e)
+
+/-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean.
+
+`omega`'s certificate is a tree: each step serializes its coefficient lists again, a constraint
+used twice is proved twice, and every call serializes its atoms and facts again. A walk's
+certificates therefore repeat a few subterms millions of times (ArenaSpec `loop66_c0`: 64M term
+nodes, 0.23M distinct, held until the theorem is checked). They are hash-consed against the run's
+table (`RunCaches.omegaTerms`), so the run's caches, the goals' assignments and the final term
+hold each distinct subterm once, and `omega`'s own goals, which hold the certificate unshared,
+are dropped (`omegaRaw'`). -/
 def omegaRaw (facts : Array Expr) (ty : Expr) : MetaM (Option Expr) := do
   let h0 ← IO.getNumHeartbeats
   let r ← omegaRaw' facts ty
@@ -850,17 +893,35 @@ where
   let s ← saveState
   -- `omega` may exhaust the recursion depth on a false goal with many case splits: a failure
   tryCatchRuntimeEx (do
-    let m ← mkFreshExprMVar ty
-    let before := (← getLCtx).lastDecl.map (·.fvarId)
-    let some g ← m.mvarId!.falseOrByContra | return some (← instantiateMVars m)
-    g.withContext do
-      let neg := match (← getLCtx).lastDecl with
-        | some d => if some d.fvarId != before then #[d.toExpr] else #[]
-        | none => #[]
-      -- `omega`'s case splits on `/` and `%` by literals recurse deeply on a false goal
-      withTheReader Core.Context (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
-        Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
-    return some (← instantiateMVars m))
+    let prove : MetaM Expr := do
+      let m ← mkFreshExprMVar ty
+      let before := (← getLCtx).lastDecl.map (·.fvarId)
+      if let some g ← m.mvarId!.falseOrByContra then
+        g.withContext do
+          let neg := match (← getLCtx).lastDecl with
+            | some d => if some d.fvarId != before then #[d.toExpr] else #[]
+            | none => #[]
+          -- `omega`'s case splits on `/` and `%` by literals recurse deeply on a false goal
+          withTheReader Core.Context
+            (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
+            Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
+      instantiateMVars m
+    -- Without unknowns, one depth deeper: `omega`'s goals (the unshared certificate) and
+    -- postponed constraints are dropped with the depth; a proof needing one is no proof
+    let proveClosed : MetaM (Option Expr) := do
+      let some pf ← withNewMCtxDepth do
+          let pf ← prove
+          return if (← getPostponed).isEmpty then some pf else none
+        | return none
+      let mctx ← getMCtx
+      return if (!pf.hasExprMVar || (pf.collectMVars {}).result.all mctx.decls.contains) &&
+        (!pf.hasLevelMVar || (collectLevelMVars {} pf).result.all mctx.lDecls.contains)
+        then some pf else none
+    let isClosed (t : Expr) : MetaM Bool := return !(← instantiateMVars t).hasMVar
+    let closed ← isClosed ty <&&> facts.allM fun f => do isClosed (← inferType f)
+    -- with unknowns, at the context's depth, where `omega` may assign them
+    let some pf ← if closed then proveClosed else some <$> prove | s.restore; return none
+    return some (← internTerms (← caches).omegaTerms pf))
     fun _ => do s.restore; return none
 
 /-- A proposition `omega` reads: relations of natural numbers and integers under `¬ ∧ ∨ → ↔`. -/
