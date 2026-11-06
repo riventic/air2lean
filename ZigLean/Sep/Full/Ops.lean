@@ -237,26 +237,40 @@ theorem up_bytesAt_cell {r : Res} {b : BlockId} (hp : up (bytesAt p A S K bs) r)
   rw [ite_eq_left ⟨rfl, by omega, by omega⟩, Nat.add_sub_cancel_left] at e
   exact erase_cell e
 
-/-- **The block of owned bytes** (`0 < bs.size`): live, at address `A`, of a kind with `K`'s
+/-- **`m` has the bytes `bs` at `p`** as live bytes read as the cells `⟨bs[j]!, A, S, K⟩` (up to
+`Cell.norm`): what owning them exclusively (`Holds.bytesRead`) or by shares (`Holds.sbytesRead`,
+`Share.lean`) gives, and all a read of them needs (`Mem.bytes_block`, `Mem.bytes_access`). -/
+def _root_.Zig.Mem.BytesRead (m : Mem) (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) : Prop :=
+  ∃ b, p.block = some b ∧ 0 ≤ p.off ∧ ∀ j, j < bs.size →
+    ∃ c, m.heap (b, p.off.toNat + j) = some c ∧ c.norm = (⟨bs[j]!, A, S, K⟩ : Cell).norm
+
+/-- Owned bytes are read in `m` (`Holds.cellN`). -/
+theorem Holds.bytesRead {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hp : up (bytesAt p A S K bs) r) : m.BytesRead p A S K bs := by
+  obtain ⟨b, hpb, h0, -⟩ := hp.1
+  refine ⟨b, hpb, h0, fun j hj => ?_⟩
+  obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hp hpb hj
+  rw [← hc]; exact hh.cellN hfc
+
+/-- **The block of bytes read in `m`** (`0 < bs.size`): live, at address `A`, of a kind with `K`'s
 normal form, with the bytes `bs` at `p`, at or above its first live offset. -/
-theorem Holds.bytesAt_block {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hp : up (bytesAt p A S K bs) r) (hpos : 0 < bs.size) :
+theorem Mem.bytes_block {m : Mem} (hr : m.BytesRead p A S K bs) (hpos : 0 < bs.size) :
     ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live = true ∧ 0 ≤ p.off ∧
       blk.kind.mappedLo ≤ p.off.toNat ∧ p.off.toNat + bs.size ≤ blk.bytes.size ∧ blk.addr = A ∧
       blk.kind.norm = K.norm ∧
       blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs := by
-  obtain ⟨b, hpb, h0, -⟩ := hp.1
+  obtain ⟨b, hpb, h0, hcell⟩ := hr
   have cell : ∀ j (hj : j < bs.size), ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧
       blk.kind.mappedLo ≤ p.off.toNat + j ∧ blk.addr = A ∧ blk.kind.norm = K.norm ∧
       blk.bytes[p.off.toNat + j]? = some bs[j] := by
     intro j hj
-    obtain ⟨fc, hfc, hc⟩ := up_bytesAt_cell hp hpb hj
-    obtain ⟨blk, hb, hl, -, hlo, ha, hk⟩ := hh.block hfc
-    obtain ⟨c', hc', hn⟩ := hh.cellN hfc
+    obtain ⟨c', hc', hn⟩ := hcell j hj
+    obtain ⟨blk, hb, hl, -, hlo, ha, hk⟩ :=
+      Mem.block_of_cell (fc := ⟨⟨bs[j]!, A, S, K⟩, none⟩) ⟨c', hc', hn⟩
     obtain ⟨blk', hb', -, hx', rfl⟩ := Mem.heap_some hc'
     rw [hb] at hb'; cases hb'
     have hbyte := congrArg Cell.byte hn
-    simp only [Cell.norm, hc] at hbyte ha hk
+    simp only [Cell.norm] at hbyte ha hk
     refine ⟨blk, hb, hl, hlo, ha.symm, hk.symm, ?_⟩
     rw [Array.getElem?_eq_getElem hx', hbyte, getElem!_pos bs j hj]
   obtain ⟨blk, hb, hl, hlo, ha, hk, -⟩ := cell 0 hpos
@@ -272,15 +286,23 @@ theorem Holds.bytesAt_block {m : Mem} {r rF : Res} (hh : Holds m r rF)
     simp only [Array.getElem_extract]
     exact (Array.getElem?_eq_some_iff.mp hx).2
 
-/-- An access to `n > 0` of the owned bytes, from byte `k` on, with an aligned address: it
+/-- **The block of owned bytes** (`Mem.bytes_block`). -/
+theorem Holds.bytesAt_block {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hp : up (bytesAt p A S K bs) r) (hpos : 0 < bs.size) :
+    ∃ b blk, p.block = some b ∧ m.blocks[b]? = some blk ∧ blk.live = true ∧ 0 ≤ p.off ∧
+      blk.kind.mappedLo ≤ p.off.toNat ∧ p.off.toNat + bs.size ≤ blk.bytes.size ∧ blk.addr = A ∧
+      blk.kind.norm = K.norm ∧
+      blk.bytes.extract p.off.toNat (p.off.toNat + bs.size) = bs :=
+  Mem.bytes_block (hh.bytesRead hp) hpos
+
+/-- An access to `n > 0` of bytes read in `m`, from byte `k` on, with an aligned address: it
 succeeds in the bytes' block and sees them. -/
-theorem Holds.bytesAt_access {m : Mem} {r rF : Res} (hh : Holds m r rF)
-    (hp : up (bytesAt p A S K bs) r) {k n al : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
-    (ha : (A + p.off.toNat + k) % al = 0) :
+theorem Mem.bytes_access {m : Mem} (hr : m.BytesRead p A S K bs) {k n al : Nat} (hn : 0 < n)
+    (hk : k + n ≤ bs.size) (ha : (A + p.off.toNat + k) % al = 0) :
     ∃ b blk, m.access (p.add k) n al = pure (b, blk, p.off.toNat + k) ∧
       m.blocks[b]? = some blk ∧ blk.kind.norm = K.norm ∧
       blk.bytes.extract (p.off.toNat + k) (p.off.toNat + k + n) = bs.extract k (k + n) := by
-  obtain ⟨b, blk, hpb, hb, hl, h0, hlo, hfit, hA, hK, hx⟩ := hh.bytesAt_block hp (by omega)
+  obtain ⟨b, blk, hpb, hb, hl, h0, hlo, hfit, hA, hK, hx⟩ := Mem.bytes_block hr (by omega)
   have e : (p.add k).off.toNat = p.off.toNat + k := by simp only [Ptr.add]; omega
   refine ⟨b, blk, ?_, hb, hK, ?_⟩
   · have := access_of (m := m) (p := p.add k) (n := n) (a := al) (by simpa using hpb) hb hl
@@ -289,6 +311,15 @@ theorem Holds.bytesAt_access {m : Mem} {r rF : Res} (hh : Holds m r rF)
     rwa [e] at this
   · rw [← hx, Array.extract_extract]
     congr 1 <;> omega
+
+/-- An access to owned bytes (`Mem.bytes_access`). -/
+theorem Holds.bytesAt_access {m : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hp : up (bytesAt p A S K bs) r) {k n al : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
+    (ha : (A + p.off.toNat + k) % al = 0) :
+    ∃ b blk, m.access (p.add k) n al = pure (b, blk, p.off.toNat + k) ∧
+      m.blocks[b]? = some blk ∧ blk.kind.norm = K.norm ∧
+      blk.bytes.extract (p.off.toNat + k) (p.off.toNat + k + n) = bs.extract k (k + n) :=
+  Mem.bytes_access (hh.bytesRead hp) hn hk ha
 
 /-- The resource after a write of `bs'` at byte `o` of block `b`: its cells there hold the new
 bytes, with their labels and tags. -/
@@ -490,17 +521,26 @@ theorem loadBytes_bytesAt {n : Nat} (hn : 0 < n) (hk : k + n ≤ bs.size)
       (noRace_of_singleThread hs.1.single _ _ _ _),
       hh.readAt _ _ _ _ _, sep_lift.mpr ⟨hx, hp⟩, hs.readAt _ _ _ _ _⟩
 
+/-- **Load of a `T`** at byte `k` of bytes that every resource of `P` reads in the memory
+(`Mem.BytesRead`: owned, tagged or shared bytes alike), decoding to `v` there: `P` stays. -/
+theorem load_of_read {P : FAssn} {T : Type} [Enc T] {v : T}
+    (hr : ∀ m r rF, Holds m r rF → P r → m.BytesRead q A S K bs) (hn : 0 < Enc.size T)
+    (hk : k + Enc.size T ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
+    (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
+    FTotalTriple P (Zig.load T al (q.add k)) (fun x => ⟪x = v⟫ ⋆ P) :=
+  of_run fun m r rF hh hp hs => by
+    obtain ⟨b, blk, hacc, -, -, hx⟩ := Mem.bytes_access (hr m r rF hh hp) hn hk ha
+    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
+      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
+      hs.readAt _ _ _ _ _⟩
+
 /-- **Load of a `T`** at byte `k` of owned bytes that decode to `v` there. -/
 theorem load_bytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
     (hk : k + Enc.size T ≤ bs.size) (ha : (A + q.off.toNat + k) % al = 0)
     (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
     FTotalTriple (up (bytesAt q A S K bs)) (Zig.load T al (q.add k))
       (fun x => ⟪x = v⟫ ⋆ up (bytesAt q A S K bs)) :=
-  of_run fun m r rF hh hp hs => by
-    obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access hp hn hk ha
-    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
-      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
-      hs.readAt _ _ _ _ _⟩
+  load_of_read (fun _ _ _ hh hp => hh.bytesRead hp) hn hk ha hv
 
 /-- **Store of the bytes `bs'`** at byte `k` of owned bytes, not of a `const` global: the bytes
 become `writeBytes bs k bs'`. -/
