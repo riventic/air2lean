@@ -48,8 +48,8 @@ theorem _root_.Zig.Mem.SingleThread.owns {m : Mem} (h : m.SingleThread) (hp : He
   fun e he _ => (h.2 e he).2
 
 /-- A step of the current thread keeps a one-thread memory one-thread (`FStepIn`). -/
-theorem _root_.Zig.Mem.SingleThread.fstep {m m' : Mem} {hF : Heap} (h : m.SingleThread)
-    (hs : FStepIn hF m m') : m'.SingleThread := by
+theorem _root_.Zig.Mem.SingleThread.fstep {m m' : Mem} {hF hR : Heap} (h : m.SingleThread)
+    (hs : FStepIn hF m m' hR) : m'.SingleThread := by
   refine ⟨by rw [hs.current, hs.size]; exact h.1, fun e he => ⟨?_, ?_⟩⟩
   · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨ht, -⟩
     · rw [hs.current, hn.1]; exact (h.2 e₀ he₀).1
@@ -91,25 +91,133 @@ theorem FHeap.erase_fix_ne {m : Mem} {h : FHeap} {l : Loc} :
     (h.fix m).erase l ≠ none ↔ h.erase l ≠ none := by
   simp [FHeap.erase, FHeap.fix]
 
+theorem Res.excl_fix {m : Mem} {r : Res} {l : Loc} : (r.fix m).excl l ≠ none ↔ r.excl l ≠ none := by
+  simp only [Res.excl_ne, Res.fix, ne_eq, FHeap.fix_none]
+
+theorem Res.shared_fix {m : Mem} {r : Res} {l : Loc} :
+    (r.fix m).shared l ≠ none ↔ r.shared l ≠ none := by
+  simp only [Res.shared_ne, Res.fix, FHeap.fix_none]
+
+/-! ## Thread ownership of a resource (option R) -/
+
+/-- **Thread `t` owns the resource `r`** (`docs/sep-full-state.md` §Read shares, option R): every
+recorded access to its exclusive bytes (cells, whole shares: `Res.excl`) and every recorded write
+to its shared bytes (partial shares: `Res.shared`) happened before `t`'s clock. -/
+def _root_.Zig.Mem.OwnsRes (m : Mem) (t : ThreadId) (r : Res) : Prop :=
+  m.Owns t r.excl ∧ m.OwnsR t r.shared
+
+section OwnsRes
+
+variable {m m' : Mem} {t : ThreadId} {r r' r₁ r₂ : Res}
+
+/-- Ownership of all of a resource's bytes is thread ownership of it. -/
+theorem _root_.Zig.Mem.OwnsRes.of_owns (ho : m.Owns t r.owned) : m.OwnsRes t r :=
+  ⟨ho.sub fun _ => Res.owned_of_excl, Mem.Owns.toR (ho.sub fun _ => Res.owned_of_shared)⟩
+
+/-- A thread may read every byte of a resource it owns. -/
+theorem _root_.Zig.Mem.OwnsRes.ownsR (ho : m.OwnsRes t r) : m.OwnsR t r.owned :=
+  (Mem.OwnsRC.union (Mem.OwnsC.toR ho.1) ho.2).sub fun _ hl hn => by
+    simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+    rcases Res.excl_or_shared hl with h | h
+    · exact h hn.1
+    · exact h hn.2
+
+/-- A thread owns every access to its cells. -/
+theorem _root_.Zig.Mem.OwnsRes.cells (ho : m.OwnsRes t r) : m.Owns t r.heap.erase :=
+  ho.1.sub fun _ hl => Res.excl_of_heap fun e => hl (by simp [FHeap.erase, e])
+
+theorem _root_.Zig.Mem.OwnsRes.sub (ho : m.OwnsRes t r)
+    (hx : ∀ l, r'.excl l ≠ none → r.excl l ≠ none)
+    (hs : ∀ l, r'.shared l ≠ none → r.owned l ≠ none) : m.OwnsRes t r' :=
+  ⟨ho.1.sub hx, ho.ownsR.sub hs⟩
+
+/-- A thread owns each part of a resource it owns. -/
+theorem _root_.Zig.Mem.OwnsRes.sepL (ho : m.OwnsRes t r) (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) : m.OwnsRes t r₁ :=
+  ho.sub (fun _ hl => Res.excl_sep hh hg (.inl hl))
+    fun _ hl => (Res.owned_sep hh hg).mpr (.inl (Res.owned_of_shared hl))
+
+theorem _root_.Zig.Mem.OwnsRes.sepR (ho : m.OwnsRes t r) (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) : m.OwnsRes t r₂ :=
+  ho.sub (fun _ hl => Res.excl_sep hh hg (.inr hl))
+    fun _ hl => (Res.owned_sep hh hg).mpr (.inr (Res.owned_of_shared hl))
+
+/-- The current thread keeps owning a resource over any of its steps (`Mem.Owns.fstepCur`). -/
+theorem _root_.Zig.Mem.OwnsRes.fstepCur {hF hR : Heap} (ho : m.OwnsRes m.current r)
+    (hs : FStepIn hF m m' hR) : m'.OwnsRes m'.current r :=
+  ⟨ho.1.fstepCur hs, ho.2.fstepCur hs⟩
+
+/-- **An update keeps thread ownership**: next to the same frame in the same memory, every
+exclusive byte of the new resource is an exclusive byte of the old one (`Holds.excl_sub'`: a
+whole share is exclusive), and every byte of it a byte of the old one (`Holds.owned_sub`). -/
+theorem _root_.Zig.Mem.OwnsRes.upd {rF : Res} (ho : m.OwnsRes t r) (hh : Holds m r rF)
+    (hh' : Holds m r' rF) : m.OwnsRes t r' :=
+  ho.sub (fun _ hl => hh.excl_sub' hh' (hh'.live_of_owned (Res.owned_of_excl hl)).1 hl)
+    fun _ hl => hh.owned_sub hh' (Res.owned_of_shared hl)
+
+/-- **The frame rule's ownership**: after a step of the thread on the part `rP` of `rP ⋆ rR`
+that ends with `rP'`, the thread owns `rP' ⋆ rR`. An exclusive byte of the sum is one of `rP'`,
+or a byte of `rR`, which the sum held exclusively before (`Holds.excl_sub'`: the frame `rF` is
+the same). -/
+theorem _root_.Zig.Mem.OwnsRes.frame {hF hR : Heap} {rF rP rP' rR : Res}
+    (hh : Holds m ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ rF)
+    (hh' : Holds m' ⟨rP'.heap ∪ rR.heap, rP'.know.union rR.know, rP'.gh.add rR.gh⟩ rF)
+    (ho : m.OwnsRes m.current ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩)
+    (ho' : m'.OwnsRes m'.current rP') (hs : FStepIn hF m m' hR) :
+    m'.OwnsRes m'.current ⟨rP'.heap ∪ rR.heap, rP'.know.union rR.know, rP'.gh.add rR.gh⟩ := by
+  have ho₁ := ho.fstepCur hs
+  refine ⟨(Mem.OwnsC.union ho'.1 ho₁.1).sub fun l hl hn => ?_,
+    (Mem.OwnsRC.union ho'.ownsR ho₁.ownsR).sub fun l hl hn => ?_⟩
+  · simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+    by_cases hR' : rR.owned l ≠ none
+    · have hl₀ : Res.owned ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ l ≠ none :=
+        (Res.owned_sep rfl rfl).mpr (.inr hR')
+      exact (hh.excl_sub' hh' (hh.live_of_owned hl₀).1 hl) hn.2
+    · have hR0 : rR.heap l = none ∧ ¬ (rR.gh.share l).Pos := by
+        rw [Res.owned_ne] at hR'; grind
+      refine absurd hn.1 (Res.excl_ne.mpr ?_)
+      rcases Res.excl_ne.mp hl with e | e
+      · left; simpa [FHeap.union_apply, hR0.1] using e
+      · right
+        rw [Ghost.add_share, (SCell.not_pos_iff.mp hR0.2).eq, SCell.add_zero] at e
+        exact e
+  · simp only [Heap.union_apply, Option.or_eq_none_iff] at hn
+    rcases (Res.owned_sep rfl rfl).mp (Res.owned_of_shared hl) with e | e
+    · exact e hn.1
+    · exact ((Res.owned_sep rfl rfl).mpr (.inr e)) hn.2
+
+end OwnsRes
+
+/-- **The frame's bytes and read shares** of a resource's step: a step in the frame `⟨rR ⋆ rF⟩`
+is a step in `rF` (the shared bytes of the sum that `rF` holds are `rF`'s shared bytes). -/
+theorem _root_.Zig.FStepIn.frameRight {m m' : Mem} {rR rF : Res}
+    (hs : FStepIn (Res.owned ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩) m m'
+      (Res.shared ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩)) :
+    FStepIn rF.owned m m' rF.shared :=
+  hs.weakenR (fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))
+    fun _ hl hs => Res.shared_sep' rfl rfl hs hl
+
 /-! ## Thread triples -/
 
-/-- `FTriple` for a step of one thread inside a concurrent run (module doc). -/
+/-- `FTriple` for a step of one thread inside a concurrent run (module doc). The thread owns the
+resource (`Mem.OwnsRes`: every access to its exclusive bytes, every write to its shared bytes
+before its clock), and the step may read the frame's partial read shares (`FStepIn`'s `hR`). -/
 def FTTriple {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+  ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
     match (c.run m).run with
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m'
+        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared
 
 namespace FTTriple
 
 variable {α β : Type} {P P' R : FAssn} {Q Q' : α → FAssn} {c : MemM α}
 
 theorem of_run
-    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       ∃ v m' r', c.run m = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
+        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
     FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨v, m', r', hr, h'⟩ := h m r rF hh hp hc ho
@@ -133,7 +241,7 @@ theorem post (ht : FTTriple P c Q) (hq : ∀ v r, Q v r → Q' v r) : FTTriple P
 /-- **One logic**: a thread triple is a sequential triple (module doc). -/
 theorem toFTriple (ht : FTTriple P c Q) : FTriple P c Q := by
   intro m r rF hh hp hs
-  have := ht m r rF hh hp hs.fconc (hs.1.single.owns _)
+  have := ht m r rF hh hp hs.fconc (.of_owns (hs.1.single.owns _))
   revert this
   cases (c.run m).run with
   | none => intro; trivial
@@ -149,39 +257,39 @@ precondition cannot state (`Mem.MsgCov` at an oracle pick's resumption): the bod
 triple in each of them. -/
 theorem of_fix_on (Φ : Mem → Prop) (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
     (h : ∀ m r rF, Φ m → Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
-      m.Owns m.current r.owned →
+      m.OwnsRes m.current r →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
-    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
+    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m' := by
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared := by
   intro m r rF hΦ hh hp hc ho
   have := h m (r.fix m) (rF.fix m) hΦ hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
-    (ho.sub fun _ hl => Res.owned_fix.mp hl)
+    (ho.sub (fun _ hl => Res.excl_fix.mp hl) fun _ hl => Res.owned_fix.mp (Res.owned_of_shared hl))
   split at this
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
-      hst.weaken fun _ hl => Res.owned_fix.mpr hl⟩
+      hst.weakenR (fun _ hl => Res.owned_fix.mpr hl) fun _ _ hl => Res.shared_fix.mp hl⟩
 
 /-- **Thread rules from exact cells** (`FTriple.of_fix`): it is enough to prove a thread triple
 for resources whose cells are the memory's exact cells, if the precondition survives reading
 the actual sizes. The thread owns the same bytes, and the frame has the same bytes. -/
 theorem of_fix (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
     (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.FConc →
-      m.Owns m.current r.owned →
+      m.OwnsRes m.current r →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
     FTTriple P c Q :=
   fun m r rF hh hp hc ho =>
     of_fix_on (fun _ => True) hP (fun m r rF _ => h m r rF) m r rF trivial hh hp hc ho
@@ -192,17 +300,15 @@ theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) 
   intro m r rF hh hpr hc ho
   obtain ⟨rP, rR, hd, rfl, hp, hr⟩ := hpr
   have hRF := (FHeap.disjoint_union_left.mp hh.disj).2
-  have hoR : m.Owns m.current rR.owned := ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)
-  have := ht m rP _ (Holds.split hd hh) hp hc (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))
+  have := ht m rP _ (Holds.split hd hh) hp hc (ho.sepL rfl rfl)
   split at this
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     have hQR := (FHeap.disjoint_union_right.mp hh'.disj).1
-    refine ⟨_, Holds.join hQR hRF hh', ⟨r', rR, hQR, rfl, hq, hr⟩, hc', ?_,
-      hst.weaken fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)⟩
-    exact (Mem.OwnsC.union ho' (Mem.Owns.fstepSelf hst hoR
-      fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))).sub fun _ => Res.owned_sub_union rfl rfl
+    have hj := Holds.join hQR hRF hh'
+    exact ⟨_, hj, ⟨r', rR, hQR, rfl, hq, hr⟩, hc', Mem.OwnsRes.frame hh hj ho ho' hst,
+      hst.frameRight⟩
 
 theorem frameL (ht : FTTriple P c Q) : FTTriple (R ⋆ P) c (fun v => R ⋆ Q v) :=
   conseq (frame (R := R) ht) (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
@@ -247,7 +353,7 @@ theorem lift {φ : Prop} (h : φ → FTTriple P c Q) : FTTriple (⟪φ⟫ ⋆ P)
 theorem eupd (hu : EUpd P P') (ht : FTTriple P' c Q) : FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨r', hh', hp'⟩ := hu m.noFp r rF hh.toNoFp hp hc.noFp
-  exact ht m r' rF hh'.ofNoFp hp' hc (ho.sub fun _ => hh.owned_sub hh'.ofNoFp)
+  exact ht m r' rF hh'.ofNoFp hp' hc (ho.upd hh hh'.ofNoFp)
 
 /-- An update of the postcondition. -/
 theorem eupd_post (ht : FTTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTTriple P c Q' := by
@@ -258,7 +364,7 @@ theorem eupd_post (ht : FTTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTTrip
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     obtain ⟨r'', hh'', hq'⟩ := hu _ _ r' rF hh'.toNoFp hq hc'.noFp
-    exact ⟨r'', hh''.ofNoFp, hq', hc', ho'.sub fun _ => hh'.owned_sub hh''.ofNoFp, hst⟩
+    exact ⟨r'', hh''.ofNoFp, hq', hc', ho'.upd hh' hh''.ofNoFp, hst⟩
 
 /-- A ghost update of the precondition. -/
 theorem upd (hu : Upd P P') (ht : FTTriple P' c Q) : FTTriple P c Q := eupd (EUpd.of_upd hu) ht
@@ -294,8 +400,7 @@ theorem drop {K : α → FAssn} (ht : FTTriple P c (fun v => Q v ⋆ K v))
     obtain ⟨e, ha⟩ := hK _ _ hk2
     simp only [e, FHeap.union_empty] at hd hm
     rw [ha.share_add] at hm
-    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hc',
-      ho'.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl), hs'⟩
+    exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hc', ho'.sepL rfl rfl, hs'⟩
 
 end FTTriple
 
@@ -310,7 +415,7 @@ concurrent logic (`WP` for safety, `Stops` for turns) from one total thread trip
 
 /-- From every memory where the thread owns `P`, `c` returns a value. -/
 def FTTReturns {α : Type} (P : FAssn) (c : MemM α) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+  ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
     ∃ v m', c.run m = pure (v, m')
 
 /-- Total correctness of a thread's step. -/
@@ -325,13 +430,13 @@ theorem toPartial (ht : FTTotalTriple P c Q) : FTTriple P c Q := ht.1
 
 /-- The step has a result (the premise of a turn budget's `liftMem` step). -/
 theorem halts (ht : FTTotalTriple P c Q) {m : Mem} {r rF : Res} (hh : Holds m r rF) (hp : P r)
-    (hc : m.FConc) (ho : m.Owns m.current r.owned) : (c.run m).run ≠ none := by
+    (hc : m.FConc) (ho : m.OwnsRes m.current r) : (c.run m).run ≠ none := by
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hc ho
   rw [e]; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run]
 
 /-- **One logic**: a total thread triple is a total sequential triple. -/
 theorem toFTotalTriple (ht : FTTotalTriple P c Q) : FTotalTriple P c Q :=
-  ⟨ht.1.toFTriple, fun m r rF hh hp hs => ht.2 m r rF hh hp hs.fconc (hs.1.single.owns _)⟩
+  ⟨ht.1.toFTriple, fun m r rF hh hp hs => ht.2 m r rF hh hp hs.fconc (.of_owns (hs.1.single.owns _))⟩
 
 theorem conseq (ht : FTTotalTriple P c Q) (hp : ∀ r, P' r → P r) (hq : ∀ v r, Q v r → Q' v r) :
     FTTotalTriple P' c Q' :=
@@ -340,8 +445,7 @@ theorem conseq (ht : FTTotalTriple P c Q) (hp : ∀ r, P' r → P r) (hq : ∀ v
 theorem frame (ht : FTTotalTriple P c Q) : FTTotalTriple (P ⋆ R) c (fun v => Q v ⋆ R) := by
   refine ⟨ht.1.frame, fun m r rF hh hpr hc ho => ?_⟩
   obtain ⟨rP, rR, hd, rfl, hp, -⟩ := hpr
-  exact ht.2 m rP _ (Holds.split hd hh) hp hc
-    (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))
+  exact ht.2 m rP _ (Holds.split hd hh) hp hc (ho.sepL rfl rfl)
 
 theorem ret (v : α) : FTTotalTriple (Q v) (pure v : MemM α) Q :=
   ⟨FTTriple.ret v, fun m _ _ _ _ _ _ => ⟨v, m, rfl⟩⟩
