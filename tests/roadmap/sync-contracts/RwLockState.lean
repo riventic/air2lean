@@ -1,5 +1,5 @@
 import ZigLean.Sep.Full.RwLock
-import ZigLean.Sep.Full.RwLockShare
+import ZigLean.Sep.Full.Share
 import ZigLean.Mem.Thread
 
 /- Value algebra controls for the real ABI64 Gen operands and the mathematical
@@ -145,17 +145,28 @@ theorem retire_before_writer :
   ⟨(RwState.last_reader_guard (by decide) (by decide) false).mpr rfl,
     old_writer_guard 1 0 false⟩
 
-/-- Two readers' halves of the whole protected resource join back to the whole, whose shares are
-exact, so a writer after both readers finds every byte held whole. -/
-theorem two_readers_join (r : Res) (l : Loc) :
-    ((rsum (r.frac Frac.one.half) (r.frac Frac.one.half)).gh.share l).Total := by
-  rw [Res.frac_add, Frac.half_add_half]; exact Res.frac_one_total r l
+/-! The protected resource's read shares are F3's generic share (`ZigLean/Sep/Full/Share.lean`):
+a shared holder of the RwLock holds `sheap H q` of the protected heap `H`. -/
+
+/-- A shared acquire halves the free lock's fraction: room for any number of readers. -/
+theorem reader_half {H : FHeap} {q : Frac} {r : Res} :
+    sheap H q r ↔ (sheap H q.half ⋆ sheap H q.half) r := by
+  rw [← sheap_add, Frac.half_add_half]
+
+/-- Two readers' halves of the whole join back to the whole share, which `EUpd.unshare_whole`
+turns into the exclusive heap for a writer after both readers. -/
+theorem two_readers_whole {H : FHeap} {r : Res}
+    (h : (sheap H Frac.one.half ⋆ sheap H Frac.one.half) r) : sheap H Frac.one r :=
+  Frac.half_add_half Frac.one ▸ sheap_add.mpr h
 
 /-- A third reader splits the free half again; the three fractions stay valid. -/
-theorem three_readers_valid (r : Res) (l : Loc) :
-    ((rsum (r.frac Frac.one.half)
-      (rsum (r.frac Frac.one.half.half) (r.frac Frac.one.half.half))).gh.share l).Valid := by
-  rw [Res.frac_add, Frac.half_add_half, Res.frac_add, Frac.half_add_half]
-  exact FHeap.shares_valid (by decide) r.heap l
+theorem three_readers_valid (H : FHeap) (l : Loc) :
+    (((Ghost.sharesOf H Frac.one.half).add ((Ghost.sharesOf H Frac.one.half.half).add
+      (Ghost.sharesOf H Frac.one.half.half))).share l).Valid := by
+  rw [Ghost.sharesOf_add, Frac.half_add_half, Ghost.sharesOf_add, Frac.half_add_half,
+    Ghost.sharesOf_share]
+  rcases H l with _ | c
+  · exact SCell.valid_zero
+  · exact SCell.valid_of (by decide)
 
 end Zig.Full.RwLockStateTest

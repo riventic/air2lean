@@ -265,7 +265,6 @@
     "ZigLean.Sep.Full.WordNewest": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.Sem": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.RwLock": [],
-    "ZigLean.Sep.Full.RwLockShare": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "OSM-01"],
     "ZigLean.Os.Mmap": ["OSM-01"],
     "ZigLean.Os.MmapRun": ["OSM-01"],
     "ZigLean.Os": ["OSF-01", "OSF-02", "OST-01", "OST-02", "OST-03", "OSY-01", "OSK-01", "OSK-02", "OSG-01", "OSM-02"],
