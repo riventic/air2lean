@@ -82,6 +82,13 @@ class AuditTests(unittest.TestCase):
         self.assertIn("Air2Lean.Renumber.execFunc_rename", cc.GENERIC_ROOTS["Air2Lean.Renumber"])
         cc.check_audit(audit(), artifact())
 
+    def test_scope_is_in_the_reports_sorted_order(self):
+        # `scripts/assumptions.py` lists the audited modules sorted; the expected scope must match
+        # whatever order `GENERIC_ROOTS` declares them in.
+        report = audit()
+        report["modules"] = sorted(cc.GENERIC_ROOTS)
+        cc.check_audit(report, artifact())
+
     def test_each_generic_root_requires_its_actual_theorem_and_node(self):
         for _, name in ROOTS:
             for field in ("theorems", "nodes"):

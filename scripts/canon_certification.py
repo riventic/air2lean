@@ -29,7 +29,8 @@ GENERIC_ROOTS = {
     "Air2Lean.RenumberProgram": frozenset(f"Air2Lean.Renumber.{name}" for name in (
         "tickPolicy_renumber", "run_renumber", "runOn_renumber")),
 }
-MODULES = tuple(GENERIC_ROOTS)
+# In the order the audit report lists them (`scripts/assumptions.py` sorts its modules).
+MODULES = tuple(sorted(GENERIC_ROOTS))
 
 
 def native_binding(data):
