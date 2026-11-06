@@ -182,13 +182,13 @@ def Op.isSpinHint : Op → Bool
   | _ => false  -- keep: only `asm` can be a spin hint
 
 /-- The switch selector and every case item and range bound, in order. -/
-private def switchValues (v : Val) (cases : Array SwitchCase) : Array Val :=
+def switchValues (v : Val) (cases : Array SwitchCase) : Array Val :=
   #[v] ++ cases.foldl (fun acc c =>
     let acc := c.items.foldl Array.push acc
     c.ranges.foldl (fun acc (lo, hi) => (acc.push lo).push hi) acc) #[]
 
 /-- The case bodies, then the `else` body. -/
-private def switchBodies (cases : Array SwitchCase) (elseBody : Array Inst) : Array (Array Inst) :=
+def switchBodies (cases : Array SwitchCase) (elseBody : Array Inst) : Array (Array Inst) :=
   cases.map (·.body) ++ #[elseBody]
 
 /-- The classifier (module doc) under `--allocator-model mode` (which std calls are models). No
