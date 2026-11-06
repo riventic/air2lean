@@ -692,8 +692,12 @@ theorem main_spec (σ : Placement) (d : Nat) : (proto a b).WP 0 (disjoint a b) (
   obtain ⟨hc₁₈, hth₁₈⟩ := join_threads r2₁₇ hj₂
   obtain ⟨rO₁₇, ho₁₇⟩ := hi₁₇.own
   have e0 : ownOf G₄ m₁₇ 0 = rk1 := by simp [ownOf, joinedB, hg₄, Gh.res]
+  -- `main`'s part has no read share (`blk`: bytes and an extent), so the join gathers none
+  have hu1 : ∀ l, rk1.shared l = none :=
+    (FAssn.Unshared.sep (.sep (.up _) (.bext _ _ _)) (.sep (.up _) (.bext _ _ _)) :
+      (MainA a b B .j2).Unshared) rk1 hma₁₇
   have ho₁₈ := FOwned.join (ho₁₇.current 0) (by rw [hsz₁₇]; decide) (by decide) hj₂
-    fun l => .inl (by rw [e0]; exact (Res.excl_eq_erase).2 l)
+    fun l => .inl (by rw [e0]; exact hu1 l)
   have e2 : ownOf G₄ m₁₇ 2 = rk2 := by
     have r : m₁₇.threads[2]? = some { spawner := 0, joined := false } := r2₁₇
     simp [ownOf, joinedB, r, hf2, Gh.res]
