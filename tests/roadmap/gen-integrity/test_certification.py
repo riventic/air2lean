@@ -21,17 +21,22 @@ def binding(functions=1, changed=True):
     return dict(kind="canon-debug-native-binding", version=1, functions=functions, changed=changed)
 
 
+CANON_SEM = "Air2Lean.CanonSem"
+ROOTS = [(module, name) for module, names in cc.GENERIC_ROOTS.items() for name in sorted(names)]
+
+
 def artifact():
-    return dict(olean="/private/tmp/CanonSem.olean", olean_sha256="actual-artifact-sha256")
+    return {module: dict(olean=f"/private/tmp/{module}.olean", olean_sha256=f"actual-{module}-sha256")
+            for module in cc.MODULES}
 
 
 def audit():
-    return dict(status="pass", violations=[], modules=[cc.MODULE],
+    return dict(status="pass", violations=[], modules=list(cc.MODULES),
                 kernel_replay=dict(status="pass", rejected=[], reused=[]),
                 freshness=dict(lake_trace_check=dict(status="up-to-date"),
-                               artifacts=[dict(module=cc.MODULE, **artifact())]),
-                theorems=[dict(module=cc.MODULE, name=name, allowed=True) for name in sorted(cc.GENERIC_ROOTS)],
-                nodes=[dict(module=cc.MODULE, name=name, kind="theorem") for name in sorted(cc.GENERIC_ROOTS)])
+                               artifacts=[dict(module=module, **row) for module, row in artifact().items()]),
+                theorems=[dict(module=module, name=name, allowed=True) for module, name in ROOTS],
+                nodes=[dict(module=module, name=name, kind="theorem") for module, name in ROOTS])
 
 
 class ProtocolTests(unittest.TestCase):
@@ -73,11 +78,12 @@ class ProtocolTests(unittest.TestCase):
 
 class AuditTests(unittest.TestCase):
     def test_generic_roots_in_their_actual_module_are_accepted(self):
-        self.assertIn("Air2Lean.DebugIds.execFunc_mapDebugArray", cc.GENERIC_ROOTS)
+        self.assertIn("Air2Lean.DebugIds.execFunc_mapDebugArray", cc.GENERIC_ROOTS[CANON_SEM])
+        self.assertIn("Air2Lean.Renumber.execFunc_rename", cc.GENERIC_ROOTS["Air2Lean.Renumber"])
         cc.check_audit(audit(), artifact())
 
     def test_each_generic_root_requires_its_actual_theorem_and_node(self):
-        for name in cc.GENERIC_ROOTS:
+        for _, name in ROOTS:
             for field in ("theorems", "nodes"):
                 report = audit()
                 report[field] = [row for row in report[field] if row["name"] != name]
@@ -97,11 +103,12 @@ class AuditTests(unittest.TestCase):
 
     def test_replay_reuse_rejection_staleness_and_wrong_scope_fail(self):
         changes = (lambda r: r.update(status="fail"), lambda r: r.update(violations=["axiom"]),
-                   lambda r: r.update(modules=[cc.MODULE, "RoundTrip0"]),
+                   lambda r: r.update(modules=[*cc.MODULES, "RoundTrip0"]),
                    lambda r: r.update(modules=["RoundTrip0"]),
+                   lambda r: r.update(modules=[CANON_SEM]),
                    lambda r: r["kernel_replay"].update(status="fail"),
-                   lambda r: r["kernel_replay"].update(reused=[cc.MODULE]),
-                   lambda r: r["kernel_replay"].update(rejected=[cc.MODULE]),
+                   lambda r: r["kernel_replay"].update(reused=[CANON_SEM]),
+                   lambda r: r["kernel_replay"].update(rejected=[CANON_SEM]),
                    lambda r: r["freshness"]["lake_trace_check"].update(status="stale"),
                    lambda r: r["theorems"][0].update(allowed=False),
                    lambda r: r["theorems"].append(dict(module="RoundTrip0", name="preserves_0", allowed=True)))
@@ -130,21 +137,21 @@ class AuditTests(unittest.TestCase):
             path.parent.mkdir(parents=True)
             path.write_bytes(b"unit fixture bytes")
             with mock.patch.object(cc, "ROOT", root):
-                actual = cc.generic_artifact()
+                actual = cc.generic_artifact(CANON_SEM)
                 self.assertEqual(actual, dict(olean=str(path.resolve()),
                     olean_sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
                 report = audit()
-                report["freshness"]["artifacts"] = [dict(module=cc.MODULE,
-                    olean=str(path.relative_to(root)), olean_sha256=actual["olean_sha256"])]
-                cc.check_audit(report, actual)
+                report["freshness"]["artifacts"][0] = dict(module=CANON_SEM,
+                    olean=str(path.relative_to(root)), olean_sha256=actual["olean_sha256"])
+                cc.check_audit(report, artifact() | {CANON_SEM: actual})
 
     def test_one_existing_assurance_call_with_no_build_cache_or_private_lean_path(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
 
             def run(arguments, **kwargs):
-                self.assertEqual(arguments.count("--module"), 1)
-                self.assertEqual(arguments[arguments.index("--module") + 1], cc.MODULE)
+                self.assertEqual([arguments[i + 1] for i, a in enumerate(arguments) if a == "--module"],
+                                 list(cc.MODULES))
                 self.assertIn("--no-build", arguments)
                 self.assertNotIn("--replay-cache", arguments)
                 self.assertEqual(kwargs["env"]["LEAN_PATH"], "existing-path")
@@ -153,7 +160,7 @@ class AuditTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
 
             with mock.patch.dict(cc.os.environ, LEAN_PATH="existing-path", AIR2LEAN_JOBS="2"), \
-                    mock.patch.object(cc, "generic_artifact", return_value=artifact()) as hashed, \
+                    mock.patch.object(cc, "generic_artifacts", return_value=artifact()) as hashed, \
                     mock.patch.object(cc.subprocess, "run", side_effect=run) as executed, \
                     contextlib.redirect_stdout(io.StringIO()):
                 cc.audit_certificates(work)
@@ -165,11 +172,12 @@ class AuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             (work / "audit.json").write_text(json.dumps(audit()))
-            with mock.patch.object(cc, "generic_artifact", side_effect=[artifact(), artifact() | dict(olean_sha256="new")]), \
+            changed = artifact() | {CANON_SEM: artifact()[CANON_SEM] | dict(olean_sha256="new")}
+            with mock.patch.object(cc, "generic_artifacts", side_effect=[artifact(), changed]), \
                     mock.patch.object(cc.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
                 with self.assertRaisesRegex(ValueError, "changed during its audit"):
                     cc.audit_certificates(work)
-            with mock.patch.object(cc, "generic_artifact", return_value=artifact()), \
+            with mock.patch.object(cc, "generic_artifacts", return_value=artifact()), \
                     mock.patch.object(cc.subprocess, "run", return_value=SimpleNamespace(
                         returncode=1, stdout="", stderr="actual replay failure")):
                 with self.assertRaisesRegex(ValueError, "actual replay failure"):
@@ -200,7 +208,7 @@ class CohortTests(unittest.TestCase):
             for (index, _), report in zip(self.cases, reports):
                 self.assertEqual(json.loads((work / f"NativeBinding{index}.json").read_text()), report)
             self.assertIn("3 TRU-02 native bindings, 7 functions", output.getvalue())
-            self.assertIn("generic CanonSem kernel replay checked separately", output.getvalue())
+            self.assertIn("generic CanonSem/Renumber kernel replay checked separately", output.getvalue())
 
     def test_mismatch_producer_failure_and_invalid_protocol_never_reach_audit(self):
         for failure in ("mismatch", "producer", "protocol"):

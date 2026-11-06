@@ -37,6 +37,8 @@ def cleanup (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Zig.Ptr) : Zig.MemM (Except Zig.
   match e with
   | .ret v => pure v
 
+attribute [zig_run] cleanup
+
 structure coldPayloadLocals where
   deriving Inhabited
 
@@ -60,6 +62,8 @@ def coldPayload (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (Zi
   match e with
   | .ret v => pure v
 
+attribute [zig_run] coldPayload
+
 structure payload64Locals where
   deriving Inhabited
 
@@ -80,6 +84,8 @@ def payload64 (p0 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] payload64
+
 structure payload8Locals where
   deriving Inhabited
 
@@ -99,6 +105,8 @@ def payload8 (p0 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
       pure (.ret i6))) : Zig.MM payload8Locals payload8Exit).run' (default : payload8Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] payload8
 
 structure writeAliasLocals where
   deriving Inhabited
@@ -128,5 +136,7 @@ def writeAlias (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Except Zig.ErrName (Bi
         pure (.ret i14)))) : Zig.MM writeAliasLocals writeAliasExit).run' (default : writeAliasLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] writeAlias
 
 end TryPointers

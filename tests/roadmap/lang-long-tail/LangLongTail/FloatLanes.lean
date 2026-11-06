@@ -38,6 +38,8 @@ def middle (p0 : Zig.F80) : Zig.MemM (Zig.F80) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] middle
+
 structure swapLocals where
   deriving Inhabited
 
@@ -55,5 +57,7 @@ def swap (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM swapLocals swapExit).run' (default : swapLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] swap
 
 end FloatLanes

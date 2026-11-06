@@ -26,12 +26,14 @@ MAX_DECLARATIONS = 65536
 MAX_FILE = 512 * 1024 * 1024
 MAX_TOTAL = 16 * 1024 * 1024 * 1024
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
-            'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES')
+            'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES',
+            # An enclosing run's toolchain digest (assumptions.py runtime_run): a receipt hashes its own.
+            'AIR2LEAN_TOOLCHAIN_RUNTIME_RUN')
 INPUTS = ('lean-toolchain', 'lakefile.toml', 'assurance/policy.json', 'scripts/assumptions.py',
-          'tools/Assurance.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
+          'tools/Assurance.lean', 'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean', 'scripts/proof-receipt.py', 'tests/roadmap/proof-receipts/check.sh',
           'assurance/float-semantics.json', 'scripts/float-semantics.py', 'scripts/gen-integrity.py',
           'scripts/premise_markers.py', 'assurance/witness-fixtures.json', 'scripts/theorem_universe.py',
-          'scripts/premises.py', 'scripts/lean-deps.py')
+          'scripts/premises.py', 'scripts/lean-deps.py', 'scripts/par.py')
 OUTPUTS = ('before.json', 'audit.json', 'after.json')
 REPLAY_JOBS = 2  # concurrent kernel replays that fit the guard RSS budget (worker)
 
@@ -491,8 +493,9 @@ def audit_ok(plan, audit):
     for key, path in [('source_sha256', ROOT / 'tools/Assurance.lean'),
                       ('olean_sha256', ROOT / '.lake/build/lib/lean/tools/Assurance.olean'),
                       ('lake_trace_sha256', ROOT / '.lake/build/lib/lean/tools/Assurance.trace'),
+                      ('executable_sha256', ROOT / '.lake/build/bin/assurance'),
                       ('lean_toolchain_sha256', ROOT / 'lean-toolchain'), ('lake_config_sha256', ROOT / 'lakefile.toml')]:
-        demand(extractor[key] == fingerprint(path)['sha256'], 'extractor identity mismatch: ' + key)
+        demand(extractor.get(key) == fingerprint(path)['sha256'], 'extractor identity mismatch: ' + key)
 
 
 def worker(attempt):
@@ -655,6 +658,9 @@ def verify(attempt, release=False):
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in ('manifest', 'check-manifest'):
         return helper('artifact-manifest').manifest_main(sys.argv[1:])  # Loaded only when used.
+    if sys.argv[1:] == ['inputs']:  # The guard's --input paths, one source (proof-receipts/check.sh).
+        print('\n'.join(INPUTS))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'worker', 'seal', 'verify'))
     parser.add_argument('attempt', type=Path)

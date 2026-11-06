@@ -20,6 +20,8 @@ def loadOptional (p0 : Zig.Ptr) : Zig.MemM (Option (Zig.ErrName)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] loadOptional
+
 structure loadUnionLocals where
   deriving Inhabited
 
@@ -32,6 +34,8 @@ def loadUnion (p0 : Zig.Ptr) : Zig.MemM (Except Zig.ErrName (BitVec 8)) := do
     pure (.ret i1)) : Zig.MM loadUnionLocals loadUnionExit).run' (default : loadUnionLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] loadUnion
 
 structure setPayloadLocals where
   deriving Inhabited
@@ -48,6 +52,8 @@ def setPayload (p0 : Zig.Ptr) (p1 : BitVec 8) : Zig.MemM (Bool) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] setPayload
+
 structure storeErrorLocals where
   deriving Inhabited
 
@@ -62,6 +68,8 @@ def storeError (p0 : Zig.Ptr) (p1 : Zig.ErrName) : Zig.MemM (Zig.ErrName) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] storeError
+
 structure storeOptionalLocals where
   deriving Inhabited
 
@@ -75,6 +83,8 @@ def storeOptional (p0 : Zig.Ptr) (p1 : Option (Zig.ErrName)) : Zig.MemM (Bool) :
     pure (.ret i3)) : Zig.MM storeOptionalLocals storeOptionalExit).run' (default : storeOptionalLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] storeOptional
 
 structure unionTry64Locals where
   deriving Inhabited
@@ -97,6 +107,8 @@ def unionTry64 (p0 : Zig.Ptr) (p1 : Except Zig.ErrName (BitVec 64)) : Zig.MemM (
   match e with
   | .ret v => pure v
 
+attribute [zig_run] unionTry64
+
 structure unionTry8Locals where
   deriving Inhabited
 
@@ -117,5 +129,7 @@ def unionTry8 (p0 : Zig.Ptr) (p1 : Except Zig.ErrName (BitVec 8)) : Zig.MemM (Ex
       pure (.ret i8))) : Zig.MM unionTry8Locals unionTry8Exit).run' (default : unionTry8Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unionTry8
 
 end ErrorWidth10

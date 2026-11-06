@@ -17,7 +17,7 @@ generated dispatcher); `runtime_nav_ptr` is `Zig.tlsPtr key`, the current thread
 | Initialization per thread | `tlsEnter_init`: each new instance is a new live block holding exactly the initial bytes; `mem0`'s main instance holds the same bytes as `tlsInit` (`Check.lean`). |
 | Concurrent use, all schedules | `twoCounters_spec`/`twoCounters_safe` (`ThreadLocals/Counters.lean`): every `ok` result is 90908 (each worker read 9, `main` read 8) and no run errs (no race, panic or deadlock), for every oracle and fuel. Each thread owns its instance; the workers' instances are made by `tlsEnter` and freed by `tlsExit` inside the proof. |
 | Thread exit ends the instance | `leaked_never_ok` (`ThreadLocals/Leak.lean`): no schedule returns a value; the read through the leaked pointer hits a dead block (`load_dead`). `tlsExit_dead`: after a thread end every instance of it is dead. |
-| Ownership transfer | A TLS pointer is an ordinary pointer: passing it hands over nothing (race check), and a proof hands cells over with `Zig.Conc.Capture.grant` like any capture (C01). |
+| Ownership transfer | A TLS pointer is an ordinary pointer: passing it hands over nothing (race check), and a proof hands cells over with `Zig.Full.FCapture.grant` like any capture (C01). |
 
 `ThreadLocals/Runtime.lean` runs 16 sampled schedules (90908 and `.illegal`) and two semantic
 mutants: one instance shared by all threads (the run no longer returns 90908) and instances
@@ -28,7 +28,7 @@ a missing initial value, error storage, a wrong pointee type, over-alignment,
 `volatile`, and a constant pointer into a `threadlocal` global (0.14.1's form).
 
 ```sh
-lake build air2lean ZigLean.Conc.TlsLemmas
+lake build air2lean ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
 bash tests/roadmap/thread-locals/check.sh
 ```
 

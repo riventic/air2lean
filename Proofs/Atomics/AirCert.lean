@@ -23,6 +23,23 @@ Outside the certificate fragment:
 * `atomics.stackPush`: a concurrent function (`Zig.ConcM`)
 * `atomics.twoPlusTwoW`: a concurrent function (`Zig.ConcM`)
 * `atomics.ww`: a concurrent function (`Zig.ConcM`)
+
+The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
+
+* `atomic.Value(u32).init` trusted-Canon: none
+* `atomics.mpRelAcq` trusted-Canon: forwardReadOnlyCopies
+* `atomics.mpRelaxed` trusted-Canon: forwardReadOnlyCopies
+* `atomics.mpWriter` trusted-Canon: forwardReadOnlyCopies
+* `atomics.mpWriterRelaxed` trusted-Canon: forwardReadOnlyCopies
+* `atomics.push` trusted-Canon: forwardReadOnlyCopies
+* `atomics.sb` trusted-Canon: forwardReadOnlyCopies
+* `atomics.sbRelaxed` trusted-Canon: forwardReadOnlyCopies
+* `atomics.stackPush` trusted-Canon: forwardReadOnlyCopies, itemReads
+* `atomics.twoPlusTwoW` trusted-Canon: forwardReadOnlyCopies
+* `atomics.ww` trusted-Canon: forwardReadOnlyCopies
 -/
 
 end Atomics.AirCert

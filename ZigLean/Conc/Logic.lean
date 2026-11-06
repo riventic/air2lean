@@ -16,8 +16,9 @@ invariant and ghost values.
   spawner picks (so it can give the new thread a part of what it owns); `fin g` holds of the
   ghost value of a thread that has ended.
 - **One thread** (`Safe`). A thread's run is a tree (`CoN`). At each stop the thread picks its
-  new ghost value and shows the invariant. When it goes on, it knows only the invariant and its
-  own ghost value: the other threads can have done anything that keeps the invariant (the rely),
+  new ghost value and shows the invariant. When it goes on, it knows only the invariant, its
+  own ghost value and that it exists (`t < m.threads.size`: the scheduler resumes only a thread
+  it has): the other threads can have done anything that keeps the invariant (the rely),
   and each thread keeps it (the guarantee). A thread does not change the ghost value of another
   thread, and a run between two stops keeps the number of threads.
 - **Join.** A `join` of thread `u` goes on only after `u` ended, so the thread learns `fin (G u)`.
@@ -143,15 +144,15 @@ def Step (t : ThreadId) (op : SyncOp Tgt) (G : ThreadId → γ) (m : Mem)
       (P.strict = true → ∃ m', ((Thread.join tid).run { m with current := t }).run =
         some (.ok ((), m'))) ∧ ∀ m',
       ((Thread.join tid).run { m with current := t }).run = some (.ok ((), m')) → K () G m')
-  | .wait p e, K => (P.strict = true → P.Live t G m) ∧ (m.waiters.any (·.1 == t) = false →
+  | .wait p e sh, K => (P.strict = true → P.Live t G m) ∧ (m.waiters.any (·.1 == t) = false →
       (P.strict = true → ∃ b m',
-        ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m'))) ∧
-      (∀ e', ((Thread.futexWait p e).run { m with current := t }).run = some (.error e') →
+        ((Thread.futexWait p e sh).run { m with current := t }).run = some (.ok (b, m'))) ∧
+      (∀ e', ((Thread.futexWait p e sh).run { m with current := t }).run = some (.error e') →
         e'.nativeStops) ∧
-      ∀ b m', ((Thread.futexWait p e).run { m with current := t }).run = some (.ok (b, m')) →
+      ∀ b m', ((Thread.futexWait p e sh).run { m with current := t }).run = some (.ok (b, m')) →
         if b then P.inv G m' ∧ K () G { m with current := t } else K () G m')
   | .wake p n, K => ∀ cs m',
-      ((Thread.futexWake p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
+      ((Thread.futexWakePtr p n cs).run { m with current := t }).run = some (.ok ((), m')) → K () G m'
 
 /-- The charge of a stop at `op` with the credits `cr`: the thread resumed with `old` credits and
 stops with `new`. The turn that reaches the stop costs one credit, and the thread keeps at least
@@ -162,7 +163,7 @@ progress, so a cost proof fails closed at them. -/
 def ChargeOk (cr : γ → Nat) : SyncOp Tgt → Nat → Nat → Prop
   | .spawn tgt, old, new =>
       1 ≤ new ∧ ∃ k, (∀ g₀, P.init tgt g₀ → 1 ≤ cr g₀ ∧ cr g₀ ≤ k) ∧ new + k + 1 ≤ old
-  | .wait _ _, _, _ | .gate, _, _ | .spawnGated _, _, _ => False
+  | .wait .., _, _ | .gate, _, _ | .spawnGated _, _, _ => False
   | _, old, new => 1 ≤ new ∧ new + 1 ≤ old
 
 /-- Thread `t`, which resumed with the ghost values `G`, stops at `op` with the ghost value `g`
@@ -229,14 +230,16 @@ theorem Step.mono {t : ThreadId} {op : SyncOp Tgt} {G : ThreadId → γ} {m : Me
 
 /-- Thread `t`'s run `x`, which began with `N` threads and the ghost values `G`, keeps the
 protocol, and each result `b` at the memory `m` and the depth `d` that is left satisfies
-`Q b G m d`. -/
+`Q b G m d`. At a stop the thread goes on only as a thread that exists: the scheduler resumes
+only a thread of `m₁.threads` (the threads never shrink), so the resumption also knows
+`t < m₁.threads.size` (`go_spec` discharges it from `SInv.size`). -/
 def Safe {β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem → Nat → Prop) :
     {n : Nat} → Nat → (ThreadId → γ) → CoN Tgt (β × Mem) n → Prop
   | n, _, _, .leaf none => P.Partial ∨ n = 0
   | _, _, _, .leaf (some (.error e)) => P.strict = false ∧ e.nativeStops ∨ e = .stackOverflow
   | n, N, G, .leaf (some (.ok (b, m))) => m.threads.size = N ∧ Q b G m n
   | _, N, G, .sync op m k => m.threads.size = N ∧ ∃ g, P.inv (upd G t g) m ∧ P.Charged t op G g ∧
-      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
         P.Step t op G₁ m₁ fun r G₂ m₂ => Safe t Q m₂.threads.size G₂ (k r m₂)
 
 variable {P}
@@ -250,8 +253,8 @@ theorem Safe.mono {β : Type} {t : ThreadId} {Q Q' : β → (ThreadId → γ) �
     exact fun ⟨hN, hq⟩ => ⟨hN, h _ _ _ _ hq⟩
   | sync op m k ih =>
     simp only [Safe]
-    exact fun ⟨hN, g, hi, hch, hk⟩ => ⟨hN, g, hi, hch, fun G₁ m₁ hg hi₁ =>
-      Step.mono P (fun r G₂ m₂ hs => ih r m₂ hs) (hk G₁ m₁ hg hi₁)⟩
+    exact fun ⟨hN, g, hi, hch, hk⟩ => ⟨hN, g, hi, hch, fun G₁ m₁ hg hi₁ ht =>
+      Step.mono P (fun r G₂ m₂ hs => ih r m₂ hs) (hk G₁ m₁ hg hi₁ ht)⟩
 
 /-- **Without a turn cost `Safe` is the partial-correctness one**: at a stop the thread shows
 the invariant with its new ghost value, and nothing more. -/
@@ -259,7 +262,7 @@ theorem Safe.sync_none {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) 
     (hc : P.cost = none) {n N G} {op : SyncOp Tgt} {m : Mem}
     {k : op.Resp → Mem → CoN Tgt (β × Mem) n} :
     P.Safe t Q N G (.sync op m k) ↔ m.threads.size = N ∧ ∃ g, P.inv (upd G t g) m ∧
-      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
         P.Step t op G₁ m₁ fun r G₂ m₂ => P.Safe t Q m₂.threads.size G₂ (k r m₂) := by
   simp only [Safe]
   exact ⟨fun ⟨hN, g, hi, _, hk⟩ => ⟨hN, g, hi, hk⟩,
@@ -276,8 +279,8 @@ theorem Safe.bind {α β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) �
     exact fun ⟨hN, hq⟩ => hN ▸ hq
   | sync op m k ih =>
     simp only [Safe, CoN.bind]
-    exact fun ⟨hN, g, hi, hch, hk⟩ => ⟨hN, g, hi, hch, fun G₁ m₁ hg hi₁ =>
-      Step.mono P (fun r G₂ m₂ hs => ih r m₂ hs) (hk G₁ m₁ hg hi₁)⟩
+    exact fun ⟨hN, g, hi, hch, hk⟩ => ⟨hN, g, hi, hch, fun G₁ m₁ hg hi₁ ht =>
+      Step.mono P (fun r G₂ m₂ hs => ih r m₂ hs) (hk G₁ m₁ hg hi₁ ht)⟩
 
 /-! ## The weakest precondition of a run -/
 
@@ -352,10 +355,11 @@ theorem liftMem {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → 
 
 /-- A sync op that pays for its turn (`Proto.Charged`; for a protocol that counts turns): the
 thread stops with the ghost value `g` and the invariant; `Q` holds of each response when it goes
-on. At depth `0` there is no result. -/
+on, as a thread that exists (`t < m₁.threads.size`). At depth `0` there is no result. -/
 theorem syncC {op : SyncOp Tgt} {Q : op.Resp → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ P.Charged t op G g ∧
-      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k) :
+      ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
+        P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k) :
     P.WP t (ConcM.sync op) Q G m n := by
   unfold WP
   match n, h with
@@ -363,13 +367,15 @@ theorem syncC {op : SyncOp Tgt} {Q : op.Resp → (ThreadId → γ) → Mem → N
   | k + 1, h =>
     obtain ⟨g, hi, hch, hk⟩ := h k rfl
     simp only [ConcM.sync, Safe, true_and]
-    exact ⟨g, hi, hch, fun G₁ m₁ hg hi₁ => Step.mono P (fun _ _ _ hq => hq) (hk G₁ m₁ hg hi₁)⟩
+    exact ⟨g, hi, hch, fun G₁ m₁ hg hi₁ ht =>
+      Step.mono P (fun _ _ _ hq => hq) (hk G₁ m₁ hg hi₁ ht)⟩
 
 /-- A sync op of a protocol that does not count turns (`Proto.cost = none`): the thread stops
-with the ghost value `g` and the invariant; `Q` holds of each response when it goes on. -/
+with the ghost value `g` and the invariant; `Q` holds of each response when it goes on, as a
+thread that exists (`t < m₁.threads.size`). -/
 theorem sync {op : SyncOp Tgt} {Q : op.Resp → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
-      P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k)
+      t < m₁.threads.size → P.Step t op G₁ m₁ fun r G₂ m₂ => Q r G₂ m₂ k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (ConcM.sync op) Q G m n :=
   syncC fun k hk => let ⟨g, hi, hs⟩ := h k hk; ⟨g, hi, Charged.of_none hcost, hs⟩
@@ -422,10 +428,11 @@ def QKid (t : ThreadId) : Unit → (ThreadId → γ) → Mem → Nat → Prop :=
   fun _ G m _ => ∃ g, P.inv (upd G t g) m ∧ P.fin g ∧ (P.strict = true → joinedAll t m)
 
 variable (P) in
-/-- Thread `t`, which waits at `p` with the ghost value `g`, keeps the protocol when it goes on. -/
+/-- Thread `t`, which waits at `p` with the ghost value `g`, keeps the protocol when it goes on
+(knowing, as at `Safe`'s stop, that it exists: `t < m₁.threads.size`). -/
 def PausedOk {β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem → Nat → Prop) (g : γ)
     (p : Sched.Paused Tgt β) : Prop :=
-  ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ →
+  ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
     P.Step t p.op G₁ m₁ fun r G₂ m₂ => P.Safe t Q m₂.threads.size G₂ (p.k r m₂)
 
 variable (P) in
@@ -592,8 +599,9 @@ end MemM
 
 /-- A futex wake does not throw, and keeps the threads. -/
 theorem futexWake_ok (p : Ptr) (n : Nat) (cs : List Nat) (m : Mem) :
-    ∃ m', ((Thread.futexWake p n cs).run m).run = some (.ok ((), m')) ∧ m'.threads = m.threads :=
-  ⟨_, rfl, rfl⟩
+    ∃ m', ((Thread.futexWakePtr p n cs).run m).run = some (.ok ((), m')) ∧
+      m'.threads = m.threads :=
+  ⟨_, rfl, by dsimp only; split <;> rfl⟩
 
 /-- The oracle's choices change only the oracle position. -/
 theorem chooseMany_eq {α : Type} {s s' : Sched.State Tgt α} {o : Nat → Nat} :
@@ -639,14 +647,15 @@ theorem recordAccess_keeps {b o l : Nat} {k : AccessKind} {m m' : Mem} {x : Unit
 /-- What a futex wait did: a woken thread goes on (it leaves `woken`); else the kernel read the
 `u32` `v` at `p` with a recorded atomic read (memory `m₁`), and the thread sleeps (it joins
 `waiters`) if `v = e`. -/
-theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) :
+theorem futexWait_ok {p : Ptr} {e : BitVec 32} {sh : Bool} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e sh).run m).run = some (.ok (b, m'))) :
     (m.woken.contains m.current = true ∧ b = false ∧
       m' = { m with woken := m.woken.erase m.current }) ∨
     (m.woken.contains m.current = false ∧ ∃ bid blk o v m₁, m.access p 4 4 = pure (bid, blk, o) ∧
       ((recordAccess bid o 4 .atomicRead).run m).run = some (.ok ((), m₁)) ∧
       (intOfBytes 32 (blk.bytes.extract o (o + 4))).run = some (.ok v) ∧
-      ((v = e ∧ b = true ∧ m' = { m₁ with waiters := m₁.waiters.push (m₁.current, p) }) ∨
+      ((v = e ∧ b = true ∧
+          m' = { m₁ with waiters := m₁.waiters.push (m₁.current, blk.key o sh) }) ∨
        (v ≠ e ∧ b = false ∧ m' = m₁))) := by
   unfold Thread.futexWait at h
   obtain ⟨a, m₀, hg, h₁⟩ := MemM.bind_ok h
@@ -677,8 +686,8 @@ theorem futexWait_ok {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
       exact .inr ⟨he, rfl, rfl⟩
 
 /-- A futex wait keeps the threads. -/
-theorem futexWait_threads {p : Ptr} {e : BitVec 32} {m m' : Mem} {b : Bool}
-    (h : ((Thread.futexWait p e).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
+theorem futexWait_threads {p : Ptr} {e : BitVec 32} {sh : Bool} {m m' : Mem} {b : Bool}
+    (h : ((Thread.futexWait p e sh).run m).run = some (.ok (b, m'))) : m'.threads = m.threads := by
   rcases futexWait_ok h with ⟨-, -, rfl⟩ | ⟨-, _, _, _, _, m₁, -, hr, -, ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩⟩
   · rfl
   · exact (recordAccess_keeps hr).1
@@ -769,7 +778,7 @@ def TurnPost {α β : Type} (t : ThreadId) (Q : β → (ThreadId → γ) → Mem
         p.op = .spawnGated tgt) ∧ P.init tgt (G₂ (s.kids.size + 1))) ∧
     ((ov = none ∧ ∃ p' g, ts = .paused p' ∧ P.inv (upd G₂ t g) s'.mem ∧ P.PausedOk t Q g p' ∧
        ((P.Charged t p'.op G₂ g ∧ p'.depth + 1 = p.depth) ∨
-        (p'.op = p.op ∧ ∃ ptr e, p.op = .wait ptr e))) ∨
+        (p'.op = p.op ∧ ∃ ptr e sh, p.op = .wait ptr e sh))) ∨
      (∃ b d, ts = .done ∧ ov = some b ∧ Q b G₂ s'.mem d))
 
 /-- `settle` with no new kid. -/
@@ -843,12 +852,12 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
     (hdisp : ∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
       P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n)
     (hinv : P.inv G s.mem) (hsz : s.mem.threads.size = s.kids.size + 1)
-    (hp : P.PausedOk t Q (G t) p)
+    (hp : P.PausedOk t Q (G t) p) (ht : t < s.mem.threads.size)
     (hgo : Sched.canGo s t p.op = true) (hdone : ∀ u, s.isDone u = true → P.fin (G u))
     (h : Sched.turn env dispatch fuel o t s p = .ok (ts, ov, s')) :
     P.TurnPost t Q s G p fuel ts ov s' := by
   obtain ⟨d, op, k⟩ := p
-  have hstep := hp G s.mem rfl hinv
+  have hstep := hp G s.mem rfl hinv ht
   cases op with
   | yield =>
     simp only [Sched.turn, Sched.turnTrace] at h
@@ -868,9 +877,9 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
     obtain ⟨m₁, hw, hth⟩ := futexWake_ok ptr n cs { s.mem with current := t }
     simp only [Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_turnPost h (hstep cs m₁ hw) hsz rfl rfl (congrArg Array.size hth)
-  | wait ptr e =>
+  | wait ptr e sh =>
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem] at h
-    match hw : ((Thread.futexWait ptr e).run { s.mem with current := t }).run with
+    match hw : ((Thread.futexWait ptr e sh).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error _) => simp [hw] at h
     | some (.ok (b, m₁)) =>
@@ -887,7 +896,7 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
         · simp only [Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl, rfl⟩ := h
           refine ⟨G, fun _ _ => rfl, rfl, by rw [hth, hsz], .inl rfl,
-            .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK.1, hp, .inr ⟨rfl, _, _, rfl⟩⟩⟩
+            .inl ⟨rfl, _, G t, rfl, by rw [upd_same]; exact hK.1, hp, .inr ⟨rfl, _, _, _, rfl⟩⟩⟩
       | false =>
         simp only [Bool.false_eq_true, ↓reduceIte] at h hK
         exact settle_turnPost h hK hsz rfl rfl hth
@@ -929,7 +938,7 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
       · rw [e]
       · have : s.kids.size + 1 = child := by rw [hc]; simp only at hsz ⊢; omega
         rw [this, upd_self]
-        intro G₁ m₁' hg hi
+        intro G₁ m₁' hg hi _
         exact hdisp tgt g₀ hg₀ child G₁ m₁' _ (by rw [← this]; exact Nat.succ_pos _) hg hi
       · have : s.kids.size + 1 = child := by rw [hc]; simp only at hsz ⊢; omega
         rw [this, upd_self]; exact hg₀
@@ -956,7 +965,7 @@ theorem turn_ok {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.s
       · rw [e]
       · have : s.kids.size + 1 = child := by rw [hc]; simp only at hsz ⊢; omega
         rw [this, upd_self]
-        intro G₁ m₁' hg hi
+        intro G₁ m₁' hg hi _
         refine ⟨fun hstr => ⟨by rw [← this]; exact Nat.succ_pos _, hg ▸ hj₀ hstr⟩, ?_⟩
         exact hdisp tgt g₀ hg₀ child G₁ m₁' _ (by rw [← this]; exact Nat.succ_pos _) hg hi
       · have : s.kids.size + 1 = child := by rw [hc]; simp only at hsz ⊢; omega
@@ -985,12 +994,12 @@ theorem turn_err {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.
     (dispatch : Tgt → ConcM Tgt Unit) (fuel : Nat) (o : Nat → Nat)
     {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {s : Sched.State Tgt α}
     {G : ThreadId → γ} {p : Sched.Paused Tgt β}
-    (hinv : P.inv G s.mem) (hp : P.PausedOk t Q (G t) p)
+    (hinv : P.inv G s.mem) (hp : P.PausedOk t Q (G t) p) (ht : t < s.mem.threads.size)
     (hQ : P.strict = true → ∀ b G m d, Q b G m d → joinedAll t m)
     (hgo : Sched.canGo s t p.op = true) (hdone : ∀ u, s.isDone u = true → P.fin (G u))
     {e : Error} (h : Sched.turn env dispatch fuel o t s p = .error (some e)) : P.ErrOk e := by
   obtain ⟨d, op, k⟩ := p
-  have hstep := hp G s.mem rfl hinv
+  have hstep := hp G s.mem rfl hinv ht
   cases op with
   | yield =>
     simp only [Sched.turn, Sched.turnTrace] at h
@@ -1010,11 +1019,11 @@ theorem turn_err {α β : Type} (env : Env) (henv : env.spawn = .fallible → P.
     obtain ⟨m₁, hw, -⟩ := futexWake_ok ptr n cs { s.mem with current := t }
     simp only [Sched.State.onMem, bind, Except.bind, hw] at h
     exact settle_err (hstep cs m₁ hw) hQ h
-  | wait ptr e' =>
+  | wait ptr e' sh =>
     have hq0 : ({ s.mem with current := t } : Mem).waiters.any (·.1 == t) = false := by
       simpa [Sched.canGo] using hgo
     simp only [Sched.turn, Sched.turnTrace, Sched.State.onMem] at h
-    match hw : ((Thread.futexWait ptr e').run { s.mem with current := t }).run with
+    match hw : ((Thread.futexWait ptr e' sh).run { s.mem with current := t }).run with
     | none => simp [hw] at h
     | some (.error e₁) =>
       simp only [hw, Except.error.injEq, Option.some.injEq] at h
@@ -1146,6 +1155,13 @@ theorem mem_ready {α : Type} {s : Sched.State Tgt α} {t : ThreadId} (h : t ∈
       · simp at hf
     | done => simp at hf
 
+/-- Every thread the scheduler resumes exists: `main` is thread `0` and kid `i` is thread
+`i + 1`, below `kids.size + 1` (`SInv.size`). -/
+theorem SInv.lt_size {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
+    {s : Sched.State Tgt α} {G : ThreadId → γ} (hs : P.SInv QM s G) {u : ThreadId}
+    (h : u < s.kids.size + 1) : u < s.mem.threads.size :=
+  hs.size ▸ h
+
 theorem SInv.done {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → Prop}
     {s : Sched.State Tgt α} {G : ThreadId → γ} (hs : P.SInv QM s G) :
     ∀ u, s.isDone u = true → P.fin (G u) := by
@@ -1220,22 +1236,22 @@ theorem gated_of_joinValid {m : Mem} {t tid : ThreadId} (h : Thread.joinValid m 
 `gate` is not `main` and `joins` holds of its ghost value. -/
 theorem paused_info {β : Type} {t : ThreadId} {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {g : γ}
     {p : Sched.Paused Tgt β} {G : ThreadId → γ} {m : Mem} (hstr : P.strict = true)
-    (hp : P.PausedOk t Q g p) (hg : G t = g) (hi : P.inv G m) :
+    (hp : P.PausedOk t Q g p) (hg : G t = g) (hi : P.inv G m) (ht : t < m.threads.size) :
     (∀ tid, p.op = .join tid → P.rank t < P.rank tid ∧ tid < m.threads.size ∧ P.joins (G t) ∧
       m.isGated tid = false) ∧
-      (∀ ptr e, p.op = .wait ptr e → P.Live t G m) ∧ (p.op = .gate → 0 < t ∧ P.joins (G t)) := by
+      (∀ ptr e sh, p.op = .wait ptr e sh → P.Live t G m) ∧ (p.op = .gate → 0 < t ∧ P.joins (G t)) := by
   obtain ⟨d, op, k⟩ := p
-  have hs := hp G m hg hi
+  have hs := hp G m hg hi ht
   cases op with
   | join tid' =>
     exact ⟨fun tid h => (by cases h; exact ⟨(hs.1 hstr).1, (hs.1 hstr).2.1,
-      (hs.1 hstr).2.2.1, gated_of_joinValid (hs.1 hstr).2.2.2⟩), fun _ _ h => (by cases h),
+      (hs.1 hstr).2.2.1, gated_of_joinValid (hs.1 hstr).2.2.2⟩), fun _ _ _ h => (by cases h),
       fun h => (by cases h)⟩
-  | wait ptr' e' =>
-    exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h; exact hs.1 hstr), fun h => (by cases h)⟩
-  | gate => exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun _ => hs.1 hstr⟩
+  | wait ptr' e' sh' =>
+    exact ⟨fun _ h => (by cases h), fun _ _ _ h => (by cases h; exact hs.1 hstr), fun h => (by cases h)⟩
+  | gate => exact ⟨fun _ h => (by cases h), fun _ _ _ h => (by cases h), fun _ => hs.1 hstr⟩
   | yield | choose | pick | spawn | asyncChoice | spawnGated | wake =>
-    exact ⟨fun _ h => (by cases h), fun _ _ h => (by cases h), fun h => (by cases h)⟩
+    exact ⟨fun _ h => (by cases h), fun _ _ _ h => (by cases h), fun h => (by cases h)⟩
 
 /-- A waiting thread that can go on is in `ready`. -/
 theorem ready_of_main {α : Type} {s : Sched.State Tgt α} {p : Sched.Paused Tgt α}
@@ -1259,12 +1275,12 @@ ended and is not gated, or sleeps at a futex and keeps `Live`, or is a gated def
 theorem stuck_info {α β : Type} {s : Sched.State Tgt α} {t : ThreadId}
     {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {p : Sched.Paused Tgt β} {G : ThreadId → γ}
     (hstr : P.strict = true) (hp : P.PausedOk t Q (G t) p) (hi : P.inv G s.mem)
-    (hc : Sched.canGo s t p.op = false) :
+    (ht : t < s.mem.threads.size) (hc : Sched.canGo s t p.op = false) :
     (∃ tid, P.rank t < P.rank tid ∧ tid < s.mem.threads.size ∧ P.joins (G t) ∧ s.isDone tid = false ∧
       s.mem.isGated tid = false) ∨
       (s.mem.waiters.any (·.1 == t) = true ∧ P.Live t G s.mem) ∨
       (s.mem.isGated t = true ∧ 0 < t ∧ P.joins (G t)) := by
-  obtain ⟨hj, hw, hg⟩ := paused_info hstr hp rfl hi
+  obtain ⟨hj, hw, hg⟩ := paused_info hstr hp rfl hi ht
   obtain ⟨d, op, k⟩ := p
   cases op with
   | join tid =>
@@ -1272,9 +1288,9 @@ theorem stuck_info {α β : Type} {s : Sched.State Tgt α} {t : ThreadId}
     exact .inl ⟨tid, h1, h2, h3, by
       simp only [Sched.canGo, Bool.or_eq_false_iff, Bool.not_eq_false'] at hc
       exact hc.2, h4⟩
-  | wait ptr e =>
+  | wait ptr e sh =>
     simp only [Sched.canGo, Bool.not_eq_false'] at hc
-    exact .inr (.inl ⟨hc, hw ptr e rfl⟩)
+    exact .inr (.inl ⟨hc, hw ptr e sh rfl⟩)
   | gate =>
     simp only [Sched.canGo, Bool.not_eq_false'] at hc
     exact .inr (.inr ⟨hc, hg rfl⟩)
@@ -1309,7 +1325,7 @@ theorem ready_ne {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → 
     by_cases h0 : t = 0
     · subst h0
       obtain ⟨p, hp, hok⟩ := hs.main
-      apply stuck_info hstr hok hs.inv
+      apply stuck_info hstr hok hs.inv ht
       cases hc : Sched.canGo s 0 p.op
       · rfl
       · have := ready_of_main hp hc; rw [hre] at this; simp at this
@@ -1324,7 +1340,7 @@ theorem ready_ne {α : Type} {QM : α → (ThreadId → γ) → Mem → Nat → 
       | done => simp at hnd
       | paused p =>
         have hp : s.kids[i]? = some (.paused p) := by rw [Array.getElem?_eq_getElem hi, hk]
-        apply stuck_info hstr hok hs.inv
+        apply stuck_info hstr hok hs.inv ht
         cases hc : Sched.canGo s (i + 1) p.op
         · rfl
         · have := ready_of_kid hp hc; rw [hre] at this; simp at this
@@ -1417,10 +1433,12 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
             simp only [Sched.outOf, Option.some.injEq] at h
             subst h
             exact good_of (fun _ _ h => by cases h) fun _ heq => by
-              cases heq; exact turn_err env henv dispatch fuel o hS₁.inv hok hQM hgo hS₁.done he
+              cases heq
+              exact turn_err env henv dispatch fuel o hS₁.inv hok (hS₁.lt_size (Nat.succ_pos _))
+                hQM hgo hS₁.done he
         · rename_i ts v' s₂ ht
           obtain ⟨G₂, -, -, -, -, hr⟩ := turn_ok env henv dispatch fuel o hdisp hS₁.inv hS₁.size
-            hok hgo hS₁.done ht
+            hok (hS₁.lt_size (Nat.succ_pos _)) hgo hS₁.done ht
           simp only [Option.some.injEq] at h
           subst h
           refine good_of (fun v m h => ?_) fun _ h => by cases h
@@ -1431,7 +1449,7 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
           · cases hov; exact ⟨G₂, d, hq⟩
         · rename_i ts s₂ ht
           obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok env henv dispatch fuel o hdisp
-            hS₁.inv hS₁.size hok hgo hS₁.done ht
+            hS₁.inv hS₁.size hok (hS₁.lt_size (Nat.succ_pos _)) hgo hS₁.done ht
           rcases hr with ⟨-, p', g, rfl, hi, hpk, -⟩ | ⟨b, d, -, hov, -⟩
           · refine ih { s₂ with main := .paused p' } (upd G₂ 0 g)
               ⟨hi, hsize, ⟨p', rfl, by rw [upd_self]; exact hpk⟩, ?_⟩ h
@@ -1459,10 +1477,12 @@ theorem go_spec {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spaw
               subst h
               exact good_of (fun _ _ h => by cases h) fun _ heq => by
                 cases heq; exact turn_err (s := s₁) env henv dispatch fuel o hS₁.inv hok
-                  (fun hstr _ _ _ _ ⟨_, _, _, hj⟩ => hj hstr) (hgo₁ _ _ hgo) hS₁.done he
+                  (hS₁.lt_size (Nat.succ_lt_succ hlt)) (fun hstr _ _ _ _ ⟨_, _, _, hj⟩ => hj hstr)
+                  (hgo₁ _ _ hgo) hS₁.done he
           · rename_i ts ov s₂ ht
             obtain ⟨G₂, hagree, hmain, hsize, hkids, hr⟩ := turn_ok (s := s₁) env henv dispatch fuel o
-              hdisp hS₁.inv hS₁.size hok (hgo₁ _ _ hgo) hS₁.done ht
+              hdisp hS₁.inv hS₁.size hok (hS₁.lt_size (Nat.succ_lt_succ hlt)) (hgo₁ _ _ hgo)
+              hS₁.done ht
             obtain ⟨p₀, hp₀, hok₀⟩ := hS₁.main
             have hmain' : ∀ g, ∃ p, s₂.main = .paused p ∧
                 P.PausedOk 0 QM (upd G₂ (i + 1) g 0) p :=

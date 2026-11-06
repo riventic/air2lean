@@ -11,6 +11,8 @@ def air2lean_model_0_contract : Zig.External.Contract ((BitVec 32)) (BitVec 32) 
 
 def air2lean_model_0 (p0 : BitVec 32) : Zig.MemM (BitVec 32) := _root_.ExternModel.abs p0
 
+attribute [zig_run] air2lean_model_0
+
 -- Explicit imported-model assumption; reported in air2lean-models.
 axiom air2lean_model_0_evidence : air2lean_model_0_contract.Holds .total [Zig.Error.illegal] .preserves _root_.ExternModel.abs
 
@@ -31,5 +33,7 @@ def absSum (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
     pure (.ret i4)) : Zig.MM absSumLocals absSumExit).run' (default : absSumLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] absSum
 
 end ExternCalls.Trusted

@@ -58,8 +58,8 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - **Extend it, never fork it.** New capability comes as library lemmas and `@[fsym]` rules.
   Do not add a new judgment (`…Triple`, `…Returns`, `…Within`, `Stops`, `Halts`, …), tactic
   (`syntax`/`macro`/`elab … : tactic`), proof template or automation, and do not add to the legacy
-  layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates, `vc_gen`
-  targets), which is being migrated and deleted. If `fsym` cannot do something, stop and report
+  layer (`ZigLean/Sep` outside `Full/`: `Triple`, `TotalTriple`, `TTriple`, templates), which is
+  being migrated and deleted. If `fsym` cannot do something, stop and report
   the exact missing rule or engine feature instead of building around it.
 - **The allow-list is the gate.** `assurance/proof-framework.json` lists every judgment and
   tactic and every file that still uses the legacy layer; `scripts/proof-framework.py` (preflight,
@@ -122,15 +122,27 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 ## Workflow
 
 - Run `/review` and `/simple` on every PR. Keep PRs small.
-- **Merge when green locally; CI does not block** (maintainer decision 2026-10-12). Before
-  merging: merge `main` into the PR, run `scripts/regen.sh --pr`, `scripts/preflight.sh` and every
-  CI part the PR touches locally (including x86_64-linux under Rosetta); then merge it at once
-  (`gh pr merge <N> --admin --merge`), one PR at a time. CI still runs on every PR and on `main`
-  as a warning; a red result after merge is fixed forward immediately.
+- **Light merge gate; CI does not block** (maintainer decisions 2026-10-12 and 2026-11-04: end
+  results over per-PR checks). Before merging:
+  1. Merge `main` into the PR.
+  2. On that merged tree, build the Lean modules the PR changes and their importers
+     (`scripts/build-guard.py … lake build <Modules>`).
+  3. Run the PR's own unit tests and the check scripts of the fixtures it changes.
+  4. Run `scripts/no-sorry.sh`, `scripts/proof-framework.py` and `scripts/preflight.sh
+     --no-translator`.
+  5. Merge it at once (`gh pr merge <N> --admin --merge`), one PR at a time.
+
+  If main moves meanwhile, do not re-gate: merge main again, rebuild the touched modules, and
+  merge. `scripts/regen.sh --pr`, the full preflight and full build, the full fixture checks and
+  the native rows are not per-PR steps. The main health run covers them.
+- **Main health run.** About every 3 hours, `scripts/preflight.sh` (full build and fixture checks)
+  and `scripts/regen.sh` run on `main`. A red result is fixed forward at once, ahead of feature
+  work, and stale generated files go into one regen PR. CI still runs on every PR and on `main` as
+  a warning.
 - Every executing CI part runs in a restricted checkout that withholds undeclared files, and the
   nightly run executes everything unrestricted (docs/ci.md#restricted-checkout).
 - **Whole-tree generated files are never committed in PRs** (`assurance/generated.json`: coverage
-  inventories, premise index, provenance manifests, pins and receipts). CI produces them on the
+  inventories, theorem inventory, premise index, provenance manifests, pins and receipts). CI produces them on the
   merged tree and publishes them on the `generated` branch (docs/ci.md#whole-tree-generated-files);
   `scripts/generated.py materialize` (or `fetch`/`regen`) puts them in a checkout.
 - Run heavy builds through `scripts/build-guard.py`. Regenerate the other generated files (theorem
@@ -149,11 +161,10 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
 - Start every new worktree with `scripts/worktree-init.sh [--zig <version>]`: it builds the Lean
   packages through the shared cache (only modules no worktree has built yet are compiled), the
   requested patched compilers and the generated files.
-- Run `scripts/preflight.sh` before every push: it materializes the whole-tree files and checks
-  every committed generated file CI checks for staleness, in minutes.
-- **Local first.** Every CI part can be run on the development Mac, and a PR is pushed and merged
-  only after the parts it touches are green locally. CI is never the test loop and never a
-  merge gate. Do not push to find out whether something is still red.
+- Run `scripts/preflight.sh --no-translator` before merging: it materializes the whole-tree files
+  and checks every committed generated file CI checks for staleness, in minutes.
+- **Local first.** Every CI part can be run on the development Mac. CI is never the test loop and
+  never a merge gate. Do not push to find out whether something is still red.
 - **x86_64-linux runs locally under Rosetta.** Native x86_64-linux runs (build modes, native
   differential, harnesses) go in a `--platform linux/amd64` Docker container, which runs under
   Rosetta at near-native speed. Never copy `-z norelro` into a script: source
@@ -171,8 +182,7 @@ Standing rules for anyone (human or agent) working on air2lean. Project scope an
   in the shell.
 - **Inner loop: build only what you changed.** While working, build the touched module
   (`scripts/build-guard.py … lake build <Module>`) or run the one check script of the fixture.
-  Run `scripts/regen.sh --pr`, `scripts/preflight.sh` and the native/Docker rows once, before
-  merging, not after every edit.
+  Before merging, run the light merge gate above, not the full checks.
 - **"Full build" means `scripts/full-build.sh`** ([docs/ci.md#full-build](docs/ci.md#full-build)):
   every ZigLean/Air2Lean module, Proofs and the tests/diff libraries, under build-guard. A bare
   `lake build` builds only the default targets and leaves the full-state logic and Proofs stale.

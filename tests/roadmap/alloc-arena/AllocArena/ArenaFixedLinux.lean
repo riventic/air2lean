@@ -414,6 +414,8 @@ def heap_FixedBufferAllocator_init (p0 : Zig.Slice) : Zig.MemM (heap_FixedBuffer
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heap_FixedBufferAllocator_init
+
 structure heap_FixedBufferAllocator_allocatorLocals where
   local1 : mem_Allocator
   deriving Inhabited
@@ -430,6 +432,8 @@ def heap_FixedBufferAllocator_allocator (p0 : Zig.Ptr) : Zig.MemM (mem_Allocator
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heap_FixedBufferAllocator_allocator
+
 structure heap_ArenaAllocator_State_promoteLocals where
   local2 : heap_ArenaAllocator
   deriving Inhabited
@@ -445,6 +449,8 @@ def heap_ArenaAllocator_State_promote (p0 : heap_ArenaAllocator_State) (p1 : mem
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heap_ArenaAllocator_State_promote
+
 structure heap_ArenaAllocator_initLocals where
   deriving Inhabited
 
@@ -457,6 +463,8 @@ def heap_ArenaAllocator_init (p0 : mem_Allocator) : Zig.MemM (heap_ArenaAllocato
     pure (.ret i1)) : Zig.MM heap_ArenaAllocator_initLocals heap_ArenaAllocator_initExit).run' (default : heap_ArenaAllocator_initLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_init
 
 structure heap_ArenaAllocator_allocatorLocals where
   local1 : mem_Allocator
@@ -473,6 +481,8 @@ def heap_ArenaAllocator_allocator (p0 : Zig.Ptr) : Zig.MemM (mem_Allocator) := d
     pure (.ret (← get).local1)) : Zig.MM heap_ArenaAllocator_allocatorLocals heap_ArenaAllocator_allocatorExit).run' (default : heap_ArenaAllocator_allocatorLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_allocator
 
 structure math_mul__anon_44faaf286c79Locals where
   deriving Inhabited
@@ -500,6 +510,8 @@ def math_mul__anon_44faaf286c79 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] math_mul__anon_44faaf286c79
+
 structure debug_assertLocals where
   deriving Inhabited
 
@@ -522,6 +534,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] debug_assert
+
 structure mem_Alignment_toByteUnitsLocals where
   deriving Inhabited
 
@@ -535,6 +549,8 @@ def mem_Alignment_toByteUnits (p0 : mem_Alignment) : Zig.Result (BitVec 64) := d
     pure (.ret i2)) : Zig.M mem_Alignment_toByteUnitsLocals mem_Alignment_toByteUnitsExit).run' (default : mem_Alignment_toByteUnitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Alignment_toByteUnits
 
 structure math_isPowerOfTwo__anon_38853e1fe316Locals where
   deriving Inhabited
@@ -554,6 +570,8 @@ def math_isPowerOfTwo__anon_38853e1fe316 (p0 : BitVec 64) : Zig.Result (Bool) :=
     pure (.ret i7)) : Zig.M math_isPowerOfTwo__anon_38853e1fe316Locals math_isPowerOfTwo__anon_38853e1fe316Exit).run' (default : math_isPowerOfTwo__anon_38853e1fe316Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] math_isPowerOfTwo__anon_38853e1fe316
 
 structure mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals where
   deriving Inhabited
@@ -579,6 +597,8 @@ def mem_isValidAlignGeneric__anon_32d5b5f10ec2 (p0 : BitVec 64) : Zig.Result (Bo
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_isValidAlignGeneric__anon_32d5b5f10ec2
+
 structure mem_alignBackward__anon_f056e98f6fd2Locals where
   deriving Inhabited
 
@@ -595,6 +615,8 @@ def mem_alignBackward__anon_f056e98f6fd2 (p0 : BitVec 64) (p1 : BitVec 64) : Zig
     pure (.ret i6)) : Zig.M mem_alignBackward__anon_f056e98f6fd2Locals mem_alignBackward__anon_f056e98f6fd2Exit).run' (default : mem_alignBackward__anon_f056e98f6fd2Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_alignBackward__anon_f056e98f6fd2
 
 structure mem_alignForward__anon_589277751031Locals where
   deriving Inhabited
@@ -613,6 +635,8 @@ def mem_alignForward__anon_589277751031 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mem_alignForward__anon_589277751031
+
 structure mem_isValidAlignLocals where
   deriving Inhabited
 
@@ -625,6 +649,8 @@ def mem_isValidAlign (p0 : BitVec 64) : Zig.Result (Bool) := do
     pure (.ret i1)) : Zig.M mem_isValidAlignLocals mem_isValidAlignExit).run' (default : mem_isValidAlignLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_isValidAlign
 
 structure mem_alignPointerOffset__anon_7004c05f4892Locals where
   ov : BitVec 64 × BitVec 1
@@ -686,6 +712,8 @@ def mem_alignPointerOffset__anon_7004c05f4892 (p0 : Zig.Ptr) (p1 : BitVec 64) : 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_alignPointerOffset__anon_7004c05f4892
+
 structure mem_alignPointer__anon_53311c568cf7Locals where
   deriving Inhabited
 
@@ -722,6 +750,8 @@ def mem_alignPointer__anon_53311c568cf7 (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.Me
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_alignPointer__anon_53311c568cf7
 
 structure heap_PageAllocator_mapLocals where
   local14 : Option (Zig.Ptr)
@@ -903,6 +933,8 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_PageAllocator_map
+
 structure heap_PageAllocator_allocLocals where
   deriving Inhabited
 
@@ -918,6 +950,8 @@ def heap_PageAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Alignment
     pure (.ret i7)) : Zig.CM Tgt heap_PageAllocator_allocLocals heap_PageAllocator_allocExit).run' (default : heap_PageAllocator_allocLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_PageAllocator_alloc
 
 structure heap_ArenaAllocator_loadFirstNodeLocals where
   deriving Inhabited
@@ -935,6 +969,8 @@ def heap_ArenaAllocator_loadFirstNode (p0 : Zig.Ptr) : Zig.ConcM Tgt (Option (Zi
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heap_ArenaAllocator_loadFirstNode
+
 structure heap_ArenaAllocator_Node_Size_toIntLocals where
   int : heap_ArenaAllocator_Node_Size
   deriving Inhabited
@@ -951,6 +987,8 @@ def heap_ArenaAllocator_Node_Size_toInt (p0 : heap_ArenaAllocator_Node_Size) : Z
     pure (.ret i6)) : Zig.M heap_ArenaAllocator_Node_Size_toIntLocals heap_ArenaAllocator_Node_Size_toIntExit).run' (default : heap_ArenaAllocator_Node_Size_toIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_Node_Size_toInt
 
 structure heap_ArenaAllocator_Node_loadBufLocals where
   deriving Inhabited
@@ -997,6 +1035,8 @@ def heap_ArenaAllocator_Node_loadBuf (p0 : Zig.Ptr) : Zig.ConcM Tgt (Zig.Slice) 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_Node_loadBuf
+
 structure mem_Alignment_forwardLocals where
   deriving Inhabited
 
@@ -1015,6 +1055,8 @@ def mem_Alignment_forward (p0 : mem_Alignment) (p1 : BitVec 64) : Zig.Result (Bi
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mem_Alignment_forward
+
 structure heap_ArenaAllocator_alignedIndexLocals where
   deriving Inhabited
 
@@ -1032,6 +1074,8 @@ def heap_ArenaAllocator_alignedIndex (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_A
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heap_ArenaAllocator_alignedIndex
+
 structure heap_ArenaAllocator_pushFreeListLocals where
   deriving Inhabited
 
@@ -1046,6 +1090,7 @@ def heap_ArenaAllocator_pushFreeList.again19 : heap_ArenaAllocator_pushFreeListE
   | _ => false
 
 def heap_ArenaAllocator_pushFreeList.loop19 (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Zig.Ptr) : Zig.CM Tgt heap_ArenaAllocator_pushFreeListLocals heap_ArenaAllocator_pushFreeListExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i21 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
     let i22 ← Zig.callMC (Zig.ptrProject i21 (·.add 8))
@@ -1091,6 +1136,8 @@ def heap_ArenaAllocator_pushFreeList (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : Zig.Ptr
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_pushFreeList.loop19 heap_ArenaAllocator_pushFreeList
+
 structure heap_ArenaAllocator_Node_beginResizeLocals where
   deriving Inhabited
 
@@ -1121,6 +1168,8 @@ def heap_ArenaAllocator_Node_beginResize (p0 : Zig.Ptr) : Zig.ConcM Tgt (Option 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_Node_beginResize
+
 structure math_add__anon_23f0cc3a812cLocals where
   deriving Inhabited
 
@@ -1146,6 +1195,8 @@ def math_add__anon_23f0cc3a812c (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] math_add__anon_23f0cc3a812c
 
 structure heap_ArenaAllocator_nodeSizeForLocals where
   deriving Inhabited
@@ -1186,6 +1237,8 @@ def heap_ArenaAllocator_nodeSizeFor (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Resu
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_nodeSizeFor
+
 structure heap_ArenaAllocator_Node_Size_fromIntLocals where
   deriving Inhabited
 
@@ -1204,6 +1257,8 @@ def heap_ArenaAllocator_Node_Size_fromInt (p0 : BitVec 64) : Zig.Result (heap_Ar
     pure (.ret i4)) : Zig.M heap_ArenaAllocator_Node_Size_fromIntLocals heap_ArenaAllocator_Node_Size_fromIntExit).run' (default : heap_ArenaAllocator_Node_Size_fromIntLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_Node_Size_fromInt
 
 structure heap_ArenaAllocator_Node_endResizeLocals where
   deriving Inhabited
@@ -1232,6 +1287,8 @@ def heap_ArenaAllocator_Node_endResize (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : Bit
   match e with
   | .ret => pure ()
 
+attribute [zig_run] heap_ArenaAllocator_Node_endResize
+
 structure heap_ArenaAllocator_stealFreeListLocals where
   deriving Inhabited
 
@@ -1246,6 +1303,8 @@ def heap_ArenaAllocator_stealFreeList (p0 : Zig.Ptr) : Zig.ConcM Tgt (Option (Zi
     pure (.ret i3)) : Zig.CM Tgt heap_ArenaAllocator_stealFreeListLocals heap_ArenaAllocator_stealFreeListExit).run' (default : heap_ArenaAllocator_stealFreeListLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_stealFreeList
 
 structure heap_ArenaAllocator_Node_allocatedSliceUnsafeLocals where
   deriving Inhabited
@@ -1265,6 +1324,8 @@ def heap_ArenaAllocator_Node_allocatedSliceUnsafe (p0 : Zig.Ptr) : Zig.MemM (Zig
     pure (.ret i7)) : Zig.MM heap_ArenaAllocator_Node_allocatedSliceUnsafeLocals heap_ArenaAllocator_Node_allocatedSliceUnsafeExit).run' (default : heap_ArenaAllocator_Node_allocatedSliceUnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_Node_allocatedSliceUnsafe
 
 structure heap_ArenaAllocator_tryPushNodeLocals where
   local16 : heap_ArenaAllocator_PushResult
@@ -1296,6 +1357,8 @@ def heap_ArenaAllocator_tryPushNode (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.ConcM Tg
       pure (.ret heap_ArenaAllocator_PushResult.success))) : Zig.CM Tgt heap_ArenaAllocator_tryPushNodeLocals heap_ArenaAllocator_tryPushNodeExit).run' (default : heap_ArenaAllocator_tryPushNodeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_ArenaAllocator_tryPushNode
 
 structure heap_PageAllocator_reallocLocals where
   local17 : Zig.Slice
@@ -1423,6 +1486,8 @@ def heap_PageAllocator_realloc (p0 : Zig.Slice) (p1 : mem_Alignment) (p2 : BitVe
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_PageAllocator_realloc
+
 structure heap_PageAllocator_resizeLocals where
   deriving Inhabited
 
@@ -1436,6 +1501,8 @@ def heap_PageAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignmen
     pure (.ret i6)) : Zig.MM heap_PageAllocator_resizeLocals heap_PageAllocator_resizeExit).run' (default : heap_PageAllocator_resizeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_PageAllocator_resize
 
 structure heap_ArenaAllocator_resizeLocals where
   local5 : Zig.Slice
@@ -1570,6 +1637,8 @@ def heap_ArenaAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignme
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_resize
+
 structure heap_FixedBufferAllocator_sliceContainsSliceLocals where
   local2 : Zig.Slice
   local5 : Zig.Slice
@@ -1613,6 +1682,8 @@ def heap_FixedBufferAllocator_sliceContainsSlice (p0 : Zig.Slice) (p1 : Zig.Slic
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_sliceContainsSlice
+
 structure heap_FixedBufferAllocator_ownsSliceLocals where
   deriving Inhabited
 
@@ -1627,6 +1698,8 @@ def heap_FixedBufferAllocator_ownsSlice (p0 : Zig.Ptr) (p1 : Zig.Slice) : Zig.Me
     pure (.ret i4)) : Zig.MM heap_FixedBufferAllocator_ownsSliceLocals heap_FixedBufferAllocator_ownsSliceExit).run' (default : heap_FixedBufferAllocator_ownsSliceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_FixedBufferAllocator_ownsSlice
 
 structure heap_FixedBufferAllocator_isLastAllocationLocals where
   local2 : Zig.Slice
@@ -1651,6 +1724,8 @@ def heap_FixedBufferAllocator_isLastAllocation (p0 : Zig.Ptr) (p1 : Zig.Slice) :
     pure (.ret i16)) : Zig.MM heap_FixedBufferAllocator_isLastAllocationLocals heap_FixedBufferAllocator_isLastAllocationExit).run' (default : heap_FixedBufferAllocator_isLastAllocationLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_FixedBufferAllocator_isLastAllocation
 
 structure heap_FixedBufferAllocator_resizeLocals where
   deriving Inhabited
@@ -1742,6 +1817,8 @@ def heap_FixedBufferAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_A
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_resize
+
 structure mem_alignPointerOffset__anon_1fdb4fd23aeeLocals where
   ov : BitVec 64 × BitVec 1
   deriving Inhabited
@@ -1801,6 +1878,8 @@ def mem_alignPointerOffset__anon_1fdb4fd23aee (p0 : Zig.Ptr) (p1 : BitVec 64) : 
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_alignPointerOffset__anon_1fdb4fd23aee
 
 structure heap_FixedBufferAllocator_allocLocals where
   deriving Inhabited
@@ -1869,6 +1948,8 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] heap_FixedBufferAllocator_alloc
 
 structure heap_ArenaAllocator_allocLocals where
   cur_first_node : Option (Zig.Ptr)
@@ -1992,9 +2073,8 @@ def heap_ArenaAllocator_alloc.again31 : heap_ArenaAllocator_allocExit → Bool
   | .rep31 => true
   | _ => false
 
-mutual
-
 def heap_ArenaAllocator_alloc.loop375 (p1 : BitVec 64) (p2 : mem_Alignment) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i377 ← pure ((← get).it)
     let i378 ← pure ((i377).isSome)
@@ -2065,9 +2145,50 @@ def heap_ArenaAllocator_alloc.loop375 (p1 : BitVec 64) (p2 : mem_Alignment) : Zi
   | .br376 => (do
     pure .rep375)
   | e => pure e
+
+mutual
+
+def heap_ArenaAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Alignment) (p3 : BitVec 64) : Zig.ConcM Tgt (Option (Zig.Ptr)) := do
+  Zig.ConcM.liftMem Zig.tick
+  let e ← ((do
+    let i4 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr p0)))
+    let i5 ← pure (i4 &&& (7 : BitVec 64))
+    let i6 ← pure (i5 == (0 : BitVec 64))
+    match ← ((do
+      if i6 then (do
+        pure .br7)
+      else (do
+        throw .panic)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
+    | .br7 => (do
+      let i12 ← Zig.callMC (Zig.checkAlign 8 p0 >>= fun _ => pure p0)
+      let i13 ← pure (p1)
+      let i14 ← pure (Zig.gt false i13 (0 : BitVec 64))
+      let _i15 ← Zig.callRC (debug_assert i14)
+      match ← ((do
+        let i17 ← Zig.callRC (mem_Alignment_toByteUnits p2)
+        let i18 ← Zig.sub false i17 (1 : BitVec 64)
+        let i19 ← Zig.sub false (18446744073709551615 : BitVec 64) i18
+        let i20 ← pure (p1)
+        let i21 ← pure (i19)
+        let i22 ← pure (Zig.gt false i20 i21)
+        if i22 then (do
+          pure (.ret none))
+        else (do
+          pure .br16)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
+      | .br16 => (do
+        let i27 ← Zig.callC (heap_ArenaAllocator_loadFirstNode i12)
+        modify (fun s => { s with cur_first_node := i27 })
+        modify (fun s => { s with cur_new_node := none })
+        Zig.loop (heap_ArenaAllocator_alloc.loop31 p1 p2 i12) heap_ArenaAllocator_alloc.again31)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit).run' (default : heap_ArenaAllocator_allocLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
 partial_fixpoint
 
 def heap_ArenaAllocator_alloc.loop31 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 : Zig.Ptr) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     match ← ((do
       match ← ((do
@@ -2971,45 +3092,9 @@ def heap_ArenaAllocator_alloc.loop31 (p1 : BitVec 64) (p2 : mem_Alignment) (i12 
   | e => pure e
 partial_fixpoint
 
-def heap_ArenaAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Alignment) (p3 : BitVec 64) : Zig.ConcM Tgt (Option (Zig.Ptr)) := do
-  let e ← ((do
-    let i4 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr p0)))
-    let i5 ← pure (i4 &&& (7 : BitVec 64))
-    let i6 ← pure (i5 == (0 : BitVec 64))
-    match ← ((do
-      if i6 then (do
-        pure .br7)
-      else (do
-        throw .panic)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
-    | .br7 => (do
-      let i12 ← Zig.callMC (Zig.checkAlign 8 p0 >>= fun _ => pure p0)
-      let i13 ← pure (p1)
-      let i14 ← pure (Zig.gt false i13 (0 : BitVec 64))
-      let _i15 ← Zig.callRC (debug_assert i14)
-      match ← ((do
-        let i17 ← Zig.callRC (mem_Alignment_toByteUnits p2)
-        let i18 ← Zig.sub false i17 (1 : BitVec 64)
-        let i19 ← Zig.sub false (18446744073709551615 : BitVec 64) i18
-        let i20 ← pure (p1)
-        let i21 ← pure (i19)
-        let i22 ← pure (Zig.gt false i20 i21)
-        if i22 then (do
-          pure (.ret none))
-        else (do
-          pure .br16)) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit) with
-      | .br16 => (do
-        let i27 ← Zig.callC (heap_ArenaAllocator_loadFirstNode i12)
-        modify (fun s => { s with cur_first_node := i27 })
-        modify (fun s => { s with cur_new_node := none })
-        Zig.loop (heap_ArenaAllocator_alloc.loop31 p1 p2 i12) heap_ArenaAllocator_alloc.again31)
-      | e => pure e)
-    | e => pure e) : Zig.CM Tgt heap_ArenaAllocator_allocLocals heap_ArenaAllocator_allocExit).run' (default : heap_ArenaAllocator_allocLocals)
-  match e with
-  | .ret v => pure v
-  | _ => throw .panic
-partial_fixpoint
-
 end
+
+attribute [zig_run] heap_ArenaAllocator_alloc.loop375 heap_ArenaAllocator_alloc.eq_def heap_ArenaAllocator_alloc.loop31.eq_def
 
 structure mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7Locals where
   deriving Inhabited
@@ -3072,6 +3157,8 @@ def mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7 (p0 : mem_Allocator
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_allocBytesWithAlignment__anon_f686c272daf7
+
 structure mem_Allocator_allocWithSizeAndAlignment__anon_2d3c33bb31beLocals where
   deriving Inhabited
 
@@ -3097,6 +3184,8 @@ def mem_Allocator_allocWithSizeAndAlignment__anon_2d3c33bb31be (p0 : mem_Allocat
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_allocWithSizeAndAlignment__anon_2d3c33bb31be
 
 structure mem_Allocator_alignedAlloc__anon_004dab4d837dLocals where
   deriving Inhabited
@@ -3128,6 +3217,8 @@ def mem_Allocator_alignedAlloc__anon_004dab4d837d (p0 : mem_Allocator) (p1 : Bit
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_alignedAlloc__anon_004dab4d837d
+
 structure mem_absorbSentinel__anon_7169d0388e16Locals where
   deriving Inhabited
 
@@ -3139,6 +3230,8 @@ def mem_absorbSentinel__anon_7169d0388e16 (p0 : Zig.Slice) : Zig.MemM (Zig.Slice
     pure (.ret p0)) : Zig.MM mem_absorbSentinel__anon_7169d0388e16Locals mem_absorbSentinel__anon_7169d0388e16Exit).run' (default : mem_absorbSentinel__anon_7169d0388e16Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_absorbSentinel__anon_7169d0388e16
 
 structure mem_Alignment_fromByteUnitsLocals where
   deriving Inhabited
@@ -3155,6 +3248,8 @@ def mem_Alignment_fromByteUnits (p0 : BitVec 64) : Zig.Result (mem_Alignment) :=
     pure (.ret i4)) : Zig.M mem_Alignment_fromByteUnitsLocals mem_Alignment_fromByteUnitsExit).run' (default : mem_Alignment_fromByteUnitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Alignment_fromByteUnits
 
 structure heap_PageAllocator_unmapLocals where
   local1 : Zig.Slice
@@ -3189,6 +3284,8 @@ def heap_PageAllocator_unmap (p0 : Zig.Slice) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] heap_PageAllocator_unmap
+
 structure heap_PageAllocator_freeLocals where
   deriving Inhabited
 
@@ -3218,6 +3315,8 @@ def heap_PageAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignment)
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] heap_PageAllocator_free
 
 structure heap_ArenaAllocator_freeLocals where
   local4 : Zig.Slice
@@ -3300,6 +3399,8 @@ def heap_ArenaAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignment
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_free
+
 structure heap_FixedBufferAllocator_freeLocals where
   deriving Inhabited
 
@@ -3341,6 +3442,8 @@ def heap_FixedBufferAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Ali
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_free
+
 structure mem_Allocator_free__anon_809fd7dfd3c9Locals where
   deriving Inhabited
 
@@ -3381,6 +3484,8 @@ def mem_Allocator_free__anon_809fd7dfd3c9 (p0 : mem_Allocator) (p1 : Zig.Slice) 
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_free__anon_809fd7dfd3c9
+
 structure heap_ArenaAllocator_countListCapacityLocals where
   capacity : BitVec 64
   it : Option (Zig.Ptr)
@@ -3397,6 +3502,7 @@ def heap_ArenaAllocator_countListCapacity.again6 : heap_ArenaAllocator_countList
   | _ => false
 
 def heap_ArenaAllocator_countListCapacity.loop6  : Zig.MM heap_ArenaAllocator_countListCapacityLocals heap_ArenaAllocator_countListCapacityExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).it)
     let i9 ← pure ((i8).isSome)
@@ -3433,6 +3539,8 @@ def heap_ArenaAllocator_countListCapacity (p0 : Option (Zig.Ptr)) : Zig.MemM (Bi
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_countListCapacity.loop6 heap_ArenaAllocator_countListCapacity
+
 structure heap_ArenaAllocator_queryCapacityLocals where
   capacity : BitVec 64
   local3 : BitVec 64
@@ -3449,6 +3557,7 @@ def heap_ArenaAllocator_queryCapacity.again11 : heap_ArenaAllocator_queryCapacit
   | _ => false
 
 def heap_ArenaAllocator_queryCapacity.loop11 (i9 : Vector (Option (Zig.Ptr)) 2) : Zig.MM heap_ArenaAllocator_queryCapacityLocals heap_ArenaAllocator_queryCapacityExit := do
+  Zig.callM Zig.tick
   let i12 ← pure ((← get).local3)
   match ← ((do
     let i14 ← pure (i12)
@@ -3486,6 +3595,8 @@ def heap_ArenaAllocator_queryCapacity (p0 : heap_ArenaAllocator) : Zig.MemM (Bit
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] heap_ArenaAllocator_queryCapacity.loop11 heap_ArenaAllocator_queryCapacity
 
 structure arena_fitLocals where
   fba : Zig.Ptr
@@ -3544,6 +3655,8 @@ def arena_fit (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_fit
+
 structure mem_absorbSentinel__anon_7342b53a30edLocals where
   deriving Inhabited
 
@@ -3555,6 +3668,8 @@ def mem_absorbSentinel__anon_7342b53a30ed (p0 : Zig.Slice) : Zig.MemM (Zig.Slice
     pure (.ret p0)) : Zig.MM mem_absorbSentinel__anon_7342b53a30edLocals mem_absorbSentinel__anon_7342b53a30edExit).run' (default : mem_absorbSentinel__anon_7342b53a30edLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_absorbSentinel__anon_7342b53a30ed
 
 structure mem_Allocator_free__anon_1e60e7ef40f5Locals where
   deriving Inhabited
@@ -3596,6 +3711,8 @@ def mem_Allocator_free__anon_1e60e7ef40f5 (p0 : mem_Allocator) (p1 : Zig.Slice) 
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_free__anon_1e60e7ef40f5
+
 structure arena_foreign_freeLocals where
   arena : Zig.Ptr
   deriving Inhabited
@@ -3615,6 +3732,8 @@ def arena_foreign_free  : Zig.ConcM Tgt (Unit) := do
   Zig.free s0
   match e with
   | .ret => pure ()
+
+attribute [zig_run] arena_foreign_free
 
 structure mem_Allocator_create__anon_496c6df2f4baLocals where
   deriving Inhabited
@@ -3637,6 +3756,8 @@ def mem_Allocator_create__anon_496c6df2f4ba (p0 : mem_Allocator) : Zig.ConcM Tgt
       pure (.ret i8))) : Zig.CM Tgt mem_Allocator_create__anon_496c6df2f4baLocals mem_Allocator_create__anon_496c6df2f4baExit).run' (default : mem_Allocator_create__anon_496c6df2f4baLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Allocator_create__anon_496c6df2f4ba
 
 structure mem_Allocator_destroy__anon_d74a2d8a982dLocals where
   deriving Inhabited
@@ -3666,6 +3787,8 @@ def mem_Allocator_destroy__anon_d74a2d8a982d (p0 : mem_Allocator) (p1 : Zig.Ptr)
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_destroy__anon_d74a2d8a982d
 
 structure mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals where
   deriving Inhabited
@@ -3717,6 +3840,8 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b
+
 structure mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals where
   deriving Inhabited
 
@@ -3742,6 +3867,8 @@ def mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 (p0 : mem_Allocat
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43
 
 structure mem_Allocator_alloc__anon_a8254a5f2b74Locals where
   deriving Inhabited
@@ -3773,6 +3900,8 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_alloc__anon_a8254a5f2b74
 
 structure arena_mixedLocals where
   fba : Zig.Ptr
@@ -3844,6 +3973,8 @@ def arena_mixed  : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_mixed
+
 structure arena_oob_freeLocals where
   arena : Zig.Ptr
   deriving Inhabited
@@ -3869,6 +4000,8 @@ def arena_oob_free  : Zig.ConcM Tgt (Unit) := do
   Zig.free s0
   match e with
   | .ret => pure ()
+
+attribute [zig_run] arena_oob_free
 
 structure arena_oom_freeLocals where
   fba : Zig.Ptr
@@ -3922,6 +4055,8 @@ def arena_oom_free (p0 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_oom_free
+
 structure heap_ArenaAllocator_deinitLocals where
   local1 : BitVec 64
   it : Option (Zig.Ptr)
@@ -3947,6 +4082,7 @@ def heap_ArenaAllocator_deinit.again9 : heap_ArenaAllocator_deinitExit → Bool
   | _ => false
 
 def heap_ArenaAllocator_deinit.loop19 (p0 : heap_ArenaAllocator) : Zig.CM Tgt heap_ArenaAllocator_deinitLocals heap_ArenaAllocator_deinitExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i21 ← pure ((← get).it)
     let i22 ← pure ((i21).isSome)
@@ -3979,6 +4115,7 @@ def heap_ArenaAllocator_deinit.loop19 (p0 : heap_ArenaAllocator) : Zig.CM Tgt he
   | e => pure e
 
 def heap_ArenaAllocator_deinit.loop9 (p0 : heap_ArenaAllocator) (i7 : Vector (Option (Zig.Ptr)) 2) : Zig.CM Tgt heap_ArenaAllocator_deinitLocals heap_ArenaAllocator_deinitExit := do
+  Zig.callMC Zig.tick
   let i10 ← pure ((← get).local1)
   match ← ((do
     let i12 ← pure (i10)
@@ -4015,6 +4152,8 @@ def heap_ArenaAllocator_deinit (p0 : heap_ArenaAllocator) : Zig.ConcM Tgt (Unit)
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] heap_ArenaAllocator_deinit.loop19 heap_ArenaAllocator_deinit.loop9 heap_ArenaAllocator_deinit
 
 structure arena_pageLocals where
   arena : Zig.Ptr
@@ -4084,6 +4223,8 @@ def arena_page (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_page
+
 structure heap_ArenaAllocator_resetLocals where
   ok : Bool
   local55 : BitVec 64
@@ -4128,6 +4269,7 @@ def heap_ArenaAllocator_reset.again66 : heap_ArenaAllocator_resetExit → Bool
   | _ => false
 
 def heap_ArenaAllocator_reset.loop78 (p0 : Zig.Ptr) : Zig.CM Tgt heap_ArenaAllocator_resetLocals heap_ArenaAllocator_resetExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i80 ← pure ((← get).it)
     let i81 ← pure ((i80).isSome)
@@ -4170,6 +4312,7 @@ def heap_ArenaAllocator_reset.loop78 (p0 : Zig.Ptr) : Zig.CM Tgt heap_ArenaAlloc
   | e => pure e
 
 def heap_ArenaAllocator_reset.loop66 (p0 : Zig.Ptr) (i61 : Vector (Zig.Ptr) 2) (i64 : Vector (BitVec 64) 2) : Zig.CM Tgt heap_ArenaAllocator_resetLocals heap_ArenaAllocator_resetExit := do
+  Zig.callMC Zig.tick
   let i67 ← pure ((← get).local55)
   match ← ((do
     let i69 ← pure (i67)
@@ -4409,6 +4552,8 @@ def heap_ArenaAllocator_reset (p0 : Zig.Ptr) (p1 : heap_ArenaAllocator_ResetMode
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_ArenaAllocator_reset.loop78 heap_ArenaAllocator_reset.loop66 heap_ArenaAllocator_reset
+
 structure arena_resetLocals where
   fba : Zig.Ptr
   arena : Zig.Ptr
@@ -4498,6 +4643,8 @@ def arena_reset (p0 : BitVec 64) (p1 : Bool) : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_reset
+
 structure mem_Allocator_resize__anon_ec6bca265858Locals where
   deriving Inhabited
 
@@ -4559,6 +4706,8 @@ def mem_Allocator_resize__anon_ec6bca265858 (p0 : mem_Allocator) (p1 : Zig.Slice
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_resize__anon_ec6bca265858
+
 structure arena_resizeLocals where
   fba : Zig.Ptr
   arena : Zig.Ptr
@@ -4603,6 +4752,8 @@ def arena_resize (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_resize
+
 structure arena_sumLocals where
   fba : Zig.Ptr
   arena : Zig.Ptr
@@ -4622,6 +4773,7 @@ def arena_sum.again27 : arena_sumExit → Bool
   | _ => false
 
 def arena_sum.loop27 (i9 : Zig.Slice) (i25 : BitVec 64) : Zig.CM Tgt arena_sumLocals arena_sumExit := do
+  Zig.callMC Zig.tick
   let i28 ← pure ((← get).local23)
   match ← ((do
     let i30 ← pure (i28)
@@ -4686,6 +4838,8 @@ def arena_sum (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] arena_sum.loop27 arena_sum
 
 structure arena_threeLocals where
   fba : Zig.Ptr
@@ -4804,6 +4958,8 @@ def arena_three (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] arena_three
+
 structure heap_ArenaAllocator_remapLocals where
   local5 : Zig.Slice
   deriving Inhabited
@@ -4829,6 +4985,8 @@ def heap_ArenaAllocator_remap (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignmen
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] heap_ArenaAllocator_remap
 
 structure heap_FixedBufferAllocator_remapLocals where
   local5 : Zig.Slice
@@ -4856,6 +5014,8 @@ def heap_FixedBufferAllocator_remap (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Al
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_FixedBufferAllocator_remap
+
 structure heap_PageAllocator_remapLocals where
   deriving Inhabited
 
@@ -4869,8 +5029,12 @@ def heap_PageAllocator_remap (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignment
   match e with
   | .ret v => pure v
 
+attribute [zig_run] heap_PageAllocator_remap
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end AllocArena.ArenaFixedLinux

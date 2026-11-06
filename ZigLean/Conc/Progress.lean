@@ -33,7 +33,8 @@ theorem spinLoopHint {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
       ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → Q () G₁ { m₁ with current := t } k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Zig.spinLoopHint : ConcM Tgt Unit) Q G m n :=
-  sync h hcost
+  sync (fun k hk => let ⟨g, hi, hc⟩ := h k hk; ⟨g, hi, fun G₁ m₁ hg hi₁ _ => hc G₁ m₁ hg hi₁⟩)
+    hcost
 
 end Conc.Proto.WP
 end Zig

@@ -186,7 +186,7 @@ does not promise it: a `FixedBufferAllocator` `free` leaves the grant's block li
 | `Atomic` | `FTriple.atomicStore` | `{apts p v} atomicStoreAt 0 ord 8 p w {apts p w}`, any order |
 | `AtomicPtr` | `FTriple.atomicLoadUnorderedEnc`, `FTriple.cmpxchgPtr` | pointer-valued `aptsE`: the `unordered` load reads the value; a strong `cmpxchg` with the held value succeeds |
 | `Seq` | `Sched.run_solo`, `Sched.run_eq_seqRun`, `ThreadFreeC.*` | a one-thread scheduler run of a `ThreadFree` concurrent function is its sequential reading |
-| `Conc` | `CTriple.bind`, `liftMem`, `pick_bind`, `step`, `know_intro`, `forget`, `conc_norm` | full-state triples for a concurrent function called in one thread (`Sched.soloRun`, oracle `0`) |
+| `Conc` | `CTriple.bind`, `liftMem`, `pick_bind`, `step`, `know_intro`, `forget`, the `CNorm` lemmas (in `fsym_norm`) | full-state triples for a concurrent function called in one thread (`Sched.soloRun`, oracle `0`) |
 | `Atomic` | `apts_layout` | **O3**: a memory that holds a word as `apts` has no atomic location of another offset or size over it (`docs/alloc-page.md`'s `odd` memory holds no `apts` of the hint) |
 
 The prototype toy allocator (`Full/Toy.lean`: the shape of `PageAllocator.map`'s hint protocol,
@@ -1135,6 +1135,25 @@ authorized before a step and not after it), `tick_without_credit`
 (`¬ FTriple emp Zig.tick (fun _ => emp)`, decision D3), `no_mint_spent`,
 `no_plain_under_meter` and the positive control `tick_credit_live`.
 
+**Cost bounds** (`ZigLean/Sep/Full/Cost.lean`) are statements over these resources, not a
+judgment of their own:
+
+* *Plain mode from a cost proof.* No meter runs where `unmetered` is held, so credits can be
+  added there (`Holds.mintCredits`, `EUpd.credits_mint`). A proof with `n` credits gives the
+  plain-mode proof of the same program (`FTotalTriple.of_credits_unmetered`, `of_credits_plain`;
+  admissible inputs: `Witness.FAdmit.of_mem_plain`, `up_plain`, `of_mem_credits`).
+* *Exact counts.* From a start without credits, meter or `unmetered` (`MeterFree`), a run proved
+  with `N` credits makes at most `N` steps (`FTotalTriple.ticks_le`); from a start without
+  receipts, a run that returns `N` receipts makes at least `N` (`ticks_ge`; `Holds.addSpent` is
+  the adequacy step that puts the receipts of the past steps in the frame). A statement with both
+  counts its steps exactly (`ticks_eq`, from a `CreditFree` start), and
+  `FTotalTriple.not_fewer_credits` makes it tight: no proof pays the same run with fewer credits.
+* *Counted loops.* `FTotalTriple.loop_exact`: when one body run pays one credit, returns its
+  receipt and lowers the measure by exactly one (`floopExact`), the loop from the measure `n`
+  takes `n + 1` credits and returns `n + 1` receipts.
+
+Kernel-checked in `TicksCX.lean`: `two_steps_exact`, `two_steps_tight` and `two_steps_plain`.
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem
@@ -1295,7 +1314,19 @@ model argument, standards references and necessity/advancing-read controls.
   futex and atomic ops do not touch block addresses). So `known` facts are stable under the rely
   and can live in any thread's ghost value or in `Proto.inv`. This is the Iris notion of a
   persistent proposition.
-* **Shared atomic words** (`Conc/Word.lean`: `Word.Ok` requires "no other location overlaps").
+* **Block addresses stay across every thread step** (maintainer decision 2026-11-05, audit
+  finding S6, ledger row `fstepin-addrs`): the step-level form of `KMono`'s address facts above.
+  The thread step relation `FStepIn` has the field `addrs : m.SameAddrs m'`: every block of `m`,
+  also one of the frame, exists in `m'` at the same address. The model never moves a block: a
+  write, `free`, an unmap or an in-place resize changes only bytes, `live` or `kind`, and every
+  `addr :=` is a new block (`Mem.afterAlloc`, a mapping, a moving `mremap`). So everything read
+  from addresses, `addrIn` and the futex keys, is stable under every `FStepIn` of the rely
+  (`Mem.SameAddrs.addrIn_eq`). Counterexample to the old relation (only
+  `m.blocks.size ≤ m'.blocks.size`): a frame step that moves block `b'` (a nested lock's word,
+  outside the frame) satisfies every other field, and a lock invariant that names `b'`'s futex key
+  (`LockWord.nest`) is false after it. Rejected alternative: a word-address field in each
+  protocol object (`LockWord`, `FCond`, `FSem`, `FEvent` would each repeat it).
+* **Shared atomic words** (`Conc/Base/Word.lean`: `Word.Ok` requires "no other location overlaps").
   This is the constraint `(o, n)` for a word that no thread owns. The full-state version keeps the word in the
   protocol invariant as `apts` contents with tag `some (o, n)`.
 * **A process-shared PageAllocator** then has `Proto.inv ⊇ ∃ v, hint ↦ₐ v ∗ addrOf v …`, and each
@@ -1344,7 +1375,7 @@ model argument, standards references and necessity/advancing-read controls.
       stay proof-only like the rest of `ZigLean/Sep`, so they are not added to `ZigLean.lean`.
    2. Done (`AllocSpec.lean`, `Tame.lean`): `FAllocSpec` over `FAllocInv` (next section).
       `FAllocSpec.ofTotal` turns a legacy total `AllocSpec` of a `VTame` vtable into a full one
-      (`AllocInv.toFull`). `tame` proves `Tame` for normalized generated code (`fsym_norm`), and the
+      (`AllocInv.toFull`). The `Tame` lemmas cover normalized generated code (`fsym_norm`), and the
       OS mappings (`Os.mmap`, `munmap`, `mremap`) are `Tame`. (`FAllocSpec.ofTotal` is gone with
       block extents; the FixedBufferAllocator's `FBA.fallocSpec` is now a native full-state proof,
       `tests/roadmap/alloc-fba/AllocFba/Full.lean`, with the rules of `ZigLean/Sep/Full/Ops.lean`.) The page

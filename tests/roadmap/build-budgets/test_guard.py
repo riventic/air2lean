@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Offline guard tests: stdlib Python children only, no compiler probes/builds."""
 
+import contextlib
+import fcntl
+import hashlib
 import importlib.util
+import io
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -19,6 +24,9 @@ sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("build_guard", GUARD)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
+
+# 13 slots: one elastic base of up to 2 slots leaves the 11 of one PROCESS_MIB sub-admission.
+ELASTIC_BUDGET = ("--mem-budget-mib", "13312")
 
 # Longer than the coordinator's 12-second timeout and bounded PID waits. Tests
 # assert removal before this deadline; expiry only protects a broken harness.
@@ -37,6 +45,8 @@ class GuardTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         os.environ.pop("AIR2LEAN_GUARD_PRIORITY", None)
+        os.environ.pop("AIR2LEAN_GUARD_IDLE_MINUTES", None)
+        os.environ.pop("AIR2LEAN_LOCK_WAIT", None)  # the tests' guards that wait say so
 
     def fixture_source(self, source, lifetime=FIXTURE_LIFETIME):
         self.fixture_counter += 1
@@ -219,6 +229,62 @@ fixture_pause()
         self.assertTrue(all(not self.live(int(pid)) for pid in pids.read_text().split()))
         self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
 
+    def test_idle_limit_stops_a_workload_without_cpu_progress(self):
+        started = time.monotonic()
+        result, report, _ = self.run_guard("fixture_pause()", "--idle-minutes", "0.02")
+        self.assertEqual((result.returncode, report["outcome"]), (123, "hung"), result.stderr)
+        self.assertEqual(report["budget"]["idle_minutes"], 0.02)
+        self.assertLess(time.monotonic() - started, FIXTURE_LIFETIME)
+
+    def test_idle_limit_spares_a_workload_that_computes(self):
+        # 6 s of silent computing against a 3 s limit and a 1 s step: each window needs a third
+        # of a core, and Linux ps counts whole seconds.
+        source = "import time\nend = time.monotonic() + 6\nwhile time.monotonic() < end: pass"
+        result, report, _ = self.run_guard(source, "--idle-minutes", "0.05", "--timeout", "10")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), result.stderr)
+
+    def test_the_lock_wait_comes_from_the_option_the_environment_or_is_none(self):
+        args = ["--cwd", str(self.root), "--report", "r", "--log", "l", "--", "true"]
+        self.assertEqual(guard.parse_args(args).lock_wait, 0)
+        os.environ["AIR2LEAN_LOCK_WAIT"] = "21600"
+        self.assertEqual(guard.parse_args(args).lock_wait, 21600)
+        self.assertEqual(guard.parse_args(["--lock-wait", "5", *args]).lock_wait, 5)
+        os.environ["AIR2LEAN_LOCK_WAIT"] = "soon"
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            guard.parse_args(args)
+
+    def test_idle_limit_comes_from_the_environment_or_is_off(self):
+        os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "0.02"
+        result, report, _ = self.run_guard("fixture_pause()")
+        self.assertEqual((result.returncode, report["outcome"]), (123, "hung"), result.stderr)
+        os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"] = "soon"
+        result = subprocess.run(self.command("pass")[0], capture_output=True, text=True, timeout=12)
+        self.assertEqual(result.returncode, 2)
+        del os.environ["AIR2LEAN_GUARD_IDLE_MINUTES"]
+        result, report, _ = self.run_guard("import time; time.sleep(1.5)")
+        self.assertEqual((result.returncode, report["budget"]["idle_minutes"]), (0, 0))
+
+    def test_progress_is_a_started_process_output_or_cpu_time(self):
+        rows = {1: {"start": "a", "cpu_s": 5.0}, 2: {"start": "a", "cpu_s": 0.0}}
+        progress = guard.Progress(60, 0)
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 1))  # both started: progress
+        self.assertEqual(progress.since, 1)
+        rows[1]["cpu_s"] = 5.5
+        self.assertFalse(progress.hung(rows, {1, 2}, 0, 30))  # 0.5 s of CPU: under the 1 s step
+        self.assertEqual(progress.since, 1)
+        del rows[1]  # an ended process takes nothing back
+        rows[2]["cpu_s"] = 0.6
+        self.assertFalse(progress.hung(rows, {2}, 0, 40))  # 0.5 + 0.6 s reach the step
+        self.assertEqual(progress.since, 40)
+        self.assertFalse(progress.hung(rows, {2}, 7, 90))  # output
+        self.assertEqual(progress.since, 90)
+        rows[2] = {"start": "b", "cpu_s": 0.0}  # PID reuse: a started process
+        self.assertFalse(progress.hung(rows, {2}, 7, 149))
+        self.assertEqual(progress.since, 149)
+        self.assertTrue(progress.hung(rows, {2}, 7, 209))
+        self.assertEqual([guard.cpu_seconds(text) for text in ("0:01.50", "01:02:03", "2-00:00:01")],
+                         [1.5, 3723.0, 172801.0])
+
     def test_sampled_memory_limit_without_large_allocations(self):
         result, report, _ = self.run_guard("import time; time.sleep(2)", "--rss-mib", "1")
         self.assertEqual((result.returncode, report["outcome"]), (125, "rss_limit"))
@@ -376,7 +442,6 @@ fixture_pause()
         self.assertNotIn("inherited_from", report["admission"])
 
     def test_an_older_guard_holding_the_lock_still_runs_alone(self):
-        import fcntl
         with (self.root / "shared.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)  # what a guard of an older checkout takes
             code, _ = self.attempt(cwd=self.worktree("new"))
@@ -385,7 +450,6 @@ fixture_pause()
         self.assertEqual(code, 0)
 
     def test_a_waiting_queue_holder_is_admitted_before_later_acquirers(self):
-        import fcntl
         directory = Path(str(self.root / "shared.lock") + ".d")
         directory.mkdir()
         with (directory / "queue").open("a") as queue:
@@ -478,8 +542,93 @@ fixture_pause()
         code, evidence = self.attempt(cwd=self.worktree("later"))
         self.assertEqual((code, evidence["admission"]["priority"]), (0, "normal"))
 
+    def test_a_small_guard_backfills_beside_a_waiting_head(self):
+        # Budget 3 GiB: the holder takes one slot; the big head (weight 3) waits and, early in its
+        # ramp, keeps one slot. The small guard runs in the third; the head follows the holder.
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", order, *budget, "--rss-mib", "3000", "--backfill-ramp", "600")
+        code, evidence = self.attempt(*budget, "--lock-wait", "5", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (0, "success"))
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertIsNone(big.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+        self.assertEqual(order.read_text().split(), ["big"])
+        self.assertEqual(os.listdir(Path(str(self.root / "shared.lock") + ".d") / "heads"), [])
+
+    def test_a_head_past_its_ramp_keeps_every_free_slot(self):
+        budget = ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        big, _ = self.start_waiter("big", self.root / "order", *budget, "--rss-mib", "3000",
+                                   "--backfill-ramp", "0")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        self.assertFalse(evidence["admission"]["backfilled"])
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(big)
+
+    def stand_in_head(self, content, enter=None):
+        """A queue head (stand-in): it holds the queue and publishes `content` in `heads/`, until
+        the test ends (or what `enter` belongs to closes)."""
+        enter = enter or self.enterContext
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        directory.mkdir(parents=True, exist_ok=True)
+        queue = enter((directory / "queue").open("a"))
+        fcntl.flock(queue, fcntl.LOCK_EX)
+        enter(guard.publish_entry(directory / "heads", "1-1", content, lambda path: path.open("a")))
+
+    def test_backfill_leaves_the_heads_unmet_reservation_free(self):
+        self.stand_in_head({"pid": os.getpid(), "unmet": 1, "need": 3})
+        code, _ = self.attempt("--mem-budget-mib", "1024", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual(code, 75)  # one free slot: the head's
+        code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("b"))
+        self.assertEqual(code, 0)  # two: one for the head, one for the backfill
+        self.assertTrue(evidence["admission"]["backfilled"])
+        self.assertEqual(guard.free_mib(self.root / "shared.lock", 2048), 1024)  # the head's reserved slot
+
+    def test_free_slots_that_admit_the_head_go_to_it(self):
+        self.stand_in_head({"pid": os.getpid(), "unmet": 0, "need": 2})
+        code, evidence = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual(code, 75)
+        self.assertFalse(evidence["admission"]["backfilled"])
+        code, _ = self.attempt("--mem-budget-mib", "3072", "--lock-wait", "2", cwd=self.worktree("b"))
+        self.assertEqual(code, 75)  # three free still admit the head (2) first
+
+    def test_a_head_entry_of_another_shape_gets_no_backfill(self):
+        for content in ({"unmet": "x", "need": 3}, {"unmet": 1}, {"unmet": 2, "need": 1}, {"unmet": None, "need": 3}):
+            with self.subTest(content=content), contextlib.ExitStack() as stack:
+                self.stand_in_head(content, stack.enter_context)
+                code, evidence = self.attempt("--mem-budget-mib", "4096", "--lock-wait", "1.5",
+                                              cwd=self.worktree("a"))
+                self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+
+    def test_the_backfill_ramp(self):
+        for value in ("-1", "inf", "nan"):
+            with self.subTest(value=value), self.assertRaises(SystemExit), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                guard.parse_args(["--report", "r", "--log", "l", "--backfill-ramp", value, "--", "true"])
+        a = guard.parse_args(["--report", "r", "--log", "l", "--rss-mib", "4096", "--backfill-ramp", "100",
+                              "--mem-budget-mib", "8192", "--lock", str(self.root / "shared.lock"), "--", "true"])
+        self.assertEqual(a.backfill_ramp, 100)
+        admission = guard.Admission(a)
+        self.assertEqual([admission.reservation(w) for w in (0, 1, 25, 50, 99, 100, 1000)], [0, 1, 1, 2, 4, 4, 4])
+        a.backfill_ramp = 0
+        self.assertEqual(admission.reservation(0), 4)
+
+    def test_no_backfill_behind_a_merge_ticket(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "3072")
+        holder, _ = self.start_holder(*budget)
+        merge, _ = self.start_waiter("merge", order, *budget, "--rss-mib", "3000", "--priority", "merge")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("small"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(merge)
+
     def test_normal_guards_wait_for_a_live_merge_ticket_and_ignore_a_dead_one(self):
-        import fcntl
         self.tickets.mkdir(parents=True)
         ticket = self.tickets / "00000000000000000001-1"
         with ticket.open("a") as owner:
@@ -514,7 +663,7 @@ fixture_pause()
         code, evidence = self.attempt(*budget, "--lock-wait", "1", cwd=self.worktree("late"))
         self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # no new admission meanwhile
         normal, err = self.start_waiter("normal", order, *budget)
-        self.assertIn("0 merge and 1 exclusive guard(s) queued", err.read_text())
+        self.assertIn("0 merge, 1 exclusive and 0 lifeline guard(s) queued", err.read_text())
         self.assertIsNone(holder.poll())  # the running workload is not preempted
         self.assertIsNone(exclusive.poll())
         holder.send_signal(signal.SIGTERM)
@@ -551,6 +700,62 @@ fixture_pause()
         self.assertEqual(os.listdir(self.tickets), [])
         self.assertIsNone(holder.poll())
 
+    def test_a_normal_guard_arriving_later_is_admitted_before_a_background_one(self):
+        order, budget = self.root / "order", ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)
+        background, err = self.start_waiter("background", order, *budget, "--priority", "background")
+        self.assertIn("background priority", err.read_text())
+        normal, _ = self.start_waiter("normal", order, *budget)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(normal, background)
+        self.assertEqual(order.read_text().split(), ["normal", "background"])
+        self.assertFalse(self.tickets.exists() and os.listdir(self.tickets))
+
+    def test_a_waiting_background_guard_holds_no_slot(self):
+        # Budget 2 GiB: the holder takes one slot, the background guard (weight 2) waits for both.
+        # A normal guard of weight 1 is admitted at once, as the queue head (no backfill): the
+        # background guard keeps neither the queue nor a slot while it waits.
+        order, budget = self.root / "order", ("--mem-budget-mib", "2048")
+        holder, _ = self.start_holder(*budget)
+        background, _ = self.start_waiter("background", order, *budget, "--rss-mib", "2000",
+                                          "--priority", "background")
+        code, evidence = self.attempt(*budget, "--lock-wait", "2", cwd=self.worktree("normal"))
+        self.assertEqual((code, evidence["admission"]["backfilled"]), (0, False))
+        self.assertIsNone(background.poll())
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(background)
+        self.assertEqual(order.read_text().split(), ["background"])
+
+    def test_a_background_guard_waits_for_a_head_a_ticket_and_a_waiting_guard(self):
+        budget = ("--mem-budget-mib", "4096", "--priority", "background", "--lock-wait", "2")
+        directory = Path(str(self.root / "shared.lock") + ".d")
+        with contextlib.ExitStack() as stack:
+            self.stand_in_head({"pid": os.getpid(), "unmet": 0, "need": 1}, stack.enter_context)
+            code, evidence = self.attempt(*budget, cwd=self.worktree("behind-head"))
+            self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))  # free slots, but a head
+        for registry in ("merge", "waiting"):  # a merge guard; a normal guard between two heads
+            with self.subTest(registry=registry), \
+                    guard.publish_entry(directory / registry, "00000000000000000001-1", {}, lambda p: p.open("a")):
+                code, _ = self.attempt(*budget, cwd=self.worktree("behind-" + registry))
+                self.assertEqual(code, 75)
+        code, evidence = self.attempt(*budget, cwd=self.worktree("alone"))
+        self.assertEqual((code, evidence["admission"]["priority"]), (0, "background"))
+        self.assertEqual(os.listdir(directory / "waiting"), [])  # the dead entry went too
+
+    def test_a_waiting_background_guard_holds_no_workspace(self):
+        budget = ("--mem-budget-mib", "1024")
+        holder, _ = self.start_holder(*budget)  # takes the only slot
+        background, _ = self.start_waiter("background", self.root / "order", *budget, "--priority", "background",
+                                          cwd=self.worktree("shared"))
+        # Had the background guard taken the workspace, the normal one would wait for it.
+        normal, _ = self.start_waiter("normal", self.root / "order", *budget, cwd=self.worktree("shared"))
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        self.finish(normal, background)
+        self.assertEqual((self.root / "order").read_text().split(), ["normal", "background"])
+
     def test_priority_comes_from_the_environment_or_the_option(self):
         def priority(*options):
             return guard.parse_args(["--report", "r.json", "--log", "l.log", *options, "--", "true"]).priority
@@ -572,8 +777,135 @@ fixture_pause()
         with mock.patch.dict(os.environ, {"AIR2LEAN_BUILD_MEM_MIB": "-1"}), self.assertRaises(SystemExit):
             guard.parse_args(["--report", "r.json", "--log", "l.log", "--", "true"])
 
+    # Usage-aware charge (build-guard.py's docstring). /proc/meminfo and the cgroup limit are
+    # mocked: the policy is the same on every host, only its MemAvailable source is Linux's.
+    def admission(self, *options, budget="8192", rss="6000"):
+        cgroup = mock.patch.object(guard, "cgroup_limited", return_value=False)
+        cgroup.start()
+        self.addCleanup(cgroup.stop)
+        a = guard.parse_args(["--cwd", str(self.root), "--lock", str(self.root / "shared.lock"),
+                              "--report", "r.json", "--log", "l.log", "--mem-budget-mib", budget,
+                              "--rss-mib", rss, "--lock-wait", "1", *options, "--", "lake", "build"])
+        admission = guard.Admission(a)
+        admission.directory.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(admission.release)
+        return admission
+
+    def history(self, admission, *runs):
+        admission.history.parent.mkdir(exist_ok=True)
+        admission.history.write_text(json.dumps([{"outcome": outcome, "peak_mib": peak} for outcome, peak in runs]))
+
+    def test_overcommit_charges_the_measured_need_after_two_successes(self):
+        self.assertEqual(guard.history_charge([{"outcome": "success", "peak_mib": 2000}], 6000),
+                         (6000, "fewer than 2 recent successes"))
+        runs = [{"outcome": "success", "peak_mib": 1000}, {"outcome": "child_failed", "peak_mib": 5000},
+                {"outcome": "success", "peak_mib": 2000}]
+        self.assertEqual(guard.history_charge(runs, 6000), (2600, None))  # 1.3 x the largest success
+        self.assertEqual(guard.history_charge(runs, 2048), (2048, None))  # never above --rss-mib
+        tiny = [{"outcome": "success", "peak_mib": 10}] * 2
+        self.assertEqual(guard.history_charge(tiny, 6000), (guard.SLOT_MIB, None))  # at least one slot
+        admission = self.admission()
+        self.history(admission, ("success", 1000), ("success", 2000))
+        with mock.patch.object(guard, "mem_available_mib", return_value=6000):
+            admission.plan()
+        self.assertEqual((admission.declared, admission.weight), (6, 3))
+        self.assertEqual(admission.evidence()["charge_mib"], 2600)
+
+    def test_overcommit_falls_back_to_the_declared_limit_after_a_limit_hit(self):
+        oom = {"outcome": "child_failed", "exit_code": guard.KILLED, "peak_mib": 900}
+        for unsafe in [{"outcome": outcome, "peak_mib": 6100} for outcome in guard.UNSAFE_OUTCOMES] + [oom]:
+            admission = self.admission()
+            ok = {"outcome": "success", "peak_mib": 1000}
+            admission.history.parent.mkdir(exist_ok=True)
+            admission.history.write_text(json.dumps([ok, unsafe, ok, ok]))
+            with mock.patch.object(guard, "mem_available_mib", return_value=6000):
+                admission.plan()
+            self.assertEqual(admission.weight, admission.declared)
+            self.assertIn("hit its limit", admission.evidence()["why_declared"])
+        # It ages out: after HISTORY_RUNS later runs the command is charged its need again.
+        self.history(admission, ("rss_limit", 6100), *[("success", 1000)] * guard.HISTORY_RUNS)
+        with mock.patch.object(guard, "mem_available_mib", return_value=6000):
+            admission.plan()
+        self.assertEqual(admission.weight, 2)
+        # Entries that are not runs (a damaged file) are skipped, not fatal.
+        admission.history.write_text(json.dumps([1, None, "x", {"outcome": "success", "peak_mib": 1000}]))
+        self.assertEqual(guard.history_charge(admission.runs(), 6000), (6000, "fewer than 2 recent successes"))
+
+    def test_recorded_runs_feed_the_next_charge(self):
+        admission = self.admission()
+        for peak in (900, 1500):
+            admission.record({"started_utc": "t", "outcome": "success", "exit_code": 0, "samples": 3,
+                              "peak_sampled_rss_kib": peak * 1024})
+        admission.record({"started_utc": "t", "outcome": "cancelled", "exit_code": 143, "samples": 0,
+                          "peak_sampled_rss_kib": 0})
+        self.assertEqual([(run["outcome"], run["peak_mib"]) for run in admission.runs()],
+                         [("success", 900), ("success", 1500), ("cancelled", None)])
+        # One key for every checkout of the command, another for another directory in the checkout.
+        one, two, sub = (self.admission("--cwd", str(self.root / path)).a for path in ("w1", "w2", "w1/tests"))
+        self.assertEqual(guard.command_key(one, one.cwd), guard.command_key(two, two.cwd))
+        self.assertNotEqual(guard.command_key(one, one.cwd), guard.command_key(sub, one.cwd))
+        other = self.admission()  # the same command in the same workspace shares the history
+        with mock.patch.object(guard, "mem_available_mib", return_value=6000):
+            other.plan()
+        self.assertEqual(other.weight, 2)  # ceil(1.3 x 1500) = 1950 MiB
+
+    def test_macos_and_opted_out_guards_are_never_overcommitted(self):
+        cases = (((), None, False, "not Linux"), (("--no-overcommit",), 6000, False, "--no-overcommit"),
+                 (("--exclusive",), 6000, False, "--exclusive"), (("--lock-wait", "0"), 6000, False, "--lock-wait 0"),
+                 ((), 6000, True, "cgroup"))
+        for options, available, limited, why in cases:
+            admission = self.admission(*options)
+            self.history(admission, ("success", 1000), ("success", 1000))
+            with mock.patch.object(guard, "mem_available_mib", return_value=available), \
+                    mock.patch.object(guard, "cgroup_limited", return_value=limited):
+                admission.plan()
+            self.assertEqual(admission.weight, admission.declared)
+            self.assertIn(why, admission.evidence()["why_declared"])
+            self.assertFalse(admission.evidence()["overcommit"])
+
+    def test_declared_limits_stay_within_the_bound(self):
+        # 8 slots: the registered excess may reach 4 (declared limits <= 1.5 x budget, as held
+        # slots never exceed the budget), whatever runs at its declared charge besides.
+        admission = self.admission(rss="4096")
+        admission.weight = 1
+        self.assertTrue(admission.within_bound())  # excess 3 <= 4
+        other = self.admission()
+        guard.publish_entry(other.running, "00000000000000000001-1", {"excess_slots": 3}, other.open)
+        self.assertFalse(admission.within_bound())  # 3 + 3 > 4
+        other.release()  # its guard ended: the entry no longer counts
+        self.assertTrue(admission.within_bound())
+
+    @unittest.skipIf(guard.mem_available_mib() is None or guard.cgroup_limited(), "never overcommitted here")
+    def test_a_repeated_command_is_admitted_at_its_measured_need(self):
+        options = ("--mem-budget-mib", "8192", "--rss-mib", "4096", "--lock-wait", "5")
+        reports = [self.run_guard("import time; time.sleep(0.1)", *options)[1] for _ in range(3)]
+        self.assertEqual([report["admission"]["weight"] for report in reports], [4, 4, 1])
+        self.assertEqual([report["admission"]["overcommit"] for report in reports], [False, False, True])
+        self.assertEqual(reports[2]["budget"]["rss_mib"], 4096)  # the limit stays the declared one
+        self.assertEqual(os.listdir(self.root / "shared.lock.d/running"), [])  # gone with its guard
+
+    def test_the_backstop_preempts_only_the_youngest_overcommitted_workload(self):
+        older, younger, declared = self.admission(), self.admission(), self.admission()
+        for admission in (older, younger):
+            admission.weight = 2
+            admission.register()
+        low, high = guard.backstop_mib() - 1, guard.backstop_mib()
+
+        def preempt(admission):
+            admission.next_backstop_check = 0.0  # MemAvailable is read at most once a second
+            return admission.preempt()
+        with mock.patch.object(guard, "mem_available_mib", return_value=high):
+            self.assertFalse(preempt(younger))
+        with mock.patch.object(guard, "mem_available_mib", return_value=low):
+            self.assertFalse(preempt(declared))  # it holds its declared slots
+            self.assertFalse(preempt(older))
+            self.assertTrue(preempt(younger))
+            self.assertEqual(len(os.listdir(younger.running)), 1)  # it left the registry at once
+            self.assertFalse(preempt(older))  # now the youngest, but within the hold-off
+            (older.directory / "preempted").write_text("0")
+            self.assertTrue(preempt(older))
+
     def test_waiting_for_lock_can_be_cancelled_without_spawning(self):
-        import fcntl
         with (self.root / "shared.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             marker = self.root / "must-not-run"
@@ -679,7 +1011,7 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
             with self.assertRaises(RuntimeError):
                 sampler.sample()
 
-    def test_sequential_zig_flags_and_leaf_count(self):
+    def test_sequential_zig_flags_and_invocation_count(self):
         names = {"zig"}
         self.assertEqual(guard.sequential_command(["zig", "build", "test"], names),
                          ["zig", "build", "-j1", "test"])
@@ -687,17 +1019,45 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
                         ["zig", "build", "-j"], ["zig", "build", "@options"]):
             with self.assertRaises(ValueError):
                 guard.sequential_command(command, names)
-        rows = {1: {"parent": 0, "name": "zig"}, 2: {"parent": 1, "name": "zig"}}
-        self.assertFalse(guard.parallel_zig(rows, {1, 2}, names))
-        rows[3] = {"parent": 1, "name": "zig"}
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, names))
-        self.assertFalse(guard.parallel_zig(rows, {1, 2, 3}, names, jobs=2))
-        rows[4] = {"parent": 1, "name": "zig"}
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3, 4}, names, jobs=2))
-        del rows[4]
+        # `zig build` (1) runs its compilers (2, 3, 4) below its build runner (10).
+        rows = {1: {"parent": 0, "name": "zig"}, 10: {"parent": 1, "name": "build"},
+                2: {"parent": 10, "name": "zig"}}
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2}, names))
+        rows[3] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3}, names))
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2, 3}, names, jobs=2))
+        rows[4] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, {1, 10, 2, 3, 4}, names, jobs=2))
+        self.assertFalse(guard.parallel_zig(rows, {1, 10, 2, 3, 4}, names, jobs=3))
+        # A cold libc build under it: compiler 2's `zig clang` children are part of compiler 2.
+        for pid in (20, 21, 22, 23):
+            rows[pid] = {"parent": 2, "name": "zig"}
+        tree = {1, 10, 2, 3, 4, 20, 21, 22, 23}
+        self.assertFalse(guard.parallel_zig(rows, tree, names, jobs=3))
+        self.assertTrue(guard.parallel_zig(rows, tree, names, jobs=2))
+        # A non-Zig process below a clang child that runs a compiler (40): compiler 2 supervises
+        # it, so 40 counts instead of 2.
+        rows[41] = {"parent": 20, "name": "sh"}
+        rows[40] = {"parent": 41, "name": "zig"}
+        self.assertFalse(guard.parallel_zig(rows, tree | {40, 41}, names, jobs=3))  # 3, 4 and 40
+        rows[5] = {"parent": 10, "name": "zig"}
+        self.assertTrue(guard.parallel_zig(rows, tree | {40, 41, 5}, names, jobs=3))
+
+        def tree_of(edges, name="zig"):  # {pid: parent pid} of Zig processes, others as given
+            return {pid: {"parent": parent, "name": name} for pid, parent in edges.items()}
+
+        # One `zig build-exe ... -lc` (30) with its clang children: one invocation. So is a Zig
+        # process with direct Zig children (Zig starts several compilers only through a runner).
+        single = tree_of({30: 0, 31: 30, 32: 30, 33: 30})
+        self.assertFalse(guard.parallel_zig(single, set(single), names))
+        # 0.17: `zig build` execs into its runner `maker`; its compilers (with clang children) each count.
+        maker = {50: {"parent": 0, "name": "maker"}, **tree_of({51: 50, 52: 50, 53: 51, 54: 51})}
+        self.assertTrue(guard.parallel_zig(maker, set(maker), names))
+        self.assertFalse(guard.parallel_zig(maker, set(maker), names, jobs=2))
+        # Truncated comm: aliases sharing the 15-byte prefix count as the configured name.
         alias = "zig-very-long-configured-alias"
-        rows[2]["name"] = rows[3]["name"] = alias[:15]
-        self.assertTrue(guard.parallel_zig(rows, {1, 2, 3}, {alias}))
+        aliased = {60: {"parent": 0, "name": "driver"}, **tree_of({61: 60, 62: 60}, alias[:15])}
+        self.assertTrue(guard.parallel_zig(aliased, set(aliased), {alias}))
         self.assertEqual(guard.sequential_command(["zig", "build", "--prefix", "-j1"], names),
                          ["zig", "build", "-j1", "--prefix", "-j1"])
         self.assertEqual(guard.sequential_command(["zig", "build", "run", "--", "-j1", "-j2"], names),
@@ -756,7 +1116,6 @@ os.execv({real!r}, ["ps"] + sys.argv[1:])
                                   "--report", str(self.root / "report"), "--", "mock"])
 
     def test_fingerprints_are_collected_after_the_waiting_lock_is_acquired(self):
-        import fcntl
         fixture = self.root / "input"
         fixture.write_text("before")
         args, _, _ = self.command("pass", "--input", "input", "--lock-wait", "2")
@@ -856,11 +1215,11 @@ os._exit(0)
             self.assertEqual(stops.call_count, 2)
             self.assertEqual(results, [True, True])
 
-    def test_truncated_alias_leaves_trigger_workload_termination(self):
+    def test_truncated_alias_compilers_trigger_workload_termination(self):
         alias = "zig-long-configured-compiler"
         args, _, _ = self.command("fixture_pause()", "--zig-name", alias)
         original_processes = guard.processes
-        def sampled_leaves(*args):
+        def sampled_compilers(*args):
             rows = original_processes(*args)
             leaders = [pid for pid, row in rows.items()
                        if row["parent"] == os.getpid() and row["group"] == pid]
@@ -871,7 +1230,7 @@ os._exit(0)
                     rows[pid] = {"parent": leader, "group": leader, "start": "mock",
                                  "name": alias[:15], "rss_kib": 0}
             return rows
-        with mock.patch.object(guard, "processes", side_effect=sampled_leaves):
+        with mock.patch.object(guard, "processes", side_effect=sampled_compilers):
             report = guard.run(guard.parse_args(args[2:]))
         self.assertEqual((report["exit_code"], report["outcome"]), (126, "parallel_zig"))
         self.assertLess(report["child_status"], 0)
@@ -964,6 +1323,379 @@ os._exit(0)
                     self.assertEqual(command[2], "-j1")
                     self.assertEqual(command[3:], list(suffix))
                     self.assertEqual(frontend_jobs(command[2:], operands), 1)
+
+    # Elastic workloads and their sub-admissions (build-guard.py module docstring).
+
+    def sub_args(self, source, *options, report=None):
+        """A sub-admission guard of `source` (its stdout passes through); its report if given."""
+        args = [sys.executable, str(GUARD), "--cwd", str(self.root), "--lock", str(self.root / "shared.lock"),
+                "--sub-admission", "--timeout", "5", "--interval", "0.02", "--grace", "0.1", *options]
+        return args + (["--report", str(report)] if report else []) + ["--", sys.executable, "-c", source]
+
+    def in_elastic(self, inner, *outer):
+        """Run `inner` (a guard's argv) in an elastic guard's workload: (outer result, report, log)."""
+        source = "import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % inner
+        return self.run_guard(source, "--elastic", *ELASTIC_BUDGET, *outer)
+
+    def test_a_sub_admission_holds_its_own_slots_outside_the_enclosing_sum(self):
+        # It allocates 96 MiB inside an elastic guard limited to 64: the enclosing guard leaves it
+        # out of its sum, and the free slots show the base (1) and the charge (2) held.
+        source = ("import importlib.util, sys; spec = importlib.util.spec_from_file_location('g', %r); "
+                  "g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g); "
+                  "block = bytearray(96 << 20); import time; time.sleep(0.5); "
+                  "print('free', g.free_mib(g.Path(%r), 13312)); print('hello')") % (str(GUARD), str(self.root / "shared.lock"))
+        # Its declared bound is far above its charge: it is no overcommitted workload (no excess).
+        inner = self.sub_args(source, "--charge-mib", "2048", "--rss-mib", "11000")
+        result, report, log = self.in_elastic(inner, "--rss-mib", "64")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), log.read_text())
+        self.assertIn("free 10240\nhello\n", log.read_text())  # base 1 + charge 2 of 13 slots
+        self.assertLess(report["peak_sampled_rss_kib"], 64 * 1024)
+        self.assertTrue(json.loads(report["environment_overrides"][guard.INHERIT])["elastic"]["id"])
+
+    def test_a_sub_admissions_compilers_count_against_its_own_jobs(self):
+        # Two "compilers" (sleep, via --zig-name) at once in a part with --jobs 2, inside an
+        # elastic guard with --jobs 1: the part's own bound, not the enclosing one, applies.
+        source = ("import subprocess; ps = [subprocess.Popen(['sleep', '1.5']) for _ in range(2)]; "
+                  "[p.wait() for p in ps]")
+        inner = self.sub_args(source, "--charge-mib", "64", "--rss-mib", "64", "--jobs", "2",
+                              "--zig-name", "sleep")
+        result, report, log = self.in_elastic(inner, "--rss-mib", "64", "--zig-name", "sleep")
+        self.assertEqual((result.returncode, report["outcome"]), (0, "success"), log.read_text())
+
+    def test_a_sub_admission_over_its_charge_runs_again_at_its_declared_bound(self):
+        count, report = self.root / "count", self.root / "inner.json"
+        source = (f"import pathlib, time; p = pathlib.Path({str(count)!r}); n = len(p.read_text()) + 1 "
+                  f"if p.exists() else 1; p.write_text('x' * n); print('run', n); "
+                  "block = bytearray(80 << 20); time.sleep(0.5)")
+        inner = self.sub_args(source, "--charge-mib", "40", "--rss-mib", "400", report=report)
+        result, outer, log = self.in_elastic(inner, "--rss-mib", "64")
+        self.assertEqual(result.returncode, 0, log.read_text())
+        evidence = json.loads(report.read_text())
+        self.assertEqual(evidence["outcome"], "success")
+        self.assertEqual(evidence["budget"]["limit_mib"], 400)
+        self.assertEqual(evidence["stopped_run"]["admission"]["weight"], 1)
+        self.assertEqual(evidence["admission"]["weight"], 1)
+        self.assertGreater(evidence["peak_process_rss_kib"], 80 * 1024)  # the kernel's mark
+        self.assertIn("over its charge of 40 MiB", log.read_text())
+        # The stopped run's stdout is dropped: the workload's output is that of its last run.
+        self.assertNotIn("run 1", log.read_text())
+        self.assertIn("run 2", log.read_text())
+
+    def test_a_sub_admission_needs_an_enclosing_elastic_admission(self):
+        report = self.root / "inner.json"
+        inner = self.sub_args("print('ran')", "--charge-mib", "64", "--rss-mib", "64", report=report)
+        result = subprocess.run(inner, capture_output=True, text=True, timeout=12)
+        self.assertEqual(result.returncode, 75)
+        self.assertEqual(json.loads(report.read_text())["outcome"], "inheritance_refused")
+        self.assertNotIn("ran", result.stdout)
+        result, _, _ = self.run_guard("import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % inner,
+                                      *ELASTIC_BUDGET, "--rss-mib", "64")  # not elastic
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("no enclosing --elastic admission", json.loads(report.read_text())["error"])
+
+    def test_the_elastic_bases_leave_room_for_one_sub_admission(self):
+        holder, _ = self.start_holder("--elastic", *ELASTIC_BUDGET, "--rss-mib", "2048")
+        # A second elastic base would leave less than 11 slots: it waits, outside the queue ...
+        code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "1024", "--lock-wait", "0.5",
+                                      cwd=self.worktree("second"))
+        self.assertEqual((code, evidence["outcome"]), (75, "lock_busy"))
+        # ... so a normal guard behind it is admitted at once.
+        code, _ = self.attempt(*ELASTIC_BUDGET, "--rss-mib", "1024", cwd=self.worktree("normal"))
+        self.assertEqual(code, 0)
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "1024", cwd=self.worktree("second"))
+        self.assertEqual(code, 0)
+        code, evidence = self.attempt("--elastic", *ELASTIC_BUDGET, "--rss-mib", "3072", cwd=self.worktree("big"))
+        self.assertEqual((code, evidence["outcome"]), (75, "elastic_too_large"))
+
+    def lock_admission(self, *options, rss="1024"):
+        """An Admission (not acquired) on the test's lock, in the elastic budget (13 slots)."""
+        return self.admission(*options, budget=ELASTIC_BUDGET[1], rss=rss)
+
+    def part(self, workload="elastic-1"):
+        part = self.lock_admission("--sub-admission", "--charge-mib", "1024")
+        part.enclosing = {"elastic": {"id": workload}}
+        return part
+
+    @staticmethod
+    def take(part):
+        """Take the lifeline now, not after the part's next attempt time (ATTEMPT_EVERY)."""
+        part.next_lifeline = 0
+        return part.take_lifeline()
+
+    def test_the_lifeline_goes_ahead_of_every_exclusive_ticket(self):
+        admission, take = self.lock_admission, self.take
+        merge = admission("--priority", "merge")
+        merge.join_queue()
+        exclusive = admission("--exclusive")
+        exclusive.join_queue()
+        first, second, running = (self.part() for _ in range(3))
+        running.publish_leaf()  # while a part of the workload runs, nobody needs the lifeline
+        self.assertFalse(take(first))
+        running.release()
+        self.assertTrue(take(first))
+        self.assertFalse(take(second))  # one lifeline per elastic workload
+        self.assertEqual(second.priority, "normal")
+        # Behind a merge guard (which needs no running workload to end), ahead of an exclusive one
+        # (which waits for the elastic workload, so for its lifeline).
+        self.assertTrue(first.ticket.endswith("-" + guard.LEAF))
+        self.assertEqual(merge.queued_tickets(), [merge.ticket, first.ticket, exclusive.ticket])
+        self.assertIsNone(first.mirror)  # not its turn: older guards drain behind the merge ticket anyway
+        merge.leave_queue()
+        self.assertTrue(first.my_turn() and not exclusive.my_turn())
+        # Its turn, and no head that knows lifelines: a guard of an older checkout may keep the
+        # queue from it. It mirrors its ticket first in `merge/`, where those guards drain behind
+        # every entry; new guards leave the mirror out.
+        first.mirror_lifeline()
+        self.assertEqual(sorted(os.listdir(self.tickets)), [first.mirror[0], exclusive.ticket])
+        self.assertTrue(first.mirror[0].startswith("%020d-" % 0))
+        self.assertEqual(exclusive.drain_tickets(), [exclusive.ticket])
+        heads = first.heads
+        for content, mirrored in (({"pid": 1, "unmet": 0, "need": 2, "lifeline_aware": True}, False),
+                                  ({"pid": 1, "unmet": 0, "need": 2}, True)):  # a new head, an older one
+            with self.subTest(content=content), guard.publish_entry(heads, guard.entry_name(), content,
+                                                                     lambda path: path.open("a")):
+                first.mirror_lifeline()
+                self.assertEqual(first.mirror is not None, mirrored)
+        first.hold_queue(True)  # its head: the mirror goes, older guards backfill beside it
+        self.assertEqual(os.listdir(self.tickets), [exclusive.ticket])
+        first.release()
+        self.assertTrue(take(second))
+
+    def test_a_normal_head_leads_ahead_of_later_lifelines_only_if_it_fits_beside_the_bases(self):
+        early, large, late = (self.lock_admission(rss=mib) for mib in ("2048", "13312", "1024"))
+        for guard_ in (early, large):
+            guard_.publish_waiting()
+        lifeline = self.part()
+        self.assertTrue(self.take(lifeline))
+        late.publish_waiting()
+        # 13 slots, no elastic base: the early guard (2) and the large one (13) fit; they waited
+        # before the lifeline, the late one after it.
+        self.assertEqual([g.my_turn() for g in (early, large, late)], [True, True, False])
+        self.assertTrue(lifeline.my_turn())
+        # A base of 2 slots: the large guard could only be admitted once that workload ends, which
+        # may need its lifeline, so the lifeline leads ahead of it.
+        guard.publish_entry(early.elastic, guard.entry_name(), {"pid": os.getpid(), "slots": 2}, early.open)
+        self.assertEqual([g.my_turn() for g in (early, large, late)], [True, False, False])
+        # An elastic entry of another shape: no normal guard leads ahead of a lifeline (fail closed).
+        guard.publish_entry(early.elastic, guard.entry_name(), {"slots": "x"}, early.open)
+        self.assertFalse(early.my_turn())
+        # A drain ticket: no normal guard leads, none backfills.
+        lifeline.release()
+        merge = self.lock_admission("--priority", "merge")
+        merge.join_queue()
+        self.assertFalse(early.my_turn())
+        self.assertEqual(early.drain_tickets(), [merge.ticket])
+
+    def test_normal_guards_take_the_queue_in_arrival_order(self):
+        # A lane job waits in the queue loop; the part of an elastic workload comes after it.
+        # However often the part polls, the queue is the lane job's first. A guard waiting for
+        # its workspace (not in the queue loop) holds up nobody, nor does one in line that stopped
+        # refreshing its place (not in its turn, or stopped while alive).
+        lane, part, outside = self.lock_admission(rss="6000"), self.part(), self.lock_admission()
+        queue = lambda admission: admission.open("queue")  # closed on release
+        outside.publish_waiting()  # waiting for its workspace, before both
+        lane.line_up(True)
+        self.assertFalse(part.takes_queue(queue(part)))
+        lane_queue = queue(lane)
+        self.assertTrue(lane.takes_queue(lane_queue))
+        fcntl.flock(lane_queue, fcntl.LOCK_UN)
+        name, part_queue = lane.in_line[0], queue(part)
+        lane.line_up(False)  # out of its turn (no drain ticket): passed over
+        self.assertTrue(part.takes_queue(part_queue))
+        fcntl.flock(part_queue, fcntl.LOCK_UN)
+        (lane.lined_up / name).unlink()  # removed under it: published again, in its turn, in its place
+        lane.line_up(True)
+        self.assertEqual(lane.in_line[0], name)
+        self.assertFalse(part.takes_queue(part_queue))
+        lane.leave_line()  # admitted
+        part.leave_line()
+        early = self.lock_admission()
+        early.line_up(False)  # new but out of its turn: holds up nobody either
+        self.assertTrue(part.takes_queue(part_queue))
+
+    def test_a_waiting_lifeline_reserves_and_normal_guards_backfill_beside_it(self):
+        # The remote host, 2026-11-05: an unmeasured part (11 slots) took its workload's lifeline
+        # while running workloads held 20 of 28 slots; as a drain ticket it kept every normal guard
+        # waiting (8 to 19 minutes, 4.7 of 24 GB in use).
+        budget, order = ("--mem-budget-mib", "28672"), self.root / "order"
+        holder, _ = self.start_holder(*budget, "--rss-mib", "20480", "--timeout", "20", cwd=self.worktree("holder"))
+        part = self.sub_args(f'open({str(order)!r}, "a").write("lifeline\\n")',
+                             "--charge-mib", "11000", "--rss-mib", "11000", "--lock-wait", "20")
+        args, _, log = self.command("import subprocess, sys; sys.exit(subprocess.run(%r).returncode)" % part,
+                                    "--elastic", *budget, "--rss-mib", "1024", "--timeout", "20", "--lock-wait", "5")
+        elastic = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(self.cleanup_process, elastic)
+        lifelines, heads = self.tickets.parent / "lifeline-tickets", self.tickets.parent / "heads"
+        deadline = time.monotonic() + 5
+        while not (guard.held_entries(lifelines) and guard.held_entries(heads)) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(guard.held_entries(heads), "the lifeline never became the queue head")
+        self.assertFalse(guard.held_entries(self.tickets))  # no drain ticket
+        # A 1-slot normal guard runs beside the lifeline's unmet reservation (7 free, 11 needed).
+        code, evidence = self.attempt(*budget, "--rss-mib", "1024", "--lock-wait", "3", cwd=self.worktree("small"))
+        self.assertEqual(code, 0)
+        self.assertTrue(evidence["admission"]["backfilled"])
+        # A later normal guard (17 slots) waits; once the holder ends, the lifeline goes first.
+        late, _ = self.start_waiter("late", order, *budget, "--rss-mib", "17408")
+        holder.send_signal(signal.SIGTERM)
+        holder.communicate(timeout=12)
+        elastic.communicate(timeout=12)
+        self.assertEqual(elastic.returncode, 0, log.read_text())
+        self.finish(late)
+        self.assertEqual(order.read_text().split(), ["lifeline", "late"])
+
+    def test_the_elastic_plan_nests_and_falls_back_to_one_plain_admission(self):
+        lock = self.root / "shared.lock"
+        grant = lambda **fields: json.dumps({"lock": str(lock.resolve()), **fields})
+        for inherit, budget, expected in (
+                (None, 64000, ("elastic", 4096)),
+                (None, 13312, ("elastic", 2048)),       # 13 slots: 2 beside one 11000 MiB process
+                (None, 11264, ("plain", 11000)),        # no room: one admission, as before
+                (None, 8000, ("plain", 8000)),
+                (grant(rss_mib=2048, elastic={"id": "e"}), 64000, ("elastic", 2048)),
+                (grant(rss_mib=16000), 64000, ("plain", 16000)),  # a plain enclosing admission
+                (grant(rss_mib=True), 64000, ("elastic", 4096)),  # malformed: none
+                ("not json", 64000, ("elastic", 4096))):
+            with self.subTest(inherit=inherit, budget=budget), \
+                 mock.patch.dict(os.environ, {guard.INHERIT: inherit or ""}):
+                self.assertEqual(guard.elastic_plan(4096, lock, budget), expected)
+
+    def fake_toolchain(self):
+        toolchain = self.root / "toolchain"
+        (toolchain / "bin").mkdir(parents=True)
+        (toolchain / "lib").mkdir()
+        lean = toolchain / "bin" / "lean"
+        lean.write_text('#!/bin/sh\necho "real $*"\n')
+        lean.chmod(0o755)
+        (toolchain / "bin" / "lake").write_text("")
+        return toolchain
+
+    def test_lean_processes_run_each_elaboration_through_the_guard(self):
+        toolchain = self.fake_toolchain()
+        env = guard.lean_processes_env(toolchain, self.root / "shared.lock")
+        sysroot = Path(env["LEAN_SYSROOT"])
+        self.assertEqual((env["LAKE_OVERRIDE_LEAN"], env["LEAN"]), ("true", str(sysroot / "bin" / "lean")))
+        self.assertTrue(env["PATH"].startswith(str(sysroot / "bin") + os.pathsep))
+        self.assertEqual((sysroot / "lib").resolve(), toolchain / "lib")
+        self.assertEqual((sysroot / "bin" / "lake").resolve(), toolchain / "bin" / "lake")
+        self.assertEqual(guard.lean_processes_env(toolchain, self.root / "shared.lock"), env)  # reused
+        os.environ.pop(guard.INHERIT, None)
+        for args in (["--githash"], ["Foo.lean", "-o", "x"]):  # outside an elastic admission: the real lean
+            done = subprocess.run([env["LEAN"], *args], capture_output=True, text=True, timeout=12)
+            self.assertEqual(done.stdout, "real %s\n" % " ".join(args))
+        # In one, each elaboration is a sub-admission, and its peak is measured.
+        (self.root / "Foo.lean").write_text("def x := 1\n")
+        source = "import os, subprocess, sys; sys.exit(subprocess.run([os.environ['LEAN'], 'Foo.lean']).returncode)"
+        result, report, log = self.run_guard(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                             "--lean-processes", str(toolchain))
+        self.assertEqual(result.returncode, 0, log.read_text())
+        self.assertEqual(log.read_text(), "real Foo.lean\n")
+        self.assertEqual(report["environment_overrides"]["LEAN"], env["LEAN"])
+        store = json.loads((Path(str(self.root / "shared.lock") + ".d") / "lean-peaks.json").read_text())
+        self.assertEqual(store["Foo.lean"]["sha256"], guard.digest(self.root / "Foo.lean"))
+        self.assertGreater(store["Foo.lean"]["peaks_kib"][0], 0)
+        # Its source changes: the next elaboration is charged by the earlier peak, not PROCESS_MIB.
+        (self.root / "Foo.lean").write_text("def x := 2\n")
+        reports = self.root / "lean-reports"
+        reports.mkdir()
+        os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
+        result, _, log = self.run_guard(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                        "--lean-processes", str(toolchain))
+        self.assertEqual(result.returncode, 0, log.read_text())
+        [part] = [json.loads(path.read_text()) for path in reports.iterdir()]
+        self.assertEqual(part["admission"]["charge_mib"], guard.SLOT_MIB)  # 1.3 x a few MiB, one slot
+        # --lean-processes needs an elastic admission.
+        result, report, _ = self.run_guard("pass", "--lean-processes", str(toolchain))
+        self.assertEqual((result.returncode, report["outcome"]), (75, "inheritance_refused"))
+
+    def test_a_module_never_measured_is_charged_the_tables_typical_peak(self):
+        # The committed table's 95th-percentile peak (nearest rank) is 800 MiB: below its largest
+        # row, above its median. Two modules without a row: one fits 1.3 x 800 MiB, one (1500 MiB
+        # of incompressible pages, held over three samples) outgrows it and runs again at PROCESS_MIB.
+        toolchain = self.fake_toolchain()
+        (toolchain / "bin" / "lean").write_text(
+            f"#!{sys.executable}\nimport os, sys, time\n"
+            "block = os.urandom(1 << 20) * int(open(sys.argv[1]).read()); time.sleep(3)\n")
+        rows = [100] * 18 + [800, 9000]
+        (self.root / peaks.TABLE).parent.mkdir()
+        (self.root / peaks.TABLE).write_text(json.dumps(
+            {"modules": {f"M{i}.lean": {"peak_mib": mib, "sha256": "x"} for i, mib in enumerate(rows)}}))
+        (self.root / "Small.lean").write_text("1")
+        (self.root / "Big.lean").write_text("1500")
+        reports = self.root / "lean-reports"
+        reports.mkdir()
+        os.environ["AIR2LEAN_LEAN_REPORTS"] = str(reports)
+        source = ("import os, subprocess, sys; sys.exit(max(subprocess.run([os.environ['LEAN'], m]).returncode "
+                  "for m in ('Small.lean', 'Big.lean')))")
+        args, report_path, log = self.command(source, "--elastic", *ELASTIC_BUDGET, "--rss-mib", "64",
+                                              "--timeout", "30", "--lean-processes", str(toolchain))
+        result = subprocess.run(args, capture_output=True, text=True, timeout=40)
+        self.assertEqual(result.returncode, 0, log.read_text() + result.stderr)
+        parts = {path.name.split(".")[0]: json.loads(path.read_text()) for path in reports.iterdir()}
+        charge = math.ceil(guard.CHARGE_MARGIN * 800)
+        small, big = parts["Small"], parts["Big"]
+        self.assertEqual((small["outcome"], small["admission"]["charge_mib"]), ("success", charge))
+        self.assertNotIn("stopped_run", small)
+        self.assertEqual((big["outcome"], big["admission"]["charge_mib"]), ("success", guard.PROCESS_MIB))
+        self.assertEqual(big["stopped_run"]["admission"]["charge_mib"], charge)
+        self.assertGreater(big["peak_process_rss_kib"], charge * 1024)
+
+
+peaks_spec = importlib.util.spec_from_file_location("lean_peaks", ROOT / "scripts/lean-peaks.py")
+peaks = importlib.util.module_from_spec(peaks_spec)
+peaks_spec.loader.exec_module(peaks)
+
+
+class LeanPeaksTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="air2lean-peaks-test-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.store = self.root / "lock.d" / "lean-peaks.json"
+        subprocess.run(["git", "init", "-q", str(self.root / "ws")], check=True)
+        self.ws = self.root / "ws"
+        (self.ws / "A.lean").write_text("a")
+        (self.ws / "B.lean").write_text("b")
+        subprocess.run(["git", "add", "A.lean", "B.lean"], cwd=self.ws, check=True)
+
+    def test_a_measurement_belongs_to_one_source(self):
+        self.assertIsNone(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"))  # no table
+        for kib in (100, 300, 200, 50):
+            peaks.record(self.store, "A.lean", "s1", kib)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"), 300)  # the last 3
+        peaks.record(self.store, "A.lean", "s1", 10)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "A.lean", "s1"), 200)
+        peaks.record(self.store, "A.lean", "s2", 70)
+        self.assertEqual(peaks.read_store(self.store)["A.lean"]["peaks_kib"], [70])  # s1's are stale
+
+    def test_the_table_is_regenerated_from_the_store_and_keeps_unchanged_rows(self):
+        sha = lambda name: hashlib.sha256((self.ws / name).read_bytes()).hexdigest()
+        (self.ws / "assurance").mkdir()
+        old = {"modules": {"B.lean": {"peak_mib": 7, "sha256": sha("B.lean")},
+                           "Gone.lean": {"peak_mib": 9, "sha256": "x"}}}
+        (self.ws / peaks.TABLE).write_text(json.dumps(old))
+        peaks.record(self.store, "A.lean", sha("A.lean"), 2049)
+        table = peaks.table(self.store, self.ws)
+        self.assertEqual(table["modules"], {"A.lean": {"peak_mib": 3, "sha256": sha("A.lean")},
+                                            "B.lean": {"peak_mib": 7, "sha256": sha("B.lean")}})
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
+        # A changed source: not measured, but its earlier peak stays as the prior of its guess,
+        # this machine's before the committed row's.
+        (self.ws / "B.lean").write_text("changed")
+        self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], old["modules"]["B.lean"])
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 7 * 1024)
+        peaks.record(self.store, "B.lean", "earlier", 5 * 1024)
+        self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "B.lean", sha("B.lean")), 5 * 1024)
+        self.assertEqual(peaks.table(self.store, self.ws)["modules"]["B.lean"], {"peak_mib": 5, "sha256": "earlier"})
+
+    def test_a_module_never_measured_is_guessed_from_the_tables_95th_percentile(self):
+        (self.ws / "assurance").mkdir()
+        for count, rank in ((1, 0), (19, 18), (20, 18), (100, 94)):  # nearest rank, ceil(0.95 n)
+            rows = {f"M{i}.lean": {"peak_mib": i + 1, "sha256": "x"} for i in range(count)}
+            (self.ws / peaks.TABLE).write_text(json.dumps({"modules": rows}))
+            self.assertEqual(peaks.charge_peak_kib(self.store, self.ws, "New.lean", "s"), (rank + 1) * 1024)
 
 
 if __name__ == "__main__":

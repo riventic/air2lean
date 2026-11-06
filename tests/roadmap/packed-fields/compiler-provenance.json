@@ -58,8 +58,8 @@
     "air-fresh/0.16.0/llvm/packed_fields.unionBadMode.json": "1e5d0c51fe31871749c28b9d58fdb32415df8a25b7b7d4c25abb1a253117dc46",
     "air-fresh/0.16.0/llvm/packed_fields.unionRaw.json": "78cf9bc567e00a040611c7ecde8c02b083dda9a772de85edd81c4c26f703b4eb",
     "air-fresh/0.16.0/x86_64/packed_fields.hostAbi.json": "de31d052c7dbc9ab9f27ee66c84245edee90a6cdc7f17be97cdb707f464a9b00",
-    "PackedFieldsFresh/Gen.lean": "1d7b00c6225a86e76fbbd57d5c5a7754ebe0d44f26c31718eeba92336be32f80",
-    "PackedFieldsX86/Gen.lean": "9b2c6bf0f5ca8becf51362fae900a302c1442ea664610e06c6d6b4363aacb63f"
+    "PackedFieldsFresh/Gen.lean": "6c2a9a175001369a823ca71873148c59055bab450a5ef7fbedeb1c4fdbc9eeb4",
+    "PackedFieldsX86/Gen.lean": "e28d1491141ab1f3e6d2d38603879cbd4d499591da1d0085413e57ec16c66d0a"
   },
   "qualification": {
     "compiler_export": "passed",

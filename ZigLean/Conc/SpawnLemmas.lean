@@ -1,6 +1,5 @@
 import ZigLean.Conc.Spawn
 import ZigLean.Conc.Lemmas
-import ZigLean.Conc.Transfer
 
 /-! WP rules require every oracle outcome. A failed assignment does not require
 `P.init` and cannot use the historical successful-spawn rule. Interference is
@@ -85,7 +84,7 @@ theorem WP.groupAsyncWithPolicyC {policy : SpawnPolicy} {group : Ptr} {io : Io} 
   simp only [StateT.run_bind, StateT.run_lift]
   refine WP.bind (WP.bind (WP.sync (fun k hk => ?_) hcost))
   obtain ⟨g, hi, hb⟩ := h k hk
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
+  exact ⟨g, hi, fun G₁ m₁ hg hi₁ _ c hc => WP.pure' (hb G₁ m₁ hg hi₁ c hc)⟩
 
 theorem WP.groupConcurrentFallibleC {group : Ptr} {io : Io} {target : Tgt} {s : σ}
     {Q : Except ErrName Unit × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -108,20 +107,6 @@ theorem WP.spawnFailureFrame {target : Tgt} {c : Nat} (hc : c ≠ 0) {s : σ}
       (fun result G' m' _ => result = (.error (spawnErrorAt (c - 1)), s) ∧ frame G' m') G m n := by
   simp only [spawnOutcomeC, if_neg hc]
   exact WP.pure' ⟨rfl, hf⟩
-
-/-- **Failure leaves ownership with the caller.** Suppose the caller split its part into `keep`
-and the `child` cells of the grant it prepared for the captured fields (`Capture.grant`,
-`ZigLean/Conc/Transfer.lean`). On a failed assignment the split, the grant, the ghost state and
-the memory at the resumed choice are all unchanged: no thread is created and no captured
-region moves. Contrast `Capture.fork_grant`, which hands `child` to the new thread. -/
-theorem WP.spawnFailureRetains {target : Tgt} {c : Nat} (hc : c ≠ 0) {s : σ}
-    {own : ThreadId → Heap} {keep child : Heap} {mode : Ptr → Transfer} {cs : List Capture}
-    (ho : Owned own m) (hsplit : own t = keep ∪ child) (hg : Capture.grant mode cs child) :
-    P.WP t ((spawnOutcomeC c target : CM Tgt σ _).run s)
-      (fun r G' m' _ => r = (.error (spawnErrorAt (c - 1)), s) ∧ G' = G ∧ m' = m ∧
-        Owned own m' ∧ own t = keep ∪ child ∧ Capture.grant mode cs child) G m n :=
-  WP.spawnFailureFrame hc (frame := fun G' m' => G' = G ∧ m' = m ∧ Owned own m' ∧
-    own t = keep ∪ child ∧ Capture.grant mode cs child) ⟨rfl, rfl, ho, hsplit, hg⟩
 
 /-- A failed second assignment executes the caller's cleanup continuation. In
 particular, an outstanding first-child join must be proved with WP.joinC; failure

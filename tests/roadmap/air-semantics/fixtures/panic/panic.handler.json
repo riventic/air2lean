@@ -1,0 +1,19 @@
+{
+  "schema": 11,
+  "zig_version": "0.15.2",
+  "name": "debug.FullPanic((function 'defaultPanic')).integerOverflow",
+  "params": [0],
+  "ret": 1,
+  "body": [
+    {"id": 0, "tag": "arg", "ty": 0, "param": 0},
+    {"id": 1, "tag": "call", "ty": 0,
+     "callee": {"ty": 3, "func": "panic.f", "noreturn": false}, "args": [{"inst": 0}]},
+    {"id": 2, "tag": "unreach", "ty": 1}
+  ],
+  "types": [
+    {"k": "int", "signed": false, "bits": 32, "abi_size": 4, "abi_align": 4},
+    {"k": "noreturn"},
+    {"k": "void", "abi_size": 0, "abi_align": 1},
+    {"k": "other", "name": "fn (u32) callconv(.c) u32"}
+  ]
+}

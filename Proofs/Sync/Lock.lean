@@ -58,6 +58,9 @@ theorem loop23_body (hP : L.FitsOn P U ok) {p : Ptr} (hp : p = L.ptr) (hS : mute
   unfold Io_Mutex_lockUncancelable.loop23
   simp only [StateT.run_bind, pure_bind, bind_assoc]
   rw [hp]
+  refine WP.bind (wp_tickOn hP (g := L.set g .spin Heap.empty) (by rw [L.ph_set]; decide)
+    ((hP.ok_set _ _ _).mpr hok) hi fun m _ hi => ?_)
+  dsimp only
   refine WP.bind (wp_xchgLockOn hP mutexS hS (g := L.set g .spin Heap.empty) (L.ph_set _ _ _)
     ((hP.ok_set _ _ _).mpr hok) hi
     fun k hk G₁ m₁ r hc₁ hcase => ?_)

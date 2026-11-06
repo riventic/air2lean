@@ -3,13 +3,16 @@
 # record that CI gates on, in a few minutes, so that a round does not fail on a file that only
 # needed regenerating. It runs no proof, differential test or mutation; CI still runs everything.
 #
-#   scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr]
+#   scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr] [--logs DIR]
 #
+# --logs DIR keeps the full build's phase logs in DIR/full-build (no full build with
+# --no-translator); a failed phase also prints its error lines, else its last lines, into this
+# script's output (scripts/full-build.sh).
 # scripts/regen.sh regenerates what these checks find stale (`scripts/regen.sh --check` runs this).
 # First it materializes the whole-tree generated files (assurance/generated.json; not committed,
 # docs/ci.md#whole-tree-generated-files): `scripts/generated.py materialize` regenerates the
 # coverage inventories (pinned pristine compiler sources, scripts/cas.py) and the premise index,
-# and fetches the provenance fixtures from the `generated` branch when it is reachable (CI
+# and fetches the theorem inventory and the provenance fixtures from the `generated` branch when it is reachable (CI
 # regenerates and strictly checks them on the PR's tree; --pr skips that fetch).
 # --no-materialize uses the files already in the checkout (CI installs its own); --no-sources
 # regenerates only the premise index. With AIR2LEAN_CAS_DIR set, the translator build and the
@@ -19,7 +22,7 @@
 #   CI matrix, compatibility and pins     ci-matrix.py, ci-reuse.py check-workflow, compat.py,
 #                                         build-modes.py, perf-budgets.py (validate, heartbeats check)
 #   support and target matrices           support-matrix.py, target-matrix.py --strict
-#   premise index and theorem inventory   premises.py, tutorials.py lint, theorem-inventory.py, no-sorry.sh
+#   premise index and theorem list        premises.py, tutorials.py lint, theorem-inventory.py check --list, no-sorry.sh
 #   one proof framework (only shrinks)    proof-framework.py (base: --base or CI's base branch)
 #   fsym engine ledger                    engine-ledger.py (rows and view; every "ledger #N"
 #                                         citation names a row; a closed row is no workaround)
@@ -31,6 +34,8 @@
 #   generated modules                     gen-integrity.py check, after the full build
 #                                         (scripts/full-build.sh, which first checks the
 #                                         precompiled fsym libraries; skipped by --no-translator)
+#   generated loop invariants             gen-integrity.py invgen (the records' hashes), and
+#                                         invgen.py check after the full build (likewise)
 #
 # Exit 0: every check passed; 1: a check failed (all are run; failures are listed at the end).
 set -uo pipefail
@@ -38,15 +43,18 @@ set -uo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root" || exit 2
 export PYTHONDONTWRITEBYTECODE=1
-translator=1 sources=1 materialize=1 heavy=fetch
-for arg in "$@"; do
-  case "$arg" in
+translator=1 sources=1 materialize=1 heavy=fetch logs=
+usage='usage: scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr] [--logs DIR]'
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-translator) translator=0 ;;
     --no-sources) sources=0 ;;
     --no-materialize) materialize=0 ;;
     --pr) heavy=skip ;;
-    *) echo "usage: scripts/preflight.sh [--no-translator] [--no-sources] [--no-materialize] [--pr]" >&2; exit 2 ;;
+    --logs) [ -n "${2:-}" ] || { echo "$usage" >&2; exit 2; }; logs=$2; shift ;;
+    *) echo "$usage" >&2; exit 2 ;;
   esac
+  shift
 done
 
 failed=()
@@ -77,6 +85,7 @@ fi
 if [ "${GITHUB_ACTIONS:-}" != true ]; then
   check 'case family enrollment history' python3 -B scripts/gen-integrity.py enrollment
 fi
+check 'generated loop invariant records' python3 -B scripts/gen-integrity.py invgen
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
 check 'performance budgets' python3 scripts/perf-budgets.py validate
@@ -86,7 +95,10 @@ check 'support matrix' python3 scripts/support-matrix.py check
 check 'declared target matrix' python3 scripts/target-matrix.py check --strict
 check 'theorem premise index' python3 -B scripts/premises.py check
 check 'tutorial layout and premise lists' python3 -B scripts/tutorials.py lint
-check 'theorem inventory' python3 -B scripts/theorem-inventory.py check
+# The recorded results are a whole-tree generated file (group theorem-inventory, built and fully
+# checked by CI's `theorem-inventory` job and the main health run); a PR's tree is not the tree of
+# the copy `materialize` fetches, so only the committed list is checked here.
+check 'theorem list (scopes, claims, tables)' python3 -B scripts/theorem-inventory.py check --list
 check 'sorry/admit/native_decide and kernel escape hatches' scripts/no-sorry.sh
 check 'one proof framework: no new judgment, tactic or legacy-logic user' python3 -B scripts/proof-framework.py
 check 'one proof framework: ratchet regressions' python3 -B -m unittest discover -s tests/roadmap/proof-framework -p 'test_*.py'
@@ -102,17 +114,22 @@ check 'runtime tag fixtures (L14)' python3 scripts/coverage.py l14 coverage/0.14
 check 'C front-end coverage record' tests/roadmap/c-frontend/check.sh --light
 check 'lean-deps: which Lean files the full build elaborates' python3 -B -m unittest discover -s tests/roadmap/lean-deps -p 'test_*.py'
 
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
-trap 'rm -rf "$scratch"' EXIT
-
 if [ "$translator" = 1 ]; then
   # The full build (docs/ci.md#full-build): the translator and every Lean module, so that nothing
   # pushed was checked against stale oleans. Through Lake's shared artifact cache when
-  # AIR2LEAN_CAS_DIR is set.
-  check 'full build (scripts/full-build.sh)' scripts/full-build.sh --logs "$scratch/full-build"
+  # AIR2LEAN_CAS_DIR is set. Its phase logs go to --logs DIR/full-build (replaced on each run,
+  # kept afterwards), else to a temporary directory removed at exit.
+  if [ -n "$logs" ]; then
+    rm -rf "$logs/full-build" && mkdir -p "$logs" && logs=$(cd "$logs" && pwd) || exit 2
+  else
+    logs=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-preflight.XXXXXX") || exit 2
+    trap 'rm -rf "$logs"' EXIT
+  fi
+  check 'full build (scripts/full-build.sh)' scripts/full-build.sh --logs "$logs/full-build"
   check 'proof-fixture package: module names and mutant verdicts' \
     python3 -B -m unittest discover -s tests/roadmap/fixtures-lake -p 'test_*.py'
   check 'generated modules are fresh translations' python3 -B scripts/gen-integrity.py check
+  check 'generated loop invariants are fresh' python3 -B scripts/invgen.py check
 fi
 
 if [ "${#failed[@]}" -gt 0 ]; then

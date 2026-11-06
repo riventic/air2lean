@@ -36,6 +36,8 @@ def bump  : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bump
+
 structure readLimitLocals where
   deriving Inhabited
 
@@ -48,6 +50,8 @@ def readLimit  : Zig.MemM (BitVec 32) := do
     pure (.ret i0)) : Zig.MM readLimitLocals readLimitExit).run' (default : readLimitLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readLimit
 
 structure readScratchLocals where
   deriving Inhabited
@@ -62,6 +66,8 @@ def readScratch  : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] readScratch
+
 structure setScratchLocals where
   deriving Inhabited
 
@@ -75,5 +81,7 @@ def setScratch (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
     pure (.ret i2)) : Zig.MM setScratchLocals setScratchExit).run' (default : setScratchLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] setScratch
 
 end GlobalInit

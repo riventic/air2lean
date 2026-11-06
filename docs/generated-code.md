@@ -315,7 +315,7 @@ def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [
   the thread with the global's initial bytes. Instances are never shared: the same name in two
   threads is two blocks (`TlsWF.no_alias`), and a new thread's instances hold exactly the initial
   bytes whatever other threads did to theirs (`tlsEnter_init`,
-  `ZigLean/Conc/TlsLemmas.lean`).
+  `ZigLean/Conc/Base/Tls.lean`).
 - **Address identity.** `tlsPtr` reads only the thread's record; it is not a memory access.
   The pointer it returns is an ordinary pointer to the instance's block: it can be stored,
   compared and passed to another thread. Every access through it is an ordinary access with
@@ -327,7 +327,7 @@ def tlsInit : List (Zig.BlockId × Array Zig.Byte × Nat) := [
 - **Ownership.** An instance belongs to its thread. Passing its address to another thread
   transfers nothing: a concurrent access without a happens-before edge is a data race
   (`.illegal`), and a proof hands the cells over explicitly, as for any captured pointer
-  (`Zig.Conc.Capture.grant`, `ZigLean/Conc/Transfer.lean`).
+  (`Zig.Full.FCapture.grant`, `ZigLean/Sep/Full/ThreadSpawn.lean`).
 
 The checker accepts a named, non-`extern` `threadlocal var` with an initial value (wholly
 defined or wholly `undefined`) of an error-free type that the model encodes, and a
@@ -424,7 +424,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
 ```
 
-An empty capture has type `Unit`; a single field preserves the scalar constructor shown above. A four-field mixed capture has type `BitVec 32 × Zig.Ptr × BitVec 32 × Zig.Ptr`; the dispatcher calls `worker a.1 a.2.1 a.2.2.1 a.2.2.2` in source order. Pure workers receive a `Zig.readSlice` conversion for each captured slice. For programs containing an empty or multi-field capture, `Tgt.spawnInit P target ghost` is an alias of `P.init target ghost` for expressing the ownership or sharing obligation over the full capture. Such programs also get `Tgt.captures : Tgt → List Zig.Conc.Capture`, which classifies each field in source order from its AIR type. A pointer-free value is `.value`, a pointer is `.ptr p`, a slice is `.slice s`, and any other field is `.other`, for example an aggregate holding a pointer, an allocator, `Io`, or a thread handle. `Zig.Conc.Capture.grant` (`ZigLean/Conc/Transfer.lean`) turns this list into the per-argument ownership obligation; see [proofs.md](proofs.md#concurrent-separation-logic).
+An empty capture has type `Unit`; a single field preserves the scalar constructor shown above. A four-field mixed capture has type `BitVec 32 × Zig.Ptr × BitVec 32 × Zig.Ptr`; the dispatcher calls `worker a.1 a.2.1 a.2.2.1 a.2.2.2` in source order. Pure workers receive a `Zig.readSlice` conversion for each captured slice. For programs containing an empty or multi-field capture, `Tgt.spawnInit P target ghost` is an alias of `P.init target ghost` for expressing the ownership or sharing obligation over the full capture. Such programs also get `Tgt.captures : Tgt → List Zig.Conc.Capture`, which classifies each field in source order from its AIR type. A pointer-free value is `.value`, a pointer is `.ptr p`, a slice is `.slice s`, and any other field is `.other`, for example an aggregate holding a pointer, an allocator, `Io`, or a thread handle. `Zig.Full.FCapture.grant` (`ZigLean/Sep/Full/ThreadSpawn.lean`) turns this list into the per-argument ownership obligation; see [proofs.md](proofs.md#concurrent-separation-logic).
 
 Every access, plain or atomic, is one `Zig.AccessKind`: `.read`, `.write`, `.atomicRead` or `.atomicWrite`. Each access is one `Zig.FootprintEntry` (block, byte range, kind, and the thread's vector clock at the time), kept in `Zig.Mem.footprint`. `Zig.recordAccess` checks a new access against every earlier entry that overlaps its bytes with a concurrent clock (`Zig.VClock.concurrent`: neither clock is `≤` the other) via `Zig.racePair`: at least one write and at least one plain access is a data race, `.illegal`; anything else is no race. The spawn and join edges, and the release and acquire edges of atomics, are in std-models.md §Thread model. `Thread.yield` is translated from std; its OS call is `Zig.callC Zig.Os.Linux.sched_yield` (or `Zig.Os.Darwin.sched_yield`, OSY-01). Audited inline `std.atomic.spinLoopHint` instructions emit `Zig.spinLoopHintC`; both expose scheduling opportunities with no fairness guarantee ([progress-hints.md](progress-hints.md)). `Thread.detach` (0.16.0) emits `Zig.detachC`, which consumes the handle without a stop ([std-models.md](std-models.md#thread-model)). `Io.futexWaitTimeout` is rejected at translation time (`stdModels`, `Air2Lean/StdModels.lean`) with its reason. `Thread.Futex.wait`/`wake` are modelled; the supported `Thread.Mutex` and `Thread.Condition` methods are translated from std code, with the macOS mutex boundary modelled ([std-models.md](std-models.md#thread-model)).
 

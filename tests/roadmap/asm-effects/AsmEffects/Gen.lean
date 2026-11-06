@@ -37,6 +37,8 @@ def addr (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] addr
+
 structure barrierLocals where
   deriving Inhabited
 
@@ -49,6 +51,8 @@ def barrier  : Zig.Result (Unit) := do
     pure .ret) : Zig.M barrierLocals barrierExit).run' (default : barrierLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] barrier
 
 structure incLocalLocals where
   local1 : BitVec 32
@@ -68,6 +72,8 @@ def incLocal (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] incLocal
+
 structure incmLocals where
   deriving Inhabited
 
@@ -83,6 +89,8 @@ def incm (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] incm
+
 structure setmLocals where
   deriving Inhabited
 
@@ -96,6 +104,8 @@ def setm (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM setmLocals setmExit).run' (default : setmLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] setm
 
 structure swapmLocals where
   deriving Inhabited
@@ -114,5 +124,7 @@ def swapm (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM swapmLocals swapmExit).run' (default : swapmLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] swapm
 
 end AsmEffects

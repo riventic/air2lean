@@ -45,6 +45,8 @@ def timestamp32 (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (Except Zig.ErrNa
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] timestamp32
+
 structure timestamp64Locals where
   deriving Inhabited
 
@@ -85,5 +87,7 @@ def timestamp64 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (Except Zig.ErrNa
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] timestamp64
 
 end FlowTime

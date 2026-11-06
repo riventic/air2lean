@@ -48,6 +48,8 @@ def Random_bytes [Ext] (p0 : Random) (p1 : Zig.Slice) : Zig.ConcM Tgt (Unit) := 
   match e with
   | .ret => pure ()
 
+attribute [zig_run] Random_bytes
+
 structure rollLocals where
   b : Zig.Ptr
   deriving Inhabited
@@ -70,8 +72,12 @@ def roll [Ext] (p0 : Random) : Zig.ConcM Tgt (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] roll
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch [Ext] : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end Interfaces.Rnd

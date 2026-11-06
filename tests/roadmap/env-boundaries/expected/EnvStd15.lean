@@ -191,11 +191,15 @@ def air2lean_model_0_contract : Zig.External.Contract ((BitVec 32)) (BitVec 64) 
 
 def air2lean_model_0 (p0 : BitVec 32) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.close p0
 
+attribute [zig_run] air2lean_model_0
+
 theorem air2lean_model_0_evidence : air2lean_model_0_contract.Holds .total [Zig.Error.illegal] .tracked _root_.Zig.Env.Linux.close := _root_.Zig.Env.Linux.closeEvidence
 
 def air2lean_model_1_contract : Zig.External.Contract ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) (BitVec 64) := _root_.Zig.Env.Linux.readContract
 
 def air2lean_model_1 (p0 : BitVec 32) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.read (p0, p1, p2)
+
+attribute [zig_run] air2lean_model_1
 
 def air2lean_model_1_footprint : Zig.External.Footprint ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) where
   reads := fun _ => []
@@ -206,6 +210,8 @@ theorem air2lean_model_1_evidence : air2lean_model_1_contract.Holds .total [Zig.
 def air2lean_model_2_contract : Zig.External.Contract ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) (BitVec 64) := _root_.Zig.Env.Linux.writeContract
 
 def air2lean_model_2 (p0 : BitVec 32) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.write (p0, p1, p2)
+
+attribute [zig_run] air2lean_model_2
 
 def air2lean_model_2_footprint : Zig.External.Footprint ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) where
   reads := fun args => [Zig.External.Region.block args.2.1]
@@ -252,6 +258,8 @@ def posix_errno__anon_c57b4435c781 (p0 : BitVec 64) : Zig.Result (os_linux_E__en
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] posix_errno__anon_c57b4435c781
+
 structure posix_closeLocals where
   deriving Inhabited
 
@@ -272,6 +280,8 @@ def posix_close (p0 : BitVec 32) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] posix_close
+
 structure fs_File_closeLocals where
   deriving Inhabited
 
@@ -286,6 +296,8 @@ def fs_File_close (p0 : fs_File) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] fs_File_close
+
 structure posix_unexpectedErrnoLocals where
   deriving Inhabited
 
@@ -297,6 +309,8 @@ def posix_unexpectedErrno (p0 : os_linux_E__enum_1) : Zig.Result (Zig.ErrName) :
     pure (.ret "Unexpected")) : Zig.M posix_unexpectedErrnoLocals posix_unexpectedErrnoExit).run' (default : posix_unexpectedErrnoLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] posix_unexpectedErrno
 
 structure posix_readLocals where
   deriving Inhabited
@@ -312,6 +326,7 @@ def posix_read.again9 : posix_readExit → Bool
   | _ => false
 
 def posix_read.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_readLocals posix_readExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i11 ← pure p1.ptr
     let i12 ← pure p1.len
@@ -393,6 +408,8 @@ def posix_read (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] posix_read.loop9 posix_read
+
 structure fs_File_readLocals where
   deriving Inhabited
 
@@ -406,6 +423,8 @@ def fs_File_read (p0 : fs_File) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName 
     pure (.ret i3)) : Zig.MM fs_File_readLocals fs_File_readExit).run' (default : fs_File_readLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] fs_File_read
 
 structure fs_File_readAllLocals where
   index : BitVec 64
@@ -426,6 +445,7 @@ def fs_File_readAll.again5 : fs_File_readAllExit → Bool
   | _ => false
 
 def fs_File_readAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_readAllLocals fs_File_readAllExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).index)
     let i8 ← pure p1.len
@@ -500,6 +520,8 @@ def fs_File_readAll (p0 : fs_File) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrNa
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fs_File_readAll.loop5 fs_File_readAll
+
 structure posix_writeLocals where
   deriving Inhabited
 
@@ -514,6 +536,7 @@ def posix_write.again9 : posix_writeExit → Bool
   | _ => false
 
 def posix_write.loop9 (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MM posix_writeLocals posix_writeExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i11 ← pure p1.ptr
     let i12 ← pure p1.len
@@ -607,6 +630,8 @@ def posix_write (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] posix_write.loop9 posix_write
+
 structure fs_File_writeLocals where
   deriving Inhabited
 
@@ -620,6 +645,8 @@ def fs_File_write (p0 : fs_File) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName
     pure (.ret i3)) : Zig.MM fs_File_writeLocals fs_File_writeExit).run' (default : fs_File_writeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] fs_File_write
 
 structure fs_File_writeAllLocals where
   index : BitVec 64
@@ -638,6 +665,7 @@ def fs_File_writeAll.again5 : fs_File_writeAllExit → Bool
   | _ => false
 
 def fs_File_writeAll.loop5 (p0 : fs_File) (p1 : Zig.Slice) : Zig.MM fs_File_writeAllLocals fs_File_writeAllExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i7 ← pure ((← get).index)
     let i8 ← pure p1.len
@@ -697,6 +725,8 @@ def fs_File_writeAll (p0 : fs_File) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrN
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fs_File_writeAll.loop5 fs_File_writeAll
+
 structure readAllCloseLocals where
   deriving Inhabited
 
@@ -710,6 +740,8 @@ def readAllClose (p0 : fs_File) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName 
     pure (.ret i2)) : Zig.MM readAllCloseLocals readAllCloseExit).run' (default : readAllCloseLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readAllClose
 
 structure writeAllCloseLocals where
   deriving Inhabited
@@ -731,5 +763,7 @@ def writeAllClose (p0 : fs_File) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName
       pure (.ret (.ok () : Except Zig.ErrName (Unit))))) : Zig.MM writeAllCloseLocals writeAllCloseExit).run' (default : writeAllCloseLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] writeAllClose
 
 end EnvStd15

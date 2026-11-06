@@ -37,6 +37,8 @@ def divCeilI13 (p0 : BitVec 13) (p1 : BitVec 13) : Zig.Result (BitVec 13) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] divCeilI13
+
 structure divCeilI32Locals where
   deriving Inhabited
 
@@ -70,6 +72,8 @@ def divCeilI32 (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] divCeilI32
 
 structure divCeilI64Locals where
   deriving Inhabited
@@ -105,6 +109,8 @@ def divCeilI64 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] divCeilI64
+
 structure divCeilI8Locals where
   deriving Inhabited
 
@@ -139,6 +145,8 @@ def divCeilI8 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] divCeilI8
+
 structure divCeilU32Locals where
   deriving Inhabited
 
@@ -161,6 +169,8 @@ def divCeilU32 (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] divCeilU32
 
 structure divCeilU64Locals where
   deriving Inhabited
@@ -185,6 +195,8 @@ def divCeilU64 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] divCeilU64
+
 structure divCeilU8Locals where
   deriving Inhabited
 
@@ -207,5 +219,7 @@ def divCeilU8 (p0 : BitVec 8) (p1 : BitVec 8) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] divCeilU8
 
 end DivCeil

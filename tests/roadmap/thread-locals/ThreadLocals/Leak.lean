@@ -1,5 +1,4 @@
 import ThreadLocals.Gen
-import ZigLean.Conc.TlsLemmas
 import ZigLean.Sep.Full.ThreadTls
 
 /-!

@@ -38,8 +38,8 @@ decoded AIR:
 | Straight-line ops | `evalPure : Func → Env → Inst → Result Value` (arithmetic, comparisons, casts) and `evalMem : … → MemM Value` (loads, stores, field pointers, pointer casts and comparisons) |
 | Control flow | `execBody`/`execInst`/`execSwitch`/`execLoop : … → Zig.MM Frame Exit`, well-founded recursion over the nested bodies; `Exit` is `br target value`, `repeat target` or `ret value`; `loop` is `execLoop`, `Zig.loop` of the body |
 | Memory | ZigLean's `Zig.Mem` (`Zig.MemM`); the state of a body is its `Frame`: the stack blocks it allocated (freed at `ret`) and its register locals' cells ([§Locals](#locals)) |
-| Function | `execFunc call f args`: arguments checked against the parameter types (`argsOk`) |
-| Program | `run p`: the least fixpoint (`partial_fixpoint`) of `execFunc` over a call oracle |
+| Function | `execFunc p call f args`: arguments checked against the parameter types (`argsOk`), with the complete original program's execution policy |
+| Program | `Program` contains the original functions and validated model inputs; `run p` is the least fixpoint (`partial_fixpoint`) of `execFunc` over its actual lookup |
 | Bottom | `stuck` (`Option.none`): non-termination and every out-of-fragment or ill-typed step |
 
 Why a function: a decoded AIR function is deterministic given the memory, and ZigLean already
@@ -56,6 +56,25 @@ emission certificate cannot identify that result with a defined generated comput
 A canonicalization equality alone can hold when both sides are stuck; it does not establish
 native behavior outside the interpreter's fragment.
 
+### Canonical program and step costs
+
+The existing memory/concurrency analysis and original call-group analysis are shared in
+`Program`. Their input is the complete checked translation program and its validated model
+bindings, before certificate selection or extracted loop helpers. Emission, interpretation
+and certificate construction consume that same value. A certificate cannot supply a separate
+policy bit, effects list or call graph. The finite analysis is kernel reducible, so its
+classification in a generated certificate is checked rather than admitted.
+
+Every memory/concurrent loop-body invocation starts with `Zig.tick`, including an iteration
+that exits immediately. Each original recursive memory/concurrent member also ticks at
+function entry, even when it takes its base branch. An extracted loop helper is not another
+original recursive member. Pure functions and their slice views remain unticked. A tick
+advances the actual memory counter; exact certificates retain this field. The existing
+recursive-memory stack-budget exclusion remains an exclusion, not a newly certified case.
+Ticks alone establish no cost bound: a bound additionally requires a proof with the relevant
+resources. These rules implement the maintainer's A/1a decision recorded on
+[PR #510](https://github.com/riventic/air2lean/pull/510#issuecomment-6284852746).
+
 ### Emission preservation (V02): a certificate per function
 
 Two ways to prove emission correct: a **verified emitter** (prove `Emit.lean` once, for a fixed
@@ -64,23 +83,57 @@ string generator with many strategies per construct; proving it would mean re-im
 in a provable form. Translation validation keeps the emitter as it is and makes it untrusted:
 `--air-certificate` writes, beside `Gen.lean`, a Lean file that the kernel checks.
 
-For each function `f` in the certificate fragment the file contains the decoded AIR `air_f`
-(printed term, checked to be the decoded golden AIR) and:
+The file first quotes every original function and validated model input with constructor
+terms (`Reify`), including bodies outside the proof fragment. The complete `program` owns
+lookup and derived classification. For each selected function `f`, `air_f` names that original
+function; native round-trip checks compare the complete program to the decoded golden AIR.
+One theorem `policies` states the step-policy table `program.tickPolicies` (every function's
+loop and entry ticks, the call groups and classifications computed once) in a single kernel
+evaluation; each function's `policy_f`/`entry_f` reads its entry
+(`Program.tickPolicy_of_tickPolicies`). The emitter reads the same table.
 
-* `f_step`: `(execFunc call air_f [args]).run m` equals the generated definition's result:
+A requested certificate that cannot be built at all (the compiler metadata of a recursive
+group, an inconsistent proof clique) fails the
+whole translation closed with one `--air-certificate: cannot build the AIR certificate, nothing
+written: …` diagnostic, before any write: neither the Lean output nor any sidecar appears. A function outside
+the certificate fragment is not such a failure; the certificate lists it with its reason.
+The file then contains:
+
+* `f_step`: `(execFunc program call air_f [args]).run m` equals the generated definition's result:
   `(fun v => (enc v, m)) <$> Gen.f args` for a function in `Zig.Result`, or
   `(fun r => (enc r.1, r.2)) <$> (Gen.f args).run m` for a function in `Zig.MemM` (same memory
   before and after). With certified callees, the generated program (`gen`) answers the calls.
 * `f_fix`, `gen_fixpoint`, `run_le_gen`: the generated program satisfies every certified
-  function's equation, so the program semantics is below it.
+  function's equation. `runOn program table` restricts lookup to the certified names while
+  retaining the complete original program's policy; its semantics is below the generated
+  oracle. The table contains names, not substituted bodies or another analysis input.
 * `f_run` (no certified calls) or `f_sound` + `f_complete` + `f_eq` (calls, recursion):
-  **equality** of `run` (the least fixpoint of the AIR program) and the generated definition.
+  **equality** of that selected-domain least fixpoint and the generated definition. The
+  unrestricted `run program` remains the meaning of the complete source program.
 
 The proofs are generic: one `simp only` with the `air_sem` simp set (`Air2Lean/SemAttr.lean`)
 after one unfolding of the generated definition, and fixpoint induction over a generated
 `partial_fixpoint` clique for completeness. Nothing in a certificate is chosen per function
 by hand: the generator emits the same proof script for every function in the fragment, and a
 function the script cannot normalize fails `lake build`, it is not silently skipped.
+
+For an executable partial-fixpoint clique, certificate construction automatically compiles
+the current renderer's exact module bytes in a private module root. The existing
+`tools/Assurance` reader returns Lean's actual `EqnInfo.declNames`, fixed-parameter
+permutations and induction theorem binders through Lean's existing `run_meta`. Compiler
+metadata orders the proof; it grants no premise or assurance admission. The kernel still
+checks the certificate. Membership must match the same renderer's executable declarations,
+including loop helpers and actual call lowering. Original `Program` SCCs remain the sole
+native cost/effect policy. Source, toolchain, lookup and fresh artifact identities are bound
+before and after the query; an ambient or stale Gen is never substituted. If there is no
+executable recursive clique, construction needs no compiler query.
+
+This keeps a fresh one-shot `--air-certificate` invocation usable inside the air2lean Lean
+workspace, including split-module outputs. The exact module plan is reused for publication.
+Certificate, timing, source-map, manifest and generated module destinations must be distinct
+portable names (case-insensitive, like the split-module name allocator). Existing aliases
+are resolved before writes; dangling aliases and hard-linked regular output files refuse
+with a diagnostic, rather than allowing a later sidecar write to alter a prepared module.
 
 Per instruction family, the emission strategy and its proof obligation:
 
@@ -100,12 +153,14 @@ Per instruction family, the emission strategy and its proof obligation:
 
 ### Loops
 
-The semantics runs a loop as `execLoop c id body env`, which is `Zig.loop (execBody c body env)
+The semantics runs a loop as `execLoop c id body env`, which is `Zig.loop (execIteration c body env)
 (Exit.again id)` over the frame and `Exit`; the generated code runs `Zig.loop (f.loop<n>
 captured…) f.again<n>` over its `Locals` state and its own exit type `fExit`. `execLoop` is a
 definition of its own that the certificate's simp set does not unfold, so a whole loop is
 rewritten by its lemma instead of being expanded. The machinery, in `Sem.lean` (proved once) and
-generated per loop (`Certificate.loopCert`):
+generated per loop (`Certificate.loopCert`). `execIteration` includes the canonical tick
+prefix in memory mode, so its one-iteration equality covers the full returned memory,
+including the final-exit tick:
 
 1. an **exit encoding** `enc_f : fExit → Exit` (`.br<n> v ↦ .br n (enc v)`, `.rep<n> ↦ .rep n`,
    `.ret v ↦ .ret (enc v)`), printed from the emitter's exit table (`CertShape`);
@@ -228,7 +283,7 @@ ranking are decoding, not rewriting) and `≈` is:
 | Rewrite | Relation | Proof |
 |---|---|---|
 | 0 `versionTags`, 4 `argRanks` | part of `decode` | — |
-| 6 `renumber`, live IDs and operands | desired equality | unproved: the same arbitrary oracle can manufacture a caller's register-cell ID; see the [audit regression](../tests/roadmap/air-semantics/RenumberOracle.lean) |
+| 6 `renumber`, live IDs and operands | equality, for every injective renaming, argument list and full memory, under every call oracle that keeps `Oracle.CellFree` (the program's own `run` and `runOn` do) | one generic kernel theorem (`Renumber.execFunc_rename`) plus native per-function binding evidence (`CanonCertificate.renumberBound`, [below](#generic-renaming-theorem-and-native-binding)); an arbitrary oracle can manufacture a caller's register-cell ID, so the contract is needed ([audit regression](../tests/roadmap/air-semantics/RenumberOracle.lean)) |
 | final debug-definition IDs within 6 `renumber` | equality, for every oracle, argument list and full memory | one generic kernel theorem plus native per-item binding evidence; live IDs, operands and targets remain unchanged |
 | 3 `dropTrueChecks` | equality | needs the dropped condition's truth (`x ≤ x + y` after a checked add): a lemma per pattern, used by the normalization |
 | 2 `itemReads` | equality | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` (needs pointer arithmetic in the semantics) |
@@ -237,7 +292,18 @@ ranking are decoding, not rewriting) and `≈` is:
 
 Certifying the remaining rewrites would let a certificate embed the decoded **raw** AIR and
 compare it with `decode` of the golden JSON, removing those rewrites from the trusted base for
-that function. The certificates below cover only the final debug-definition-ID rewrite.
+that function. Today the certificates cover `renumber` (live IDs and debug-definition IDs);
+the other rewrites stay trusted.
+
+Each certificate's report names, for every function of the program, the rewrites that fired on
+it, as a line ``* `<fn>` trusted-Canon: <passes>`` (or `none`), in pipeline order. `Raw.canonicalizeTraced`
+compares each rewrite's whole `RawFunc` output with its input, so any change counts, and
+`renumber` fires whenever it moves an ID. The line omits `renumber` for a function whose native
+binding to the renaming theorem holds, and keeps it (trusted) where the binding fails or the
+input of `renumber` does not decode. These are the Canon rewrites a certified function trusts;
+a function the translator gives no trace fails the certificate closed. The line covers `Canon.lean` only: the cross-file renaming of anonymous
+declarations (`Anon.lean`, on the JSON text before parsing) and the error-table merge stay in the
+trusted base for every function ([§Trusted base](#trusted-base-of-a-certificate)).
 
 #### Live-ID and memory boundaries
 
@@ -259,17 +325,24 @@ and bind the complete normalized functions. This witnesses the per-function arbi
 obstruction; it makes no claim of native Zig or whole-program identity-callee misexecution.
 
 The [approved direction for live IDs](https://github.com/riventic/air2lean/pull/394#issuecomment-6197911477)
-is a general oracle contract: results neither observe nor leak the caller's register-cell
-names, with a once-for-all proof for the program's least-fixpoint oracle and an explicit
-premise ID for external implementations. The corresponding future statement is:
+is a general oracle contract: results do not leak the caller's register-cell names, with a
+once-for-all proof for the program's least-fixpoint oracle. It is implemented as
+`Renumber.Oracle.CellFree` (on arguments without register-cell names, a call's value names no
+register cell) and proved for `run p` and `runOn p names` (`run_cellFree`, `runOn_cellFree`,
+by fixpoint induction). The statement ([below](#generic-renaming-theorem-and-native-binding)) is:
 
 ```text
-OracleContract o → execFunc o before args = execFunc o after args
+Inj ρ → Oracle.CellFree o → execFunc p o (renFunc ρ f) args = execFunc p o f args
 ```
 
-That contract and live-renumbering proof remain future work under TRU-02. The implemented
-debug-definition step retains the stronger equality for every arbitrary same oracle:
-it changes no live register cell, operand or branch target and introduces no oracle premise.
+The contract is not a premise. A certificate's final statements (`_run`, `_eq`, `_sound`) are
+about the program's own oracles (`run`, `runOn`), which keep it. A `_step` theorem stated for
+an arbitrary oracle transfers to the function before `renumber` only for an oracle that keeps
+the contract. A `_view` theorem is about `execFuncV`, which `execFunc_rename` does not cover;
+only its `_step`, through `SemView.execFunc_view` (memories equal up to read entries), transfers.
+An external call model would have to prove the contract before `execFunc_rename` applies to it. The
+debug-definition step (`CanonSem`) keeps its stronger equality for every arbitrary oracle,
+since it changes no live register cell, operand or branch target.
 
 Copy elimination has an independent full-memory boundary. `forwardReadOnlyCopies` can
 delete a copy's allocation, store, pointer bitcasts and loads. Taking its address through
@@ -332,9 +405,46 @@ nor that a function is inside the semantic fragment. The historical 2,421-functi
 cohort is not such a coverage count; the narrower emission-certificate fragment is not a
 classifier for all of Sem, and no unsupported count is inferred.
 
-Only this final reified mapping is kernel-checked. Live renumbering, all other
+This debug-ID mapping and the renaming below are the kernel-checked parts of Canon. All other
 canonicalization passes, normalization and actual Raw/snapshot binding retain TRU-02;
 the interpreter retains SEM-06 and the existing memory-model premises. V01/V02 remain open.
+
+#### Generic renaming theorem and native binding
+
+`Air2Lean/Renumber.lean` proves once, for every function `f`, every injective renaming `ρ` of
+instruction IDs, every argument list, the full memory and every oracle that keeps
+`Oracle.CellFree`, that `renFunc ρ f` (every instruction ID, operand reference, branch target and
+nested body renamed) has the same `Sem.execFunc` result as `f` (`execFunc_rename`). The proof is
+a simulation over the definitional semantics: the renamed run's frame and SSA environment are
+the original ones with every register-cell name mapped by `ρ`. A register local's address only
+reaches `load` and `store` (`regAlloc`), so every other operand holds a value without cell names
+(`InvEnv`, `execBody_flow`), and both runs compute the same values (`execBody_sim`).
+`execFunc_rename_run` and `execFunc_rename_runOn` instantiate it with the program's own oracles.
+Like `CanonSem`, this is a compiler-correctness equality about `Sem`, not a program judgment,
+tactic, axiom or premise.
+
+The per-function obligation is native evidence under TRU-02, computed on the certificate path
+(`--air-certificate`) in `Main`: `Raw.CanonTrace.input` keeps `renumber`'s input, and
+`normalizeTraced` decodes it with the same `normalizeCanonical` as the canonical function.
+`CanonCertificate.renumberBound pre canonical` pairs the instruction IDs of both (in
+`Func.allInsts` order), builds `ρ = Renumber.zipRen pairs`, and checks that no two pairs share a
+target (so `ρ` is injective, `zipRen_inj`) and that `renFunc ρ pre` is structurally equal to the
+canonical function (`sameFunction`, every field). The pairing is only a guess for `ρ`: a wrong
+guess fails `sameFunction`, so soundness rests on the final comparison alone. Where the check
+holds, the report drops `renumber` from the function's `trusted-Canon` line; where it fails or
+`pre` does not decode, `renumber` stays listed (fail closed). In the 13 committed examples it
+holds for all 124 functions. `tests/roadmap/air-semantics/CanonBinding.lean` has the causal
+controls: a collapsed ID, a changed operand or changed metadata does not bind.
+
+The binding is **per function, inside the certificate's program**. `execFunc_rename` relates the
+function's body before and after `renumber` within one program: the canonical one. Its other
+functions (reached through the oracle) are canonical, and so are its tick policies
+(`Program.ticked`, `entryTicked`, computed from every body by `memoryFunctions`,
+`concFunctions` and `callGroups`). Each callee's own `renumber` is bound on its own line. A
+whole-program statement would say that `run` of the program of pre-`renumber` functions equals
+`run` of the canonical program. It would also need those program analyses to be invariant
+under renaming. It is not proved, so the program-level part of `renumber` (callee bodies and
+tick policies) stays under TRU-02.
 
 ### How SEM-06 shrinks
 
@@ -401,8 +511,15 @@ in `test_lean.py`.
 
 * `tests/roadmap/air-semantics/test_cli.py`: the certificate flag leaves `Gen.lean`
   byte-identical; each committed certificate equals a fresh one; the certified set is the
-  expected one and every other function is listed; flag misuse is rejected; no `sorry`,
-  `admit` or `native_decide`; a certified memory function with calls has `_sound`.
+  expected one and every other function is listed; every function has exactly one
+  `trusted-Canon` line of known rewrites in pipeline order, and none lists `renumber` (its native
+  binding holds for every committed example); flag misuse is rejected; no `sorry`, `admit` or
+  `native_decide`; a certified memory function with calls has `_sound`.
+* `tests/roadmap/air-semantics/CanonBinding.lean` (run by `test_lean.py`): the native bindings'
+  causal controls, for the debug-ID map and for `renumberBound` (an injective renaming binds; a
+  collapsed ID, a changed operand or changed metadata does not).
+* `scripts/canon_certification.py` (gen-integrity, full build): a fresh Assurance audit and
+  kernel replay of the generic modules `CanonSem` and `Renumber` with their theorem roots.
 * `lake build Proofs/<Ex>/AirCert` for every committed certificate.
 * `tests/roadmap/air-semantics/test_lean.py`: the round trip (`RoundTrip.lean`: every
   embedded `Func` is the decoded golden AIR); ten one-operator mutations (arithmetic, a
@@ -410,6 +527,9 @@ in `test_lean.py`.
   loop's increment) each break exactly their function's `_step` (the loop's: its iteration
   lemma); a hand-written caller fixture gets `_eq`; the Zig 0.15.2 slices goldens certify their
   expected functions and the fresh certificate checks.
+* The coverage lint: `Sem.outside?` classifies every `Op` constructor (no wildcard arm), and
+  `tests/roadmap/op-effects/test_op_table.py` checks it against the interpreter (see its
+  docstring).
 
 ### Cost
 
@@ -429,7 +549,12 @@ instruction. Each theorem unfolds only its own function.
 
 ### Trusted base of a certificate
 
-* the exporter and the compiler (V03); JSON parsing, `Canon.lean` and `Normalize.lean`;
+* the exporter and the compiler (V03); the renaming of anonymous declarations (`Anon.lean`),
+  JSON parsing, `Canon.lean` (the rewrites on the function's `trusted-Canon` line) and
+  `Normalize.lean` (with the error-table merge);
+* for a function whose `renumber` is bound ([§Canonicalization](#generic-renaming-theorem-and-native-binding)),
+  instead of `renumber` itself: the native run of `CanonCertificate.renumberBound` (`renFunc`
+  and `sameFunction`) on the decoded snapshots before and after it (TRU-02);
 * `printFunc`, checked by the round trip (it prints every field, so equal prints are equal
   values);
 * `Sem` itself and ZigLean's primitives and memory model, shared with the generated code

@@ -268,4 +268,96 @@ run_meta budget_within_limit
 
 end Budget
 
+/-! ## Shared certificates (`omegaRaw`; docs/proof-automation.md, "`omega`'s certificates are
+shared") -/
+
+section Shared
+open Lean Meta Zig.Full.Auto
+
+/-- **The certificates of a run are maximally shared**, each and together: hash-consing them
+again finds no duplicate node. The problem chains four facts over five atoms, so a certificate
+combines constraints in several steps over the same coefficient lists; the second goal of the
+run uses the same facts and atoms. (Core `omega` alone: 2576 nodes for 739 distinct ones on the
+first goal.) Nor does the run keep `omega`'s goals, which hold the certificate unshared. A
+problem with an unknown is still proved. -/
+def omega_proofs_shared : MetaM Unit := do
+  let id ← fsymRunCounter.modifyGet fun n => (n + 1, n + 1)
+  fsymRuns.modify (·.insert id (← RunCaches.new))
+  try
+    withOptions (·.set `fsym.run id) <|
+    withLocalDeclD `a (mkConst ``Nat) fun a => withLocalDeclD `b (mkConst ``Nat) fun b =>
+    withLocalDeclD `c (mkConst ``Nat) fun c => withLocalDeclD `d (mkConst ``Nat) fun d =>
+    withLocalDeclD `e (mkConst ``Nat) fun e => do
+    let le (x y : Expr) := mkAppM ``LE.le #[x, y]
+    let add (x y : Expr) := mkAppM ``HAdd.hAdd #[x, y]
+    let t1 ← le (← add a b) c
+    let t2 ← le (← add c d) e
+    let t3 ← le e (mkNatLit 10)
+    let t4 ← le (mkNatLit 1) b
+    let ty1 ← mkAppM ``LT.lt #[← add a d, mkNatLit 10]
+    let ty2 ← le (← add (← add a b) d) (mkNatLit 10)
+    withLocalDeclD `h1 t1 fun h1 => withLocalDeclD `h2 t2 fun h2 =>
+    withLocalDeclD `h3 t3 fun h3 => withLocalDeclD `h4 t4 fun h4 => do
+    let goals : MetaM Nat := return (← getMCtx).decls.foldl (fun n _ _ => n + 1) 0
+    let before ← goals
+    let some p1 ← omegaRaw #[h1, h2, h3, h4] ty1 | throwError "omega_proofs_shared: no proof"
+    let some p2 ← omegaRaw #[h1, h2, h3, h4] ty2 | throwError "omega_proofs_shared: no proof"
+    -- `omega`'s own goals hold the unshared certificate: none is kept
+    let after ← goals
+    unless after == before do
+      throwError "omega_proofs_shared: {before} goals before omega, {after} after"
+    for (p, ty) in [(p1, ty1), (p2, ty2)] do
+      Meta.check p
+      unless ← isDefEq (← inferType p) ty do throwError "omega_proofs_shared: {p} does not prove {ty}"
+    for (what, x) in [("the first", p1), ("both", mkApp2 (mkConst ``Prod.mk) p1 p2)] do
+      let n ← x.numObjs
+      let m ← (ShareCommon.shareCommon' x).numObjs
+      unless n == m do throwError "omega_proofs_shared: {what}: {n} term nodes, {m} distinct"
+    -- a problem with an unknown is solved at the context's depth, as before the sharing
+    let w ← mkFreshExprMVar (mkConst ``Nat)
+    let some _ ← omegaRaw #[h1] (← le w (← add w (mkNatLit 1)))
+      | throwError "omega_proofs_shared: no proof of ?w ≤ ?w + 1"
+    -- terms that differ only in a binder's name or annotation stay apart
+    let tbl ← IO.mkRef {}
+    let fs := [(`x, .default), (`y, .default), (`x, .implicit)].map fun (n, bi) =>
+      mkLambda n bi (mkConst ``Nat) (.bvar 0)
+    for e in fs do
+      unless (← internTerms tbl e).equal e do
+        throwError "omega_proofs_shared: {e} interned as a different term"
+    -- `Nat`, `#0` and the three functions
+    let size ← (← tbl.get).foldM (fun n _ => pure (n + 1)) (0 : Nat)
+    unless size == 5 do throwError "omega_proofs_shared: binder names or annotations merged: {size}"
+  finally fsymRuns.modify (·.erase id)
+
+run_meta omega_proofs_shared
+
+end Shared
+
+/-! ### A fact in normal form states it (`mpResult`, `normFacts`)
+
+A simp result whose last steps have no proof (a `dsimproc`'s fold, `Nat.reduceSub`) keeps the
+proof of the steps before: `pf : P = Q` with `r.expr` past `Q`. The fact must state `r.expr`, not
+`Q`, or the second pass (`renormFacts`) reads `Q` and folds it again on every failed side goal
+(PageSpec's `bs.size ≤ 18446744073709551616 - 4096`, 41 times in `remap_spec`). -/
+section Stated
+open Lean Meta Zig.Full.Auto
+
+run_meta do
+  withLocalDeclD `x (mkConst ``Nat) fun x => do
+  let two64 := mkNatLit 18446744073709551616
+  let q ← mkAppM ``LE.le #[x, ← mkAppM ``HSub.hSub #[two64, mkNatLit 4096]]
+  let nf ← mkAppM ``LE.le #[x, mkNatLit 18446744073709547520]
+  withLocalDeclD `h q fun h => do
+  -- a proof of the steps with a proof (none here: `Q = Q`), the fold after it without one
+  let r : Simp.Result := { expr := nf, proof? := some (← mkEqRefl q) }
+  let p ← mpResult r h
+  Meta.check p
+  let ty ← inferType p
+  unless ty == nf do throwError "mpResult: the fact states {ty}, not its normal form {nf}"
+  -- a result whose proof states it keeps the proof as it is
+  let r' : Simp.Result := { expr := q, proof? := some (← mkEqRefl q) }
+  unless (← inferType (← mpResult r' h)) == q do throwError "mpResult: {q} not kept"
+
+end Stated
+
 end SepAuto.Arith

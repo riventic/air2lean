@@ -64,14 +64,15 @@ theorem wstep (o : Nat → Nat) {f : Nat} {mp : MainAt} {wp : WorkerAt} {s : Sch
     intro p hp; rw [hk, ← hp]; rfl
   let S₁ : Sched.State Tgt Unit := { s with step := s.step + 1, trace := s.trace.push s.ready.size }
   have hk₁ : (atT S₁ 1).kids = #[workerTS wp (dw' + 1)] := hk
+  have hkt : (atTick S₁ 1).kids = #[workerTS wp (dw' + 1)] := hk
   cases wp with
   | done => exact absurd rfl hw
   | start =>
     rw [go_kid o hne hsel (hk0 _ rfl), choose_snd, tt_start]
-    refine ⟨.load, { atT S₁ 1 with kids := #[workerTS .load dw'] },
-      ⟨d, dw', hm, rfl, hi.cur 1, by omega, by omega, fun h => by cases h⟩,
+    refine ⟨.load, { atTick S₁ 1 with kids := #[workerTS .load dw'] },
+      ⟨d, dw', hm, rfl, (hi.cur 1).ticked, by omega, by omega, fun h => by cases h⟩,
       by show s.step < s.step + 1; omega,
-      by rw [← kid_set _ hk₁], fun _ => rfl, by simp, by simp, by simp, by simp⟩
+      by rw [← kid_set _ hkt], fun _ => rfl, by simp, by simp, by simp, by simp⟩
   | spin =>
     rw [go_kid o hne hsel (hk0 _ rfl), choose_snd, tt_spin]
     refine ⟨.yld, { atT S₁ 1 with kids := #[workerTS .yld dw'] },
@@ -80,9 +81,9 @@ theorem wstep (o : Nat → Nat) {f : Nat} {mp : MainAt} {wp : WorkerAt} {s : Sch
       by rw [← kid_set _ hk₁], by simp, fun _ => rfl, by simp, by simp, by simp⟩
   | yld =>
     rw [go_kid o hne hsel (hk0 _ rfl), choose_snd, tt_yld]
-    refine ⟨.load, { atT S₁ 1 with kids := #[workerTS .load dw'] },
-      ⟨d, dw', hm, rfl, hi.cur 1, by omega, by omega, fun h => by cases h⟩,
-      by show s.step < s.step + 1; omega, by rw [← kid_set _ hk₁], by simp, by simp,
+    refine ⟨.load, { atTick S₁ 1 with kids := #[workerTS .load dw'] },
+      ⟨d, dw', hm, rfl, (hi.cur 1).ticked, by omega, by omega, fun h => by cases h⟩,
+      by show s.step < s.step + 1; omega, by rw [← kid_set _ hkt], by simp, by simp,
       fun _ => rfl, by simp,
       by simp⟩
   | load =>
