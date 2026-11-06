@@ -95,7 +95,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       (by rw [show gW rp 0 false 0 = G 1 from hgu.symm, upd_same]
           exact inv_cur 1 hi (by rw [hgu]; nofun)) rfl))
     rintro _ G' m' _ ⟨-, hi'⟩
-    exact qkid hi'
+    exact qkid (FAssn.Unshared.plain rp hplain) hi'
   | producer p => exact absurd hg.1 (by simp [semOf])
   | work p => exact absurd hg.1 (by simp [semOf])
   | writer p => exact absurd hg.1 (by simp [semOf])

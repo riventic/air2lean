@@ -77,4 +77,65 @@ theorem Mem.Owns.join_other {m m' : Mem} {t u w : ThreadId} {h : Heap}
   rw [Proto.getElem!_set!_ite, if_neg (by simp [hw])]
   exact ho.congr rfl rfl
 
+/-! ### Read ownership (`Mem.OwnsR`) across fork and join, by the same clock facts -/
+
+theorem Mem.OwnsRC.congr {m m' : Mem} {c : VClock} {h : Heap} (ho : m.OwnsRC c h)
+    (hfp : m'.footprint = m.footprint) (hbs : m'.blocks.size = m.blocks.size) :
+    m'.OwnsRC c h := by
+  intro e he hw ht
+  rw [hfp] at he
+  rw [hbs] at ht
+  exact ho e he hw ht
+
+theorem Mem.OwnsR.fork {m m' : Mem} {t u c : ThreadId} {gt : Bool} {h : Heap}
+    (ho : m.OwnsR u h) (hcs : m.clocks.size = m.threads.size) (hu : u < m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    m'.OwnsR u h := by
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  have hu' : u < m.clocks.size := hcs ▸ hu
+  refine Mem.OwnsRC.mono (c := m.clocks[u]!) ?_ ?_
+  · exact ho.congr rfl rfl
+  · rw [Proto.getElem!_push, if_pos (by simpa using hu'), Proto.getElem!_set!_ite]
+    split
+    · rename_i e; rw [e.1]; exact VClock.le_bump _ _
+    · exact VClock.le_refl _
+
+theorem Mem.OwnsR.fork_child {m m' : Mem} {t c : ThreadId} {gt : Bool} {h : Heap}
+    (ho : m.OwnsR t h) (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    m'.OwnsR c h := by
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨rfl, rfl⟩ := hf
+  refine Mem.OwnsRC.mono (c := m.clocks[t]!) ?_ ?_
+  · exact ho.congr rfl rfl
+  · rw [Proto.getElem!_push, if_neg (by simp [hcs]), if_pos (by simp [hcs])]
+    exact VClock.le_bump _ _
+
+theorem Mem.OwnsR.join {m m' : Mem} {t u : ThreadId} {h₁ h₂ : Heap}
+    (h₁o : m.OwnsR t h₁) (h₂o : m.OwnsR u h₂) (ht : t < m.clocks.size)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    m'.OwnsR t (h₁ ∪ h₂) := by
+  obtain ⟨rec, _, _, rfl⟩ := Proto.join_eq hj
+  apply Mem.OwnsRC.union
+  · refine Mem.OwnsRC.mono (c := m.clocks[t]!) ?_ ?_
+    · exact h₁o.congr rfl rfl
+    · rw [Proto.getElem!_set!_ite, if_pos ⟨rfl, ht⟩]
+      exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+  · refine Mem.OwnsRC.mono (c := m.clocks[u]!) ?_ ?_
+    · exact h₂o.congr rfl rfl
+    · rw [Proto.getElem!_set!_ite, if_pos ⟨rfl, ht⟩]
+      exact VClock.le_merge_right _ _
+
+theorem Mem.OwnsR.join_other {m m' : Mem} {t u w : ThreadId} {h : Heap}
+    (ho : m.OwnsR w h) (hw : w ≠ t)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    m'.OwnsR w h := by
+  obtain ⟨rec, _, _, rfl⟩ := Proto.join_eq hj
+  change Mem.OwnsRC _ _ _
+  rw [Proto.getElem!_set!_ite, if_neg (by simp [hw])]
+  exact ho.congr rfl rfl
+
 end Zig

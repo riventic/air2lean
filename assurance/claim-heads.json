@@ -18,14 +18,14 @@
     },
     "Zig.Full.CTriple": {
       "module": "ZigLean.Sep.Full.Conc",
-      "fingerprint": "a4b387aa24a484dba87eb5ade939f090",
+      "fingerprint": "a4175cea55c7d4b506856827eb6e0167",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 3,
       "state": []
     },
     "Zig.Full.FTTriple": {
       "module": "ZigLean.Sep.Full.Thread",
-      "fingerprint": "09736ac87b0c6c17b15a7e0d4570896f",
+      "fingerprint": "4a3115777497e93b057a77360974daf8",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []

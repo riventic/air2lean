@@ -174,7 +174,7 @@ theorem one {r : Res} (hh : Holds m r rO) (h1 : m.threads.size = 1) (hc : m.cloc
     rw [h1]
     refine ⟨r, rnil, FHeap.disjoint_empty _, ?_, by simp [partOf], ⟨rfl, rfl, rfl⟩⟩
     rw [res_eta r]; simp [FHeap.union_empty, Know.union_none, Ghost.add_unit]
-  owns _ _ e he := by rw [hf] at he; simp at he
+  owns _ _ := .of_owns fun e he => by rw [hf] at he; simp at he
   outside u hu := by
     rw [h1] at hu; rw [upd_ne _ _ (by unfold ThreadId at *; omega)]; exact ⟨rfl, rfl, rfl⟩
   csize := by rw [hc, h1]

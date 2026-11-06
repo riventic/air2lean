@@ -92,6 +92,13 @@ def R (Y : ThreadId → X) : FAssn :=
 /-- The semaphore's mutex (`ioMutex.c = 2`). -/
 abbrev L : FLock Gh := FLock.prod 0 24 R 2 (by decide)
 
+/-- The mutex's resource holds no read share, so no acquire gathers one (`FLock.NoGather.of_R`). -/
+theorem R_unshared (Y : ThreadId → X) : (R Y).Unshared :=
+  .sep (.up _) (by
+    unfold Pool; split
+    · exact .emp
+    · exact .up _)
+
 /-- The condition's state and epoch. -/
 def WS : Word 32 4 := { b := 0, o := 28 }
 def WE : Word 32 4 := { b := 0, o := 32 }
@@ -236,7 +243,7 @@ def proto (semOf : Tgt → Option Ptr) : Proto Tgt Gh where
   inv G m := ∃ rX, L.Inv G rX m ∧ U G rX m
   init tgt g := semOf tgt = some cPtr ∧ ∃ rp, plain rp ∧
     g = (⟨.out, rp, rnil⟩, { ph := .work 0 false 0 })
-  fin g := g.1.ph = .gone ∧ g.2 = { ph := .fin }
+  fin g := g.1.ph = .gone ∧ g.2 = { ph := .fin } ∧ ∀ l, g.1.part.shared l = none
   strict := true
   joins g := g.1.ph = .out ∧ g.2 = { ph := .joins }
 

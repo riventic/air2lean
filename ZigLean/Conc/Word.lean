@@ -480,7 +480,7 @@ theorem Ok.prep {m m₁ : Mem} {t li : Nat} {k : AccessKind} (hw : W.Ok m) (hc :
   obtain ⟨hwr, hopr, -⟩ := hw.record rfl ht hcs hk
   have hcov : mr.MsgCov → m₁.MsgCov := by
     obtain ⟨blk, hb, -, hsz, -⟩ := hw.blk
-    exact (FStepIn.locIdx (m := mr) (hF := fun _ => none) W.sz_pos (fun _ _ _ => rfl)
+    exact (FStepIn.locIdx (m := mr) (hF := fun _ => none) (hR := Heap.empty) W.sz_pos (fun _ _ _ => rfl)
       ⟨blk, hb, hsz⟩ h).msgCov
   -- the location
   cases hf : mr.atomics.findIdx? (fun l => l.block == W.b && l.off == W.o) with
@@ -587,7 +587,7 @@ theorem Ok.rmwAt {m₁ M : Mem} {t li : Nat} {l : ALoc} {ord : AtomicOrder} {new
   have hcov : m₁.MsgCov → M.MsgCov := fun h => by
     obtain ⟨e, he, heb, heo, hel, hec⟩ := hrec
     rw [hM]
-    refine (FStepIn.rmwM (hF := fun _ => none) (blk := blk) (e := e) ord _ new hct
+    refine (FStepIn.rmwM (hF := fun _ => none) (hR := Heap.empty) (blk := blk) (e := e) ord _ new hct
       (by rw [hl0]; omega) (by rw [hl0, hlb]; exact hb) (fun hin => ?_) he (by rw [hl0, hlb]; exact heb)
       (by rw [hl0, hlo]; exact heo) hel hec
       (by rw [hl0, getElem!_pos l.msgs _ (by omega)]; exact Array.getElem_mem _)).msgCov h
@@ -710,7 +710,7 @@ theorem Ok.read {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicOrder} (
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.atomics,
       fun e he => .inl (hg.footprint ▸ he), .of_eq hg.blocks, .of_eq hg.atomics,
       by unfold Mem.Aux loadM acqM observeM; split <;> simp,
-      (FStepIn.loadM (hF := fun _ => none) hcs₁ ord (l.msgs[pos]!) (by
+      (FStepIn.loadM (hF := fun _ => none) (hR := Heap.empty) hcs₁ ord (l.msgs[pos]!) (by
         intro hin
         have hlen := (hw₁.loc li l hl).1
         have hpos := W.sz_pos
@@ -1170,26 +1170,31 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
   refine ⟨hwi, ⟨rL, ho', hLoff, FHeap.disjoint_union_right.mpr ⟨hLW', hXY.2⟩, fun hF' => ?_, hnF⟩,
     LockWord.off_erase.mpr fun l hl => ?_, hi.pdisj, hi.idle, hi.res⟩
   · obtain ⟨hR, hO⟩ := hF hF'
-    refine ⟨hR, fun e he htc => ?_⟩
-    by_cases hm : e ∈ m.footprint
-    · rcases hO e hm (htc.imp id fun h => by rw [← hop.bsize]; exact h) with h | ⟨i, l, hl, hle⟩
-      · exact .inl (LockWord.LiveLe.mono hop.threads hcl h)
-      · exact .inr ⟨i, l, (hloc i l).mpr hl, hle⟩
-    · rcases hop.fp e he with h | ⟨hb, heo, hlen, -⟩
-      · exact absurd h hm
-      · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
-        · rw [hb] at h3; rw [heo] at h1; rw [heo, hlen] at h2
-          have hin : W.In (W.b, x) := ⟨rfl, h1, by omega⟩
-          -- `rL` owns no byte of `W`: the rest has them as cells (`FOwned.rest_noShare`)
-          refine (h3 (Classical.byContradiction fun hn => (Res.owned_ne.mp hn).elim
-            (· (hLW _ hin)) fun hp => ho.rest_noShare (l := (W.b, x)) ?_ ?_)).elim
-          · intro e
-            simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
-            exact cellsAt_some hin (hw.cellIn hin) e.1
-          · simp only [rsum, Ghost.add_share]
-            exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
-              (SCell.pos_add_iff.mpr (.inl hp)))))
-        · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
+    -- both parts of `LockWord.OwnsRes`: a new access is at `W`, of which `rL` holds no byte
+    have key : ∀ (h : Heap) (w : Bool), (∀ l, h l ≠ none → rL.owned l ≠ none) →
+        L.Owns (L.pl G) m h w → L.Owns (L.pl G) m' h w := by
+      intro h w hsub hO e he hwr htc
+      by_cases hm : e ∈ m.footprint
+      · rcases hO e hm hwr (htc.imp id fun h => by rw [← hop.bsize]; exact h) with
+          h | ⟨i, l, hl, hle⟩
+        · exact .inl (LockWord.LiveLe.mono hop.threads hcl h)
+        · exact .inr ⟨i, l, (hloc i l).mpr hl, hle⟩
+      · rcases hop.fp e he with h | ⟨hb, heo, hlen, -⟩
+        · exact absurd h hm
+        · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
+          · rw [hb] at h3; rw [heo] at h1; rw [heo, hlen] at h2
+            have hin : W.In (W.b, x) := ⟨rfl, h1, by omega⟩
+            -- `rL` owns no byte of `W`: the rest has them as cells (`FOwned.rest_noShare`)
+            refine (hsub _ h3 (Classical.byContradiction fun hn => (Res.owned_ne.mp hn).elim
+              (· (hLW _ hin)) fun hp => ho.rest_noShare (l := (W.b, x)) ?_ ?_)).elim
+            · intro e
+              simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
+              exact cellsAt_some hin (hw.cellIn hin) e.1
+            · simp only [rsum, Ghost.add_share]
+              exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
+                (SCell.pos_add_iff.mpr (.inl hp)))))
+          · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
+    exact ⟨hR, key _ _ (fun _ => Res.owned_of_excl) hO.1, key _ _ (fun _ => Res.owned_of_shared) hO.2⟩
   · have := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff]
       at this ⊢
