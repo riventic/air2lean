@@ -611,15 +611,6 @@ structure RecBoundary where
   invocation : Expr
   entered : Bool := false
 
-/-- Terms hash-consed by `internTerms`: each distinct term once, up to `Expr.equal` (binder names
-and annotations count), and their addresses. `terms` keeps the terms alive, so an address in
-`addrs` is never reused by another term. Persistent sets: the run's caches are shared between
-threads (`fsymRuns`), so the runtime never updates them in place, and an insertion into a hash
-set would copy all of it. -/
-structure InternTable where
-  terms : PersistentHashSet ExprStructEq := {}
-  addrs : PersistentHashSet USize := {}
-
 /-- The caches of one run of `fsym` (theorems are elaborated in parallel: no global state).
 * `hyp`: the `fsym_arith` normal form of each hypothesis, by `FVarId` (a hypothesis' type only
   changes up to definitional equality): `none` if unchanged, else the new proposition and its
@@ -707,9 +698,11 @@ structure RunCaches where
   fwdTried : IO.Ref (Std.HashSet (Nat × FVarId))
   /-- A search in progress ran out of its fuel (`outOfFuel`, `limitedRun`). -/
   fuelOut : IO.Ref Bool
-  /-- The subterms of the run's `omega` certificates (`omegaRaw`). Never rolled back: an entry
-  only shares. -/
-  omegaTerms : IO.Ref InternTable
+  /-- The subterms of the run's `omega` certificates (`omegaRaw`), each distinct term once, up to
+  `Expr.equal` (binder names and annotations count). Never rolled back: an entry only shares. A
+  persistent set: the caches of a run are shared between threads (`fsymRuns`), so the runtime
+  never updates them in place, and an insertion into a hash set would copy all of it. -/
+  omegaTerms : IO.Ref (PersistentHashSet ExprStructEq)
 
 def RunCaches.new : IO RunCaches :=
   return { hyp := ← IO.mkRef {}, disch := ← IO.mkRef {}, facts := ← IO.mkRef #[],
@@ -834,36 +827,34 @@ def detProbe (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : Meta
     (← caches).detFail.modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
   return r
 
-/-- `internTerms` (implementation): bottom up, each node of `e` once (`memo`, by address), its
-children replaced first, so that a lookup in `tbl` compares children by address. `shareCommon'`
-first turns `omega`'s tree into a graph, so that `visit` meets each distinct node once. A term
-of `tbl` is not entered: a certificate contains its facts' proofs, often earlier certificates. -/
-unsafe def internTermsImpl (tbl : IO.Ref InternTable) (e : Expr) : IO Expr := do
-  let memo ← IO.mkRef (mkPtrMap (α := Expr) (β := Expr))
-  let rec visit (e : Expr) : IO Expr := do
-    if (← tbl.get).addrs.contains (ptrAddrUnsafe e) then return e
-    if let some r := (← memo.get).find? e then return r
-    let e' ← match e with
-      | .app f a => pure (e.updateApp! (← visit f) (← visit a))
-      | .lam _ t b _ => pure (e.updateLambdaE! (← visit t) (← visit b))
-      | .forallE _ t b _ => pure (e.updateForallE! (← visit t) (← visit b))
-      | .letE _ t v b _ => pure (e.updateLetE! (← visit t) (← visit v) (← visit b))
-      | .mdata _ b => pure (e.updateMData! (← visit b))
-      | .proj _ _ b => pure (e.updateProj! (← visit b))
-      | _ => pure e
-    let r ← match (← tbl.get).terms.find? ⟨e'⟩ with
-      | some r => pure r.val
-      | none =>
-        tbl.modify fun ⟨terms, addrs⟩ => ⟨terms.insert ⟨e'⟩, addrs.insert (ptrAddrUnsafe e')⟩
-        pure e'
-    memo.modify (·.insert e r)
-    return r
-  visit (ShareCommon.shareCommon' e)
+/-- `internTerms`' walk: bottom up, its children replaced first, so that a lookup in `tbl`
+compares children by address, and each node once (`memo`; the same node again is found by
+address). A term already in `tbl` is not entered: a certificate contains its facts' proofs, often
+earlier certificates. -/
+partial def internVisit (tbl : IO.Ref (PersistentHashSet ExprStructEq))
+    (memo : IO.Ref (Std.HashMap ExprStructEq Expr)) (e : Expr) : IO Expr := do
+  if let some r := (← memo.get).get? ⟨e⟩ then return r
+  if let some r := (← tbl.get).find? ⟨e⟩ then return r.val
+  let visit := internVisit tbl memo
+  let e' ← match e with
+    | .app f a => pure (e.updateApp! (← visit f) (← visit a))
+    | .lam _ t b _ => pure (e.updateLambdaE! (← visit t) (← visit b))
+    | .forallE _ t b _ => pure (e.updateForallE! (← visit t) (← visit b))
+    | .letE _ t v b _ => pure (e.updateLetE! (← visit t) (← visit v) (← visit b))
+    | .mdata _ b => pure (e.updateMData! (← visit b))
+    | .proj _ _ b => pure (e.updateProj! (← visit b))
+    | _ => pure e
+  let r ← match (← tbl.get).find? ⟨e'⟩ with
+    | some r => pure r.val
+    | none => tbl.modify (·.insert ⟨e'⟩); pure e'
+  memo.modify (·.insert ⟨e⟩ r)
+  return r
 
 /-- `e` hash-consed against `tbl`: each subterm is replaced by the equal term in `tbl`
-(`Expr.equal`), and the new ones are added. -/
-@[implemented_by internTermsImpl]
-opaque internTerms (tbl : IO.Ref InternTable) (e : Expr) : IO Expr
+(`Expr.equal`), and the new ones are added. `shareCommon'` first turns `omega`'s tree into a
+graph, so that the walk meets each distinct node once. -/
+def internTerms (tbl : IO.Ref (PersistentHashSet ExprStructEq)) (e : Expr) : IO Expr := do
+  internVisit tbl (← IO.mkRef {}) (ShareCommon.shareCommon' e)
 
 /-- `omega` proves `ty` from `facts` (proof terms), as given; the state is kept clean.
 
