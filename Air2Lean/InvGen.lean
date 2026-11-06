@@ -10,8 +10,8 @@ terms that `fsym` walks, and writes their invariants `F.loopN.inv`, measures `F.
 exit posts `F.loopN.post` as `def`s into a Lean file (`Inv.lean`), registered with `@[fsym_inv]`:
 at the loop, `fsym` applies its loop rule with them (P09-E4), so a proof of the function that runs
 the loop names no loop lemma. It adds no tactic, judgment or command: the proofs that use the
-definitions are `fsym` walks that the kernel checks, so a wrong or too weak invariant makes a proof fail, never a
-wrong proof. A loop outside the families below gets no definition: the generator records why in
+definitions are `fsym` walks that the kernel checks, so a wrong or too weak invariant makes a
+proof fail, never a wrong proof. A loop outside the families below gets no definition: the generator records why in
 the file's header and on stderr, and a proof that needs it does not build (fail closed).
 
 Families (layer 2 of the design: numeric facts and measures over the variables of the shape):
@@ -465,29 +465,39 @@ structure Cand where
   facts : Array Fact
   owned : Array Owned
   meas : String
-  /-- The exit type, and the exit post's body over the exit `r` (not a candidate: it follows from
-  the invariant and the exit, which the callers' proofs check). -/
+  /-- The exit type, and the exit post's facts over the exit `r` and its value fact of each
+  written cell `k` (not candidates: the output's walk with the post checks them, `genLoop`). -/
   exit : String
-  post : String
+  postFacts : Array String
+  postCells : Array (Nat × String)
 
-/-- The invariant's body with the kept facts (`keep`), each written by `fact`. -/
-def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String := Id.run do
-  let kept := (List.range c.facts.size).filter (keep[·]!)
-  let top := kept.filter (c.facts[·]!.cell?.isNone)
+/-- An assertion over the resources `c.owned`: the facts `top`, and each written cell `k` at a
+value `v` with the facts `cell k`. -/
+def Cand.assn (c : Cand) (top : List String) (cell : Nat → List String) : String := Id.run do
   let mut atoms := #[]
-  if !top.isEmpty then atoms := atoms.push s!"⟪{" ∧\n      ".intercalate (top.map fact)}⟫"
+  if !top.isEmpty then atoms := atoms.push s!"⟪{" ∧\n      ".intercalate top}⟫"
   for o in c.owned do
     match o with
     | .read atom => atoms := atoms.push atom
     | .plain => atoms := atoms.push "plain"
     | .written k ty atom =>
-      let fs := kept.filter fun i => (c.facts[i]!.cell?.map (·.1)) == some k
+      let fs := cell k
       atoms := atoms.push <| if fs.isEmpty then s!"(FAssn.ex fun v : {ty} => {atom})"
-        else s!"(FAssn.ex fun v : {ty} => ⟪{" ∧ ".intercalate (fs.map fact)}⟫ ⋆ {atom})"
+        else s!"(FAssn.ex fun v : {ty} => ⟪{" ∧ ".intercalate fs}⟫ ⋆ {atom})"
   return if atoms.isEmpty then "⟪True⟫" else " ⋆\n    ".intercalate atoms.toList
 
+/-- The invariant's body with the kept facts (`keep`), each written by `fact`. -/
+def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String :=
+  let kept := (List.range c.facts.size).filter (keep[·]!)
+  c.assn ((kept.filter (c.facts[·]!.cell?.isNone)).map fact)
+    fun k => (kept.filter fun i => (c.facts[i]!.cell?.map (·.1)) == some k).map fact
+
+/-- The exit post's body. -/
+def Cand.post (c : Cand) : String :=
+  c.assn c.postFacts.toList fun k => (c.postCells.filter (·.1 == k)).toList.map (·.2)
+
 /-- The definitions `name.inv` and `name.meas` with the kept facts, each written by `fact`, each
-after `attr`. -/
+prefixed with `attr` (`Cand.output`: `@[fsym_inv]`). -/
 def Cand.defs (c : Cand) (keep : Array Bool) (fact : Nat → String) (attr := "") : String :=
   s!"{c.doc}{attr}def {c.name}.inv {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) : FAssn :=\n  \
     {c.body keep fact}\n\n\
@@ -499,8 +509,8 @@ def Cand.defs (c : Cand) (keep : Array Bool) (fact : Nat → String) (attr := ""
 def Cand.output (c : Cand) (keep : Array Bool) : String :=
   s!"{c.defs keep (c.facts[·]!.text) "@[fsym_inv] "}\n\
     /-- The exit post of `{c.name}`: the loop exits with `r`, after all iterations. -/\n\
-    @[fsym_inv] def {c.name}.post {c.binders}(s0 : {c.loc}) {c.entry}(r : {c.exit} × {c.loc}) : FAssn :=\n  \
-    {c.post}\n"
+    @[fsym_inv] def {c.name}.post {c.binders}(s0 : {c.loc}) {c.entry}(r : {c.exit} × {c.loc}) : \
+    FAssn :=\n  {c.post}\n"
 
 /-- The check of the kept facts: each one a definition `name.candᵢ` (so that a residual goal
 names it), the invariant over them, the measure, and the step triple of one iteration, walked by
@@ -511,7 +521,7 @@ exiting iteration ends in the exit post `name.post`, as the loop rule's step req
 def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : String := Id.run do
   let mut defs := ""
   for h : i in [0:c.facts.size] do
-    if final || !keep[i]! then continue
+    if !keep[i]! then continue
     let v := match c.facts[i].cell? with | some (_, ty) => s!"(v : {ty}) " | none => ""
     defs := defs ++ s!"def {c.name}.cand{i} {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) {v}: Prop :=\n  \
       {c.facts[i].text}\n\n"
@@ -521,14 +531,17 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
   let use (i : Nat) := s!"{q c.name}.cand{i} {c.args}s0 {c.vargs}s" ++ if c.facts[i]!.cell?.isSome then " v" else ""
   let inv (s : String) := s!"{q c.name}.inv {c.args}s0 {c.vargs}{s}"
   let meas (s : String) := s!"{q c.name}.meas {c.args}{c.measArgs}{s}"
-  let (text, exit, post) := if final then (c.output keep, s!"{q c.name}.post {c.args}s0 {c.vargs}r", s!" {q c.name}.post")
+  -- the definitions, the assertion at the exit and the extra definition to unfold
+  let (text, atExit, unfoldPost) := if final then
+      (c.output keep, s!"{q c.name}.post {c.args}s0 {c.vargs}r", s!" {q c.name}.post")
     else (defs ++ c.defs keep use, inv "r.2", "")
   return s!"{text}\n\
     set_option fsym.report true in\n\
     theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
       FTotalTriple ({inv "s"}) (({q c.name} {c.args}).run s)\n      \
-      (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"} else {exit}) := by\n  \
-      unfold {q c.name} {q c.name}.inv {q c.name}.meas{post}\n  fsym\n"
+      (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"}\n        \
+        else {atExit}) := by\n  \
+      unfold {q c.name} {q c.name}.inv {q c.name}.meas{unfoldPost}\n  fsym\n"
 
 /-- The opens of the generated file, which the pruning walks elaborate under too. -/
 def opens : String := "open Zig Zig.Full Zig.Full.FAssn"
@@ -564,16 +577,17 @@ def walk (ns : Name) (c : Cand) (keep : Array Bool) (final := false) :
   -- Each residual leaves the step theorem with unsolved goals; any other error is fatal.
   if let some e := errors.find? fun e => residuals.isEmpty || !e.startsWith "unsolved goals" then
     throwError "the step check failed: {e}"
+  let field (j : Json) (k : String) := (j.getObjValAs? String k).toOption.getD ""
+  -- (the output has no candidates: a residual there is fatal, and this says why)
   if final then
     if let some res := residuals[0]? then
       throwError "the kept facts do not establish the exit post `{c.name}.post`: \
-        `{(res.getObjValD "goal").getObjValAs? String "text" |>.toOption.getD ""}`"
+        `{field (res.getObjValD "goal") "text"}`"
   let pre := s!"{ns}.{c.name}.cand"
   let mut drop := #[]
   for res in residuals do
     let goal := res.getObjValD "goal"
     let origin := res.getObjValD "origin"
-    let field (j : Json) (k : String) := (j.getObjValAs? String k).toOption.getD ""
     let goalText := field goal "text"
     let head := field goal "head"
     let i? := if head.startsWith pre then (toString (head.drop pre.length)).toNat? else none
@@ -612,7 +626,7 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       let some structName := (ty.getArg! 0).constName? | throwError "locals that are not a structure"
       let exit ← match (ty.getArg! 1).constName? with
         | some n => pure (relName ns n)
-        | none => pure (toString (← ppExpr (ty.getArg! 1)))
+        | none => toString <$> ppExpr (ty.getArg! 1)
       unless isStructure (← getEnv) structName do throwError "locals that are not a structure"
       for x in xs do
         let n := (← x.fvarId!.getDecl).userName
@@ -665,21 +679,22 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       -- measure is `left`.
       let X := s!"s.{x}.toNat"
       let X0 := s!"s0.{x}.toNat"
-      let mut facts : Array Fact := #[]
-      for f in fields do
-        if f != x then facts := facts.push { text := s!"s.{f} = s0.{f}" }
+      -- the other locals at their entry values, at the locals `sv`
+      let pinned (sv : String) := (fields.filter (· != x)).map (s!"{sv}.{·} = s0.{·}")
+      let mut facts : Array Fact := (pinned "s").map ({ text := · })
       -- The counter runs from `X0` to the value it exits at: the bound, or one past it for
       -- `<=`/`>=` (`one`), where the counter's last step must not wrap (`noWrap`; a literal bound
       -- that makes it false is outside the family). Which side of `X0` it stays on is left to
       -- Houdini: both are candidates (true at entry), and the step keeps one.
       let one := if c.incl then " + 1" else ""
-      let (total, left, toExit) := if c.down then
-          (s!"{X0}{one} - {bound}", s!"{X}{one} - {bound}", s!"{bound} ≤ {X}{one}")
-        else
-          (s!"{bound}{one} - {X0}", s!"{bound}{one} - {X}", s!"{X} ≤ {bound}{one}")
+      -- the iterations in all, with the bound `b`
+      let totalOf (b : String) := if c.down then s!"{X0}{one} - {b}" else s!"{b}{one} - {X0}"
+      let total := totalOf bound
+      let (left, toExit) := if c.down then (s!"{X}{one} - {bound}", s!"{bound} ≤ {X}{one}")
+        else (s!"{bound}{one} - {X}", s!"{X} ≤ {bound}{one}")
       facts := facts ++ #[{ text := s!"{X0} ≤ {X}" }, { text := s!"{X} ≤ {X0}" }, { text := toExit }]
       -- `total` at the exit's locals `r.2`
-      let totalPost := if c.down then s!"{X0}{one} - {boundAt "r.2"}" else s!"{boundAt "r.2"}{one} - {X0}"
+      let totalPost := totalOf (boundAt "r.2")
       if c.incl then
         let ty ← withLocalDeclD `s (.const structName []) fun s =>
           inferType (mkApp (.const (structName ++ x) []) s)
@@ -699,13 +714,10 @@ def candLoop (ns body again : Name) : MetaM Cand := do
         | some #[l] => s!"r.1 = {relName ns l}"
         | some ls => s!"({" ∨ ".intercalate (ls.map (s!"r.1 = {relName ns ·}")).toList})"
         | none => s!"{relName ns again} r.1 = false"
-      let mut post := #[label]
-      for f in fields do
-        if f != x then post := post.push s!"r.2.{f} = s0.{f}"
-      post := post.push <|
-        if c.down then s!"{XR}{one} = {boundAt "r.2"}" else s!"{XR} = {boundAt "r.2"}{one}"
+      let post := #[label] ++ pinned "r.2" ++
+        #[if c.down then s!"{XR}{one} = {boundAt "r.2"}" else s!"{XR} = {boundAt "r.2"}{one}"]
       let mut owned := #[]
-      let mut ownedPost := #[]
+      let mut postCells : Array (Nat × String) := #[]
       let mut doc := #[]
       for h : k in [0:c.cells.size] do
         let (cell, inc) := c.cells[k]
@@ -713,7 +725,6 @@ def candLoop (ns body again : Name) : MetaM Cand := do
         let ty := tys[k]!
         if !cell.stored then
           owned := owned.push (.read s!"up (pts {p} {cell.align} v{k})")
-          ownedPost := ownedPost.push s!"up (pts {p} {cell.align} v{k})"
           doc := doc.push s!"\n`v{k}` is `*{p}`, which the loop only reads."
           continue
         facts := facts.push { text := s!"v{k}.toNat + {scaled inc total} < 2 ^ {cell.width}" }
@@ -725,23 +736,20 @@ def candLoop (ns body again : Name) : MetaM Cand := do
         for d in (if inc != 0 then #[up, down] else if c.down then #[down] else #[up]) do
           facts := facts.push { text := s!"v.toNat = v{k}.toNat + {scaled inc d}", cell? := some (k, ty) }
         owned := owned.push (.written k ty s!"up (pts {p} {cell.align} v)")
-        ownedPost := ownedPost.push <|
-          s!"(FAssn.ex fun v : {ty} => ⟪v.toNat = v{k}.toNat + {scaled inc totalPost}⟫ ⋆ up (pts {p} {cell.align} v))"
+        postCells := postCells.push (k, s!"v.toNat = v{k}.toNat + {scaled inc totalPost}")
         doc := doc.push s!"\n`v{k}` is `*{p}` there, which goes up by {inc} per iteration."
-      if c.plain then
-        owned := owned.push .plain
-        ownedPost := ownedPost.push "plain"
+      if c.plain then owned := owned.push .plain
       let name := relName ns body
       return {
         name, again := relName ns again, binders, args, loc, entry, vargs, measEntry, measArgs,
-        facts, owned, meas := left, exit,
-        post := " ⋆\n    ".intercalate (s!"⟪{" ∧\n      ".intercalate post.toList}⟫" :: ownedPost.toList),
+        facts, owned, meas := left, exit, postFacts := post, postCells,
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
           by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
 
 /-- The invariant `body.inv`, measure `body.meas` and exit post `body.post` of the loop `body`
 with exit test `again` (`candLoop`, pruned by `houdini`, the output walked once more with its exit
-post) as source text with the pruning decisions, or why there are none. Each loop has its own heartbeat budget: the walks of the loops before it do not count. -/
+post) as source text with the pruning decisions, or why there are none. Each loop has its own
+heartbeat budget: the walks of the loops before it do not count. -/
 def genLoop (ns body again : Name) : MetaM (Except String (String × Array Json)) :=
   -- (a heartbeat or recursion limit, too, only costs this loop its invariant)
   withCurrHeartbeats <| tryCatchRuntimeEx
