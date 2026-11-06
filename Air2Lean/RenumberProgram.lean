@@ -579,8 +579,8 @@ theorem deadUndefStores_ren (hρ : Inj ρ) (f : Func) :
     cases p <;> cases v <;> try rfl
     next x t =>
       rw [show renOp ρ (.store (.inst x) (.undef t)) = .store (.inst (ρ x)) (.undef t) from rfl]
-      simp only [Array.any_map', Function.comp_def, renInst_id, renInst_op, beq_ren hρ, isAlloc_renOp, placesOf_ren hρ, Array.size_map, ← Array.map_extract,
-        Array.find?_map, usesPlaceOf_ren hρ, leavesBody_ren hρ, Option.any_map,
+      simp only [Array.any_map', Function.comp_def, renInst_id, renInst_op, beq_ren hρ,
+        isAlloc_renOp, placesOf_ren hρ, Array.size_map, ← Array.map_extract, Array.find?_map, usesPlaceOf_ren hρ, leavesBody_ren hρ, Option.any_map,
         overwritesLocal_ren hρ, apply_ite (Array.map ρ), Array.map_push]
 
 /-- **Renaming keeps the observable `undefined` stores' allocs**, renamed. -/
@@ -674,8 +674,8 @@ theorem tickPolicy_renumber (p q : Prog) (σ : Func → InstId → InstId) (hσ 
     (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models) (name : String) :
     q.tickPolicy name = p.tickPolicy name :=
   tickPolicy_map p q _ hq hm (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)
-    (fun f => usesMemoryLocally_ren (hσ f) f) (fun f => syncLocally_ren (hσ f) f) (fun f refs => callees_ren (hσ f) f refs)
-    (fun names refs f => calleesOf_ren (hσ f) names refs f) name
+    (fun f => usesMemoryLocally_ren (hσ f) f) (fun f => syncLocally_ren (hσ f) f)
+    (fun f refs => callees_ren (hσ f) f refs) (fun names refs f => calleesOf_ren (hσ f) names refs f) name
 
 /-- **Renaming every function of a program preserves the program** (V02, Canon `renumber`):
 `q` is `p` with each function `f` renamed by an injective `σ f`. -/
