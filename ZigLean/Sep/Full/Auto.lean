@@ -617,7 +617,7 @@ structure RecBoundary where
 * `disch`: side conditions the discharger proved; a proof is reused where its free variables
   are in scope.
 * `dischFail`: side conditions the discharger failed on, with the fact sets it failed with
-  (retried only with a fact outside each of them, as `detFail`).
+  (retried only with other facts, `failCached`).
 * `facts`: the facts of the current arithmetic problem (proofs over the goal's hypotheses of
   propositions in normal form), which the discharger works from.
 * `probe`: probes (a mask, remainder, case or `if` fact for a term): a proof (reused where in
@@ -775,9 +775,9 @@ def outOfFuel : CoreM Unit := do (← caches).fuelOut.set true
 
 /-- Run the search `x`, and whether it hit a limit: a search in it ran out of fuel (`outOfFuel`), or
 the heartbeat limit is reached (`heartbeatsOut`). **Nothing obtained under a limit is cached as a
-failure** (`probe`, `detProbe`, `omegaDisch`, the derived fields, layouts and instances): such
-a failure says nothing of the input, and a search with more room (another query order, an
-obligation without a probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
+failure** (`probe`, `detProbe`, the derived fields, layouts and instances): such a failure says
+nothing of the input, and a search with more room (another query order, an obligation without a
+probe's budget) may succeed. A limit hit inside a search counts for the searches around it. -/
 def limitedRun {m : Type → Type} {α : Type} [Monad m] [MonadLiftT CoreM m] [MonadFinally m]
     (x : m α) : m (α × Bool) := do
   let ref := (← (caches : CoreM RunCaches)).fuelOut
@@ -815,13 +815,17 @@ def probe (key : Expr) (n : Nat) (run : MetaM (Option Expr)) : MetaM (Option Exp
   return r
 
 /-- The search `run` for `key` from the facts `base`, its failures cached in `cache` (`detFail`,
-`dischFail`): not retried where it failed before with a superset of `base` (`omega` proves
-nothing from fewer facts), in any context (the facts are proofs: the same term is the same
-proposition). A failure under a limit is not recorded (`limitedRun`). -/
+`dischFail`): not retried where it failed before with a superset of `base` (`subset`: a search
+that proves nothing from fewer facts, plain `omega`), else with `base` itself, in any context
+(the facts are proofs: the same term is the same proposition). A failure under a limit is not
+recorded (`limitedRun`). -/
 def failCached (cache : RunCaches → IO.Ref (Std.HashMap Expr (Array (Std.HashSet Expr))))
-    (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) : MetaM (Option Expr) := do
+    (key : Expr) (base : Array Expr) (run : MetaM (Option Expr)) (subset := true) :
+    MetaM (Option Expr) := do
   let failed := ((← (cache (← caches)).get).get? key).getD #[]
-  if failed.any fun s => base.all s.contains then return none
+  -- (the number of distinct facts: an equal set has as many)
+  let n := if subset then 0 else (Std.HashSet.ofArray base).size
+  if failed.any fun s => (subset || s.size == n) && base.all s.contains then return none
   let (r, limited) ← limitedRun run
   if r.isNone && !limited then
     (cache (← caches)).modify (·.insert key (failed.push (Std.HashSet.ofArray base)))
@@ -1261,9 +1265,12 @@ where arithSimpCtxCore : MetaM (Simp.Context × Simp.SimprocsArray) := do
 
 /-- The discharger of the arithmetic simp set (no wrap-around, `pow_mod_elim`, …): the bound of
 a word, else the side goal in normal form by `omega` from the current facts (`dischFacts`);
-cached: a proof where it is in scope, a failure for the facts it failed with (`dischFail`; not
-under a limit, `limitedRun`; the probe's budget is the discharger's own at every call): each
-failed `omega` asks the side conditions of every relevant fact again (`renormFacts`). -/
+cached: a proof where it is in scope, a failure for the facts it failed with (`dischFail`, not
+under a limit: `failCached`): each failed `omega` asks the side conditions of every relevant
+fact again (`renormFacts`). A failure is reused for the same facts only: `omegaFacts` is not
+monotone in them (the plain facts' refutation of the goal skips the search through the case
+facts, a probe's budget cuts it off), and the probe's budget is the discharger's own at every
+call. -/
 def omegaDisch (cases := true) : Simp.Discharge := fun e => do
   let r : MetaM (Option Expr) := do
     let e ← instantiateMVars e
@@ -1272,7 +1279,7 @@ def omegaDisch (cases := true) : Simp.Discharge := fun e => do
       if !pf.hasAnyFVar (fun f => !lctx.contains f) then return some pf
     let facts ← (← caches).facts.get
     let key := if cases then e else mkApp (mkConst `fsym.noCases) e
-    let out ← failCached RunCaches.dischFail key facts do
+    let out ← failCached RunCaches.dischFail key facts (subset := false) do
       -- `x.toNat < 2 ^ w`
       let wordBound : MetaM (Option Expr) := do
         unless e.isAppOfArity ``LT.lt 4 do return none
