@@ -42,13 +42,15 @@ theorem failedSpawnOwnership {own : ThreadId → Res} {rO : Res} {m : Mem} {P : 
 theorem refusedSecondThenJoin {own : ThreadId → Res} {rO : Res} {m m' : Mem} {t first c : ThreadId}
     {depth : Nat} (hc : c ≠ 0) (ho : FOwned own rO m) (ht : t < m.threads.size)
     (hne : first ≠ t)
-    (hj : ((Thread.join first).run {m with current := t}).run = some (.ok ((), m'))) :
+    (hj : ((Thread.join first).run {m with current := t}).run = some (.ok ((), m')))
+    -- the join gathers no read share (`FOwned.join`, engine ledger #share-gather)
+    (hg : ∀ l, (own t).shared l = none ∨ (own first).shared l = none) :
     (spawnOutcomeC c Target.worker : CM Target Unit _).run () depth {m with current := t} =
       CoN.leaf (some (.ok ((.error (spawnErrorAt (c - 1)), ()), {m with current := t}))) ∧
     FOwned (upd (upd own t (rsum (own t) (own first))) first rnil) rO m' := by
   refine ⟨failedSpawnLeaf c hc () _ depth, ?_⟩
   simpa only [upd_comm own rnil (rsum (own t) (own first)) hne] using
-    FOwned.join ho ht hne hj
+    FOwned.join ho ht hne hj hg
 
 -- At an exhausted budget the oracle range holds only the five errors, and no choice
 -- decodes to assignment.

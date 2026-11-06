@@ -79,12 +79,14 @@ nonvacuity_witness _root_.failedSpawnOwnership := by
   exact ⟨plainOwn, rO, SpawnFailure.mem0 .fresh, P, (fun _ => ()), 0, 0, ho, trivial⟩
 
 /- The computed telescope of refusedSecondThenJoin is, in order:
-   own, rO, m, m', t, first, c, depth, hc, ho, ht, hne, hj, True.
+   own, rO, m, m', t, first, c, depth, hc, ho, ht, hne, hj, hg, True.
    Its And conclusion adds no binders. The run premise hj is supplied by join_run,
-   at an actual fork endpoint rather than a separately constructed memory. -/
+   at an actual fork endpoint rather than a separately constructed memory; the parent's part
+   is empty, so the join gathers no read share (hg). -/
 nonvacuity_witness _root_.refusedSecondThenJoin := by
-  obtain ⟨own, rO, m, m', first, -, ho, ht, hne, hj, -, -⟩ := fork_join_inputs .fresh
-  exact ⟨own, rO, m, m', 0, first, 1, 0, by decide, ho, ht, hne, hj, trivial⟩
+  obtain ⟨own, rO, m, m', first, -, ho, ht, hne, hj, hparent, -⟩ := fork_join_inputs .fresh
+  exact ⟨own, rO, m, m', 0, first, 1, 0, by decide, ho, ht, hne, hj,
+    fun l => .inl (by rw [hparent]; exact (Res.excl_eq_erase).2 l), trivial⟩
 
 /-- A positive start instance, independently useful even if the producer classifies the
 original WP head as structural. No protocol or ghost environment is assumed to exist. -/
@@ -127,6 +129,7 @@ theorem refusal_join_plain_inhabited :
     exact (Nat.lt_irrefl 0) hn
   have hresult := _root_.refusedSecondThenJoin (own := own) (rO := rO) (m := m) (m' := m')
     (t := 0) (first := first) (c := 1) (depth := 0) (by decide) ho ht hne hj
+    fun l => .inl (by rw [hparent]; exact (Res.excl_eq_erase).2 l)
   exact ⟨own, rO, m, m', first, hf, hresult, hreturned, hplain, hnonunit⟩
 
 end SpawnFailure.RuntimeNonvacuity
