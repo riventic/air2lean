@@ -1812,7 +1812,8 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     -- `?xs = [].reverse ++ xs`): its value in the normal form of lists (`xs`)
     if (← whnfR ty).isAppOfArity ``List 1 then
       for (m, v, flip) in [(x, y, true), (y, x, false)] do
-        unless m.isMVar && !(← m.mvarId!.isAssigned) && !v.hasExprMVar do continue
+        let .mvar mv := m | continue
+        if v.hasExprMVar || (← mv.isAssigned) then continue
         let (ctx, procs) ← arithSimpCtx
         let (r, _) ← fsimp v ctx procs
         if r.expr == v then continue
