@@ -207,7 +207,8 @@ open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
 `StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
 universe parameters whose parameters are explicit and named apart (`fsym` matches them by name with
-`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post), whose
+`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post; for
+the invariant, the locals may be followed by a ghost measure `n : Nat`), whose
 parameter of the locals at the loop's entry is named `s0` and whose value is an `FAssn` (a `Nat`
 for the measure). -/
 def checkLoopInv (decl : Name) : MetaM Unit := do
@@ -230,6 +231,15 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
     let dep (e : Expr) := e.hasAnyFVar fun v => ys.any (·.fvarId! == v)
     return if dep σ || dep ε then none else some (σ, ε)
   forallTelescope d.type fun xs res => do
+    -- a ghost measure (`B.inv … s n`: a last parameter `n : Nat` after the locals; the loop rule
+    -- is `loop_ghost_ex`, so there is no `B.meas`)
+    let ghost ← if last == "inv" && xs.size ≥ 2 then do
+        let isNat ← isDefEq (← inferType xs.back!) (mkConst ``Nat)
+        match types? with
+        | some (σ, _) => pure (isNat && (← isDefEq (← inferType xs[xs.size - 2]!) σ))
+        | none => pure isNat
+      else pure false
+    let xs := if ghost then xs.pop else xs
     let some s := xs.back? | fail "no parameter for the loop's locals"
     if let some (σ, ε) := types? then
       let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ

@@ -728,6 +728,9 @@ structure RunCaches where
   premises side goals again (`wpChain`); and the depth of that chaining. -/
   chain : IO.Ref (Array Expr)
   chainDepth : IO.Ref Nat
+  /-- The depth of the planner's constructor folds in progress (`closeEntail`, `ctorFold`: a
+  postcondition's atom stuck on an unknown of a recursive type, tried at each constructor). -/
+  foldDepth : IO.Ref Nat
   /-- The caller's lemmas whose conclusion is an arithmetic fact (`fsym [l]`, a protocol's
   `Shape X m → sum X ≤ 4`): applied to a new hypothesis of a `WP` walk that is their first
   premise, their conclusion a new fact for the arithmetic (`wpForward`). -/
@@ -762,7 +765,8 @@ def RunCaches.new : IO RunCaches :=
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            branchSubsts := ← IO.mkRef {},
            updHeads := ← IO.mkRef #[], updUnfold := ← IO.mkRef false, atomFacts := ← IO.mkRef {},
-           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, forward := ← IO.mkRef #[],
+           chain := ← IO.mkRef #[], chainDepth := ← IO.mkRef 0, foldDepth := ← IO.mkRef 0,
+           forward := ← IO.mkRef #[],
            runFwd := ← IO.mkRef #[], forwardEx := ← IO.mkRef #[], fwdTried := ← IO.mkRef {},
            fuelOut := ← IO.mkRef false, omegaTerms := ← IO.mkRef {} }
 
@@ -1804,6 +1808,18 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it)
     if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
+    -- an unknown ghost list that the equation fixes (a loop's parameter at its entry,
+    -- `?xs = [].reverse ++ xs`): its value in the normal form of lists (`xs`)
+    if (← whnfR ty).isAppOfArity ``List 1 then
+      for (m, v, flip) in [(x, y, true), (y, x, false)] do
+        unless m.isMVar && !(← m.mvarId!.isAssigned) && !v.hasExprMVar do continue
+        let (ctx, procs) ← arithSimpCtx
+        let (r, _) ← fsimp v ctx procs
+        if r.expr == v then continue
+        unless ← isDefEq m r.expr do continue
+        let pf ← r.getProof
+        g.assign (← if flip then mkEqSymm pf else pure pf)
+        return []
     if ← withReducible (isDefEq x y) then g.assign (← mkEqRefl x); return []
     -- an equation of values that are not numbers (pointers `p.elem 4 i`, structures): one
     -- function, its arguments equal up to arithmetic
@@ -3960,6 +3976,30 @@ partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
   -- (`r.expr` is `e` unfolded: by `unfoldAtom`'s proof, else definitionally)
   return (b, ← impToOrig pb e r)
 
+/-- The nesting bound of the planner's constructor folds (`closeEntail`): a repetition folds one
+node into a list, a loop's entry an empty list next to it. -/
+def maxCtorFolds : Nat := 2
+
+/-- An unknown `?m` of a recursive type (a list; not `Nat`, which is arithmetic) that an atom of
+`Q` is stuck on (its definition is by cases on it: `lseg X hd tl ?m` does not unfold), with its
+type's constructors and parameters: the planner's constructor fold (`closeEntail`). -/
+def stuckUnknown? (Q : Expr) : MetaM (Option (MVarId × List Name × Array Expr)) := do
+  let env ← getEnv
+  for a in atoms (← instantiateMVars Q) do
+    let .const c _ := a.getAppFn | continue
+    if isFsymAtom env c || a.isAppOf liftN || a.isAppOf exN then continue
+    for d in a.getAppArgs do
+      let .mvar m := d | continue
+      if ← m.isAssigned then continue
+      let ty ← whnfD (← m.getType)
+      let .const tn _ := ty.getAppFn | continue
+      if tn == ``Nat then continue
+      let some ii ← caseInduct? tn | continue
+      unless ii.isRec do continue
+      if (← unfoldAtom a).expr != a then continue
+      return some (m, ii.ctors, ty.getAppArgs.extract 0 ii.numParams)
+  return none
+
 /-! ## Updates into a postcondition: the planner -/
 
 /-- Prove `x = y`: pointers by block and offset, numbers by arithmetic, applications of one
@@ -4028,6 +4068,10 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
   if ty.isConstOf ``Nat || ty.isConstOf ``Int then return ← arith g (quick := true)
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
+  -- a ghost list (a list family's items, `(ys.reverse ++ []).reverse` against `ys`): equal in the
+  -- normal form of lists (`List.append_nil`, `List.reverse_cons`, … are `fsym_arith`)
+  if ty.isAppOfArity ``List 1 then
+    if ← closeWith g (← `(tactic| simp only [fsym_arith])) then return true
   let (fx, fy) := (x.getAppFn, y.getAppFn)
   -- (a constant's applications, or a local function's: a caller's `tok : Ptr → … → FAssn`)
   unless (fx.isConst || fx.isFVar) && fx == fy && x.getAppNumArgs == y.getAppNumArgs do
@@ -5206,6 +5250,35 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
       if rQi2.expr == Qi1 then break
       pQ ← mkAppM ``imp_trans #[← impFromResult Qi2 rQi2 pQ2, pQ]
       Qi := rQi2.expr
+    -- a constructor fold (ledger #list-walk-step): an atom of `Q` stuck on an unknown of a
+    -- recursive type that the atoms did not assign (`lseg X (some p) none ?ys`, the list a
+    -- repetition folds a node into, or the empty prefix at a loop's entry) is tried at each
+    -- constructor (`?ys := []`, `?ys := ?z :: ?zs`), each with the whole plan; the first that
+    -- closes the update is kept. At most `maxCtorFolds` nested.
+    let depth := (← caches).foldDepth
+    if (← depth.get) < maxCtorFolds then
+      if let some (m, ctors, params) ← stuckUnknown? Qi then
+        for ctor in ctors do
+          let s1 ← saveState
+          let restore1 ← (← caches).saveArith
+          let closed ← try
+              let c ← mkAppOptM ctor (params.map some)
+              let (fs, _, _) ← forallMetaTelescope (← inferType c)
+              unless ← isDefEq (.mvar m) (mkAppN c fs) do throwError "fold"
+              let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, ← instantiateMVars Qi])
+              g.assign (← mkAppM ``EUpd.trans #[g2, ← mkAppM ``EUpd.of_imp #[pQ]])
+              trace[fsym] "constructor fold: {mkMVar m} := {← instantiateMVars (mkMVar m)}"
+              -- (the folded atom unfolds even where a caller's update produces its head)
+              let unfold := (← caches).updUnfold
+              let unfold₀ ← unfold.get
+              depth.modify (· + 1)
+              unfold.set true
+              let left ← try closeEntail g2.mvarId! sizes
+                finally depth.modify (· - 1); unfold.set unfold₀
+              pure left.isEmpty
+            catch _ => pure false
+          if closed then return []
+          s1.restore; restore1
     let qats := atoms Qi
     -- Preserve requested address knowledge before typed views hide byte metadata. Commit only
     -- an actual addition, so ordinary planning can retry without losing it at a later mismatch.
@@ -6981,14 +7054,75 @@ def refutedSide (left : List MVarId) : TacticM Bool :=
       s.restore
       restoreArith
 
+/-- **A ghost argument to split at a branch** (a list walk's cursor test, ledger
+#list-walk-step): a variable `d` of a recursive type (a list; not `Nat`, which is arithmetic) that
+is an argument of a state atom that does not unfold because its definition is by cases on `d`
+(`lseg X cur none zs` at the test `cur.isSome`), and whose cases decide the branch's condition:
+in each case the atom unfolds, its facts and existentials go into the context (`normPre`), and
+the facts then prove the condition or its negation, or are contradictory. Only a probe: the
+state is restored, and the caller splits `d` (`casesWalk`). -/
+def ghostSplit? (g : MVarId) (P : Expr) : TacticM (Option Expr) := g.withContext do
+  let env ← getEnv
+  let mut seen : Array FVarId := #[]
+  for a in atoms (← instantiateMVars P) do
+    let .const c _ := a.getAppFn | continue
+    if isFsymAtom env c then continue
+    for d in a.getAppArgs do
+      let .fvar f := d | continue
+      if seen.contains f then continue
+      seen := seen.push f
+      let .const tn _ := (← whnfD (← f.getType)).getAppFn | continue
+      if tn == ``Nat then continue
+      let some ii ← caseInduct? tn | continue
+      unless ii.isRec do continue
+      -- (an atom stuck on `d`: unfolding does not change it)
+      if (← unfoldAtom a).expr != a then continue
+      let ok ← decidesBranch f
+      trace[fsym] "ghost split of {d} in {a}: {if ok then "decides" else "does not decide"} the branch"
+      if ok then return some d
+  return none
+where
+  /-- Each case of `f` decides the condition of the goal's branch. -/
+  decidesBranch (f : FVarId) : TacticM Bool := do
+    let s ← saveState
+    let restoreArith ← (← caches).saveArith (← (← caches).recBoundary.get).isSome
+    try
+      let branches ← g.cases f
+      branches.allM fun b => do
+        let g' ← normPre b.mvarId
+        g'.withContext do
+          let refuted ← (← getLCtx).anyM fun d => do
+            return !d.isImplementationDetail && (← instantiateMVars d.type).consumeMData.isFalse
+          if refuted then return true
+          -- (the program normalized: a condition that the case's constructor decides,
+          -- `(some p).isSome = true`, takes its branch)
+          let (_, _, _, _, c₀, _) ← view g'
+          let g' ← simpProg g' #[]
+          g'.withContext do
+          let (_, _, _, _, c', _) ← view g'
+          let c' := c'.consumeMData
+          unless c'.isAppOfArity ``ite 5 do return c' != c₀.consumeMData
+          let cond := c'.getArg! 1
+          let hp ← mkFreshExprMVar cond
+          if ← arith hp.mvarId! (quick := true) then return true
+          let hn ← mkFreshExprMVar (mkNot cond)
+          arith hn.mvarId! (quick := true)
+    catch _ => return false
+    finally
+      s.restore
+      restoreArith
+
 /-- The backend's loop rule (`Full/Loop`, `Full/ThreadLoop`, `Conc`): with a measure in a total
 logic (`!L.part`), else partial correctness. `none` in a logic that is not one of the backends'
-constants (a proof over a variable `FLogic`). -/
-def loopRuleOf (L : Bk) : Option Name :=
+constants (a proof over a variable `FLogic`). `ghost`: an invariant with a ghost measure
+(`B.inv … s n`), by `loop_ghost_ex` in a total logic. -/
+def loopRuleOf (L : Bk) (ghost := false) : Option Name :=
   if L.conc then some ``CTriple.loop
-  else if L.L.isConstOf ``FLogic.total then some ``FTotalTriple.loop_measure
+  else if L.L.isConstOf ``FLogic.total then
+    some (if ghost then ``FTotalTriple.loop_ghost_ex else ``FTotalTriple.loop_measure)
   else if L.L.isConstOf ``FLogic.partial then some ``FTriple.loop
-  else if L.L.isConstOf ``TLogic.total then some ``FTTotalTriple.loop_measure
+  else if L.L.isConstOf ``TLogic.total then
+    some (if ghost then ``FTTotalTriple.loop_ghost_ex else ``FTTotalTriple.loop_measure)
   else if L.L.isConstOf ``TLogic.partial then some ``FTTriple.loop
   else none
 
@@ -7000,6 +7134,8 @@ structure RegLoop where
   inv : Name
   meas? : Option Name
   post? : Option Name
+  /-- `B.inv … s n`: the locals followed by a ghost measure `n : Nat` (no `B.meas`). -/
+  ghost : Bool
 
 /-- The command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`). -/
 def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
@@ -7009,7 +7145,12 @@ def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
   unless l.isAppOfArity ``Zig.loop 7 do return none
   let some B := (l.getArg! 5).consumeMData.getAppFn.constName? | return none
   let (some inv, meas?, post?) := loopInvOf (← getEnv) B | return none
-  return some { loop := l, body := B, inv, meas?, post? }
+  -- (the registration's test, `checkLoopInv`: a last `Nat` parameter after one of the locals)
+  let ghost ← forallTelescope (← inferType (mkConst inv)) fun ys _ => do
+    unless ys.size ≥ 2 do return false
+    isDefEq (← inferType ys.back!) (mkConst ``Nat) <&&>
+      isDefEq (← inferType ys[ys.size - 2]!) (← inferType (x.getArg! 4))
+  return some { loop := l, body := B, inv, meas?, post?, ghost }
 
 /-- **A loop with a registered invariant** (`@[fsym_inv]`, P09-E4): the command
 `(Zig.loop (B xs) again).run s₀` of `x >>= f` by the backend's loop rule (`loopRuleOf`) with the
@@ -7029,21 +7170,29 @@ A registration that does not fit the loop (no measure in a total logic, a parame
 that `B.inv` does not have) is an error. -/
 def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
     TacticM (Except MessageData (MVarId × MVarId × List MVarId × Option MVarId)) := g.withContext do
-  let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN? } := R
+  let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN?, ghost } := R
   let (body, s₀) := ((l.getArg! 5).consumeMData, x.consumeMData.getArg! 4)
   let fail {α} (why : MessageData) : TacticM α :=
     throwError "fsym: the loop invariant of `{B}` (`@[fsym_inv]`): {why}"
   let total := !L.part
+  -- (a ghost measure is the invariant's last parameter: the rule has no `μ`)
+  let measured := total && !ghost
   let s ← saveState
   let restoreArith ← (← caches).saveArith
   let rollback : TacticM Unit := do s.restore; restoreArith
   try
+    if ghost && measN?.isSome then
+      fail m!"`{invN}` has a ghost measure and `{B}.meas` is registered too"
     let xs := body.getAppArgs
     let σ ← inferType s₀
     -- `B.inv`'s parameters: the body's arguments, the locals at entry `s0` and the unknowns
+    -- (then the locals, and the ghost measure)
     let invTy ← inferType (mkConst invN)
-    let names := invTy.getForallBinderNames.toArray.pop
-    let pre := (← forallMetaTelescope invTy).1.pop
+    let k := if ghost then 2 else 1
+    let all := invTy.getForallBinderNames.toArray
+    let names := all.extract 0 (all.size - k)
+    let ms := (← forallMetaTelescope invTy).1
+    let pre := ms.extract 0 (ms.size - k)
     unless xs.size ≤ pre.size do fail m!"`{invN}` does not take the body's {xs.size} arguments"
     for h : i in [0:pre.size] do
       if i < xs.size then
@@ -7060,6 +7209,11 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
       try mkAppM' (mkConst c) args
       catch _ => fail m!"`{c}`'s parameters do not have the types of `{invN}`'s of the same names"
     let I := mkAppN (mkConst invN) pre
+    -- (a ghost measure in a partial logic: the invariant at some measure, `∃ n, B.inv … s n`)
+    let I ← if ghost && !total then
+        withLocalDeclD `s σ fun sv => do
+          mkLambdaFVars #[sv] (mkApp2 (mkConst exN) (mkConst ``Nat) (mkApp I sv))
+      else pure I
     -- (without a registered exit post: an unknown, the strongest post of the step's exits that
     -- its walk infers, P09-E2)
     let post ← match postN? with
@@ -7068,13 +7222,13 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
         let E ← mkFreshExprMVar (← mkArrow (← mkAppM ``Prod #[l.getArg! 4, σ]) (mkConst ``Zig.Full.FAssn))
         (← caches).inferPosts.modify (·.push E.mvarId!)
         pure E
-    -- the rule `lem I μ post ?step s₀`: the loop rules' last parameters are `I`, `μ` (total only),
-    -- `post`, `step` and `s`
+    -- the rule `lem I μ post ?step s₀`: the loop rules' last parameters are `I`, `μ` (total only,
+    -- not with a ghost measure: `loop_ghost_ex`), `post`, `step` and `s`
     let lemC ← mkConstWithFreshMVarLevels lem
     let (lms, _, concl) ← forallMetaTelescope (← inferType lemC)
     let n := lms.size
-    let mut data : Array (Expr × Nat) := #[(I, n - 4 - total.toNat), (post, n - 3), (s₀, n - 1)]
-    if total then
+    let mut data : Array (Expr × Nat) := #[(I, n - 4 - measured.toNat), (post, n - 3), (s₀, n - 1)]
+    if measured then
       let some measN := measN? | fail m!"no measure `{B}.meas` for total correctness"
       data := data.push (← atParams measN, n - 4)
     for (e, i) in data do
@@ -7375,6 +7529,10 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
         let .const tn _ := (← whnfD (← d.getType)).getAppFn | continue
         let some ii ← caseInduct? tn | continue
         unless ii.isRec do found := some (.fvar d); break
+    -- a ghost argument of a recursive type (a list) of a state atom whose cases decide the
+    -- condition (a list walk's cursor test: `ghostSplit?`)
+    if found.isNone then
+      found ← ghostSplit? g P
     trace[fsym] "branch on {cond'}: split variable {found}"
     if let some d := found then
       return ← casesWalk g d user extra fuel
@@ -7534,13 +7692,14 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- plan at the entry: after the views and the rebase of what its plan wanted, reported.
   -- (a proof over a variable logic has no loop rule: the loop stays a residual)
   let loop? ← if partialRule then pure none else registeredLoop? x
-  if let (some R, some lem) := (loop?, loopRuleOf L) then
+  if let (some R, some lem) := (loop?, loopRuleOf L (loop?.any (·.ghost))) then
     if !wanted.isEmpty then
       if let some r ← viewed wanted then return r
     match ← reportLimit m!"the registered invariant of the loop{indentExpr x}"
         (loopInvRule? g L lem R x f) with
     | .ok (k, step, left, exit?) =>
-      let (_, step) ← step.intro `s
+      -- (the step: `∀ s`, `∀ s n` with a ghost measure in a total logic)
+      let (_, step) ← step.introN (if R.ghost && !L.part then 2 else 1) [`s, `n]
       -- An unknown exit post: the join of the step's exits, before the continuation's walk,
       -- only if the step's walk closed every path (each exit it reaches is noted). A step that
       -- stopped, or a join that does not fit, leaves it unknown and stops the continuation. A
