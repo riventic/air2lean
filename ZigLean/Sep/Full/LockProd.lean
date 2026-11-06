@@ -175,6 +175,36 @@ theorem off_disj (hh : L.Off h.erase) : FHeap.Disjoint (L.wordR m).heap h := fun
 theorem off_of_wordDisj (hb : L.BlkOk m) (hd : FHeap.Disjoint h (L.wordR m).heap) : L.Off h.erase :=
   off_erase.mpr fun l hl => (hd l).resolve_right (wordR_some hb hl)
 
+/-- **A part of the rest beside the word owns no byte of the word**: the rest holds the word's
+bytes as cells, so no share of them (`FOwned.rest_noShare`). -/
+theorem off_owned_of_rest {own : ThreadId → Res} {rO rc : Res}
+    (ho : FOwned own (rsum (L.wordR m) rO) m) (hb : L.BlkOk m) (hO : L.Off rO.heap.erase)
+    (hsub : ∀ l, rc.owned l ≠ none → rO.owned l ≠ none) : L.Off rc.owned := fun x h1 h2 =>
+  Classical.byContradiction fun hn => by
+    rcases Res.owned_ne.mp (hsub _ hn) with hh | hp
+    · exact hh (off_erase.mp hO _ ⟨rfl, h1, h2⟩)
+    · refine ho.rest_noShare (l := (L.b, x)) ?_ ?_
+      · simp only [rsum, FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+        exact fun h => absurd h (wordR_some hb ⟨rfl, h1, h2⟩)
+      · simp only [rsum, Ghost.add_share]
+        exact SCell.pos_add_iff.mpr (.inr hp)
+
+/-- **A lock step keeps what any thread owns** without the word's bytes: the stepping thread's
+clock grows (`OwnsC.step`), the others stay, and no new access touches the bytes. -/
+theorem Owns.lstep {t u : ThreadId} {m' : Mem} {h : Heap} (hs : L.Step t m m') (hoff : L.Off h)
+    (hbl : L.b < m.blocks.size) (ho : m.Owns u h) : m'.Owns u h := by
+  by_cases e : u = t
+  · subst e; exact OwnsC.step hs hoff hbl ho
+  · unfold Mem.Owns; rw [hs.others u e]
+    intro en he htc
+    by_cases hm : en ∈ m.footprint
+    · exact ho en hm (htc.imp id fun h => by rw [← hs.bsize]; exact h)
+    · rcases htc with htc | hbe
+      · exact absurd htc (hs.fpOff hoff he hm)
+      · rcases hs.fp en he with h | ⟨heb, -⟩
+        · exact absurd h hm
+        · rw [heb, hs.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
+
 end LockWord
 
 namespace FLock
@@ -364,6 +394,73 @@ theorem swap (hp : A.Pair B) {rLB rHB rX : Res}
   · have := LockWord.off_erase.mp hxA l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at this
     exact this.2
+
+/-- `A`'s `set` is invisible to `B`: the same places, parts and resources. -/
+theorem B_upd (hp : A.Pair B) (G : ThreadId → γ) (t : ThreadId) (p : LPh) (h : Res)
+    (u : ThreadId) :
+    B.ph (upd G t (A.set (G t) p h) u) = B.ph (G u) ∧
+      B.part (upd G t (A.set (G t) p h) u) = B.part (G u) ∧
+      B.held (upd G t (A.set (G t) p h) u) = B.held (G u) := by
+  by_cases e : u = t
+  · subst e; rw [upd_self]
+    exact ⟨hp.ph_ab _ _ _, by rw [← hp.part, ← hp.part, A.part_set], hp.held_ab _ _ _⟩
+  · rw [upd_ne _ _ e]; exact ⟨rfl, rfl, rfl⟩
+
+/-- **A step of `A`'s code keeps what the product keeps of `B`** (`LockWord.WInv.otherStep`,
+`LockWord.Owns.otherStep`), at the same free resource, holders' resources and rest; `B`'s word
+cells stay. A step that queues `t` (`A`'s futex wait) needs `t` away from `B`, or holding `B` at
+`holdsAway` with `A`'s futex key in `B`'s nest. -/
+theorem Keeps.otherStep (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {m' : Mem} {p : LPh}
+    {h : Res} (hi : A.Inv G (rsum (side B m rL rH) rX) m) (hk : B.Keeps G m rL rH rX)
+    (hs : A.Step t m m')
+    (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
+      B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m))) :
+    side B m' rL rH = side B m rL rH ∧ B.Keeps (upd G t (A.set (G t) p h)) m' rL rH rX := by
+  have hap : B.ApartL A.toLockWord := hp.apart.symm
+  have hU := hp.B_upd G t p h
+  have hpl : B.pl (upd G t (A.set (G t) p h)) = B.pl G := funext fun u => (hU u).1
+  have hheld : B.heldOf (upd G t (A.set (G t) p h)) m' = B.heldOf G m := funext fun u => by
+    unfold heldOf; rw [LockWord.joinedB_congr hs.threads, (hU u).2.2]
+  have hR : ∀ r, B.R (upd G t (A.set (G t) p h)) r ↔ B.R G r := hp.R_ab G t p h
+  have hfree : B.Free (upd G t (A.set (G t) p h)) ↔ B.Free G := by
+    unfold FLock.Free; rw [hpl]
+  obtain ⟨rLA, ⟨ho, hLoffA, -, -, -⟩, -⟩ := hi.facts
+  have hbA : A.BlkOk m := hi.w.blk
+  have hbl : A.b < m.blocks.size := by
+    obtain ⟨blk, hb, -⟩ := hbA; exact (Array.getElem?_eq_some_iff.mp hb).1
+  have hl : m.LiveLayout := ho.conc.2.1
+  -- the rest beside `A`'s word, without `A`'s word bytes
+  have hO : A.Off (rsum rLA (rsum (side B m rL rH) rX)).heap.erase :=
+    LockWord.off_erase.mpr fun l hl' => by
+      show (rLA.heap ∪ (rsum (side B m rL rH) rX).heap) l = none
+      rw [FHeap.union_apply, LockWord.off_erase.mp hLoffA l hl',
+        LockWord.off_erase.mp hi.xoff l hl']; rfl
+  have hsub : ∀ {rc : Res}, (∀ l, rc.owned l ≠ none →
+      (rsum (side B m rL rH) rX).owned l ≠ none) → A.Off rc.owned := fun hc =>
+    LockWord.off_owned_of_rest ho hbA hO fun l hl' =>
+      (Res.owned_sep rfl rfl).mpr (.inr (hc l hl'))
+  have hLown : A.Off rL.owned := hsub fun l hl' => (Res.owned_sep rfl rfl).mpr (.inl
+    ((Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl hl')))))
+  have hHown : ∀ u < m.threads.size, A.Off (B.heldOf G m u).owned := fun u hu => by
+    obtain ⟨_, rfl, hj⟩ := sepN_owned hk.held hu
+    exact hsub fun l hl' => (Res.owned_sep rfl rfl).mpr (.inl
+      ((Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr (hj l hl'))))))
+  have hf := hk.facts
+  refine ⟨by unfold FLock.side; rw [LockWord.wordR_otherStep hs hap], ⟨⟨?_, hf.loff, fun hF => ?_,
+    fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
+    ?_, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩⟩
+  · rw [hpl]
+    exact hf.w.otherStep hs hap (hap.key_ne hl hf.w.blk hbA) ht
+  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
+    refine ⟨(hR rL).mpr h1, ?_⟩
+    rw [hpl]
+    exact h2.otherStep hs hap hLown hbl fun _ h => h
+  · rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u
+  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact hf.idle u hu
+  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact (hR _).mpr (hf.res u hu)
+  · rw [hheld, hs.threads]; exact hk.held
+  · rw [hs.threads] at hu; rw [hheld]
+    exact LockWord.Owns.lstep hs (hHown u hu) hbl (hk.owns u hu)
 
 /-- **The two-lock product's invariant is the same in either lock's view**: a protocol whose
 invariant is `A`'s with `Pair.U B U` is also `B`'s with `Pair.U A U` (`FLock.Fits.inv` for both
