@@ -1630,6 +1630,16 @@ theorem none (hm : SMatch m h s) {l : Loc} (hl : h l = none) (hs : SCells s l = 
     m.heap l = none :=
   hm.whole.none (by simp [hl, hs])
 
+/-- **A share reads its cell from `m`**: a positive part `a` of the shares at `l` reads a live
+byte of `m` (up to `Cell.norm`), as an exclusive cell does (`cell`). -/
+theorem share_cell (hm : SMatch m h s) {l : Loc} {a b : SCell} (hs : s l = a.add b) {fc : FCell}
+    (hq : 0 < (a fc).val) : ∃ c, m.heap l = some c ∧ c.norm = fc.cell.norm := by
+  have hc : SCells s l = some fc := by
+    show (s l).cell = some fc
+    rw [hs]; exact SCell.cell_add (hs ▸ hm.valid l) hq
+  have hn : h l = Option.none := (hm.apart l).resolve_right (by rw [hc]; exact Option.some_ne_none _)
+  exact hm.whole.cell (by simp [FHeap.union_apply, hn, hc])
+
 /-- A shared cell is a live byte of `m`. -/
 theorem share_live (hm : SMatch m h s) {l : Loc} (hl : SCells s l ≠ Option.none) :
     m.heap l ≠ Option.none := fun e => by
@@ -1653,6 +1663,15 @@ theorem of_whole {m' : Mem} {h' : FHeap} (hm : SMatch m h s) (hf : FMatch m' (h'
     (hd : ∀ l, h' l ≠ Option.none → h l ≠ Option.none) : SMatch m' h' s :=
   ⟨hf, fun l => (hm.apart l).imp_left fun e => Classical.byContradiction fun hn => hd l hn e,
     hm.total⟩
+
+/-- **Another split of the same cells**: exclusive cells and shares that give the same cells at
+every location (`he`), apart and totalled, match the same memory. A whole share and the exclusive
+cell are two such splits (`Share.lean`: `EUpd.share_whole`, `EUpd.unshare_whole`). -/
+theorem of_full {h' : FHeap} {s' : Loc → SCell} (hm : SMatch m h s)
+    (he : ∀ l, (h' ∪ SCells s') l = (h ∪ SCells s) l) (hd : FHeap.Disjoint h' (SCells s'))
+    (ht : ∀ l, (s' l).Total) : SMatch m h' s' := by
+  have e : h' ∪ SCells s' = h ∪ SCells s := funext he
+  exact ⟨e ▸ hm.whole, hd, ht⟩
 
 end SMatch
 

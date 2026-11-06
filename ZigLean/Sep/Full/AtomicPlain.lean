@@ -95,11 +95,7 @@ theorem load_abytesAt {T : Type} [Enc T] {v : T} (hn : 0 < Enc.size T)
     (hv : Enc.decode (bs.extract k (k + Enc.size T)) = pure v) :
     FTotalTriple (abytesAt q A S K bs tg) (Zig.load T al (q.add k))
       (fun x => ⟪x = v⟫ ⋆ abytesAt q A S K bs tg) :=
-  of_run fun m r rF hh hp hs => by
-    obtain ⟨b, blk, hacc, -, -, hx⟩ := hh.bytesAt_access (up_of_abytesAt hp) hn hk ha
-    exact ⟨v, _, r, load_read hacc (by rw [hx]; exact hv)
-      (noRace_of_singleThread hs.1.single _ _ _ _), hh.readAt _ _ _ _ _, sep_lift.mpr ⟨rfl, hp⟩,
-      hs.readAt _ _ _ _ _⟩
+  load_of_read (fun _ _ _ hh hp => hh.bytesRead (up_of_abytesAt hp)) hn hk ha hv
 
 /-- **Store of the bytes `bs'`** at byte `k` of owned tagged bytes, not of a `const` global: the
 bytes become `writeBytes bs k bs'`, the tag stays. -/
