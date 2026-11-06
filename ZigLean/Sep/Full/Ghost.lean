@@ -900,6 +900,10 @@ and no thread has a stack budget (`docs/sep-full-state.md` §Plain mode). Duplic
 "the current thread has no budget", step 5) without changing them. -/
 def plain : FAssn := noStack ⋆ unmetered
 
+/-- The plain mode holds no read share (`FAssn.Unshared`). -/
+theorem FAssn.Unshared.plain : plain.Unshared :=
+  .sep (.of_share fun _ h => by rw [h.2.2]; rfl) (.of_share fun _ h => by rw [h.2.2]; rfl)
+
 /-- A resource with a `noStack` fragment is held only in a memory without stack budgets. -/
 theorem Holds.noStack {m : Mem} {r rF : Res} (hh : Holds m r rF) (h : 0 < r.gh.ac.frag .noStack) :
     m.NoStack :=

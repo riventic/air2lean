@@ -161,7 +161,7 @@ theorem arena_rule : ∃ m' r',
     Holds m' r'
       ⟨FHeap.ofHeap (shapes mArena) (hF mArena), Know.none, Ghost.exts (heapExts mArena (hF mArena))⟩ ∧
     apts p 0 r' := by
-  have h := FTTriple.atomicLoadW p 0 .relaxed mArena _ _ holds word fconc owns
+  have h := FTTriple.atomicLoadW p 0 .relaxed mArena _ _ holds word fconc (.of_owns owns)
   have hreads := arena_reads
   generalize ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 p).run mArena).run = res at h hreads ⊢
   rcases res with _ | (e | ⟨v, m'⟩)

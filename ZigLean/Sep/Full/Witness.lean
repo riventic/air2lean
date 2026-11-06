@@ -67,12 +67,12 @@ def FLive (P : FAssn) (c : MemM α) : Prop :=
 /-- An admissible input of a thread triple with precondition `P`. -/
 def FTTAdmit (P : FAssn) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
-    (_ : m.Owns m.current r.owned), True
+    (_ : m.OwnsRes m.current r), True
 
 /-- An admissible input of a thread triple with precondition `P` on which `c` returns. -/
 def FTTLive (P : FAssn) (c : MemM α) : Prop :=
   ∃ (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
-    (_ : m.Owns m.current r.owned), ∃ v, (c.run m).run = some (.ok v)
+    (_ : m.OwnsRes m.current r), ∃ v, (c.run m).run = some (.ok v)
 
 /-- An admissible input of a concurrent triple with precondition `P`, at some depth: a thread
 triple's (`FTTAdmit`). -/
@@ -82,7 +82,7 @@ def CAdmit (P : FAssn) : Prop := ∃ (_ : Nat), FTTAdmit P
 (`soloTree`: each stop answered in the memory it stopped with), returns. -/
 def CLive {Tgt : Type} (P : FAssn) (x : ConcM Tgt α) : Prop :=
   ∃ (n : Nat) (m : Mem) (r rF : Res) (_ : Holds m r rF) (_ : P r) (_ : m.FConc)
-    (_ : m.Owns m.current r.owned), ∃ v, soloTree (x n m) = some (.ok v)
+    (_ : m.OwnsRes m.current r), ∃ v, soloTree (x n m) = some (.ok v)
 
 /-- A memory without stack budgets holds its native full heap with an empty frame. -/
 theorem holds_mem (m : Mem) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
@@ -191,26 +191,26 @@ theorem FTTAdmit.of_mem {P : FAssn} {m : Mem} (hp : P ⟨m.fheap, Know.none, Gho
     (hs : m.FSeq) (hf : m.footprint = #[]) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     FTTAdmit P :=
   have ⟨rF, hh⟩ := holds_mem m hns
-  ⟨m, _, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
+  ⟨m, _, rF, hh, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), trivial⟩
 
 theorem FTTLive.of_mem {P : FAssn} {c : MemM α} {m : Mem} (hp : P ⟨m.fheap, Know.none, Ghost.unit⟩)
     (hs : m.FSeq) (hf : m.footprint = #[]) (hr : ∃ v, (c.run m).run = some (.ok v))
     (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) : FTTLive P c :=
   have ⟨rF, hh⟩ := holds_mem m hns
-  ⟨m, _, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, hr⟩
+  ⟨m, _, rF, hh, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), hr⟩
 
 theorem FTTAdmit.of_exts {P : FAssn} {m : Mem} {k : Know} {E : BlockId → Option (Nat × BlockKind)}
     (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E)) (hp : P ⟨m.fheap, k, Ghost.exts E⟩)
     (hs : m.FSeq) (hf : m.footprint = #[]) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     FTTAdmit P :=
-  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
+  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), trivial⟩
 
 theorem FTTLive.of_exts {P : FAssn} {c : MemM α} {m : Mem} {k : Know}
     {E : BlockId → Option (Nat × BlockKind)} (hk : Know.Sub k m.kn) (ht : ExtTrue m (Ghost.exts E))
     (hp : P ⟨m.fheap, k, Ghost.exts E⟩) (hs : m.FSeq) (hf : m.footprint = #[])
     (hr : ∃ v, (c.run m).run = some (.ok v)) (hns : m.NoStack := by exact Mem.noStack_of_stacks rfl) :
     FTTLive P c :=
-  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs.fconc, owns_of_footprint hf _ _, hr⟩
+  ⟨m, _, _, holds_exts (FMatch.fheap m) hk ht hns, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), hr⟩
 
 /-- A total thread triple returns on every admissible input. -/
 theorem FTTLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTTotalTriple P c Q)

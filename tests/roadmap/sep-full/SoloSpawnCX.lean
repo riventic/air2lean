@@ -36,7 +36,7 @@ theorem no_triple {Tgt : Type} (op : SyncOp Tgt) (hop : SyncOp.Solo op = false) 
     {Q : op.Resp → FAssn} (hP : FAdmit P) : ¬ CTriple P (ConcM.sync op) Q := by
   intro h
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ := hP
-  have := h 1 m r rF hh hp hs.fconc (hs.1.single.owns _)
+  have := h 1 m r rF hh hp hs.fconc (.of_owns (hs.1.single.owns _))
   change CTriple.Run Q m rF (.sync op m fun r m' => .leaf (some (.ok (r, m')))) at this
   exact absurd (CTriple.Run.sync_iff.mp this).1 (by rw [hop]; decide)
 

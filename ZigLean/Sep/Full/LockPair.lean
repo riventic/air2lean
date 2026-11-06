@@ -179,10 +179,11 @@ theorem WInv.otherStep {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem} (hi : 
 exists): `K`'s new accesses are at `K`'s word, and `L`'s newest message stays. -/
 theorem Owns.otherStep {P P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {h : Heap}
     (hs : K.Step t m m') (hap : L.ApartL K) (hoff : K.Off h) (hbl : K.b < m.blocks.size)
-    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.Owns P m h) : L.Owns P' m' h := by
-  intro e he htc
+    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) {w : Bool} (ho : L.Owns P m h w) :
+    L.Owns P' m' h w := by
+  intro e he hw htc
   by_cases hm : e ∈ m.footprint
-  · rcases ho e hm (htc.imp id fun h => by rw [← hs.bsize]; exact h) with h | h
+  · rcases ho e hm hw (htc.imp id fun h => by rw [← hs.bsize]; exact h) with h | h
     · exact .inl (hs.liveLe hg h)
     · exact .inr (h.otherStep hs hap)
   · rcases htc with htc | hbe
@@ -275,11 +276,12 @@ private theorem Inv.otherStay {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m
     hi.idle, hi.res⟩
   · obtain ⟨h1, h2⟩ := hF hF'
     -- `rL` owns no byte of `K`'s word: the rest has them as cells (`rest_owned_off`)
-    refine ⟨h1, h2.otherStep hs hap (fun x hx1 hx2 => rest_owned_off ho ?_ (hLK _ ⟨rfl, hx1, hx2⟩))
-      hKbl (fun _ h => h)⟩
-    intro e
-    simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
-    exact LockWord.wordR_some hKb ⟨rfl, hx1, hx2⟩ e.2.2.1
+    have hKoff : K.Off rL.owned := fun x hx1 hx2 => rest_owned_off ho (by
+      intro e
+      simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
+      exact LockWord.wordR_some hKb ⟨rfl, hx1, hx2⟩ e.2.2.1) (hLK _ ⟨rfl, hx1, hx2⟩)
+    exact ⟨h1, h2.1.otherStep hs hap hKoff.excl hKbl (fun _ h => h),
+      h2.2.otherStep hs hap hKoff.shared hKbl (fun _ h => h)⟩
   · refine LockWord.off_erase.mpr fun l hl => ?_
     have h := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at h ⊢

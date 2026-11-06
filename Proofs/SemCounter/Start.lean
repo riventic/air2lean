@@ -170,8 +170,8 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
   rw [o28, hs8] at hxB
   -- each access to a byte of `main`'s part happened before `main`
   have hown0 : ∀ e ∈ m.footprint, e.Touches (upd (fun _ => rnil) 0 (rsum (rsum rM (rsum (rsum rCn rN)
-      rW)) (rsum rB rIO)) 0).owned → AllLe m e.clock :=
-    fun e he htc => allLe_of_one h1 (ho.owns 0 ht e he (.inl htc))
+      rW)) (rsum rB rIO)) 0).excl → AllLe m e.clock :=
+    fun e he htc => allLe_of_one h1 ((ho.owns 0 ht).1 e he (.inl htc))
   have hBin : ∀ l, rB.heap l ≠ none ↔ BoxW l := fun l => by
     rw [up_bytesAt_some hB₁ rfl l, o28, hs8]; rfl
   have hIOoff : ∀ l, BoxW l → rIO.heap l = none := fun l hl =>
@@ -189,7 +189,7 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
         rw [← e1, hxB, e1, he]; exact intOfBytes_rmw 0)
       (fun e he' hh => hown0 e he' (Word.touches_of hh fun x a b => by
         rw [hb, upd_self]
-        exact Res.owned_of_heap (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
+        exact Res.excl_of_heap (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
   obtain ⟨hwsOk, hwsz, hwsv, -⟩ := hwi WS rfl (by decide) (by decide) (by decide) hS
   obtain ⟨hweOk, hwez, hwev, hwec⟩ := hwi WE rfl (by decide) (by decide) (by decide) hE
   -- the mutex holds 0
@@ -290,9 +290,9 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
         have hsz16 : (bs.extract 0 16).size = 16 := by simp [hs]
         exact heap_ne_l (b := r₂) ((up_bytesAt_some h₁ rfl (e.block, e.off)).mpr
           ⟨hr.1, by simp [cPtr, Ptr.add], by rw [hsz16]; simp [cPtr, Ptr.add]; exact hr.2.2⟩)
-      refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
+      refine (ho.owns 0 ht).1 e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
-      exact Res.owned_of_heap (heap_ne_r (heap_ne_r hx))
+      exact Res.excl_of_heap (heap_ne_r (heap_ne_r hx))
     refine ⟨⟨⟨by rw [hth]; rfl, .inl ⟨h1, hp0, fun u hu => ?_⟩⟩, hio,
         ⟨rIO, ⟨A, bs.extract 0 16, hA, by simp [hs], by rw [hIo]; exact LawfulEnc.decode_encode _,
           ?_⟩, hIOoff,
@@ -790,11 +790,12 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} {rp : Re
     · subst e; rw [upd_self, hgs] at h; cases h
     · rw [hne u e] at h ⊢; exact hU.lg.wtx u h
 
-/-- **The kid's end** (`QKid`): it is `gone` at `fin` and spawned no thread. -/
-theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res}
+/-- **The kid's end** (`QKid`): it is `gone` at `fin` and spawned no thread. Its part holds no
+read share (`hrp`), so `main`'s join gathers none (`FLock.Inv.join`). -/
+theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res} (hrp : ∀ l, rp.shared l = none)
     (hi : (proto semOf).inv (upd G 1 (gW rp 2 false 0)) m) : (proto semOf).QKid 1 () G m d := by
   have hi' := inv_end hi (.inr ⟨rfl, rfl⟩)
-  refine ⟨_, hi', ⟨rfl, rfl⟩, fun _ => ?_⟩
+  refine ⟨_, hi', ⟨rfl, rfl, hrp⟩, fun _ => ?_⟩
   obtain ⟨rX, -, hu⟩ := hi'
   exact joinedAll_of_main (spawners hu.um.shape) (by decide)
 
@@ -834,6 +835,8 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
     hfin.1 hj (by rw [hg]; rfl) rfl rfl (fun r hR => by
       show R (fun u => (upd G₁ 0 g u).2) r
       rw [hX]; exact hR)
+    fun l => .inr (hL.own_unshared (by rw [show L.ph (G₁ 1) = .gone from hfin.1]; rfl)
+      hfin.2.2 l)
   have hF : L.Free (upd G₁ 0 g) := by
     intro u hu'
     by_cases h0 : u = 0
@@ -848,15 +851,16 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
       have := hcl u (by rw [hL'.w.csize]; exact hu'); rwa [hc'] at this
   obtain ⟨rL, hR, hsep, ho⟩ := hL'.take (t := 0) hF
     (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall
+    (FLock.NoGather.of_R _ fun _ => R_unshared _)
   have hR4 : (up (pts (cPtr.add 16) 8 (1 : BitVec 64)) ⋆ up (pts nPtr 4 (BitVec.ofNat 32 4))) rL := by
     have hR' : R (fun u => (upd G₁ 0 g u).2) rL := hR
     rw [hX] at hR'
     have hh : held (fun u => (G₁ u).2.ph) = false := by
       show ((G₁ 0).2.ph.holds || (G₁ 1).2.ph.holds) = false
-      rw [hg, hfin.2]; rfl
+      rw [hg, hfin.2.1]; rfl
     have h4 : sum (fun u => (G₁ u).2.ph) = 4 := by
       show (G₁ 0).2.ph.count + (G₁ 1).2.ph.count = 4
-      rw [hg, hfin.2]; rfl
+      rw [hg, hfin.2.1]; rfl
     change (up (pts (cPtr.add 16) 8 (pv fun u => (G₁ u).2.ph)) ⋆ Pool fun u => (G₁ u).2.ph) rL at hR'
     unfold pv Pool at hR'; rw [hh, h4] at hR'; exact hR'
   refine h k G₁ m' _ rX _ hk hc' ho (sep_mono_right (fun _ h => sep_mono_left

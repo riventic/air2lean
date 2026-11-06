@@ -129,7 +129,7 @@ theorem size_load_rule (α : Type) [Packed α 64] (hv : Packed.valid (α := α) 
         w = Packed.ofBits 0 ∧ apts N 0 r'
     | _ => False := by
   have h := FTTriple.atomicLoadAsW (α := α) N 0 .relaxed hv m _ _ holds word fconc
-    (by rw [Res.owned_eq_erase]; exact owns)
+    (.of_owns (by rw [Res.owned_eq_erase]; exact owns))
   have hint := size_load_reads
   generalize hr : ((Zig.atomicLoadAt (n := 64) 0 .relaxed 8 N).run m).run = res at hint
   rcases res with _ | (e | ⟨v, m₁⟩)

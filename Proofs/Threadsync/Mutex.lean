@@ -106,7 +106,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : P.init tgt g) (u : ThreadId)
       (by rw [show gOut rp 0 = G 1 from hgu.symm, upd_same]
           exact inv_cur 1 hi (by rw [hgu]; nofun)) rfl))
     rintro _ G' m' _ ⟨-, hi'⟩
-    exact qkid hi'
+    exact qkid (FAssn.Unshared.plain rp hplain) hi'
   | producer p => exact absurd hg.1 (by simp [workOf])
   | task p => exact absurd hg.1 (by simp [workOf])
 
