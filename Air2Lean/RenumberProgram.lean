@@ -11,11 +11,20 @@ injective map (one map per function) preserves `run` and `runOn` of the program
 The lift needs the program's step-tick policies (`Program.tickPolicy`) to be the same. They are
 computed from every body by `memoryFunctions`, `concFunctions` and `callGroups`, which read each
 function only through its local memory, sync and callee facts (`SemRewrite.tickPolicy_map`).
-Those facts are proved invariant under every injective renaming here. The proof sees a renamed
-body as the original one with `renInst` applied to each instruction (`allInsts_renFunc`), whose
-operation has the original effects with every operand and target renamed (`effectsIn_renOp`),
-and every lookup by instruction ID commutes with the renaming because it is injective
-(`find?_id_ren`).
+The sync and callee facts are proved invariant under every injective renaming here
+(`syncLocally_ren`, `callees_ren`, `calleesOf_ren`). The proof sees a renamed body as the
+original one with `renInst` applied to each instruction (`allInsts_renFunc`), whose operation
+has the original effects with every operand and target renamed (`effectsIn_renOp`), and every
+lookup by instruction ID commutes with the renaming because it is injective (`find?_id_ren`).
+
+**Open: the local memory fact.** `run_renumber` still takes
+`(renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally` as a hypothesis. Of its parts, the
+place roots and the use-escaping allocs are proved invariant (`placeRoots_ren`,
+`usesEscapingAllocs_ren`, `bodyLists_ren`); `deadUndefStores`, `undefAllocs`, `byteLocalOk` and
+the per-instruction predicate of `Func.usesMemoryLocally` are not yet. Their instruction tests
+are anonymous `match`es under binders, which no lemma can name; naming them in `Memory.lean`
+(for example `Inst.usesPlaceOf`, `Inst.leavesBody`, `Val.instIn`) lets each get an invariance
+lemma like the ones here.
 -/
 
 namespace Air2Lean.Renumber
@@ -521,6 +530,41 @@ decreasing_by
   have h3 : sizeOf i.op < sizeOf i := by cases i; simp; omega
   omega
 
+theorem flattenInst_nil_ren (j : Inst) :
+    flattenInst #[] (renInst ρ j) = (flattenInst #[] j).map (renInst ρ) := by
+  simpa only [Array.map_empty] using flattenInst_ren (ρ := ρ) j #[]
+
 end Memory
+
+/-! ## The whole program -/
+
+/-- **The tick policies of a renamed program** are the original ones, given that every renaming
+keeps a function's local memory use (`Func.usesMemoryLocally`); its sync and callee facts are
+proved invariant above. -/
+theorem tickPolicy_renumber (p q : Prog) (σ : Func → InstId → InstId) (hσ : ∀ f, Inj (σ f))
+    (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models)
+    (hmem : ∀ f, (renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally) (name : String) :
+    q.tickPolicy name = p.tickPolicy name :=
+  tickPolicy_map p q _ hq hm (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) hmem
+    (fun f => syncLocally_ren (hσ f) f) (fun f refs => callees_ren (hσ f) f refs)
+    (fun names refs f => calleesOf_ren (hσ f) names refs f) name
+
+/-- **Renaming every function of a program preserves the program** (V02, Canon `renumber`):
+`q` is `p` with each function `f` renamed by an injective `σ f`. -/
+theorem run_renumber (p q : Prog) (σ : Func → InstId → InstId) (hσ : ∀ f, Inj (σ f))
+    (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models)
+    (hmem : ∀ f, (renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally) :
+    run q = run p :=
+  run_map p q _ hq (fun _ => rfl) (tickPolicy_renumber p q σ hσ hq hm hmem) fun o ho f args => by
+    rcases ho with rfl | rfl <;> exact execFunc_rename (hσ f) q (run_cellFree _) f args
+
+/-- `run_renumber` for a certified subprogram's semantics. -/
+theorem runOn_renumber (p q : Prog) (names : List String) (σ : Func → InstId → InstId)
+    (hσ : ∀ f, Inj (σ f)) (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f)
+    (hm : q.models = p.models)
+    (hmem : ∀ f, (renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally) :
+    runOn q names = runOn p names :=
+  runOn_map p q names _ hq (fun _ => rfl) (tickPolicy_renumber p q σ hσ hq hm hmem) fun o ho f args => by
+    rcases ho with rfl | rfl <;> exact execFunc_rename (hσ f) q (runOn_cellFree _ names) f args
 
 end Air2Lean.Renumber
