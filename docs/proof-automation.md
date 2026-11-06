@@ -336,6 +336,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   terms mention `r`, not the growing expression that computed it.
 * **Branches**: an `if` whose condition (or its negation) the facts prove takes one side; else
   both are walked with the condition as a fact. A `match` on a variable is split by cases. A
+  **ghost argument** of a recursive type (a list, not `Nat`) of a state atom that does not unfold
+  (its definition is by cases on it: `lseg X cur none zs` at a list walk's test `cur.isSome`) is
+  split when each of its cases decides the condition (`ghostSplit?`, a probe: the case's atom
+  unfolds and its facts go into the context; ledger #list-walk-step). A
   `throw` must be unreachable (the facts are contradictory).
 * **A rule's precondition that is not literally in the state** is planned: the planner closes
   `EUpd P (P₀ ⋆ ?R)` (`?R` is the frame: what is left), so a rule may ask for the full extent of a
@@ -362,7 +366,14 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   against the state's value evaluated to its head constructor within a budget (two stores'
   `([a, b].set 0 x).set (1#64).toNat y`: `?w₀ := x`, `?w₁ := y`; not a number, which is the
   solver's), and the match is proved (`matchArgs`, `proveEq`; regression
-  `tests/roadmap/sep-auto/SepAuto/AtomArgs.lean`). Shares of one block and tag are joined, split and weakened (an
+  `tests/roadmap/sep-auto/SepAuto/AtomArgs.lean`). An atom of `Q` stuck on an unknown of a
+  recursive type that the state's atoms do not assign (`lseg X (some p) none ?ys`: the list a
+  repetition folds a node into, or the empty prefix at a loop's entry) is tried at each
+  constructor (`?ys := []`, `?ys := ?z :: ?ys'`), each with the whole plan, the first that closes
+  the update kept, at most `maxCtorFolds` nested (the **constructor fold**). Ghost lists are equal
+  in the normal form of lists (`List.append_nil`, `List.reverse_cons`, `List.sum_append`, … are
+  `fsym_arith`), and an unknown list that an equation fixes takes the normal form of its value
+  (regression `tests/roadmap/sep-auto/SepAuto/ListWalk.lean`). Shares of one block and tag are joined, split and weakened (an
   allocator's own share and its grants' tagged shares of the same block stay apart; regression
   `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
@@ -813,6 +824,13 @@ body `B`, named by their part.
   that the definition has no universe parameters, explicit parameters with names of their own,
   the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
   for the measure). A name is one definition, so there is one of each part per body.
+* **A ghost measure**: an invariant whose locals are followed by `n : Nat` (`B.inv … s n`, with
+  no `B.meas`) is measured by `n`, which the invariant relates to its ghost state (a list walk's
+  nodes left, `zs.length = n`, which the locals do not determine). The rule is `loop_ghost_ex`
+  (`FTotalTriple`, `FTTotalTriple`: the step `∀ s n, T (B.inv … s n) ((B xs).run s)
+  (floopNext again (B.inv …) B.post n)`), and in a partial logic the loop rule with
+  `∃ n, B.inv … s n` (regression `tests/roadmap/sep-auto/SepAuto/ListWalk.lean`, client
+  `Proofs/Lists/Linked.lean`).
 * `fsym` applies the backend's loop rule with them (`FTotalTriple.loop_measure`, `FTriple.loop`
   in the partial logic, `FTTotalTriple.loop_measure` and `FTTriple.loop` in a thread,
   `CTriple.loop` in the concurrent backend) as a rule (`tryRule`, `loopInvRule?`): its
