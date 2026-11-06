@@ -3,7 +3,7 @@ import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Sep.Full.Local
 import ZigLean.Sep.Full.AutoWP
 import ZigLean.Sep.Full.LockSteps
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 
 /-!
 # A snapshot cache against the mutex contract (C14 client)

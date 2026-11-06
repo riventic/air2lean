@@ -44,10 +44,10 @@ proof framework").
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
-  status `legacy-to-retire` (`unroll_sched`, …), found as a word match in
+  status `legacy-to-retire` (`within`, …), found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
-  gates building new proofs on it, so a new file cannot import `ZigLean.Conc.Unroll` and call
-  `unroll_sched` without a reviewed addition. A new file or a rising count fails, also against the
+  gates building new proofs on it, so a new file cannot import `ZigLean.Sep.Full.Extent` and call
+  `within` without a reviewed addition. A new file or a rising count fails, also against the
   base (unless the entry records `"approved"`); a falling count is stale (`--write` lowers it).
   A local name equal to a retiring tactic (`let within := …`) also counts, a conservative
   over-approximation.
@@ -89,7 +89,7 @@ postcondition, which neither an implication nor the model's own result alone sta
 | `unroll_solo` | `Full/Unroll` (module deleted, L16) | the partial fixpoints' defining equations (`unfold`), then `decide +kernel` |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
 | `vc_gen(?)`, `#vc_extract(_all)`, `@[vc_contract]` | `VC/Extract`, `VC/ContractAttr` (deleted, L15) | `fsym`: the VCs are its residual goals, `fsym.report` their origins; a `Result` contract through `FTotalTriple.result_spec` ([vcs.md](vcs.md)) |
-| `unroll_sched` | `Conc/Unroll` | `CTriple` rules for the scheduler (Plan A4) |
+| `unroll_sched` | `Conc/Unroll` (module deleted, L17) | the `zig_run` simp set unfolds the run's path, then `decide +kernel` ([proof-tools.md](proof-tools.md)) |
 | `blkat_alloc` | `Conc/Lemmas` (deleted, L14) | term proofs over `BlkAt.alloc` and `BlkAt.afterAlloc` |
 | `tomega` | `Conc/Spec/Count` (deleted, L18) | `Nat` library lemmas (`Nat.ne_of_gt`, `Nat.lt_of_lt_of_le`) |
 | `zig_range` | `Range` | `fsym_arith` and `@[fsym_provider]` facts |
