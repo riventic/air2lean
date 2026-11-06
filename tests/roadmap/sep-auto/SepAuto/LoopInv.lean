@@ -215,7 +215,8 @@ example (p : Ptr) (n : BitVec 32) (v : BitVec 64) : True := by
 end
 
 /-- The loop concurrently: a body of `CM` over the locals `Nat` that counts down, its invariant
-for every target (`CTriple.loop`) and no registered exit post (the invariant at an exit). -/
+for every target (`CTriple.loop`) and no registered exit post (the strongest post of the step's
+exits, inferred: P09-E2). -/
 def cdown {Tgt : Type} : CM Tgt Nat Bool := do
   callMC Zig.tick
   let n ← get
