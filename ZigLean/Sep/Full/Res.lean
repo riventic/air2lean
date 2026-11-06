@@ -1644,10 +1644,6 @@ theorem of_fmatch (hm : FMatch m h) (hs : ∀ l, (s l).Empty) : SMatch m h s := 
   refine ⟨by rw [e, FHeap.union_empty]; exact hm, by rw [e]; exact FHeap.disjoint_empty h,
     fun l => .inl (hs l).eq⟩
 
-theorem fmatch (hm : SMatch m h s) (hs : ∀ l, (s l).Empty) : FMatch m h := by
-  have e : SCells s = FHeap.empty := funext fun l => SCell.cell_eq_none (hs l)
-  have := hm.whole; rwa [e, FHeap.union_empty] at this
-
 /-- The same shares, written another way (a ghost change that leaves them: `Ghost.share_add₂`). -/
 theorem reShare {s' : Loc → SCell} (hm : SMatch m h s) (e : s' = s) : SMatch m h s' := e ▸ hm
 
