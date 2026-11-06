@@ -470,8 +470,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     (hok : ok (G t)) (_ : (L Lo).ph (G t) ≠ .gone) (hna : (L Lo).ph (G t) ≠ .away)
     (_ : (L Lo).ph (G t) ≠ .holdsAway) (_ : (L Lo).Inv G rX m)
     (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
-    (hrel : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
-    U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
+    (hrel : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!))
+    (_ : (L Lo).Transfer G rX m m' t p h) : U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   have hX : ∀ u, (upd G t ((L Lo).set (G t) p h) u).2 = (G u).2 := fun u => congrFun (FLock.snd_set G t p h) u
   obtain ⟨hwS, hhS⟩ := hu.ws.lockStep hs apS
   obtain ⟨hwE, hhE⟩ := hu.we.lockStep hs apE
