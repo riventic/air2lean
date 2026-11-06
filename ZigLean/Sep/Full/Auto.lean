@@ -483,6 +483,15 @@ def wpArgs? (e : Expr) : Option (Array Expr) :=
   let e := e.consumeMData
   if e.isAppOfArity wpN 10 then some e.getAppArgs else none
 
+/-- The postcondition argument of a goal's judgment (`view`'s and `wpArgs?`'s), without
+restating the goal. -/
+def postArg? (t : Expr) : Option Expr :=
+  let t := t.consumeMData
+  if [``FLogic.T, ``CTriple, ``TLogic.T].any (t.isAppOfArity · 5) then some (t.getArg! 4)
+  else if [``FTotalTriple, ``FTriple, ``FTTotalTriple, ``FTTriple].any (t.isAppOfArity · 4) then
+    some (t.getArg! 3)
+  else (wpArgs? t).map (·[6]!)
+
 /-- The key of a `WP` rule or command `x`: the head of the command, through `StateT.run` (a
 step of a concurrent body `(c : CM σ α).run s`). -/
 def wpKey (x : Expr) : Name :=
@@ -616,6 +625,19 @@ structure RecBoundary where
   invocation : Expr
   entered : Bool := false
 
+/-- A return into an unknown exit post `?E as` (a registered loop's exit `(label, s)`; P09-E2):
+the update `proof : EUpd P (?E as)` that the return left, and the return's strongest post `sp`
+(over `?E`'s context, `sp as` its state) with `pf : EUpd P (sp as)`. `finishExits` joins the
+notes of `?E`. -/
+structure ExitNote where
+  post : MVarId
+  proof : MVarId
+  sp : Expr
+  pf : Expr
+  P : Expr
+  args : Array Expr
+  deriving Inhabited
+
 /-- The caches of one run of `fsym` (theorems are elaborated in parallel: no global state).
 * `hyp`: the `fsym_arith` normal form of each hypothesis, by `FVarId` (a hypothesis' type only
   changes up to definitional equality): `none` if unchanged, else the new proposition and its
@@ -660,6 +682,21 @@ structure RunCaches where
   /-- The failed demands of the current step (unknowns abstracted): an original failed atom,
   or requested known atoms separated from that intact target on the right (`viewDemand`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
+  /-- The atoms the innermost plan of a rule's precondition missed, each occurrence (`wanted`
+  keeps each once per step; `none` outside a plan, `withPlanNotes`), and the rules of the
+  current step whose precondition had no plan, for a report (P09-E3; collected only while a
+  report is). -/
+  planNotes : IO.Ref (Option (Array AbstractMVarsResult))
+  plans : IO.Ref (Array Report.Plan)
+  /-- The unknown posts that the walk infers at returns into them applied to computed arguments
+  (P09-E2, `noteExit`): the exit posts that the engine created (a registered loop without
+  `B.post`, `loopInvRule?`) and the goal's unknown postcondition (`run`; after a case split that
+  reverted a variable it takes, the unknown it is assigned through, `?Q' true v`). No other
+  unknown is noted at a return (`exitPosts`). -/
+  inferPosts : IO.Ref (Array MVarId)
+  /-- Returns into an unknown exit post (`noteExit`): joined into the unknown when its walk ends
+  (`finishExits`). -/
+  exits : IO.Ref (Array ExitNote)
   /-- The program a view retries and its active retry states. A new intermediate resource or
   request, or a new fact, can progress; repeating the same state cannot start another view.
   The previous path is restored by `walk.viewed`, never cached as a negative result. -/
@@ -719,7 +756,8 @@ def RunCaches.new : IO RunCaches :=
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            layouts := ← IO.mkRef {}, lawful := ← IO.mkRef {},
-           wanted := ← IO.mkRef #[], viewProg := ← IO.mkRef none,
+           wanted := ← IO.mkRef #[], planNotes := ← IO.mkRef none, plans := ← IO.mkRef #[],
+           inferPosts := ← IO.mkRef #[], exits := ← IO.mkRef #[], viewProg := ← IO.mkRef none,
            recBoundary := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
            branchSubsts := ← IO.mkRef {},
@@ -4778,6 +4816,30 @@ def noteWanted (a : Expr) (requested : Array Expr := #[]) : MetaM Unit := do
   let demand := if knowledge.isEmpty then a else mkSep (sepOf knowledge) a
   let r ← abstractMVars demand
   (← caches).wanted.modify (pushWanted · r)
+  (← caches).planNotes.modify (·.map (·.push r))
+
+/-- The plan `x` of a rule's precondition, with the atoms it missed (`noteWanted`) while a
+report is collected (`Report.active`; else none are kept). The notes are this plan's own: an
+inner plan's (a rule probed inside it) stay the inner one's, and the outer plan's notes resume
+after it. -/
+def withPlanNotes {α : Type} (x : TacticM α) : TacticM (α × Array AbstractMVarsResult) := do
+  unless ← Report.active do return (← x, #[])
+  let ref := (← caches).planNotes
+  let before ← ref.get
+  ref.set (some #[])
+  try
+    let r ← x
+    return (r, (← ref.get).getD #[])
+  finally
+    ref.set before
+
+/-- A rule whose precondition had no plan, kept for the step's report (P09-E3): only while a
+report is collected (`Report.active`), only with an atom it missed, and once (a retry of the
+rule that misses the same atoms adds no row). -/
+def notePlan (rule : Expr) (missed : Array AbstractMVarsResult) : TacticM Unit := do
+  unless !missed.isEmpty && (← Report.active) do return
+  let p ← Report.plan (← instantiateMVars rule) missed
+  (← caches).plans.modify fun ps => if ps.contains p then ps else ps.push p
 
 /-- The current raw-byte/region source of one requested address, with its guarded update.
 Each probe restores the arithmetic refs before leaving; only a successful proof keeps its Lean
@@ -4812,6 +4874,118 @@ def knownSource? (ats : Array Expr) (a : Expr) : TacticM (Option (Nat × Expr ×
     if result.isSome then return result
     s.restore
   return none
+
+/-! ## Inferred posts (P09-E2) -/
+
+/-- The strongest post `fun ys => ∃ xs, ⟪φs⟫ ⋆ (⟪y₁ = a₁⟫ ⋆ … ⋆ (⟪yₙ = aₙ⟫ ⋆ P))` of the state
+`P` at the arguments `as` (the result last), with the walk's locals (those of the context not in
+`outer` nor in `keep`: the data `xs` existentially, the facts `φs` as facts, in their order), and
+the proof of `EUpd P (post as)` with the locals as witnesses. Throws if a local cannot be
+abstracted (a sort above `Type`, a fact whose proof the state names). -/
+def strongestPost (outer : LocalContext) (keep : Array FVarId) (P : Expr) (as : Array Expr) :
+    MetaM (Expr × Expr) := do
+  let locals := (← getLCtx).foldl (init := #[]) fun acc d =>
+    if d.isImplementationDetail || outer.contains d.fvarId || keep.contains d.fvarId then acc
+    else acc.push d
+  -- the bodies of the post at the arguments `ys`, outermost first (the last is
+  -- `⟪y₁ = a₁⟫ ⋆ … ⋆ P`)
+  let bodies (ys : Array Expr) : MetaM (Array Expr) := do
+    let mut b := P
+    for (y, a) in (ys.zip as).reverse do
+      b := mkSep (mkApp (mkConst liftN) (← mkEq y a)) b
+    let mut out := #[b]
+    for d in locals.reverse do
+      if ← isProp d.type then
+        if b.containsFVar d.fvarId then throwError "the state names the fact {d.userName}"
+        b := mkSep (mkApp (mkConst liftN) d.type) b
+      else
+        unless (← whnfD (← inferType d.type)) == mkSort Level.one do
+          throwError "{d.userName} is not of a type in `Type`"
+        b := mkApp2 (mkConst exN) d.type (← mkLambdaFVars #[d.toExpr] b)
+      out := out.push b
+    return out.reverse
+  -- the post, and the body of each local's `∃` at the arguments `as` (abstracted at fresh
+  -- `ys` first: an argument may be one of the locals, whose binder must not capture it)
+  let decls ← as.mapIdxM fun i a => return (Name.mkSimple s!"y{i}", fun _ => inferType a)
+  let (post, Fs) ← withLocalDeclsD decls fun ys => do
+    let bs ← bodies ys
+    -- (a fact's entry is unused: a fact is a conjunct of the post, not a binder)
+    let Fs ← locals.mapIdxM fun i d => do
+      if ← isProp d.type then return mkConst ``True
+      return (← mkLambdaFVars #[d.toExpr] bs[i + 1]!).replaceFVars ys as
+    return (← mkLambdaFVars ys bs[0]!, Fs)
+  -- `∀ r, P r → post as r`: the locals as witnesses, the facts by their hypotheses
+  let mut pf ← mkAppOptM ``imp_refl #[P]
+  for a in as.reverse do
+    pf ← mkAppM ``imp_lift #[← mkEqRefl a, pf]
+  for i' in [0:locals.size] do
+    let i := locals.size - 1 - i'
+    let d := locals[i]!
+    pf ← if ← isProp d.type then mkAppM ``imp_lift #[d.toExpr, pf]
+      else mkAppOptM ``imp_ex #[P, d.type, Fs[i]!, d.toExpr, pf]
+  return (post, ← mkAppM ``EUpd.of_imp #[pf])
+
+/-- The join `∃ b : Bool, if b = true then A else B` of two assertions (the posts of two
+branches, `joinPosts`; of two returns into an unknown exit post, `finishExits`). -/
+def joinAssn (A B : Expr) : Expr :=
+  mkApp2 (mkConst exN) (mkConst ``Bool) <| .lam `b (mkConst ``Bool)
+    (mkApp5 (mkConst ``ite [1]) (mkConst ``Zig.Full.FAssn)
+      (mkApp3 (mkConst ``Eq [1]) (mkConst ``Bool) (.bvar 0) (mkConst ``Bool.true))
+      (mkApp2 (mkConst ``instDecidableEqBool) (.bvar 0) (mkConst ``Bool.true)) A B) .default
+
+/-- The branch of an assertion's `if` (nested: in the branch taken) whose condition is decided:
+by the evaluation of its instance (`isTrue`/`isFalse`: a loop step's post `if again r.1 = true
+then … else …` at an exit with a constructor label), by a hypothesis (after a split on it), else
+by the facts (`decideIte`); with the proof of the equation where it is not definitional. The
+term itself if no condition is decided. -/
+partial def decidePost (e : Expr) : TacticM (Expr × Option Expr) := do
+  let e := e.headBeta
+  unless e.isAppOfArity ``ite 5 do return (e, none)
+  let (c, inst, x, y) := (e.getArg! 1, e.getArg! 2, e.getArg! 3, e.getArg! 4)
+  let i ← withTransparency .default (whnf inst)
+  if i.isAppOfArity ``Decidable.isTrue 2 then return ← decidePost x
+  if i.isAppOfArity ``Decidable.isFalse 2 then return ← decidePost y
+  let byHyp ← if let some d ← findLocalDeclWithType? c then
+      pure (some (← mkAppOptM ``ite_pos_eq #[c, inst, mkFVar d, x, y], x))
+    else if let some d ← findLocalDeclWithType? (mkNot c) then
+      pure (some (← mkAppOptM ``ite_neg_eq #[c, inst, mkFVar d, x, y], y))
+    else pure none
+  let some (pf, br) ← (if byHyp.isSome then pure byHyp else decideIte e false) | return (e, none)
+  let (b, p?) ← decidePost br
+  return (b, ← mkEqTrans? pf p?)
+
+/-- The unassigned unknowns of the posts that the walk infers (`inferPosts`): each post's own,
+or those it is assigned through (a step's continuation post, an unknown applied to the
+variables that a substitution reverted: `?Q := ?Q' b`). -/
+def exitPosts : TacticM (Array MVarId) := do
+  (← (← caches).inferPosts.get).foldlM (init := #[]) fun acc m => do
+    return acc ++ (← getMVars (mkMVar m))
+
+/-- `e` names an unassigned unknown post that the walk infers (`exitPosts`). -/
+def hasExitPost (e : Expr) : TacticM Bool := do
+  let e ← instantiateMVars e
+  unless e.hasExprMVar do return false
+  let us ← exitPosts
+  return (e.find? fun x => x.isMVar && us.contains x.mvarId!).isSome
+
+/-- **A return into an unknown post applied to computed arguments** (P09-E2): the update
+`g : EUpd P (?E as)`, `?E` an unknown post that the walk infers (`exitPosts`: a loop's exit post
+that the engine created, the goal's), `as` the exit's arguments (`(label, s)`). The
+return's strongest post over `?E`'s context (`strongestPost`: the walk's locals existential,
+its facts as facts, the arguments by equations) is noted and the update left for the join of
+all returns into `?E` (`finishExits`, when `?E`'s walk ends). `false` (nothing changed) if the
+strongest post cannot be stated. -/
+def noteExit (g E : MVarId) (P w : Expr) : TacticM Bool := g.withContext do
+  let lctx := (← E.getDecl).lctx
+  try
+    let (sp, pf) ← strongestPost lctx #[] P w.getAppArgs
+    if sp.hasAnyFVar (!lctx.contains ·) then
+      throwError "the post names a local outside its context"
+    (← caches).exits.modify (·.push { post := E, proof := g, sp, pf, P, args := w.getAppArgs })
+    return true
+  catch ex =>
+    trace[fsym] "exit post inference: {ex.toMessageData}"
+    return false
 
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
@@ -4860,6 +5034,28 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
       g.assign (← mkAppM ``eupd_pre_eq #[e, ← mkAppOptM ``eupd_ex_pre #[none, F, R, Q, k]])
       let (_, g2) ← k.mvarId!.intro n
       return ← g2.withContext (closeEntail g2 sizes)
+  -- a postcondition with a loop's unknown exit post (P09-E2, a step's `if again r.1 = true
+  -- then … else ?E r`): its decided conditions taken (`decidePost`); a return into the unknown
+  -- noted for the join (`noteExit`), never unified; an undecided condition split below; the
+  -- unknown anywhere else, or a return whose strongest post cannot be stated: left
+  if ← hasExitPost Q then
+    let (w, eq?) ← decidePost Q
+    if w != Q then
+      let g2 ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, w])
+      let pf ← match eq? with
+        | none => pure g2
+        | some e => do
+          let f ← withLocalDeclD `x (mkConst ``Zig.Full.FAssn) fun x => do
+            mkLambdaFVars #[x] (← mkAppM ``EUpd #[P, x])
+          mkEqMPR (← mkCongrArg f e) g2
+      g.assign (← mkExpectedTypeHint pf t)
+      return ← closeEntail g2.mvarId! sizes
+    if let .mvar E := w.getAppFn then
+      if (← exitPosts).contains E then
+        return if ← noteExit g E P w then [] else [g]
+    unless w.isAppOfArity ``ite 5 && !(← instantiateMVars (w.getArg! 1)).hasExprMVar do
+      trace[fsym] "an unknown exit post outside a return's post: {w}"
+      return [g]
   -- an assertion-level `if` of the postcondition that the facts do not decide: split on it
   let s0 ← saveState
   let (Qi, _) ← instQ (← reduceProjs Q)
@@ -5545,7 +5741,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
         sLit.restore; restoreLiteralArith
         let fr ← mkFreshExprMVar (mkConst ``Zig.Full.FAssn)
         let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, mkSep P₀i fr])
-        let left ← closeEntail hE.mvarId! sizes
+        let (left, missed) ← withPlanNotes (closeEntail hE.mvarId! sizes)
         unless left.isEmpty do
           -- Only a committed, fully determined frame may retain pure obligations. A missing
           -- resource plan stays the original call; no entailment/data unknown is invented.
@@ -5557,7 +5753,7 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
             else pure false
           unless determined do
             trace[fsym] "rule {rule}: no plan for its precondition"
-            rollback; return none
+            rollback; notePlan rule missed; return none
           -- (determined only by the rest of the plan, e.g. an existential's witness that a later
           -- atom fixed: proved by arithmetic now, if the facts show them; a quick probe, since
           -- the rule may still be rolled back)
@@ -5694,9 +5890,10 @@ def tryBindRule (g : MVarId) (rule : Expr) : TacticM (Option (List MVarId × Lis
     else
       sLit.restore
       let hE ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, ← instantiateMVars P₀])
-      let left ← closeEntail hE.mvarId! sizes
+      let (left, missed) ← withPlanNotes (closeEntail hE.mvarId! sizes)
       unless left.isEmpty do
-        trace[fsym] "bind rule {rule}: no plan for its precondition"; s.restore; return none
+        trace[fsym] "bind rule {rule}: no plan for its precondition"; s.restore
+        notePlan rule missed; return none
       planned := some (← instantiateMVars hE)
     synthInstArgs args
     let sides := (← args.filterM fun a => do
@@ -6625,47 +6822,77 @@ def inferPost (Q P v : Expr) : TacticM (Option Expr) := do
   -- the unknown's, not the walk's)
   let outer := (← Q.getAppFn.mvarId!.getDecl).lctx
   let args := Q.getAppArgs.filterMap fun a => if a.isFVar then some a.fvarId! else none
-  let locals := (← getLCtx).foldl (init := #[]) fun acc d =>
-    if d.isImplementationDetail || outer.contains d.fvarId || args.contains d.fvarId then acc
-    else acc.push d
   let s ← saveState
   try
-    -- the bodies of the post at the result `rv`, outermost first (the last is `⟪rv = v⟫ ⋆ P`)
-    let bodies (rv : Expr) : MetaM (Array Expr) := do
-      let mut b := mkSep (mkApp (mkConst liftN) (← mkEq rv v)) P
-      let mut out := #[b]
-      for d in locals.reverse do
-        if ← isProp d.type then
-          if b.containsFVar d.fvarId then throwError "the state names the fact {d.userName}"
-          b := mkSep (mkApp (mkConst liftN) d.type) b
-        else
-          unless (← whnfD (← inferType d.type)) == mkSort Level.one do
-            throwError "{d.userName} is not of a type in `Type`"
-          b := mkApp2 (mkConst exN) d.type (← mkLambdaFVars #[d.toExpr] b)
-        out := out.push b
-      return out.reverse
-    -- the post, and the body of each local's `∃` at the result `v` (abstracted at a fresh `r`
-    -- first: `v` may be one of the locals, whose binder must not capture the result)
-    let (post, Fs) ← withLocalDeclD `r (← inferType v) fun r => do
-      let bs ← bodies r
-      -- (a fact's entry is unused: a fact is a conjunct of the post, not a binder)
-      let Fs ← locals.mapIdxM fun i d => do
-        if ← isProp d.type then return mkConst ``True
-        return (← mkLambdaFVars #[d.toExpr] bs[i + 1]!).replaceFVar r v
-      return (← mkLambdaFVars #[r] bs[0]!, Fs)
+    let (post, h) ← strongestPost outer args P #[v]
     unless ← isDefEq Q post do throwError "the post names a local outside its context"
-    -- `∀ r, P r → Q v r`: the locals as witnesses, the facts by their hypotheses
-    let mut pf ← mkAppM ``imp_lift #[← mkEqRefl v, ← mkAppOptM ``imp_refl #[P]]
-    for i' in [0:locals.size] do
-      let i := locals.size - 1 - i'
-      let d := locals[i]!
-      pf ← if ← isProp d.type then mkAppM ``imp_lift #[d.toExpr, pf]
-        else mkAppOptM ``imp_ex #[P, d.type, Fs[i]!, d.toExpr, pf]
-    let h ← mkAppM ``EUpd.of_imp #[pf]
     return some (← mkExpectedTypeHint h (← mkAppM ``EUpd #[P, mkApp Q v]))
   catch ex =>
     trace[fsym] "post inference: {ex.toMessageData}"
     s.restore; return none
+
+/-- **The join of the returns into unknown exit posts** (P09-E2, `noteExit`) whose walk ended:
+the notes of the unknowns `only` (all, if `none`) whose update the proof `root` still needs
+(a note of a branch that backtracking abandoned is dropped). With `infer`, each unknown `?E`
+becomes the join of its returns' strongest posts, `fun ys => ∃ b, if b then sp₁ ys else …` (one
+return: its post), and each return's update injects its post into the join (`upd_join_l`,
+`upd_join_r`). Returns the residuals: without `infer` (the walk of `?E`'s returns stopped
+early: `?E` stays unknown), every note's update; else the updates of the notes whose unknown was
+otherwise determined meanwhile, and those of an unknown whose join does not fit one of its
+returns (left unknown). -/
+def finishExits (root : Expr) (only : Option MVarId := none) (infer := true) :
+    TacticM (List MVarId) := do
+  let notes ← (← caches).exits.get
+  if notes.isEmpty then return []
+  let live ← getMVars root
+  let mut keep := #[]
+  let mut groups : Array (MVarId × Array ExitNote) := #[]
+  let mut left := []
+  for n in notes do
+    if only.any (· != n.post) then keep := keep.push n; continue
+    unless live.contains n.proof do continue
+    if !infer then
+      Report.record n.proof [n.proof] "exit_post_not_inferred" "postcondition"
+      left := left ++ [n.proof]; continue
+    if ← n.post.isAssigned then
+      Report.record n.proof [n.proof] "postcondition_not_proved" "postcondition"
+      left := left ++ [n.proof]; continue
+    groups := match groups.findIdx? (·.1 == n.post) with
+      | some i => groups.modify i fun (e, ns) => (e, ns.push n)
+      | none => groups.push (n.post, #[n])
+  (← caches).exits.set keep
+  for (E, ns) in groups do
+    let decl ← E.getDecl
+    -- the join at the arguments `as`: `sp₁ as`, …, nested to the right
+    let joinAt (as : Array Expr) : Expr :=
+      let ps := ns.map fun n => n.sp.beta as
+      ps.pop.foldr joinAssn ps.back!
+    let J ← withLCtx decl.lctx decl.localInstances do
+      forallTelescope (← instantiateMVars decl.type) fun ys _ => mkLambdaFVars ys (joinAt ys)
+    -- each return's update into its part of the join, checked against `EUpd P (J as)` before
+    -- `?E` is assigned
+    let pfs ← ns.mapIdxM fun i n => n.proof.withContext do
+      let ps := ns.map fun m => m.sp.beta n.args
+      -- the tail of the join from `j`
+      let tail (j : Nat) : Expr := (ps.extract j ps.size).pop.foldr joinAssn ps.back!
+      let mut pf := n.pf
+      if i + 1 < ns.size then
+        pf ← mkAppOptM ``upd_join_l #[n.P, ps[i]!, tail (i + 1), pf]
+      for j' in [0:i] do
+        let j := i - 1 - j'
+        pf ← mkAppOptM ``upd_join_r #[n.P, ps[j]!, tail (j + 1), pf]
+      let want ← mkAppM ``EUpd #[n.P, J.beta n.args]
+      return if ← withNewMCtxDepth (isDefEq (← inferType pf) want) then some pf else none
+    if pfs.any (·.isNone) then
+      trace[fsym] "the join of the inferred exit posts does not fit a return: {J}"
+      for n in ns do
+        Report.record n.proof [n.proof] "exit_post_not_inferred" "postcondition"
+      left := left ++ (ns.map (·.proof)).toList
+      continue
+    E.assign J
+    for (n, pf) in ns.zip pfs do
+      if let some pf := pf then n.proof.assign pf
+  return left
 
 /-- **The post of one step.** The return `pure v` right after a rule's step, whose state is the
 rule's post `Q₀ v` with its frame `R`, where the postcondition `Q` is an unknown (a program of
@@ -6717,10 +6944,7 @@ def joinPosts (Q : Expr) (gs : List MVarId) : TacticM (List MVarId) := do
   -- one unknown per branch, where the post's unknown is
   let qs ← gs.mapM fun _ => mkFreshExprMVarAt decl.lctx decl.localInstances ty
   let join (A B : Expr) : MetaM Expr := withLocalDeclD `v β fun v => do
-    let body ← withLocalDeclD `b (mkConst ``Bool) fun b => do
-      let c ← mkEq b (mkConst ``Bool.true)
-      mkLambdaFVars #[b] (← mkAppM ``ite #[c, mkApp A v, mkApp B v])
-    mkLambdaFVars #[v] (mkApp2 (mkConst exN) (mkConst ``Bool) body)
+    mkLambdaFVars #[v] (joinAssn (mkApp A v) (mkApp B v))
   let rev := qs.reverse
   let mut J := rev.head!
   for q in rev.tail! do J ← join q J
@@ -6790,22 +7014,23 @@ def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
 /-- **A loop with a registered invariant** (`@[fsym_inv]`, P09-E4): the command
 `(Zig.loop (B xs) again).run s₀` of `x >>= f` by the backend's loop rule (`loopRuleOf`) with the
 invariant `B.inv`, the measure `B.meas` (total correctness) and the exit post `B.post` (without
-one: the invariant with `again r.1 = false`), applied as a rule (`tryRule`: its precondition
+one: an unknown, the strongest post at the step's exits, P09-E2), applied as a rule (`tryRule`: its precondition
 planned, the frame inferred). Their parameters before the locals are matched by name with
 `B.inv`'s: `B.inv`'s first ones are the body's arguments `xs`, one named `s0` is the locals at
 loop entry `s₀`, and the others are unknowns that the plan of the precondition assigns. `lem` is
 `loopRuleOf L`.
-* `.ok (k, step, left)`: the continuation, the goal of the body's step (`∀ s, …`, which the
-  caller walks) and the side goals left;
+* `.ok (k, step, left, exit?)`: the continuation, the goal of the body's step (`∀ s, …`, which
+  the caller walks), the side goals left and the unknown exit post (no `B.post`), which the
+  step's walk infers (`finishExits`) before the continuation's;
 * `.error why`: the invariant does not hold at the entry (no plan, or an unknown that the
   plan leaves; nothing changed).
 
 A registration that does not fit the loop (no measure in a total logic, a parameter of `B.meas`
 that `B.inv` does not have) is an error. -/
 def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
-    TacticM (Except MessageData (MVarId × MVarId × List MVarId)) := g.withContext do
+    TacticM (Except MessageData (MVarId × MVarId × List MVarId × Option MVarId)) := g.withContext do
   let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN? } := R
-  let (body, again, s₀) := ((l.getArg! 5).consumeMData, l.getArg! 6, x.consumeMData.getArg! 4)
+  let (body, s₀) := ((l.getArg! 5).consumeMData, x.consumeMData.getArg! 4)
   let fail {α} (why : MessageData) : TacticM α :=
     throwError "fsym: the loop invariant of `{B}` (`@[fsym_inv]`): {why}"
   let total := !L.part
@@ -6835,11 +7060,14 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
       try mkAppM' (mkConst c) args
       catch _ => fail m!"`{c}`'s parameters do not have the types of `{invN}`'s of the same names"
     let I := mkAppN (mkConst invN) pre
+    -- (without a registered exit post: an unknown, the strongest post of the step's exits that
+    -- its walk infers, P09-E2)
     let post ← match postN? with
       | some p => atParams p
-      | none => withLocalDeclD `r (← mkAppM ``Prod #[l.getArg! 4, σ]) fun r => do
-          let φ ← mkEq (mkApp again (← mkAppM ``Prod.fst #[r])).headBeta (mkConst ``Bool.false)
-          mkLambdaFVars #[r] (mkSep (mkApp (mkConst liftN) φ) (mkApp I (← mkAppM ``Prod.snd #[r])))
+      | none => do
+        let E ← mkFreshExprMVar (← mkArrow (← mkAppM ``Prod #[l.getArg! 4, σ]) (mkConst ``Zig.Full.FAssn))
+        (← caches).inferPosts.modify (·.push E.mvarId!)
+        pure E
     -- the rule `lem I μ post ?step s₀`: the loop rules' last parameters are `I`, `μ` (total only),
     -- `post`, `step` and `s`
     let lemC ← mkConstWithFreshMVarLevels lem
@@ -6862,7 +7090,7 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
         rollback
         return .error m!"the plan at the loop's entry does not determine `{invN}`'s \
           parameter {names[i]!}"
-    return .ok (k, step.mvarId!, left)
+    return .ok (k, step.mvarId!, left, if postN?.isNone then some post.mvarId! else none)
   catch ex => rollback; throw ex
 
 mutual
@@ -7014,7 +7242,9 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   let viewed (wanted : Array AbstractMVarsResult) : TacticM (Option (List MVarId)) := do
     let s ← saveState
     let restoreArith ← (← caches).saveArith (← (← caches).recBoundary.get).isSome
-    let rollback : TacticM Unit := do s.restore; restoreArith
+    -- (the step's failed plans: a view's walk reports its own)
+    let plans ← (← caches).plans.get
+    let rollback : TacticM Unit := do s.restore; restoreArith; (← caches).plans.set plans
     try
       let some g' ← viewStep g wanted | rollback; return none
       let ref := (← caches).viewProg
@@ -7038,6 +7268,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       return some gs
     catch ex => rollback; throw ex
   (← caches).wanted.set #[]
+  (← caches).plans.set #[]
   -- return
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
@@ -7046,6 +7277,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       if let some h ← inferPost Q P v then
         g.assign (← mkAppOptM (L.nm ``ret) #[L.L, none, P, Q, v, h])
         return []
+    -- (a return into a loop's unknown exit post: noted by the entailment, `noteExit`)
     let Qv := (mkApp Q v).headBeta
     let s ← saveState
     let entail : TacticM (List MVarId) := do
@@ -7265,7 +7497,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       restoreArith
       return left ++ (← walk k user extra (fuel - 1))
     if let some r ← viewed (← (← caches).wanted.get) then return r
-    return ← Report.leave g [g] "no_rule" "program" (some x)
+    return ← Report.leave g [g] "no_rule" "program" (some x) (plans := ← (← caches).plans.get)
   -- a body's `match` on a variable as the command (`StateT.run (match x with …) s`: a callee's
   -- result, `.error`/`.ok`, ledger #20/#35): split the variable (after a rule about the `match`)
   if x.isAppOfArity ``StateT.run 5 then
@@ -7307,9 +7539,32 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       if let some r ← viewed wanted then return r
     match ← reportLimit m!"the registered invariant of the loop{indentExpr x}"
         (loopInvRule? g L lem R x f) with
-    | .ok (k, step, left) =>
+    | .ok (k, step, left, exit?) =>
       let (_, step) ← step.intro `s
-      return left ++ (← eachBranch [step, k] id (walk · user extra (fuel - 1)))
+      -- An unknown exit post: the join of the step's exits, before the continuation's walk,
+      -- only if the step's walk closed every path (each exit it reaches is noted). A step that
+      -- stopped, or a join that does not fit, leaves it unknown and stops the continuation. A
+      -- step whose every path closed without an exit (the loop never exits): `⟪False⟫`.
+      let stepLeft ← IO.mkRef ([] : List MVarId)
+      return left ++ (← eachBranch [step, k] id fun h => do
+        let some E := exit? | walk h user extra (fuel - 1)
+        if h == step then
+          let gs ← walk h user extra (fuel - 1)
+          stepLeft.set gs
+          return gs
+        let stopped := !(← stepLeft.get).isEmpty
+        let early ← finishExits (mkMVar step) (only := E) (infer := !stopped)
+        if stopped || (!(← E.isAssigned) && !early.isEmpty) then
+          Report.stopMessage m!"fsym: the exit post of the loop is not inferred (its step's \
+            walk {if stopped then "stopped" else "has exits whose join does not fit"}){indentExpr x}"
+          return early ++ (← Report.leave g [k] "exit_post_not_inferred" "rule_continuation" (some x))
+        unless ← E.isAssigned do
+          E.assign (← withLCtx (← E.getDecl).lctx (← E.getDecl).localInstances do
+            let ty ← instantiateMVars (← E.getType)
+            let .forallE _ β _ _ := ty | throwError "fsym: exit post type {ty}"
+            withLocalDeclD `r β fun r => mkLambdaFVars #[r] (mkApp (mkConst liftN) (mkConst ``False)))
+        Report.notePost E "loop_exit" (some x)
+        return early ++ (← walk h user extra (fuel - 1)))
     | .error why =>
       let wantedInv ← (← caches).wanted.get
       if wantedInv.size != wanted.size then
@@ -7319,6 +7574,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
           (fuel - 1)
       Report.stopMessage m!"fsym: {why}{indentExpr x}\nwith the precondition{indentExpr P}"
       return ← Report.leave g [g] "invariant_not_established" "loop_entry" (some x)
+        (plans := ← (← caches).plans.get)
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
     let s1 ← saveState
@@ -7355,7 +7611,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   if let some r := unfolded? then
     return ← walk (← rewriteCmd g L α P Q c x r) user extra (fuel - 1)
   Report.stopMessage m!"fsym: no rule for the command{indentExpr x}\nwith the precondition{indentExpr P}"
-  return ← Report.leave g [g] "no_rule" "program" (some x)
+  return ← Report.leave g [g] "no_rule" "program" (some x) (plans := ← (← caches).plans.get)
 
 end
 
@@ -8614,13 +8870,27 @@ def run (g : MVarId) (user : Array Expr := #[]) (extra : Array Syntax := #[])
           if ← isLibrary c then return none
           return some c
       (← caches).updHeads.modify (· ++ heads)
+    -- the goal's unknown postcondition, which the walk infers (P09-E2), for a report: the
+    -- judgment's postcondition argument (`?Q`, `?Q x h`), not an unknown of its precondition
+    if let some Q := postArg? (← instantiateMVars (← g.getType)) then
+      if let .mvar m := Q.getAppFn then
+        let ty ← instantiateMVars (← m.getType)
+        if (← m.getKind).isNatural &&
+            (← forallTelescope ty fun _ b => return b.isConstOf ``Zig.Full.FAssn) then
+          (← caches).inferPosts.modify (·.push m)
+          Report.notePost m "return"
     let h0 ← IO.getNumHeartbeats
     let gs ← if (wpArgs? (← instantiateMVars (← g.getType))).isSome then wpEntry g user extra
       else walk g user extra 400
+    -- the returns into unknown exit posts that no loop's continuation joined
+    let gs := gs ++ (← finishExits (mkMVar g))
     trace[fsym.total] "heartbeats {((← IO.getNumHeartbeats) - h0) / 1000}"
     -- (an unknown of the proof that no goal left names: an engine fault, shown before the
     -- kernel rejects the proof)
-    let us ← (← getMVars (mkMVar g)).filterM fun u => return !gs.contains u && !(← u.isDelayedAssigned)
+    -- (an unknown that a goal left names, a loop's exit post that was not inferred, is the goal's)
+    let named ← gs.foldlM (init := #[]) fun acc m => return acc ++ (← getMVars (← m.getType))
+    let us ← (← getMVars (mkMVar g)).filterM fun u =>
+      return !gs.contains u && !named.contains u && !(← u.isDelayedAssigned)
     unless us.isEmpty do
       logError m!"fsym: the proof has unknowns {← us.mapM fun u => do instantiateMVars (← u.getType)}"
     return gs

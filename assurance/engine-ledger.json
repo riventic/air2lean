@@ -1202,9 +1202,9 @@
   {
    "id": "P09-E2",
    "title": "strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as inferPost...",
-   "status": "open",
+   "status": "closed",
    "requester": "P09",
-   "progress": "pending maintainer approval (note: agent 17's single-step post work on codex/fsym-bridge-ofseq touches inferPost for thread goals; keep compatible)",
+   "progress": "DONE (R1, PR #717; approved with P09 2026-10-15). An unknown post at the top of a goal is inferred as before (`inferPost`, now over `strongestPost`, which takes any arguments). New: a return into an unknown that the walk infers (a registered loop's exit post that the engine created, the goal's postcondition also after a case split, `?Q true v`) applied to computed arguments is noted by the entailment (`noteExit`, after `decidePost` takes the decided conditions; an undecided exit condition is split on, so the exit's post carries it), never unified. When the unknown's walk ends (end of `Auto.run`; before a registered loop's continuation), it becomes the join of the returns' strongest posts, each with equations for its arguments (`finishExits`, `upd_join_l`/`upd_join_r`, checked before the assignment). A registered loop without `B.post` continues from the strongest post of its step's exits only if the step's walk closed every path (`⟪False⟫` if no exit is reached); a stopped step leaves the exit post unknown and the continuation a residual (`exit_post_not_inferred`), in every backend with a loop rule. The report lists the inferred posts (`posts`, `kind` `return`/`loop_exit`). Regression tests/roadmap/sep-auto/SepAuto/Infer.lean: total, partial and thread logics, function ends and loop exits, a too-strong caller post rejected, a step that stops before an exit, an exit post assigned before its join, a return without a strongest post, an undecided exit condition; LoopInv's concurrent loop without a post.",
    "request": "strongest-postcondition inference at returns for FTotalTriple/FTriple and the thread backends, as `inferPost` does for WP segments",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1212,9 +1212,9 @@
   {
    "id": "P09-E3",
    "title": "abduction report",
-   "status": "open",
+   "status": "closed",
    "requester": "P09",
-   "progress": "pending maintainer approval",
+   "progress": "DONE (R1, PR #717; approved with P09 2026-10-15). Each plan of a rule's precondition collects the atoms it misses (`noteWanted` into `planNotes`, `withPlanNotes`: only while a report is collected, each plan its own notes). A rule whose plan fails is kept for the step once (`notePlan`, in `tryRule` and `tryBindRule`; a retry with the same missed atoms adds no row). A stop with no rule, or an invariant that does not hold at a loop's entry (the loop rule's plan), lists them in its origin's `plans`: the rule, and each missed atom with its unknowns (`?u0`, … and their types). A view's walk that is rolled back restores the step's plans. Regression tests/roadmap/sep-auto/SepAuto/Infer.lean: a load from a state without the cell; a loop invariant that needs a cell the entry lacks.",
    "request": "abduction report: at \"no plan for its precondition\", return the missing atom with its unknowns",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1224,7 +1224,7 @@
    "title": "@[fsym_inv] loop-invariant registry",
    "status": "open",
    "requester": "P09",
-   "progress": "Approved by the maintainer 2026-11-05 (this engine case only: no new tactic, no new judgment). Generator done (lanes E4b/E4c, #701): `air2lean-invgen` emits `F.loopN.inv`, `F.loopN.meas` and an exit post `F.loopN.post` with `@[fsym_inv]`; the hand step and loop lemmas of loop-tactics/nested (`inner_step`, `inner_loop`) and loop-tactics/counted (the five `F_step`/`F_loop` pairs) are deleted, the callers' walks are bare `fsym`, and the mutants name the callers' theorems. Engine (lane E4, #688): the `@[fsym_inv]` registry of `B.inv`/`B.meas`/`B.post` (ZigLean/Sep/Full/AutoAttr.lean) and the loop case of `walkCore` (`loopInvRule?` in Auto.lean): at a loop no rule is about, the backend's loop rule (`FTotalTriple.loop_measure`, `FTriple.loop`, the thread forms, `CTriple.loop`) applied by `tryRule` with the registered definitions, unknowns planned at entry, frame inferred, the body's step walked as a goal of its own (regression tests/roadmap/sep-auto/SepAuto/LoopInv.lean; docs/proof-automation.md, §Loops). The exit post is registered too (`B.post`): without one the exit is the invariant with `again r.1 = false`, which forgets the exit's label and test (the strongest post at the exits is P09-E2). Open: nested's hand outer loop (deletion plan), whose invariant is outside the generator's families today.",
+   "progress": "Approved by the maintainer 2026-11-05 (this engine case only: no new tactic, no new judgment). Generator done (lanes E4b/E4c, #701): `air2lean-invgen` emits `F.loopN.inv`, `F.loopN.meas` and an exit post `F.loopN.post` with `@[fsym_inv]`; the hand step and loop lemmas of loop-tactics/nested (`inner_step`, `inner_loop`) and loop-tactics/counted (the five `F_step`/`F_loop` pairs) are deleted, the callers' walks are bare `fsym`, and the mutants name the callers' theorems. Engine (lane E4, #688): the `@[fsym_inv]` registry of `B.inv`/`B.meas`/`B.post` (ZigLean/Sep/Full/AutoAttr.lean) and the loop case of `walkCore` (`loopInvRule?` in Auto.lean): at a loop no rule is about, the backend's loop rule (`FTotalTriple.loop_measure`, `FTriple.loop`, the thread forms, `CTriple.loop`) applied by `tryRule` with the registered definitions, unknowns planned at entry, frame inferred, the body's step walked as a goal of its own (regression tests/roadmap/sep-auto/SepAuto/LoopInv.lean; docs/proof-automation.md, §Loops). The exit post is registered too (`B.post`): without one the walk continues from the strongest post of the step's exits (P09-E2, closed), which keeps the exit's label and test. Open: nested's hand outer loop (deletion plan), whose invariant is outside the generator's families today.",
    "request": "`@[fsym_inv]` loop-invariant registry: apply the backend's loop rule with a registered invariant and measure; parameters by the planner, frame inferred",
    "workaround_sites": ["tests/roadmap/loop-tactics/nested/Proof.lean"],
    "deletion_plan": "Nested's hand outer loop (`outerI`, `outerPost`, `outer_step`, `outer_loop`; `fsym` walks its step since #arith-atom-congruence, and its inner loop by the generated `@[fsym_inv]` definitions): delete when the generator also emits the counter-dependent outer invariant over `tsum` with a summary of the generated inner loop (S2c′) and `@[fsym_inv]` applies its loop rule."
@@ -1238,6 +1238,16 @@
    "request": "`@[fsym_upd]` ghost-update registry keyed by heads, tried at returns; generalizes caller updates (9f); replaces #64–#67 workarounds with the bump-ledger family",
    "workaround_sites": [],
    "deletion_plan": ""
+  },
+  {
+   "id": "list-walk-step",
+   "title": "a list walk's step from its invariant: split the ghost list by the cursor's test, unfold and fold the list",
+   "status": "open",
+   "requester": "invariant-synthesis (P09, S2d: Proofs/Lists/Linked.lean, Proofs/Lists/Alloc.lean freeAll, loop-tactics/Queue.lean)",
+   "progress": "Found by R1 (2026-11-06, PR #717). The generator rejects the loops: `air2lean-invgen Proofs.Lists.Gen Lists` records reverse.loop6 and sum.loop6 as \"an unsupported term: i8.isSome\", and freeAll.loop5 as \"an unsupported term: i7.isSome\" (the S2d reading). The engine side is this row.",
+   "request": "At a list walk's step `T (∃ ys zs, ⟪xs = f ys zs⟫ ⋆ list X s.prev ys ⋆ list X s.cur zs ⋆ …) (B.run s) …` whose body tests the cursor (`s.cur.isSome`, a `match` on `?*Node`), `fsym` should case-split the ghost list `zs` (`[]`, with `cur = none`; `z :: zs'`, with `list X cur (z :: zs')` unfolded to `node X p z q ⋆ list X q zs'`, `list_cons`). At the repetition it should fold `node X p z q ⋆ list X prev ys` back into the invariant's list (`lseg_snoc` of the S3 list family). Today the hand steps `reverse_step`, `sum_step` and freeAll's step do the split, the unfolding and the fold by hand around `fsym`-proved fixed-shape steps (`reverse_tstep_nil`/`_cons`, `sum_step_nil`/`_cons`, `freeAll_step_nil`/`_cons`).",
+   "workaround_sites": ["Proofs/Lists/Linked.lean", "Proofs/Lists/Alloc.lean"],
+   "deletion_plan": "When `fsym` walks these steps from the invariant and the generator emits the list-walk family (S2d), delete `revInv`/`revPost`/`sumInv`/`sumPost`/`freeInv`/`freePost` and the `*_step`/`*_loop` lemmas. The files then hold statements proved by `fsym` over the generated `@[fsym_inv]` definitions, and loop-tactics/Queue.lean builds on top unchanged."
   },
   {
    "id": "arith-atom-congruence",

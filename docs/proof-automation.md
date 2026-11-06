@@ -806,8 +806,9 @@ body `B`, named by their part.
 
 * `B.inv` is the invariant at the start of an iteration, `B.meas` the measure (total correctness:
   it decreases at each repetition), `B.post` the assertion at the exit. Without `B.post` the
-  exit is the invariant with `again r.1 = false`, which forgets the exit's label and the exit
-  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks, when
+  exit post is an unknown that the step's walk infers (P09-E2, §Inferred posts below): the
+  strongest post of the step's exits, which keeps the exit's label and test for a translated
+  caller's `match` on the label. The attribute checks, when
   it is added, that `B` is a defined program over locals (`StateT σ m ε`: `MM σ ε`, `CM Tgt σ ε`),
   that the definition has no universe parameters, explicit parameters with names of their own,
   the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
@@ -818,7 +819,8 @@ body `B`, named by their part.
   precondition `B.inv … s₀` is planned in the state and the rest is the frame, which stays
   outside the loop; its premise, the step `∀ s, T (B.inv … s) ((B xs).run s) (fun r => if again
   r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a branch
-  of its own (in the context of the loop), then the walk goes on after the loop from `B.post`. The
+  of its own (in the context of the loop), then the walk goes on after the loop from `B.post`
+  (or from the inferred exit post, once the step's walk has determined it). The
   body is inlined in the step as a generated call is (`unfoldCmd`: a generated program run from
   a state, `StateT.run (B xs) s`).
 * The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
@@ -844,6 +846,43 @@ body `B`, named by their part.
 * Not covered: a sequential loop inside a concurrent function's `ConcM.liftMem` command (it
   stops with no rule), and a proof over a variable `FLogic` (no loop rule: the loop stays a
   residual).
+
+### Inferred posts (P09-E2)
+
+A postcondition that is an unknown is inferred by the walk, in every backend that walks a
+memory program (`FTotalTriple`, `FTriple`, the thread triples, `CTriple`, a `MemM` segment of a
+`WP` walk):
+
+* **An unknown over its own locals** (`?Q`, `?Q x h`): at a return of `v` in the state `P` it
+  becomes `fun r => ∃ xs, ⟪φs⟫ ⋆ (⟪r = v⟫ ⋆ P)` with the walk's locals (`inferPost`); the
+  branches of a split are joined first, one unknown per branch (`joinPosts`).
+* **An unknown applied to computed arguments** (`?E as`): only an unknown that the walk itself
+  infers, a registered loop's exit post that the engine created (no `B.post`) or the goal's
+  unknown postcondition (also through the unknown it is assigned through, after a case split
+  substituted a variable it takes: `?Q true v`). Any other unknown is unified as before. The
+  entailment of a return first takes the post's decided conditions (`decidePost`: by
+  evaluation, a loop step's `if again r.1 then … else ?E r` at an exit `(label, s)`; by a
+  hypothesis; by the facts). A condition it does not decide (an exit label that is not a
+  constructor) is split on, so the repetition is proved as before and the exit's post carries
+  the condition as a fact. A return into the unknown is noted with its strongest post, which
+  states its arguments by equations (`noteExit`); the unknown is never unified with the state.
+  When the unknown's walk ends, it becomes the join of its returns' posts,
+  `fun ys => ∃ b : Bool, if b then sp₁ ys else …` (one return: its post), and each return's
+  update goes into its part of the join (`finishExits`, `upd_join_l`, `upd_join_r`; each checked
+  before the unknown is assigned). The walk ends at the end of the run, and for a loop's exit
+  post before the loop's continuation is walked.
+* **A loop's exit post** is inferred only if the step's walk closed every path, so each exit it
+  reaches is noted. A step that stopped (a residual), or a join that does not fit a return,
+  leaves the exit post unknown: the continuation is not walked and stays a residual (report
+  reason `exit_post_not_inferred`, condition `rule_continuation`), as do the noted returns
+  (condition `postcondition`). A step whose every path closed without an exit (the loop never
+  exits) gives `⟪False⟫`. A return whose unknown was determined otherwise in between is left as a
+  residual (`postcondition_not_proved`).
+
+The inferred post is the strongest one only up to what the walk keeps: the facts and atoms of the
+state at the return, with the walk's locals existential. A local of a sort above `Type`, or a fact
+whose proof the state names, cannot be abstracted. The return then stays a residual and the
+unknown is not assigned from it.
 
 ## Recursive groups
 
@@ -997,8 +1036,27 @@ The schema is versioned by `schemaVersion` (currently `1`):
   (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
 * `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
   `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
-  `match_without_discriminant`, or `invariant_not_established` (a loop's registered invariant
-  at its entry, condition `loop_entry`, §Loops).
+  `match_without_discriminant`, `invariant_not_established` (a loop's registered invariant
+  at its entry, condition `loop_entry`, §Loops), or `exit_post_not_inferred` (a registered
+  loop's unknown exit post that its step's walk did not determine: the continuation, condition
+  `rule_continuation`, and the step's returns into it, condition `postcondition`; §Inferred
+  posts).
+* `origin.plans` (P09-E3; present only when it is not empty, at a `no_rule` or
+  `invariant_not_established` stop): the rules of the stopped step whose precondition had no plan
+  in the state, in the order they were first tried (a retry that misses the same atoms adds no
+  row). Each has its `rule` (`{head, text}`) and `missing`: the atoms of its precondition that no
+  atom of the state provided (that plan's own, not those of a rule probed inside it), each with its `atom`
+  (`{head, text}`, its unknowns shown as `?u0`, `?u1`, …) and its `unknowns` (`name` and `type`).
+  This is the abduced anti-frame of the bi-abduction loop (`docs/invariant-synthesis.md`). A
+  plan that failed only on a fact or a side condition misses no atom and is not listed.
+* `posts` (P09-E2; top level, present only when it is not empty): the postconditions that the
+  walk inferred (§Inferred posts), each with its `kind` (`return`: an unknown postcondition of
+  the goal; `loop_exit`: the exit post of a registered loop without `B.post`), its `program`
+  (the loop, for `loop_exit`; else null) and the `post` itself. An unknown that the walk did not
+  determine, or one determined in a branch that backtracking abandoned, is not listed.
+
+`plans` and `posts` are optional keys of schema version 1: a reader of the earlier keys ignores
+them.
 
 The JSON structure and discriminator strings are the API. The expression text follows Lean's
 pretty printer and its local names; it is display text, not an expression serialization. The
@@ -1021,7 +1079,8 @@ Regression: `tests/roadmap/sep-auto/SepAuto/Report.lean` compares ordinary and r
 deliberately incomplete proofs (including their proof terms), checks the sequential and thread
 logics and internal protocol-backend residuals (including post-dependent rule premises), and
 checks rollback of speculative attribution. These incomplete backend exercises do not declare
-program correctness theorems.
+program correctness theorems. `tests/roadmap/sep-auto/SepAuto/Infer.lean` checks `posts` and
+`plans` (P09-E2, P09-E3), both in the typed result and in the JSON line.
 
 `set_option trace.fsym true in fsym` traces the walk, rule and provider failures, carving and
 joining, failed arithmetic and entailment errors; `trace.fsym.arith` prints each `omega` problem;
