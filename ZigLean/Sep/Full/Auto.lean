@@ -3081,6 +3081,15 @@ def caseInduct? (tn : Name) : MetaM (Option InductiveVal) := do
   let some (.inductInfo ii) := (← getEnv).find? tn | return none
   return if ii.ctors.length ≥ 2 then some ii else none
 
+/-- The type `ty` as a recursive inductive type to split by cases, with its arguments: a ghost
+list of a list family (not `Nat`, whose constructors are arithmetic). -/
+def recCaseType? (ty : Expr) : MetaM (Option (InductiveVal × Array Expr)) := do
+  let ty ← whnfD ty
+  let .const tn _ := ty.getAppFn | return none
+  if tn == ``Nat then return none
+  let some ii ← caseInduct? tn | return none
+  return if ii.isRec then some (ii, ty.getAppArgs) else none
+
 /-- `e` is an application of a constructor of an inductive type with several constructors other
 than `Bool` and `Nat` (an optional, an error union, an enumeration): `Bool` tests go through `if`,
 and `Nat` constructors are arithmetic (literals, `n + 1`), which `fsym_arith` reads. -/
@@ -3992,13 +4001,9 @@ def stuckUnknown? (Q : Expr) : MetaM (Option (MVarId × List Name × Array Expr)
     for d in a.getAppArgs do
       let .mvar m := d | continue
       if ← m.isAssigned then continue
-      let ty ← whnfD (← m.getType)
-      let .const tn _ := ty.getAppFn | continue
-      if tn == ``Nat then continue
-      let some ii ← caseInduct? tn | continue
-      unless ii.isRec do continue
+      let some (ii, args) ← recCaseType? (← m.getType) | continue
       if (← unfoldAtom a).expr != a then continue
-      return some (m, ii.ctors, ty.getAppArgs.extract 0 ii.numParams)
+      return some (m, ii.ctors, args.extract 0 ii.numParams)
   return none
 
 /-! ## Updates into a postcondition: the planner -/
@@ -7068,16 +7073,18 @@ def ghostSplit? (g : MVarId) (P : Expr) : TacticM (Option Expr) := g.withContext
   for a in atoms (← instantiateMVars P) do
     let .const c _ := a.getAppFn | continue
     if isFsymAtom env c then continue
+    -- (an atom stuck on its arguments: unfolding does not change it; computed once per atom)
+    let mut stuck? : Option Bool := none
     for d in a.getAppArgs do
       let .fvar f := d | continue
       if seen.contains f then continue
+      if (← recCaseType? (← f.getType)).isNone then continue
+      let stuck ← match stuck? with
+        | some b => pure b
+        | none => do let b := (← unfoldAtom a).expr == a; stuck? := some b; pure b
+      -- (another atom may be stuck on `d`)
+      unless stuck do continue
       seen := seen.push f
-      let .const tn _ := (← whnfD (← f.getType)).getAppFn | continue
-      if tn == ``Nat then continue
-      let some ii ← caseInduct? tn | continue
-      unless ii.isRec do continue
-      -- (an atom stuck on `d`: unfolding does not change it)
-      if (← unfoldAtom a).expr != a then continue
       let ok ← decidesBranch f
       trace[fsym] "ghost split of {d} in {a}: {if ok then "decides" else "does not decide"} the branch"
       if ok then return some d
@@ -7096,13 +7103,12 @@ where
             return !d.isImplementationDetail && (← instantiateMVars d.type).consumeMData.isFalse
           if refuted then return true
           -- (the program normalized: a condition that the case's constructor decides,
-          -- `(some p).isSome = true`, takes its branch)
-          let (_, _, _, _, c₀, _) ← view g'
+          -- `(some p).isSome = true`, takes its branch, and the `if` is gone)
           let g' ← simpProg g' #[]
           g'.withContext do
           let (_, _, _, _, c', _) ← view g'
           let c' := c'.consumeMData
-          unless c'.isAppOfArity ``ite 5 do return c' != c₀.consumeMData
+          unless c'.isAppOfArity ``ite 5 do return true
           let cond := c'.getArg! 1
           let hp ← mkFreshExprMVar cond
           if ← arith hp.mvarId! (quick := true) then return true
@@ -7146,11 +7152,9 @@ def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
   unless l.isAppOfArity ``Zig.loop 7 do return none
   let some B := (l.getArg! 5).consumeMData.getAppFn.constName? | return none
   let (some inv, meas?, post?) := loopInvOf (← getEnv) B | return none
-  -- (the registration's test, `checkLoopInv`: a last `Nat` parameter after one of the locals)
-  let ghost ← forallTelescope (← inferType (mkConst inv)) fun ys _ => do
-    unless ys.size ≥ 2 do return false
-    isDefEq (← inferType ys.back!) (mkConst ``Nat) <&&>
-      isDefEq (← inferType ys[ys.size - 2]!) (← inferType (x.getArg! 4))
+  -- (the registration's test, `checkLoopInv`)
+  let σ ← inferType (x.getArg! 4)
+  let ghost ← forallTelescope (← inferType (mkConst inv)) fun ys _ => isGhostInv ys (some σ)
   return some { loop := l, body := B, inv, meas?, post?, ghost }
 
 /-- **A loop with a registered invariant** (`@[fsym_inv]`, P09-E4): the command

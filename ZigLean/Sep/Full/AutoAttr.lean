@@ -204,6 +204,18 @@ def loopInvParts : List String := ["inv", "meas", "post"]
 def loopEntryParam : Name := `s0
 
 open Meta in
+/-- The parameters `xs` of `B.inv` end in a ghost measure (`B.inv … s n`): a last parameter of
+type `Nat` after one of the locals `σ` (`none`: locals that depend on the body's parameters, any
+type). Locals of type `Nat` have no ghost measure: their invariant's last parameter is the
+locals. -/
+def isGhostInv (xs : Array Expr) (σ? : Option Expr) : MetaM Bool := do
+  unless xs.size ≥ 2 do return false
+  unless ← isDefEq (← inferType xs.back!) (mkConst ``Nat) do return false
+  let some σ := σ? | return true
+  if ← isDefEq σ (mkConst ``Nat) then return false
+  isDefEq (← inferType xs[xs.size - 2]!) σ
+
+open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
 `StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
 universe parameters whose parameters are explicit and named apart (`fsym` matches them by name with
@@ -233,12 +245,7 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
   forallTelescope d.type fun xs res => do
     -- a ghost measure (`B.inv … s n`: a last parameter `n : Nat` after the locals; the loop rule
     -- is `loop_ghost_ex`, so there is no `B.meas`)
-    let ghost ← if last == "inv" && xs.size ≥ 2 then do
-        let isNat ← isDefEq (← inferType xs.back!) (mkConst ``Nat)
-        match types? with
-        | some (σ, _) => pure (isNat && (← isDefEq (← inferType xs[xs.size - 2]!) σ))
-        | none => pure isNat
-      else pure false
+    let ghost ← if last == "inv" then isGhostInv xs (types?.map (·.1)) else pure false
     let xs := if ghost then xs.pop else xs
     let some s := xs.back? | fail "no parameter for the loop's locals"
     if let some (σ, ε) := types? then
