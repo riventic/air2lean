@@ -42,8 +42,11 @@ the machine's, `scripts/par.py`) divided by `REPLAY_MIB` (one replay's memory,
 earlier in the same build; the architecture-audit fixtures' four audits
 (`tests/roadmap/architecture-audit/claims/build.sh`) share one file per run in the same way, and
 so do the `theorem_universe.py gate --replay-cache` calls of a gate script (a fresh file in its
-temporary directory; no gate caches by default).
-Receipts reject reused replays.
+temporary directory; no gate caches by default). With `--replay-cache`, a module that is Lake-built
+in the root package is checked as a Lake-built receipt of the root package's replay workspace
+(`.lake/replay`), which Lake keeps across builds until the module or an import changes; such a
+module is listed in `reused`. Without `--replay-cache`, nothing outside a fixture package's own
+receipts is reused. Receipts reject reused replays.
 
 Existing replay-cache hits also require the current installed runtime/logical/IR input digest
 from `toolchain_runtime_sha256`, the same byte traversal the extractor uses. Missing or changed

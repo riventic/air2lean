@@ -1415,7 +1415,7 @@ def replay_jobs() -> int:
 def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cache: Path | None = None,
                   cacheable: frozenset = frozenset(), *, expected_runtime: str | None = None,
                   compiled_inputs_sha256: str | None = None, validate_inputs=None,
-                  lake_package: Path | None = None, root_receipts: bool = False) -> dict:
+                  lake_package: Path | None = None) -> dict:
     """Re-check every declaration of each module with the toolchain's independent `leanchecker`.
 
     Imports are loaded from oleans, so the caller passes every non-toolchain module of the
@@ -1426,9 +1426,11 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     modules; this runtime binding does not authenticate project/private import closures.
     `lake_package`: every module's check is a Lake-built receipt in that package's replay
     workspace instead (`lake_kernel_replay`), when Lake resolves exactly `lean_path` there.
-    `root_receipts`: otherwise the check of each `cacheable` module is a receipt in the root
-    package's replay workspace, when Lake resolves exactly the root package's build directory
-    and the toolchain there; the other modules are checked afresh.
+    Otherwise, with `cache` (the caller allows reuse), the check of each `cacheable` module is a
+    receipt in the root package's replay workspace, which Lake keeps across builds until the
+    module or an import changes, when Lake resolves exactly the root package's build directory
+    and the toolchain there; such a passing module counts as `reused`, and the others are checked
+    afresh or through `cache`. Without `cache`, every module outside `lake_package` replays now.
     Several audits of one build may share `cache` at once (scripts/fixture-checks.py's run): each
     cacheable module is checked under a claim (`<cache>.d/<module>.lock`), the cache is read
     again under it and a pass is merged in at once, so concurrent audits replay each module once
@@ -1500,15 +1502,15 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     modules, published = sorted(digests), []
     receipts = (lake_kernel_replay(modules, lake_package, checker_sha, runtime_sha, lean_path)
                 if lake_package is not None and modules else None)
-    if receipts is None and root_receipts and (built := sorted(set(modules) & cacheable)):
+    root = receipts is None and cache is not None and bool(built := sorted(set(modules) & cacheable))
+    if root:
         # A `cacheable` module and its whole import closure resolve to the root package's build
         # directory or the toolchain on `lean_path` (cacheable_modules), so leanchecker checks the
-        # same oleans on the root package's own lookup path: there its check is a receipt of the
-        # root package's replay workspace, which Lake keeps until the module or an import changes.
+        # same oleans on the root package's own lookup path.
         receipts = lake_kernel_replay(built, ROOT, checker_sha, runtime_sha, os.pathsep.join(
             map(str, (ROOT / ".lake/build/lib/lean", toolchain / "lib/lean"))))
     try:
-        results = {m: (False, None if r.get("status") == "pass" else {
+        results = {m: (root and r.get("status") == "pass", None if r.get("status") == "pass" else {
             "module": m, "output": f"leanchecker exited {r.get('exit_code')}\n" + str(r.get("output", ""))})
             for m, r in (receipts or {}).items()}
         if rest := [m for m in modules if m not in results]:
@@ -1644,8 +1646,7 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
                                          expected_runtime=runtime_sha,
                                          compiled_inputs_sha256=hashlib.sha256(
                                               json.dumps(lake_inputs, sort_keys=True).encode()).hexdigest(),
-                                          validate_inputs=validate_inputs, lake_package=lake_package,
-                                          root_receipts=True)
+                                          validate_inputs=validate_inputs, lake_package=lake_package)
     return {"revision": git_revision(), "lake_trace_check": {"modules": lake_modules, "status": "up-to-date"},
             "lean_sysroot": str(toolchain), "toolchain_runtime_sha256": runtime_sha,
             "artifacts": artifacts,
