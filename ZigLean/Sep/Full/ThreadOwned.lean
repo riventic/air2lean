@@ -232,12 +232,12 @@ theorem _root_.Zig.FStepIn.dropMid {a b c : Res} {m m' : Mem}
       · exact (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr h))))
     fun l hl hR => by
       obtain ⟨hn, hw, -⟩ := Res.shared_ne.mp hR
-      simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at hn
+      simp only [FHeap.union_apply, Option.or_eq_none_iff] at hn
       have hn' : (rsum a c).heap l = none := by
-        simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff]; exact ⟨hn.1, hn.2.2⟩
+        simp only [FHeap.union_apply, Option.or_eq_none_iff]; exact ⟨hn.1, hn.2.2⟩
       refine Res.shared_ne.mpr ⟨hn', fun hw' => hw ?_,
         ((Res.owned_ne.mp hl).resolve_left fun h => h hn')⟩
-      simp only [rsum, Ghost.add_share] at hw' ⊢
+      simp only [Ghost.add_share] at hw' ⊢
       rw [← SCell.add_assoc, SCell.add_comm (a.gh.share l) (b.gh.share l), SCell.add_assoc]
       exact SCell.Whole.add' _ hw'
 

@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.LockPair
+import ZigLean.Sep.Full.Word
 
 /-!
 # The two-lock product: one protocol, two locks, either lock's view
@@ -20,11 +21,17 @@ each lock's code then need only their own lock's `Fits`; the other lock rides in
   ownership of their resources.
 * `Pair.swap`: `A`'s invariant and `B`'s facts give `B`'s invariant and `A`'s facts;
   `Pair.inv_iff`: so one protocol invariant serves both locks' `Fits.inv`.
+* **Read shares**: the holders' resources move into the parts without gathering a partial share
+  (`FLock.NoGatherHeld`, `NoGatherHeld.of_R` for a resource without partial shares; F4's
+  `Mem.OwnsRes.gather`), so `Pair.swap` and `Pair.inv_iff` take it.
 * **`B` kept across `A`'s view's steps**: a step of `A`'s code (`Pair.Keeps.otherStep`; a thread it
   queues is `away` from `B`, or holds `B` at `holdsAway` with `A`'s key in `B`'s nest), a change
-  of `A`'s coordinates such as a nap (`Keeps.setA`), a stop (`Keeps.cur`). `Pair.U_stable`,
-  `U_setA` and `U_atStop` lift them to `Pair.U` for `A`'s `Fits.stable`, `Fits.nap`'s `hU` and
-  `Fits.atStop`. Still to come (ledger #two-lock-product): a step on a part, and `PartTick`.
+  of `A`'s coordinates such as a nap (`Keeps.setA`), a stop (`Keeps.cur`), a step on a thread's
+  own part (`Keeps.partStep`, in `Inv.wp_liftMem`'s frame: `A`'s rest with its read shares; `B`'s
+  word cells stay up to `Cell.norm`, so `A`'s rest is rebuilt at the new memory, `Inv.congrX`).
+  `Pair.U_stable`, `U_setA`, `U_atStop`, `U_partStep` and `U_partTick` lift them to `Pair.U` for
+  `A`'s `Fits.stable`, `Fits.nap`'s `hU`, `Fits.atStop`, a part step's continuation and
+  `Fits.kstep`'s `PartTick`.
 -/
 
 namespace Zig
@@ -190,9 +197,9 @@ theorem off_owned_of_rest {own : ThreadId → Res} {rO rc : Res}
     rcases Res.owned_ne.mp (hsub _ hn) with hh | hp
     · exact hh (off_erase.mp hO _ ⟨rfl, h1, h2⟩)
     · refine ho.rest_noShare (l := (L.b, x)) ?_ ?_
-      · simp only [rsum, FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+      · simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
         exact fun h => absurd h (wordR_some hb ⟨rfl, h1, h2⟩)
-      · simp only [rsum, Ghost.add_share]
+      · simp only [Ghost.add_share]
         exact SCell.pos_add_iff.mpr (.inr hp)
 
 /-- **A lock step keeps what any thread's clock owns** without the word's bytes: the stepping
@@ -336,18 +343,6 @@ structure Keeps (B : FLock γ) (G : ThreadId → γ) (m : Mem) (rL rH rX : Res) 
   hoff : B.Off rH.heap.erase
   xdisj : FHeap.Disjoint (rsum rL rH).heap rX.heap
   xoff : B.Off rX.heap.erase
-
-/-- **The invariant with a rest that is the same up to `Cell.norm`** (`FOwned.congrRest`; the same
-knowledge and ghost state). -/
-theorem Inv.congrRest {rX' : Res} (hi : L.Inv G rX m) (hs : FHeap.Sim rX'.heap rX.heap)
-    (hk : rX'.know = rX.know) (hg : rX'.gh = rX.gh) : L.Inv G rX' m := by
-  obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  have hn : ∀ l, rX'.heap l = none ↔ rX.heap l = none := fun _ => hs.none
-  refine ⟨hi.w, ⟨rL, ho.congrRest ((FHeap.Sim.refl _).union ((FHeap.Sim.refl _).union hs))
-      (by simp only [rsum, hk]) (by simp only [rsum, hg]),
-    hLoff, fun l => (hLX l).imp id (hn l).mpr, hF, hnF⟩,
-    LockWord.off_erase.mpr fun l hl => (hn l).mpr (LockWord.off_erase.mp hi.xoff l hl),
-    hi.pdisj, hi.idle, hi.res⟩
 
 end FLock
 
@@ -584,7 +579,7 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
     A.Inv (upd G t g) (rsum (side B m' rL rH) rX) m' ∧ B.Keeps (upd G t g) m' rL rH rX := by
   have hf := hk.facts
   have hbB : B.BlkOk m := hf.w.blk
-  obtain ⟨rLA, ho', -, hLX', -⟩ := hi'.rest
+  obtain ⟨rLA, ho', -⟩ := hi'.rest
   -- `B`'s word cells: in `A`'s rest, so the same up to `Cell.norm`
   have hside : ∀ l, B.In l → ∃ c, m.heap l = some c ∧
       (rsum (side B m rL rH) rX).heap l = some ⟨c, none⟩ := fun l hl => by
@@ -599,12 +594,7 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
   have hcellsL : ∀ l, B.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := by
     intro l hl
     obtain ⟨c, hc, hX⟩ := hside l hl
-    have hA : (A.wordR m').heap l = none := cellsAt_none (hp.apart.symm.not_in hl)
-    have hLA : rLA.heap l = none := (hLX' l).resolve_right (by rw [hX]; exact nofun)
-    have hO : (rsum (A.wordR m') (rsum rLA (rsum (side B m rL rH) rX))).heap l = some ⟨c, none⟩ := by
-      show ((A.wordR m').heap l).or ((rLA.heap l).or ((rsum (side B m rL rH) rX).heap l)) = _
-      rw [hA, hLA, hX]; rfl
-    rw [hc, ho'.rest_cell hO]
+    rw [hc, hi'.restCell hX]
     rfl
   have hcells : ∀ x, B.o ≤ x → x < B.o + 4 →
       (m'.heap (B.b, x)).map Cell.norm = (m.heap (B.b, x)).map Cell.norm :=
@@ -671,7 +661,7 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
       simp only [FLock.own, hjb, hjt, upd_self, Bool.false_eq_true, ↓reduceIte] at h0
       exact h0
     rw [← hp.part]; exact (Option.or_eq_none_iff.mp e').1
-  refine ⟨hi'.congrRest (hsim.union (FHeap.Sim.refl _)) rfl rfl,
+  refine ⟨hi'.congrX (hsim.union (FHeap.Sim.refl _)) rfl rfl,
     ⟨⟨by rw [hpl]; exact hf.w.stepIn hs hwF hwR hcells, hf.loff, fun hF => ?_,
       fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
     by rw [hheldOf, hs.threads]; exact hk.held, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩⟩

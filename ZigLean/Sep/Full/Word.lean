@@ -19,8 +19,9 @@ the word's values and clocks (`Word.Ok`, `Word.hist`) are facts of the memory mo
 - **A step on a thread's own part preserves a framed word** (`Word.Ok.fstep`, `hist_fstep`):
   its frame has the word's cells, which stay up to `Cell.norm` (`FLock.Inv.cellsN`).
 - **A futex wait at the word** by a thread out of the lock's code (`away`) keeps the lock's
-  invariant (`FLock.Inv.waitOff`, `FLock.Inv.spuriousOff`); so does a futex wake at it
-  (`FLock.Inv.wakeOff`).
+  invariant (`FLock.Inv.waitOff`, `FLock.Inv.spuriousOff`), and so does one by a holder at
+  `holdsAway` when the word is in the lock's nest (`FLock.Inv.waitNest`); so does a futex wake at
+  it (`FLock.Inv.wakeOff`).
 
 A rest that has the word's cells of an older memory, the same up to `Cell.norm`, is the rest with
 the word's cells of the new memory (`FLock.Inv.congrX`).
@@ -521,6 +522,41 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
       (fun _ => Iff.rfl)
   · simp only [Bool.false_eq_true, ↓reduceIte] at hw ⊢
     exact ⟨hw.1, hrel _ hiR rfl hw.2⟩
+
+/-- **A holder's futex wait at a nest futex** (`LockWord.WInv.waitNest`; ledger #two-lock-product
+item (3)): thread `t` holds the lock at `holdsAway` and waits, in the private domain, at a shared
+word `W` of the lock's nest (its bytes in the protocol's rest, apart from the lock's word; e.g. a
+semaphore's condition epoch). The invariant holds with the same places, with `t` in the queue if
+it sleeps. A nest futex that is another lock's word is that lock's code (`Pair.otherInv`). -/
+theorem Inv.waitNest {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
+    {e : BitVec 32} {b : Bool} (hi : L.Inv G rX m) (hph : L.ph (G t) = .holdsAway) (hW : W.Ok m A)
+    (hap : W.ApartL L.toLockWord) (hn : L.nest W.ptr) (hX : ∀ l, W.In l → rX.heap l ≠ none)
+    (h : ((Thread.futexWait W.ptr e false).run { m with current := t }).run =
+      some (.ok (b, m'))) :
+    L.Inv G rX m' := by
+  obtain ⟨ht, -⟩ := hi.ht (by rw [hph]; decide)
+  obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hW.access
+  have hWb : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb₀).1
+  have hoff : ∀ bid blk o, m.access W.ptr 4 4 = pure (bid, blk, o) →
+      bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o := fun bid blk o ha => by
+    rw [ha₀] at ha; cases ha
+    rcases hap with h | h | h
+    · exact .inl (Ne.symm h)
+    · exact .inr (.inr h)
+    · exact .inr (.inl h)
+  have hw := hi.w.waitNest (t := t) (by exact hph) (hi.keyAt_ne hW hap false) hn hoff h
+  rcases futexWait_eq h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, -, -, hc⟩
+  · exact hi.requeue t m.waiters _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl)
+      (fun _ h => h) (fun _ => Iff.rfl)
+  have ha' : m.access W.ptr 4 4 = pure (bid, blk, o) := ha
+  rw [ha₀] at ha'; cases ha'
+  have hiR : L.Inv G rX (({ m with current := t } : Mem).recordAt W.b W.o 4 .atomicRead) :=
+    (hi.cur t).recordX (by decide) rfl ht hWb (by decide)
+      (fun x h1 h2 => hX _ ⟨rfl, h1, h2⟩)
+  rcases hc with ⟨-, rfl, rfl⟩ | ⟨-, rfl, rfl⟩
+  · exact hiR.requeue t _ _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl) (fun _ h => h)
+      (fun _ => Iff.rfl)
+  · exact hiR
 
 /-- A spurious return of a futex wait of thread `t` (`away`, not in the queue) at a shared word:
 `t` goes to `out` with the memory before the wait. -/
