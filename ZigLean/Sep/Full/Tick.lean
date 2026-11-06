@@ -161,11 +161,11 @@ theorem spent_zero : spent 0 = emp := by funext r; simp [spent, emp]
 /-- **Receipts and credits that are not used are dropped.** -/
 @[fsym_drop] theorem EUpd.spent_drop {n : Nat} {R : FAssn} : EUpd (spent n ⋆ R) R :=
   EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
-    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
+    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)
 
 @[fsym_drop] theorem EUpd.credits_drop {n : Nat} {R : FAssn} : EUpd (credits n ⋆ R) R :=
   EUpd.trans (EUpd.of_imp fun _ h => sep_comm h)
-    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)
+    (EUpd.drop fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)
 
 /-- **The plain mode splits off a resource that holds its fragments** (`Res.Plain`,
 `Holds.splitPlain`): a precondition whose resources hold the plain mode (an exact thread part, a

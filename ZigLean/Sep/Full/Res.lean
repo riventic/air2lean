@@ -1274,19 +1274,29 @@ claims** by block and byte (`docs/sep-full-state.md` §Byte-range claims): one c
 the shares, tags and receipts of an extent cell at bound `0`. An exclusive claim on a byte is the
 whole fraction of its cell (`ZigLean/Sep/Full/Claims.lean`), and **the authoritative counter
 cell** (`ac`, §Authoritative counters: credits, step receipts, stack tokens, plain-mode facts;
-non-mintable, `MemAuth`). -/
+non-mintable, `MemAuth`), and **the read shares** of heap cells by location (`share`, §Read
+shares: a location with a share is no resource's exclusive cell; `Holds` matches the cell a share
+reads against the memory). -/
 @[ext] structure Ghost where
   led : Nat → GCell
   extent : BlockId → ECell
   cl : BlockId → Nat → ECell
   ac : KCell
+  share : Loc → SCell
 
 namespace Ghost
 
-def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit, ACell.unit⟩
+def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit, ACell.unit,
+  fun _ => SCell.zero⟩
+
+@[simp] theorem unit_led (γ : Nat) : unit.led γ = GCell.unit := rfl
+
+@[simp] theorem unit_extent (b : BlockId) : unit.extent b = ECell.unit := rfl
+
+@[simp] theorem unit_cl (b : BlockId) (x : Nat) : unit.cl b x = ECell.unit := rfl
 
 def add (g₁ g₂ : Ghost) : Ghost := ⟨fun γ => (g₁.led γ).add (g₂.led γ), fun b => (g₁.extent b).add (g₂.extent b),
-  fun b x => (g₁.cl b x).add (g₂.cl b x), g₁.ac.add g₂.ac⟩
+  fun b x => (g₁.cl b x).add (g₂.cl b x), g₁.ac.add g₂.ac, fun l => (g₁.share l).add (g₂.share l)⟩
 
 /-- The ledger statuses of `g`: ledger `γ`'s authority is at epoch `e` with parent tag `p`. -/
 def ls (g : Ghost) : LStat := fun γ e p => ∃ M, 0 < (g.led γ).auth (e, M, p)
@@ -1320,6 +1330,7 @@ theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
   · funext b; exact ECell.add_comm _ _
   · funext b x; exact ECell.add_comm _ _
   · exact ACell.add_comm _ _
+  · funext l; exact SCell.add_comm _ _
 
 theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
   ext1
@@ -1327,6 +1338,7 @@ theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add
   · funext b; exact ECell.add_assoc _ _ _
   · funext b x; exact ECell.add_assoc _ _ _
   · exact ACell.add_assoc _ _ _
+  · funext l; exact SCell.add_assoc _ _ _
 
 @[simp] theorem add_unit (g : Ghost) : g.add unit = g := by
   ext1 <;> (try funext x) <;> (try funext y) <;> simp [add, unit]
@@ -1492,14 +1504,18 @@ def GOk (m : Mem) (g gF : Ghost) : Prop :=
 theorem GOk.assoc {m : Mem} {a b c : Ghost} : GOk m (a.add b) c ↔ GOk m a (b.add c) := by
   unfold GOk; rw [Ghost.add_assoc, Ghost.Ok.assoc]
 
-/-- The ghost part `b` holds no exclusive fragment of the counter cell: no stack token. Such a
-part can be dropped (`GOk.mono`); a stack token cannot (`StackAuth` demands it). -/
-def Ghost.Affine (b : Ghost) : Prop := ∀ k v, b.ac.ex k v = 0
+/-- The ghost part `b` holds no exclusive fragment of the counter cell (no stack token) and no
+read share. Such a part can be dropped (`GOk.mono`); a stack token cannot (`StackAuth` demands
+it), and neither can a share (`Holds` matches the cell it reads against the memory, as it does
+an exclusive cell). -/
+def Ghost.Affine (b : Ghost) : Prop := (∀ k v, b.ac.ex k v = 0) ∧ ∀ l, (b.share l).Empty
 
-theorem Ghost.affine_unit : Ghost.unit.Affine := fun _ _ => rfl
+theorem Ghost.affine_unit : Ghost.unit.Affine := ⟨fun _ _ => rfl, fun _ => SCell.empty_zero⟩
 
 theorem Ghost.Affine.add {a b : Ghost} (ha : a.Affine) (hb : b.Affine) : (a.add b).Affine :=
-  fun k v => by simp [ha k v, hb k v]
+  ⟨fun k v => by simp [ha.1 k v, hb.1 k v], fun l c => by
+    show ((a.share l).add (b.share l) c).val = 0
+    rw [SCell.add_val, ha.2 l c, hb.2 l c]; grind⟩
 
 /-- **Ghost state without stack tokens can be dropped.** -/
 theorem GOk.mono {m : Mem} {a b c : Ghost} (h : GOk m (a.add b) c) (hb : b.Affine) : GOk m a c := by
@@ -1509,7 +1525,7 @@ theorem GOk.mono {m : Mem} {a b c : Ghost} (h : GOk m (a.add b) c) (hb : b.Affin
   have := h.2.1; rw [e] at this
   have h3 := h.2.2.1; rw [e] at h3
   have h4 := h.2.2.2; rw [e] at h4
-  exact ⟨ExtTrue.of_add this, ClFresh.of_add h3, MemAuth.drop h4 hb⟩
+  exact ⟨ExtTrue.of_add this, ClFresh.of_add h3, MemAuth.drop h4 hb.1⟩
 
 theorem GOk.keep {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hk : KeepsExt m m')
     (hs : m.blocks.size ≤ m'.blocks.size) (hm : MemAuth.Keep m m') : GOk m' g gF :=
@@ -1527,6 +1543,79 @@ theorem GOk.of_blocks {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hb : m'.bloc
 theorem GOk.of_unit {m : Mem} {gF : Ghost} (h : GOk m Ghost.unit gF) (m' : Mem)
     (hF : ExtTrue m' gF) (hC : ClFresh m' gF) (hM : MemAuth m' gF.ac) : GOk m' Ghost.unit gF :=
   ⟨h.1, by simpa using hF, by simpa using hC, by simpa using hM⟩
+
+/-! ## The heap with the read shares (§Read shares) -/
+
+@[simp] theorem Ghost.add_share (a b : Ghost) (l : Loc) :
+    (a.add b).share l = (a.share l).add (b.share l) := rfl
+
+@[simp] theorem Ghost.unit_share (l : Loc) : Ghost.unit.share l = SCell.zero := rfl
+
+/-- A part without shares leaves the shares of a sum as they are. -/
+theorem Ghost.Affine.share_add {a b c : Ghost} (hb : b.Affine) :
+    ((a.add b).add c).share = (a.add c).share := by
+  funext l; simp only [Ghost.add_share]; rw [(hb.2 l).eq, SCell.add_zero]
+
+/-- **The cells read shares read**: at each location, the cell its share reads (`SCell.cell`),
+none where it has no share. -/
+noncomputable def SCells (s : Loc → SCell) : FHeap := fun l => (s l).cell
+
+/-- **The heap `h` with the read shares `s` matches `m`**: `h` and the cells the shares read
+together match `m` (`FMatch`), no share is on a location of `h` (a shared cell is no resource's
+exclusive cell), and each location's shares are valid (one cell, at most whole). -/
+def SMatch (m : Mem) (h : FHeap) (s : Loc → SCell) : Prop :=
+  FMatch m (h ∪ SCells s) ∧ FHeap.Disjoint h (SCells s) ∧ ∀ l, (s l).Valid
+
+namespace SMatch
+
+variable {m : Mem} {h : FHeap} {s : Loc → SCell}
+
+theorem whole (hm : SMatch m h s) : FMatch m (h ∪ SCells s) := hm.1
+
+theorem apart (hm : SMatch m h s) : FHeap.Disjoint h (SCells s) := hm.2.1
+
+theorem valid (hm : SMatch m h s) : ∀ l, (s l).Valid := hm.2.2
+
+/-- An exclusive cell is a live byte of `m` (up to `Cell.norm`). -/
+theorem cell (hm : SMatch m h s) {l : Loc} {fc : FCell} (hl : h l = some fc) :
+    ∃ c, m.heap l = some c ∧ c.norm = fc.cell.norm :=
+  hm.whole.cell (by simp [hl])
+
+/-- An exclusive cell meets its tag constraint. -/
+theorem tag (hm : SMatch m h s) {l : Loc} {fc : FCell} (hl : h l = some fc) :
+    TagSat (shapes m) l.1 l.2 fc.atom :=
+  hm.whole.2 l fc (by simp [hl])
+
+/-- A location with neither an exclusive cell nor a share is no live byte. -/
+theorem none (hm : SMatch m h s) {l : Loc} (hl : h l = none) (hs : SCells s l = none) :
+    m.heap l = none :=
+  hm.whole.none (by simp [hl, hs])
+
+/-- Without shares it is `FMatch`. -/
+theorem of_fmatch (hm : FMatch m h) (hs : ∀ l, (s l).Empty) : SMatch m h s := by
+  have e : SCells s = FHeap.empty := funext fun l => SCell.cell_eq_none (hs l)
+  refine ⟨by rw [e, FHeap.union_empty]; exact hm, by rw [e]; exact FHeap.disjoint_empty h,
+    fun l => by rw [(hs l).eq]; exact SCell.valid_zero⟩
+
+theorem fmatch (hm : SMatch m h s) (hs : ∀ l, (s l).Empty) : FMatch m h := by
+  have e : SCells s = FHeap.empty := funext fun l => SCell.cell_eq_none (hs l)
+  have := hm.whole; rwa [e, FHeap.union_empty] at this
+
+/-- The same shares, written another way (a ghost change that leaves them: `Ghost.share_add₂`). -/
+theorem reShare {s' : Loc → SCell} (hm : SMatch m h s) (e : s' = s) : SMatch m h s' := e ▸ hm
+
+end SMatch
+
+/-- A part without read shares leaves the shares of a sum as they are. For a ghost state built
+without shares (credits, counter cells, ledgers, extents, claims) the premise is `rfl`. -/
+theorem Ghost.share_add_none {a b : Ghost} (hb : b.share = fun _ => SCell.zero := by rfl) :
+    (a.add b).share = a.share := by
+  funext l; simp [hb]
+
+/-- Sums of parts with the same shares have the same shares. -/
+theorem Ghost.share_add₂ {a b a' b' : Ghost} (ha : a'.share = a.share) (hb : b'.share = b.share) :
+    (a'.add b').share = (a.add b).share := by
+  funext l; simp only [Ghost.add_share, ha, hb]
 
 /-! ## Resources and assertions -/
 
@@ -1930,7 +2019,7 @@ end ECell
 
 /-- The ghost state with the extent cell `c` at block `b` and nothing else. -/
 def Ghost.atExt (b : BlockId) (c : ECell) : Ghost :=
-  ⟨fun _ => GCell.unit, fun b' => if b' = b then c else ECell.unit, fun _ _ => ECell.unit, ACell.unit⟩
+  { Ghost.unit with extent := fun b' => if b' = b then c else ECell.unit }
 
 @[simp] theorem Ghost.atExt_cl (b : BlockId) (c : ECell) : (Ghost.atExt b c).cl = fun _ _ => ECell.unit := rfl
 
@@ -1939,10 +2028,11 @@ def Ghost.atExt (b : BlockId) (c : ECell) : Ghost :=
 theorem Ghost.atExt_add (b : BlockId) (c c' : ECell) :
     (Ghost.atExt b c).add (Ghost.atExt b c') = Ghost.atExt b (c.add c') := by
   ext1
-  · funext γ; simp [Ghost.add, Ghost.atExt]
+  · funext γ; simp [Ghost.add, Ghost.atExt, Ghost.unit]
   · funext b'; simp only [Ghost.add, Ghost.atExt]; split <;> simp
-  · funext b' x; simp [Ghost.add, Ghost.atExt]
+  · funext b' x; simp [Ghost.add, Ghost.atExt, Ghost.unit]
   · simp [Ghost.add, Ghost.atExt]
+  · funext l; simp [Ghost.add, Ghost.atExt, Ghost.unit]
 
 /-- **The authority over block `b`'s extent with the fraction `q`**: `b` is live, `S` bytes,
 kind `K` (mapping start included); shares of `1 - q` are out. Owns no bytes. -/
@@ -1969,7 +2059,7 @@ def brcpt (b : BlockId) (q : Frac) (k γ e : Nat) : FAssn := fun r =>
 def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
   ⟨fun _ => GCell.unit, fun b => match E b with
     | some (S, K) => ECell.auth1 S K Frac.one
-    | none => ECell.unit, fun _ _ => ECell.unit, ACell.unit⟩
+    | none => ECell.unit, fun _ _ => ECell.unit, ACell.unit, fun _ => SCell.zero⟩
 
 @[simp] theorem Ghost.exts_ac (E : BlockId → Option (Nat × BlockKind)) :
     (Ghost.exts E).ac = ACell.unit := rfl

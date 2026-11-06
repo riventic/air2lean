@@ -217,8 +217,8 @@ theorem FTotalTriple.toTotal_on_plain {c : MemM α} {P : Assn} {Q : α → Assn}
   intro m hP hF hd hm hp _ ⟨hs, hns⟩
   have ht' : FTotalTriple (up P ⋆ plain) c (fun v => up (Q v)) :=
     ht.eupd_post fun _ => (EUpd.of_imp fun _ h => by unfold plain at h; exact sep_assoc' h).trans
-      ((EUpd.drop (K := unmetered) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩).trans
-        (EUpd.drop (K := noStack) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩))
+      ((EUpd.drop (K := unmetered) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩).trans
+        (EUpd.drop (K := noStack) fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩))
   obtain ⟨v, m', r', hr, hh', hq, hs'⟩ := ht'.runs
     ((holds_ofHeap hd hm hns).addPlain hns fun _ => by simp [Ghost.exts])
     (sep_plain_intro ⟨by simpa using hp, rfl, rfl⟩) hs

@@ -1117,7 +1117,7 @@ theorem FTotalTriple.mremapMoveC (os : Os.Target) (hhas : os.hasMremap = true) {
       have el : lo' = lo := by have := h2.2.1; rw [hs, hp0] at this; exact_mod_cast this.symm
       subst eb el
       exact sep_lift.mpr ⟨h1, b', A', lo', sep_lift.mpr ⟨h2, sep_assoc h⟩⟩
-    · refine (EUpd.drop (fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact fun _ _ => rfl⟩)).trans
+    · refine (EUpd.drop (fun _ h => ⟨h.1, h.2.1, by rw [h.2.2]; exact ⟨fun _ _ => rfl, fun _ _ => rfl⟩⟩)).trans
         (EUpd.of_imp fun r h => ?_)
       simp only [nb, lo', if_neg hs, fmremapPost, fmremapPostC] at h ⊢
       obtain ⟨h1, h⟩ := sep_lift.mp (sep_assoc h)

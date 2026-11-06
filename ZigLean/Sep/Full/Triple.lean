@@ -77,12 +77,12 @@ instance (sh : List Shape) : Decidable (ShapesWF sh) := inferInstanceAs (Decidab
 
 instance (m : Mem) : Decidable m.FSeq := inferInstanceAs (Decidable (_ ∧ _))
 
-/-- `m` holds the resource `r` and the frame `rF`: their disjoint union matches `m` (its live
-bytes, each byte's tag constraint: `FMatch`), their knowledge is true in `m`, and their ghost
-states compose (`Ghost.Ok`). -/
+/-- `m` holds the resource `r` and the frame `rF`: their disjoint union with the cells their
+read shares read matches `m` (its live bytes, each byte's tag constraint: `SMatch`, `FMatch`),
+their knowledge is true in `m`, and their ghost states compose (`Ghost.Ok`). -/
 structure Holds (m : Mem) (r rF : Res) : Prop where
   disj : FHeap.Disjoint r.heap rF.heap
-  heap : FMatch m (r.heap ∪ rF.heap)
+  heap : SMatch m (r.heap ∪ rF.heap) (r.gh.add rF.gh).share
   know : Know.Sub r.know m.kn
   knowF : Know.Sub rF.know m.kn
   ghost : GOk m r.gh rF.gh
@@ -128,7 +128,8 @@ theorem frame (ht : FTriple P c Q) : FTriple (P ⋆ R) c (fun v => Q v ⋆ R) :=
   obtain ⟨hdisj, hheap, hk, hkF, hg⟩ := hh
   obtain ⟨hPF, hRF⟩ := FHeap.disjoint_union_left.mp hdisj
   have := ht m rP ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩
-    ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩, by rw [← FHeap.union_assoc]; exact hheap, hk.left,
+    ⟨FHeap.disjoint_union_right.mpr ⟨hd, hPF⟩,
+      by rw [← FHeap.union_assoc, ← Ghost.add_assoc]; exact hheap, hk.left,
       hk.right.union hkF, GOk.assoc.mp hg⟩ hp hs
   split at this
   · trivial
@@ -136,7 +137,8 @@ theorem frame (ht : FTriple P c Q) : FTriple (P ⋆ R) c (fun v => Q v ⋆ R) :=
   · obtain ⟨r', ⟨hd', hh', hk', hkF', hg'⟩, hq, hs'⟩ := this
     obtain ⟨hQR, hQF⟩ := FHeap.disjoint_union_right.mp hd'
     exact ⟨⟨r'.heap ∪ rR.heap, r'.know.union rR.know, r'.gh.add rR.gh⟩,
-      ⟨FHeap.disjoint_union_left.mpr ⟨hQF, hRF⟩, by rw [FHeap.union_assoc]; exact hh',
+      ⟨FHeap.disjoint_union_left.mpr ⟨hQF, hRF⟩,
+        by rw [FHeap.union_assoc, Ghost.add_assoc]; exact hh',
         hk'.union hkF'.left, hkF'.right, GOk.assoc.mpr hg'⟩, ⟨r', rR, hQR, rfl, hq, hr⟩, hs'⟩
 
 /-- Frame on the left. -/
@@ -186,6 +188,7 @@ theorem drop {K : α → FAssn} (ht : FTriple P c (fun v => Q v ⋆ K v))
   · obtain ⟨r', ⟨hd, hm, hk, hkF, hg⟩, ⟨r₁, r₂, -, rfl, hq, hk2⟩, hs'⟩ := this
     obtain ⟨e, ha⟩ := hK _ _ hk2
     simp only [e, FHeap.union_empty] at hd hm
+    rw [ha.share_add] at hm
     exact ⟨r₁, ⟨hd, hm, hk.left, hkF, GOk.mono hg ha⟩, hq, hs'⟩
 
 /-- A step that does not change the memory and returns: every assertion stays. -/
@@ -258,39 +261,51 @@ theorem FHeap.Sim.some {h₁ h₂ : FHeap} (hs : FHeap.Sim h₁ h₂) {l : Loc} 
 
 theorem FHeap.Sim.symm {h₁ h₂ : FHeap} (hs : FHeap.Sim h₁ h₂) : FHeap.Sim h₂ h₁ := fun l => (hs l).symm
 
+theorem FHeap.Sim.refl (h : FHeap) : FHeap.Sim h h := fun _ => rfl
+
 theorem FHeap.Sim.norm {h₁ h₂ : FHeap} (hs : FHeap.Sim h₁ h₂) (l : Loc) :
     (h₁ l).map (fun fc => fc.cell.norm) = (h₂ l).map (fun fc => fc.cell.norm) := by
   have := congrArg (Option.map Prod.fst) (hs l)
   simpa [Option.map_map, Function.comp_def] using this
 
+theorem FHeap.Sim.union {a a' b b' : FHeap} (ha : FHeap.Sim a a') (hb : FHeap.Sim b b') :
+    FHeap.Sim (a ∪ b) (a' ∪ b') := fun l => by
+  have e1 := ha l
+  simp only [FHeap.union_apply]
+  cases x : a l <;> cases y : a' l <;> rw [x, y] at e1
+  · exact hb l
+  · cases e1
+  · cases e1
+  · exact e1
+
+/-- **`SMatch` sees cells up to `Cell.norm`**: a heap with the same cells up to it, with the same
+tags, matches with the same shares. -/
+theorem SMatch.sim {m : Mem} {h h' : FHeap} {s : Loc → SCell} (hm : SMatch m h s)
+    (hs : FHeap.Sim h' h) : SMatch m h' s := by
+  have hu : FHeap.Sim (h' ∪ SCells s) (h ∪ SCells s) := hs.union (FHeap.Sim.refl _)
+  refine ⟨⟨fun l => by rw [hm.whole.1 l]; exact (hu.norm l).symm, fun l fc hl => ?_⟩,
+    fun l => ?_, hm.valid⟩
+  · obtain ⟨fc', h1, -, ha⟩ := hu.symm.some hl
+    rw [← ha]; exact hm.whole.2 l fc' h1
+  · rcases hm.apart l with e | e
+    · exact .inl (hs.none.mpr e)
+    · exact .inr e
+
 /-- The resource and the frame swapped. -/
 theorem Holds.swap {m : Mem} {r rF : Res} (hh : Holds m r rF) : Holds m rF r :=
-  ⟨hh.disj.symm, by rw [FHeap.union_comm hh.disj.symm]; exact hh.heap, hh.knowF, hh.know,
+  ⟨hh.disj.symm, by rw [FHeap.union_comm hh.disj.symm, Ghost.add_comm]; exact hh.heap, hh.knowF,
+    hh.know,
     by have := hh.ghost; unfold GOk at this ⊢; rw [Ghost.Ok.comm, Ghost.add_comm]; exact this⟩
 
 /-- A frame that is the same up to `Cell.norm` (and keeps its knowledge and ghost state) is held
 by the same memory. -/
 theorem Holds.congrF {m : Mem} {r rF rF' : Res} (hh : Holds m r rF) (hs : FHeap.Sim rF'.heap rF.heap)
     (hk : rF'.know = rF.know) (hg : rF'.gh = rF.gh) : Holds m r rF' := by
-  refine ⟨fun l => ?_, ⟨fun l => ?_, fun l fc hl => ?_⟩, hh.know, hk ▸ hh.knowF, hg ▸ hh.ghost⟩
+  refine ⟨fun l => ?_, ?_, hh.know, hk ▸ hh.knowF, hg ▸ hh.ghost⟩
   · rcases hh.disj l with e | e
     · exact .inl e
     · exact .inr (hs.none.mpr e)
-  · rw [hh.heap.1 l]
-    simp only [FHeap.union_apply]
-    cases e : r.heap l with
-    | some _ => rfl
-    | none => simp only [Option.none_or]; exact (hs.norm l).symm
-  · simp only [FHeap.union_apply] at hl
-    cases e : r.heap l with
-    | some fc0 =>
-      rw [e] at hl; cases hl
-      exact hh.heap.2 l fc (by simp [e])
-    | none =>
-      rw [e, Option.none_or] at hl
-      obtain ⟨fc', h', -, ha⟩ := hs.symm.some hl
-      rw [← ha]
-      exact hh.heap.2 l fc' (by simp [e, h'])
+  · rw [hg]; exact hh.heap.sim (FHeap.Sim.union (FHeap.Sim.refl _) hs)
 
 theorem FMatch.fix_cell {m : Mem} {h : FHeap} (hm : FMatch m h) {l : Loc} {fc : FCell}
     (hl : h l = some fc) : ∃ c, m.heap l = some c ∧ h.fix m l = some ⟨c, fc.atom⟩ ∧
@@ -305,22 +320,30 @@ theorem FMatch.fix_cell {m : Mem} {h : FHeap} (hm : FMatch m h) {l : Loc} {fc : 
   rw [he]; rw [he] at hby ha
   cases fc with | mk cell atom => cases cell; simp_all
 
+theorem SMatch.fix_cell {m : Mem} {h : FHeap} {s : Loc → SCell} (hm : SMatch m h s) {l : Loc}
+    {fc : FCell} (hl : h l = some fc) : ∃ c, m.heap l = some c ∧ h.fix m l = some ⟨c, fc.atom⟩ ∧
+      c.norm = fc.cell.norm := by
+  obtain ⟨c, hc, hf, hn⟩ := hm.whole.fix_cell (l := l) (fc := fc) (by simp [hl])
+  refine ⟨c, hc, ?_, hn⟩
+  rw [FHeap.fix_union, FHeap.union_apply] at hf
+  cases e : h.fix m l with
+  | none => exact absurd (FHeap.fix_none.mp e) (by simp [hl])
+  | some x => rw [e, Option.some_or] at hf; exact hf
+
+/-- A heap with its cells' actual sizes and kinds is the heap up to `Cell.norm`. -/
+theorem SMatch.fix_sim {m : Mem} {h : FHeap} {s : Loc → SCell} (hm : SMatch m h s) :
+    FHeap.Sim (h.fix m) h := fun l => by
+  cases e : h l with
+  | none => simp [FHeap.fix, e]
+  | some fc =>
+    obtain ⟨c, -, hf, hn⟩ := hm.fix_cell e
+    simp only [hf, Option.map_some, hn]
+
 /-- Under `Holds`, the resource and the frame with their actual sizes and kinds are held. -/
-theorem Holds.fix {m : Mem} {r rF : Res} (hh : Holds m r rF) : Holds m (r.fix m) (rF.fix m) := by
-  refine ⟨FHeap.fix_disjoint hh.disj, ⟨fun l => ?_, fun l fc hl => ?_⟩, hh.know, hh.knowF, hh.ghost⟩
-  · show _ = ((r.heap.fix m ∪ rF.heap.fix m) l).map _
-    rw [← FHeap.fix_union]
-    cases e : (r.heap ∪ rF.heap) l with
-    | none => rw [hh.heap.none e, (FHeap.fix_none (m := m)).mpr e]; rfl
-    | some fc =>
-      obtain ⟨c, hc, hf, -⟩ := hh.heap.fix_cell e
-      rw [hc, hf]; rfl
-  · simp only [Res.fix] at hl
-    rw [← FHeap.fix_union] at hl
-    simp only [FHeap.fix, Option.map_eq_some_iff] at hl
-    obtain ⟨fc0, h0, rfl⟩ := hl
-    have := hh.heap.2 l fc0 h0
-    split <;> exact this
+theorem Holds.fix {m : Mem} {r rF : Res} (hh : Holds m r rF) : Holds m (r.fix m) (rF.fix m) :=
+  ⟨FHeap.fix_disjoint hh.disj, by
+    show SMatch m (r.heap.fix m ∪ rF.heap.fix m) (r.gh.add rF.gh).share
+    rw [← FHeap.fix_union]; exact hh.heap.sim hh.heap.fix_sim, hh.know, hh.knowF, hh.ghost⟩
 
 theorem Holds.fix_exact {m : Mem} {r rF : Res} (hh : Holds m r rF) : Exact m (r.fix m) := by
   intro l fc hl
@@ -357,9 +380,11 @@ theorem Holds.fix_sim {m : Mem} {r rF : Res} (hh : Holds m r rF) : FHeap.Sim (rF
     simp only [FHeap.union_apply, (FHeap.fix_none (m := m)).mpr hr, Option.none_or] at hf
     simp only [Res.fix, hf, Option.map_some, hn]
 
-/-- The live bytes of a memory that holds `r` and `rF` with their exact cells. -/
+/-- The live bytes of a memory that holds `r` and `rF` with their exact cells, and no read
+shares. -/
 theorem Holds.heap_exact {m : Mem} {r rF : Res} (hh : Holds m r rF) (hx : Exact m r)
-    (hxF : Exact m rF) : m.heap = r.heap.erase ∪ rF.heap.erase := by
+    (hxF : Exact m rF) (hns : ∀ l, ((r.gh.add rF.gh).share l).Empty) :
+    m.heap = r.heap.erase ∪ rF.heap.erase := by
   funext l
   simp only [Heap.union_apply, FHeap.erase]
   cases e : r.heap l with
@@ -367,7 +392,17 @@ theorem Holds.heap_exact {m : Mem} {r rF : Res} (hh : Holds m r rF) (hx : Exact 
   | none =>
     cases e' : rF.heap l with
     | some fc => simp [hxF l fc e']
-    | none => exact hh.heap.none (by simp [e, e'])
+    | none => exact hh.heap.none (by simp [e, e']) (SCell.cell_eq_none (hns l))
+
+/-- **The live bytes of a memory are an exact resource's cells and others** (the frame's, the
+cells read shares read). -/
+theorem Exact.heap_split {m : Mem} {r : Res} (hx : Exact m r) :
+    ∃ hF, m.heap = r.heap.erase ∪ hF :=
+  ⟨fun l => if r.heap l = none then m.heap l else none, funext fun l => by
+    simp only [Heap.union_apply, FHeap.erase]
+    cases e : r.heap l with
+    | some fc => simp [hx l fc e]
+    | none => simp⟩
 
 /-- **Rules from exact cells.** To prove a triple, it is enough to prove it for resources whose
 cells are the memory's exact cells, if the precondition survives reading the actual sizes
@@ -391,7 +426,7 @@ theorem FTriple.of_fix {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
 /-- A frame byte meets its tag constraint. -/
 theorem Holds.tagF {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc} {fc : FCell}
     (hc : rF.heap l = some fc) : TagSat (shapes m) l.1 l.2 fc.atom := by
-  refine hh.heap.2 l fc ?_
+  refine hh.heap.tag (l := l) (fc := fc) ?_
   rcases hh.disj l with e | e
   · rw [FHeap.union_apply, e, Option.none_or, hc]
   · rw [e] at hc; cases hc
@@ -772,14 +807,15 @@ theorem Ghost.exts_split {E : BlockId → Option (Nat × BlockKind)} {b : BlockI
     Ghost.exts E = (Ghost.atExt b (ECell.auth1 S K Frac.one)).add
       (Ghost.exts fun x => if x = b then none else E x) := by
   ext1
-  · funext γ; simp [Ghost.add, Ghost.atExt, Ghost.exts]
+  · funext γ; simp [Ghost.add, Ghost.atExt, Ghost.exts, Ghost.unit]
   · funext x
     simp only [Ghost.add, Ghost.atExt, Ghost.exts]
     by_cases hx : x = b
     · subst hx; simp [h]
     · simp [hx]
-  · funext x y; simp [Ghost.add, Ghost.atExt, Ghost.exts]
+  · funext x y; simp [Ghost.add, Ghost.atExt, Ghost.exts, Ghost.unit]
   · simp
+  · funext l; simp [Ghost.add, Ghost.atExt, Ghost.exts, Ghost.unit]
 
 /-- A legacy assertion with the full extent of one block. -/
 theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
@@ -788,10 +824,11 @@ theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
   refine ⟨by simpa [h2] using hp, by simp [k1, k2, Know.union_none], ?_⟩
   simp only [g1, g2, Ghost.unit_add]
   ext1
-  · funext γ; simp [Ghost.atExt, Ghost.exts]
+  · funext γ; simp [Ghost.atExt, Ghost.exts, Ghost.unit]
   · funext x; simp only [Ghost.atExt, Ghost.exts]; split <;> simp_all
-  · funext x y; simp [Ghost.atExt, Ghost.exts]
+  · funext x y; simp [Ghost.atExt, Ghost.exts, Ghost.unit]
   · simp
+  · funext l; simp [Ghost.atExt, Ghost.exts, Ghost.unit]
 
 /-! ## Address disjointness of live blocks (stage 3) -/
 
