@@ -21,6 +21,7 @@ import ZigLean.Sep.Full.Tick
 import ZigLean.Sep.Full.ResetLedger
 import ZigLean.Sep.Full.OsFutex
 import ZigLean.Sep.Full.TSum
+import ZigLean.Sep.Full.Share
 import ZigLean.VecMem
 
 /-!

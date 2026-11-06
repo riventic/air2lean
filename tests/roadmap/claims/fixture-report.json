@@ -12575,7 +12575,7 @@
      }
     ],
     "head": {
-     "fingerprint": "52337a8c84e7af03ef11c8ab60144e83",
+     "fingerprint": "a4175cea55c7d4b506856827eb6e0167",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Conc",
      "name": "Zig.Full.CTriple"
@@ -12648,10 +12648,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.FHeap.erase",
-    "Zig.Full.Res.heap"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.cret_partial.nonvacuous",
@@ -12760,12 +12758,10 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
+    "Zig.Mem.OwnsRes",
     "Zig.Mem.current",
     "Zig.Sched.Out",
-    "Zig.Sched.soloTree",
-    "Zig.Full.FHeap.erase",
-    "Zig.Full.Res.heap"
+    "Zig.Sched.soloTree"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.cret_partial.returns",
@@ -16300,7 +16296,7 @@
      }
     ],
     "head": {
-     "fingerprint": "6925f4258e0f3781a89d7bb0a13efac3",
+     "fingerprint": "4a3115777497e93b057a77360974daf8",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
@@ -16370,10 +16366,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.FHeap.erase",
-    "Zig.Full.Res.heap"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.tret_partial.nonvacuous",
@@ -16481,10 +16475,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.FHeap.erase",
-    "Zig.Full.Res.heap"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.tret_partial.returns",
@@ -16726,10 +16718,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.FHeap.erase",
-    "Zig.Full.Res.heap"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.tret_total.nonvacuous",
