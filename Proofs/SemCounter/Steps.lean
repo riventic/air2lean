@@ -728,7 +728,11 @@ theorem fits : S.Fits (proto semOf) U ok where
     role_part := fun _ _ _ => Iff.rfl
     ok_calm := fun _ _ _ hp hq => ⟨fun _ => hq, fun _ => hp⟩
     kstep := kstep
-    holdLive := fun _ _ _ _ hi _ hv => FLock.holdLive_none (fun _ h => h) hi hv }
+    holdLive := fun _ _ _ _ hi _ hv => FLock.holdLive_none (fun _ h => h) hi hv
+    noGather := fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => .sep (.up _) (by
+      unfold Pool; split
+      · exact .emp
+      · exact .up _) }
 
 end SemCounter
 end Zig

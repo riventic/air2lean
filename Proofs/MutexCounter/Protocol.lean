@@ -115,7 +115,7 @@ variable {Tgt : Type}
 def proto (workOf : Tgt → Option Ptr) : Proto Tgt Gh where
   inv G m := ∃ rX, (L Lo).Inv G rX m ∧ U Lo G rX m
   init tgt g := workOf tgt = some cPtr ∧ ∃ rp, plain rp ∧ g = (⟨.out, rp, rnil⟩, .work 0)
-  fin g := g.1.ph = .gone ∧ g.2 = .fin
+  fin g := g.1.ph = .gone ∧ g.2 = .fin ∧ ∀ l, g.1.part.shared l = none
   strict := true
   joins g := g.1.ph = .out ∧ g.2 = .joins
 
@@ -162,6 +162,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
 theorem fits : (L Lo).Fits (FPrim.empty Gh) (proto Lo workOf) (U Lo) fun _ => True :=
   .ofLockAll (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) stable
     (fun _ _ _ _ _ hu => ⟨hu.shape, hu.io, hu.rest⟩) tickStable
+    fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => FAssn.Unshared.up _
 
 /-- The protocol's invariant at a stop of `t`. -/
 theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : (proto Lo workOf).inv G m)
@@ -343,7 +344,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
           (LockWord.someLe_le hcl h'')⟩
       · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
           fun u hu => VClock.le_trans hcl (h'' u hu))
-    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
+    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt.empty
       rw [hr.1]
       simpa [FHeap.erase] using rest_io hu.rest hr.2.2
 
@@ -508,9 +509,9 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
           ⟨hr.1, by simp [cPtr], by have := hr.2.2; simp [cPtr, hs]; omega⟩
         simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
         intro h; exact absurd h this
-      refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
+      refine (ho.owns 0 ht).1 e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
-      exact Res.owned_of_heap fun h => hx (by
+      exact Res.excl_of_heap fun h => hx (by
         simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at h; exact h.2)
 
 /-! ## The spawn, the ends -/
@@ -624,11 +625,12 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} {rp : Re
       · exact .inr (.inr ⟨rfl, rfl⟩))
     rw [upd_snd, upd_upd] at this; exact this
 
-/-- **The kid's end** (`QKid`): it is `gone` at `fin` and spawned no thread. -/
-theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res}
+/-- **The kid's end** (`QKid`): it is `gone` at `fin` and spawned no thread. Its part holds no
+read share (`hrp`), so `main`'s join gathers none (`FLock.Inv.join`). -/
+theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res} (hrp : ∀ l, rp.shared l = none)
     (hi : (proto Lo workOf).inv (upd G 1 (gOut rp 2)) m) : (proto Lo workOf).QKid 1 () G m d := by
   have hi' := inv_end hi (.inr ⟨rfl, rfl⟩)
-  refine ⟨_, hi', ⟨rfl, rfl⟩, fun _ => ?_⟩
+  refine ⟨_, hi', ⟨rfl, rfl, hrp⟩, fun _ => ?_⟩
   obtain ⟨rX, -, hu⟩ := hi'
   exact joinedAll_of_main (spawners hu.shape) (by decide)
 
@@ -669,6 +671,8 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
     hfin.1 hj (by rw [hg]; rfl) rfl rfl (fun r hR => by
       show R Lo (fun u => (upd G₁ 0 g u).2) r
       rw [hX]; exact hR)
+    fun l => .inr (hL.own_unshared (by rw [show (L Lo).ph (G₁ 1) = .gone from hfin.1]; rfl)
+      hfin.2.2 l)
   have hF : (L Lo).Free (upd G₁ 0 g) := by
     intro u hu'
     by_cases h0 : u = 0
@@ -683,12 +687,13 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
       have := hcl u (by rw [hL'.w.csize]; exact hu'); rwa [hc'] at this
   obtain ⟨rL, hR, hsep, ho⟩ := hL'.take (t := 0) hF
     (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall
+    (FLock.NoGather.of_R _ fun _ => FAssn.Unshared.up _)
   have hR4 : up (pts (cPtr.add (Lo.mo + 4)) 4 (BitVec.ofNat 32 4)) rL := by
     have hR' : R Lo (fun u => (upd G₁ 0 g u).2) rL := hR
     rw [hX] at hR'
     have h4 : sum (fun u => (G₁ u).2) = 4 := by
       show (G₁ 0).2.count + (G₁ 1).2.count = 4
-      rw [hg, hfin.2]; rfl
+      rw [hg, hfin.2.1]; rfl
     unfold R at hR'; rw [h4] at hR'; exact hR'
   refine h k G₁ m' _ rX _ hk hc' ho (sep_mono_right (fun _ h => sep_mono_left
     (fun r (h : r = rL) => by subst h; exact hR4) h) hsep) (blk_of hL' hu.rest) hcl
@@ -737,7 +742,7 @@ theorem main_counter {own : ThreadId → Res} {rX r : Res} {m : Mem} {w : Nat}
   refine ⟨blk, hblk, hl, hsz, hk, by rw [hA]; rw [hoff] at hal; omega,
     ((L Lo).u32_bytes hblk).mp hw, by rw [hx]; exact hdec, fun k => ?_⟩
   -- `main` owns the word's and the counter's bytes
-  refine Mem.Owns.noRace (h := (upd own 0 r 0).owned) (by rw [hc]; exact ho.owns 0 ht)
+  refine Mem.Owns.noRace (h := (upd own 0 r 0).excl) (by rw [hc]; exact (ho.owns 0 ht).1)
     fun x h1 h2 => ?_
   have hne : ∀ {a b : Res} {l : Zig.Loc}, a.heap l ≠ none ∨ b.heap l ≠ none →
       (rsum a b).heap.erase l ≠ none := fun h => by
@@ -747,8 +752,8 @@ theorem main_counter {own : ThreadId → Res} {rX r : Res} {m : Mem} {w : Nat}
     · exact fun h' => absurd h' h
     · exact fun _ => h
   rw [upd_self, e, e']
-  show (rsum (rsum r₁ r₂) r₀).owned (0, x) ≠ none
-  refine Res.owned_of_erase (hne (.inl ?_))
+  show (rsum (rsum r₁ r₂) r₀).excl (0, x) ≠ none
+  refine Res.excl_of_erase (hne (.inl ?_))
   have hsome : ∀ {a b : Res} {l : Zig.Loc}, a.heap l ≠ none ∨ b.heap l ≠ none →
       (rsum a b).heap l ≠ none := fun h => by
     simpa [FHeap.erase] using hne h

@@ -974,6 +974,10 @@ theorem R_congr {Y Y' : ThreadId → X} (h : ∀ u, (Y' u).ph = (Y u).ph) : R Y'
 theorem fitsL : (L K).Fits (FPrim.empty Gh) (proto K) (U K) ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
+    fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => .sep (.up _) (by
+      unfold Pool; split
+      · exact .sep (.up _) (.up _)
+      · exact .emp)
 
 /-- **The protocol keeps the semaphore** (`FSem.Fits`): the lock's laws, the steps of the
 condition's and the semaphore's code (`cstep`, `U_own`, `enterStep`, `holdStep`), the ticks, and
@@ -1018,6 +1022,7 @@ theorem fitsS : (S K).Fits (proto K) (U K) ok where
   role_part _ _ _ := Iff.rfl
   ok_calm _ _ _ hp hq := ⟨fun _ => hq, fun _ => hp⟩
   holdLive _ _ _ _ hi _ hv := FLock.holdLive_none (fun _ h => h) hi hv
+  noGather := fitsL.noGather
   kstep := by
     intro t G rX m G' rX' m' hs hu
     rcases hs with ⟨hSI, hs | ⟨hC, hmv⟩⟩ | hs

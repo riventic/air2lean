@@ -891,6 +891,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 theorem fitsL : L.Fits (FPrim.empty Gh) proto U ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
+    fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => FAssn.Unshared.up _
 
 /-! ## A native step on the caller's part, next to the event -/
 

@@ -690,6 +690,9 @@ theorem Res.shared_ne {r : Res} {l : Loc} :
 theorem Res.excl_of_heap {r : Res} {l : Loc} (h : r.heap l ≠ none) : r.excl l ≠ none :=
   Res.excl_ne.mpr (.inl h)
 
+theorem Res.excl_of_erase {r : Res} {l : Loc} (h : r.heap.erase l ≠ none) : r.excl l ≠ none :=
+  Res.excl_of_heap fun e => h (by simp [FHeap.erase, e])
+
 theorem Res.owned_of_excl {r : Res} {l : Loc} (h : r.excl l ≠ none) : r.owned l ≠ none := by
   rcases Res.excl_ne.mp h with h | h
   · exact Res.owned_of_heap h
@@ -761,6 +764,42 @@ theorem Res.excl_eq_erase {r : Res} (hs : r.gh.share = fun _ => SCell.zero := by
   · rw [Res.excl_ne]; exact ⟨fun h => h.resolve_right (hw l), .inl⟩
   · obtain ⟨-, -, hp⟩ := Res.shared_ne.mp h
     rw [hs] at hp; exact SCell.not_pos_iff.mpr SCell.empty_zero hp
+
+/-- **An assertion without partial shares**: every resource it holds has no shared byte
+(`Res.shared`), so its bytes are all exclusive. Such a resource never gathers a read share at a
+join or a lock acquire (`FOwned.join`, `FLock.NoGather.of_R`). It is closed under `⋆` and `∃`, and
+every assertion without ghost shares has it (`Unshared.of_share`). -/
+def FAssn.Unshared (P : FAssn) : Prop := ∀ r, P r → ∀ l, r.shared l = none
+
+namespace FAssn.Unshared
+
+theorem of_share {P : FAssn} (h : ∀ r, P r → r.gh.share = fun _ => SCell.zero) : P.Unshared :=
+  fun r hr => (Res.excl_eq_erase (h r hr)).2
+
+theorem of_gh {P : FAssn} (h : ∀ r, P r → r.gh = Ghost.unit) : P.Unshared :=
+  of_share fun r hr => by rw [h r hr]; rfl
+
+theorem up (P : Assn) : (FAssn.up P).Unshared := of_gh fun _ h => h.2.2
+theorem emp : FAssn.emp.Unshared := of_gh fun _ h => h.2.2
+theorem lift (φ : Prop) : (FAssn.lift φ).Unshared := of_gh fun _ h => h.2.2.2
+theorem bauth (b : BlockId) (S : Nat) (K : BlockKind) (q : Frac) : (Zig.Full.bauth b S K q).Unshared :=
+  of_share fun _ h => by rw [h.2.2]; rfl
+theorem bext (b : BlockId) (S : Nat) (K : BlockKind) : (Zig.Full.bext b S K).Unshared :=
+  Unshared.bauth b S K Frac.one
+
+theorem ex {γ : Type} {P : γ → FAssn} (h : ∀ x, (P x).Unshared) : (FAssn.ex P).Unshared :=
+  fun r ⟨x, hx⟩ => h x r hx
+
+theorem sep {P Q : FAssn} (hP : P.Unshared) (hQ : Q.Unshared) : (P ⋆ Q).Unshared := by
+  rintro r ⟨r₁, r₂, -, rfl, h₁, h₂⟩ l
+  refine Classical.byContradiction fun hs => ?_
+  have hp := (Res.shared_ne.mp hs).2.2
+  simp only [Ghost.add_share] at hp
+  rcases SCell.pos_add_iff.mp hp with hp | hp
+  · exact Res.shared_sep rfl rfl hs (Res.owned_ne.mpr (.inr hp)) (hP r₁ h₁ l)
+  · exact Res.shared_sep' rfl rfl hs (Res.owned_ne.mpr (.inr hp)) (hQ r₂ h₂ l)
+
+end FAssn.Unshared
 
 /-- **The exclusive bytes are fixed by the memory and the frame** (`Holds.owned_sub'`): next to the
 same frame, a byte live in the first memory that the second resource holds exclusively (a cell

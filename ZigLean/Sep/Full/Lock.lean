@@ -288,8 +288,9 @@ on it (engine ledger #share-gather). A resource without partial shares never gat
 def NoGather (G : ThreadId → γ) (m : Mem) (t : ThreadId) : Prop :=
   ∀ rL, L.R G rL → ∀ l, (L.own G m t).shared l = none ∨ rL.shared l = none
 
-/-- A lock whose resource holds no partial share gathers none. -/
-theorem NoGather.of_R (hR : ∀ G r, L.R G r → ∀ l, r.shared l = none) {G : ThreadId → γ} {m : Mem}
+/-- A lock whose resource holds no partial share gathers none (`FAssn.Unshared`: `up`, `bext`,
+`⋆`, `∃`, …). -/
+theorem NoGather.of_R (hR : ∀ G, (L.R G).Unshared) {G : ThreadId → γ} {m : Mem}
     {t : ThreadId} : L.NoGather G m t :=
   fun rL h l => .inr (hR G rL h l)
 
@@ -515,6 +516,15 @@ theorem free_iff_of {G G' : ThreadId → γ}
 theorem Inv.ht {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {t : ThreadId}
     (hg : L.ph (G t) ≠ .gone) : t < m.threads.size ∧ joinedB m t = false :=
   hi.w.live t hg
+
+/-- **A thread outside the lock without read shares in its part owns none** (`Inv.join`'s and
+`Inv.take`'s gather premise `hgat`, from a protocol's `fin` or its parts' assertions). -/
+theorem Inv.own_unshared {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m)
+    {u : ThreadId} (hu : (L.ph (G u)).held = false) (hp : ∀ l, (L.part (G u)).shared l = none)
+    (l : Loc) : (L.own G m u).shared l = none := by
+  unfold own; split
+  · exact (Res.excl_eq_erase).2 l
+  · rw [hi.idle u hu, rsum_rnil]; exact hp l
 
 /-- No part, no free resource and not the protocol's rest has a byte of the word. -/
 theorem Inv.wordFree {G : ThreadId → γ} {rY : Res} {m : Mem}
