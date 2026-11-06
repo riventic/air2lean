@@ -300,4 +300,227 @@ theorem syncLocally_ren (hρ : Inj ρ) (f : Func) : (renFunc ρ f).syncLocally =
   simp only [Func.syncLocally, allInsts_renFunc, Array.any_map, Function.comp_def, renInst_op,
     effects_renOp, renEffects, hasOpenCall_ren hρ]
 
+/-! ## Memory -/
+
+section Memory
+
+theorem pointsToMem_ren (v : Val) : (renVal ρ v).pointsToMem = v.pointsToMem := by
+  cases v with
+  | optSome t w => simpa [renVal, Val.pointsToMem] using pointsToMem_ren w
+  | errUnionOk t w => simpa [renVal, Val.pointsToMem] using pointsToMem_ren w
+  | _ => simp [renVal, Val.pointsToMem]
+termination_by sizeOf v
+decreasing_by all_goals simp_wf; omega
+
+theorem hasUndefExcept_ren (admit : TyId → Bool) (v : Val) :
+    (renVal ρ v).hasUndefExcept admit = v.hasUndefExcept admit := by
+  cases v with
+  | optSome t w => simpa [renVal, Val.hasUndefExcept] using hasUndefExcept_ren admit w
+  | errUnionOk t w => simpa [renVal, Val.hasUndefExcept] using hasUndefExcept_ren admit w
+  | _ => simp [renVal, Val.hasUndefExcept]
+termination_by sizeOf v
+decreasing_by all_goals simp_wf; omega
+
+theorem hasNestedUndef_ren (v : Val) : (renVal ρ v).hasNestedUndef = v.hasNestedUndef := by
+  have h := hasUndefExcept_ren (ρ := ρ) (fun _ => false) v
+  cases v <;> simp_all [renVal, Val.hasNestedUndef]
+
+theorem constTy?_ren (v : Val) : (renVal ρ v).constTy? = v.constTy? := by
+  cases v <;> rfl
+
+theorem isUndef_ren (v : Val) : (renVal ρ v matches .undef _) = (v matches .undef _) := by
+  cases v <;> rfl
+
+theorem asmAllowEntry?_renOp (arch : String) (op : Op) :
+    (renOp ρ op).asmAllowEntry? arch = op.asmAllowEntry? arch := by
+  cases op <;> try rfl
+  case asm source vol clobbers outputs inputs =>
+    simp [renOp, renFlat, Op.asmAllowEntry?, asmConstraints, Array.map_map, Function.comp_def, renAsm]
+
+theorem isDeviceAsm_renOp (arch : String) (op : Op) :
+    (renOp ρ op).isDeviceAsm arch = op.isDeviceAsm arch := by
+  cases op <;> try rfl
+  case asm source vol clobbers outputs inputs =>
+    have h := asmAllowEntry?_renOp (ρ := ρ) arch (.asm source vol clobbers outputs inputs)
+    simp only [renOp, renFlat] at h ⊢
+    simp only [Op.isDeviceAsm, h]
+
+theorem isMemAsm_renOp (arch : String) (op : Op) : (renOp ρ op).isMemAsm arch = op.isMemAsm arch := by
+  simp only [Op.isMemAsm, asmAllowEntry?_renOp]
+
+theorem contains_ren (hρ : Inj ρ) (xs : Array InstId) (x : InstId) :
+    (xs.map ρ).contains (ρ x) = xs.contains x := by
+  simp only [Array.contains_map, beq_ren hρ]
+  rfl
+
+/-- `Array.foldl_hom` from the empty array, for a step that commutes with mapping `h` on the
+members. -/
+theorem foldl_hom_nil {α β γ : Type} (h : α → γ) (g₁ : Array α → β → Array α)
+    (g₂ : Array γ → β → Array γ) (xs : Array β)
+    (H : ∀ x ∈ xs, ∀ a, g₂ (a.map h) x = (g₁ a x).map h) :
+    xs.foldl g₂ #[] = (xs.foldl g₁ #[]).map h := by
+  have := foldl_hom_mem (Array.map h) g₁ g₂ xs #[] H
+  simpa only [Array.map_empty] using this
+
+/-- The renaming of an `(instruction, alloc)` pair. -/
+abbrev ren2 (ρ : InstId → InstId) (p : InstId × InstId) : InstId × InstId := (ρ p.1, ρ p.2)
+
+theorem find?_fst_ren (hρ : Inj ρ) (xs : Array (InstId × InstId)) (x : InstId) :
+    (xs.map (ren2 ρ)).find? (·.1 == ρ x) = (xs.find? (·.1 == x)).map (ren2 ρ) := by
+  have hp : ((fun y : InstId × InstId => y.1 == ρ x) ∘ ren2 ρ) = (fun y => y.1 == x) := by
+    funext y
+    simp only [Function.comp_def, ren2, beq_ren hρ]
+  rw [Array.find?_map, hp]
+
+theorem placeRoots_ren (hρ : Inj ρ) (insts : Array Inst) :
+    placeRoots (insts.map (renInst ρ)) = (placeRoots insts).map (ren2 ρ) := by
+  simp only [placeRoots, Array.foldl_map]
+  apply foldl_hom_nil
+  intro i hmem acc
+  rcases i with ⟨id, ty, op⟩
+  simp only [renInst_op, renInst_id]
+  cases op
+  case alloc => simp [renOp, renFlat, Array.map_push]
+  case fieldPtr b n =>
+    cases b
+    case inst x =>
+      simp only [renOp, renFlat, renVal, find?_fst_ren hρ]
+      cases acc.find? (·.1 == x) <;> simp [Array.map_push]
+    all_goals rfl
+  case fieldParentPtr b n =>
+    cases b
+    case inst x =>
+      simp only [renOp, renFlat, renVal, find?_fst_ren hρ]
+      cases acc.find? (·.1 == x) <;> simp [Array.map_push]
+    all_goals rfl
+  case bitcast s b =>
+    cases b
+    case inst x =>
+      simp only [renOp, renFlat, renVal, find?_fst_ren hρ]
+      cases acc.find? (·.1 == x) <;> simp [Array.map_push]
+    all_goals rfl
+  case sliceFieldPtr l b =>
+    cases b
+    case inst x =>
+      simp only [renOp, renFlat, renVal, find?_fst_ren hρ]
+      cases acc.find? (·.1 == x) <;> simp [Array.map_push]
+    all_goals rfl
+  all_goals rfl
+
+theorem placesOf_ren (hρ : Inj ρ) (roots : Array (InstId × InstId)) (a : InstId) :
+    placesOf (roots.map (ren2 ρ)) (ρ a) = (placesOf roots a).map ρ := by
+  simp only [placesOf, Array.filterMap_map, Array.map_filterMap]
+  congr 1
+  funext p
+  simp only [Function.comp_def, ren2, beq_ren hρ]
+  split <;> rfl
+
+theorem placeOperands_renOp (op : Op) : placeOperands (renOp ρ op) = (placeOperands op).map (renVal ρ) := by
+  simp only [placeOperands, effects_renOp, renEffects, Array.map_append]
+
+theorem valueOperands_renOp (op : Op) : valueOperands (renOp ρ op) = (valueOperands op).map (renVal ρ) := by
+  simp only [valueOperands, effects_renOp, renEffects]
+
+theorem ptrOperands_renOp (op : Op) : ptrOperands (renOp ρ op) = (ptrOperands op).map (renVal ρ) := by
+  simp only [ptrOperands, effects_renOp, renEffects]
+
+/-- A fold over renamed operands that commutes with renaming its accumulator. -/
+theorem foldl_ren_of (g₁ : Array InstId → Val → Array InstId) (g₂ : Array InstId → Val → Array InstId)
+    (xs ys : Array Val) (acc : Array InstId) (hy : ys = xs.map (renVal ρ))
+    (H : ∀ v a, g₂ (a.map ρ) (renVal ρ v) = (g₁ a v).map ρ) :
+    ys.foldl g₂ (acc.map ρ) = (xs.foldl g₁ acc).map ρ := by
+  subst hy
+  rw [Array.foldl_map]
+  exact Array.foldl_hom (Array.map ρ) (fun a v => H v a)
+
+/-- Adding the root of an operand found by `roots.find?` commutes with renaming. -/
+theorem push_root_ren (hρ : Inj ρ) (roots : Array (InstId × InstId)) (acc : Array InstId) (x : InstId) :
+    (match ((roots.map (ren2 ρ)).find? (fun p : InstId × InstId => p.1 == ρ x)) with
+      | some (_, r) => if (acc.map ρ).contains r then acc.map ρ else (acc.map ρ).push r
+      | none => acc.map ρ) =
+    (match roots.find? (fun p : InstId × InstId => p.1 == x) with
+      | some (_, r) => if acc.contains r then acc else acc.push r
+      | none => acc).map ρ := by
+  rw [find?_fst_ren hρ]
+  cases roots.find? (fun p : InstId × InstId => p.1 == x) with
+  | none => rfl
+  | some p =>
+    obtain ⟨_, r⟩ := p
+    simp only [Option.map_some, ren2, contains_ren hρ]
+    split <;> simp [Array.map_push]
+
+theorem usesEscapingAllocs_ren (hρ : Inj ρ) (f : Func) :
+    usesEscapingAllocs (renFunc ρ f) = (usesEscapingAllocs f).map ρ := by
+  simp only [usesEscapingAllocs, allInsts_renFunc, placeRoots_ren hρ, Array.foldl_map]
+  apply foldl_hom_nil
+  intro i hmem acc
+  simp only [renInst_op, renInst_id, renInst_ty, valueOperands_renOp]
+  refine foldl_ren_of _ _ _ _ acc ?_ ?_
+  · rw [Array.map_append]
+    congr 1
+    rcases i with ⟨id, ty, op⟩
+    cases op
+    case store p v =>
+      simp only [renOp, renFlat, hasNestedUndef_ren]
+      cases v <;> cases p <;> simp [renVal, find?_id_ren hρ, Option.map_map, Function.comp_def, renFunc,
+        Func.withBody, Option.bind_map, renInst_ty]
+      all_goals (try split) <;> (try simp_all [renVal])
+    case bitcast s v =>
+      cases v
+      case inst x =>
+        simp only [renOp, renFlat, renVal, find?_id_ren hρ]
+        cases f.allInsts.find? (·.id == x) <;> simp [renFunc, Func.withBody]
+        all_goals (try split) <;> (try simp_all [renVal])
+      all_goals simp [renOp, renFlat, renVal]
+    all_goals simp [renOp, renFlat]
+  · intro v a
+    cases v
+    case inst x => exact push_root_ren hρ _ a x
+    all_goals rfl
+
+theorem flatMap_congr_mem {α β : Type} {f g : α → Array β} :
+    ∀ (xs : Array α), (∀ x ∈ xs, f x = g x) → xs.flatMap f = xs.flatMap g := by
+  intro xs h
+  rcases xs with ⟨l⟩
+  simp only [List.mem_toArray] at h
+  simp only [List.flatMap_toArray]
+  congr 1
+  induction l with
+  | nil => rfl
+  | cons x rest ih =>
+    simp only [List.flatMap_cons, h x (List.mem_cons_self ..),
+      ih fun y hy => h y (List.mem_cons_of_mem _ hy)]
+
+/-- `bodyLists` without `attach`. -/
+theorem bodyLists_eq (b : Array Inst) :
+    bodyLists b = #[b] ++ b.flatMap (fun i => i.op.effects.control.bodies.flatMap bodyLists) := by
+  rw [bodyLists]
+  congr 1
+  rw [Array.flatMap_subtype (g := fun i => i.op.effects.control.bodies.flatMap bodyLists)
+    (fun x _ => by
+      dsimp only
+      rw [Array.flatMap_subtype (g := bodyLists) (fun _ _ => rfl), Array.unattach_attach]),
+    Array.unattach_attach]
+
+theorem bodyLists_ren (b : Array Inst) :
+    bodyLists (b.map (renInst ρ)) = (bodyLists b).map (·.map (renInst ρ)) := by
+  rw [bodyLists_eq, bodyLists_eq, Array.map_append, Array.flatMap_map, Array.map_flatMap]
+  congr 1
+  · simp
+  apply flatMap_congr_mem
+  intro i hi
+  simp only [renInst_op, effects_renOp, renEffects, renControl_bodies, Array.flatMap_map,
+    Array.map_flatMap]
+  apply flatMap_congr_mem
+  intro n hn
+  exact bodyLists_ren n
+termination_by sizeOf b
+decreasing_by
+  have h1 := Array.sizeOf_lt_of_mem hi
+  have h2 := Op.controlBody_size_lt i.op hn
+  have h3 : sizeOf i.op < sizeOf i := by cases i; simp; omega
+  omega
+
+end Memory
+
 end Air2Lean.Renumber
