@@ -118,7 +118,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
   -- each access to a byte of `main`'s part happened before `main`
   have hown0 : ∀ e ∈ m.footprint, e.block = 0 → (∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ x < 24) →
       VClock.le e.clock (m.clocks[0]!) = true := fun e he hb ⟨x, h1x, h2x, h3x⟩ =>
-    ho.owns 0 ht e he (.inl ⟨x, h1x, h2x, by rw [hb, upd_self]; exact Res.owned_of_heap (hown24 x h3x)⟩)
+    (ho.owns 0 ht).1 e he (.inl ⟨x, h1x, h2x, by rw [hb, upd_self]; exact Res.excl_of_heap (hown24 x h3x)⟩)
   -- the pieces
   obtain ⟨_, _, hd, rfl, ⟨rM, _, hdM, rfl, hpM, ⟨rN, rW, hdNW, rfl, hN₁, hW₁⟩⟩,
       ⟨rB, rE, hdB, rfl, hB₁, hE₁⟩⟩ :=

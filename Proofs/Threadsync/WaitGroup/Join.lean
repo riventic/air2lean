@@ -40,7 +40,9 @@ theorem wp_join1 {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
   have h10 : (1 : ThreadId) ≠ 0 := by decide
   have hl := hL.join (t := 0) (u := 1) (g := gO (rsum rM (L.own G₁ m₁ 1)) { ph := .j1, wk := w })
     h10 h10 (by rw [hg]; rfl) hfin.1 hj (by show _ = rsum (G₁ 0).1.part _; rw [hg]; rfl) rfl rfl
-    fun r hR => R_upd0 hR
+    (fun r hR => R_upd0 hR)
+    fun l => .inr (hL.own_unshared (by rw [show L.ph (G₁ 1) = .gone from hfin.1]; rfl)
+      hfin.2.2.2 l)
   obtain ⟨rec, hrec, -, hm'⟩ := join_eq hj
   obtain rfl : rec = _ := Option.some.inj (hrec.symm.trans hr1')
   have hcur : m'.current = 0 := by rw [hm']

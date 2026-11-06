@@ -218,7 +218,8 @@ def check_no_escape_hatches():
     paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemView.lean', ROOT / 'Air2Lean/SemAttr.lean',
              ROOT / 'Air2Lean/Certificate.lean',
              ROOT / 'Air2Lean/CanonSem.lean', ROOT / 'Air2Lean/CanonCertificate.lean',
-             ROOT / 'Air2Lean/Renumber.lean',
+             ROOT / 'Air2Lean/Renumber.lean', ROOT / 'Air2Lean/SemRewrite.lean',
+             ROOT / 'Air2Lean/RenumberProgram.lean',
              *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXAMPLES)]
     for path in paths:
         code = re.sub(r'/-.*?-/|--[^\n]*', '', path.read_text(), flags=re.S)

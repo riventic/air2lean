@@ -58,12 +58,12 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     (hloc : ∀ G m m' rO rR r', P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' →
+      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared →
       P.inv (upd G t (set (G t) r')) m')
     (hpost : ∀ G m m' rO rR r' v d, P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' → Qa v r' →
+      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared → Qa v r' →
       Q v G m' d) :
     ∀ {n} (tr : CoN Tgt (α × Mem) n) {G : ThreadId → γ} {m : Mem} {rO rR : Res},
       P.inv G m → t < m.threads.size → FOwned (fun u => res (G u)) rO m →
@@ -78,7 +78,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     -- the call ran with the running thread's token in its frame: its part holds none
     obtain ⟨hnc, hh'⟩ := Holds.dropCurF
       (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh'
-    rw [Res.owned_addGh] at hst
+    rw [Res.owned_addGh, Res.shared_addGh] at hst
     have hs := (ho.current t).step rfl htl hR hRO hh' hc' ho' hst hnc
     simp only [Safe]
     exact ⟨by rw [hst.threads], hpost G m m' rO rR r' v _ hi hR hs hst hq⟩
@@ -86,7 +86,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     obtain ⟨hso, r', hh₁, hc₁, ho₁, hst, hk⟩ := CTriple.Run.sync_iff.mp h
     obtain ⟨hnc, hh₁⟩ := Holds.dropCurF
       (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh₁
-    rw [Res.owned_addGh] at hst
+    rw [Res.owned_addGh, Res.shared_addGh] at hst
     have hs := (ho.current t).step rfl htl hR hRO hh₁ hc₁ ho₁ hst hnc
     refine (Safe.sync_none hcost).mpr ⟨by rw [hst.threads], set (G t) r',
       hloc G m m₁ rO rR r' hi hR hs hst, fun G₁ m₂ hg hi₂ _ => Step.of_solo hso fun ρ hρ => ?_⟩
@@ -97,7 +97,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     rw [e] at hh₂
     have hc₂ : ({ m₂ with current := t } : Mem).FConc :=
       ⟨by show t < m₂.clocks.size; rw [ho₂.csize]; exact htl₂, ho₂.conc.1, ho₂.conc.2.1⟩
-    have hown : ({ m₂ with current := t } : Mem).Owns t r'.owned := e ▸ ho₂.owns t htl₂
+    have hown : ({ m₂ with current := t } : Mem).OwnsRes t r' := e ▸ ho₂.owns t htl₂
     exact Run.safe hcost hres hinv hloc hpost (k ρ { m₂ with current := t }) (m := m₂) hi₂ htl₂ ho₂
       hR₂ hRO₂
       (hk { m₂ with current := t } _ hst.current.symm hh₂ hc₂ hown ρ hρ (.inr ho₂.conc.2.2))
@@ -111,12 +111,12 @@ theorem WP.call_fowned {x : ConcM Tgt α} {Pa : FAssn} (hx : CTriple Pa x Qa)
     (hloc : ∀ G m m' rO rR r', P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' →
+      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared →
       P.inv (upd G t (set (G t) r')) m')
     (hpost : ∀ G m m' rO rR r' v d, P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' → Qa v r' →
+      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared → Qa v r' →
       Q v G m' d)
     {G : ThreadId → γ} {m : Mem} {n : Nat} (hi : P.inv G m) (hc : m.current = t)
     (hp : Pa (res (G t))) : P.WP t x Q G m n := by

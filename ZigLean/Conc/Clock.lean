@@ -143,6 +143,98 @@ theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : 
 
 end Owns
 
+/-! ## Read ownership
+
+A read races only with a concurrent write (`racePair`: two reads never race). So a thread that
+only reads bytes needs only that every recorded **write** to them happened before its clock
+(`Mem.OwnsRC`, `Mem.OwnsR`); reads by other threads may be concurrent with it. This is the
+ownership of a read share (`docs/sep-full-state.md` §Read shares): any number of threads may hold
+it for the same bytes at once (`tests/roadmap/sep-full/ShareRaceCX.lean`).
+
+- Ownership gives read ownership (`Mem.OwnsC.toR`), and read ownership is ownership once every
+  recorded read is before the clock, too (`Mem.OwnsRC.owns`): the obligation of turning a whole
+  share back into an exclusive cell.
+- A non-write access by the read owner does not race (`Mem.OwnsR.noRace`).
+- A recorded read, by any thread, keeps every clock's read ownership (`Mem.OwnsRC.recordRead`,
+  `Mem.OwnsR.recordRead`); the reader keeps its own after any access (`Mem.OwnsR.recordAt`). -/
+
+/-- The clock `c` may read `h`: every recorded write to a byte of `h`, and every write to a block
+that does not exist yet, happened before `c`. -/
+def Mem.OwnsRC (m : Mem) (c : VClock) (h : Heap) : Prop :=
+  ∀ e ∈ m.footprint, e.kind.isWrite = true → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+    VClock.le e.clock c = true
+
+/-- Thread `t` may read `h`. -/
+def Mem.OwnsR (m : Mem) (t : ThreadId) (h : Heap) : Prop := m.OwnsRC (m.clocks[t]!) h
+
+section OwnsR
+
+variable {m m' : Mem} {c c' : VClock} {h h₁ h₂ hF : Heap}
+
+theorem Mem.OwnsC.toR (ho : m.OwnsC c h) : m.OwnsRC c h := fun e he _ ht => ho e he ht
+
+theorem Mem.Owns.toR {t : ThreadId} (ho : m.Owns t h) : m.OwnsR t h := Mem.OwnsC.toR ho
+
+/-- **Read ownership with every read before the clock is ownership.** -/
+theorem Mem.OwnsRC.owns (hw : m.OwnsRC c h)
+    (hr : ∀ e ∈ m.footprint, e.kind.isWrite = false → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+      VClock.le e.clock c = true) : m.OwnsC c h := fun e he ht => by
+  cases hk : e.kind.isWrite
+  · exact hr e he hk ht
+  · exact hw e he hk ht
+
+theorem Mem.OwnsRC.mono (ho : m.OwnsRC c h) (hc : VClock.le c c' = true) : m.OwnsRC c' h :=
+  fun e he hw ht => VClock.le_trans (ho e he hw ht) hc
+
+theorem Mem.OwnsRC.sub (ho : m.OwnsRC c h) (hs : ∀ l, h₁ l ≠ none → h l ≠ none) :
+    m.OwnsRC c h₁ :=
+  fun e he hw ht => ho e he hw (ht.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hs _ h3⟩) id)
+
+theorem Mem.OwnsRC.union (h1 : m.OwnsRC c h₁) (h2 : m.OwnsRC c h₂) : m.OwnsRC c (h₁ ∪ h₂) := by
+  intro e he hw ht
+  rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb
+  · by_cases hn : h₁ (e.block, x) = none
+    · exact h2 e he hw (.inl ⟨x, hx1, hx2, by simpa [hn] using hx3⟩)
+    · exact h1 e he hw (.inl ⟨x, hx1, hx2, hn⟩)
+  · exact h1 e he hw (.inr hb)
+
+/-- A `StepIn hF` keeps the read ownership of each part of `hF`, by any clock. -/
+theorem Mem.OwnsRC.frame (hs : StepIn hF m m') (ho : m.OwnsRC c h)
+    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsRC c h := by
+  intro e he hw ht
+  rcases hs.fp e he with he | ⟨-, hnt, hb⟩
+  · exact ho e he hw (ht.imp id fun hb => Nat.le_trans hs.blocks hb)
+  · rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb'
+    · exact absurd ⟨x, hx1, hx2, hsub _ hx3⟩ hnt
+    · exact absurd hb' (Nat.not_le.mpr hb)
+
+/-- **A non-write access by the current thread to bytes it may read does not race.** -/
+theorem Mem.OwnsR.noRace {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (ho : m.OwnsR m.current h) (hk : kind.isWrite = false)
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) :
+    NoRace m b off len kind := by
+  apply noRace_of_raceAt
+  unfold raceAt
+  rw [Array.findSome?_eq_none_iff]
+  intro e he
+  split
+  · rename_i hc
+    simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
+    obtain ⟨⟨⟨⟨⟨hb, hl⟩, hel⟩, h1⟩, h2⟩, hcon⟩ := hc
+    subst hb
+    cases hw : e.kind.isWrite
+    · simp [racePair, hw, hk]
+    · have ht : e.Touches h := by
+        by_cases ho' : e.off ≤ off
+        · exact ⟨off, ho', h1, hin off (Nat.le_refl _) (by omega)⟩
+        · exact ⟨e.off, Nat.le_refl _, by omega, hin e.off (by omega) h2⟩
+      have hle := VClock.le_trans (ho e he hw (.inl ht))
+        (VClock.le_bump (m.clocks[m.current]!) m.current)
+      simp [VClock.concurrent, hle] at hcon
+  · rfl
+
+end OwnsR
+
 namespace StepIn
 
 variable {m m' m'' : Mem} {hF hF' : Heap}
@@ -245,6 +337,39 @@ theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.curren
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact VClock.le_trans (ho e he ht) (VClock.le_bump _ _)
+  · exact VClock.le_refl _
+
+/-- No clock gets smaller over a recorded access. -/
+theorem recordAt_clock_le (u : ThreadId) :
+    VClock.le (m.clocks[u]!) ((m.recordAt b off len kind).clocks[u]!) = true := by
+  simp only [Mem.recordAt]; rw [Conc.Proto.getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+  · exact VClock.le_refl _
+
+/-- **A recorded read keeps every clock's read ownership.** -/
+theorem Mem.OwnsRC.recordRead {c : VClock} (ho : m.OwnsRC c h) (hk : kind.isWrite = false) :
+    (m.recordAt b off len kind).OwnsRC c h := by
+  intro e he hw ht
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact ho e he hw ht
+  · simp [hk] at hw
+
+/-- A recorded read, by any thread, keeps what every thread may read. -/
+theorem Mem.OwnsR.recordRead {u : ThreadId} (ho : m.OwnsR u h) (hk : kind.isWrite = false) :
+    (m.recordAt b off len kind).OwnsR u h :=
+  (Mem.OwnsRC.recordRead ho hk).mono (recordAt_clock_le u)
+
+/-- The current thread keeps what it may read over one of its recorded accesses. -/
+theorem Mem.OwnsR.recordAt (hc : m.current < m.clocks.size) (ho : m.OwnsR m.current h) :
+    (m.recordAt b off len kind).OwnsR (m.recordAt b off len kind).current h := by
+  show (m.recordAt b off len kind).OwnsRC ((m.recordAt b off len kind).clocks[m.current]!) h
+  rw [recordAt_clock hc]
+  intro e he hw ht
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact VClock.le_trans (ho e he hw ht) (VClock.le_bump _ _)
   · exact VClock.le_refl _
 
 theorem Mem.Owns.readAt {blk : Block} (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :
@@ -620,8 +745,49 @@ theorem Mem.MsgCov.ofAtomics (h : m.MsgCov) (hfp : m'.footprint = m.footprint)
 
 end MsgCov
 
-/-- **The step relation of `FTTriple`** (module doc). -/
-structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
+/-- **A new access may read the frame's read shares**: the entry `e` touches a byte of the frame
+`hF` only by a non-write, and only at a byte of `hR` (the frame's partial read shares, which the
+stepping thread may share: `docs/sep-full-state.md` §Read shares, option R). With `hR` empty it
+touches no byte of `hF` (`FootprintEntry.ReadsIn.empty`). -/
+def FootprintEntry.ReadsIn (e : FootprintEntry) (hF hR : Heap) : Prop :=
+  ∀ x, e.off ≤ x → x < e.off + e.len → hF (e.block, x) ≠ none →
+    e.kind.isWrite = false ∧ hR (e.block, x) ≠ none
+
+namespace FootprintEntry.ReadsIn
+
+variable {e e₀ : FootprintEntry} {hF hR hF' hR' h : Heap}
+
+theorem of_not (h : ¬ e.Touches hF) : e.ReadsIn hF hR :=
+  fun x h1 h2 h3 => absurd ⟨x, h1, h2, h3⟩ h
+
+/-- An entry that may read the frame's shares touches no part of the frame apart from them. -/
+theorem not_touches (hr : e.ReadsIn hF hR) (hs : ∀ l, h l ≠ none → hF l ≠ none)
+    (hd : ∀ l, h l ≠ none → hR l = none) : ¬ e.Touches h :=
+  fun ⟨x, h1, h2, h3⟩ => (hr x h1 h2 (hs _ h3)).2 (hd _ h3)
+
+theorem empty (hr : e.ReadsIn hF Heap.empty) : ¬ e.Touches hF :=
+  hr.not_touches (fun _ h => h) fun _ _ => rfl
+
+/-- A write touches no byte of the frame. -/
+theorem write (hr : e.ReadsIn hF hR) (hw : e.kind.isWrite = true) : ¬ e.Touches hF :=
+  fun ⟨x, h1, h2, h3⟩ => by have := (hr x h1 h2 h3).1; rw [hw] at this; cases this
+
+theorem weaken (hr : e.ReadsIn hF hR) (hs : ∀ l, hF' l ≠ none → hF l ≠ none)
+    (hR : ∀ l, hF' l ≠ none → hR l ≠ none → hR' l ≠ none) : e.ReadsIn hF' hR' :=
+  fun x h1 h2 h3 => let ⟨hw, hr'⟩ := hr x h1 h2 (hs _ h3); ⟨hw, hR _ h3 hr'⟩
+
+/-- A narrowing of an entry that may read the frame's shares may read them. -/
+theorem narrow (hr : e₀.ReadsIn hF hR) (hn : e.Narrows e₀) : e.ReadsIn hF hR := by
+  obtain ⟨-, hb, hk, ho, hl, -⟩ := hn
+  intro x h1 h2 h3
+  rw [hb] at h3 ⊢; rw [hk]
+  exact hr x (by omega) (by omega) h3
+
+end FootprintEntry.ReadsIn
+
+/-- **The step relation of `FTTriple`** (module doc). The frame is `hF`; a new access may read the
+frame's partial read shares `hR` (`FootprintEntry.ReadsIn`), and touches no other byte of it. -/
+structure FStepIn (hF : Heap) (m m' : Mem) (hR : Heap := Heap.empty) : Prop where
   current : m'.current = m.current
   threads : m'.threads = m.threads
   waiters : m'.waiters = m.waiters
@@ -637,7 +803,7 @@ structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
   nextMsg : m.nextMsg ≤ m'.nextMsg
   atomics : ∃ σ, AMap hF m m' σ
   fp : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
-    (e.tid = m.current ∧ ¬ e.Touches hF ∧ e.block < m'.blocks.size ∧
+    (e.tid = m.current ∧ e.ReadsIn hF hR ∧ e.block < m'.blocks.size ∧
       (e.kind.isWrite = true → ¬ m'.IsConst e.block))
   /-- A new access happened before the thread's new clock. -/
   fpc : ∀ e ∈ m'.footprint, (∃ e₀ ∈ m.footprint, e.Narrows e₀) ∨
@@ -648,7 +814,7 @@ structure FStepIn (hF : Heap) (m m' : Mem) : Prop where
   cov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov
 
 /-- No block disappears. -/
-theorem FStepIn.blocks {hF : Heap} {m m' : Mem} (hs : FStepIn hF m m') :
+theorem FStepIn.blocks {hF hR : Heap} {m m' : Mem} (hs : FStepIn hF m m' hR) :
     m.blocks.size ≤ m'.blocks.size :=
   hs.addrs.size
 
@@ -1010,9 +1176,9 @@ theorem Mem.mem_retire_atomics {l : ALoc} (hl : l ∈ (m.retire b o len).atomics
 /-- **Forgetting the accesses past the end of block `b'`** (`Mem.forgetFrom`, a revival: `S` at
 least the block's size) is a step of the thread for every frame: it only narrows entries, and no
 location lies past the block's end (`Mem.MsgCov`). -/
-theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat)
+theorem FStepIn.forgetFrom {hF hR : Heap} (b' : BlockId) (S : Nat)
     (hS : ∀ blk, m.blocks[b']? = some blk → blk.bytes.size ≤ S) :
-    FStepIn hF m (m.forgetFrom b' S) where
+    FStepIn hF m (m.forgetFrom b' S) hR where
   current := rfl
   threads := rfl
   waiters := rfl
@@ -1051,8 +1217,8 @@ theorem FStepIn.forgetFrom {hF : Heap} (b' : BlockId) (S : Nat)
       fun c hc => (hmsg msg hm).2 c (hover c hc)⟩⟩
 
 /-- Retiring the locations over bytes that the frame does not have is a step of the thread. -/
-theorem FStepIn.retire {hF : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :
-    FStepIn hF m (m.retire b o len) where
+theorem FStepIn.retire {hF hR : Heap} (hcut : ∀ x, o ≤ x → x < o + len → hF (b, x) = none) :
+    FStepIn hF m (m.retire b o len) hR where
   current := rfl
   threads := rfl
   waiters := rfl
@@ -1074,7 +1240,7 @@ end Retire
 
 section FStep
 
-variable {m m' m'' : Mem} {hF hF' : Heap}
+variable {m m' m'' : Mem} {hF hF' hR hR' : Heap}
 
 /-- A `StepIn` that makes no `const` global, writes none and keeps the messages covered is an
 `FStepIn`. -/
@@ -1082,7 +1248,7 @@ theorem FStepIn.of_stepIn (hs : StepIn hF m m') (ha : m.SameAddrs m')
     (hk : ∀ b, b < m.blocks.size → m'.IsConst b → m.IsConst b)
     (hw : ∀ e ∈ m'.footprint, e ∉ m.footprint → e.kind.isWrite = true → ¬ m'.IsConst e.block)
     (hcov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov) :
-    FStepIn hF m m' where
+    FStepIn hF m m' hR where
   current := hs.current
   threads := hs.threads
   waiters := hs.waiters
@@ -1099,12 +1265,12 @@ theorem FStepIn.of_stepIn (hs : StepIn hF m m') (ha : m.SameAddrs m')
     · exact .inl ⟨e, hm, .refl e⟩
     · rcases hs.fp e he with h | ⟨ht, hnt, hb⟩
       · exact absurd h hm
-      · exact .inr ⟨ht, hnt, hb, hw e he hm⟩
+      · exact .inr ⟨ht, .of_not hnt, hb, hw e he hm⟩
   fpc e he := (hs.fpc e he).imp (fun h => ⟨e, h, .refl e⟩) id
   const := hk
   cov := hcov
 
-theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m where
+theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m hR where
   current := rfl
   threads := rfl
   waiters := rfl
@@ -1122,11 +1288,12 @@ theorem FStepIn.refl (m : Mem) (hF : Heap) : FStepIn hF m m where
   cov _ h := h
 
 /-- A step keeps the messages covered (`FStepIn.cov`, no record in front). -/
-theorem FStepIn.msgCov (hs : FStepIn hF m m') (h : m.MsgCov) : m'.MsgCov := by
+theorem FStepIn.msgCov (hs : FStepIn hF m m' hR) (h : m.MsgCov) : m'.MsgCov := by
   have := hs.cov #[] (by rw [Mem.withFp_nil]; exact h)
   rwa [Mem.withFp_nil] at this
 
-theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FStepIn hF m m'' := by
+theorem FStepIn.trans (h₁ : FStepIn hF m m' hR) (h₂ : FStepIn hF m' m'' hR) :
+    FStepIn hF m m'' hR := by
   obtain ⟨σ, ha⟩ := h₁.atomics
   obtain ⟨σ', ha'⟩ := h₂.atomics
   have hmine : VClock.le (m.clocks[m.current]!) (m''.clocks[m.current]!) = true := by
@@ -1141,7 +1308,7 @@ theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FSte
   · rcases h₂.fp e he with ⟨e₁, he₁, hn⟩ | ⟨ht, hnt, hb, hw⟩
     · rcases h₁.fp e₁ he₁ with ⟨e₀, he₀, hn'⟩ | ⟨ht, hnt, hb, hw⟩
       · exact .inl ⟨e₀, he₀, hn.trans hn'⟩
-      · have hnt' : ¬ e.Touches hF := fun h => hnt (hn.touches h)
+      · have hnt' : e.ReadsIn hF hR := hnt.narrow hn
         obtain ⟨h1, h2, h3, -⟩ := hn
         refine .inr ⟨h1.trans ht, hnt', h2 ▸ Nat.lt_of_lt_of_le hb h₂.blocks, fun hwr hc => ?_⟩
         rw [h3] at hwr
@@ -1154,52 +1321,105 @@ theorem FStepIn.trans (h₁ : FStepIn hF m m') (h₂ : FStepIn hF m' m'') : FSte
         exact .inr (VClock.le_trans hn.clock (VClock.le_trans hle this))
     · rw [h₁.current] at hle; exact .inr hle
 
-/-- A step in a larger frame is a step in a part of it. -/
-theorem FStepIn.weaken (hs : FStepIn hF m m') (hsub : ∀ l, hF' l ≠ none → hF l ≠ none) :
-    FStepIn hF' m m' :=
+/-- **A step in a part of the frame** whose read shares are among the part's own (`hR'`). -/
+theorem FStepIn.weakenR (hs : FStepIn hF m m' hR) (hsub : ∀ l, hF' l ≠ none → hF l ≠ none)
+    (hRs : ∀ l, hF' l ≠ none → hR l ≠ none → hR' l ≠ none) : FStepIn hF' m m' hR' :=
   { hs with
     atomics := let ⟨σ, ha⟩ := hs.atomics; ⟨σ, ha.weaken hsub⟩
     fp := fun e he => (hs.fp e he).imp id fun ⟨ht, hnt, hb, hw⟩ =>
-      ⟨ht, fun ⟨x, h1, h2, h3⟩ => hnt ⟨x, h1, h2, hsub _ h3⟩, hb, hw⟩ }
+      ⟨ht, hnt.weaken hsub hRs, hb, hw⟩ }
+
+theorem FStepIn.weaken (hs : FStepIn hF m m' hR) (hsub : ∀ l, hF' l ≠ none → hF l ≠ none) :
+    FStepIn hF' m m' hR :=
+  hs.weakenR hsub fun _ _ h => h
+
+/-- A step that reads no byte of the frame may read its shares. -/
+theorem FStepIn.reads (hs : FStepIn hF m m') : FStepIn hF m m' hR :=
+  hs.weakenR (fun _ h => h) fun _ _ h => absurd rfl h
 
 /-- No clock gets smaller. -/
-theorem FStepIn.clock (hs : FStepIn hF m m') (u : ThreadId) :
+theorem FStepIn.clock (hs : FStepIn hF m m' hR) (u : ThreadId) :
     VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
   by_cases hc : u = m.current
   · subst hc; exact hs.mine
   · rw [hs.others u hc]; exact VClock.le_refl _
 
 /-- An `FStepIn hF` keeps the ownership of each part of `hF`, by any clock. -/
-theorem Mem.OwnsC.fstep (hs : FStepIn hF m m') {c : VClock} {h : Heap} (ho : m.OwnsC c h)
-    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsC c h := by
+theorem Mem.OwnsC.fstep (hs : FStepIn hF m m' hR) {c : VClock} {h : Heap} (ho : m.OwnsC c h)
+    (hsub : ∀ l, h l ≠ none → hF l ≠ none) (hd : ∀ l, h l ≠ none → hR l = none := by
+      intro _ _; rfl) : m'.OwnsC c h := by
   intro e he ht
   rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, hb, -⟩
   · refine VClock.le_trans hn.clock (ho e₀ he₀ ?_)
     rcases ht with ht | hb
     · exact .inl (hn.touches ht)
     · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
-  · rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb'
-    · exact absurd ⟨x, hx1, hx2, hsub _ hx3⟩ hnt
+  · rcases ht with ht | hb'
+    · exact absurd ht (hnt.not_touches hsub hd)
     · exact absurd hb' (Nat.not_le.mpr hb)
 
-/-- Another thread keeps what it owns over an `FStepIn hF` when that is a part of `hF`. -/
-theorem Mem.Owns.fstep {u : ThreadId} {h : Heap} (hs : FStepIn hF m m') (hu : u ≠ m.current)
-    (ho : m.Owns u h) (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns u h := by
-  unfold Mem.Owns; rw [hs.others u hu]; exact Mem.OwnsC.fstep hs ho hsub
+/-- Another thread keeps what it owns over an `FStepIn hF` when that is a part of `hF` apart
+from the read shares the step may read. -/
+theorem Mem.Owns.fstep {u : ThreadId} {h : Heap} (hs : FStepIn hF m m' hR) (hu : u ≠ m.current)
+    (ho : m.Owns u h) (hsub : ∀ l, h l ≠ none → hF l ≠ none)
+    (hd : ∀ l, h l ≠ none → hR l = none := by intro _ _; rfl) : m'.Owns u h := by
+  unfold Mem.Owns; rw [hs.others u hu]; exact Mem.OwnsC.fstep hs ho hsub hd
 
-/-- The current thread keeps what it owns in `hF` over an `FStepIn hF`. -/
-theorem Mem.Owns.fstepSelf {h : Heap} (hs : FStepIn hF m m') (ho : m.Owns m.current h)
-    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.Owns m'.current h := by
-  unfold Mem.Owns; rw [hs.current]; exact (Mem.OwnsC.fstep hs ho hsub).mono hs.mine
+/-- **The current thread keeps what it owns** over any `FStepIn`: every new access is its own,
+before its new clock (`FStepIn.fpc`), and every old one is kept or narrowed. -/
+theorem Mem.Owns.fstepCur {h : Heap} (hs : FStepIn hF m m' hR) (ho : m.Owns m.current h) :
+    m'.Owns m'.current h := by
+  intro e he ht
+  show VClock.le e.clock (m'.clocks[m'.current]!) = true
+  rw [hs.current]
+  rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
+  · refine VClock.le_trans hn.clock (VClock.le_trans (ho e₀ he₀ ?_) hs.mine)
+    rcases ht with ht | hb
+    · exact .inl (hn.touches ht)
+    · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
+  · exact hle
+
+/-- An `FStepIn hF` keeps the read ownership of each part of `hF`, by any clock: a new access to
+a byte of the frame is a read. -/
+theorem Mem.OwnsRC.fstep (hs : FStepIn hF m m' hR) {c : VClock} {h : Heap} (ho : m.OwnsRC c h)
+    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsRC c h := by
+  intro e he hw ht
+  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, hb, -⟩
+  · refine VClock.le_trans hn.clock (ho e₀ he₀ (hn.2.2.1 ▸ hw) ?_)
+    rcases ht with ht | hb
+    · exact .inl (hn.touches ht)
+    · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
+  · rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb'
+    · exact absurd ⟨x, hx1, hx2, hsub _ hx3⟩ (hnt.write hw)
+    · exact absurd hb' (Nat.not_le.mpr hb)
+
+/-- Another thread keeps what it may read over an `FStepIn hF` when that is a part of `hF`. -/
+theorem Mem.OwnsR.fstep {u : ThreadId} {h : Heap} (hs : FStepIn hF m m' hR) (hu : u ≠ m.current)
+    (ho : m.OwnsR u h) (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsR u h := by
+  unfold Mem.OwnsR; rw [hs.others u hu]; exact Mem.OwnsRC.fstep hs ho hsub
+
+/-- The current thread keeps what it may read over any `FStepIn`. -/
+theorem Mem.OwnsR.fstepCur {h : Heap} (hs : FStepIn hF m m' hR) (ho : m.OwnsR m.current h) :
+    m'.OwnsR m'.current h := by
+  intro e he hw ht
+  show VClock.le e.clock (m'.clocks[m'.current]!) = true
+  rw [hs.current]
+  rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
+  · refine VClock.le_trans hn.clock (VClock.le_trans (ho e₀ he₀ (hn.2.2.1 ▸ hw) ?_) hs.mine)
+    rcases ht with ht | hb
+    · exact .inl (hn.touches ht)
+    · exact .inr (hn.2.1 ▸ Nat.le_trans hs.blocks hb)
+  · exact hle
 
 /-- The plain writes to bytes of the frame stay before `c` over an `FStepIn` of the frame. -/
 theorem Conc.Proto.PlainLe.fstep {b o len : Nat} {c : VClock} (h : PlainLe m b o len c)
-    (hs : FStepIn hF m m') (hw : ∀ x, o ≤ x → x < o + len → hF (b, x) ≠ none) :
+    (hs : FStepIn hF m m' hR) (hw : ∀ x, o ≤ x → x < o + len → hF (b, x) ≠ none) :
     PlainLe m' b o len c := by
   intro e he hh
-  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
+  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt', -⟩
   · exact VClock.le_trans hn.clock (h e₀ he₀ (hn.plainHit hh))
-  · exfalso
+  · have hnt := hnt'.write (by rw [plainHit_kind hh]; rfl)
+    exfalso
     obtain ⟨h0, he0, h1, h2⟩ := plainHit_range hh
     have hx : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ o ≤ x ∧ x < o + len :=
       ⟨if o ≤ e.off then e.off else o, by split <;> omega, by split <;> omega,
@@ -1226,7 +1446,7 @@ theorem FStepIn.setBlock {b : BlockId} {nb : Block}
     (ha : ∀ blk, m.blocks[b]? = some blk → nb.addr = blk.addr)
     (hk : nb.kind = .constGlobal → m.IsConst b)
     (hsz : ∀ l ∈ m.atomics, l.block = b → 0 < l.len → l.InBlock m → l.off + l.len ≤ nb.bytes.size) :
-    FStepIn hF m { m with blocks := m.blocks.set! b nb } where
+    FStepIn hF m { m with blocks := m.blocks.set! b nb } hR where
   current := rfl
   threads := rfl
   waiters := rfl
@@ -1257,22 +1477,23 @@ if `blk` is. -/
 theorem FStepIn.setBlock_of {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
     (ha : nb.addr = blk.addr) (hk : nb.kind = .constGlobal → blk.kind = .constGlobal)
     (hsz : ∀ l ∈ m.atomics, l.block = b → 0 < l.len → l.InBlock m → l.off + l.len ≤ nb.bytes.size) :
-    FStepIn hF m { m with blocks := m.blocks.set! b nb } :=
+    FStepIn hF m { m with blocks := m.blocks.set! b nb } hR :=
   FStepIn.setBlock (fun _ h => by cases hb.symm.trans h; exact ha) (fun h => ⟨blk, hb, hk h⟩) hsz
 
 /-- `Mem.write` of block `b` of `m` keeps its kind. -/
 theorem FStepIn.write {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk) (o : Nat)
-    (bs : Array Byte) : FStepIn hF m (m.write b blk o bs) :=
+    (bs : Array Byte) : FStepIn hF m (m.write b blk o bs) hR :=
   FStepIn.setBlock_of hb rfl id fun _ _ e _ ⟨blk', h1, h2⟩ => by
     rw [e, hb] at h1; cases h1
     exact Nat.le_trans h2 (writeBytes_size_ge _ _ _)
 
-/-- A recorded access by the current thread that touches no byte of `hF` and writes no `const`
-global. -/
-theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
-    (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
+/-- **A recorded access by the current thread that may read the frame's read shares**: it
+touches a byte of `hF` only by a non-write at a byte of `hR`. -/
+theorem FStepIn.recordAt_reads {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size)
+    (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) ≠ none → kind.isWrite = false ∧ hR (b, x) ≠ none)
     (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
-    FStepIn hF m (m.recordAt b off len kind) where
+    FStepIn hF m (m.recordAt b off len kind) hR where
   current := rfl
   threads := rfl
   waiters := rfl
@@ -1290,7 +1511,7 @@ theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
     simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
     · exact .inl ⟨e, he, .refl e⟩
-    · exact .inr ⟨rfl, fun ⟨x, h1, h2, h3⟩ => h3 (hnt x h1 h2), hb, hw⟩
+    · exact .inr ⟨rfl, hnt, hb, hw⟩
   fpc e he := by
     simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
@@ -1302,12 +1523,20 @@ theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
   cov := Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he => by
     simp only [Mem.recordAt, Array.mem_push]; exact .inl he
 
+/-- A recorded access by the current thread that touches no byte of `hF` and writes no `const`
+global. -/
+theorem FStepIn.recordAt_of {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
+    (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
+    FStepIn hF m (m.recordAt b off len kind) hR :=
+  FStepIn.recordAt_reads hc (fun x h1 h2 h3 => absurd (hnt x h1 h2) h3) hb hw
+
 /-- A recorded access by the current thread to bytes it owns (in `h`, not in `hF`) that writes
 no `const` global. -/
 theorem FStepIn.recordAt {h : Heap} {b : BlockId} {off len : Nat} {kind : AccessKind}
     (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
     (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) (hb : b < m.blocks.size)
-    (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.recordAt b off len kind) :=
+    (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.recordAt b off len kind) hR :=
   FStepIn.recordAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb hw
 
 /-- A read by the current thread that touches no byte of `hF`: recorded, or nothing for a
@@ -1315,16 +1544,26 @@ theorem FStepIn.recordAt {h : Heap} {b : BlockId} {off len : Nat} {kind : Access
 theorem FStepIn.readAt_of {blk : Block} {b : BlockId} {off len : Nat} {kind : AccessKind}
     (hc : m.current < m.clocks.size) (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) = none)
     (hb : b < m.blocks.size) (hw : kind.isWrite = true → ¬ m.IsConst b) :
-    FStepIn hF m (m.readAt blk b off len kind) :=
-  Mem.readAt_cases (P := FStepIn hF m) (FStepIn.refl m hF) (FStepIn.recordAt_of hc hnt hb hw)
+    FStepIn hF m (m.readAt blk b off len kind) hR :=
+  Mem.readAt_cases (P := (FStepIn hF m · hR)) (FStepIn.refl m hF) (FStepIn.recordAt_of hc hnt hb hw)
 
 theorem FStepIn.readAt {h : Heap} {blk : Block} {b : BlockId} {off len : Nat} {kind : AccessKind}
     (hc : m.current < m.clocks.size) (hd : Heap.Disjoint h hF)
     (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) (hb : b < m.blocks.size)
-    (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.readAt blk b off len kind) :=
+    (hw : kind.isWrite = true → ¬ m.IsConst b) : FStepIn hF m (m.readAt blk b off len kind) hR :=
   FStepIn.readAt_of hc (fun x h1 h2 => (hd (b, x)).resolve_left (hin x h1 h2)) hb hw
 
-theorem FStepIn.cur (hs : FStepIn hF m m') (hc : m.current < m.clocks.size) :
+/-- **A read by the current thread that may read the frame's read shares** (`recordAt_reads`), or
+nothing for a `const` global. -/
+theorem FStepIn.readAt_reads {blk : Block} {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (hc : m.current < m.clocks.size) (hk : kind.isWrite = false)
+    (hnt : ∀ x, off ≤ x → x < off + len → hF (b, x) ≠ none → hR (b, x) ≠ none)
+    (hb : b < m.blocks.size) : FStepIn hF m (m.readAt blk b off len kind) hR :=
+  Mem.readAt_cases (P := (FStepIn hF m · hR)) (FStepIn.refl m hF)
+    (FStepIn.recordAt_reads hc (fun x h1 h2 h3 => ⟨hk, hnt x h1 h2 h3⟩) hb
+      fun hw => absurd (hk.symm.trans hw) (by decide))
+
+theorem FStepIn.cur (hs : FStepIn hF m m' hR) (hc : m.current < m.clocks.size) :
     m'.current < m'.clocks.size := by
   rw [hs.current, hs.size]; exact hc
 
@@ -1344,7 +1583,7 @@ section AtomicStep
 
 open Conc.Proto
 
-variable {m m' : Mem} {hF : Heap}
+variable {m m' : Mem} {hF hR : Heap}
 
 /-- The locations stay at their indices (`σ = some`): a location keeps its bytes, and stays as it
 is if it lies in the frame's bytes; a new one (past the old end) has a byte and none of the
@@ -1378,7 +1617,7 @@ grows). -/
 theorem FStepIn.ofAMap {σ : Nat → Option Nat} (ha : AMap hF m m' σ) (hn : m.nextMsg ≤ m'.nextMsg)
     (he : m' = { m with atomics := m'.atomics, seen := m'.seen, nextMsg := m'.nextMsg })
     (hcov : ∀ F, (m.withFp F).MsgCov → (m'.withFp F).MsgCov) :
-    FStepIn hF m m' := by
+    FStepIn hF m m' hR := by
   have hfp : m'.footprint = m.footprint := (congrArg Mem.footprint he).trans rfl
   have hcl : m'.clocks = m.clocks := (congrArg Mem.clocks he).trans rfl
   have hbl : m'.blocks = m.blocks := (congrArg Mem.blocks he).trans rfl
@@ -1442,7 +1681,7 @@ theorem Mem.MsgCovAt.relClock_of_mem {li : Nat} {rd : Msg} (hrd : rd ∈ (m.atom
 
 /-- A new location, over bytes that are not the frame's, in its block and with covered messages. -/
 theorem FStepIn.pushLoc {l : ALoc} (hl : 0 < l.len) (hoff : l.Off hF) (hcov : l.NewCov m) :
-    FStepIn hF m { m with atomics := m.atomics.push l, nextMsg := m.nextMsg + 1 } := by
+    FStepIn hF m { m with atomics := m.atomics.push l, nextMsg := m.nextMsg + 1 } hR := by
   refine .ofAMap (AMap.ofSome (fun i l₀ h => ⟨l₀, ?_, rfl, rfl, rfl, fun _ => rfl⟩)
     (fun j l' h hj => ?_) rfl fun _ _ _ _ => rfl) (Nat.le_succ _) rfl
     fun F h => h.ofAtomics rfl rfl fun l' hl' hpos => ?_
@@ -1467,7 +1706,8 @@ theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n
     (hnot : ¬ (m.atomics[i]!).In hF)
     (hM : ∀ F, (m.withFp F).MsgCov → 0 < (m.atomics[i]!).len → ∀ msg ∈ M,
       (m.atomics[i]!).CovBy (m.withFp F) msg.clock ∧ (m.atomics[i]!).CovBy (m.withFp F) msg.relClock) :
-    FStepIn hF m { m with atomics := m.atomics.set! i { m.atomics[i]! with msgs := M }, nextMsg := n } := by
+    FStepIn hF m { m with atomics := m.atomics.set! i { m.atomics[i]! with msgs := M }, nextMsg := n }
+      hR := by
   refine .ofAMap (AMap.ofSome (fun j l h => ?_) (fun j l' h hj => ?_) rfl
     fun _ _ _ _ => rfl) hn rfl
     fun F h => h.ofAtomics rfl rfl fun l' hl' hpos => ?_
@@ -1500,7 +1740,7 @@ theorem FStepIn.setLoc {i : Nat} {M : Array Msg} {n : Nat} (hn : m.nextMsg ≤ n
 
 /-- The current thread observes a location that is not wholly in the frame. -/
 theorem FStepIn.observe {li : Nat} (id : Nat) (hnot : ¬ (m.atomics[li]!).In hF) :
-    FStepIn hF m (observeM m li id) := by
+    FStepIn hF m (observeM m li id) hR := by
   refine .ofAMap (AMap.ofSome (fun i l h => ⟨l, h, rfl, rfl, rfl, fun _ => rfl⟩)
     (fun j l' h hj => absurd (Array.getElem?_eq_some_iff.mp h).1 (Nat.not_lt.mpr hj)) ?_ ?_)
     (Nat.le_refl _) rfl (Mem.MsgCov.keepFp (fun _ hl _ => hl) (fun _ _ _ h => h) fun _ he => he)
@@ -1548,7 +1788,8 @@ theorem insertM_in {li p : Nat} {msg : Msg} :
   · rw [Array.set!_eq_setIfInBounds, Array.setIfInBounds, dite_eq_right h]
 
 /-- An acquire: the current thread's clock grows. -/
-theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m (acqM m c) where
+theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) :
+    FStepIn hF m (acqM m c) hR where
   current := rfl
   threads := rfl
   waiters := rfl
@@ -1572,7 +1813,7 @@ theorem FStepIn.acq (hc : m.current < m.clocks.size) (c : VClock) : FStepIn hF m
 /-- An atomic read of a message (`atomicLoadAt` after `loadPrep`). -/
 theorem FStepIn.loadM (hc : m.current < m.clocks.size) {li : Nat} (ord : AtomicOrder) (msg : Msg)
     (hnot : ¬ (m.atomics[li]!).In hF) :
-    FStepIn hF m (Conc.Proto.loadM m li ord msg) := by
+    FStepIn hF m (Conc.Proto.loadM m li ord msg) hR := by
   unfold Conc.Proto.loadM
   dsimp only
   split
@@ -1584,7 +1825,7 @@ it, and the block its bytes. -/
 theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF)
     (hmsg : m.MsgCovAt li msg) :
-    FStepIn hF m (insertM m li (m.atomics[li]!).msgs.size msg) := by
+    FStepIn hF m (insertM m li (m.atomics[li]!).msgs.size msg) hR := by
   rw [insertM_last hb]
   refine (FStepIn.setLoc (M := (m.atomics[li]!).msgs.push msg) (Nat.le_succ _) hnot
     fun F h hpos x hx => ?_).trans (FStepIn.setBlock_of hb rfl id fun l _ e _ hin => ?_)
@@ -1606,7 +1847,7 @@ theorem FStepIn.insertLast {li : Nat} {msg : Msg} {blk : Block}
 theorem FStepIn.storeM {n : Nat} {li : Nat} {blk : Block} (ord : AtomicOrder) (v : BitVec n)
     (hb : m.blocks[(m.atomics[li]!).block]? = some blk) (hnot : ¬ (m.atomics[li]!).In hF)
     (hmsg : m.MsgCovAt li (storeMsg m ord v)) :
-    FStepIn hF m (Conc.Proto.storeM m li (m.atomics[li]!).msgs.size ord v) :=
+    FStepIn hF m (Conc.Proto.storeM m li (m.atomics[li]!).msgs.size ord v) hR :=
   (FStepIn.insertLast hb hnot hmsg).trans (FStepIn.observe _ ((not_congr insertM_in).mpr hnot))
 
 /-- **An RMW that read the newest message `rd` of a location** with a byte that is not the
@@ -1619,7 +1860,7 @@ theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} {e : FootprintEntry}
     (he : e ∈ m.footprint) (heb : e.block = (m.atomics[li]!).block)
     (heo : e.off = (m.atomics[li]!).off) (hel : 0 < e.len) (hec : e.clock = m.clocks[m.current]!)
     (hrd : rd ∈ (m.atomics[li]!).msgs) :
-    FStepIn hF m (Conc.Proto.rmwM m li pos ord rd new) := by
+    FStepIn hF m (Conc.Proto.rmwM m li pos ord rd new) hR := by
   unfold Conc.Proto.rmwM
   dsimp only
   have hrel : ∀ M : Mem, (rmwMsg M ord rd new).relClock =
@@ -1628,11 +1869,11 @@ theorem FStepIn.rmwM {n : Nat} {li pos : Nat} {blk : Block} {e : FootprintEntry}
       (rmwMsg M ord rd new).relClock = (rmwMsg M ord rd new).clock ∨
       (rmwMsg M ord rd new).relClock = #[] := fun M => by
     simp only [rmwMsg]; cases ord.isRel <;> simp
-  have key : ∀ M : Mem, FStepIn hF m M → M.atomics = m.atomics → M.blocks = m.blocks →
+  have key : ∀ M : Mem, FStepIn hF m M hR → M.atomics = m.atomics → M.blocks = m.blocks →
       M.footprint = m.footprint →
       ((rmwMsg M ord rd new).clock = e.clock ∨
         (rmwMsg M ord rd new).clock = VClock.merge e.clock rd.relClock) →
-      FStepIn hF m (observeM (insertM M li (pos + 1) (rmwMsg M ord rd new)) li M.nextMsg) := by
+      FStepIn hF m (observeM (insertM M li (pos + 1) (rmwMsg M ord rd new)) li M.nextMsg) hR := by
     intro M hs ha hbl hfp hcl
     have hm : M.MsgCovAt li (rmwMsg M ord rd new) :=
       Mem.MsgCovAt.of_entry (hfp ▸ he) (ha ▸ heb) (ha ▸ heo) hel
@@ -1654,7 +1895,7 @@ new location. -/
 theorem FStepIn.locIdx {b o len li : Nat} {m₁ : Mem} (hlen : 0 < len)
     (hoff : ∀ x, o ≤ x → x < o + len → hF (b, x) = none)
     (hin : ∃ blk, m.blocks[b]? = some blk ∧ o + len ≤ blk.bytes.size)
-    (h : ((Zig.locIdx b o len).run m).run = some (.ok (li, m₁))) : FStepIn hF m m₁ := by
+    (h : ((Zig.locIdx b o len).run m).run = some (.ok (li, m₁))) : FStepIn hF m m₁ hR := by
   -- a new location of the word: in its block, its first message from the plain writes
   have hnew : ∀ (M : Mem) (bs : Array Byte) (id : Nat), M.blocks = m.blocks →
       (∀ e ∈ m.footprint, e ∈ M.footprint) →
@@ -1667,7 +1908,7 @@ theorem FStepIn.locIdx {b o len li : Nat} {m₁ : Mem} (hlen : 0 < len)
     subst hm
     exact ⟨ALoc.CovBy.plainClock fun e he => Mem.mem_withFp (hfp e he), ALoc.CovBy.empty⟩
   have hret : ∀ {li : Nat} {m₁ : Mem}, ((retireAt b o len).run m).run = some (.ok (li, m₁)) →
-      FStepIn hF m m₁ := by
+      FStepIn hF m m₁ hR := by
     intro li m₁ h
     unfold retireAt at h
     obtain ⟨_, _, hg, h1⟩ := MemM.bind_ok h

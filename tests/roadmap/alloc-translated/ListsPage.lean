@@ -333,38 +333,23 @@ theorem doubleFreeReuse_unsafe : ¬ NoIllegal 1 @doubleFreeReuse := not_noIllega
 theorem useAfterFreeReuse_unsafe : ¬ NoIllegal 1 @useAfterFreeReuse :=
   not_noIllegal _ useAfterFreeReuse_run
 
-/-- A separating conjunction of two parts without the byte `l` has no byte `l`. -/
-theorem sep_heap_none {P Q : FAssn} {r : Res} {l : Loc} (h : (P ⋆ Q) r)
-    (hP : ∀ r, P r → r.heap l = none) (hQ : ∀ r, Q r → r.heap l = none) : r.heap l = none := by
-  obtain ⟨r₁, r₂, -, rfl, h1, h2⟩ := h
-  simp [FHeap.union_apply, hP _ h1, hQ _ h2]
-
-theorem Persistent.heap_none {P : FAssn} (hP : Persistent P) {l : Loc} :
-    ∀ r, P r → r.heap l = none := fun r h => by rw [(hP r h).1]; rfl
-
-/-- **The precondition owns no byte of the node's mapping**: the hint word is global 0, and the
-fee, the vtable and the plain mode own no bytes. -/
-theorem pre_avoids {r : Res} (h : pre PageAlloc.ainv Frac.one vtp fns 1 r) (o : Nat) :
-    r.heap (nodeBlock, o) = none := by
-  refine sep_heap_none h (fun r h => ?_) fun r h => sep_heap_none h
-    (Persistent.heap_none (Persistent.sep (Persistent.sep Persistent.emp Persistent.emp) Persistent.vtR))
-    fun r h => sep_heap_none h (fun r h => by rw [h.1]; rfl) fun r h => by rw [h.1]; rfl
-  obtain ⟨hv, h⟩ := h
-  refine sep_heap_none h (fun r h => ?_) fun r h => ?_
-  · obtain ⟨A, S, K, bs, -, -, -, -, -, -, b, hb, -, hl⟩ := h
-    rw [hl]
-    simp only [Option.some.injEq] at hb
-    subst hb
-    simp
-  · cases hv with
-    | none => rw [h.1]; rfl
-    | some _ => exact Persistent.heap_none (Persistent.ex fun _ => Persistent.ex fun _ =>
-        Persistent.sep Persistent.lift Persistent.known) r h
+/-- **The precondition holds nothing of the node's mapping**, neither a byte nor a share of one:
+the hint word is global 0, and the fee, the vtable and the plain mode hold no bytes and no
+shares. -/
+theorem pre_avoids (o : Nat) : Avoids (pre PageAlloc.ainv Frac.one vtp fns 1) (nodeBlock, o) :=
+  Avoids.sep (P := PageAlloc.own)
+    (Avoids.ex fun hv => Avoids.sep (Avoids.aptsE (by simp)) (by
+      cases hv with
+      | none => exact Avoids.of_persistent Persistent.emp _
+      | some _ => exact Avoids.of_persistent (Persistent.ex fun _ => Persistent.ex fun _ =>
+          Persistent.sep Persistent.lift Persistent.known) _))
+    (Avoids.sep (Avoids.of_persistent
+      (Persistent.sep (Persistent.sep Persistent.emp Persistent.emp) Persistent.vtR) _) (Avoids.plain _))
 
 /-- **Leak**: the no-leak property `NoLeak` is false for `forgetFree`. The run returns with the
-node's mapping live; the frame owned none of its bytes at start (the block did not exist), and the
-precondition owns none (`pre_avoids`), so no resource that holds the memory after the run is the
-precondition with the same frame. -/
+node's mapping live; the frame held none of its bytes and no share of one at start (the block did
+not exist), and the precondition holds none (`pre_avoids`), so no resource that holds the memory
+after the run is the precondition with the same frame. -/
 theorem forgetFree_leaks : ¬ NoLeak 1 @forgetFree := fun h => by
   obtain ⟨r, rF, hh, hp⟩ := start .fresh
   have hk := forgetFree_run
@@ -373,19 +358,10 @@ theorem forgetFree_leaks : ¬ NoLeak 1 @forgetFree := fun h => by
   · rename_i v m' hrun
     obtain ⟨r', hh', hp'⟩ := h ext ctx vtp fns _ env0 Frac.one page_fits page_spec 100 _ r rF hh hp
       (fseq _) v m' hrun
-    -- block 7 does not exist at start, so the frame owns none of its bytes
+    -- block 7 does not exist at start, so the frame holds none of its bytes and no share
     have h0 : ((mem0 .fresh).heap (nodeBlock, 0)).isNone = true := by decide +kernel
-    have hF : rF.heap (nodeBlock, 0) = none := by
-      have := hh.heap.1 (nodeBlock, 0)
-      rw [Option.isNone_iff_eq_none.mp h0] at this
-      simp only [Option.map_none, FHeap.union_apply] at this
-      cases e : rF.heap (nodeBlock, 0) with
-      | none => rfl
-      | some _ => cases e' : r.heap (nodeBlock, 0) <;> simp [e, e'] at this
-    have := hh'.heap.1 (nodeBlock, 0)
-    rw [FHeap.union_apply, pre_avoids hp' 0, hF] at this
-    simp only [Option.none_or, Option.map_none, Option.map_eq_none_iff] at this
-    rw [this] at hk
+    have hF := (hh.avoids_of_none (Option.isNone_iff_eq_none.mp h0)).2
+    rw [hh'.none_of_avoids (pre_avoids 0 r' hp') hF] at hk
     cases hk
   · cases hk
 

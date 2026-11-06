@@ -212,7 +212,7 @@ theorem Ok.fstep {m m' : Mem} {hF : Heap} (hw : W.Ok m A)
           VClock.le_trans (VClock.le_trans hn.clock hle) (hs.clock u)⟩
       · exact .inr fun u hu hA =>
           VClock.le_trans (VClock.le_trans hn.clock (ha u (hs.threads ▸ hu) hA)) (hs.clock u)
-    · exact absurd (touches_of hh fun x h1 h2 => hwF (W.b, x) ⟨rfl, h1, h2⟩) hnt
+    · exact absurd (touches_of hh fun x h1 h2 => hwF (W.b, x) ⟨rfl, h1, h2⟩) hnt.empty
   · obtain ⟨v, hv⟩ := hw.val
     exact ⟨v, by unfold Word.Holds; rw [hcur]; exact hv⟩
   · obtain ⟨j, hj⟩ := (hloc l).mp ⟨i, hl⟩
@@ -387,7 +387,7 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
       (rsum (L.wordR m) rL).owned (L.b, x) ≠ none := fun x h1 h2 => Res.owned_of_heap fun he => by
     simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at he
     exact cellsAt_some (m := m) (W := L.In) ⟨rfl, h1, h2⟩ (hi.w.blk.cell h1 h2) he.1
-  have hwi := hi.w.stepIn hframe hframeL (fun x h1 h2 => by rw [hLcells x h1 h2])
+  have hwi := hi.w.stepIn hframe hframeL (fun _ _ _ => rfl) (fun x h1 h2 => by rw [hLcells x h1 h2])
   have hWw : FHeap.Disjoint (W.cellsR m).heap (L.wordR m).heap := fun l => by
     by_cases hl : W.In l
     · exact .inr (cellsAt_none fun h => hnw l h hl)
@@ -424,7 +424,7 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     fun hfree => ?_, hnF⟩, LockWord.off_erase.mpr fun l hl => ?_, hi.pdisj, hi.idle, hi.res⟩
   · obtain ⟨hR, hO⟩ := hF hfree
     exact ⟨hR, hO.stepIn hframe (fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)) hframeL
-      (fun i l hl => (hi.w.loc.ok i l hl).1)⟩
+      (fun i l hl => (hi.w.loc.ok i l hl).1) fun _ _ => rfl⟩
   · have hoff := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at hoff ⊢
     exact ⟨cellsAt_none fun h => hnw l hl h, hoff.2⟩
@@ -849,7 +849,7 @@ theorem prepare_amap {m m' : Mem} {li : Nat} {k : AccessKind} {hF : Heap} (hw : 
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m'))) :
     m.nextMsg ≤ m'.nextMsg ∧ ∃ σ, AMap hF m m' σ := by
   obtain ⟨blk, hb, _, hsz, _⟩ := hw.blk
-  have hs := FStepIn.locIdx (m := m.recordAt W.b W.o nb k) W.sz_pos hoff ⟨blk, hb, hsz⟩ h
+  have hs := FStepIn.locIdx (m := m.recordAt W.b W.o nb k) (hR := Heap.empty) W.sz_pos hoff ⟨blk, hb, hsz⟩ h
   obtain ⟨σ, ha⟩ := hs.atomics
   have hr : AMap hF m (m.recordAt W.b W.o nb k) some := AMap.of_eq rfl rfl
   exact ⟨hs.nextMsg, _, hr.trans ha rfl⟩
@@ -923,7 +923,7 @@ theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     obtain ⟨rfl, rfl⟩ := locIdx_found hf hlen hlast hpl h
     exact hr
   | none =>
-    have hs := FStepIn.locIdx (m := mr) (hF := fun _ => none) W.sz_pos
+    have hs := FStepIn.locIdx (m := mr) (hF := fun _ => none) (hR := Heap.empty) W.sz_pos
       (fun _ _ _ => rfl) (by obtain ⟨blk, hb, _, hsz, _⟩ := hw.blk; exact ⟨blk, hb, hsz⟩) h
     obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hw.only) h
     refine hr.trans (RestStep.of_blocks hs rfl ⟨rfl, rfl, rfl⟩
@@ -1161,7 +1161,7 @@ theorem Ok.read_native {m m₁ : Mem} {t li pos : Nat} {l : ALoc} {ord : AtomicO
   have hl0 := (loc_get hl).2.2
   have hc₁ : m₁.current = t := hs.current.trans hc
   have hcs₁ : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
-  have hr := FStepIn.loadM (hF := fun _ => none) hcs₁ ord (l.msgs[pos]!)
+  have hr := FStepIn.loadM (hF := fun _ => none) (hR := Heap.empty) hcs₁ ord (l.msgs[pos]!)
     (loc_notIn hl (hw₁.loc li l hl).1 (fun _ _ _ => rfl))
   have hb : (loadM m₁ li ord (l.msgs[pos]!)).blocks = m₁.blocks := by
     unfold loadM; split <;> rfl
@@ -1224,7 +1224,7 @@ theorem loadM_rest {m : Mem} {li : Nat} {l : ALoc}
     (hlive : ∀ l, W.In l → m.heap l ≠ none) (hl : W.Loc m li l) (hlen : l.len = nb)
     (hc : m.current < m.clocks.size) (ord : AtomicOrder) (msg : Msg) :
     RestStep W.In m (loadM m li ord msg) := by
-  have hs := FStepIn.loadM (hF := fun _ => none) hc ord msg
+  have hs := FStepIn.loadM (hF := fun _ => none) (hR := Heap.empty) hc ord msg
     (loc_notIn hl hlen (fun _ _ _ => rfl))
   refine RestStep.of_blocks hs (by unfold loadM; split <;> rfl)
     (by unfold Mem.Aux loadM acqM observeM; split <;> simp)

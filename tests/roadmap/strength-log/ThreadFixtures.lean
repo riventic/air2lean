@@ -33,11 +33,12 @@ example {own : ThreadId → Res} {rO : Res} {m : Mem} {P : Proto Target Unit}
 example {own : ThreadId → Res} {rO : Res} {m m' : Mem} {t first c : ThreadId}
     {depth : Nat} (hc : c ≠ 0) (ho : FOwned own rO m) (ht : t < m.threads.size)
     (hne : first ≠ t)
-    (hj : ((Thread.join first).run { m with current := t }).run = some (.ok ((), m'))) :
+    (hj : ((Thread.join first).run { m with current := t }).run = some (.ok ((), m')))
+    (hg : ∀ l, (own t).shared l = none ∨ (own first).shared l = none) :
     (spawnOutcomeC c Target.worker : CM Target Unit _).run () depth { m with current := t } =
       CoN.leaf (some (.ok ((.error (spawnErrorAt (c - 1)), ()), { m with current := t }))) ∧
     FOwned (upd (upd own t (rsum (own t) (own first))) first rnil) rO m' :=
-  refusedSecondThenJoin hc ho ht hne hj
+  refusedSecondThenJoin hc ho ht hne hj hg
 
 end StrengthLog.ThreadFixtures
 

@@ -256,7 +256,7 @@ theorem UM_frame_native {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {hF
         (LockWord.someLe_le hc h'')⟩
     · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
         fun u hu => VClock.le_trans hc (h'' u hu))
-  · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
+  · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt.empty
     rw [hr.1]; exact hio _ hr.2.2
 
 /-- **A step of `t` on its own part or on the mutex's resource keeps `UM`** (an `FStepIn` that keeps

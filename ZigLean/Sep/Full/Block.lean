@@ -548,7 +548,7 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
   have hacc0 : m.noFp.access s.ptr s.len.toNat 1 = m.access s.ptr s.len.toNat 1 := rfl
   have hst₀ : ∀ v m', (Zig.remapByteBuffer s n).run m = Pure.pure (v, m') →
       (Zig.remapByteBuffer s n).run m = Pure.pure (none, m) →
-      FStepIn rF.owned m m' ∧ m.RevivesOwned m' := fun v m' e h1 => by
+      FStepIn rF.owned m m' rF.shared ∧ m.RevivesOwned m' := fun v m' e h1 => by
     rw [h1] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨FStepIn.refl _ _, (Mem.NoRevive.refl m).revivesOwned⟩
@@ -614,9 +614,9 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
           simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
           exact ⟨⟨⟨⟨e, by omega⟩, hlen⟩, by omega⟩, by omega⟩
         rw [hnh] at hh'; cases hh'
-    refine ⟨((hrec.trans (FStepIn.forgetFrom _ _ fun blk' h => by
+    refine ⟨(((hrec.trans (FStepIn.forgetFrom _ _ fun blk' h => by
         have h' : m.blocks[b]? = some blk' := h
-        rw [hb] at h'; cases h'; exact Nat.le_refl _)).trans hret).trans hset,
+        rw [hb] at h'; cases h'; exact Nat.le_refl _)).trans hret).trans hset).reads,
       Mem.RevivesOwned.of_forgetFrom (m₁ := mr) rfl fun b' x hb' hl' hd => ?_⟩
     have hget := blocks_set_get (m := m) (m' := mr.afterByteRemap b blk n) hb rfl
     by_cases e' : b' = b

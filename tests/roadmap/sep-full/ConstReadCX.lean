@@ -108,9 +108,9 @@ theorem cload_thread :
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ (⟪v = 0⟫ ⋆ cpts p 1 (0 : BitVec 8)) r' ∧
-        m'.FConc ∧ m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m' :=
+        m'.FConc ∧ m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared :=
   (FTTotalTriple.cload (p := p) (a := 1) (v := (0 : BitVec 8)) (by decide)).1 m rC rF holds hc
-    fconc owns
+    fconc (.of_owns owns)
 
 /-- An external model's write claim of a `const` global throws `.illegal` before recording. -/
 theorem write_claim_illegal : ((External.claim p .write).run m).run = some (.error .illegal) := by

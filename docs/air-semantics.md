@@ -440,11 +440,29 @@ The binding is **per function, inside the certificate's program**. `execFunc_ren
 function's body before and after `renumber` within one program: the canonical one. Its other
 functions (reached through the oracle) are canonical, and so are its tick policies
 (`Program.ticked`, `entryTicked`, computed from every body by `memoryFunctions`,
-`concFunctions` and `callGroups`). Each callee's own `renumber` is bound on its own line. A
-whole-program statement would say that `run` of the program of pre-`renumber` functions equals
-`run` of the canonical program. It would also need those program analyses to be invariant
-under renaming. It is not proved, so the program-level part of `renumber` (callee bodies and
-tick policies) stays under TRU-02.
+`concFunctions` and `callGroups`). Each callee's own `renumber` is bound on its own line.
+
+The whole-program statement is `RenumberProgram.run_renumber` (and `runOn_renumber`): if every
+function of `q` is the function of `p` at the same place renamed by an injective map, then
+`run q = run p`. It rests on three generic facts in `Air2Lean/SemRewrite.lean`, stated for any
+body rewrite: a body reads its program only through the tick policy (`execBody_prog`,
+`execFunc_prog`); the policy analyses read each function only through its name, globals, types
+and local memory, sync and callee facts (`tickPolicy_map`); and a rewrite that keeps the
+policies and each function's execution keeps `run` (`run_map`, by the least-fixpoint
+characterization in both directions). For renaming, the sync and callee facts are proved
+(`syncLocally_ren`, `callees_ren`, `calleesOf_ren`), on top of one effects lemma for every
+operation (`effectsIn_renOp`) and the instruction list of a renamed function
+(`allInsts_renFunc`). `renFlat` renames shuffle-mask values too: with an instruction reference
+in a mask (which `Raw.validateRefs` rejects), an unrenamed mask would let the escaping-alloc
+analysis see a different local.
+
+One local fact remains a hypothesis of `run_renumber`: that renaming keeps
+`Func.usesMemoryLocally`. Its place roots and use-escaping allocs are proved invariant
+(`placeRoots_ren`, `usesEscapingAllocs_ren`); `deadUndefStores`, `undefAllocs`, `byteLocalOk`
+and the per-instruction predicate are not yet, because their instruction tests are anonymous
+`match`es under binders that no lemma can name (the fix is to name them in `Memory.lean`). So
+the program-level part of `renumber` stays under TRU-02, narrowed to that memory fact and the
+native binding.
 
 ### How SEM-06 shrinks
 

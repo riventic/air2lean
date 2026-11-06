@@ -22,6 +22,12 @@ GENERIC_ROOTS = {
     "Air2Lean.Renumber": frozenset(f"Air2Lean.Renumber.{name}" for name in (
         "execFunc_rename", "run_cellFree", "runOn_cellFree", "zipRen_inj",
         "execFunc_rename_run", "execFunc_rename_runOn")),
+    # The whole-program lift of a body rewrite, shared by both (`SemRewrite`), and its
+    # instance for `renumber` (`RenumberProgram`).
+    "Air2Lean.SemRewrite": frozenset(f"Air2Lean.Sem.{name}" for name in (
+        "execFunc_prog", "tickPolicy_map", "run_map", "runOn_map")),
+    "Air2Lean.RenumberProgram": frozenset(f"Air2Lean.Renumber.{name}" for name in (
+        "tickPolicy_renumber", "run_renumber", "runOn_renumber")),
 }
 MODULES = tuple(GENERIC_ROOTS)
 

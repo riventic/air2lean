@@ -490,13 +490,29 @@ Each stage is a permanent part of the end state, and none adds a shim.
 | S6 | acceptance measured; P09 complete; P03's "invariants and measures are not inferred" closed | — |
 
 P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
-the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
+the documented JSON schema. P09-E2 and P09-E3 are implemented
+(`docs/proof-automation.md`, §Inferred posts and §Machine-readable residual reports), so S1 is
+complete:
+
+* **P09-E2.** An unknown postcondition is inferred as the strongest post of the walk's returns,
+  in the sequential, thread and concurrent backends. This includes an unknown applied to computed
+  arguments, such as a loop step's exit `(label, s)`, whose returns are joined when its walk
+  ends. A loop with a registered invariant and no registered `B.post` continues from the
+  strongest post of its step's exits. The report's `posts` lists each inferred post (`return`,
+  `loop_exit`).
+* **P09-E3.** A stop with no rule, or an invariant that does not hold at a loop's entry, lists in
+  its origin's `plans` the rules whose precondition had no plan. Each comes with the atoms it
+  missed and their unknowns: the abduced anti-frame.
+
+The generator does not read either output yet. It still emits `B.post` from its reading, which
+the callers' walks check. Reading the inferred exit post instead, and the bi-abduction loop over
+`plans`, are generator work of S2 and later, not engine work.
 
 P09-E4 is implemented (`docs/proof-automation.md`, §Loops): `@[fsym_inv]` registers `B.inv`,
 `B.meas` and the exit post `B.post` of a loop body `B`, and `air2lean-invgen` emits all three
-with the attribute. The exit post is registered because the invariant alone forgets the exit's
-label and test, which a translated caller matches on, and `fsym` infers no strongest post at a
-loop's exits (P09-E2).
+with the attribute. The exit post was registered because the invariant alone forgets the exit's
+label and test, which a translated caller matches on. Since P09-E2, `fsym` infers the strongest
+post at a loop's exits when no `B.post` is registered.
 
 ### Implemented: counted loops (S2, first slice)
 
@@ -689,7 +705,7 @@ What the slices do not have yet (next slices, sizes S < M < L):
 |---|---|---|
 | S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
 | S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; the engine side, #atom-args-normal-form, is closed), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
-| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
+| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top. Not covered yet (checked 2026-11-06 by running `air2lean-invgen Proofs.Lists.Gen Lists`): `reverse.loop6` and `sum.loop6` give "an unsupported term: i8.isSome", and `freeAll.loop5` gives "an unsupported term: i7.isSome". The loop test is on an optional node pointer (`?*Node`), not on a counter, so the hand invariants and the `*_step`/`*_loop` lemmas of these files stay. The family needs, in the generator, the reading of `Option.isSome`/`Option.get` on the cursor local, the atoms `list X hd xs`/`node X p z q` from the node layout with the ghost lists split at the cursor, and the measure `xs.length`. The engine also cannot walk such a step yet. The hand `reverse_step`/`sum_step`/`freeAll` steps split the ghost list `zs` into `[]`/`z :: zs` themselves and unfold `list X cu (z :: zs)` into `node X p z q ⋆ list X q zs` (`list_cons`). Only the two fixed-shape steps (`reverse_tstep_nil`/`_cons`, …) are `fsym` walks. The missing rule is a case split of a ghost list in the state, driven by the cursor's `isSome` test, with the `node`/`list` unfolding and the fold at the next iteration (`lseg_snoc`, the S3 list family). The loop rule needs nothing new: `@[fsym_inv]` with `B.post` or the inferred exit post (P09-E2) | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 
 S3 to S6 follow the staging table above.

@@ -78,6 +78,17 @@ theorem join_r {Q₁ Q₂ : β → FAssn} (t : L.T P c Q₂) :
     L.T P c (fun v => FAssn.ex fun b : Bool => if b = true then Q₁ v else Q₂ v) :=
   L.post t fun _ _ h => ⟨false, h⟩
 
+/-- An update into the left post of a join (the joined returns into one unknown post,
+`finishExits`). -/
+theorem upd_join_l {A B : FAssn} (h : EUpd P A) :
+    EUpd P (FAssn.ex fun b : Bool => if b = true then A else B) :=
+  EUpd.trans h (EUpd.of_imp fun _ h => ⟨true, h⟩)
+
+/-- An update into the right post of a join. -/
+theorem upd_join_r {A B : FAssn} (h : EUpd P B) :
+    EUpd P (FAssn.ex fun b : Bool => if b = true then A else B) :=
+  EUpd.trans h (EUpd.of_imp fun _ h => ⟨false, h⟩)
+
 end Steps
 
 /-! ## Facts of atoms -/

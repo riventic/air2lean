@@ -287,7 +287,7 @@ def proto : Proto Tgt Gh where
   init tgt g := match tgt with
     | .task p => p = bPtr ∧ ∃ rp, plain rp ∧ g = (⟨.out, rp, rnil⟩, { ph := .lk })
     | _ => False
-  fin g := g.1.ph = .gone ∧ g.2.ph = .fin ∧ g.2.e = .out
+  fin g := g.1.ph = .gone ∧ g.2.ph = .fin ∧ g.2.e = .out ∧ ∀ l, g.1.part.shared l = none
   strict := true
   joins g := g.1.ph = .out ∧ (g.2.ph = .rdd ∨ g.2.ph = .j1) ∧ g.2.e = .out
 
@@ -891,6 +891,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
 theorem fitsL : L.Fits (FPrim.empty Gh) proto U ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
+    fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => FAssn.Unshared.up _
 
 /-! ## A native step on the caller's part, next to the event -/
 
@@ -989,7 +990,7 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
 theorem fitsE : L.Fits (E.prim L) proto U ok := { fitsL with
-  kfin g h := by show g.2.e = _; rw [h.2.2]
+  kfin g h := by show g.2.e = _; rw [h.2.2.1]
   kjoins g h := by show g.2.e = _; rw [h.2.2]
   sub _ _ _ hu := ⟨hu.einv, fun _ hW => by
     subst hW; exact ⟨hu.ev.anti fun _ h => .inr h, Rest.split (fun _ => ev_box) hu.rest⟩⟩

@@ -2,6 +2,7 @@ import ZigLean.Sep.Full.Witness
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.Claims
 import ZigLean.Sep.Full.AtomicPtr
+import ZigLean.Sep.Full.Const
 
 /-!
 # Admissible inputs built from the start memory (`docs/claim-strength.md` §Witnesses)
@@ -123,7 +124,7 @@ theorem FAdmit.Start.toFAdmit {P : FAssn} (h : FAdmit.Start P) : FAdmit P :=
 /-- A thread's admissible input: the thread owns every heap of a memory with no recorded access. -/
 theorem FAdmit.Start.cadmit {P : FAssn} (h : FAdmit.Start P) : CAdmit P :=
   have ⟨m, ⟨hs, hf⟩, r, rF, hh, hp⟩ := h
-  CAdmit.of ⟨m, r, rF, hh, hp, hs.fconc, owns_of_footprint hf _ _, trivial⟩
+  CAdmit.of ⟨m, r, rF, hh, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), trivial⟩
 
 theorem FAdmit.Start.eupd {P P' : FAssn} (h : FAdmit.Start P) (hu : EUpd P P') :
     FAdmit.Start P' :=
@@ -359,6 +360,70 @@ theorem FAdmit.init_claims (σ : Placement) (gs : List (Array Byte × Nat × Blo
     FAdmit (globals gs ⋆ gclaims gs) :=
   FAdmit.frame (R := plain) ((FAdmit.Start.init_claims σ gs h hK).toFAdmit.mono
     fun _ h => ac_cast h (by ac_rfl))
+
+/-! ## A byte no resource holds
+
+A refutation of a no-leak property (a run that returns with a byte live that no resource holding
+`P` with the same frame accounts for) shows that the precondition holds nothing at the byte
+(`Avoids`) and that the frame holds nothing there either, since the byte is not live at start
+(`Holds.avoids_of_none`). A memory with a live byte is then held by neither
+(`Holds.none_of_avoids`). Holding a byte means its exclusive cell or a read share of it
+(`SMatch`): both count. -/
+
+/-- **`P` holds nothing at `l`**: no resource of `P` has the exclusive cell at `l` or a share of
+it. -/
+def Avoids (P : FAssn) (l : Loc) : Prop := ∀ r, P r → r.heap l = none ∧ (r.gh.share l).Empty
+
+/-- A part without bytes or ghost state holds nothing anywhere. -/
+theorem Avoids.of_persistent {P : FAssn} (hP : Persistent P) (l : Loc) : Avoids P l := fun r h => by
+  obtain ⟨e1, e2⟩ := hP r h
+  rw [e1, e2]; exact ⟨rfl, SCell.empty_zero⟩
+
+theorem Avoids.sep {P Q : FAssn} {l : Loc} (hP : Avoids P l) (hQ : Avoids Q l) : Avoids (P ⋆ Q) l := by
+  rintro _ ⟨r₁, r₂, -, rfl, h1, h2⟩
+  obtain ⟨a1, b1⟩ := hP r₁ h1
+  obtain ⟨a2, b2⟩ := hQ r₂ h2
+  exact ⟨by simp [FHeap.union_apply, a1, a2], by simpa using b1.add b2⟩
+
+theorem Avoids.ex {γ : Type} {P : γ → FAssn} {l : Loc} (h : ∀ x, Avoids (P x) l) :
+    Avoids (FAssn.ex P) l := fun r ⟨x, hx⟩ => h x r hx
+
+/-- The plain mode holds counter fragments only. -/
+theorem Avoids.plain (l : Loc) : Avoids plain l :=
+  Avoids.sep (fun r h => by rw [h.1, h.2.2]; exact ⟨rfl, SCell.empty_zero⟩)
+    fun r h => by rw [h.1, h.2.2]; exact ⟨rfl, SCell.empty_zero⟩
+
+/-- Bytes of another block hold nothing at `l`. -/
+theorem Avoids.abytesAt {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {tg : Option (Nat × Nat)} {l : Loc} (hl : p.block ≠ some l.1) : Avoids (abytesAt p A S K bs tg) l :=
+  fun r h => by
+    obtain ⟨-, hg, b, hb, -, hr⟩ := h
+    rw [hr, hg]
+    refine ⟨?_, SCell.empty_zero⟩
+    have : l.1 ≠ b := fun e => hl (e ▸ hb)
+    simp [this]
+
+theorem Avoids.aptsE {α : Type} [Enc α] {p : Ptr} {v : α} {l : Loc} (hl : p.block ≠ some l.1) :
+    Avoids (aptsE p v) l := fun r ⟨_, _, _, _, _, _, _, _, h⟩ => Avoids.abytesAt hl r h
+
+/-- **A byte that is not live is held by neither side**: no exclusive cell and no share. -/
+theorem _root_.Zig.Full.Holds.avoids_of_none {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hm : m.heap l = none) :
+    (r.heap l = none ∧ (r.gh.share l).Empty) ∧ (rF.heap l = none ∧ (rF.gh.share l).Empty) := by
+  have := hh.heap.whole.1 l
+  rw [hm, Option.map_none, eq_comm, Option.map_eq_none_iff, FHeap.union_apply,
+    Option.or_eq_none_iff, FHeap.union_apply, Option.or_eq_none_iff] at this
+  obtain ⟨⟨h1, h2⟩, hs⟩ := this
+  have hp := (SCell.cell_eq_none_iff.mp hs : ¬ ((r.gh.add rF.gh).share l).Pos)
+  rw [Ghost.add_share, SCell.pos_add_iff, not_or] at hp
+  exact ⟨⟨h1, SCell.not_pos_iff.mp hp.1⟩, h2, SCell.not_pos_iff.mp hp.2⟩
+
+/-- **A byte neither side holds is not live.** -/
+theorem _root_.Zig.Full.Holds.none_of_avoids {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (h : r.heap l = none ∧ (r.gh.share l).Empty) (hF : rF.heap l = none ∧ (rF.gh.share l).Empty) :
+    m.heap l = none :=
+  hh.heap.none (by simp [FHeap.union_apply, h.1, hF.1])
+    (SCell.cell_eq_none (by rw [Ghost.add_share]; exact h.2.add hF.2))
 
 end Witness
 end Zig

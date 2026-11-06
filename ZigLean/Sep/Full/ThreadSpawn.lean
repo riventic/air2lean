@@ -147,13 +147,16 @@ theorem fork_grant {keep child : Res} {gt : Bool} (ho : FOwned own rO m) (ht : t
     FOwned (upd (upd own t keep) ch child) rO m' ∧ grant mode cs (upd (upd own t keep) ch child ch) :=
   ⟨FOwned.fork ho ht hsplit hd hf, by rw [upd_self]; exact hg⟩
 
-/-- **Join**: the parent `t` regains every byte that the joined thread `u` holds. -/
+/-- **Join**: the parent `t` regains every byte that the joined thread `u` holds, when the join
+gathers no share (`hg`, `FOwned.join`: fail closed). -/
 theorem join_regain (ho : FOwned own rO m) (ht : t < m.threads.size) (hut : u ≠ t)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
+    (hg : ∀ l, (own t).shared l = none ∨ (own u).shared l = none := by
+      intro l; exact .inl ((Res.excl_eq_erase).2 l)) :
     FOwned (upd (upd own u rnil) t (rsum (own t) (own u))) rO m' ∧
       ∀ l fc, (own u).heap l = some fc →
         (upd (upd own u rnil) t (rsum (own t) (own u)) t).heap l = some fc := by
-  refine ⟨FOwned.join ho ht hut hj, fun l fc hl => ?_⟩
+  refine ⟨FOwned.join ho ht hut hj hg, fun l fc hl => ?_⟩
   rw [upd_self]
   have hd : FHeap.Disjoint (own t).heap (own u).heap := by
     by_cases hu : u < m.threads.size

@@ -607,7 +607,7 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
           (LockWord.someLe_le hc h'')⟩
       · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
           fun u hu => VClock.le_trans hc (h'' u hu))
-    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
+    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt.empty
       rw [hr.1]; exact hio _ hr.2.2
   · rw [hP']
     rcases hu.reg j hj with h' | ⟨hlk, h'⟩
@@ -1474,6 +1474,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
 theorem fitsL : (L Lo).Fits (FPrim.empty Gh) (proto Lo prodOf) (U Lo) ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
+    fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => .sep (.up _) (.up _)
 
 /-- **The protocol has the condition** (the lock's laws as for `fitsL`); the window: the epoch
 has at most two writes (`ep2`). -/
