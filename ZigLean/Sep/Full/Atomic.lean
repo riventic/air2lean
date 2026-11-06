@@ -757,6 +757,13 @@ theorem abytesAt_owned {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     ∀ x, p.off.toNat ≤ x → x < p.off.toNat + bs.size → r.owned (b, x) ≠ none := fun x h1 h2 =>
   Res.owned_of_erase (abytesAt_mine hab hpb x h1 h2)
 
+/-- The bytes of an owned word are exclusive bytes of the resource (`Res.excl`). -/
+theorem abytesAt_excl {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
+    {tg : Option (Nat × Nat)} {r : Res} (hab : abytesAt p A S K bs tg r) {b : BlockId}
+    (hpb : p.block = some b) :
+    ∀ x, p.off.toNat ≤ x → x < p.off.toNat + bs.size → r.excl (b, x) ≠ none := fun x h1 h2 =>
+  Res.excl_of_heap fun e => abytesAt_mine hab hpb x h1 h2 (by simp [FHeap.erase, e])
+
 /-- The bytes of an owned word are not the frame's. -/
 theorem abytesAt_frame {m : Mem} {r rF : Res} (hh : Holds m r rF) {p : Ptr} {A S : Nat}
     {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r)
@@ -790,27 +797,27 @@ access retires the locations over them, sequentially or concurrently
 (`tests/roadmap/sep-full/MixedSizeCX.lean`). -/
 theorem locIdx_noErr_word {m : Mem} {r : Res} {p : Ptr} {A S : Nat} {K : BlockKind}
     {bs : Array Byte} {tg : Option (Nat × Nat)} (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned) {b : BlockId}
+    (hc : m.current < m.clocks.size) (ho : m.OwnsRes m.current r) {b : BlockId}
     (hpb : p.block = some b) (k : AccessKind) (e : Error) :
     ((locIdx b p.off.toNat 8).run (m.recordAt b p.off.toNat 8 k)).run ≠ some (.error e) :=
-  locIdx_noErr_owned (ho.recordAt hc)
-    (fun x h1 h2 => abytesAt_owned hab hpb x h1 (by omega)) e
+  locIdx_noErr_owned (ho.1.recordAt hc)
+    (fun x h1 h2 => abytesAt_excl hab hpb x h1 (by omega)) e
 
 /-- `FTTriple.of_step` (below) in the memories with a property `Φ` (`FTTriple.of_fix_on`). -/
 theorem FTTriple.of_step_on {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} (Φ : Mem → Prop)
     (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
     (h : ∀ m r rF, Φ m → Holds m r rF → Exact m r → Exact m rF → P r →
-      m.current < m.clocks.size → m.Owns m.current r.owned → ShapesWF (shapes m) →
+      m.current < m.clocks.size → m.OwnsRes m.current r → ShapesWF (shapes m) →
       m.LiveLayout →
       (∀ e, (c.run m).run ≠ some (.error e)) ∧
       ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
         ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m') :
-    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+    ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m' := by
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared := by
   refine FTTriple.of_fix_on Φ hP fun m r rF hΦ hh hxr hxF hp hc ho => ?_
   obtain ⟨hne, hok⟩ := h m r rF hΦ hh hxr hxF hp hc.1 ho hc.2.1 hc.2.2
   match e : (c.run m).run with
@@ -818,7 +825,8 @@ theorem FTTriple.of_step_on {α : Type} {P : FAssn} {c : MemM α} {Q : α → FA
   | some (.error er) => exact (hne er e).elim
   | some (.ok (v, m')) =>
     obtain ⟨r', hh', hq, hw', hl', hst, hnr⟩ := hok v m' e
-    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst hnr.revivesOwned hh', hst⟩
+    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst.reads hnr.revivesOwned hh',
+      hst.reads⟩
 
 /-- The run of a step of the current thread on an owned word, in a thread: from the analysis of
 the run (premise `h`, for every memory where the thread owns the precondition), the thread
@@ -826,7 +834,7 @@ triple. -/
 theorem FTTriple.of_step {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
     (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
     (h : ∀ m r rF, Holds m r rF → Exact m r → Exact m rF → P r → m.current < m.clocks.size →
-      m.Owns m.current r.owned → ShapesWF (shapes m) → m.LiveLayout →
+      m.OwnsRes m.current r → ShapesWF (shapes m) → m.LiveLayout →
       (∀ e, (c.run m).run ≠ some (.error e)) ∧
       ∀ v m', (c.run m).run = some (.ok (v, m')) → ∃ r', Holds m' r' rF ∧ Q v r' ∧
         ShapesWF (shapes m') ∧ m'.LiveLayout ∧ FStepIn rF.owned m m' ∧ m.NoRevive m') :
@@ -883,7 +891,7 @@ newest message happened before the thread, so the floor of its read is that mess
 (`floor_newest`). Every recorded access to the location's bytes happened before the thread
 (`Mem.Owns`), so every message did. -/
 theorem newest_before {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
-    (ho : m.Owns m.current r.owned) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
+    (ho : m.OwnsRes m.current r) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
     {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
     (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
     {k : AccessKind} {li : Nat}
@@ -909,7 +917,7 @@ theorem newest_before {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.cu
     rw [if_pos ⟨rfl, Nat.le_refl _, show p.off.toNat < p.off.toNat + 8 by omega⟩, h1] at h2
     simp only [ALoc.shape, Option.some.injEq, Prod.mk.injEq] at h2
     exact h2.2
-  have hmc₁ : m₁.MsgCov := (FStepIn.locIdx (hF := fun _ => none) (by decide) (fun _ _ _ => rfl)
+  have hmc₁ : m₁.MsgCov := (FStepIn.locIdx (hF := fun _ => none) (hR := Heap.empty) (by decide) (fun _ _ _ => rfl)
     ⟨blk, hblk, hbsz⟩ hl).msgCov hmc.recordAt
   have hcl₁ : m₁.clocks = (m.recordAt b p.off.toNat 8 k).clocks := by rw [hm₁]
   have hfp₁ : m₁.footprint = (m.recordAt b p.off.toNat 8 k).footprint := by rw [hm₁]
@@ -928,8 +936,8 @@ theorem newest_before {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.cu
         · exact ⟨p.off.toNat, h, by omega, Nat.le_refl _, by omega⟩
         · exact ⟨e.off, Nat.le_refl _, by omega, h, by omega⟩
       have hx := abytesAt_mine hab hpb x hx3 (by rw [hsz]; exact hx4)
-      refine VClock.le_trans (ho e he (.inl ⟨x, hx1, hx2, ?_⟩)) (VClock.le_bump _ _)
-      rw [h1]; exact Res.owned_of_erase hx
+      refine VClock.le_trans (ho.cells e he (.inl ⟨x, hx1, hx2, ?_⟩)) (VClock.le_bump _ _)
+      rw [h1]; exact hx
     · exact VClock.le_refl _
   -- so did the newest message
   have hmem : m₁.atomics[li]! ∈ m₁.atomics := by
@@ -938,7 +946,7 @@ theorem newest_before {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.cu
 
 /-- `newest_before`: the floor of the read is the newest message. -/
 theorem floor_newest {m m₁ : Mem} {r rF : Res} (hh : Holds m r rF) (hc : m.current < m.clocks.size)
-    (ho : m.Owns m.current r.owned) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
+    (ho : m.OwnsRes m.current r) (hmc : m.MsgCov) (hw : ShapesWF (shapes m))
     {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte} {tg : Option (Nat × Nat)}
     (hab : abytesAt p A S K bs tg r) (hsz : bs.size = 8) {b : BlockId} (hpb : p.block = some b)
     {k : AccessKind} {li : Nat}
@@ -1009,7 +1017,7 @@ the word is an `apts`; the step does not throw, whatever the word's tag constrai
 (`locIdx_noErr_word`). -/
 theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
+    (hc : m.current < m.clocks.size) (ho : m.OwnsRes m.current r)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run ≠ some (.error e)) ∧
     ∀ w m', ((Zig.atomicLoadAt (n := 64) 0 ord 8 p).run m).run = some (.ok (w, m')) →
@@ -1029,8 +1037,8 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
     simpa [this] using hx
   have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicRead
-  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.noRace fun x h1 h2 =>
-    abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicRead := ho.1.noRace fun x h1 h2 =>
+    abytesAt_excl hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   -- A successful preparation reads the newest message, which has the owned bytes.
   have hnewest : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicRead)).run = some (.ok (li, m₁)) →
@@ -1082,7 +1090,7 @@ theorem atomicLoad_run (p : Ptr) (v : BitVec 64) (ord : AtomicOrder) {m : Mem} {
           unfold Mem.Aux loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]) (by
           unfold loadM acqM observeM; split <;> simp [hm₁, Mem.recordAt]))
       have hs0 := fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead
-      have hs1 := FStepIn.locIdx (by decide) (frame_off hh hab hsz hpb)
+      have hs1 := FStepIn.locIdx (hR := Heap.empty) (by decide) (frame_off hh hab hsz hpb)
         (by have := access_inBlock hacc8 (m.recordAt b p.off.toNat 8 .atomicRead) rfl
             rwa [intSize_64] at this)
         (by rw [intSize_64] at hl; exact hl)
@@ -1212,7 +1220,7 @@ theorem write_newest_apts {m m₀ : Mem}
 afterwards the word is an `apts` of the new value. -/
 theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem} {r rF : Res}
     (hh : Holds m r rF) (hxr : Exact m r) (hxF : Exact m rF) (hp : wpts p v r)
-    (hc : m.current < m.clocks.size) (ho : m.Owns m.current r.owned)
+    (hc : m.current < m.clocks.size) (ho : m.OwnsRes m.current r)
     (hwf : ShapesWF (shapes m)) (hld : m.LiveLayout) :
     (∀ e, ((Zig.atomicStoreAt 0 ord 8 p w).run m).run ≠ some (.error e)) ∧
     ∀ u m', ((Zig.atomicStoreAt 0 ord 8 p w).run m).run = some (.ok (u, m')) →
@@ -1231,8 +1239,8 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some, Array.size_extract]
     omega
   have hlocok := locIdx_noErr_word hab hsz hc ho hpb .atomicWrite
-  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicWrite := ho.noRace fun x h1 h2 =>
-    abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hnr : NoRace m b p.off.toNat (intSize 64) .atomicWrite := ho.1.noRace fun x h1 h2 =>
+    abytesAt_excl hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have hpost : ∀ li m₁, ((locIdx b p.off.toNat (intSize 64)).run
       (m.recordAt b p.off.toNat (intSize 64) .atomicWrite)).run = some (.ok (li, m₁)) →
       (writeSlots m₁ li)[0]? = some (m₁.atomics[li]!).msgs.size ∧
@@ -1262,7 +1270,8 @@ theorem atomicStore_run (p : Ptr) (v w : BitVec 64) (ord : AtomicOrder) {m : Mem
         rw [hb, hm₁]; exact hblk
       subst hm'
       have hs0 := fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicWrite
-      have hs1 := FStepIn.locIdx (m := m.recordAt b p.off.toNat 8 .atomicWrite) (by decide)
+      have hs1 := FStepIn.locIdx (m := m.recordAt b p.off.toNat 8 .atomicWrite) (hR := Heap.empty)
+        (by decide)
         (frame_off hh hab hsz hpb) ⟨blk, hblk, by omega⟩ (by rw [intSize_64] at hl; exact hl)
       have hmc : m₁.MsgCovAt li (storeMsg m₁ ord w) :=
         msgCovAt_recordAt (X := #[]) (n := 8) hc (by decide) (fun e he => by rw [hm₁]; exact he) hb ho

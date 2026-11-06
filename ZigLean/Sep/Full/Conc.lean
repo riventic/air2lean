@@ -234,11 +234,11 @@ def Run (Q : α → FAssn) : {n : Nat} → Mem → Res → CoN Tgt (α × Mem) n
   | _, _, _, .leaf none => True
   | _, _, _, .leaf (some (.error e)) => e = .stackOverflow
   | _, m₀, rF, .leaf (some (.ok (v, m'))) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-      m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m₀ m'
+      m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m₀ m' rF.shared
   | _, m₀, rF, .sync op m₁ k => SyncOp.Solo op = true ∧ ∃ r', Holds m₁ r' rF ∧ m₁.FConc ∧
-      m₁.Owns m₁.current r'.owned ∧ FStepIn rF.owned m₀ m₁ ∧
+      m₁.OwnsRes m₁.current r' ∧ FStepIn rF.owned m₀ m₁ rF.shared ∧
       ∀ m₂ rF₂, m₂.current = m₁.current → Holds m₂ r' rF₂ → m₂.FConc →
-        m₂.Owns m₂.current r'.owned → ∀ ρ, soloAnswer op m₂ ρ →
+        m₂.OwnsRes m₂.current r' → ∀ ρ, soloAnswer op m₂ ρ →
           (soloResp op = some ρ ∨ m₂.MsgCov) → Run Q m₂ rF₂ (k ρ m₂)
 
 end CTriple
@@ -246,7 +246,7 @@ end CTriple
 /-- **A full-state triple for a call of a concurrent function** (module doc): from every memory
 in which the thread owns `P`, the run of `x` at every depth is a `CTriple.Run`. -/
 def CTriple (P : FAssn) (x : ConcM Tgt α) (Q : α → FAssn) : Prop :=
-  ∀ n m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+  ∀ n m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
     CTriple.Run Q m rF (x n m)
 
 namespace CTriple
@@ -259,15 +259,15 @@ variable {γ : Type}
 
 theorem Run.ok_iff {Q : α → FAssn} {m₀ m' : Mem} {rF : Res} {v : α} {n : Nat} :
     Run (Tgt := Tgt) (n := n) Q m₀ rF (.leaf (some (.ok (v, m')))) ↔ ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-      m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m₀ m' := by
+      m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m₀ m' rF.shared := by
   simp only [Run]
 
 theorem Run.sync_iff {Q : α → FAssn} {m₀ m₁ : Mem} {rF : Res} {n : Nat} {op : SyncOp Tgt}
     {k : op.Resp → Mem → CoN Tgt (α × Mem) n} :
     Run Q m₀ rF (.sync op m₁ k) ↔ SyncOp.Solo op = true ∧ ∃ r', Holds m₁ r' rF ∧ m₁.FConc ∧
-      m₁.Owns m₁.current r'.owned ∧ FStepIn rF.owned m₀ m₁ ∧
+      m₁.OwnsRes m₁.current r' ∧ FStepIn rF.owned m₀ m₁ rF.shared ∧
       ∀ m₂ rF₂, m₂.current = m₁.current → Holds m₂ r' rF₂ → m₂.FConc →
-        m₂.Owns m₂.current r'.owned → ∀ ρ, soloAnswer op m₂ ρ →
+        m₂.OwnsRes m₂.current r' → ∀ ρ, soloAnswer op m₂ ρ →
           (soloResp op = some ρ ∨ m₂.MsgCov) → Run Q m₂ rF₂ (k ρ m₂) := by
   simp only [Run]
 
@@ -285,7 +285,7 @@ theorem Run.mono {Q' : α → FAssn} (hq : ∀ v r, Q v r → Q' v r) :
 
 /-- A step before the segment: the segment starts earlier. -/
 theorem Run.prefix {n : Nat} {t : CoN Tgt (α × Mem) n} {m₀ m₁ : Mem} {rF : Res}
-    (hs : FStepIn rF.owned m₀ m₁) (h : Run Q m₁ rF t) : Run Q m₀ rF t := by
+    (hs : FStepIn rF.owned m₀ m₁ rF.shared) (h : Run Q m₁ rF t) : Run Q m₀ rF t := by
   cases t with
   | leaf o =>
     rcases o with _ | _ | ⟨_, _⟩
@@ -302,7 +302,7 @@ tree's), from the memory and the part of the result. -/
 theorem Run.bind {S : β → FAssn} {F : γ × Mem → (k : Nat) → CoN Tgt (β × Mem) k} {Q : γ → FAssn} :
     ∀ {n} (t : CoN Tgt (γ × Mem) n) {m₀ : Mem} {rF : Res}, Run Q m₀ rF t →
     (∀ v m' k, k ≤ n → ∀ r' rF', Holds m' r' rF' → Q v r' → m'.FConc →
-      m'.Owns m'.current r'.owned → Run S m' rF' (F (v, m') k)) →
+      m'.OwnsRes m'.current r' → Run S m' rF' (F (v, m') k)) →
     Run S m₀ rF (t.bind F)
   | _, .leaf none, _, _, _, _ => trivial
   | _, .leaf (some (.error _)), _, _, h, _ => h
@@ -315,34 +315,31 @@ theorem Run.bind {S : β → FAssn} {F : γ × Mem → (k : Nat) → CoN Tgt (β
       Run.bind (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm) fun v m' k hk' =>
         hf v m' k (Nat.le_succ_of_le hk')⟩
 
-/-- **The frame rule**, stop by stop: a part `rR` that holds `R` and that the thread owns stays
-in the thread's part through every segment and every stop. -/
+/-- **The frame rule**, stop by stop: a part `rR` that holds `R` stays in the thread's part
+through every segment and every stop. The thread owns the segment's start part `rP ⋆ rR`
+(`Mem.OwnsRes.frame`: a byte whole in the sum is exclusive although each part holds a piece). -/
 theorem Run.frame {R : FAssn} {rR : Res} (hR : R rR) :
-    ∀ {n} (t : CoN Tgt (α × Mem) n) {m₀ : Mem} {rF : Res}, FHeap.Disjoint rR.heap rF.heap →
-    m₀.Owns m₀.current rR.owned →
+    ∀ {n} (t : CoN Tgt (α × Mem) n) {m₀ : Mem} {rF rP : Res}, FHeap.Disjoint rR.heap rF.heap →
+    Holds m₀ ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ rF →
+    m₀.OwnsRes m₀.current ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ →
     Run Q m₀ ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩ t →
     Run (fun v => Q v ⋆ R) m₀ rF t
-  | _, .leaf none, _, _, _, _, _ => trivial
-  | _, .leaf (some (.error _)), _, _, _, _, h => h
-  | _, .leaf (some (.ok (_, _))), _, _, hRF, hoR, h => by
+  | _, .leaf none, _, _, _, _, _, _, _ => trivial
+  | _, .leaf (some (.error _)), _, _, _, _, _, _, h => h
+  | _, .leaf (some (.ok (_, _))), _, _, _, hRF, hh₀, ho₀, h => by
     obtain ⟨r', hh, hq, hc, ho, hst⟩ := Run.ok_iff.mp h
     have hQR := (FHeap.disjoint_union_right.mp hh.disj).1
-    exact Run.ok_iff.mpr ⟨_, Holds.join hQR hRF hh, ⟨r', rR, hQR, rfl, hq, hR⟩, hc,
-      (Mem.OwnsC.union ho (Mem.Owns.fstepSelf hst hoR fun _ hl =>
-        (Res.owned_sep rfl rfl).mpr (.inl hl))).sub fun _ => Res.owned_sub_union rfl rfl,
-      hst.weaken fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl)⟩
-  | _, .sync _ _ k, _, _, hRF, hoR, h => by
+    have hj := Holds.join hQR hRF hh
+    exact Run.ok_iff.mpr ⟨_, hj, ⟨r', rR, hQR, rfl, hq, hR⟩, hc,
+      Mem.OwnsRes.frame hh₀ hj ho₀ ho hst, hst.frameRight⟩
+  | _, .sync _ _ k, _, _, _, hRF, hh₀, ho₀, h => by
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
     have hQR := (FHeap.disjoint_union_right.mp hh.disj).1
-    exact Run.sync_iff.mpr ⟨hs, _, Holds.join hQR hRF hh, hc,
-      (Mem.OwnsC.union ho (Mem.Owns.fstepSelf hst hoR fun _ hl =>
-        (Res.owned_sep rfl rfl).mpr (.inl hl))).sub fun _ => Res.owned_sub_union rfl rfl,
-      hst.weaken fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl),
+    have hj := Holds.join hQR hRF hh
+    exact Run.sync_iff.mpr ⟨hs, _, hj, hc, Mem.OwnsRes.frame hh₀ hj ho₀ ho hst, hst.frameRight,
       fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
-        Run.frame hR (k ρ m₂) (FHeap.disjoint_union_left.mp hh₂.disj).2
-          (ho₂.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))
-          (hk m₂ _ e (Holds.split hQR hh₂) hc₂
-            (ho₂.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl)) ρ hρ hm)⟩
+        Run.frame hR (k ρ m₂) (FHeap.disjoint_union_left.mp hh₂.disj).2 hh₂ ho₂
+          (hk m₂ _ e (Holds.split hQR hh₂) hc₂ (ho₂.sepL rfl rfl) ρ hρ hm)⟩
 
 /-- An update of each result (`EUpd`, read in `m.noFp`). -/
 theorem Run.eupd_post {Q' : α → FAssn} (hu : ∀ v, EUpd (Q v) (Q' v)) :
@@ -352,7 +349,7 @@ theorem Run.eupd_post {Q' : α → FAssn} (hu : ∀ v, EUpd (Q v) (Q' v)) :
   | _, .leaf (some (.ok (_, _))), _, _, h => by
     obtain ⟨r', hh', hq, hc', ho', hst⟩ := Run.ok_iff.mp h
     obtain ⟨r'', hh'', hq'⟩ := hu _ _ r' _ hh'.toNoFp hq hc'.noFp
-    exact Run.ok_iff.mpr ⟨r'', hh''.ofNoFp, hq', hc', ho'.sub fun _ => hh'.owned_sub hh''.ofNoFp, hst⟩
+    exact Run.ok_iff.mpr ⟨r'', hh''.ofNoFp, hq', hc', ho'.upd hh' hh''.ofNoFp, hst⟩
   | _, .sync _ _ k, _, _, h => by
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
     exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
@@ -386,7 +383,7 @@ thread itself in the memory it stopped with) is a sequential triple. -/
 theorem toSolo (ht : CTriple P x Q) (n : Nat) : FTriple P (soloRun n x) Q := by
   intro m r rF hh hp hs
   rw [run_eq]
-  exact Run.solo (x n m) hs.1.single (ht n m r rF hh hp hs.fconc (hs.1.single.owns _))
+  exact Run.solo (x n m) hs.1.single (ht n m r rF hh hp hs.fconc (.of_owns (hs.1.single.owns _)))
 
 /-- The in-thread reading of a run, as a thread's step: each stop is answered by the thread
 itself in the memory it stopped with, and the segments compose (`FStepIn.trans`). -/
@@ -395,7 +392,7 @@ theorem Run.soloThread : ∀ {n} (t : CoN Tgt (α × Mem) n) {m₀ : Mem} {rF : 
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m₀ m')
+        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m₀ m' rF.shared)
   | _, .leaf none, _, _, _ => trivial
   | _, .leaf (some (.error _)), _, _, h => h
   | _, .leaf (some (.ok (_, _))), _, _, h => Run.ok_iff.mp h
@@ -431,7 +428,7 @@ theorem Run.liftMem {c : MemM α} {m : Mem} {rF : Res} {n : Nat}
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.Owns m'.current r'.owned ∧ FStepIn rF.owned m m') :
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
     Run Q m rF ((ConcM.liftMem c : ConcM Tgt α) n m) := by
   show Run Q m rF (.leaf (c.run m))
   match e : (c.run m).run, h1 with
@@ -476,7 +473,7 @@ theorem pick_bind {count : Mem → Nat} {f : Nat → ConcM Tgt α} (h : ∀ c, C
 in-thread reading answers `0`): the choice is at most `k`. With a count lemma of an atomic op on an
 owned word (one option: the newest message) this is the choice `0` of its thread rule. -/
 theorem pick_le {count : Mem → Nat} {k : Nat}
-    (hle : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned → m.MsgCov →
+    (hle : ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r → m.MsgCov →
       count m ≤ k + 1) :
     CTriple P (ConcM.sync (.pick count) : ConcM Tgt Nat) (fun c : Nat => ⟪c ≤ k⟫ ⋆ P) := by
   intro n m r rF hh hp hc ho
@@ -496,7 +493,7 @@ theorem pick_le {count : Mem → Nat} {k : Nat}
 
 /-- `pick_le` with one option: the choice `0`. -/
 theorem pick_one {count : Mem → Nat}
-    (hle : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned → m.MsgCov →
+    (hle : ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r → m.MsgCov →
       count m ≤ 1) :
     CTriple P (ConcM.sync (.pick count) : ConcM Tgt Nat) (fun c : Nat => ⟪c = 0⟫ ⋆ P) :=
   fun n m r rF hh hp hc ho => Run.mono (fun (c : Nat) _ h => by
@@ -516,8 +513,7 @@ theorem frame (ht : CTriple P x Q) : CTriple (P ⋆ R) x (fun v => Q v ⋆ R) :=
   intro n m r rF hh hpr hc ho
   obtain ⟨rP, rR, hd, rfl, hp, hr⟩ := hpr
   have hRF := (FHeap.disjoint_union_left.mp hh.disj).2
-  exact Run.frame hr (x n m) hRF (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))
-    (ht n m rP _ (Holds.split hd hh) hp hc (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl)))
+  exact Run.frame hr (x n m) hRF hh ho (ht n m rP _ (Holds.split hd hh) hp hc (ho.sepL rfl rfl))
 
 theorem frameL (ht : CTriple P x Q) : CTriple (R ⋆ P) x (fun v => R ⋆ Q v) :=
   conseq (frame (R := R) ht) (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
@@ -538,7 +534,7 @@ theorem of_pure {φ : Prop} (hφ : ∀ r, P r → φ) (h : φ → CTriple P x Q)
 theorem eupd (hu : EUpd P P') (ht : CTriple P' x Q) : CTriple P x Q := by
   intro n m r rF hh hp hc ho
   obtain ⟨r', hh', hp'⟩ := hu m.noFp r rF hh.toNoFp hp hc.noFp
-  exact ht n m r' rF hh'.ofNoFp hp' hc (ho.sub fun _ => hh.owned_sub hh'.ofNoFp)
+  exact ht n m r' rF hh'.ofNoFp hp' hc (ho.upd hh hh'.ofNoFp)
 
 /-- An update of the postcondition. -/
 theorem eupd_post (ht : CTriple P x Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : CTriple P x Q' :=
@@ -573,7 +569,7 @@ theorem forget {K : FAssn} (hK : ∀ r, K r → r.heap = FHeap.empty ∧ r.gh.Af
     simp only [e, FHeap.union_empty] at hd' hm
     rw [ha.share_add] at hm
     exact ⟨hd', hm, hk.left, hkF, GOk.mono hg ha⟩
-  exact ht n m r₁ rF hh₁ h1 hc (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))
+  exact ht n m r₁ rF hh₁ h1 hc (ho.sepL rfl rfl)
 
 /-- A `MemM` step that returns `v` and leaves the memory as it is. -/
 theorem pureStep {c : MemM α} {v : α} {f : α → ConcM Tgt β} {S : β → FAssn}
@@ -656,13 +652,13 @@ theorem loop {σ ε : Type} {body : CM Tgt σ ε} {again : ε → Bool} (inv : �
       exact ihn k (by omega) s' m' r' rF' hh' hq hc' ho'
   have key := Zig.loop.fixpoint_induct body again
     (fun l => ∀ s m, (l.run s) n m = .leaf none ∨ ∀ r rF, Holds m r rF → inv s r → m.FConc →
-      m.Owns m.current r.owned → Run post m rF (((Zig.loop body again).run s) n m))
+      m.OwnsRes m.current r → Run post m rF (((Zig.loop body again).run s) n m))
     (admissible_pi_apply (β := fun _ => ConcM Tgt (ε × σ))
       (fun s x => ∀ m, x n m = .leaf none ∨ ∀ r rF, Holds m r rF → inv s r → m.FConc →
-        m.Owns m.current r.owned → Run post m rF (((Zig.loop body again).run s) n m))
+        m.OwnsRes m.current r → Run post m rF (((Zig.loop body again).run s) n m))
       fun s => by
         have := Sched.admissible_root (Tgt := Tgt) (α := ε × σ) fun n' m => n' = n →
-          ∀ r rF, Holds m r rF → inv s r → m.FConc → m.Owns m.current r.owned →
+          ∀ r rF, Holds m r rF → inv s r → m.FConc → m.OwnsRes m.current r →
             Run post m rF (((Zig.loop body again).run s) n m)
         intro c hc h m
         refine (this c hc (fun x hx n' m' => ?_) n m).imp id fun h' => h' rfl
