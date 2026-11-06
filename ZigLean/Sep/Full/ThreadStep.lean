@@ -58,8 +58,8 @@ theorem Holds.withFp {m₀ : Mem} {r rF : Res} (hh : Holds m₀ r rF) (F : Array
     Holds (m₀.withFp F) r rF :=
   ⟨hh.disj, hh.heap, hh.know, hh.knowF, hh.ghost.of_blocks rfl rfl rfl rfl⟩
 
-theorem _root_.Zig.FStepIn.withFp {hF : Heap} {m m₀ : Mem} (hs : FStepIn hF m.noFp m₀) :
-    FStepIn hF m (m₀.withFp m.footprint) where
+theorem _root_.Zig.FStepIn.withFp {hF hR : Heap} {m m₀ : Mem} (hs : FStepIn hF m.noFp m₀ hR) :
+    FStepIn hF m (m₀.withFp m.footprint) hR where
   current := hs.current
   threads := hs.threads
   waiters := hs.waiters
@@ -103,8 +103,9 @@ theorem _root_.Zig.Mem.NoRevive.revivesOwned {m m' : Mem} (h : m.NoRevive m') : 
   fun b x hb h' hn => absurd hn (h b x hb h')
 
 /-- Two steps of the thread that revive only bytes it owns revive only bytes it owns. -/
-theorem _root_.Zig.Mem.RevivesOwned.trans {m m₁ m₂ : Mem} {hF hF' : Heap} (h₁ : m.RevivesOwned m₁)
-    (hs₁ : FStepIn hF m m₁) (h₂ : m₁.RevivesOwned m₂) (hs₂ : FStepIn hF' m₁ m₂) :
+theorem _root_.Zig.Mem.RevivesOwned.trans {m m₁ m₂ : Mem} {hF hF' hR hR' : Heap}
+    (h₁ : m.RevivesOwned m₁) (hs₁ : FStepIn hF m m₁ hR) (h₂ : m₁.RevivesOwned m₂)
+    (hs₂ : FStepIn hF' m₁ m₂ hR') :
     m.RevivesOwned m₂ := by
   intro b x hb hl hd e he heb h1 h2
   by_cases hl₁ : m₁.heap (b, x) = none
@@ -132,29 +133,53 @@ theorem _root_.Zig.Mem.RevivesOwned.of_forgetFrom {m m₁ m' : Mem} {b : BlockId
   · rw [hc]; exact VClock.le_default _
   · omega
 
-/-- **Ownership after a step**: the thread owns the bytes of a resource that the memory after the
-step holds next to the frame. A byte of it was a byte of the resource before (the frame keeps its
-own), or is in a new block, or came alive with no access but the thread's (`RevivesOwned`). -/
-theorem owns_step {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF)
-    (ho : m.Owns m.current r.owned) (hs : FStepIn rF.owned m m')
-    (hrev : m.RevivesOwned m') (hh' : Holds m' r' rF) :
-    m'.Owns m'.current r'.owned := by
+/-- **Read ownership after a step** (`owns_step_of`, for the recorded writes). -/
+theorem ownsR_step_of {m m' : Mem} {h h' hF hR : Heap} (hs : FStepIn hF m m' hR)
+    (hrev : m.RevivesOwned m') (hlive : ∀ l, h' l ≠ none → m'.heap l ≠ none)
+    (hsub : ∀ l, (∃ c, m.heap l = some c) → h' l ≠ none → h l ≠ none)
+    (ho : m.OwnsR m.current h) : m'.OwnsR m'.current h' := by
+  intro e he hw ht
+  have hcur : m'.current = m.current := hs.current
+  show VClock.le e.clock (m'.clocks[m'.current]!) = true
+  rw [hcur]
+  rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
+  · obtain ⟨-, hb₀, hk₀, ho₀, hl₀, hc₀⟩ := hn
+    by_cases hrv : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ h' (e.block, x) ≠ none ∧
+        e.block < m.blocks.size ∧ m.heap (e.block, x) = none
+    · obtain ⟨x, h1, h2, h3, hb, hm⟩ := hrv
+      rw [← hcur]
+      exact hrev _ x hb (hlive _ h3) hm e he rfl h1 h2
+    refine VClock.le_trans hc₀ (VClock.le_trans (ho e₀ he₀ (hk₀ ▸ hw) ?_) hs.mine)
+    rcases ht with ⟨x, h1, h2, h3⟩ | hb
+    · by_cases hb : e.block < m.blocks.size
+      · have hm : m.heap (e.block, x) ≠ none := fun hm => hrv ⟨x, h1, h2, h3, hb, hm⟩
+        left
+        refine ⟨x, by omega, by omega, ?_⟩
+        rw [← hb₀]
+        exact hsub _ (Option.ne_none_iff_exists'.mp hm) h3
+      · exact .inr (by rw [← hb₀]; exact Nat.le_of_not_lt hb)
+    · exact .inr (by rw [← hb₀]; exact Nat.le_trans hs.blocks hb)
+  · exact hle
+
+/-- **Ownership after a step**, for any heaps: the thread owns `h'` after the step if a byte of it
+was a byte of `h` before (when it was live), is in a new block, or came alive with no access but
+the thread's (`RevivesOwned`). -/
+theorem owns_step_of {m m' : Mem} {h h' hF hR : Heap} (hs : FStepIn hF m m' hR)
+    (hrev : m.RevivesOwned m') (hlive : ∀ l, h' l ≠ none → m'.heap l ≠ none)
+    (hsub : ∀ l, (∃ c, m.heap l = some c) → h' l ≠ none → h l ≠ none)
+    (ho : m.Owns m.current h) : m'.Owns m'.current h' := by
   intro e he ht
   have hcur : m'.current = m.current := hs.current
   show VClock.le e.clock (m'.clocks[m'.current]!) = true
   rw [hcur]
-  -- a byte of `r'` is live in `m'`
-  have hlive : ∀ x, r'.owned (e.block, x) ≠ none → m'.heap (e.block, x) ≠ none := fun x h3 => by
-    obtain ⟨c, hc⟩ := (hh'.live_of_owned h3).1
-    rw [hc]; simp
   rcases hs.fpc e he with ⟨e₀, he₀, hn⟩ | hle
   · obtain ⟨-, hb₀, -, ho₀, hl₀, hc₀⟩ := hn
-    by_cases hrv : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ r'.owned (e.block, x) ≠ none ∧
+    by_cases hrv : ∃ x, e.off ≤ x ∧ x < e.off + e.len ∧ h' (e.block, x) ≠ none ∧
         e.block < m.blocks.size ∧ m.heap (e.block, x) = none
     · -- a byte that came alive: the thread owns it
       obtain ⟨x, h1, h2, h3, hb, hm⟩ := hrv
       rw [← hcur]
-      exact hrev _ x hb (hlive x h3) hm e he rfl h1 h2
+      exact hrev _ x hb (hlive _ h3) hm e he rfl h1 h2
     refine VClock.le_trans hc₀ (VClock.le_trans (ho e₀ he₀ ?_) hs.mine)
     rcases ht with ⟨x, h1, h2, h3⟩ | hb
     · by_cases hb : e.block < m.blocks.size
@@ -162,10 +187,26 @@ theorem owns_step {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF)
         left
         refine ⟨x, by omega, by omega, ?_⟩
         rw [← hb₀]
-        exact hh.owned_sub' hh' (Option.ne_none_iff_exists'.mp hm) h3
+        exact hsub _ (Option.ne_none_iff_exists'.mp hm) h3
       · exact .inr (by rw [← hb₀]; exact Nat.le_of_not_lt hb)
     · exact .inr (by rw [← hb₀]; exact Nat.le_trans hs.blocks hb)
   · exact hle
+
+/-- **Ownership after a step**: the thread owns a resource that the memory after the step holds
+next to the frame. An exclusive byte of it was an exclusive byte of the resource before
+(`Holds.excl_sub'`), any byte of it a byte of it before (the frame keeps its own), or it is in a
+new block, or came alive with no access but the thread's (`RevivesOwned`). -/
+theorem owns_step {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF)
+    (ho : m.OwnsRes m.current r) (hs : FStepIn rF.owned m m' rF.shared)
+    (hrev : m.RevivesOwned m') (hh' : Holds m' r' rF) :
+    m'.OwnsRes m'.current r' := by
+  have hlive : ∀ l, r'.owned l ≠ none → m'.heap l ≠ none := fun l h3 => by
+    obtain ⟨c, hc⟩ := (hh'.live_of_owned h3).1
+    rw [hc]; simp
+  refine ⟨owns_step_of hs hrev (fun l hl => hlive l (Res.owned_of_excl hl))
+      (fun l hm hl => hh.excl_sub' hh' hm hl) ho.1,
+    ownsR_step_of hs hrev (fun l hl => hlive l (Res.owned_of_shared hl))
+      (fun l hm hl => hh.owned_sub' hh' hm (Res.owned_of_shared hl)) ho.ownsR⟩
 
 /-! ## Local steps and the kernel -/
 
@@ -173,10 +214,10 @@ theorem owns_step {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF)
 `m.noFp` up to the record of accesses, and a result of it is a step of the thread outside the
 frame that revives only bytes the thread owns. -/
 def ThreadLocal {α : Type} (P : FAssn) (c : MemM α) : Prop :=
-  ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+  ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
     (c.run m).run.map (Except.map fun p => (p.1, p.2.noFp)) =
       ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.noFp)) ∧
-    ∀ v m', c.run m = pure (v, m') → FStepIn rF.owned m m' ∧ m.RevivesOwned m'
+    ∀ v m', c.run m = pure (v, m') → FStepIn rF.owned m m' rF.shared ∧ m.RevivesOwned m'
 
 /-- The run from `m` agrees with the run from `m.noFp` up to the record: a result of one is a
 result of the other with the same value and the same memory up to the record. -/
@@ -233,11 +274,10 @@ theorem pre (hl : ThreadLocal P c) (hp : ∀ r, P' r → P r) : ThreadLocal P' c
 theorem frame (hl : ThreadLocal P c) : ThreadLocal (P ⋆ R) c := by
   intro m r rF hh hpr hc ho
   obtain ⟨rP, rR, hd, rfl, hp, -⟩ := hpr
-  obtain ⟨h1, h2⟩ := hl m rP _ (Holds.split hd hh) hp hc
-    (ho.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl))
+  obtain ⟨h1, h2⟩ := hl m rP _ (Holds.split hd hh) hp hc (ho.sepL rfl rfl)
   refine ⟨h1, fun v m₀ e => ?_⟩
   obtain ⟨hst, hrev⟩ := h2 v m₀ e
-  exact ⟨hst.weaken fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl), hrev⟩
+  exact ⟨hst.frameRight, hrev⟩
 
 theorem frameL (hl : ThreadLocal P c) : ThreadLocal (R ⋆ P) c :=
   hl.frame.pre fun _ h => sep_comm h
@@ -508,9 +548,9 @@ theorem run_withFp_ok {α : Type} {x : MemM α} {m m₂ : Mem} {w : α} {F : Arr
 record in front (`RunFp`), and a result of the run from `m.noFp` is a step outside the frame that
 makes no byte of an old block alive. The memory primitives are local this way. -/
 theorem ThreadLocal.intro {α : Type} {P : FAssn} {c : MemM α}
-    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.Owns m.current r.owned →
+    (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       RunFp m.footprint m.noFp c ∧
-      ∀ v m₀, c.run m.noFp = pure (v, m₀) → FStepIn rF.owned m.noFp m₀ ∧ m.NoRevive m₀) :
+      ∀ v m₀, c.run m.noFp = pure (v, m₀) → FStepIn rF.owned m.noFp m₀ rF.shared ∧ m.NoRevive m₀) :
     ThreadLocal P c := by
   intro m r rF hh hp hc ho
   obtain ⟨hr, hl⟩ := h m r rF hh hp hc ho
@@ -627,7 +667,7 @@ theorem alloc (kind : BlockKind) (size align : Nat) : ThreadLocal P (Zig.alloc k
   refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
   · exact RunFp.alloc kind size align
   · obtain ⟨-, rfl⟩ := Proto.alloc_ok (m := m.noFp) e
-    exact ⟨FStepIn.afterAlloc _ _ _ _ _, Mem.NoRevive.afterAlloc _ _ _ _⟩
+    exact ⟨(FStepIn.afterAlloc _ _ _ _ _).reads, Mem.NoRevive.afterAlloc _ _ _ _⟩
 
 /-- **`free` of a block that `P` owns whole** is local: no access to it races with its end. -/
 theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
@@ -637,10 +677,11 @@ theorem free {p : Ptr} {b : BlockId} (hpb : p.block = some b)
   refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
   · refine RunFp.free hpb fun blk hb => ?_
     rw [Mem.noFp_withFp, freeRaces_of_singleThread hc.noFp.1.single]
-    refine freeRaces_of_clock fun e he heb hl hoff => ho e he (.inl ⟨e.off, Nat.le_refl _, by omega, ?_⟩)
-    rw [heb]; exact Res.owned_of_erase (hown m r rF hh hp blk hb e.off hoff)
+    refine freeRaces_of_clock fun e he heb hl hoff =>
+      ho.cells e he (.inl ⟨e.off, Nat.le_refl _, by omega, ?_⟩)
+    rw [heb]; exact hown m r rF hh hp blk hb e.off hoff
   · obtain ⟨b', blk, -, hb, rfl⟩ := Proto.free_ok (m := m.noFp) e
-    exact ⟨FStepIn.kill hb, Mem.NoRevive.kill _ _ _⟩
+    exact ⟨(FStepIn.kill hb).reads, Mem.NoRevive.kill _ _ _⟩
 
 end ThreadLocal
 
@@ -717,11 +758,11 @@ variable {P : FAssn} {p : Ptr} {n a : Nat} {k : AccessKind} {b : BlockId}
 
 /-- The race checks of an owned access pass in `m` (ownership) and in `m.noFp` (one thread). -/
 theorem noRace_owned {m : Mem} {r : Res} {o : Nat} (hc : m.FConc)
-    (ho : m.Owns m.current r.owned)
+    (ho : m.OwnsRes m.current r)
     (hin : ∀ x, o ≤ x → x < o + n → r.heap.erase (b, x) ≠ none) :
     NoRace m.noFp b o n k ∧ NoRace (m.noFp.withFp m.footprint) b o n k := by
   refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
-  rw [Mem.noFp_withFp]; exact ho.noRace fun x h1 h2 => Res.owned_of_erase (hin x h1 h2)
+  rw [Mem.noFp_withFp]; exact ho.cells.noRace fun x h1 h2 => hin x h1 h2
 
 /-- **An owned read of bytes** (`loadBytes`) is local. Its access is a read (`hk`): `loadBytes`
 checks no `const` global, so a recorded write kind would be a write to one. -/
@@ -829,14 +870,14 @@ theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadL
       ((f v).run m₁').run.map (Except.map fun p => (p.1, p.2.noFp)) =
         ((f v).run m₁).run.map (Except.map fun p => (p.1, p.2.noFp)) ∧
       ∀ w m₂', (f v).run m₁' = Pure.pure (w, m₂') →
-        FStepIn rF.owned m₁' m₂' ∧ m₁'.RevivesOwned m₂' := by
+        FStepIn rF.owned m₁' m₂' rF.shared ∧ m₁'.RevivesOwned m₂' := by
     intro v m₁' e
     obtain ⟨m₁, e₁, hm⟩ := run_noFp_ok hrun e
     obtain ⟨r₀, hh₀, hq₀, hs₀⟩ := hq m.noFp r rF hh.toNoFp hp hcm.noFp v m₁ e₁
     obtain ⟨hst, hrev⟩ := hloc v m₁' e
     have hh₀' := hh₀.of_noFp_eq hm
     obtain ⟨h1, h1'⟩ := hf v m₁' r₀ rF hh₀' hq₀ (hs₀.fconc.of_noFp hm) (owns_step hh ho hst hrev hh₀')
-    obtain ⟨h0, -⟩ := hf v m₁ r₀ rF hh₀ hq₀ hs₀.fconc (hs₀.1.single.owns _)
+    obtain ⟨h0, -⟩ := hf v m₁ r₀ rF hh₀ hq₀ hs₀.fconc (.of_owns (hs₀.1.single.owns _))
     exact ⟨m₁, e₁, by rw [h1, h0, hm], h1'⟩
   refine ⟨?_, fun w m₂' e => ?_⟩
   · rw [StateT.run_bind, ExceptT.run_bind, StateT.run_bind, ExceptT.run_bind]
