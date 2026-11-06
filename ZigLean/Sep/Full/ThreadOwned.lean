@@ -139,6 +139,20 @@ theorem sepN_noCur {f : Nat → FAssn} (hf : ∀ j r, f j r → r.NoCur) :
   | 0, _, h => fun v => by rw [h.2.2]; rfl
   | n + 1, _, ⟨r₁, r₂, _, rfl, h1, h2⟩ => Res.noCur_rsum (hf n r₁ h1) (sepN_noCur hf h2)
 
+/-- **`m` holds any split with the same sum**: `Holds` reads only the sum of the resource and the
+frame (its bytes, knowledge and ghost state), so a resource may move between them. -/
+theorem Holds.regroup {m : Mem} {r rF r' rF' : Res} (hh : Holds m r rF)
+    (hd : FHeap.Disjoint r'.heap rF'.heap) (he : rsum r' rF' = rsum r rF) : Holds m r' rF' := by
+  have eh := congrArg Res.heap he
+  have ek := congrArg Res.know he
+  have eg := congrArg Res.gh he
+  dsimp only at eh ek eg
+  have hk : Know.Sub (r'.know.union rF'.know) m.kn := by rw [ek]; exact hh.know.union hh.knowF
+  refine ⟨hd, by rw [eh]; exact hh.heap, hk.left, hk.right, ?_⟩
+  have hg := hh.ghost
+  unfold GOk Ghost.Ok at hg ⊢
+  rw [eg]; exact hg
+
 /-! ## The parts -/
 
 /-- The threads' parts and the protocol's rest in `m` (module doc). -/
@@ -184,6 +198,39 @@ theorem part_noCur (ho : FOwned own rO m) {rR : Res}
     (hR : sepN m.threads.size (partsBut own t) rR) :
     ∀ v, ((own t).gh.add (rR.gh.add rO.gh)).ac.ex .cur v = 0 :=
   Res.noCur_rsum (ho.noCur.1 t) (Res.noCur_rsum (ho.partsBut_noCur hR) ho.noCur.2)
+
+/-- **Thread `t`'s part and the rest, split anew**: a new part `o'` and rest `rO'` with the same
+sum as `t`'s part and the rest (e.g. a resource moves between them: in a two-lock product, the
+other lock's held resource, which one lock's view keeps in the rest and the other's in the
+part). The new part must be `t`'s (`Mem.Owns`); the other parts stay. -/
+theorem move {o' rO' : Res} (ho : FOwned own rO m) (ht : t < m.threads.size)
+    (hd : FHeap.Disjoint o'.heap rO'.heap) (he : rsum o' rO' = rsum (own t) rO)
+    (hown : m.Owns t o'.heap.erase) : FOwned (upd own t o') rO' m := by
+  obtain ⟨rT, hs, hh⟩ := ho.holds
+  obtain ⟨rR, hR, hdR, rfl⟩ := parts_pick ht hs
+  have hRO : FHeap.Disjoint rR.heap rO.heap := (FHeap.disjoint_union_left.mp hh.disj).2
+  -- `rR` is apart from the old sum, so from the new one's summands
+  have hR' : FHeap.Disjoint rR.heap (o'.heap ∪ rO'.heap) := by
+    rw [show o'.heap ∪ rO'.heap = (own t).heap ∪ rO.heap from congrArg Res.heap he]
+    exact FHeap.disjoint_union_right.mpr ⟨hdR.symm, hRO⟩
+  obtain ⟨hRo, hRr⟩ := FHeap.disjoint_union_right.mp hR'
+  have hcur : (rsum o' rO').NoCur := by rw [he]; exact Res.noCur_rsum (ho.noCur.1 t) ho.noCur.2
+  refine ⟨⟨_, parts_put ht hR hRo.symm, hh.regroup ?_ ?_⟩, fun u hu => ?_, fun u hu => ?_,
+    ho.csize, ho.conc, fun u => ?_, hcur.right⟩
+  · exact FHeap.disjoint_union_left.mpr ⟨hd, hRr⟩
+  · show rsum (rsum o' rR) rO' = rsum (rsum (own t) rR) rO
+    calc rsum (rsum o' rR) rO' = rsum (rsum o' rO') rR := by
+          rw [rsum_assoc (a := o'), rsum_comm hRr, ← rsum_assoc]
+      _ = rsum (rsum (own t) rO) rR := by rw [he]
+      _ = rsum (rsum (own t) rR) rO := by
+          rw [rsum_assoc (a := own t), rsum_comm hRO.symm, ← rsum_assoc]
+  · by_cases e : u = t
+    · subst e; rw [upd_self]; exact hown
+    · rw [upd_ne _ _ e]; exact ho.owns u hu
+  · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
+  · by_cases e : u = t
+    · subst e; rw [upd_self]; exact hcur.left
+    · rw [upd_ne _ _ e]; exact ho.noCur.1 u
 
 /-- **The start**: no thread owns anything, the whole memory is the protocol's rest (its
 messages covered, as in a memory without atomic locations: `Mem.MsgCov.of_atomics`). No thread

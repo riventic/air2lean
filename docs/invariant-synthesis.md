@@ -492,10 +492,11 @@ Each stage is a permanent part of the end state, and none adds a shim.
 P09-E1 is implemented: `Auto.runReport` returns residual attribution, and `fsym.report` emits
 the documented JSON schema. P09-E2 and P09-E3 remain open, so S1 is not complete.
 
-P09-E4's engine part is implemented (`docs/proof-automation.md`, §Loops): `@[fsym_inv]` registers
-`B.inv`, `B.meas` and the exit post `B.post` of a loop body `B`. The exit post is registered
-because the invariant alone forgets the exit's label and test, which a translated caller matches
-on, and `fsym` infers no strongest post at a loop's exits (P09-E2).
+P09-E4 is implemented (`docs/proof-automation.md`, §Loops): `@[fsym_inv]` registers `B.inv`,
+`B.meas` and the exit post `B.post` of a loop body `B`, and `air2lean-invgen` emits all three
+with the attribute. The exit post is registered because the invariant alone forgets the exit's
+label and test, which a translated caller matches on, and `fsym` infers no strongest post at a
+loop's exits (P09-E2).
 
 ### Implemented: counted loops (S2, first slice)
 
@@ -514,7 +515,7 @@ candidate facts stay (Houdini pruning, S2f below). It writes `Inv.lean`: a first
 `-- air2lean-invgen: {…}` recording the generator's revision (its Lean version and the SHA-256 of
 each of its modules, as `translator_revision%` records the translator's), the inputs it read (the
 translated module's source, `--source`, with its SHA-256), the module, its namespace and, per
-loop, the family or why the loop has none; then plain `def`s. A module with no loop, or a loop
+loop, the family or why the loop has none; then the `def`s, registered with `@[fsym_inv]`. A module with no loop, or a loop
 body outside the given namespace, is an error. `scripts/invgen.py check|write` regenerates every
 committed `Inv.lean` (its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right
 after `gen`, so a retranslation regenerates the invariants with it.
@@ -538,7 +539,11 @@ paths, guarded by `¬ x < b`, that touch no memory and no local. For the loop bo
 generator writes `F.loopN.inv params s0 v₀ … s` (the other locals pinned to the entry locals
 `s0`, `s0.x ≤ x ≤ b`, each cell `vₖ + cₖ * (x - s0.x)` and the no-overflow fact
 `vₖ + cₖ * (b - s0.x) < 2 ^ w` of its checked adds, and `plain` when the body ticks) and
-`F.loopN.meas params s := b - x`. The invariant needs `s0.x ≤ b` at entry: the client
+`F.loopN.meas params s := b - x`, and the exit post `F.loopN.post params s0 v₀ … r` (the exit's
+label, the other locals at their entry values, the counter at its exit value `b` and each cell at
+`vₖ + cₖ * (b - s0.x)`).
+`fsym` applies `FTotalTriple.loop_measure` with the three at the loop (P09-E4), so a caller's walk
+needs no loop lemma. The invariant needs `s0.x ≤ b` at entry: the client
 establishes it (a loop entered past its bound is not an instance). Every other loop gets no definition and the reason (a nested
 loop, a call, a signed test, a second test, a cell at an offset, an increment that is not a
 constant, an uncovered add, a literal that wraps, a parameter named like a generated binder, …): a
@@ -546,21 +551,21 @@ proof that needs it does not build.
 
 First client: the inner loop `pairs.loop14` of `tests/roadmap/loop-tactics/nested` (the
 translated `while (j < i) : (j += 1) acc.* += 1`). Its hand-written `innerI` and measure are
-deleted; `Proof.lean` imports the committed `Nested/Inv.lean` and uses `pairs.loop14.inv` and
-`pairs.loop14.meas` with the same `fsym` walks, and the theorem it proves (`inner_loop`, and with
-it `pairs_total`) is unchanged. The hand step and loop lemmas around them (`inner_step`,
-`inner_loop`) remain until `@[fsym_inv]`; engine ledger row P09-E4 records their deletion.
-`nested/check.sh`:
+deleted; `Proof.lean` imports the committed `Nested/Inv.lean`, and the walk of the outer body
+(`outer_step`, by `fsym`) applies the inner loop's registered invariant, measure and exit post:
+no inner step or loop lemma (P09-E4 deleted `inner_step` and `inner_loop`), and `pairs_total` is
+unchanged. `nested/check.sh`:
 
 * regenerates `Inv.lean` from the committed translation and compares it byte for byte
   (`lake exe air2lean-invgen`, as `scripts/invgen.py check` does);
 * checks the proof against it;
 * checks three seeded mutants of the generated file (a wrong cell relation, a dropped bound `x ≤ b`,
   a measure that does not decrease): each still elaborates, and the proof then fails with an
-  elaboration error inside the inner loop's theorems.
+  elaboration error inside `outer_step`, the theorem whose walk runs the inner loop.
 
 The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
-for it, and its invariant (`outerI`, with the quadratic `cnt`) stays hand-written.
+for it, and its invariant (`outerI`, over the library sum `tsum`) stays hand-written (deletion
+plan: engine ledger row P09-E4).
 
 ### Implemented: the counted family widened (S2c)
 
@@ -581,18 +586,21 @@ no-overflow fact `vₖ + cₖ * n < 2 ^ w` (`n` all iterations); the measure is 
 
 Client: `tests/roadmap/loop-tactics/counted`, the retained Zig 0.17.0 AIR of `counted.zig`, one
 exported function per shape (`down`: `i > 0`, `i -= 1`, `acc.* += 3`; `upNe`; `upLe`; `lenCount`
-over `xs.len`; `readBound` over `lim.*`). `Proof.lean` proves each loop's body step and loop
-(`F_step`, `F_loop`, the pattern of `nested`, until `@[fsym_inv]`) and the function's total
-triple (`F_total`, by `fsym [F_loop]`) with the generated invariant and measure and no hand
-invariant. No other loop in the corpus has these shapes in the full-state logic: the translated
+over `xs.len`; `readBound` over `lim.*`). `Proof.lean` proves each function's total triple
+(`F_total`) by `fsym` alone, with the generated invariant, measure and exit post: no hand
+invariant and no step or loop lemma. No other loop in the corpus has these shapes in the full-state logic: the translated
 counted loops of `Proofs/` (`sum`, `find`, `sumDigits`, `advance`, `totalWeightedTardiness`,
 `dot`) are pure-layer loops (`Zig.loop_spec` over `M`, not `MM` over memory) whose invariants are
 prefix sums over array items, and `Proofs/Slices/Sep.lean`'s `reverse` swaps items (S2e).
 `check.sh` (shared with `nested` through `../invgen-fixture.sh`) regenerates and compares the
 translation and `Inv.lean`, checks the proof, and runs the seeded mutants of `mutants.json`
 (`../invgen_mutants.py`): a wrong down-counting relation, a dropped `x ≤ b` under `!=`, a dropped
-no-wrap fact of a `<=` counter, a measure that does not decrease over a slice length and a
-dropped read-only cell each fail inside their loop's theorems.
+`x ≤ b + 1` of a `<=` counter, a measure that does not decrease over a slice length, a
+dropped read-only cell and an exit post that is too strong (`down`'s counter at `1`, which its
+caller does not need, so only the loop rule's exit obligation rejects it) each fail inside their
+function's theorem. (A dropped no-wrap fact of the
+`<=` counter is not among them: the walk runs in `upLe_total`'s context, whose premise
+`n + 1 < 2 ^ 32` restores it.)
 
 Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (fail closed):
 
@@ -600,14 +608,17 @@ Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (
   at an offset)". `fsym` forms such a pointer from an owned array (`FTotalTriple.arr_ptrProject`),
   so the invariant needs the array atom `arr p vs` with item updates, not separate `pts` cells.
   Under an invariant that owns `arr p [w₀, w₁]`, `fsym` walks the body (item `0` through `p`
-  itself by `FTotalTriple.arr_load_zero`/`arr_store_zero`), but the stored list stays
-  `([w₀, w₁].set 0 x).set (1#64).toNat y` and does not match the invariant's list: engine ledger
-  row #atom-args-normal-form.
+  itself by `FTotalTriple.arr_load_zero`/`arr_store_zero`), and the stored list
+  `([w₀, w₁].set 0 x).set (1#64).toNat y` matches the invariant's list `[?w₀, ?w₁]` (the planner
+  evaluates it to the pattern's constructors, `docs/proof-automation.md`; closed ledger row
+  #atom-args-normal-form). The generator does not emit it yet.
 * `tri` adds the counter to its cell (`acc.* += i`): "a cell that does not go up by a constant".
-  A library sum `S` (`S n = 0 + 1 + … + (n - 1)`) makes the invariant linear, but the counter's
-  step leaves `S x.toNat` beside `x.toNat = i.toNat + 1`, which the arithmetic does not relate:
-  engine ledger row #arith-atom-congruence (it holds the rewrites that were checked). The hand
-  `cnt`/`cnt_mono` of `nested`'s outer loop are that glue today.
+  The library sum `tsum n g` (`ZigLean/Sep/Full/TSum.lean`, `g u` over `u < n`) makes the
+  invariant linear, `v + (tsum n g - tsum i g) = v₀ + (tsum n g - tsum i₀ g)` with `g = fun u => u`,
+  and `fsym` walks its step: the arithmetic relates `tsum x.toNat g` to `tsum (i.toNat + 1) g`
+  by the congruence of atoms (`docs/proof-automation.md`, closed ledger row
+  #arith-atom-congruence). The generator does not emit it yet; `nested`'s hand outer invariant
+  `outerI` has this form and `fsym` walks it without glue.
 
 ### Implemented: Houdini pruning (S2f)
 
@@ -653,8 +664,12 @@ The following mean no invariant (fail closed), and the loop is recorded with the
 Each walk drops at least one candidate, so the fixpoint takes at most one walk per candidate,
 plus one. Each loop runs with its own heartbeat budget.
 
-The output is the definitions with the kept facts written out, in the S2c text. The proofs of
-the fixtures, which are the kernel checks that count, are unchanged. Every pruning decision is
+The output is the definitions with the kept facts written out, in the S2c text, registered
+with `@[fsym_inv]` beside the exit post `F.loopN.post` (P09-E4). The post is no candidate: after
+the fixpoint the generator walks the output once more, with the post at the exit as the loop rule's
+step has it, and a residual there means no invariant (fail closed, at generation). The callers'
+proofs check the post again. The proofs of the
+fixtures, which are the kernel checks that count, are bare `fsym` walks of the callers. Every pruning decision is
 in the record: each loop's entry in `loops` lists, under `pruned`, the dropped fact, the walk
 that dropped it and its residual goal there. On every loop of `counted` and on `nested`'s inner
 loop, the first walk drops the wrong side of the counter and the wrong direction of the cell's
@@ -664,7 +679,7 @@ interpreter. Two seeded mutants of `counted/mutants.json` check the pruning agai
 * `houdini-pruned-kept` puts the pruned `s0.i ≤ s.i` back into `down`'s invariant;
 * `houdini-kept-dropped` drops the kept `s.i ≤ s0.i`, which the proof needs.
 
-Each fails inside `down_step`. A generated invariant is only as strong as the candidates. A loop
+Each fails inside `down_total`, whose walk applies `down`'s registered invariant. A generated invariant is only as strong as the candidates. A loop
 whose proof needs a fact that is not a candidate gets an invariant that is too weak, and its
 proof fails.
 
@@ -672,9 +687,8 @@ What the slices do not have yet (next slices, sizes S < M < L):
 
 | Next | Content | Size |
 |---|---|---|
-| S2a | `@[fsym_inv]` (P09-E4), its own engine PR with a `sep-auto` regression: `fsym` applies `loop_measure` with a registered invariant and measure, and the generator emits the attribute. This deletes the step and loop lemmas (`inner_step`, `inner_loop`) | M |
 | S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
-| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; waits on #atom-args-normal-form), cell updates that depend on the counter (a library sum with the `fsym_arith` lemmas above, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing `outerI` and `cnt`; waits on #arith-atom-congruence) | M |
+| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; the engine side, #atom-args-normal-form, is closed), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
 | S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 

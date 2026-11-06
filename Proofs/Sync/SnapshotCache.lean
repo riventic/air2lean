@@ -178,8 +178,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
     (hok : ok (G t)) (_ : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .away)
     (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m)
     (hs : L.Step t m m')
-    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
-    U (upd G t (L.set (G t) p h)) rX m' := by
+    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
+    (_ : L.Transfer G rX m m' t p h) : U (upd G t (L.set (G t) p h)) rX m' := by
   obtain ⟨hsh, hrest, hmid⟩ := hu
   refine ⟨?_, hrest, fun u hu' => ?_⟩
   · rw [FLock.snd_set]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
