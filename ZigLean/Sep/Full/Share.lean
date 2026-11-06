@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.Ops
+import ZigLean.Sep.Full.ThreadStep
 
 /-!
 # Shared resources: a fraction of an exclusive heap, loads on it, and the whole share
@@ -293,6 +294,29 @@ theorem load_sbytesAt {T : Type} [Enc T] {v : T} {k al : Nat} (hq : 0 < q.val)
       exact sep_lift.mpr ⟨hφ, hb'.1⟩⟩
 
 end FTotalTriple
+
+/-- A shared typed value holds a read share of each of its bytes (`Res.owned`). -/
+theorem spts_owned {T : Type} [Enc T] {a : Nat} {v : T} {b : BlockId} (hpb : p.block = some b)
+    {r : Res} (hp : spts p a q v r) {x : Nat} (h1 : p.off.toNat ≤ x)
+    (h2 : x < p.off.toNat + Enc.size T) : r.owned (b, x) ≠ none := by
+  obtain ⟨hq, H, hP, hs⟩ := hp
+  obtain ⟨A, S, K, bs, -, hsz, -, hb, -⟩ := hP.1
+  obtain ⟨fc, hfc, -⟩ := up_bytesAt_cell (r := ⟨H, Know.none, Ghost.unit⟩) ⟨hb, rfl, rfl⟩ hpb
+    (j := x - p.off.toNat) (by omega)
+  rw [show p.off.toNat + (x - p.off.toNat) = x by omega] at hfc
+  change H (b, x) = some fc at hfc
+  refine Res.owned_ne.mpr (.inr ⟨fc, ?_⟩)
+  rw [hs.2.2, Ghost.sharesOf_share, hfc, Option.elim_some, SCell.of_self]
+  exact hq
+
+/-- **Load of a shared typed value in a thread** (`spts`, `@[fsym]`, §Read shares): the sequential
+rule (`FTotalTriple.sload`, `load_of_read` over `Mem.BytesRead`) is local to the thread
+(`ThreadLocal.loadOwned`): the share orders every write before the load, and other holders of
+the share may read the bytes meanwhile. The share stays. -/
+@[fsym] theorem FTTotalTriple.sload {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
+    FTTotalTriple (spts p a q v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ spts p a q v) :=
+  .ofSeq (FTotalTriple.sload hn) (ThreadLocal.loadOwned fun _ hpb _ hp _ h1 h2 =>
+    spts_owned hpb hp h1 h2)
 
 /-- **Shared bytes split** into two shares of the same bytes. -/
 theorem sbytesAt_split {q₁ q₂ : Frac} {r : Res} (h : sbytesAt p A S K bs (q₁.add q₂) r) :

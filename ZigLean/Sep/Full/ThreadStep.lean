@@ -791,6 +791,25 @@ theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
         (fun hw => absurd hw (by decide)),
       fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
 
+/-- **A typed load of bytes the resource holds or reads** (a cell or a share: `Res.owned`, §Read
+shares) is local: the thread's read ownership orders every write to them before it
+(`Mem.OwnsRes.ownsR`, `Mem.OwnsR.noRace`), and the frame holds at most read shares of them
+(`Holds.frame_shared`), which the step may read (`FStepIn.readAt_reads`). -/
+theorem loadOwned {T : Type} [Enc T]
+    (hin : ∀ b, p.block = some b → ∀ r, P r → ∀ x, p.off.toNat ≤ x →
+      x < p.off.toNat + Enc.size T → r.owned (b, x) ≠ none) :
+    ThreadLocal P (Zig.load T a p) := by
+  refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
+  · refine RunFp.load (T := T) fun b blk o h => ?_
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
+    rw [Mem.noFp_withFp]; exact ho.ownsR.noRace rfl (hin b hpb r hp)
+  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
+    obtain ⟨hpb, rfl, -, hb⟩ := access_at h
+    exact ⟨FStepIn.readAt_reads hc.1 rfl
+        (fun x h1 h2 hF => hh.frame_shared (hin b hpb r hp x h1 h2) hF) hb,
+      fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
+
 /-- **An owned write of bytes** (`storeBytes`) is local. -/
 theorem storeBytes {bs : Array Byte} (hown : OwnsPtr P p bs.size) :
     ThreadLocal P (Zig.storeBytes p a bs k) := by

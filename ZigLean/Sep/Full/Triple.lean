@@ -801,6 +801,24 @@ theorem sep {P Q : FAssn} (hP : P.Unshared) (hQ : Q.Unshared) : (P ⋆ Q).Unshar
 
 end FAssn.Unshared
 
+/-- **Next to a byte the resource holds, the frame holds at most a partial share of it**: not a
+cell (`Holds.erase_disj_owned`, the heap's apartness), not a whole share (`SCell.Whole.frame`).
+So a read of the resource's bytes touches only the frame's read shares (`FStepIn`'s `hR`). -/
+theorem Holds.frame_shared {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hr : r.owned l ≠ none) (hF : rF.owned l ≠ none) : rF.shared l ≠ none := by
+  -- `r` holds no cell there, so it holds a positive share
+  have hrh : r.heap l = none := by
+    have := (hh.erase_disj_owned l).resolve_right hF
+    simpa [FHeap.erase] using this
+  have hrp : (r.gh.share l).Pos := (Res.owned_ne.mp hr).resolve_left (· hrh)
+  have hFh : rF.heap l = none := Classical.byContradiction fun e =>
+    hh.not_pos_of_heap (l := l) (by simpa [FHeap.union_apply, hrh] using e)
+      (by rw [Ghost.add_share]; exact SCell.pos_add_iff.mpr (.inl hrp))
+  refine Res.shared_ne.mpr ⟨hFh, fun hw => ?_, (Res.owned_ne.mp hF).resolve_left (· hFh)⟩
+  have hv : ((rF.gh.share l).add (r.gh.share l)).Valid := by
+    rw [SCell.add_comm, ← Ghost.add_share]; exact hh.heap.valid l
+  exact SCell.not_pos_iff.mpr (hw.frame hv) hrp
+
 /-- **The exclusive bytes are fixed by the memory and the frame** (`Holds.owned_sub'`): next to the
 same frame, a byte live in the first memory that the second resource holds exclusively (a cell
 or a whole share), the first holds exclusively. An update turns a whole share into a cell and
