@@ -69,7 +69,8 @@ calls with 20 to 30 facts.
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
   `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
-  `EUpd X Y` of one atom (§Views).
+  `EUpd X Y` of one atom (§Views), `@[fsym_inv]` a loop's invariant, measure and exit post
+  (§Loops).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -752,6 +753,59 @@ obligation without a budget, or a query of a type nested inside one past the bud
 The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
+## Loops
+
+A loop `(Zig.loop (B xs) again).run s₀` that no rule is about is proved by its **registered
+invariant** (`@[fsym_inv]`, P09-E4, `docs/invariant-synthesis.md`): definitions next to the loop
+body `B`, named by their part.
+
+```lean
+@[fsym_inv] def fill.loop.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn := …
+@[fsym_inv] def fill.loop.meas (n : BitVec 32) (s : Locals) : Nat := n.toNat - s.i.toNat
+@[fsym_inv] def fill.loop.post (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (r : Exit × Locals) : FAssn := …
+```
+
+* `B.inv` is the invariant at the start of an iteration, `B.meas` the measure (total correctness:
+  it decreases at each repetition), `B.post` the assertion at the exit. Without `B.post` the
+  exit is the invariant with `again r.1 = false`, which forgets the exit's label and the exit
+  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks, when
+  it is added, that `B` is a defined program over locals (`StateT σ m ε`: `MM σ ε`, `CM Tgt σ ε`),
+  that the definition has no universe parameters, explicit parameters with names of their own,
+  the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
+  for the measure). A name is one definition, so there is one of each part per body.
+* `fsym` applies the backend's loop rule with them (`FTotalTriple.loop_measure`, `FTriple.loop`
+  in the partial logic, `FTTotalTriple.loop_measure` and `FTTriple.loop` in a thread,
+  `CTriple.loop` in the concurrent backend) as a rule (`tryRule`, `loopInvRule?`): its
+  precondition `B.inv … s₀` is planned in the state and the rest is the frame, which stays
+  outside the loop; its premise, the step `∀ s, T (B.inv … s) ((B xs).run s) (fun r => if again
+  r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a branch
+  of its own (in the context of the loop), then the walk goes on after the loop from `B.post`. The
+  body is inlined in the step as a generated call is (`unfoldCmd`: a generated program run from
+  a state, `StateT.run (B xs) s`).
+* The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
+  the body's arguments `xs`; the one named `s0` is the locals at loop entry `s₀` (the
+  generator's name; the registration rejects another parameter of a locals structure's type);
+  every other one (the value at a pointer at entry, `v0`) is an unknown that the plan of the
+  precondition assigns. A fact of the precondition that only the whole plan determines (an
+  existential's witness fixed by a later atom) is proved by arithmetic once it is determined.
+* An invariant that does not hold at the entry (no plan, or a plan that leaves an unknown), after
+  the views and the rebase of a literal pointer for the atoms its plan wanted, stops the walk at
+  the loop (report reason `invariant_not_established`, condition `loop_entry`). A registration
+  that does not fit the loop (no `B.meas` in a total logic, a parameter of `B.meas` or `B.post`
+  that `B.inv` does not have or has with another type) is an error. The step's side goals that the walk does
+  not prove are left to the caller, as a rule's are; a wrong invariant that holds at the entry
+  fails there, at the step's next iteration (regressions:
+  `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`: total, partial, in a thread, concurrent without
+  an exit post, an invariant the step does not keep, one that the entry does not establish, and
+  rejected registrations).
+* The registry is for a loop that no rule applies to: the caller's and the library's rules about
+  the loop are tried first, again with the facts of the state's atoms (`moreFacts`) and the views
+  their preconditions wanted; a rule that applies with side goals it leaves is taken instead (a
+  rule whose side goal the facts refute is not).
+* Not covered: a sequential loop inside a concurrent function's `ConcM.liftMem` command (it
+  stops with no rule), and a proof over a variable `FLogic` (no loop rule: the loop stays a
+  residual).
+
 ## Recursive groups
 
 `FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
@@ -821,9 +875,10 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
   loop body (`f.loop<id>`), each member of a recursive group (by its unsplit equation
   `f.eq_def`: its own equation lemmas split a `match` on a parameter into one lemma per case,
   which a computed argument never matches), each `--model` wrapper (`air2lean_model_<i>`) and
-  `dispatch`. Also `Zig.loop` and the library models that hold a loop (`Zig.osUnfairLockC`), both
-  tagged in `ZigLean/Simp.lean`. A new library model with a `Zig.loop` or a `partial_fixpoint`
-  is tagged there too, as is a `--model` implementation that holds one, where it is defined.
+  `dispatch`. Also `Zig.loop` (tagged in `ZigLean/Simp.lean`) and the library models that hold a
+  loop, each tagged where it is defined (`Zig.osUnfairLockC`, `ZigLean/Conc/Call.lean`), so that
+  `ZigLean.Simp` imports no model. A new library model with a `Zig.loop` or a `partial_fixpoint`
+  is tagged the same way, as is a `--model` implementation that holds one.
 * **Emission rule.** The translator ends each declaration group with
   `attribute [zig_run] <the group's executable declarations>`, each model wrapper with
   `attribute [zig_run] air2lean_model_<i>` and `dispatch` with `attribute [zig_run] dispatch`
@@ -847,6 +902,8 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
   A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
   the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
   `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
+* A loop: its invariant, measure and exit post as `@[fsym_inv] def B.inv`/`B.meas`/`B.post` next
+  to the body `B` (§Loops), not a lemma about the loop passed as `fsym [h]`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
@@ -901,7 +958,8 @@ The schema is versioned by `schemaVersion` (currently `1`):
   (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
 * `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
   `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
-  or `match_without_discriminant`.
+  `match_without_discriminant`, or `invariant_not_established` (a loop's registered invariant
+  at its entry, condition `loop_entry`, §Loops).
 
 The JSON structure and discriminator strings are the API. The expression text follows Lean's
 pretty printer and its local names; it is display text, not an expression serialization. The

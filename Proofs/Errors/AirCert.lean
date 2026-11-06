@@ -15,11 +15,13 @@ Outside the certificate fragment:
 * `errors.sumDigits`: a function with a slice parameter that calls a function (a view function calls only panic handlers, `Sem.roBody`)
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `errors.digitOrZero` trusted-Canon: renumber
-* `errors.parseDigit` trusted-Canon: renumber
-* `errors.sumDigits` trusted-Canon: renumber
+* `errors.digitOrZero` trusted-Canon: none
+* `errors.parseDigit` trusted-Canon: none
+* `errors.sumDigits` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

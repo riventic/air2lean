@@ -43,12 +43,13 @@ theorem begin_before_deadline (s : Kernel) (choice : Nat) (p : Ptr) (expected : 
     (hq : s.mem.waiters.any (·.1 == s.mem.current) = false)
     (hw : s.mem.woken.contains s.mem.current = false)
     (read : (readWord choice p).run s.mem = pure (expected, readMem))
-    (early : now.nanoseconds < deadline.nanoseconds) :
+    (early : now.nanoseconds < deadline.nanoseconds)
+    {k : FutexKey} (hk : readMem.keyAt p false = some k) :
     s.begin choice p expected (some deadline) now = pure (none,
-      { mem := { readMem with waiters := readMem.waiters.push (readMem.current, p) },
+      { mem := { readMem with waiters := readMem.waiters.push (readMem.current, k) },
         registration := some ⟨readMem.current, p, some deadline⟩ }) := by
   have : ¬ deadline.nanoseconds ≤ now.nanoseconds := by omega
-  simp [Kernel.begin, hr, hq, not_woken hw, read, this]
+  simp [Kernel.begin, hr, hq, not_woken hw, read, this, hk]
 
 /-- A mismatching word wins over an expired deadline: the predicate is decided first. -/
 theorem begin_mismatch_first (s : Kernel) (choice : Nat) (p : Ptr)
@@ -82,7 +83,9 @@ theorem wake_registration (s : Kernel) (p : Ptr) (n : Nat) :
   unfold Kernel.wake
   split
   · rfl
-  all_goals rename_i heq; cases heq
+  · split
+    · rfl
+    all_goals rename_i heq; cases heq
 
 /-- Timeout from a later observation: a paused caller's next awake observation that reaches
 the deadline enables timeout, whatever wake the environment delivers at that boundary. -/

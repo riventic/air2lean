@@ -43,39 +43,41 @@ Outside the certificate fragment:
 * `vectors.xorLanes`: a parameter that is not an integer, bool, plain pointer or slice
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `vectors.addTo` trusted-Canon: renumber
-* `vectors.andLanes` trusted-Canon: renumber
-* `vectors.checkedAdd` trusted-Canon: renumber
-* `vectors.fDot` trusted-Canon: renumber
-* `vectors.fMax` trusted-Canon: renumber
-* `vectors.fMin` trusted-Canon: renumber
-* `vectors.interleave` trusted-Canon: renumber
-* `vectors.maxLane` trusted-Canon: renumber
-* `vectors.minLane` trusted-Canon: renumber
-* `vectors.orLanes` trusted-Canon: renumber
-* `vectors.pick` trusted-Canon: renumber
-* `vectors.reverse` trusted-Canon: renumber
-* `vectors.sMod` trusted-Canon: renumber
-* `vectors.sRem` trusted-Canon: renumber
-* `vectors.satAdd` trusted-Canon: renumber
-* `vectors.splatAdd` trusted-Canon: renumber
-* `vectors.twiceInMem` trusted-Canon: renumber
-* `vectors.uDotWrap` trusted-Canon: renumber
-* `vectors.uMinLane` trusted-Canon: renumber
-* `vectors.vAbs` trusted-Canon: renumber
-* `vectors.vBits` trusted-Canon: renumber
-* `vectors.vDiv` trusted-Canon: renumber
-* `vectors.vLess` trusted-Canon: renumber
-* `vectors.vMinMax` trusted-Canon: renumber
-* `vectors.vMod` trusted-Canon: renumber
-* `vectors.vNarrow` trusted-Canon: renumber
-* `vectors.vNeg` trusted-Canon: renumber
-* `vectors.vOverflow` trusted-Canon: forwardReadOnlyCopies, renumber
-* `vectors.vShift` trusted-Canon: renumber
-* `vectors.vToFloat` trusted-Canon: renumber
-* `vectors.xorLanes` trusted-Canon: renumber
+* `vectors.addTo` trusted-Canon: none
+* `vectors.andLanes` trusted-Canon: none
+* `vectors.checkedAdd` trusted-Canon: none
+* `vectors.fDot` trusted-Canon: none
+* `vectors.fMax` trusted-Canon: none
+* `vectors.fMin` trusted-Canon: none
+* `vectors.interleave` trusted-Canon: none
+* `vectors.maxLane` trusted-Canon: none
+* `vectors.minLane` trusted-Canon: none
+* `vectors.orLanes` trusted-Canon: none
+* `vectors.pick` trusted-Canon: none
+* `vectors.reverse` trusted-Canon: none
+* `vectors.sMod` trusted-Canon: none
+* `vectors.sRem` trusted-Canon: none
+* `vectors.satAdd` trusted-Canon: none
+* `vectors.splatAdd` trusted-Canon: none
+* `vectors.twiceInMem` trusted-Canon: none
+* `vectors.uDotWrap` trusted-Canon: none
+* `vectors.uMinLane` trusted-Canon: none
+* `vectors.vAbs` trusted-Canon: none
+* `vectors.vBits` trusted-Canon: none
+* `vectors.vDiv` trusted-Canon: none
+* `vectors.vLess` trusted-Canon: none
+* `vectors.vMinMax` trusted-Canon: none
+* `vectors.vMod` trusted-Canon: none
+* `vectors.vNarrow` trusted-Canon: none
+* `vectors.vNeg` trusted-Canon: none
+* `vectors.vOverflow` trusted-Canon: forwardReadOnlyCopies
+* `vectors.vShift` trusted-Canon: none
+* `vectors.vToFloat` trusted-Canon: none
+* `vectors.xorLanes` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

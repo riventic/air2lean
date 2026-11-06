@@ -121,6 +121,25 @@ def R (Y : ThreadId → X) : FAssn :=
 /-- The mutex. -/
 abbrev L : FLock Gh := FLock.prod 0 Lo.mo (R Lo) Lo.c Lo.c_ok
 
+/-- The epoch's, the event's and the mutex's words have three futex keys (one block, three offsets
+below the `Box`'s size, `Mem.wordKey_ne_off`). -/
+theorem weKey_ne (m : Mem) : Lo.WE.key m ≠ (L Lo).key m := by
+  have := Lo.ok; have := Lo.fits
+  exact Mem.wordKey_ne_off (by show Lo.so + 4 ≠ Lo.mo; omega)
+    (by show Lo.so + 4 < Lo.mo + 2 ^ 64; omega)
+    (by show Lo.mo < Lo.so + 4 + 2 ^ 64; omega) false false
+
+theorem wvKey_ne (m : Mem) : Lo.WV.key m ≠ (L Lo).key m := by
+  have := Lo.ok; have := Lo.fits
+  exact Mem.wordKey_ne_off (by show Lo.vo ≠ Lo.mo; omega)
+    (by show Lo.vo < Lo.mo + 2 ^ 64; omega) (by show Lo.mo < Lo.vo + 2 ^ 64; omega) false false
+
+theorem key_EV (m : Mem) : Lo.WE.key m ≠ Lo.WV.key m := by
+  have := Lo.ok; have := Lo.fits
+  exact Mem.wordKey_ne_off (by show Lo.so + 4 ≠ Lo.vo; omega)
+    (by show Lo.so + 4 < Lo.vo + 2 ^ 64; omega)
+    (by show Lo.vo < Lo.so + 4 + 2 ^ 64; omega) false false
+
 /-- The condition: its place is `X.c`; the producer signals. -/
 def C : FCond Gh where
   S := Lo.WS
@@ -225,7 +244,7 @@ structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   /-- After the producer's end, the event is set. -/
   fin : (G 1).2.ph = .fin → (E Lo).IsSet m
   /-- A thread waits only at the mutex, the epoch or the event. -/
-  q : ∀ w ∈ m.waiters, w.2 = (L Lo).ptr ∨ w.2 = Lo.WE.ptr ∨ w.2 = Lo.WV.ptr
+  q : ∀ w ∈ m.waiters, w.2 = (L Lo).key m ∨ w.2 = Lo.WE.key m ∨ w.2 = Lo.WV.key m
   /-- A thread in the condition's code is `main` in its loop or the producer in `signal`. -/
   xc : ∀ u, (G u).2.c ≠ .out → (G u).2.ph = .run ∨ (G u).2.ph = .sg
 
@@ -422,7 +441,7 @@ theorem U.congrHist {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U
         VClock.le ((C Lo).S.hist m)[j]!.clock (m'.clocks[0]!) = true) ∨
         (L Lo).Before m' ((C Lo).S.hist m)[j]!.clock)))
     (fin : (G 1).2.ph = .fin → (E Lo).IsSet m')
-    (q : ∀ w ∈ m'.waiters, w.2 = (L Lo).ptr ∨ w.2 = Lo.WE.ptr ∨ w.2 = Lo.WV.ptr) :
+    (q : ∀ w ∈ m'.waiters, w.2 = (L Lo).key m' ∨ w.2 = Lo.WE.key m' ∨ w.2 = Lo.WV.key m') :
     U Lo G' rX' m' := by
   have hS : (C Lo).S.hist m' = (C Lo).S.hist m := hhS
   refine ⟨shape, io, rest, blk, ws, we, wv, cinv, einv, by rw [(hX 1).2.1]; exact hu.places,
@@ -459,8 +478,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   obtain ⟨hwV, hhV⟩ := hu.wv.lockStep hs apV
   refine hu.congrHist (fun u => by rw [hX u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE ?_
     (fun e he hr => ?_) (hu.rest.congr fun l hl => hs.heap (box_notL hl)) (hu.blk.lstep hs)
-    hwS hwE hwV (hu.cinv.lstep hu.ws hu.we apS apE hok.1 hna (fun _ _ _ => rfl) hs)
-    (hu.einv.lstep hu.wv apV hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
+    hwS hwE hwV (hu.cinv.lstep hu.ws hu.we apS apE (weKey_ne Lo m) hok.1 hna (fun _ _ _ => rfl) hs)
+    (hu.einv.lstep hu.wv apV (wvKey_ne Lo m) hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
       (fun _ _ _ => Iff.rfl) hs)
     (fun h1 => ?_) (fun j hj => ?_) (fun h1 => ?_) (fun w hw => ?_)
   · have : (fun u => (upd G t ((L Lo).set (G t) p h) u).2) = fun u => (G u).2 := funext hX
@@ -488,7 +507,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
         · exact .inl ⟨by rw [upd_ne _ _ (Ne.symm ht0)]; exact hh, VClock.le_trans hle (hs.clocks 0)⟩
       · exact .inr (hs.before _ hb)
   · show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hhV]; exact hu.fin h1
-  · by_cases hl : w.2 = (L Lo).ptr
+  · rw [hs.key, hu.we.key_of_addrs hs.addrs, hu.wv.key_of_addrs hs.addrs]
+    by_cases hl : w.2 = (L Lo).key m
     · exact .inl hl
     · exact hu.q w ((hs.waiters_mem w hl).mp hw)
 
@@ -499,11 +519,11 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
     fun _ hw => (hw.fields_native (m' := { m with current := t })
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
   ⟨hu.shape, hu.io, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we, wordOk _ hu.wv,
-    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h)
-      (Nat.le_refl _) (fun _ => VClock.le_refl _),
+    hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl rfl rfl (fun _ hw _ => hw)
+      (fun _ _ h => h) (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _)
       (Nat.le_refl _) id id
-      hu.einv.fresh,
+      hu.einv.fresh rfl rfl,
     hu.places, hu.ep1, hu.ep2, hu.epS, hu.incE, hu.ent, hu.hold, hu.reg, hu.w1, hu.snap, hu.lvc,
     hu.fin, hu.q, hu.xc⟩
 
@@ -558,11 +578,15 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
     by_cases e : u = t
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
+  have hkE : Lo.WE.key m' = Lo.WE.key m := hu.we.key_of_addrs hs.addrs
+  have hkV : Lo.WV.key m' = Lo.WV.key m := hu.wv.key_of_addrs hs.addrs
+  obtain ⟨_, hb₀, -⟩ := hu.blk
+  have hkL : (L Lo).key m' = (L Lo).key m := (L Lo).key_of_addrs hs.addrs hb₀
   refine hu.congrHist (fun u => by rw [hX' u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE ?_
     (fun e he hr => ?_) hrest hbk hwS hwE hwV
     (hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
       (fun _ h => by show g.1.ph = _; rw [hph]; exact h)
-      (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE (by rw [hs.waiters])
+      (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE hkE hkL (by rw [hs.waiters])
       (fun w hw _ => .inl (by rw [hs.waiters] at hw; exact hw))
       (fun _ _ _ h => by rw [hs.woken]; exact h) (Nat.le_of_eq (by rw [hs.threads])) hs.clock)
     (hu.einv.frame (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact congrArg (·.e) hX)
@@ -570,9 +594,9 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
       (fun h => by rw [upd_self]; show g.2.ph = .ev ∨ g.2.ph = .joins; rw [hX]; exact h)
       (fun h => by rw [upd_self]; show g.2.ph = .st ∨ g.2.ph = .fin; rw [hX]; exact h)
       (hu.einv.fresh.fstep hs (fun x h1 h2 => hwB _ (Lo.wv_box ⟨rfl, h1, h2⟩))
-        (fun i l hl => (hu.wv.loc i l hl).1)))
+        (fun i l hl => (hu.wv.loc i l hl).1)) hkV hkL)
     (fun h1 => by rw [hP']; exact hu.hold h1) (fun j hj => ?_) (fun h1 => ?_)
-    (fun w hw => by rw [hs.waiters] at hw; exact hu.q w hw)
+    (fun w hw => by rw [hs.waiters] at hw; rw [hkL, hkE, hkV]; exact hu.q w hw)
   · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
     rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
   · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
@@ -796,10 +820,6 @@ theorem BlkOk.of_block {m m' : Mem} (h : BlkOk Lo m)
 
 /-! ## The threads' places -/
 
-theorem ptr_EV : Lo.WE.ptr ≠ Lo.WV.ptr := fun h => by
-  have h1 : (((Lo.so + 4 : Nat) : Int)) = ((Lo.vo : Nat) : Int) := congrArg Ptr.off h
-  have := Lo.ok; omega
-
 theorem ne_VS : Lo.WV ≠ Lo.WS := fun h => by
   have h1 : Lo.vo = Lo.so := congrArg Word.o h
   have := Lo.ok; omega
@@ -901,7 +921,11 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     (hs.fp he).imp_right fun h => h.elim (three_fp hW3) (three_fp (.inr (.inl rfl)))
   have hbef : ∀ c, (L Lo).Before m c → (L Lo).Before m' c := fun _ ⟨i, l, hl, hc⟩ =>
     ⟨i, l, hs.lockLoc (three_ap hW3) apE hl, hc⟩
-  have hwt : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w = (t, Lo.WE.ptr) := fun _ hw => hs.waiters hw
+  have hwt : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w = (t, Lo.WE.key m) := fun _ hw => hs.waiters hw
+  have hkE : Lo.WE.key m' = Lo.WE.key m := hs.key hu.we
+  have hkV : Lo.WV.key m' = Lo.WV.key m := hs.key hu.wv
+  have hkL : (L Lo).key m' = (L Lo).key m :=
+    let ⟨_, hb₀, _⟩ := hu.blk; (L Lo).key_of_addrs hs.addrs hb₀
   have hwd := fun W' (hW' : Three Lo W') (h : W'.Ok m) =>
     hs.word h (three_word hW3 hW') (three_word (W := Lo.WE) (.inr (.inl rfl)) hW')
   have hok3 := fun W' (hW' : Three Lo W') (h : W'.Ok m) => (hwd W' hW' h).1
@@ -1006,11 +1030,11 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       exact hcell (Option.map_eq_none_iff.mp hnone))
     (fun i l hl => (hu.wv.loc i l hl).1)
   -- a new waiter in the futex queue is `t` at the epoch, registered
-  have hnw : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w = (t, Lo.WE.ptr) ∧ ((G t).2.c).waits = true) :=
+  have hnw : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w = (t, Lo.WE.key m) ∧ ((G t).2.c).waits = true) :=
     fun w hw => by
       rcases hwt w hw with h' | rfl
       · exact .inl h'
-      · obtain ⟨i, jr, e, h1, -⟩ := hI.q _ hw rfl
+      · obtain ⟨i, jr, e, h1, -⟩ := hI.q _ hw hkE.symm
         refine .inr ⟨rfl, hcw t ?_⟩
         have : (G' t).2.c = _ := h1
         rw [this]; rfl
@@ -1040,7 +1064,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2.1 (fun hne => ?_) hV (fun w hw => ?_)
       hclk (Nat.le_of_eq (by rw [hth])) (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
-      (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h') hFV
+      (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h') hFV hkV hkL
     · by_cases hl : (L Lo).ph (G' t) = (L Lo).ph (G t)
       · exact .inl hl
       · obtain ⟨-, hq'⟩ := hlq (Ne.symm hl)
@@ -1052,7 +1076,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
             · rw [CPh.sig_waits h'] at hw; cases hw)) hne
     · rcases hnw w hw with h' | ⟨rfl, hw'⟩
       · exact .inl h'
-      · refine .inr ⟨rfl, ptr_EV, fun he => ?_⟩
+      · refine .inr ⟨rfl, key_EV Lo m, fun he => ?_⟩
         have := hu.e_out (u := t) (fun hc => by rw [hc] at hw'; cases hw')
         rw [show (E Lo).ph (G t) = (G t).2.e from rfl, this] at he; cases he
   · -- places
@@ -1224,6 +1248,7 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     rw [(hph 1).1] at h1
     show ((Lo.WV.hist m')[(Lo.WV.hist m').size - 1]!).Val _; rw [hV]; exact hu.fin h1
   · -- q
+    rw [hkL, hkE, hkV]
     rcases hwt w hw with h' | rfl
     · exact hu.q w h'
     · exact .inr (.inl rfl)
@@ -1256,7 +1281,11 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     (hs.fp he).imp_right (three_fp (.inr (.inr rfl)))
   have hbef : ∀ c, (L Lo).Before m c → (L Lo).Before m' c := fun _ ⟨i, l, hl, hc⟩ =>
     ⟨i, l, hs.lockLoc apV hl, hc⟩
-  have hwt : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w = (t, Lo.WV.ptr) := fun _ hw => hs.waiters hw
+  have hwt : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w = (t, Lo.WV.key m) := fun _ hw => hs.waiters hw
+  have hkV : Lo.WV.key m' = Lo.WV.key m := hs.key
+  have hkE : Lo.WE.key m' = Lo.WE.key m := hu.we.key_of_addrs hs.addrs
+  have hkL : (L Lo).key m' = (L Lo).key m :=
+    let ⟨_, hb₀, _⟩ := hu.blk; (L Lo).key_of_addrs hs.addrs hb₀
   have hwd := fun W' (hW' : Three Lo W') (h : W'.Ok m) =>
     hs.word h (three_word (W := Lo.WV) (.inr (.inr rfl)) hW')
   have hok3 := fun W' (hW' : Three Lo W') (h : W'.Ok m) => (hwd W' hW' h).1
@@ -1314,10 +1343,10 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · exact e
     · exact absurd e.symm ne_VE
   -- a new waiter in the futex queue is `t` at the event, a waiter there
-  have hnw : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w = (t, Lo.WV.ptr) ∧ p = .w1) := fun w hw => by
+  have hnw : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ (w = (t, Lo.WV.key m) ∧ p = .w1) := fun w hw => by
     rcases hwt w hw with h' | rfl
     · exact .inl h'
-    · have h1 := (hI.q _ hw rfl).1
+    · have h1 := (hI.q _ hw hkV.symm).1
       rw [hEt] at h1; exact .inr ⟨rfl, h1⟩
   refine hu.congrHist (fun u => ⟨(hph u).1, (hph u).2, hsz u⟩) hS hE ?_ (fun e he hr => ?_)
     (Rest.step (fun _ => Lo.wv_box) hu.rest rfl hY fun l _ hw => hcells l hw)
@@ -1353,7 +1382,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     refine hu.cinv.other (t := t) rfl (fun hb => ?_)
       (fun hr ha => absurd ha (hnaw fun hc => by
         rw [show (C Lo).ph (G t) = (G t).2.c from rfl, hc] at hr; cases hr))
-      (fun h' => h') hS hE (hs.waiters_at ptr_EV fun w hw hw2 w' hw' he hw'2 => by
+      (fun h' => h') hS hE hkE hkL (hs.waiters_at (key_EV Lo m) fun w hw hw2 w' hw' he hw'2 => by
         -- queued at the epoch: `main`, registered; at the event's word: at `w1`
         obtain ⟨_, _, _, hr, -⟩ := hu.cinv.q w hw hw2
         have h1 := (hu.einv.q w' hw' hw'2).1
@@ -1409,6 +1438,7 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       · show ((Lo.WV.hist m')[(Lo.WV.hist m).size - 1]!).Val _
         rw [e, Word.get_push_lt (by omega)]; exact hset
   · -- q
+    rw [hkL, hkE, hkV]
     rcases hwt w hw with h' | rfl
     · exact hu.q w h'
     · exact .inr (.inr rfl)

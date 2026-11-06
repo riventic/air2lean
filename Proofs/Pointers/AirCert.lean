@@ -20,20 +20,22 @@ Outside the certificate fragment:
 * `pointers.setOptJob`: inst 2: an instruction outside the fragment
 
 The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate
-is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization):
+is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).
+`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;
+that binding is per function, and the program-level renaming stays trusted:
 
-* `pointers.addDown` trusted-Canon: renumber
-* `pointers.addTo` trusted-Canon: renumber
-* `pointers.bumpOpt` trusted-Canon: renumber
-* `pointers.copyJob` trusted-Canon: renumber
-* `pointers.delay` trusted-Canon: forwardReadOnlyCopies, renumber
-* `pointers.dueOf` trusted-Canon: forwardReadOnlyCopies, renumber
-* `pointers.maxPtr` trusted-Canon: renumber
-* `pointers.same` trusted-Canon: renumber
-* `pointers.setOpt` trusted-Canon: renumber
-* `pointers.setOptJob` trusted-Canon: renumber
-* `pointers.sumTo` trusted-Canon: renumber
-* `pointers.swap` trusted-Canon: renumber
+* `pointers.addDown` trusted-Canon: none
+* `pointers.addTo` trusted-Canon: none
+* `pointers.bumpOpt` trusted-Canon: none
+* `pointers.copyJob` trusted-Canon: none
+* `pointers.delay` trusted-Canon: forwardReadOnlyCopies
+* `pointers.dueOf` trusted-Canon: forwardReadOnlyCopies
+* `pointers.maxPtr` trusted-Canon: none
+* `pointers.same` trusted-Canon: none
+* `pointers.setOpt` trusted-Canon: none
+* `pointers.setOptJob` trusted-Canon: none
+* `pointers.sumTo` trusted-Canon: none
+* `pointers.swap` trusted-Canon: none
 -/
 
 def source_0 : _root_.Air2Lean.Func :=

@@ -31,7 +31,7 @@ namespace SepAuto.LockQueue
 
 /-- `B`'s step that queues `u` at `B`'s word. -/
 def queued (B : LockWord) (u : ThreadId) (m : Mem) : Mem :=
-  { m with waiters := m.waiters.push (u, B.ptr) }
+  { m with waiters := m.waiters.push (u, B.key m) }
 
 /-- **The step meets every field of `Step` but `newQ`**: given `newQ`, it is a `Step`
 (`Step.same`: threads, clocks, blocks, footprint, locations and the other futexes' entries
@@ -42,15 +42,15 @@ theorem queue_other_admitted (B : LockWord) (t u : ThreadId) (m : Mem)
   LockWord.Step.same rfl rfl rfl rfl rfl rfl
     (by
       simp only [queued]
-      rw [Array.filter_push_of_neg (p := fun x : ThreadId × Ptr => x.2 != B.ptr)
-        (a := (u, B.ptr)) (by simp)]
+      rw [Array.filter_push_of_neg (p := fun x : ThreadId × FutexKey => x.2 != B.key m)
+        (a := (u, B.key m)) (by simp)]
       simp)
     (hq := hq)
 
 /-- **`A`'s invariant is false after it** when `u` is at `A`'s place `out`. -/
 theorem queue_other_breaks (A B : LockWord) (P : ThreadId → LPh) (u : ThreadId) (m : Mem)
-    (hp : B.ptr ≠ A.ptr) (hu : P u = .out) : ¬ A.WInv P (queued B u m) := fun hw => by
-  rcases hw.fq (u, B.ptr) (Array.mem_push.mpr (.inr rfl)) with ⟨h, -⟩ | ⟨-, h⟩ | ⟨-, h, -⟩
+    (hp : B.key m ≠ A.key m) (hu : P u = .out) : ¬ A.WInv P (queued B u m) := fun hw => by
+  rcases hw.fq (u, B.key m) (Array.mem_push.mpr (.inr rfl)) with ⟨h, -⟩ | ⟨-, h⟩ | ⟨-, h, -⟩
   · exact hp h
   · rw [hu] at h; cases h
   · rw [hu] at h; cases h
@@ -62,12 +62,12 @@ theorem queue_self (B : LockWord) (t : ThreadId) (m : Mem) : B.Step t m (queued 
 /-- **`newQ` is the only obstruction**: the step is a `Step` exactly when it queues the stepping
 thread itself or an entry already in the queue. -/
 theorem queue_step_iff (B : LockWord) (t u : ThreadId) (m : Mem) :
-    B.Step t m (queued B u m) ↔ u = t ∨ (u, B.ptr) ∈ m.waiters := by
+    B.Step t m (queued B u m) ↔ u = t ∨ (u, B.key m) ∈ m.waiters := by
   constructor
   · intro hs
-    by_cases hn : (u, B.ptr) ∈ m.waiters
+    by_cases hn : (u, B.key m) ∈ m.waiters
     · exact .inr hn
-    · exact .inl (hs.newQ (u, B.ptr) (Array.mem_push.mpr (.inr rfl)) hn)
+    · exact .inl (hs.newQ (u, B.key m) (Array.mem_push.mpr (.inr rfl)) hn)
   · rintro (rfl | h)
     · exact queue_self B _ m
     · refine queue_other_admitted B t u m (LockWord.newQ_of_sub fun w hw => ?_)

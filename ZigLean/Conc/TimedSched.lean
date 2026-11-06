@@ -42,17 +42,22 @@ def Kernel.begin (s : Kernel) (readChoice : Nat) (p : Ptr) (expected : BitVec 32
   if deadline.any (fun expiry => expiry.nanoseconds ≤ now.nanoseconds) then
     return (some .timeout, { s with mem := m })
   let r : Registration := ⟨m.current, p, deadline⟩
-  return (none, { mem := { m with waiters := m.waiters.push (r.owner, p) },
+  let some k := m.keyAt p false | throw .illegal
+  return (none, { mem := { m with waiters := m.waiters.push (r.owner, k) },
                   registration := some r })
 
 /-- Wake changes queue bookkeeping only; it supplies no happens-before edge. The timed kernel
 serves one registration per owner and wakes in queue order (no oracle choice of waiters, unlike
-`Sched`). -/
+`Sched`). It wakes at `p`'s private key (`Mem.keyAt`); a pointer without a block has no waiters
+(every registration read its word first), so the wake changes nothing. -/
 def Kernel.wake (s : Kernel) (p : Ptr) (n : Nat) : Kernel :=
-  match h : ((Thread.futexWake p n []).run s.mem).run with
-  | some (.ok (_, mem)) => { s with mem := mem }
-  | some (.error _) => by cases h
-  | none => by cases h
+  match s.mem.keyAt p false with
+  | none => s
+  | some k =>
+    match h : ((Thread.futexWake k n []).run s.mem).run with
+    | some (.ok (_, mem)) => { s with mem := mem }
+    | some (.error _) => by cases h
+    | none => by cases h
 
 def Kernel.enabled (s : Kernel) (now : Option Time.Timestamp) : ReturnReason → Bool
   | .mismatch => false

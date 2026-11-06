@@ -47,6 +47,7 @@ def lo : Layout where
   c := mutexC
   c_ok := by decide
   ok := by decide
+  fits := by decide
 
 /-- The producer's argument. -/
 def prodOf : Tgt → Option Ptr

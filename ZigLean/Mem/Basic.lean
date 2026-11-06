@@ -497,7 +497,7 @@ the domain and the address.
 The address is the `usize` that the kernel receives (`futexAddr` of the pointer's numeric
 address), so every key is the native key's address, also for a pointer whose numeric address
 lies outside `[0, 2 ^ 64)`. Two words of one block at offsets below `2 ^ 64` have different keys
-without any bound on the block (`Mem.keyAt_ne_same`). -/
+without any bound on the block (`Mem.wordKey_ne_off`, `Mem.keyAt_ne_off`). -/
 structure FutexKey where
   /-- A shared (not `FUTEX_PRIVATE_FLAG`) key. -/
   shared : Bool
@@ -530,9 +530,9 @@ structure Mem where
   /-- The id of the next message. -/
   nextMsg : Nat := 0
   /-- The futex queue (the kernel's state, `ZigLean/Mem/Thread.lean`): the threads that wait at
-  a futex, and the address. A wake picks among them (`Thread.wakeSet`): the order is not a
-  wake order. -/
-  waiters : Array (ThreadId × Ptr) := #[]
+  a futex, and its key (`FutexKey`: domain and numeric address, not the provenance pointer). A
+  wake picks among them (`Thread.wakeSet`): the order is not a wake order. -/
+  waiters : Array (ThreadId × FutexKey) := #[]
   /-- The threads that a futex wake woke: their wait goes on at their next turn. -/
   woken : Array ThreadId := #[]
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
@@ -1314,6 +1314,13 @@ def Block.key (blk : Block) (o : Nat) (shared : Bool) : FutexKey :=
 def futexKeyOf (p : Ptr) (shared : Bool) : MemM FutexKey := do
   let some k := (← get).keyAt p shared | throw .illegal
   pure k
+
+/-- The futex key of the word at offset `o` of block `b` in the domain `shared`, as a total
+function of the memory: `Mem.keyAt` of `⟨some b, o⟩` where block `b` exists
+(`Mem.keyAt_wordKey`). A protocol's queue invariant names its word's waiters by this key; it
+reads only the block's address, so it stays while the block does (`Mem.wordKey_of_addr`). -/
+def Mem.wordKey (m : Mem) (b : BlockId) (o : Nat) (shared : Bool := false) : FutexKey :=
+  ⟨shared, futexAddr (((m.blocks[b]?).map (·.addr)).getD 0 + (o : Int))⟩
 
 /-- The pointer to address `n`: inside or one past the block whose address range covers `n`, at
 the matching offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A dead block still
