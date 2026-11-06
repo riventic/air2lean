@@ -333,4 +333,33 @@ run_meta omega_proofs_shared
 
 end Shared
 
+/-! ### A new form that only evaluates ground terms (`renormFacts`, `omegaGround`)
+
+The second pass drops a fact's new form that says the same to `omega` (PageSpec's
+`2 ^ 64 - 4096` of a hypothesis, folded again on every failed side goal). The two forms are equal
+only when they differ in ground terms `omega` evaluates (`groundNat?`) at linear positions; a
+constant, an atom's argument, a word or another value keeps the new form. -/
+section Ground
+open Lean Meta Elab Term Zig.Full.Auto
+
+/-- The two propositions of `fun xs => (p, q)` say the same to `omega` (`omegaGround`). -/
+def groundSame (stx : Term) : TermElabM Bool := do
+  let e ← instantiateMVars (← elabTerm stx none)
+  lambdaTelescope e fun _ b => return omegaGround (b.getArg! 2) == omegaGround (b.getArg! 3)
+
+run_elab do
+  for (stx, want) in [
+      (← `(fun (x : Nat) => (x ≤ 2 ^ 64 - 4096, x ≤ 18446744073709547520)), true),
+      (← `(fun (n k : Nat) => (n + 2 ^ k ≤ 2 ^ 64 - 4096 ∧ k < 63 + 1, n + 2 ^ k ≤ 18446744073709547520 ∧ k < 64)), true),
+      (← `(fun (x : Int) (k : Nat) => (x + ((k + (1 + 1) : Nat) : Int) < 0, x + ((k + 2 : Nat) : Int) < 0)), true),
+      (← `(fun (x : Nat) => (x ≤ 4096, x ≤ 4095)), false),
+      (← `(fun (x : Nat) => (x ≤ UInt64.size - 4096, x ≤ 18446744073709547520)), false),
+      (← `(fun (n : Nat) (g : Nat → Nat) => (n + g (2 ^ 3) ≤ 10, n + g 8 ≤ 10)), false),
+      (← `(fun (x : Nat) => (x * (1 + 1) ≤ 8, x * 2 ≤ 8)), false),
+      (← `(fun (x : BitVec 64) => (x = 4095#64 + 1#64, x = 4096#64)), false)] do
+    let got ← groundSame stx
+    unless got == want do throwError "omegaGround: {stx} gives {got}, not {want}"
+
+end Ground
+
 end SepAuto.Arith
