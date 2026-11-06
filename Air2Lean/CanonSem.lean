@@ -1,4 +1,4 @@
-import Air2Lean.Sem
+import Air2Lean.SemRewrite
 
 /-!
 # Debug-definition IDs preserve the AIR interpreter
@@ -126,12 +126,11 @@ theorem erase_mapDebugArray (rename : InstId → InstId) (body : Array Inst) :
     eraseBody body.toList = eraseBody (mapDebugArray rename body).toList := by
   simp only [eraseBody, mapDebugArray, List.toList_toArray, mapDebugBody_comp]
 
-def eraseFunc (f : Func) : Func := { f with body := (eraseBody f.body.toList).toArray }
+/-- `f` with its debug IDs erased (`Func.withBody`: everything but the body reads the same,
+`SemRewrite`). -/
+abbrev eraseFunc (f : Func) : Func := f.withBody (eraseBody f.body.toList).toArray
 
-def eraseCtx (c : Ctx) : Ctx := { c with func := eraseFunc c.func }
-
-theorem iteration_erase (c : Ctx) {α : Type} (body : SM α) :
-    iteration (eraseCtx c) body = iteration c body := rfl
+abbrev eraseCtx (c : Ctx) : Ctx := { c with func := eraseFunc c.func }
 
 theorem eraseCases_all (cs : List SwitchCase)
     (p : Array Val → Array (Val × Val) → Bool) :
@@ -188,55 +187,7 @@ end
 
 theorem regAlloc_erase (f : Func) (a : InstId) :
     regAlloc (eraseFunc f) a = regAlloc f a := by
-  simp only [regAlloc, eraseFunc, List.toList_toArray, regBody_erase]
-
-theorem valOkIn_erase (f : Func) (n : Nat) (t : TyId) (v : Value) :
-    valOkIn (eraseFunc f) n t v = valOkIn f n t v := by
-  induction n generalizing t v with
-  | zero => rfl
-  | succ n ih =>
-    simp only [eraseFunc] at ih
-    simp only [valOkIn, eraseFunc]
-    split <;> (try rw [ih]) <;> rfl
-
-theorem argsOk_erase (f : Func) (ts : List TyId) (args : List Value) :
-    argsOk (eraseFunc f) ts args = argsOk f ts args := by
-  induction ts generalizing args with
-  | nil => cases args <;> rfl
-  | cons t ts ih =>
-    cases args <;> simp only [argsOk, valOkIn_erase, ih]
-
-theorem operand_erase (f : Func) (env : Env) (v : Val) :
-    operand (eraseFunc f) env v = operand f env v := by rfl
-
-theorem cellVal_erase (f : Func) (env : Env) (v : Val) :
-    cellVal (eraseFunc f) env v = cellVal f env v := by rfl
-
-theorem errUnionOperand_erase (f : Func) (env : Env) (v : Val) :
-    errUnionOperand (eraseFunc f) env v = errUnionOperand f env v := by rfl
-
-theorem sliceOperand_erase (f : Func) (env : Env) (v : Val) :
-    sliceOperand (eraseFunc f) env v = sliceOperand f env v := by rfl
-
-theorem indexOperand_erase (f : Func) (env : Env) (v : Val) :
-    indexOperand (eraseFunc f) env v = indexOperand f env v := by rfl
-
-theorem itemLayout_erase (f : Func) (t : TyId) (a : Nat) :
-    itemLayout (eraseFunc f) t a = itemLayout f t a := by rfl
-
-theorem tyOf_erase (f : Func) (t : TyId) : tyOf (eraseFunc f) t = tyOf f t := by rfl
-
-theorem pointee_erase (f : Func) (t : TyId) : pointee? (eraseFunc f) t = pointee? f t := by rfl
-
-theorem layoutOf_erase (f : Func) : layoutOf (eraseFunc f) = layoutOf f := by rfl
-
-theorem ptrAlignOf_erase (f : Func) (t : TyId) :
-    ptrAlignOf (eraseFunc f) t = ptrAlignOf f t := by rfl
-
-theorem evalMem_func_erase (f : Func) (env : Env) (i : Inst) :
-    evalMem (eraseFunc f) env i = evalMem f env i := by
-  obtain ⟨id, ty, op⟩ := i
-  cases op <;> rfl
+  simp only [regAlloc, eraseFunc, Func.withBody, List.toList_toArray, regBody_erase]
 
 theorem execBody_erase (c : Ctx) : ∀ l env,
     execBody (eraseCtx c) (eraseBody l) env = execBody c l env := by
@@ -262,7 +213,7 @@ theorem execBody_erase (c : Ctx) : ∀ l env,
     rfl
   case case29 =>
     intro id body env ih
-    simp only [execLoop, iteration_erase, ih]
+    simp only [execLoop, iteration_withBody, ih]
   all_goals
     intro i
     obtain ⟨id, ty, op⟩ := i
@@ -271,9 +222,9 @@ theorem execBody_erase (c : Ctx) : ∀ l env,
     simp only at *
     subst_vars
     simp_all only [eraseInst, mapDebugInst, eraseCtx, execInst,
-      regAlloc_erase, operand_erase, cellVal_erase, errUnionOperand_erase,
-      sliceOperand_erase, indexOperand_erase, itemLayout_erase, tyOf_erase,
-      pointee_erase, layoutOf_erase, ptrAlignOf_erase, evalMem_func_erase,
+      regAlloc_erase, operand_withBody, cellVal_withBody, errUnionOperand_withBody,
+      sliceOperand_withBody, indexOperand_withBody, itemLayout_withBody, tyOf_withBody,
+      pointee_withBody, layoutOf_withBody, ptrAlignOf_withBody, evalMem_withBody,
       ite_true, ite_false, Bool.false_eq_true]
     try rfl
   case case26 =>
@@ -281,7 +232,7 @@ theorem execBody_erase (c : Ctx) : ∀ l env,
 
 theorem execFunc_erase (prog : Prog) (call : Oracle) (f : Func) (args : List Value) :
     execFunc prog call (eraseFunc f) args = execFunc prog call f args := by
-  simp only [execFunc, argsOk_erase, show (eraseFunc f).params = f.params from rfl,
+  simp only [execFunc, argsOk_withBody, show (eraseFunc f).params = f.params from rfl,
     show (eraseFunc f).name = f.name from rfl]
   by_cases h : argsOk f f.params.toList args = true
   · simp only [h, ite_true]
