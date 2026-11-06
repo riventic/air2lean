@@ -703,7 +703,7 @@ theorem fits : S.Fits (proto semOf) U ok where
     ok_setPart := fun _ _ => Iff.rfl
     stable := stable
     atStop := fun _ _ _ t _ hu => atStop t hu
-    kfin := fun g h => by show (g.2.c, g.2.sp) = (CPh.out, SPh.out); rw [h.2]
+    kfin := fun g h => by show (g.2.c, g.2.sp) = (CPh.out, SPh.out); rw [h.2.1]
     kjoins := fun g h => by show (g.2.c, g.2.sp) = (CPh.out, SPh.out); rw [h.2]
     sub := fun _ _ _ hu => ⟨⟨hu.cinv, fun W hW => by
       rcases hW with rfl | rfl
@@ -728,7 +728,8 @@ theorem fits : S.Fits (proto semOf) U ok where
     role_part := fun _ _ _ => Iff.rfl
     ok_calm := fun _ _ _ hp hq => ⟨fun _ => hq, fun _ => hp⟩
     kstep := kstep
-    holdLive := fun _ _ _ _ hi _ hv => FLock.holdLive_none (fun _ h => h) hi hv }
+    holdLive := fun _ _ _ _ hi _ hv => FLock.holdLive_none (fun _ h => h) hi hv
+    noGather := fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => R_unshared _ }
 
 end SemCounter
 end Zig

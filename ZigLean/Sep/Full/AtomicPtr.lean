@@ -167,8 +167,8 @@ theorem FTTriple.atomicLoadUnorderedEnc {α : Type} [Enc α] (p : Ptr) (v : α) 
   have hpb := (access_eq hacc).1
   have hKb := (abytesAt_kind hxr hab hsz hpb hblk).1
   have hacc8 : m.access p 8 8 = pure (b, blk, p.off.toNat) := by simpa using hacc
-  have hnr : NoRace m b p.off.toNat 8 .atomicRead := ho.noRace fun x h1 h2 =>
-    abytesAt_owned hab hpb x h1 (by rw [hsz]; exact h2)
+  have hnr : NoRace m b p.off.toNat 8 .atomicRead := ho.1.noRace fun x h1 h2 =>
+    abytesAt_excl hab hpb x h1 (by rw [hsz]; exact h2)
   have hcur : curBytes (m.recordAt b p.off.toNat 8 .atomicRead) b p.off.toNat 8 = bs := by
     simp only [curBytes, Mem.recordAt, hblk, Option.map_some, Option.getD_some]
     have : bs.extract 0 8 = bs := by rw [← hsz]; simp
@@ -334,8 +334,8 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
     (abytesAt_bytesAt hab) hm (by simp [Ptr.add]) (by decide) (by omega) (by simpa using hal)
   obtain ⟨hpb, -, hlive, h0, hfit, -, -⟩ := access_eq hacc
   obtain ⟨hKb, hlo⟩ := abytesAt_kind hxr hab hsz hpb hblk
-  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.owned (b, x) ≠ none :=
-    fun x h1 h2 => abytesAt_owned hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
+  have hmine : ∀ x, p.off.toNat ≤ x → x < p.off.toNat + intSize 64 → r.excl (b, x) ≠ none :=
+    fun x h1 h2 => abytesAt_excl hab hpb x h1 (by rw [hsz]; rw [intSize_64] at h2; exact h2)
   have haccW8 : m.accessW p (intSize 64) 8 = pure (b, blk, p.off.toNat) := by
     rw [intSize_64]; unfold Mem.accessW; rw [show m.access p 8 8 = pure (b, blk, p.off.toNat) by
       simpa using hacc]
@@ -370,7 +370,7 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       NoRace m₀ b p.off.toNat (intSize 64) .atomicWrite := by
     intro li m₀ hl
     obtain ⟨-, -, -, -, -, ⟨a', sn, next, hm₀⟩, -⟩ := hpost li m₀ hl
-    have ho₀ : m₀.Owns m₀.current r.owned := by rw [hm₀]; exact ho.recordAt hc
+    have ho₀ : m₀.Owns m₀.current r.excl := by rw [hm₀]; exact ho.1.recordAt hc
     exact ho₀.noRace hmine
   refine ⟨fun e hrun => ?_, fun res m' hrun => ?_⟩
   ·
@@ -378,7 +378,7 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       rcases MemM.bind_err hrun with he | ⟨⟨li, opts⟩, m₁, hp1, h1⟩
       · unfold casPtrPrep at he
         rcases MemM.bind_err he with he | ⟨⟨li, rd⟩, m₁, hp1, h1⟩
-        · exact casReadPrep_noErr haccW8 (ho.noRace hmine) hlocok e he
+        · exact casReadPrep_noErr haccW8 (ho.1.noRace hmine) hlocok e he
         rcases MemM.bind_err h1 with he | ⟨a, m₂, hg, h2⟩
         · exact MemM.get_err he
         exact MemM.pure_err h2

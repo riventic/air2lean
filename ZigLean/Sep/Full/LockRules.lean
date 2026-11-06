@@ -300,7 +300,7 @@ theorem wp_casOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ
       L.Before m' (({ m₁ with current := t } : Mem).clocks[t]!) := fun h => by
     rw [h] at hnh; cases hnh
   rcases hcase with ⟨rfl, hF, hw, hacq⟩ | ⟨rfl, hw⟩ | ⟨rfl, hw⟩
-  · obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw
+  · obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw (hP.noGather _ _ _ t hiL hU)
     refine .inl ⟨rfl, rL, ?_⟩
     have := hP.step hiL hU hok₁ hng hna hz hst (fun h' => hrel h' _) (.acquire hnh hF hfr) hl
     rwa [hg₁] at this
@@ -332,7 +332,7 @@ theorem Fits.stepAcq (hP : L.Fits K P U ok) {G₁ : ThreadId → γ} {rX : Res} 
     (hw : L.WInv (upd (L.pl G₁) t .holds) m') :
     ∃ rL, P.inv (upd G₁ t (L.set g .holds rL)) m' := by
   subst hg₁
-  obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw
+  obtain ⟨rL, hfr, hl⟩ := hiL.acq hst hnh hng hF hacq hw (hP.noGather _ _ _ t hiL hU)
   exact ⟨rL, hP.step hiL hU hok hng hna (LPh.ne_holdsAway_of_not_held hnh) hst
     (fun h => by rw [h] at hnh; cases hnh) (.acquire hnh hF hfr) hl⟩
 

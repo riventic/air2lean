@@ -1,5 +1,6 @@
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.Ops
+import ZigLean.Sep.Full.ThreadStep
 
 /-!
 # Shared resources: a fraction of an exclusive heap, loads on it, and the whole share
@@ -26,8 +27,9 @@ states the share once, for every exclusive heap, and derives the byte and typed 
   `load_sbytesAt`, `@[fsym]` `sload`). A store or a free needs the byte exclusively, so no rule
   changes a byte a share reads.
 
-These rules are sequential (`FTotalTriple`). Several threads that read one byte at once need the
-race clocks of a partial share (slice F4).
+These rules are sequential (`FTotalTriple`). In a thread a typed share load is local
+(`ThreadLocal.sload`, slice F4: several threads may read one byte at once, `Mem.OwnsR`), so `fsym`
+applies `sload` there too.
 
 Proof-only: not reachable from `ZigLean.lean`.
 -/
@@ -293,6 +295,28 @@ theorem load_sbytesAt {T : Type} [Enc T] {v : T} {k al : Nat} (hq : 0 < q.val)
       exact sep_lift.mpr ⟨hφ, hb'.1⟩⟩
 
 end FTotalTriple
+
+/-- A shared typed value holds a read share of each of its bytes (`Res.owned`). -/
+theorem spts_owned {T : Type} [Enc T] {a : Nat} {v : T} {b : BlockId} (hpb : p.block = some b)
+    {r : Res} (hp : spts p a q v r) {x : Nat} (h1 : p.off.toNat ≤ x)
+    (h2 : x < p.off.toNat + Enc.size T) : r.owned (b, x) ≠ none := by
+  obtain ⟨hq, H, hP, hs⟩ := hp
+  obtain ⟨A, S, K, bs, -, hsz, -, hb, -⟩ := hP.1
+  obtain ⟨fc, hfc, -⟩ := up_bytesAt_cell (r := ⟨H, Know.none, Ghost.unit⟩) ⟨hb, rfl, rfl⟩ hpb
+    (j := x - p.off.toNat) (by omega)
+  rw [show p.off.toNat + (x - p.off.toNat) = x by omega] at hfc
+  change H (b, x) = some fc at hfc
+  refine Res.owned_ne.mpr (.inr ⟨fc, ?_⟩)
+  rw [hs.2.2, Ghost.sharesOf_share, hfc, Option.elim_some, SCell.of_self]
+  exact hq
+
+/-- **A load of a shared typed value is local to the thread** (`spts`, a locality provider,
+§Read shares): the share orders every write before the load, and other holders of the share may
+read the bytes meanwhile (`ThreadLocal.loadOwned`). So `fsym` applies the sequential `sload` in a
+thread (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), and the share stays. -/
+@[fsym_provider] theorem ThreadLocal.sload {T : Type} [Enc T] {a : Nat} {v : T} :
+    ThreadLocal (spts p a q v) (Zig.load T a p) :=
+  ThreadLocal.loadOwned fun _ hpb _ hp _ h1 h2 => spts_owned hpb hp h1 h2
 
 /-- **Shared bytes split** into two shares of the same bytes. -/
 theorem sbytesAt_split {q₁ q₂ : Frac} {r : Res} (h : sbytesAt p A S K bs (q₁.add q₂) r) :

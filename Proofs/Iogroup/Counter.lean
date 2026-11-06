@@ -148,7 +148,7 @@ def proto : Proto Tgt Gh where
   inv G m := ∃ rX, L.Inv G rX m ∧ U G rX m
   init tgt g := match tgt with
     | .add p => p = cPtr ∧ ∃ rp, plain rp ∧ g = (⟨.out, rp, rnil⟩, .task false)
-  fin g := g.1.ph = .gone ∧ g.2 = .fin
+  fin g := g.1.ph = .gone ∧ g.2 = .fin ∧ ∀ l, g.1.part.shared l = none
   strict := true
   spawnFails := true
   joins g := g.1.ph = .out ∧ ((∃ i k, g.2 = .joins i k) ∨ g.2 = .task false)
@@ -207,6 +207,7 @@ theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
 theorem fits : L.Fits (FPrim.empty Gh) proto U fun _ => True :=
   .ofLockAll (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) stable
     (fun _ _ _ _ _ hu => ⟨hu.shape, hu.io, hu.rest, hu.jle⟩) tickStable
+    fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => FAssn.Unshared.up _
 
 /-- The protocol's invariant at a stop of `t`. -/
 theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : proto.inv G m)
@@ -450,7 +451,7 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
           (LockWord.someLe_le hcl h'')⟩
       · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
           fun u hu => VClock.le_trans hcl (h'' u hu))
-    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt
+    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt.empty
       have hr2 := hr.2.2
       have := (up_bytesAt_some hX rfl (e.block, e.off)).mpr ⟨hr.1, by simp [cPtr],
         by simp [cPtr, hbs]; omega⟩
@@ -617,7 +618,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
           exact inv_cur u hi (by rw [hgu]; exact (by decide : LPh.out ≠ LPh.gone))) rfl))
     rintro _ G' m' _ ⟨-, -, hi'⟩
     have hi'' := inv_end hi'
-    refine ⟨_, hi'', ⟨rfl, rfl⟩, fun _ => ?_⟩
+    refine ⟨_, hi'', ⟨rfl, rfl, FAssn.Unshared.plain rp hp⟩, fun _ => ?_⟩
     obtain ⟨rX, -, hU⟩ := hi''
     exact joinedAll_of_main (spawners hU.shape) hu
 
@@ -835,7 +836,9 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {rM : Res} {i k : Nat} (h
   have hl := hiL.join (t := 0) (u := i' + 1) (g := gJoins rJ (i' + 1) k') hu0 hu0
     (by rw [hg]; rfl) hfin.1 hj (by
       show rJ = rsum (G₁ 0).1.part _
-      rw [hg]; rfl) rfl rfl fun r hR => R_main hR (by rw [hg]; rfl)
+      rw [hg]; rfl) rfl rfl (fun r hR => R_main hR (by rw [hg]; rfl))
+    fun l => .inr (hiL.own_unshared (by rw [show L.ph (G₁ (i' + 1)) = .gone from hfin.1]; rfl)
+      hfin.2.2 l)
   obtain ⟨rec, hrec', hjf, hm'⟩ := Proto.join_eq hj
   have hcs : m.clocks.size = k' + 1 := by rw [hiL.w.csize, hsz]
   have hth : m'.threads = m.threads.set! (i' + 1) { rec with joined := true } := by rw [hm']
@@ -872,7 +875,7 @@ theorem inv_join {G₁ : ThreadId → Gh} {m m' : Mem} {rM : Res} {i k : Nat} (h
     rw [hX u hu0']
     by_cases hui : u = i' + 1
     · subst hui
-      refine ⟨true, gt₀, ?_, fun _ => hfin.2, hk⟩
+      refine ⟨true, gt₀, ?_, fun _ => hfin.2.1, hk⟩
       rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_pos rfl,
         if_pos (by rw [hsz]; omega), hrec_r]
     · refine ⟨jn, gt, ?_, hj, hk⟩
@@ -1117,6 +1120,7 @@ theorem inv_final {G : ThreadId → Gh} {m : Mem} {rM : Res} {k : Nat}
       exact (hU.jle u ((hjb u).mpr ⟨Nat.pos_of_ne_zero h0, by unfold ThreadId at *; omega⟩)).2
   obtain ⟨rL, hR, hsep, ho⟩ := hiL.take (t := 0) hF
     (by rw [upd_self]; exact (by decide : LPh.out ≠ LPh.gone)) hall
+    (FLock.NoGather.of_R _ fun _ => FAssn.Unshared.up _)
   have hR3 : up (pts (cPtr.add 20) 4 (BitVec.ofNat 32 3)) rL := by
     have : R (fun u => (upd G 0 (gJoins rM k k) u).2) rL := hR
     have hc : ∀ u, 1 ≤ u → u ≤ 3 →
@@ -1265,12 +1269,12 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
       subst this
       have hio : rIO.heap (e.block, e.off) ≠ none :=
         (up_bytesAt_some hIO rfl _).mpr ⟨hr.1, by simp [cPtr], by rw [enc_io]; simp [cPtr]; exact hr.2.2⟩
-      refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
+      refine (ho.owns 0 ht).1 e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
       have hRest : (rsum rIO rStable).heap (e.block, e.off) ≠ none := by
         simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
         exact fun h => False.elim (hio h)
-      exact (Res.owned_sep rfl rfl).mpr (.inr (Res.owned_of_heap hRest))
+      exact Res.excl_sep rfl rfl (.inr (Res.excl_of_heap hRest))
     · rw [rsum_rnil]
       exact ⟨A, _, hA, enc_io io, by cases io; exact LawfulEnc.decode_encode _,
         rIO, rStable, hdStable, rfl, hIO,

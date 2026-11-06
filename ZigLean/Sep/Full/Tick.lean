@@ -236,7 +236,7 @@ theorem _root_.Zig.FStepIn.ticked (m : Mem) (hF : Heap) : FStepIn hF m m.ticked 
   ThreadLocal.intro fun m _ _ _ _ _ _ => ⟨rfl, fun v m₀ e => by
     rw [tick_run'] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-    exact ⟨FStepIn.ticked _ _, fun _ _ _ h => h⟩⟩
+    exact ⟨(FStepIn.ticked _ _).reads, fun _ _ _ h => h⟩⟩
 
 /-- The exact caller-part rule in a concurrent memory. Its complete frame, including a held
 resource, is preserved by the existing thread-local lifting kernel. -/

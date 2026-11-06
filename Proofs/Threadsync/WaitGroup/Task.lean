@@ -682,12 +682,15 @@ theorem wp_finRmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m :
 variable [Zig.Os.HasEnv]
 
 theorem finish_spec {t : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res}
+    (hrp : ∀ l, rp.shared l = none)
     (hi : proto.inv (upd G t (gO rp { ph := .un })) m) (hc : m.current = t) :
     proto.WP t (Thread_WaitGroup_finish bPtr) (fun _ G' m' _ => m'.current = t ∧
       ∃ g, proto.fin g ∧ proto.inv (upd G' t g) m') G m d := by
   unfold Thread_WaitGroup_finish
+  -- the task's part at its end is `rp`, without read shares (`proto.fin`)
   fsym [WP.liftMem_pure (projI _ _) rfl, fitsL.wp_tick_plain, wp_finRmw,
     debug_assert, wp_setT resetEvent rfl ⟨⟩]
+  all_goals exact hrp _
 
 /-! ## A task -/
 
@@ -697,7 +700,7 @@ and store (the holder's steps, `FLock.Fits.wp_hold`, at `hl` and to `un`), `unlo
 group's `finish` (`finish_spec`); it ends `gone` at `fin`, out of the event's code. The walk splits
 on the thread (the counter's sum reads both tasks' stores). -/
 theorem task_spec {u : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res} (hp : rp.Plain)
-    (_hu : u = 1 ∨ u = 2) (hi : proto.inv (upd G u (gO rp { ph := .lk })) m) (hc : m.current = u) :
+    (hrp : ∀ l, rp.shared l = none) (_hu : u = 1 ∨ u = 2) (hi : proto.inv (upd G u (gO rp { ph := .lk })) m) (hc : m.current = u) :
     proto.WP u (task bPtr) (fun _ G' m' _ => m'.current = u ∧
       ∃ g, proto.fin g ∧ proto.inv (upd G' u g) m') G m d := by
   unfold task
@@ -736,7 +739,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
       · exact .inl h
       · exact .inr h
     rw [dispatch_task]
-    refine WP.map (WP.mono ?_ (task_spec G _ d (Res.plain_of hpP) hu12
+    refine WP.map (WP.mono ?_ (task_spec G _ d (Res.plain_of hpP) (FAssn.Unshared.plain rp hpP) hu12
       (by rw [show gO rp { ph := .lk } = G u from hgu.symm, upd_same]
           exact inv_cur u hi (by rw [hgu]; nofun)) rfl))
     rintro _ G' m' _ ⟨-, g', hfin, hi'⟩

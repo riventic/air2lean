@@ -1543,14 +1543,14 @@ theorem mmap (os : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags 
     FStepIn.bumpAllocs
   split at h6
   · obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h6
-    exact ⟨hst, fun _ _ _ h => h⟩
+    exact ⟨hst.reads, fun _ _ _ h => h⟩
   · obtain ⟨_, m₄, h7, h8⟩ := Conc.Proto.MemM.bind_ok h6
     obtain ⟨rfl, rfl⟩ := Conc.Proto.MemM.get_ok h7
     obtain ⟨_, m₅, h9, h10⟩ := Conc.Proto.MemM.bind_ok h8
     obtain ⟨-, rfl⟩ := Conc.Proto.MemM.pure_ok h10
     have e2 := Conc.Proto.MemM.set_ok h9
     subst e2
-    exact ⟨hst.trans (FStepIn.push _), Mem.NoRevive.push rfl⟩
+    exact ⟨(hst.trans (FStepIn.push _)).reads, Mem.NoRevive.push rfl⟩
 
 /-- **The `mremap` shrink of bytes that `P` owns is local**: in every memory of `P` the request
 shrinks the mapping at `p`, and `P` owns the cut bytes (none for an empty cut, whose zero-length
@@ -1681,14 +1681,14 @@ theorem mremapGrow (os : Os.Target) (hhas : os.hasMremap = true) {b : BlockId} {
     rw [hrun m hb] at e
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+      exact ⟨hst₁.reads, (Mem.NoRevive.refl m).revivesOwned⟩
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+      exact ⟨hst₁.reads, (Mem.NoRevive.refl m).revivesOwned⟩
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
       obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.owned) (P := os.pageSize)
         (n := newLen.toNat) hb₁ hl hK
-      exact ⟨hst₁.trans hst₂, hrev₂⟩
+      exact ⟨(hst₁.trans hst₂).reads, hrev₂⟩
 
 /-- **A growth of a whole mapping that `P` owns is local**, with or without `MAYMOVE`: in every
 memory of `P` the request grows the live mapping at `p`, and `P` owns its live bytes `[lo, S)`.
@@ -1746,11 +1746,11 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
     rw [hrun m hb hnr.2] at e
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+      exact ⟨hst₁.reads, (Mem.NoRevive.refl m).revivesOwned⟩
     split at e
     · split at e
       · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-        exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+        exact ⟨hst₁.reads, (Mem.NoRevive.refl m).revivesOwned⟩
       · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
         -- the move: the owned write of the old bytes, the end of the old block, the new block
         let mr := ({ m with allocs := m.allocs + 1 } : Mem).recordAt b lo (blk.bytes.size - lo) .write
@@ -1766,7 +1766,7 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
         let mk : Mem := { mr with blocks := mr.blocks.set! b { blk with live := false } }
         have hpush : FStepIn rF.owned mk (mr.mremapMoved os.pageSize b blk lo n) :=
           FStepIn.push (m := mk) nnb
-        refine ⟨((hst₁.trans hrec).trans (FStepIn.kill hbr)).trans hpush, ?_⟩
+        refine ⟨(((hst₁.trans hrec).trans (FStepIn.kill hbr)).trans hpush).reads, ?_⟩
         have hk : mr.NoRevive mk := Mem.NoRevive.kill mr b blk
         have hn' : mk.NoRevive (mr.mremapMoved os.pageSize b blk lo n) := Mem.NoRevive.push rfl
         have : mr.NoRevive (mr.mremapMoved os.pageSize b blk lo n) :=
@@ -1774,11 +1774,11 @@ theorem mremapMove (os : Os.Target) (hhas : os.hasMremap = true) {flags : BitVec
         exact Mem.NoRevive.revivesOwned this
     split at e
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      exact ⟨hst₁, (Mem.NoRevive.refl m).revivesOwned⟩
+      exact ⟨hst₁.reads, (Mem.NoRevive.refl m).revivesOwned⟩
     · obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
       obtain ⟨hst₂, hrev₂⟩ := Mem.mremapGrown_step (hF := rF.owned) (P := os.pageSize)
         (n := newLen.toNat) hb₁ hl hK
-      exact ⟨hst₁.trans hst₂, hrev₂⟩
+      exact ⟨(hst₁.trans hst₂).reads, hrev₂⟩
 
 /-- **The move or growth of a mapping of `S` bytes from offset `lo`** (provider form of
 `mremapMove`): the precondition owns its live bytes (`OwnsPtr`, which makes the block live) and
