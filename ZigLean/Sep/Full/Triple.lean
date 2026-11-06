@@ -656,6 +656,17 @@ open Classical in
 noncomputable def Res.shared (r : Res) : Heap := fun l =>
   if r.heap l ≠ none ∨ (r.gh.share l).Whole then none else r.owned l
 
+/-- Ghost state without shares changes neither the exclusive nor the shared bytes. -/
+theorem Res.excl_addGh {h : FHeap} {k : Know} {a g : Ghost}
+    (hb : g.share = fun _ => SCell.zero := by rfl) :
+    (⟨h, k, a.add g⟩ : Res).excl = (⟨h, k, a⟩ : Res).excl := by
+  funext l; simp only [Res.excl, Res.owned_addGh hb]; rw [Ghost.share_add_none hb]
+
+theorem Res.shared_addGh {h : FHeap} {k : Know} {a g : Ghost}
+    (hb : g.share = fun _ => SCell.zero := by rfl) :
+    (⟨h, k, a.add g⟩ : Res).shared = (⟨h, k, a⟩ : Res).shared := by
+  funext l; simp only [Res.shared, Res.owned_addGh hb]; rw [Ghost.share_add_none hb]
+
 theorem Res.excl_ne {r : Res} {l : Loc} :
     r.excl l ≠ none ↔ r.heap l ≠ none ∨ (r.gh.share l).Whole := by
   unfold Res.excl

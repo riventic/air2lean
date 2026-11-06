@@ -186,6 +186,46 @@ theorem _root_.Zig.Mem.OwnsRes.frame {hF hR : Heap} {rF rP rP' rR : Res}
     · exact e hn.1
     · exact ((Res.owned_sep rfl rfl).mpr (.inr e)) hn.2
 
+/-- Thread ownership ignores ghost state without shares. -/
+theorem _root_.Zig.Mem.OwnsRes.addGh_iff {h : FHeap} {k : Know} {a g : Ghost}
+    (hb : g.share = fun _ => SCell.zero := by rfl) :
+    m.OwnsRes t ⟨h, k, a.add g⟩ ↔ m.OwnsRes t ⟨h, k, a⟩ := by
+  unfold Mem.OwnsRes; rw [Res.excl_addGh hb, Res.shared_addGh hb]
+
+/-- An exclusive byte of `r₁ ⋆ r₂` that `r₂` does not own at all is exclusive in `r₁`. -/
+theorem _root_.Zig.Full.Res.excl_of_sep_none {r₁ r₂ : Res} {l : Loc}
+    (h₂ : r₂.owned l = none)
+    (hl : Res.excl ⟨r₁.heap ∪ r₂.heap, r₁.know.union r₂.know, r₁.gh.add r₂.gh⟩ l ≠ none) :
+    r₁.excl l ≠ none := by
+  have h0 : r₂.heap l = none ∧ ¬ (r₂.gh.share l).Pos := by
+    have : ¬ r₂.owned l ≠ none := fun h => h h₂
+    rw [Res.owned_ne] at this; grind
+  refine Res.excl_ne.mpr ?_
+  rcases Res.excl_ne.mp hl with e | e
+  · left; simpa [FHeap.union_apply, h0.1] using e
+  · right
+    rw [Ghost.add_share, (SCell.not_pos_iff.mp h0.2).eq, SCell.add_zero] at e
+    exact e
+
+/-- **Another thread keeps owning** a resource of the frame `rF` of a step in `rF.owned` that
+may read `rF.shared`: its exclusive bytes are exclusive in `rF` (`Res.excl_sep`), so no step
+touches them; its shared bytes are only read. -/
+theorem _root_.Zig.Mem.OwnsRes.fstep {hF hR : Heap} {u : ThreadId} {p : Res}
+    (ho : m.OwnsRes u p) (hs : FStepIn hF m m' hR) (hu : u ≠ m.current)
+    (hx : ∀ l, p.excl l ≠ none → hF l ≠ none ∧ hR l = none)
+    (hsh : ∀ l, p.shared l ≠ none → hF l ≠ none) : m'.OwnsRes u p :=
+  ⟨Mem.Owns.fstep hs hu ho.1 (fun l hl => (hx l hl).1) fun l hl => (hx l hl).2,
+    Mem.OwnsR.fstep hs hu ho.2 hsh⟩
+
+/-- `OwnsRes.fstep` for a step in the frame `rF` itself (`FStepIn rF.owned m m' rF.shared`), of a
+resource `p` that is a part of `rF` (`hsub`: its cells and shares add up into `rF`'s). -/
+theorem _root_.Zig.Mem.OwnsRes.fstepIn {u : ThreadId} {p rF : Res}
+    (ho : m.OwnsRes u p) (hs : FStepIn rF.owned m m' rF.shared) (hu : u ≠ m.current)
+    (hsub : ∀ l, p.excl l ≠ none → rF.excl l ≠ none)
+    (hown : ∀ l, p.owned l ≠ none → rF.owned l ≠ none) : m'.OwnsRes u p :=
+  ho.fstep hs hu (fun l hl => ⟨hown l (Res.owned_of_excl hl), Res.excl_shared_disj (hsub l hl)⟩)
+    fun l hl => hown l (Res.owned_of_shared hl)
+
 end OwnsRes
 
 /-- **The frame's bytes and read shares** of a resource's step: a step in the frame `⟨rR ⋆ rF⟩`
