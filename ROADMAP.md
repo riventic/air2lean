@@ -83,6 +83,7 @@ recorded in the file named.
 | 2026-11-04 | Condition variable window: a quantitative premise plus a narrowed `Fits.win` ([#641](https://github.com/riventic/air2lean/pull/641)); the condition primitive step carries the lock's word invariant (option a, [#631](https://github.com/riventic/air2lean/pull/631)). | engine ledger |
 | 2026-11-05 | Futex queue keyed by `FutexKey` (audit S6, option A, [#668](https://github.com/riventic/air2lean/pull/668)); every block stays at its address across every thread step ([#681](https://github.com/riventic/air2lean/pull/681)). | docs/sep-full-state.md, soundness-2026-10-14 §S6 |
 | 2026-11-05 | `FLock.Fits.stable` gets the step's resource transfer (decision (a), [#696](https://github.com/riventic/air2lean/pull/696)). | engine ledger |
+| 2026-11-06 | Read shares of heap cells for shared readers (option A, [#637](https://github.com/riventic/air2lean/pull/637)): a load needs a positive fraction, a store or free the whole cell; rejected an invariant-read rule and disjoint per-reader pieces. The coordinator takes over the RwLock migration (#637). | docs/sep-full-state.md §Read shares |
 
 ### Open for the maintainer
 
