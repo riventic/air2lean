@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.RwLock
+import ZigLean.Sep.Full.RwLockShare
 import ZigLean.Mem.Thread
 
 /- Value algebra controls for the real ABI64 Gen operands and the mathematical
@@ -143,5 +144,18 @@ theorem retire_before_writer :
       (RwState.encode 1 0 false &&& 1 != 0) = false :=
   ⟨(RwState.last_reader_guard (by decide) (by decide) false).mpr rfl,
     old_writer_guard 1 0 false⟩
+
+/-- Two readers' halves of the whole protected resource join back to the whole, whose shares are
+exact, so a writer after both readers finds every byte held whole. -/
+theorem two_readers_join (r : Res) (l : Loc) :
+    ((rsum (r.frac Frac.one.half) (r.frac Frac.one.half)).gh.share l).Total := by
+  rw [Res.frac_add, Frac.half_add_half]; exact Res.frac_one_total r l
+
+/-- A third reader splits the free half again; the three fractions stay valid. -/
+theorem three_readers_valid (r : Res) (l : Loc) :
+    ((rsum (r.frac Frac.one.half)
+      (rsum (r.frac Frac.one.half.half) (r.frac Frac.one.half.half))).gh.share l).Valid := by
+  rw [Res.frac_add, Frac.half_add_half, Res.frac_add, Frac.half_add_half]
+  exact FHeap.shares_valid (by decide) r.heap l
 
 end Zig.Full.RwLockStateTest

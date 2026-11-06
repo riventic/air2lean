@@ -748,7 +748,10 @@ of one byte, ordered before a later exclusive acquire by the RwLock's state word
 then two choices stay conservative: a recorded access to the rest (`FOwned.recordRest`) needs
 that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the parts' and the
 rest's owned sets empty. Then `RwLockImpl` hands shared holders the protected resource at a
-fraction.
+fraction: `Res.frac q r` (`ZigLean/Sep/Full/RwLockShare.lean`), the heap of a heap-only resource
+as read shares at `q`; fractions of one resource split and join by equality (`Res.frac_add`), and
+the free lock's fraction halves at each shared acquire (`Res.frac_half`), so the fractions need
+no bound on the readers (the native counters do: ledger `rwlock-reader-admission-room`).
 
 ### The fee of a grant (coordinator decision 2026-10-12)
 
