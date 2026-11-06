@@ -18,10 +18,10 @@ framework", "Coordination"). The full-state separation logic with `fsym` (`FTrip
 `FTotalTriple`, `CTriple`) is the end state; the legacy layer (`ZigLean/Sep` outside `Full/`,
 the Conc CSL chain) is migrated and deleted.
 
-| Gate (`assurance/proof-framework.json`) | 2026-10-15 | 2026-10-21 | now |
+| Gate (`assurance/proof-framework.json`) | earlier | 2026-10-21 | now |
 |---|---|---|---|
-| `legacy_users` | 97 at the arena landing | 41 | **13** |
-| tactic entries | 34 | 29 | **10** (`legacy-to-retire`: `unroll_sched`, `within`, `when_defined`) |
+| `legacy_users` | 97 at the arena landing (2026-10-14) | 41 | **13** |
+| tactic entries | 34 before #471 (2026-10-19) | 29 | **10** (`legacy-to-retire`: `unroll_sched`, `within`, `when_defined`) |
 | judgments / registries | | | 82 / 14 |
 
 What is left of the goal, in order ([legacy-retirement](docs/legacy-retirement.md), "Dependency
