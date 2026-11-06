@@ -4,8 +4,7 @@
   "old": "3 * (s0.i.toNat - s.i.toNat)",
   "new": "3 * (s.i.toNat - s0.i.toNat)",
   "in": [
-   "down_step",
-   "down_loop"
+   "down_total"
   ]
  },
  {
@@ -13,17 +12,15 @@
   "old": "s.i.toNat ≤ p1.toNat ∧",
   "new": "True ∧",
   "in": [
-   "upNe_step",
-   "upNe_loop"
+   "upNe_total"
   ]
  },
  {
-  "name": "le-counter-fits",
-  "old": "p1.toNat + 1 < 2 ^ 32 ∧",
+  "name": "le-range",
+  "old": "s.i.toNat ≤ p1.toNat + 1 ∧",
   "new": "True ∧",
   "in": [
-   "upLe_step",
-   "upLe_loop"
+   "upLe_total"
   ]
  },
  {
@@ -31,17 +28,15 @@
   "old": ": Nat :=\n  p1.len.toNat - s.i.toNat\n",
   "new": ": Nat :=\n  p1.len.toNat\n",
   "in": [
-   "lenCount_step",
-   "lenCount_loop"
+   "lenCount_total"
   ]
  },
  {
   "name": "read-cell",
-  "old": "up (pts p1 4 v0) ⋆\n    ",
-  "new": "",
+  "old": "up (pts p1 4 v0) ⋆\n    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (s.i",
+  "new": "(FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (s.i",
   "in": [
-   "readBound_step",
-   "readBound_loop"
+   "readBound_total"
   ]
  },
  {
@@ -49,7 +44,15 @@
   "old": "⟪s.i.toNat ≤ s0.i.toNat ∧",
   "new": "⟪s.i.toNat ≤ s0.i.toNat ∧ s0.i.toNat ≤ s.i.toNat ∧",
   "in": [
-   "down_step"
+   "down_total"
+  ]
+ },
+ {
+  "name": "post-exit-counter",
+  "old": "r.2.i.toNat = 0⟫",
+  "new": "r.2.i.toNat = 1⟫",
+  "in": [
+   "down_total"
   ]
  },
  {
@@ -57,7 +60,7 @@
   "old": "⟪s.i.toNat ≤ s0.i.toNat ∧\n      ",
   "new": "⟪",
   "in": [
-   "down_step"
+   "down_total"
   ]
  }
 ]
